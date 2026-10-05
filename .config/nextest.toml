@@ -201,6 +201,20 @@ filter = "test(=scalar_virtual_phase_conventions::scalar_virtual_triangle_mirror
 slow-timeout = { period = "5m", terminate-after = 2 }
 
 [[profile.ci.overrides]]
+# The complete jet, DIS and FullSM inventory bodies retain their assertions
+# and grouping options; reserve all nextest test slots for each bounded run.
+filter = "test(=test_generate_amplitude_1l_sm_jets) or test(=test_generate_amplitude_1l_sm_jets_with_grouping) or test(=test_dis_isr) or test(=test_vacuum_amplitude_generation_full_sm_two_loop) or test(=test_vacuum_amplitude_generation_full_sm_three_loop_raw)"
+threads-required = "num-test-threads"
+slow-timeout = { period = "1m", terminate-after = 15 }
+
+[[profile.ci.overrides]]
+# Restored numerical tests retain their fixed sample budgets for every mass,
+# helicity and kinematic point. Run them without competing workers within 15 minutes.
+filter = "test(=integrations::scalar_sunrise) or test(=integrations::scalar_mercedes) or test(=aa_aa::aa_aa_integrated_graph_histogram_bins) or test(=smoke::test_epem_dd_dt)"
+threads-required = "num-test-threads"
+slow-timeout = { period = "1m", terminate-after = 15 }
+
+[[profile.ci.overrides]]
 # The numerical acceptances launch ten internal integration workers. Reserve the same
 # resources explicitly and allow the fixed-statistics numerical integrations to
 # complete; profile.default still supplies other matching per-test settings.
@@ -246,6 +260,20 @@ slow-timeout = { period = "5m", terminate-after = 2 }
 # budgets and assertions, with bounded headroom for the complete integrations.
 filter = "test(=scalar_virtual_phase_conventions::scalar_virtual_triangle_mirrors_match_signed_born_interference) or test(=scalar_phase_conventions::scalar_born_six_body_mc_matches_phase_space) or test(/^dod[012]_bubble_uv$/) or test(=epem_a_bbx_amp_uv) or test(=se1l_uv)"
 slow-timeout = { period = "5m", terminate-after = 2 }
+
+[[profile.ci_gammaloop.overrides]]
+# The complete jet, DIS and FullSM inventory bodies retain their assertions
+# and grouping options; reserve all nextest test slots for each bounded run.
+filter = "test(=test_generate_amplitude_1l_sm_jets) or test(=test_generate_amplitude_1l_sm_jets_with_grouping) or test(=test_dis_isr) or test(=test_vacuum_amplitude_generation_full_sm_two_loop) or test(=test_vacuum_amplitude_generation_full_sm_three_loop_raw)"
+threads-required = "num-test-threads"
+slow-timeout = { period = "1m", terminate-after = 15 }
+
+[[profile.ci_gammaloop.overrides]]
+# Restored numerical tests retain their fixed sample budgets for every mass,
+# helicity and kinematic point. Run them without competing workers within 15 minutes.
+filter = "test(=integrations::scalar_sunrise) or test(=integrations::scalar_mercedes) or test(=aa_aa::aa_aa_integrated_graph_histogram_bins) or test(=smoke::test_epem_dd_dt)"
+threads-required = "num-test-threads"
+slow-timeout = { period = "1m", terminate-after = 15 }
 
 [[profile.ci_gammaloop.overrides]]
 # The numerical acceptances launch ten internal integration workers. Reserve the same

@@ -332,6 +332,7 @@ Within a running session, switch the preset with the existing command `set globa
   instances.
 + Optional compile/export steps persist compiled evaluator artifacts and
   DOT/standalone outputs.
+
 + Each generated integrand now embeds its frozen f64 backend choice in
   `integrand.bin`:
   - `eager`
@@ -350,6 +351,40 @@ Within a running session, switch the preset with the existing command `set globa
   - if external loading fails and startup globals explicitly opt into
     symjit, GammaLoop falls back to symjit for that integrand and logs
     it
+
+Diagram grouping selects a common momentum chart from a colored skeleton.
+Ghost arrows encode physical ghost flow: reversing an edge's stored endpoints
+and conjugating its particle leaves that skeleton unchanged. Mass/spin coloring
+identifies a ghost with its antighost, so the canonicalizer reverses the temporary
+skeleton arrow for a negative-PDG ghost. Sorting the final graph retains its
+existing endpoint and particle rules, including on a second canonicalization
+pass. For neutral adjoint QCD ghosts, the left/right charge-conjugation step
+preserves ghost number, keeping the differentiated endpoint fixed. It
+conjugates the quark fields using the existing particle rule. The correction
+is restricted to neutral color-adjoint ghosts; charged electroweak ghosts
+retain their existing treatment. Closed ghost loops receive their Grassmann
+sign. A directed self-loop's
+automorphism factor already includes its symmetry and receives no extra factor
+of two. Generation parses and validates the original graph before grouping.
+When flow normalization leaves its ordered vertices, edge IDs, particle data
+and directions unchanged, the normalized graph reuses that parsed state.
+Changed flows receive a separate parse with their own momentum chart.
+Spatial-momentum validation examines the normalized factorized numerator and
+all prefactors before tensor-network parsing. Indexed printers use ordinary
+function notation for malformed calls, so validation can report the error.
+
+Numerator-comparison samples use incoming and outgoing wavefunction keys with
+the same flow convention as amplitude generation. Each sampled scalar has a
+lazy exact polynomial cache. A Lorentz-zero test stops at the first certified
+nonzero sample; candidate ratio comparisons reuse the caches and retain the
+configured sample count. Each color term caches its canonical form at the
+first sample's ordinary evaluation point. Later samples reuse it while retaining
+their own Lorentz contractions and scalar substitutions. Graph numerators remain
+factorized throughout.
+After grouping, the scalar symmetry weights are combined over a common
+denominator before testing whether the class vanishes. This also removes zeros hidden
+behind polynomial denominators in the member ratios; stored provenance and
+nonzero coefficients retain their existing form.
 
 SymJIT rebuilds the saved Symbolica evaluator with its extra common-expression cache disabled: SymJIT 2.21 can reuse function results across inactive branches or discard stores still needed by later calls. Symbolica's numeric program keeps its existing sharing; requested optimization levels remain capped at O2.
 
@@ -794,6 +829,9 @@ histogram-level `sample_count` rather than explicit zero fills.
 Histogram snapshots therefore remain fully mergeable and
 re-constructible into live accumulator state. The Rust-facing histogram
 API exposes `merge(...)`, `merge_in_place(...)`, and `rebin(...)`.
+Restoring an unlabeled continuous histogram keeps the same empty label
+metadata as a fresh worker. Explicit labels and discrete-bin metadata
+remain intact, and the merge compatibility checks still reject mismatches.
 
 Current built-in quantities include:
 

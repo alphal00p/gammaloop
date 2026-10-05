@@ -68,7 +68,9 @@ ci-checks-and-upload:
     # Test-result outputs alone do not retain the binaries and compiler artifacts.
     # Realize the scheduled producers too, including their stable publication links.
     started=$SECONDS
-    nix build --impure --no-link --print-out-paths "${targets[@]}" > "$tmp/outputs"
+    # Keep all selected closures rooted until the upload finishes, including
+    # across the gap between realization and nix copy on a shared daemon.
+    nix build --impure --out-link "$tmp/result" --print-out-paths "${targets[@]}" > "$tmp/outputs"
     printf 'CI publication preparation completed (%ss).\n' "$((SECONDS - started))"
 
     # Keep a throwaway XDG_CACHE_HOME so locally remembered unsigned narinfo cannot

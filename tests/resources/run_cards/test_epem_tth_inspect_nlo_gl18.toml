@@ -1,4 +1,5 @@
-# Historical GL18 is GL22 with CP grouping disabled; its edge IDs are unchanged.
+# Current GL22 without CP grouping matches current CP-grouped GL18.
+# The historical benchmark's graph identity remains unestablished.
 commands = [
 "import model ./assets/models/json/sm/sm-default.json",
 "generate xs e+ e- > t t~ h | e+ e- g t t~ h ghG ghG~ a QCD^2==2 QED^2==6 [{{3}} QCD] --select-graphs GL22 --numerator-grouping group_identical_graphs_up_to_scalar_rescaling --symmetrize-left-right-states false --clear-existing-processes",

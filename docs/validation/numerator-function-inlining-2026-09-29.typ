@@ -9,8 +9,9 @@ speed when generated numerator functions are inlined during numerical lowering.
 This experiment covers the bubble-dressed double triangle in explicit 3D with
 ordinary MUV subtraction and the complete sum of 102 orientations.
 
-The new evaluator setting `inline_numerator_functions` defaults to `false`.
-Setting it to `true` registers generated component and coefficient functions
+The experiment used `inline_numerator_functions = false` by default.
+The current default is `true`; setting it to `false` retains shared evaluator
+bodies. Inlining registers generated component and coefficient functions
 with Symbolica's `Always` inlining policy. Tensor contraction, compact energies,
 scalar-factor collection and root aliases retain their existing behavior.
 Function-map replacements remain disabled, so this introduces no earlier

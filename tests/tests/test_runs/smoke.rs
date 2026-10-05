@@ -68,9 +68,11 @@ mod slow {
         }
         .run(&mut state.state, &state.cli_settings)?;
 
+        // The Born width is Nc*MZ*(|gL|^2+|gR|^2)/(24*pi), about
+        // 0.37204 GeV for V_79's GC_50+GC_58 and -2*GC_58 couplings.
         assert_approx_eq(
             &single_slot_integral(&result).result.re,
-            &F(-0.372),
+            &F(0.372),
             &F(1e-2),
         );
         Ok(())
@@ -119,57 +121,57 @@ mod slow {
     }
 }
 
+#[test]
+fn test_epem_dd_dt() -> Result<()> {
+    let mut cli = get_test_cli(
+        Some("test_epem_dd_dt.toml".into()),
+        get_tests_workspace_path().join("test_epem_dd_dt"),
+        None,
+        false,
+    )?;
+
+    let (_, a) = Inspect {
+        process: None,
+        integrand_name: Some("default".to_string()),
+        momentum_space: false,
+        point: vec![
+            0.3684805278343727,
+            0.20242350926484026,
+            0.48242524836619227,
+            0.3919994435419629,
+            0.14345675651437087,
+            0.47075342347077187,
+        ],
+        ..Default::default()
+    }
+    .run(&mut cli)?;
+
+    // Sum both virtual and both real-gluon cuts at the original cube point.
+    assert_snapshot!(format!("{a:.8e}"),@"(-1.7675722573627832e-4+-6.290575596256553e-5i)");
+
+    let integrate_command = Integrate {
+        workspace_path: Some(
+            get_tests_workspace_path().join("test_epem_dd_dt/integration_workspace"),
+        ),
+        n_cores: Some(1),
+        restart: true,
+        ..Default::default()
+    };
+
+    let integral = integrate_command.run(&mut cli.state, &cli.cli_settings)?;
+    // The virtual-only integral is IR divergent. Including both real cuts gives
+    // sigma_Born * C_F * alpha_s/(4pi) * [35/3 + 2 log(mUV²/s)] for the
+    // local vertex UV scheme, with sigma_Born = 2pi*alpha_em²/9, mUV = 1000,
+    // s = 4, alpha_em = 1/132.507 and alpha_s = 0.118. The imaginary part is zero.
+    assert!(
+        integral.is_compatible_with_target(Complex::new(F(1.8182851767060301e-5), F(0.0)), 1),
+        "Not compatible: {integral}",
+    );
+    Ok(())
+}
+
 mod failing {
     use super::*;
-
-    #[test]
-    fn test_epem_dd_dt() -> Result<()> {
-        let mut cli = get_test_cli(
-            Some("test_epem_dd_dt.toml".into()),
-            get_tests_workspace_path().join("test_epem_dd_dt"),
-            None,
-            false,
-        )?;
-
-        let (_, a) = Inspect {
-            process: None,
-            integrand_name: Some("default".to_string()),
-            momentum_space: false,
-            point: vec![
-                0.3684805278343727,
-                0.20242350926484026,
-                0.48242524836619227,
-                0.3919994435419629,
-                0.14345675651437087,
-                0.47075342347077187,
-            ],
-            ..Default::default()
-        }
-        .run(&mut cli)?;
-
-        assert_snapshot!(format!("{a:.8e}"),@"(1.3677606162044735e-3+4.451464910288581e-4i)");
-
-        let integrate_command = Integrate {
-            workspace_path: Some(
-                get_tests_workspace_path().join("test_epem_dd_dt/integration_workspace"),
-            ),
-            n_cores: Some(1),
-            restart: true,
-            ..Default::default()
-        };
-
-        let intergal = integrate_command.run(&mut cli.state, &cli.cli_settings)?;
-        assert!(
-            intergal.is_compatible_with_target(
-                Complex::new(F(1.0185532594130467e-4), F(-2.7124366612352106e-7)),
-                1
-            ),
-            "Not compatible: {intergal}",
-        );
-
-        // todo add integration
-        Ok(())
-    }
 
     #[test]
     fn test_pentabox_dario() -> Result<()> {
@@ -206,26 +208,29 @@ mod failing {
 
         Ok(())
     }
+}
 
-    #[test]
-    fn trees() -> Result<()> {
-        let mut cli = get_test_cli(
-            Some("trees/qqx_aaa.toml".into()),
-            get_tests_workspace_path().join("qqx_aaa_tree"),
-            None,
-            false,
-        )?;
+#[test]
+fn trees() -> Result<()> {
+    let mut cli = get_test_cli(
+        Some("trees/qqx_aaa.toml".into()),
+        get_tests_workspace_path().join("qqx_aaa_tree"),
+        None,
+        false,
+    )?;
 
-        let (_, a) = Inspect {
-            process: None,
-            integrand_name: Some("default".to_string()),
-            ..Default::default()
-        }
-        .run(&mut cli)?;
-
-        assert_snapshot!(format!("{a:.8e}"),@"(1.4727604164105595e-4+-1.1503139369130214e-3i)");
-
-        clean_test(&cli.cli_settings.state.folder);
-        Ok(())
+    let (_, a) = Inspect {
+        process: None,
+        integrand_name: Some("default".to_string()),
+        ..Default::default()
     }
+    .run(&mut cli)?;
+
+    // Exact full-numerator equality with the UFO tree is checked in the
+    // core fixture test; this value comes from independent Weyl matrices.
+    let expected = Complex::new(-0.00014727604164105617, 0.0011503139369130225);
+    assert_complex_approx_eq(a, expected, "UFO tree reference");
+
+    clean_test(&cli.cli_settings.state.folder);
+    Ok(())
 }

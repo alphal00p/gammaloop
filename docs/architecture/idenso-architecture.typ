@@ -85,8 +85,7 @@ normal form:
 - `GammaSimplifier` collects bispinor chains and applies dimension-gated Clifford, trace,
   projector, gamma5, and optional four-dimensional epsilon rules;
 - `ColorSimplifier` collects fundamental color lines, closes traces, applies generator,
-  structure-constant, Fierz, and Casimir rules, prunes antisymmetric zero terms, and iterates to a
-  fixed point;
+  structure-constant, Fierz, and Casimir rules, prunes color zeros, and iterates to a fixed point;
 - `EpsilonSimplifier` owns epsilon contractions and reductions;
 - `Cookable` replaces selected functions or representation-index payloads with compact symbols,
   either as readable flattened names or reversible Symbolica `UserData::Atom` encodings.
@@ -95,6 +94,45 @@ Settings objects are part of the semantics. Gamma ordering and trace evaluation,
 invariant substitutions, Schoonschip depth and traversal, and cooking source/tag filters can all
 change the result form. Reproducible callers should record the exact settings and the order in
 which independent rewrite families ran.
+
+With trace evaluation enabled, contracting two slots of a fundamental SU(N) symmetric cubic
+trace gives zero: the contraction reduces to a Casimir times the trace of one generator.
+The rule checks the fundamental dimension and all three adjoint dimensions, and accepts either
+repeated slots or an explicit adjoint metric. It leaves other representations, ranks, and custom
+tensors alone. Only the collected color payload is rewritten; accompanying momentum factors
+remain factorized.
+
+Long fundamental traces also use the SU(N) Fierz identity when a generator
+index occurs exactly twice. With trace evaluation enabled, a recognized invariant
+operator with one open fundamental pair and no free adjoint slots reduces to
+its closed trace divided by $N_c$, times the fundamental metric. With exactly
+one free adjoint slot, the same guarded projection returns its coefficient
+of $T^a$, using `Tr(Ta*S)/(TR*(Nc^2-1))`. A fresh typed dummy closes the scalar
+projection before the original free index is restored on the generator.
+Known tensors, contracted remaining slots, and the projection's scalar closure
+are checked explicitly. Additional free adjoints and unknown matrix operators
+prevent the projection. Both rules preserve surrounding momentum factors,
+and the generator basis is already a fixed point.
+
+An adjacent fundamental generator pair contracted with a symmetric cubic trace
+uses `STr(Ta*Tb*Tc)*Tb*Tc = TR^2*(Nc^2-4)/(2*Nc)*Ta`. The local chain rule
+preserves its ordered prefix and suffix, other open color lines, and momentum
+factors. It requires compatible fundamental and adjoint dimensions, known
+operators, and exactly two occurrences of each contracted slot. This reduction
+does not apply a Schur projection to the complete multi-chain tensor.
+
+When a color rewrite creates a sum, its new terms must be reduced before
+collecting them again. Otherwise collection can restore the previous
+factorization and make the loop stop before the contractions run. This
+ordering applies inside the collected color payload; momentum factors remain
+outside it.
+
+The local structure-constant contraction derives its sign from the order of
+three distinct literal adjoint arguments. Cyclic permutations have positive
+sign; reversing two arguments changes the sign. The surrounding scalar retains
+any sign already extracted by normalization. This avoids reconstructing a
+tensor whose literal index name ends in `_`: Symbolica preserves such argument
+orders because that name can also denote pattern syntax.
 
 Most pattern engines use a local fixed-point loop: transform the current atom, compare it with
 the previous atom, and stop when unchanged. That guarantees termination only for the implemented
@@ -134,6 +172,13 @@ Spenso representation syntax is the shared contract. Slots carry a representatio
 abstract index, and dual orientation. Products contract matching dual slots; additions must
 expose compatible external structure. `chain`, `trace`, `dot`, metrics, and bracket-like syntax
 are parser-owned shorthands rather than arbitrary opaque functions.
+
+Index canonicalization temporarily gives composite dimensions such as `Nc^2-1`
+reversible symbols so the tensor parser can recognize their slots. Each symbol
+stores its defining expression inside an `idenso::representation_dimension`
+wrapper in Symbolica user data. Canonicalization restores only those dimension
+payloads afterward; separately cooked spectator functions remain cooked. This
+preserves formal dimensions without expanding the graph numerator.
 
 `UndoShorthands` selects Spenso `ShorthandParsing::Expand` modes, parses a symbolic network, and
 executes it to reconstruct explicit tensor products with fresh parse-local dummies. The

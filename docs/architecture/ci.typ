@@ -57,6 +57,11 @@ before fetching compiler state or test binaries. Necessary artifact producers
 remain explicitly selected for publication; an empty successful test output alone
 does not retain them. Test groups are scheduled and reported independently.
 
+The local upload command keeps all selected outputs rooted through temporary
+result links until cache publication finishes. The command removes those links
+on exit. This prevents concurrent garbage collection from deleting a realized
+producer between the build and upload stages.
+
 Synchronous dependency discovery incorporates Syd's PR \#104 suggestion while
 retaining the explicit graph. Local uploads adapt \#105 through the Just command;
 entering a shell installs no global upload hook.

@@ -48,6 +48,7 @@ check_on_norm = true
 
 [default_runtime_settings.general]
 m_uv = 5.0
+mu_r = 1000.0
 
 [default_runtime_settings.subtraction]
 disable_threshold_subtraction = false

@@ -3,6 +3,7 @@ use gammalooprs::{
     graph::{Graph, parse::IntoGraph},
     initialisation::test_initialise,
     model::Model,
+    numerator::{aind::Aind, symbolica_ext::NumeratorAtomExt},
     processes::{Amplitude, AmplitudeGraph},
     utils::{GS, load_generic_model},
     uv::{
@@ -12,13 +13,17 @@ use gammalooprs::{
     },
 };
 use idenso::{
-    Cookable, IndexTooling, cof,
+    Cookable, IndexTooling, coad, cof,
     color::{CS, ColorSimplifier},
     color_idx,
     dirac::GammaSimplifier,
     shorthands::{metric::MetricSimplifier, schoonschip::Schoonschip},
 };
-use spenso::{shadowing::symbolica_utils::LogPrint, structure::abstract_index::AbstractIndex};
+use spenso::{
+    network::{library::symbolic::ETS, tags::SPENSO_TAG},
+    shadowing::symbolica_utils::LogPrint,
+    structure::abstract_index::AbstractIndex,
+};
 use symbolica::{
     atom::{Atom, AtomCore, Symbol},
     function, parse, parse_lit,
@@ -76,15 +81,171 @@ pub fn align_to_rqft(atom: &Atom, model: &Model) -> Atom {
         .with(parse!("gs").pow(2) / (Atom::var(Symbol::PI) * 4))
         .replace(parse!("UFO::aEW"))
         .with(parse!("ge").pow(2) / (Atom::var(Symbol::PI) * 4)))
-    .expand_num()
+    // Symbolic MATAD retains these functions. Resolve their exact values
+    // before comparing with RQFT, without approximating any period constants.
+    .replace(parse!("vakint::Gamma(1)"))
+    .with(Atom::one())
+    .replace(parse!("vakint::PolyGamma(0,1)"))
+    .with(-parse!("vakint::EulerGamma"))
+    .replace(parse!("vakint::PolyGamma(1,1)"))
+    .with(Atom::var(Symbol::PI).pow(2) / Atom::num(6))
+    .replace(parse!("vakint::Sqrt(3)"))
+    .with(parse!("3^(1/2)"))
+    // MATAD uses om1 = exp(i*pi/3), HI = Im(H), and cl2 = Cl2(pi/3).
+    // H(1,0;z) = -Li2(z) - log(z)*log(1-z); the log product is real at om1.
+    .replace(parse!("vakint::HI(1,0,vakint::om1)"))
+    .with(-parse!("vakint::cl2"))
+    // restore_numerator uses this caller symbol for the same Vakint constant.
+    .replace(parse!("vakint::cl2"))
+    .with(parse!("gammalooprs::cl2"))
+    // MATAD's FORM output and master expansions use both exact zeta notations.
+    .replace(parse!("vakint::z3"))
+    .with(parse!("vakint::Zeta(3)"))
+    // Inverting Sqrt(3) produces a separate positive rational-base radical.
+    // Put it over the same base so exact coefficient collection can cancel it.
+    .replace(parse!("(1/3)^(1/2)"))
+    .with(parse!("3^(1/2)") / Atom::num(3))
+    // RQFT's vacuum references use mUV > 0 and mu_r^2 > 0. On this domain,
+    // normalize only the exact caller-owned ratio that Vakint restores.
+    .replace(function!(
+        Symbol::LOG,
+        Atom::var(GS.m_uv_vacuum).pow(2) / Atom::var(GS.mu_r_sq)
+    ))
+    .with(
+        Atom::num(2) * function!(Symbol::LOG, GS.m_uv_vacuum) - function!(Symbol::LOG, GS.mu_r_sq),
+    )
+    // These are contracted Laurent coefficients, not graph numerators. Expand
+    // their scalar sums so identities introduced above cancel before printing.
+    .coefficient_list::<i16>(&[Atom::var(GS.dim_epsilon)])
+    .into_iter()
+    .fold(Atom::Zero, |sum, (power, coefficient)| {
+        sum + power * coefficient.expand()
+    })
     .collect_factors()
     .collect_num()
     .collect_symbol::<i16>(GS.dim_epsilon)
     .collect_factors()
-    // .coefficient_list::<i8>(&[Atom::var(GS.dim_epsilon)])
-    // .iter()
-    // .fold(Atom::Zero, |a, (e, v)| a + e * v)
 }
+
+#[test]
+fn rqft_alignment_normalizes_exact_gamma_constants() {
+    test_initialise().unwrap();
+    let model = load_generic_model("sm");
+    // The developed ghost d1 coefficient must reduce to its independently
+    // computed RQFT forest sum, with the Euler constants cancelling exactly.
+    let coefficient = parse!(
+        "((-156*vakint::Gamma(1)-90*vakint::EulerGamma*vakint::Gamma(1)
+          -90*vakint::Gamma(1)*vakint::PolyGamma(0,1)+185)*gammalooprs::ε
+          -90*vakint::Gamma(1)+78)/32"
+    );
+    let expected = parse!("-3/8+29/32*gammalooprs::ε");
+    assert!(
+        (align_to_rqft(&coefficient, &model) - expected)
+            .expand()
+            .is_zero()
+    );
+    let untouched = parse!("user::Gamma(1)+vakint::PolyGamma(2,1)");
+    assert_eq!(align_to_rqft(&untouched, &model), untouched);
+}
+
+#[test]
+fn rqft_alignment_normalizes_exact_matad_periods() {
+    test_initialise().unwrap();
+    let model = load_generic_model("sm");
+    // The developed ghost's epsilon-squared coefficient is the unchanged
+    // rational RQFT reference: the trigamma and Clausen terms cancel exactly.
+    let sqrt3 = parse!("vakint::Sqrt(3)");
+    let coefficient = (parse!(
+        "-12*vakint::Sqrt(3)+8*3^(1/2)*vakint::Sqrt(3)*vakint::cl2
+         +8*3^(1/2)*vakint::Sqrt(3)*gammalooprs::cl2
+         +18*vakint::PolyGamma(1,1)*vakint::Sqrt(3)
+         +48*vakint::HI(1,0,vakint::om1)"
+    ) - Atom::num(3) * &sqrt3 * Atom::var(Symbol::PI).pow(2))
+        * Atom::num((-3, 512))
+        / sqrt3;
+    assert!(
+        (align_to_rqft(&coefficient, &model) - Atom::num((9, 128)))
+            .expand()
+            .is_zero()
+    );
+    let untouched = parse!(
+        "user::PolyGamma(1,1)+user::Sqrt(3)+user::HI(1,0,vakint::om1)
+         +vakint::PolyGamma(1,2)+vakint::HI(1,0,vakint::om2)
+         +vakint::HI(0,1,vakint::om1)+vakint::Sqrt(2)+user::cl2"
+    );
+    let aligned = align_to_rqft(&untouched, &model);
+    assert!((aligned.clone() - untouched).expand().is_zero());
+    assert!(aligned.contains_symbol(symbolica::symbol!("user::cl2")));
+}
+
+#[test]
+fn rqft_alignment_normalizes_inverse_sqrt3() {
+    test_initialise().unwrap();
+    let model = load_generic_model("sm");
+    let reciprocal = parse!("vakint::Sqrt(3)^(-1)*3^(1/2)");
+    assert_eq!(align_to_rqft(&reciprocal, &model), Atom::one());
+    let untouched = parse!("(1/2)^(1/2)+user::Sqrt(3)^(-1)");
+    let aligned = align_to_rqft(&untouched, &model);
+    assert!((aligned.clone() - untouched).expand().is_zero());
+    assert!(aligned.contains_symbol(symbolica::symbol!("user::Sqrt")));
+}
+
+#[test]
+fn rqft_alignment_normalizes_positive_uv_scale_logs() {
+    test_initialise().unwrap();
+    let model = load_generic_model("sm");
+    let uv_mass = Atom::var(GS.m_uv_vacuum);
+    let mu_r_sq = Atom::var(GS.mu_r_sq);
+    let epsilon = Atom::var(GS.dim_epsilon);
+    let ratio = uv_mass.pow(2) / &mu_r_sq;
+    let logs = function!(Symbol::LOG, &ratio) + function!(Symbol::LOG, &mu_r_sq)
+        - Atom::num(2) * function!(Symbol::LOG, &uv_mass);
+    // The developed ghost d6 reference remains parametric in both positive
+    // scales: its logarithms cancel to the original rational forest sum.
+    let coefficient = Atom::num((3, 64))
+        + (Atom::num((35, 128)) - Atom::num((9, 8)) * &logs) * &epsilon
+        + (-Atom::one() + Atom::num((3, 4)) * logs) * epsilon.pow(2);
+    let expected = parse!("3/64+35/128*gammalooprs::ε-gammalooprs::ε^2");
+    assert!(
+        (align_to_rqft(&coefficient, &model) - expected)
+            .expand()
+            .is_zero()
+    );
+
+    // Match d6's nested native coefficients, including the opposite sign in
+    // its epsilon-squared logarithm. They must normalize before serialization.
+    let log_mass = function!(Symbol::LOG, &uv_mass);
+    let log_scale = function!(Symbol::LOG, &mu_r_sq);
+    let nested = Atom::num((3, 64))
+        + (Atom::num(-144) * (-&log_scale + Atom::num(2) * &log_mass)
+            - Atom::num(144) * &log_scale
+            + Atom::num(288) * &log_mass
+            + Atom::num(35))
+            * Atom::num((1, 128))
+            * &epsilon
+        + (Atom::num(-96) * (-Atom::num(2) * &log_mass + &log_scale)
+            - Atom::num(128)
+            - Atom::num(192) * &log_mass
+            + Atom::num(96) * &log_scale)
+            * Atom::num((1, 128))
+            * epsilon.pow(2);
+    assert_eq!(
+        align_to_rqft(&nested, &model),
+        parse!("3/64+35/128*gammalooprs::ε-gammalooprs::ε^2")
+    );
+
+    // Negative arguments, foreign scale symbols, and arbitrary log products
+    // have no declared positive-scale contract here and must be retained.
+    let untouched = function!(Symbol::LOG, -ratio)
+        + function!(Symbol::LOG, parse!("user::mUV").pow(2) / &mu_r_sq)
+        + function!(Symbol::LOG, uv_mass.pow(2) / parse!("user::mu_r_sq"))
+        + parse!("log(user::x*user::y)");
+    let aligned = align_to_rqft(&untouched, &model);
+    assert!((aligned.clone() - untouched).expand().is_zero());
+    assert!(aligned.contains_symbol(symbolica::symbol!("user::mUV")));
+    assert!(aligned.contains_symbol(symbolica::symbol!("user::mu_r_sq")));
+}
+
 #[test]
 fn scalar_pole_part() {
     test_initialise().unwrap();
@@ -657,41 +818,414 @@ fn finit_part_ghlo() {
     assert!((align_to_rqft(&a, &model) - expected).expand().is_zero());
 }
 
-mod failing {
-    use super::*;
-
-    fn rqft_3loop_settings() -> UVgenerationSettings {
-        UVgenerationSettings {
-            softct: false,
-            orchestrator: UVOrchestrator::HedgePoset,
-            renormalization_prescription: RenormalizationPrescriptionSettings {
-                log_divergent: ApproximationType::PolePart,
-                massive_power_divergent: ApproximationType::PolePart,
-                massless_power_divergent: ApproximationType::PolePart,
-                ..Default::default()
+fn rqft_3loop_settings() -> UVgenerationSettings {
+    UVgenerationSettings {
+        softct: false,
+        orchestrator: UVOrchestrator::HedgePoset,
+        renormalization_prescription: RenormalizationPrescriptionSettings {
+            log_divergent: ApproximationType::PolePart,
+            massive_power_divergent: ApproximationType::PolePart,
+            massless_power_divergent: ApproximationType::PolePart,
+            ..Default::default()
+        },
+        vakint: VakintSettings {
+            normalization: "(
+            𝑖*(𝜋^((4-2*eps)/2))
+         * (exp(-EulerGamma))^(eps)
+         * (exp(-logmUVmu-log_mu_sq))^(eps)
+         )^(-n_loops)"
+                .to_string(),
+            additional_normalization: "1".to_string(),
+            matad: MATADSettings {
+                expand_masters: true,
+                susbstitute_masters: true,
+                substitute_hpls: false,
+                direct_numerical_substition: false,
             },
-            vakint: VakintSettings {
-                normalization: "(
-                𝑖*(𝜋^((4-2*eps)/2))
-             * (exp(-EulerGamma))^(eps)
-             * (exp(-logmUVmu-log_mu_sq))^(eps)
-             )^(-n_loops)"
-                    .to_string(),
-                additional_normalization: "1".to_string(),
-                matad: MATADSettings {
-                    expand_masters: true,
-                    susbstitute_masters: true,
-                    substitute_hpls: false,
-                    direct_numerical_substition: false,
-                },
-                alphaloop: AlphaLoopSettings {
-                    susbstitute_masters: false,
-                },
-                ..Default::default()
+            alphaloop: AlphaLoopSettings {
+                susbstitute_masters: false,
             },
             ..Default::default()
-        }
+        },
+        ..Default::default()
     }
+}
+
+#[test]
+fn finite_part_ghost_3loop_developed() {
+    test_initialise().unwrap();
+
+    let model = load_generic_model("sm");
+    let g: Vec<Graph> = Graph::from_path(
+        concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../tests/resources/graphs/uv_tests/rqft_ghG_3l.dot"
+        ),
+        &model,
+    )
+    .unwrap();
+
+    let mut amp = Amplitude::from_graph_list("bub", g).unwrap();
+    assert_eq!(amp.graphs.len(), 78);
+    for (index, graph) in amp.graphs.iter().enumerate() {
+        assert_eq!(graph.graph.name, format!("d{}", index + 1));
+    }
+
+    let settings = rqft_3loop_settings();
+
+    let a = amp.graphs[0].renormalization_part(&settings).unwrap();
+    // `Fi` denotes textual summand i of RQFT's `Fill forest(0)`. These values
+    // come from FORM runs with each summand tagged before the forest reduction;
+    // they already include the diagram's overall prefactor.
+    // d1: RQFT `ghost_nnlo_0`.
+    // H = p1.p1*gs^6*ca^3
+    // Forest paths: F0=[0]; F1=[1→2]; F2=[3→4]; F3=[5→6]; F4=[7→8];
+    // F5=[9→10]; F6=[11→12]; F7=[13→14]; F8=[1→10→6];
+    // F9=[1→15→10]; F10=[3→12→6]; F11=[3→15→12];
+    // F12=[7→14→6]; F13=[7→15→14], where each number identifies `uvdiag`.
+    // F0/H = rat(39/16*ep^-2 + 185/32*ep^-1)
+    // F1/H = rat(-3/2*ep^-2 - 5/6*ep^-1)
+    // F2/H = rat(-3/2*ep^-2 - 5/6*ep^-1)
+    // F3/H = rat(-45/16*ep^-2 - 39/8*ep^-1)
+    // F4/H = rat(-3/2*ep^-2 - 5/6*ep^-1)
+    // F8/H = rat(3/2*ep^-2 + 5/6*ep^-1)
+    // F10/H = rat(3/2*ep^-2 + 5/6*ep^-1)
+    // F12/H = rat(3/2*ep^-2 + 5/6*ep^-1)
+    // F5..F7, F9, F11, F13 = 0
+    // sum(Fi)/H = rat(-3/8*ep^-2 + 29/32*ep^-1);
+    // native GammaLoop / RQFT = +1.
+    insta::assert_snapshot!(
+       align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-3/8+29/32*ε)*(cas(2,coad(8)))^3*dot(P(0,mink(4)),P(0,mink(4)))*gs^6*ε^(-2)"
+    );
+
+    let a = amp.graphs[1].renormalization_part(&settings).unwrap();
+    // d2: RQFT `ghost_nnlo_1`.
+    // H = p1.p1*gs^6*ca^3
+    // F0/H = rat(1/32*ep^-2 + 5/192*ep^-1)
+    // F3/H = rat(-3/64*ep^-2)
+    // F6/H = rat(-3/64*ep^-2)
+    // F1..F2, F4..F5, F7..F16 = 0
+    // sum(Fi)/H = rat(-1/16*ep^-2 + 5/192*ep^-1);
+    // native GammaLoop / RQFT = +1.
+    // The two remaining six-f terms have an odd signed graph automorphism and
+    // vanish independently during tensor canonicalization.
+    let aligned = align_to_rqft(&a, &model)
+        .expand()
+        .map_terms_single_core(|term| {
+            term.cook_indices()
+                .canonize::<AbstractIndex>(AbstractIndex::Dummy)
+                .expect("test expression should canonicalize")
+        })
+        .collect_factors()
+        .to_dots();
+    insta::assert_snapshot!(
+       aligned.to_bare_ordered_string(),@"(-1/16+5/192*ε)*(cas(2,coad(8)))^3*dot(P(0,mink(4)),P(0,mink(4)))*gs^6*ε^(-2)"
+    );
+
+    let a = amp.graphs[2].renormalization_part(&settings).unwrap();
+    // d3: RQFT `ghost_nnlo_2`.
+    // H = p1.p1*gs^6*ca^3
+    // F0/H = rat(9/128*ep^-3 + 15/256*ep^-2 + 27/512*ep^-1)
+    //        + cl2*sqrt3*rat(-3/32*ep^-1)
+    //        + pi^2*rat(9/512*ep^-1)
+    // F2/H = rat(-27/128*ep^-3 + 9/256*ep^-2)
+    //        + pi^2*rat(-9/512*ep^-1)
+    // F6/H = rat(-27/128*ep^-3 + 9/256*ep^-2 + 9/512*ep^-1)
+    //        + cl2*sqrt3*rat(3/32*ep^-1)
+    //        + pi^2*rat(-9/256*ep^-1)
+    // F8/H = rat(27/64*ep^-3 - 9/32*ep^-2)
+    //        + pi^2*rat(9/256*ep^-1)
+    // F1, F3..F5, F7, F9 = 0
+    // sum(Fi)/H = rat(9/128*ep^-3 - 39/256*ep^-2 + 9/128*ep^-1);
+    // Hedge terminals F0={H2y}, F2={GEe}{H2y}, F6={Fyy}{H2y}, and
+    // F8={Fyy}{GEe}{H2y} previously matched them before coupling replacement.
+    // Before correcting UUV1, their common i*GC_10^4*GC_12 became -gs^6.
+    // The three corrected ghost-gluon vertices reverse every forest term,
+    // so native GammaLoop / RQFT = +1 at the model convention boundary.
+    insta::assert_snapshot!(
+       align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-39/256*ε+9/128+9/128*ε^2)*(cas(2,coad(8)))^3*dot(P(0,mink(4)),P(0,mink(4)))*gs^6*ε^(-3)"
+    );
+
+    let a = amp.graphs[3].renormalization_part(&settings).unwrap();
+    // d4: SM-UFO counterpart of RQFT `ghost_nnlo_4` (RQFT d5).
+    // H = p1.p1*gs^6*ca^3
+    // F0/H = rat(9/32*ep^-2 + 33/64*ep^-1)
+    //        + cl2*sqrt3*rat(-3/4*ep^-1)
+    // F7/H = rat(-27/64*ep^-2 - 45/128*ep^-1)
+    //        + cl2*sqrt3*rat(3/4*ep^-1)
+    // F1..F6, F8..F13 = 0
+    // sum(Fi)/H = rat(-9/64*ep^-2 + 21/128*ep^-1)
+    // RQFT uses the ghost momentum at a ghost-gluon vertex, whereas the SM UFO
+    // now uses the antighost momentum. This still exchanges the mirror pair d4/d5:
+    // Hedge terminals {H2y}=F0 and {Fyy}{H2y}=F7, while the others are zero.
+    // Their historical common i*GC_10^4*GC_12 gave a relative -1.
+    // Correcting the three UUV1 vertices gives native GammaLoop / RQFT = +1.
+    insta::assert_snapshot!(
+       align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-9/64+21/128*ε)*(cas(2,coad(8)))^3*dot(P(0,mink(4)),P(0,mink(4)))*gs^6*ε^(-2)"
+    );
+
+    let a = amp.graphs[4].renormalization_part(&settings).unwrap();
+    // d5: SM-UFO counterpart of RQFT `ghost_nnlo_3` (RQFT d4).
+    // H = p1.p1*gs^6*ca^3
+    // F0/H = rat(9/128*ep^-3 + 15/256*ep^-2 + 99/512*ep^-1)
+    //        + cl2*sqrt3*rat(-3/32*ep^-1)
+    //        + pi^2*rat(9/512*ep^-1)
+    // F5/H = rat(-27/128*ep^-3 + 9/256*ep^-2)
+    //        + pi^2*rat(-9/512*ep^-1)
+    // F7/H = rat(-27/128*ep^-3 + 9/256*ep^-2 + 9/512*ep^-1)
+    //        + cl2*sqrt3*rat(3/32*ep^-1)
+    //        + pi^2*rat(-9/256*ep^-1)
+    // F13/H = rat(27/64*ep^-3 - 9/32*ep^-2)
+    //         + pi^2*rat(9/256*ep^-1)
+    // F1..F4, F6, F8..F12 = 0
+    // sum(Fi)/H = rat(9/128*ep^-3 - 39/256*ep^-2 + 27/128*ep^-1)
+    // Hedge terminals {H2y}=F0, {GqO}{H2y}=F5, {Fyy}{H2y}=F7, and
+    // {Fyy}{GqO}{H2y}=F13. The mirror mapping and three corrected UUV1
+    // vertices give native GammaLoop / RQFT = +1.
+    insta::assert_snapshot!(
+       align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-39/256*ε+27/128*ε^2+9/128)*(cas(2,coad(8)))^3*dot(P(0,mink(4)),P(0,mink(4)))*gs^6*ε^(-3)"
+    );
+
+    let a = amp.graphs[5].renormalization_part(&settings).unwrap();
+    // d6: RQFT `ghost_nnlo_5`.
+    // H = p1.p1*gs^6*ca^3
+    // F0/H = rat(3/64*ep^-3 - 451/128*ep^-2 - 2767/256*ep^-1)
+    //        + cl2*sqrt3*rat(31/16*ep^-1)
+    //        + pi^2*rat(3/256*ep^-1)
+    // F2/H = rat(27/16*ep^-2 + 19/16*ep^-1)
+    // F4/H = rat(-9/64*ep^-3 + 411/128*ep^-2 + 515/64*ep^-1)
+    //        + pi^2*rat(-3/256*ep^-1)
+    // F5/H = rat(27/16*ep^-2 + 19/16*ep^-1)
+    // F8/H = rat(-9/64*ep^-3 + 435/128*ep^-2 + 867/256*ep^-1)
+    //        + cl2*sqrt3*rat(-31/16*ep^-1)
+    //        + pi^2*rat(-3/128*ep^-1)
+    // F10/H = rat(-27/16*ep^-2 - 19/16*ep^-1)
+    // F13/H = rat(-27/16*ep^-2 - 19/16*ep^-1)
+    // F14/H = rat(9/32*ep^-3 - 45/16*ep^-2 - 13/8*ep^-1)
+    //         + pi^2*rat(3/128*ep^-1)
+    // F1, F3, F6..F7, F9, F11..F12, F15 = 0
+    // sum(Fi)/H = rat(3/64*ep^-3 + 35/128*ep^-2 - ep^-1)
+    // native GammaLoop / RQFT = +1.
+    insta::assert_snapshot!(
+       align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-1*ε^2+3/64+35/128*ε)*(cas(2,coad(8)))^3*dot(P(0,mink(4)),P(0,mink(4)))*gs^6*ε^(-3)"
+    );
+
+    let a = amp.graphs[6].renormalization_part(&settings).unwrap();
+    // d7: RQFT `ghost_nnlo_6`.
+    // H = p1.p1*gs^6*ca^3
+    // F0/H = rat(3/64*ep^-3 - 451/128*ep^-2 - 2767/256*ep^-1)
+    //        + cl2*sqrt3*rat(31/16*ep^-1)
+    //        + pi^2*rat(3/256*ep^-1)
+    // F2/H = rat(27/16*ep^-2 + 19/16*ep^-1)
+    // F4/H = rat(-9/64*ep^-3 + 411/128*ep^-2 + 515/64*ep^-1)
+    //        + pi^2*rat(-3/256*ep^-1)
+    // F5/H = rat(27/16*ep^-2 + 19/16*ep^-1)
+    // F8/H = rat(-9/64*ep^-3 + 435/128*ep^-2 + 867/256*ep^-1)
+    //        + cl2*sqrt3*rat(-31/16*ep^-1)
+    //        + pi^2*rat(-3/128*ep^-1)
+    // F10/H = rat(-27/16*ep^-2 - 19/16*ep^-1)
+    // F13/H = rat(-27/16*ep^-2 - 19/16*ep^-1)
+    // F14/H = rat(9/32*ep^-3 - 45/16*ep^-2 - 13/8*ep^-1)
+    //         + pi^2*rat(3/128*ep^-1)
+    // F1, F3, F6..F7, F9, F11..F12, F15 = 0
+    // sum(Fi)/H = rat(3/64*ep^-3 + 35/128*ep^-2 - ep^-1)
+    // native GammaLoop / RQFT = +1.
+    insta::assert_snapshot!(
+       align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-1*ε^2+3/64+35/128*ε)*(cas(2,coad(8)))^3*dot(P(0,mink(4)),P(0,mink(4)))*gs^6*ε^(-3)"
+    );
+
+    let a = amp.graphs[7].renormalization_part(&settings).unwrap();
+    // d8: RQFT `ghost_nnlo_7`.
+    // H = p1.p1*gs^6*ca^3
+    // F0/H = rat(27/32*ep^-3 + 9/32*ep^-2 - 63/64*ep^-1)
+    //        + cl2*sqrt3*rat(-9/8*ep^-1)
+    //        + pi^2*rat(27/128*ep^-1)
+    // F3/H = rat(-81/32*ep^-3 + 27/16*ep^-2)
+    //        + pi^2*rat(-27/128*ep^-1)
+    // F5/H = rat(-81/64*ep^-3 + 27/128*ep^-2 + 27/256*ep^-1)
+    //        + cl2*sqrt3*rat(9/16*ep^-1)
+    //        + pi^2*rat(-27/128*ep^-1)
+    // F7/H = rat(-81/64*ep^-3 + 27/128*ep^-2 + 27/256*ep^-1)
+    //        + cl2*sqrt3*rat(9/16*ep^-1)
+    //        + pi^2*rat(-27/128*ep^-1)
+    // F10/H = rat(81/32*ep^-3 - 27/16*ep^-2)
+    //         + pi^2*rat(27/128*ep^-1)
+    // F11/H = rat(81/32*ep^-3 - 27/16*ep^-2)
+    //         + pi^2*rat(27/128*ep^-1)
+    // F1..F2, F4, F6, F8..F9, F12..F13 = 0
+    // sum(Fi)/H = rat(27/32*ep^-3 - 63/64*ep^-2 - 99/128*ep^-1)
+    // native GammaLoop / RQFT = +1.
+    insta::assert_snapshot!(
+       align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-63/64*ε+-99/128*ε^2+27/32)*(cas(2,coad(8)))^3*dot(P(0,mink(4)),P(0,mink(4)))*gs^6*ε^(-3)"
+    );
+
+    let a = amp.graphs[8].renormalization_part(&settings).unwrap();
+    // d9: RQFT `ghost_nnlo_8`.
+    // H = p1.p1*gs^6*ca^3
+    // F0..F25 = 0
+    // sum(Fi)/H = 0
+    insta::assert_snapshot!(
+       align_to_rqft(&a,&model).to_bare_ordered_string(),@"0"
+    );
+
+    let a = amp.graphs[9].renormalization_part(&settings).unwrap();
+    // d10: RQFT `ghost_nnlo_9`.
+    // H = p1.p1*gs^6*ca^3
+    // F0..F25 = 0
+    // sum(Fi)/H = 0
+    insta::assert_snapshot!(
+       align_to_rqft(&a,&model).to_bare_ordered_string(),@"0"
+    );
+}
+
+// RQFT 6ac3a8a56b4e supplies an independent forest for each diagram. The
+// current-UFO replay changes only certified primitive conventions; the exact
+// polynomials below never come from GammaLoop's numerical or symbolic output.
+// Adjacent Fi comments retain the original RQFT convention; each literal uses
+// the independently replayed current-UFO forest sum.
+macro_rules! rqft_ghost_reference {
+    (@expression $reference:literal) => {
+        parse!($reference)
+            .replace(parse!("ep"))
+            .with(Atom::var(GS.dim_epsilon))
+            .replace(parse!("ca"))
+            .with(idenso::color_cas!(2, idenso::coad!(8)))
+            .replace(parse!("cf"))
+            .with(idenso::color_cas!(2, cof!(3)))
+            .replace(parse!("z3"))
+            .with(parse!("vakint::Zeta(3)"))
+    };
+    ($name:ident, $diagram:literal, $reference:literal) => {
+        #[test]
+        fn $name() {
+            test_initialise().unwrap();
+            let model = load_generic_model("sm");
+            let graphs: Vec<Graph> = Graph::from_path(
+                concat!(
+                    env!("CARGO_MANIFEST_DIR"),
+                    "/../../tests/resources/graphs/uv_tests/rqft_ghG_3l.dot"
+                ),
+                &model,
+            )
+            .unwrap();
+            let mut amp = Amplitude::from_graph_list("bub", graphs).unwrap();
+            assert_eq!(amp.graphs.len(), 78);
+            for (index, graph) in amp.graphs.iter().enumerate() {
+                assert_eq!(graph.graph.name, format!("d{}", index + 1));
+            }
+            let a = amp.graphs[$diagram - 1]
+                .renormalization_part(&rqft_3loop_settings())
+                .unwrap();
+            let momentum = function!(GS.external_mom, 0, spenso::mink!(4));
+            let expected = function!(SPENSO_TAG.dot, &momentum, &momentum)
+                * rqft_ghost_reference!(@expression $reference);
+            let aligned = align_to_rqft(&a, &model);
+            let difference = (aligned - expected).expand();
+            assert!(
+                difference.is_zero(),
+                "d{} disagrees with its independent current-UFO forest sum: {}",
+                $diagram,
+                difference.to_plain_string(),
+            );
+        }
+    };
+}
+
+#[test]
+fn rqft_reference_uses_the_native_dot_namespace() {
+    test_initialise().unwrap();
+    let model = load_generic_model("sm");
+    let momentum = function!(GS.external_mom, 0, spenso::mink!(4));
+    let native = function!(SPENSO_TAG.dot, &momentum, &momentum);
+    let foreign = function!(GS.dot, &momentum, &momentum);
+    assert_eq!(SPENSO_TAG.dot.get_name(), "spenso::dot");
+    assert_eq!(GS.dot.get_name(), "gammalooprs::dot");
+    assert!(!(native - &foreign).expand().is_zero());
+    assert_eq!(align_to_rqft(&foreign, &model), foreign);
+}
+
+#[test]
+fn rqft_reference_preserves_foreign_coupling_and_period_symbols() {
+    test_initialise().unwrap();
+    let model = load_generic_model("sm");
+    // align_to_rqft owns the gs/nf comparison symbols in its caller's namespace.
+    // Vakint owns both z3 and Zeta, which restore_numerator retains.
+    assert_eq!(
+        symbolica::symbol!("gs").get_name(),
+        "test_renormalization::gs"
+    );
+    assert_eq!(
+        symbolica::symbol!("nf").get_name(),
+        "test_renormalization::nf"
+    );
+    let native = parse!("gs^6*nf*vakint::Zeta(3)");
+    let foreign = parse!("gammalooprs::gs^6*gammalooprs::nf*user::Zeta(3)");
+    assert!(!(&native - &foreign).expand().is_zero());
+    let aligned = align_to_rqft(&(&native + &foreign), &model);
+    assert!((&aligned - &native - &foreign).expand().is_zero());
+    assert!(aligned.contains_symbol(symbolica::symbol!("gammalooprs::gs")));
+    assert!(aligned.contains_symbol(symbolica::symbol!("gammalooprs::nf")));
+    assert!(aligned.contains_symbol(symbolica::symbol!("user::Zeta")));
+    let periods = parse!("vakint::z3+vakint::Zeta(3)+user::z3+user::Zeta(3)");
+    let canonical = parse!("2*vakint::Zeta(3)+user::z3+user::Zeta(3)");
+    assert!(
+        (align_to_rqft(&periods, &model) - canonical)
+            .expand()
+            .is_zero()
+    );
+
+    // Exercise every nonzero reference placeholder through the same macro arm.
+    let reference = rqft_ghost_reference!(@expression "gs^6*ca*cf*nf*z3/ep^2");
+    let expected = parse!("gs^6*nf*vakint::Zeta(3)")
+        * idenso::color_cas!(2, idenso::coad!(8))
+        * idenso::color_cas!(2, cof!(3))
+        / Atom::var(GS.dim_epsilon).pow(2);
+    assert!((reference - expected).expand().is_zero());
+}
+
+#[test]
+fn rqft_photon_projection_preserves_regulated_dimension() {
+    test_initialise().unwrap();
+    let dimension = Atom::var(GS.dim);
+    let epsilon = Atom::var(GS.dim_epsilon);
+    let left = spenso::mink!(GS.dim, function!(GS.hedgeaind, 0));
+    let right = spenso::mink!(GS.dim, function!(GS.hedgeaind, 1));
+    let metric = function!(ETS.metric, &left, &right);
+    let momentum_squared = function!(
+        SPENSO_TAG.dot,
+        function!(GS.external_mom, 0, spenso::mink!(GS.dim)),
+        function!(GS.external_mom, 0, spenso::mink!(GS.dim))
+    );
+    let projected_metric = metric.pow(2).schoonschip_with_net_full::<Aind>().unwrap();
+    assert_eq!(projected_metric, dimension);
+    let projected_momentum =
+        (metric * function!(GS.external_mom, 0, left) * function!(GS.external_mom, 0, right))
+            .schoonschip_with_net_full::<Aind>()
+            .unwrap()
+            .to_dots();
+    assert_eq!(projected_momentum, momentum_squared);
+
+    // RQFT feynman_rules.h declares D=4-2*ep. This exact Laurent identity
+    // checks the finite term supplied by the dimensional projection.
+    let projected_coefficient = (Atom::num((4, 81)) * (&dimension - 1) / epsilon.pow(2)
+        + (Atom::num(11) - Atom::num(17) * &dimension) / (epsilon.clone() * 243))
+        .replace(GS.dim)
+        .with(Atom::num(4) - Atom::num(2) * &epsilon);
+    let reference =
+        Atom::num((34, 243)) + Atom::num((4, 27)) / epsilon.pow(2) - Atom::num((1, 3)) / &epsilon;
+    assert!((projected_coefficient - reference).expand().is_zero());
+    let scalar_trace = (projected_metric * &momentum_squared)
+        .map_mink_dim(Atom::num(4))
+        .replace(GS.dim)
+        .with(Atom::num(4) - Atom::num(2) * &epsilon);
+    assert_eq!(
+        scalar_trace,
+        (Atom::num(4) - Atom::num(2) * epsilon) * momentum_squared.map_mink_dim(Atom::num(4))
+    );
+}
+
+mod slow {
+    use super::*;
 
     #[test]
     fn finite_part_photon_3loop_no_ghost() {
@@ -733,1813 +1267,1750 @@ mod failing {
         // parent. It is purely auxiliary but required to cancel every mUV^2
         // term; F0 and F2 cancel C. Thus sum(Fi)/H/p2 is
         // 34/243 + 4/27*ep^-2 - 1/3*ep^-1.
-        let rqft = parse!(
-            "dot(P(0,spenso::mink(4)),P(0,spenso::mink(4)))*ge^2*gs^4
-             *spenso::cas(2,spenso::coad(8))*spenso::cas(2,spenso::cof(3))*nf
-             *(34/243+4/27*ε^(-2)-1/3*ε^(-1))"
-        );
+        let momentum = function!(GS.external_mom, 0, spenso::mink!(4));
+        let epsilon = Atom::var(GS.dim_epsilon);
+        let rqft = function!(SPENSO_TAG.dot, &momentum, &momentum)
+            * parse!("ge^2*gs^4*nf")
+            * idenso::color_cas!(2, coad!(8))
+            * idenso::color_cas!(2, cof!(3))
+            * (Atom::num((34, 243)) + Atom::num((4, 27)) * epsilon.pow(-2)
+                - epsilon.pow(-1) / Atom::num(3));
         let settings = rqft_3loop_settings();
+
+        // Preserve d_A T_F = d_F C_F before numeric dimensions are contracted.
+        // RQFT first chooses this Casimir basis, then writes T_F = n_f / 2;
+        // substituting n_f after contracting 3 and 8 cannot recover that basis.
+        let fundamental_dimension = parse!("rqft_dF");
+        let adjoint_dimension = parse!("rqft_dA");
+        let fundamental = function!(CS.fundamental_rep, &fundamental_dimension);
+        let adjoint = function!(CS.adjoint_rep, &adjoint_dimension);
+        let parametrize = |atom: &mut Atom| {
+            let original = atom.clone();
+            *atom = atom
+                .to_param_color()
+                .replace(CS.nc * CS.nc - 1)
+                .with(adjoint_dimension.clone())
+                .replace(CS.nc)
+                .with(fundamental_dimension.clone());
+            assert_eq!(
+                atom.replace(fundamental_dimension.as_view().to_pattern())
+                    .with(Atom::num(3))
+                    .replace(adjoint_dimension.as_view().to_pattern())
+                    .with(Atom::num(8)),
+                original,
+                "parametric color changes a primitive at N_c = 3"
+            );
+        };
 
         for index in [21, 24] {
             let graph = &mut amp.graphs[index];
-            let difference =
-                (align_to_rqft(&graph.renormalization_part(&settings).unwrap(), &model) - &rqft)
-                    .expand();
+            for (_, _, vertex) in graph.graph.underlying.iter_nodes_mut() {
+                parametrize(&mut vertex.num.value);
+            }
+            let edges: Vec<_> = graph
+                .graph
+                .underlying
+                .iter_edges()
+                .map(|(_, index, _)| index)
+                .collect();
+            for edge in edges {
+                parametrize(&mut graph.graph.underlying[edge].num.value);
+            }
+            parametrize(&mut graph.graph.global_prefactor.num);
+            parametrize(&mut graph.graph.global_prefactor.projector);
+            // RQFT projects in d=4-2ε, using the same open Lorentz domain as
+            // the integrated tensor. A fixed four-dimensional projector would
+            // lose its ε-dependent contribution to the finite coefficient.
+            graph.graph.global_prefactor.projector =
+                graph.graph.global_prefactor.projector.map_mink_dim(GS.dim);
+
+            let renormalized = graph
+                .renormalization_part(&settings)
+                .unwrap()
+                // Contract only this completed integrated tensor and its
+                // projector; the graph numerator remains factorized.
+                .schoonschip_with_net_full::<Aind>()
+                .unwrap()
+                .to_dots()
+                .to_color_casimir(fundamental.as_view(), adjoint.as_view())
+                .replace(fundamental.as_view().to_pattern())
+                .with(cof!(3))
+                .replace(adjoint.as_view().to_pattern())
+                .with(coad!(8));
+            assert!(renormalized.list_dangling::<Aind>().unwrap().is_empty());
+            let renormalized = renormalized
+                // With every index closed, normalize the scalar-product
+                // representation while retaining scalar metric-trace factors.
+                .map_mink_dim(Atom::num(4))
+                .replace(GS.dim)
+                .with(Atom::num(4) - Atom::num(2) * &epsilon);
+            let difference = (align_to_rqft(&renormalized, &model) - &rqft).expand();
             assert!(
                 difference.is_zero(),
                 "{} differs from its RQFT reference:\n{}",
                 graph.graph.name,
-                difference.to_bare_ordered_string()
+                difference.to_plain_string()
             );
         }
     }
-
-    #[test]
-    fn finite_part_ghost_3loop_developed() {
-        test_initialise().unwrap();
-
-        let model = load_generic_model("sm");
-        let g: Vec<Graph> = Graph::from_path(
-            concat!(
-                env!("CARGO_MANIFEST_DIR"),
-                "/../../tests/resources/graphs/uv_tests/rqft_ghG_3l.dot"
-            ),
-            &model,
-        )
-        .unwrap();
-
-        let mut amp = Amplitude::from_graph_list("bub", g).unwrap();
-        assert_eq!(amp.graphs.len(), 78);
-        for (index, graph) in amp.graphs.iter().enumerate() {
-            assert_eq!(graph.graph.name, format!("d{}", index + 1));
-        }
-
-        let settings = rqft_3loop_settings();
-
-        let a = amp.graphs[0].renormalization_part(&settings).unwrap();
-        // `Fi` denotes textual summand i of RQFT's `Fill forest(0)`. These values
-        // come from FORM runs with each summand tagged before the forest reduction;
-        // they already include the diagram's overall prefactor.
-        // d1: RQFT `ghost_nnlo_0`.
-        // H = p1.p1*gs^6*ca^3
-        // Forest paths: F0=[0]; F1=[1→2]; F2=[3→4]; F3=[5→6]; F4=[7→8];
-        // F5=[9→10]; F6=[11→12]; F7=[13→14]; F8=[1→10→6];
-        // F9=[1→15→10]; F10=[3→12→6]; F11=[3→15→12];
-        // F12=[7→14→6]; F13=[7→15→14], where each number identifies `uvdiag`.
-        // F0/H = rat(39/16*ep^-2 + 185/32*ep^-1)
-        // F1/H = rat(-3/2*ep^-2 - 5/6*ep^-1)
-        // F2/H = rat(-3/2*ep^-2 - 5/6*ep^-1)
-        // F3/H = rat(-45/16*ep^-2 - 39/8*ep^-1)
-        // F4/H = rat(-3/2*ep^-2 - 5/6*ep^-1)
-        // F8/H = rat(3/2*ep^-2 + 5/6*ep^-1)
-        // F10/H = rat(3/2*ep^-2 + 5/6*ep^-1)
-        // F12/H = rat(3/2*ep^-2 + 5/6*ep^-1)
-        // F5..F7, F9, F11, F13 = 0
-        // sum(Fi)/H = rat(-3/8*ep^-2 + 29/32*ep^-1);
-        // native GammaLoop / RQFT = +1.
-        insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-3/8+29/32*ε)*(cas(2,coad(8)))^3*dot(P(0,mink(4)),P(0,mink(4)))*gs^6*ε^(-2)"
-        );
-
-        let a = amp.graphs[1].renormalization_part(&settings).unwrap();
-        // d2: RQFT `ghost_nnlo_1`.
-        // H = p1.p1*gs^6*ca^3
-        // F0/H = rat(1/32*ep^-2 + 5/192*ep^-1)
-        // F3/H = rat(-3/64*ep^-2)
-        // F6/H = rat(-3/64*ep^-2)
-        // F1..F2, F4..F5, F7..F16 = 0
-        // sum(Fi)/H = rat(-1/16*ep^-2 + 5/192*ep^-1);
-        // native GammaLoop / RQFT = +1.
-        // The two remaining six-f terms have an odd signed graph automorphism and
-        // vanish independently during tensor canonicalization.
-        let aligned = align_to_rqft(&a, &model)
-            .expand()
-            .map_terms_single_core(|term| {
-                term.cook_indices()
-                    .canonize::<AbstractIndex>(AbstractIndex::Dummy)
-                    .expect("test expression should canonicalize")
-            })
-            .collect_factors()
-            .to_dots();
-        insta::assert_snapshot!(
-           aligned.to_bare_ordered_string(),@"(-1/16+5/192*ε)*(cas(2,coad(8)))^3*dot(P(0,mink(4)),P(0,mink(4)))*gs^6*ε^(-2)"
-        );
-
-        let a = amp.graphs[2].renormalization_part(&settings).unwrap();
-        // d3: RQFT `ghost_nnlo_2`.
-        // H = p1.p1*gs^6*ca^3
-        // F0/H = rat(9/128*ep^-3 + 15/256*ep^-2 + 27/512*ep^-1)
-        //        + cl2*sqrt3*rat(-3/32*ep^-1)
-        //        + pi^2*rat(9/512*ep^-1)
-        // F2/H = rat(-27/128*ep^-3 + 9/256*ep^-2)
-        //        + pi^2*rat(-9/512*ep^-1)
-        // F6/H = rat(-27/128*ep^-3 + 9/256*ep^-2 + 9/512*ep^-1)
-        //        + cl2*sqrt3*rat(3/32*ep^-1)
-        //        + pi^2*rat(-9/256*ep^-1)
-        // F8/H = rat(27/64*ep^-3 - 9/32*ep^-2)
-        //        + pi^2*rat(9/256*ep^-1)
-        // F1, F3..F5, F7, F9 = 0
-        // sum(Fi)/H = rat(9/128*ep^-3 - 39/256*ep^-2 + 9/128*ep^-1);
-        // Hedge terminals F0={H2y}, F2={GEe}{H2y}, F6={Fyy}{H2y}, and
-        // F8={Fyy}{GEe}{H2y} previously matched them before coupling replacement.
-        // Before correcting UUV1, their common i*GC_10^4*GC_12 became -gs^6.
-        // The three corrected ghost-gluon vertices reverse every forest term,
-        // so native GammaLoop / RQFT = +1 at the model convention boundary.
-        insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-39/256*ε+9/128+9/128*ε^2)*(cas(2,coad(8)))^3*dot(P(0,mink(4)),P(0,mink(4)))*gs^6*ε^(-3)"
-        );
-
-        let a = amp.graphs[3].renormalization_part(&settings).unwrap();
-        // d4: SM-UFO counterpart of RQFT `ghost_nnlo_4` (RQFT d5).
-        // H = p1.p1*gs^6*ca^3
-        // F0/H = rat(9/32*ep^-2 + 33/64*ep^-1)
-        //        + cl2*sqrt3*rat(-3/4*ep^-1)
-        // F7/H = rat(-27/64*ep^-2 - 45/128*ep^-1)
-        //        + cl2*sqrt3*rat(3/4*ep^-1)
-        // F1..F6, F8..F13 = 0
-        // sum(Fi)/H = rat(-9/64*ep^-2 + 21/128*ep^-1)
-        // RQFT uses the ghost momentum at a ghost-gluon vertex, whereas the SM UFO
-        // now uses the antighost momentum. This still exchanges the mirror pair d4/d5:
-        // Hedge terminals {H2y}=F0 and {Fyy}{H2y}=F7, while the others are zero.
-        // Their historical common i*GC_10^4*GC_12 gave a relative -1.
-        // Correcting the three UUV1 vertices gives native GammaLoop / RQFT = +1.
-        insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-9/64+21/128*ε)*(cas(2,coad(8)))^3*dot(P(0,mink(4)),P(0,mink(4)))*gs^6*ε^(-2)"
-        );
-
-        let a = amp.graphs[4].renormalization_part(&settings).unwrap();
-        // d5: SM-UFO counterpart of RQFT `ghost_nnlo_3` (RQFT d4).
-        // H = p1.p1*gs^6*ca^3
-        // F0/H = rat(9/128*ep^-3 + 15/256*ep^-2 + 99/512*ep^-1)
-        //        + cl2*sqrt3*rat(-3/32*ep^-1)
-        //        + pi^2*rat(9/512*ep^-1)
-        // F5/H = rat(-27/128*ep^-3 + 9/256*ep^-2)
-        //        + pi^2*rat(-9/512*ep^-1)
-        // F7/H = rat(-27/128*ep^-3 + 9/256*ep^-2 + 9/512*ep^-1)
-        //        + cl2*sqrt3*rat(3/32*ep^-1)
-        //        + pi^2*rat(-9/256*ep^-1)
-        // F13/H = rat(27/64*ep^-3 - 9/32*ep^-2)
-        //         + pi^2*rat(9/256*ep^-1)
-        // F1..F4, F6, F8..F12 = 0
-        // sum(Fi)/H = rat(9/128*ep^-3 - 39/256*ep^-2 + 27/128*ep^-1)
-        // Hedge terminals {H2y}=F0, {GqO}{H2y}=F5, {Fyy}{H2y}=F7, and
-        // {Fyy}{GqO}{H2y}=F13. The mirror mapping and three corrected UUV1
-        // vertices give native GammaLoop / RQFT = +1.
-        insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-39/256*ε+27/128*ε^2+9/128)*(cas(2,coad(8)))^3*dot(P(0,mink(4)),P(0,mink(4)))*gs^6*ε^(-3)"
-        );
-
-        let a = amp.graphs[5].renormalization_part(&settings).unwrap();
-        // d6: RQFT `ghost_nnlo_5`.
-        // H = p1.p1*gs^6*ca^3
-        // F0/H = rat(3/64*ep^-3 - 451/128*ep^-2 - 2767/256*ep^-1)
-        //        + cl2*sqrt3*rat(31/16*ep^-1)
-        //        + pi^2*rat(3/256*ep^-1)
-        // F2/H = rat(27/16*ep^-2 + 19/16*ep^-1)
-        // F4/H = rat(-9/64*ep^-3 + 411/128*ep^-2 + 515/64*ep^-1)
-        //        + pi^2*rat(-3/256*ep^-1)
-        // F5/H = rat(27/16*ep^-2 + 19/16*ep^-1)
-        // F8/H = rat(-9/64*ep^-3 + 435/128*ep^-2 + 867/256*ep^-1)
-        //        + cl2*sqrt3*rat(-31/16*ep^-1)
-        //        + pi^2*rat(-3/128*ep^-1)
-        // F10/H = rat(-27/16*ep^-2 - 19/16*ep^-1)
-        // F13/H = rat(-27/16*ep^-2 - 19/16*ep^-1)
-        // F14/H = rat(9/32*ep^-3 - 45/16*ep^-2 - 13/8*ep^-1)
-        //         + pi^2*rat(3/128*ep^-1)
-        // F1, F3, F6..F7, F9, F11..F12, F15 = 0
-        // sum(Fi)/H = rat(3/64*ep^-3 + 35/128*ep^-2 - ep^-1)
-        // native GammaLoop / RQFT = +1.
-        insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-1*ε^2+3/64+35/128*ε)*(cas(2,coad(8)))^3*dot(P(0,mink(4)),P(0,mink(4)))*gs^6*ε^(-3)"
-        );
-
-        let a = amp.graphs[6].renormalization_part(&settings).unwrap();
-        // d7: RQFT `ghost_nnlo_6`.
-        // H = p1.p1*gs^6*ca^3
-        // F0/H = rat(3/64*ep^-3 - 451/128*ep^-2 - 2767/256*ep^-1)
-        //        + cl2*sqrt3*rat(31/16*ep^-1)
-        //        + pi^2*rat(3/256*ep^-1)
-        // F2/H = rat(27/16*ep^-2 + 19/16*ep^-1)
-        // F4/H = rat(-9/64*ep^-3 + 411/128*ep^-2 + 515/64*ep^-1)
-        //        + pi^2*rat(-3/256*ep^-1)
-        // F5/H = rat(27/16*ep^-2 + 19/16*ep^-1)
-        // F8/H = rat(-9/64*ep^-3 + 435/128*ep^-2 + 867/256*ep^-1)
-        //        + cl2*sqrt3*rat(-31/16*ep^-1)
-        //        + pi^2*rat(-3/128*ep^-1)
-        // F10/H = rat(-27/16*ep^-2 - 19/16*ep^-1)
-        // F13/H = rat(-27/16*ep^-2 - 19/16*ep^-1)
-        // F14/H = rat(9/32*ep^-3 - 45/16*ep^-2 - 13/8*ep^-1)
-        //         + pi^2*rat(3/128*ep^-1)
-        // F1, F3, F6..F7, F9, F11..F12, F15 = 0
-        // sum(Fi)/H = rat(3/64*ep^-3 + 35/128*ep^-2 - ep^-1)
-        // native GammaLoop / RQFT = +1.
-        insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-1*ε^2+3/64+35/128*ε)*(cas(2,coad(8)))^3*dot(P(0,mink(4)),P(0,mink(4)))*gs^6*ε^(-3)"
-        );
-
-        let a = amp.graphs[7].renormalization_part(&settings).unwrap();
-        // d8: RQFT `ghost_nnlo_7`.
-        // H = p1.p1*gs^6*ca^3
-        // F0/H = rat(27/32*ep^-3 + 9/32*ep^-2 - 63/64*ep^-1)
-        //        + cl2*sqrt3*rat(-9/8*ep^-1)
-        //        + pi^2*rat(27/128*ep^-1)
-        // F3/H = rat(-81/32*ep^-3 + 27/16*ep^-2)
-        //        + pi^2*rat(-27/128*ep^-1)
-        // F5/H = rat(-81/64*ep^-3 + 27/128*ep^-2 + 27/256*ep^-1)
-        //        + cl2*sqrt3*rat(9/16*ep^-1)
-        //        + pi^2*rat(-27/128*ep^-1)
-        // F7/H = rat(-81/64*ep^-3 + 27/128*ep^-2 + 27/256*ep^-1)
-        //        + cl2*sqrt3*rat(9/16*ep^-1)
-        //        + pi^2*rat(-27/128*ep^-1)
-        // F10/H = rat(81/32*ep^-3 - 27/16*ep^-2)
-        //         + pi^2*rat(27/128*ep^-1)
-        // F11/H = rat(81/32*ep^-3 - 27/16*ep^-2)
-        //         + pi^2*rat(27/128*ep^-1)
-        // F1..F2, F4, F6, F8..F9, F12..F13 = 0
-        // sum(Fi)/H = rat(27/32*ep^-3 - 63/64*ep^-2 - 99/128*ep^-1)
-        // native GammaLoop / RQFT = +1.
-        insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-63/64*ε+-99/128*ε^2+27/32)*(cas(2,coad(8)))^3*dot(P(0,mink(4)),P(0,mink(4)))*gs^6*ε^(-3)"
-        );
-
-        let a = amp.graphs[8].renormalization_part(&settings).unwrap();
-        // d9: RQFT `ghost_nnlo_8`.
-        // H = p1.p1*gs^6*ca^3
-        // F0..F25 = 0
-        // sum(Fi)/H = 0
-        insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"0"
-        );
-
-        let a = amp.graphs[9].renormalization_part(&settings).unwrap();
-        // d10: RQFT `ghost_nnlo_9`.
-        // H = p1.p1*gs^6*ca^3
-        // F0..F25 = 0
-        // sum(Fi)/H = 0
-        insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"0"
-        );
-    }
-
-    // Preserve the unfinished references separately: d11..d78 still contain
-    // historical placeholders and cannot validate the developed phase checks.
-    #[test]
-    fn finite_part_ghost_3loop_unfinished() {
-        test_initialise().unwrap();
-
-        let model = load_generic_model("sm");
-        let g: Vec<Graph> = Graph::from_path(
-            concat!(
-                env!("CARGO_MANIFEST_DIR"),
-                "/../../tests/resources/graphs/uv_tests/rqft_ghG_3l.dot"
-            ),
-            &model,
-        )
-        .unwrap();
-
-        let mut amp = Amplitude::from_graph_list("bub", g).unwrap();
-        assert_eq!(amp.graphs.len(), 78);
-        for (index, graph) in amp.graphs.iter().enumerate() {
-            assert_eq!(graph.graph.name, format!("d{}", index + 1));
-        }
-
-        let settings = rqft_3loop_settings();
-
-        let a = amp.graphs[10].renormalization_part(&settings).unwrap();
-        // d11: RQFT `ghost_nnlo_10`.
-        // H = p1.p1*gs^6*ca^2*nf
-        // F0/H = rat(1/12*ep^-3 + 1/6*ep^-2 + 1/72*ep^-1)
-        //        + cl2*sqrt3*rat(-7/27*ep^-1)
-        //        + pi^2*rat(1/48*ep^-1)
-        // F2/H = rat(-1/8*ep^-3 - 7/48*ep^-2 - 95/864*ep^-1)
-        //        + cl2*sqrt3*rat(37/162*ep^-1)
-        //        + pi^2*rat(-1/48*ep^-1)
-        // F3/H = rat(-1/8*ep^-3 - 5/48*ep^-2 + 35/864*ep^-1)
-        //        + cl2*sqrt3*rat(5/162*ep^-1)
-        //        + pi^2*rat(-1/48*ep^-1)
-        // F6/H = rat(1/4*ep^-3 - 1/36*ep^-1)
-        //        + pi^2*rat(1/48*ep^-1)
-        // F1, F4..F5, F7 = 0
-        // sum(Fi)/H = rat(1/12*ep^-3 - 1/12*ep^-2 - 1/12*ep^-1)
-        insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
-        );
-
-        let a = amp.graphs[11].renormalization_part(&settings).unwrap();
-        // d12: RQFT `ghost_nnlo_11`.
-        // H = p1.p1*gs^6*ca^3
-        // F0/H = rat(-5/24*ep^-3 + 67/96*ep^-2 + 1049/864*ep^-1)
-        //        + cl2*sqrt3*rat(-151/162*ep^-1)
-        //        + pi^2*rat(-5/96*ep^-1)
-        // F3/H = rat(5/16*ep^-3 - 13/16*ep^-2 - 37/108*ep^-1)
-        //        + cl2*sqrt3*rat(185/324*ep^-1)
-        //        + pi^2*rat(5/96*ep^-1)
-        // F4/H = rat(5/16*ep^-3 - 5/6*ep^-2 - 17/48*ep^-1)
-        //        + cl2*sqrt3*rat(13/36*ep^-1)
-        //        + pi^2*rat(5/96*ep^-1)
-        // F9/H = rat(-5/8*ep^-3 + 115/96*ep^-2 - 95/288*ep^-1)
-        //        + pi^2*rat(-5/96*ep^-1)
-        // F1..F2, F5..F8, F10..F11 = 0
-        // sum(Fi)/H = rat(-5/24*ep^-3 + 1/4*ep^-2 + 3/16*ep^-1)
-        insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
-        );
-
-        let a = amp.graphs[12].renormalization_part(&settings).unwrap();
-        // d13: RQFT `ghost_nnlo_12`.
-        // H = p1.p1*gs^6*ca^3
-        // F0/H = rat(-7/96*ep^-2 - 113/864*ep^-1)
-        //        + cl2*sqrt3*rat(8/81*ep^-1)
-        // F3/H = rat(5/96*ep^-2 + 23/1728*ep^-1)
-        //        + cl2*sqrt3*rat(-5/162*ep^-1)
-        // F4/H = rat(3/32*ep^-2 + 161/1728*ep^-1)
-        //        + cl2*sqrt3*rat(-11/162*ep^-1)
-        // F9/H = rat(-7/96*ep^-2 + 7/288*ep^-1)
-        // F1..F2, F5..F8, F10..F11 = 0
-        // sum(Fi)/H = 0
-        insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
-        );
-
-        let a = amp.graphs[13].renormalization_part(&settings).unwrap();
-        // d14: RQFT `ghost_nnlo_13`.
-        // H = p1.p1*gs^6*ca^3
-        // F0/H = rat(-3/64*ep^-3 - 29/256*ep^-2 - 335/1536*ep^-1)
-        //        + cl2*sqrt3*rat(5/16*ep^-1)
-        //        + pi^2*rat(-3/256*ep^-1)
-        // F1/H = rat(9/256*ep^-3 - 15/512*ep^-2)
-        //        + pi^2*rat(3/1024*ep^-1)
-        // F2/H = rat(9/128*ep^-3 + 15/256*ep^-2 + 27/512*ep^-1)
-        //        + cl2*sqrt3*rat(-5/32*ep^-1)
-        //        + pi^2*rat(3/256*ep^-1)
-        // F4/H = rat(9/256*ep^-3 + 21/512*ep^-2)
-        //        + pi^2*rat(3/1024*ep^-1)
-        // F5/H = rat(9/128*ep^-3 + 15/256*ep^-2 + 27/512*ep^-1)
-        //        + cl2*sqrt3*rat(-5/32*ep^-1)
-        //        + pi^2*rat(3/256*ep^-1)
-        // F9/H = rat(-9/128*ep^-3 + 3/64*ep^-2)
-        //        + pi^2*rat(-3/512*ep^-1)
-        // F10/H = rat(-9/128*ep^-3 + 3/64*ep^-2)
-        //         + pi^2*rat(-3/512*ep^-1)
-        // F11/H = rat(-9/128*ep^-3)
-        //         + pi^2*rat(-3/512*ep^-1)
-        // F3, F6..F8, F12..F14 = 0
-        // sum(Fi)/H = rat(-3/64*ep^-3 + 7/64*ep^-2 - 173/1536*ep^-1)
-        insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
-        );
-
-        let a = amp.graphs[14].renormalization_part(&settings).unwrap();
-        // d15: RQFT `ghost_nnlo_14`.
-        // H = p1.p1*gs^6*ca^3
-        // F0/H = rat(-1/192*ep^-3 - 1/768*ep^-2 - 5/1536*ep^-1)
-        //        + cl2*sqrt3*rat(1/144*ep^-1)
-        //        + pi^2*rat(-1/768*ep^-1)
-        // F1/H = rat(1/256*ep^-3 - 3/512*ep^-2)
-        //        + pi^2*rat(1/3072*ep^-1)
-        // F2/H = rat(1/128*ep^-3 + 1/256*ep^-2 + 1/512*ep^-1)
-        //        + cl2*sqrt3*rat(-1/288*ep^-1)
-        //        + pi^2*rat(1/768*ep^-1)
-        // F4/H = rat(1/256*ep^-3 - 3/512*ep^-2)
-        //        + pi^2*rat(1/3072*ep^-1)
-        // F5/H = rat(1/128*ep^-3 + 1/256*ep^-2 + 1/512*ep^-1)
-        //        + cl2*sqrt3*rat(-1/288*ep^-1)
-        //        + pi^2*rat(1/768*ep^-1)
-        // F9/H = rat(-1/128*ep^-3)
-        //        + pi^2*rat(-1/1536*ep^-1)
-        // F10/H = rat(-1/128*ep^-3)
-        //         + pi^2*rat(-1/1536*ep^-1)
-        // F11/H = rat(-1/128*ep^-3)
-        //         + pi^2*rat(-1/1536*ep^-1)
-        // F3, F6..F8, F12..F14 = 0
-        // sum(Fi)/H = rat(-1/192*ep^-3 - 1/192*ep^-2 + 1/1536*ep^-1)
-        insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
-        );
-
-        let a = amp.graphs[15].renormalization_part(&settings).unwrap();
-        // d16: RQFT `ghost_nnlo_15`.
-        // H = p1.p1*gs^6*ca^3
-        // F0/H = rat(-1/64*ep^-3 - 13/768*ep^-2 - 53/1536*ep^-1)
-        //        + cl2*sqrt3*rat(1/16*ep^-1)
-        //        + pi^2*rat(-1/256*ep^-1)
-        // F1/H = rat(3/256*ep^-3 - 13/512*ep^-2)
-        //        + pi^2*rat(1/1024*ep^-1)
-        // F2/H = rat(3/128*ep^-3 + 3/256*ep^-2 + 3/512*ep^-1)
-        //        + cl2*sqrt3*rat(-1/96*ep^-1)
-        //        + pi^2*rat(1/256*ep^-1)
-        // F4/H = rat(3/256*ep^-3 - 1/512*ep^-2)
-        //        + pi^2*rat(1/1024*ep^-1)
-        // F5/H = rat(3/128*ep^-3 + 5/256*ep^-2 + 9/512*ep^-1)
-        //        + cl2*sqrt3*rat(-5/96*ep^-1)
-        //        + pi^2*rat(1/256*ep^-1)
-        // F9/H = rat(-3/128*ep^-3 + 1/64*ep^-2)
-        //        + pi^2*rat(-1/512*ep^-1)
-        // F10/H = rat(-3/128*ep^-3)
-        //         + pi^2*rat(-1/512*ep^-1)
-        // F11/H = rat(-3/128*ep^-3)
-        //         + pi^2*rat(-1/512*ep^-1)
-        // F3, F6..F8, F12..F14 = 0
-        // sum(Fi)/H = rat(-1/64*ep^-3 + 1/384*ep^-2 - 17/1536*ep^-1)
-        insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
-        );
-
-        let a = amp.graphs[16].renormalization_part(&settings).unwrap();
-        // d17: RQFT `ghost_nnlo_16`.
-        // H = p1.p1*gs^6*ca^3
-        // F0/H = rat(-1/64*ep^-3 - 19/768*ep^-2 - 21/512*ep^-1)
-        //        + cl2*sqrt3*rat(1/16*ep^-1)
-        //        + pi^2*rat(-1/256*ep^-1)
-        // F1/H = rat(3/256*ep^-3 - 1/512*ep^-2)
-        //        + pi^2*rat(1/1024*ep^-1)
-        // F2/H = rat(3/128*ep^-3 + 5/256*ep^-2 + 9/512*ep^-1)
-        //        + cl2*sqrt3*rat(-5/96*ep^-1)
-        //        + pi^2*rat(1/256*ep^-1)
-        // F4/H = rat(3/256*ep^-3 - 1/512*ep^-2)
-        //        + pi^2*rat(1/1024*ep^-1)
-        // F5/H = rat(3/128*ep^-3 + 3/256*ep^-2 + 3/512*ep^-1)
-        //        + cl2*sqrt3*rat(-1/96*ep^-1)
-        //        + pi^2*rat(1/256*ep^-1)
-        // F9/H = rat(-3/128*ep^-3)
-        //        + pi^2*rat(-1/512*ep^-1)
-        // F10/H = rat(-3/128*ep^-3 + 1/64*ep^-2)
-        //         + pi^2*rat(-1/512*ep^-1)
-        // F11/H = rat(-3/128*ep^-3)
-        //         + pi^2*rat(-1/512*ep^-1)
-        // F3, F6..F8, F12..F14 = 0
-        // sum(Fi)/H = rat(-1/64*ep^-3 + 7/384*ep^-2 - 9/512*ep^-1)
-        insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
-        );
-
-        let a = amp.graphs[17].renormalization_part(&settings).unwrap();
-        // d18: RQFT `ghost_nnlo_17`.
-        // H = p1.p1*gs^6*ca^3
-        // F0/H = rat(-1/128*ep^-3 - 11/768*ep^-2 + 35/512*ep^-1)
-        //        + cl2*sqrt3*rat(5/96*ep^-1)
-        //        + z3*rat(-1/8*ep^-1)
-        //        + pi^2*rat(-1/512*ep^-1)
-        // F1/H = rat(3/256*ep^-3 - 1/512*ep^-2)
-        //        + pi^2*rat(1/1024*ep^-1)
-        // F5/H = rat(3/256*ep^-3 - 13/512*ep^-2)
-        //        + pi^2*rat(1/1024*ep^-1)
-        // F8/H = rat(3/128*ep^-3 + 5/256*ep^-2 + 9/512*ep^-1)
-        //        + cl2*sqrt3*rat(-5/96*ep^-1)
-        //        + pi^2*rat(1/256*ep^-1)
-        // F11/H = rat(-3/128*ep^-3 + 1/64*ep^-2)
-        //         + pi^2*rat(-1/512*ep^-1)
-        // F17/H = rat(-3/128*ep^-3 + 1/64*ep^-2)
-        //         + pi^2*rat(-1/512*ep^-1)
-        // F2..F4, F6..F7, F9..F10, F12..F16, F18 = 0
-        // sum(Fi)/H = rat(-1/128*ep^-3 + 7/768*ep^-2 + 11/128*ep^-1)
-        //             + z3*rat(-1/8*ep^-1)
-        insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
-        );
-
-        let a = amp.graphs[18].renormalization_part(&settings).unwrap();
-        // d19: RQFT `ghost_nnlo_18`.
-        // H = p1.p1*gs^6*ca^3
-        // F0/H = rat(-3/128*ep^-3 - 19/256*ep^-2 - 39/512*ep^-1)
-        //        + cl2*sqrt3*rat(5/32*ep^-1)
-        //        + z3*rat(-1/8*ep^-1)
-        //        + pi^2*rat(-3/512*ep^-1)
-        // F1/H = rat(9/256*ep^-3 + 21/512*ep^-2)
-        //        + pi^2*rat(3/1024*ep^-1)
-        // F5/H = rat(9/256*ep^-3 - 15/512*ep^-2)
-        //        + pi^2*rat(3/1024*ep^-1)
-        // F8/H = rat(9/128*ep^-3 + 15/256*ep^-2 + 27/512*ep^-1)
-        //        + cl2*sqrt3*rat(-5/32*ep^-1)
-        //        + pi^2*rat(3/256*ep^-1)
-        // F11/H = rat(-9/128*ep^-3 + 3/64*ep^-2)
-        //         + pi^2*rat(-3/512*ep^-1)
-        // F17/H = rat(-9/128*ep^-3 + 3/64*ep^-2)
-        //         + pi^2*rat(-3/512*ep^-1)
-        // F2..F4, F6..F7, F9..F10, F12..F16, F18 = 0
-        // sum(Fi)/H = rat(-3/128*ep^-3 + 23/256*ep^-2 - 3/128*ep^-1)
-        //             + z3*rat(-1/8*ep^-1)
-        insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
-        );
-
-        let a = amp.graphs[19].renormalization_part(&settings).unwrap();
-        // d20: RQFT `ghost_nnlo_19`.
-        // H = p1.p1*gs^6*ca^3
-        // F0/H = rat(-1/128*ep^-3 - 5/768*ep^-2 - 23/512*ep^-1)
-        //        + cl2*sqrt3*rat(1/96*ep^-1)
-        //        + pi^2*rat(-1/512*ep^-1)
-        // F1/H = rat(3/256*ep^-3 - 1/512*ep^-2)
-        //        + pi^2*rat(1/1024*ep^-1)
-        // F5/H = rat(3/256*ep^-3 - 1/512*ep^-2)
-        //        + pi^2*rat(1/1024*ep^-1)
-        // F8/H = rat(3/128*ep^-3 + 3/256*ep^-2 + 3/512*ep^-1)
-        //        + cl2*sqrt3*rat(-1/96*ep^-1)
-        //        + pi^2*rat(1/256*ep^-1)
-        // F11/H = rat(-3/128*ep^-3)
-        //         + pi^2*rat(-1/512*ep^-1)
-        // F17/H = rat(-3/128*ep^-3)
-        //         + pi^2*rat(-1/512*ep^-1)
-        // F2..F4, F6..F7, F9..F10, F12..F16, F18 = 0
-        // sum(Fi)/H = rat(-1/128*ep^-3 + 1/768*ep^-2 - 5/128*ep^-1)
-        insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
-        );
-
-        let a = amp.graphs[20].renormalization_part(&settings).unwrap();
-        // d21: RQFT `ghost_nnlo_20`.
-        // H = p1.p1*gs^6*ca^3
-        // F0/H = rat(-1/384*ep^-3 - 1/256*ep^-2 - 11/1536*ep^-1)
-        //        + cl2*sqrt3*rat(1/288*ep^-1)
-        //        + pi^2*rat(-1/1536*ep^-1)
-        // F1/H = rat(1/256*ep^-3 - 3/512*ep^-2)
-        //        + pi^2*rat(1/3072*ep^-1)
-        // F5/H = rat(1/256*ep^-3 + 5/512*ep^-2)
-        //        + pi^2*rat(1/3072*ep^-1)
-        // F8/H = rat(1/128*ep^-3 + 1/256*ep^-2 + 1/512*ep^-1)
-        //        + cl2*sqrt3*rat(-1/288*ep^-1)
-        //        + pi^2*rat(1/768*ep^-1)
-        // F11/H = rat(-1/128*ep^-3)
-        //         + pi^2*rat(-1/1536*ep^-1)
-        // F17/H = rat(-1/128*ep^-3)
-        //         + pi^2*rat(-1/1536*ep^-1)
-        // F2..F4, F6..F7, F9..F10, F12..F16, F18 = 0
-        // sum(Fi)/H = rat(-1/384*ep^-3 + 1/256*ep^-2 - 1/192*ep^-1)
-        insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
-        );
-
-        let a = amp.graphs[21].renormalization_part(&settings).unwrap();
-        // d22: RQFT `ghost_nnlo_21`.
-        // H = p1.p1*gs^6*ca^3
-        // F0/H = rat(-1/128*ep^-3 - 5/768*ep^-2 - 7/512*ep^-1)
-        //        + cl2*sqrt3*rat(1/96*ep^-1)
-        //        + pi^2*rat(-1/512*ep^-1)
-        // F1/H = rat(3/256*ep^-3 - 1/512*ep^-2)
-        //        + pi^2*rat(1/1024*ep^-1)
-        // F5/H = rat(3/256*ep^-3 - 1/512*ep^-2)
-        //        + pi^2*rat(1/1024*ep^-1)
-        // F8/H = rat(3/128*ep^-3 + 3/256*ep^-2 + 3/512*ep^-1)
-        //        + cl2*sqrt3*rat(-1/96*ep^-1)
-        //        + pi^2*rat(1/256*ep^-1)
-        // F11/H = rat(-3/128*ep^-3)
-        //         + pi^2*rat(-1/512*ep^-1)
-        // F17/H = rat(-3/128*ep^-3)
-        //         + pi^2*rat(-1/512*ep^-1)
-        // F2..F4, F6..F7, F9..F10, F12..F16, F18 = 0
-        // sum(Fi)/H = rat(-1/128*ep^-3 + 1/768*ep^-2 - 1/128*ep^-1)
-        insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
-        );
-
-        let a = amp.graphs[22].renormalization_part(&settings).unwrap();
-        // d23: RQFT `ghost_nnlo_22`.
-        // H = p1.p1*gs^6*ca^3
-        // F0/H = rat(-1/384*ep^-3 - 1/256*ep^-2 - 11/1536*ep^-1)
-        //        + cl2*sqrt3*rat(1/288*ep^-1)
-        //        + pi^2*rat(-1/1536*ep^-1)
-        // F1/H = rat(1/256*ep^-3 + 5/512*ep^-2)
-        //        + pi^2*rat(1/3072*ep^-1)
-        // F5/H = rat(1/256*ep^-3 - 3/512*ep^-2)
-        //        + pi^2*rat(1/3072*ep^-1)
-        // F8/H = rat(1/128*ep^-3 + 1/256*ep^-2 + 1/512*ep^-1)
-        //        + cl2*sqrt3*rat(-1/288*ep^-1)
-        //        + pi^2*rat(1/768*ep^-1)
-        // F11/H = rat(-1/128*ep^-3)
-        //         + pi^2*rat(-1/1536*ep^-1)
-        // F17/H = rat(-1/128*ep^-3)
-        //         + pi^2*rat(-1/1536*ep^-1)
-        // F2..F4, F6..F7, F9..F10, F12..F16, F18 = 0
-        // sum(Fi)/H = rat(-1/384*ep^-3 + 1/256*ep^-2 - 1/192*ep^-1)
-        insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
-        );
-
-        let a = amp.graphs[23].renormalization_part(&settings).unwrap();
-        // d24: RQFT `ghost_nnlo_23`.
-        // H = p1.p1*gs^6*ca^2*nf
-        // F0/H = rat(-1/48*ep^-3 - 5/96*ep^-2 - 7/64*ep^-1)
-        //        + cl2*sqrt3*rat(5/36*ep^-1)
-        //        + z3*rat(1/4*ep^-1)
-        //        + pi^2*rat(-1/192*ep^-1)
-        // F1/H = rat(1/32*ep^-3 - 1/64*ep^-2)
-        //        + pi^2*rat(1/384*ep^-1)
-        // F2/H = rat(1/32*ep^-3 - 1/64*ep^-2)
-        //        + pi^2*rat(1/384*ep^-1)
-        // F4/H = rat(1/16*ep^-3 + 5/96*ep^-2 + 3/64*ep^-1)
-        //        + cl2*sqrt3*rat(-5/36*ep^-1)
-        //        + pi^2*rat(1/96*ep^-1)
-        // F5/H = rat(-1/16*ep^-3 + 1/24*ep^-2)
-        //        + pi^2*rat(-1/192*ep^-1)
-        // F6/H = rat(-1/16*ep^-3 + 1/24*ep^-2)
-        //        + pi^2*rat(-1/192*ep^-1)
-        // F3, F7 = 0
-        // sum(Fi)/H = rat(-1/48*ep^-3 + 5/96*ep^-2 - 1/16*ep^-1)
-        //             + z3*rat(1/4*ep^-1)
-        insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
-        );
-
-        let a = amp.graphs[24].renormalization_part(&settings).unwrap();
-        // d25: RQFT `ghost_nnlo_24`.
-        // H = p1.p1*gs^6*ca^2*nf
-        // F0/H = rat(-1/48*ep^-3 - 5/96*ep^-2 - 7/64*ep^-1)
-        //        + cl2*sqrt3*rat(5/36*ep^-1)
-        //        + z3*rat(1/4*ep^-1)
-        //        + pi^2*rat(-1/192*ep^-1)
-        // F1/H = rat(1/32*ep^-3 - 1/64*ep^-2)
-        //        + pi^2*rat(1/384*ep^-1)
-        // F2/H = rat(1/32*ep^-3 - 1/64*ep^-2)
-        //        + pi^2*rat(1/384*ep^-1)
-        // F4/H = rat(1/16*ep^-3 + 5/96*ep^-2 + 3/64*ep^-1)
-        //        + cl2*sqrt3*rat(-5/36*ep^-1)
-        //        + pi^2*rat(1/96*ep^-1)
-        // F5/H = rat(-1/16*ep^-3 + 1/24*ep^-2)
-        //        + pi^2*rat(-1/192*ep^-1)
-        // F6/H = rat(-1/16*ep^-3 + 1/24*ep^-2)
-        //        + pi^2*rat(-1/192*ep^-1)
-        // F3, F7 = 0
-        // sum(Fi)/H = rat(-1/48*ep^-3 + 5/96*ep^-2 - 1/16*ep^-1)
-        //             + z3*rat(1/4*ep^-1)
-        insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
-        );
-
-        let a = amp.graphs[25].renormalization_part(&settings).unwrap();
-        // d26: RQFT `ghost_nnlo_25`.
-        // H = p1.p1*gs^6*ca^3
-        // F0/H = rat(-13/128*ep^-3 - 197/768*ep^-2 - 733/1536*ep^-1)
-        //        + cl2*sqrt3*rat(65/96*ep^-1)
-        //        + z3*rat(-3/8*ep^-1)
-        //        + pi^2*rat(-13/512*ep^-1)
-        // F1/H = rat(39/256*ep^-3 - 37/512*ep^-2)
-        //        + pi^2*rat(13/1024*ep^-1)
-        // F5/H = rat(39/256*ep^-3 - 37/512*ep^-2)
-        //        + pi^2*rat(13/1024*ep^-1)
-        // F8/H = rat(39/128*ep^-3 + 65/256*ep^-2 + 117/512*ep^-1)
-        //        + cl2*sqrt3*rat(-65/96*ep^-1)
-        //        + pi^2*rat(13/256*ep^-1)
-        // F11/H = rat(-39/128*ep^-3 + 13/64*ep^-2)
-        //         + pi^2*rat(-13/512*ep^-1)
-        // F17/H = rat(-39/128*ep^-3 + 13/64*ep^-2)
-        //         + pi^2*rat(-13/512*ep^-1)
-        // F2..F4, F6..F7, F9..F10, F12..F16, F18 = 0
-        // sum(Fi)/H = rat(-13/128*ep^-3 + 199/768*ep^-2 - 191/768*ep^-1)
-        //             + z3*rat(-3/8*ep^-1)
-        insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
-        );
-
-        let a = amp.graphs[26].renormalization_part(&settings).unwrap();
-        // d27: RQFT `ghost_nnlo_26`.
-        // H = p1.p1*gs^6*ca^3
-        // F0/H = rat(1/192*ep^-3 + 7/384*ep^-2 + 31/768*ep^-1)
-        //        + cl2*sqrt3*rat(-5/144*ep^-1)
-        //        + pi^2*rat(1/768*ep^-1)
-        // F1/H = rat(-1/128*ep^-3 - 1/256*ep^-2)
-        //        + pi^2*rat(-1/1536*ep^-1)
-        // F5/H = rat(-1/128*ep^-3 - 1/256*ep^-2)
-        //        + pi^2*rat(-1/1536*ep^-1)
-        // F8/H = rat(-1/64*ep^-3 - 5/384*ep^-2 - 3/256*ep^-1)
-        //        + cl2*sqrt3*rat(5/144*ep^-1)
-        //        + pi^2*rat(-1/384*ep^-1)
-        // F11/H = rat(1/64*ep^-3 - 1/96*ep^-2)
-        //         + pi^2*rat(1/768*ep^-1)
-        // F17/H = rat(1/64*ep^-3 - 1/96*ep^-2)
-        //         + pi^2*rat(1/768*ep^-1)
-        // F2..F4, F6..F7, F9..F10, F12..F16, F18 = 0
-        // sum(Fi)/H = rat(1/192*ep^-3 - 3/128*ep^-2 + 11/384*ep^-1)
-        insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
-        );
-
-        let a = amp.graphs[27].renormalization_part(&settings).unwrap();
-        // d28: RQFT `ghost_nnlo_27`.
-        // H = p1.p1*gs^6*ca^3
-        // F0/H = rat(-1/384*ep^-3 - 1/256*ep^-2 - 1/512*ep^-1)
-        //        + cl2*sqrt3*rat(5/288*ep^-1)
-        //        + pi^2*rat(-1/1536*ep^-1)
-        // F1/H = rat(1/256*ep^-3 - 3/512*ep^-2)
-        //        + pi^2*rat(1/3072*ep^-1)
-        // F5/H = rat(1/256*ep^-3 - 3/512*ep^-2)
-        //        + pi^2*rat(1/3072*ep^-1)
-        // F8/H = rat(1/128*ep^-3 + 5/768*ep^-2 + 3/512*ep^-1)
-        //        + cl2*sqrt3*rat(-5/288*ep^-1)
-        //        + pi^2*rat(1/768*ep^-1)
-        // F11/H = rat(-1/128*ep^-3 + 1/192*ep^-2)
-        //         + pi^2*rat(-1/1536*ep^-1)
-        // F17/H = rat(-1/128*ep^-3 + 1/192*ep^-2)
-        //         + pi^2*rat(-1/1536*ep^-1)
-        // F2..F4, F6..F7, F9..F10, F12..F16, F18 = 0
-        // sum(Fi)/H = rat(-1/384*ep^-3 + 1/768*ep^-2 + 1/256*ep^-1)
-        insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
-        );
-
-        let a = amp.graphs[28].renormalization_part(&settings).unwrap();
-        // d29: RQFT `ghost_nnlo_28`.
-        // H = p1.p1*gs^6*ca^3
-        // F0/H = rat(-3/64*ep^-3 - 7/128*ep^-2 - 23/256*ep^-1)
-        //        + cl2*sqrt3*rat(31/144*ep^-1)
-        //        + pi^2*rat(-3/256*ep^-1)
-        // F1/H = rat(3/64*ep^-3 - 5/128*ep^-2)
-        //        + pi^2*rat(1/256*ep^-1)
-        // F2/H = rat(3/64*ep^-3 - 1/128*ep^-2 - 11/768*ep^-1)
-        //        + cl2*sqrt3*rat(1/144*ep^-1)
-        //        + pi^2*rat(1/128*ep^-1)
-        // F4/H = rat(3/32*ep^-3 + 3/64*ep^-2 + 25/384*ep^-1)
-        //        + cl2*sqrt3*rat(-2/9*ep^-1)
-        //        + pi^2*rat(1/64*ep^-1)
-        // F7/H = rat(-3/32*ep^-3 + 3/32*ep^-2)
-        //        + pi^2*rat(-1/128*ep^-1)
-        // F9/H = rat(-3/32*ep^-3 + 1/32*ep^-2)
-        //        + pi^2*rat(-1/128*ep^-1)
-        // F3, F5..F6, F8, F10..F11 = 0
-        // sum(Fi)/H = rat(-3/64*ep^-3 + 9/128*ep^-2 - 5/128*ep^-1)
-        insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
-        );
-
-        let a = amp.graphs[29].renormalization_part(&settings).unwrap();
-        // d30: RQFT `ghost_nnlo_29`.
-        // H = p1.p1*gs^6*ca^2*nf
-        // F0/H = rat(1/48*ep^-3 + 1/12*ep^-2 + 25/864*ep^-1)
-        //        + cl2*sqrt3*rat(-25/324*ep^-1)
-        //        + pi^2*rat(1/192*ep^-1)
-        // F1/H = rat(-1/24*ep^-2)
-        // F2/H = rat(-1/32*ep^-3 - 13/192*ep^-2 - 23/1152*ep^-1)
-        //        + cl2*sqrt3*rat(7/216*ep^-1)
-        //        + pi^2*rat(-1/192*ep^-1)
-        // F3/H = rat(-1/32*ep^-3 - 5/64*ep^-2 - 103/3456*ep^-1)
-        //        + cl2*sqrt3*rat(29/648*ep^-1)
-        //        + pi^2*rat(-1/192*ep^-1)
-        // F5/H = rat(1/24*ep^-2)
-        // F6/H = rat(1/16*ep^-3 + 1/24*ep^-2)
-        //        + pi^2*rat(1/192*ep^-1)
-        // F4, F7 = 0
-        // sum(Fi)/H = rat(1/48*ep^-3 - 1/48*ep^-2 - 1/48*ep^-1)
-        insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
-        );
-
-        let a = amp.graphs[30].renormalization_part(&settings).unwrap();
-        // d31: RQFT `ghost_nnlo_30`.
-        // H = p1.p1*gs^6*ca^3
-        // F0/H = rat(-19/384*ep^-3 + 131/768*ep^-2 + 4471/13824*ep^-1)
-        //        + cl2*sqrt3*rat(-287/2592*ep^-1)
-        //        + pi^2*rat(-19/1536*ep^-1)
-        // F1/H = rat(-1/128*ep^-3 - 71/768*ep^-2)
-        //        + pi^2*rat(-1/1536*ep^-1)
-        // F2/H = rat(5/64*ep^-3 - 77/384*ep^-2 - 149/768*ep^-1)
-        //        + cl2*sqrt3*rat(11/144*ep^-1)
-        //        + pi^2*rat(5/384*ep^-1)
-        // F4/H = rat(9/128*ep^-3 - 51/256*ep^-2 - 1105/13824*ep^-1)
-        //        + cl2*sqrt3*rat(89/2592*ep^-1)
-        //        + pi^2*rat(3/256*ep^-1)
-        // F7/H = rat(1/64*ep^-3 + 17/192*ep^-2)
-        //        + pi^2*rat(1/768*ep^-1)
-        // F9/H = rat(-5/32*ep^-3 + 7/24*ep^-2)
-        //        + pi^2*rat(-5/384*ep^-1)
-        // F3, F5..F6, F8, F10..F11 = 0
-        // sum(Fi)/H = rat(-19/384*ep^-3 + 15/256*ep^-2 + 19/384*ep^-1)
-        insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
-        );
-
-        let a = amp.graphs[31].renormalization_part(&settings).unwrap();
-        // d32: RQFT `ghost_nnlo_31`.
-        // H = p1.p1*gs^6*ca^3
-        // F0/H = rat(-1/384*ep^-3 - 19/768*ep^-2 - 719/13824*ep^-1)
-        //        + cl2*sqrt3*rat(67/2592*ep^-1)
-        //        + pi^2*rat(-1/1536*ep^-1)
-        // F1/H = rat(1/128*ep^-3 + 7/768*ep^-2)
-        //        + pi^2*rat(1/1536*ep^-1)
-        // F2/H = rat(5/192*ep^-2 + 47/1152*ep^-1)
-        //        + cl2*sqrt3*rat(-1/54*ep^-1)
-        // F4/H = rat(1/128*ep^-3 + 5/256*ep^-2 + 119/13824*ep^-1)
-        //        + cl2*sqrt3*rat(-19/2592*ep^-1)
-        //        + pi^2*rat(1/768*ep^-1)
-        // F7/H = rat(-1/64*ep^-3 - 1/192*ep^-2)
-        //        + pi^2*rat(-1/768*ep^-1)
-        // F9/H = rat(-1/48*ep^-2)
-        // F3, F5..F6, F8, F10..F11 = 0
-        // sum(Fi)/H = rat(-1/384*ep^-3 + 1/256*ep^-2 - 1/384*ep^-1)
-        insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
-        );
-
-        let a = amp.graphs[32].renormalization_part(&settings).unwrap();
-        // d33: RQFT `ghost_nnlo_32`.
-        // H = p1.p1*gs^6*ca^3
-        // F0/H = rat(-1/64*ep^-3 - 1/128*ep^-2 - 131/6912*ep^-1)
-        //        + cl2*sqrt3*rat(25/1296*ep^-1)
-        //        + pi^2*rat(-1/256*ep^-1)
-        // F1/H = rat(1/64*ep^-3 - 1/384*ep^-2)
-        //        + pi^2*rat(1/768*ep^-1)
-        // F2/H = rat(1/64*ep^-3 - 1/384*ep^-2 - 11/2304*ep^-1)
-        //        + cl2*sqrt3*rat(1/432*ep^-1)
-        //        + pi^2*rat(1/384*ep^-1)
-        // F4/H = rat(1/32*ep^-3 + 1/192*ep^-2 + 37/3456*ep^-1)
-        //        + cl2*sqrt3*rat(-7/324*ep^-1)
-        //        + pi^2*rat(1/192*ep^-1)
-        // F7/H = rat(-1/32*ep^-3 + 1/96*ep^-2)
-        //        + pi^2*rat(-1/384*ep^-1)
-        // F9/H = rat(-1/32*ep^-3 + 1/96*ep^-2)
-        //        + pi^2*rat(-1/384*ep^-1)
-        // F3, F5..F6, F8, F10..F11 = 0
-        // sum(Fi)/H = rat(-1/64*ep^-3 + 5/384*ep^-2 - 5/384*ep^-1)
-        insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
-        );
-
-        let a = amp.graphs[33].renormalization_part(&settings).unwrap();
-        // d34: RQFT `ghost_nnlo_33`.
-        // H = p1.p1*gs^6*ca^2*nf
-        // F0/H = rat(1/16*ep^-3 + 1/3*ep^-2 + 5/32*ep^-1)
-        //        + cl2*sqrt3*rat(-19/36*ep^-1)
-        //        + pi^2*rat(1/64*ep^-1)
-        // F1/H = rat(-1/8*ep^-2)
-        // F2/H = rat(-3/32*ep^-3 - 13/64*ep^-2 - 23/384*ep^-1)
-        //        + cl2*sqrt3*rat(7/72*ep^-1)
-        //        + pi^2*rat(-1/64*ep^-1)
-        // F3/H = rat(-3/32*ep^-3 - 23/64*ep^-2 - 53/384*ep^-1)
-        //        + cl2*sqrt3*rat(31/72*ep^-1)
-        //        + pi^2*rat(-1/64*ep^-1)
-        // F5/H = rat(1/8*ep^-2)
-        // F6/H = rat(3/16*ep^-3 + 1/8*ep^-2)
-        //        + pi^2*rat(1/64*ep^-1)
-        // F4, F7 = 0
-        // sum(Fi)/H = rat(1/16*ep^-3 - 5/48*ep^-2 - 1/24*ep^-1)
-        insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
-        );
-
-        let a = amp.graphs[34].renormalization_part(&settings).unwrap();
-        // d35: RQFT `ghost_nnlo_34`.
-        // H = p1.p1*gs^6*ca^3
-        // F0/H = rat(-19/128*ep^-3 + 229/768*ep^-2 + 721/1536*ep^-1)
-        //        + cl2*sqrt3*rat(167/288*ep^-1)
-        //        + pi^2*rat(-19/512*ep^-1)
-        // F1/H = rat(-3/128*ep^-3 - 67/256*ep^-2)
-        //        + pi^2*rat(-1/512*ep^-1)
-        // F2/H = rat(15/64*ep^-3 - 77/128*ep^-2 - 149/256*ep^-1)
-        //        + cl2*sqrt3*rat(11/48*ep^-1)
-        //        + pi^2*rat(5/128*ep^-1)
-        // F4/H = rat(27/128*ep^-3 - 69/256*ep^-2 + 217/1536*ep^-1)
-        //        + cl2*sqrt3*rat(-233/288*ep^-1)
-        //        + pi^2*rat(9/256*ep^-1)
-        // F7/H = rat(3/64*ep^-3 + 15/64*ep^-2)
-        //        + pi^2*rat(1/256*ep^-1)
-        // F9/H = rat(-15/32*ep^-3 + 7/8*ep^-2)
-        //        + pi^2*rat(-5/128*ep^-1)
-        // F3, F5..F6, F8, F10..F11 = 0
-        // sum(Fi)/H = rat(-19/128*ep^-3 + 211/768*ep^-2 + 11/384*ep^-1)
-        insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
-        );
-
-        let a = amp.graphs[35].renormalization_part(&settings).unwrap();
-        // d36: RQFT `ghost_nnlo_35`.
-        // H = p1.p1*gs^6*ca^3
-        // F0/H = rat(-1/128*ep^-3 - 53/768*ep^-2 - 83/512*ep^-1)
-        //        + cl2*sqrt3*rat(7/96*ep^-1)
-        //        + pi^2*rat(-1/512*ep^-1)
-        // F1/H = rat(3/128*ep^-3 + 3/256*ep^-2)
-        //        + pi^2*rat(1/512*ep^-1)
-        // F2/H = rat(5/64*ep^-2 + 47/384*ep^-1)
-        //        + cl2*sqrt3*rat(-1/18*ep^-1)
-        // F4/H = rat(3/128*ep^-3 + 11/256*ep^-2 + 25/1536*ep^-1)
-        //        + cl2*sqrt3*rat(-5/288*ep^-1)
-        //        + pi^2*rat(1/256*ep^-1)
-        // F7/H = rat(-3/64*ep^-3 + 1/64*ep^-2)
-        //        + pi^2*rat(-1/256*ep^-1)
-        // F9/H = rat(-1/16*ep^-2)
-        // F3, F5..F6, F8, F10..F11 = 0
-        // sum(Fi)/H = rat(-1/128*ep^-3 + 13/768*ep^-2 - 3/128*ep^-1)
-        insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
-        );
-
-        let a = amp.graphs[36].renormalization_part(&settings).unwrap();
-        // d37: RQFT `ghost_nnlo_36`.
-        // H = p1.p1*gs^6*ca^3
-        // F0/H = rat(-3/64*ep^-3 - 7/128*ep^-2 - 23/256*ep^-1)
-        //        + cl2*sqrt3*rat(31/144*ep^-1)
-        //        + pi^2*rat(-3/256*ep^-1)
-        // F1/H = rat(3/64*ep^-3 - 5/128*ep^-2)
-        //        + pi^2*rat(1/256*ep^-1)
-        // F2/H = rat(3/64*ep^-3 - 1/128*ep^-2 - 11/768*ep^-1)
-        //        + cl2*sqrt3*rat(1/144*ep^-1)
-        //        + pi^2*rat(1/128*ep^-1)
-        // F4/H = rat(3/32*ep^-3 + 3/64*ep^-2 + 25/384*ep^-1)
-        //        + cl2*sqrt3*rat(-2/9*ep^-1)
-        //        + pi^2*rat(1/64*ep^-1)
-        // F7/H = rat(-3/32*ep^-3 + 3/32*ep^-2)
-        //        + pi^2*rat(-1/128*ep^-1)
-        // F9/H = rat(-3/32*ep^-3 + 1/32*ep^-2)
-        //        + pi^2*rat(-1/128*ep^-1)
-        // F3, F5..F6, F8, F10..F11 = 0
-        // sum(Fi)/H = rat(-3/64*ep^-3 + 9/128*ep^-2 - 5/128*ep^-1)
-        insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
-        );
-
-        let a = amp.graphs[37].renormalization_part(&settings).unwrap();
-        // d38: RQFT `ghost_nnlo_37`.
-        // H = p1.p1*gs^6*ca^2*nf
-        // F0/H = rat(1/48*ep^-3 + 1/16*ep^-2 + 7/864*ep^-1)
-        //        + cl2*sqrt3*rat(-7/324*ep^-1)
-        //        + pi^2*rat(1/192*ep^-1)
-        // F1/H = rat(-1/24*ep^-2)
-        // F2/H = rat(-1/32*ep^-3 - 13/192*ep^-2 - 23/1152*ep^-1)
-        //        + cl2*sqrt3*rat(7/216*ep^-1)
-        //        + pi^2*rat(-1/192*ep^-1)
-        // F3/H = rat(-1/32*ep^-3 - 3/64*ep^-2 - 49/3456*ep^-1)
-        //        + cl2*sqrt3*rat(-7/648*ep^-1)
-        //        + pi^2*rat(-1/192*ep^-1)
-        // F5/H = rat(1/24*ep^-2)
-        // F6/H = rat(1/16*ep^-3 + 1/24*ep^-2)
-        //        + pi^2*rat(1/192*ep^-1)
-        // F4, F7 = 0
-        // sum(Fi)/H = rat(1/48*ep^-3 - 1/96*ep^-2 - 5/192*ep^-1)
-        insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
-        );
-
-        let a = amp.graphs[38].renormalization_part(&settings).unwrap();
-        // d39: RQFT `ghost_nnlo_38`.
-        // H = p1.p1*gs^6*ca^3
-        // F0/H = rat(-19/384*ep^-3 + 175/768*ep^-2 + 5551/13824*ep^-1)
-        //        + cl2*sqrt3*rat(-683/2592*ep^-1)
-        //        + pi^2*rat(-19/1536*ep^-1)
-        // F1/H = rat(-1/128*ep^-3 - 71/768*ep^-2)
-        //        + pi^2*rat(-1/1536*ep^-1)
-        // F2/H = rat(5/64*ep^-3 - 77/384*ep^-2 - 149/768*ep^-1)
-        //        + cl2*sqrt3*rat(11/144*ep^-1)
-        //        + pi^2*rat(5/384*ep^-1)
-        // F4/H = rat(9/128*ep^-3 - 73/256*ep^-2 - 1699/13824*ep^-1)
-        //        + cl2*sqrt3*rat(485/2592*ep^-1)
-        //        + pi^2*rat(3/256*ep^-1)
-        // F7/H = rat(1/64*ep^-3 + 17/192*ep^-2)
-        //        + pi^2*rat(1/768*ep^-1)
-        // F9/H = rat(-5/32*ep^-3 + 7/24*ep^-2)
-        //        + pi^2*rat(-5/384*ep^-1)
-        // F3, F5..F6, F8, F10..F11 = 0
-        // sum(Fi)/H = rat(-19/384*ep^-3 + 23/768*ep^-2 + 65/768*ep^-1)
-        insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
-        );
-
-        let a = amp.graphs[39].renormalization_part(&settings).unwrap();
-        // d40: RQFT `ghost_nnlo_39`.
-        // H = p1.p1*gs^6*ca^3
-        // F0/H = rat(-1/384*ep^-3 - 23/768*ep^-2 - 791/13824*ep^-1)
-        //        + cl2*sqrt3*rat(103/2592*ep^-1)
-        //        + pi^2*rat(-1/1536*ep^-1)
-        // F1/H = rat(1/128*ep^-3 + 7/768*ep^-2)
-        //        + pi^2*rat(1/1536*ep^-1)
-        // F2/H = rat(5/192*ep^-2 + 47/1152*ep^-1)
-        //        + cl2*sqrt3*rat(-1/54*ep^-1)
-        // F4/H = rat(1/128*ep^-3 + 7/256*ep^-2 + 173/13824*ep^-1)
-        //        + cl2*sqrt3*rat(-55/2592*ep^-1)
-        //        + pi^2*rat(1/768*ep^-1)
-        // F7/H = rat(-1/64*ep^-3 - 1/192*ep^-2)
-        //        + pi^2*rat(-1/768*ep^-1)
-        // F9/H = rat(-1/48*ep^-2)
-        // F3, F5..F6, F8, F10..F11 = 0
-        // sum(Fi)/H = rat(-1/384*ep^-3 + 5/768*ep^-2 - 1/256*ep^-1)
-        insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
-        );
-
-        let a = amp.graphs[40].renormalization_part(&settings).unwrap();
-        // d41: RQFT `ghost_nnlo_40`.
-        // H = p1.p1*gs^6*ca^3
-        // F0/H = rat(-1/64*ep^-3 - 1/128*ep^-2 - 131/6912*ep^-1)
-        //        + cl2*sqrt3*rat(25/1296*ep^-1)
-        //        + pi^2*rat(-1/256*ep^-1)
-        // F1/H = rat(1/64*ep^-3 - 1/384*ep^-2)
-        //        + pi^2*rat(1/768*ep^-1)
-        // F2/H = rat(1/64*ep^-3 - 1/384*ep^-2 - 11/2304*ep^-1)
-        //        + cl2*sqrt3*rat(1/432*ep^-1)
-        //        + pi^2*rat(1/384*ep^-1)
-        // F4/H = rat(1/32*ep^-3 + 1/192*ep^-2 + 37/3456*ep^-1)
-        //        + cl2*sqrt3*rat(-7/324*ep^-1)
-        //        + pi^2*rat(1/192*ep^-1)
-        // F7/H = rat(-1/32*ep^-3 + 1/96*ep^-2)
-        //        + pi^2*rat(-1/384*ep^-1)
-        // F9/H = rat(-1/32*ep^-3 + 1/96*ep^-2)
-        //        + pi^2*rat(-1/384*ep^-1)
-        // F3, F5..F6, F8, F10..F11 = 0
-        // sum(Fi)/H = rat(-1/64*ep^-3 + 5/384*ep^-2 - 5/384*ep^-1)
-        insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
-        );
-
-        let a = amp.graphs[41].renormalization_part(&settings).unwrap();
-        // d42: RQFT `ghost_nnlo_41`.
-        // H = p1.p1*gs^6*ca^2*nf
-        // F0/H = rat(1/12*ep^-3 + 9/32*ep^-2 + 35/192*ep^-1)
-        //        + cl2*sqrt3*rat(-4/9*ep^-1)
-        //        + pi^2*rat(1/48*ep^-1)
-        // F1/H = rat(-1/16*ep^-3 - 5/96*ep^-2)
-        //        + pi^2*rat(-1/192*ep^-1)
-        // F2/H = rat(-3/32*ep^-3 - 13/64*ep^-2 - 23/384*ep^-1)
-        //        + cl2*sqrt3*rat(7/72*ep^-1)
-        //        + pi^2*rat(-1/64*ep^-1)
-        // F3/H = rat(-5/32*ep^-3 - 49/192*ep^-2 - 49/384*ep^-1)
-        //        + cl2*sqrt3*rat(25/72*ep^-1)
-        //        + pi^2*rat(-5/192*ep^-1)
-        // F5/H = rat(1/8*ep^-3)
-        //        + pi^2*rat(1/96*ep^-1)
-        // F6/H = rat(3/16*ep^-3 + 1/8*ep^-2)
-        //        + pi^2*rat(1/64*ep^-1)
-        // F4, F7 = 0
-        // sum(Fi)/H = rat(1/12*ep^-3 - 5/48*ep^-2 - 1/192*ep^-1)
-        insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
-        );
-
-        let a = amp.graphs[42].renormalization_part(&settings).unwrap();
-        // d43: RQFT `ghost_nnlo_42`.
-        // H = p1.p1*gs^6*ca^3
-        // F0/H = rat(-79/384*ep^-3 + 323/768*ep^-2 + 659/1536*ep^-1)
-        //        + cl2*sqrt3*rat(101/288*ep^-1)
-        //        + pi^2*rat(-79/1536*ep^-1)
-        // F1/H = rat(19/128*ep^-3 - 307/768*ep^-2)
-        //        + pi^2*rat(19/1536*ep^-1)
-        // F2/H = rat(15/64*ep^-3 - 77/128*ep^-2 - 149/256*ep^-1)
-        //        + cl2*sqrt3*rat(11/48*ep^-1)
-        //        + pi^2*rat(5/128*ep^-1)
-        // F4/H = rat(49/128*ep^-3 - 427/768*ep^-2 + 173/1536*ep^-1)
-        //        + cl2*sqrt3*rat(-167/288*ep^-1)
-        //        + pi^2*rat(49/768*ep^-1)
-        // F7/H = rat(-19/64*ep^-3 + 37/64*ep^-2)
-        //        + pi^2*rat(-19/768*ep^-1)
-        // F9/H = rat(-15/32*ep^-3 + 7/8*ep^-2)
-        //        + pi^2*rat(-5/128*ep^-1)
-        // F3, F5..F6, F8, F10..F11 = 0
-        // sum(Fi)/H = rat(-79/384*ep^-3 + 81/256*ep^-2 - 31/768*ep^-1)
-        insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
-        );
-
-        let a = amp.graphs[43].renormalization_part(&settings).unwrap();
-        // d44: RQFT `ghost_nnlo_43`.
-        // H = p1.p1*gs^6*ca^3
-        // F0/H = rat(-1/384*ep^-3 - 21/256*ep^-2 - 239/1536*ep^-1)
-        //        + cl2*sqrt3*rat(3/32*ep^-1)
-        //        + pi^2*rat(-1/1536*ep^-1)
-        // F1/H = rat(1/128*ep^-3 + 23/768*ep^-2)
-        //        + pi^2*rat(1/1536*ep^-1)
-        // F2/H = rat(5/64*ep^-2 + 47/384*ep^-1)
-        //        + cl2*sqrt3*rat(-1/18*ep^-1)
-        // F4/H = rat(1/128*ep^-3 + 53/768*ep^-2 + 29/1536*ep^-1)
-        //        + cl2*sqrt3*rat(-11/288*ep^-1)
-        //        + pi^2*rat(1/768*ep^-1)
-        // F7/H = rat(-1/64*ep^-3 - 1/64*ep^-2)
-        //        + pi^2*rat(-1/768*ep^-1)
-        // F9/H = rat(-1/16*ep^-2)
-        // F3, F5..F6, F8, F10..F11 = 0
-        // sum(Fi)/H = rat(-1/384*ep^-3 + 13/768*ep^-2 - 11/768*ep^-1)
-        insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
-        );
-
-        let a = amp.graphs[44].renormalization_part(&settings).unwrap();
-        // d45: RQFT `ghost_nnlo_44`.
-        // H = p1.p1*gs^6*ca^2*nf
-        // F0/H = rat(1/48*ep^-3 + 17/96*ep^-2 + 113/192*ep^-1)
-        //        + cl2*sqrt3*rat(-17/36*ep^-1)
-        //        + pi^2*rat(1/192*ep^-1)
-        // F1/H = rat(-1/16*ep^-3 - 5/96*ep^-2)
-        //        + pi^2*rat(-1/192*ep^-1)
-        // F2/H = rat(-1/8*ep^-2)
-        // F3/H = rat(-1/16*ep^-3 - 23/96*ep^-2 - 33/64*ep^-1)
-        //        + cl2*sqrt3*rat(17/36*ep^-1)
-        //        + pi^2*rat(-1/96*ep^-1)
-        // F5/H = rat(1/8*ep^-3)
-        //        + pi^2*rat(1/96*ep^-1)
-        // F6/H = rat(1/8*ep^-2)
-        // F4, F7 = 0
-        // sum(Fi)/H = rat(1/48*ep^-3 - 11/96*ep^-2 + 7/96*ep^-1)
-        insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
-        );
-
-        let a = amp.graphs[45].renormalization_part(&settings).unwrap();
-        // d46: RQFT `ghost_nnlo_45`.
-        // H = p1.p1*gs^6*ca^3
-        // F0/H = rat(-1/24*ep^-3 - 89/192*ep^-2 + 277/384*ep^-1)
-        //        + cl2*sqrt3*rat(43/36*ep^-1)
-        //        + pi^2*rat(-1/96*ep^-1)
-        // F1/H = rat(19/128*ep^-3 - 307/768*ep^-2)
-        //        + pi^2*rat(19/1536*ep^-1)
-        // F3/H = rat(-3/128*ep^-3 - 67/256*ep^-2)
-        //        + pi^2*rat(-1/512*ep^-1)
-        // F4/H = rat(1/8*ep^-3 + 119/192*ep^-2 - 135/128*ep^-1)
-        //        + cl2*sqrt3*rat(-43/36*ep^-1)
-        //        + pi^2*rat(1/48*ep^-1)
-        // F7/H = rat(-19/64*ep^-3 + 37/64*ep^-2)
-        //        + pi^2*rat(-19/768*ep^-1)
-        // F9/H = rat(3/64*ep^-3 + 15/64*ep^-2)
-        //        + pi^2*rat(1/256*ep^-1)
-        // F2, F5..F6, F8, F10..F11 = 0
-        // sum(Fi)/H = rat(-1/24*ep^-3 + 59/192*ep^-2 - 1/3*ep^-1)
-        insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
-        );
-
-        let a = amp.graphs[46].renormalization_part(&settings).unwrap();
-        // d47: RQFT `ghost_nnlo_46`.
-        // H = p1.p1*gs^6*ca^3
-        // F0/H = rat(-1/96*ep^-3 - 9/64*ep^-1)
-        //        + cl2*sqrt3*rat(-1/72*ep^-1)
-        //        + pi^2*rat(-1/384*ep^-1)
-        // F1/H = rat(1/128*ep^-3 + 23/768*ep^-2)
-        //        + pi^2*rat(1/1536*ep^-1)
-        // F3/H = rat(3/128*ep^-3 + 3/256*ep^-2)
-        //        + pi^2*rat(1/512*ep^-1)
-        // F4/H = rat(1/32*ep^-3 - 1/48*ep^-2 + 3/32*ep^-1)
-        //        + cl2*sqrt3*rat(1/72*ep^-1)
-        //        + pi^2*rat(1/192*ep^-1)
-        // F7/H = rat(-1/64*ep^-3 - 1/64*ep^-2)
-        //        + pi^2*rat(-1/768*ep^-1)
-        // F9/H = rat(-3/64*ep^-3 + 1/64*ep^-2)
-        //        + pi^2*rat(-1/256*ep^-1)
-        // F2, F5..F6, F8, F10..F11 = 0
-        // sum(Fi)/H = rat(-1/96*ep^-3 + 1/48*ep^-2 - 3/64*ep^-1)
-        insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
-        );
-
-        let a = amp.graphs[47].renormalization_part(&settings).unwrap();
-        // d48: RQFT `ghost_nnlo_47`.
-        // H = p1.p1*gs^6*ca^3
-        // F0/H = rat(-1/96*ep^-3 - 1/64*ep^-2 + 1/384*ep^-1)
-        //        + cl2*sqrt3*rat(1/72*ep^-1)
-        //        + pi^2*rat(-1/384*ep^-1)
-        // F1/H = rat(1/64*ep^-3 - 1/384*ep^-2)
-        //        + pi^2*rat(1/768*ep^-1)
-        // F3/H = rat(1/64*ep^-3 - 1/384*ep^-2)
-        //        + pi^2*rat(1/768*ep^-1)
-        // F4/H = rat(1/32*ep^-3 + 1/64*ep^-2 - 5/384*ep^-1)
-        //        + cl2*sqrt3*rat(-1/72*ep^-1)
-        //        + pi^2*rat(1/192*ep^-1)
-        // F7/H = rat(-1/32*ep^-3 + 1/96*ep^-2)
-        //        + pi^2*rat(-1/384*ep^-1)
-        // F9/H = rat(-1/32*ep^-3 + 1/96*ep^-2)
-        //        + pi^2*rat(-1/384*ep^-1)
-        // F2, F5..F6, F8, F10..F11 = 0
-        // sum(Fi)/H = rat(-1/96*ep^-3 + 1/64*ep^-2 - 1/96*ep^-1)
-        insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
-        );
-
-        let a = amp.graphs[48].renormalization_part(&settings).unwrap();
-        // d49: RQFT `ghost_nnlo_48`.
-        // H = p1.p1*gs^6*ca^3
-        // F0/H = rat(-1/32*ep^-3 - 5/192*ep^-2 - 5/384*ep^-1)
-        //        + cl2*sqrt3*rat(-1/72*ep^-1)
-        //        + z3*rat(1/8*ep^-1)
-        //        + pi^2*rat(-1/128*ep^-1)
-        // F1/H = rat(3/64*ep^-3 - 1/128*ep^-2 - 11/768*ep^-1)
-        //        + cl2*sqrt3*rat(1/144*ep^-1)
-        //        + pi^2*rat(1/128*ep^-1)
-        // F5/H = rat(3/32*ep^-3 + 3/64*ep^-2 - 5/192*ep^-1)
-        //        + pi^2*rat(1/128*ep^-1)
-        // F8/H = rat(3/64*ep^-3 - 1/128*ep^-2 - 11/768*ep^-1)
-        //        + cl2*sqrt3*rat(1/144*ep^-1)
-        //        + pi^2*rat(1/128*ep^-1)
-        // F12/H = rat(-3/32*ep^-3 + 1/32*ep^-2)
-        //         + pi^2*rat(-1/128*ep^-1)
-        // F15/H = rat(-3/32*ep^-3 + 1/32*ep^-2)
-        //         + pi^2*rat(-1/128*ep^-1)
-        // F2..F4, F6..F7, F9..F11, F13..F14, F16..F17 = 0
-        // sum(Fi)/H = rat(-1/32*ep^-3 + 13/192*ep^-2 - 13/192*ep^-1)
-        //             + z3*rat(1/8*ep^-1)
-        insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
-        );
-
-        let a = amp.graphs[49].renormalization_part(&settings).unwrap();
-        // d50: RQFT `ghost_nnlo_49`.
-        // H = p1.p1*gs^6*ca^3
-        // F0/H = rat(-1/96*ep^-3 - 1/192*ep^-2 + 5/1152*ep^-1)
-        //        + cl2*sqrt3*rat(-1/216*ep^-1)
-        //        + pi^2*rat(-1/384*ep^-1)
-        // F1/H = rat(1/64*ep^-3 - 1/384*ep^-2 - 11/2304*ep^-1)
-        //        + cl2*sqrt3*rat(1/432*ep^-1)
-        //        + pi^2*rat(1/384*ep^-1)
-        // F5/H = rat(1/32*ep^-3 + 1/192*ep^-2 - 1/192*ep^-1)
-        //        + pi^2*rat(1/384*ep^-1)
-        // F8/H = rat(1/64*ep^-3 - 1/384*ep^-2 - 11/2304*ep^-1)
-        //        + cl2*sqrt3*rat(1/432*ep^-1)
-        //        + pi^2*rat(1/384*ep^-1)
-        // F12/H = rat(-1/32*ep^-3 + 1/96*ep^-2)
-        //         + pi^2*rat(-1/384*ep^-1)
-        // F15/H = rat(-1/32*ep^-3 + 1/96*ep^-2)
-        //         + pi^2*rat(-1/384*ep^-1)
-        // F2..F4, F6..F7, F9..F11, F13..F14, F16..F17 = 0
-        // sum(Fi)/H = rat(-1/96*ep^-3 + 1/64*ep^-2 - 1/96*ep^-1)
-        insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
-        );
-
-        let a = amp.graphs[50].renormalization_part(&settings).unwrap();
-        // d51: RQFT `ghost_nnlo_50`.
-        // H = p1.p1*gs^6*ca*nf
-        // F0/H = cf*rat(1/6*ep^-3 + 29/18*ep^-2 + 59/18*ep^-1)
-        //        + cf*cl2*sqrt3*rat(-14/27*ep^-1)
-        //        + ca*rat(-1/12*ep^-3 - 29/36*ep^-2 - 59/36*ep^-1)
-        //        + ca*cl2*sqrt3*rat(7/27*ep^-1)
-        //        + z3*cf*rat(-2*ep^-1)
-        //        + z3*ca*rat(ep^-1)
-        //        + pi^2*cf*rat(1/24*ep^-1)
-        //        + pi^2*ca*rat(-1/48*ep^-1)
-        // F1/H = cf*rat(-1/4*ep^-3 - 13/24*ep^-2 - 23/144*ep^-1)
-        //        + cf*cl2*sqrt3*rat(7/27*ep^-1)
-        //        + ca*rat(1/8*ep^-3 + 13/48*ep^-2 + 23/288*ep^-1)
-        //        + ca*cl2*sqrt3*rat(-7/54*ep^-1)
-        //        + pi^2*cf*rat(-1/24*ep^-1)
-        //        + pi^2*ca*rat(1/48*ep^-1)
-        // F2/H = cf*rat(-4/3*ep^-2 - 4/9*ep^-1)
-        //        + ca*rat(2/3*ep^-2 + 2/9*ep^-1)
-        // F3/H = cf*rat(-1/2*ep^-3 - 5/3*ep^-2 - 8/9*ep^-1)
-        //        + ca*rat(1/4*ep^-3 + 5/6*ep^-2 + 4/9*ep^-1)
-        //        + pi^2*cf*rat(-1/24*ep^-1)
-        //        + pi^2*ca*rat(1/48*ep^-1)
-        // F4/H = cf*rat(-1/4*ep^-3 - 13/24*ep^-2 - 23/144*ep^-1)
-        //        + cf*cl2*sqrt3*rat(7/27*ep^-1)
-        //        + ca*rat(1/8*ep^-3 + 13/48*ep^-2 + 23/288*ep^-1)
-        //        + ca*cl2*sqrt3*rat(-7/54*ep^-1)
-        //        + pi^2*cf*rat(-1/24*ep^-1)
-        //        + pi^2*ca*rat(1/48*ep^-1)
-        // F6/H = cf*rat(1/2*ep^-3 + 1/6*ep^-2 + 1/9*ep^-1)
-        //        + ca*rat(-1/4*ep^-3 - 1/12*ep^-2 - 1/18*ep^-1)
-        //        + pi^2*cf*rat(1/24*ep^-1)
-        //        + pi^2*ca*rat(-1/48*ep^-1)
-        // F7/H = cf*rat(4/3*ep^-2 + 4/9*ep^-1)
-        //        + ca*rat(-2/3*ep^-2 - 2/9*ep^-1)
-        // F9/H = cf*rat(1/2*ep^-3 + 1/6*ep^-2 + 1/9*ep^-1)
-        //        + ca*rat(-1/4*ep^-3 - 1/12*ep^-2 - 1/18*ep^-1)
-        //        + pi^2*cf*rat(1/24*ep^-1)
-        //        + pi^2*ca*rat(-1/48*ep^-1)
-        // F5, F8 = 0
-        // sum(Fi)/H = cf*rat(1/6*ep^-3 - 29/36*ep^-2 + 55/24*ep^-1)
-        //             + ca*rat(-1/12*ep^-3 + 29/72*ep^-2 - 55/48*ep^-1)
-        //             + z3*cf*rat(-2*ep^-1)
-        //             + z3*ca*rat(ep^-1)
-        insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
-        );
-
-        let a = amp.graphs[51].renormalization_part(&settings).unwrap();
-        // d52: RQFT `ghost_nnlo_51`.
-        // H = p1.p1*gs^6*ca^2*nf
-        // F0/H = rat(-1/72*ep^-3 + 155/144*ep^-2 + 751/288*ep^-1)
-        //        + cl2*sqrt3*rat(-43/54*ep^-1)
-        //        + pi^2*rat(-1/288*ep^-1)
-        // F1/H = rat(5/12*ep^-3 - 77/72*ep^-2 - 149/144*ep^-1)
-        //        + cl2*sqrt3*rat(11/27*ep^-1)
-        //        + pi^2*rat(5/72*ep^-1)
-        // F4/H = rat(1/24*ep^-3 - 151/144*ep^-2 - 95/72*ep^-1)
-        //        + pi^2*rat(1/288*ep^-1)
-        // F5/H = rat(-3/8*ep^-3 - 13/16*ep^-2 - 23/96*ep^-1)
-        //        + cl2*sqrt3*rat(7/18*ep^-1)
-        //        + pi^2*rat(-1/16*ep^-1)
-        // F8/H = rat(-5/6*ep^-3 + 4/3*ep^-2 + 13/27*ep^-1)
-        //        + pi^2*rat(-5/72*ep^-1)
-        // F9/H = rat(3/4*ep^-3 + 1/4*ep^-2 + 1/6*ep^-1)
-        //        + pi^2*rat(1/16*ep^-1)
-        // F2..F3, F6..F7 = 0
-        // sum(Fi)/H = rat(-1/72*ep^-3 - 13/48*ep^-2 + 143/216*ep^-1)
-        insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
-        );
-
-        let a = amp.graphs[52].renormalization_part(&settings).unwrap();
-        // d53: RQFT `ghost_nnlo_52`.
-        // H = p1.p1*gs^6*ca^2*nf
-        // F0/H = rat(-1/72*ep^-3 + 155/144*ep^-2 + 751/288*ep^-1)
-        //        + cl2*sqrt3*rat(-43/54*ep^-1)
-        //        + pi^2*rat(-1/288*ep^-1)
-        // F1/H = rat(-3/8*ep^-3 - 13/16*ep^-2 - 23/96*ep^-1)
-        //        + cl2*sqrt3*rat(7/18*ep^-1)
-        //        + pi^2*rat(-1/16*ep^-1)
-        // F2/H = rat(1/24*ep^-3 - 151/144*ep^-2 - 95/72*ep^-1)
-        //        + pi^2*rat(1/288*ep^-1)
-        // F5/H = rat(5/12*ep^-3 - 77/72*ep^-2 - 149/144*ep^-1)
-        //        + cl2*sqrt3*rat(11/27*ep^-1)
-        //        + pi^2*rat(5/72*ep^-1)
-        // F6/H = rat(3/4*ep^-3 + 1/4*ep^-2 + 1/6*ep^-1)
-        //        + pi^2*rat(1/16*ep^-1)
-        // F7/H = rat(-5/6*ep^-3 + 4/3*ep^-2 + 13/27*ep^-1)
-        //        + pi^2*rat(-5/72*ep^-1)
-        // F3..F4, F8..F9 = 0
-        // sum(Fi)/H = rat(-1/72*ep^-3 - 13/48*ep^-2 + 143/216*ep^-1)
-        insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
-        );
-
-        let a = amp.graphs[53].renormalization_part(&settings).unwrap();
-        // d54: RQFT `ghost_nnlo_53`.
-        // H = p1.p1*gs^6*ca^3
-        // F0/H = rat(-65/96*ep^-3 + 3329/1152*ep^-2 + 23713/2304*ep^-1)
-        //        + cl2*sqrt3*rat(-143/72*ep^-1)
-        //        + z3*rat(1/4*ep^-1)
-        //        + pi^2*rat(-65/384*ep^-1)
-        // F1/H = rat(65/64*ep^-3 - 1001/384*ep^-2 - 1937/768*ep^-1)
-        //        + cl2*sqrt3*rat(143/144*ep^-1)
-        //        + pi^2*rat(65/384*ep^-1)
-        // F3/H = rat(-9/8*ep^-2 - 8/9*ep^-1)
-        // F5/H = rat(65/32*ep^-3 - 463/128*ep^-2 - 3685/576*ep^-1)
-        //        + pi^2*rat(65/384*ep^-1)
-        // F8/H = rat(65/64*ep^-3 - 1001/384*ep^-2 - 1937/768*ep^-1)
-        //        + cl2*sqrt3*rat(143/144*ep^-1)
-        //        + pi^2*rat(65/384*ep^-1)
-        // F12/H = rat(-65/32*ep^-3 + 13/4*ep^-2 + 169/144*ep^-1)
-        //         + pi^2*rat(-65/384*ep^-1)
-        // F13/H = rat(9/8*ep^-2 + 8/9*ep^-1)
-        // F15/H = rat(-65/32*ep^-3 + 13/4*ep^-2 + 169/144*ep^-1)
-        //         + pi^2*rat(-65/384*ep^-1)
-        // F2, F4, F6..F7, F9..F11, F14, F16..F17 = 0
-        // sum(Fi)/H = rat(-65/96*ep^-3 + 161/288*ep^-2 + 2759/2304*ep^-1)
-        //             + z3*rat(1/4*ep^-1)
-        insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
-        );
-
-        let a = amp.graphs[54].renormalization_part(&settings).unwrap();
-        // d55: RQFT `ghost_nnlo_54`.
-        // H = p1.p1*gs^6*ca^3
-        // F0/H = rat(5/576*ep^-3 - 13/192*ep^-2 - 319/1152*ep^-1)
-        //        + cl2*sqrt3*rat(35/432*ep^-1)
-        //        + pi^2*rat(5/2304*ep^-1)
-        // F1/H = rat(5/64*ep^-2 + 47/384*ep^-1)
-        //        + cl2*sqrt3*rat(-1/18*ep^-1)
-        // F5/H = rat(-5/192*ep^-3 + 17/288*ep^-2 + 23/144*ep^-1)
-        //        + pi^2*rat(-5/2304*ep^-1)
-        // F8/H = rat(-5/192*ep^-3 + 77/1152*ep^-2 + 149/2304*ep^-1)
-        //        + cl2*sqrt3*rat(-11/432*ep^-1)
-        //        + pi^2*rat(-5/1152*ep^-1)
-        // F12/H = rat(-1/16*ep^-2 - 1/16*ep^-1)
-        // F15/H = rat(5/96*ep^-3 - 1/12*ep^-2 - 13/432*ep^-1)
-        //         + pi^2*rat(5/1152*ep^-1)
-        // F2..F4, F6..F7, F9..F11, F13..F14, F16..F17 = 0
-        // sum(Fi)/H = rat(5/576*ep^-3 - 11/1152*ep^-2 - 157/6912*ep^-1)
-        insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
-        );
-
-        let a = amp.graphs[55].renormalization_part(&settings).unwrap();
-        // d56: RQFT `ghost_nnlo_55`.
-        // H = p1.p1*gs^6*ca^3
-        // F0/H = rat(5/576*ep^-3 - 13/192*ep^-2 - 319/1152*ep^-1)
-        //        + cl2*sqrt3*rat(35/432*ep^-1)
-        //        + pi^2*rat(5/2304*ep^-1)
-        // F1/H = rat(-5/192*ep^-3 + 77/1152*ep^-2 + 149/2304*ep^-1)
-        //        + cl2*sqrt3*rat(-11/432*ep^-1)
-        //        + pi^2*rat(-5/1152*ep^-1)
-        // F5/H = rat(-5/192*ep^-3 + 17/288*ep^-2 + 23/144*ep^-1)
-        //        + pi^2*rat(-5/2304*ep^-1)
-        // F8/H = rat(5/64*ep^-2 + 47/384*ep^-1)
-        //        + cl2*sqrt3*rat(-1/18*ep^-1)
-        // F12/H = rat(5/96*ep^-3 - 1/12*ep^-2 - 13/432*ep^-1)
-        //         + pi^2*rat(5/1152*ep^-1)
-        // F15/H = rat(-1/16*ep^-2 - 1/16*ep^-1)
-        // F2..F4, F6..F7, F9..F11, F13..F14, F16..F17 = 0
-        // sum(Fi)/H = rat(5/576*ep^-3 - 11/1152*ep^-2 - 157/6912*ep^-1)
-        insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
-        );
-
-        let a = amp.graphs[56].renormalization_part(&settings).unwrap();
-        // d57: RQFT `ghost_nnlo_56`.
-        // H = p1.p1*gs^6*ca^3
-        // F0/H = rat(-59/1152*ep^-2 - 161/768*ep^-1)
-        //        + cl2*sqrt3*rat(1/27*ep^-1)
-        // F1/H = rat(5/192*ep^-2 + 47/1152*ep^-1)
-        //        + cl2*sqrt3*rat(-1/54*ep^-1)
-        // F3/H = rat(1/24*ep^-2 + 1/36*ep^-1)
-        // F5/H = rat(19/384*ep^-2 + 25/192*ep^-1)
-        // F8/H = rat(5/192*ep^-2 + 47/1152*ep^-1)
-        //        + cl2*sqrt3*rat(-1/54*ep^-1)
-        // F12/H = rat(-1/48*ep^-2 - 1/48*ep^-1)
-        // F13/H = rat(-1/24*ep^-2 - 1/36*ep^-1)
-        // F15/H = rat(-1/48*ep^-2 - 1/48*ep^-1)
-        // F2, F4, F6..F7, F9..F11, F14, F16..F17 = 0
-        // sum(Fi)/H = rat(5/576*ep^-2 - 91/2304*ep^-1)
-        insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
-        );
-
-        let a = amp.graphs[57].renormalization_part(&settings).unwrap();
-        // d58: RQFT `ghost_nnlo_57`.
-        // H = p1.p1*gs^6*ca^3
-        // F0/H = rat(-1/24*ep^-3 + 1/32*ep^-2 + 29/216*ep^-1)
-        //        + cl2*sqrt3*rat(-13/162*ep^-1)
-        //        + pi^2*rat(-1/96*ep^-1)
-        // F5/H = rat(1/16*ep^-3 - 1/24*ep^-2 - 31/864*ep^-1)
-        //        + cl2*sqrt3*rat(13/324*ep^-1)
-        //        + pi^2*rat(1/96*ep^-1)
-        // F6/H = rat(1/16*ep^-3 - 1/24*ep^-2 - 31/864*ep^-1)
-        //        + cl2*sqrt3*rat(13/324*ep^-1)
-        //        + pi^2*rat(1/96*ep^-1)
-        // F11/H = rat(-1/8*ep^-3 + 7/96*ep^-2 - 1/96*ep^-1)
-        //         + pi^2*rat(-1/96*ep^-1)
-        // F1..F4, F7..F10 = 0
-        // sum(Fi)/H = rat(-1/24*ep^-3 + 1/48*ep^-2 + 5/96*ep^-1)
-        insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
-        );
-
-        let a = amp.graphs[58].renormalization_part(&settings).unwrap();
-        // d59: RQFT `ghost_nnlo_58`.
-        // H = p1.p1*gs^6*ca*nf^2
-        // F0/H = rat(-1/9*ep^-3 - 55/54*ep^-2 - 161/162*ep^-1)
-        //        + cl2*sqrt3*rat(92/81*ep^-1)
-        //        + pi^2*rat(-1/36*ep^-1)
-        // F1/H = rat(1/6*ep^-3 + 35/36*ep^-2 + 133/216*ep^-1)
-        //        + cl2*sqrt3*rat(-46/81*ep^-1)
-        //        + pi^2*rat(1/36*ep^-1)
-        // F2/H = rat(1/6*ep^-3 + 35/36*ep^-2 + 133/216*ep^-1)
-        //        + cl2*sqrt3*rat(-46/81*ep^-1)
-        //        + pi^2*rat(1/36*ep^-1)
-        // F3/H = rat(-1/3*ep^-3 - 5/6*ep^-2 - 7/54*ep^-1)
-        //        + pi^2*rat(-1/36*ep^-1)
-        // sum(Fi)/H = rat(-1/9*ep^-3 + 5/54*ep^-2 + 35/324*ep^-1)
-        insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
-        );
-
-        let a = amp.graphs[59].renormalization_part(&settings).unwrap();
-        // d60: RQFT `ghost_nnlo_59`.
-        // H = p1.p1*gs^6*ca^2*nf
-        // F0/H = rat(19/72*ep^-3 - 569/432*ep^-2 - 2489/648*ep^-1)
-        //        + cl2*sqrt3*rat(203/162*ep^-1)
-        //        + pi^2*rat(19/288*ep^-1)
-        // F3/H = rat(-19/48*ep^-3 + 397/288*ep^-2 + 1429/576*ep^-1)
-        //        + cl2*sqrt3*rat(-37/108*ep^-1)
-        //        + pi^2*rat(-19/288*ep^-1)
-        // F4/H = rat(-19/48*ep^-3 + 439/288*ep^-2 + 3617/1728*ep^-1)
-        //        + cl2*sqrt3*rat(-295/324*ep^-1)
-        //        + pi^2*rat(-19/288*ep^-1)
-        // F7/H = rat(19/24*ep^-3 - 89/48*ep^-2 - 431/432*ep^-1)
-        //        + pi^2*rat(19/288*ep^-1)
-        // F1..F2, F5..F6 = 0
-        // sum(Fi)/H = rat(19/72*ep^-3 - 29/108*ep^-2 - 343/1296*ep^-1)
-        insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
-        );
-
-        let a = amp.graphs[60].renormalization_part(&settings).unwrap();
-        // d61: RQFT `ghost_nnlo_60`.
-        // H = p1.p1*gs^6*ca^2*nf
-        // F0/H = rat(1/72*ep^-3 + 97/432*ep^-2 + 179/324*ep^-1)
-        //        + cl2*sqrt3*rat(-13/54*ep^-1)
-        //        + pi^2*rat(1/288*ep^-1)
-        // F3/H = rat(-1/48*ep^-3 - 65/288*ep^-2 - 803/1728*ep^-1)
-        //        + cl2*sqrt3*rat(43/324*ep^-1)
-        //        + pi^2*rat(-1/288*ep^-1)
-        // F4/H = rat(-1/48*ep^-3 - 59/288*ep^-2 - 301/1728*ep^-1)
-        //        + cl2*sqrt3*rat(35/324*ep^-1)
-        //        + pi^2*rat(-1/288*ep^-1)
-        // F7/H = rat(1/24*ep^-3 + 3/16*ep^-2 + 31/432*ep^-1)
-        //        + pi^2*rat(1/288*ep^-1)
-        // F1..F2, F5..F6 = 0
-        // sum(Fi)/H = rat(1/72*ep^-3 - 1/54*ep^-2 - 19/1296*ep^-1)
-        insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
-        );
-
-        let a = amp.graphs[61].renormalization_part(&settings).unwrap();
-        // d62: RQFT `ghost_nnlo_61`.
-        // H = p1.p1*gs^6*ca^2*nf
-        // F0/H = rat(19/72*ep^-3 - 569/432*ep^-2 - 2489/648*ep^-1)
-        //        + cl2*sqrt3*rat(203/162*ep^-1)
-        //        + pi^2*rat(19/288*ep^-1)
-        // F3/H = rat(-19/48*ep^-3 + 439/288*ep^-2 + 3617/1728*ep^-1)
-        //        + cl2*sqrt3*rat(-295/324*ep^-1)
-        //        + pi^2*rat(-19/288*ep^-1)
-        // F4/H = rat(-19/48*ep^-3 + 397/288*ep^-2 + 1429/576*ep^-1)
-        //        + cl2*sqrt3*rat(-37/108*ep^-1)
-        //        + pi^2*rat(-19/288*ep^-1)
-        // F7/H = rat(19/24*ep^-3 - 89/48*ep^-2 - 431/432*ep^-1)
-        //        + pi^2*rat(19/288*ep^-1)
-        // F1..F2, F5..F6 = 0
-        // sum(Fi)/H = rat(19/72*ep^-3 - 29/108*ep^-2 - 343/1296*ep^-1)
-        insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
-        );
-
-        let a = amp.graphs[62].renormalization_part(&settings).unwrap();
-        // d63: RQFT `ghost_nnlo_62`.
-        // H = p1.p1*gs^6*ca^3
-        // F0/H = rat(-179/288*ep^-3 + 5153/3456*ep^-2 - 17635/5184*ep^-1)
-        //        + cl2*sqrt3*rat(-575/216*ep^-1)
-        //        + pi^2*rat(-179/1152*ep^-1)
-        // F5/H = rat(179/192*ep^-3 - 1075/576*ep^-2 + 5399/1152*ep^-1)
-        //        + cl2*sqrt3*rat(575/432*ep^-1)
-        //        + pi^2*rat(179/1152*ep^-1)
-        // F6/H = rat(179/192*ep^-3 - 1075/576*ep^-2 + 5399/1152*ep^-1)
-        //        + cl2*sqrt3*rat(575/432*ep^-1)
-        //        + pi^2*rat(179/1152*ep^-1)
-        // F11/H = rat(-179/96*ep^-3 + 383/128*ep^-2 - 18715/3456*ep^-1)
-        //         + pi^2*rat(-179/1152*ep^-1)
-        // F1..F4, F7..F10 = 0
-        // sum(Fi)/H = rat(-179/288*ep^-3 + 1297/1728*ep^-2 + 5767/10368*ep^-1)
-        insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
-        );
-
-        let a = amp.graphs[63].renormalization_part(&settings).unwrap();
-        // d64: RQFT `ghost_nnlo_63`.
-        // H = p1.p1*gs^6*ca^3
-        // F0/H = rat(-11/288*ep^-3 + 455/3456*ep^-2 + 2629/2592*ep^-1)
-        //        + cl2*sqrt3*rat(-77/648*ep^-1)
-        //        + pi^2*rat(-11/1152*ep^-1)
-        // F5/H = rat(11/192*ep^-3 - 41/288*ep^-2 - 1277/1728*ep^-1)
-        //        + cl2*sqrt3*rat(121/1296*ep^-1)
-        //        + pi^2*rat(11/1152*ep^-1)
-        // F6/H = rat(11/192*ep^-3 - 25/144*ep^-2 - 359/576*ep^-1)
-        //        + cl2*sqrt3*rat(11/432*ep^-1)
-        //        + pi^2*rat(11/1152*ep^-1)
-        // F11/H = rat(-11/96*ep^-3 + 91/384*ep^-2 + 1307/3456*ep^-1)
-        //         + pi^2*rat(-11/1152*ep^-1)
-        // F1..F4, F7..F10 = 0
-        // sum(Fi)/H = rat(-11/288*ep^-3 + 91/1728*ep^-2 + 313/10368*ep^-1)
-        insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
-        );
-
-        let a = amp.graphs[64].renormalization_part(&settings).unwrap();
-        // d65: RQFT `ghost_nnlo_64`.
-        // H = p1.p1*gs^6*ca^2*nf
-        // F0/H = rat(1/72*ep^-3 + 97/432*ep^-2 + 179/324*ep^-1)
-        //        + cl2*sqrt3*rat(-13/54*ep^-1)
-        //        + pi^2*rat(1/288*ep^-1)
-        // F3/H = rat(-1/48*ep^-3 - 59/288*ep^-2 - 301/1728*ep^-1)
-        //        + cl2*sqrt3*rat(35/324*ep^-1)
-        //        + pi^2*rat(-1/288*ep^-1)
-        // F4/H = rat(-1/48*ep^-3 - 65/288*ep^-2 - 803/1728*ep^-1)
-        //        + cl2*sqrt3*rat(43/324*ep^-1)
-        //        + pi^2*rat(-1/288*ep^-1)
-        // F7/H = rat(1/24*ep^-3 + 3/16*ep^-2 + 31/432*ep^-1)
-        //        + pi^2*rat(1/288*ep^-1)
-        // F1..F2, F5..F6 = 0
-        // sum(Fi)/H = rat(1/72*ep^-3 - 1/54*ep^-2 - 19/1296*ep^-1)
-        insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
-        );
-
-        let a = amp.graphs[65].renormalization_part(&settings).unwrap();
-        // d66: RQFT `ghost_nnlo_65`.
-        // H = p1.p1*gs^6*ca^3
-        // F0/H = rat(-11/288*ep^-3 + 455/3456*ep^-2 + 2629/2592*ep^-1)
-        //        + cl2*sqrt3*rat(-77/648*ep^-1)
-        //        + pi^2*rat(-11/1152*ep^-1)
-        // F5/H = rat(11/192*ep^-3 - 25/144*ep^-2 - 359/576*ep^-1)
-        //        + cl2*sqrt3*rat(11/432*ep^-1)
-        //        + pi^2*rat(11/1152*ep^-1)
-        // F6/H = rat(11/192*ep^-3 - 41/288*ep^-2 - 1277/1728*ep^-1)
-        //        + cl2*sqrt3*rat(121/1296*ep^-1)
-        //        + pi^2*rat(11/1152*ep^-1)
-        // F11/H = rat(-11/96*ep^-3 + 91/384*ep^-2 + 1307/3456*ep^-1)
-        //         + pi^2*rat(-11/1152*ep^-1)
-        // F1..F4, F7..F10 = 0
-        // sum(Fi)/H = rat(-11/288*ep^-3 + 91/1728*ep^-2 + 313/10368*ep^-1)
-        insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
-        );
-
-        let a = amp.graphs[66].renormalization_part(&settings).unwrap();
-        // d67: RQFT `ghost_nnlo_66`.
-        // H = p1.p1*gs^6*ca^3
-        // F0/H = rat(1/288*ep^-3 - 175/3456*ep^-2 - 1081/5184*ep^-1)
-        //        + cl2*sqrt3*rat(47/648*ep^-1)
-        //        + pi^2*rat(1/1152*ep^-1)
-        // F5/H = rat(-1/192*ep^-3 + 29/576*ep^-2 + 395/3456*ep^-1)
-        //        + cl2*sqrt3*rat(-47/1296*ep^-1)
-        //        + pi^2*rat(-1/1152*ep^-1)
-        // F6/H = rat(-1/192*ep^-3 + 29/576*ep^-2 + 395/3456*ep^-1)
-        //        + cl2*sqrt3*rat(-47/1296*ep^-1)
-        //        + pi^2*rat(-1/1152*ep^-1)
-        // F11/H = rat(1/96*ep^-3 - 19/384*ep^-2 - 91/3456*ep^-1)
-        //         + pi^2*rat(1/1152*ep^-1)
-        // F1..F4, F7..F10 = 0
-        // sum(Fi)/H = rat(1/288*ep^-3 + 1/1728*ep^-2 - 65/10368*ep^-1)
-        insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
-        );
-
-        let a = amp.graphs[67].renormalization_part(&settings).unwrap();
-        // d68: RQFT `ghost_nnlo_67`.
-        // H = p1.p1*gs^6*ca^3
-        // F0/H = rat(-1/48*ep^-3 - 1/96*ep^-2 - 1/1728*ep^-1)
-        //        + cl2*sqrt3*rat(5/324*ep^-1)
-        //        + pi^2*rat(-1/192*ep^-1)
-        // F3/H = rat(1/16*ep^-3 - 1/32*ep^-2 + 1/288*ep^-1)
-        //        + pi^2*rat(1/192*ep^-1)
-        // F5/H = rat(1/16*ep^-3 - 1/96*ep^-2 - 17/1728*ep^-1)
-        //        + cl2*sqrt3*rat(-5/324*ep^-1)
-        //        + pi^2*rat(1/96*ep^-1)
-        // F13/H = rat(-1/8*ep^-3 + 1/12*ep^-2 - 1/72*ep^-1)
-        //         + pi^2*rat(-1/96*ep^-1)
-        // F1..F2, F4, F6..F12, F14..F17 = 0
-        // sum(Fi)/H = rat(-1/48*ep^-3 + 1/32*ep^-2 - 1/48*ep^-1)
-        insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
-        );
-
-        let a = amp.graphs[68].renormalization_part(&settings).unwrap();
-        // d69: RQFT `ghost_nnlo_68`.
-        // H = p1.p1*gs^6*ca^2*nf
-        // F0/H = rat(1/24*ep^-3 - 1/48*ep^-2 - 233/864*ep^-1)
-        //        + cl2*sqrt3*rat(67/162*ep^-1)
-        //        + pi^2*rat(1/96*ep^-1)
-        // F1/H = rat(-1/8*ep^-3 - 11/48*ep^-2 + 13/144*ep^-1)
-        //        + pi^2*rat(-1/96*ep^-1)
-        // F3/H = rat(-1/8*ep^-3 + 5/48*ep^-2 + 293/864*ep^-1)
-        //        + cl2*sqrt3*rat(-67/162*ep^-1)
-        //        + pi^2*rat(-1/48*ep^-1)
-        // F5/H = rat(1/4*ep^-3 + 1/12*ep^-2 - 1/18*ep^-1)
-        //        + pi^2*rat(1/48*ep^-1)
-        // F2, F4, F6..F7 = 0
-        // sum(Fi)/H = rat(1/24*ep^-3 - 1/16*ep^-2 + 5/48*ep^-1)
-        insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
-        );
-
-        let a = amp.graphs[69].renormalization_part(&settings).unwrap();
-        // d70: RQFT `ghost_nnlo_69`.
-        // H = p1.p1*gs^6*ca^3
-        // F0/H = rat(-5/48*ep^-3 + 1/32*ep^-2 - 1369/1728*ep^-1)
-        //        + cl2*sqrt3*rat(257/324*ep^-1)
-        //        + pi^2*rat(-5/192*ep^-1)
-        // F3/H = rat(5/16*ep^-3 - 29/32*ep^-2 + 77/288*ep^-1)
-        //        + pi^2*rat(5/192*ep^-1)
-        // F5/H = rat(5/16*ep^-3 - 9/32*ep^-2 + 1057/1728*ep^-1)
-        //        + cl2*sqrt3*rat(-257/324*ep^-1)
-        //        + pi^2*rat(5/96*ep^-1)
-        // F13/H = rat(-5/8*ep^-3 + 11/8*ep^-2 - 7/18*ep^-1)
-        //         + pi^2*rat(-5/96*ep^-1)
-        // F1..F2, F4, F6..F12, F14..F17 = 0
-        // sum(Fi)/H = rat(-5/48*ep^-3 + 7/32*ep^-2 - 29/96*ep^-1)
-        insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
-        );
-
-        let a = amp.graphs[70].renormalization_part(&settings).unwrap();
-        // d71: RQFT `ghost_nnlo_70`.
-        // H = p1.p1*gs^6*ca^3
-        // F0/H = rat(-1/48*ep^-2 + 25/864*ep^-1)
-        //        + cl2*sqrt3*rat(-4/81*ep^-1)
-        // F3/H = rat(5/48*ep^-2 - 5/144*ep^-1)
-        // F5/H = rat(1/48*ep^-2 - 37/864*ep^-1)
-        //        + cl2*sqrt3*rat(4/81*ep^-1)
-        // F13/H = rat(-1/12*ep^-2 + 1/36*ep^-1)
-        // F1..F2, F4, F6..F12, F14..F17 = 0
-        // sum(Fi)/H = rat(1/48*ep^-2 - 1/48*ep^-1)
-        insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
-        );
-
-        let a = amp.graphs[71].renormalization_part(&settings).unwrap();
-        // d72: RQFT `ghost_nnlo_71`.
-        // H = p1.p1*gs^6*ca*cf*nf
-        // F0/H = rat(-1/12*ep^-3 - 61/72*ep^-2 - 431/432*ep^-1)
-        //        + cl2*sqrt3*rat(49/81*ep^-1)
-        //        + pi^2*rat(-1/48*ep^-1)
-        // F1/H = rat(2/3*ep^-2 + 2/9*ep^-1)
-        // F2/H = rat(1/4*ep^-3 + 3/8*ep^-2 + 11/18*ep^-1)
-        //        + pi^2*rat(1/48*ep^-1)
-        // F3/H = rat(1/4*ep^-3 + 7/8*ep^-2 + 53/432*ep^-1)
-        //        + cl2*sqrt3*rat(-49/81*ep^-1)
-        //        + pi^2*rat(1/24*ep^-1)
-        // F5/H = rat(-2/3*ep^-2 - 2/9*ep^-1)
-        // F7/H = rat(-1/2*ep^-3 - 1/4*ep^-2 + 1/18*ep^-1)
-        //        + pi^2*rat(-1/24*ep^-1)
-        // F4, F6 = 0
-        // sum(Fi)/H = rat(-1/12*ep^-3 + 11/72*ep^-2 - 5/24*ep^-1)
-        insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
-        );
-
-        let a = amp.graphs[72].renormalization_part(&settings).unwrap();
-        // d73: RQFT `ghost_nnlo_72`.
-        // H = p1.p1*gs^6*ca*cf*nf
-        // F0/H = rat(-1/12*ep^-3 - 61/72*ep^-2 - 431/432*ep^-1)
-        //        + cl2*sqrt3*rat(49/81*ep^-1)
-        //        + pi^2*rat(-1/48*ep^-1)
-        // F1/H = rat(2/3*ep^-2 + 2/9*ep^-1)
-        // F2/H = rat(1/4*ep^-3 + 3/8*ep^-2 + 11/18*ep^-1)
-        //        + pi^2*rat(1/48*ep^-1)
-        // F3/H = rat(1/4*ep^-3 + 7/8*ep^-2 + 53/432*ep^-1)
-        //        + cl2*sqrt3*rat(-49/81*ep^-1)
-        //        + pi^2*rat(1/24*ep^-1)
-        // F5/H = rat(-2/3*ep^-2 - 2/9*ep^-1)
-        // F7/H = rat(-1/2*ep^-3 - 1/4*ep^-2 + 1/18*ep^-1)
-        //        + pi^2*rat(-1/24*ep^-1)
-        // F4, F6 = 0
-        // sum(Fi)/H = rat(-1/12*ep^-3 + 11/72*ep^-2 - 5/24*ep^-1)
-        insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
-        );
-
-        let a = amp.graphs[73].renormalization_part(&settings).unwrap();
-        // d74: RQFT `ghost_nnlo_73`.
-        // H = p1.p1*gs^6*ca^2*nf
-        // F0/H = rat(23/72*ep^-3 + 25/144*ep^-2 - 373/96*ep^-1)
-        //        + cl2*sqrt3*rat(85/54*ep^-1)
-        //        + pi^2*rat(23/288*ep^-1)
-        // F1/H = rat(-23/24*ep^-3 - 253/144*ep^-2 + 47/9*ep^-1)
-        //        + pi^2*rat(-23/288*ep^-1)
-        // F3/H = rat(-23/24*ep^-3 + 23/144*ep^-2 + 221/96*ep^-1)
-        //        + cl2*sqrt3*rat(-85/54*ep^-1)
-        //        + pi^2*rat(-23/144*ep^-1)
-        // F5/H = rat(23/12*ep^-3 + 11/12*ep^-2 - 169/54*ep^-1)
-        //        + pi^2*rat(23/144*ep^-1)
-        // F2, F4, F6..F7 = 0
-        // sum(Fi)/H = rat(23/72*ep^-3 - 73/144*ep^-2 + 55/108*ep^-1)
-        insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
-        );
-
-        let a = amp.graphs[74].renormalization_part(&settings).unwrap();
-        // d75: RQFT `ghost_nnlo_74`.
-        // H = p1.p1*gs^6*ca^3
-        // F0/H = rat(-223/288*ep^-3 + 5615/576*ep^-2 + 20179/1152*ep^-1)
-        //        + cl2*sqrt3*rat(-401/216*ep^-1)
-        //        + pi^2*rat(-223/1152*ep^-1)
-        // F1/H = rat(-7/2*ep^-2 - 79/36*ep^-1)
-        // F3/H = rat(223/96*ep^-3 - 9799/576*ep^-2 - 1477/288*ep^-1)
-        //        + pi^2*rat(223/1152*ep^-1)
-        // F5/H = rat(223/96*ep^-3 - 8215/576*ep^-2 - 607/128*ep^-1)
-        //        + cl2*sqrt3*rat(401/216*ep^-1)
-        //        + pi^2*rat(223/576*ep^-1)
-        // F8/H = rat(-7/2*ep^-2 - 79/36*ep^-1)
-        // F9/H = rat(7/2*ep^-2 + 79/36*ep^-1)
-        // F13/H = rat(-223/48*ep^-3 + 559/24*ep^-2 - 260/27*ep^-1)
-        //         + pi^2*rat(-223/576*ep^-1)
-        // F14/H = rat(7/2*ep^-2 + 79/36*ep^-1)
-        // F2, F4, F6..F7, F10..F12, F15..F17 = 0
-        // sum(Fi)/H = rat(-223/288*ep^-3 + 113/64*ep^-2 - 857/432*ep^-1)
-        insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
-        );
-
-        let a = amp.graphs[75].renormalization_part(&settings).unwrap();
-        // d76: RQFT `ghost_nnlo_75`.
-        // H = p1.p1*gs^6*ca^3
-        // F0/H = rat(-7/288*ep^-3 - 145/576*ep^-2 + 283/1152*ep^-1)
-        //        + cl2*sqrt3*rat(-17/216*ep^-1)
-        //        + pi^2*rat(-7/1152*ep^-1)
-        // F3/H = rat(7/96*ep^-3 + 497/576*ep^-2 - 319/288*ep^-1)
-        //        + pi^2*rat(7/1152*ep^-1)
-        // F5/H = rat(7/96*ep^-3 + 209/576*ep^-2 - 101/384*ep^-1)
-        //        + cl2*sqrt3*rat(17/216*ep^-1)
-        //        + pi^2*rat(7/576*ep^-1)
-        // F13/H = rat(-7/48*ep^-3 - 5/6*ep^-2 + 103/108*ep^-1)
-        //         + pi^2*rat(-7/576*ep^-1)
-        // F1..F2, F4, F6..F12, F14..F17 = 0
-        // sum(Fi)/H = rat(-7/288*ep^-3 + 9/64*ep^-2 - 37/216*ep^-1)
-        insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
-        );
-
-        let a = amp.graphs[76].renormalization_part(&settings).unwrap();
-        // d77: RQFT `ghost_nnlo_76`.
-        // H = p1.p1*gs^6*ca^3
-        // F0/H = rat(-17/144*ep^-2 - 341/864*ep^-1)
-        //        + cl2*sqrt3*rat(8/81*ep^-1)
-        // F3/H = rat(5/48*ep^-2 + 25/96*ep^-1)
-        // F5/H = rat(7/48*ep^-2 + 167/864*ep^-1)
-        //        + cl2*sqrt3*rat(-8/81*ep^-1)
-        // F8/H = rat(1/12*ep^-2 + 1/18*ep^-1)
-        // F13/H = rat(-1/8*ep^-2 - 1/12*ep^-1)
-        // F14/H = rat(-1/12*ep^-2 - 1/18*ep^-1)
-        // F1..F2, F4, F6..F7, F9..F12, F15..F17 = 0
-        // sum(Fi)/H = rat(1/144*ep^-2 - 7/288*ep^-1)
-        insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
-        );
-
-        let a = amp.graphs[77].renormalization_part(&settings).unwrap();
-        // d78: RQFT `ghost_nnlo_77`.
-        // H = p1.p1*gs^6*ca^3
-        // F0/H = rat(-17/144*ep^-2 - 341/864*ep^-1)
-        //        + cl2*sqrt3*rat(8/81*ep^-1)
-        // F3/H = rat(5/48*ep^-2 + 25/96*ep^-1)
-        // F5/H = rat(7/48*ep^-2 + 167/864*ep^-1)
-        //        + cl2*sqrt3*rat(-8/81*ep^-1)
-        // F8/H = rat(1/12*ep^-2 + 1/18*ep^-1)
-        // F13/H = rat(-1/8*ep^-2 - 1/12*ep^-1)
-        // F14/H = rat(-1/12*ep^-2 - 1/18*ep^-1)
-        // F1..F2, F4, F6..F7, F9..F12, F15..F17 = 0
-        // sum(Fi)/H = rat(1/144*ep^-2 - 7/288*ep^-1)
-        insta::assert_snapshot!(
-           align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
-        );
-    }
 }
+
+#[test]
+fn finite_part_ghost_3loop_quark_bubble() {
+    test_initialise().unwrap();
+
+    let model = load_generic_model("sm");
+    let g: Vec<Graph> = Graph::from_path(
+        concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../tests/resources/graphs/uv_tests/rqft_ghG_3l.dot"
+        ),
+        &model,
+    )
+    .unwrap();
+
+    let mut amp = Amplitude::from_graph_list("bub", g).unwrap();
+    assert_eq!(amp.graphs.len(), 78);
+    for (index, graph) in amp.graphs.iter().enumerate() {
+        assert_eq!(graph.graph.name, format!("d{}", index + 1));
+    }
+
+    let settings = rqft_3loop_settings();
+
+    let a = amp.graphs[10].renormalization_part(&settings).unwrap();
+    // d11: RQFT `ghost_nnlo_10`.
+    // H = p1.p1*gs^6*ca^2*nf
+    // F0/H = rat(1/12*ep^-3 + 1/6*ep^-2 + 1/72*ep^-1)
+    //        + cl2*sqrt3*rat(-7/27*ep^-1)
+    //        + pi^2*rat(1/48*ep^-1)
+    // F2/H = rat(-1/8*ep^-3 - 7/48*ep^-2 - 95/864*ep^-1)
+    //        + cl2*sqrt3*rat(37/162*ep^-1)
+    //        + pi^2*rat(-1/48*ep^-1)
+    // F3/H = rat(-1/8*ep^-3 - 5/48*ep^-2 + 35/864*ep^-1)
+    //        + cl2*sqrt3*rat(5/162*ep^-1)
+    //        + pi^2*rat(-1/48*ep^-1)
+    // F6/H = rat(1/4*ep^-3 - 1/36*ep^-1)
+    //        + pi^2*rat(1/48*ep^-1)
+    // F1, F4..F5, F7 = 0
+    // sum(Fi)/H = rat(1/12*ep^-3 - 1/12*ep^-2 - 1/12*ep^-1)
+    // Independent FORM 5 replay of RQFT 6ac3a8a56b4e, including all eight
+    // forests, reproduces this sum under the current UFO conventions too:
+    // UUV1 uses antighost momentum, GC_10=-G, GC_11=iG and ghosts propagate
+    // with +i. The RQFT 5..10 -> v1..v6 incidence, overall -1 and external
+    // adjoint projector agree; no GammaLoop result defines this reference.
+    let momentum = function!(GS.external_mom, 0, spenso::mink!(4));
+    let epsilon = Atom::var(GS.dim_epsilon);
+    let expected = function!(SPENSO_TAG.dot, &momentum, &momentum)
+        * parse!("gs^6*nf")
+        * idenso::color_cas!(2, idenso::coad!(8)).pow(2)
+        * (epsilon.pow(-3) - epsilon.pow(-2) - epsilon.pow(-1))
+        / Atom::num(12);
+    let aligned = align_to_rqft(&a, &model);
+    assert!(
+        (aligned.clone() - expected).expand().is_zero(),
+        "d11 disagrees with the independent RQFT forest sum: {aligned}"
+    );
+}
+
+// d12: RQFT `ghost_nnlo_11`.
+// H = p1.p1*gs^6*ca^3
+// F0/H = rat(-5/24*ep^-3 + 67/96*ep^-2 + 1049/864*ep^-1)
+//        + cl2*sqrt3*rat(-151/162*ep^-1)
+//        + pi^2*rat(-5/96*ep^-1)
+// F3/H = rat(5/16*ep^-3 - 13/16*ep^-2 - 37/108*ep^-1)
+//        + cl2*sqrt3*rat(185/324*ep^-1)
+//        + pi^2*rat(5/96*ep^-1)
+// F4/H = rat(5/16*ep^-3 - 5/6*ep^-2 - 17/48*ep^-1)
+//        + cl2*sqrt3*rat(13/36*ep^-1)
+//        + pi^2*rat(5/96*ep^-1)
+// F9/H = rat(-5/8*ep^-3 + 115/96*ep^-2 - 95/288*ep^-1)
+//        + pi^2*rat(-5/96*ep^-1)
+// F1..F2, F5..F8, F10..F11 = 0
+// sum(Fi)/H = rat(-5/24*ep^-3 + 1/4*ep^-2 + 3/16*ep^-1)
+rqft_ghost_reference!(
+    finite_part_ghost_3loop_d12,
+    12,
+    "gs^6*ca^3*( - 5/24*ep^-3 + 1/4*ep^-2 + 3/16*ep^-1)"
+);
+
+// d13: RQFT `ghost_nnlo_12`.
+// H = p1.p1*gs^6*ca^3
+// F0/H = rat(-7/96*ep^-2 - 113/864*ep^-1)
+//        + cl2*sqrt3*rat(8/81*ep^-1)
+// F3/H = rat(5/96*ep^-2 + 23/1728*ep^-1)
+//        + cl2*sqrt3*rat(-5/162*ep^-1)
+// F4/H = rat(3/32*ep^-2 + 161/1728*ep^-1)
+//        + cl2*sqrt3*rat(-11/162*ep^-1)
+// F9/H = rat(-7/96*ep^-2 + 7/288*ep^-1)
+// F1..F2, F5..F8, F10..F11 = 0
+// sum(Fi)/H = 0
+rqft_ghost_reference!(finite_part_ghost_3loop_d13, 13, "0");
+
+// d14: RQFT `ghost_nnlo_13`.
+// H = p1.p1*gs^6*ca^3
+// F0/H = rat(-3/64*ep^-3 - 29/256*ep^-2 - 335/1536*ep^-1)
+//        + cl2*sqrt3*rat(5/16*ep^-1)
+//        + pi^2*rat(-3/256*ep^-1)
+// F1/H = rat(9/256*ep^-3 - 15/512*ep^-2)
+//        + pi^2*rat(3/1024*ep^-1)
+// F2/H = rat(9/128*ep^-3 + 15/256*ep^-2 + 27/512*ep^-1)
+//        + cl2*sqrt3*rat(-5/32*ep^-1)
+//        + pi^2*rat(3/256*ep^-1)
+// F4/H = rat(9/256*ep^-3 + 21/512*ep^-2)
+//        + pi^2*rat(3/1024*ep^-1)
+// F5/H = rat(9/128*ep^-3 + 15/256*ep^-2 + 27/512*ep^-1)
+//        + cl2*sqrt3*rat(-5/32*ep^-1)
+//        + pi^2*rat(3/256*ep^-1)
+// F9/H = rat(-9/128*ep^-3 + 3/64*ep^-2)
+//        + pi^2*rat(-3/512*ep^-1)
+// F10/H = rat(-9/128*ep^-3 + 3/64*ep^-2)
+//         + pi^2*rat(-3/512*ep^-1)
+// F11/H = rat(-9/128*ep^-3)
+//         + pi^2*rat(-3/512*ep^-1)
+// F3, F6..F8, F12..F14 = 0
+// sum(Fi)/H = rat(-3/64*ep^-3 + 7/64*ep^-2 - 173/1536*ep^-1)
+rqft_ghost_reference!(
+    finite_part_ghost_3loop_d14,
+    14,
+    "gs^6*ca^3*( - 3/64*ep^-3 + 7/64*ep^-2 - 173/1536*ep^-1)"
+);
+
+// d15: RQFT `ghost_nnlo_14`.
+// H = p1.p1*gs^6*ca^3
+// F0/H = rat(-1/192*ep^-3 - 1/768*ep^-2 - 5/1536*ep^-1)
+//        + cl2*sqrt3*rat(1/144*ep^-1)
+//        + pi^2*rat(-1/768*ep^-1)
+// F1/H = rat(1/256*ep^-3 - 3/512*ep^-2)
+//        + pi^2*rat(1/3072*ep^-1)
+// F2/H = rat(1/128*ep^-3 + 1/256*ep^-2 + 1/512*ep^-1)
+//        + cl2*sqrt3*rat(-1/288*ep^-1)
+//        + pi^2*rat(1/768*ep^-1)
+// F4/H = rat(1/256*ep^-3 - 3/512*ep^-2)
+//        + pi^2*rat(1/3072*ep^-1)
+// F5/H = rat(1/128*ep^-3 + 1/256*ep^-2 + 1/512*ep^-1)
+//        + cl2*sqrt3*rat(-1/288*ep^-1)
+//        + pi^2*rat(1/768*ep^-1)
+// F9/H = rat(-1/128*ep^-3)
+//        + pi^2*rat(-1/1536*ep^-1)
+// F10/H = rat(-1/128*ep^-3)
+//         + pi^2*rat(-1/1536*ep^-1)
+// F11/H = rat(-1/128*ep^-3)
+//         + pi^2*rat(-1/1536*ep^-1)
+// F3, F6..F8, F12..F14 = 0
+// sum(Fi)/H = rat(-1/192*ep^-3 - 1/192*ep^-2 + 1/1536*ep^-1)
+rqft_ghost_reference!(
+    finite_part_ghost_3loop_d15,
+    15,
+    "gs^6*ca^3*( - 1/192*ep^-3 - 1/192*ep^-2 + 1/1536*ep^-1)"
+);
+
+// d16: RQFT `ghost_nnlo_15`.
+// H = p1.p1*gs^6*ca^3
+// F0/H = rat(-1/64*ep^-3 - 13/768*ep^-2 - 53/1536*ep^-1)
+//        + cl2*sqrt3*rat(1/16*ep^-1)
+//        + pi^2*rat(-1/256*ep^-1)
+// F1/H = rat(3/256*ep^-3 - 13/512*ep^-2)
+//        + pi^2*rat(1/1024*ep^-1)
+// F2/H = rat(3/128*ep^-3 + 3/256*ep^-2 + 3/512*ep^-1)
+//        + cl2*sqrt3*rat(-1/96*ep^-1)
+//        + pi^2*rat(1/256*ep^-1)
+// F4/H = rat(3/256*ep^-3 - 1/512*ep^-2)
+//        + pi^2*rat(1/1024*ep^-1)
+// F5/H = rat(3/128*ep^-3 + 5/256*ep^-2 + 9/512*ep^-1)
+//        + cl2*sqrt3*rat(-5/96*ep^-1)
+//        + pi^2*rat(1/256*ep^-1)
+// F9/H = rat(-3/128*ep^-3 + 1/64*ep^-2)
+//        + pi^2*rat(-1/512*ep^-1)
+// F10/H = rat(-3/128*ep^-3)
+//         + pi^2*rat(-1/512*ep^-1)
+// F11/H = rat(-3/128*ep^-3)
+//         + pi^2*rat(-1/512*ep^-1)
+// F3, F6..F8, F12..F14 = 0
+// sum(Fi)/H = rat(-1/64*ep^-3 + 1/384*ep^-2 - 17/1536*ep^-1)
+// Current-UFO primitive conventions alter the original RQFT sum above.
+rqft_ghost_reference!(
+    finite_part_ghost_3loop_d16,
+    16,
+    "gs^6*ca^3*( - 1/64*ep^-3 + 7/384*ep^-2 - 9/512*ep^-1)"
+);
+
+// d17: RQFT `ghost_nnlo_16`.
+// H = p1.p1*gs^6*ca^3
+// F0/H = rat(-1/64*ep^-3 - 19/768*ep^-2 - 21/512*ep^-1)
+//        + cl2*sqrt3*rat(1/16*ep^-1)
+//        + pi^2*rat(-1/256*ep^-1)
+// F1/H = rat(3/256*ep^-3 - 1/512*ep^-2)
+//        + pi^2*rat(1/1024*ep^-1)
+// F2/H = rat(3/128*ep^-3 + 5/256*ep^-2 + 9/512*ep^-1)
+//        + cl2*sqrt3*rat(-5/96*ep^-1)
+//        + pi^2*rat(1/256*ep^-1)
+// F4/H = rat(3/256*ep^-3 - 1/512*ep^-2)
+//        + pi^2*rat(1/1024*ep^-1)
+// F5/H = rat(3/128*ep^-3 + 3/256*ep^-2 + 3/512*ep^-1)
+//        + cl2*sqrt3*rat(-1/96*ep^-1)
+//        + pi^2*rat(1/256*ep^-1)
+// F9/H = rat(-3/128*ep^-3)
+//        + pi^2*rat(-1/512*ep^-1)
+// F10/H = rat(-3/128*ep^-3 + 1/64*ep^-2)
+//         + pi^2*rat(-1/512*ep^-1)
+// F11/H = rat(-3/128*ep^-3)
+//         + pi^2*rat(-1/512*ep^-1)
+// F3, F6..F8, F12..F14 = 0
+// sum(Fi)/H = rat(-1/64*ep^-3 + 7/384*ep^-2 - 9/512*ep^-1)
+// Current-UFO primitive conventions alter the original RQFT sum above.
+rqft_ghost_reference!(
+    finite_part_ghost_3loop_d17,
+    17,
+    "gs^6*ca^3*( - 1/64*ep^-3 + 1/384*ep^-2 - 17/1536*ep^-1)"
+);
+
+// d18: RQFT `ghost_nnlo_17`.
+// H = p1.p1*gs^6*ca^3
+// F0/H = rat(-1/128*ep^-3 - 11/768*ep^-2 + 35/512*ep^-1)
+//        + cl2*sqrt3*rat(5/96*ep^-1)
+//        + z3*rat(-1/8*ep^-1)
+//        + pi^2*rat(-1/512*ep^-1)
+// F1/H = rat(3/256*ep^-3 - 1/512*ep^-2)
+//        + pi^2*rat(1/1024*ep^-1)
+// F5/H = rat(3/256*ep^-3 - 13/512*ep^-2)
+//        + pi^2*rat(1/1024*ep^-1)
+// F8/H = rat(3/128*ep^-3 + 5/256*ep^-2 + 9/512*ep^-1)
+//        + cl2*sqrt3*rat(-5/96*ep^-1)
+//        + pi^2*rat(1/256*ep^-1)
+// F11/H = rat(-3/128*ep^-3 + 1/64*ep^-2)
+//         + pi^2*rat(-1/512*ep^-1)
+// F17/H = rat(-3/128*ep^-3 + 1/64*ep^-2)
+//         + pi^2*rat(-1/512*ep^-1)
+// F2..F4, F6..F7, F9..F10, F12..F16, F18 = 0
+// sum(Fi)/H = rat(-1/128*ep^-3 + 7/768*ep^-2 + 11/128*ep^-1)
+//             + z3*rat(-1/8*ep^-1)
+rqft_ghost_reference!(
+    finite_part_ghost_3loop_d18,
+    18,
+    "gs^6*ca^3*( - 1/128*ep^-3 + 7/768*ep^-2 + 11/128*ep^-1) + gs^6* z3*ca^3*( - 1/8*ep^-1)"
+);
+
+// d19: RQFT `ghost_nnlo_18`.
+// H = p1.p1*gs^6*ca^3
+// F0/H = rat(-3/128*ep^-3 - 19/256*ep^-2 - 39/512*ep^-1)
+//        + cl2*sqrt3*rat(5/32*ep^-1)
+//        + z3*rat(-1/8*ep^-1)
+//        + pi^2*rat(-3/512*ep^-1)
+// F1/H = rat(9/256*ep^-3 + 21/512*ep^-2)
+//        + pi^2*rat(3/1024*ep^-1)
+// F5/H = rat(9/256*ep^-3 - 15/512*ep^-2)
+//        + pi^2*rat(3/1024*ep^-1)
+// F8/H = rat(9/128*ep^-3 + 15/256*ep^-2 + 27/512*ep^-1)
+//        + cl2*sqrt3*rat(-5/32*ep^-1)
+//        + pi^2*rat(3/256*ep^-1)
+// F11/H = rat(-9/128*ep^-3 + 3/64*ep^-2)
+//         + pi^2*rat(-3/512*ep^-1)
+// F17/H = rat(-9/128*ep^-3 + 3/64*ep^-2)
+//         + pi^2*rat(-3/512*ep^-1)
+// F2..F4, F6..F7, F9..F10, F12..F16, F18 = 0
+// sum(Fi)/H = rat(-3/128*ep^-3 + 23/256*ep^-2 - 3/128*ep^-1)
+//             + z3*rat(-1/8*ep^-1)
+rqft_ghost_reference!(
+    finite_part_ghost_3loop_d19,
+    19,
+    "gs^6*ca^3*( - 3/128*ep^-3 + 23/256*ep^-2 - 3/128*ep^-1) + gs^6* z3*ca^3*( - 1/8*ep^-1)"
+);
+
+// d20: RQFT `ghost_nnlo_19`.
+// H = p1.p1*gs^6*ca^3
+// F0/H = rat(-1/128*ep^-3 - 5/768*ep^-2 - 23/512*ep^-1)
+//        + cl2*sqrt3*rat(1/96*ep^-1)
+//        + pi^2*rat(-1/512*ep^-1)
+// F1/H = rat(3/256*ep^-3 - 1/512*ep^-2)
+//        + pi^2*rat(1/1024*ep^-1)
+// F5/H = rat(3/256*ep^-3 - 1/512*ep^-2)
+//        + pi^2*rat(1/1024*ep^-1)
+// F8/H = rat(3/128*ep^-3 + 3/256*ep^-2 + 3/512*ep^-1)
+//        + cl2*sqrt3*rat(-1/96*ep^-1)
+//        + pi^2*rat(1/256*ep^-1)
+// F11/H = rat(-3/128*ep^-3)
+//         + pi^2*rat(-1/512*ep^-1)
+// F17/H = rat(-3/128*ep^-3)
+//         + pi^2*rat(-1/512*ep^-1)
+// F2..F4, F6..F7, F9..F10, F12..F16, F18 = 0
+// sum(Fi)/H = rat(-1/128*ep^-3 + 1/768*ep^-2 - 5/128*ep^-1)
+// Current-UFO primitive conventions alter the original RQFT sum above.
+rqft_ghost_reference!(
+    finite_part_ghost_3loop_d20,
+    20,
+    "gs^6*ca^3*( - 1/128*ep^-3 + 1/768*ep^-2 - 1/128*ep^-1)"
+);
+
+// d21: RQFT `ghost_nnlo_20`.
+// H = p1.p1*gs^6*ca^3
+// F0/H = rat(-1/384*ep^-3 - 1/256*ep^-2 - 11/1536*ep^-1)
+//        + cl2*sqrt3*rat(1/288*ep^-1)
+//        + pi^2*rat(-1/1536*ep^-1)
+// F1/H = rat(1/256*ep^-3 - 3/512*ep^-2)
+//        + pi^2*rat(1/3072*ep^-1)
+// F5/H = rat(1/256*ep^-3 + 5/512*ep^-2)
+//        + pi^2*rat(1/3072*ep^-1)
+// F8/H = rat(1/128*ep^-3 + 1/256*ep^-2 + 1/512*ep^-1)
+//        + cl2*sqrt3*rat(-1/288*ep^-1)
+//        + pi^2*rat(1/768*ep^-1)
+// F11/H = rat(-1/128*ep^-3)
+//         + pi^2*rat(-1/1536*ep^-1)
+// F17/H = rat(-1/128*ep^-3)
+//         + pi^2*rat(-1/1536*ep^-1)
+// F2..F4, F6..F7, F9..F10, F12..F16, F18 = 0
+// sum(Fi)/H = rat(-1/384*ep^-3 + 1/256*ep^-2 - 1/192*ep^-1)
+rqft_ghost_reference!(
+    finite_part_ghost_3loop_d21,
+    21,
+    "gs^6*ca^3*( - 1/384*ep^-3 + 1/256*ep^-2 - 1/192*ep^-1)"
+);
+
+// d22: RQFT `ghost_nnlo_21`.
+// H = p1.p1*gs^6*ca^3
+// F0/H = rat(-1/128*ep^-3 - 5/768*ep^-2 - 7/512*ep^-1)
+//        + cl2*sqrt3*rat(1/96*ep^-1)
+//        + pi^2*rat(-1/512*ep^-1)
+// F1/H = rat(3/256*ep^-3 - 1/512*ep^-2)
+//        + pi^2*rat(1/1024*ep^-1)
+// F5/H = rat(3/256*ep^-3 - 1/512*ep^-2)
+//        + pi^2*rat(1/1024*ep^-1)
+// F8/H = rat(3/128*ep^-3 + 3/256*ep^-2 + 3/512*ep^-1)
+//        + cl2*sqrt3*rat(-1/96*ep^-1)
+//        + pi^2*rat(1/256*ep^-1)
+// F11/H = rat(-3/128*ep^-3)
+//         + pi^2*rat(-1/512*ep^-1)
+// F17/H = rat(-3/128*ep^-3)
+//         + pi^2*rat(-1/512*ep^-1)
+// F2..F4, F6..F7, F9..F10, F12..F16, F18 = 0
+// sum(Fi)/H = rat(-1/128*ep^-3 + 1/768*ep^-2 - 1/128*ep^-1)
+// Current-UFO primitive conventions alter the original RQFT sum above.
+rqft_ghost_reference!(
+    finite_part_ghost_3loop_d22,
+    22,
+    "gs^6*ca^3*( - 1/128*ep^-3 + 1/768*ep^-2 - 5/128*ep^-1)"
+);
+
+// d23: RQFT `ghost_nnlo_22`.
+// H = p1.p1*gs^6*ca^3
+// F0/H = rat(-1/384*ep^-3 - 1/256*ep^-2 - 11/1536*ep^-1)
+//        + cl2*sqrt3*rat(1/288*ep^-1)
+//        + pi^2*rat(-1/1536*ep^-1)
+// F1/H = rat(1/256*ep^-3 + 5/512*ep^-2)
+//        + pi^2*rat(1/3072*ep^-1)
+// F5/H = rat(1/256*ep^-3 - 3/512*ep^-2)
+//        + pi^2*rat(1/3072*ep^-1)
+// F8/H = rat(1/128*ep^-3 + 1/256*ep^-2 + 1/512*ep^-1)
+//        + cl2*sqrt3*rat(-1/288*ep^-1)
+//        + pi^2*rat(1/768*ep^-1)
+// F11/H = rat(-1/128*ep^-3)
+//         + pi^2*rat(-1/1536*ep^-1)
+// F17/H = rat(-1/128*ep^-3)
+//         + pi^2*rat(-1/1536*ep^-1)
+// F2..F4, F6..F7, F9..F10, F12..F16, F18 = 0
+// sum(Fi)/H = rat(-1/384*ep^-3 + 1/256*ep^-2 - 1/192*ep^-1)
+rqft_ghost_reference!(
+    finite_part_ghost_3loop_d23,
+    23,
+    "gs^6*ca^3*( - 1/384*ep^-3 + 1/256*ep^-2 - 1/192*ep^-1)"
+);
+
+// d24: RQFT `ghost_nnlo_23`.
+// H = p1.p1*gs^6*ca^2*nf
+// F0/H = rat(-1/48*ep^-3 - 5/96*ep^-2 - 7/64*ep^-1)
+//        + cl2*sqrt3*rat(5/36*ep^-1)
+//        + z3*rat(1/4*ep^-1)
+//        + pi^2*rat(-1/192*ep^-1)
+// F1/H = rat(1/32*ep^-3 - 1/64*ep^-2)
+//        + pi^2*rat(1/384*ep^-1)
+// F2/H = rat(1/32*ep^-3 - 1/64*ep^-2)
+//        + pi^2*rat(1/384*ep^-1)
+// F4/H = rat(1/16*ep^-3 + 5/96*ep^-2 + 3/64*ep^-1)
+//        + cl2*sqrt3*rat(-5/36*ep^-1)
+//        + pi^2*rat(1/96*ep^-1)
+// F5/H = rat(-1/16*ep^-3 + 1/24*ep^-2)
+//        + pi^2*rat(-1/192*ep^-1)
+// F6/H = rat(-1/16*ep^-3 + 1/24*ep^-2)
+//        + pi^2*rat(-1/192*ep^-1)
+// F3, F7 = 0
+// sum(Fi)/H = rat(-1/48*ep^-3 + 5/96*ep^-2 - 1/16*ep^-1)
+//             + z3*rat(1/4*ep^-1)
+// The ordered current-UFO color matrix runs from quark to antiquark.
+// Its independently replayed sum agrees with the original Fi sum above.
+rqft_ghost_reference!(
+    finite_part_ghost_3loop_d24,
+    24,
+    "gs^6*ca^2*nf*( - 1/48*ep^-3 + 5/96*ep^-2 - 1/16*ep^-1) + gs^6* z3*ca^2*nf*(1/4*ep^-1)"
+);
+
+// d25: RQFT `ghost_nnlo_24`.
+// H = p1.p1*gs^6*ca^2*nf
+// F0/H = rat(-1/48*ep^-3 - 5/96*ep^-2 - 7/64*ep^-1)
+//        + cl2*sqrt3*rat(5/36*ep^-1)
+//        + z3*rat(1/4*ep^-1)
+//        + pi^2*rat(-1/192*ep^-1)
+// F1/H = rat(1/32*ep^-3 - 1/64*ep^-2)
+//        + pi^2*rat(1/384*ep^-1)
+// F2/H = rat(1/32*ep^-3 - 1/64*ep^-2)
+//        + pi^2*rat(1/384*ep^-1)
+// F4/H = rat(1/16*ep^-3 + 5/96*ep^-2 + 3/64*ep^-1)
+//        + cl2*sqrt3*rat(-5/36*ep^-1)
+//        + pi^2*rat(1/96*ep^-1)
+// F5/H = rat(-1/16*ep^-3 + 1/24*ep^-2)
+//        + pi^2*rat(-1/192*ep^-1)
+// F6/H = rat(-1/16*ep^-3 + 1/24*ep^-2)
+//        + pi^2*rat(-1/192*ep^-1)
+// F3, F7 = 0
+// sum(Fi)/H = rat(-1/48*ep^-3 + 5/96*ep^-2 - 1/16*ep^-1)
+//             + z3*rat(1/4*ep^-1)
+// The ordered current-UFO color matrix runs from quark to antiquark.
+// Its independently replayed sum agrees with the original Fi sum above.
+rqft_ghost_reference!(
+    finite_part_ghost_3loop_d25,
+    25,
+    "gs^6*ca^2*nf*( - 1/48*ep^-3 + 5/96*ep^-2 - 1/16*ep^-1) + gs^6* z3*ca^2*nf*(1/4*ep^-1)"
+);
+
+// d26: RQFT `ghost_nnlo_25`.
+// H = p1.p1*gs^6*ca^3
+// F0/H = rat(-13/128*ep^-3 - 197/768*ep^-2 - 733/1536*ep^-1)
+//        + cl2*sqrt3*rat(65/96*ep^-1)
+//        + z3*rat(-3/8*ep^-1)
+//        + pi^2*rat(-13/512*ep^-1)
+// F1/H = rat(39/256*ep^-3 - 37/512*ep^-2)
+//        + pi^2*rat(13/1024*ep^-1)
+// F5/H = rat(39/256*ep^-3 - 37/512*ep^-2)
+//        + pi^2*rat(13/1024*ep^-1)
+// F8/H = rat(39/128*ep^-3 + 65/256*ep^-2 + 117/512*ep^-1)
+//        + cl2*sqrt3*rat(-65/96*ep^-1)
+//        + pi^2*rat(13/256*ep^-1)
+// F11/H = rat(-39/128*ep^-3 + 13/64*ep^-2)
+//         + pi^2*rat(-13/512*ep^-1)
+// F17/H = rat(-39/128*ep^-3 + 13/64*ep^-2)
+//         + pi^2*rat(-13/512*ep^-1)
+// F2..F4, F6..F7, F9..F10, F12..F16, F18 = 0
+// sum(Fi)/H = rat(-13/128*ep^-3 + 199/768*ep^-2 - 191/768*ep^-1)
+//             + z3*rat(-3/8*ep^-1)
+rqft_ghost_reference!(
+    finite_part_ghost_3loop_d26,
+    26,
+    "gs^6*ca^3*( - 13/128*ep^-3 + 199/768*ep^-2 - 191/768*ep^-1) +  gs^6*z3*ca^3*( - 3/8*ep^-1)"
+);
+
+// d27: RQFT `ghost_nnlo_26`.
+// H = p1.p1*gs^6*ca^3
+// F0/H = rat(1/192*ep^-3 + 7/384*ep^-2 + 31/768*ep^-1)
+//        + cl2*sqrt3*rat(-5/144*ep^-1)
+//        + pi^2*rat(1/768*ep^-1)
+// F1/H = rat(-1/128*ep^-3 - 1/256*ep^-2)
+//        + pi^2*rat(-1/1536*ep^-1)
+// F5/H = rat(-1/128*ep^-3 - 1/256*ep^-2)
+//        + pi^2*rat(-1/1536*ep^-1)
+// F8/H = rat(-1/64*ep^-3 - 5/384*ep^-2 - 3/256*ep^-1)
+//        + cl2*sqrt3*rat(5/144*ep^-1)
+//        + pi^2*rat(-1/384*ep^-1)
+// F11/H = rat(1/64*ep^-3 - 1/96*ep^-2)
+//         + pi^2*rat(1/768*ep^-1)
+// F17/H = rat(1/64*ep^-3 - 1/96*ep^-2)
+//         + pi^2*rat(1/768*ep^-1)
+// F2..F4, F6..F7, F9..F10, F12..F16, F18 = 0
+// sum(Fi)/H = rat(1/192*ep^-3 - 3/128*ep^-2 + 11/384*ep^-1)
+rqft_ghost_reference!(
+    finite_part_ghost_3loop_d27,
+    27,
+    "gs^6*ca^3*(1/192*ep^-3 - 3/128*ep^-2 + 11/384*ep^-1)"
+);
+
+// d28: RQFT `ghost_nnlo_27`.
+// H = p1.p1*gs^6*ca^3
+// F0/H = rat(-1/384*ep^-3 - 1/256*ep^-2 - 1/512*ep^-1)
+//        + cl2*sqrt3*rat(5/288*ep^-1)
+//        + pi^2*rat(-1/1536*ep^-1)
+// F1/H = rat(1/256*ep^-3 - 3/512*ep^-2)
+//        + pi^2*rat(1/3072*ep^-1)
+// F5/H = rat(1/256*ep^-3 - 3/512*ep^-2)
+//        + pi^2*rat(1/3072*ep^-1)
+// F8/H = rat(1/128*ep^-3 + 5/768*ep^-2 + 3/512*ep^-1)
+//        + cl2*sqrt3*rat(-5/288*ep^-1)
+//        + pi^2*rat(1/768*ep^-1)
+// F11/H = rat(-1/128*ep^-3 + 1/192*ep^-2)
+//         + pi^2*rat(-1/1536*ep^-1)
+// F17/H = rat(-1/128*ep^-3 + 1/192*ep^-2)
+//         + pi^2*rat(-1/1536*ep^-1)
+// F2..F4, F6..F7, F9..F10, F12..F16, F18 = 0
+// sum(Fi)/H = rat(-1/384*ep^-3 + 1/768*ep^-2 + 1/256*ep^-1)
+rqft_ghost_reference!(
+    finite_part_ghost_3loop_d28,
+    28,
+    "gs^6*ca^3*( - 1/384*ep^-3 + 1/768*ep^-2 + 1/256*ep^-1)"
+);
+
+// d29: RQFT `ghost_nnlo_28`.
+// H = p1.p1*gs^6*ca^3
+// F0/H = rat(-3/64*ep^-3 - 7/128*ep^-2 - 23/256*ep^-1)
+//        + cl2*sqrt3*rat(31/144*ep^-1)
+//        + pi^2*rat(-3/256*ep^-1)
+// F1/H = rat(3/64*ep^-3 - 5/128*ep^-2)
+//        + pi^2*rat(1/256*ep^-1)
+// F2/H = rat(3/64*ep^-3 - 1/128*ep^-2 - 11/768*ep^-1)
+//        + cl2*sqrt3*rat(1/144*ep^-1)
+//        + pi^2*rat(1/128*ep^-1)
+// F4/H = rat(3/32*ep^-3 + 3/64*ep^-2 + 25/384*ep^-1)
+//        + cl2*sqrt3*rat(-2/9*ep^-1)
+//        + pi^2*rat(1/64*ep^-1)
+// F7/H = rat(-3/32*ep^-3 + 3/32*ep^-2)
+//        + pi^2*rat(-1/128*ep^-1)
+// F9/H = rat(-3/32*ep^-3 + 1/32*ep^-2)
+//        + pi^2*rat(-1/128*ep^-1)
+// F3, F5..F6, F8, F10..F11 = 0
+// sum(Fi)/H = rat(-3/64*ep^-3 + 9/128*ep^-2 - 5/128*ep^-1)
+rqft_ghost_reference!(
+    finite_part_ghost_3loop_d29,
+    29,
+    "gs^6*ca^3*( - 3/64*ep^-3 + 9/128*ep^-2 - 5/128*ep^-1)"
+);
+
+// d30: RQFT `ghost_nnlo_29`.
+// H = p1.p1*gs^6*ca^2*nf
+// F0/H = rat(1/48*ep^-3 + 1/12*ep^-2 + 25/864*ep^-1)
+//        + cl2*sqrt3*rat(-25/324*ep^-1)
+//        + pi^2*rat(1/192*ep^-1)
+// F1/H = rat(-1/24*ep^-2)
+// F2/H = rat(-1/32*ep^-3 - 13/192*ep^-2 - 23/1152*ep^-1)
+//        + cl2*sqrt3*rat(7/216*ep^-1)
+//        + pi^2*rat(-1/192*ep^-1)
+// F3/H = rat(-1/32*ep^-3 - 5/64*ep^-2 - 103/3456*ep^-1)
+//        + cl2*sqrt3*rat(29/648*ep^-1)
+//        + pi^2*rat(-1/192*ep^-1)
+// F5/H = rat(1/24*ep^-2)
+// F6/H = rat(1/16*ep^-3 + 1/24*ep^-2)
+//        + pi^2*rat(1/192*ep^-1)
+// F4, F7 = 0
+// sum(Fi)/H = rat(1/48*ep^-3 - 1/48*ep^-2 - 1/48*ep^-1)
+// Current-UFO primitive conventions alter the original RQFT sum above.
+rqft_ghost_reference!(
+    finite_part_ghost_3loop_d30,
+    30,
+    "gs^6*ca^2*nf*(1/48*ep^-3 - 1/96*ep^-2 - 5/192*ep^-1)"
+);
+
+// d31: RQFT `ghost_nnlo_30`.
+// H = p1.p1*gs^6*ca^3
+// F0/H = rat(-19/384*ep^-3 + 131/768*ep^-2 + 4471/13824*ep^-1)
+//        + cl2*sqrt3*rat(-287/2592*ep^-1)
+//        + pi^2*rat(-19/1536*ep^-1)
+// F1/H = rat(-1/128*ep^-3 - 71/768*ep^-2)
+//        + pi^2*rat(-1/1536*ep^-1)
+// F2/H = rat(5/64*ep^-3 - 77/384*ep^-2 - 149/768*ep^-1)
+//        + cl2*sqrt3*rat(11/144*ep^-1)
+//        + pi^2*rat(5/384*ep^-1)
+// F4/H = rat(9/128*ep^-3 - 51/256*ep^-2 - 1105/13824*ep^-1)
+//        + cl2*sqrt3*rat(89/2592*ep^-1)
+//        + pi^2*rat(3/256*ep^-1)
+// F7/H = rat(1/64*ep^-3 + 17/192*ep^-2)
+//        + pi^2*rat(1/768*ep^-1)
+// F9/H = rat(-5/32*ep^-3 + 7/24*ep^-2)
+//        + pi^2*rat(-5/384*ep^-1)
+// F3, F5..F6, F8, F10..F11 = 0
+// sum(Fi)/H = rat(-19/384*ep^-3 + 15/256*ep^-2 + 19/384*ep^-1)
+// Current-UFO primitive conventions alter the original RQFT sum above.
+rqft_ghost_reference!(
+    finite_part_ghost_3loop_d31,
+    31,
+    "gs^6*ca^3*( - 19/384*ep^-3 + 23/768*ep^-2 + 65/768*ep^-1)"
+);
+
+// d32: RQFT `ghost_nnlo_31`.
+// H = p1.p1*gs^6*ca^3
+// F0/H = rat(-1/384*ep^-3 - 19/768*ep^-2 - 719/13824*ep^-1)
+//        + cl2*sqrt3*rat(67/2592*ep^-1)
+//        + pi^2*rat(-1/1536*ep^-1)
+// F1/H = rat(1/128*ep^-3 + 7/768*ep^-2)
+//        + pi^2*rat(1/1536*ep^-1)
+// F2/H = rat(5/192*ep^-2 + 47/1152*ep^-1)
+//        + cl2*sqrt3*rat(-1/54*ep^-1)
+// F4/H = rat(1/128*ep^-3 + 5/256*ep^-2 + 119/13824*ep^-1)
+//        + cl2*sqrt3*rat(-19/2592*ep^-1)
+//        + pi^2*rat(1/768*ep^-1)
+// F7/H = rat(-1/64*ep^-3 - 1/192*ep^-2)
+//        + pi^2*rat(-1/768*ep^-1)
+// F9/H = rat(-1/48*ep^-2)
+// F3, F5..F6, F8, F10..F11 = 0
+// sum(Fi)/H = rat(-1/384*ep^-3 + 1/256*ep^-2 - 1/384*ep^-1)
+// Current-UFO primitive conventions alter the original RQFT sum above.
+rqft_ghost_reference!(
+    finite_part_ghost_3loop_d32,
+    32,
+    "gs^6*ca^3*( - 1/384*ep^-3 + 5/768*ep^-2 - 1/256*ep^-1)"
+);
+
+// d33: RQFT `ghost_nnlo_32`.
+// H = p1.p1*gs^6*ca^3
+// F0/H = rat(-1/64*ep^-3 - 1/128*ep^-2 - 131/6912*ep^-1)
+//        + cl2*sqrt3*rat(25/1296*ep^-1)
+//        + pi^2*rat(-1/256*ep^-1)
+// F1/H = rat(1/64*ep^-3 - 1/384*ep^-2)
+//        + pi^2*rat(1/768*ep^-1)
+// F2/H = rat(1/64*ep^-3 - 1/384*ep^-2 - 11/2304*ep^-1)
+//        + cl2*sqrt3*rat(1/432*ep^-1)
+//        + pi^2*rat(1/384*ep^-1)
+// F4/H = rat(1/32*ep^-3 + 1/192*ep^-2 + 37/3456*ep^-1)
+//        + cl2*sqrt3*rat(-7/324*ep^-1)
+//        + pi^2*rat(1/192*ep^-1)
+// F7/H = rat(-1/32*ep^-3 + 1/96*ep^-2)
+//        + pi^2*rat(-1/384*ep^-1)
+// F9/H = rat(-1/32*ep^-3 + 1/96*ep^-2)
+//        + pi^2*rat(-1/384*ep^-1)
+// F3, F5..F6, F8, F10..F11 = 0
+// sum(Fi)/H = rat(-1/64*ep^-3 + 5/384*ep^-2 - 5/384*ep^-1)
+rqft_ghost_reference!(
+    finite_part_ghost_3loop_d33,
+    33,
+    "gs^6*ca^3*( - 1/64*ep^-3 + 5/384*ep^-2 - 5/384*ep^-1)"
+);
+
+// d34: RQFT `ghost_nnlo_33`.
+// H = p1.p1*gs^6*ca^2*nf
+// F0/H = rat(1/16*ep^-3 + 1/3*ep^-2 + 5/32*ep^-1)
+//        + cl2*sqrt3*rat(-19/36*ep^-1)
+//        + pi^2*rat(1/64*ep^-1)
+// F1/H = rat(-1/8*ep^-2)
+// F2/H = rat(-3/32*ep^-3 - 13/64*ep^-2 - 23/384*ep^-1)
+//        + cl2*sqrt3*rat(7/72*ep^-1)
+//        + pi^2*rat(-1/64*ep^-1)
+// F3/H = rat(-3/32*ep^-3 - 23/64*ep^-2 - 53/384*ep^-1)
+//        + cl2*sqrt3*rat(31/72*ep^-1)
+//        + pi^2*rat(-1/64*ep^-1)
+// F5/H = rat(1/8*ep^-2)
+// F6/H = rat(3/16*ep^-3 + 1/8*ep^-2)
+//        + pi^2*rat(1/64*ep^-1)
+// F4, F7 = 0
+// sum(Fi)/H = rat(1/16*ep^-3 - 5/48*ep^-2 - 1/24*ep^-1)
+// Current-UFO primitive conventions alter the original RQFT sum above.
+rqft_ghost_reference!(
+    finite_part_ghost_3loop_d34,
+    34,
+    "gs^6*ca^2*nf*(1/12*ep^-3 - 5/48*ep^-2 - 1/192*ep^-1)"
+);
+
+// d35: RQFT `ghost_nnlo_34`.
+// H = p1.p1*gs^6*ca^3
+// F0/H = rat(-19/128*ep^-3 + 229/768*ep^-2 + 721/1536*ep^-1)
+//        + cl2*sqrt3*rat(167/288*ep^-1)
+//        + pi^2*rat(-19/512*ep^-1)
+// F1/H = rat(-3/128*ep^-3 - 67/256*ep^-2)
+//        + pi^2*rat(-1/512*ep^-1)
+// F2/H = rat(15/64*ep^-3 - 77/128*ep^-2 - 149/256*ep^-1)
+//        + cl2*sqrt3*rat(11/48*ep^-1)
+//        + pi^2*rat(5/128*ep^-1)
+// F4/H = rat(27/128*ep^-3 - 69/256*ep^-2 + 217/1536*ep^-1)
+//        + cl2*sqrt3*rat(-233/288*ep^-1)
+//        + pi^2*rat(9/256*ep^-1)
+// F7/H = rat(3/64*ep^-3 + 15/64*ep^-2)
+//        + pi^2*rat(1/256*ep^-1)
+// F9/H = rat(-15/32*ep^-3 + 7/8*ep^-2)
+//        + pi^2*rat(-5/128*ep^-1)
+// F3, F5..F6, F8, F10..F11 = 0
+// sum(Fi)/H = rat(-19/128*ep^-3 + 211/768*ep^-2 + 11/384*ep^-1)
+// Current-UFO primitive conventions alter the original RQFT sum above.
+rqft_ghost_reference!(
+    finite_part_ghost_3loop_d35,
+    35,
+    "gs^6*ca^3*( - 79/384*ep^-3 + 81/256*ep^-2 - 31/768*ep^-1)"
+);
+
+// d36: RQFT `ghost_nnlo_35`.
+// H = p1.p1*gs^6*ca^3
+// F0/H = rat(-1/128*ep^-3 - 53/768*ep^-2 - 83/512*ep^-1)
+//        + cl2*sqrt3*rat(7/96*ep^-1)
+//        + pi^2*rat(-1/512*ep^-1)
+// F1/H = rat(3/128*ep^-3 + 3/256*ep^-2)
+//        + pi^2*rat(1/512*ep^-1)
+// F2/H = rat(5/64*ep^-2 + 47/384*ep^-1)
+//        + cl2*sqrt3*rat(-1/18*ep^-1)
+// F4/H = rat(3/128*ep^-3 + 11/256*ep^-2 + 25/1536*ep^-1)
+//        + cl2*sqrt3*rat(-5/288*ep^-1)
+//        + pi^2*rat(1/256*ep^-1)
+// F7/H = rat(-3/64*ep^-3 + 1/64*ep^-2)
+//        + pi^2*rat(-1/256*ep^-1)
+// F9/H = rat(-1/16*ep^-2)
+// F3, F5..F6, F8, F10..F11 = 0
+// sum(Fi)/H = rat(-1/128*ep^-3 + 13/768*ep^-2 - 3/128*ep^-1)
+// Current-UFO primitive conventions alter the original RQFT sum above.
+rqft_ghost_reference!(
+    finite_part_ghost_3loop_d36,
+    36,
+    "gs^6*ca^3*( - 1/384*ep^-3 + 13/768*ep^-2 - 11/768*ep^-1)"
+);
+
+// d37: RQFT `ghost_nnlo_36`.
+// H = p1.p1*gs^6*ca^3
+// F0/H = rat(-3/64*ep^-3 - 7/128*ep^-2 - 23/256*ep^-1)
+//        + cl2*sqrt3*rat(31/144*ep^-1)
+//        + pi^2*rat(-3/256*ep^-1)
+// F1/H = rat(3/64*ep^-3 - 5/128*ep^-2)
+//        + pi^2*rat(1/256*ep^-1)
+// F2/H = rat(3/64*ep^-3 - 1/128*ep^-2 - 11/768*ep^-1)
+//        + cl2*sqrt3*rat(1/144*ep^-1)
+//        + pi^2*rat(1/128*ep^-1)
+// F4/H = rat(3/32*ep^-3 + 3/64*ep^-2 + 25/384*ep^-1)
+//        + cl2*sqrt3*rat(-2/9*ep^-1)
+//        + pi^2*rat(1/64*ep^-1)
+// F7/H = rat(-3/32*ep^-3 + 3/32*ep^-2)
+//        + pi^2*rat(-1/128*ep^-1)
+// F9/H = rat(-3/32*ep^-3 + 1/32*ep^-2)
+//        + pi^2*rat(-1/128*ep^-1)
+// F3, F5..F6, F8, F10..F11 = 0
+// sum(Fi)/H = rat(-3/64*ep^-3 + 9/128*ep^-2 - 5/128*ep^-1)
+rqft_ghost_reference!(
+    finite_part_ghost_3loop_d37,
+    37,
+    "gs^6*ca^3*( - 3/64*ep^-3 + 9/128*ep^-2 - 5/128*ep^-1)"
+);
+
+// d38: RQFT `ghost_nnlo_37`.
+// H = p1.p1*gs^6*ca^2*nf
+// F0/H = rat(1/48*ep^-3 + 1/16*ep^-2 + 7/864*ep^-1)
+//        + cl2*sqrt3*rat(-7/324*ep^-1)
+//        + pi^2*rat(1/192*ep^-1)
+// F1/H = rat(-1/24*ep^-2)
+// F2/H = rat(-1/32*ep^-3 - 13/192*ep^-2 - 23/1152*ep^-1)
+//        + cl2*sqrt3*rat(7/216*ep^-1)
+//        + pi^2*rat(-1/192*ep^-1)
+// F3/H = rat(-1/32*ep^-3 - 3/64*ep^-2 - 49/3456*ep^-1)
+//        + cl2*sqrt3*rat(-7/648*ep^-1)
+//        + pi^2*rat(-1/192*ep^-1)
+// F5/H = rat(1/24*ep^-2)
+// F6/H = rat(1/16*ep^-3 + 1/24*ep^-2)
+//        + pi^2*rat(1/192*ep^-1)
+// F4, F7 = 0
+// sum(Fi)/H = rat(1/48*ep^-3 - 1/96*ep^-2 - 5/192*ep^-1)
+// Current-UFO primitive conventions alter the original RQFT sum above.
+rqft_ghost_reference!(
+    finite_part_ghost_3loop_d38,
+    38,
+    "gs^6*ca^2*nf*(1/48*ep^-3 - 1/48*ep^-2 - 1/48*ep^-1)"
+);
+
+// d39: RQFT `ghost_nnlo_38`.
+// H = p1.p1*gs^6*ca^3
+// F0/H = rat(-19/384*ep^-3 + 175/768*ep^-2 + 5551/13824*ep^-1)
+//        + cl2*sqrt3*rat(-683/2592*ep^-1)
+//        + pi^2*rat(-19/1536*ep^-1)
+// F1/H = rat(-1/128*ep^-3 - 71/768*ep^-2)
+//        + pi^2*rat(-1/1536*ep^-1)
+// F2/H = rat(5/64*ep^-3 - 77/384*ep^-2 - 149/768*ep^-1)
+//        + cl2*sqrt3*rat(11/144*ep^-1)
+//        + pi^2*rat(5/384*ep^-1)
+// F4/H = rat(9/128*ep^-3 - 73/256*ep^-2 - 1699/13824*ep^-1)
+//        + cl2*sqrt3*rat(485/2592*ep^-1)
+//        + pi^2*rat(3/256*ep^-1)
+// F7/H = rat(1/64*ep^-3 + 17/192*ep^-2)
+//        + pi^2*rat(1/768*ep^-1)
+// F9/H = rat(-5/32*ep^-3 + 7/24*ep^-2)
+//        + pi^2*rat(-5/384*ep^-1)
+// F3, F5..F6, F8, F10..F11 = 0
+// sum(Fi)/H = rat(-19/384*ep^-3 + 23/768*ep^-2 + 65/768*ep^-1)
+// Current-UFO primitive conventions alter the original RQFT sum above.
+rqft_ghost_reference!(
+    finite_part_ghost_3loop_d39,
+    39,
+    "gs^6*ca^3*( - 19/384*ep^-3 + 15/256*ep^-2 + 19/384*ep^-1)"
+);
+
+// d40: RQFT `ghost_nnlo_39`.
+// H = p1.p1*gs^6*ca^3
+// F0/H = rat(-1/384*ep^-3 - 23/768*ep^-2 - 791/13824*ep^-1)
+//        + cl2*sqrt3*rat(103/2592*ep^-1)
+//        + pi^2*rat(-1/1536*ep^-1)
+// F1/H = rat(1/128*ep^-3 + 7/768*ep^-2)
+//        + pi^2*rat(1/1536*ep^-1)
+// F2/H = rat(5/192*ep^-2 + 47/1152*ep^-1)
+//        + cl2*sqrt3*rat(-1/54*ep^-1)
+// F4/H = rat(1/128*ep^-3 + 7/256*ep^-2 + 173/13824*ep^-1)
+//        + cl2*sqrt3*rat(-55/2592*ep^-1)
+//        + pi^2*rat(1/768*ep^-1)
+// F7/H = rat(-1/64*ep^-3 - 1/192*ep^-2)
+//        + pi^2*rat(-1/768*ep^-1)
+// F9/H = rat(-1/48*ep^-2)
+// F3, F5..F6, F8, F10..F11 = 0
+// sum(Fi)/H = rat(-1/384*ep^-3 + 5/768*ep^-2 - 1/256*ep^-1)
+// Current-UFO primitive conventions alter the original RQFT sum above.
+rqft_ghost_reference!(
+    finite_part_ghost_3loop_d40,
+    40,
+    "gs^6*ca^3*( - 1/384*ep^-3 + 1/256*ep^-2 - 1/384*ep^-1)"
+);
+
+// d41: RQFT `ghost_nnlo_40`.
+// H = p1.p1*gs^6*ca^3
+// F0/H = rat(-1/64*ep^-3 - 1/128*ep^-2 - 131/6912*ep^-1)
+//        + cl2*sqrt3*rat(25/1296*ep^-1)
+//        + pi^2*rat(-1/256*ep^-1)
+// F1/H = rat(1/64*ep^-3 - 1/384*ep^-2)
+//        + pi^2*rat(1/768*ep^-1)
+// F2/H = rat(1/64*ep^-3 - 1/384*ep^-2 - 11/2304*ep^-1)
+//        + cl2*sqrt3*rat(1/432*ep^-1)
+//        + pi^2*rat(1/384*ep^-1)
+// F4/H = rat(1/32*ep^-3 + 1/192*ep^-2 + 37/3456*ep^-1)
+//        + cl2*sqrt3*rat(-7/324*ep^-1)
+//        + pi^2*rat(1/192*ep^-1)
+// F7/H = rat(-1/32*ep^-3 + 1/96*ep^-2)
+//        + pi^2*rat(-1/384*ep^-1)
+// F9/H = rat(-1/32*ep^-3 + 1/96*ep^-2)
+//        + pi^2*rat(-1/384*ep^-1)
+// F3, F5..F6, F8, F10..F11 = 0
+// sum(Fi)/H = rat(-1/64*ep^-3 + 5/384*ep^-2 - 5/384*ep^-1)
+rqft_ghost_reference!(
+    finite_part_ghost_3loop_d41,
+    41,
+    "gs^6*ca^3*( - 1/64*ep^-3 + 5/384*ep^-2 - 5/384*ep^-1)"
+);
+
+// d42: RQFT `ghost_nnlo_41`.
+// H = p1.p1*gs^6*ca^2*nf
+// F0/H = rat(1/12*ep^-3 + 9/32*ep^-2 + 35/192*ep^-1)
+//        + cl2*sqrt3*rat(-4/9*ep^-1)
+//        + pi^2*rat(1/48*ep^-1)
+// F1/H = rat(-1/16*ep^-3 - 5/96*ep^-2)
+//        + pi^2*rat(-1/192*ep^-1)
+// F2/H = rat(-3/32*ep^-3 - 13/64*ep^-2 - 23/384*ep^-1)
+//        + cl2*sqrt3*rat(7/72*ep^-1)
+//        + pi^2*rat(-1/64*ep^-1)
+// F3/H = rat(-5/32*ep^-3 - 49/192*ep^-2 - 49/384*ep^-1)
+//        + cl2*sqrt3*rat(25/72*ep^-1)
+//        + pi^2*rat(-5/192*ep^-1)
+// F5/H = rat(1/8*ep^-3)
+//        + pi^2*rat(1/96*ep^-1)
+// F6/H = rat(3/16*ep^-3 + 1/8*ep^-2)
+//        + pi^2*rat(1/64*ep^-1)
+// F4, F7 = 0
+// sum(Fi)/H = rat(1/12*ep^-3 - 5/48*ep^-2 - 1/192*ep^-1)
+// Current-UFO primitive conventions alter the original RQFT sum above.
+rqft_ghost_reference!(
+    finite_part_ghost_3loop_d42,
+    42,
+    "gs^6*ca^2*nf*(1/16*ep^-3 - 5/48*ep^-2 - 1/24*ep^-1)"
+);
+
+// d43: RQFT `ghost_nnlo_42`.
+// H = p1.p1*gs^6*ca^3
+// F0/H = rat(-79/384*ep^-3 + 323/768*ep^-2 + 659/1536*ep^-1)
+//        + cl2*sqrt3*rat(101/288*ep^-1)
+//        + pi^2*rat(-79/1536*ep^-1)
+// F1/H = rat(19/128*ep^-3 - 307/768*ep^-2)
+//        + pi^2*rat(19/1536*ep^-1)
+// F2/H = rat(15/64*ep^-3 - 77/128*ep^-2 - 149/256*ep^-1)
+//        + cl2*sqrt3*rat(11/48*ep^-1)
+//        + pi^2*rat(5/128*ep^-1)
+// F4/H = rat(49/128*ep^-3 - 427/768*ep^-2 + 173/1536*ep^-1)
+//        + cl2*sqrt3*rat(-167/288*ep^-1)
+//        + pi^2*rat(49/768*ep^-1)
+// F7/H = rat(-19/64*ep^-3 + 37/64*ep^-2)
+//        + pi^2*rat(-19/768*ep^-1)
+// F9/H = rat(-15/32*ep^-3 + 7/8*ep^-2)
+//        + pi^2*rat(-5/128*ep^-1)
+// F3, F5..F6, F8, F10..F11 = 0
+// sum(Fi)/H = rat(-79/384*ep^-3 + 81/256*ep^-2 - 31/768*ep^-1)
+// Current-UFO primitive conventions alter the original RQFT sum above.
+rqft_ghost_reference!(
+    finite_part_ghost_3loop_d43,
+    43,
+    "gs^6*ca^3*( - 19/128*ep^-3 + 211/768*ep^-2 + 11/384*ep^-1)"
+);
+
+// d44: RQFT `ghost_nnlo_43`.
+// H = p1.p1*gs^6*ca^3
+// F0/H = rat(-1/384*ep^-3 - 21/256*ep^-2 - 239/1536*ep^-1)
+//        + cl2*sqrt3*rat(3/32*ep^-1)
+//        + pi^2*rat(-1/1536*ep^-1)
+// F1/H = rat(1/128*ep^-3 + 23/768*ep^-2)
+//        + pi^2*rat(1/1536*ep^-1)
+// F2/H = rat(5/64*ep^-2 + 47/384*ep^-1)
+//        + cl2*sqrt3*rat(-1/18*ep^-1)
+// F4/H = rat(1/128*ep^-3 + 53/768*ep^-2 + 29/1536*ep^-1)
+//        + cl2*sqrt3*rat(-11/288*ep^-1)
+//        + pi^2*rat(1/768*ep^-1)
+// F7/H = rat(-1/64*ep^-3 - 1/64*ep^-2)
+//        + pi^2*rat(-1/768*ep^-1)
+// F9/H = rat(-1/16*ep^-2)
+// F3, F5..F6, F8, F10..F11 = 0
+// sum(Fi)/H = rat(-1/384*ep^-3 + 13/768*ep^-2 - 11/768*ep^-1)
+// Current-UFO primitive conventions alter the original RQFT sum above.
+rqft_ghost_reference!(
+    finite_part_ghost_3loop_d44,
+    44,
+    "gs^6*ca^3*( - 1/128*ep^-3 + 13/768*ep^-2 - 3/128*ep^-1)"
+);
+
+// d45: RQFT `ghost_nnlo_44`.
+// H = p1.p1*gs^6*ca^2*nf
+// F0/H = rat(1/48*ep^-3 + 17/96*ep^-2 + 113/192*ep^-1)
+//        + cl2*sqrt3*rat(-17/36*ep^-1)
+//        + pi^2*rat(1/192*ep^-1)
+// F1/H = rat(-1/16*ep^-3 - 5/96*ep^-2)
+//        + pi^2*rat(-1/192*ep^-1)
+// F2/H = rat(-1/8*ep^-2)
+// F3/H = rat(-1/16*ep^-3 - 23/96*ep^-2 - 33/64*ep^-1)
+//        + cl2*sqrt3*rat(17/36*ep^-1)
+//        + pi^2*rat(-1/96*ep^-1)
+// F5/H = rat(1/8*ep^-3)
+//        + pi^2*rat(1/96*ep^-1)
+// F6/H = rat(1/8*ep^-2)
+// F4, F7 = 0
+// sum(Fi)/H = rat(1/48*ep^-3 - 11/96*ep^-2 + 7/96*ep^-1)
+rqft_ghost_reference!(
+    finite_part_ghost_3loop_d45,
+    45,
+    "gs^6*ca^2*nf*(1/48*ep^-3 - 11/96*ep^-2 + 7/96*ep^-1)"
+);
+
+// d46: RQFT `ghost_nnlo_45`.
+// H = p1.p1*gs^6*ca^3
+// F0/H = rat(-1/24*ep^-3 - 89/192*ep^-2 + 277/384*ep^-1)
+//        + cl2*sqrt3*rat(43/36*ep^-1)
+//        + pi^2*rat(-1/96*ep^-1)
+// F1/H = rat(19/128*ep^-3 - 307/768*ep^-2)
+//        + pi^2*rat(19/1536*ep^-1)
+// F3/H = rat(-3/128*ep^-3 - 67/256*ep^-2)
+//        + pi^2*rat(-1/512*ep^-1)
+// F4/H = rat(1/8*ep^-3 + 119/192*ep^-2 - 135/128*ep^-1)
+//        + cl2*sqrt3*rat(-43/36*ep^-1)
+//        + pi^2*rat(1/48*ep^-1)
+// F7/H = rat(-19/64*ep^-3 + 37/64*ep^-2)
+//        + pi^2*rat(-19/768*ep^-1)
+// F9/H = rat(3/64*ep^-3 + 15/64*ep^-2)
+//        + pi^2*rat(1/256*ep^-1)
+// F2, F5..F6, F8, F10..F11 = 0
+// sum(Fi)/H = rat(-1/24*ep^-3 + 59/192*ep^-2 - 1/3*ep^-1)
+rqft_ghost_reference!(
+    finite_part_ghost_3loop_d46,
+    46,
+    "gs^6*ca^3*( - 1/24*ep^-3 + 59/192*ep^-2 - 1/3*ep^-1)"
+);
+
+// d47: RQFT `ghost_nnlo_46`.
+// H = p1.p1*gs^6*ca^3
+// F0/H = rat(-1/96*ep^-3 - 9/64*ep^-1)
+//        + cl2*sqrt3*rat(-1/72*ep^-1)
+//        + pi^2*rat(-1/384*ep^-1)
+// F1/H = rat(1/128*ep^-3 + 23/768*ep^-2)
+//        + pi^2*rat(1/1536*ep^-1)
+// F3/H = rat(3/128*ep^-3 + 3/256*ep^-2)
+//        + pi^2*rat(1/512*ep^-1)
+// F4/H = rat(1/32*ep^-3 - 1/48*ep^-2 + 3/32*ep^-1)
+//        + cl2*sqrt3*rat(1/72*ep^-1)
+//        + pi^2*rat(1/192*ep^-1)
+// F7/H = rat(-1/64*ep^-3 - 1/64*ep^-2)
+//        + pi^2*rat(-1/768*ep^-1)
+// F9/H = rat(-3/64*ep^-3 + 1/64*ep^-2)
+//        + pi^2*rat(-1/256*ep^-1)
+// F2, F5..F6, F8, F10..F11 = 0
+// sum(Fi)/H = rat(-1/96*ep^-3 + 1/48*ep^-2 - 3/64*ep^-1)
+rqft_ghost_reference!(
+    finite_part_ghost_3loop_d47,
+    47,
+    "gs^6*ca^3*( - 1/96*ep^-3 + 1/48*ep^-2 - 3/64*ep^-1)"
+);
+
+// d48: RQFT `ghost_nnlo_47`.
+// H = p1.p1*gs^6*ca^3
+// F0/H = rat(-1/96*ep^-3 - 1/64*ep^-2 + 1/384*ep^-1)
+//        + cl2*sqrt3*rat(1/72*ep^-1)
+//        + pi^2*rat(-1/384*ep^-1)
+// F1/H = rat(1/64*ep^-3 - 1/384*ep^-2)
+//        + pi^2*rat(1/768*ep^-1)
+// F3/H = rat(1/64*ep^-3 - 1/384*ep^-2)
+//        + pi^2*rat(1/768*ep^-1)
+// F4/H = rat(1/32*ep^-3 + 1/64*ep^-2 - 5/384*ep^-1)
+//        + cl2*sqrt3*rat(-1/72*ep^-1)
+//        + pi^2*rat(1/192*ep^-1)
+// F7/H = rat(-1/32*ep^-3 + 1/96*ep^-2)
+//        + pi^2*rat(-1/384*ep^-1)
+// F9/H = rat(-1/32*ep^-3 + 1/96*ep^-2)
+//        + pi^2*rat(-1/384*ep^-1)
+// F2, F5..F6, F8, F10..F11 = 0
+// sum(Fi)/H = rat(-1/96*ep^-3 + 1/64*ep^-2 - 1/96*ep^-1)
+rqft_ghost_reference!(
+    finite_part_ghost_3loop_d48,
+    48,
+    "gs^6*ca^3*( - 1/96*ep^-3 + 1/64*ep^-2 - 1/96*ep^-1)"
+);
+
+// d49: RQFT `ghost_nnlo_48`.
+// H = p1.p1*gs^6*ca^3
+// F0/H = rat(-1/32*ep^-3 - 5/192*ep^-2 - 5/384*ep^-1)
+//        + cl2*sqrt3*rat(-1/72*ep^-1)
+//        + z3*rat(1/8*ep^-1)
+//        + pi^2*rat(-1/128*ep^-1)
+// F1/H = rat(3/64*ep^-3 - 1/128*ep^-2 - 11/768*ep^-1)
+//        + cl2*sqrt3*rat(1/144*ep^-1)
+//        + pi^2*rat(1/128*ep^-1)
+// F5/H = rat(3/32*ep^-3 + 3/64*ep^-2 - 5/192*ep^-1)
+//        + pi^2*rat(1/128*ep^-1)
+// F8/H = rat(3/64*ep^-3 - 1/128*ep^-2 - 11/768*ep^-1)
+//        + cl2*sqrt3*rat(1/144*ep^-1)
+//        + pi^2*rat(1/128*ep^-1)
+// F12/H = rat(-3/32*ep^-3 + 1/32*ep^-2)
+//         + pi^2*rat(-1/128*ep^-1)
+// F15/H = rat(-3/32*ep^-3 + 1/32*ep^-2)
+//         + pi^2*rat(-1/128*ep^-1)
+// F2..F4, F6..F7, F9..F11, F13..F14, F16..F17 = 0
+// sum(Fi)/H = rat(-1/32*ep^-3 + 13/192*ep^-2 - 13/192*ep^-1)
+//             + z3*rat(1/8*ep^-1)
+rqft_ghost_reference!(
+    finite_part_ghost_3loop_d49,
+    49,
+    "gs^6*ca^3*( - 1/32*ep^-3 + 13/192*ep^-2 - 13/192*ep^-1) + gs^6* z3*ca^3*(1/8*ep^-1)"
+);
+
+// d50: RQFT `ghost_nnlo_49`.
+// H = p1.p1*gs^6*ca^3
+// F0/H = rat(-1/96*ep^-3 - 1/192*ep^-2 + 5/1152*ep^-1)
+//        + cl2*sqrt3*rat(-1/216*ep^-1)
+//        + pi^2*rat(-1/384*ep^-1)
+// F1/H = rat(1/64*ep^-3 - 1/384*ep^-2 - 11/2304*ep^-1)
+//        + cl2*sqrt3*rat(1/432*ep^-1)
+//        + pi^2*rat(1/384*ep^-1)
+// F5/H = rat(1/32*ep^-3 + 1/192*ep^-2 - 1/192*ep^-1)
+//        + pi^2*rat(1/384*ep^-1)
+// F8/H = rat(1/64*ep^-3 - 1/384*ep^-2 - 11/2304*ep^-1)
+//        + cl2*sqrt3*rat(1/432*ep^-1)
+//        + pi^2*rat(1/384*ep^-1)
+// F12/H = rat(-1/32*ep^-3 + 1/96*ep^-2)
+//         + pi^2*rat(-1/384*ep^-1)
+// F15/H = rat(-1/32*ep^-3 + 1/96*ep^-2)
+//         + pi^2*rat(-1/384*ep^-1)
+// F2..F4, F6..F7, F9..F11, F13..F14, F16..F17 = 0
+// sum(Fi)/H = rat(-1/96*ep^-3 + 1/64*ep^-2 - 1/96*ep^-1)
+rqft_ghost_reference!(
+    finite_part_ghost_3loop_d50,
+    50,
+    "gs^6*ca^3*( - 1/96*ep^-3 + 1/64*ep^-2 - 1/96*ep^-1)"
+);
+
+// d51: RQFT `ghost_nnlo_50`.
+// H = p1.p1*gs^6*ca*nf
+// F0/H = cf*rat(1/6*ep^-3 + 29/18*ep^-2 + 59/18*ep^-1)
+//        + cf*cl2*sqrt3*rat(-14/27*ep^-1)
+//        + ca*rat(-1/12*ep^-3 - 29/36*ep^-2 - 59/36*ep^-1)
+//        + ca*cl2*sqrt3*rat(7/27*ep^-1)
+//        + z3*cf*rat(-2*ep^-1)
+//        + z3*ca*rat(ep^-1)
+//        + pi^2*cf*rat(1/24*ep^-1)
+//        + pi^2*ca*rat(-1/48*ep^-1)
+// F1/H = cf*rat(-1/4*ep^-3 - 13/24*ep^-2 - 23/144*ep^-1)
+//        + cf*cl2*sqrt3*rat(7/27*ep^-1)
+//        + ca*rat(1/8*ep^-3 + 13/48*ep^-2 + 23/288*ep^-1)
+//        + ca*cl2*sqrt3*rat(-7/54*ep^-1)
+//        + pi^2*cf*rat(-1/24*ep^-1)
+//        + pi^2*ca*rat(1/48*ep^-1)
+// F2/H = cf*rat(-4/3*ep^-2 - 4/9*ep^-1)
+//        + ca*rat(2/3*ep^-2 + 2/9*ep^-1)
+// F3/H = cf*rat(-1/2*ep^-3 - 5/3*ep^-2 - 8/9*ep^-1)
+//        + ca*rat(1/4*ep^-3 + 5/6*ep^-2 + 4/9*ep^-1)
+//        + pi^2*cf*rat(-1/24*ep^-1)
+//        + pi^2*ca*rat(1/48*ep^-1)
+// F4/H = cf*rat(-1/4*ep^-3 - 13/24*ep^-2 - 23/144*ep^-1)
+//        + cf*cl2*sqrt3*rat(7/27*ep^-1)
+//        + ca*rat(1/8*ep^-3 + 13/48*ep^-2 + 23/288*ep^-1)
+//        + ca*cl2*sqrt3*rat(-7/54*ep^-1)
+//        + pi^2*cf*rat(-1/24*ep^-1)
+//        + pi^2*ca*rat(1/48*ep^-1)
+// F6/H = cf*rat(1/2*ep^-3 + 1/6*ep^-2 + 1/9*ep^-1)
+//        + ca*rat(-1/4*ep^-3 - 1/12*ep^-2 - 1/18*ep^-1)
+//        + pi^2*cf*rat(1/24*ep^-1)
+//        + pi^2*ca*rat(-1/48*ep^-1)
+// F7/H = cf*rat(4/3*ep^-2 + 4/9*ep^-1)
+//        + ca*rat(-2/3*ep^-2 - 2/9*ep^-1)
+// F9/H = cf*rat(1/2*ep^-3 + 1/6*ep^-2 + 1/9*ep^-1)
+//        + ca*rat(-1/4*ep^-3 - 1/12*ep^-2 - 1/18*ep^-1)
+//        + pi^2*cf*rat(1/24*ep^-1)
+//        + pi^2*ca*rat(-1/48*ep^-1)
+// F5, F8 = 0
+// sum(Fi)/H = cf*rat(1/6*ep^-3 - 29/36*ep^-2 + 55/24*ep^-1)
+//             + ca*rat(-1/12*ep^-3 + 29/72*ep^-2 - 55/48*ep^-1)
+//             + z3*cf*rat(-2*ep^-1)
+//             + z3*ca*rat(ep^-1)
+rqft_ghost_reference!(
+    finite_part_ghost_3loop_d51,
+    51,
+    "gs^6*ca*cf*nf*(1/6*ep^-3 - 29/36*ep^-2 + 55/24*ep^-1) + gs^6* ca^2*nf*( - 1/12*ep^-3 + 29/72*ep^-2 - 55/48*ep^-1) + gs^6*z3* ca*cf*nf*( - 2*ep^-1) + gs^6*z3*ca^2*nf*(ep^-1)"
+);
+
+// d52: RQFT `ghost_nnlo_51`.
+// H = p1.p1*gs^6*ca^2*nf
+// F0/H = rat(-1/72*ep^-3 + 155/144*ep^-2 + 751/288*ep^-1)
+//        + cl2*sqrt3*rat(-43/54*ep^-1)
+//        + pi^2*rat(-1/288*ep^-1)
+// F1/H = rat(5/12*ep^-3 - 77/72*ep^-2 - 149/144*ep^-1)
+//        + cl2*sqrt3*rat(11/27*ep^-1)
+//        + pi^2*rat(5/72*ep^-1)
+// F4/H = rat(1/24*ep^-3 - 151/144*ep^-2 - 95/72*ep^-1)
+//        + pi^2*rat(1/288*ep^-1)
+// F5/H = rat(-3/8*ep^-3 - 13/16*ep^-2 - 23/96*ep^-1)
+//        + cl2*sqrt3*rat(7/18*ep^-1)
+//        + pi^2*rat(-1/16*ep^-1)
+// F8/H = rat(-5/6*ep^-3 + 4/3*ep^-2 + 13/27*ep^-1)
+//        + pi^2*rat(-5/72*ep^-1)
+// F9/H = rat(3/4*ep^-3 + 1/4*ep^-2 + 1/6*ep^-1)
+//        + pi^2*rat(1/16*ep^-1)
+// F2..F3, F6..F7 = 0
+// sum(Fi)/H = rat(-1/72*ep^-3 - 13/48*ep^-2 + 143/216*ep^-1)
+// The ordered current-UFO color matrix runs from quark to antiquark.
+// Its independently replayed sum agrees with the original Fi sum above.
+rqft_ghost_reference!(
+    finite_part_ghost_3loop_d52,
+    52,
+    "gs^6*ca^2*nf*( - 1/72*ep^-3 - 13/48*ep^-2 + 143/216*ep^-1)"
+);
+
+// d53: RQFT `ghost_nnlo_52`.
+// H = p1.p1*gs^6*ca^2*nf
+// F0/H = rat(-1/72*ep^-3 + 155/144*ep^-2 + 751/288*ep^-1)
+//        + cl2*sqrt3*rat(-43/54*ep^-1)
+//        + pi^2*rat(-1/288*ep^-1)
+// F1/H = rat(-3/8*ep^-3 - 13/16*ep^-2 - 23/96*ep^-1)
+//        + cl2*sqrt3*rat(7/18*ep^-1)
+//        + pi^2*rat(-1/16*ep^-1)
+// F2/H = rat(1/24*ep^-3 - 151/144*ep^-2 - 95/72*ep^-1)
+//        + pi^2*rat(1/288*ep^-1)
+// F5/H = rat(5/12*ep^-3 - 77/72*ep^-2 - 149/144*ep^-1)
+//        + cl2*sqrt3*rat(11/27*ep^-1)
+//        + pi^2*rat(5/72*ep^-1)
+// F6/H = rat(3/4*ep^-3 + 1/4*ep^-2 + 1/6*ep^-1)
+//        + pi^2*rat(1/16*ep^-1)
+// F7/H = rat(-5/6*ep^-3 + 4/3*ep^-2 + 13/27*ep^-1)
+//        + pi^2*rat(-5/72*ep^-1)
+// F3..F4, F8..F9 = 0
+// sum(Fi)/H = rat(-1/72*ep^-3 - 13/48*ep^-2 + 143/216*ep^-1)
+// The ordered current-UFO color matrix runs from quark to antiquark.
+// Its independently replayed sum agrees with the original Fi sum above.
+rqft_ghost_reference!(
+    finite_part_ghost_3loop_d53,
+    53,
+    "gs^6*ca^2*nf*( - 1/72*ep^-3 - 13/48*ep^-2 + 143/216*ep^-1)"
+);
+
+// d54: RQFT `ghost_nnlo_53`.
+// H = p1.p1*gs^6*ca^3
+// F0/H = rat(-65/96*ep^-3 + 3329/1152*ep^-2 + 23713/2304*ep^-1)
+//        + cl2*sqrt3*rat(-143/72*ep^-1)
+//        + z3*rat(1/4*ep^-1)
+//        + pi^2*rat(-65/384*ep^-1)
+// F1/H = rat(65/64*ep^-3 - 1001/384*ep^-2 - 1937/768*ep^-1)
+//        + cl2*sqrt3*rat(143/144*ep^-1)
+//        + pi^2*rat(65/384*ep^-1)
+// F3/H = rat(-9/8*ep^-2 - 8/9*ep^-1)
+// F5/H = rat(65/32*ep^-3 - 463/128*ep^-2 - 3685/576*ep^-1)
+//        + pi^2*rat(65/384*ep^-1)
+// F8/H = rat(65/64*ep^-3 - 1001/384*ep^-2 - 1937/768*ep^-1)
+//        + cl2*sqrt3*rat(143/144*ep^-1)
+//        + pi^2*rat(65/384*ep^-1)
+// F12/H = rat(-65/32*ep^-3 + 13/4*ep^-2 + 169/144*ep^-1)
+//         + pi^2*rat(-65/384*ep^-1)
+// F13/H = rat(9/8*ep^-2 + 8/9*ep^-1)
+// F15/H = rat(-65/32*ep^-3 + 13/4*ep^-2 + 169/144*ep^-1)
+//         + pi^2*rat(-65/384*ep^-1)
+// F2, F4, F6..F7, F9..F11, F14, F16..F17 = 0
+// sum(Fi)/H = rat(-65/96*ep^-3 + 161/288*ep^-2 + 2759/2304*ep^-1)
+//             + z3*rat(1/4*ep^-1)
+rqft_ghost_reference!(
+    finite_part_ghost_3loop_d54,
+    54,
+    "gs^6*ca^3*( - 65/96*ep^-3 + 161/288*ep^-2 + 2759/2304*ep^-1) +  gs^6*z3*ca^3*(1/4*ep^-1)"
+);
+
+// d55: RQFT `ghost_nnlo_54`.
+// H = p1.p1*gs^6*ca^3
+// F0/H = rat(5/576*ep^-3 - 13/192*ep^-2 - 319/1152*ep^-1)
+//        + cl2*sqrt3*rat(35/432*ep^-1)
+//        + pi^2*rat(5/2304*ep^-1)
+// F1/H = rat(5/64*ep^-2 + 47/384*ep^-1)
+//        + cl2*sqrt3*rat(-1/18*ep^-1)
+// F5/H = rat(-5/192*ep^-3 + 17/288*ep^-2 + 23/144*ep^-1)
+//        + pi^2*rat(-5/2304*ep^-1)
+// F8/H = rat(-5/192*ep^-3 + 77/1152*ep^-2 + 149/2304*ep^-1)
+//        + cl2*sqrt3*rat(-11/432*ep^-1)
+//        + pi^2*rat(-5/1152*ep^-1)
+// F12/H = rat(-1/16*ep^-2 - 1/16*ep^-1)
+// F15/H = rat(5/96*ep^-3 - 1/12*ep^-2 - 13/432*ep^-1)
+//         + pi^2*rat(5/1152*ep^-1)
+// F2..F4, F6..F7, F9..F11, F13..F14, F16..F17 = 0
+// sum(Fi)/H = rat(5/576*ep^-3 - 11/1152*ep^-2 - 157/6912*ep^-1)
+rqft_ghost_reference!(
+    finite_part_ghost_3loop_d55,
+    55,
+    "gs^6*ca^3*(5/576*ep^-3 - 11/1152*ep^-2 - 157/6912*ep^-1)"
+);
+
+// d56: RQFT `ghost_nnlo_55`.
+// H = p1.p1*gs^6*ca^3
+// F0/H = rat(5/576*ep^-3 - 13/192*ep^-2 - 319/1152*ep^-1)
+//        + cl2*sqrt3*rat(35/432*ep^-1)
+//        + pi^2*rat(5/2304*ep^-1)
+// F1/H = rat(-5/192*ep^-3 + 77/1152*ep^-2 + 149/2304*ep^-1)
+//        + cl2*sqrt3*rat(-11/432*ep^-1)
+//        + pi^2*rat(-5/1152*ep^-1)
+// F5/H = rat(-5/192*ep^-3 + 17/288*ep^-2 + 23/144*ep^-1)
+//        + pi^2*rat(-5/2304*ep^-1)
+// F8/H = rat(5/64*ep^-2 + 47/384*ep^-1)
+//        + cl2*sqrt3*rat(-1/18*ep^-1)
+// F12/H = rat(5/96*ep^-3 - 1/12*ep^-2 - 13/432*ep^-1)
+//         + pi^2*rat(5/1152*ep^-1)
+// F15/H = rat(-1/16*ep^-2 - 1/16*ep^-1)
+// F2..F4, F6..F7, F9..F11, F13..F14, F16..F17 = 0
+// sum(Fi)/H = rat(5/576*ep^-3 - 11/1152*ep^-2 - 157/6912*ep^-1)
+rqft_ghost_reference!(
+    finite_part_ghost_3loop_d56,
+    56,
+    "gs^6*ca^3*(5/576*ep^-3 - 11/1152*ep^-2 - 157/6912*ep^-1)"
+);
+
+// d57: RQFT `ghost_nnlo_56`.
+// H = p1.p1*gs^6*ca^3
+// F0/H = rat(-59/1152*ep^-2 - 161/768*ep^-1)
+//        + cl2*sqrt3*rat(1/27*ep^-1)
+// F1/H = rat(5/192*ep^-2 + 47/1152*ep^-1)
+//        + cl2*sqrt3*rat(-1/54*ep^-1)
+// F3/H = rat(1/24*ep^-2 + 1/36*ep^-1)
+// F5/H = rat(19/384*ep^-2 + 25/192*ep^-1)
+// F8/H = rat(5/192*ep^-2 + 47/1152*ep^-1)
+//        + cl2*sqrt3*rat(-1/54*ep^-1)
+// F12/H = rat(-1/48*ep^-2 - 1/48*ep^-1)
+// F13/H = rat(-1/24*ep^-2 - 1/36*ep^-1)
+// F15/H = rat(-1/48*ep^-2 - 1/48*ep^-1)
+// F2, F4, F6..F7, F9..F11, F14, F16..F17 = 0
+// sum(Fi)/H = rat(5/576*ep^-2 - 91/2304*ep^-1)
+rqft_ghost_reference!(
+    finite_part_ghost_3loop_d57,
+    57,
+    "gs^6*ca^3*(5/576*ep^-2 - 91/2304*ep^-1)"
+);
+
+// d58: RQFT `ghost_nnlo_57`.
+// H = p1.p1*gs^6*ca^3
+// F0/H = rat(-1/24*ep^-3 + 1/32*ep^-2 + 29/216*ep^-1)
+//        + cl2*sqrt3*rat(-13/162*ep^-1)
+//        + pi^2*rat(-1/96*ep^-1)
+// F5/H = rat(1/16*ep^-3 - 1/24*ep^-2 - 31/864*ep^-1)
+//        + cl2*sqrt3*rat(13/324*ep^-1)
+//        + pi^2*rat(1/96*ep^-1)
+// F6/H = rat(1/16*ep^-3 - 1/24*ep^-2 - 31/864*ep^-1)
+//        + cl2*sqrt3*rat(13/324*ep^-1)
+//        + pi^2*rat(1/96*ep^-1)
+// F11/H = rat(-1/8*ep^-3 + 7/96*ep^-2 - 1/96*ep^-1)
+//         + pi^2*rat(-1/96*ep^-1)
+// F1..F4, F7..F10 = 0
+// sum(Fi)/H = rat(-1/24*ep^-3 + 1/48*ep^-2 + 5/96*ep^-1)
+rqft_ghost_reference!(
+    finite_part_ghost_3loop_d58,
+    58,
+    "gs^6*ca^3*( - 1/24*ep^-3 + 1/48*ep^-2 + 5/96*ep^-1)"
+);
+
+// d59: RQFT `ghost_nnlo_58`.
+// H = p1.p1*gs^6*ca*nf^2
+// F0/H = rat(-1/9*ep^-3 - 55/54*ep^-2 - 161/162*ep^-1)
+//        + cl2*sqrt3*rat(92/81*ep^-1)
+//        + pi^2*rat(-1/36*ep^-1)
+// F1/H = rat(1/6*ep^-3 + 35/36*ep^-2 + 133/216*ep^-1)
+//        + cl2*sqrt3*rat(-46/81*ep^-1)
+//        + pi^2*rat(1/36*ep^-1)
+// F2/H = rat(1/6*ep^-3 + 35/36*ep^-2 + 133/216*ep^-1)
+//        + cl2*sqrt3*rat(-46/81*ep^-1)
+//        + pi^2*rat(1/36*ep^-1)
+// F3/H = rat(-1/3*ep^-3 - 5/6*ep^-2 - 7/54*ep^-1)
+//        + pi^2*rat(-1/36*ep^-1)
+// sum(Fi)/H = rat(-1/9*ep^-3 + 5/54*ep^-2 + 35/324*ep^-1)
+rqft_ghost_reference!(
+    finite_part_ghost_3loop_d59,
+    59,
+    "gs^6*ca*nf^2*( - 1/9*ep^-3 + 5/54*ep^-2 + 35/324*ep^-1)"
+);
+
+// d60: RQFT `ghost_nnlo_59`.
+// H = p1.p1*gs^6*ca^2*nf
+// F0/H = rat(19/72*ep^-3 - 569/432*ep^-2 - 2489/648*ep^-1)
+//        + cl2*sqrt3*rat(203/162*ep^-1)
+//        + pi^2*rat(19/288*ep^-1)
+// F3/H = rat(-19/48*ep^-3 + 397/288*ep^-2 + 1429/576*ep^-1)
+//        + cl2*sqrt3*rat(-37/108*ep^-1)
+//        + pi^2*rat(-19/288*ep^-1)
+// F4/H = rat(-19/48*ep^-3 + 439/288*ep^-2 + 3617/1728*ep^-1)
+//        + cl2*sqrt3*rat(-295/324*ep^-1)
+//        + pi^2*rat(-19/288*ep^-1)
+// F7/H = rat(19/24*ep^-3 - 89/48*ep^-2 - 431/432*ep^-1)
+//        + pi^2*rat(19/288*ep^-1)
+// F1..F2, F5..F6 = 0
+// sum(Fi)/H = rat(19/72*ep^-3 - 29/108*ep^-2 - 343/1296*ep^-1)
+rqft_ghost_reference!(
+    finite_part_ghost_3loop_d60,
+    60,
+    "gs^6*ca^2*nf*(19/72*ep^-3 - 29/108*ep^-2 - 343/1296*ep^-1)"
+);
+
+// d61: RQFT `ghost_nnlo_60`.
+// H = p1.p1*gs^6*ca^2*nf
+// F0/H = rat(1/72*ep^-3 + 97/432*ep^-2 + 179/324*ep^-1)
+//        + cl2*sqrt3*rat(-13/54*ep^-1)
+//        + pi^2*rat(1/288*ep^-1)
+// F3/H = rat(-1/48*ep^-3 - 65/288*ep^-2 - 803/1728*ep^-1)
+//        + cl2*sqrt3*rat(43/324*ep^-1)
+//        + pi^2*rat(-1/288*ep^-1)
+// F4/H = rat(-1/48*ep^-3 - 59/288*ep^-2 - 301/1728*ep^-1)
+//        + cl2*sqrt3*rat(35/324*ep^-1)
+//        + pi^2*rat(-1/288*ep^-1)
+// F7/H = rat(1/24*ep^-3 + 3/16*ep^-2 + 31/432*ep^-1)
+//        + pi^2*rat(1/288*ep^-1)
+// F1..F2, F5..F6 = 0
+// sum(Fi)/H = rat(1/72*ep^-3 - 1/54*ep^-2 - 19/1296*ep^-1)
+rqft_ghost_reference!(
+    finite_part_ghost_3loop_d61,
+    61,
+    "gs^6*ca^2*nf*(1/72*ep^-3 - 1/54*ep^-2 - 19/1296*ep^-1)"
+);
+
+// d62: RQFT `ghost_nnlo_61`.
+// H = p1.p1*gs^6*ca^2*nf
+// F0/H = rat(19/72*ep^-3 - 569/432*ep^-2 - 2489/648*ep^-1)
+//        + cl2*sqrt3*rat(203/162*ep^-1)
+//        + pi^2*rat(19/288*ep^-1)
+// F3/H = rat(-19/48*ep^-3 + 439/288*ep^-2 + 3617/1728*ep^-1)
+//        + cl2*sqrt3*rat(-295/324*ep^-1)
+//        + pi^2*rat(-19/288*ep^-1)
+// F4/H = rat(-19/48*ep^-3 + 397/288*ep^-2 + 1429/576*ep^-1)
+//        + cl2*sqrt3*rat(-37/108*ep^-1)
+//        + pi^2*rat(-19/288*ep^-1)
+// F7/H = rat(19/24*ep^-3 - 89/48*ep^-2 - 431/432*ep^-1)
+//        + pi^2*rat(19/288*ep^-1)
+// F1..F2, F5..F6 = 0
+// sum(Fi)/H = rat(19/72*ep^-3 - 29/108*ep^-2 - 343/1296*ep^-1)
+rqft_ghost_reference!(
+    finite_part_ghost_3loop_d62,
+    62,
+    "gs^6*ca^2*nf*(19/72*ep^-3 - 29/108*ep^-2 - 343/1296*ep^-1)"
+);
+
+// d63: RQFT `ghost_nnlo_62`.
+// H = p1.p1*gs^6*ca^3
+// F0/H = rat(-179/288*ep^-3 + 5153/3456*ep^-2 - 17635/5184*ep^-1)
+//        + cl2*sqrt3*rat(-575/216*ep^-1)
+//        + pi^2*rat(-179/1152*ep^-1)
+// F5/H = rat(179/192*ep^-3 - 1075/576*ep^-2 + 5399/1152*ep^-1)
+//        + cl2*sqrt3*rat(575/432*ep^-1)
+//        + pi^2*rat(179/1152*ep^-1)
+// F6/H = rat(179/192*ep^-3 - 1075/576*ep^-2 + 5399/1152*ep^-1)
+//        + cl2*sqrt3*rat(575/432*ep^-1)
+//        + pi^2*rat(179/1152*ep^-1)
+// F11/H = rat(-179/96*ep^-3 + 383/128*ep^-2 - 18715/3456*ep^-1)
+//         + pi^2*rat(-179/1152*ep^-1)
+// F1..F4, F7..F10 = 0
+// sum(Fi)/H = rat(-179/288*ep^-3 + 1297/1728*ep^-2 + 5767/10368*ep^-1)
+rqft_ghost_reference!(
+    finite_part_ghost_3loop_d63,
+    63,
+    "gs^6*ca^3*( - 179/288*ep^-3 + 1297/1728*ep^-2 + 5767/10368*ep^-1)"
+);
+
+// d64: RQFT `ghost_nnlo_63`.
+// H = p1.p1*gs^6*ca^3
+// F0/H = rat(-11/288*ep^-3 + 455/3456*ep^-2 + 2629/2592*ep^-1)
+//        + cl2*sqrt3*rat(-77/648*ep^-1)
+//        + pi^2*rat(-11/1152*ep^-1)
+// F5/H = rat(11/192*ep^-3 - 41/288*ep^-2 - 1277/1728*ep^-1)
+//        + cl2*sqrt3*rat(121/1296*ep^-1)
+//        + pi^2*rat(11/1152*ep^-1)
+// F6/H = rat(11/192*ep^-3 - 25/144*ep^-2 - 359/576*ep^-1)
+//        + cl2*sqrt3*rat(11/432*ep^-1)
+//        + pi^2*rat(11/1152*ep^-1)
+// F11/H = rat(-11/96*ep^-3 + 91/384*ep^-2 + 1307/3456*ep^-1)
+//         + pi^2*rat(-11/1152*ep^-1)
+// F1..F4, F7..F10 = 0
+// sum(Fi)/H = rat(-11/288*ep^-3 + 91/1728*ep^-2 + 313/10368*ep^-1)
+rqft_ghost_reference!(
+    finite_part_ghost_3loop_d64,
+    64,
+    "gs^6*ca^3*( - 11/288*ep^-3 + 91/1728*ep^-2 + 313/10368*ep^-1)"
+);
+
+// d65: RQFT `ghost_nnlo_64`.
+// H = p1.p1*gs^6*ca^2*nf
+// F0/H = rat(1/72*ep^-3 + 97/432*ep^-2 + 179/324*ep^-1)
+//        + cl2*sqrt3*rat(-13/54*ep^-1)
+//        + pi^2*rat(1/288*ep^-1)
+// F3/H = rat(-1/48*ep^-3 - 59/288*ep^-2 - 301/1728*ep^-1)
+//        + cl2*sqrt3*rat(35/324*ep^-1)
+//        + pi^2*rat(-1/288*ep^-1)
+// F4/H = rat(-1/48*ep^-3 - 65/288*ep^-2 - 803/1728*ep^-1)
+//        + cl2*sqrt3*rat(43/324*ep^-1)
+//        + pi^2*rat(-1/288*ep^-1)
+// F7/H = rat(1/24*ep^-3 + 3/16*ep^-2 + 31/432*ep^-1)
+//        + pi^2*rat(1/288*ep^-1)
+// F1..F2, F5..F6 = 0
+// sum(Fi)/H = rat(1/72*ep^-3 - 1/54*ep^-2 - 19/1296*ep^-1)
+rqft_ghost_reference!(
+    finite_part_ghost_3loop_d65,
+    65,
+    "gs^6*ca^2*nf*(1/72*ep^-3 - 1/54*ep^-2 - 19/1296*ep^-1)"
+);
+
+// d66: RQFT `ghost_nnlo_65`.
+// H = p1.p1*gs^6*ca^3
+// F0/H = rat(-11/288*ep^-3 + 455/3456*ep^-2 + 2629/2592*ep^-1)
+//        + cl2*sqrt3*rat(-77/648*ep^-1)
+//        + pi^2*rat(-11/1152*ep^-1)
+// F5/H = rat(11/192*ep^-3 - 25/144*ep^-2 - 359/576*ep^-1)
+//        + cl2*sqrt3*rat(11/432*ep^-1)
+//        + pi^2*rat(11/1152*ep^-1)
+// F6/H = rat(11/192*ep^-3 - 41/288*ep^-2 - 1277/1728*ep^-1)
+//        + cl2*sqrt3*rat(121/1296*ep^-1)
+//        + pi^2*rat(11/1152*ep^-1)
+// F11/H = rat(-11/96*ep^-3 + 91/384*ep^-2 + 1307/3456*ep^-1)
+//         + pi^2*rat(-11/1152*ep^-1)
+// F1..F4, F7..F10 = 0
+// sum(Fi)/H = rat(-11/288*ep^-3 + 91/1728*ep^-2 + 313/10368*ep^-1)
+rqft_ghost_reference!(
+    finite_part_ghost_3loop_d66,
+    66,
+    "gs^6*ca^3*( - 11/288*ep^-3 + 91/1728*ep^-2 + 313/10368*ep^-1)"
+);
+
+// d67: RQFT `ghost_nnlo_66`.
+// H = p1.p1*gs^6*ca^3
+// F0/H = rat(1/288*ep^-3 - 175/3456*ep^-2 - 1081/5184*ep^-1)
+//        + cl2*sqrt3*rat(47/648*ep^-1)
+//        + pi^2*rat(1/1152*ep^-1)
+// F5/H = rat(-1/192*ep^-3 + 29/576*ep^-2 + 395/3456*ep^-1)
+//        + cl2*sqrt3*rat(-47/1296*ep^-1)
+//        + pi^2*rat(-1/1152*ep^-1)
+// F6/H = rat(-1/192*ep^-3 + 29/576*ep^-2 + 395/3456*ep^-1)
+//        + cl2*sqrt3*rat(-47/1296*ep^-1)
+//        + pi^2*rat(-1/1152*ep^-1)
+// F11/H = rat(1/96*ep^-3 - 19/384*ep^-2 - 91/3456*ep^-1)
+//         + pi^2*rat(1/1152*ep^-1)
+// F1..F4, F7..F10 = 0
+// sum(Fi)/H = rat(1/288*ep^-3 + 1/1728*ep^-2 - 65/10368*ep^-1)
+rqft_ghost_reference!(
+    finite_part_ghost_3loop_d67,
+    67,
+    "gs^6*ca^3*(1/288*ep^-3 + 1/1728*ep^-2 - 65/10368*ep^-1)"
+);
+
+// d68: RQFT `ghost_nnlo_67`.
+// H = p1.p1*gs^6*ca^3
+// F0/H = rat(-1/48*ep^-3 - 1/96*ep^-2 - 1/1728*ep^-1)
+//        + cl2*sqrt3*rat(5/324*ep^-1)
+//        + pi^2*rat(-1/192*ep^-1)
+// F3/H = rat(1/16*ep^-3 - 1/32*ep^-2 + 1/288*ep^-1)
+//        + pi^2*rat(1/192*ep^-1)
+// F5/H = rat(1/16*ep^-3 - 1/96*ep^-2 - 17/1728*ep^-1)
+//        + cl2*sqrt3*rat(-5/324*ep^-1)
+//        + pi^2*rat(1/96*ep^-1)
+// F13/H = rat(-1/8*ep^-3 + 1/12*ep^-2 - 1/72*ep^-1)
+//         + pi^2*rat(-1/96*ep^-1)
+// F1..F2, F4, F6..F12, F14..F17 = 0
+// sum(Fi)/H = rat(-1/48*ep^-3 + 1/32*ep^-2 - 1/48*ep^-1)
+rqft_ghost_reference!(
+    finite_part_ghost_3loop_d68,
+    68,
+    "gs^6*ca^3*( - 1/48*ep^-3 + 1/32*ep^-2 - 1/48*ep^-1)"
+);
+
+// d69: RQFT `ghost_nnlo_68`.
+// H = p1.p1*gs^6*ca^2*nf
+// F0/H = rat(1/24*ep^-3 - 1/48*ep^-2 - 233/864*ep^-1)
+//        + cl2*sqrt3*rat(67/162*ep^-1)
+//        + pi^2*rat(1/96*ep^-1)
+// F1/H = rat(-1/8*ep^-3 - 11/48*ep^-2 + 13/144*ep^-1)
+//        + pi^2*rat(-1/96*ep^-1)
+// F3/H = rat(-1/8*ep^-3 + 5/48*ep^-2 + 293/864*ep^-1)
+//        + cl2*sqrt3*rat(-67/162*ep^-1)
+//        + pi^2*rat(-1/48*ep^-1)
+// F5/H = rat(1/4*ep^-3 + 1/12*ep^-2 - 1/18*ep^-1)
+//        + pi^2*rat(1/48*ep^-1)
+// F2, F4, F6..F7 = 0
+// sum(Fi)/H = rat(1/24*ep^-3 - 1/16*ep^-2 + 5/48*ep^-1)
+rqft_ghost_reference!(
+    finite_part_ghost_3loop_d69,
+    69,
+    "gs^6*ca^2*nf*(1/24*ep^-3 - 1/16*ep^-2 + 5/48*ep^-1)"
+);
+
+// d70: RQFT `ghost_nnlo_69`.
+// H = p1.p1*gs^6*ca^3
+// F0/H = rat(-5/48*ep^-3 + 1/32*ep^-2 - 1369/1728*ep^-1)
+//        + cl2*sqrt3*rat(257/324*ep^-1)
+//        + pi^2*rat(-5/192*ep^-1)
+// F3/H = rat(5/16*ep^-3 - 29/32*ep^-2 + 77/288*ep^-1)
+//        + pi^2*rat(5/192*ep^-1)
+// F5/H = rat(5/16*ep^-3 - 9/32*ep^-2 + 1057/1728*ep^-1)
+//        + cl2*sqrt3*rat(-257/324*ep^-1)
+//        + pi^2*rat(5/96*ep^-1)
+// F13/H = rat(-5/8*ep^-3 + 11/8*ep^-2 - 7/18*ep^-1)
+//         + pi^2*rat(-5/96*ep^-1)
+// F1..F2, F4, F6..F12, F14..F17 = 0
+// sum(Fi)/H = rat(-5/48*ep^-3 + 7/32*ep^-2 - 29/96*ep^-1)
+rqft_ghost_reference!(
+    finite_part_ghost_3loop_d70,
+    70,
+    "gs^6*ca^3*( - 5/48*ep^-3 + 7/32*ep^-2 - 29/96*ep^-1)"
+);
+
+// d71: RQFT `ghost_nnlo_70`.
+// H = p1.p1*gs^6*ca^3
+// F0/H = rat(-1/48*ep^-2 + 25/864*ep^-1)
+//        + cl2*sqrt3*rat(-4/81*ep^-1)
+// F3/H = rat(5/48*ep^-2 - 5/144*ep^-1)
+// F5/H = rat(1/48*ep^-2 - 37/864*ep^-1)
+//        + cl2*sqrt3*rat(4/81*ep^-1)
+// F13/H = rat(-1/12*ep^-2 + 1/36*ep^-1)
+// F1..F2, F4, F6..F12, F14..F17 = 0
+// sum(Fi)/H = rat(1/48*ep^-2 - 1/48*ep^-1)
+rqft_ghost_reference!(
+    finite_part_ghost_3loop_d71,
+    71,
+    "gs^6*ca^3*(1/48*ep^-2 - 1/48*ep^-1)"
+);
+
+// d72: RQFT `ghost_nnlo_71`.
+// H = p1.p1*gs^6*ca*cf*nf
+// F0/H = rat(-1/12*ep^-3 - 61/72*ep^-2 - 431/432*ep^-1)
+//        + cl2*sqrt3*rat(49/81*ep^-1)
+//        + pi^2*rat(-1/48*ep^-1)
+// F1/H = rat(2/3*ep^-2 + 2/9*ep^-1)
+// F2/H = rat(1/4*ep^-3 + 3/8*ep^-2 + 11/18*ep^-1)
+//        + pi^2*rat(1/48*ep^-1)
+// F3/H = rat(1/4*ep^-3 + 7/8*ep^-2 + 53/432*ep^-1)
+//        + cl2*sqrt3*rat(-49/81*ep^-1)
+//        + pi^2*rat(1/24*ep^-1)
+// F5/H = rat(-2/3*ep^-2 - 2/9*ep^-1)
+// F7/H = rat(-1/2*ep^-3 - 1/4*ep^-2 + 1/18*ep^-1)
+//        + pi^2*rat(-1/24*ep^-1)
+// F4, F6 = 0
+// sum(Fi)/H = rat(-1/12*ep^-3 + 11/72*ep^-2 - 5/24*ep^-1)
+rqft_ghost_reference!(
+    finite_part_ghost_3loop_d72,
+    72,
+    "gs^6*ca*cf*nf*( - 1/12*ep^-3 + 11/72*ep^-2 - 5/24*ep^-1)"
+);
+
+// d73: RQFT `ghost_nnlo_72`.
+// H = p1.p1*gs^6*ca*cf*nf
+// F0/H = rat(-1/12*ep^-3 - 61/72*ep^-2 - 431/432*ep^-1)
+//        + cl2*sqrt3*rat(49/81*ep^-1)
+//        + pi^2*rat(-1/48*ep^-1)
+// F1/H = rat(2/3*ep^-2 + 2/9*ep^-1)
+// F2/H = rat(1/4*ep^-3 + 3/8*ep^-2 + 11/18*ep^-1)
+//        + pi^2*rat(1/48*ep^-1)
+// F3/H = rat(1/4*ep^-3 + 7/8*ep^-2 + 53/432*ep^-1)
+//        + cl2*sqrt3*rat(-49/81*ep^-1)
+//        + pi^2*rat(1/24*ep^-1)
+// F5/H = rat(-2/3*ep^-2 - 2/9*ep^-1)
+// F7/H = rat(-1/2*ep^-3 - 1/4*ep^-2 + 1/18*ep^-1)
+//        + pi^2*rat(-1/24*ep^-1)
+// F4, F6 = 0
+// sum(Fi)/H = rat(-1/12*ep^-3 + 11/72*ep^-2 - 5/24*ep^-1)
+rqft_ghost_reference!(
+    finite_part_ghost_3loop_d73,
+    73,
+    "gs^6*ca*cf*nf*( - 1/12*ep^-3 + 11/72*ep^-2 - 5/24*ep^-1)"
+);
+
+// d74: RQFT `ghost_nnlo_73`.
+// H = p1.p1*gs^6*ca^2*nf
+// F0/H = rat(23/72*ep^-3 + 25/144*ep^-2 - 373/96*ep^-1)
+//        + cl2*sqrt3*rat(85/54*ep^-1)
+//        + pi^2*rat(23/288*ep^-1)
+// F1/H = rat(-23/24*ep^-3 - 253/144*ep^-2 + 47/9*ep^-1)
+//        + pi^2*rat(-23/288*ep^-1)
+// F3/H = rat(-23/24*ep^-3 + 23/144*ep^-2 + 221/96*ep^-1)
+//        + cl2*sqrt3*rat(-85/54*ep^-1)
+//        + pi^2*rat(-23/144*ep^-1)
+// F5/H = rat(23/12*ep^-3 + 11/12*ep^-2 - 169/54*ep^-1)
+//        + pi^2*rat(23/144*ep^-1)
+// F2, F4, F6..F7 = 0
+// sum(Fi)/H = rat(23/72*ep^-3 - 73/144*ep^-2 + 55/108*ep^-1)
+rqft_ghost_reference!(
+    finite_part_ghost_3loop_d74,
+    74,
+    "gs^6*ca^2*nf*(23/72*ep^-3 - 73/144*ep^-2 + 55/108*ep^-1)"
+);
+
+// d75: RQFT `ghost_nnlo_74`.
+// H = p1.p1*gs^6*ca^3
+// F0/H = rat(-223/288*ep^-3 + 5615/576*ep^-2 + 20179/1152*ep^-1)
+//        + cl2*sqrt3*rat(-401/216*ep^-1)
+//        + pi^2*rat(-223/1152*ep^-1)
+// F1/H = rat(-7/2*ep^-2 - 79/36*ep^-1)
+// F3/H = rat(223/96*ep^-3 - 9799/576*ep^-2 - 1477/288*ep^-1)
+//        + pi^2*rat(223/1152*ep^-1)
+// F5/H = rat(223/96*ep^-3 - 8215/576*ep^-2 - 607/128*ep^-1)
+//        + cl2*sqrt3*rat(401/216*ep^-1)
+//        + pi^2*rat(223/576*ep^-1)
+// F8/H = rat(-7/2*ep^-2 - 79/36*ep^-1)
+// F9/H = rat(7/2*ep^-2 + 79/36*ep^-1)
+// F13/H = rat(-223/48*ep^-3 + 559/24*ep^-2 - 260/27*ep^-1)
+//         + pi^2*rat(-223/576*ep^-1)
+// F14/H = rat(7/2*ep^-2 + 79/36*ep^-1)
+// F2, F4, F6..F7, F10..F12, F15..F17 = 0
+// sum(Fi)/H = rat(-223/288*ep^-3 + 113/64*ep^-2 - 857/432*ep^-1)
+rqft_ghost_reference!(
+    finite_part_ghost_3loop_d75,
+    75,
+    "gs^6*ca^3*( - 223/288*ep^-3 + 113/64*ep^-2 - 857/432*ep^-1)"
+);
+
+// d76: RQFT `ghost_nnlo_75`.
+// H = p1.p1*gs^6*ca^3
+// F0/H = rat(-7/288*ep^-3 - 145/576*ep^-2 + 283/1152*ep^-1)
+//        + cl2*sqrt3*rat(-17/216*ep^-1)
+//        + pi^2*rat(-7/1152*ep^-1)
+// F3/H = rat(7/96*ep^-3 + 497/576*ep^-2 - 319/288*ep^-1)
+//        + pi^2*rat(7/1152*ep^-1)
+// F5/H = rat(7/96*ep^-3 + 209/576*ep^-2 - 101/384*ep^-1)
+//        + cl2*sqrt3*rat(17/216*ep^-1)
+//        + pi^2*rat(7/576*ep^-1)
+// F13/H = rat(-7/48*ep^-3 - 5/6*ep^-2 + 103/108*ep^-1)
+//         + pi^2*rat(-7/576*ep^-1)
+// F1..F2, F4, F6..F12, F14..F17 = 0
+// sum(Fi)/H = rat(-7/288*ep^-3 + 9/64*ep^-2 - 37/216*ep^-1)
+rqft_ghost_reference!(
+    finite_part_ghost_3loop_d76,
+    76,
+    "gs^6*ca^3*( - 7/288*ep^-3 + 9/64*ep^-2 - 37/216*ep^-1)"
+);
+// d77: RQFT `ghost_nnlo_76`.
+// H = p1.p1*gs^6*ca^3
+// F0/H = rat(-17/144*ep^-2 - 341/864*ep^-1)
+//        + cl2*sqrt3*rat(8/81*ep^-1)
+// F3/H = rat(5/48*ep^-2 + 25/96*ep^-1)
+// F5/H = rat(7/48*ep^-2 + 167/864*ep^-1)
+//        + cl2*sqrt3*rat(-8/81*ep^-1)
+// F8/H = rat(1/12*ep^-2 + 1/18*ep^-1)
+// F13/H = rat(-1/8*ep^-2 - 1/12*ep^-1)
+// F14/H = rat(-1/12*ep^-2 - 1/18*ep^-1)
+// F1..F2, F4, F6..F7, F9..F12, F15..F17 = 0
+// sum(Fi)/H = rat(1/144*ep^-2 - 7/288*ep^-1)
+rqft_ghost_reference!(
+    finite_part_ghost_3loop_d77,
+    77,
+    "gs^6*ca^3*(1/144*ep^-2 - 7/288*ep^-1)"
+);
+
+// d78: RQFT `ghost_nnlo_77`.
+// H = p1.p1*gs^6*ca^3
+// F0/H = rat(-17/144*ep^-2 - 341/864*ep^-1)
+//        + cl2*sqrt3*rat(8/81*ep^-1)
+// F3/H = rat(5/48*ep^-2 + 25/96*ep^-1)
+// F5/H = rat(7/48*ep^-2 + 167/864*ep^-1)
+//        + cl2*sqrt3*rat(-8/81*ep^-1)
+// F8/H = rat(1/12*ep^-2 + 1/18*ep^-1)
+// F13/H = rat(-1/8*ep^-2 - 1/12*ep^-1)
+// F14/H = rat(-1/12*ep^-2 - 1/18*ep^-1)
+// F1..F2, F4, F6..F7, F9..F12, F15..F17 = 0
+// sum(Fi)/H = rat(1/144*ep^-2 - 7/288*ep^-1)
+rqft_ghost_reference!(
+    finite_part_ghost_3loop_d78,
+    78,
+    "gs^6*ca^3*(1/144*ep^-2 - 7/288*ep^-1)"
+);

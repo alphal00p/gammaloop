@@ -56,7 +56,11 @@ disable_threshold_subtraction = false
 [default_runtime_settings.sampling]
 graphs = "summed"
 orientations = "summed"
-lmb_multichanneling = false
+# Complementary path bases cover every hard triangle. Their map-density
+# partition removes the infinite-variance tails of a single spherical basis.
+lmb_multichanneling = true
+sampling_channel_weight = "map_density"
+default_channel_selection = ["lmb(1,4,7)", "lmb(2,5,6)"]
 lmb_channels = "summed"
 coordinate_system = "spherical"
 mapping = "linear"

@@ -2,7 +2,7 @@
 
 #quote(block: true)[
 #strong[Status:] Current implementation architecture, audited against the Vakint source on
-2026-10-01.
+2026-10-04.
 
 This note describes the Rust engine and its optional Symbolica community-module wrapper. Backend
 availability and numerical coverage depend on the selected topology, epsilon depth, and installed
@@ -80,9 +80,17 @@ Integral evaluation matches again so that it has the canonical topology and nume
 It then walks `settings.evaluation_order` and selects the first method whose topology, loop count,
 and requested epsilon depth are supported. AlphaLoop is limited to its registered topologies,
 at most three loops, and at most four requested terms; MATAD covers its registered topologies up
-to three loops and five terms; FMFT covers registered four-loop topologies up to five terms;
+to three loops and normally five terms; FMFT covers registered four-loop topologies up to five terms;
 pySecDec covers topologies registered for that numerical path. Failure to find a method is an
 explicit `NoEvaluationMethodFound` error, not an implicit fallback.
+
+MATAD also accepts exactly six terms for a certified product of at most
+three independent tadpoles with the same nonzero mass. Each line must be
+a self-loop carrying a distinct loop momentum with coefficient `+1` or
+`-1`. These products need only the existing Gamma series through epsilon
+degree five. Connected master tables retain their original depth limit;
+mixed masses, scaled loop momenta and seven-term requests do not qualify.
+The FORM remainder check still rejects unavailable coefficients.
 
 The registered one-scale two-loop sunsets include the MM0 and M00 mass patterns.
 Canonical masses accept either zero or `msq(index)`, and scale extraction chooses
@@ -94,6 +102,9 @@ Numerical evaluation is a later boundary. Parametric backend output remains a Sy
 expression. Numerical parameters and optional external momenta are converted to the configured
 binary precision, and `NumericalEvaluationResult` represents the result and optional error as
 Laurent coefficients `(epsilon power, complex value)`.
+Laurent extraction reads the actual epsilon atom and its integer powers,
+preserving its namespace and display registrations. A malformed monomial
+or a coefficient that still depends on epsilon returns an evaluation error.
 
 == External tools and feature boundaries
 

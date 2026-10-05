@@ -25,7 +25,7 @@ use gammaloop_integration_tests::{
 };
 use gammalooprs::integrands::{
     HasIntegrand,
-    evaluation::{EvaluationMetaData, PreciseEvaluationResultOutput},
+    evaluation::{EvaluationMetaData, PreciseEvaluationResultOutput, StabilityStatus},
 };
 use gammalooprs::observables::events::AdditionalWeightKey;
 use gammalooprs::processes::ProcessCollection;
@@ -486,23 +486,33 @@ fn required_stability_accuracy_floor(
         .unwrap_or(f64::EPSILON))
 }
 
-fn stability_relative_accuracy(metadata: &EvaluationMetaData, accuracy_floor: f64) -> f64 {
-    let stability_accuracy = metadata
-        .stability_results
-        .iter()
-        .filter_map(|result| result.estimated_relative_accuracy.as_ref())
-        .fold(0.0_f64, |max, accuracy| max.max(accuracy.0.abs()));
-    let instability_error = metadata
-        .relative_instability_error
-        .re
-        .0
-        .abs()
-        .max(metadata.relative_instability_error.im.0.abs());
+fn stability_relative_accuracy(metadata: &EvaluationMetaData, accuracy_floor: f64) -> Result<f64> {
+    // Earlier attempts describe discarded values. The last attempt owns the
+    // returned value, matching EvaluationMetaData::final_precision.
+    let final_result = metadata.stability_results.last().ok_or_else(|| {
+        eyre::eyre!("inspect evaluation should report its final stability attempt")
+    })?;
+    eyre::ensure!(
+        !metadata.is_nan && !matches!(final_result.status, StabilityStatus::Unstable(_)),
+        "inspect evaluation ended at {} with status {:?} and is_nan={}",
+        final_result.precision,
+        final_result.status,
+        metadata.is_nan,
+    );
+    let accuracies = [
+        final_result
+            .estimated_relative_accuracy
+            .map_or(0.0, |accuracy| accuracy.0.abs()),
+        metadata.relative_instability_error.re.0.abs(),
+        metadata.relative_instability_error.im.0.abs(),
+        accuracy_floor.abs(),
+    ];
+    eyre::ensure!(
+        accuracies.iter().all(|accuracy| accuracy.is_finite()),
+        "inspect evaluation has non-finite final accuracy metadata: {accuracies:?}",
+    );
 
-    stability_accuracy
-        .max(instability_error)
-        .max(accuracy_floor.abs())
-        .max(f64::EPSILON)
+    Ok(accuracies.into_iter().fold(f64::EPSILON, f64::max))
 }
 
 struct InspectProbePoint {
@@ -581,6 +591,92 @@ fn inspect_probe_dependence_uses_reported_accuracy_and_rejects_nonfinite_probes(
         assert!(probe(invalid, accuracy).passes(true).is_err());
         assert!(probe(0.0, invalid).passes(true).is_err());
     }
+}
+
+#[test]
+fn inspect_stability_accuracy_uses_the_final_accepted_precision() -> Result<()> {
+    use gammalooprs::integrands::evaluation::{EvaluationResult, StabilityResult};
+    use gammalooprs::settings::runtime::Precision;
+
+    let mut metadata = EvaluationResult::zero().evaluation_metadata;
+    metadata.stability_results = vec![
+        StabilityResult {
+            precision: Precision::Double,
+            estimated_relative_accuracy: Some(F(0.02)),
+            estimated_decimal_digits: None,
+            status: StabilityStatus::Unstable(2),
+            total_time: Duration::ZERO,
+        },
+        StabilityResult {
+            precision: Precision::Quad,
+            estimated_relative_accuracy: Some(F(1.0e-12)),
+            estimated_decimal_digits: None,
+            status: StabilityStatus::Stable(2),
+            total_time: Duration::ZERO,
+        },
+    ];
+    let accuracy = stability_relative_accuracy(&metadata, 1.0e-8)?;
+    assert_eq!(accuracy, 1.0e-8);
+    let mut probe = InspectProbeResult {
+        probe: InspectProbePoint {
+            point: vec![1.0],
+            scale_exponent: 0.0,
+            seed_index: 0,
+        },
+        relative_delta: 0.003,
+        relative_accuracy: accuracy,
+        required_relative_delta: INSPECT_DEPENDENCE_ACCURACY_FACTOR * accuracy,
+    };
+    assert!(probe.passes(false)?);
+
+    // A successful retry cannot relax the configured accuracy floor.
+    probe.relative_accuracy = stability_relative_accuracy(&metadata, 1.0e-5)?;
+    assert_eq!(probe.relative_accuracy, 1.0e-5);
+    probe.required_relative_delta = INSPECT_DEPENDENCE_ACCURACY_FACTOR * probe.relative_accuracy;
+    assert!(!probe.passes(false)?);
+
+    metadata.relative_instability_error.im = F(2.0e-6);
+    assert_eq!(stability_relative_accuracy(&metadata, 1.0e-8)?, 2.0e-6);
+    metadata.relative_instability_error.im = F(0.0);
+    metadata.stability_results[1].estimated_relative_accuracy = None;
+    metadata.stability_results[1].status = StabilityStatus::Unknown;
+    assert_eq!(stability_relative_accuracy(&metadata, 1.0e-8)?, 1.0e-8);
+    Ok(())
+}
+
+#[test]
+fn inspect_stability_accuracy_rejects_unstable_and_nonfinite_final_results() {
+    use gammalooprs::integrands::evaluation::{EvaluationResult, StabilityResult};
+    use gammalooprs::settings::runtime::Precision;
+
+    let mut metadata = EvaluationResult::zero().evaluation_metadata;
+    metadata.stability_results.push(StabilityResult {
+        precision: Precision::Quad,
+        estimated_relative_accuracy: Some(F(1.0e-12)),
+        estimated_decimal_digits: None,
+        status: StabilityStatus::Unstable(2),
+        total_time: Duration::ZERO,
+    });
+    assert!(stability_relative_accuracy(&metadata, 1.0e-8).is_err());
+
+    metadata.stability_results[0].status = StabilityStatus::Stable(2);
+    metadata.is_nan = true;
+    assert!(stability_relative_accuracy(&metadata, 1.0e-8).is_err());
+    metadata.is_nan = false;
+    for invalid in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
+        metadata.stability_results[0].estimated_relative_accuracy = Some(F(invalid));
+        assert!(stability_relative_accuracy(&metadata, 1.0e-8).is_err());
+        metadata.stability_results[0].estimated_relative_accuracy = Some(F(1.0e-12));
+        metadata.relative_instability_error.re = F(invalid);
+        assert!(stability_relative_accuracy(&metadata, 1.0e-8).is_err());
+        metadata.relative_instability_error.re = F(0.0);
+        metadata.relative_instability_error.im = F(invalid);
+        assert!(stability_relative_accuracy(&metadata, 1.0e-8).is_err());
+        metadata.relative_instability_error.im = F(0.0);
+        assert!(stability_relative_accuracy(&metadata, invalid).is_err());
+    }
+    metadata.stability_results.clear();
+    assert!(stability_relative_accuracy(&metadata, 1.0e-8).is_err());
 }
 
 fn deterministic_uv_momentum_points(
@@ -670,7 +766,7 @@ fn evaluate_momentum_sample(
 
     Ok(InspectEvaluation {
         value: evaluation.integrand_result.map(|entry| entry.0),
-        relative_accuracy: stability_relative_accuracy(metadata, accuracy_floor),
+        relative_accuracy: stability_relative_accuracy(metadata, accuracy_floor)?,
     })
 }
 
@@ -2738,7 +2834,7 @@ fn local_ir_integrated_generation_succeeds_across_local_uv_routes() -> Result<()
             })?;
             let value = InspectEvaluation {
                 value: evaluation.integrand_result.map(|entry| entry.0),
-                relative_accuracy: stability_relative_accuracy(metadata, f64::EPSILON),
+                relative_accuracy: stability_relative_accuracy(metadata, f64::EPSILON)?,
             };
             assert!(
                 value.value.re.is_finite() && value.value.im.is_finite(),
@@ -5206,6 +5302,68 @@ fn sunrise_pole_part_matches_muv_inspect() -> Result<()> {
         prescription.massive_power_divergent = scheme;
         prescription.massless_power_divergent = scheme;
         cli.run_command("run generate")?;
+        {
+            use gammalooprs::utils::GS;
+            use symbolica::atom::AtomView;
+
+            let ProcessCollection::Amplitudes(amplitudes) =
+                &cli.state.process_list.processes[0].collection
+            else {
+                panic!("expected the scalar Sunrise amplitude")
+            };
+            let amplitude = &amplitudes[integrand_name];
+            let [amplitude_graph] = amplitude.graphs.as_slice() else {
+                panic!("expected one scalar Sunrise graph")
+            };
+            let parameters = &amplitude_graph
+                .graph
+                .param_builder
+                .pairs
+                .additional_params
+                .params;
+            assert_eq!(parameters.len(), 21);
+            assert_eq!(
+                amplitude
+                    .integrand
+                    .as_ref()
+                    .unwrap()
+                    .get_settings()
+                    .general
+                    .additional_param_values
+                    .len(),
+                parameters.len()
+            );
+            let mut markers = std::collections::HashSet::new();
+            for expression in std::iter::once(&amplitude_graph.derived_data.all_mighty_integrand)
+                .chain(
+                    amplitude_graph
+                        .derived_data
+                        .all_mighty_numerators
+                        .iter()
+                        .map(|entry| &entry.rhs),
+                )
+            {
+                let _ = expression.replace_map(|view, _, _| {
+                    if let AtomView::Fun(function) = view
+                        && function.get_symbol() == GS.ct_marker
+                    {
+                        markers.insert(view.to_owned());
+                    }
+                });
+            }
+            assert!(
+                markers
+                    .iter()
+                    .any(|marker| marker.contains_symbol(GS.uv_integrate)),
+                "the integrated fixture must retain integrated CT markers"
+            );
+            for marker in &markers {
+                assert!(
+                    parameters.contains(marker),
+                    "unbound generated integrated CT marker: {marker}"
+                );
+            }
+        }
         Ok(cli)
     };
     let mut muv = setup("sunrise_muv_inspect", ApproximationType::MUV)?;
@@ -6094,18 +6252,17 @@ child_only_uv.total > 0 && child_only_uv.resolved > 0
                 let paths = local["projection_paths"].as_array().unwrap_or_else(|| {
                     panic!("Appendix-B.1 term has malformed direct-3D paths: {local}")
                 });
-                assert!(
-                    !paths.is_empty(),
-                    "Appendix-B.1 must retain at least the identity projection path"
-                );
                 if term.node_key == "∅" {
                     assert!(
-                        paths.iter().all(|path| path["steps"]
-                            .as_array()
-                            .is_some_and(Vec::is_empty)),
-                        "the Appendix-B.1 root must carry only its empty identity path: {paths:?}"
+                        paths.is_empty(),
+                        "the unprojected Appendix-B.1 root must have no projection history: {paths:?}"
                     );
                 } else {
+                    assert!(
+                        !paths.is_empty(),
+                        "Appendix-B.1 non-root node {} must retain its projection paths",
+                        term.node_key
+                    );
                     assert!(
                         paths.iter().all(|path| path["steps"]
                             .as_array()

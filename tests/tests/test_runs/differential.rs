@@ -242,144 +242,144 @@ mod failing {
 
         Ok(())
     }
+}
 
-    #[test]
-    #[serial]
-    fn lu_differential_json_observables_resume_from_workspace() -> Result<()> {
-        let mut cli =
-            setup_sm_differential_lu_cli("lu_differential_json_observables_resume_from_workspace")?;
-        configure_differential_leading_jet_observable(&mut cli)?;
-        configure_differential_leading_jet_selector(&mut cli)?;
-        cli.run_command(
-            "set process kv general.generate_events=false integrator.n_start=12 integrator.min_samples_for_update=12 integrator.n_max=12 integrator.n_increase=0 integrator.observables_output.format=[\"json\"]",
-        )?;
+#[test]
+#[serial]
+fn lu_differential_json_observables_resume_from_workspace() -> Result<()> {
+    let mut cli =
+        setup_sm_differential_lu_cli("lu_differential_json_observables_resume_from_workspace")?;
+    configure_differential_leading_jet_observable(&mut cli)?;
+    configure_differential_leading_jet_selector(&mut cli)?;
+    cli.run_command(
+        "set process kv general.generate_events=false integrator.n_start=12 integrator.min_samples_for_update=12 integrator.n_max=12 integrator.n_increase=0 integrator.observables_output.format=[\"json\"]",
+    )?;
 
-        let workspace = cli.cli_settings.state.folder.join("resume_workspace");
-        Integrate {
-            process: vec![],
-            integrand_name: vec!["default".to_string()],
-            workspace_path: Some(workspace.clone()),
-            target: vec![],
-            n_cores: Some(1),
-            restart: true,
-            ..Default::default()
-        }
-        .run(&mut cli.state, &cli.cli_settings)?;
-
-        let slot_workspace = selected_slot_workspace(&cli, &workspace, None, Some("default"))?;
-        let (process_id, resolved_integrand_name) = cli
-            .state
-            .find_integrand_ref(None, Some(&"default".to_string()))?;
-        let slot_meta = gammalooprs::integrate::SlotMeta {
-            process_name: cli.state.process_list.processes[process_id]
-                .definition
-                .folder_name
-                .clone(),
-            integrand_name: resolved_integrand_name,
-        };
-        let final_file = slot_workspace.join("observables_final.json");
-        let checkpoint_file =
-            gammalooprs::integrate::latest_observable_resume_state_path(&workspace, &slot_meta);
-        assert!(checkpoint_file.exists());
-        let result_snapshot_path = workspace.join("integration_result.json");
-        let result_before_resume = std::fs::read_to_string(&result_snapshot_path)?;
-        let state_before_resume =
-            std::fs::read(gammalooprs::integrate::workspace_state_path(&workspace))?;
-        let before_resume =
-            gammalooprs::observables::ObservableSnapshotBundle::from_json_file(&final_file)?;
-
-        Integrate {
-            process: vec![],
-            integrand_name: vec!["default".to_string()],
-            workspace_path: Some(workspace.clone()),
-            target: vec![],
-            n_cores: Some(1),
-            restart: false,
-            ..Default::default()
-        }
-        .run(&mut cli.state, &cli.cli_settings)?;
-
-        let after_resume =
-            gammalooprs::observables::ObservableSnapshotBundle::from_json_file(&final_file)?;
-        assert_eq!(before_resume, after_resume);
-        assert_eq!(
-            result_before_resume,
-            std::fs::read_to_string(result_snapshot_path)?
-        );
-        assert_eq!(
-            state_before_resume,
-            std::fs::read(gammalooprs::integrate::workspace_state_path(&workspace))?
-        );
-
-        Ok(())
+    let workspace = cli.cli_settings.state.folder.join("resume_workspace");
+    Integrate {
+        process: vec![],
+        integrand_name: vec!["default".to_string()],
+        workspace_path: Some(workspace.clone()),
+        target: vec![],
+        n_cores: Some(1),
+        restart: true,
+        ..Default::default()
     }
+    .run(&mut cli.state, &cli.cli_settings)?;
 
-    #[test]
-    #[serial]
-    fn lu_differential_hwu_observables_resume_from_workspace() -> Result<()> {
-        let mut cli =
-            setup_sm_differential_lu_cli("lu_differential_hwu_observables_resume_from_workspace")?;
-        configure_differential_leading_jet_observable(&mut cli)?;
-        configure_differential_leading_jet_selector(&mut cli)?;
-        cli.run_command(
-            "set process kv general.generate_events=false integrator.n_start=12 integrator.min_samples_for_update=12 integrator.n_max=12 integrator.n_increase=0 integrator.observables_output.format=[\"hwu\"]",
-        )?;
+    let slot_workspace = selected_slot_workspace(&cli, &workspace, None, Some("default"))?;
+    let (process_id, resolved_integrand_name) = cli
+        .state
+        .find_integrand_ref(None, Some(&"default".to_string()))?;
+    let slot_meta = gammalooprs::integrate::SlotMeta {
+        process_name: cli.state.process_list.processes[process_id]
+            .definition
+            .folder_name
+            .clone(),
+        integrand_name: resolved_integrand_name,
+    };
+    let final_file = slot_workspace.join("observables_final.json");
+    let checkpoint_file =
+        gammalooprs::integrate::latest_observable_resume_state_path(&workspace, &slot_meta);
+    assert!(checkpoint_file.exists());
+    let result_snapshot_path = workspace.join("integration_result.json");
+    let result_before_resume = std::fs::read_to_string(&result_snapshot_path)?;
+    let state_before_resume =
+        std::fs::read(gammalooprs::integrate::workspace_state_path(&workspace))?;
+    let before_resume =
+        gammalooprs::observables::ObservableSnapshotBundle::from_json_file(&final_file)?;
 
-        let workspace = cli.cli_settings.state.folder.join("resume_workspace");
-        Integrate {
-            process: vec![],
-            integrand_name: vec!["default".to_string()],
-            workspace_path: Some(workspace.clone()),
-            target: vec![],
-            n_cores: Some(1),
-            restart: true,
-            ..Default::default()
-        }
-        .run(&mut cli.state, &cli.cli_settings)?;
-
-        let slot_workspace = selected_slot_workspace(&cli, &workspace, None, Some("default"))?;
-        let final_file = slot_workspace.join("observables_final.hwu");
-        let before_resume = std::fs::read_to_string(&final_file)?;
-        let (process_id, resolved_integrand_name) = cli
-            .state
-            .find_integrand_ref(None, Some(&"default".to_string()))?;
-        let slot_meta = gammalooprs::integrate::SlotMeta {
-            process_name: cli.state.process_list.processes[process_id]
-                .definition
-                .folder_name
-                .clone(),
-            integrand_name: resolved_integrand_name,
-        };
-        let checkpoint_file =
-            gammalooprs::integrate::latest_observable_resume_state_path(&workspace, &slot_meta);
-        assert!(checkpoint_file.exists());
-        let result_snapshot_path = workspace.join("integration_result.json");
-        let result_before_resume = std::fs::read_to_string(&result_snapshot_path)?;
-        let state_before_resume =
-            std::fs::read(gammalooprs::integrate::workspace_state_path(&workspace))?;
-
-        Integrate {
-            process: vec![],
-            integrand_name: vec!["default".to_string()],
-            workspace_path: Some(workspace.clone()),
-            target: vec![],
-            n_cores: Some(1),
-            restart: false,
-            ..Default::default()
-        }
-        .run(&mut cli.state, &cli.cli_settings)?;
-
-        let after_resume = std::fs::read_to_string(final_file)?;
-        assert_eq!(before_resume, after_resume);
-        assert_eq!(
-            result_before_resume,
-            std::fs::read_to_string(result_snapshot_path)?
-        );
-        assert_eq!(
-            state_before_resume,
-            std::fs::read(gammalooprs::integrate::workspace_state_path(&workspace))?
-        );
-
-        Ok(())
+    Integrate {
+        process: vec![],
+        integrand_name: vec!["default".to_string()],
+        workspace_path: Some(workspace.clone()),
+        target: vec![],
+        n_cores: Some(1),
+        restart: false,
+        ..Default::default()
     }
+    .run(&mut cli.state, &cli.cli_settings)?;
+
+    let after_resume =
+        gammalooprs::observables::ObservableSnapshotBundle::from_json_file(&final_file)?;
+    assert_eq!(before_resume, after_resume);
+    assert_eq!(
+        result_before_resume,
+        std::fs::read_to_string(result_snapshot_path)?
+    );
+    assert_eq!(
+        state_before_resume,
+        std::fs::read(gammalooprs::integrate::workspace_state_path(&workspace))?
+    );
+
+    Ok(())
+}
+
+#[test]
+#[serial]
+fn lu_differential_hwu_observables_resume_from_workspace() -> Result<()> {
+    let mut cli =
+        setup_sm_differential_lu_cli("lu_differential_hwu_observables_resume_from_workspace")?;
+    configure_differential_leading_jet_observable(&mut cli)?;
+    configure_differential_leading_jet_selector(&mut cli)?;
+    cli.run_command(
+        "set process kv general.generate_events=false integrator.n_start=12 integrator.min_samples_for_update=12 integrator.n_max=12 integrator.n_increase=0 integrator.observables_output.format=[\"hwu\"]",
+    )?;
+
+    let workspace = cli.cli_settings.state.folder.join("resume_workspace");
+    Integrate {
+        process: vec![],
+        integrand_name: vec!["default".to_string()],
+        workspace_path: Some(workspace.clone()),
+        target: vec![],
+        n_cores: Some(1),
+        restart: true,
+        ..Default::default()
+    }
+    .run(&mut cli.state, &cli.cli_settings)?;
+
+    let slot_workspace = selected_slot_workspace(&cli, &workspace, None, Some("default"))?;
+    let final_file = slot_workspace.join("observables_final.hwu");
+    let before_resume = std::fs::read_to_string(&final_file)?;
+    let (process_id, resolved_integrand_name) = cli
+        .state
+        .find_integrand_ref(None, Some(&"default".to_string()))?;
+    let slot_meta = gammalooprs::integrate::SlotMeta {
+        process_name: cli.state.process_list.processes[process_id]
+            .definition
+            .folder_name
+            .clone(),
+        integrand_name: resolved_integrand_name,
+    };
+    let checkpoint_file =
+        gammalooprs::integrate::latest_observable_resume_state_path(&workspace, &slot_meta);
+    assert!(checkpoint_file.exists());
+    let result_snapshot_path = workspace.join("integration_result.json");
+    let result_before_resume = std::fs::read_to_string(&result_snapshot_path)?;
+    let state_before_resume =
+        std::fs::read(gammalooprs::integrate::workspace_state_path(&workspace))?;
+
+    Integrate {
+        process: vec![],
+        integrand_name: vec!["default".to_string()],
+        workspace_path: Some(workspace.clone()),
+        target: vec![],
+        n_cores: Some(1),
+        restart: false,
+        ..Default::default()
+    }
+    .run(&mut cli.state, &cli.cli_settings)?;
+
+    let after_resume = std::fs::read_to_string(final_file)?;
+    assert_eq!(before_resume, after_resume);
+    assert_eq!(
+        result_before_resume,
+        std::fs::read_to_string(result_snapshot_path)?
+    );
+    assert_eq!(
+        state_before_resume,
+        std::fs::read(gammalooprs::integrate::workspace_state_path(&workspace))?
+    );
+
+    Ok(())
 }

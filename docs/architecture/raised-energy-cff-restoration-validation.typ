@@ -57,11 +57,12 @@ closes the root-only coverage gap observed in the September 26 projected-4D
 retry; the compact-energy validation record retains that memory-limited baseline.
 
 Generated scalar numerator components and coefficient functions use Symbolica's
-`InliningPolicy::Never` for ordinary evaluators. Distinct argument tuples call
-one retained evaluator body instead of each lowering an inlined copy. Hyperdual
-builds use `Always`: the pinned Symbolica implementation cannot vectorize
-retained sub-evaluators. This choice is made after Taylor operations, so it does
-not change symbolic momentum dependence or the Taylor algebra.
+`InliningPolicy::Always` by default. Setting `inline_numerator_functions = false`
+uses `Never` for ordinary evaluators: distinct argument tuples call one retained
+evaluator body. Hyperdual builds always use `Always`: the pinned Symbolica
+implementation cannot vectorize retained sub-evaluators. This choice is made
+after Taylor operations, so it does not change symbolic momentum dependence or
+the Taylor algebra.
 
 Function metadata records both inlining policy and caller-scope alias identity.
 Rebuilds and standalone archives preserve both; algebraic function-map

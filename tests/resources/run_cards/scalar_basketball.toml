@@ -48,7 +48,12 @@ helicities = [1, 1]
 
 [default_runtime_settings.stability]
 # rotation_axis = []
-check_on_norm = true
+# This scalar amplitude preserves its signed value under rotations. Equal norms
+# can hide opposite signs from catastrophic cancellation in the UV forest.
+check_on_norm = false
+# Identical rotation residuals can hide cancellation errors at Quad precision.
+# Retry a zero measured discrepancy at the next precision level.
+escalate_if_exact_zero = true
 
 [default_runtime_settings.general]
 m_uv = 5.0

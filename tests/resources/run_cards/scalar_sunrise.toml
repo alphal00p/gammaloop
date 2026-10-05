@@ -60,7 +60,8 @@ escalate_for_large_weight_threshold = -1.0
 
 [default_runtime_settings.general]
 m_uv = 5.0
-additional_param_values = [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
+# Match the shared 21-marker graph schema; this local-only card uses the first eight.
+additional_param_values = [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
 
 [default_runtime_settings.subtraction]
 disable_threshold_subtraction = false
@@ -68,7 +69,11 @@ disable_threshold_subtraction = false
 [default_runtime_settings.sampling]
 graphs = "summed"
 orientations = "summed"
-lmb_multichanneling = false
+# A single spherical basis has infinite variance in correlated hard bubbles.
+# These two bases include a soft edge in each bubble limit.
+lmb_multichanneling = true
+sampling_channel_weight = "map_density"
+default_channel_selection = ["lmb(0,1)", "lmb(0,2)"]
 lmb_channels = "summed"
 coordinate_system = "spherical"
 mapping = "linear"

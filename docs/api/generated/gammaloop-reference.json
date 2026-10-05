@@ -17786,7 +17786,7 @@
       "value_type": "boolean",
       "description": "Inline generated numerator functions instead of retaining shared evaluator bodies.",
       "required": false,
-      "default": false,
+      "default": true,
       "possible_values": []
     },
     {

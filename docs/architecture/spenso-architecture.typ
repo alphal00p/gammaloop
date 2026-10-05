@@ -137,7 +137,10 @@ Separately, `FastTensorSum`, `FastTensorSumContractible`, balanced scalar/tensor
 contraction profiles, and pair estimates provide optional optimized paths inside the same
 network semantics. Unsupported shapes or unprofitable cases use the ordinary sum and
 contraction paths. Network counters and timers are opt-in diagnostic instrumentation; they do
-not change the execution result.
+not change the execution result. `SPENSO_NETWORK_PROFILE` records cumulative
+counters and timers with periodic reports and slow-operation diagnostics.
+Per-operation starts, batch completion and merge-progress lines additionally
+require `SPENSO_NETWORK_PROFILE_VERBOSE`.
 
 == Symbolica parsing boundary
 

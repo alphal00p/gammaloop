@@ -524,3 +524,8 @@ Avoid a universal rewrite engine unless the algebraic strategy itself is shared.
 Index canonicalization retains independent scalar products instead of distributing them through
 tensor sums. Explicit free indices and compact-dot dummies occupy distinct reserved names; canceled
 representation groups do not advance the surviving contraction's canonical dummy allocation.
+
+Composite dimensions such as `Nc^2-1` receive temporary reversible labels before
+Spenso parsing and are restored in the returned expression. Their defining
+expressions remain distinct; this operation does not assign concrete component
+sizes. Ordinary function cooking and index-payload cooking remain separate.

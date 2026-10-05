@@ -159,6 +159,39 @@ fn validate() {
     // );
 }
 
+#[test]
+fn explicit_gamma_namespace_resolves_the_tensor_library() {
+    use idenso::dirac::AGS;
+    use spenso::network::{library::symbolic::ExplicitKey, parsing::StructureFromAtom};
+    use symbolica::atom::AtomView;
+
+    test_initialize();
+    let scalar_gamma = parse_lit!(
+        gamma(bis(4, hedge(1)), bis(4, hedge(2)), mink(4, edge(1, 1))),
+        default_namespace = "spenso"
+    )
+    .cook_indices();
+    let tensor_gamma = parse_lit!(
+        spenso::gamma(bis(4, hedge(1)), bis(4, hedge(2)), mink(4, edge(1, 1))),
+        default_namespace = "spenso"
+    )
+    .cook_indices();
+    let (AtomView::Fun(scalar), AtomView::Fun(tensor)) =
+        (scalar_gamma.as_view(), tensor_gamma.as_view())
+    else {
+        panic!("expected gamma function calls")
+    };
+    assert_eq!(scalar.get_symbol().get_namespace(), "symbolica");
+    assert_eq!(tensor.get_symbol(), AGS.gamma);
+
+    for (gamma, library_found) in [(scalar_gamma, false), (tensor_gamma, true)] {
+        let structure = ShadowedStructure::<AbstractIndex>::parse(gamma.as_view()).unwrap();
+        let key = ExplicitKey::from_structure(&structure).unwrap();
+        assert_eq!(key.order(), 3);
+        assert_eq!(HEP_LIB.get(&key).is_ok(), library_found);
+    }
+}
+
 fn validate_gamma(expr: Atom, const_map: HashMap<Atom, symbolica::domains::float::Complex<f64>>) {
     let mut net = expr.parse_to_hep_net(&ParseSettings::default()).unwrap();
 
@@ -213,99 +246,97 @@ fn validate_gamma(expr: Atom, const_map: HashMap<Atom, symbolica::domains::float
     }
 }
 
-mod failing {
-    use super::*;
+#[test]
+fn gl_03() {
+    test_initialize();
+    let mut const_map = HashMap::new();
+    let pt: DenseTensor<Atom, _> = ShadowedStructure::<AbstractIndex>::from_iter(
+        [Minkowski {}.new_slot(4, 1)],
+        symbol!("spenso::P"),
+        Some(vec![Atom::num(0)]),
+    )
+    .into_canonical()
+    .to_shell()
+    .concretize()
+    .unwrap();
 
-    #[test]
-    fn gl_03() {
-        test_initialize();
-        let mut const_map = HashMap::new();
-        let pt: DenseTensor<Atom, _> = ShadowedStructure::<AbstractIndex>::from_iter(
-            [Minkowski {}.new_slot(4, 1)],
-            symbol!("spenso::P"),
-            Some(vec![Atom::num(0)]),
-        )
-        .into_canonical()
-        .to_shell()
-        .concretize()
-        .unwrap();
-
-        for (i, a) in pt.iter_flat() {
-            const_map.insert(
-                a.clone(),
-                symbolica::domains::float::Complex::new(usize::from(i) as f64 * 1., 0.),
-            );
-        }
-
-        let pt: DenseTensor<Atom, _> = ShadowedStructure::<AbstractIndex>::from_iter(
-            [Minkowski {}.new_slot(4, 1)],
-            symbol!("spenso::K"),
-            Some(vec![Atom::num(1)]),
-        )
-        .into_canonical()
-        .to_shell()
-        .concretize()
-        .unwrap();
-
-        for (i, a) in pt.iter_flat() {
-            const_map.insert(
-                a.clone(),
-                symbolica::domains::float::Complex::new(usize::from(i) as f64 * 1., 0.),
-            );
-        }
-
-        let pt: DenseTensor<Atom, _> = ShadowedStructure::<AbstractIndex>::from_iter(
-            [Minkowski {}.new_slot(4, 1)],
-            symbol!("spenso::K"),
-            Some(vec![Atom::num(0)]),
-        )
-        .into_canonical()
-        .to_shell()
-        .concretize()
-        .unwrap();
-
-        for (i, a) in pt.iter_flat() {
-            const_map.insert(
-                a.clone(),
-                symbolica::domains::float::Complex::new(usize::from(i) as f64 * 1., 0.),
-            );
-        }
-
+    for (i, a) in pt.iter_flat() {
         const_map.insert(
-            parse_lit!(spenso::MC),
-            symbolica::domains::float::Complex::new(11232., 0.),
+            a.clone(),
+            symbolica::domains::float::Complex::new(usize::from(i) as f64 * 1., 0.),
         );
-
-        const_map.insert(
-            parse_lit!(spenso::MW),
-            symbolica::domains::float::Complex::new(1231., 0.),
-        );
-
-        let expr = parse_lit!(
-            1 / 6
-                ^ 4
-                ^ -2 * (MC * g(bis(4, hedge(1)), bis(4, hedge(2)))
-                    - K(0, mink(4, edge(1, 1)))
-                        * gamma(bis(4, hedge(1)), bis(4, hedge(2)), mink(4, edge(1, 1))))
-                    * (-K(0, mink(4, edge(3, 1))) - K(1, mink(4, edge(3, 1))))
-                    * (-g(mink(4, hedge(7)), mink(4, hedge(8))) + MW
-                        ^ -2 * (-P(0, mink(4, hedge(7))) - K(1, mink(4, hedge(7))))
-                            * (-P(0, mink(4, hedge(8))) - K(1, mink(4, hedge(8)))))
-                    * (P(0, mink(4, edge(5, 1)))
-                        + K(0, mink(4, edge(5, 1)))
-                        + K(1, mink(4, edge(5, 1))))
-                    * g(mink(4, hedge(0)), mink(4, hedge(8)))
-                    * gamma(bis(4, hedge(10)), bis(4, hedge(6)), mink(4, hedge(11)))
-                    * gamma(bis(4, hedge(2)), bis(4, vertex(1, 1)), mink(4, hedge(7)))
-                    * gamma(bis(4, hedge(6)), bis(4, hedge(5)), mink(4, edge(3, 1)))
-                    * gamma(bis(4, hedge(9)), bis(4, hedge(10)), mink(4, edge(5, 1)))
-                    * projm(bis(4, hedge(5)), bis(4, hedge(1)))
-                    * projm(bis(4, vertex(1, 1)), bis(4, hedge(9)))
-                    * (1 / 2)
-                ^ (1 / 2),
-            default_namespace = "spenso"
-        );
-
-        validate_gamma(expr.cook_indices(), const_map.clone());
     }
+
+    let pt: DenseTensor<Atom, _> = ShadowedStructure::<AbstractIndex>::from_iter(
+        [Minkowski {}.new_slot(4, 1)],
+        symbol!("spenso::K"),
+        Some(vec![Atom::num(1)]),
+    )
+    .into_canonical()
+    .to_shell()
+    .concretize()
+    .unwrap();
+
+    for (i, a) in pt.iter_flat() {
+        const_map.insert(
+            a.clone(),
+            symbolica::domains::float::Complex::new(usize::from(i) as f64 * 1., 0.),
+        );
+    }
+
+    let pt: DenseTensor<Atom, _> = ShadowedStructure::<AbstractIndex>::from_iter(
+        [Minkowski {}.new_slot(4, 1)],
+        symbol!("spenso::K"),
+        Some(vec![Atom::num(0)]),
+    )
+    .into_canonical()
+    .to_shell()
+    .concretize()
+    .unwrap();
+
+    for (i, a) in pt.iter_flat() {
+        const_map.insert(
+            a.clone(),
+            symbolica::domains::float::Complex::new(usize::from(i) as f64 * 1., 0.),
+        );
+    }
+
+    const_map.insert(
+        parse_lit!(spenso::MC),
+        symbolica::domains::float::Complex::new(11232., 0.),
+    );
+
+    const_map.insert(
+        parse_lit!(spenso::MW),
+        symbolica::domains::float::Complex::new(1231., 0.),
+    );
+
+    // `gamma` is reserved for Symbolica's scalar Gamma function even with
+    // a default namespace. Qualify the Dirac tensor explicitly.
+    let expr = parse_lit!(
+        1 / 6
+            ^ 4
+            ^ -2 * (MC * g(bis(4, hedge(1)), bis(4, hedge(2)))
+                - K(0, mink(4, edge(1, 1)))
+                    * spenso::gamma(bis(4, hedge(1)), bis(4, hedge(2)), mink(4, edge(1, 1))))
+                * (-K(0, mink(4, edge(3, 1))) - K(1, mink(4, edge(3, 1))))
+                * (-g(mink(4, hedge(7)), mink(4, hedge(8))) + MW
+                    ^ -2 * (-P(0, mink(4, hedge(7))) - K(1, mink(4, hedge(7))))
+                        * (-P(0, mink(4, hedge(8))) - K(1, mink(4, hedge(8)))))
+                * (P(0, mink(4, edge(5, 1)))
+                    + K(0, mink(4, edge(5, 1)))
+                    + K(1, mink(4, edge(5, 1))))
+                * g(mink(4, hedge(0)), mink(4, hedge(8)))
+                * spenso::gamma(bis(4, hedge(10)), bis(4, hedge(6)), mink(4, hedge(11)))
+                * spenso::gamma(bis(4, hedge(2)), bis(4, vertex(1, 1)), mink(4, hedge(7)))
+                * spenso::gamma(bis(4, hedge(6)), bis(4, hedge(5)), mink(4, edge(3, 1)))
+                * spenso::gamma(bis(4, hedge(9)), bis(4, hedge(10)), mink(4, edge(5, 1)))
+                * projm(bis(4, hedge(5)), bis(4, hedge(1)))
+                * projm(bis(4, vertex(1, 1)), bis(4, hedge(9)))
+                * (1 / 2)
+            ^ (1 / 2),
+        default_namespace = "spenso"
+    );
+
+    validate_gamma(expr.cook_indices(), const_map.clone());
 }
