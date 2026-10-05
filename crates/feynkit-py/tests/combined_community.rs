@@ -19,6 +19,33 @@ const MODEL_JSON: &str = include_str!("fixtures/scalars_2p_3p.json");
 const SPENSO_WRAPPER: &str = "from ..tensor_native import *\n\ninitialize_module()\n";
 
 #[test]
+fn shared_numeric_external_states_in_installed_host() {
+    Python::initialize();
+    Python::attach(|py| -> PyResult<()> {
+        let symbolica = install_package(py, "symbolica")?;
+        let core = PyModule::new(py, "symbolica.core")?;
+        create_symbolica_module(&core)?;
+        py.import("sys")?
+            .getattr("modules")?
+            .set_item("symbolica.core", &core)?;
+        symbolica.add("core", &core)?;
+        let community = install_package(py, "symbolica.community")?;
+        symbolica.add("community", &community)?;
+        register_native::<FeynkitModule>(&core)?;
+        import_wrapper(
+            py,
+            &community,
+            "symbolica.community.hepkit",
+            FEYNKIT_WRAPPER,
+        )?;
+        let code = CString::new(include_str!("installed_wavefunctions.py")).unwrap();
+        let locals = PyDict::new(py);
+        py.run(&code, Some(&locals), Some(&locals))
+    })
+    .unwrap();
+}
+
+#[test]
 fn qcd_rich_display_requires_no_python_rendering_packages() {
     Python::initialize();
     Python::attach(|py| -> PyResult<()> {

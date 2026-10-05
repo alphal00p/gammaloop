@@ -2264,14 +2264,6 @@ impl<T: FloatLike> F<T> {
         self.ln() / ten.ln()
     }
 
-    pub(crate) fn complex_sqrt(&self) -> Complex<Self> {
-        if self.positive() {
-            Complex::new(self.sqrt(), self.zero())
-        } else {
-            Complex::new(self.zero(), (-self).sqrt())
-        }
-    }
-
     pub(crate) fn rem_euclid(&self, rhs: &Self) -> Self {
         F(self.0.rem_euclid(&rhs.0))
     }
