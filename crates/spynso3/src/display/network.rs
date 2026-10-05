@@ -437,8 +437,18 @@ impl SpensoNet {
             preamble: "#set text(size: 9pt, fill: rgb(\"#000000\"))".into(),
             title: None,
             pages: vec![],
-            layout: Default::default(),
-            label_feedback: true,
+            layout: serde_json::from_value(serde_json::json!({
+                "layout-algo": "dot",
+                "tree-dx": 0.35,
+                "tree-dy": 2.2,
+                "route-label-width-cap": 0.0,
+                "label-steps": 40,
+                "internal-label-length-scale": 0.35,
+                "external-label-length-scale": 0.35,
+            }))
+            .unwrap(),
+            layout_edges: Some(Vec::new()),
+            label_feedback: false,
         };
         let mut indices = BTreeMap::new();
         for (index, record) in nodes.iter().enumerate() {
@@ -481,25 +491,40 @@ impl SpensoNet {
                 details,
             });
         }
+        let root = snapshot["root"].as_u64().ok_or("missing network root")? as usize;
+        let root = *indices.get(&root).ok_or("unknown network root")?;
+        scene
+            .layout
+            .insert("layout-roots".into(), serde_json::json!([root]));
         for (index, record) in edges.iter().enumerate() {
-            let endpoint = |value: &Value| -> Result<Option<TypstEndpointSpec>, String> {
-                if value.is_null() {
-                    return Ok(None);
-                }
-                let node = value[0].as_u64().ok_or("invalid network endpoint")? as usize;
-                Ok(Some(TypstEndpointSpec {
-                    node: *indices.get(&node).ok_or("unknown network node")?,
-                    id: value[1].as_u64().map(|h| h as usize),
-                    statement: None,
-                    data: None,
-                    port_label: None,
-                    compass: None,
-                    in_subgraph: false,
-                    route_points: vec![],
-                }))
-            };
-            let source = endpoint(&record["source"])?;
-            let sink = endpoint(&record["sink"])?;
+            let tree = record["tree"] == true;
+            if tree {
+                scene.layout_edges.as_mut().unwrap().push(index);
+            }
+            let endpoint =
+                |value: &Value, source: bool| -> Result<Option<TypstEndpointSpec>, String> {
+                    if value.is_null() {
+                        return Ok(None);
+                    }
+                    let node = value[0].as_u64().ok_or("invalid network endpoint")? as usize;
+                    let node = *indices.get(&node).ok_or("unknown network node")?;
+                    Ok(Some(TypstEndpointSpec {
+                        node,
+                        id: value[1].as_u64().map(|h| h as usize),
+                        statement: None,
+                        data: None,
+                        port_label: None,
+                        compass: if tree {
+                            Some(if source { "n" } else { "s" }.into())
+                        } else {
+                            scene.nodes[node].rectangular.then(|| "s".into())
+                        },
+                        in_subgraph: false,
+                        route_points: vec![],
+                    }))
+                };
+            let source = endpoint(&record["source"], true)?;
+            let sink = endpoint(&record["sink"], false)?;
             let mut details: Details = record["inspection"]
                 .as_object()
                 .ok_or("missing edge inspection")?
@@ -524,7 +549,6 @@ impl SpensoNet {
                 "sink-hedge",
                 record["sink"].get(1).cloned().unwrap_or(Value::Null),
             );
-            let tree = record["tree"] == true;
             let label = record["label-typst"].as_str().map(|math| {
                 let page = scene.pages.len();
                 scene.pages.push(format!("[$ {math} $]"));
@@ -540,7 +564,10 @@ impl SpensoNet {
                 flow: None,
                 id: Some(index),
                 pos: None,
-                statements: BTreeMap::new(),
+                statements: BTreeMap::from([(
+                    "route".into(),
+                    if tree { "direct" } else { "hobby-through" }.into(),
+                )]),
             });
             scene.edges.push(EdgeDrawing {
                 stroke: Stroke {
