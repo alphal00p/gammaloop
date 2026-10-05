@@ -4,13 +4,45 @@ These assets supply the four-loop branch of the opt-in
 `EvaluationMethod::RustRed` / `EvaluationOrder::rustred_only()` backend.
 They do not change Vakint's default evaluation order or its FORM-backed modes.
 
-The current runtime pin is `7b22f5bda441588f2e437b15fa0872461c483708`.
+The current runtime pin is `986c427f36b280a2c741d52d0401152a1f90e4d6`.
 The September 24 equation-to-package refresh supplies 59,509 unrestricted
-candidate rules in 20,381,288 compressed bytes. All 1,155 raw terminals,
+candidate rules (20,381,288 compressed bytes before the codec migration below). All 1,155 raw terminals,
 74 catalog outputs and normalization sidecars are retained. See the
 [current producer recipe and measured validation](../../../rustred_package_refresh.typ).
 The migration and timing sections below retain their historical measurements;
 their 59,636-rule payload is not the current generated package.
+
+## Symbolica 3.0 codec migration (2026-10-05)
+
+All 15 embedded native payloads now use Symbolica export format 6 and atom
+format 1, matching the pinned Symbolica `98794d0d` stack. This is transport
+migration, not a rule-generation or master-value update. The RustRed envelope,
+family geometry, rule/source records, terminal keys and normalization relations
+are unchanged. Stored-byte hashes and native validation counts are recorded in
+[`../codec-migration-2026-10-05.json`](../codec-migration-2026-10-05.json).
+
+The three sealed one-/two-/three-loop programs, four candidate programs and
+four normalization sidecars contain only native Num coefficient frames. They
+were migrated with RustRed's existing `convert_native_v5_to_v6.py`; an exact
+byte-difference check admitted only its state-version and atom-version bytes.
+All non-coefficient sections are byte-identical. General Atom catalogs were
+**not** passed through that converter: an old native decoder first verified
+all 74 retained values against their original canonical-text precursors, then
+the current native parser/encoder transported those same exact values. Fresh
+processes checked every key, value, family fingerprint and complete-coverage
+flag, with unrelated Symbolica state initialized before import. Catalog
+structural PROGRAM sections also remain byte-identical.
+
+Current native cold checks replay all three sealed artifacts and round-trip
+their programs. For each four-loop family they load the candidate program,
+independently rebuild the weighted normalization plan, require the unchanged
+raw set (H 386, X 445, BMW 179, FG 145), and check exact catalog equality with
+the normalized output set (22, 19, 17, 16). The regression target is
+`cargo test -p vakint --test rustred_asset_compatibility_tests`.
+No FORM process, rule search or numerical master recomputation is involved.
+These codec checks do not establish arbitrary-index four-loop closure or
+replace the separate numerical-evaluation acceptance gate. Historical byte
+sizes and timings below refer to their explicitly dated previous encodings.
 
 Each parent (H, FG, BMW and X) has:
 
