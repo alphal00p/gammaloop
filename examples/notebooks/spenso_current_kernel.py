@@ -236,7 +236,7 @@ def _(G4, Q2, Q24, q24):
     parameters = [*Q2.components(), *G4.components(), *q24.components()]
     evaluator = Q24.evaluator(parameters)
 
-    value = evaluator.evaluate_complex([[1, 0, 0, 0, 0, 0, 1, 0, 2, 1, 0, 1]])[0]
+    value = evaluator.evaluate_complex([[1, .1, .3, 0.4, 3.1, 2.1, 1.1, 0.1, 2.2, 1.2, 0.2, 1.2]])[0]
     value
     return
 
