@@ -1,15 +1,15 @@
-use symbolica::api::python::SymbolicaCommunityModule;
+use symbolica::api::python::{Citation, SymbolicaCommunityModule};
 
 use std::collections::HashMap;
 use std::env;
 
-use pyo3::types::{PyModule, PyModuleMethods, PyType};
+use pyo3::types::{PyAnyMethods, PyDict, PyModule, PyModuleMethods, PyType};
 use pyo3::{
     Bound, FromPyObject, PyAny, PyClass, PyErr, PyRef, Python, exceptions, pyclass, pymethods,
 };
 use pyo3::{Py, PyResult};
 use symbolica::api::python::PythonExpression;
-use symbolica::atom::{Atom, Symbol};
+use symbolica::atom::{Atom, AtomCore, AtomView, Symbol};
 use symbolica::domains::float::{Complex, Float, RealLike};
 
 use crate::symbols::S;
@@ -23,8 +23,12 @@ use crate::{
 use pyo3_stub_gen::derive::*;
 
 impl SymbolicaCommunityModule for VakintWrapper {
+    fn get_citations() -> Vec<Citation> {
+        crate::citations::USED_CITATIONS.get_citations()
+    }
+
     fn get_name() -> String {
-        "vakint".to_string()
+        "hepkit_vakint".to_string()
     }
 
     fn register_module(m: &Bound<'_, PyModule>) -> PyResult<()> {
@@ -54,7 +58,7 @@ macro_rules! define_vakint_python_surface {
             Ok(())
         }
 
-        /// The classes registered on `symbolica.community.vakint`.
+        /// The classes registered on `symbolica.community.hepkit.vakint`.
         #[cfg(feature = "python_stubgen")]
         pub const PYTHON_STUB_SURFACE: &[&str] = &[$(<$class as PyClass>::NAME,)+];
     };
@@ -72,7 +76,7 @@ fn vakint_to_python_error(vakint_error: VakintError) -> PyErr {
 }
 
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
-#[pyclass(name = "Vakint", module = "symbolica.community.vakint")]
+#[pyclass(name = "Vakint", module = "symbolica.community.hepkit.vakint")]
 /// Vakint engine and settings used for matching, reduction, and evaluation.
 ///
 /// Construct one instance and reuse it: initialization processes the complete topology library.
@@ -82,7 +86,10 @@ pub struct VakintWrapper {
 }
 
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
-#[pyclass(name = "VakintNumericalResult", module = "symbolica.community.vakint")]
+#[pyclass(
+    name = "VakintNumericalResult",
+    module = "symbolica.community.hepkit.vakint"
+)]
 /// Numerical Laurent series in the dimensional-regularization parameter epsilon.
 pub struct NumericalEvaluationResultWrapper {
     pub value: NumericalEvaluationResult,
@@ -105,13 +112,53 @@ impl<'a, 'py> FromPyObject<'a, 'py> for NumericalEvaluationResultWrapper {
 }
 
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
+#[spenso_macros::track_usage(record_usage)]
 #[pymethods]
 impl NumericalEvaluationResultWrapper {
+    /// Return a native Symbolica expression without rounding coefficients to Python floats.
+    ///
+    /// The default variable is `vakint::ε`. Use `Vakint.numerical_result_to_expression`
+    /// when the originating engine has a custom epsilon symbol.
+    #[pyo3(signature = (epsilon_symbol = None))]
+    pub fn to_expression(
+        &self,
+        epsilon_symbol: Option<PythonExpression>,
+    ) -> PyResult<PythonExpression> {
+        let epsilon = match epsilon_symbol.as_ref().map(|e| e.expr.as_view()) {
+            None => vakint_symbol!("ε"),
+            Some(AtomView::Var(v)) => v.get_symbol(),
+            Some(_) => {
+                return Err(exceptions::PyValueError::new_err(
+                    "epsilon_symbol must be a Symbolica variable",
+                ));
+            }
+        };
+        Ok(self.value.to_atom(epsilon).into())
+    }
+
+    /// Display through Symbolica's native rich expression printer.
+    pub fn _repr_html_(&self) -> PyResult<String> {
+        self.to_expression(None)?._repr_html_()
+    }
+
+    /// Return Symbolica's `FormattedOutput`; keyword options are forwarded unchanged.
+    #[pyo3(signature = (**options))]
+    pub fn formatted(
+        &self,
+        py: Python<'_>,
+        options: Option<&Bound<'_, PyDict>>,
+    ) -> PyResult<Py<PyAny>> {
+        Ok(Py::new(py, self.to_expression(None)?)?
+            .bind(py)
+            .call_method("formatted", (), options)?
+            .unbind())
+    }
+
     /// String representation of the numerical result.
     ///
     /// ## Examples
     /// ```python
-    /// >>> from symbolica.community.vakint import VakintNumericalResult
+    /// >>> from symbolica.community.hepkit.vakint import VakintNumericalResult
     /// >>> result = VakintNumericalResult([
     /// ...     (-3, (0.0, -11440.53140354612)),
     /// ...     (-2, (0.0, 57169.95521898031)),
@@ -132,7 +179,7 @@ impl NumericalEvaluationResultWrapper {
     ///
     /// ## Examples
     /// ```python
-    /// >>> from symbolica.community.vakint import VakintNumericalResult
+    /// >>> from symbolica.community.hepkit.vakint import VakintNumericalResult
     /// >>> result = VakintNumericalResult([
     /// ...     (-3, (0.0, -11440.53140354612)),
     /// ...     (-2, (0.0, 57169.95521898031)),
@@ -157,7 +204,7 @@ impl NumericalEvaluationResultWrapper {
     ///
     /// ## Examples
     /// ```python
-    /// >>> from symbolica.community.vakint import VakintNumericalResult
+    /// >>> from symbolica.community.hepkit.vakint import VakintNumericalResult
     /// >>> result = VakintNumericalResult([
     /// ...     (-3, (0.0, -11440.53140354612)),
     /// ...     (-2, (0.0, 57169.95521898031)),
@@ -195,7 +242,7 @@ impl NumericalEvaluationResultWrapper {
     ///
     /// ## Examples
     /// ```python
-    /// >>> from symbolica.community.vakint import VakintNumericalResult
+    /// >>> from symbolica.community.hepkit.vakint import VakintNumericalResult
     /// >>> result1 = VakintNumericalResult([
     /// ...     (-3, (0.0, -11440.53140354612)),
     /// ... ])
@@ -241,7 +288,10 @@ impl NumericalEvaluationResultWrapper {
 ///
 /// Construct this wrapper from a Symbolica expression before applying Vakint operations.
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
-#[pyclass(name = "VakintExpression", module = "symbolica.community.vakint")]
+#[pyclass(
+    name = "VakintExpression",
+    module = "symbolica.community.hepkit.vakint"
+)]
 pub struct VakintExpressionWrapper {
     pub value: VakintExpression,
 }
@@ -250,8 +300,10 @@ impl<'a, 'py> FromPyObject<'a, 'py> for VakintExpressionWrapper {
     type Error = PyErr;
 
     fn extract(ob: pyo3::Borrowed<'a, 'py, PyAny>) -> Result<Self, Self::Error> {
-        if let Ok(a) = ob.extract::<VakintExpressionWrapper>() {
-            Ok(VakintExpressionWrapper { value: a.value })
+        if let Ok(a) = ob.cast::<VakintExpressionWrapper>() {
+            Ok(VakintExpressionWrapper {
+                value: a.borrow().value.clone(),
+            })
         } else {
             Err(exceptions::PyValueError::new_err(
                 "Not a valid vakint expression",
@@ -261,8 +313,27 @@ impl<'a, 'py> FromPyObject<'a, 'py> for VakintExpressionWrapper {
 }
 
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
+#[spenso_macros::track_usage(record_usage)]
 #[pymethods]
 impl VakintExpressionWrapper {
+    /// Display through Symbolica's native rich expression printer.
+    pub fn _repr_html_(&self) -> PyResult<String> {
+        self.to_expression()?._repr_html_()
+    }
+
+    /// Return Symbolica's `FormattedOutput`; keyword options are forwarded unchanged.
+    #[pyo3(signature = (**options))]
+    pub fn formatted(
+        &self,
+        py: Python<'_>,
+        options: Option<&Bound<'_, PyDict>>,
+    ) -> PyResult<Py<PyAny>> {
+        Ok(Py::new(py, self.to_expression()?)?
+            .bind(py)
+            .call_method("formatted", (), options)?
+            .unbind())
+    }
+
     /// String representation of the VakintExpression.
     ///
     pub fn __str__(&self) -> PyResult<String> {
@@ -274,7 +345,7 @@ impl VakintExpressionWrapper {
     /// ## Examples
     /// ```python
     /// >>> from symbolica import E
-    /// >>> from symbolica.community.vakint import VakintExpression
+    /// >>> from symbolica.community.hepkit.vakint import VakintExpression
     /// >>> integral = VakintExpression(E('''
     /// ...     k(1,11)*k(1,11)
     /// ...     *topo(prop(1,edge(1,1),k(1),muvsq,1))
@@ -293,7 +364,7 @@ impl VakintExpressionWrapper {
     /// ## Examples
     /// ```python
     /// >>> from symbolica import E
-    /// >>> from symbolica.community.vakint import VakintExpression
+    /// >>> from symbolica.community.hepkit.vakint import VakintExpression
     /// >>> integral = E('''
     /// ...     (
     /// ...         k(1,11)*k(2,11)*k(1,22)*k(2,22)
@@ -329,7 +400,10 @@ impl VakintExpressionWrapper {
 }
 
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
-#[pyclass(name = "VakintEvaluationMethod", module = "symbolica.community.vakint")]
+#[pyclass(
+    name = "VakintEvaluationMethod",
+    module = "symbolica.community.hepkit.vakint"
+)]
 /// One configured backend in a `Vakint` instance's evaluation order.
 pub struct VakintEvaluationMethodWrapper {
     pub method: EvaluationMethod,
@@ -339,8 +413,10 @@ impl<'a, 'py> FromPyObject<'a, 'py> for VakintEvaluationMethodWrapper {
     type Error = PyErr;
 
     fn extract(ob: pyo3::Borrowed<'a, 'py, PyAny>) -> Result<Self, Self::Error> {
-        if let Ok(a) = ob.extract::<VakintEvaluationMethodWrapper>() {
-            Ok(VakintEvaluationMethodWrapper { method: a.method })
+        if let Ok(a) = ob.cast::<VakintEvaluationMethodWrapper>() {
+            Ok(VakintEvaluationMethodWrapper {
+                method: a.borrow().method.clone(),
+            })
         } else {
             Err(exceptions::PyValueError::new_err(
                 "Not a valid vakint evaluation method",
@@ -350,6 +426,7 @@ impl<'a, 'py> FromPyObject<'a, 'py> for VakintEvaluationMethodWrapper {
 }
 
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
+#[spenso_macros::track_usage(record_usage)]
 #[pymethods]
 impl VakintEvaluationMethodWrapper {
     /// String representation of the evaluation method.
@@ -363,7 +440,7 @@ impl VakintEvaluationMethodWrapper {
     ///
     /// ## Examples
     /// ```python
-    /// >>> from symbolica.community.vakint import VakintEvaluationMethod
+    /// >>> from symbolica.community.hepkit.vakint import VakintEvaluationMethod
     /// >>> alphaloop_method = VakintEvaluationMethod.new_alphaloop_method()
     /// >>> "AlphaLoop" in str(alphaloop_method)
     /// True
@@ -381,9 +458,11 @@ impl VakintEvaluationMethodWrapper {
     /// Create the opt-in FORM-independent RustRed scalar-integral evaluation method.
     ///
     /// This method leaves Vakint's tensor-reduction selection unchanged. It uses
-    /// shipped closing artifacts for supported one- and two-loop equal-mass vacuum
-    /// families. Tensor-bearing inputs still use Vakint's separately selected tensor
-    /// prepass; only the scalar reduction and master-substitution tail is FORM-free.
+    /// shipped closing artifacts for supported one- through three-loop equal-mass
+    /// vacuum families and guarded, finite-tested candidate programs at four loops.
+    /// Four-loop success is pointwise reduction, not arbitrary-index closure.
+    /// The default FeynKit tensor prepass is also FORM-independent; explicitly
+    /// choosing the historical AlphaLoop tensor prepass still requires FORM.
     ///
     /// ## Examples
     /// ```python
@@ -414,7 +493,7 @@ impl VakintEvaluationMethodWrapper {
     ///
     /// ## Examples
     /// ```python
-    /// >>> from symbolica.community.vakint import VakintEvaluationMethod
+    /// >>> from symbolica.community.hepkit.vakint import VakintEvaluationMethod
     /// >>> matad_method = VakintEvaluationMethod.new_matad_method(
     /// ...     expand_masters=True,
     /// ...     susbstitute_masters=True,
@@ -465,7 +544,7 @@ impl VakintEvaluationMethodWrapper {
     ///
     /// ## Examples
     /// ```python
-    /// >>> from symbolica.community.vakint import VakintEvaluationMethod
+    /// >>> from symbolica.community.hepkit.vakint import VakintEvaluationMethod
     /// >>> fmft_method = VakintEvaluationMethod.new_fmft_method(
     /// ...     expand_masters=True,
     /// ...     susbstitute_masters=True,
@@ -506,7 +585,7 @@ impl VakintEvaluationMethodWrapper {
     ///
     /// ## Examples
     /// ```python
-    /// >>> from symbolica.community.vakint import VakintEvaluationMethod
+    /// >>> from symbolica.community.hepkit.vakint import VakintEvaluationMethod
     /// >>> pysecdec_method = VakintEvaluationMethod.new_pysecdec_method(
     /// ...     quiet=True,
     /// ...     relative_precision=1e-7,
@@ -574,6 +653,7 @@ impl VakintEvaluationMethodWrapper {
 }
 
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
+#[spenso_macros::track_usage(record_usage)]
 #[pymethods]
 impl VakintWrapper {
     #[pyo3(signature = (run_time_decimal_precision = None, evaluation_order = None, tensor_reduction_method = None, epsilon_symbol = None, mu_r_sq_symbol = None, form_exe_path = None, python_exe_path = None, verify_numerator_identification = None, integral_normalization_factor = None, allow_unknown_integrals = None, clean_tmp_dir = None, number_of_terms_in_epsilon_expansion = None, use_dot_product_notation = None, temporary_directory = None))]
@@ -736,7 +816,7 @@ impl VakintWrapper {
     /// ## Examples
     /// ```python
     /// >>> from symbolica import E
-    /// >>> from symbolica.community.vakint import Vakint
+    /// >>> from symbolica.community.hepkit.vakint import Vakint
     /// >>> vakint = Vakint(evaluation_order=[])
     /// >>> result = vakint.numerical_result_from_expression(
     /// ...     E("vakint::ε^-2 + 1 + 0.12*vakint::ε^-1")
@@ -769,7 +849,7 @@ impl VakintWrapper {
     /// ## Examples
     /// ```python
     /// >>> from symbolica import E
-    /// >>> from symbolica.community.vakint import Vakint
+    /// >>> from symbolica.community.hepkit.vakint import Vakint
     /// >>> vakint = Vakint(evaluation_order=[])
     /// >>> evaluated = E(
     /// ...     "muvsq*vakint::ε^-1 + mursq",
@@ -831,7 +911,7 @@ impl VakintWrapper {
     ///
     /// ## Examples
     /// ```python
-    /// >>> from symbolica.community.vakint import Vakint, VakintNumericalResult
+    /// >>> from symbolica.community.hepkit.vakint import Vakint, VakintNumericalResult
     /// >>> vakint = Vakint(evaluation_order=[])
     /// >>> result = VakintNumericalResult([
     /// ...     (-1, (2.0, 0.0)),
@@ -858,7 +938,7 @@ impl VakintWrapper {
     /// ## Examples
     /// ```python
     /// >>> from symbolica import E
-    /// >>> from symbolica.community.vakint import Vakint
+    /// >>> from symbolica.community.hepkit.vakint import Vakint
     /// >>> vakint = Vakint(evaluation_order=[])
     /// >>> integral = E(
     /// ...     "topo(prop(18,edge(7,7),k(99),muvsq,1))",
@@ -899,7 +979,7 @@ impl VakintWrapper {
     /// ## Examples
     /// ```python
     /// >>> from symbolica import E
-    /// >>> from symbolica.community.vakint import Vakint
+    /// >>> from symbolica.community.hepkit.vakint import Vakint
     /// >>> vakint = Vakint(evaluation_order=[])
     /// >>> integral = E(
     /// ...     "k(1,101)*k(1,102)*topo(prop(1,edge(1,1),k(1),muvsq,1))",
@@ -932,7 +1012,7 @@ impl VakintWrapper {
     /// ## Examples
     /// ```python
     /// >>> from symbolica import E
-    /// >>> from symbolica.community.vakint import Vakint, VakintEvaluationMethod
+    /// >>> from symbolica.community.hepkit.vakint import Vakint, VakintEvaluationMethod
     /// >>> vakint = Vakint(
     /// ...     evaluation_order=[VakintEvaluationMethod.new_alphaloop_method()]
     /// ... )
@@ -971,7 +1051,7 @@ impl VakintWrapper {
     /// ## Examples
     /// ```python
     /// >>> from symbolica import E
-    /// >>> from symbolica.community.vakint import Vakint, VakintEvaluationMethod
+    /// >>> from symbolica.community.hepkit.vakint import Vakint, VakintEvaluationMethod
     /// >>> vakint = Vakint(
     /// ...     evaluation_order=[VakintEvaluationMethod.new_alphaloop_method()]
     /// ... )
@@ -1006,6 +1086,60 @@ mod tests {
     use super::*;
 
     #[test]
+    fn modern_module_identity_preserves_default_backend_order() {
+        assert_eq!(VakintWrapper::get_name(), "hepkit_vakint");
+        let defaults = VakintSettings::default();
+        assert!(matches!(
+            defaults.evaluation_order.0.as_slice(),
+            [
+                EvaluationMethod::AlphaLoop(_),
+                EvaluationMethod::MATAD(_),
+                EvaluationMethod::FMFT(_),
+                EvaluationMethod::PySecDec(_)
+            ]
+        ));
+        assert!(matches!(
+            defaults.tensor_reduction_method,
+            TensorReductionMethod::FeynKit
+        ));
+    }
+
+    #[test]
+    fn native_payloads_preserve_numerical_precision_without_python() {
+        // Python rendering/extraction is tested in an installed-host subprocess,
+        // never by importing a second Symbolica kernel into this Rust binary.
+        let value = Float::parse("1.2345678901234567890123456789012345", Some(160)).unwrap();
+        let coefficient = Complex::new(value.clone(), Float::with_val(160, 0));
+        let result = NumericalEvaluationResult(vec![(-2, coefficient.clone())]);
+        let epsilon = vakint_symbol!("ε");
+        let expected = Atom::num(coefficient) * Atom::var(epsilon).pow(Atom::num(-2));
+        assert_eq!(result.to_atom(epsilon), expected);
+        let rounded = NumericalEvaluationResult(vec![(
+            -2,
+            Complex::new(
+                Float::with_val(160, value.to_f64()),
+                Float::with_val(160, 0),
+            ),
+        )]);
+        assert_ne!(result.to_atom(epsilon), rounded.to_atom(epsilon));
+
+        let topology = symbolica::function!(
+            S.topo,
+            symbolica::function!(
+                S.prop,
+                1,
+                symbolica::function!(S.edge, 1, 1),
+                symbolica::function!(S.k, 1),
+                Atom::num(1),
+                1
+            )
+        );
+        let split = VakintExpression::try_from(topology.clone()).unwrap();
+        assert_eq!(Atom::from(split.clone()), topology);
+        assert_eq!(Atom::from(split), topology);
+    }
+
+    #[test]
     fn python_rustred_method_constructor_preserves_its_option() {
         Python::initialize();
         Python::attach(|py| {
@@ -1027,4 +1161,8 @@ mod tests {
             assert!(!unsubstituted_options.substitute_masters);
         });
     }
+}
+
+fn record_usage() {
+    crate::citations::USED_CITATIONS.record(crate::citations::CitationSource::Vakint);
 }

@@ -336,6 +336,7 @@ impl MATAD {
     }
 
     pub fn substitute_additional_constants(&self, result: AtomView) -> Result<Atom, VakintError> {
+        crate::citations::USED_CITATIONS.record(crate::citations::CitationSource::Matad);
         MasterPrecisionWarnings::new(&self.settings).check_substitutions(
             result,
             ADDITIONAL_CONSTANTS

@@ -298,6 +298,7 @@ mod tests {
                 .into_family(),
         );
         let solution = SectorSolution {
+            order: IntegralOrder::new([true; 3], [false; 3]),
             max_numerator_rank: None,
             finite_case_policy: Default::default(),
             rules: Vec::new(),
@@ -435,6 +436,7 @@ mod tests {
             solutions
                 .entry(sector)
                 .or_insert_with(|| SectorSolution {
+                    order: IntegralOrder::new(sector, [false; 6]),
                     max_numerator_rank: None,
                     finite_case_policy: Default::default(),
                     rules: Vec::new(),

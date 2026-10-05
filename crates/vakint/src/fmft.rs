@@ -203,6 +203,7 @@ impl FMFT {
     }
 
     pub fn substitute_additional_constants(&self, result: AtomView) -> Result<Atom, VakintError> {
+        crate::citations::USED_CITATIONS.record(crate::citations::CitationSource::Fmft);
         let processed_constants = ADDITIONAL_CONSTANTS
             .iter()
             .map(|(src, trgt)| {

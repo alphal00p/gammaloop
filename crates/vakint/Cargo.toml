@@ -18,14 +18,15 @@ ahash = "0.8.12"
 arrayvec = "0.7.4"
 colored = { workspace = true }
 eyre = { workspace = true }
-feynkit-tensor = { workspace = true }
+feynkit-tensor = { git = "https://github.com/alphal00p/gammaloop", branch = "feynkit", default-features = false }
 flate2 = "1.1.9"
 log = "0.4.29"
 regex = "1.12.2"
 rug = "1.28.0"
 rustred.workspace = true
 rustred-app.workspace = true
-spenso = { workspace = true }
+spenso = { git = "https://github.com/alphal00p/gammaloop", branch = "feynkit", default-features = false }
+spenso-macros = { git = "https://github.com/alphal00p/gammaloop", branch = "feynkit", default-features = false }
 string-template-plus = "0.4.3"
 thiserror = { workspace = true }
 version-compare = "0.2.1"

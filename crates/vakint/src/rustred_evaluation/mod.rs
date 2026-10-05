@@ -115,6 +115,7 @@ impl Vakint {
         integral_specs: &ReplacementRules,
         options: &RustRedEvaluationOptions,
     ) -> Result<Atom, VakintError> {
+        crate::citations::USED_CITATIONS.record(crate::citations::CitationSource::RustRed);
         if integral_specs.canonical_topology.get_integral().n_loops == 4 {
             return four_loop::evaluate(settings, numerator, integral_specs, options);
         }

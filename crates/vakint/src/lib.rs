@@ -1,5 +1,6 @@
 #![allow(mixed_script_confusables)]
 pub mod alphaloop_numerics;
+mod citations;
 pub mod fmft;
 pub mod fmft_numerics;
 pub mod graph;
@@ -15,7 +16,7 @@ use crate::utils::set_precision_in_polynomial_atom;
 use ahash::RandomState;
 use colored::Colorize;
 use eyre::Result;
-use feynkit_tensor::{RepeatedIndexCompatibility, TensorReducer};
+use feynkit_tensor::TensorReducer;
 use graph::Graph;
 #[allow(unused)]
 use log::{debug, info, warn};
@@ -25,6 +26,7 @@ use regex::Regex;
 use rug::float::Constant;
 use spenso::{
     network::{library::symbolic::ETS, tags::SPENSO_TAG},
+    shadowing::{Collectable, TensorCollectFilter},
     structure::representation::{BaseRepName, Minkowski, initialize as initialize_spenso_reps},
 };
 use std::{
@@ -2723,17 +2725,48 @@ impl VakintTerm {
             }
         });
         let indexed_numerator = Vakint::convert_from_dot_notation(vakint_dots.as_view());
-        let reducer = TensorReducer::new(dimension)
-            .with_integrated_head(S.k)
-            .with_repeated_index_compatibility(
-                RepeatedIndexCompatibility::LegacyIdenticalIntegratedPowers,
-            );
-        let terms = reducer.distribute_summands(indexed_numerator.as_view())?;
+        let reducer = TensorReducer::new(dimension).with_integrated_head(S.k);
         let mut next_bridge_dummy = Self::next_dot_dummy_index(indexed_numerator.as_view());
-        let mut reduced = Atom::Zero;
-        for term in terms {
-            reduced +=
-                Self::tensor_reduce_feynkit_term(term.as_view(), &reducer, &mut next_bridge_dummy)?;
+        let lorentz = TensorCollectFilter::Reps([Minkowski {}.into()]);
+        // The frontend still carries Vakint's raw-index k/p/g leaves here.
+        // Keep their original representation metadata together until each
+        // selected sector enters the checked tensor reducer. Scalar coefficient
+        // subtrees stay opaque in the existing filtered collector.
+        let selected = indexed_numerator.collect_with_map(|value| match value {
+            AtomView::Fun(function) => {
+                [S.k, S.p, S.g].contains(&function.get_symbol()) || lorentz.matches(value)
+            }
+            AtomView::Pow(power) => {
+                // A closed indexed power owns a fresh dummy scope per copy.
+                // The typed reducer handles that scope; raw collection must
+                // not distribute the base and merge those labels first.
+                let base = power.get_base();
+                [S.k, S.p, S.g]
+                    .into_iter()
+                    .any(|head| Self::contains_function_head(base, head))
+                    || base.contains_symbol(Minkowski::selfless_symbol())
+            }
+            _ => false,
+        });
+        let mut failure = None;
+        let mut reduced = selected
+            .into_inner()
+            .map_collects(|collected, _, out| {
+                if failure.is_some() {
+                    return;
+                }
+                let AtomView::Fun(collected) = collected else {
+                    unreachable!("map_collects visits only collector wrappers")
+                };
+                let term = collected.iter().next().expect("collector wrapper payload");
+                match Self::tensor_reduce_feynkit_term(term, &reducer, &mut next_bridge_dummy) {
+                    Ok(value) => **out = value,
+                    Err(error) => failure = Some(error),
+                }
+            })
+            .unwrap_collect();
+        if let Some(error) = failure {
+            return Err(error);
         }
         if !settings.use_dot_product_notation {
             reduced = Vakint::convert_from_dot_notation(reduced.as_view());
@@ -2771,6 +2804,21 @@ impl VakintTerm {
         opaque_slots: &BTreeMap<Atom, Atom>,
     ) -> Atom {
         numerator.replace_map(|term, _context, out| {
+            if let AtomView::Add(sum) = term {
+                // A preserved power can contain additive branches with the
+                // same dummy label but different original dimensions. Attach
+                // provenance within each branch before the typed reducer
+                // handles that power; never distribute the surrounding graph.
+                **out = Atom::add_many(
+                    sum.iter()
+                        .map(|summand| {
+                            let slots = Self::collect_opaque_minkowski_slots(summand);
+                            Self::vakint_to_spenso_numerator(summand, dimension, &slots)
+                        })
+                        .collect::<Vec<_>>(),
+                );
+                return;
+            }
             let AtomView::Fun(function) = term else {
                 return;
             };
@@ -2862,7 +2910,11 @@ impl VakintTerm {
                     opaque_slots,
                 );
                 **out = FunctionBuilder::new(*FEYNKIT_EXTERNAL_VECTOR)
-                    .add_arg(original)
+                    .add_arg(
+                        FunctionBuilder::new(SPENSO_TAG.pure_scalar)
+                            .add_arg(original)
+                            .finish(),
+                    )
                     .add_arg(slot)
                     .finish();
             }
@@ -2898,7 +2950,11 @@ impl VakintTerm {
             .finish();
         Some(
             FunctionBuilder::new(*FEYNKIT_EXTERNAL_VECTOR)
-                .add_arg(original)
+                .add_arg(
+                    FunctionBuilder::new(SPENSO_TAG.pure_scalar)
+                        .add_arg(original)
+                        .finish(),
+                )
                 .add_arg(Self::retarget_or_create_spenso_slot(
                     slot,
                     dimension,
@@ -2956,7 +3012,11 @@ impl VakintTerm {
 
         Some(
             FunctionBuilder::new(*FEYNKIT_EXTERNAL_VECTOR)
-                .add_arg(original)
+                .add_arg(
+                    FunctionBuilder::new(SPENSO_TAG.pure_scalar)
+                        .add_arg(original)
+                        .finish(),
+                )
                 .add_arg(slot)
                 .finish(),
         )
@@ -3321,11 +3381,15 @@ impl VakintTerm {
             let dummy = S.dot_dummy_ind(*next_dummy);
             *next_dummy += 1;
             if function.get_symbol() == *FEYNKIT_EXTERNAL_VECTOR {
-                let Some(original) = arguments.first() else {
+                let Some(AtomView::Fun(metadata)) = arguments.first() else {
                     return;
                 };
+                if metadata.get_symbol() != SPENSO_TAG.pure_scalar || metadata.get_nargs() != 1 {
+                    return;
+                }
+                let original = metadata.iter().next().unwrap();
                 let original_dimension =
-                    Self::compact_spenso_minkowski_vector_representation(*original)
+                    Self::compact_spenso_minkowski_vector_representation(original)
                         .and_then(|representation| match representation {
                             AtomView::Fun(representation) => representation.iter().next(),
                             _ => None,
@@ -3336,7 +3400,7 @@ impl VakintTerm {
                     .add_arg(&dummy)
                     .finish();
                 let Some(vector) =
-                    Self::replace_compact_minkowski_slot(*original, indexed_slot.as_view())
+                    Self::replace_compact_minkowski_slot(original, indexed_slot.as_view())
                 else {
                     return;
                 };
@@ -3517,9 +3581,14 @@ impl VakintTerm {
     }
 
     fn restore_external_vector(arguments: &[AtomView<'_>], dimension: &Atom) -> Option<Atom> {
-        let [original, slot] = arguments else {
+        let [AtomView::Fun(metadata), slot] = arguments else {
             return None;
         };
+        // Original vector syntax is opaque metadata, not another tensor port.
+        if metadata.get_symbol() != SPENSO_TAG.pure_scalar || metadata.get_nargs() != 1 {
+            return None;
+        }
+        let original = metadata.iter().next()?;
         let AtomView::Fun(representation) = slot else {
             return None;
         };
@@ -4012,6 +4081,7 @@ impl Vakint {
     }
 
     pub fn new() -> Result<Self, VakintError> {
+        citations::USED_CITATIONS.record(citations::CitationSource::Vakint);
         // Force initialization of symbolica symbols with proper attributes
         LazyLock::force(&S);
 
@@ -6112,6 +6182,7 @@ Evaluated (n_loops=1, mu_r=1) :
         reused_path: Option<String>,
         temporary_directory: Option<String>,
     ) -> Result<Vec<String>, VakintError> {
+        citations::USED_CITATIONS.record(citations::CitationSource::PySecDec);
         let mut generate_pysecdec_sources = true;
         let tmp_dir = if let Some(reused_path_specified) = reused_path.as_ref() {
             let specified_dir = PathBuf::from(reused_path_specified);
@@ -6209,6 +6280,7 @@ Evaluated (n_loops=1, mu_r=1) :
         clean: bool,
         temporary_directory: Option<String>,
     ) -> Result<String, VakintError> {
+        citations::USED_CITATIONS.record(citations::CitationSource::Form);
         let tmp_dir = create_unique_tmp_run_dir(temporary_directory.as_deref(), "vakint_temp")?;
 
         for resource in resources.iter() {

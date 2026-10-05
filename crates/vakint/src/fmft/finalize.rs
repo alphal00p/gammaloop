@@ -34,6 +34,7 @@ impl FMFT {
         muv_sq_atom: &Atom,
         options: &FMFTOptions,
     ) -> Result<Atom, VakintError> {
+        crate::citations::USED_CITATIONS.record(crate::citations::CitationSource::Fmft);
         // The native reducer can return coefficients in d or the configured
         // epsilon variable. Normalize these before the Laurent expansion so
         // poles such as 1/(d-4) cannot hide required unknown master orders.

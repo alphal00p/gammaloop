@@ -45,7 +45,7 @@ linnet = { path = "crates/linnet/", default-features = false }
 momtrop = "0.3.0"
 ndarray = "0.17.2"
 notify = "8.2.0"
-numerica = { version = "=3.0.0", default-features = false }
+numerica = { version = "3.0.1", default-features = false }
 nu-ansi-term = "0.50.3"
 numpy = "0.28"
 pyo3 = "0.28"
@@ -57,8 +57,8 @@ rand = "0.9.4"
 ratatui = "0.30.0"
 rayon = "1.5"
 regex = "1.12.3"
-rustred = { git = "https://github.com/alphal00p/rustred.git", rev = "7b22f5bda441588f2e437b15fa0872461c483708" }
-rustred-app = { git = "https://github.com/alphal00p/rustred.git", rev = "7b22f5bda441588f2e437b15fa0872461c483708", default-features = false }
+rustred = { git = "https://github.com/alphal00p/rustred", rev = "986c427f36b280a2c741d52d0401152a1f90e4d6", default-features = false }
+rustred-app = { git = "https://github.com/alphal00p/rustred", rev = "986c427f36b280a2c741d52d0401152a1f90e4d6", default-features = false }
 schemars = "1.2.1"
 serde = "1.0.228"
 self_cell = "1.2.2"
@@ -70,7 +70,7 @@ spenso = { path = "crates/spenso/", default-features = false }
 spenso-hep-lib = { path = "crates/spenso-hep-lib/", default-features = false }
 spenso-macros = { path = "crates/spenso-macros/", default-features = false }
 symbolica-utils = { path = "crates/symbolica-utils/", default-features = false }
-symbolica = { version = "3.0.0", default-features = false }
+symbolica = { version = "3.0.1", default-features = false }
 sysinfo = "0.33.1"
 tabled = "0.22.0"
 thiserror = "2.0"
@@ -88,9 +88,9 @@ walkdir = "2.5.0"
 which = "8.0.0"
 
 [patch.crates-io]
-graphica = { git = "https://github.com/symbolica-dev/symbolica", rev = "953e26e2754e9a4b918404fbdea590725d8e863d" }
-numerica = { git = "https://github.com/symbolica-dev/symbolica", rev = "953e26e2754e9a4b918404fbdea590725d8e863d" }
-symbolica = { git = "https://github.com/symbolica-dev/symbolica", rev = "953e26e2754e9a4b918404fbdea590725d8e863d" }
+graphica = { git = "https://github.com/symbolica-dev/symbolica", rev = "98794d0d7337ba2b08e4c046dde584ad7fc1ce10" }
+numerica = { git = "https://github.com/symbolica-dev/symbolica", rev = "98794d0d7337ba2b08e4c046dde584ad7fc1ce10" }
+symbolica = { git = "https://github.com/symbolica-dev/symbolica", rev = "98794d0d7337ba2b08e4c046dde584ad7fc1ce10" }
 
 [profile.bench]
 opt-level = 3
