@@ -157,28 +157,64 @@ def _(mo):
 def _(join, propagator):
     current = join * propagator
     current
-    return
+    return (current,)
 
 
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
     Up to this point, `current` records the tensors and their contractions.
-    Calling `to_tensor()` carries out the component sums, using the
-    library's gamma matrices and generating symbolic entries for the named
-    input tensors. The resulting tensor `Q24` contains the four scalar
-    expressions for $Q(2,4)_c$, including the momentum-dependent denominator.
+    Parsing it with `to_network()` turns this expression into an executable
+    tensor network, using the built-in tensor library for the gamma matrices
+    and symbolic components for the named inputs. The network retains the
+    contractions and the scalar operations needed for the propagator
+    denominator; these are evaluated in the next step.
     """)
     return
 
 
-app._unparsable_cell(
-    r"""
-    Q24 = current.()
+@app.cell
+def _(current):
+    network = current.to_network()
+    network
+    return (network,)
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    Executing the network carries out the component sums and scalar
+    operations, leaving the input components symbolic. Since `execute()`
+    changes the network in place, we execute a copy so that the original
+    network remains available for inspection.
+    """)
+    return
+
+
+@app.cell
+def _(network):
+    network.execute()
+    network
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    The completed network now contains the current's component expressions.
+    `result_tensor()` extracts them as the tensor `Q24`, whose open spinor
+    index labels the four expressions for $Q(2,4)_c$. Each includes the
+    momentum-dependent propagator denominator and is ready for numerical
+    evaluation.
+    """)
+    return
+
+
+@app.cell
+def _(network):
+    Q24 = network.result_tensor()
     Q24
-    """,
-    name="_"
-)
+    return (Q24,)
 
 
 @app.cell(hide_code=True)
@@ -251,21 +287,22 @@ def _(mo):
     above. Symbolica then identifies exact zeros and components related by
     equality or a sign, giving the one stored representative for the
     metric-pair structure and the six for the antisymmetric four-gluon
-    structure discussed there. The recorded reconstruction map allows the
-    second join to use this reduced current without changing the rule.
+    structure discussed there. In the four-gluon case, only the six entries
+    with $\rho<\sigma$ need to be stored: the others follow from
+    $X_{\rho\rho}=0$ and $X_{\sigma\rho}=-X_{\rho\sigma}$. pyAmpliCol
+    records these relations so that the second join can contract with the
+    remaining input current using the six stored entries, with exactly
+    the same result as using all 16.
 
-    This is also the distinction between deriving a component expression
-    and choosing a decomposition. For the supported higher-point
-    colour-singlet rules that use the input-retaining construction,
-    Spenso contracts the original interaction at the final join; it does
-    not select a smaller intermediate space. The reconstruction conditions
-    and colour restrictions remain those of the contact-decomposition
-    section, and the supported UFO structures are summarised in the
-    UFO-coverage table. In particular, adding a colour representation
-    requires its colour flows and projections as well as its tensors.
-    Within that scope, the component expressions derived during model
-    processing supply both the local recurrence kernels and the combined
-    evaluators described in the preceding subsections.
+    For the supported higher-point colour-singlet interactions where no
+    compact intermediate current is constructed, pyAmpliCol retains the
+    input currents and momenta until the final join. Spenso derives the
+    component expressions for that join by contracting the original UFO
+    interaction with all its inputs. Thus pyAmpliCol specifies which
+    intermediate currents to build, while Spenso supplies the expressions
+    needed to evaluate the chosen joins. The section on general contact
+    decomposition describes these constructions and their validity checks;
+    the UFO-coverage table lists the interactions currently supported.
     """)
     return
 
