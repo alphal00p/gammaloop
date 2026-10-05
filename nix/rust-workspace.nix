@@ -101,11 +101,11 @@
     (workspaceRoot + "/crates/linnest/typst/typst.toml")
     (workspaceRoot + "/crates/linnet-py/README.md")
     (workspaceRoot + "/crates/linnet-py/vendor")
-    # Reviewed 2026-09-14: Spynso's embedded Typst renderer is also a build input;
-    # adding its source directory does not change the documentation cache boundaries.
     (workspaceRoot + "/crates/spynso3/typst")
     (workspaceRoot + "/crates/vakint/form_src")
     (workspaceRoot + "/crates/vakint/templates")
+    (workspaceRoot + "/crates/feynkit-model/data/sm.json.zlib")
+    (workspaceRoot + "/crates/feynkit-ufo/src/model_metadata.py")
   ];
 
   snapshotSources = lib.fileset.unions [
@@ -397,6 +397,8 @@
     sortedUnique (map builtins.head sourceMatches);
 
   workspacePackageExtraSourceRoots.production = {
+    "feynkit-ufo" = ["crates/feynkit-ufo/src/model_metadata.py"];
+    "feynkit-model" = ["crates/feynkit-model/data/sm.json.zlib"];
     "alphal00p-docs-catalogs" = documentationCatalogAnnotatedItemSourcePaths;
     "alphal00p-docs-examples" = [
       "crates/linnet-py/pyproject.toml"
@@ -453,15 +455,21 @@
   };
 
   workspacePackageExtraSourceRoots.compileTimeTest = {
+    "feynkit-model" = [
+      "crates/feynkit-model/tests/fixtures"
+      "assets/models/json/sm/sm.json"
+    ];
     "alphal00p-docs-macros" = ["crates/alphal00p-docs-macros/tests/ui"];
     "alphal00p-docs-python-exporter" = ["crates/linnet-py/linnet_py.pyi" "docs/api/python"];
-    clinnet = [
+    "clinnet" = [
       "assets/embedded/drawing/templates/impl/physics-edge-style.typ"
       "assets/embedded/drawing/templates/layout-core.typ"
       "assets/embedded/drawing/templates/physics-edge-style.typ"
       "crates/clinnet/tests/resources"
       "crates/linnest/typst/examples/map-style.typ"
       "tests/resources/graphs/epemttbar.dot"
+      "crates/kurvst/typst/tests/pattern-split.typ"
+      "crates/kurvst/typst/tests/layer-offset.typ"
     ];
     # Unit and integration tests embed these graph fixtures and snapshots with include_str!.
     "gammaloop-api" = [
@@ -477,6 +485,10 @@
     "gammaloop-integration-tests" = [
       "tests/resources/graphs"
       "tests/tests/snapshots/test_evaluation_api__gl20_multichannel_local_inspect_events.snap"
+      "crates/feynkit-model/tests/fixtures"
+      "tests/resources/graphs/scalar/dod2_bubble.dot"
+      "tests/resources/graphs/gamma_star_ddbar_top_bubble.dot"
+      "tests/resources/graphs/benchmark_epem_a_tth_NNLO_graph.dot"
     ];
   };
 
@@ -566,8 +578,11 @@
     ];
   };
 
-  workspacePackageExtraSourceRootsForSourcePackages = kind: sourcePackages:
-    sortedUnique (lib.concatMap (sourcePackage: workspacePackageExtraSourceRoots.${kind}.${sourcePackage} or []) sourcePackages);
+  workspacePackageExtraSourceRootsForSourcePackages = kind: sourcePackages: let
+    roots = lib.concatMap (sourcePackage: workspacePackageExtraSourceRoots.${kind}.${sourcePackage} or []) sourcePackages;
+    # The packaged SM fixture is a symlink to the workspace model.
+    fixtureTarget = lib.optional (lib.elem "crates/feynkit-model/tests/fixtures" roots) "assets/models/json/sm/sm.json";
+  in sortedUnique (roots ++ fixtureTarget);
 
   workspacePackageExtraFilesetsForSourcePackages = kind: sourcePackages:
     map (sourceRoot: workspaceRoot + "/${sourceRoot}") (workspacePackageExtraSourceRootsForSourcePackages kind sourcePackages);
