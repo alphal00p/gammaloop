@@ -94,34 +94,26 @@ def exact_number(value):
     return E(str(real)) + Symbol.I * E(str(imag))
 
 
-def wrapped_tensor_svg(tensor):
-    """Line-wrap native component output without introducing algebraic aliases."""
-    source = tensor.to_typst()
-    for component in tensor[:]:
-        factors = list(component)
-        total = next(x for x in factors if x.get_type() == AtomType.Add)
-        inverse = next(
-            x for x in factors if x.get_type() == AtomType.Pow and list(x)[1] == -1
-        )
-        denominator = next(iter(inverse))
-        coefficient = reduce(
-            mul, (x for x in factors if x != total and x != inverse), E("1")
-        )
-        terms = list(total)
-        if (coefficient * sum(terms) / denominator - component).expand().cancel() != 0:
-            raise ValueError("Line-wrapped output differs from the original component")
-        lines = [to_typst(term) for term in terms]
-        rows = lines[0] + "".join(
-            " \\ &" + ("" if row.startswith("-") else "+") + row for row in lines[1:]
-        )
-        sign = "-" if coefficient == -1 else to_typst(coefficient)
-        wrapped = "frac(" + sign + "lr((&" + rows + "))," + to_typst(denominator) + ")"
-        native = to_typst(component)
-        if source.count(native) != 1:
-            raise ValueError(
-                "Cannot locate this component uniquely in the tensor display"
-            )
-        source = source.replace(native, wrapped)
+def wrapped_component_svg(component):
+    """Line-wrap the displayed component without introducing algebraic aliases."""
+    factors = list(component)
+    total = next(x for x in factors if x.get_type() == AtomType.Add)
+    inverse = next(
+        x for x in factors if x.get_type() == AtomType.Pow and list(x)[1] == -1
+    )
+    denominator = next(iter(inverse))
+    coefficient = reduce(
+        mul, (x for x in factors if x != total and x != inverse), E("1")
+    )
+    terms = list(total)
+    if (coefficient * sum(terms) / denominator - component).expand().cancel() != 0:
+        raise ValueError("Line-wrapped output differs from the original component")
+    lines = [to_typst(term) for term in terms]
+    rows = lines[0] + "".join(
+        " \\ &" + ("" if row.startswith("-") else "+") + row for row in lines[1:]
+    )
+    sign = "-" if coefficient == -1 else to_typst(coefficient)
+    source = "frac(" + sign + "lr((&" + rows + "))," + to_typst(denominator) + ")"
     document = (
         "#set page(width:auto,height:auto,margin:4pt)\n#set text(size:11pt)\n$ "
         + source
@@ -153,9 +145,11 @@ def output_block(values, slug, assets, rsvg_convert):
     graphics = []
     for index, value in enumerate(values):
         if slug == "network":
-            svg = value.render().replace("<svg ", '<svg data-theme="light" ', 1)
+            svg = (
+                value.render().to_svg().replace("<svg ", '<svg data-theme="light" ', 1)
+            )
         elif slug == "components":
-            svg = wrapped_tensor_svg(value)
+            svg = wrapped_component_svg(value)
         else:
             svg = value.to_svg()
         basename = f"{slug}-{index}"
@@ -201,7 +195,7 @@ def export(notebook, output, rsvg_convert):
         "network": ("network", "Parsing the current into a tensor network."),
         "Q24": (
             "components",
-            "Executing the network and extracting the current components.",
+            "Executing the network and displaying the first current component.",
         ),
         "value": ("evaluation", "Numerical evaluation of the current."),
     }
@@ -222,7 +216,9 @@ def export(notebook, output, rsvg_convert):
         ]
         if not body or isinstance(body[0], ast.Import):
             continue  # Hidden marimo setup.
-        module = ast.fix_missing_locations(ast.Module(body=body, type_ignores=[]))
+        if not isinstance(body[-1], ast.Expr):
+            raise TypeError("Each listing must end with the expression to display")
+        module = ast.fix_missing_locations(ast.Module(body=body[:-1], type_ignores=[]))
         exec(compile(module, str(notebook), "exec"), namespace)  # noqa: S102 -- Execute the requested local notebook.
         assignments = {
             node.id
@@ -238,11 +234,11 @@ def export(notebook, output, rsvg_convert):
 
         lines = source.splitlines()[body[0].lineno - 1 : body[-1].end_lineno]
         code = textwrap.dedent("\n".join(lines))
-        displayed = namespace[name]
-        if name == "Q2":
-            values = [namespace[key] for key in ("Q2", "G4", "q24")]
-        else:
-            values = [displayed]
+        # Capture the notebook's actual final expression.
+        displayed = eval(
+            compile(ast.Expression(body[-1].value), str(notebook), "eval"), namespace
+        )
+        values = list(displayed) if isinstance(displayed, tuple) else [displayed]
         listing = (
             rf"\begin{{notebookcell}}{{{caption}}}{{lst:spenso-{slug}}}"
             + "\n\\begin{lstlisting}[style=pythoncode]"

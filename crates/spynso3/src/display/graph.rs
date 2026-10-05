@@ -784,13 +784,14 @@ impl PyRenderSettings {
     }
 }
 
-/// A rendered diagram snapshot with its configured notebook display.
+/// A rendered diagram or tensor network snapshot with its notebook display.
 /// Displaying or exporting the snapshot reuses the rendered SVG and labels.
 ///
 /// Examples
 /// --------
 /// >>> from symbolica.community.tensor import TensorNetwork, RenderSettings
-/// >>> drawing = TensorNetwork(1).render(config=RenderSettings(node_radius=5))
+/// >>> from symbolica import E
+/// >>> drawing = TensorNetwork(E("1")).render(config=RenderSettings(node_radius=5))
 /// >>> drawing
 /// >>> svg = drawing.to_svg()
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
