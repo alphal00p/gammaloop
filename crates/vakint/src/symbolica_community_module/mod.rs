@@ -1,4 +1,5 @@
 use symbolica::api::python::{Citation, SymbolicaCommunityModule};
+mod diagram_integral;
 
 use std::collections::HashMap;
 use std::env;
@@ -55,6 +56,7 @@ macro_rules! define_vakint_python_surface {
     ($($class:ty),+ $(,)?) => {
         pub(crate) fn initialize_vakint(m: &Bound<'_, PyModule>) -> PyResult<()> {
             $(<$class as ModuleInit>::init(m)?;)+
+            m.add_function(pyo3::wrap_pyfunction!(diagram_integral::integral_from_diagram, m)?)?;
             Ok(())
         }
 

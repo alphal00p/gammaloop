@@ -1,6 +1,8 @@
 #![allow(mixed_script_confusables)]
 pub mod alphaloop_numerics;
 mod citations;
+#[cfg(feature = "feynkit-ingress")]
+pub mod diagram_integral;
 pub mod fmft;
 pub mod fmft_numerics;
 pub mod graph;

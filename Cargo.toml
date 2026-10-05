@@ -88,6 +88,10 @@ walkdir = "2.5.0"
 which = "8.0.0"
 
 [patch.crates-io]
+# Match the shared HEPKit host's optional notebook components.
+typst-library = { git = "https://github.com/alphal00p/gammaloop", branch = "feynkit" }
+typst-svg = { git = "https://github.com/alphal00p/gammaloop", branch = "feynkit" }
+symbolica-typst-plugin = { git = "https://github.com/symbolica-dev/symbolica-typst-plugin", rev = "57b7455b37c30f4f87353c0073e49f5225e937ab" }
 graphica = { git = "https://github.com/symbolica-dev/symbolica", rev = "98794d0d7337ba2b08e4c046dde584ad7fc1ce10" }
 numerica = { git = "https://github.com/symbolica-dev/symbolica", rev = "98794d0d7337ba2b08e4c046dde584ad7fc1ce10" }
 symbolica = { git = "https://github.com/symbolica-dev/symbolica", rev = "98794d0d7337ba2b08e4c046dde584ad7fc1ce10" }

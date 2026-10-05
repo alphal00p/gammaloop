@@ -13,8 +13,16 @@ Use the canonical Typst documentation for maintained workflows:
 
 The crate also contains source examples under [`examples/`](examples/); check them against the
 versioned API reference before adapting them. Vakint is exposed to Python through
-`symbolica.community.vakint` when that community module is included in the installed Symbolica
+`symbolica.community.hepkit.vakint` when that community module is included in the installed Symbolica
 assembly, not as an independent Python distribution.
+
+The optional `feynkit-ingress` feature exposes the native
+`VakintExpression::from_diagram` constructor and `DiagramIntegralOptions`.
+It consumes FeynKit's graph, integral family and existing momentum routing,
+with native Symbolica scalar products and simultaneous parameter substitutions.
+The community-module feature enables this automatically and exports the same
+operation as `integral_from_diagram`; no Python-side graph or algebra adapter is
+involved. Neither entry point rematches the graph or changes evaluation defaults.
 
 For supported one-, two- and three-loop equal-mass vacuum families, the opt-in
 `EvaluationOrder::rustred_only()` scalar backend instead applies closing IBP
