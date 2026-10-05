@@ -74,6 +74,7 @@ def _(mo):
     a tensor carrying one index. The arguments `2`, `4` and `2, 4` retain
     the leg labels of $Q(2)$, $G(4)$ and $q_{24}$ in their names; tensor
     indices are assigned when the contractions are formed below.
+    Each listing is followed by its rendered output.
     """)
     return
 
@@ -184,7 +185,9 @@ def _(mo):
     network, `result_tensor()` extracts the tensor `Q24`, whose open spinor
     index labels the four expressions for $Q(2,4)_c$. Each includes the
     momentum-dependent propagator denominator and is ready for numerical
-    evaluation.
+    evaluation. In the component output, numeric superscripts label entries
+    in the chosen basis. Line breaks have been added to fit the expressions
+    on the page.
     """)
     return
 
