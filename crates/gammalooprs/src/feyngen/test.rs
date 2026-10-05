@@ -6,7 +6,6 @@ use ahash::HashSet;
 use idenso::IndexTooling;
 use idenso::dirac::AGS;
 use idenso::tensor::SymbolicTensor;
-use insta::assert_snapshot;
 use itertools::Itertools;
 use linnet::half_edge::involution::EdgeData;
 use linnet::half_edge::involution::Flow;
@@ -26,13 +25,15 @@ use spenso_hep_lib::proj_p_data_weyl;
 use symbolica::atom::Atom;
 use symbolica::atom::AtomCore;
 use symbolica::coefficient::Coefficient;
-use symbolica::graph::Graph as SymbolicaGraph;
+use symbolica::domains::integer::Integer;
+use symbolica::graph::{GenerationSettings, Graph as SymbolicaGraph, HalfEdge};
 use symbolica::id::Replacement;
 use symbolica::parse_lit;
 use tracing::debug;
 
 use crate::dot;
 use crate::feyngen::diagram_generator::EdgeColor;
+use crate::feyngen::diagram_generator::feynman_graph_automorphism_group_size;
 use crate::graph::FeynmanGraph;
 use crate::initialisation::test_initialise;
 use crate::numerator::aind::Aind;
@@ -61,6 +62,372 @@ use crate::model::VertexRule;
 use crate::numerator::GlobalPrefactor;
 use crate::processes::ProcessDefinition;
 use crate::utils::load_generic_model;
+
+#[test]
+fn directed_self_loop_symmetry_factors_match_wick_contractions() {
+    let neutral = HalfEdge::undirected("a");
+    let charged = HalfEdge::incoming("q");
+    let other = HalfEdge::incoming("r");
+    // Each expected denominator follows from labeled Wick contractions
+    // divided by identical-field and identical-vertex factorials. Directed
+    // loop ends are different fields; undirected flips and permutations
+    // of identical propagators still count.
+    for (signature, vertices, expected) in [
+        (vec![charged, charged.flip()], 1, vec![(1, 1)]),
+        (
+            vec![charged, charged.flip(), other, other.flip()],
+            1,
+            vec![(2, 1)],
+        ),
+        (
+            vec![charged, charged.flip(), charged, charged.flip()],
+            1,
+            vec![(2, 2)],
+        ),
+        (vec![neutral; 4], 1, vec![(0, 8)]),
+        (
+            vec![neutral, neutral, charged, charged.flip()],
+            1,
+            vec![(1, 2)],
+        ),
+        (
+            vec![neutral, charged, charged.flip()],
+            2,
+            vec![(0, 2), (2, 2)],
+        ),
+    ] {
+        let graphs = SymbolicaGraph::<usize, &str>::generate(
+            &[],
+            std::slice::from_ref(&signature),
+            GenerationSettings::new()
+                .max_vertices(vertices)
+                .max_loops(2)
+                .allow_self_loops(true)
+                .allow_zero_flow_edges(true),
+        )
+        .unwrap();
+        let observed = graphs
+            .iter()
+            .map(|(graph, group_size)| {
+                (
+                    graph
+                        .edges()
+                        .iter()
+                        .filter(|edge| edge.directed && edge.vertices.0 == edge.vertices.1)
+                        .count(),
+                    feynman_graph_automorphism_group_size(graph, group_size),
+                )
+            })
+            .sorted()
+            .collect_vec();
+        assert_eq!(
+            observed,
+            expected
+                .into_iter()
+                .map(|(loops, size)| (loops, Integer::from(size)))
+                .collect_vec(),
+            "vertex signature {signature:?}",
+        );
+    }
+}
+
+#[test]
+fn ghost_box_reflection_preserves_the_derivative_momentum_chart() {
+    let model = load_generic_model("sm");
+    let process = ProcessDefinition {
+        initial_pdgs: vec![22],
+        final_pdgs_lists: vec![vec![22]],
+        numerator_grouping:
+            NumeratorAwareGraphGroupingOption::GroupIdenticalGraphUpToScalarRescaling(
+                GraphGroupingOptions::default(),
+            ),
+        ..Default::default()
+    };
+    // The GL65/GL66 ghost boxes in a > d d~ at QCD=3 are identical
+    // under 2 <-> 3, with a reversed quark loop. Forgetting ghost flow
+    // instead selects a reflection that changes its derivative momenta.
+    let edges = [
+        (0, 2, 9000005),
+        (3, 0, 9000005),
+        (0, 4, 21),
+        (2, 1, 9000005),
+        (1, 3, 9000005),
+        (1, 5, 21),
+        (2, 3, 21),
+        (4, 5, 1),
+        (6, 4, 1),
+        (5, 7, 1),
+        (7, 6, 1),
+    ];
+    let canonical = [(false, false), (false, true), (true, false), (true, true)].map(
+        |(reflected, reverse_storage)| {
+            let mut graph = SymbolicaGraph::new();
+            for (node, external_tag) in [0, 0, 0, 0, 0, 0, 0, 0, 1, 2].into_iter().enumerate() {
+                graph.add_node(NodeColorWithVertexRule {
+                    external_tag,
+                    vertex_rule: model.get_vertex_rule(match node {
+                        0..=3 => "V_35",
+                        4..=5 => "V_74",
+                        _ => "V_71",
+                    }),
+                });
+            }
+            for (a, b, pdg) in edges {
+                let (a, b) = if reflected && pdg != 21 {
+                    (b, a)
+                } else {
+                    (a, b)
+                };
+                let (a, b, pdg) =
+                    if reverse_storage && model.get_particle_from_pdg(pdg).0.is_ghost() {
+                        (b, a, -pdg)
+                    } else {
+                        (a, b, pdg)
+                    };
+                graph.add_edge(a, b, true, EdgeColor { pdg }).unwrap();
+            }
+            for (a, b) in [(8, 6), (9, 7)] {
+                graph.add_edge(a, b, true, EdgeColor { pdg: 22 }).unwrap();
+            }
+            let (skeleton, sorted) = process
+                .canonicalize_edge_and_vertex_ordering(
+                    &model,
+                    &graph,
+                    &HashMap::default(),
+                    &process.numerator_grouping,
+                    None,
+                )
+                .unwrap();
+            let (second_skeleton, second_sorted) = process
+                .canonicalize_edge_and_vertex_ordering(
+                    &model,
+                    &sorted,
+                    &HashMap::default(),
+                    &process.numerator_grouping,
+                    None,
+                )
+                .unwrap();
+            // Cross-section generation repeats this pass after selecting its
+            // external assignment, when storage has already been canonicalized.
+            assert_eq!(skeleton.nodes(), second_skeleton.nodes());
+            assert_eq!(skeleton.edges(), second_skeleton.edges());
+            assert_eq!(
+                sorted.nodes().iter().map(|n| &n.data).collect_vec(),
+                second_sorted.nodes().iter().map(|n| &n.data).collect_vec(),
+            );
+            let chart = |graph: &SymbolicaGraph<NodeColorWithVertexRule, EdgeColor>| {
+                graph
+                    .edges()
+                    .iter()
+                    .map(|edge| (edge.vertices, edge.directed, edge.data))
+                    .collect_vec()
+            };
+            assert_eq!(chart(&sorted), chart(&second_sorted));
+            process.normalize_flows(&sorted, &model).unwrap().0
+        },
+    );
+    for graph in &canonical[1..] {
+        assert_eq!(
+            canonical[0].nodes().iter().map(|n| &n.data).collect_vec(),
+            graph.nodes().iter().map(|n| &n.data).collect_vec(),
+        );
+    }
+    let edges = |graph: &SymbolicaGraph<NodeColorWithVertexRule, EdgeColor>, reverse_quarks| {
+        graph
+            .edges()
+            .iter()
+            .map(|edge| {
+                let particle = model.get_particle_from_pdg(edge.data.pdg);
+                let vertices =
+                    if reverse_quarks && particle.0.is_fermion() && !particle.0.is_ghost() {
+                        (edge.vertices.1, edge.vertices.0)
+                    } else {
+                        edge.vertices
+                    };
+                (vertices, edge.directed, edge.data)
+            })
+            .sorted()
+            .collect_vec()
+    };
+    // The ghost derivative edges must match with their directions intact.
+    // The sole quark loop reverses: four vector vertices and four slash
+    // momenta give sign +1, and Tr(Ta Tb) is unchanged under reversal.
+    assert_eq!(edges(&canonical[0], false), edges(&canonical[2], true));
+    // Reversing a storage edge and its particle label changes no physical
+    // endpoint or derivative momentum, before or after the reflection.
+    for i in [0, 2] {
+        assert_eq!(edges(&canonical[i], false), edges(&canonical[i + 1], false));
+    }
+}
+
+#[test]
+fn cp_preserves_neutral_adjoint_ghost_derivative_flow() {
+    let model = load_generic_model("sm");
+    let process = ProcessDefinition {
+        generation_type: GenerationType::CrossSection,
+        symmetrize_left_right_states: true,
+        initial_pdgs: vec![22],
+        final_pdgs_lists: vec![vec![1, -1]],
+        numerator_grouping:
+            NumeratorAwareGraphGroupingOption::GroupIdenticalGraphUpToScalarRescaling(
+                GraphGroupingOptions::default(),
+            ),
+        ..Default::default()
+    };
+    // The GL48/GL50 ghost triangles in a > d d~ at QCD=3
+    // differ only in ghost orientation. Swapping the external sides
+    // reflects the triangle and reverses the entire quark pentagon.
+    let edges = [
+        (0, 1, 9000005),
+        (2, 0, 9000005),
+        (0, 3, 21),
+        (1, 2, 9000005),
+        (1, 5, 21),
+        (2, 4, 21),
+        (3, 4, 1),
+        (5, 3, 1),
+        (4, 6, 1),
+        (7, 5, 1),
+        (6, 7, 1),
+    ];
+    let colors = HashMap::from_iter([(1, -2001), (2, -3001)]);
+    let canonical = |reverse_ghosts, reverse_storage, cp_enabled| {
+        let mut process = process.clone();
+        process.symmetrize_left_right_states = cp_enabled;
+        let mut graph = SymbolicaGraph::new();
+        for (node, external_tag) in [0, 0, 0, 0, 0, 0, 0, 0, 1, 2].into_iter().enumerate() {
+            graph.add_node(NodeColorWithVertexRule {
+                external_tag,
+                vertex_rule: model.get_vertex_rule(match node {
+                    0..=2 => "V_35",
+                    3..=5 => "V_74",
+                    _ => "V_71",
+                }),
+            });
+        }
+        for (a, b, pdg) in edges {
+            let ghost = model.get_particle_from_pdg(pdg).0.is_ghost();
+            let (a, b) = if reverse_ghosts && ghost {
+                (b, a)
+            } else {
+                (a, b)
+            };
+            let (a, b, pdg) = if reverse_storage && ghost {
+                (b, a, -pdg)
+            } else {
+                (a, b, pdg)
+            };
+            graph.add_edge(a, b, true, EdgeColor { pdg }).unwrap();
+        }
+        for (a, b) in [(8, 6), (9, 7)] {
+            graph.add_edge(a, b, true, EdgeColor { pdg: 22 }).unwrap();
+        }
+        let (_, assigned) = process
+            .canonicalize_edge_and_vertex_ordering(
+                &model,
+                &graph,
+                &colors,
+                &process.numerator_grouping,
+                Some((false, cp_enabled)),
+            )
+            .unwrap();
+        // Production repeats ordering for the chosen external assignment.
+        process
+            .canonicalize_edge_and_vertex_ordering(
+                &model,
+                &assigned,
+                &colors,
+                &process.numerator_grouping,
+                None,
+            )
+            .unwrap()
+    };
+    let disabled = [
+        canonical(false, false, false),
+        canonical(true, false, false),
+    ];
+    assert_ne!(disabled[0].0.edges(), disabled[1].0.edges());
+    let canonical = [(false, false), (false, true), (true, false), (true, true)]
+        .map(|(reverse, storage)| canonical(reverse, storage, true));
+    let chart = |graph: &SymbolicaGraph<NodeColorWithVertexRule, EdgeColor>| {
+        graph
+            .edges()
+            .iter()
+            .map(|edge| (edge.vertices, edge.directed, edge.data))
+            .sorted()
+            .collect_vec()
+    };
+    let normalized = canonical.each_ref().map(|(_, sorted)| {
+        // Production finishes ordering after choosing the external assignment.
+        // Another ordering pass can reassign the shared CP external pair;
+        // flow normalization must preserve its own physical chart instead.
+        let (normalized, negative_sign) = process.normalize_flows(sorted, &model).unwrap();
+        let (renormalized, repeated_negative_sign) =
+            process.normalize_flows(&normalized, &model).unwrap();
+        assert!(!negative_sign);
+        assert!(!repeated_negative_sign);
+        assert_eq!(
+            normalized.nodes().iter().map(|n| &n.data).collect_vec(),
+            renormalized.nodes().iter().map(|n| &n.data).collect_vec()
+        );
+        assert_eq!(chart(&normalized), chart(&renormalized));
+        normalized
+    });
+    for graph in &normalized[1..] {
+        assert_eq!(
+            normalized[0].nodes().iter().map(|n| &n.data).collect_vec(),
+            graph.nodes().iter().map(|n| &n.data).collect_vec()
+        );
+    }
+    // The external-side reflection reverses the quark pentagon;
+    // charge conjugation reverses it again. Both physical flows must
+    // therefore match exactly, including every ghost derivative edge.
+    assert_eq!(chart(&normalized[0]), chart(&normalized[2]));
+    for i in [0, 2] {
+        assert_eq!(chart(&normalized[i]), chart(&normalized[i + 1]));
+    }
+}
+
+#[test]
+fn amplitude_comparison_samples_resolve_incoming_and_outgoing_wavefunctions() {
+    let model = load_generic_model("sm");
+    let process = ProcessDefinition {
+        generation_type: GenerationType::Amplitude,
+        initial_pdgs: vec![11, -11, 22],
+        final_pdgs_lists: vec![vec![11, -11, 22]],
+        ..Default::default()
+    };
+    let (_, library) = process.sample_lib(
+        &mut symbolica::domains::finite_field::PrimeIteratorU64::new(1),
+        false,
+        false,
+        &model,
+    );
+    // LSZ uses u, vbar, epsilon for incoming states and ubar, v,
+    // epsilonbar for outgoing states. Every component must be sampled.
+    for (external_index, (pdg, name)) in [
+        (11, GS.u),
+        (-11, GS.vbar),
+        (22, GS.epsilon),
+        (11, GS.ubar),
+        (-11, GS.v),
+        (22, GS.epsilonbar),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let particle = model.get_particle_from_pdg(pdg);
+        let key = ExplicitKey {
+            structure: particle.spin_reps(),
+            global_name: Some(name),
+            additional_args: Some(vec![Atom::num(external_index)]),
+        };
+        assert!(
+            library.get(&key).is_ok(),
+            "unsampled external state {key:?}"
+        );
+    }
+}
 
 #[test]
 fn closed_anticommutating_loop_counts() {
@@ -1330,37 +1697,62 @@ pub(crate) fn chain_dis_generate(options: &[ProcessDefinition], model: &Model) -
         .collect()
 }
 
-mod failing {
-    use super::*;
+#[test]
+fn nlo_fs_dis() {
+    // setup_logger().unwrap();
 
-    #[test]
-    fn nlo_fs_dis() {
-        // setup_logger().unwrap();
+    // The historical sm_dis fixture differs in the retained DIS sector only
+    // by tagging the electron-photon vertex with the LT coupling order.
+    let mut model = load_generic_model("sm");
+    model.name = "sm_dis".into();
+    model.orders.push(Arc::new(crate::model::Order {
+        name: "LT".into(),
+        expansion_order: 99,
+        hierarchy: 3,
+    }));
+    let mut coupling = model.get_coupling("GC_3").clone();
+    coupling.name = "DIS".into();
+    coupling.orders.insert("LT".into(), 1);
+    let coupling_name = crate::model::CouplingName(coupling.name);
+    model.couplings.insert(coupling_name, coupling);
+    let vertex_index = model.vertex_rule_name_to_position["V_98"];
+    Arc::make_mut(&mut model.vertex_rules[vertex_index].0).couplings =
+        vec![vec![Some(coupling_name)]];
+    // Rebuild the vertex lookup tables together with the model data.
+    let model = Model::from_serializable_model(model.to_serializable());
+    let options = dis_cart_prod(&["d", "d~", "g"], 1, &model);
 
-        let model = load_generic_model("sm_dis");
-        let options = dis_cart_prod(&["d", "d~", "g"], 1, &model);
+    for option in options {
+        let diagrams = chain_dis_generate(std::slice::from_ref(&option), &model);
 
-        for option in options {
-            let diagrams = chain_dis_generate(std::slice::from_ref(&option), &model);
+        let process_name = option
+            .initial_pdgs
+            .iter()
+            .map(|a| model.get_particle_from_pdg(*a as isize).0.name.clone())
+            .join(",");
 
-            let process_name = option
-                .initial_pdgs
-                .iter()
-                .map(|a| model.get_particle_from_pdg(*a as isize).0.name.clone())
-                .join(",");
-
-            assert_snapshot!(
-                format!("number of diagrams for {}", process_name),
-                diagrams.len()
-            );
-            // let dots = diagrams
-            //     .iter()
-            //     .map(|a| a.dot())
-            //     .collect::<Vec<_>>()
-            //     .join("\n");
-            // assert_snapshot!(format!("dots for {}", process_name), dots);
-        }
-
-        // println!("Number of fs: {}", fs_diagrams.len());
+        // Preserve the original sm_dis counts without depending on the
+        // obsolete _gammaloop crate/module prefix of its snapshots.
+        let expected = match process_name.as_str() {
+            "d,e-" | "d~,e-" => 6,
+            "g,e-" => 4,
+            "d,d,e-" | "d~,d,e-" | "d~,d~,e-" => 12,
+            "d,g,e-" | "d~,g,e-" => 11,
+            "g,g,e-" => 0,
+            _ => panic!("Unexpected DIS initial state: {process_name}"),
+        };
+        assert_eq!(
+            diagrams.len(),
+            expected,
+            "DIS initial state: {process_name}"
+        );
+        // let dots = diagrams
+        //     .iter()
+        //     .map(|a| a.dot())
+        //     .collect::<Vec<_>>()
+        //     .join("\n");
+        // assert_snapshot!(format!("dots for {}", process_name), dots);
     }
+
+    // println!("Number of fs: {}", fs_diagrams.len());
 }

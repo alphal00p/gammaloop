@@ -4689,27 +4689,27 @@ mod tests {
         assert_eq!(esurface_1, esurface_2);
     }
 
+    #[test]
+    fn test_to_atom() {
+        let external_shift = vec![(EdgeIndex::from(1), -1)];
+
+        let esurface = Esurface {
+            energies: vec![EdgeIndex::from(2), EdgeIndex::from(3)],
+            external_shift,
+            vertex_set: VertexSet::dummy(),
+            // subspace_graph: unsafe { InternalSubGraph::new_unchecked(SuBitGraph::new()) },
+        };
+
+        let esurface_atom = esurface.to_atom(&[]);
+        let expected_atom = parse!("OSE(2) + OSE(3) - Q(1, spenso::cind(0))");
+
+        let diff = esurface_atom - &expected_atom;
+        let diff = diff.expand();
+        assert_eq!(diff, Atom::new());
+    }
+
     mod failing {
         use super::*;
-
-        #[test]
-        fn test_to_atom() {
-            let external_shift = vec![(EdgeIndex::from(1), -1)];
-
-            let esurface = Esurface {
-                energies: vec![EdgeIndex::from(2), EdgeIndex::from(3)],
-                external_shift,
-                vertex_set: VertexSet::dummy(),
-                // subspace_graph: unsafe { InternalSubGraph::new_unchecked(SuBitGraph::new()) },
-            };
-
-            let esurface_atom = esurface.to_atom(&[]);
-            let expected_atom = parse!("Q(2, cind(0)) + Q(3, cind(0)) - P(1, cind(0))");
-
-            let diff = esurface_atom - &expected_atom;
-            let diff = diff.expand();
-            assert_eq!(diff, Atom::new());
-        }
 
         #[test]
         fn test_from_cut_left_dt() {

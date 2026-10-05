@@ -508,6 +508,85 @@ fn color_trace_projectors_preserve_adjoint_slots_and_algebra() {
 }
 
 #[test]
+fn cubic_color_trace_contractions_are_traceless() {
+    test_initialize();
+    let settings = ColorSimplifySettings::default().with_cof_dimension_invariants();
+    let spectator = parse_lit!((opaque(x) + opaque(y)) ^ 5);
+    let trace = parse!(
+        "trace(cof(Nc), sym(t(coad(Nc ^ 2 - 1, a), spenso::in, spenso::out),\n            t(coad(Nc ^ 2 - 1, b), spenso::in, spenso::out),\n            t(coad(Nc ^ 2 - 1, c), spenso::in, spenso::out)))",
+        default_namespace = "spenso"
+    );
+    let metric = parse_lit!(
+        g(coad(Nc ^ 2 - 1, a), coad(Nc ^ 2 - 1, b)),
+        default_namespace = "spenso"
+    );
+    assert_eq!(
+        (&trace * &metric * &spectator).simplify_color_with(settings),
+        Atom::Zero
+    );
+    assert_eq!(
+        (&trace * &spectator).simplify_color_with(settings),
+        &trace * &spectator
+    );
+    assert_eq!(
+        (&trace * &metric).simplify_color_with(settings.without_trace_evaluation()),
+        &trace * &metric
+    );
+    let repeated = trace
+        .replace(parse_lit!(
+            coad(Nc ^ 2 - 1, b),
+            default_namespace = "spenso"
+        ))
+        .with(parse_lit!(
+            coad(Nc ^ 2 - 1, a),
+            default_namespace = "spenso"
+        ));
+    assert_eq!(repeated.simplify_color_with(settings), Atom::Zero);
+
+    // The DIS ghost bubble first produces a metric between two distinct
+    // generator slots. Its closed quark trace then leaves precisely this contraction.
+    let network = parse!(
+        "f(coad(8, a), coad(8, i), coad(8, j))\n            * f(coad(8, b), coad(8, i), coad(8, j))\n            * trace(cof(3), cyclic(t(coad(8, a), spenso::in, spenso::out),\n                t(coad(8, c), spenso::in, spenso::out),\n                t(coad(8, b), spenso::in, spenso::out)))",
+        default_namespace = "spenso"
+    );
+    assert_eq!(
+        (network * &spectator).simplify_color_with(settings),
+        Atom::Zero
+    );
+
+    for unsupported in [
+        parse_lit!(
+            custom_tensor(coad(8, a), coad(8, b), coad(8, c)),
+            default_namespace = "spenso"
+        ),
+        parse_lit!(
+            trace(
+                cof(3),
+                sym(
+                    custom_matrix(coad(8, a)),
+                    custom_matrix(coad(8, b)),
+                    custom_matrix(coad(8, c))
+                )
+            ),
+            default_namespace = "spenso"
+        ),
+        parse!(
+            "trace(cof(3), sym(t(coad(7, a), spenso::in, spenso::out), t(coad(7, b), spenso::in, spenso::out), t(coad(7, c), spenso::in, spenso::out)))",
+            default_namespace = "spenso"
+        ),
+        parse!(
+            "trace(cof(3), sym(t(coad(8, a), spenso::in, spenso::out), t(coad(8, b), spenso::in, spenso::out), t(coad(8, c), spenso::in, spenso::out), t(coad(8, d), spenso::in, spenso::out)))",
+            default_namespace = "spenso"
+        ),
+    ] {
+        let candidate = unsupported
+            * parse_lit!(g(coad(8, a), coad(8, b)), default_namespace = "spenso")
+            * &spectator;
+        assert!(!candidate.simplify_color_with(settings).is_zero());
+    }
+}
+
+#[test]
 fn cof_dimension_simplification_resolves_new_color_invariants() {
     test_initialize();
     let settings = ColorSimplifySettings::default().with_cof_dimension_invariants();

@@ -453,7 +453,7 @@ macro_rules! spenso_print_scripted_indexed {
                 };
 
                 let mut argiter = f.iter();
-                let id = argiter.next().unwrap();
+                let id = argiter.next()?;
                 let Ok(i) = usize::try_from(id) else {
                     return None;
                 };

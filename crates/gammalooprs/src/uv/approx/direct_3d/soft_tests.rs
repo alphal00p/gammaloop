@@ -1206,6 +1206,105 @@ fn appendix_b1_nested_routes_keep_the_graph_canonical_enclosing_chart() -> Resul
 }
 
 #[test]
+fn nested_banana_retains_quotient_carriers_after_an_integrated_prefix() -> Result<()> {
+    test_initialise()?;
+    let graph: Graph = dot!(
+        digraph banana {
+            edge [particle=scalar_1 num=1]
+            node [num=1]
+            ext [style=invis]
+            ext -> a:0 [id=5]
+            b:1 -> ext [id=4]
+            a -> b [id=1]
+            a -> b [id=2]
+            a -> b [id=3]
+            a -> b [id=0]
+        },
+        "scalars"
+    )?;
+    let subgraph = |edges: &[usize]| {
+        let mut subgraph = graph.empty_subgraph::<SuBitGraph>();
+        for edge in edges.iter().copied().map(EdgeIndex) {
+            subgraph.add(graph[&edge].1);
+        }
+        subgraph
+    };
+    let node = |edges: &[usize]| {
+        let subgraph = subgraph(edges);
+        TestNode {
+            lmb: graph.lmb_of(&subgraph),
+            subgraph,
+            dod: 0,
+            scheme: ApproximationType::MUV,
+        }
+    };
+    let integrated = node(&[1, 2]);
+    let child = node(&[0, 1, 2]);
+    let parent = node(&[0, 1, 2, 3]);
+    let settings = UVgenerationSettings::default();
+    let ctx = UVCtx::new(&graph, &settings);
+    let child_active = child.reduced_subgraph(&integrated);
+    let (_, child_lmb) = coordinate_lmb(&ctx, &child, &integrated, None, &[], &child_active)?;
+    assert_eq!(child_lmb.loop_edges.raw, vec![EdgeIndex(0)]);
+    assert!(
+        graph.loop_momentum_basis.edge_signatures[EdgeIndex(0)]
+            .external
+            .iter()
+            .any(|sign| sign.is_sign()),
+        "the original graph routes Q0 with a fixed external shift"
+    );
+    let parent_active = child_active.union(&parent.reduced_subgraph(&child));
+    let prior_frame = DirectCoordinateFrame {
+        active_subgraph: child_active.clone(),
+        lmb: child_lmb,
+    };
+    let (_, selected) = coordinate_lmb(
+        &ctx,
+        &parent,
+        &child,
+        Some(&child_active),
+        &[prior_frame],
+        &parent_active,
+    )?;
+    // The original graph carrier Q3 keeps its first position; the retained
+    // quotient carrier Q0 follows it in the compatible enclosing chart.
+    assert_eq!(selected.loop_edges.raw, vec![EdgeIndex(3), EdgeIndex(0)]);
+    // Contracting the integrated two-line bubble makes each remaining line
+    // a self-loop. Certify its signed momentum, rather than only its loop id.
+    for (index, edge) in selected.loop_edges.iter().enumerate() {
+        let signature = &selected.edge_signatures[*edge];
+        assert!(signature.external.iter().all(|sign| sign.is_zero()));
+        for (loop_index, sign) in signature.internal.iter().enumerate() {
+            assert_eq!(sign.is_sign(), loop_index == index);
+            if loop_index == index {
+                assert!(!sign.is_negative());
+            }
+        }
+    }
+    let q0 = GS.emr_mom(EdgeIndex(0), GS.cind(1));
+    let q3 = GS.emr_mom(EdgeIndex(3), GS.cind(1));
+    let fixed_external = GS.emr_mom(EdgeIndex(5), GS.cind(1));
+    let input = q0 * q3 * fixed_external;
+    let rescaled = Direct3dApproximation::t_rescale(
+        Local3DDeformation::Ordinary,
+        &ctx,
+        &parent,
+        &child,
+        &input,
+        Some(&parent_active),
+        &selected,
+        false,
+    )?;
+    assert!(
+        (rescaled - input * Atom::var(GS.rescale).pow(-2))
+            .expand()
+            .is_zero(),
+        "both quotient carriers must scale homogeneously while graph-external momentum stays fixed"
+    );
+    Ok(())
+}
+
+#[test]
 fn nested_route_rejects_a_retained_affine_graph_external_carrier() -> Result<()> {
     test_initialise()?;
     let graph: Graph = dot!(
@@ -1220,6 +1319,7 @@ fn nested_route_rejects_a_retained_affine_graph_external_carrier() -> Result<()>
             v2 -> v3 [id=4]
             v3 -> v4 [id=5]
             v1 -> v4 [id=6 lmb_id=1]
+            v2 -> v2 [id=7 lmb_id=2]
         },
         "scalars"
     )?;
@@ -1260,21 +1360,34 @@ fn nested_route_rejects_a_retained_affine_graph_external_carrier() -> Result<()>
     };
     let settings = UVgenerationSettings::default();
     let ctx = UVCtx::new(&graph, &settings);
-    let error = coordinate_lmb(
-        &ctx,
-        &parent,
-        &child,
-        Some(&child.subgraph),
-        &[prior_frame],
-        &parent.subgraph,
-    )
-    .expect_err("an affine retained carrier must not become a fixed parent coordinate");
-    let message = error.to_string();
-    assert!(
-        message.contains("affine graph-external momentum shift"),
-        "unexpected routing error: {message}"
-    );
-    assert!(message.contains(&parent.subgraph.string_label()));
+    // Integrating an unrelated tadpole does not change this carrier's affine
+    // routing. A nonempty inactive prefix must not switch off the guard.
+    let mut tadpole = graph.empty_subgraph::<SuBitGraph>();
+    tadpole.add(graph[&EdgeIndex(7)].1);
+    for inactive in [graph.empty_subgraph(), tadpole] {
+        let given = TestNode {
+            subgraph: child.subgraph.union(&inactive),
+            lmb: child.lmb.clone(),
+            dod: child.dod,
+            scheme: child.scheme,
+        };
+        let active = parent.subgraph.subtract(&inactive);
+        let error = coordinate_lmb(
+            &ctx,
+            &parent,
+            &given,
+            Some(&child.subgraph),
+            std::slice::from_ref(&prior_frame),
+            &active,
+        )
+        .expect_err("an affine retained carrier must not become a fixed parent coordinate");
+        let message = error.to_string();
+        assert!(
+            message.contains("affine graph-external momentum shift"),
+            "unexpected routing error: {message}"
+        );
+        assert!(message.contains(&parent.subgraph.string_label()));
+    }
 
     Ok(())
 }

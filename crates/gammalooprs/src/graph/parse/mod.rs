@@ -846,7 +846,7 @@ impl Graph {
             * &self.global_prefactor.projector
             * &self.overall_factor;
         let mut invalid_q3 = None;
-        let _ = full_num.replace_map(|view, _, _| {
+        full_num.visitor(&mut |view| {
             if invalid_q3.is_none()
                 && let AtomView::Fun(q3) = view
                 && q3.get_symbol() == GS.emr_vec
@@ -896,6 +896,7 @@ impl Graph {
                     invalid_q3 = Some((reason, view.into_atom()));
                 }
             }
+            true
         });
         if let Some((reason, q3)) = invalid_q3 {
             return Err(eyre!(
@@ -906,14 +907,14 @@ impl Graph {
         }
 
         let mut invalid_q = None;
-        let _ = full_num.replace_map(|view, _, _| {
+        full_num.visitor(&mut |view| {
             if invalid_q.is_none()
                 && let AtomView::Fun(q) = view
                 && q.get_symbol() == GS.emr_mom
             {
                 let Some(edge) = q.iter().next() else {
                     invalid_q = Some(("found no edge argument".to_owned(), view.into_atom()));
-                    return;
+                    return true;
                 };
                 let edge_id = i64::try_from(edge)
                     .ok()
@@ -936,6 +937,7 @@ impl Graph {
                     invalid_q = Some((reason, view.into_atom()));
                 }
             }
+            true
         });
         if let Some((reason, q)) = invalid_q {
             return Err(eyre!(
@@ -948,7 +950,7 @@ impl Graph {
         Ok(())
     }
 
-    fn validate_full_numerator_tensor_network(&self) -> Result<()> {
+    pub(crate) fn validate_full_numerator_tensor_network(&self) -> Result<()> {
         self.validate_spatial_momentum_convention()?;
         let full_num = self
             .numerator(&self.full_filter(), &self.empty_subgraph())

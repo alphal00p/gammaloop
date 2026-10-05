@@ -3140,28 +3140,21 @@ mod tests {
         assert!(external_index < internal_index);
     }
 
-    mod failing {
-        use super::*;
+    #[test]
+    fn test_encode_decode_arc_propagator() {
+        let model = load_generic_model("sm");
+        let propagator = model.get_propagator("t_propFeynman");
+        let propagator_encoded =
+            bincode::encode_to_vec(&propagator, bincode::config::standard()).unwrap();
 
-        #[test]
-        fn test_encode_decode_arc_propagator() {
-            let model = load_generic_model(
-                "sm
-            ",
-            );
-            let propagator = model.get_propagator("t_propFeynman");
-            let propagator_encoded =
-                bincode::encode_to_vec(&propagator, bincode::config::standard()).unwrap();
+        let propagator_decoded: ArcPropagator = bincode::decode_from_slice_with_context(
+            &propagator_encoded,
+            bincode::config::standard(),
+            model,
+        )
+        .unwrap()
+        .0;
 
-            let propagator_decoded: ArcPropagator = bincode::decode_from_slice_with_context(
-                &propagator_encoded,
-                bincode::config::standard(),
-                model,
-            )
-            .unwrap()
-            .0;
-
-            assert_eq!(propagator.name, propagator_decoded.name);
-        }
+        assert_eq!(propagator.name, propagator_decoded.name);
     }
 }

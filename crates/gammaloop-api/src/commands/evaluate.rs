@@ -1,7 +1,11 @@
 use std::{fs, path::PathBuf};
 
 use clap::Args;
-use gammalooprs::processes::{AmplitudeGraph, AnalyticalEvaluationConfig};
+use gammalooprs::{
+    graph::FeynmanGraph,
+    processes::{AmplitudeGraph, AnalyticalEvaluationConfig},
+    uv::UltravioletGraph,
+};
 
 use gammalooprs::processes::{Amplitude, ProcessCollection};
 
@@ -92,8 +96,6 @@ impl Evaluate {
             .uv
             .vakint
             .true_settings();
-        let refresh_model_values = amplitude.integrand.is_some();
-
         let vakint = vakint()?;
 
         if let Some(n_terms) = self.number_of_terms_in_epsilon_expansion {
@@ -104,6 +106,10 @@ impl Evaluate {
 
         for graph_term in amplitude.graphs.iter() {
             let g = &graph_term.graph;
+            if self.number_of_terms_in_epsilon_expansion.is_none() {
+                true_settings.number_of_terms_in_epsilon_expansion =
+                    g.n_loops(&g.no_dummy()) as i64 + 1;
+            }
             let mut complete_evaluation_for_this_graph = Atom::num(1);
             if g.n_externals() != 0 {
                 return Err(color_eyre::eyre::eyre!(
@@ -130,7 +136,6 @@ impl Evaluate {
                     gc,
                     AnalyticalEvaluationConfig {
                         model: &model,
-                        refresh_model_values,
                         evaluate_numerically: self.numerical,
                         vakint,
                         true_settings: &true_settings,

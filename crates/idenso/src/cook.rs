@@ -6,6 +6,7 @@ use symbolica::{
         UserData, representation::FunView,
     },
     coefficient::CoefficientView,
+    function, symbol,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -445,6 +446,77 @@ impl CookSettings {
         self.cook_representation_index_payloads(view, self.source.index_payload_filter())
     }
 
+    /// Give composite dimensions stable symbolic labels for tensor-network parsing.
+    pub(crate) fn try_cook_dimensions(&self, view: AtomView<'_>) -> Result<Atom, CookingError> {
+        let error = ArcMutexOption::empty();
+        let cooked = view.replace_map(|atom, _, out| {
+            let AtomView::Fun(rep) = atom else { return };
+            if !rep.get_symbol().has_tag(&SPENSO_TAG.representation)
+                || !(1..=2).contains(&rep.get_nargs())
+            {
+                return;
+            }
+            let mut args = rep.iter();
+            let dimension = args.next().unwrap();
+            if matches!(dimension, AtomView::Num(_) | AtomView::Var(_)) {
+                return;
+            }
+            let payload = function!(symbol!("idenso::representation_dimension"), dimension);
+            let AtomView::Fun(payload) = payload.as_view() else {
+                unreachable!()
+            };
+            match self.cook_function(payload) {
+                Ok(dimension) => {
+                    **out = args
+                        .fold(
+                            FunctionBuilder::new(rep.get_symbol()).add_arg(dimension),
+                            |rep, argument| rep.add_arg(argument),
+                        )
+                        .finish();
+                }
+                Err(err) => error.set_once(err),
+            }
+        });
+        error.into_result(cooked)
+    }
+
+    /// Restore only dimension payloads encoded by `try_cook_dimensions`.
+    pub(crate) fn uncook_dimensions(&self, view: AtomView<'_>) -> Atom {
+        view.replace_map(|atom, _, out| {
+            let AtomView::Fun(rep) = atom else { return };
+            if !rep.get_symbol().has_tag(&SPENSO_TAG.representation)
+                || !(1..=2).contains(&rep.get_nargs())
+            {
+                return;
+            }
+            let mut args = rep.iter();
+            let Some(AtomView::Var(dimension)) = args.next() else {
+                return;
+            };
+            let dimension = dimension.get_symbol();
+            if !self.should_uncook_symbol(dimension) {
+                return;
+            }
+            let UserData::Atom(payload) = dimension.get_data() else {
+                return;
+            };
+            let AtomView::Fun(payload) = payload.as_view() else {
+                return;
+            };
+            if payload.get_symbol() == symbol!("idenso::representation_dimension")
+                && payload.get_nargs() == 1
+            {
+                **out = args
+                    .fold(
+                        FunctionBuilder::new(rep.get_symbol())
+                            .add_arg(payload.iter().next().unwrap()),
+                        |rep, argument| rep.add_arg(argument),
+                    )
+                    .finish();
+            }
+        })
+    }
+
     /// Cook one function call into an atom, or return it unchanged if skipped.
     pub fn cook_function(&self, fun: FunView<'_>) -> Result<Atom, CookingError> {
         self.cook_function_symbol(fun, self.source.index_payload_filter())
@@ -838,6 +910,22 @@ mod tests {
         let cooked = expr.cook_with_settings(&settings);
 
         assert_eq!(cooked.uncook_with_settings(&settings), expr);
+    }
+
+    #[test]
+    fn reversible_dimension_cooking_restores_declarations_and_slots_only() {
+        test_initialize();
+        let settings = CookSettings::reversible();
+        let expression = parse_lit!(trace(
+            spenso::coad(Nc ^ 2 - 1),
+            spectator(spenso::coad(Nc ^ 2 - 1, a))
+        )) * parse_lit!(f(g(1))).cook_with_settings(&settings);
+        let cooked = settings
+            .try_cook_dimensions(expression.as_view())
+            .expect("formal dimensions should cook");
+
+        assert_ne!(cooked, expression);
+        assert_eq!(settings.uncook_dimensions(cooked.as_view()), expression);
     }
 
     #[test]

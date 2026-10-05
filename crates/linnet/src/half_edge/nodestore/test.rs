@@ -80,6 +80,44 @@ fn convert_node_store_preserves_graph_storage_and_isolated_nodes() {
 }
 
 #[test]
+fn sewn_external_pairs_preserve_traversal_before_compaction() {
+    fn check<N: NodeStorageOps<NodeData = usize>>(mut graph: HedgeGraph<(), usize, (), N>) {
+        let terminals = [NodeIndex(0), NodeIndex(1), NodeIndex(2), NodeIndex(3)];
+        assert!(graph.tadpoles(&terminals).unwrap().is_empty());
+        graph.identify_nodes(&[terminals[0], terminals[2]], 100);
+        graph.identify_nodes(&[terminals[1], terminals[3]], 101);
+
+        // Sewing opposite external pairs into a box adds two cycles without
+        // separating it. Identification history must not create components.
+        let non_bridges = graph.non_bridges();
+        assert_eq!(graph.count_connected_components(&non_bridges), 1);
+        graph.forget_identification_history();
+        assert_eq!(graph.non_bridges(), non_bridges);
+        assert_eq!(graph.count_connected_components(&non_bridges), 1);
+    }
+
+    let mut builder = HedgeGraphBuilder::<(), usize, ()>::new();
+    let nodes: Vec<_> = (0..8).map(|id| builder.add_node(id)).collect();
+    for (a, b) in [
+        (0, 4),
+        (1, 5),
+        (2, 6),
+        (3, 7),
+        (4, 5),
+        (5, 6),
+        (6, 7),
+        (7, 4),
+    ] {
+        builder.add_edge(nodes[a], nodes[b], (), false);
+    }
+    let graph: HedgeGraph<_, _, _, NodeStorageVec<_>> = builder.build();
+    let forest: HedgeGraph<_, _, _, Forest<usize, ChildVecStore<()>>> =
+        graph.clone().into_node_store().unwrap();
+    check(graph);
+    check(forest);
+}
+
+#[test]
 fn converting_forest_history_requires_explicit_compaction() {
     type ForestStore = Forest<&'static str, ChildVecStore<()>>;
 

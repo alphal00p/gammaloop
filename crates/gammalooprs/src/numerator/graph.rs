@@ -162,14 +162,9 @@ pub trait ReversibleEdge {
 
 impl ReversibleEdge for EdgeData<&Edge> {
     fn pdg(&self) -> isize {
-        if let Some(p) = self.data.particle() {
-            match self.orientation {
-                Orientation::Default | Orientation::Undirected => p.pdg_code,
-                Orientation::Reversed => -p.pdg_code,
-            }
-        } else {
-            0
-        }
+        // Parsed edges already store the signed particle species. Their arrow
+        // orientation follows that species and must not conjugate it again.
+        self.data.particle().map_or(0, |particle| particle.pdg_code)
     }
 
     fn pol_symbol(&self, flow: Flow) -> Option<Symbol> {
@@ -440,7 +435,12 @@ impl ReversibleEdge for EdgeData<ArcParticle> {
 mod test {
 
     // use env_logger::WriteStyle;
+    use super::ReversibleEdge;
     use idenso::{color::ColorSimplifier, dirac::GammaSimplifier, tensor::SymbolicNetParse};
+    use linnet::half_edge::{
+        involution::{EdgeData, Hedge},
+        subgraph::{SuBitGraph, SubSetLike},
+    };
 
     use spenso::network::parsing::ParseSettings;
     use symbolica::{
@@ -450,15 +450,15 @@ mod test {
 
     use crate::{
         dot,
-        graph::{Graph, parse::IntoGraph},
+        graph::{Graph, edge::ParseEdge, parse::IntoGraph},
         initialisation::{initialise, test_initialise},
         numerator::aind::Aind,
         processes::{Amplitude, AmplitudeGraph, DotExportSettings},
         settings::{
-            GlobalSettings, RuntimeSettings,
-            global::GenerationSettings,
-            runtime::{LockedRuntimeSettings, kinematic::KinematicsSettings},
+            GlobalSettings, RuntimeSettings, global::GenerationSettings,
+            runtime::LockedRuntimeSettings,
         },
+        utils::GS,
         uv::UltravioletGraph,
     };
 
@@ -563,119 +563,316 @@ mod test {
         let _ = expr.simplify_gamma();
     }
 
-    mod failing {
-        use super::*;
-
-        #[test]
-        fn evaluate_pols() {
-            initialise().unwrap();
-            let model = crate::utils::load_generic_model("sm");
-
-            let graphs: Vec<Graph> = dot!(
+    #[test]
+    fn pols() {
+        initialise().unwrap();
+        let mut graphs: Vec<Graph> = dot!(
             digraph bxatobx{
                 graph [
-                    // polarizations="1"
-                    color_num="spenso::g(spenso::dind(spenso::cof(3,hedge(0))),spenso::cof(3,hedge(2)))"
+                    num="v(0,spenso::bis(4,hedge(0)))*vbar(2,spenso::bis(4,hedge(2)))*ϵ(1,spenso::mink(4,hedge(1)))"
                 ]
-                bla    [style=invis]
-                bla -> A:1   [particle=a id=0]
-                bla -> A:2    [particle="b~" id=2]
-                A:0  -> bla  [particle="b~" id=1]
-            })
-            .unwrap();
-
-            let mut amp: Amplitude = Amplitude::from_graph_list("name", graphs.clone()).unwrap();
-            let mut settings = RuntimeSettings::default();
-
-            for g in graphs {
-                println!("{}", g.dot_serialize(&DotExportSettings::default()));
-                settings.kinematics = KinematicsSettings::random(&g, 42);
-
-                // Amplitude::new(name)
+                ext    [style=invis]
+                ext -> A:1   [particle=a id=1]
+                ext -> A:2    [dir=back particle="b~" id=2]
+                A:0  -> ext  [dir=back particle="b~" id=0]
             }
 
-            let proc_set = GenerationSettings::default();
-            let thread_pool = rayon::ThreadPoolBuilder::new()
-                .num_threads(1)
-                .build()
-                .unwrap();
+            digraph batob{
+                graph [
+                    num="ubar(0,spenso::bis(4,hedge(0)))*u(2,spenso::bis(4,hedge(2)))*ϵ(1,spenso::mink(4,hedge(1)))"
+                ]
+                ext    [style=invis]
+                ext -> A:1   [particle=a id=1]
+                ext -> A:2    [particle="b" id=2]
+                A:0  -> ext  [particle="b" id=0]
+            }
 
-            let default_runtime_settings = RuntimeSettings::default();
-            let locked_runtime_settings = LockedRuntimeSettings::from(&default_runtime_settings);
-            amp.preprocess(&model, &proc_set, &locked_runtime_settings, &thread_pool)
-                .unwrap();
+            digraph bbato{
+                graph [
+                    num="vbar(0,spenso::bis(4,hedge(0)))*u(2,spenso::bis(4,hedge(2)))*ϵ(1,spenso::mink(4,hedge(1)))"
+                ]
+                ext    [style=invis]
+                ext -> A:1   [particle=a id=1]
+                ext -> A:2    [particle="b" id=2]
+                ext -> A:0  [dir=back pdg=-5 id=0]
+            }
 
-            amp.build_integrand(
+            digraph bbato{
+                graph [
+                    num="vbar(0,spenso::bis(4,hedge(0)))*u(2,spenso::bis(4,hedge(2)))*ϵbar(1,spenso::mink(4,hedge(1)))"
+                ]
+                ext    [style=invis]
+                A:1 -> ext  [particle=a id=1]
+                ext -> A:2    [particle="b" id=2]
+                ext -> A:0  [dir=back pdg=-5 id=0]
+            }
+
+        )
+        .unwrap();
+
+        let model = crate::utils::load_generic_model("sm");
+        // Incoming (u, vbar) and outgoing (ubar, v) fermion states are fixed
+        // by the physical species and incidence, independently of arrow style.
+        let reference_symbols = [
+            [GS.v, GS.epsilon, GS.vbar],
+            [GS.ubar, GS.epsilon, GS.u],
+            [GS.vbar, GS.epsilon, GS.u],
+            [GS.vbar, GS.epsilonbar, GS.u],
+        ];
+        for (g, symbols) in graphs.iter_mut().zip(reference_symbols) {
+            let external: SuBitGraph = g.underlying.external_filter();
+            for hedge in external.included_iter() {
+                let eid = g.underlying[&hedge];
+                let edge = g.underlying.get_edge_data_full(hedge);
+                let parsed = ParseEdge::from(edge.data);
+                let parsed = EdgeData::new(&parsed, edge.orientation);
+                let flow = g.underlying.flow(hedge);
+                assert_eq!(parsed.pol_symbol(flow), Some(symbols[eid.0]));
+                assert_eq!(edge.pol_symbol(flow), parsed.pol_symbol(flow));
+            }
+            let pols = g.generate_polarizations();
+            assert_eq!(pols, g.global_prefactor.projector);
+            let serialized = g.dot_serialize(&DotExportSettings::default());
+            // This structural fixture stores its literal polarization reference
+            // as `num`; it does not define a complete scalar tensor network.
+            let round_trip = Graph::from_dot(
+                linnet::parser::DotGraph::from_string(serialized).unwrap(),
                 &model,
-                "test_process",
-                &GlobalSettings::default(),
-                (&RuntimeSettings::default()).into(),
-                &thread_pool,
             )
             .unwrap();
-
-            // integrand.evaluate_sample(sample, wgt, iter, use_f128, max_eval);
-        }
-
-        #[test]
-        fn pols() {
-            initialise().unwrap();
-            let mut graphs: Vec<Graph> = dot!(
-                digraph bxatobx{
-                    graph [
-                        num="v(0,spenso::bis(4,hedge(0)))*vbar(2,spenso::bis(4,hedge(2)))*ϵ(1,spenso::mink(4,hedge(1)))"
-                    ]
-                    ext    [style=invis]
-                    ext -> A:1   [particle=a id=1]
-                    ext -> A:2    [dir=back particle="b~" id=2]
-                    A:0  -> ext  [dir=back particle="b~" id=0]
-                }
-
-                digraph batob{
-                    graph [
-                        num="ubar(0,spenso::bis(4,hedge(0)))*u(2,spenso::bis(4,hedge(2)))*ϵ(1,spenso::mink(4,hedge(1)))"
-                    ]
-                    ext    [style=invis]
-                    ext -> A:1   [particle=a id=1]
-                    ext -> A:2    [particle="b" id=2]
-                    A:0  -> ext  [particle="b" id=0]
-                }
-
-                digraph bbato{
-                    graph [
-                        num="vbar(0,spenso::bis(4,hedge(0)))*u(2,spenso::bis(4,hedge(2)))*ϵ(1,spenso::mink(4,hedge(1)))"
-                    ]
-                    ext    [style=invis]
-                    ext -> A:1   [particle=a id=1]
-                    ext -> A:2    [particle="b" id=2]
-                    ext -> A:0  [dir=back pdg=-5 id=0]
-                }
-
-                digraph bbato{
-                    graph [
-                        num="vbar(0,spenso::bis(4,hedge(0)))*u(2,spenso::bis(4,hedge(2)))*ϵbar(1,spenso::mink(4,hedge(1)))"
-                    ]
-                    ext    [style=invis]
-                    A:1 -> ext  [particle=a id=1]
-                    ext -> A:2    [particle="b" id=2]
-                    ext -> A:0  [dir=back pdg=-5 id=0]
-                }
-
-            )
-            .unwrap();
-
-            for g in &mut graphs {
-                let pols = g.generate_polarizations();
-                println!("{pols}");
-                let expected = &g.global_prefactor.num;
-                println!("{expected}");
+            assert_eq!(round_trip.generate_polarizations(), pols);
+            assert_eq!(round_trip.global_prefactor.projector, pols);
+            for hedge in external.included_iter() {
+                let original = g.underlying.get_edge_data_full(hedge);
+                let reparsed = round_trip.underlying.get_edge_data_full(hedge);
                 assert_eq!(
-                    expected, &pols,
-                    "\nExpected: {:}\nActual: {:} for graph {:}",
-                    expected, pols, g.name,
+                    reparsed.data.particle().map(|particle| particle.pdg_code),
+                    original.data.particle().map(|particle| particle.pdg_code),
                 );
+                assert_eq!(reparsed.orientation, original.orientation);
+            }
+            println!("{pols}");
+            let expected = &g.global_prefactor.num;
+            println!("{expected}");
+            assert_eq!(
+                expected, &pols,
+                "\nExpected: {:}\nActual: {:} for graph {:}",
+                expected, pols, g.name,
+            );
+        }
+    }
+
+    #[test]
+    fn user_numerator_tree_fixtures_match_ufo_tree_algebra() {
+        test_initialise().unwrap();
+        let model = crate::utils::load_generic_model("sm");
+        let mut expected = None;
+        for source in [
+            include_str!("../../../../tests/resources/graphs/qqx_aaa_tree_unprocessed.dot"),
+            include_str!(
+                "../../../../tests/resources/graphs/qqx_aaa_tree_user_numerator_unprocessed.dot"
+            ),
+            include_str!("../../../../tests/resources/graphs/qqx_aaa_tree_user_numerator.dot"),
+            include_str!("../../../../tests/resources/graphs/trees/qqx_aaa.dot"),
+        ] {
+            let graph: Graph = source.into_graph(&model).unwrap();
+            let numerator = (graph
+                .numerator(&graph.full_filter(), &graph.empty_subgraph())
+                .state
+                .expr
+                * &graph.global_prefactor.projector
+                * &graph.global_prefactor.num
+                * &graph.overall_factor)
+                .simplify_color();
+            if let Some(expected) = &expected {
+                assert_eq!(
+                    &numerator, expected,
+                    "manual tree must include both UFO propagator phases"
+                );
+            } else {
+                expected = Some(numerator);
             }
         }
+    }
+
+    #[test]
+    fn user_pentabox_numerator_closes_all_external_indices() {
+        test_initialise().unwrap();
+        let model = crate::utils::load_generic_model("sm");
+        let _: Graph =
+            include_str!("../../../../tests/resources/graphs/qqx_aaa_pentabox_user_numerator.dot")
+                .into_graph(&model)
+                .unwrap();
+    }
+
+    #[test]
+    fn tree() {
+        initialise().unwrap();
+        // The explicit UFO reference includes i*pslash for each internal
+        // fermion propagator, matching the embedded SM Feynman rules.
+        let mut graphs: Vec<Graph> = dot!(
+            digraph qqx_aaa_tree_1 {
+                        num="spenso::g(spenso::dind(spenso::cof(3, hedge(1))), spenso::cof(3, hedge(2)))/3"
+                        ext    [style=invis]
+                        ext -> v1:1 [particle="d" id=1];
+                        ext -> v3:2 [dir=back particle="d~" id=2];
+                        v1:3 -> ext [particle="a" id=3];
+                        v2:4 -> ext [particle="a" id=4];
+                        v3:0 -> ext [particle="a" id=0];
+                        v1 -> v2 [particle="d" id=5];
+                        v2 -> v3 [particle="d" id=6];
+            }
+
+            digraph qqx_aaa_tree_1 {
+                        ext    [style=invis]
+                        ext -> v1:1 [particle="d" id=1];
+                        ext -> v3:2 [dir=back particle="d~" id=2];
+                        v1:3 -> ext [particle="a" id=3];
+                        v2:4 -> ext [particle="a" id=4];
+                        v3:0 -> ext [particle="a" id=0];
+                        v1 -> v2 [particle="d" id=5];
+                        v2 -> v3 [particle="d" id=6];
+                        num="spenso::g(spenso::dind(spenso::cof(3, hedge(1))), spenso::cof(3, hedge(2)))/3"
+            }
+
+
+            digraph qqx_aaa_tree_1_glob {
+            ext [style=invis];
+            ext -> v1:1 [particle="d", id=1];
+            ext -> v3:2 [dir=back particle="d~", id=2];
+            v1:3 -> ext [particle="a", id=3];
+            v2:4 -> ext [particle="a", id=4];
+            v3:0 -> ext [particle="a", id=0];
+            v1 -> v2 [particle="d", id=5];
+            v2 -> v3 [particle="d", id=6];
+            num=" UFO::GC_1^3
+                *spenso::g(spenso::cof(3,hedge(1)),spenso::dind(spenso::cof(3,hedge(5))))
+                *spenso::gamma(spenso::bis(4,hedge(5)),spenso::bis(4,hedge(1)),spenso::mink(4,hedge(3)))
+
+                *spenso::g(spenso::cof(3,hedge(5)),spenso::dind(spenso::cof(3,hedge(6))))
+                *1i*Q(5,spenso::mink(4,edge(5,1)))
+                *spenso::gamma(spenso::bis(4,hedge(6)),spenso::bis(4,hedge(5)),spenso::mink(4,edge(5,1)))
+
+
+                *spenso::g(spenso::cof(3,hedge(6)),spenso::dind(spenso::cof(3,hedge(7))))
+                *spenso::gamma(spenso::bis(4,hedge(7)),spenso::bis(4,hedge(6)),spenso::mink(4,hedge(4)))
+
+                *spenso::g(spenso::cof(3,hedge(7)),spenso::dind(spenso::cof(3,hedge(8))))
+                *spenso::gamma(spenso::bis(4,hedge(8)),spenso::bis(4,hedge(7)),spenso::mink(4,edge(6,1)))
+                *1i*Q(6,spenso::mink(4,edge(6,1)))
+
+                *spenso::g(spenso::cof(3,hedge(8)),spenso::dind(spenso::cof(3,hedge(2))))
+                *spenso::gamma(spenso::bis(4,hedge(2)),spenso::bis(4,hedge(8)),spenso::mink(4,hedge(0)))
+
+                   "
+             overall_factor="1"
+                projector="u(1,spenso::bis(4,hedge(1)))
+            *vbar(2,spenso::bis(4,hedge(2)))
+            *ϵbar(0,spenso::mink(4,hedge(0)))
+            *ϵbar(3,spenso::mink(4,hedge(3)))
+            *ϵbar(4,spenso::mink(4,hedge(4)))
+            *spenso::g(spenso::cof(3,hedge(2)),spenso::dind(spenso::cof(3,hedge(1))))/3"
+
+            edge [num="1"];
+            node [num="1"];
+            }
+
+
+        )
+        .unwrap();
+
+        let mut a: Option<Atom> = None;
+        for g in &mut graphs {
+            let mut out = String::new();
+
+            let new_a = (g
+                .numerator(&g.full_filter(), &g.empty_subgraph())
+                .state
+                .expr
+                * &g.global_prefactor.projector
+                * &g.global_prefactor.num
+                * &g.overall_factor)
+                .simplify_color();
+            println!("New:{new_a}");
+            if let Some(a) = &a {
+                println!("Old:{a}");
+                assert_eq!(&new_a, a, "{}", (&new_a / a).expand().to_canonical_string());
+            } else {
+                a = Some(new_a);
+            }
+            g.dot_serialize_fmt(&mut out, &DotExportSettings::default())
+                .unwrap();
+            println!("{}", out);
+        }
+
+        let mut a = Amplitude::from_graph_list("test", graphs.clone()).unwrap();
+
+        let model = crate::utils::load_generic_model("sm");
+
+        let generation_pool = rayon::ThreadPoolBuilder::new()
+            .num_threads(1)
+            .build()
+            .unwrap();
+
+        let default_runtime_settings = RuntimeSettings::default();
+        let locked_runtime_settings = LockedRuntimeSettings::from(&default_runtime_settings);
+        a.preprocess(
+            &model,
+            &GenerationSettings::default(),
+            &locked_runtime_settings,
+            &generation_pool,
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn evaluate_pols() {
+        initialise().unwrap();
+        let model = crate::utils::load_generic_model("sm");
+
+        let mut graph = Graph::from_dot(
+            linnet::dot!(
+                digraph bxatobx {
+                    bla [style=invis]
+                    bla -> A:1 [particle=a id=0]
+                    bla -> A:2 [particle="b~" id=2]
+                    A:0 -> bla [particle="b~" id=1]
+                }
+            )
+            .unwrap(),
+            &model,
+        )
+        .unwrap();
+        graph.global_prefactor.num *=
+            graph.underlying[Hedge(0)].color_kronekers(&graph.underlying[Hedge(2)]);
+        graph.validate_full_numerator_tensor_network().unwrap();
+        let mut amp = Amplitude::from_graph_list("name", vec![graph]).unwrap();
+
+        let proc_set = GenerationSettings::default();
+        let thread_pool = rayon::ThreadPoolBuilder::new()
+            .num_threads(1)
+            .build()
+            .unwrap();
+
+        let default_runtime_settings = RuntimeSettings::default();
+        let locked_runtime_settings = LockedRuntimeSettings::from(&default_runtime_settings);
+        amp.preprocess(&model, &proc_set, &locked_runtime_settings, &thread_pool)
+            .unwrap();
+
+        amp.build_integrand(
+            &model,
+            "test_process",
+            &GlobalSettings::default(),
+            (&RuntimeSettings::default()).into(),
+            &thread_pool,
+        )
+        .unwrap();
+
+        // integrand.evaluate_sample(sample, wgt, iter, use_f128, max_eval);
+    }
+
+    mod failing {
+        use super::*;
 
         #[test]
         fn vertex_rule() {
@@ -723,124 +920,6 @@ mod test {
                     .unwrap();
                 println!("{}", out);
             }
-        }
-
-        #[test]
-        fn tree() {
-            initialise().unwrap();
-            let mut graphs: Vec<Graph> = dot!(
-                digraph qqx_aaa_tree_1 {
-                            num="spenso::g(spenso::dind(spenso::cof(3, hedge(1))), spenso::cof(3, hedge(2)))/3"
-                            ext    [style=invis]
-                            ext -> v1:1 [particle="d" id=1];
-                            ext -> v3:2 [dir=back particle="d~" id=2];
-                            v1:3 -> ext [particle="a" id=3];
-                            v2:4 -> ext [particle="a" id=4];
-                            v3:0 -> ext [particle="a" id=0];
-                            v1 -> v2 [particle="d" id=5];
-                            v2 -> v3 [particle="d" id=6];
-                }
-
-                digraph qqx_aaa_tree_1 {
-                            ext    [style=invis]
-                            ext -> v1:1 [particle="d" id=1];
-                            ext -> v3:2 [dir=back particle="d~" id=2];
-                            v1:3 -> ext [particle="a" id=3];
-                            v2:4 -> ext [particle="a" id=4];
-                            v3:0 -> ext [particle="a" id=0];
-                            v1 -> v2 [particle="d" id=5];
-                            v2 -> v3 [particle="d" id=6];
-                            num="spenso::g(spenso::dind(spenso::cof(3, hedge(1))), spenso::cof(3, hedge(2)))/3"
-                }
-
-
-                digraph qqx_aaa_tree_1_glob {
-                ext [style=invis];
-                ext -> v1:1 [particle="d", id=1];
-                ext -> v3:2 [dir=back particle="d~", id=2];
-                v1:3 -> ext [particle="a", id=3];
-                v2:4 -> ext [particle="a", id=4];
-                v3:0 -> ext [particle="a", id=0];
-                v1 -> v2 [particle="d", id=5];
-                v2 -> v3 [particle="d", id=6];
-                num=" UFO::GC_1^3
-                    *spenso::g(spenso::cof(3,hedge(1)),spenso::dind(spenso::cof(3,hedge(5))))
-                    *spenso::gamma(spenso::bis(4,hedge(5)),spenso::bis(4,hedge(1)),spenso::mink(4,hedge(3)))
-
-                    *spenso::g(spenso::cof(3,hedge(5)),spenso::dind(spenso::cof(3,hedge(6))))
-                    *Q(5,spenso::mink(4,edge(5,1)))
-                    *spenso::gamma(spenso::bis(4,hedge(6)),spenso::bis(4,hedge(5)),spenso::mink(4,edge(5,1)))
-
-
-                    *spenso::g(spenso::cof(3,hedge(6)),spenso::dind(spenso::cof(3,hedge(7))))
-                    *spenso::gamma(spenso::bis(4,hedge(7)),spenso::bis(4,hedge(6)),spenso::mink(4,hedge(4)))
-
-                    *spenso::g(spenso::cof(3,hedge(7)),spenso::dind(spenso::cof(3,hedge(8))))
-                    *spenso::gamma(spenso::bis(4,hedge(8)),spenso::bis(4,hedge(7)),spenso::mink(4,edge(6,1)))
-                    *Q(6,spenso::mink(4,edge(6,1)))
-
-                    *spenso::g(spenso::cof(3,hedge(8)),spenso::dind(spenso::cof(3,hedge(2))))
-                    *spenso::gamma(spenso::bis(4,hedge(2)),spenso::bis(4,hedge(8)),spenso::mink(4,hedge(0)))
-
-                       "
-                 overall_factor="1"
-                    projector="u(1,spenso::bis(4,hedge(1)))
-                *vbar(2,spenso::bis(4,hedge(2)))
-                *ϵbar(0,spenso::mink(4,hedge(0)))
-                *ϵbar(3,spenso::mink(4,hedge(3)))
-                *ϵbar(4,spenso::mink(4,hedge(4)))
-                *spenso::g(spenso::cof(3,hedge(2)),spenso::dind(spenso::cof(3,hedge(1))))/3"
-
-                edge [num="1"];
-                node [num="1"];
-                }
-
-
-            )
-            .unwrap();
-
-            let mut a: Option<Atom> = None;
-            for g in &mut graphs {
-                let mut out = String::new();
-
-                let new_a = (g
-                    .numerator(&g.full_filter(), &g.empty_subgraph())
-                    .state
-                    .expr
-                    * &g.global_prefactor.projector
-                    * &g.global_prefactor.num
-                    * &g.overall_factor)
-                    .simplify_color();
-                println!("New:{new_a}");
-                if let Some(a) = &a {
-                    println!("Old:{a}");
-                    assert_eq!(&new_a, a, "{}", (&new_a / a).expand().to_canonical_string());
-                } else {
-                    a = Some(new_a);
-                }
-                g.dot_serialize_fmt(&mut out, &DotExportSettings::default())
-                    .unwrap();
-                println!("{}", out);
-            }
-
-            let mut a = Amplitude::from_graph_list("test", graphs.clone()).unwrap();
-
-            let model = crate::utils::load_generic_model("sm");
-
-            let generation_pool = rayon::ThreadPoolBuilder::new()
-                .num_threads(1)
-                .build()
-                .unwrap();
-
-            let default_runtime_settings = RuntimeSettings::default();
-            let locked_runtime_settings = LockedRuntimeSettings::from(&default_runtime_settings);
-            a.preprocess(
-                &model,
-                &GenerationSettings::default(),
-                &locked_runtime_settings,
-                &generation_pool,
-            )
-            .unwrap();
         }
 
         #[test]

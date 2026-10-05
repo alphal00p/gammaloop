@@ -29,7 +29,7 @@ use crate::uv::{
     marker::{UvMarker, UvOperation},
 };
 
-use linnet::half_edge::involution::EdgeIndex;
+use linnet::half_edge::involution::{EdgeIndex, Hedge};
 
 use linnet::half_edge::subgraph::{SuBitGraph, SubSetLike, SubSetOps};
 use linnet::half_edge::{builder::HedgeGraphBuilder, involution::Flow};
@@ -50,6 +50,65 @@ use symbolica::{
     atom::{Atom, AtomCore},
     function, parse,
 };
+
+#[test]
+fn analytical_uv_limits_match_compact_and_explicit_energies() -> Result<(), eyre::Report> {
+    test_initialise()?;
+    let graph: Graph = dot!(
+        digraph analytical_energy_limit {
+            edge [particle="H" num=1];
+            node [num=1];
+            ext [style=invis];
+            ext -> A:0 [id=0];
+            B:1 -> ext [id=1];
+            A -> B [id=2];
+            A -> B [id=3];
+        }
+    )?;
+    let lmb = &graph.loop_momentum_basis;
+    assert_eq!(lmb.loop_edges.len(), 1);
+    let edge = lmb.loop_edges[LoopIndex(0)];
+    let invariant = (1..=3).fold(Atom::num(9), |sum, index| {
+        sum + GS.emr_mom(edge, GS.cind(index)).pow(2)
+    });
+    let compact = function!(GS.energy_surface, usize::from(edge), &invariant);
+    let numerator = parse!(
+        "(analytical_energy_limit::a+analytical_energy_limit::b)^8*(analytical_energy_limit::c+analytical_energy_limit::d)^3"
+    );
+    let source = &numerator * &compact;
+    let lambda = symbol!("analytical_energy_limit::lambda");
+    let compact_limits = graph.all_limits(&graph.full_filter(), &source, lambda, lmb);
+    for energy in [
+        invariant.sqrt(),
+        function!(GS.broadcasting_sqrt, &invariant),
+    ] {
+        let explicit_limits =
+            graph.all_limits(&graph.full_filter(), &(&numerator * energy), lambda, lmb);
+        assert_eq!(compact_limits, explicit_limits);
+    }
+    let [(_, series)] = compact_limits.as_slice() else {
+        panic!("a one-loop graph must have one nonempty UV limit");
+    };
+    let actual = series
+        .to_atom()
+        .replace(GS.emr_mom(edge, GS.cind(1)))
+        .with(3)
+        .replace(GS.emr_mom(edge, GS.cind(2)))
+        .with(4)
+        .replace(GS.emr_mom(edge, GS.cind(3)))
+        .with(0);
+    // E=sqrt(25/lambda^2+9) with the three-dimensional measure lambda^-3.
+    // Exact structural equality also checks that the independent numerator's
+    // powers remain factorized in every coefficient.
+    let parameter = Atom::var(lambda);
+    let expected = &numerator * 5 / parameter.pow(4)
+        + &numerator * Atom::num((9, 10)) / parameter.pow(2)
+        - &numerator * Atom::num((81, 1000));
+    assert_eq!(actual, expected);
+    assert_eq!(source, numerator * compact);
+    assert!(source.contains_symbol(GS.energy_surface));
+    Ok(())
+}
 
 #[test]
 fn integrands_bulk_add_preserves_factorized_coefficients_and_cut_orders() -> Result<(), eyre::Report>
@@ -479,18 +538,27 @@ fn pdg_set(values: impl IntoIterator<Item = isize>) -> BTreeSet<isize> {
 }
 
 fn build_tta_uv_graph() -> Graph {
-    dot!(
-        digraph G {
-            e [style=invis];
-            e -> A:0 [id=0 particle="t"];
-            B:1 -> e [id=1 particle="t"];
-            e -> C:2 [id=2 particle="a"];
-            A -> B [particle="g" lmb_index=0];
-            C -> B [particle="t"];
-            A -> C [particle="t"];
-        }
+    let model = load_generic_model("sm");
+    let mut graph = Graph::from_dot(
+        linnet::dot!(
+            digraph G {
+                e [style=invis];
+                e -> A:0 [id=0 particle="t"];
+                B:1 -> e [id=1 particle="t"];
+                e -> C:2 [id=2 particle="a"];
+                A -> B [particle="g" lmb_id=0];
+                C -> B [particle="t"];
+                A -> C [particle="t"];
+            }
+        )
+        .unwrap(),
+        &model,
     )
-    .unwrap()
+    .unwrap();
+    graph.global_prefactor.num *=
+        graph.underlying[Hedge(0)].color_kronekers(&graph.underlying[Hedge(1)]);
+    graph.validate_full_numerator_tensor_network().unwrap();
+    graph
 }
 
 fn scalar_profile_tables(analysis: &crate::uv::profile::UVProfileAnalysis, max_dod: f64) -> String {
@@ -531,6 +599,47 @@ fn scalars_profile() {
         "subtracted scalar UV profile failed:\n{pass_fail:#?}\n\n{}",
         scalar_profile_tables(&analysis, -0.9)
     );
+}
+
+#[test]
+fn unsubtracted_scalars() {
+    test_initialise().unwrap();
+    let (mut amp, model) = build_uv_scalars_amplitude(UVgenerationSettings {
+        generate_integrated: false,
+        softct: false,
+        add_marker: true,
+        keep_marker: false,
+        subtract_uv: false,
+        ..Default::default()
+    });
+
+    let profile_settings = scalar_uv_profile_settings();
+    let res = amp.profile(&model, &profile_settings).unwrap();
+
+    let analysis = res.analyse();
+    assert!(res.pass_fail(-0.9, &profile_settings).failed > 0);
+    for graph in &analysis.graphs {
+        for lmb in &graph.lmbs {
+            for subset in &lmb.subsets {
+                assert!(
+                    subset.bare_dod_matches_estimate(),
+                    "bare DOD mismatch for fixed {:?}, free {:?}",
+                    subset.fixed,
+                    subset.free
+                );
+            }
+        }
+    }
+    for t in analysis.tables_per_graph(-0.9) {
+        println!("{}", t);
+    }
+
+    for t in analysis.analytic_tables_per_graph() {
+        let Some(t) = t else {
+            continue;
+        };
+        println!("{}", t);
+    }
 }
 
 #[test]
@@ -2263,6 +2372,25 @@ fn disconnected_spinney_classification_is_factorwise() {
     failing::disconnected_spinney_classification_is_factorwise();
 }
 
+#[test]
+fn ct_identifier_flips_outgoing_boundary_pdgs() {
+    test_initialise().unwrap();
+
+    let graph = build_tta_uv_graph();
+    let expected_internal_pdg_set = pdg_set([6, 21]);
+    let identifiers = graph
+        .spinneys(&graph.full_filter())
+        .into_iter()
+        .map(|spinney| graph.ct_identifier(&spinney.filter))
+        .collect::<Vec<_>>();
+    let identifier = identifiers
+        .iter()
+        .find(|identifier| identifier.internal_pdg_set.as_ref() == Some(&expected_internal_pdg_set))
+        .unwrap_or_else(|| panic!("tta triangle should have a UV spinney: {identifiers:?}"));
+
+    assert_eq!(identifier.internal_pdg_set, Some(expected_internal_pdg_set));
+    assert_eq!(identifier.external_pdg_set, pdg_set([-6, 6, 22]));
+}
 mod failing {
     use super::*;
 
@@ -2348,28 +2476,6 @@ mod failing {
         amp.build_integrands(&set, vk).unwrap();
 
         println!("{}", amp.derived_data.all_mighty_integrand);
-    }
-
-    #[test]
-    fn ct_identifier_flips_outgoing_boundary_pdgs() {
-        test_initialise().unwrap();
-
-        let graph = build_tta_uv_graph();
-        let expected_internal_pdg_set = pdg_set([6, 21]);
-        let identifiers = graph
-            .spinneys(&graph.full_filter())
-            .into_iter()
-            .map(|spinney| graph.ct_identifier(&spinney.filter))
-            .collect::<Vec<_>>();
-        let identifier = identifiers
-            .iter()
-            .find(|identifier| {
-                identifier.internal_pdg_set.as_ref() == Some(&expected_internal_pdg_set)
-            })
-            .unwrap_or_else(|| panic!("tta triangle should have a UV spinney: {identifiers:?}"));
-
-        assert_eq!(identifier.internal_pdg_set, Some(expected_internal_pdg_set));
-        assert_eq!(identifier.external_pdg_set, pdg_set([-6, 6, 22]));
     }
 
     #[test]
@@ -2488,64 +2594,10 @@ mod failing {
     }
 
     #[test]
-    fn unsubtracted_scalars() {
-        test_initialise().unwrap();
-        let (mut amp, model) = build_uv_scalars_amplitude(UVgenerationSettings {
-            generate_integrated: false,
-            softct: false,
-            add_marker: true,
-            keep_marker: false,
-            subtract_uv: true,
-            ..Default::default()
-        });
-
-        let profile_settings = scalar_uv_profile_settings();
-        let res = amp.profile(&model, &profile_settings).unwrap();
-
-        let analysis = res.analyse();
-        assert!(res.pass_fail(-0.9, &profile_settings).failed > 0);
-        for graph in &analysis.graphs {
-            for lmb in &graph.lmbs {
-                for subset in &lmb.subsets {
-                    assert!(
-                        subset.bare_dod_matches_estimate(),
-                        "bare DOD mismatch for fixed {:?}, free {:?}",
-                        subset.fixed,
-                        subset.free
-                    );
-                }
-            }
-        }
-        for t in analysis.tables_per_graph(-0.9) {
-            println!("{}", t);
-        }
-
-        for t in analysis.analytic_tables_per_graph() {
-            let Some(t) = t else {
-                continue;
-            };
-            println!("{}", t);
-        }
-    }
-
-    #[test]
     fn tta_uv() {
         test_initialise().unwrap();
 
-        let g: Vec<Graph> = dot!(
-            digraph G{
-                e        [style=invis]
-                e -> A:0   [ id=0 particle=t]
-                B:1 -> e   [ id=1 particle=t]
-                e -> C:2   [ id=2 particle=a]
-                A -> B    [ lmb_index=0 particle=g]
-                C -> B  [particle=t]
-                A -> C [particle=t]
-            }
-        )
-        .unwrap();
-
-        let mut amp = Amplitude::from_graph_list("tta", g).unwrap();
+        let mut amp = Amplitude::from_graph_list("tta", vec![build_tta_uv_graph()]).unwrap();
 
         let model = load_generic_model("sm");
 

@@ -1932,33 +1932,29 @@ mod tests {
         assert!(!rendered.contains("Numerical stability"), "{rendered}");
     }
 
-    mod failing {
-        use super::*;
+    #[test]
+    fn zero_eval_statistics_snapshot_and_render_are_sanitized() {
+        let stats = StatisticsCounter::new_empty();
+        let snapshot = stats.snapshot();
 
-        #[test]
-        fn zero_eval_statistics_snapshot_and_render_are_sanitized() {
-            let stats = StatisticsCounter::new_empty();
-            let snapshot = stats.snapshot();
+        assert_eq!(snapshot.num_evals, 0);
+        assert_eq!(snapshot.average_total_time_seconds, 0.0);
+        assert_eq!(snapshot.average_parameterization_time_seconds, 0.0);
+        assert_eq!(snapshot.average_integrand_time_seconds, 0.0);
+        assert_eq!(snapshot.average_evaluator_time_seconds, 0.0);
+        assert_eq!(snapshot.average_observable_time_seconds, 0.0);
+        assert_eq!(snapshot.average_integrator_time_seconds, 0.0);
+        assert_eq!(snapshot.f64_percentage, 0.0);
+        assert_eq!(snapshot.f128_percentage, 0.0);
+        assert_eq!(snapshot.arb_percentage, 0.0);
+        assert_eq!(snapshot.nan_percentage, 0.0);
+        assert_eq!(snapshot.nan_or_unstable_percentage, 0.0);
+        assert_eq!(snapshot.selection_efficiency_percentage, None);
 
-            assert_eq!(snapshot.num_evals, 0);
-            assert_eq!(snapshot.average_total_time_seconds, 0.0);
-            assert_eq!(snapshot.average_parameterization_time_seconds, 0.0);
-            assert_eq!(snapshot.average_integrand_time_seconds, 0.0);
-            assert_eq!(snapshot.average_evaluator_time_seconds, 0.0);
-            assert_eq!(snapshot.average_observable_time_seconds, 0.0);
-            assert_eq!(snapshot.average_integrator_time_seconds, 0.0);
-            assert_eq!(snapshot.f64_percentage, 0.0);
-            assert_eq!(snapshot.f128_percentage, 0.0);
-            assert_eq!(snapshot.arb_percentage, 0.0);
-            assert_eq!(snapshot.nan_percentage, 0.0);
-            assert_eq!(snapshot.nan_or_unstable_percentage, 0.0);
-            assert_eq!(snapshot.selection_efficiency_percentage, None);
-
-            let rendered = stats.render_status_table();
-            assert!(rendered.contains("sel. % :     N/A"), "{rendered}");
-            assert!(rendered.contains("f64 :     0.00%"), "{rendered}");
-            assert!(rendered.contains("nans+unstable :     0.0%"), "{rendered}");
-            assert!(rendered.contains("integrator :   0.00 ns"), "{rendered}");
-        }
+        let rendered = stats.render_status_table();
+        assert!(rendered.contains("sel. % :     N/A"), "{rendered}");
+        assert!(rendered.contains("f64 :     0.00%"), "{rendered}");
+        assert!(rendered.contains("nans+unstable :     0.0%"), "{rendered}");
+        assert!(rendered.contains("integrator :     0.00 µs"), "{rendered}");
     }
 }

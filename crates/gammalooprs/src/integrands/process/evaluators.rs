@@ -3602,6 +3602,7 @@ mod tests {
         for do_fn_map_replacements in [false, true] {
             let settings = EvaluatorSettings {
                 store_atom: true,
+                inline_numerator_functions: false,
                 do_fn_map_replacements,
                 ..Default::default()
             };
@@ -3668,9 +3669,9 @@ mod tests {
                 std::slice::from_ref(&definition),
                 None,
                 &EvaluatorSettings {
-                    inline_numerator_functions: true,
+                    store_atom: true,
                     do_fn_map_replacements: false,
-                    ..settings
+                    ..Default::default()
                 },
             )
             .unwrap();
@@ -3764,6 +3765,7 @@ mod tests {
             Some(crate::utils::hyperdual_utils::simple_n_deriv_shape(1)),
             &EvaluatorSettings {
                 store_atom: true,
+                inline_numerator_functions: false,
                 ..Default::default()
             },
         )

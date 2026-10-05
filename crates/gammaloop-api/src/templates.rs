@@ -255,10 +255,17 @@ mod tests {
             r#"#import "drawings/templates/edge-style.typ" as physics
 #import "drawings/templates/crates/linnest/typst/src/lib.typ": graph
 #let g = graph.parse(read("processes/amplitudes/example.dot")).first()
-#let styles = physics.style()
-#for edge in graph.edges(g) {
-  assert(repr((styles.edge-label)(edge)).contains(repr(physics.map.at("scalar_0").label)))
-}
+#let particle-label = physics.map.at("scalar_0").label
+#let styles = physics.style(label-size: 12pt, label-fill: blue)
+#let expected-label = text(size: 12pt, fill: blue)[#particle-label]
+#assert(particle-label != none)
+#assert(graph.edges(g).len() == 3)
+// Drawing callbacks receive flattened fields, while graph.edges stores DOT
+// attributes in statements. Use the public mapper's normalized view.
+#let _ = graph.map(g, edge: edge => {
+  assert((styles.edge-label)(edge.fields) == expected-label)
+  none
+})
 [Model-generated particle labels work directly in Typst.]
 "#,
         )?;

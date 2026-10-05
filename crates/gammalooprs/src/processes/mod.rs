@@ -101,7 +101,10 @@ pub struct EvaluatorSettings {
     #[serde(default, skip_serializing_if = "is_false")]
     pub do_fn_map_replacements: bool,
     /// Inline generated numerator functions instead of retaining shared evaluator bodies.
-    #[serde(default, skip_serializing_if = "is_false")]
+    #[serde(
+        default = "evaluator_default_inline_numerator_functions",
+        skip_serializing_if = "is_true"
+    )]
     pub inline_numerator_functions: bool,
     /// Translate compatible symbolic expressions directly into Spenso networks.
     #[serde(
@@ -171,6 +174,10 @@ const fn evaluator_default_direct_translation() -> bool {
     true
 }
 
+const fn evaluator_default_inline_numerator_functions() -> bool {
+    true
+}
+
 const fn evaluator_default_horner_iterations() -> usize {
     1
 }
@@ -210,7 +217,7 @@ impl Default for EvaluatorSettings {
             direct_translation: evaluator_default_direct_translation(),
             compile: false,
             do_fn_map_replacements: false,
-            inline_numerator_functions: false,
+            inline_numerator_functions: evaluator_default_inline_numerator_functions(),
             store_atom: false,
             horner_iterations: evaluator_default_horner_iterations(),
             n_cores: evaluator_default_n_cores(),
@@ -867,19 +874,12 @@ mod raised_cross_section_tests;
 
 #[cfg(test)]
 mod tests {
-    use std::fs::OpenOptions;
-
-    use linnet::half_edge::{
-        involution::EdgeIndex,
-        subgraph::{SuBitGraph, SubSetLike},
-    };
-
     use symbolica::state::State;
 
     use crate::{
         GammaLoopContextContainer, dot,
-        graph::{Graph, LoopMomentumBasis, parse::IntoGraph},
-        momentum::signature::LoopExtSignature,
+        graph::{Graph, parse::IntoGraph},
+        initialisation::test_initialise,
         settings::{
             RuntimeSettings,
             global::{
@@ -891,104 +891,129 @@ mod tests {
         utils::load_generic_model,
     };
 
-    use super::AmplitudeGraph;
+    use super::{AmplitudeGraph, EvaluatorSettings};
 
-    mod failing {
-        use super::*;
+    #[test]
+    fn numerator_inlining_defaults_and_explicit_opt_out_round_trip() {
+        use crate::utils::serde_utils::ShowDefaultsGuard;
 
-        #[test]
-        fn test_encode_decode_amplitude_graph() {
-            // load the model and hack the masses, go through serializable model since arc is not mutable
-            let model = load_generic_model("sm");
+        assert!(EvaluatorSettings::default().inline_numerator_functions);
+        for input in ["", "n_cores = 2"] {
+            let settings: EvaluatorSettings = toml::from_str(input).unwrap();
+            assert!(settings.inline_numerator_functions);
+        }
 
-            let mut graph: Graph = dot!(
-                digraph G{
-                    e1      [flow=sink]
-                    e2      [flow=source]
-                    e3      [flow=source]
-                    e1 -> n1  [particle=h]
-                    e2 -> n4    [particle=h]
-                    n1 -> n2    [particle=h]
-                    n1 -> n3    [particle=h]
-                    n2 -> n3    [particle=t]
-                    n3 -> n4    [particle=t]
-                    n4 -> n2    [particle=t]
-                }
-            )
-            .unwrap();
-            let loop_momentum_basis = LoopMomentumBasis {
-                tree: SuBitGraph::empty(0),
-                loop_edges: vec![EdgeIndex::from(0), EdgeIndex::from(4)].into(),
-                ext_edges: vec![EdgeIndex::from(5), EdgeIndex::from(6)].into(),
-                edge_signatures: graph
-                    .underlying
-                    .new_edgevec(|_, _, _| LoopExtSignature::from((vec![], vec![]))),
-            };
+        {
+            let _guard = ShowDefaultsGuard::new(false);
+            let settings = EvaluatorSettings::default();
+            let serialized = toml::to_string(&settings).unwrap();
+            assert!(!serialized.contains("inline_numerator_functions"));
+            assert_eq!(
+                toml::from_str::<EvaluatorSettings>(&serialized).unwrap(),
+                settings
+            );
 
-            // loop_momentum_basis
-            //     .set_edge_signatures(&graph.underlying)
-            //     .unwrap();
+            let settings: EvaluatorSettings =
+                toml::from_str("inline_numerator_functions = false").unwrap();
+            let serialized = toml::to_string(&settings).unwrap();
+            assert!(serialized.contains("inline_numerator_functions = false"));
+            assert_eq!(
+                toml::from_str::<EvaluatorSettings>(&serialized).unwrap(),
+                settings
+            );
+        }
 
-            graph.loop_momentum_basis = loop_momentum_basis;
+        let _guard = ShowDefaultsGuard::new(true);
+        let serialized = toml::to_string(&EvaluatorSettings::default()).unwrap();
+        assert!(serialized.contains("inline_numerator_functions = true"));
+    }
 
-            let mut amplitude: AmplitudeGraph = AmplitudeGraph::new(graph.clone());
+    #[test]
+    fn test_encode_decode_amplitude_graph() {
+        test_initialise().unwrap();
+        // Use the model routing produced by graph import for the persistence roundtrip.
+        let model = load_generic_model("sm");
 
-            amplitude
-                .preprocess(
-                    &model,
-                    &GenerationSettings {
-                        compile: GammaloopCompileOptions {
-                            compilation_mode: CompilationMode::Cpp,
-                            fast_math: false,
-                            optimization_level: CompilationOptimizationLevel::O0,
-                            unsafe_math: false,
-                            compiler: crate::settings::global::default_external_compiler()
-                                .to_owned(),
-                            custom: Vec::new(),
-                        },
-                        tropical_subgraph_table: TropicalSubgraphTableSettings {
-                            panic_on_fail: false,
-                            target_omega: 1.0,
-                            ..Default::default()
-                        },
+        let graph: Graph = dot!(
+            digraph G{
+                e1      [style=invis]
+                e2      [style=invis]
+                e1 -> n1  [particle=H]
+                n4 -> e2    [particle=H]
+                n1 -> n2    [particle=H]
+                n1 -> n3    [particle=H]
+                n2 -> n3    [particle=t]
+                n3 -> n4    [particle=t]
+                n4 -> n2    [particle=t]
+            }
+        )
+        .unwrap();
+        let mut amplitude: AmplitudeGraph = AmplitudeGraph::new(graph.clone());
+
+        amplitude
+            .preprocess(
+                &model,
+                &GenerationSettings {
+                    compile: GammaloopCompileOptions {
+                        compilation_mode: CompilationMode::Cpp,
+                        fast_math: false,
+                        optimization_level: CompilationOptimizationLevel::O0,
+                        unsafe_math: false,
+                        compiler: crate::settings::global::default_external_compiler().to_owned(),
+                        custom: Vec::new(),
+                    },
+                    tropical_subgraph_table: TropicalSubgraphTableSettings {
+                        panic_on_fail: false,
+                        target_omega: 1.0,
                         ..Default::default()
                     },
-                    &LockedRuntimeSettings::from(&RuntimeSettings::default()),
-                )
-                .unwrap();
-
-            let mut temp = OpenOptions::new()
-                .write(true)
-                .create(true)
-                .truncate(true)
-                .open("test.bin")
-                .unwrap();
-
-            State::export(&mut temp).unwrap();
-            drop(temp);
-
-            let mut temp = OpenOptions::new().read(true).open("test.bin").unwrap();
-            let state_map = State::import(&mut temp, None).unwrap();
-
-            let context = GammaLoopContextContainer {
-                model: &model,
-                state_map: &state_map,
-            };
-
-            println!("context created");
-
-            let encoded_amplitude =
-                bincode::encode_to_vec(&amplitude, bincode::config::standard()).unwrap();
-
-            let _amplitude: AmplitudeGraph = bincode::decode_from_slice_with_context(
-                &encoded_amplitude,
-                bincode::config::standard(),
-                context,
+                    ..Default::default()
+                },
+                &LockedRuntimeSettings::from(&RuntimeSettings::default()),
             )
-            .expect("amplitude decode failed")
-            .0;
+            .unwrap();
 
-            println!("amplitude graph passed");
-        }
+        let mut symbols = Vec::new();
+        State::export(&mut symbols).unwrap();
+        let state_map = State::import(&mut std::io::Cursor::new(symbols), None).unwrap();
+
+        let context = GammaLoopContextContainer {
+            model: &model,
+            state_map: &state_map,
+        };
+
+        let encoded_amplitude =
+            bincode::encode_to_vec(&amplitude, bincode::config::standard()).unwrap();
+
+        let decoded: AmplitudeGraph = bincode::decode_from_slice_with_context(
+            &encoded_amplitude,
+            bincode::config::standard(),
+            context,
+        )
+        .expect("amplitude decode failed")
+        .0;
+
+        assert_eq!(decoded.graph.name, amplitude.graph.name);
+        assert_eq!(decoded.graph.overall_factor, amplitude.graph.overall_factor);
+        assert_eq!(
+            decoded.graph.loop_momentum_basis,
+            amplitude.graph.loop_momentum_basis
+        );
+        assert_eq!(
+            decoded.graph.param_builder.reps,
+            amplitude.graph.param_builder.reps
+        );
+        assert_eq!(
+            decoded.graph.param_builder.values,
+            amplitude.graph.param_builder.values
+        );
+        assert_eq!(
+            decoded.derived_data.all_mighty_integrand,
+            amplitude.derived_data.all_mighty_integrand
+        );
+        assert_eq!(
+            decoded.derived_data.all_mighty_numerators,
+            amplitude.derived_data.all_mighty_numerators
+        );
     }
 }

@@ -894,7 +894,6 @@ struct AmplitudeThresholdCountertermBuild {
 
 pub struct AnalyticalEvaluationConfig<'a> {
     pub model: &'a Model,
-    pub refresh_model_values: bool,
     pub evaluate_numerically: bool,
     pub vakint: &'a Vakint,
     pub true_settings: &'a vakint::VakintSettings,
@@ -1213,8 +1212,6 @@ impl AmplitudeGraph {
         config: AnalyticalEvaluationConfig<'_>,
     ) -> Result<Atom> {
         let mut true_settings = config.true_settings.clone();
-        true_settings.number_of_terms_in_epsilon_expansion =
-            self.graph.n_loops(&self.graph.no_dummy()) as i64 + 1;
         let pysec_dec_enabled_in_vakint = true_settings.evaluation_order.0.iter().find_map(|o| {
             if let EvaluationMethod::PySecDec(opts) = o {
                 Some(opts)
@@ -1226,9 +1223,7 @@ impl AmplitudeGraph {
         let complex_params_vakint =
             if config.evaluate_numerically || pysec_dec_enabled_in_vakint.is_some() {
                 let mut param_builder = self.graph.param_builder.clone(); //ParamBuilder::<f64>::new(&self.graph, model);
-                if config.refresh_model_values {
-                    param_builder.update_model_values(config.model);
-                }
+                param_builder.update_model_values(config.model);
                 param_builder.m_uv_value(Complex::new_re(F(config.run_time_settings.general.m_uv)));
                 param_builder.renormalization_localization_scale_value(Complex::new_re(F(config
                     .run_time_settings
