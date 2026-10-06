@@ -1,9 +1,11 @@
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, sync::Arc};
 
 use spenso::structure::dimension::Dimension;
 use spenso::structure::representation::{Minkowski, RepName};
 use symbolica::atom::{Atom, AtomCore};
+use symbolica::domains::atom::AtomField;
 use symbolica::graph::{CanonicalForm, Graph};
+use symbolica::poly::PolyVariable;
 use symbolica::tensors::matrix::{Matrix, MatrixError};
 
 use super::{IntegralFamily, IntegralFamilyError, IntegralMapping, PropagatorMapping};
@@ -15,6 +17,62 @@ enum ParametricVertex {
 }
 
 impl IntegralFamily {
+    // U/F can acquire Gaussian coefficients from external scalar products,
+    // even when the original affine rows belong to the rational field.
+    // Keep that expression coefficient domain, but disable statistical zeros.
+    fn parameter_terms(
+        expression: &Atom,
+        parameters: &[Atom],
+    ) -> Result<Vec<(Vec<u32>, Atom)>, IntegralFamilyError> {
+        let requested = parameters
+            .iter()
+            .cloned()
+            .map(PolyVariable::try_from)
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(IntegralFamilyError::InvalidBasis)?;
+        let field = AtomField {
+            statistical_zero_test: false,
+            cancel_check_on_division: false,
+            custom_normalization: None,
+        };
+        let polynomial = expression
+            .try_to_polynomial::<_, u32>(&field, Some(Arc::new(requested.clone())))
+            .map_err(|e| IntegralFamilyError::InvalidBasis(e.to_string()))?;
+        let indices = requested
+            .iter()
+            .map(|variable| {
+                polynomial
+                    .variables()
+                    .iter()
+                    .position(|v| v == variable)
+                    .ok_or_else(|| {
+                        IntegralFamilyError::InvalidBasis(
+                            "polynomial conversion changed a parameter coordinate".into(),
+                        )
+                    })
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        let mut terms = polynomial
+            .to_multivariate_polynomial_list(&indices, true)
+            .into_iter()
+            .map(|(exponents, coefficient)| {
+                let coefficient = coefficient.flatten(false).together();
+                if parameters.iter().any(|p| coefficient.contains(p.as_view())) {
+                    return Err(IntegralFamilyError::InvalidBasis(
+                        "non-polynomial parameter dependence".into(),
+                    ));
+                }
+                Ok((
+                    indices.iter().map(|&i| exponents[i]).collect::<Vec<_>>(),
+                    coefficient,
+                ))
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        terms.retain(|(_, coefficient)| !coefficient.is_zero());
+        terms.sort_by(|(left, _), (right, _)| left.cmp(right));
+        Ok(terms)
+    }
+
     /// Group families using verified affine loop-momentum maps.
     ///
     /// Returns one `(representative_index, mapping)` per input, in input order.
@@ -141,10 +199,7 @@ impl IntegralFamily {
         let rep = Minkowski {}.new_rep(self.kinematics.dimension());
         let mut equations = Vec::new();
         for denominator in &self.denominators {
-            let coefficients = denominator
-                .coefficient_list::<i32>(&self.scalar_products)
-                .into_iter()
-                .collect::<BTreeMap<_, _>>();
+            let coefficients = self.scalar_product_coefficients(denominator)?;
             for p in &self.loop_momenta {
                 let row = self
                     .loop_momenta
@@ -208,12 +263,11 @@ impl IntegralFamily {
                 "Parametric scaling requires a nonsingular quadratic loop matrix".into(),
             ));
         }
-        let polynomial = (u + f).expand().to_polynomial_in_vars::<u32>(parameters);
-        let equations = polynomial
+        let equations = Self::parameter_terms(&(u + f), parameters)?
             .into_iter()
-            .filter(|term| !term.coefficient.together().is_zero())
-            .map(|term| {
-                term.exponents
+            .filter(|(_, coefficient)| !coefficient.is_zero())
+            .map(|(exponents, _)| {
+                exponents
                     .iter()
                     .zip(parameters)
                     .map(|(exponent, weight)| Atom::num(*exponent) * weight)
@@ -294,13 +348,12 @@ impl IntegralFamily {
             graph.add_node(ParametricVertex::Parameter);
         }
         for (second, expression) in [(false, u), (true, f)] {
-            let polynomial = expression.to_polynomial_in_vars::<u32>(parameters);
-            for term in &polynomial {
+            for (exponents, coefficient) in Self::parameter_terms(&expression, parameters)? {
                 let node = graph.add_node(ParametricVertex::Term {
                     second,
-                    coefficient: term.coefficient.together(),
+                    coefficient,
                 });
-                for (parameter, exponent) in term.exponents.iter().enumerate() {
+                for (parameter, exponent) in exponents.iter().enumerate() {
                     if *exponent != 0 {
                         graph
                             .add_edge(parameter, node, false, *exponent)
@@ -333,10 +386,7 @@ impl IntegralFamily {
             .map(|(x, d)| x * d)
             .sum::<Atom>()
             .expand();
-        let coefficients = weighted
-            .coefficient_list::<i32>(&self.scalar_products)
-            .into_iter()
-            .collect::<BTreeMap<_, _>>();
+        let coefficients = self.scalar_product_coefficients(&weighted)?;
         let coefficient = |p: &Atom, q: &Atom| {
             coefficients
                 .get(&rep.inner_product(p, q))
@@ -1008,6 +1058,115 @@ mod tests {
             .unwrap();
         assert!(u.is_zero());
         assert!(family.scaleless_transverse_direction().unwrap().is_none());
+    }
+
+    #[test]
+    fn tiny_symbolic_quadratic_coefficients_survive_parametric_operations() {
+        let k = parse!("tiny_parametric::k");
+        let l = parse!("tiny_parametric::l");
+        let kin = Kinematics::new();
+        let kk = kin.scalar_product(&k, &k).unwrap();
+        let ll = kin.scalar_product(&l, &l).unwrap();
+        let q = parse!("(tiny_parametric::a+tiny_parametric::b)/10^1000");
+        let parameters = [parse!("tiny_parametric::x"), parse!("tiny_parametric::y")];
+        let denominators = [&q * &kk - 1, &kk - 2];
+        for expanded in [false, true] {
+            let family = IntegralFamily::new(
+                vec![k.clone()],
+                vec![],
+                denominators
+                    .iter()
+                    .map(|d| if expanded { d.expand() } else { d.clone() })
+                    .collect(),
+                &kin,
+            )
+            .unwrap();
+            let (u, f) = family.symanzik(&parameters).unwrap();
+            let expected_u = &parameters[0] * &q + &parameters[1];
+            assert!((&u - &expected_u).together().is_zero());
+            assert!(
+                (f - expected_u * (&parameters[0] + Atom::num(2) * &parameters[1]))
+                    .together()
+                    .is_zero()
+            );
+            let quadratic = family.quadratic_denominator(0).unwrap().unwrap();
+            assert_eq!(quadratic.momentum(), &k);
+            assert!((quadratic.scale() - &q).together().is_zero());
+            assert_eq!(quadratic.remainder(), &Atom::num(-1));
+        }
+        let full_rank =
+            IntegralFamily::new(vec![k, l], vec![], vec![(&kk + &q * &ll).expand()], &kin).unwrap();
+        assert!(
+            full_rank
+                .scaleless_transverse_direction()
+                .unwrap()
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn tiny_symbolic_mass_prevents_false_scalelessness_and_equivalence() {
+        let k = parse!("tiny_mass::k");
+        let kin = Kinematics::new();
+        let kk = kin.scalar_product(&k, &k).unwrap();
+        let q = parse!("(tiny_mass::a+tiny_mass::b)/10^1000");
+        let parameters = [parse!("tiny_mass::x")];
+        let massless =
+            IntegralFamily::new(vec![k.clone()], vec![], vec![kk.clone()], &kin).unwrap();
+        let massive = IntegralFamily::new(vec![k.clone()], vec![], vec![&kk - &q], &kin).unwrap();
+        let expanded =
+            IntegralFamily::new(vec![k], vec![], vec![(&kk - &q).expand()], &kin).unwrap();
+        assert!(massless.scaleless_scaling(&parameters).unwrap().is_some());
+        assert!(massive.scaleless_scaling(&parameters).unwrap().is_none());
+        assert!(expanded.scaleless_scaling(&parameters).unwrap().is_none());
+        assert!(
+            massive
+                .parametric_mapping(&massless, &parameters)
+                .unwrap()
+                .is_none()
+        );
+        assert_eq!(
+            massive
+                .parametric_mapping(&expanded, &parameters)
+                .unwrap()
+                .unwrap()
+                .denominator_map(),
+            &[0]
+        );
+    }
+
+    #[test]
+    fn parameter_grouping_retains_gaussian_external_products_and_u32_powers() {
+        let k = parse!("complex_uf::k");
+        let p = parse!("complex_uf::p");
+        let kin = Kinematics::new()
+            .with_mass_squared(&p, parse!("𝑖"))
+            .unwrap();
+        let kk = kin.scalar_product(&k, &k).unwrap();
+        let kp = kin.scalar_product(&k, &p).unwrap();
+        let family =
+            IntegralFamily::new(vec![k], vec![p], vec![kk.clone(), kk + kp * 2], &kin).unwrap();
+        let parameters = [parse!("complex_uf::x"), parse!("complex_uf::y")];
+        let (u, f) = family.symanzik(&parameters).unwrap();
+        assert!((u - &parameters[0] - &parameters[1]).expand().is_zero());
+        assert!((f - parse!("𝑖") * parameters[1].pow(2)).expand().is_zero());
+        assert!(family.scaleless_scaling(&parameters).unwrap().is_none());
+        assert!(
+            family
+                .parametric_mapping(&family, &parameters)
+                .unwrap()
+                .is_some()
+        );
+        let expression =
+            parse!("(complex_uf::a+𝑖*complex_uf::b)/10^1000") * parameters[0].pow(70_000);
+        let terms = IntegralFamily::parameter_terms(&expression.expand(), &parameters).unwrap();
+        assert_eq!(terms.len(), 1);
+        assert_eq!(terms[0].0, vec![70_000, 0]);
+        assert!(
+            (&terms[0].1 * parameters[0].pow(70_000) - expression)
+                .expand()
+                .is_zero()
+        );
     }
 
     #[test]

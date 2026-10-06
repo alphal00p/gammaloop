@@ -7,10 +7,15 @@ use spenso::{
         representation::{Minkowski, RepName},
     },
 };
-use std::collections::{BTreeMap, BTreeSet};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    sync::Arc,
+};
 use symbolica::{
     atom::{Atom, AtomCore, AtomView},
+    domains::atom::AtomField,
     function,
+    poly::PolyVariable,
 };
 use thiserror::Error;
 
@@ -247,21 +252,66 @@ impl Kinematics {
         Ok(result.expand())
     }
 
-    fn linear_terms(&self, momentum: &Atom) -> Result<Vec<(Atom, Atom)>, SymbolicKinematicsError> {
+    /// Decompose a linear momentum into `(momentum name, scalar coefficient)` pairs.
+    ///
+    /// Single names need no declaration. For combinations, momentum names must
+    /// be declared and may not occur inside scalar coefficient functions or powers.
+    /// Native exact expression-field grouping retains Gaussian and symbolic
+    /// coefficients without statistical zero testing.
+    pub fn linear_terms(
+        &self,
+        momentum: &Atom,
+    ) -> Result<Vec<(Atom, Atom)>, SymbolicKinematicsError> {
         if momentum.is_zero() {
             return Ok(Vec::new());
         }
         if matches!(momentum.as_view(), AtomView::Var(_) | AtomView::Fun(_)) {
             return Ok(vec![(momentum.clone(), Atom::one())]);
         }
+        let invalid = || SymbolicKinematicsError::NonlinearMomentum(momentum.clone());
         let variables = self.momenta.iter().collect::<Vec<_>>();
-        let terms = momentum.coefficient_list::<i32>(&variables);
-        if terms.iter().any(|(key, coefficient)| {
-            !self.momenta.contains(key)
-                || variables.iter().any(|p| coefficient.contains(p.as_view()))
-        }) {
-            return Err(SymbolicKinematicsError::NonlinearMomentum(momentum.clone()));
+        let requested = variables
+            .iter()
+            .map(|v| PolyVariable::try_from((*v).clone()))
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|_| invalid())?;
+        let field = AtomField {
+            statistical_zero_test: false,
+            cancel_check_on_division: false,
+            custom_normalization: None,
+        };
+        let polynomial = momentum
+            .try_to_polynomial::<_, i32>(&field, Some(Arc::new(requested.clone())))
+            .map_err(|_| invalid())?;
+        // Conversion may normalize rational powers or extend the variable map.
+        // Keep the literal declared momentum coordinates, or reject the input.
+        let indices = requested
+            .iter()
+            .map(|v| {
+                polynomial
+                    .variables()
+                    .iter()
+                    .position(|p| p == v)
+                    .ok_or_else(invalid)
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        let mut terms = Vec::new();
+        for (exponents, coefficient) in polynomial.to_multivariate_polynomial_list(&indices, true) {
+            let mut powers = indices
+                .iter()
+                .enumerate()
+                .filter(|(_, index)| exponents[**index] != 0);
+            let key = match (powers.next(), powers.next()) {
+                (Some((position, index)), None) if exponents[*index] == 1 => variables[position],
+                _ => return Err(invalid()),
+            };
+            let coefficient = coefficient.flatten(false);
+            if variables.iter().any(|p| coefficient.contains(p.as_view())) {
+                return Err(invalid());
+            }
+            terms.push((key.clone(), coefficient));
         }
+        terms.sort_by(|(left, _), (right, _)| left.cmp(right));
         Ok(terms)
     }
 
@@ -391,6 +441,48 @@ mod tests {
         assert!(kin.scalar_product(&parse!("Q(1)/(1+Q(2))"), &p).is_err());
         assert!(kin.scalar_product(&(&p + Atom::one()), &p).is_err());
         assert!(Kinematics::new().with_momenta([&p + &q]).is_err());
+    }
+
+    #[test]
+    fn tiny_expanded_symbolic_momentum_coefficients_are_exact() {
+        let p = parse!("p");
+        let k = parse!("k");
+        let kin = Kinematics::new()
+            .with_momenta([p.clone(), k.clone()])
+            .unwrap();
+        for coefficient in [
+            parse!("(a+b)/10^1000"),
+            parse!("(a+b)*10^1000"),
+            parse!("𝑖*(a+b)/10^1000"),
+            parse!("(1+𝑖)*(sin(a)+cos(b))/(c+d)"),
+        ] {
+            let expected = &coefficient * kin.scalar_product(&k, &p).unwrap()
+                + kin.scalar_product(&p, &p).unwrap();
+            for momentum in [&coefficient * &k + &p, (&coefficient * &k + &p).expand()] {
+                let actual = kin.scalar_product(&momentum, &p).unwrap();
+                assert!((actual - &expected).together().is_zero());
+                let terms = kin
+                    .linear_terms(&momentum)
+                    .unwrap()
+                    .into_iter()
+                    .collect::<BTreeMap<_, _>>();
+                assert_eq!(terms.len(), 2);
+                assert!((&terms[&k] - &coefficient).together().is_zero());
+                assert_eq!(terms[&p], Atom::one());
+            }
+        }
+        for invalid in [
+            parse!("p+sin(k)*p/10^1000"),
+            parse!("p+k^2/10^1000"),
+            parse!("p+k^(1/2)/10^1000"),
+            parse!("p+k^(-1)/10^1000"),
+            parse!("p+k/(1+p)"),
+        ] {
+            assert!(matches!(
+                kin.linear_terms(&invalid),
+                Err(SymbolicKinematicsError::NonlinearMomentum(_))
+            ));
+        }
     }
 
     #[test]
