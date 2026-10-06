@@ -17,9 +17,8 @@ enum ParametricVertex {
 }
 
 impl IntegralFamily {
-    // U/F can acquire Gaussian coefficients from external scalar products,
-    // even when the original affine rows belong to the rational field.
-    // Keep that expression coefficient domain, but disable statistical zeros.
+    // Keep general expression coefficients in the parameter variables,
+    // including Gaussian external products, but disable statistical zeros.
     fn parameter_terms(
         expression: &Atom,
         parameters: &[Atom],
@@ -186,8 +185,7 @@ impl IntegralFamily {
                         .map(|row| row.into_iter().sum::<Atom>())
                 })
                 .collect::<Result<Vec<_>, _>>()?;
-            let (gram, _) = Atom::system_to_matrix::<u16, _, _>(&rows, &self.external_momenta)
-                .map_err(|e| IntegralFamilyError::InvalidBasis(e.to_string()))?;
+            let (gram, _) = Self::affine_system(&rows, &self.external_momenta)?;
             if gram
                 .det()
                 .map_err(|e| IntegralFamilyError::InvalidBasis(e.to_string()))?
@@ -220,8 +218,7 @@ impl IntegralFamily {
         // Symbolica supplies the linear solve; no separate row reduction lives here.
         for pivot in &self.loop_momenta {
             equations.push(pivot - 1);
-            let (matrix, rhs) = Atom::system_to_matrix::<u16, _, _>(&equations, &self.loop_momenta)
-                .map_err(|e| IntegralFamilyError::InvalidBasis(e.to_string()))?;
+            let (matrix, rhs) = Self::affine_system(&equations, &self.loop_momenta)?;
             equations.pop();
             match matrix.solve_any(&rhs) {
                 Ok(solution) => {
@@ -277,8 +274,7 @@ impl IntegralFamily {
             .collect::<Vec<_>>();
         // Parameter names serve only as linear-system unknowns after extracting
         // the exponent vectors; the physical coefficients no longer occur.
-        let (matrix, rhs) = Atom::system_to_matrix::<u16, _, _>(&equations, parameters)
-            .map_err(|e| IntegralFamilyError::InvalidBasis(e.to_string()))?;
+        let (matrix, rhs) = Self::affine_system(&equations, parameters)?;
         match matrix.solve_any(&rhs) {
             Ok(solution) => Ok(Some(
                 solution
@@ -1133,6 +1129,52 @@ mod tests {
                 .denominator_map(),
             &[0]
         );
+    }
+
+    #[test]
+    fn gaussian_quadratic_forms_retain_symanzik_normalization() {
+        let k = parse!("gaussian_uf::k");
+        let l = parse!("gaussian_uf::l");
+        let kin = Kinematics::new();
+        let kk = kin.scalar_product(&k, &k).unwrap();
+        let kl = kin.scalar_product(&k, &l).unwrap();
+        let ll = kin.scalar_product(&l, &l).unwrap();
+        let imaginary = parse!("𝑖");
+        let a = parse!("gaussian_uf::a");
+        let b = parse!("gaussian_uf::b");
+        let real_kernel = IntegralFamily::new(
+            vec![k.clone(), l.clone()],
+            vec![],
+            vec![&imaginary * (&kk + Atom::num(2) * &kl + &ll) - 7],
+            &kin,
+        )
+        .unwrap();
+        assert_eq!(
+            real_kernel.scaleless_transverse_direction().unwrap(),
+            Some(vec![Atom::one(), Atom::num(-1)])
+        );
+        let family = IntegralFamily::new(
+            vec![k.clone(), l],
+            vec![],
+            vec![
+                &kk + Atom::num(2) * &imaginary * &kl - &ll - (Atom::one() + &imaginary),
+                &kk + &ll - 3,
+            ],
+            &kin,
+        )
+        .unwrap();
+        let (u, f) = family.symanzik(&[a.clone(), b.clone()]).unwrap();
+        assert!((u - b.pow(2)).together().is_zero());
+        assert!(
+            (f - b.pow(2) * ((Atom::one() + &imaginary) * &a + Atom::num(3) * &b))
+                .together()
+                .is_zero()
+        );
+        let scaled =
+            IntegralFamily::new(vec![k], vec![], vec![&imaginary * (&kk - 7)], &kin).unwrap();
+        let (u, f) = scaled.symanzik(std::slice::from_ref(&a)).unwrap();
+        assert!((u - &imaginary * &a).together().is_zero());
+        assert!((f + Atom::num(7) * a.pow(2)).together().is_zero());
     }
 
     #[test]
