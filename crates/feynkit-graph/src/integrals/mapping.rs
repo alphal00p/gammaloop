@@ -155,9 +155,9 @@ impl IntegralFamily {
             .chain(&target.external_momenta)
             .collect::<Vec<_>>();
         for image in loop_images {
-            // Use the shared kinematics parser to validate linear combinations.
-            let _ = target.kinematics.scalar_product(image, image)?;
-            let terms = image.coefficient_list::<i32>(&target_momenta);
+            // Reuse the shared exact decomposition, including Gaussian
+            // coefficients, before the real-contour admission check.
+            let terms = target.kinematics.linear_terms(image)?;
             if terms.iter().any(|(momentum, _)| {
                 !target_momenta
                     .iter()
@@ -360,10 +360,7 @@ impl IntegralFamily {
         let denominator = self.denominators.get(index).ok_or_else(|| {
             IntegralFamilyError::InvalidBasis(format!("denominator index {index} is out of range"))
         })?;
-        let coefficients = denominator
-            .coefficient_list::<i32>(&self.scalar_products)
-            .into_iter()
-            .collect::<BTreeMap<_, _>>();
+        let coefficients = self.scalar_product_coefficients(denominator)?;
         let Some((pivot, scale)) = self.loop_momenta.iter().find_map(|p| {
             coefficients
                 .get(&rep.inner_product(p, p))
@@ -688,6 +685,53 @@ mod tests {
                 .is_zero()
         );
         assert!(target.find_mapping(&source, 100).unwrap().is_none());
+    }
+
+    #[test]
+    fn tiny_symbolic_shear_mapping_retains_exact_momentum_coefficients() {
+        let [k, s, l, r] = ["tiny_map::k", "tiny_map::s", "tiny_map::l", "tiny_map::r"]
+            .map(|name| symbolica::symbol!(name).to_atom());
+        let a = symbolica::symbol!("tiny_map::a"; Real).to_atom();
+        let b = symbolica::symbol!("tiny_map::b"; Real).to_atom();
+        let q = (a + b) / parse!("10^1000");
+        let kin = Kinematics::new()
+            .with_momenta([k.clone(), s.clone(), l.clone(), r.clone()])
+            .unwrap();
+        let source = IntegralFamily::new(
+            vec![k.clone(), s.clone()],
+            vec![],
+            vec![
+                kin.scalar_product(&k, &k).unwrap(),
+                kin.scalar_product(&s, &s).unwrap(),
+            ],
+            &kin,
+        )
+        .unwrap();
+        let ll = kin.scalar_product(&l, &l).unwrap();
+        let lr = kin.scalar_product(&l, &r).unwrap();
+        let rr = kin.scalar_product(&r, &r).unwrap();
+        let target = IntegralFamily::new(
+            vec![l.clone(), r.clone()],
+            vec![],
+            vec![
+                (&ll + Atom::num(2) * &q * &lr + q.pow(2) * &rr).expand(),
+                rr.clone(),
+            ],
+            &kin,
+        )
+        .unwrap();
+        for image in [&l + &q * &r, (&l + &q * &r).expand()] {
+            let mapping = source
+                .mapping_to(&target, &[image, r.clone()])
+                .unwrap()
+                .unwrap();
+            assert_eq!(mapping.denominator_map(), &[0, 1]);
+            assert!(
+                (mapping.apply(&kin.scalar_product(&k, &s).unwrap()) - &lr - &q * &rr)
+                    .together()
+                    .is_zero()
+            );
+        }
     }
 
     #[test]

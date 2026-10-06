@@ -13,7 +13,7 @@ use symbolica::domains::{
     rational::Q,
     rational_polynomial::{RationalPolynomial, RationalPolynomialField},
 };
-use symbolica::poly::PolyVariable;
+use symbolica::poly::{PolyVariable, polynomial::MultivariatePolynomial};
 use symbolica::tensors::matrix::Matrix;
 use thiserror::Error;
 
@@ -24,6 +24,7 @@ mod partial_fraction;
 pub use mapping::{IntegralMapping, PropagatorMapping, QuadraticMomentum};
 
 type CoefficientMatrix = Matrix<RationalPolynomialField<IntegerRing, u16>>;
+type ExactPolynomial = MultivariatePolynomial<RationalPolynomialField<IntegerRing, u16>, u16>;
 
 #[derive(Clone, Debug, Error)]
 pub enum IntegralFamilyError {
@@ -86,6 +87,68 @@ pub struct IntegralFamily {
 }
 
 impl IntegralFamily {
+    /// Group over the exact native rational field, retaining the original row
+    /// denominator. Default expression-field conversion uses statistical zero
+    /// tests, which can discard tiny symbolic coefficients after expansion.
+    fn exact_polynomial(
+        expression: &impl AtomCore,
+        variables: &[Atom],
+    ) -> Result<ExactPolynomial, IntegralFamilyError> {
+        let variables = variables
+            .iter()
+            .cloned()
+            .map(PolyVariable::try_from)
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(IntegralFamilyError::InvalidBasis)?;
+        expression
+            .try_to_rational_polynomial(&Q, &Z, None)
+            .map_err(|e| IntegralFamilyError::InvalidBasis(e.to_string()))?
+            .to_polynomial(&variables, false)
+            .map_err(|e| IntegralFamilyError::InvalidBasis(e.into()))
+    }
+
+    fn affine_coefficients(
+        expression: &impl AtomCore,
+        variables: &[Atom],
+    ) -> Result<Vec<RationalPolynomial<IntegerRing, u16>>, IntegralFamilyError> {
+        let polynomial = Self::exact_polynomial(expression, variables)?;
+        let mut row = vec![RationalPolynomial::new(&Z, Default::default()); variables.len() + 1];
+        for term in &polynomial {
+            let mut powers = term.exponents.iter().enumerate().filter(|(_, p)| **p != 0);
+            let column = match (powers.next(), powers.next()) {
+                (None, None) => variables.len(),
+                (Some((index, 1)), None) => index,
+                _ => {
+                    return Err(IntegralFamilyError::InvalidBasis(
+                        "expected affine expressions".into(),
+                    ));
+                }
+            };
+            row[column] = term.coefficient.clone();
+        }
+        Ok(row)
+    }
+
+    fn scalar_product_coefficients(
+        &self,
+        expression: &Atom,
+    ) -> Result<BTreeMap<Atom, Atom>, IntegralFamilyError> {
+        self.scalar_products
+            .iter()
+            .cloned()
+            .chain(std::iter::once(Atom::one()))
+            .zip(Self::affine_coefficients(
+                expression,
+                &self.scalar_products,
+            )?)
+            .map(|(key, coefficient)| {
+                let coefficient = coefficient.to_expression();
+                self.require_external_coefficient(&coefficient)?;
+                Ok((key, coefficient))
+            })
+            .collect()
+    }
+
     /// Preserve affine coefficients, including rational row normalization.
     /// Symbolica's equation-to-matrix conversion may clear denominators, which
     /// preserves solutions and ranks but changes determinants and relations
@@ -95,39 +158,9 @@ impl IntegralFamily {
         expressions: &[impl AtomCore],
         variables: &[Atom],
     ) -> Result<(CoefficientMatrix, CoefficientMatrix), IntegralFamilyError> {
-        let polynomial_variables = variables
-            .iter()
-            .cloned()
-            .map(PolyVariable::try_from)
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(IntegralFamilyError::InvalidBasis)?;
         let mut entries: Vec<RationalPolynomial<IntegerRing, u16>> = Vec::new();
         for expression in expressions {
-            // Convert before grouping: AtomField's statistical zero test can
-            // discard tiny symbolic coefficients after expansion. Keeping the
-            // denominator preserves the original affine row's normalization.
-            let rational = expression
-                .try_to_rational_polynomial(&Q, &Z, None)
-                .map_err(|e| IntegralFamilyError::InvalidBasis(e.to_string()))?;
-            let polynomial = rational
-                .to_polynomial(&polynomial_variables, false)
-                .map_err(|e| IntegralFamilyError::InvalidBasis(e.into()))?;
-            let mut row =
-                vec![RationalPolynomial::new(&Z, Default::default()); variables.len() + 1];
-            for term in &polynomial {
-                let mut powers = term.exponents.iter().enumerate().filter(|(_, p)| **p != 0);
-                let column = match (powers.next(), powers.next()) {
-                    (None, None) => variables.len(),
-                    (Some((index, 1)), None) => index,
-                    _ => {
-                        return Err(IntegralFamilyError::InvalidBasis(
-                            "expected affine expressions".into(),
-                        ));
-                    }
-                };
-                row[column] = term.coefficient.clone();
-            }
-            entries.extend(row);
+            entries.extend(Self::affine_coefficients(expression, variables)?);
         }
         // Every entry must use the same variable ordering for exact arithmetic.
         if let Some((first, rest)) = entries.split_first_mut() {
