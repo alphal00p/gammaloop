@@ -3,6 +3,7 @@ use std::collections::BTreeMap;
 use feynkit_kinematics::Kinematics;
 use spenso::structure::representation::{Minkowski, RepName};
 use symbolica::atom::{Atom, AtomCore, AtomView};
+use symbolica::id::Pattern;
 
 use super::{IntegralFamily, IntegralFamilyError};
 use crate::{DiagramError, FeynmanDiagram, symbols};
@@ -115,7 +116,9 @@ impl FeynmanDiagram {
             // so propagator construction and model mass conventions stay owned
             // by denominator_of_in_dimension rather than a second implementation.
             let original_square = rep.inner_product(&arguments[1], &arguments[1]);
-            let denominator = arguments[3].replace(original_square).with(square);
+            let denominator = arguments[3]
+                .replace(Pattern::Literal(original_square))
+                .with(Pattern::Literal(square));
             denominators.insert(edge, denominator);
         }
         Ok(IntegralFamily::new(
@@ -131,6 +134,40 @@ impl FeynmanDiagram {
 mod tests {
     use super::*;
     use feynkit_model::Model;
+
+    #[test]
+    fn propagator_kinematics_use_literal_symbols() {
+        let diagram = FeynmanDiagram::from_dot(
+            Model::phi3(),
+            r#"digraph bubble {
+                ext [style=invis];
+                ext -> a [particle="phi"];
+                a -> b [particle="phi", lmb_id=0];
+                a -> b [particle="phi"];
+                b -> ext [particle="phi"];
+            }"#,
+        )
+        .unwrap();
+        // Trailing underscores are legal scalar and tensor-dimension names,
+        // not a request to interpret the replacement as a wildcard pattern.
+        let dimension = symbolica::symbol!("propagator_dimension_").to_atom();
+        let invariant = symbolica::symbol!("propagator_invariant_").to_atom();
+        let unconstrained = diagram
+            .propagator_family(&Kinematics::in_dimension(&dimension).unwrap())
+            .unwrap();
+        let external = &unconstrained.external_momenta()[0];
+        let kinematics = Kinematics::in_dimension(&dimension)
+            .unwrap()
+            .with_mass_squared(external, invariant.clone())
+            .unwrap();
+        let family = diagram.propagator_family(&kinematics).unwrap();
+        assert_eq!(family.denominators().len(), 2);
+        assert_eq!(family.kinematics().dimension(), kinematics.dimension());
+        assert!(family.denominators().iter().any(|d| d.contains(&invariant)));
+        let completed = diagram.integral_family(&kinematics, &[]).unwrap();
+        assert!(completed.is_complete() && completed.is_independent());
+        assert_eq!(completed.denominators(), family.denominators());
+    }
 
     #[test]
     fn dependent_graph_propagators_remain_available_for_partial_fractioning() {
