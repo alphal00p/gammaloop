@@ -272,8 +272,7 @@ docs-check:
     cargo run --locked -p alphal00p-docs-catalogs --features gammaloop-reference --bin alphal00p-docs-gammaloop-reference -- --check
     cargo run --locked -p alphal00p-docs-catalogs --features vakint-reference --bin alphal00p-docs-vakint-reference -- --check
     cargo run --locked -p alphal00p-docs-python-exporter --features gammaloop -- gammaloop-python docs/api/python/gammaloop-python.pyi --check
-    cargo run --locked -p alphal00p-docs-python-exporter --features linnet -- linnet-python docs/api/python/linnet-python.pyi --check
-    cargo run --locked -p alphal00p-docs-python-exporter --features render -- linnet-render docs/api/python/linnet-render.pyi --check
+    cargo run --locked -p alphal00p-docs-python-exporter --features linnet -- linnet-graph docs/api/python/linnet-graph.pyi --check
     cargo run --locked -p alphal00p-docs-python-exporter --features spenso -- spynso3 docs/api/python/spynso3.pyi --check
     cargo run --locked -p alphal00p-docs-python-exporter --features vakint -- vakint-community docs/api/python/vakint-community.pyi --check
     cargo test --locked -p alphal00p-docs-python-exporter
@@ -282,18 +281,18 @@ docs-check:
     cargo test --locked -p alphal00p-docs-examples
     cargo run --locked -p alphal00p-docs-builder -- check
     just docs-svg-assets-check
-    just docs-linnet-python-check
+    just docs-linnet-graph-check
 
 # Build Linnet's extension and compare its real import surface with the checked-in stub.
-docs-linnet-python-check:
+docs-linnet-graph-check:
     #!/usr/bin/env bash
     set -euo pipefail
 
     temp_base=${TMPDIR:-/tmp}
-    test_root=$(mktemp -d "$temp_base/alphal00p-docs-linnet-python.XXXXXX")
+    test_root=$(mktemp -d "$temp_base/alphal00p-docs-linnet-graph.XXXXXX")
     cleanup() {
         case "$test_root" in
-            "$temp_base"/alphal00p-docs-linnet-python.*)
+            "$temp_base"/alphal00p-docs-linnet-graph.*)
                 rm -rf -- "$test_root"
                 ;;
         esac
@@ -302,11 +301,9 @@ docs-linnet-python-check:
 
     python_bin=${PYTHON_BIN_PATH:-python3}
     uv venv "$test_root/venv" --python "$python_bin"
-    VIRTUAL_ENV="$test_root/venv" maturin develop --uv --locked --manifest-path crates/linnet-py/Cargo.toml --features extension-module,abi3-py310
-    "$test_root/venv/bin/python" -m unittest \
-      crates/linnet-py/tests/test_basic.py \
-      crates/linnet-py/tests/test_wasm.py \
-      crates/linnet-py/tests/test_streaming.py
+    maturin build --locked --manifest-path examples/notebooks/symbolica-host/Cargo.toml --out "$test_root/wheels"
+    uv pip install --python "$test_root/venv/bin/python" --no-deps "$test_root"/wheels/*.whl
+    "$test_root/venv/bin/python" -m unittest discover -s crates/linnet-py/tests -p 'test_*.py'
 
 # Regenerate source-backed CLI/settings and topology/dependency snapshots.
 docs-generated:

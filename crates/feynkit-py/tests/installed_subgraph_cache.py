@@ -4,7 +4,7 @@ import gc
 import weakref
 from pathlib import Path
 
-import linnet
+from symbolica.community import graph as linnet
 
 from symbolica.community import hepkit as fk
 
@@ -21,15 +21,15 @@ snapshot = diagram.to_json()
 for first_caller in ("parent", "view"):
     parent = fk.FeynmanDiagram.from_json(model, snapshot)
     view = parent.filter(edge=lambda edge: not edge.is_external)
-    old_graph = parent.to_linnet()
+    old_graph = parent.to_graph()
     stale = old_graph.full_subgraph()
     old_graph.reverse_edge(0)
     first = parent if first_caller == "parent" else view
-    refreshed = first.to_linnet()
+    refreshed = first.to_graph()
     assert refreshed is not old_graph
-    assert refreshed is parent.to_linnet()
-    assert refreshed is view.to_linnet()
-    assert refreshed is view.original.to_linnet()
+    assert refreshed is parent.to_graph()
+    assert refreshed is view.to_graph()
+    assert refreshed is view.original.to_graph()
     imported = parent.subgraph(view.linnet_selection)
     assert imported.linnet_selection == view.linnet_selection
     assert imported.numerator_expression() == view.numerator_expression()
@@ -50,7 +50,7 @@ cross_section = (
 )
 side = cross_section.cuts[0].left.subgraph
 original = side.original
-assert side.to_linnet() is cross_section.to_linnet() is original.to_linnet()
+assert side.to_graph() is cross_section.to_graph() is original.to_graph()
 
 
 class BackReference:
@@ -64,13 +64,13 @@ class BackReference:
 def cyclic_view(kind):
     parent = fk.FeynmanDiagram.from_json(model, snapshot)
     view = parent.filter(edge=lambda edge: not edge.is_external)
-    graph = parent.to_linnet()
+    graph = parent.to_graph()
     payload = BackReference(view)
     if kind == "payload":
         graph.edge(0).data = payload
     else:
         graph.render_config = graph.render_config.overlay(
-            linnet.RenderConfig(selectors=linnet.DrawingSelectors(edge=payload))
+            linnet.RenderSettings(selectors=linnet.DrawingSelectors(edge=payload))
         )
     return weakref.ref(payload), view.original
 
@@ -79,7 +79,7 @@ for kind in ("payload", "callback"):
     reference, survivor = cyclic_view(kind)
     gc.collect()
     assert reference() is not None, "a live physics owner lost its shared export"
-    assert reference().view.to_linnet() is survivor.to_linnet()
+    assert reference().view.to_graph() is survivor.to_graph()
     del survivor
     gc.collect()
     assert reference() is None, f"the shared export retained its {kind} cycle"
@@ -93,7 +93,7 @@ for result_kind in ("tree", "partition"):
         if result_kind == "tree"
         else parent.all_cuts([0], [1])[0]
     )
-    graph = parent.to_linnet()
+    graph = parent.to_graph()
     payload = BackReference(result)
     graph.edge(0).data = payload
     reference = weakref.ref(payload)

@@ -14,6 +14,12 @@
     Object.defineProperty(svg, 'linnetSelection', { get: selection });
     const bounds = svg.viewBox.baseVal;
     const box = { x: bounds.x, y: bounds.y, width: bounds.width, height: bounds.height };
+    /* SVG lengths resolve pt/mm to CSS pixels. Read the authored width before
+       replacing it with the responsive viewer width: 100% keeps that physical
+       scale, independently of the drawing bounds or notebook column width. */
+    const naturalScale = svg.width.baseVal.value / box.width;
+    let scale = 1;
+    let fitted = true;
     let pinned = false;
     let dragging = false;
     let suppressClick = false;
@@ -112,7 +118,7 @@
     };
     const svgElement = tag => document.createElementNS('http://www.w3.org/2000/svg', tag);
     /* Keep the drawing in its own camera. Inspector and controls use CSS-pixel
-       coordinates, so zooming never scales text or changes the notebook height. */
+       coordinates, so zooming never scales their text or changes the notebook height. */
     const viewport = svgElement('svg');
     viewport.classList.add('linnet-viewport');
     viewport.setAttribute('tabindex', '0');
@@ -134,24 +140,29 @@
     zoomLabel.setAttribute('aria-label', 'Graph zoom');
     const paintCamera = () => {
       viewport.setAttribute('viewBox', `${camera.x} ${camera.y} ${camera.width} ${camera.height}`);
-      zoomLabel.textContent = `${Math.round(100 * box.width / camera.width)}%`;
+      zoomLabel.textContent = `${Math.round(100 * scale)}%`;
     };
     const zoom = (factor, anchor = { x: camera.x + camera.width / 2, y: camera.y + camera.height / 2 }) => {
-      const scale = Math.max(.25, Math.min(20, box.width / camera.width * factor));
-      const ratio = box.width / scale / camera.width;
+      const next = Math.max(Math.min(.25, fitScale()), Math.min(20, scale * factor));
+      const ratio = scale / next;
+      scale = next;
+      fitted = false;
       camera.x = anchor.x + (camera.x - anchor.x) * ratio;
       camera.y = anchor.y + (camera.y - anchor.y) * ratio;
       camera.width *= ratio;
       camera.height *= ratio;
       paintCamera();
     };
-    const reset = () => { Object.assign(camera, box); paintCamera(); };
+    const fitScale = () => Math.min(1,
+      viewport.width.baseVal.value / (box.width * naturalScale),
+      viewport.height.baseVal.value / (box.height * naturalScale));
+    const reset = () => { fitted = true; layout(); };
     controls.append(zoomLabel);
     const help = html('span');
     help.className = 'linnet-navigation-help';
     help.tabIndex = 0;
     help.setAttribute('role', 'img');
-    const shortcuts = 'Drag to pan · Ctrl/⌘ + scroll or +/− to zoom · 0 to fit';
+    const shortcuts = 'Drag to pan · Ctrl/⌘ + scroll or +/− to zoom · 0 to fit · 100% = original size';
     help.setAttribute('aria-label', shortcuts);
     const hint = html('span', shortcuts);
     hint.className = 'linnet-navigation-hint';
@@ -175,7 +186,11 @@
       const overlay = fixedHeight > 0;
       const panelWidth = overlay ? Math.min(300, width) : wide ? 260 : width;
       const graphWidth = overlay ? width : wide ? width - panelWidth - 16 : width;
-      const graphHeight = fixedHeight || Math.max(240, Math.min(520, graphWidth * box.height / box.width));
+      /* Grow vertically to show the whole drawing at its physical scale.
+         Narrow columns and explicitly bounded previews may need a smaller
+         fit, whose actual percentage is reported by the same camera. */
+      const fitWidth = Math.min(1, graphWidth / (box.width * naturalScale));
+      const graphHeight = fixedHeight || Math.max(240, box.height * naturalScale * fitWidth);
       const toolbarHeight = 40;
       toolbar.setAttribute('width', width);
       toolbar.setAttribute('height', toolbarHeight);
@@ -183,6 +198,15 @@
       viewport.setAttribute('y', toolbarHeight);
       viewport.setAttribute('width', graphWidth);
       viewport.setAttribute('height', graphHeight);
+      const center = fitted
+        ? { x: box.x + box.width / 2, y: box.y + box.height / 2 }
+        : { x: camera.x + camera.width / 2, y: camera.y + camera.height / 2 };
+      if (fitted) scale = fitScale();
+      camera.width = graphWidth / (naturalScale * scale);
+      camera.height = graphHeight / (naturalScale * scale);
+      camera.x = center.x - camera.width / 2;
+      camera.y = center.y - camera.height / 2;
+      paintCamera();
       panSurface.setAttribute('y', toolbarHeight);
       panSurface.setAttribute('width', graphWidth);
       panSurface.setAttribute('height', graphHeight);
@@ -213,7 +237,6 @@
       if (Math.abs(svg.getBoundingClientRect().width - layoutWidth) > .5) requestAnimationFrame(layout);
     });
     layoutObserver.observe(svg);
-    reset();
     close();
     const show = target => {
       inspected = target;
@@ -351,6 +374,7 @@
       const dx = event.clientX - pointer.x, dy = event.clientY - pointer.y;
       if (!dragging && Math.hypot(dx, dy) < 4) return;
       dragging = true;
+      fitted = false;
       viewport.setPointerCapture(event.pointerId);
       viewport.classList.add('linnet-panning');
       camera.x = pointer.camera.x - dx * pointer.matrix.a - dy * pointer.matrix.c;
@@ -373,6 +397,7 @@
       else if (event.key === '-') zoom(1 / 1.05);
       else if (event.key === '0') reset();
       else if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)) {
+        fitted = false;
         camera.x += (event.key === 'ArrowLeft' ? -1 : event.key === 'ArrowRight' ? 1 : 0) * camera.width / 10;
         camera.y += (event.key === 'ArrowUp' ? -1 : event.key === 'ArrowDown' ? 1 : 0) * camera.height / 10;
         paintCamera();

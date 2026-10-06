@@ -7,7 +7,7 @@ license = "MIT"
 repository = "https://github.com/alphal00p/gammaloop"
 
 [dependencies]
-linnet-render-py = { path = "../linnet-render-py" }
+linnet-py = { path = "../linnet-py", default-features = false }
 ahash = { workspace = true, features = ["serde"] }
 idenso = { workspace = true }
 spenso = { workspace = true, features = ["portable-payload", "python", "shadowing"] }
@@ -39,12 +39,14 @@ features = ["bincode", "python_export", "serde"]
 [features]
 default = ["native"]
 native = [
+  "linnet-py/native",
   "idenso/native",
   "spenso/native-code-generation",
   "spenso-hep-lib/native",
   "symbolica-typst-plugin/native",
 ]
 wasm = [
+  "linnet-py/wasm",
   "idenso/wasm",
   "spenso/wasm",
   "spenso-hep-lib/wasm",
@@ -52,7 +54,7 @@ wasm = [
   "symbolica-typst-plugin/wasm",
 ]
 python_stubgen = [
-  "linnet-render-py/python_stubgen",
+  "linnet-py/python_stubgen",
   "dep:pyo3-stub-gen",
   "spenso/python_stubgen",
   "symbolica/python_stubgen",

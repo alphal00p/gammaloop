@@ -4,7 +4,7 @@
 use super::spqr::{Decomposition, SpqrDecomposer, SpqrKind, SpqrRequest};
 use indexmap::IndexMap;
 use serde::Serialize;
-use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque, hash_map::Entry};
+use std::collections::{hash_map::Entry, BTreeMap, BTreeSet, HashMap, HashSet, VecDeque};
 
 pub(crate) type Id = String;
 pub(crate) type Ids = Vec<Id>;

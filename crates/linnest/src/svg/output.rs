@@ -6,7 +6,7 @@ use std::sync::Arc;
 use kurbo::{BezPath, PathEl, Rect, Shape};
 use serde_json::Value;
 
-use super::{Dash, Element, Stroke, Target, Typeset, UNIT, labels::Bounds};
+use super::{labels::Bounds, Dash, Element, Stroke, Target, Typeset, UNIT};
 use crate::{TypstDotEdge, TypstDotEndpoint, TypstDotNode};
 
 /// Canvas padding in drawing units; margin (2mm) and title gutter (1em) in points.
@@ -22,6 +22,11 @@ pub(super) const MARK_STROKE: f64 = 0.3;
 pub struct Details(Vec<(String, Value)>);
 
 impl Details {
+    /// Ordered inspection properties, shared with graph binding snapshots.
+    pub fn fields(&self) -> &[(String, Value)] {
+        &self.0
+    }
+
     /// Set a field, keeping its first position.
     pub fn insert(&mut self, key: &str, value: impl Into<Value>) {
         let value = value.into();

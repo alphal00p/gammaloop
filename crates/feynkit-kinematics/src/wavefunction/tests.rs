@@ -126,8 +126,8 @@ fn massive_spinor_completeness_and_dirac_adjoint() {
             for i in 0..4 {
                 let lhs = (0..4).fold(c(0., 0.), |a, j| a + slash[i][j] * s.components()[j]);
                 close(lhs, s.components()[i] * c(sgn * mass, 0.));
-                for j in 0..4 {
-                    sum[i][j] += s.components()[i] * adj.components()[j];
+                for (j, entry) in sum[i].iter_mut().enumerate() {
+                    *entry += s.components()[i] * adj.components()[j];
                 }
             }
         }

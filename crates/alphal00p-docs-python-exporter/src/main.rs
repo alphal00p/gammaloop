@@ -6,14 +6,17 @@ use std::{env, error::Error, fs, path::PathBuf};
     feature = "feynkit",
     feature = "gammaloop",
     feature = "vakint",
-    feature = "render"
+    feature = "linnet"
 ))]
-use pyo3::types::{PyAnyMethods as _, PyDictMethods as _, PyModuleMethods as _};
+use pyo3::types::{
+    PyAnyMethods as _, PyDictMethods as _, PyModuleMethods as _, PyStringMethods as _,
+    PyTypeMethods as _,
+};
 #[cfg(any(
     feature = "feynkit",
     feature = "gammaloop",
     feature = "spenso",
-    feature = "render",
+    feature = "linnet",
     feature = "vakint"
 ))]
 use std::collections::BTreeSet;
@@ -42,10 +45,10 @@ fn main() -> Result<(), Box<dyn Error>> {
         .modules
         .get(module_name)
         .ok_or_else(|| format!("{component} inventory has no module {module_name}"))?;
-    #[cfg(any(feature = "feynkit", feature = "gammaloop", feature = "render"))]
+    #[cfg(any(feature = "feynkit", feature = "gammaloop", feature = "linnet"))]
     if matches!(
         component.as_str(),
-        "feynkit-community" | "gammaloop-python" | "linnet-render"
+        "feynkit-community" | "gammaloop-python" | "linnet-graph"
     ) {
         validate_runtime_stub_surface(module_name, module)?;
     }
@@ -74,16 +77,9 @@ fn main() -> Result<(), Box<dyn Error>> {
             PathBuf::from(env!("CARGO_MANIFEST_DIR"))
                 .join("../feynkit-py/python/symbolica/community/hepkit/__init__.pyi"),
         ),
-        "linnet-python" => {
-            outputs.push(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../linnet-py/linnet.pyi"))
-        }
-        "linnet-render" => outputs.extend([
-            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(
-                "../../examples/notebooks/symbolica-host/python/symbolica/community/render/__init__.pyi",
-            ),
-            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(
-                "../linnet-render-py/python/symbolica/community/render/__init__.pyi",
-            ),
+        "linnet-graph" => outputs.extend([
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../linnet-py/python/symbolica/community/graph/__init__.pyi"),
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../examples/notebooks/symbolica-host/python/symbolica/community/graph/__init__.pyi"),
         ]),
         "spynso3" => outputs.push(
             PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(
@@ -100,7 +96,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             if checked_in != normalized {
                 let hint = if matches!(
                     component.as_str(),
-                    "feynkit-community" | "linnet-python" | "linnet-render" | "spynso3"
+                    "feynkit-community" | "linnet-graph" | "spynso3"
                 ) {
                     "regenerate the shared package/docs surface"
                 } else {
@@ -122,15 +118,19 @@ fn main() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-#[cfg(any(feature = "feynkit", feature = "gammaloop", feature = "render"))]
+#[cfg(any(feature = "feynkit", feature = "gammaloop", feature = "linnet"))]
 fn validate_runtime_stub_surface(
     module_name: &str,
     module: &pyo3_stub_gen::generate::Module,
 ) -> Result<(), Box<dyn Error>> {
     let runtime = pyo3::Python::attach(|py| {
         let module = match module_name {
-            #[cfg(feature = "render")]
-            "symbolica.community.render" => linnet_render_py::register(py)?,
+            #[cfg(feature = "linnet")]
+            "symbolica.community.graph" => {
+                let module = pyo3::types::PyModule::new(py, module_name)?;
+                linnet_py::register(&module)?;
+                module
+            }
             #[cfg(feature = "feynkit")]
             "symbolica.community.hepkit" => {
                 let module = pyo3::types::PyModule::new(py, module_name)?;
@@ -148,6 +148,38 @@ fn validate_runtime_stub_surface(
         public_module_names(&module)
     })?;
     let stub = stub_names(module);
+    #[cfg(feature = "linnet")]
+    let stub = if module_name == "symbolica.community.graph" {
+        // Macro-generated classes need the same name normalization as the shipped stub.
+        pyo3::Python::attach(|py| -> pyo3::PyResult<BTreeSet<String>> {
+            let source = linnet_py::canonical_stub()
+                .map_err(|error| pyo3::exceptions::PyRuntimeError::new_err(error.to_string()))?;
+            let ast = py.import("ast")?;
+            let mut names = BTreeSet::new();
+            for node in ast
+                .call_method1("parse", (source,))?
+                .getattr("body")?
+                .try_iter()?
+            {
+                let node = node?;
+                let kind = node.get_type().name()?;
+                if matches!(kind.to_str()?, "ClassDef" | "FunctionDef") {
+                    let name: String = node.getattr("name")?.extract()?;
+                    if !name.starts_with('_') {
+                        names.insert(name);
+                    }
+                } else if kind.to_str()? == "AnnAssign" {
+                    let name: String = node.getattr("target")?.getattr("id")?.extract()?;
+                    if !name.starts_with('_') {
+                        names.insert(name);
+                    }
+                }
+            }
+            Ok(names)
+        })?
+    } else {
+        stub
+    };
     if stub == runtime {
         return Ok(());
     }
@@ -168,7 +200,7 @@ fn render(
         "spynso3" => Ok(spynso3::SpensoModule::stub_source(module)),
         "feynkit-community" => Ok(module.to_string().trim_end().to_owned()),
         #[cfg(feature = "linnet")]
-        "linnet-python" => Ok(linnet_py::canonical_stub()?),
+        "linnet-graph" => Ok(linnet_py::canonical_stub()?),
         _ => Ok(module.to_string()),
     }
 }
@@ -224,7 +256,7 @@ fn validate_vakint_stub_surface(
     feature = "feynkit",
     feature = "gammaloop",
     feature = "spenso",
-    feature = "render",
+    feature = "linnet",
     feature = "vakint"
 ))]
 fn stub_names(module: &pyo3_stub_gen::generate::Module) -> BTreeSet<String> {
@@ -255,7 +287,7 @@ fn stub_names(module: &pyo3_stub_gen::generate::Module) -> BTreeSet<String> {
     feature = "feynkit",
     feature = "gammaloop",
     feature = "vakint",
-    feature = "render"
+    feature = "linnet"
 ))]
 fn public_module_names(
     module: &pyo3::Bound<'_, pyo3::types::PyModule>,
@@ -287,14 +319,12 @@ fn validate_exact_surface(
 
 fn gather(component: &str) -> Result<(&'static str, pyo3_stub_gen::StubInfo), Box<dyn Error>> {
     match component {
-        #[cfg(feature = "render")]
-        "linnet-render" => Ok(("symbolica.community.render", linnet_render_py::stub_info()?)),
         #[cfg(feature = "feynkit")]
         "feynkit-community" => Ok(("symbolica.community.hepkit", feynkit_py::stub_info()?)),
         #[cfg(feature = "gammaloop")]
         "gammaloop-python" => Ok(("gammaloop._gammaloop", gammaloop_api::python::stub_info()?)),
         #[cfg(feature = "linnet")]
-        "linnet-python" => Ok(("linnet", linnet_py::stub_info()?)),
+        "linnet-graph" => Ok(("symbolica.community.graph", linnet_py::stub_info()?)),
         #[cfg(feature = "spenso")]
         "spynso3" => Ok(("symbolica.community.tensor", spynso3::stub_info()?)),
         #[cfg(feature = "vakint")]
@@ -513,17 +543,20 @@ def validate(runtime_module, stub_source):
     #[test]
     fn linnet_package_and_docs_share_the_typed_stub_info_surface() {
         let canonical = linnet_py::canonical_stub().unwrap();
-        assert_eq!(canonical, include_str!("../../linnet-py/linnet.pyi"));
         assert_eq!(
             canonical,
-            include_str!("../../../docs/api/python/linnet-python.pyi")
+            include_str!("../../linnet-py/python/symbolica/community/graph/__init__.pyi")
+        );
+        assert_eq!(
+            canonical,
+            include_str!("../../../docs/api/python/linnet-graph.pyi")
         );
         for declaration in [
             "_NativeValue: typing.TypeAlias = (",
             "def __new__(cls, *, encode_node: typing.Callable[[NodeValue], DotVertexData]",
             "def build(*items: _GraphItem, name: _OptionalString = None",
             "def map(self, *, node: typing.Callable[[Node], typing.Any] | None = None",
-            "def render(self, output: builtins.str | os.PathLike[builtins.str], *, config: RenderConfig | None = None)",
+            "def render(self, *, config: RenderSettings | None = None)",
             "node_outset: _AutoNumber = ...",
             "_Padding: typing.TypeAlias = builtins.int | builtins.float | _NativeArray | _NativeDict | Insets",
             "def call(self, *args: _NativeValue, **kwargs: _NativeValue) -> TypstCall",

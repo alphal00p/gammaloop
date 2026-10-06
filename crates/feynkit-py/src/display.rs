@@ -1,12 +1,13 @@
 use feynkit_graph::FeynmanDiagram;
 use feynkit_model::{Model, ParticleId};
 use linnest::svg::Scene;
+use linnet_py::PyRenderSettings;
 
-use crate::render_settings::PyRenderSettings;
+use crate::render_settings::PyDiagramStyle;
 use pyo3::prelude::*;
-use std::{collections::BTreeMap, fmt::Write};
+use std::fmt::Write;
 
-use linnet_render_py::PyDiagramRender;
+use linnet_py::PyDiagramRender;
 
 pub(crate) fn escape_html(value: &str) -> String {
     let mut escaped = String::with_capacity(value.len());
@@ -23,29 +24,10 @@ pub(crate) fn escape_html(value: &str) -> String {
     escaped
 }
 
-/// Typst handles only label pages; Rust owns all graph layout and geometry.
-pub(crate) fn render_scene(scene: &Scene) -> PyResult<String> {
-    let runtime = pyo3::exceptions::PyRuntimeError::new_err;
-    let files = BTreeMap::from([("main.typ".into(), scene.label_document().into_bytes())]);
-    if scene.pages.is_empty() && scene.title.is_none() {
-        let svg = scene.render(&Default::default()).map_err(runtime)?;
-        return Ok(themed_svg(Scene::interactive_svg(&svg).map_err(runtime)?));
-    }
-    let pages = typst_renderer::Document::compile_sources(&files, "svg")
-        .map_err(runtime)?
-        .into_iter()
-        .map(String::from_utf8)
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(|e| runtime(e.to_string()))?;
-    let typeset = scene.typeset(&pages).map_err(runtime)?;
-    let svg = scene.render(&typeset).map_err(runtime)?;
-    Ok(themed_svg(Scene::interactive_svg(&svg).map_err(runtime)?))
-}
-
 /// Use the website SVG palette from docs/assets/typst/theme.typ, including
 /// the 45% lightened sink strokes from the shared physics style. Keep SVG
 /// paint attributes as light-mode fallbacks for viewers without CSS support.
-fn themed_svg(svg: String) -> String {
+pub(crate) fn themed_svg(svg: String) -> String {
     let mut styles = String::from("<style>");
     let mut light = String::new();
     let mut dark = String::new();
@@ -96,6 +78,7 @@ pub(crate) const PREVIEW_LIMIT: usize = 6;
 
 /// Compact collections share the graph renderer and Spenso's expression printer.
 /// SVG templates remain inert until a row or thumbnail is selected.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn collection_html(
     py: Python<'_>,
     title: &str,
@@ -103,6 +86,7 @@ pub(crate) fn collection_html(
     diagrams: impl ExactSizeIterator<Item = crate::graph::PyFeynmanDiagram>,
     terms: Option<&[String]>,
     config: Option<&PyRenderSettings>,
+    style: Option<&PyDiagramStyle>,
     limit: usize,
 ) -> PyResult<(String, Vec<PyDiagramRender>)> {
     let count = diagrams.len();
@@ -118,8 +102,8 @@ pub(crate) fn collection_html(
     }
     let mut drawings = Vec::new();
     for (index, diagram) in diagrams.take(limit).enumerate() {
-        let drawing = diagram.render(py, config, false, None, None)?;
-        let svg = drawing.to_svg();
+        let drawing = diagram.render(py, config, style, false, None, None)?;
+        let svg = drawing.to_svg_pages()?.join("\n");
         write!(templates, "<template>{svg}</template>").unwrap();
         drawings.push(drawing);
         let label = format!("Diagram {}", index + 1);
@@ -169,14 +153,20 @@ pub(crate) fn process_svg(
     incoming: &[ParticleId],
     outgoing: &[Vec<ParticleId>],
     config: Option<&PyRenderSettings>,
+    style: Option<&PyDiagramStyle>,
 ) -> PyResult<String> {
-    let (config, options) = PyRenderSettings::resolve(config, false);
+    let options = PyDiagramStyle::resolve(style, false);
+    let config = config.cloned().unwrap_or_default().config()?;
     let mut figures = Vec::new();
     for state in outgoing {
         let scene = options
             .process_scene(model, incoming, state, &config)
             .map_err(pyo3::exceptions::PyValueError::new_err)?;
-        figures.push(render_scene(&scene)?);
+        figures.push(Python::attach(|py| {
+            PyDiagramRender::from_scene(py, scene, None)?
+                .map_svg(themed_svg)?
+                .to_svg()
+        })?);
     }
     Scene::combine_svgs(&figures).map_err(pyo3::exceptions::PyRuntimeError::new_err)
 }

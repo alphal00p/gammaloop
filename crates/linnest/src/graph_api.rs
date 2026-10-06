@@ -4,7 +4,6 @@ use cgmath::{Point2, Rad, Vector2};
 use dot_parser::ast::CompassPt;
 use linnet::{
     half_edge::{
-        NodeIndex,
         builder::{HedgeData, HedgeGraphBuilder},
         involution::{
             ArchivedOrientation, EdgeData, EdgeIndex, Flow, Hedge, HedgePair, HedgeVec, Involution,
@@ -17,6 +16,7 @@ use linnet::{
         nodestore::{DefaultNodeStore, NodeStorageOps},
         subgraph::{Inclusion, SuBitGraph, SubSetLike},
         swap::Swap,
+        NodeIndex,
     },
     parser::{
         ArchivedDotEdgeView, ArchivedDotEndpointView, ArchivedDotGraphView, ArchivedDotVertexView,
@@ -25,7 +25,7 @@ use linnet::{
 };
 use serde::{Deserialize, Serialize};
 
-use crate::{PinConstraint, TypstEdge, TypstGraph, TypstHedge, TypstNode, default_figment};
+use crate::{default_figment, PinConstraint, TypstEdge, TypstGraph, TypstHedge, TypstNode};
 
 type DotBuilder = HedgeGraphBuilder<DotEdgeData, DotVertexData, DotHedgeData>;
 const TYPST_EDGE_NAME_KEY: &str = "__linnest-edge-name";
@@ -488,7 +488,7 @@ fn encode_typst_graph(graph: &TypstGraph) -> Result<Vec<u8>, String> {
 /// Export the measured graph through serde rather than the build-specific archive.
 /// The host computes a layout without taking ownership of Typst content or styles.
 pub fn graph_layout_snapshot_bytes(arg: &[u8], options: &[u8]) -> Result<Vec<u8>, String> {
-    use figment::{Figment, Profile, providers::Serialized};
+    use figment::{providers::Serialized, Figment, Profile};
 
     let mut graph = decode_typst_graph(arg)?;
     let options: ciborium::Value = decode_cbor(options, "layout options")?;
@@ -3061,12 +3061,10 @@ mod tests {
             encode_cbor(&restored.graph).unwrap(),
             encode_cbor(&graph.graph).unwrap()
         );
-        assert!(
-            restored
-                .layout_with_subgraph(None)
-                .unwrap_err()
-                .contains("shared Typst pipeline to prepare a constrained EC seed")
-        );
+        assert!(restored
+            .layout_with_subgraph(None)
+            .unwrap_err()
+            .contains("shared Typst pipeline to prepare a constrained EC seed"));
     }
 
     #[test]
@@ -3099,11 +3097,9 @@ mod tests {
             encode_cbor(&graph).unwrap()
         );
         snapshot["graph"]["node_store"]["nodes"][0]["set"]["head"]["width"] = serde_json::json!(16);
-        assert!(
-            TypstGraph::from_layout_snapshot(&snapshot)
-                .unwrap_err()
-                .contains("storage width")
-        );
+        assert!(TypstGraph::from_layout_snapshot(&snapshot)
+            .unwrap_err()
+            .contains("storage width"));
     }
 
     fn cut_fixture(orientation: Orientation) -> TypstGraph {
@@ -3728,24 +3724,7 @@ mod tests {
             assert!(changed, "No serialized {field} found");
             let graph: TypstGraph =
                 decode_cbor(&encode_cbor(&value).unwrap(), "corrupt graph").unwrap();
-            assert!(
-                cut_result(
-                    &graph,
-                    &[TypstCutEntry {
-                        left: 0,
-                        right: 1,
-                        winding: 2
-                    }]
-                )
-                .is_err()
-            );
-        }
-        let mut graph = cut_fixture(Orientation::Default);
-        graph.graph.node_store = HedgeGraphBuilder::<TypstEdge, TypstNode, TypstHedge>::new()
-            .build::<DefaultNodeStore<TypstNode>>()
-            .node_store;
-        assert!(
-            cut_result(
+            assert!(cut_result(
                 &graph,
                 &[TypstCutEntry {
                     left: 0,
@@ -3753,8 +3732,21 @@ mod tests {
                     winding: 2
                 }]
             )
-            .is_err()
-        );
+            .is_err());
+        }
+        let mut graph = cut_fixture(Orientation::Default);
+        graph.graph.node_store = HedgeGraphBuilder::<TypstEdge, TypstNode, TypstHedge>::new()
+            .build::<DefaultNodeStore<TypstNode>>()
+            .node_store;
+        assert!(cut_result(
+            &graph,
+            &[TypstCutEntry {
+                left: 0,
+                right: 1,
+                winding: 2
+            }]
+        )
+        .is_err());
     }
 
     #[test]
@@ -3824,13 +3816,11 @@ mod tests {
             .unwrap();
             let output = decode_typst_graph(&result.graph).unwrap();
             for edge in [0, 3, 4] {
-                assert!(
-                    output[EdgeIndex(edge)]
-                        .cut_name()
-                        .unwrap()
-                        .unwrap()
-                        .starts_with("k.")
-                );
+                assert!(output[EdgeIndex(edge)]
+                    .cut_name()
+                    .unwrap()
+                    .unwrap()
+                    .starts_with("k."));
                 if !payload_only {
                     assert_eq!(output[EdgeIndex(edge)].data, graph[EdgeIndex(0)].data);
                 }
@@ -4146,11 +4136,10 @@ mod tests {
                 "placement",
             )
             .unwrap();
-            assert!(
-                spec.resolve(&[], "test")
-                    .unwrap_err()
-                    .contains("finite number")
-            );
+            assert!(spec
+                .resolve(&[], "test")
+                .unwrap_err()
+                .contains("finite number"));
         }
         for z in [
             Value::Integer((-3).into()),
@@ -4183,13 +4172,11 @@ mod tests {
             ("ref-depth", Value::Integer(0.into())),
             ("z-mode", Value::Text("group".into())),
         ] {
-            assert!(
-                decode_cbor::<TypstPlacementSpec>(
-                    &encode_cbor(&BTreeMap::from([(key, value)])).unwrap(),
-                    "placement",
-                )
-                .is_err()
-            );
+            assert!(decode_cbor::<TypstPlacementSpec>(
+                &encode_cbor(&BTreeMap::from([(key, value)])).unwrap(),
+                "placement",
+            )
+            .is_err());
         }
     }
 

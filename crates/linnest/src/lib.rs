@@ -10,9 +10,8 @@ pub mod svg;
 pub use label_placement::{
     attachment_offset_bytes as label_attachment_offset_bytes,
     candidates_bytes as label_candidates_bytes, first_bytes as label_first_bytes,
-    obstacle_boxes_bytes as label_obstacle_boxes_bytes,
-    path_lines_bytes as label_path_lines_bytes, search_bytes as label_search_bytes,
-    stroke_lines_bytes as label_stroke_lines_bytes,
+    obstacle_boxes_bytes as label_obstacle_boxes_bytes, path_lines_bytes as label_path_lines_bytes,
+    search_bytes as label_search_bytes, stroke_lines_bytes as label_stroke_lines_bytes,
 };
 mod pin;
 mod streaming;
@@ -27,30 +26,29 @@ pub use api::{
     parse_dot_graphs_bytes,
 };
 pub use graph_api::{
-    GRAPH_SPEC_SCHEMA, GRAPH_SPEC_VERSION, TypstDotEdge, TypstDotEndpoint, TypstDotGraphInfo,
-    TypstDotNode, TypstEdgeSpec, TypstEndpointSpec, TypstGraphSpec, TypstGraphSpecEnvelope,
-    TypstNodeSpec, TypstPlacementSpec, TypstPoint, encode_graph_spec_bytes,
-    graph_apply_structural_patches_bytes, graph_archived_compass_subgraph_bytes,
-    graph_archived_subgraph_bytes, graph_compass_subgraph_bytes, graph_cycle_basis_bytes,
-    graph_dot_bytes, graph_edge_data_by_name_bytes, graph_edges_bytes,
-    graph_edges_of_archived_subgraph_bytes, graph_edges_of_bytes, graph_from_spec_bytes,
-    graph_impred_diagram_bytes, graph_impred_layout_bytes, graph_impred_seed_bytes,
-    graph_info_bytes, graph_join_by_edge_key_bytes, graph_join_by_hedge_key_bytes,
-    graph_layout_snapshot_bytes, graph_node_data_by_name_bytes, graph_nodes_bytes,
-    graph_nodes_of_archived_subgraph_bytes, graph_nodes_of_bytes,
-    graph_set_edge_data_by_name_bytes, graph_set_node_data_by_name_bytes, ImpredRun,
+    encode_graph_spec_bytes, graph_apply_structural_patches_bytes,
+    graph_archived_compass_subgraph_bytes, graph_archived_subgraph_bytes,
+    graph_compass_subgraph_bytes, graph_cycle_basis_bytes, graph_dot_bytes,
+    graph_edge_data_by_name_bytes, graph_edges_bytes, graph_edges_of_archived_subgraph_bytes,
+    graph_edges_of_bytes, graph_from_spec_bytes, graph_impred_diagram_bytes,
+    graph_impred_layout_bytes, graph_impred_seed_bytes, graph_info_bytes,
+    graph_join_by_edge_key_bytes, graph_join_by_hedge_key_bytes, graph_layout_snapshot_bytes,
+    graph_node_data_by_name_bytes, graph_nodes_bytes, graph_nodes_of_archived_subgraph_bytes,
+    graph_nodes_of_bytes, graph_set_edge_data_by_name_bytes, graph_set_node_data_by_name_bytes,
     graph_spanning_forests_bytes, graph_subgraph_bytes, graph_with_data_bytes,
-    subgraph_contains_hedge_bytes, subgraph_hedges_bytes, subgraph_label_bytes,
+    subgraph_contains_hedge_bytes, subgraph_hedges_bytes, subgraph_label_bytes, ImpredRun,
+    TypstDotEdge, TypstDotEndpoint, TypstDotGraphInfo, TypstDotNode, TypstEdgeSpec,
+    TypstEndpointSpec, TypstGraphSpec, TypstGraphSpecEnvelope, TypstNodeSpec, TypstPlacementSpec,
+    TypstPoint, GRAPH_SPEC_SCHEMA, GRAPH_SPEC_VERSION,
 };
 pub use pin::PinConstraint;
 
 use cgmath::{EuclideanSpace, InnerSpace, Point2, Rad, Vector2, Zero};
 use dot_parser::ast::CompassPt;
-use figment::{Figment, Profile, providers::Serialized};
+use figment::{providers::Serialized, Figment, Profile};
 use linnet::half_edge::swap::Swap;
 use linnet::{
     half_edge::{
-        EdgeAccessors, HedgeGraph, NodeIndex, NodeVec,
         involution::{EdgeData, EdgeIndex, EdgeVec, Flow, Hedge, HedgePair, HedgeVec, Involution},
         layout::{
             force::{ForceLayoutConfig, ForceLayoutSession},
@@ -58,7 +56,7 @@ use linnet::{
                 LayeredConfig, LayeredEdgeRoute, LayeredGeometry, LayeredOutput, LayeredProfile,
                 LayeredRankAlign, LayeredRouteExit,
             },
-            simulatedanneale::{GeoSchedule, SAConfig, anneal},
+            simulatedanneale::{anneal, GeoSchedule, SAConfig},
             spring::{
                 Constraint, HasPointConstraint, LayoutPointIndex, LayoutState, ParamTuning,
                 PinnedLayoutNeighbor, PointConstraint, ShiftDirection, SpringChargeEnergy,
@@ -66,6 +64,7 @@ use linnet::{
         },
         nodestore::{DefaultNodeStore, NodeStorageOps},
         subgraph::{SuBitGraph, SubSetLike},
+        EdgeAccessors, HedgeGraph, NodeIndex, NodeVec,
     },
     parser::{DotEdgeData, DotGraph, DotHedgeData, DotVertexData, GlobalData, HedgeParseError},
 };
@@ -133,7 +132,7 @@ use getrandom::register_custom_getrandom;
 #[cfg(feature = "custom")]
 use wasm_random::custom_getrandom;
 
-use crate::geom::{GeomError, tangent_angle_toward_c_side};
+use crate::geom::{tangent_angle_toward_c_side, GeomError};
 
 #[cfg(feature = "custom")]
 register_custom_getrandom!(custom_getrandom);
@@ -3373,7 +3372,7 @@ impl TypstGraph {
                         .partial_cmp(&right.1.x)
                         .unwrap_or(std::cmp::Ordering::Equal)
                 })
-                .then_with(|| left.0.0.cmp(&right.0.0))
+                .then_with(|| left.0 .0.cmp(&right.0 .0))
         });
 
         let mut placed = Vec::<LayoutRect>::new();

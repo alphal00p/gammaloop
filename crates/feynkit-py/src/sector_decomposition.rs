@@ -263,6 +263,14 @@ import types
 
 absent = object()
 previous = sys.modules.get(backend_name, absent)
+parents = {}
+parts = backend_name.split(".")
+for length in range(1, len(parts)):
+    name = ".".join(parts[:length])
+    parents[name] = sys.modules.get(name, absent)
+    package = types.ModuleType(name)
+    package.__path__ = []
+    sys.modules[name] = package
 backend = types.ModuleType(backend_name)
 calls = []
 answer, regulator, observer, powers, progress = (object() for _ in range(5))
@@ -302,6 +310,11 @@ try:
     else:
         raise AssertionError('missing optional backend was accepted')
 finally:
+    for name, original in parents.items():
+        if original is absent:
+            del sys.modules[name]
+        else:
+            sys.modules[name] = original
     if previous is absent:
         del sys.modules[backend_name]
     else:

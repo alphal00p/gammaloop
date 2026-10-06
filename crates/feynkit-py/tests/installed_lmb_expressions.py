@@ -111,7 +111,7 @@ for expression in (diagram.numerator_expression, diagram.denominator_expression)
         assert routed == selected_basis.route_expression(raw)
         assert routed != raw
 
-graph = diagram.to_linnet()
+graph = diagram.to_graph()
 full = diagram.subgraph(graph.full_subgraph())
 empty = diagram.subgraph()
 region = diagram.filter(edge=lambda edge: edge.id == loop_edge.id)
