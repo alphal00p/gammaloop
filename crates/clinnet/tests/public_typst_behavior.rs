@@ -325,6 +325,22 @@ fn linnest_public_svg() -> &'static str {
                 "named-map-behavior.typ",
                 include_str!("resources/named-map-behavior.typ"),
             ),
+            (
+                "identity-target-behavior.typ",
+                include_str!("resources/identity-target-behavior.typ"),
+            ),
+            (
+                "cetz-bounds-behavior.typ",
+                include_str!("resources/cetz-bounds-behavior.typ"),
+            ),
+            (
+                "marker-geometry-behavior.typ",
+                include_str!("resources/marker-geometry-behavior.typ"),
+            ),
+            (
+                "annotation-placement-behavior.typ",
+                include_str!("resources/annotation-placement-behavior.typ"),
+            ),
         ]);
         render(&base, &renderer, fixture.0, fixture.1)
     })
@@ -1222,22 +1238,31 @@ fn public_gammaloop_momentum_geometry_ignores_label_visibility() {
         assert!(!particle.is_empty(), "{mode}");
         assert_eq!(paths_with_attr(&svg, "fill", "#dc2626").len(), 9, "{mode}");
         let origin = own_translation(particle[0].1);
-        // Text changes the canvas bounds. Compare actual shafts, arrowheads,
-        // and particle paths relative to the first underlying particle path.
-        let geometry = svg_paths(&svg)
+        // Text changes the canvas bounds. Compare pinned arrowheads and particle
+        // paths relative to the first particle path. Attached arrows are painted
+        // after all edges, and their shafts may span both halves in one path;
+        // curve-level fixtures check those continuous carriers separately.
+        let mut geometry = svg_paths(&svg)
             .into_iter()
             .filter(|(_, tag)| {
-                matches!(svg_attr(tag, "stroke"), Some("#2563eb" | "#dc2626"))
+                svg_attr(tag, "stroke") == Some("#2563eb")
                     || svg_attr(tag, "fill") == Some("#dc2626")
             })
             .map(|(_, tag)| {
                 let position = own_translation(tag);
                 (
-                    svg_attr(tag, "d").unwrap().to_owned(),
+                    // Typst may elide a redundant relative move in identical paths.
+                    svg_attr(tag, "d").unwrap().replace("m 0 0", ""),
                     (position.0 - origin.0, position.1 - origin.1),
                 )
             })
             .collect::<Vec<_>>();
+        geometry.sort_by(|left, right| {
+            left.0
+                .cmp(&right.0)
+                .then_with(|| left.1.1.total_cmp(&right.1.1))
+                .then_with(|| left.1.0.total_cmp(&right.1.0))
+        });
         if let Some(expected) = &baseline {
             assert_eq!(geometry.len(), expected.len(), "{mode}");
             for (actual, expected) in geometry.iter().zip(expected) {
@@ -1270,4 +1295,27 @@ fn public_gammaloop_external_order_tracks_physical_indices() {
             &[],
         )
         .unwrap();
+}
+
+#[test]
+fn public_native_curve_splits_layers_and_route_points_behave() {
+    let (base, renderer) = staged(&[
+        (
+            "crates/kurvst/typst/tests/pattern-split.typ",
+            include_str!("../../kurvst/typst/tests/pattern-split.typ"),
+        ),
+        (
+            "crates/kurvst/typst/tests/layer-offset.typ",
+            include_str!("../../kurvst/typst/tests/layer-offset.typ"),
+        ),
+        (
+            "route-points-behavior.typ",
+            include_str!("resources/route-points-behavior.typ"),
+        ),
+    ]);
+    let source = r#"#include "crates/kurvst/typst/tests/pattern-split.typ"
+#include "crates/kurvst/typst/tests/layer-offset.typ"
+#include "route-points-behavior.typ"
+"#;
+    render(&base, &renderer, "native-geometry.typ", source);
 }

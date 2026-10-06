@@ -678,7 +678,7 @@ impl TypstRenderer {
             let stderr = String::from_utf8_lossy(&output.stderr);
 
             // Build detailed error message
-            let mut error_msg = format!("typst failed while {description}");
+            let mut error_msg = format!("typst failed while {description} ({})", output.status);
 
             // Show the command that was executed
             let cmd_str = format!("{:?}", command);
@@ -747,6 +747,7 @@ impl TypstRenderer {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::env;
 
     fn value_dict(fields: impl IntoIterator<Item = (impl Into<String>, TypstValue)>) -> TypstValue {
         TypstValue::Dictionary(
@@ -890,6 +891,15 @@ mod tests {
                 .is_some()
         );
         assert!(KURVST_PACKAGE_ASSETS.get_file("src/impl.typ").is_some());
+        for name in ["ec-layout.wasm", "LICENSE.ec-layout", "LICENSE.clarabel"] {
+            assert!(
+                !LINNEST_PACKAGE_ASSETS
+                    .get_file(name)
+                    .unwrap()
+                    .contents()
+                    .is_empty()
+            );
+        }
         for package in [&LINNEST_PACKAGE_ASSETS, &KURVST_PACKAGE_ASSETS] {
             assert!(package.files().all(|file| {
                 let path = file.path();
@@ -897,7 +907,14 @@ mod tests {
                     && path.extension().is_some_and(|extension| extension == "typ"))
                     || matches!(
                         path.to_str(),
-                        Some("typst.toml" | "linnest.wasm" | "kurvst.wasm")
+                        Some(
+                            "typst.toml"
+                                | "linnest.wasm"
+                                | "kurvst.wasm"
+                                | "ec-layout.wasm"
+                                | "LICENSE.ec-layout"
+                                | "LICENSE.clarabel"
+                        )
                     )
             }));
         }

@@ -245,7 +245,7 @@
   start,
   /// Stop angle; `stop < start` runs clockwise. -> angle
   stop,
-) = _impl.arc(center, radius, start, stop)
+) = _impl-arc(center, radius, start, stop)
 
 /// Build a path fragment from a cubic segment dictionary.
 /// -> dictionary
@@ -522,7 +522,7 @@
   end-cap: auto,
   /// Curve fitting tolerance passed to the Rust geometry engine. -> float
   accuracy: 0.001,
-) = _impl.outline(
+) = _impl-outline(
   path,
   width: width,
   join: join,
