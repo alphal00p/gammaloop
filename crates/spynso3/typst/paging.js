@@ -31,7 +31,7 @@ export default {
     const status = root.querySelector(".status");
     const math = root.querySelector(".math");
     const parts = root.querySelector(".parts");
-    let serial = 0, pending = false, live = false, horizontal = true, timer;
+    let serial = 0, pending = false, live = false, horizontal = false, timer;
     const view = crypto.randomUUID?.() || `${Date.now()}-${Math.random()}`;
 
     function send(action, value) {
