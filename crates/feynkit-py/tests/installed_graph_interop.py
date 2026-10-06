@@ -1,13 +1,15 @@
-"""Exercise an installed FeynKit host with a separately built Linnet extension.
+"""Exercise HepKit and graph bindings in one installed Community extension.
 
 The public API is provided by ``symbolica.community.hepkit``.
 """
 
 import gc
+import json
+import xml.etree.ElementTree as ET
 import weakref
 from pathlib import Path
 
-import linnet
+from symbolica.community import graph as linnet
 from symbolica.community.tensor import TensorExpression
 
 from symbolica.community import hepkit as fk
@@ -31,10 +33,10 @@ diagram = next(
     )
     > 1
 )
-graph = diagram.to_linnet()
+graph = diagram.to_graph()
 assert type(graph) is linnet.Graph
-assert type(graph).__module__ == "linnet"
-assert graph is diagram.to_linnet()
+assert type(graph).__module__ == "symbolica.community.graph"
+assert graph is diagram.to_graph()
 assert graph.n_nodes == len(diagram.vertices)
 assert graph.n_edges == len(diagram.edges)
 assert all(vertex.interaction for vertex in diagram.vertices)
@@ -54,7 +56,7 @@ assert sorted(half.data for half in graph.half_edges()) == list(
 )
 
 raw_full = graph.full_subgraph()
-assert type(raw_full).__module__ == "linnet"
+assert type(raw_full).__module__ == "symbolica.community.graph"
 full = diagram.subgraph(raw_full)
 empty = diagram.subgraph()
 internal = diagram.filter(edge=lambda edge: not edge.is_external)
@@ -134,7 +136,7 @@ else:
     raise AssertionError("parent bases must retain diagram instance ownership")
 assert diagram.compatible_momentum_basis(diagram.loop_momentum_basis)
 
-for invalid in [restored.to_linnet().full_subgraph(), object()]:
+for invalid in [restored.to_graph().full_subgraph(), object()]:
     try:
         diagram.subgraph(invalid)
     except (ValueError, TypeError):
@@ -152,7 +154,7 @@ else:
     raise AssertionError("stale selections must be rejected")
 # Physics views retain immutable diagram ownership independently of analysis edits.
 assert full.numerator_expression() == diagram.numerator_expression()
-fresh = diagram.to_linnet()
+fresh = diagram.to_graph()
 assert fresh is not graph
 assert (
     diagram.subgraph(fresh.full_subgraph()).numerator_expression()
@@ -169,7 +171,7 @@ cross_section = (
 assert len(cross_section.vertices) == 2
 assert all(not edge.is_dangling for edge in cross_section.external_edges)
 assert len(cross_section.external_edges) == 1
-cross_graph = cross_section.to_linnet()
+cross_graph = cross_section.to_graph()
 assert cross_graph.n_nodes == 2 and cross_graph.n_edges == 3
 for cut in cross_section.cuts:
     assert cut.left.loop_count == cut.right.loop_count == 0
@@ -183,7 +185,10 @@ for cut in cross_section.cuts:
 for candidate in cross_section.topology_threshold_candidates:
     assert isinstance(candidate.left, fk.Subgraph)
     assert isinstance(candidate.right, fk.Subgraph)
-assert "is_cut:" in cross_section.to_linnest()
+assert any(
+    "is_cut" in json.loads(element.get("data-linnet-detail", "{}"))
+    for element in ET.fromstring(cross_section.render().to_svg()).iter()
+)
 assert (
     fk.FeynmanDiagram.from_json(model, cross_section.to_json()).to_json()
     == cross_section.to_json()
@@ -195,7 +200,7 @@ assert (
 
 # A mutable analysis payload may point back at its owner; that cycle is collectable.
 cycle_diagram = fk.FeynmanDiagram.from_json(model, diagram.to_json())
-cycle_graph = cycle_diagram.to_linnet()
+cycle_graph = cycle_diagram.to_graph()
 
 
 class Payload:

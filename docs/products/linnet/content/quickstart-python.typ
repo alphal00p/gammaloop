@@ -3,32 +3,17 @@
 #let quickstart-python = [
 = Using Linnet from Python
 
-The `linnet` extension provides native Linnet graphs to Python 3.10 and newer. It is a real
-binding with runtime tests, but it is not currently published to PyPI.
-
-#callout("Developer preview: build from source", [
-  This `linnet` distribution must be built from a GammaLoop checkout. The `linnet` project
-  on PyPI is unrelated; `pip install linnet` does not install these bindings.
-])
-
-== Build the extension
-
-Install a stable Rust toolchain and Python 3.10 or newer, then run:
+Symbolica Community exposes native Linnet graphs as `symbolica.community.graph`.
+Build and install the complete Community wheel, or use the repository's notebook host:
 
 // docs-example: syntax
 ```sh
-git clone https://github.com/alphal00p/gammaloop.git
-cd gammaloop
-python3.10 -m venv .venv
-. .venv/bin/activate
-python -m pip install "maturin>=1.7,<2.0"
-maturin develop --locked \
-  --manifest-path crates/linnet-py/Cargo.toml \
-  --features extension-module,abi3-py310
+python -m pip install "maturin>=1.13,<2"
+maturin develop --locked --manifest-path examples/notebooks/symbolica-host/Cargo.toml
 ```
 
-The declared Python dependencies install `typst` 0.15.0 alongside the extension. Python rendering
-uses that in-process binding; a `typst` command in `PATH` is neither required nor invoked.
+Rendering uses the embedded Rust Typst compiler. No separate Python Linnet or Typst
+package or external Typst executable is required.
 
 == Parse and inspect a graph
 
@@ -36,7 +21,7 @@ Save this as `linnet_quickstart.py`:
 
 // docs-example: compile linnet-python-quickstart
 ```python
-import linnet as lp
+from symbolica.community import graph as lp
 
 codec = lp.DotCodec.topology()
 graph = lp.Graph.from_dot(

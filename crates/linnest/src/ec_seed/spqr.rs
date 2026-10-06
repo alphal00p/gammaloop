@@ -1,7 +1,7 @@
 //! SPQR decomposition primitive of the constrained embedding, and a
 //! decomposition of the small blocks of diagram expansions by recursive
 //! separation-pair splits.
-use super::embedding::{Graph, Id, Ids, Result, Set, require};
+use super::embedding::{require, Graph, Id, Ids, Result, Set};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
@@ -599,7 +599,11 @@ impl<'a> SpqrSkeletons<'a> {
     /// Twin half of a virtual edge.
     fn twin(&self, k: usize, own: usize) -> (usize, usize) {
         let [a, b] = self.halves[&k];
-        if a.0 == own { b } else { a }
+        if a.0 == own {
+            b
+        } else {
+            a
+        }
     }
 
     /// Smallest request position of the real edges behind every edge,

@@ -832,6 +832,72 @@ impl Drawing {
     }
 }
 
+impl NodeDrawing {
+    fn size(&self, typeset: &Typeset) -> (f64, f64) {
+        let Some(label) = self.label.map(|i| &typeset.pages[i]) else {
+            return (self.radius, self.radius);
+        };
+        let (w, h) = (
+            (label.width / UNIT / 2.0 + 0.25).max(self.radius),
+            (label.height / UNIT / 2.0 + 0.25).max(self.radius),
+        );
+        if self.rectangular {
+            (w, h)
+        } else {
+            (w.hypot(h), w.hypot(h))
+        }
+    }
+}
+
+impl Scene {
+    /// Arrange independently rendered channels in one valid SVG document.
+    pub fn combine_svgs(figures: &[String]) -> Result<String, String> {
+        if let [figure] = figures {
+            return Ok(figure.clone());
+        }
+        let mut body = String::new();
+        let (mut width, mut height) = (0.0_f64, 0.0_f64);
+        for figure in figures {
+            let document = roxmltree::Document::parse(figure).map_err(|e| e.to_string())?;
+            let size = document
+                .root_element()
+                .attribute("viewBox")
+                .ok_or("SVG has no viewBox")?
+                .split_whitespace()
+                .map(str::parse::<f64>)
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(|e| e.to_string())?;
+            if size.len() != 4 {
+                return Err("invalid SVG viewBox".into());
+            }
+            // Nested viewports use the outer SVG's graph units, not CSS points.
+            let end = figure.find('>').ok_or("SVG has no opening tag")?;
+            let mut opening = figure[..end].to_owned();
+            let mut dimensions = document
+                .root_element()
+                .attributes()
+                .filter(|attribute| matches!(attribute.name(), "width" | "height"))
+                .map(|attribute| attribute.range())
+                .collect::<Vec<_>>();
+            dimensions.sort_by_key(|range| range.start);
+            for range in dimensions.into_iter().rev() {
+                opening.replace_range(range, "");
+            }
+            body.push_str(&format!(
+                "{opening} x=\"{width}\" y=\"0\" width=\"{}\" height=\"{}\"{}",
+                size[2],
+                size[3],
+                &figure[end..]
+            ));
+            width += size[2] + 10.0;
+            height = height.max(size[3]);
+        }
+        Ok(format!(
+            "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 {width} {height}\" width=\"{width}pt\" height=\"{height}pt\">{body}</svg>"
+        ))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::collections::BTreeMap;
@@ -975,12 +1041,10 @@ mod tests {
     fn reads_title_and_measured_label_pages() {
         let scene = bubble(false);
         let typeset = typeset(&scene);
-        assert!(
-            typeset
-                .title
-                .as_ref()
-                .is_some_and(|title| title.metrics.is_none())
-        );
+        assert!(typeset
+            .title
+            .as_ref()
+            .is_some_and(|title| title.metrics.is_none()));
         assert_eq!(typeset.pages[0].metrics, Some([10.0, 8.0, 8.0, 12.0]));
         assert_eq!(typeset.pages[0].body, "<g/>");
         assert_eq!(typeset.defs.matches("<symbol").count(), 1);
@@ -1197,71 +1261,5 @@ mod tests {
             continued_after_rejection,
             "exercise another feedback pass after rejecting a drawing"
         );
-    }
-}
-
-impl NodeDrawing {
-    fn size(&self, typeset: &Typeset) -> (f64, f64) {
-        let Some(label) = self.label.map(|i| &typeset.pages[i]) else {
-            return (self.radius, self.radius);
-        };
-        let (w, h) = (
-            (label.width / UNIT / 2.0 + 0.25).max(self.radius),
-            (label.height / UNIT / 2.0 + 0.25).max(self.radius),
-        );
-        if self.rectangular {
-            (w, h)
-        } else {
-            (w.hypot(h), w.hypot(h))
-        }
-    }
-}
-
-impl Scene {
-    /// Arrange independently rendered channels in one valid SVG document.
-    pub fn combine_svgs(figures: &[String]) -> Result<String, String> {
-        if let [figure] = figures {
-            return Ok(figure.clone());
-        }
-        let mut body = String::new();
-        let (mut width, mut height) = (0.0_f64, 0.0_f64);
-        for figure in figures {
-            let document = roxmltree::Document::parse(figure).map_err(|e| e.to_string())?;
-            let size = document
-                .root_element()
-                .attribute("viewBox")
-                .ok_or("SVG has no viewBox")?
-                .split_whitespace()
-                .map(str::parse::<f64>)
-                .collect::<Result<Vec<_>, _>>()
-                .map_err(|e| e.to_string())?;
-            if size.len() != 4 {
-                return Err("invalid SVG viewBox".into());
-            }
-            // Nested viewports use the outer SVG's graph units, not CSS points.
-            let end = figure.find('>').ok_or("SVG has no opening tag")?;
-            let mut opening = figure[..end].to_owned();
-            let mut dimensions = document
-                .root_element()
-                .attributes()
-                .filter(|attribute| matches!(attribute.name(), "width" | "height"))
-                .map(|attribute| attribute.range())
-                .collect::<Vec<_>>();
-            dimensions.sort_by_key(|range| range.start);
-            for range in dimensions.into_iter().rev() {
-                opening.replace_range(range, "");
-            }
-            body.push_str(&format!(
-                "{opening} x=\"{width}\" y=\"0\" width=\"{}\" height=\"{}\"{}",
-                size[2],
-                size[3],
-                &figure[end..]
-            ));
-            width += size[2] + 10.0;
-            height = height.max(size[3]);
-        }
-        Ok(format!(
-            "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 {width} {height}\" width=\"{width}pt\" height=\"{height}pt\">{body}</svg>"
-        ))
     }
 }

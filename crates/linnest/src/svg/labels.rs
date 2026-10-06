@@ -4,9 +4,9 @@
 use std::collections::BTreeMap;
 
 use kurbo::{BezPath, CubicBez, Point, Shape};
-use serde::{Deserialize, Serialize, de::DeserializeOwned};
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
-use super::{UNIT, curves, marks};
+use super::{curves, marks, UNIT};
 
 /// Clearance between an external label and its free endpoint.
 const EXTERNAL_GAP: f64 = 0.25;

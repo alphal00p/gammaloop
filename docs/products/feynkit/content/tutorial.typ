@@ -253,10 +253,10 @@ Structural cycles include sewn initial-state carriers, while the physical
 `loop_count` excludes those carriers when constructing a momentum basis.
 
 For optional interoperability, install the matching Python `linnet` extension.
-`diagram.to_linnet()` returns its canonical `Graph` with physics payloads, and
+`diagram.to_graph()` returns its canonical `Graph` with physics payloads, and
 `diagram.subgraph(selection)` imports graph-bound Linnet selections. Exported half-edge
 indices may differ from native IDs; the exported half-edge's `data` contains its native ID.
-`region.to_linnet()` returns the complete analysis graph; `region.linnet_selection` supplies
+`region.to_graph()` returns the complete analysis graph; `region.linnet_selection` supplies
 its corresponding canonical selection for direct Linnet algorithms. Importing a canonical
 selection checks the graph owner and topology revision. A structural edit to the analysis
 graph invalidates those canonical selections, while existing physics views retain their

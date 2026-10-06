@@ -23,5 +23,5 @@ build = "cp314-*"
 # Pyodide's ABI-tag rewrite repacks the wheel with DEFLATE; compress afterwards.
 repair-wheel-command = 'python "{package}/compress_wheel.py" "{wheel}" "{dest_dir}"'
 environment = { MATURIN_PEP517_ARGS = "--locked --no-default-features --features wasm", RUSTFLAGS = "" }
-test-sources = ["crates/feynkit-py/tests/installed_offline_rendering.py", "crates/spynso3/tests/installed_tensor_paging.py"]
-test-command = "python crates/feynkit-py/tests/installed_offline_rendering.py && python crates/spynso3/tests/installed_tensor_paging.py"
+test-sources = ["crates/linnet-py/tests", "crates/linnet-py/python", "crates/linnest/typst/src", "crates/linnest/typst/linnest.wasm", "docs/products/linnet/content/quickstart-python.typ", "crates/feynkit-py/tests/installed_offline_rendering.py", "crates/spynso3/tests/installed_tensor_paging.py"]
+test-command = "python -m unittest discover -s crates/linnet-py/tests -p 'test_*.py' && python crates/feynkit-py/tests/installed_offline_rendering.py && python crates/spynso3/tests/installed_tensor_paging.py"

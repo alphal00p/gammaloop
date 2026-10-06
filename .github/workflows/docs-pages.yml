@@ -17,7 +17,6 @@ on:
       - 'gammaloop-api-v*'
       - 'gammaloop-python-v*'
       - 'linnet-v*'
-      - 'linnet-python-v*'
       - 'spenso-v*'
       - 'spenso-macros-v*'
       - 'spenso-hep-lib-v*'
@@ -306,42 +305,22 @@ jobs:
             echo "enabled=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - id: notebook_wheel
-        name: Restore this revision's browser wheel
-        if: steps.notebook_source.outputs.enabled == 'true'
-        uses: actions/cache@v4
-        with:
-          path: ${{ runner.temp }}/linnet-docs-wheel
-          key: linnet-docs-wheel-v1-${{ runner.os }}-cibuildwheel-4.2.0-${{ steps.notebook_source.outputs.revision }}
-
       - id: community_notebook_wheel
         name: Restore this revision's shared Symbolica browser wheel
-        if: steps.notebook_source.outputs.community == 'true'
+        if: steps.notebook_source.outputs.enabled == 'true'
         uses: actions/cache@v4
         with:
           path: ${{ runner.temp }}/symbolica-docs-wheel
           key: symbolica-docs-wheel-v1-${{ runner.os }}-cibuildwheel-4.2.0-${{ steps.notebook_source.outputs.revision }}
 
       - name: Install the WebAssembly Rust target
-        if: steps.notebook_source.outputs.enabled == 'true' && (steps.notebook_wheel.outputs.cache-hit != 'true' || (steps.notebook_source.outputs.community == 'true' && steps.community_notebook_wheel.outputs.cache-hit != 'true'))
+        if: steps.notebook_source.outputs.enabled == 'true' && steps.community_notebook_wheel.outputs.cache-hit != 'true'
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: wasm32-unknown-emscripten
 
-      - name: Build and test the documented revision's browser wheel
-        if: steps.notebook_source.outputs.enabled == 'true' && steps.notebook_wheel.outputs.cache-hit != 'true'
-        uses: pypa/cibuildwheel@v4.2.0
-        with:
-          package-dir: crates/linnet-py
-          output-dir: ${{ runner.temp }}/linnet-docs-wheel
-        env:
-          CIBW_BUILD: cp314-pyodide_wasm32
-          CIBW_ENVIRONMENT_PYODIDE: CARGO_PROFILE_RELEASE_LTO=thin CARGO_BUILD_JOBS=2 SOURCE_DATE_EPOCH=${{ steps.notebook_source.outputs.epoch }}
-          CIBW_PLATFORM: pyodide
-          SOURCE_DATE_EPOCH: ${{ steps.notebook_source.outputs.epoch }}
-
       - name: Build the shared Symbolica browser wheel
-        if: steps.notebook_source.outputs.community == 'true' && steps.community_notebook_wheel.outputs.cache-hit != 'true'
+        if: steps.notebook_source.outputs.enabled == 'true' && steps.community_notebook_wheel.outputs.cache-hit != 'true'
         uses: pypa/cibuildwheel@v4.2.0
         with:
           package-dir: examples/notebooks/symbolica-host
@@ -369,7 +348,7 @@ jobs:
           fi
 
           shopt -s nullglob
-          wheels=("$RUNNER_TEMP/linnet-docs-wheel/"*.whl)
+          wheels=("$RUNNER_TEMP/symbolica-docs-wheel/"*.whl)
           if [ "${#wheels[@]}" -ne 1 ]; then
             echo "Expected exactly one browser wheel for the documented revision" >&2
             exit 2
@@ -423,7 +402,7 @@ jobs:
             for product in "${community_products[@]}"; do
               dependency_args=(--dependency-wheel "${ufo_wheels[0]}")
               if [ "$product" != feynkit ]; then
-                dependency_args=(--dependency-wheel "${wheels[0]}")
+                dependency_args=()
               fi
               nix develop --command \
                 uv run --no-project --with marimo==0.24.0 python \

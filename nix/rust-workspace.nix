@@ -15,7 +15,7 @@
   inherit (pkgs) lib;
 
   documentation = import ./documentation.nix {
-    inherit self pkgs docsPkgs craneLib workspaceRoot cargoSources nonCargoBuildSources
+    inherit self pkgs docsPkgs craneLib workspaceRoot cargoSources localCargoPatchSources nonCargoBuildSources
       commonArgs dummyCargoTarget normalizeWorkspaceHackBuildScriptTimestampScript
       workspacePackageSrcFor workspaceMissingCargoTargetsScript;
   };
@@ -39,10 +39,10 @@
 
   # Cargo path patches are dependencies, not workspace members. Preserve their
   # manifests and implementation in every filtered dependency/build context.
+  localCargoPatchDirs = lib.filter (name: builtins.pathExists (workspaceRoot + "/vendor/${name}"))
+    ["clarabel" "dot-parser" "typst-library" "typst-svg"];
   localCargoPatchSources = lib.fileset.unions (
-    map (name: workspaceRoot + "/vendor/${name}")
-    (lib.filter (name: builtins.pathExists (workspaceRoot + "/vendor/${name}"))
-      ["clarabel" "dot-parser" "typst-library" "typst-svg"])
+    map (name: workspaceRoot + "/vendor/${name}") localCargoPatchDirs
   );
   cargoSources = lib.fileset.unions [
     (craneLib.fileset.commonCargoSources workspaceRoot)
@@ -85,6 +85,12 @@
     (workspaceRoot + "/.config")
     (workspaceRoot + "/assets")
     (workspaceRoot + "/crates/clinnet/templates")
+    (workspaceRoot + "/crates/feynkit-model/data/sm.json.zlib")
+    (workspaceRoot + "/crates/feynkit-ufo/src/parameter_labels.py")
+    (workspaceRoot + "/crates/feynkit-py/src/collection.css")
+    (workspaceRoot + "/crates/feynkit-py/src/collection.js")
+    (workspaceRoot + "/crates/linnest/src/svg/interactive.css")
+    (workspaceRoot + "/crates/linnest/src/svg/interactive.js")
     (workspaceRoot + "/crates/kurvst/typst/kurvst.wasm")
     (workspaceRoot + "/crates/kurvst/typst/src")
     (workspaceRoot + "/crates/kurvst/typst/typst.toml")
@@ -95,6 +101,7 @@
     (workspaceRoot + "/crates/linnest/typst/src")
     (workspaceRoot + "/crates/linnest/typst/typst.toml")
     (workspaceRoot + "/crates/linnet-py/README.md")
+    (workspaceRoot + "/crates/linnet-py/typst")
     (workspaceRoot + "/crates/linnet-py/vendor")
     # Reviewed 2026-09-14: Spynso's embedded Typst renderer is also a build input;
     # adding its source directory does not change the documentation cache boundaries.
@@ -142,7 +149,7 @@
       (workspaceRoot + "/docs/api/python")
       (workspaceRoot + "/docs/examples.toml")
       (workspaceRoot + "/docs/products")
-      (workspaceRoot + "/crates/linnet-py/linnet.pyi")
+      (workspaceRoot + "/crates/linnet-py/python/symbolica/community/graph/__init__.pyi")
     ] ++ workspacePackageExtraFilesetsForSourcePackages "compileTimeTest" workspaceMemberPackages);
   };
 
@@ -395,14 +402,20 @@
     sortedUnique (map builtins.head sourceMatches);
 
   workspacePackageExtraSourceRoots.production = {
+    linnest = [
+      "crates/linnest/src/svg/interactive.css"
+      "crates/linnest/src/svg/interactive.js"
+    ];
+    "feynkit-ufo" = ["crates/feynkit-ufo/src/parameter_labels.py"];
     "feynkit-py" = [
+      "crates/feynkit-py/src/collection.css"
+      "crates/feynkit-py/src/collection.js"
       "assets/embedded/drawing/templates/layout-core.typ"
       "assets/embedded/drawing/templates/physics-edge-style.typ"
       "assets/embedded/drawing/templates/impl/physics-edge-style.typ"
     ];
     "alphal00p-docs-catalogs" = documentationCatalogAnnotatedItemSourcePaths;
     "alphal00p-docs-examples" = [
-      "crates/linnet-py/pyproject.toml"
       "docs/api/python"
       "docs/examples.toml"
       "docs/products"
@@ -443,6 +456,7 @@
     "linnet-py" = [
       "crates/linnet-py/LICENSE"
       "crates/linnet-py/README.md"
+      "crates/linnet-py/typst"
       "crates/kurvst/typst/LICENSE"
       "crates/kurvst/typst/kurvst.wasm"
       "crates/kurvst/typst/src"
@@ -465,6 +479,7 @@
   };
 
   workspacePackageExtraSourceRoots.compileTimeTest = {
+    "linnet-py" = ["crates/linnet-py/tests/test_svg_interaction.py"];
     linnet = ["crates/linnet/src/half_edge/layout/impred/fixtures"];
     linnest = [
       "crates/linnest/layout/native/fixtures"
@@ -475,14 +490,25 @@
     "feynkit-cff" = ["crates/feynkit-model/tests/fixtures"];
     "feynkit-generator" = ["crates/feynkit-model/tests/fixtures"];
     "feynkit-model" = ["crates/feynkit-model/tests/fixtures"];
-    "feynkit-py" = ["crates/feynkit-model/tests/fixtures" "crates/feynkit-py/python/symbolica/community/hepkit/__init__.py" "crates/feynkit-py/tests/fixtures" "crates/linnet-render-py/python/symbolica/community/render/__init__.py"];
+    "feynkit-py" = [
+      "crates/feynkit-model/tests/fixtures"
+      "crates/feynkit-py/python/symbolica/community/hepkit/__init__.py"
+      "crates/feynkit-py/tests/fixtures"
+      "crates/feynkit-py/tests/installed_wavefunctions.py"
+      "crates/feynkit-py/tests/installed_offline_rendering.py"
+      "crates/spynso3/tests/installed_tensor_network_display.py"
+      "crates/linnet-py/tests/test_community_rendering.py"
+      "crates/linnet-py/python/symbolica/community/graph/__init__.py"
+    ];
     "alphal00p-docs-macros" = ["crates/alphal00p-docs-macros/tests/ui"];
-    "alphal00p-docs-python-exporter" = ["crates/linnet-py/linnet.pyi" "docs/api/python"];
+    "alphal00p-docs-python-exporter" = ["crates/linnet-py/python/symbolica/community/graph/__init__.pyi" "docs/api/python"];
     clinnet = [
       "assets/embedded/drawing/templates/impl/physics-edge-style.typ"
       "assets/embedded/drawing/templates/layout-core.typ"
       "assets/embedded/drawing/templates/physics-edge-style.typ"
       "crates/clinnet/tests/resources"
+      "crates/kurvst/typst/tests/pattern-split.typ"
+      "crates/kurvst/typst/tests/layer-offset.typ"
       "crates/linnest/typst/examples/map-style.typ"
       "tests/resources/graphs/epemttbar.dot"
     ];
@@ -779,7 +805,6 @@
     "feynkit-py"
     "alphal00p-docs-python-exporter"
     "linnet-py"
-    "linnet-render-py"
     "spynso3"
   ];
 
@@ -1902,6 +1927,15 @@
         doNotLinkInheritedArtifacts = args.doNotLinkInheritedArtifacts or true;
         doCheck = false;
         checkPhaseCargoCommand = "";
+
+        # Registry dependencies call these patched crates during prebuilds.
+        # Crane must not replace their implementation with workspace placeholders.
+        extraDummyScript = (args.extraDummyScript or "") + lib.concatMapStringsSep "\n" (name: ''
+          rm -rf "$out/vendor/${name}"
+          mkdir -p "$out/vendor"
+          cp -R --no-preserve=ownership ${workspaceDependencySrc}/vendor/${name} "$out/vendor/${name}"
+          chmod -R u+w "$out/vendor/${name}"
+        '') localCargoPatchDirs;
 
         postPatch =
           (args.postPatch or "")

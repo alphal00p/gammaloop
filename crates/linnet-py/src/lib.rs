@@ -8,21 +8,25 @@ mod graph;
 mod mutations;
 mod native_graph;
 mod render;
-pub use render::PreparedRender;
-pub use typst::{PyAuto as Auto, PyRenderConfig as RenderConfig};
+pub use snapshot::PyDiagramRender;
+mod scene;
+mod snapshot;
+pub use graph::PyGraph;
+pub use topology::PySubgraph;
+pub use typst::PyRenderSettings;
+pub use typst::{PyAuto as Auto, PyRenderSettings as RenderSettings};
 mod streaming;
 mod svg;
 mod topology;
 mod typst;
 
-#[pymodule(name = "linnet")]
-fn linnet_py(module: &Bound<'_, PyModule>) -> PyResult<()> {
+pub fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     graph::register(module)?;
     topology::register(module)?;
     drawing::register(module)?;
     dot::register(module)?;
     typst::register_typst_api(module)?;
-    render::register(module)?;
+    module.add_class::<PyDiagramRender>()?;
     streaming::register(module)?;
     Ok(())
 }
@@ -41,7 +45,11 @@ pub fn stub_info() -> pyo3_stub_gen::Result<pyo3_stub_gen::StubInfo> {
 // are recursively checked before they can cross into Typst.  Keep the aliases
 // here so manual signatures and generated signatures share one closed model.
 #[cfg(feature = "python_stubgen")]
-const STUB_TYPE_ALIASES: &str = r#"class _TypstValueRef(typing.Protocol): ...
+const STUB_TYPE_ALIASES: &str = r#"_RealLabel: typing.TypeAlias = Float | int | float | str | decimal.Decimal
+_ExpressionLabel: typing.TypeAlias = Expression | ComplexFloat | _RealLabel | complex | tuple[_RealLabel, _RealLabel] | None
+_LabelKey: typing.TypeAlias = typing.Callable[[typing.Any], _ExpressionLabel] | None
+
+class _TypstValueRef(typing.Protocol): ...
 class _TypstContentRef(typing.Protocol): ...
 class _TypstFunctionRef(typing.Protocol):
     def call(self, *args: _NativeValue, **kwargs: _NativeValue) -> TypstCall: ...
@@ -126,7 +134,7 @@ _HalfEdgeTarget: typing.TypeAlias = HalfEdge | builtins.int
 _GraphItem: typing.TypeAlias = NodeSpec | EdgeSpec
 _OptionalGlobalData: typing.TypeAlias = GlobalData | None
 _OptionalDotCodec: typing.TypeAlias = DotCodec | None
-_OptionalRenderConfig: typing.TypeAlias = RenderConfig | None
+_OptionalRenderSettings: typing.TypeAlias = RenderSettings | None
 _OptionalPaint: typing.TypeAlias = _Paint | None
 _OptionalLengthValue: typing.TypeAlias = _LengthValue | None
 _OptionalStrokeCap: typing.TypeAlias = StrokeCap | None | Inherit
@@ -191,7 +199,7 @@ _OptionalPadding: typing.TypeAlias = _Padding | None
 _TemplatePath: typing.TypeAlias = builtins.str | os.PathLike[builtins.str] | None | Inherit
 _SourceRootPath: typing.TypeAlias = builtins.str | os.PathLike[builtins.str] | None | Inherit
 _RenderStyle: typing.TypeAlias = GraphStyleOptions | None | Inherit
-_RenderLayouts: typing.TypeAlias = LayoutOptions | None | Inherit
+_RenderLayouts: typing.TypeAlias = LayoutSettings | None | Inherit
 _RenderDrawing: typing.TypeAlias = DrawOptions | None | Inherit
 _RenderSelectors: typing.TypeAlias = DrawingSelectors | None | Inherit
 _TemplateOptions: typing.TypeAlias = _NativeDict | None | Inherit
@@ -203,7 +211,7 @@ pub fn canonical_stub() -> pyo3_stub_gen::Result<String> {
     let info = stub_info()?;
     let module = info
         .modules
-        .get("linnet")
+        .get("symbolica.community.graph")
         .expect("linnet StubInfo must contain the linnet module");
     let mut exports = module
         .class
@@ -319,4 +327,15 @@ pub fn canonical_stub() -> pyo3_stub_gen::Result<String> {
         .join("\n");
     canonical.push('\n');
     Ok(canonical)
+}
+
+/// Generic graphs and graph presentation share a single Community module.
+pub struct GraphModule;
+impl symbolica::api::python::SymbolicaCommunityModule for GraphModule {
+    fn get_name() -> String {
+        "graph".into()
+    }
+    fn register_module(module: &Bound<'_, PyModule>) -> PyResult<()> {
+        register(module)
+    }
 }

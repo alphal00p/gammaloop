@@ -23,7 +23,7 @@ cargo run --locked -p alphal00p-docs-python-exporter --features feynkit -- \
 cargo run --locked -p alphal00p-docs-python-exporter --features gammaloop -- \
   gammaloop-python docs/api/python/gammaloop-python.pyi
 cargo run --locked -p alphal00p-docs-python-exporter --features linnet -- \
-  linnet-python docs/api/python/linnet-python.pyi
+  linnet-graph docs/api/python/linnet-graph.pyi
 cargo run --locked -p alphal00p-docs-python-exporter --features spenso -- \
   spynso3 docs/api/python/spynso3.pyi
 cargo run --locked -p alphal00p-docs-python-exporter --features vakint -- \
@@ -44,7 +44,8 @@ See the [FeynKit manual](../../products/feynkit/content/overview.typ) for usage.
 
 The Linnet invocation renders one canonical StubInfo surface, including its
 deterministic `__all__`, and writes or checks both
-`crates/linnet-py/linnet.pyi` and `docs/api/python/linnet-python.pyi`. Its import
+`crates/linnet-py/python/symbolica/community/graph/__init__.pyi` and
+`docs/api/python/linnet-graph.pyi`. Its import
 test compares that same surface with the extension's real runtime exports.
 
 Do not combine the inventory features: PyO3 stub registration uses a

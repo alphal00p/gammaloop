@@ -1069,7 +1069,7 @@ def run(value: str, strict: bool = False) -> str:
             .unwrap();
         let components = [
             ("gammaloop-python", "gammaloop._gammaloop"),
-            ("linnet-python", "linnet"),
+            ("linnet-graph", "symbolica.community.graph"),
             ("spynso3", "symbolica.community.tensor"),
             ("vakint-community", "symbolica.community.hepkit.vakint"),
         ];
@@ -1117,7 +1117,7 @@ def run(value: str, strict: bool = False) -> str:
         assert_eq!(canonical.members[1].name, "short_form");
         assert_eq!(canonical.members[1].default.as_deref(), Some("None"));
 
-        let linnet = &catalogs["linnet-python"].root.scopes["exports"].items["Graph"];
+        let linnet = &catalogs["linnet-graph"].root.scopes["exports"].items["Graph"];
         assert!(linnet.members.iter().any(|member| {
             member.name == "global_data" && member.kind == DocMemberKind::Getter
         }));
@@ -1127,7 +1127,7 @@ def run(value: str, strict: bool = False) -> str:
         assert!(linnet.members.iter().any(|member| {
             member.name == "from_dot" && member.kind == DocMemberKind::AssociatedFunction
         }));
-        let auto = &catalogs["linnet-python"].root.scopes["exports"].items["AUTO"];
+        let auto = &catalogs["linnet-graph"].root.scopes["exports"].items["AUTO"];
         assert_eq!(auto.kind, DocItemKind::PythonConstant);
         assert_eq!(
             auto.docs.as_ref().unwrap().body,

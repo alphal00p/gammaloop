@@ -8,11 +8,14 @@ import xml.etree.ElementTree as ET
 from symbolica.core import Expression
 
 E = Expression.parse
-from symbolica.community.render import (
+from symbolica.community.graph import (
     DiagramRender,
     LayoutSettings,
     RenderSettings,
-    StrokeStyle,
+    Stroke,
+    Color,
+    DrawOptions,
+    LayoutAlgorithm,
 )
 from symbolica.community.tensor import (
     Representation,
@@ -270,8 +273,10 @@ class NetworkDisplayTests(unittest.TestCase):
         network = TensorNetwork(E("2 + x"))
         config = RenderSettings(
             title="Configured graph",
-            layout=LayoutSettings(layout_algo="dot"),
-            edge_stroke=StrokeStyle(paint="#123456", thickness=2),
+            layouts=LayoutSettings(algorithm=LayoutAlgorithm.Dot),
+            drawing=DrawOptions(
+                edge_stroke=Stroke(paint=Color("#123456"), thickness=2)
+            ),
         )
         drawing = network.render(config=config)
         self.assertIsInstance(drawing, DiagramRender)
@@ -285,11 +290,11 @@ class NetworkDisplayTests(unittest.TestCase):
         network.execute()
         self.assertEqual(drawing.to_html(), html)
         self.assertEqual(drawing.to_svg(), svg)
-        self.assertIn("layout=LayoutSettings", repr(config))
-        with self.assertRaises(AttributeError):
-            config.title = "changed"
+        self.assertEqual(config.layouts.pass_count, 1)
+        config.title = "changed"
+        self.assertEqual(drawing.to_svg(), svg)
         with self.assertRaises(ValueError):
-            RenderSettings(node_radius=-1)
+            DrawOptions(node_radius=-1)
         with self.assertRaises(TypeError):
             network.render(config={"title": "obsolete"})
 

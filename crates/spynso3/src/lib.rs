@@ -2143,16 +2143,6 @@ impl SpensoModule {
     /// Preserve their actual surface instead of promising `.name`, `.value`, or iteration.
     pub fn prepare_stub_module(module: &mut pyo3_stub_gen::generate::Module) {
         use pyo3_stub_gen::generate::{ClassDef, MemberDef, MethodDef, MethodType};
-        for name in ["LayoutSettings", "StrokeStyle", "DiagramRender"] {
-            module.variables.insert(
-                name,
-                pyo3_stub_gen::generate::VariableDef {
-                    name,
-                    type_: TypeInfo::with_module("typing.TypeAlias", "typing".into()),
-                    default: Some(format!("symbolica.community.graph.{name}")),
-                },
-            );
-        }
         for (id, enumeration) in std::mem::take(&mut module.enum_) {
             let mut class = ClassDef {
                 name: enumeration.name,

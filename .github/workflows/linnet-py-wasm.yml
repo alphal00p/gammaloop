@@ -1,4 +1,4 @@
-name: Linnet Python WebAssembly
+name: Community graph WebAssembly
 
 on:
   pull_request:
@@ -13,11 +13,13 @@ on:
       - 'crates/linnest/**'
       - 'crates/linnet/**'
       - 'crates/linnet-py/**'
+      - 'crates/feynkit-*/**'
+      - 'crates/spynso3/**'
+      - 'crates/typst-renderer/**'
+      - 'examples/notebooks/symbolica-host/**'
   push:
     branches:
       - main
-    tags:
-      - 'linnet-python-v*'
   workflow_dispatch:
 
 permissions:
@@ -37,7 +39,7 @@ jobs:
 
       - uses: pypa/cibuildwheel@v4.2.0
         with:
-          package-dir: crates/linnet-py
+          package-dir: examples/notebooks/symbolica-host
         env:
           CIBW_BUILD: cp314-pyodide_wasm32
           CIBW_ENVIRONMENT_PYODIDE: CARGO_PROFILE_RELEASE_LTO=thin CARGO_BUILD_JOBS=2
@@ -45,6 +47,6 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: linnet-pyemscripten-wheel
+          name: community-graph-pyemscripten-wheel
           path: wheelhouse/*.whl
           if-no-files-found: error

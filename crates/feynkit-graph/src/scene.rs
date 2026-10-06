@@ -295,6 +295,9 @@ impl FeynmanDiagram {
                 details.insert("external-state", external.state.as_str());
                 details.insert("external-index", external.index);
                 details.insert("external-name", external.name.clone());
+                if ends.source.is_some() && ends.target.is_some() {
+                    details.insert("is_cut", external.connection);
+                }
             }
             details.insert("momentum", momentum.format_momentum());
 
@@ -415,83 +418,6 @@ impl FeynmanDiagram {
             dash: Dash::Dotted,
             round_cap: false,
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use std::collections::BTreeSet;
-
-    use linnest::svg::Dash;
-    use linnet::half_edge::{
-        involution::Hedge,
-        subgraph::{ModifySubSet, SuBitGraph},
-    };
-
-    use super::{HIGHLIGHT, INK, OUTSIDE};
-    use crate::{SceneOptions, display::tests::one_loop};
-
-    #[test]
-    fn describes_amplitudes_as_the_typst_layout_prepares_them() {
-        let diagram = one_loop();
-        let scene = diagram
-            .to_scene(None, &BTreeSet::new(), None, &SceneOptions::default())
-            .unwrap();
-        // Incoming legs start in the left group and outgoing legs in the right
-        // one, every external endpoint at raw depth zero.
-        assert_eq!(scene.graph.nodes.len(), 2);
-        let statements = |edge: usize| &scene.graph.edges[edge].statements;
-        assert_eq!(statements(0)["pin"], "x:@-left");
-        assert_eq!(statements(0)["pos"], "-10,0");
-        assert_eq!(statements(3)["pin"], "x:@+right");
-        assert_eq!(statements(3)["pos-z-mode"], "pin");
-        assert!(statements(1).is_empty());
-        // Massive scalars are dashed 1.55pt ink lines without arrowheads.
-        let scalar = &scene.edges[1];
-        assert_eq!(scalar.stroke.paint, INK);
-        assert_eq!(scalar.stroke.width, 1.55);
-        assert_eq!(scalar.stroke.dash, Dash::Dashed(0.9, 4.05));
-        assert_eq!(
-            (scalar.pattern, scalar.flow, scalar.momentum),
-            (None, None, false)
-        );
-        // Every edge shares one particle label; the name stays outside the SVG.
-        assert_eq!(scene.pages, ["[$ phi $]"]);
-        assert!(scene.edges.iter().all(|edge| edge.label == Some(0)));
-        assert!(scene.title.is_none());
-        // Half-edges are numbered in builder order, as Typst's `build` does.
-        assert_eq!(scalar.details.get("source-hedge"), Some(&1.into()));
-        assert_eq!(scalar.details.get("sink-hedge"), Some(&2.into()));
-        let document = scene.label_document();
-        assert!(!document.contains("#import"));
-        assert!(document.contains("[$ phi $]"));
-    }
-
-    #[test]
-    fn labels_momenta_and_highlights_regions() {
-        let diagram = one_loop();
-        let options = SceneOptions {
-            momentum_arrows: true,
-            ..SceneOptions::default()
-        };
-        let mut selected = diagram.graph.empty_subgraph::<SuBitGraph>();
-        selected.add(Hedge(1));
-        let scene = diagram
-            .to_scene(Some(&selected), &BTreeSet::new(), None, &options)
-            .unwrap();
-        // Momenta follow the arrows into the labels; both legs carry the same one.
-        assert!(scene.edges.iter().all(|edge| edge.momentum));
-        assert_eq!(scene.pages.len(), 3);
-        assert_eq!(scene.edges[0].label, scene.edges[3].label);
-        let internal = &scene.pages[scene.edges[1].label.unwrap()];
-        assert!(internal.contains("k_0"));
-        // A selected half highlights its edge and vertex; the rest fades.
-        assert_eq!(scene.edges[1].stroke.paint, HIGHLIGHT);
-        assert_eq!(scene.edges[1].stroke.dash, Dash::Dashed(0.9, 4.05));
-        assert_eq!(scene.edges[2].stroke.paint, OUTSIDE);
-        assert_eq!(scene.edges[2].stroke.dash, Dash::Dotted);
-        assert_eq!(scene.nodes[0].stroke.paint, HIGHLIGHT);
-        assert_eq!(scene.nodes[1].stroke.paint, OUTSIDE);
     }
 }
 
@@ -692,5 +618,82 @@ impl SceneOptions {
             .collect();
         }
         Ok(scene)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::BTreeSet;
+
+    use linnest::svg::Dash;
+    use linnet::half_edge::{
+        involution::Hedge,
+        subgraph::{ModifySubSet, SuBitGraph},
+    };
+
+    use super::{HIGHLIGHT, INK, OUTSIDE};
+    use crate::{SceneOptions, display::tests::one_loop};
+
+    #[test]
+    fn describes_amplitudes_as_the_typst_layout_prepares_them() {
+        let diagram = one_loop();
+        let scene = diagram
+            .to_scene(None, &BTreeSet::new(), None, &SceneOptions::default())
+            .unwrap();
+        // Incoming legs start in the left group and outgoing legs in the right
+        // one, every external endpoint at raw depth zero.
+        assert_eq!(scene.graph.nodes.len(), 2);
+        let statements = |edge: usize| &scene.graph.edges[edge].statements;
+        assert_eq!(statements(0)["pin"], "x:@-left");
+        assert_eq!(statements(0)["pos"], "-10,0");
+        assert_eq!(statements(3)["pin"], "x:@+right");
+        assert_eq!(statements(3)["pos-z-mode"], "pin");
+        assert!(statements(1).is_empty());
+        // Massive scalars are dashed 1.55pt ink lines without arrowheads.
+        let scalar = &scene.edges[1];
+        assert_eq!(scalar.stroke.paint, INK);
+        assert_eq!(scalar.stroke.width, 1.55);
+        assert_eq!(scalar.stroke.dash, Dash::Dashed(0.9, 4.05));
+        assert_eq!(
+            (scalar.pattern, scalar.flow, scalar.momentum),
+            (None, None, false)
+        );
+        // Every edge shares one particle label; the name stays outside the SVG.
+        assert_eq!(scene.pages, ["[$ phi $]"]);
+        assert!(scene.edges.iter().all(|edge| edge.label == Some(0)));
+        assert!(scene.title.is_none());
+        // Half-edges are numbered in builder order, as Typst's `build` does.
+        assert_eq!(scalar.details.get("source-hedge"), Some(&1.into()));
+        assert_eq!(scalar.details.get("sink-hedge"), Some(&2.into()));
+        let document = scene.label_document();
+        assert!(!document.contains("#import"));
+        assert!(document.contains("[$ phi $]"));
+    }
+
+    #[test]
+    fn labels_momenta_and_highlights_regions() {
+        let diagram = one_loop();
+        let options = SceneOptions {
+            momentum_arrows: true,
+            ..SceneOptions::default()
+        };
+        let mut selected = diagram.graph.empty_subgraph::<SuBitGraph>();
+        selected.add(Hedge(1));
+        let scene = diagram
+            .to_scene(Some(&selected), &BTreeSet::new(), None, &options)
+            .unwrap();
+        // Momenta follow the arrows into the labels; both legs carry the same one.
+        assert!(scene.edges.iter().all(|edge| edge.momentum));
+        assert_eq!(scene.pages.len(), 3);
+        assert_eq!(scene.edges[0].label, scene.edges[3].label);
+        let internal = &scene.pages[scene.edges[1].label.unwrap()];
+        assert!(internal.contains("k_0"));
+        // A selected half highlights its edge and vertex; the rest fades.
+        assert_eq!(scene.edges[1].stroke.paint, HIGHLIGHT);
+        assert_eq!(scene.edges[1].stroke.dash, Dash::Dashed(0.9, 4.05));
+        assert_eq!(scene.edges[2].stroke.paint, OUTSIDE);
+        assert_eq!(scene.edges[2].stroke.dash, Dash::Dotted);
+        assert_eq!(scene.nodes[0].stroke.paint, HIGHLIGHT);
+        assert_eq!(scene.nodes[1].stroke.paint, OUTSIDE);
     }
 }
