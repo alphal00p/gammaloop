@@ -9,7 +9,7 @@ use feynkit_model::{
 use pyo3::{
     exceptions::PyValueError,
     prelude::*,
-    types::{PyAny, PyComplex, PyModule},
+    types::{PyAny, PyComplex, PyDict, PyModule},
 };
 
 #[cfg(feature = "python_stubgen")]
@@ -28,7 +28,7 @@ use crate::{
 use spynso3::{display::DisplaySettings, expression::TensorExpression};
 use symbolica::{
     api::python::{ConvertibleToExpression, PythonExpression},
-    atom::{Atom, AtomCore},
+    atom::{Atom, AtomCore, AtomView},
     symbol,
 };
 
@@ -3193,6 +3193,82 @@ impl PyModel {
         let input = expression.extract::<PyRef<'_, PythonExpression>>()?;
         let result = self.inner.expand_couplings(&input.expr);
         Py::new(py, PythonExpression { expr: result }).map(Py::into_any)
+    }
+
+    /// Return exact model scalar bindings with all named dependencies resolved.
+    ///
+    /// Internal parameter and coupling definitions remain analytic; cached
+    /// dependent values are not used. Numerical model/card inputs are converted
+    /// to exact binary64 rationals. This operation does not mutate the model or
+    /// numerically recompute it. Unknown symbols and UFO functions outside the
+    /// returned map are retained, not evaluated.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica import E
+    /// >>> model = hep.Model.standard_model()
+    /// >>> values = model.scalar_bindings(overrides={
+    /// ...     model.parameter("MT").symbol: E("345/2"),
+    /// ...     model.parameter("ymt").symbol: E("345/2"),
+    /// ...     model.parameter("WT").symbol: E("0"),
+    /// ...     model.parameter("WH").symbol: E("0"),
+    /// ... })
+    /// >>> assert values[model.parameter("MT").symbol] == E("345/2")
+    ///
+    /// Parameters
+    /// ----------
+    /// card : ParameterCard or None, optional
+    ///     Restriction applied to a copy, including explicit internal overrides.
+    ///     Pass it explicitly even if already applied to the model, because
+    ///     the model does not retain the history of internal overrides.
+    /// overrides : dict[Expression, Expression] or None, optional
+    ///     Exact scalar definitions, keyed by plain symbols. They take
+    ///     precedence over model/card values before dependencies are resolved.
+    ///     Model parameters can be set here without creating a parameter card.
+    ///
+    /// Returns
+    /// -------
+    /// dict[Expression, Expression]
+    ///     Native exact expressions keyed by model and additional override symbols.
+    #[pyo3(signature = (card=None, *, overrides=None))]
+    #[gen_stub(override_return_type(type_repr="typing.Dict[symbolica.Expression, symbolica.Expression]", imports=("typing", "symbolica")))]
+    fn scalar_bindings<'py>(
+        &self,
+        py: Python<'py>,
+        card: Option<&PyParameterCard>,
+        #[gen_stub(override_type(type_repr="typing.Optional[typing.Dict[symbolica.Expression, symbolica.Expression]]", imports=("typing", "symbolica")))]
+        overrides: Option<&Bound<'_, PyDict>>,
+    ) -> PyResult<Bound<'py, PyDict>> {
+        let mut native_overrides = BTreeMap::new();
+        if let Some(overrides) = overrides {
+            for (key, value) in overrides.iter() {
+                let key = key.extract::<PyRef<'_, PythonExpression>>()?;
+                let AtomView::Var(symbol) = key.expr.as_view() else {
+                    return Err(PyValueError::new_err(
+                        "scalar binding keys must be plain symbols",
+                    ));
+                };
+                let value = value.extract::<PyRef<'_, PythonExpression>>()?;
+                native_overrides.insert(symbol.get_symbol(), value.expr.clone());
+            }
+        }
+        let bindings = self
+            .inner
+            .scalar_bindings(card.map(|card| &card.inner), &native_overrides)
+            .map_err(error::model)?;
+        let result = PyDict::new(py);
+        for (symbol, value) in bindings {
+            result.set_item(
+                Py::new(
+                    py,
+                    PythonExpression {
+                        expr: Atom::var(symbol),
+                    },
+                )?,
+                Py::new(py, PythonExpression { expr: value })?,
+            )?;
+        }
+        Ok(result)
     }
 
     /// Return all interaction vertex rules in model order.

@@ -17,7 +17,7 @@ use pyo3::{
     FromPyObject, IntoPyObjectExt,
     exceptions::{PyIndexError, PyTypeError, PyValueError},
     prelude::*,
-    types::{PyAny, PyBool, PyDict, PyEllipsis, PyList, PyModule, PyString},
+    types::{PyAny, PyBool, PyEllipsis, PyList, PyModule, PyString},
 };
 
 #[cfg(feature = "python_stubgen")]
@@ -32,6 +32,7 @@ use crate::{
     error,
     graph::PyFeynmanDiagram,
     model::{PyModel, PyParticle, PyVertexRule},
+    progress::MarimoProgress,
     render_settings::PyRenderSettings,
 };
 use symbolica::{
@@ -2771,36 +2772,13 @@ fn run_generation(
             }));
         }
     }
-    // A running Marimo notebook has already imported marimo. Avoid importing an
-    // optional notebook dependency (and its side effects) in ordinary scripts.
-    let marimo = py.import("sys")?.getattr("modules")?;
-    let marimo = marimo.cast::<PyDict>()?.get_item("marimo")?;
-    let marimo_progress = if automatic
-        && let Some(marimo) = marimo.filter(|module| !module.is_none())
-        && marimo.call_method0("running_in_notebook")?.is_truthy()?
-    {
-        let flush = marimo
-            .getattr("output")?
-            .getattr("_output")?
-            .getattr("flush")?
-            .unbind();
-        let status = marimo.getattr("status")?;
-        let context =
-            status.call_method1("spinner", ("Generating diagrams", "Starting generation"))?;
-        let indicator = context.call_method0("__enter__")?.unbind();
-        let state = Arc::new(Mutex::new((
-            context.unbind(),
-            indicator,
-            None::<usize>,
-            0_usize,
-        )));
-        Some((status.unbind(), state, flush))
+    let marimo_progress = if automatic {
+        MarimoProgress::detect(py, "Generating diagrams", "Starting generation")?
+            .map(|display| Arc::new(Mutex::new(display)))
     } else {
         None
     };
-    let display = marimo_progress
-        .as_ref()
-        .map(|(status, state, flush)| (status.clone_ref(py), state.clone(), flush.clone_ref(py)));
+    let display = marimo_progress.clone();
     let started = Instant::now();
     let interruption = Arc::new(Mutex::new(None));
     let snapshots = Arc::new(Mutex::new(VecDeque::<GenerationProgress>::new()));
@@ -2829,7 +2807,7 @@ fn run_generation(
         if has_progress {
             Python::attach(|py| -> PyResult<()> {
                 for inner in updates {
-                    if let Some((status, state, flush)) = &display {
+                    if let Some(display) = &display {
                         let title = match inner.stage {
                             "topologies" => "Enumerating topologies",
                             "topology_filters" => "Filtering topologies",
@@ -2865,44 +2843,13 @@ fn run_generation(
                         };
                         let subtitle =
                             format!("{counts} · {:.1}s elapsed", started.elapsed().as_secs_f64());
-                        let mut state = state.lock().unwrap();
-                        let (context, indicator, total, completed) = &mut *state;
-                        // Unknown or empty work uses a spinner. Reuse a bar when
-                        // totals agree; a new stage can reset its count to zero.
-                        let next_total = inner.total.filter(|total| *total > 0);
-                        if next_total != *total {
-                            context.call_method1(
-                                py,
-                                "__exit__",
-                                (py.None(), py.None(), py.None()),
-                            )?;
-                            let kwargs = PyDict::new(py);
-                            kwargs.set_item("title", title)?;
-                            kwargs.set_item("subtitle", &subtitle)?;
-                            kwargs.set_item("remove_on_exit", true)?;
-                            let widget = if let Some(total) = next_total {
-                                kwargs.set_item("total", total)?;
-                                kwargs.set_item("show_rate", false)?;
-                                kwargs.set_item("show_eta", false)?;
-                                "progress_bar"
-                            } else {
-                                "spinner"
-                            };
-                            *context = status.call_method(py, widget, (), Some(&kwargs))?;
-                            *indicator = context.call_method0(py, "__enter__")?;
-                            *total = next_total;
-                            *completed = 0;
-                        }
-                        if total.is_some() {
-                            let increment = inner.completed as i128 - *completed as i128;
-                            indicator.call_method1(py, "update", (increment, title, subtitle))?;
-                        } else {
-                            indicator.call_method1(py, "update", (title, subtitle))?;
-                        }
-                        *completed = inner.completed;
-                        // Delivery is already coalesced above. Marimo's own
-                        // throttle can otherwise drop a stage's only update.
-                        flush.call0(py)?;
+                        display.lock().unwrap().update(
+                            py,
+                            title,
+                            &subtitle,
+                            inner.completed,
+                            inner.total,
+                        )?;
                     }
                     if let Some(callback) = &progress {
                         callback.call1(py, (PyGenerationProgress { inner },))?;
@@ -3078,31 +3025,11 @@ fn run_generation(
             })
             .map_err(error::generation)
     })();
-    if let Some((_, state, _)) = marimo_progress {
-        let state = state.lock().unwrap();
-        let (context, indicator, total, _) = &*state;
-        // Always close the context, including when a callback or Python signal
-        // interrupted generation. Cleanup must not replace the original error.
-        let cleanup = match &result {
-            Ok(_) => context.call_method1(py, "__exit__", (py.None(), py.None(), py.None())),
-            Err(error) => {
-                let title = "Diagram generation stopped";
-                let subtitle = error.to_string();
-                let _ = if total.is_some() {
-                    indicator.call_method1(py, "update", (0, title, subtitle))
-                } else {
-                    indicator.call_method1(py, "update", (title, subtitle))
-                };
-                context.call_method1(
-                    py,
-                    "__exit__",
-                    (error.get_type(py), error.value(py), error.traceback(py)),
-                )
-            }
-        };
-        if result.is_ok() {
-            cleanup?;
-        }
+    if let Some(display) = marimo_progress {
+        display
+            .lock()
+            .unwrap()
+            .finish(py, result.as_ref().err(), "Diagram generation stopped")?;
     }
     result
 }
@@ -3154,7 +3081,7 @@ from unittest.mock import MagicMock, patch
 
 model = fk.Model.from_json(MODEL_JSON)
 process = model.process([1000], [1000, 1000], vertex_allow=["V_3_SCALAR_000"])
-settings = dict(max_vertices=3, threads=2)
+settings = dict(max_vertices=3, threads=2, numerator_grouping=fk.NumeratorGrouping("up_to_scalar"))
 context = MagicMock()
 indicator = context.__enter__.return_value
 marimo = SimpleNamespace(
