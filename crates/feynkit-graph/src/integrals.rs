@@ -9,8 +9,8 @@ use feynkit_kinematics::{Kinematics, SymbolicKinematicsError};
 use spenso::structure::representation::{Minkowski, RepName};
 use symbolica::atom::{Atom, AtomCore, AtomView};
 use symbolica::domains::{
-    integer::{IntegerRing, Z},
-    rational::Q,
+    algebraic::AlgebraicExtension,
+    rational::{Q, RationalField},
     rational_polynomial::{RationalPolynomial, RationalPolynomialField},
 };
 use symbolica::poly::{PolyVariable, polynomial::MultivariatePolynomial};
@@ -23,8 +23,11 @@ mod parametric;
 mod partial_fraction;
 pub use mapping::{IntegralMapping, PropagatorMapping, QuadraticMomentum};
 
-type CoefficientMatrix = Matrix<RationalPolynomialField<IntegerRing, u16>>;
-type ExactPolynomial = MultivariatePolynomial<RationalPolynomialField<IntegerRing, u16>, u16>;
+type GaussianField = AlgebraicExtension<RationalField>;
+type FamilyCoefficient = RationalPolynomial<GaussianField, u16>;
+type FamilyField = RationalPolynomialField<GaussianField, u16>;
+type CoefficientMatrix = Matrix<FamilyField>;
+type ExactPolynomial = MultivariatePolynomial<FamilyField, u16>;
 
 #[derive(Clone, Debug, Error)]
 pub enum IntegralFamilyError {
@@ -74,8 +77,9 @@ pub enum IntegralFamilyError {
 /// The family tracks algebraic completeness and verifies affine loop-momentum
 /// maps. Parametric scaling certificates detect scaleless sectors in dimensional
 /// regularization. Integration prescriptions and IBP solutions require additional
-/// information beyond this algebraic representation. Raw Gaussian-rational
-/// number coefficients remain unsupported by the native rational coefficient field.
+/// information beyond this algebraic representation. Coefficients are exact
+/// rational functions over the native Gaussian-rational field, with `i^2 = -1`.
+/// Algebraic coefficient support does not authorize complex contour changes.
 #[derive(Clone, Debug)]
 pub struct IntegralFamily {
     kinematics: Kinematics,
@@ -87,7 +91,7 @@ pub struct IntegralFamily {
 }
 
 impl IntegralFamily {
-    /// Group over the exact native rational field, retaining the original row
+    /// Group over the exact native Gaussian-rational field, retaining the original row
     /// denominator. Default expression-field conversion uses statistical zero
     /// tests, which can discard tiny symbolic coefficients after expansion.
     fn exact_polynomial(
@@ -100,8 +104,9 @@ impl IntegralFamily {
             .map(PolyVariable::try_from)
             .collect::<Result<Vec<_>, _>>()
             .map_err(IntegralFamilyError::InvalidBasis)?;
+        let field = GaussianField::complex(Q);
         expression
-            .try_to_rational_polynomial(&Q, &Z, None)
+            .try_to_rational_polynomial(&field, &field, None)
             .map_err(|e| IntegralFamilyError::InvalidBasis(e.to_string()))?
             .to_polynomial(&variables, false)
             .map_err(|e| IntegralFamilyError::InvalidBasis(e.into()))
@@ -110,9 +115,11 @@ impl IntegralFamily {
     fn affine_coefficients(
         expression: &impl AtomCore,
         variables: &[Atom],
-    ) -> Result<Vec<RationalPolynomial<IntegerRing, u16>>, IntegralFamilyError> {
+    ) -> Result<Vec<FamilyCoefficient>, IntegralFamilyError> {
         let polynomial = Self::exact_polynomial(expression, variables)?;
-        let mut row = vec![RationalPolynomial::new(&Z, Default::default()); variables.len() + 1];
+        let field = GaussianField::complex(Q);
+        let mut row =
+            vec![RationalPolynomial::new(&field, Default::default()); variables.len() + 1];
         for term in &polynomial {
             let mut powers = term.exponents.iter().enumerate().filter(|(_, p)| **p != 0);
             let column = match (powers.next(), powers.next()) {
@@ -158,7 +165,7 @@ impl IntegralFamily {
         expressions: &[impl AtomCore],
         variables: &[Atom],
     ) -> Result<(CoefficientMatrix, CoefficientMatrix), IntegralFamilyError> {
-        let mut entries: Vec<RationalPolynomial<IntegerRing, u16>> = Vec::new();
+        let mut entries: Vec<FamilyCoefficient> = Vec::new();
         for expression in expressions {
             entries.extend(Self::affine_coefficients(expression, variables)?);
         }
@@ -170,7 +177,7 @@ impl IntegralFamily {
                 }
             }
         }
-        let field = RationalPolynomialField::new(Z);
+        let field = RationalPolynomialField::new(GaussianField::complex(Q));
         let mut matrix = Vec::new();
         let mut rhs = Vec::new();
         for row in entries.chunks(variables.len() + 1) {
@@ -396,8 +403,7 @@ impl IntegralFamily {
             .zip(labels)
             .map(|(d, label)| d - label)
             .collect::<Vec<_>>();
-        let (matrix, rhs) = Atom::system_to_matrix::<u16, _, _>(&equations, &self.scalar_products)
-            .map_err(|error| IntegralFamilyError::InvalidBasis(error.to_string()))?;
+        let (matrix, rhs) = Self::affine_system(&equations, &self.scalar_products)?;
         let solution = matrix
             .solve(&rhs)
             .map_err(|error| IntegralFamilyError::InvalidBasis(error.to_string()))?;
@@ -632,6 +638,67 @@ mod tests {
     }
 
     #[test]
+    fn gaussian_affine_rank_row_scales_and_rules_are_exact() {
+        let k = parse!("gaussian_affine::k");
+        let p = parse!("gaussian_affine::p");
+        let kin = Kinematics::new();
+        let x = kin.scalar_product(&k, &k).unwrap();
+        let y = kin.scalar_product(&k, &p).unwrap();
+        let imaginary = parse!("𝑖");
+        let dependent = IntegralFamily::new(
+            vec![k.clone()],
+            vec![p.clone()],
+            vec![&x + &imaginary * &y, &imaginary * &x - &y],
+            &kin,
+        )
+        .unwrap();
+        assert_eq!(
+            dependent.rank(),
+            1,
+            "the coefficient field must enforce i squared = -1"
+        );
+        let scale = parse!("(gaussian_affine::a+𝑖*gaussian_affine::b)/10^1000");
+        let denominators: [Atom; 2] = [
+            &scale * (&x + (Atom::one() + &imaginary) * &y / 3 - (Atom::num(2) - &imaginary) / 5),
+            (&imaginary * &x + &y + 7) / (Atom::num(3) - &imaginary),
+        ];
+        for expanded in [false, true] {
+            let input = denominators
+                .iter()
+                .map(|d| if expanded { d.expand() } else { d.clone() })
+                .collect::<Vec<_>>();
+            let family =
+                IntegralFamily::new(vec![k.clone()], vec![p.clone()], input.clone(), &kin).unwrap();
+            let variables = [x.clone(), y.clone()];
+            let (matrix, rhs) = IntegralFamily::affine_system(&input, &variables).unwrap();
+            for (i, row) in matrix.row_iter().enumerate() {
+                let reconstructed = row
+                    .iter()
+                    .zip(&variables)
+                    .map(|(c, v)| c.to_expression() * v)
+                    .sum::<Atom>()
+                    - rhs[(i as u32, 0)].to_expression();
+                assert!((reconstructed - &input[i]).together().is_zero());
+            }
+            assert!(
+                (matrix[(0, 0)].to_expression() - &scale)
+                    .together()
+                    .is_zero()
+            );
+            let labels = [parse!("gaussian_affine::d1"), parse!("gaussian_affine::d2")];
+            let rules = family.scalar_product_rules(&labels).unwrap();
+            for variable in &variables {
+                let reconstructed = rules[variable].replace_map(|view, _, output| {
+                    if let Some(i) = labels.iter().position(|label| label.as_view() == view) {
+                        **output = input[i].clone();
+                    }
+                });
+                assert!((reconstructed - variable).together().is_zero());
+            }
+        }
+    }
+
+    #[test]
     fn exact_affine_extraction_preserves_original_rational_row_scales() {
         let k = parse!("family_exact_scale::k");
         let p = parse!("family_exact_scale::p");
@@ -704,6 +771,7 @@ mod tests {
         .unwrap();
         for scale in [
             parse!("(family_exact_guard::a+family_exact_guard::b)/10^1000"),
+            parse!("(family_exact_guard::a+𝑖*family_exact_guard::b)/10^1000"),
             parse!("(family_exact_guard::a+family_exact_guard::b)*10^1000"),
         ] {
             for bad in [
@@ -733,9 +801,8 @@ mod tests {
             }
             family.require_external_coefficient(&scale).unwrap();
         }
-        assert!(matches!(
-            IntegralFamily::new(vec![k], vec![p], vec![parse!("𝑖") * x - 1], &kin),
-            Err(IntegralFamilyError::InvalidBasis(_))
-        ));
+        let gaussian =
+            IntegralFamily::new(vec![k], vec![p], vec![parse!("𝑖") * x - 1], &kin).unwrap();
+        assert_eq!(gaussian.rank(), 1);
     }
 }
