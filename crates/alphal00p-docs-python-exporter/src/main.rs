@@ -2,12 +2,18 @@
 
 use std::{env, error::Error, fs, path::PathBuf};
 
-#[cfg(any(feature = "feynkit", feature = "gammaloop", feature = "vakint"))]
+#[cfg(any(
+    feature = "feynkit",
+    feature = "gammaloop",
+    feature = "vakint",
+    feature = "render"
+))]
 use pyo3::types::{PyAnyMethods as _, PyDictMethods as _, PyModuleMethods as _};
 #[cfg(any(
     feature = "feynkit",
     feature = "gammaloop",
     feature = "spenso",
+    feature = "render",
     feature = "vakint"
 ))]
 use std::collections::BTreeSet;
@@ -36,8 +42,11 @@ fn main() -> Result<(), Box<dyn Error>> {
         .modules
         .get(module_name)
         .ok_or_else(|| format!("{component} inventory has no module {module_name}"))?;
-    #[cfg(any(feature = "feynkit", feature = "gammaloop"))]
-    if matches!(component.as_str(), "feynkit-community" | "gammaloop-python") {
+    #[cfg(any(feature = "feynkit", feature = "gammaloop", feature = "render"))]
+    if matches!(
+        component.as_str(),
+        "feynkit-community" | "gammaloop-python" | "linnet-render"
+    ) {
         validate_runtime_stub_surface(module_name, module)?;
     }
     #[cfg(feature = "spenso")]
@@ -68,6 +77,14 @@ fn main() -> Result<(), Box<dyn Error>> {
         "linnet-python" => {
             outputs.push(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../linnet-py/linnet.pyi"))
         }
+        "linnet-render" => outputs.extend([
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(
+                "../../examples/notebooks/symbolica-host/python/symbolica/community/render/__init__.pyi",
+            ),
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(
+                "../linnet-render-py/python/symbolica/community/render/__init__.pyi",
+            ),
+        ]),
         "spynso3" => outputs.push(
             PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(
                 "../../examples/notebooks/symbolica-host/python/symbolica/community/tensor/__init__.pyi",
@@ -83,7 +100,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             if checked_in != normalized {
                 let hint = if matches!(
                     component.as_str(),
-                    "feynkit-community" | "linnet-python" | "spynso3"
+                    "feynkit-community" | "linnet-python" | "linnet-render" | "spynso3"
                 ) {
                     "regenerate the shared package/docs surface"
                 } else {
@@ -105,20 +122,29 @@ fn main() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-#[cfg(any(feature = "feynkit", feature = "gammaloop"))]
+#[cfg(any(feature = "feynkit", feature = "gammaloop", feature = "render"))]
 fn validate_runtime_stub_surface(
     module_name: &str,
     module: &pyo3_stub_gen::generate::Module,
 ) -> Result<(), Box<dyn Error>> {
     let runtime = pyo3::Python::attach(|py| {
-        let module = pyo3::types::PyModule::new(py, module_name)?;
-        match module_name {
+        let module = match module_name {
+            #[cfg(feature = "render")]
+            "symbolica.community.render" => linnet_render_py::register(py)?,
             #[cfg(feature = "feynkit")]
-            "symbolica.community.hepkit" => feynkit_py::initialize_feynkit(&module)?,
+            "symbolica.community.hepkit" => {
+                let module = pyo3::types::PyModule::new(py, module_name)?;
+                feynkit_py::initialize_feynkit(&module)?;
+                module
+            }
             #[cfg(feature = "gammaloop")]
-            "gammaloop._gammaloop" => gammaloop_api::python::register_python_api_for_docs(&module)?,
+            "gammaloop._gammaloop" => {
+                let module = pyo3::types::PyModule::new(py, module_name)?;
+                gammaloop_api::python::register_python_api_for_docs(&module)?;
+                module
+            }
             _ => unreachable!("component has no runtime stub validator"),
-        }
+        };
         public_module_names(&module)
     })?;
     let stub = stub_names(module);
@@ -198,6 +224,7 @@ fn validate_vakint_stub_surface(
     feature = "feynkit",
     feature = "gammaloop",
     feature = "spenso",
+    feature = "render",
     feature = "vakint"
 ))]
 fn stub_names(module: &pyo3_stub_gen::generate::Module) -> BTreeSet<String> {
@@ -224,7 +251,12 @@ fn stub_names(module: &pyo3_stub_gen::generate::Module) -> BTreeSet<String> {
         .collect()
 }
 
-#[cfg(any(feature = "feynkit", feature = "gammaloop", feature = "vakint"))]
+#[cfg(any(
+    feature = "feynkit",
+    feature = "gammaloop",
+    feature = "vakint",
+    feature = "render"
+))]
 fn public_module_names(
     module: &pyo3::Bound<'_, pyo3::types::PyModule>,
 ) -> pyo3::PyResult<BTreeSet<String>> {
@@ -255,6 +287,8 @@ fn validate_exact_surface(
 
 fn gather(component: &str) -> Result<(&'static str, pyo3_stub_gen::StubInfo), Box<dyn Error>> {
     match component {
+        #[cfg(feature = "render")]
+        "linnet-render" => Ok(("symbolica.community.render", linnet_render_py::stub_info()?)),
         #[cfg(feature = "feynkit")]
         "feynkit-community" => Ok(("symbolica.community.hepkit", feynkit_py::stub_info()?)),
         #[cfg(feature = "gammaloop")]

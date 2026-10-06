@@ -384,7 +384,7 @@ impl SpensoNet {
     pub(crate) fn render_graph(
         &self,
         py: Python<'_>,
-        config: Option<&super::graph::PyRenderSettings>,
+        config: Option<&linnet_render_py::PyRenderSettings>,
     ) -> PyResult<String> {
         let json = py.import("json")?;
         let config = config.cloned().unwrap_or_default().config();

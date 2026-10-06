@@ -15,6 +15,7 @@ path = "src/bin/stubgen.rs"
 required-features = ["python_stubgen"]
 
 [dependencies]
+linnet-render-py = { path = "../linnet-render-py" }
 spenso-macros = { workspace = true }
 feynkit-amplitude = { version = "0.1.0", path = "../feynkit-amplitude", default-features = false }
 feynkit-cff = { version = "0.1.0", path = "../feynkit-cff", default-features = false }
@@ -45,5 +46,5 @@ features = ["python_export"]
 default = ["ufo", "native"]
 native = ["feynkit-amplitude/native", "spynso3/native", "feynkit-cff/native", "feynkit-generator/native", "feynkit-graph/native", "feynkit-tensor/native", "feynkit-kinematics/native"]
 wasm = ["feynkit-amplitude/wasm", "spynso3/wasm", "feynkit-cff/wasm", "feynkit-generator/wasm", "feynkit-graph/wasm", "feynkit-tensor/wasm", "feynkit-kinematics/wasm"]
-python_stubgen = ["spynso3/python_stubgen", "dep:pyo3-stub-gen", "symbolica/python_stubgen"]
+python_stubgen = ["linnet-render-py/python_stubgen", "spynso3/python_stubgen", "dep:pyo3-stub-gen", "symbolica/python_stubgen"]
 ufo = ["dep:feynkit-ufo"]

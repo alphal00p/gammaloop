@@ -5,6 +5,7 @@ edition.workspace = true
 publish = false
 
 [dependencies]
+linnet-render-py = { path = "../linnet-render-py", optional = true, features = ["python_stubgen"] }
 feynkit-py = { path = "../feynkit-py", optional = true, features = ["python_stubgen"] }
 gammaloop-api = { path = "../gammaloop-api", optional = true, default-features = false, features = ["python_stubgen"] }
 linnet-py = { path = "../linnet-py", optional = true, features = ["python_stubgen"] }
@@ -16,6 +17,7 @@ vakint = { workspace = true, optional = true, features = ["python_stubgen", "sym
 
 [features]
 default = []
+render = ["dep:linnet-render-py"]
 feynkit = ["dep:feynkit-py"]
 gammaloop = ["dep:gammaloop-api"]
 linnet = ["dep:linnet-py"]
