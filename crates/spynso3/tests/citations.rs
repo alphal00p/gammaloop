@@ -99,6 +99,8 @@ word.simplify_algebra(gamma=True, color=False)
             None,
         )?;
         let citations = SpensoModule::get_citations();
+        assert_eq!(citations.len(), 3);
+        assert_eq!(citations[2].id, "arXiv:1203.6543");
         let reasons = &citations[1].reasons;
         assert_eq!(reasons.len(), 3);
         assert!(
@@ -124,6 +126,22 @@ word.simplify_algebra(gamma=True, color=False)
             SpensoModule::get_citations()[1].reasons,
             citations[1].reasons
         );
+
+        py.run(
+            c"
+f = sp.TensorExpression.color_f(8)
+color_word = f('a', 'c', 'd') * f('b', 'c', 'd')
+color_word.simplify_algebra(gamma=False, color=True)
+color_word.simplify_algebra(gamma=False, color=True)
+",
+            Some(&globals),
+            None,
+        )?;
+        let citations = SpensoModule::get_citations();
+        assert_eq!(citations.len(), 4);
+        assert_eq!(citations[2].id, "arXiv:1203.6543");
+        assert_eq!(citations[3].id, "arXiv:hep-ph/9802376");
+        assert_eq!(citations[3].reasons, ["Color algebra."]);
         Ok(())
     })
     .unwrap();
