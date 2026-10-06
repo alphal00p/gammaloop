@@ -343,8 +343,23 @@ impl Process {
         Ok(self)
     }
 
-    /// Replace the model-sector restrictions without changing the external states.
+    /// Replace veto and vertex restrictions, clearing any particle selection.
+    /// This preserves the original Rust API; an empty veto means no restriction.
     pub fn with_filters(
+        mut self,
+        particle_veto: Vec<ParticleSelector>,
+        vertex_allow: Option<Vec<VertexSelector>>,
+        vertex_veto: Vec<VertexSelector>,
+    ) -> Self {
+        self.particle_veto = (!particle_veto.is_empty()).then_some(particle_veto);
+        self.particle_selection = None;
+        self.vertex_allow = vertex_allow;
+        self.vertex_veto = vertex_veto;
+        self
+    }
+
+    /// Replace the model-sector restrictions without changing the external states.
+    pub fn with_particle_filters(
         mut self,
         particle_veto: Option<Vec<ParticleSelector>>,
         particle_selection: Option<Vec<ParticleSelector>>,
@@ -572,7 +587,7 @@ mod tests {
         let process = model.process(["e-", "e+"], ["a", "a"]).unwrap();
         let selected = process
             .clone()
-            .with_filters(None, Some(vec!["e-".into(), 22_i64.into()]), None, vec![])
+            .with_particle_filters(None, Some(vec!["e-".into(), 22_i64.into()]), None, vec![])
             .unwrap();
         selected.validate_in(&model).unwrap();
         let options = crate::GenerationOptions::default();
@@ -587,7 +602,7 @@ mod tests {
             .unwrap();
         let vetoed = process
             .clone()
-            .with_filters(Some(vetoes), None, None, vec![])
+            .with_particle_filters(Some(vetoes), None, None, vec![])
             .unwrap();
         let generated = selected.generate_diagrams(model.clone(), &options).unwrap();
         assert_eq!(generated.diagrams.len(), 2);
@@ -608,12 +623,12 @@ mod tests {
         assert!(
             process
                 .clone()
-                .with_filters(Some(vec![]), Some(vec![]), None, vec![])
+                .with_particle_filters(Some(vec![]), Some(vec![]), None, vec![])
                 .is_err()
         );
         let empty = process
             .clone()
-            .with_filters(None, Some(vec![]), None, vec![])
+            .with_particle_filters(None, Some(vec![]), None, vec![])
             .unwrap();
         assert!(
             empty
@@ -622,7 +637,9 @@ mod tests {
                 .diagrams
                 .is_empty()
         );
-        let unrestricted = empty.with_filters(None, None, None, vec![]).unwrap();
+        let unrestricted = empty
+            .with_particle_filters(None, None, None, vec![])
+            .unwrap();
         assert_eq!(
             unrestricted
                 .generate_diagrams(model.clone(), &options)
@@ -633,7 +650,7 @@ mod tests {
         );
         assert!(
             process
-                .with_filters(None, Some(vec!["missing".into()]), None, vec![])
+                .with_particle_filters(None, Some(vec!["missing".into()]), None, vec![])
                 .unwrap()
                 .validate_in(&model)
                 .is_err()
@@ -648,13 +665,7 @@ mod tests {
         let process = model
             .process(["e-", "e+"], ["a", "a"])
             .unwrap()
-            .with_filters(
-                Some(vec!["t".into()]),
-                None,
-                Some(vec!["V_98".into()]),
-                vec![],
-            )
-            .unwrap();
+            .with_filters(vec!["t".into()], Some(vec!["V_98".into()]), vec![]);
         process.validate_in(&model).unwrap();
         let definition = serde_json::to_value(&process).unwrap();
         assert!(definition.get("loop_count").is_none());
@@ -666,7 +677,7 @@ mod tests {
         assert!(
             process
                 .clone()
-                .with_filters(None, None, Some(vec!["missing".into()]), vec![])
+                .with_particle_filters(None, None, Some(vec!["missing".into()]), vec![])
                 .unwrap()
                 .validate_in(&model)
                 .is_err()
@@ -680,7 +691,7 @@ mod tests {
         let process = model
             .process(["H"], ["W+", "W-"])
             .unwrap()
-            .with_filters(Some(vec!["ghWp".into()]), None, None, vec![])
+            .with_particle_filters(Some(vec!["ghWp".into()]), None, None, vec![])
             .unwrap();
         process.validate_in(&model).unwrap();
         let error = process

@@ -479,7 +479,7 @@ impl PyProcess {
                 outgoing.into_iter().map(ParticleSelector::from),
             )
             .map_err(error::generation)?
-            .with_filters(
+            .with_particle_filters(
                 particle_veto.map(|v| v.into_iter().map(Into::into).collect()),
                 particle_selection.map(|v| v.into_iter().map(Into::into).collect()),
                 vertex_allow.map(|v| v.into_iter().map(Into::into).collect()),
@@ -783,7 +783,7 @@ impl PyProcess {
         let inner = self
             .inner
             .clone()
-            .with_filters(particle_veto, particle_selection, vertex_allow, vertex_veto)
+            .with_particle_filters(particle_veto, particle_selection, vertex_allow, vertex_veto)
             .map_err(error::process)?;
         inner.validate_in(&self.model).map_err(error::generation)?;
         Ok(Self {
