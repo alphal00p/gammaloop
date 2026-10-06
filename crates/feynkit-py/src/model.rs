@@ -2987,16 +2987,20 @@ impl PyModel {
     ///     Ordered outgoing external states.
     /// particle_veto : sequence[Particle | ParticleSelector | str | int] or None, optional
     ///     Excluded species, including their antiparticles.
+    /// particle_selection : sequence[Particle | ParticleSelector | str | int] or None, optional
+    ///     Allowed species, including their antiparticles. None allows all; an
+    ///     empty list allows none. Mutually exclusive with particle_veto.
     /// vertex_allow : sequence[VertexRule | str] or None, optional
     ///     Allowed interactions. None allows all; an empty list allows none.
     /// vertex_veto : sequence[VertexRule | str] or None, optional
     ///     Excluded interactions.
-    #[pyo3(signature = (incoming, outgoing, *, particle_veto=None, vertex_allow=None, vertex_veto=None))]
+    #[pyo3(signature = (incoming, outgoing, *, particle_veto=None, particle_selection=None, vertex_allow=None, vertex_veto=None))]
     fn process(
         &self,
         incoming: Vec<SelectorInput>,
         outgoing: Vec<SelectorInput>,
         particle_veto: Option<Vec<SelectorInput>>,
+        particle_selection: Option<Vec<SelectorInput>>,
         vertex_allow: Option<Vec<VertexInput>>,
         vertex_veto: Option<Vec<VertexInput>>,
     ) -> PyResult<PyProcess> {
@@ -3005,6 +3009,7 @@ impl PyModel {
             incoming,
             outgoing,
             particle_veto,
+            particle_selection,
             vertex_allow,
             vertex_veto,
         )

@@ -468,6 +468,7 @@ impl PyProcess {
         incoming: Vec<SelectorInput>,
         outgoing: Vec<SelectorInput>,
         particle_veto: Option<Vec<SelectorInput>>,
+        particle_selection: Option<Vec<SelectorInput>>,
         vertex_allow: Option<Vec<VertexInput>>,
         vertex_veto: Option<Vec<VertexInput>>,
     ) -> PyResult<Self> {
@@ -479,18 +480,16 @@ impl PyProcess {
             )
             .map_err(error::generation)?
             .with_filters(
-                particle_veto
-                    .unwrap_or_default()
-                    .into_iter()
-                    .map(Into::into)
-                    .collect(),
+                particle_veto.map(|v| v.into_iter().map(Into::into).collect()),
+                particle_selection.map(|v| v.into_iter().map(Into::into).collect()),
                 vertex_allow.map(|v| v.into_iter().map(Into::into).collect()),
                 vertex_veto
                     .unwrap_or_default()
                     .into_iter()
                     .map(Into::into)
                     .collect(),
-            );
+            )
+            .map_err(error::process)?;
         inner.validate_in(&model.inner).map_err(error::generation)?;
         Ok(Self {
             inner,
@@ -500,11 +499,20 @@ impl PyProcess {
 
     fn filter_summary(&self) -> String {
         let mut filters = Vec::new();
-        if !self.inner.particle_veto().is_empty() {
+        if let Some(vetoes) = self.inner.particle_veto() {
             filters.push(format!(
                 "particle_veto=[{}]",
-                self.inner
-                    .particle_veto()
+                vetoes
+                    .iter()
+                    .map(ToString::to_string)
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ));
+        }
+        if let Some(selected) = self.inner.particle_selection() {
+            filters.push(format!(
+                "particle_selection=[{}]",
+                selected
                     .iter()
                     .map(ToString::to_string)
                     .collect::<Vec<_>>()
@@ -702,17 +710,24 @@ impl PyProcess {
     /// ----------
     /// particle_veto : sequence[Particle | ParticleSelector | str | int] or None, optional
     ///     Replace the excluded species, including their antiparticles.
+    /// particle_selection : sequence[Particle | ParticleSelector | str | int] or None, optional
+    ///     Replace the allowed species, including their antiparticles. An empty
+    ///     list allows none. Clear particle_veto with None when switching modes.
     /// vertex_allow : sequence[VertexRule | str] or None, optional
     ///     Replace the allowed interaction rules.
     /// vertex_veto : sequence[VertexRule | str] or None, optional
     ///     Replace the excluded interaction rules.
-    #[pyo3(signature = (*, particle_veto=Some(Python::attach(|py| py.Ellipsis())), vertex_allow=Some(Python::attach(|py| py.Ellipsis())), vertex_veto=Some(Python::attach(|py| py.Ellipsis()))))]
-    #[pyo3(text_signature = "($self, *, particle_veto=..., vertex_allow=..., vertex_veto=...)")]
+    #[pyo3(signature = (*, particle_veto=Some(Python::attach(|py| py.Ellipsis())), particle_selection=Some(Python::attach(|py| py.Ellipsis())), vertex_allow=Some(Python::attach(|py| py.Ellipsis())), vertex_veto=Some(Python::attach(|py| py.Ellipsis()))))]
+    #[pyo3(
+        text_signature = "($self, *, particle_veto=..., particle_selection=..., vertex_allow=..., vertex_veto=...)"
+    )]
     fn with_filters(
         &self,
         py: Python<'_>,
         #[gen_stub(override_type(type_repr = "typing.Sequence[Particle | ParticleSelector | str | int] | types.EllipsisType | None", imports = ("typing", "types")))]
         particle_veto: Option<Py<PyAny>>,
+        #[gen_stub(override_type(type_repr = "typing.Sequence[Particle | ParticleSelector | str | int] | types.EllipsisType | None", imports = ("typing", "types")))]
+        particle_selection: Option<Py<PyAny>>,
         #[gen_stub(override_type(type_repr = "typing.Sequence[VertexRule | str] | types.EllipsisType | None", imports = ("typing", "types")))]
         vertex_allow: Option<Py<PyAny>>,
         #[gen_stub(override_type(type_repr = "typing.Sequence[VertexRule | str] | types.EllipsisType | None", imports = ("typing", "types")))]
@@ -720,14 +735,27 @@ impl PyProcess {
     ) -> PyResult<Self> {
         let particle_veto = match particle_veto {
             Some(v) if v.bind(py).is_instance_of::<PyEllipsis>() => {
-                self.inner.particle_veto().to_vec()
+                self.inner.particle_veto().map(<[_]>::to_vec)
             }
-            Some(v) => v
-                .extract::<Vec<SelectorInput>>(py)?
-                .into_iter()
-                .map(Into::into)
-                .collect(),
-            None => Vec::new(),
+            Some(v) => Some(
+                v.extract::<Vec<SelectorInput>>(py)?
+                    .into_iter()
+                    .map(Into::into)
+                    .collect(),
+            ),
+            None => None,
+        };
+        let particle_selection = match particle_selection {
+            Some(v) if v.bind(py).is_instance_of::<PyEllipsis>() => {
+                self.inner.particle_selection().map(<[_]>::to_vec)
+            }
+            Some(v) => Some(
+                v.extract::<Vec<SelectorInput>>(py)?
+                    .into_iter()
+                    .map(Into::into)
+                    .collect(),
+            ),
+            None => None,
         };
         let vertex_allow = match vertex_allow {
             Some(v) if v.bind(py).is_instance_of::<PyEllipsis>() => {
@@ -755,7 +783,8 @@ impl PyProcess {
         let inner = self
             .inner
             .clone()
-            .with_filters(particle_veto, vertex_allow, vertex_veto);
+            .with_filters(particle_veto, particle_selection, vertex_allow, vertex_veto)
+            .map_err(error::process)?;
         inner.validate_in(&self.model).map_err(error::generation)?;
         Ok(Self {
             inner,
@@ -774,10 +803,27 @@ impl PyProcess {
     fn particle_veto(&self) -> Vec<PyParticleSelector> {
         self.inner
             .particle_veto()
+            .unwrap_or_default()
             .iter()
             .cloned()
             .map(Into::into)
             .collect()
+    }
+
+    /// Allowed species, including their antiparticles. None allows all;
+    /// an empty list allows none. Shared by every generation operation.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``Process`` class example:
+    ///
+    /// >>> qed = model.process(["e-", "e+"], ["a", "a"], particle_selection=["e-", "a"])
+    /// >>> allowed_particles = qed.particle_selection
+    #[getter]
+    fn particle_selection(&self) -> Option<Vec<PyParticleSelector>> {
+        self.inner
+            .particle_selection()
+            .map(|selectors| selectors.iter().cloned().map(Into::into).collect())
     }
 
     /// Allowed model vertex rules; None permits every interaction.
@@ -3509,6 +3555,37 @@ assert round_tripped.incoming == process.incoming
 assert round_tripped.outgoing_alternatives == process.outgoing_alternatives
 assert round_tripped.particle_veto == process.particle_veto
 assert not hasattr(process, "loop_count")
+
+selected = sm_model.process(["e-", "e+"], ["a", "a"], particle_selection=[sm_model.particle("e-"), 22])
+assert selected.particle_selection == [11, 22]
+assert "particle_selection=[" in repr(selected)
+assert len(selected.generate_diagrams(progress=None)) == 2
+assert len(selected.generate_amplitude(progress=None).diagrams) == 2
+assert len(selected.generate_cross_section(loops=1, max_vertices=4, progress=None)) > 0
+assert selected.with_filters().particle_selection == selected.particle_selection
+assert selected.with_filters(vertex_allow=None).particle_selection == selected.particle_selection
+assert len(selected.with_filters(particle_selection=[]).generate_diagrams(progress=None)) == 0
+assert len(selected.with_filters(particle_selection=None).generate_diagrams(progress=None)) == 2
+switched = selected.with_filters(particle_selection=None, particle_veto=["e-"])
+assert switched.particle_selection is None
+assert len(switched.generate_diagrams(progress=None)) == 0
+for make in (
+    lambda: sm_model.process([], [], particle_selection=[], particle_veto=[]),
+    lambda: selected.with_filters(particle_veto=[]),
+    lambda: switched.with_filters(particle_selection=[]),
+):
+    try:
+        make()
+    except fk.GenerationError as error:
+        assert "mutually exclusive" in str(error)
+    else:
+        raise AssertionError("process accepted both particle filters")
+try:
+    selected.with_filters(particle_selection=["missing_particle"])
+except fk.GenerationError:
+    pass
+else:
+    raise AssertionError("particle selection accepted an unknown species")
 
 cross_section = model.process([particle, by_pdg], [by_name])
 cross_section = cross_section.with_final_state_alternatives(

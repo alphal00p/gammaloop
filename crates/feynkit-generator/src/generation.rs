@@ -1349,7 +1349,7 @@ impl Generator {
         }
         process.validate_in(&self.model)?;
         let options = process
-            .restrict_options(options)
+            .restrict_options(&self.model, options)?
             .resolve_selectors(&self.model)?;
         let options = &options;
         self.validate_options(generation_type, options)?;
@@ -5676,14 +5676,19 @@ mod tests {
     #[test]
     fn thread_counts_preserve_diagrams_and_progress_order() {
         let generator = Generator::new(Model::qcd());
-        let process = Process::new(["g"], ["g"]).with_filters(
-            ["u", "d", "c", "s", "t"]
-                .into_iter()
-                .map(Into::into)
-                .collect(),
-            None,
-            vec![],
-        );
+        let process = Process::new(["g"], ["g"])
+            .with_filters(
+                Some(
+                    ["u", "d", "c", "s", "t"]
+                        .into_iter()
+                        .map(Into::into)
+                        .collect(),
+                ),
+                None,
+                None,
+                vec![],
+            )
+            .unwrap();
         let options = GenerationOptions::default()
             .with_loop_count(2, 2)
             .unwrap()
