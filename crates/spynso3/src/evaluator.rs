@@ -18,7 +18,7 @@ use crate::{
 };
 
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
-#[spenso_macros::track_usage(crate::record_usage)]
+#[spenso_macros::track_usage(crate::record_usage, on_success)]
 #[cfg_attr(not(feature = "python_stubgen"), remove_gen_stub)]
 #[pymethods]
 impl Spensor {
@@ -140,6 +140,7 @@ impl TensorEvaluationLayout {
                 })
                 .collect::<PyResult<_>>()?
         };
+        crate::citations::Usage::Evaluation.record();
         Ok(tensors
             .into_iter()
             .map(|tensor| {
@@ -173,7 +174,7 @@ pub struct SpensoExpressionEvaluator {
 }
 
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
-#[spenso_macros::track_usage(crate::record_usage)]
+#[spenso_macros::track_usage(crate::record_usage, on_success)]
 #[cfg_attr(not(feature = "python_stubgen"), remove_gen_stub)]
 #[pymethods]
 impl SpensoExpressionEvaluator {
@@ -306,7 +307,7 @@ impl SpensoExpressionEvaluator {
 
 #[cfg(feature = "native")]
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
-#[spenso_macros::track_usage(crate::record_usage)]
+#[spenso_macros::track_usage(crate::record_usage, on_success)]
 #[cfg_attr(not(feature = "python_stubgen"), remove_gen_stub)]
 #[pymethods]
 impl SpensoExpressionEvaluator {
@@ -382,7 +383,7 @@ pub struct SpensoCompiledExpressionEvaluator {
 
 #[cfg(feature = "native")]
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
-#[spenso_macros::track_usage(crate::record_usage)]
+#[spenso_macros::track_usage(crate::record_usage, on_success)]
 #[cfg_attr(not(feature = "python_stubgen"), remove_gen_stub)]
 #[pymethods]
 impl SpensoCompiledExpressionEvaluator {

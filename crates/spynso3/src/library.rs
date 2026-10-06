@@ -146,7 +146,7 @@ impl<'a, 'py> FromPyObject<'a, 'py> for ConvertibleToSymbol {
 #[allow(clippy::new_without_default)]
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
 #[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
-#[spenso_macros::track_usage(crate::record_usage)]
+#[spenso_macros::track_usage(crate::record_usage, on_success)]
 #[pymethods]
 impl SpensorFunctionLibrary {
     /// Return a summary of the registered elementwise tensor functions.
@@ -561,7 +561,7 @@ impl SpensorLibrary {
 #[allow(clippy::new_without_default)]
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
 #[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
-#[spenso_macros::track_usage(crate::record_usage)]
+#[spenso_macros::track_usage(crate::record_usage, on_success)]
 #[pymethods]
 impl SpensorLibrary {
     /// Return a readable object description for inspection.

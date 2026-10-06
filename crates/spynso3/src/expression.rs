@@ -90,7 +90,7 @@ pyo3_stub_gen::module_variable!("symbolica.community.tensor", "AUTO", AutoIndex)
 #[cfg(feature = "python_stubgen")]
 pyo3_stub_gen::module_variable!("symbolica.community.tensor", "_", AutoIndex);
 
-#[spenso_macros::track_usage(crate::record_usage)]
+#[spenso_macros::track_usage(crate::record_usage, on_success)]
 #[pymethods]
 impl AutoIndex {
     fn __repr__(&self) -> &'static str {
@@ -729,7 +729,7 @@ fn inferred_descriptor(atom: AtomView<'_>) -> (Option<Symbol>, Vec<Atom>) {
 
 #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
 #[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
-#[spenso_macros::track_usage(crate::record_usage)]
+#[spenso_macros::track_usage(crate::record_usage, on_success)]
 #[pymethods]
 impl TensorExpression {
     /// Wrap symbolic algebra as a tensor and check its external axes.
@@ -2606,7 +2606,9 @@ impl TensorExpression {
             .value
             .simplify_algebra(&settings)
             .map_err(Self::inference_error)?;
-        Self::from_shared(py, Arc::new(value), self.name, self.name_args.clone())
+        let result = Self::from_shared(py, Arc::new(value), self.name, self.name_args.clone())?;
+        crate::citations::USED.record_algebra(&settings);
+        Ok(result)
     }
 
     /// Give explicit indices a scope that separates them from other copies.
@@ -2649,7 +2651,9 @@ impl TensorExpression {
             .value
             .wrap_indices(header, dummies_only)
             .map_err(Self::inference_error)?;
-        Self::from_shared(py, Arc::new(value), self_.name, self_.name_args.clone())
+        let result = Self::from_shared(py, Arc::new(value), self_.name, self_.name_args.clone())?;
+        crate::citations::Usage::Notation.record();
+        Ok(result)
     }
 
     /// List the external indices that are not summed over.
@@ -2720,7 +2724,9 @@ impl TensorExpression {
                 error => CanonicalizationError::new_err(error.to_string()),
             })?;
         let (name, args) = Self::transformed_descriptor(&self_, value.expression());
-        Self::from_shared(py, Arc::new(value), name, args)
+        let result = Self::from_shared(py, Arc::new(value), name, args)?;
+        crate::citations::Usage::Canonicalization.record();
+        Ok(result)
     }
 
     /// Construct the Dirac adjoint of a spinor tensor expression.
@@ -2764,7 +2770,9 @@ impl TensorExpression {
             .atom()
             .dirac_adjoint::<AbstractIndex>(preserve_indices)
             .map_err(|error| DiracAdjointError::new_err(error.to_string()))?;
-        Self::from_transformed_atom(&self_, py, result)
+        let result = Self::from_transformed_atom(&self_, py, result)?;
+        crate::citations::Usage::DiracAdjoint.record();
+        Ok(result)
     }
 
     /// Write compact metric products using dot notation.
@@ -2788,7 +2796,9 @@ impl TensorExpression {
     fn to_dots(self_: PyRef<'_, Self>, py: Python<'_>) -> PyResult<Py<Self>> {
         let value = self_.value.to_dots().map_err(Self::inference_error)?;
         let (name, args) = Self::transformed_descriptor(&self_, value.expression());
-        Self::from_shared(py, Arc::new(value), name, args)
+        let result = Self::from_shared(py, Arc::new(value), name, args)?;
+        crate::citations::Usage::Notation.record();
+        Ok(result)
     }
 
     /// Write dot products as explicit indexed contractions.
@@ -2812,7 +2822,9 @@ impl TensorExpression {
     fn undo_dots(self_: PyRef<'_, Self>, py: Python<'_>) -> PyResult<Py<Self>> {
         let value = self_.value.undo_dots().map_err(Self::inference_error)?;
         let (name, args) = Self::transformed_descriptor(&self_, value.expression());
-        Self::from_shared(py, Arc::new(value), name, args)
+        let result = Self::from_shared(py, Arc::new(value), name, args)?;
+        crate::citations::Usage::Notation.record();
+        Ok(result)
     }
 
     /// Expose collected chain factors with fresh compatible dummy indices.
@@ -2837,7 +2849,9 @@ impl TensorExpression {
     fn undo_chain(self_: PyRef<'_, Self>, py: Python<'_>) -> PyResult<Py<Self>> {
         let value = self_.value.undo_chain().map_err(Self::inference_error)?;
         let (name, args) = Self::transformed_descriptor(&self_, value.expression());
-        Self::from_shared(py, Arc::new(value), name, args)
+        let result = Self::from_shared(py, Arc::new(value), name, args)?;
+        crate::citations::Usage::Notation.record();
+        Ok(result)
     }
 
     /// Open compact traces as closed chains without evaluating them.
@@ -2862,7 +2876,9 @@ impl TensorExpression {
     fn undo_trace(self_: PyRef<'_, Self>, py: Python<'_>) -> PyResult<Py<Self>> {
         let value = self_.value.undo_trace().map_err(Self::inference_error)?;
         let (name, args) = Self::transformed_descriptor(&self_, value.expression());
-        Self::from_shared(py, Arc::new(value), name, args)
+        let result = Self::from_shared(py, Arc::new(value), name, args)?;
+        crate::citations::Usage::Notation.record();
+        Ok(result)
     }
 
     /// Build an executable network for this symbolic tensor.
@@ -3927,7 +3943,9 @@ impl TensorExpression {
             .value
             .contract(settings)
             .map_err(Self::inference_error)?;
-        Self::from_shared(py, Arc::new(value), self.name, self.name_args.clone())
+        let result = Self::from_shared(py, Arc::new(value), self.name, self.name_args.clone())?;
+        crate::citations::Usage::Contraction.record();
+        Ok(result)
     }
 
     #[doc = python_doc!("TensorExpression.contract_ports")]
@@ -4484,7 +4502,7 @@ impl TensorExpression {
     feature = "python_stubgen",
     pyo3_stub_gen::derive::gen_stub_pyfunction(module = "symbolica.community.tensor")
 )]
-#[spenso_macros::track_usage(crate::record_usage)]
+#[spenso_macros::track_usage(crate::record_usage, on_success)]
 #[pyfunction]
 pub fn as_tensor(py: Python<'_>, expression: &Bound<'_, PyAny>) -> PyResult<Py<TensorExpression>> {
     if let Ok(expression) = expression.extract::<PyRef<'_, TensorExpression>>() {
@@ -4574,7 +4592,7 @@ symbolic_function_overload!("dot", python_doc!("dot"), [], ["left": PositionalOr
         "#,
     )
 )]
-#[spenso_macros::track_usage(crate::record_usage)]
+#[spenso_macros::track_usage(crate::record_usage, on_success)]
 #[pyfunction]
 fn dot(
     py: Python<'_>,
@@ -4678,7 +4696,7 @@ symbolic_function_overload!("chain", python_doc!("chain"), ["start_slot": Spenso
         "#,
     )
 )]
-#[spenso_macros::track_usage(crate::record_usage)]
+#[spenso_macros::track_usage(crate::record_usage, on_success)]
 #[pyfunction]
 #[pyo3(signature = (start_slot, end_slot, *factors))]
 fn chain(
@@ -4809,7 +4827,7 @@ symbolic_function_overload!("trace", python_doc!("trace"), ["representation": Sp
         "#,
     )
 )]
-#[spenso_macros::track_usage(crate::record_usage)]
+#[spenso_macros::track_usage(crate::record_usage, on_success)]
 #[pyfunction]
 #[pyo3(signature = (representation, *factors))]
 fn trace(
@@ -4868,7 +4886,7 @@ fn trace(
     feature = "python_stubgen",
     pyo3_stub_gen::derive::gen_stub_pyfunction(module = "symbolica.community.tensor")
 )]
-#[spenso_macros::track_usage(crate::record_usage)]
+#[spenso_macros::track_usage(crate::record_usage, on_success)]
 #[pyfunction(name = "Nc")]
 fn nc() -> PythonExpression {
     PythonExpression::from(Atom::var(CS.nc))

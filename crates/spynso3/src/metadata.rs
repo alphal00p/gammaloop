@@ -64,7 +64,7 @@ impl SpensoRepresentationName {
 }
 
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
-#[spenso_macros::track_usage(crate::record_usage)]
+#[spenso_macros::track_usage(crate::record_usage, on_success)]
 #[pymethods]
 impl SpensoRepresentationName {
     /// The exact registered name of the representation.
@@ -284,7 +284,7 @@ pub(crate) fn axis_shape(py: Python<'_>, slots: Vec<PartialSlot>) -> PyResult<Py
 
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
 #[cfg_attr(not(feature = "python_stubgen"), remove_gen_stub)]
-#[spenso_macros::track_usage(crate::record_usage)]
+#[spenso_macros::track_usage(crate::record_usage, on_success)]
 #[pymethods]
 impl SpensoTensorStructure {
     /// Describe an opaque tensor by its canonical free axes.

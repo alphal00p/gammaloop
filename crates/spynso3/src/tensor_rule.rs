@@ -47,7 +47,7 @@ impl PyTensorRule {
 }
 
 #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
-#[spenso_macros::track_usage(crate::record_usage)]
+#[spenso_macros::track_usage(crate::record_usage, on_success)]
 #[pymethods]
 impl PyTensorRule {
     /// Return a readable object description for inspection.

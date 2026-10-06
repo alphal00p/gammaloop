@@ -30,15 +30,21 @@ impl Usage {
 
     fn reason(self) -> &'static str {
         match self {
-            Self::Tensor => "Constructed or manipulated typed tensors, tensor expressions, or tensor structures.",
+            Self::Tensor => {
+                "Constructed or manipulated typed tensors, tensor expressions, or tensor structures."
+            }
             Self::Network => "Executed a tensor network using component data.",
             Self::Evaluation => "Evaluated tensor components numerically through Symbolica.",
-            Self::Contraction => "Ran symbolic tensor contraction, including metric and chain/trace reduction.",
+            Self::Contraction => {
+                "Ran symbolic tensor contraction, including metric and chain/trace reduction."
+            }
             Self::Algebra => "Ran the tensor-algebra simplification scheduler.",
             Self::Gamma => "Enabled Dirac gamma identities in tensor-algebra simplification.",
             Self::Color => "Enabled color identities in tensor-algebra simplification.",
             Self::Epsilon => "Enabled epsilon identities in tensor-algebra simplification.",
-            Self::Canonicalization => "Canonicalized symbolic tensor contractions and dummy indices.",
+            Self::Canonicalization => {
+                "Canonicalized symbolic tensor contractions and dummy indices."
+            }
             Self::DiracAdjoint => "Constructed a Dirac adjoint of a tensor expression.",
             Self::Notation => "Rewrote symbolic tensor indices or dot, chain, and trace notation.",
         }
@@ -76,7 +82,9 @@ impl CitationUsage {
             return Vec::new();
         }
         let reasons = |operations: &[Usage]| {
-            operations.iter().copied()
+            operations
+                .iter()
+                .copied()
                 .filter(|usage| used & *usage as u16 != 0)
                 .map(|usage| usage.reason().to_owned())
                 .collect::<Vec<_>>()
@@ -84,32 +92,41 @@ impl CitationUsage {
         // Authorship and software DOIs are maintained in docs/products/registry.toml.
         let mut spenso_reasons = reasons(&[Usage::Tensor, Usage::Network, Usage::Evaluation]);
         let idenso_reasons = reasons(&[
-            Usage::Contraction, Usage::Algebra, Usage::Gamma, Usage::Color,
-            Usage::Epsilon, Usage::Canonicalization, Usage::DiracAdjoint, Usage::Notation,
+            Usage::Contraction,
+            Usage::Algebra,
+            Usage::Gamma,
+            Usage::Color,
+            Usage::Epsilon,
+            Usage::Canonicalization,
+            Usage::DiracAdjoint,
+            Usage::Notation,
         ]);
         if !idenso_reasons.is_empty() {
-            spenso_reasons.push("Provided tensor structures and representations for Idenso operations.".into());
+            spenso_reasons.push(
+                "Provided the Symbolica tensor-expression structure and display used by Idenso."
+                    .into(),
+            );
         }
         let mut citations = vec![Citation {
             id: "10.5281/zenodo.18248388".into(),
-            reference: "Lucien Huber, Valentin Hirschi, Ben Ruijl, Mathijs Fraaije. Spenso (2026).".into(),
+            reference: "Lucien Huber. Spenso (2026).".into(),
             bibtex: r#"@software{spenso,
-  author = {Lucien Huber and Valentin Hirschi and Ben Ruijl and Mathijs Fraaije},
+  author = {Lucien Huber},
   title = {Spenso},
   year = {2026},
   url = {https://github.com/alphal00p/spenso},
   doi = {10.5281/zenodo.18248388}
 }"#.into(),
             reasons: spenso_reasons,
-            description: "Spenso provides representation-aware tensor structures, dense and sparse component storage, and tensor-network execution. Reasons summarize successful operations across the current process.".into(),
+            description: "Spenso defines tensor-expression structures and their display in Symbolica, representation-aware tensors, dense and sparse component storage, and tensor-network execution. Reasons summarize successful operations across the current process.".into(),
             relevance: None,
         }];
         if !idenso_reasons.is_empty() {
             citations.push(Citation {
                 id: "10.5281/zenodo.18248409".into(),
-                reference: "Lucien Huber, Valentin Hirschi, Ben Ruijl, Mathijs Fraaije. Idenso (2026).".into(),
+                reference: "Lucien Huber, Ben Ruijl. Idenso (2026).".into(),
                 bibtex: r#"@software{idenso,
-  author = {Lucien Huber and Valentin Hirschi and Ben Ruijl and Mathijs Fraaije},
+  author = {Lucien Huber and Ben Ruijl},
   title = {Idenso},
   year = {2026},
   url = {https://github.com/alphal00p/spenso},
@@ -140,12 +157,16 @@ mod tests {
 
         usage.record_algebra(&AlgebraSettings {
             gamma: None,
+            color: Some(Default::default()),
             epsilon: false,
             ..Default::default()
         });
         let citations = usage.get_citations();
         assert_eq!(citations.len(), 2);
-        assert_eq!(citations[1].reasons, [Usage::Algebra.reason(), Usage::Color.reason()]);
+        assert_eq!(
+            citations[1].reasons,
+            [Usage::Algebra.reason(), Usage::Color.reason()]
+        );
         for citation in &citations {
             assert!(citation.bibtex.contains(&citation.id));
             assert!(!citation.description.is_empty());
@@ -159,8 +180,15 @@ mod tests {
     fn concurrent_operations_preserve_all_reasons() {
         let usage = CitationUsage::default();
         std::thread::scope(|scope| {
-            for operation in [Usage::Tensor, Usage::Network, Usage::Evaluation,
-                Usage::Contraction, Usage::Canonicalization, Usage::DiracAdjoint, Usage::Notation] {
+            for operation in [
+                Usage::Tensor,
+                Usage::Network,
+                Usage::Evaluation,
+                Usage::Contraction,
+                Usage::Canonicalization,
+                Usage::DiracAdjoint,
+                Usage::Notation,
+            ] {
                 let usage = &usage;
                 scope.spawn(move || usage.record(operation));
             }
@@ -168,5 +196,19 @@ mod tests {
         let citations = usage.get_citations();
         assert_eq!(citations[0].reasons.len(), 4);
         assert_eq!(citations[1].reasons.len(), 4);
+    }
+
+    #[test]
+    fn idenso_alone_always_credits_spenso_structure_and_display() {
+        let usage = CitationUsage::default();
+        usage.record(Usage::DiracAdjoint);
+        let citations = usage.get_citations();
+        assert_eq!(citations.len(), 2);
+        assert_eq!(citations[0].reference, "Lucien Huber. Spenso (2026).");
+        assert!(citations[0].reasons[0].contains("tensor-expression structure and display"));
+        assert_eq!(
+            citations[1].reference,
+            "Lucien Huber, Ben Ruijl. Idenso (2026)."
+        );
     }
 }
