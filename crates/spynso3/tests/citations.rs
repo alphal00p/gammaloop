@@ -99,8 +99,9 @@ word.simplify_algebra(gamma=True, color=False)
             None,
         )?;
         let citations = SpensoModule::get_citations();
-        assert_eq!(citations.len(), 3);
-        assert_eq!(citations[2].id, "arXiv:1203.6543");
+        assert_eq!(citations.len(), 4);
+        assert_eq!(citations[2].id, "arXiv:2601.19982");
+        assert_eq!(citations[3].id, "arXiv:1707.06453");
         let reasons = &citations[1].reasons;
         assert_eq!(reasons.len(), 3);
         assert!(
@@ -138,10 +139,11 @@ color_word.simplify_algebra(gamma=False, color=True)
             None,
         )?;
         let citations = SpensoModule::get_citations();
-        assert_eq!(citations.len(), 4);
-        assert_eq!(citations[2].id, "arXiv:1203.6543");
-        assert_eq!(citations[3].id, "arXiv:hep-ph/9802376");
-        assert_eq!(citations[3].reasons, ["Color algebra."]);
+        assert_eq!(citations.len(), 5);
+        assert_eq!(citations[2].id, "arXiv:2601.19982");
+        assert_eq!(citations[3].id, "arXiv:1707.06453");
+        assert_eq!(citations[4].id, "arXiv:hep-ph/9802376");
+        assert_eq!(citations[4].reasons, ["Color algebra."]);
         Ok(())
     })
     .unwrap();

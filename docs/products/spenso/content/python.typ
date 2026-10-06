@@ -913,11 +913,14 @@ structure and display that define tensors in Symbolica. Component-network
 execution and numerical evaluation add their own reasons to the Spenso citation.
 
 Dirac gamma algebra also cites
-#link("https://arxiv.org/abs/1203.6543")[FORM] by J. Kuipers, T. Ueda,
-J. A. M. Vermaseren, and J. Vollinga. Color algebra also cites
+#link("https://arxiv.org/abs/2601.19982")[FORM Version 5.0] by J. Davies,
+T. Kaneko, C. Marinissen, T. Ueda, and J. A. M. Vermaseren, and
+#link("https://arxiv.org/abs/1707.06453")[FORM version 4.2] by B. Ruijl,
+T. Ueda, and J. A. M. Vermaseren, as the basis for Idenso's Dirac gamma algebra
+rules. Color algebra cites
 #link("https://arxiv.org/abs/hep-ph/9802376")[Group theory factors for Feynman diagrams]
-by T. van Ritbergen, A. N. Schellekens, and J. A. M. Vermaseren, the paper
-underlying FORM's `color.h` package.
+by T. van Ritbergen, A. N. Schellekens, and J. A. M. Vermaseren as the basis for
+Idenso's color algebra rules, through `color.h`.
 
 Citations accumulate during a session. Repeated operations keep a single entry
 for each contribution.
