@@ -912,6 +912,13 @@ Idenso. Every Idenso citation also credits Spenso for the tensor-expression
 structure and display that define tensors in Symbolica. Component-network
 execution and numerical evaluation add their own reasons to the Spenso citation.
 
+Dirac gamma algebra also cites
+#link("https://arxiv.org/abs/1203.6543")[FORM] by J. Kuipers, T. Ueda,
+J. A. M. Vermaseren, and J. Vollinga. Color algebra also cites
+#link("https://arxiv.org/abs/hep-ph/9802376")[Group theory factors for Feynman diagrams]
+by T. van Ritbergen, A. N. Schellekens, and J. A. M. Vermaseren, the paper
+underlying FORM's `color.h` package.
+
 Citations accumulate during a session. Repeated operations keep a single entry
 for each contribution.
 
