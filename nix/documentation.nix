@@ -128,9 +128,11 @@ let
         (workspaceRoot + "/crates/linnet-py/linnet.pyi")
         (workspaceRoot + "/crates/feynkit-py/python/symbolica/community/hepkit/__init__.pyi")
         (workspaceRoot + "/crates/feynkit-py/python/symbolica/community/hepkit/__init__.py")
+        (workspaceRoot + "/crates/linnet-render-py/python/symbolica/community/render/__init__.pyi")
         (
           workspaceRoot + "/examples/notebooks/symbolica-host/python/symbolica/community/tensor/__init__.pyi"
         )
+        (workspaceRoot + "/examples/notebooks/symbolica-host/python/symbolica/community/render/__init__.pyi")
         (workspaceRoot + "/crates/feynkit-py/examples/ufo_generation.py")
         (workspaceRoot + "/crates/linnet-py/examples/physics_render_settings.py")
         (workspaceRoot + "/crates/linnet-py/examples/layout_stream.py")
@@ -328,6 +330,7 @@ let
     cargo run --locked --profile ${docsCargoProfile} -p alphal00p-docs-python-exporter --features gammaloop -- gammaloop-python docs/api/python/gammaloop-python.pyi --check
     cargo run --locked --profile ${docsCargoProfile} -p alphal00p-docs-python-exporter --features linnet -- linnet-python docs/api/python/linnet-python.pyi --check
     cargo run --locked --profile ${docsCargoProfile} -p alphal00p-docs-python-exporter --features spenso -- spynso3 docs/api/python/spynso3.pyi --check
+    cargo run --locked --profile ${docsCargoProfile} -p alphal00p-docs-python-exporter --features render -- linnet-render docs/api/python/linnet-render.pyi --check
     cargo run --locked --profile ${docsCargoProfile} -p alphal00p-docs-python-exporter --features vakint -- vakint-community docs/api/python/vakint-community.pyi --check
     cargo run --locked --profile ${docsCargoProfile} -p alphal00p-docs-python-exporter --features feynkit -- feynkit-community docs/api/python/feynkit-community.pyi --check
     cargo test --locked --profile ${docsCargoProfile} -p alphal00p-docs-python-exporter --features gammaloop gammaloop_runtime_surface_and_signatures_match_the_docs_stub

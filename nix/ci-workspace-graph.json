@@ -35,6 +35,7 @@
       "feynkit-py",
       "gammaloop-api",
       "linnet-py",
+      "linnet-render-py",
       "spynso3",
       "vakint"
     ],
@@ -98,6 +99,7 @@
       "feynkit-ufo",
       "linnest",
       "linnet",
+      "linnet-render-py",
       "spenso-macros",
       "spynso3",
       "typst-renderer"
@@ -184,6 +186,11 @@
       "linnet",
       "typst-renderer"
     ],
+    "linnet-render-py": [
+      "linnest",
+      "linnet",
+      "typst-renderer"
+    ],
     "spenso": [
       "gammaloop-workspace-hack",
       "linnet",
@@ -200,6 +207,7 @@
       "idenso",
       "linnest",
       "linnet",
+      "linnet-render-py",
       "spenso",
       "spenso-hep-lib",
       "spenso-macros",
@@ -273,6 +281,9 @@
         "python_stubgen"
       ],
       "linnet-py": [
+        "python_stubgen"
+      ],
+      "linnet-render-py": [
         "python_stubgen"
       ],
       "spynso3": [
@@ -368,6 +379,7 @@
         "svg"
       ],
       "linnet": [],
+      "linnet-render-py": [],
       "spenso-macros": [],
       "spynso3": [],
       "typst-renderer": []
@@ -516,6 +528,13 @@
         "full"
       ]
     },
+    "linnet-render-py": {
+      "linnest": [
+        "svg"
+      ],
+      "linnet": [],
+      "typst-renderer": []
+    },
     "spenso": {
       "gammaloop-workspace-hack": [],
       "linnet": [
@@ -540,6 +559,7 @@
         "svg"
       ],
       "linnet": [],
+      "linnet-render-py": [],
       "spenso": [
         "portable-payload",
         "python",
@@ -593,6 +613,7 @@
     "linnest": "crates/linnest",
     "linnet": "crates/linnet",
     "linnet-py": "crates/linnet-py",
+    "linnet-render-py": "crates/linnet-render-py",
     "spenso": "crates/spenso",
     "spenso-hep-lib": "crates/spenso-hep-lib",
     "spenso-macros": "crates/spenso-macros",
@@ -631,6 +652,7 @@
     "linnest",
     "linnet",
     "linnet-py",
+    "linnet-render-py",
     "spenso",
     "spenso-hep-lib",
     "spenso-macros",
@@ -764,6 +786,7 @@
       "kurvst",
       "linnest",
       "linnet",
+      "linnet-render-py",
       "spenso",
       "spenso-hep-lib",
       "spenso-macros",
@@ -882,6 +905,12 @@
       "linnet",
       "typst-renderer"
     ],
+    "linnet-render-py": [
+      "kurvst",
+      "linnest",
+      "linnet",
+      "typst-renderer"
+    ],
     "spenso": [
       "gammaloop-workspace-hack",
       "linnet",
@@ -903,6 +932,7 @@
       "kurvst",
       "linnest",
       "linnet",
+      "linnet-render-py",
       "spenso",
       "spenso-hep-lib",
       "spenso-macros",
@@ -1054,6 +1084,7 @@
       "kurvst",
       "linnest",
       "linnet",
+      "linnet-render-py",
       "spenso",
       "spenso-hep-lib",
       "spenso-macros",
@@ -1172,6 +1203,12 @@
       "linnet",
       "typst-renderer"
     ],
+    "linnet-render-py": [
+      "kurvst",
+      "linnest",
+      "linnet",
+      "typst-renderer"
+    ],
     "spenso": [
       "gammaloop-workspace-hack",
       "linnet",
@@ -1193,6 +1230,7 @@
       "kurvst",
       "linnest",
       "linnet",
+      "linnet-render-py",
       "spenso",
       "spenso-hep-lib",
       "spenso-macros",
@@ -1308,6 +1346,7 @@
       "feynkit-py",
       "gammaloop-api",
       "linnet-py",
+      "linnet-render-py",
       "spynso3",
       "vakint"
     ],
@@ -1372,6 +1411,7 @@
       "feynkit-ufo",
       "linnest",
       "linnet",
+      "linnet-render-py",
       "spenso-macros",
       "spynso3",
       "typst-renderer"
@@ -1460,6 +1500,11 @@
       "linnet",
       "typst-renderer"
     ],
+    "linnet-render-py": [
+      "linnest",
+      "linnet",
+      "typst-renderer"
+    ],
     "spenso": [
       "gammaloop-workspace-hack",
       "linnet",
@@ -1476,6 +1521,7 @@
       "idenso",
       "linnest",
       "linnet",
+      "linnet-render-py",
       "spenso",
       "spenso-hep-lib",
       "spenso-macros",
@@ -1551,6 +1597,9 @@
         "python_stubgen"
       ],
       "linnet-py": [
+        "python_stubgen"
+      ],
+      "linnet-render-py": [
         "python_stubgen"
       ],
       "spynso3": [
@@ -1647,6 +1696,7 @@
         "svg"
       ],
       "linnet": [],
+      "linnet-render-py": [],
       "spenso-macros": [],
       "spynso3": [],
       "typst-renderer": []
@@ -1801,6 +1851,13 @@
         "full"
       ]
     },
+    "linnet-render-py": {
+      "linnest": [
+        "svg"
+      ],
+      "linnet": [],
+      "typst-renderer": []
+    },
     "spenso": {
       "gammaloop-workspace-hack": [],
       "linnet": [
@@ -1827,6 +1884,7 @@
         "svg"
       ],
       "linnet": [],
+      "linnet-render-py": [],
       "spenso": [
         "portable-payload",
         "python",

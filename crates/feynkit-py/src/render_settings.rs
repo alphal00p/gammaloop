@@ -1,8 +1,8 @@
 //! Typed Python settings for the native diagram renderer.
 use feynkit_graph::SceneOptions;
 use linnest::svg::Config;
+use linnet_render_py::{PyLayoutSettings, PyStrokeStyle};
 use pyo3::{prelude::*, types::PyDict};
-pub use spynso3::display::graph::{PyLayoutSettings, PyStrokeStyle};
 
 #[cfg(feature = "python_stubgen")]
 use pyo3_stub_gen::derive::{gen_stub_pyclass, gen_stub_pymethods};
@@ -295,8 +295,8 @@ impl PyRenderSettings {
         self.graph_settings().map(|_| ())
     }
 
-    fn graph_settings(&self) -> PyResult<spynso3::display::graph::PyRenderSettings> {
-        spynso3::display::graph::PyRenderSettings::new(
+    fn graph_settings(&self) -> PyResult<linnet_render_py::PyRenderSettings> {
+        linnet_render_py::PyRenderSettings::new(
             self.title.clone(),
             self.layout.clone(),
             self.node_radius,
@@ -315,8 +315,6 @@ impl PyRenderSettings {
 }
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
-    module.add_class::<PyLayoutSettings>()?;
-    module.add_class::<PyStrokeStyle>()?;
     module.add_class::<PyRenderSettings>()?;
     Ok(())
 }

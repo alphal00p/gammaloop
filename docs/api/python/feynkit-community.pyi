@@ -15,12 +15,10 @@ import symbolica.core
 import types
 import typing
 from symbolica import ComplexFloat, Float
-from symbolica.community.tensor import DiagramRender, DisplaySettings, LayoutSettings, Slot, StrokeStyle, TensorExpression, TensorName
+from symbolica.community.render import DiagramRender, LayoutSettings, StrokeStyle
+from symbolica.community.tensor import DisplaySettings, Slot, TensorExpression, TensorName
 from symbolica.core import Expression
 
-DiagramRender: typing.TypeAlias = symbolica.community.tensor.DiagramRender
-LayoutSettings: typing.TypeAlias = symbolica.community.tensor.LayoutSettings
-StrokeStyle: typing.TypeAlias = symbolica.community.tensor.StrokeStyle
 @typing.final
 class Amplitude:
     r"""
@@ -3489,8 +3487,9 @@ class FeynmanDiagram:
         --------
         Using the setup in the ``FeynmanDiagram`` class example:
 
+        >>> from symbolica.community.render import LayoutSettings
         >>> settings = hep.RenderSettings(
-        ...     layout=hep.LayoutSettings(impred_steps=100), show_particle=False)
+        ...     layout=LayoutSettings(impred_steps=100), show_particle=False)
         >>> drawing = diagram.render(momenta=True, config=settings)
         >>> drawing
         >>> svg = drawing.to_svg()
@@ -8419,6 +8418,17 @@ class Process:
         >>> electron = process.model.particle("e-")
         """
     @property
+    def particle_veto(self) -> builtins.list[ParticleSelector]:
+        r"""
+        The excluded particle selectors, shared by every generation operation.
+
+        Examples
+        --------
+        Using the setup in the ``Process`` class example:
+
+        >>> excluded_particles = process.particle_veto
+        """
+    @property
     def particle_selection(self) -> typing.Optional[builtins.list[ParticleSelector]]:
         r"""
         Allowed species, including their antiparticles. None allows all;
@@ -8430,17 +8440,6 @@ class Process:
 
         >>> qed = model.process(["e-", "e+"], ["a", "a"], particle_selection=["e-", "a"])
         >>> allowed_particles = qed.particle_selection
-        """
-    @property
-    def particle_veto(self) -> builtins.list[ParticleSelector]:
-        r"""
-        The excluded particle selectors, shared by every generation operation.
-
-        Examples
-        --------
-        Using the setup in the ``Process`` class example:
-
-        >>> excluded_particles = process.particle_veto
         """
     @property
     def vertex_allow(self) -> typing.Optional[builtins.list[VertexRule]]:

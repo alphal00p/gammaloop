@@ -1337,6 +1337,7 @@ dependencies = [
  "bincode",
  "bincode-trait-derive",
  "blake3",
+ "linnet",
  "miniz_oxide 0.8.9",
  "serde",
  "serde_json",
@@ -1359,6 +1360,7 @@ dependencies = [
  "feynkit-ufo",
  "linnest",
  "linnet",
+ "linnet-render-py",
  "pyo3",
  "pyo3-stub-gen-derive",
  "serde_json",
@@ -2222,6 +2224,18 @@ dependencies = [
  "symbolica-utils",
  "thiserror 2.0.20",
  "twofloat",
+]
+
+[[package]]
+name = "linnet-render-py"
+version = "0.1.0"
+dependencies = [
+ "linnest",
+ "linnet",
+ "pyo3",
+ "pyo3-stub-gen-derive",
+ "serde_json",
+ "typst-renderer",
 ]
 
 [[package]]
@@ -3829,6 +3843,7 @@ dependencies = [
  "itertools 0.14.0",
  "linnest",
  "linnet",
+ "linnet-render-py",
  "pyo3",
  "pyo3-stub-gen-derive",
  "roxmltree",
