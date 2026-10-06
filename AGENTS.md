@@ -13,6 +13,10 @@ departures from the documented allowances.
 If instructions conflict, prefer the more specific local guidance and preserve
 the user's current work unless explicitly asked to change it.
 
+Before creating any new jj change, always ask the user which author name and
+email to use, and wait for their answer. Set that identity explicitly when
+creating the change.
+
 Use descriptive branch names without an agent prefix, for example
 `ci-final-review-readiness`. Do not add `codex/` unless explicitly requested.
 

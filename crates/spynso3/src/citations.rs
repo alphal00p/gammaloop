@@ -30,17 +30,23 @@ impl Usage {
 
     fn reason(self) -> &'static str {
         match self {
-            Self::Tensor => "Symbolic tensor expressions and representations.",
-            Self::Network => "Tensor-network contractions.",
-            Self::Evaluation => "Numerical evaluation of tensor components.",
-            Self::Contraction => "Symbolic tensor contractions.",
-            Self::Algebra => "Tensor algebra simplification.",
-            Self::Gamma => "Dirac gamma algebra.",
-            Self::Color => "Color algebra.",
-            Self::Epsilon => "Levi-Civita identities.",
-            Self::Canonicalization => "Canonical tensor expressions and dummy indices.",
-            Self::DiracAdjoint => "Dirac adjoints.",
-            Self::Notation => "Tensor index and contraction notation.",
+            Self::Tensor => {
+                "Constructed or manipulated typed tensors, tensor expressions, or tensor structures."
+            }
+            Self::Network => "Executed a tensor network using component data.",
+            Self::Evaluation => "Evaluated tensor components numerically through Symbolica.",
+            Self::Contraction => {
+                "Ran symbolic tensor contraction, including metric and chain/trace reduction."
+            }
+            Self::Algebra => "Ran the tensor-algebra simplification scheduler.",
+            Self::Gamma => "Enabled Dirac gamma identities in tensor-algebra simplification.",
+            Self::Color => "Enabled color identities in tensor-algebra simplification.",
+            Self::Epsilon => "Enabled epsilon identities in tensor-algebra simplification.",
+            Self::Canonicalization => {
+                "Canonicalized symbolic tensor contractions and dummy indices."
+            }
+            Self::DiracAdjoint => "Constructed a Dirac adjoint of a tensor expression.",
+            Self::Notation => "Rewrote symbolic tensor indices or dot, chain, and trace notation.",
         }
     }
 }
@@ -96,7 +102,10 @@ impl CitationUsage {
             Usage::Notation,
         ]);
         if !idenso_reasons.is_empty() {
-            spenso_reasons.push("Tensor-expression structure and display for Idenso.".into());
+            spenso_reasons.push(
+                "Provided the Symbolica tensor-expression structure and display used by Idenso."
+                    .into(),
+            );
         }
         let mut citations = vec![Citation {
             id: "10.5281/zenodo.18248388".into(),
@@ -107,11 +116,9 @@ impl CitationUsage {
   year = {2026},
   url = {https://github.com/alphal00p/spenso},
   doi = {10.5281/zenodo.18248388}
-}"#
-            .into(),
+}"#.into(),
             reasons: spenso_reasons,
-            description:
-                "Symbolic tensors, tensor networks, and mathematical display in Symbolica.".into(),
+            description: "Spenso defines tensor-expression structures and their display in Symbolica, representation-aware tensors, dense and sparse component storage, and tensor-network execution. Reasons summarize successful operations across the current process.".into(),
             relevance: None,
         }];
         if !idenso_reasons.is_empty() {
@@ -126,48 +133,7 @@ impl CitationUsage {
   doi = {10.5281/zenodo.18248409}
 }"#.into(),
                 reasons: idenso_reasons,
-                description: "Symbolic tensor algebra, including Dirac matrices, color factors, and Levi-Civita identities.".into(),
-                relevance: None,
-            });
-        }
-        if used & Usage::Gamma as u16 != 0 {
-            citations.push(Citation {
-                // Use the same FORM identifier as Vakint.
-                id: "arXiv:1203.6543".into(),
-                reference: "J. Kuipers, T. Ueda, J. A. M. Vermaseren, J. Vollinga. FORM version 4.0 (2013).".into(),
-                bibtex: r#"@article{Kuipers:2012rf,
-  author = {J. Kuipers and T. Ueda and J. A. M. Vermaseren and J. Vollinga},
-  title = {{FORM version 4.0}},
-  journal = {Computer Physics Communications},
-  volume = {184},
-  pages = {1453--1467},
-  year = {2013},
-  doi = {10.1016/j.cpc.2012.12.028},
-  eprint = {1203.6543},
-  archivePrefix = {arXiv}
-}"#.into(),
-                reasons: reasons(&[Usage::Gamma]),
-                description: "Symbolic manipulation and Dirac gamma algebra.".into(),
-                relevance: None,
-            });
-        }
-        if used & Usage::Color as u16 != 0 {
-            citations.push(Citation {
-                id: "arXiv:hep-ph/9802376".into(),
-                reference: "T. van Ritbergen, A. N. Schellekens, J. A. M. Vermaseren. Group theory factors for Feynman diagrams (1999).".into(),
-                bibtex: r#"@article{vanRitbergen:1998pn,
-  author = {T. van Ritbergen and A. N. Schellekens and J. A. M. Vermaseren},
-  title = {Group theory factors for {Feynman} diagrams},
-  journal = {International Journal of Modern Physics A},
-  volume = {14},
-  pages = {41--96},
-  year = {1999},
-  doi = {10.1142/S0217751X99000038},
-  eprint = {hep-ph/9802376},
-  archivePrefix = {arXiv}
-}"#.into(),
-                reasons: reasons(&[Usage::Color]),
-                description: "Color factors and group invariants underlying FORM's color.h package.".into(),
+                description: "Idenso implements symbolic tensor contraction, canonicalization, Dirac adjoints, and Dirac, color, and epsilon identities. Enabled algebra families describe the requested configuration; they do not certify that a particular identity changed the result.".into(),
                 relevance: None,
             });
         }
@@ -196,40 +162,18 @@ mod tests {
             ..Default::default()
         });
         let citations = usage.get_citations();
-        assert_eq!(citations.len(), 3);
-        assert_eq!(citations[2].id, "arXiv:hep-ph/9802376");
+        assert_eq!(citations.len(), 2);
         assert_eq!(
             citations[1].reasons,
             [Usage::Algebra.reason(), Usage::Color.reason()]
         );
         for citation in &citations {
-            let identifier = citation.id.strip_prefix("arXiv:").unwrap_or(&citation.id);
-            assert!(citation.bibtex.contains(identifier));
+            assert!(citation.bibtex.contains(&citation.id));
             assert!(!citation.description.is_empty());
             assert_eq!(citation.to_bibtex(), citation.bibtex);
             assert!(citation.to_markdown(false).contains(&citation.reasons[0]));
         }
         assert_eq!(usage.get_citations()[1].reasons, citations[1].reasons);
-
-        usage.record(Usage::Gamma);
-        usage.record(Usage::Color);
-        usage.record(Usage::Gamma);
-        let citations = usage.get_citations();
-        assert_eq!(citations.len(), 4);
-        assert_eq!(citations[2].id, "arXiv:1203.6543");
-        assert_eq!(citations[2].reasons, [Usage::Gamma.reason()]);
-        assert_eq!(citations[3].id, "arXiv:hep-ph/9802376");
-        assert_eq!(citations[3].reasons, [Usage::Color.reason()]);
-        assert!(
-            citations[2]
-                .to_bibtex()
-                .contains("10.1016/j.cpc.2012.12.028")
-        );
-        assert!(
-            citations[3]
-                .to_bibtex()
-                .contains("10.1142/S0217751X99000038")
-        );
     }
 
     #[test]
@@ -261,7 +205,7 @@ mod tests {
         let citations = usage.get_citations();
         assert_eq!(citations.len(), 2);
         assert_eq!(citations[0].reference, "Lucien Huber. Spenso (2026).");
-        assert!(citations[0].reasons[0].contains("Tensor-expression structure and display"));
+        assert!(citations[0].reasons[0].contains("tensor-expression structure and display"));
         assert_eq!(
             citations[1].reference,
             "Lucien Huber, Ben Ruijl. Idenso (2026)."
