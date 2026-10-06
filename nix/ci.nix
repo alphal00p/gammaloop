@@ -18,7 +18,7 @@
   groups = [
     {
       name = "feynkit";
-      packages = ["feynkit-model" "feynkit-ufo"];
+      packages = ["feynkit-kinematics" "feynkit-model" "feynkit-ufo"];
     }
     {
       name = "core";
