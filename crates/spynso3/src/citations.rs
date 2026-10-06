@@ -30,23 +30,17 @@ impl Usage {
 
     fn reason(self) -> &'static str {
         match self {
-            Self::Tensor => {
-                "Constructed or manipulated typed tensors, tensor expressions, or tensor structures."
-            }
-            Self::Network => "Executed a tensor network using component data.",
-            Self::Evaluation => "Evaluated tensor components numerically through Symbolica.",
-            Self::Contraction => {
-                "Ran symbolic tensor contraction, including metric and chain/trace reduction."
-            }
-            Self::Algebra => "Ran the tensor-algebra simplification scheduler.",
-            Self::Gamma => "Enabled Dirac gamma identities in tensor-algebra simplification.",
-            Self::Color => "Enabled color identities in tensor-algebra simplification.",
-            Self::Epsilon => "Enabled epsilon identities in tensor-algebra simplification.",
-            Self::Canonicalization => {
-                "Canonicalized symbolic tensor contractions and dummy indices."
-            }
-            Self::DiracAdjoint => "Constructed a Dirac adjoint of a tensor expression.",
-            Self::Notation => "Rewrote symbolic tensor indices or dot, chain, and trace notation.",
+            Self::Tensor => "Symbolic tensor expressions and representations.",
+            Self::Network => "Tensor-network contractions.",
+            Self::Evaluation => "Numerical evaluation of tensor components.",
+            Self::Contraction => "Symbolic tensor contractions.",
+            Self::Algebra => "Tensor algebra simplification.",
+            Self::Gamma => "Dirac gamma algebra.",
+            Self::Color => "Color algebra.",
+            Self::Epsilon => "Levi-Civita identities.",
+            Self::Canonicalization => "Canonical tensor expressions and dummy indices.",
+            Self::DiracAdjoint => "Dirac adjoints.",
+            Self::Notation => "Tensor index and contraction notation.",
         }
     }
 }
@@ -102,10 +96,7 @@ impl CitationUsage {
             Usage::Notation,
         ]);
         if !idenso_reasons.is_empty() {
-            spenso_reasons.push(
-                "Provided the Symbolica tensor-expression structure and display used by Idenso."
-                    .into(),
-            );
+            spenso_reasons.push("Tensor-expression structure and display for Idenso.".into());
         }
         let mut citations = vec![Citation {
             id: "10.5281/zenodo.18248388".into(),
@@ -116,9 +107,11 @@ impl CitationUsage {
   year = {2026},
   url = {https://github.com/alphal00p/spenso},
   doi = {10.5281/zenodo.18248388}
-}"#.into(),
+}"#
+            .into(),
             reasons: spenso_reasons,
-            description: "Spenso defines tensor-expression structures and their display in Symbolica, representation-aware tensors, dense and sparse component storage, and tensor-network execution. Reasons summarize successful operations across the current process.".into(),
+            description:
+                "Symbolic tensors, tensor networks, and mathematical display in Symbolica.".into(),
             relevance: None,
         }];
         if !idenso_reasons.is_empty() {
@@ -133,7 +126,63 @@ impl CitationUsage {
   doi = {10.5281/zenodo.18248409}
 }"#.into(),
                 reasons: idenso_reasons,
-                description: "Idenso implements symbolic tensor contraction, canonicalization, Dirac adjoints, and Dirac, color, and epsilon identities. Enabled algebra families describe the requested configuration; they do not certify that a particular identity changed the result.".into(),
+                description: "Symbolic tensor algebra, including Dirac matrices, color factors, and Levi-Civita identities.".into(),
+                relevance: None,
+            });
+        }
+        if used & Usage::Gamma as u16 != 0 {
+            citations.extend([
+                Citation {
+                    id: "arXiv:2601.19982".into(),
+                    reference: "J. Davies, T. Kaneko, C. Marinissen, T. Ueda, J. A. M. Vermaseren. FORM Version 5.0 (2026).".into(),
+                    bibtex: r#"@article{form_5,
+  author = {J. Davies and T. Kaneko and C. Marinissen and T. Ueda and J. A. M. Vermaseren},
+  title = {{FORM Version 5.0}},
+  year = {2026},
+  doi = {10.48550/arXiv.2601.19982},
+  eprint = {2601.19982},
+  archivePrefix = {arXiv},
+  primaryClass = {hep-ph}
+}"#.into(),
+                    reasons: reasons(&[Usage::Gamma]),
+                    description: "Basis for the Dirac gamma algebra rules in Idenso.".into(),
+                    relevance: None,
+                },
+                Citation {
+                    id: "arXiv:1707.06453".into(),
+                    reference: "B. Ruijl, T. Ueda, J. A. M. Vermaseren. FORM version 4.2 (2017).".into(),
+                    bibtex: r#"@article{form_4_2,
+  author = {Ben Ruijl and Takahiro Ueda and Jos Vermaseren},
+  title = {{FORM version 4.2}},
+  year = {2017},
+  doi = {10.48550/arXiv.1707.06453},
+  eprint = {1707.06453},
+  archivePrefix = {arXiv},
+  primaryClass = {hep-ph}
+}"#.into(),
+                    reasons: reasons(&[Usage::Gamma]),
+                    description: "Basis for the Dirac gamma algebra rules in Idenso.".into(),
+                    relevance: None,
+                },
+            ]);
+        }
+        if used & Usage::Color as u16 != 0 {
+            citations.push(Citation {
+                id: "arXiv:hep-ph/9802376".into(),
+                reference: "T. van Ritbergen, A. N. Schellekens, J. A. M. Vermaseren. Group theory factors for Feynman diagrams (1999).".into(),
+                bibtex: r#"@article{vanRitbergen:1998pn,
+  author = {T. van Ritbergen and A. N. Schellekens and J. A. M. Vermaseren},
+  title = {Group theory factors for {Feynman} diagrams},
+  journal = {International Journal of Modern Physics A},
+  volume = {14},
+  pages = {41--96},
+  year = {1999},
+  doi = {10.1142/S0217751X99000038},
+  eprint = {hep-ph/9802376},
+  archivePrefix = {arXiv}
+}"#.into(),
+                reasons: reasons(&[Usage::Color]),
+                description: "Basis for the color algebra rules in Idenso, through color.h.".into(),
                 relevance: None,
             });
         }
@@ -162,18 +211,47 @@ mod tests {
             ..Default::default()
         });
         let citations = usage.get_citations();
-        assert_eq!(citations.len(), 2);
+        assert_eq!(citations.len(), 3);
+        assert_eq!(citations[2].id, "arXiv:hep-ph/9802376");
         assert_eq!(
             citations[1].reasons,
             [Usage::Algebra.reason(), Usage::Color.reason()]
         );
         for citation in &citations {
-            assert!(citation.bibtex.contains(&citation.id));
+            let identifier = citation.id.strip_prefix("arXiv:").unwrap_or(&citation.id);
+            assert!(citation.bibtex.contains(identifier));
             assert!(!citation.description.is_empty());
             assert_eq!(citation.to_bibtex(), citation.bibtex);
             assert!(citation.to_markdown(false).contains(&citation.reasons[0]));
         }
         assert_eq!(usage.get_citations()[1].reasons, citations[1].reasons);
+
+        usage.record(Usage::Gamma);
+        usage.record(Usage::Color);
+        usage.record(Usage::Gamma);
+        let citations = usage.get_citations();
+        assert_eq!(citations.len(), 5);
+        assert_eq!(citations[2].id, "arXiv:2601.19982");
+        assert_eq!(citations[2].reasons, [Usage::Gamma.reason()]);
+        assert_eq!(citations[3].id, "arXiv:1707.06453");
+        assert_eq!(citations[3].reasons, [Usage::Gamma.reason()]);
+        assert_eq!(citations[4].id, "arXiv:hep-ph/9802376");
+        assert_eq!(citations[4].reasons, [Usage::Color.reason()]);
+        assert!(
+            citations[2]
+                .to_bibtex()
+                .contains("10.48550/arXiv.2601.19982")
+        );
+        assert!(
+            citations[3]
+                .to_bibtex()
+                .contains("10.48550/arXiv.1707.06453")
+        );
+        assert!(
+            citations[4]
+                .to_bibtex()
+                .contains("10.1142/S0217751X99000038")
+        );
     }
 
     #[test]
@@ -205,7 +283,7 @@ mod tests {
         let citations = usage.get_citations();
         assert_eq!(citations.len(), 2);
         assert_eq!(citations[0].reference, "Lucien Huber. Spenso (2026).");
-        assert!(citations[0].reasons[0].contains("tensor-expression structure and display"));
+        assert!(citations[0].reasons[0].contains("Tensor-expression structure and display"));
         assert_eq!(
             citations[1].reference,
             "Lucien Huber, Ben Ruijl. Idenso (2026)."
