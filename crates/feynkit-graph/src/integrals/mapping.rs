@@ -266,7 +266,7 @@ impl IntegralFamily {
         for quadratic in &source_quadratics {
             basis.push(quadratic);
             let momenta = basis.iter().map(|q| &q.momentum).collect::<Vec<_>>();
-            let (matrix, _) = Atom::system_to_matrix::<u16, _, _>(&momenta, &self.loop_momenta)
+            let (matrix, _) = Self::affine_system(&momenta, &self.loop_momenta)
                 .map_err(|e| IntegralFamilyError::InvalidMapping(e.to_string()))?;
             if matrix.rank() < basis.len() {
                 basis.pop();
@@ -732,6 +732,43 @@ mod tests {
                     .is_zero()
             );
         }
+    }
+
+    #[test]
+    fn gaussian_propagator_scales_allow_real_momentum_maps() {
+        let [k, l, p] = ["gaussian_map::k", "gaussian_map::l", "gaussian_map::p"]
+            .map(|name| symbolica::symbol!(name).to_atom());
+        let kin = Kinematics::new()
+            .with_momenta([k.clone(), l.clone(), p.clone()])
+            .unwrap();
+        let imaginary = parse!("𝑖");
+        let source = IntegralFamily::new(
+            vec![k.clone()],
+            vec![p.clone()],
+            vec![&imaginary * kin.scalar_product(&k, &k).unwrap() - 3],
+            &kin,
+        )
+        .unwrap();
+        let image = &l + &p;
+        let target = IntegralFamily::new(
+            vec![l],
+            vec![p],
+            vec![&imaginary * kin.scalar_product(&image, &image).unwrap() - 3],
+            &kin,
+        )
+        .unwrap();
+        assert!(
+            source
+                .mapping_to(&target, std::slice::from_ref(&image))
+                .unwrap()
+                .is_some()
+        );
+        let found = source.find_mapping(&target, 100).unwrap().unwrap();
+        assert!(
+            (found.apply(&source.denominators()[0]) - &target.denominators()[0])
+                .together()
+                .is_zero()
+        );
     }
 
     #[test]

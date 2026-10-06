@@ -304,6 +304,31 @@ mod tests {
     }
 
     #[test]
+    fn gaussian_homogeneous_relations_and_raised_powers_reconstruct_exactly() {
+        let k = parse!("apart_gaussian::k");
+        let p = parse!("apart_gaussian::p");
+        let kin = Kinematics::new();
+        let x = kin.scalar_product(&k, &k).unwrap();
+        let y = kin.scalar_product(&k, &p).unwrap();
+        let imaginary = parse!("𝑖");
+        let first = &x + &imaginary * &y;
+        let second = &imaginary * &x - &y;
+        for powers in [vec![1, 2, 1], vec![-2, 1, 2]] {
+            verify(
+                vec![
+                    first.clone(),
+                    second.clone(),
+                    &first - (Atom::one() + &imaginary),
+                ],
+                powers,
+                vec![k.clone()],
+                vec![p.clone()],
+                &kin,
+            );
+        }
+    }
+
+    #[test]
     fn expanded_tiny_symbolic_coefficients_keep_scalar_partial_fraction_weights() {
         let k = parse!("apart_exact::k");
         let p = parse!("apart_exact::p");
@@ -315,6 +340,9 @@ mod tests {
             parse!("(apart_exact::a+apart_exact::b)*10^1000"),
             parse!("(apart_exact::a+apart_exact::b)/(apart_exact::c+apart_exact::d)"),
             parse!("sin(apart_exact::a)+cos(apart_exact::b)"),
+            parse!("𝑖"),
+            parse!("(apart_exact::a+𝑖*apart_exact::b)/10^1000"),
+            parse!("(sin(apart_exact::a)+𝑖*cos(apart_exact::b))/(3-𝑖)"),
         ] {
             let denominators = [&x + &q * &y - 1, &x - 2, &y - 3];
             let constant = Atom::one() + Atom::num(3) * &q;
