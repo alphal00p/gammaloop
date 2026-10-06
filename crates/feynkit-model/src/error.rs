@@ -144,4 +144,8 @@ pub enum ModelError {
     UnknownCardParameter { name: String },
     #[error("external parameter '{name}' has no value for the default parameter card")]
     MissingCardValue { name: String },
+    #[error("parameter '{name}' has a non-finite scalar value")]
+    NonFiniteScalarBinding { name: String },
+    #[error("scalar bindings have a cyclic or unresolved named dependency")]
+    UnresolvedScalarBindings,
 }

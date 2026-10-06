@@ -56,7 +56,7 @@ impl PyFeynmanDiagram {
     /// ----------
     /// kwargs : keyword arguments
     ///     Arguments of ``sector_decomposition.sector_decompose`` after its input.
-    #[pyo3(signature = (**kwargs), text_signature = "($self, *, regulator, kinematics=None, dimension=None, powers=None, numerator=None, scalar_values=None, auxiliary_momenta=None, measure_multiplier=None, max_order=0, coefficient_expansion='physical', observer=None)")]
+    #[pyo3(signature = (**kwargs), text_signature = "($self, *, regulator, kinematics=None, dimension=None, powers=None, numerator=None, scalar_values=None, auxiliary_momenta=None, measure_multiplier=None, max_order=0, coefficient_expansion='physical', observer=None, progress='auto')")]
     fn sector_decompose(
         slf: PyRef<'_, Self>,
         kwargs: Option<&Bound<'_, PyDict>>,
@@ -87,7 +87,7 @@ impl PyIntegralFamily {
     /// ----------
     /// kwargs : keyword arguments
     ///     Arguments of ``sector_decomposition.sector_decompose`` after its input.
-    #[pyo3(signature = (**kwargs), text_signature = "($self, *, regulator, kinematics=None, dimension=None, powers=None, numerator=None, scalar_values=None, auxiliary_momenta=None, measure_multiplier=None, max_order=0, coefficient_expansion='physical', observer=None)")]
+    #[pyo3(signature = (**kwargs), text_signature = "($self, *, regulator, kinematics=None, dimension=None, powers=None, numerator=None, scalar_values=None, auxiliary_momenta=None, measure_multiplier=None, max_order=0, coefficient_expansion='physical', observer=None, progress='auto')")]
     fn sector_decompose(
         slf: PyRef<'_, Self>,
         kwargs: Option<&Bound<'_, PyDict>>,
@@ -118,6 +118,7 @@ pyo3_stub_gen::inventory::submit! {
                 measure_multiplier: typing.Optional[symbolica.Expression] = None,
                 max_order: int = 0, coefficient_expansion: str = "physical",
                 observer: typing.Optional[typing.Callable[[symbolica.community.hepkit.sector_decomposition.GenerationSnapshot], typing.Optional[bool]]] = None,
+                progress: typing.Union[typing.Literal["auto"], typing.Callable[[symbolica.community.hepkit.sector_decomposition.GenerationSnapshot], typing.Optional[bool]], None] = "auto",
             ) -> symbolica.community.hepkit.sector_decomposition.GeneratedIntegral:
                 """Generate Laurent integrands using the complete native diagram.
 
@@ -152,6 +153,9 @@ pyo3_stub_gen::inventory::submit! {
                     Native physical or package coefficient convention.
                 observer : callable or None
                     Native generation events; False cancels at an event boundary.
+                progress : "auto", callable or None
+                    Automatic marimo display unless observer is supplied; None disables it.
+                    A callable receives every native event after observer and may cancel.
                 """
 
         "#
@@ -177,6 +181,7 @@ pyo3_stub_gen::inventory::submit! {
                 measure_multiplier: typing.Optional[symbolica.Expression] = None,
                 max_order: int = 0, coefficient_expansion: str = "physical",
                 observer: typing.Optional[typing.Callable[[symbolica.community.hepkit.sector_decomposition.GenerationSnapshot], typing.Optional[bool]]] = None,
+                progress: typing.Union[typing.Literal["auto"], typing.Callable[[symbolica.community.hepkit.sector_decomposition.GenerationSnapshot], typing.Optional[bool]], None] = "auto",
             ) -> symbolica.community.hepkit.sector_decomposition.GeneratedIntegral:
                 """Generate Laurent integrands for an explicit family member.
 
@@ -211,6 +216,9 @@ pyo3_stub_gen::inventory::submit! {
                     Native physical or package coefficient convention.
                 observer : callable or None
                     Native generation events; False cancels at an event boundary.
+                progress : "auto", callable or None
+                    Automatic marimo display unless observer is supplied; None disables it.
+                    A callable receives every native event after observer and may cancel.
                 """
         "#
     }
@@ -257,7 +265,7 @@ absent = object()
 previous = sys.modules.get(backend_name, absent)
 backend = types.ModuleType(backend_name)
 calls = []
-answer, regulator, observer, powers = object(), object(), object(), object()
+answer, regulator, observer, powers, progress = (object() for _ in range(5))
 def capture(input, **kwargs):
     calls.append((input, kwargs))
     return answer
@@ -265,14 +273,15 @@ backend.sector_decompose = capture
 sys.modules[backend_name] = backend
 try:
     for input in (diagram, family):
-        assert input.sector_decompose(regulator=regulator, powers=powers, observer=observer) is answer
+        assert input.sector_decompose(regulator=regulator, powers=powers, observer=observer, progress=progress) is answer
         actual, kwargs = calls.pop()
         assert actual is input
-        assert kwargs == dict(regulator=regulator, powers=powers, observer=observer)
+        assert kwargs == dict(regulator=regulator, powers=powers, observer=observer, progress=progress)
         signature = inspect.signature(input.sector_decompose)
         assert signature.parameters['regulator'].kind == inspect.Parameter.KEYWORD_ONLY
         assert signature.parameters['max_order'].default == 0
         assert signature.parameters['coefficient_expansion'].default == 'physical'
+        assert signature.parameters['progress'].default == 'auto'
     failure = ValueError('backend input or observer failure')
     def fail(*args, **kwargs):
         raise failure

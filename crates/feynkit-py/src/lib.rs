@@ -10,6 +10,7 @@ mod graph_interop;
 mod integrals;
 mod kinematics;
 mod model;
+mod progress;
 mod render_settings;
 mod sector_decomposition;
 mod tensor;
@@ -45,6 +46,7 @@ pub use model::{
     PyModelExpression, PyModelFunction, PyParameter, PyParameterCard, PyParameterNature,
     PyParameterType, PyParticle, PyPropagator, PyVertexRule,
 };
+pub use progress::MarimoProgress;
 pub use render_settings::{PyLayoutSettings, PyRenderSettings, PyStrokeStyle};
 pub use tensor::PyTensorReducer;
 #[cfg(feature = "ufo")]
