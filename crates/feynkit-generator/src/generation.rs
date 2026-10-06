@@ -5677,7 +5677,7 @@ mod tests {
     fn thread_counts_preserve_diagrams_and_progress_order() {
         let generator = Generator::new(Model::qcd());
         let process = Process::new(["g"], ["g"])
-            .with_filters(
+            .with_particle_filters(
                 Some(
                     ["u", "d", "c", "s", "t"]
                         .into_iter()
