@@ -38,6 +38,7 @@ svg[data-linnet-interactive] .linnet-panning [data-linnet-kind] {
   cursor: grabbing;
 }
 svg[data-linnet-interactive] .linnet-toolbar {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 6px;
@@ -49,11 +50,48 @@ svg[data-linnet-interactive] .linnet-toolbar output {
   min-width: 4ch;
   font-variant-numeric: tabular-nums;
 }
-svg[data-linnet-interactive] .linnet-navigation-hint {
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
+svg[data-linnet-interactive] foreignObject:has(.linnet-toolbar) {
+  overflow: visible;
+}
+svg[data-linnet-interactive] .linnet-navigation-help {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 4px;
+  cursor: help;
   color: color-mix(in srgb, var(--linnet-panel-ink) 65%, var(--linnet-panel-bg));
+}
+svg[data-linnet-interactive] .linnet-navigation-help::before {
+  content: 'i';
+  width: 14px;
+  height: 14px;
+  border: 1px solid currentColor;
+  border-radius: 50%;
+  text-align: center;
+  font: bold 11px/14px serif;
+}
+svg[data-linnet-interactive] .linnet-navigation-help:focus-visible {
+  outline: 2px solid var(--linnet-selection);
+}
+svg[data-linnet-interactive] .linnet-navigation-hint {
+  display: none;
+  position: absolute;
+  top: 100%;
+  left: 0;
+  box-sizing: border-box;
+  width: max-content;
+  max-width: 100%;
+  padding: 6px 8px;
+  border: 1px solid color-mix(in srgb, var(--linnet-panel-ink) 20%, transparent);
+  border-radius: 4px;
+  background: var(--linnet-panel-bg);
+  color: var(--linnet-panel-ink);
+  box-shadow: 0 2px 8px #00000014;
+}
+svg[data-linnet-interactive] .linnet-navigation-help:is(:hover, :focus) .linnet-navigation-hint {
+  display: block;
 }
 svg[data-linnet-interactive] [data-linnet-kind] {
   cursor: pointer;
