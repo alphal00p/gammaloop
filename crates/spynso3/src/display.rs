@@ -281,7 +281,6 @@ fn validate_typst_length(value: &str, field: &str) -> PyResult<()> {
 }
 
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
-#[spenso_macros::track_usage(crate::record_usage)]
 #[pymethods]
 impl DisplaySettings {
     /// Choose tensor notation, index labels, and component presentation.
@@ -1432,7 +1431,6 @@ fn notebook_html_fragment(document: &str) -> PyResult<String> {
     feature = "python_stubgen",
     gen_stub_pyfunction(module = "symbolica.community.tensor")
 )]
-#[spenso_macros::track_usage(crate::record_usage)]
 #[pyfunction]
 fn load_math_font(py: Python<'_>) -> PyResult<String> {
     let font = PyBytes::new(py, include_bytes!("../typst/STIXTwoMath-Regular.woff2"));
@@ -2448,7 +2446,7 @@ pub(crate) fn format_concrete_tensor_output_rich(
     feature = "python_stubgen",
     gen_stub_pyfunction(module = "symbolica.community.tensor")
 )]
-#[spenso_macros::track_usage(crate::record_usage)]
+#[spenso_macros::track_usage(crate::record_usage, on_success)]
 #[pyfunction]
 #[pyo3(signature = (expression, show_dimensions = None, *, settings = None))]
 fn format_tensor(
@@ -2500,7 +2498,7 @@ fn format_tensor(
     feature = "python_stubgen",
     gen_stub_pyfunction(module = "symbolica.community.tensor")
 )]
-#[spenso_macros::track_usage(crate::record_usage)]
+#[spenso_macros::track_usage(crate::record_usage, on_success)]
 #[pyfunction]
 #[pyo3(signature = (expression, show_dimensions = None, *, settings = None))]
 fn to_typst(
@@ -2554,7 +2552,7 @@ fn to_typst(
     feature = "python_stubgen",
     gen_stub_pyfunction(module = "symbolica.community.tensor")
 )]
-#[spenso_macros::track_usage(crate::record_usage)]
+#[spenso_macros::track_usage(crate::record_usage, on_success)]
 #[pyfunction]
 #[pyo3(signature = (expression, show_dimensions = None, *, settings = None, notation_source = None))]
 fn to_html(
@@ -2605,7 +2603,7 @@ fn to_html(
     feature = "python_stubgen",
     gen_stub_pyfunction(module = "symbolica.community.tensor")
 )]
-#[spenso_macros::track_usage(crate::record_usage)]
+#[spenso_macros::track_usage(crate::record_usage, on_success)]
 #[pyfunction]
 #[pyo3(signature = (expression, show_dimensions = None, *, settings = None, notation_source = None))]
 fn to_svg(
@@ -2655,7 +2653,7 @@ fn to_svg(
     feature = "python_stubgen",
     gen_stub_pyfunction(module = "symbolica.community.tensor")
 )]
-#[spenso_macros::track_usage(crate::record_usage)]
+#[spenso_macros::track_usage(crate::record_usage, on_success)]
 #[pyfunction]
 #[pyo3(signature = (expression, show_dimensions = None, *, settings = None, notation_source = None))]
 fn formatted(

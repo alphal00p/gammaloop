@@ -56,6 +56,7 @@ use pyo3_stub_gen::{PyStubType, TypeInfo, derive::*, impl_stub_type};
 use pyo3_stub_gen::derive::{gen_stub_pyclass_enum, gen_stub_pyfunction};
 
 pub mod broadcast;
+mod citations;
 mod data;
 pub mod display;
 mod evaluator;
@@ -199,7 +200,6 @@ impl From<SymbolicParallelism> for spenso::symbolic_parallelism::SymbolicParalle
     feature = "python_stubgen",
     gen_stub_pyfunction(module = "symbolica.community.tensor")
 )]
-#[spenso_macros::track_usage(crate::record_usage)]
 #[pyfunction]
 fn set_symbolica_rayon_enabled(policy: SymbolicParallelism) -> bool {
     spenso::symbolic_parallelism::set_symbolica_rayon_enabled(policy.into());
@@ -208,46 +208,7 @@ fn set_symbolica_rayon_enabled(policy: SymbolicParallelism) -> bool {
 
 impl SymbolicaCommunityModule for SpensoModule {
     fn get_citations() -> Vec<Citation> {
-        if !CITATIONS_USED.load(std::sync::atomic::Ordering::Relaxed) {
-            return Vec::new();
-        }
-        // Authorship and software DOIs: docs/products/registry.toml.
-        vec![
-            Citation {
-                id: "10.5281/zenodo.18248388".into(),
-                reference:
-                    "Lucien Huber, Valentin Hirschi, Ben Ruijl, Mathijs Fraaije. Spenso (2026)."
-                        .into(),
-                bibtex: r#"@software{spenso,
-  author = {Lucien Huber and Valentin Hirschi and Ben Ruijl and Mathijs Fraaije},
-  title = {Spenso},
-  year = {2026},
-  url = {https://github.com/alphal00p/spenso},
-  doi = {10.5281/zenodo.18248388}
-}"#
-                .into(),
-                reasons: vec!["Provides the Spenso functionality in this community module.".into()],
-                description: "".into(),
-                relevance: None,
-            },
-            Citation {
-                id: "10.5281/zenodo.18248409".into(),
-                reference:
-                    "Lucien Huber, Valentin Hirschi, Ben Ruijl, Mathijs Fraaije. Idenso (2026)."
-                        .into(),
-                bibtex: r#"@software{idenso,
-  author = {Lucien Huber and Valentin Hirschi and Ben Ruijl and Mathijs Fraaije},
-  title = {Idenso},
-  year = {2026},
-  url = {https://github.com/alphal00p/spenso},
-  doi = {10.5281/zenodo.18248409}
-}"#
-                .into(),
-                reasons: vec!["Provides the Idenso functionality in this community module.".into()],
-                description: "".into(),
-                relevance: None,
-            },
-        ]
+        citations::USED.get_citations()
     }
 
     fn get_name() -> String {
@@ -601,7 +562,7 @@ impl From<ConcreteOrParam<RealOrComplex<f64>>> for TensorElements {
 
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
 #[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
-#[spenso_macros::track_usage(crate::record_usage)]
+#[spenso_macros::track_usage(crate::record_usage, on_success)]
 #[pymethods]
 impl Spensor {
     /// Return the symbolic descriptor for these components.
@@ -2242,14 +2203,9 @@ impl SpensoModule {
     }
 }
 
-static CITATIONS_USED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
-
 #[inline]
 pub(crate) fn record_usage() {
-    use std::sync::atomic::Ordering;
-    if !CITATIONS_USED.load(Ordering::Relaxed) {
-        CITATIONS_USED.store(true, Ordering::Relaxed);
-    }
+    citations::Usage::Tensor.record();
 }
 
 impl SpensoModule {

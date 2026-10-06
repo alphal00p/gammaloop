@@ -899,6 +899,32 @@ it must implement the expected notation interface and must not come from untrust
 Display customization stays outside Atom payloads; portable representation and math-label
 declarations continue to travel with the expressions.
 
+== Citation tracking
+
+After a calculation, `symbolica.get_citations()` returns citation objects with
+references, explanations in `reasons`, and bibliography entries from
+`citation.to_bibtex()`. Spenso is authored by Lucien Huber; Idenso is authored by
+Lucien Huber and Ben Ruijl.
+
+Successful tensor operations cite Spenso. Symbolic contraction, algebra
+simplification, canonicalization, Dirac adjoints, and index/notation rewrites add
+Idenso. Every Idenso citation also credits Spenso for the tensor-expression
+structure and display that define tensors in Symbolica. Component-network
+execution and numerical evaluation add their own reasons to the Spenso citation.
+
+Importing the module, choosing display settings or threading policy, and reading
+properties do not independently record usage. An operation returning an error
+does not record its own citation; successful operations performed inside it still
+count. Algebra reasons list the enabled Dirac, color, and epsilon families, not
+individual identities proved to have changed the result. Successful capped and
+unchanged results still count as use of the requested algorithm.
+
+Tracking accumulates across the process, including calls from other community
+bindings. Repeated operations do not duplicate reasons, and reading the report
+does not clear them. Use a fresh process or notebook kernel for an isolated
+calculation. Direct calls to the underlying Rust crates are outside this Python
+adapter's tracking unless the caller explicitly records their use.
+
 == Repeated symbolic evaluation
 
 Use `Tensor.evaluator()` when the tensor structure stays fixed and only symbolic parameters

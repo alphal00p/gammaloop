@@ -527,7 +527,7 @@ impl Default for GenerationOptions {
             cut_amplitude_filters: Vec::new(),
             numerator_grouping: NumeratorGrouping::None,
             filter_zero_color: false,
-            graph_prefix: "FK".to_owned(),
+            graph_prefix: "D".to_owned(),
             selected_diagram_ids: None,
             selected_diagram_names: None,
             vetoed_diagram_ids: BTreeSet::new(),
@@ -1117,7 +1117,7 @@ mod tests {
             .select_diagram_ids([DiagramId(17)])
             .veto_diagram_ids([DiagramId(23)])
             .with_loop_momentum_basis(DiagramId(17), [EdgeId(2), EdgeId(7)])
-            .with_named_loop_momentum_basis("FK0", [EdgeId(3), EdgeId(5)])
+            .with_named_loop_momentum_basis("D0", [EdgeId(3), EdgeId(5)])
             .forced_cuts([[EdgeId(1), EdgeId(4)]])
             .projector(Atom::one());
 

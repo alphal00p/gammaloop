@@ -8618,7 +8618,7 @@ class Process:
         allow_zero_flow_edges : bool, optional
             Permit internal edges with identically zero momentum flow.
         graph_prefix : str or None, optional
-            Prefix assigned to generated diagram names.
+            Prefix assigned to generated diagram names; None uses "D" (diagram).
         maximum_bridges : int, None, or Ellipsis, optional
             Omission or Ellipsis requires one-particle irreducibility only for diagrams
             with loops; tree exchanges are allowed, including in mixed loop ranges.
@@ -8731,7 +8731,7 @@ class Process:
         allow_zero_flow_edges : bool, optional
             Permit internal edges with identically zero momentum flow.
         graph_prefix : str or None, optional
-            Prefix assigned to generated diagram names.
+            Prefix assigned to generated diagram names; None uses "D" (diagram).
         maximum_bridges : int, None, or Ellipsis, optional
             Omission or Ellipsis requires one-particle irreducibility only for diagrams
             with loops; tree exchanges are allowed, including in mixed loop ranges.
@@ -8845,7 +8845,7 @@ class Process:
         allow_zero_flow_edges : bool, optional
             Permit internal edges with identically zero momentum flow.
         graph_prefix : str or None, optional
-            Prefix assigned to generated diagram names.
+            Prefix assigned to generated diagram names; None uses "D" (diagram).
         maximum_bridges : int, None, or Ellipsis, optional
             Omission or Ellipsis requires one-particle irreducibility only for diagrams
             with loops; tree exchanges are allowed, including in mixed loop ranges.
