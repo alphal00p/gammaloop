@@ -24,6 +24,10 @@
     ],
     "alphal00p-docs-schema": [],
     "clinnet": [],
+    "feynkit-kinematics": [
+      "linnet",
+      "spenso"
+    ],
     "feynkit-model": [
       "linnet"
     ],
@@ -154,6 +158,12 @@
     },
     "alphal00p-docs-schema": {},
     "clinnet": {},
+    "feynkit-kinematics": {
+      "linnet": [],
+      "spenso": [
+        "symbolica"
+      ]
+    },
     "feynkit-model": {
       "linnet": []
     },
@@ -326,6 +336,7 @@
     "alphal00p-docs-python-exporter": "crates/alphal00p-docs-python-exporter",
     "alphal00p-docs-schema": "crates/alphal00p-docs-schema",
     "clinnet": "crates/clinnet",
+    "feynkit-kinematics": "crates/feynkit-kinematics",
     "feynkit-model": "crates/feynkit-model",
     "feynkit-ufo": "crates/feynkit-ufo",
     "gammaloop-api": "crates/gammaloop-api",
@@ -358,6 +369,7 @@
     "alphal00p-docs-python-exporter",
     "alphal00p-docs-schema",
     "clinnet",
+    "feynkit-kinematics",
     "feynkit-model",
     "feynkit-ufo",
     "gammaloop-api",
@@ -399,6 +411,13 @@
     "alphal00p-docs-python-exporter": [],
     "alphal00p-docs-schema": [],
     "clinnet": [],
+    "feynkit-kinematics": [
+      "gammaloop-workspace-hack",
+      "linnet",
+      "spenso",
+      "spenso-macros",
+      "symbolica-utils"
+    ],
     "feynkit-model": [
       "linnet"
     ],
@@ -554,6 +573,13 @@
     "alphal00p-docs-python-exporter": [],
     "alphal00p-docs-schema": [],
     "clinnet": [],
+    "feynkit-kinematics": [
+      "gammaloop-workspace-hack",
+      "linnet",
+      "spenso",
+      "spenso-macros",
+      "symbolica-utils"
+    ],
     "feynkit-model": [
       "linnet"
     ],
@@ -678,6 +704,7 @@
     "vakint": []
   },
   "symbolica_normal_packages": [
+    "feynkit-kinematics",
     "feynkit-model",
     "feynkit-ufo",
     "gammaloop-api",
@@ -699,6 +726,7 @@
   ],
   "symbolica_test_packages": [
     "alphal00p-docs-examples",
+    "feynkit-kinematics",
     "feynkit-model",
     "feynkit-ufo",
     "gammaloop-api",
@@ -753,6 +781,10 @@
     ],
     "alphal00p-docs-schema": [],
     "clinnet": [],
+    "feynkit-kinematics": [
+      "linnet",
+      "spenso"
+    ],
     "feynkit-model": [
       "linnet"
     ],
@@ -907,6 +939,12 @@
     },
     "alphal00p-docs-schema": {},
     "clinnet": {},
+    "feynkit-kinematics": {
+      "linnet": [],
+      "spenso": [
+        "symbolica"
+      ]
+    },
     "feynkit-model": {
       "linnet": []
     },

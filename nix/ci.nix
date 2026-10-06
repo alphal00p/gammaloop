@@ -19,7 +19,7 @@
     {
       name = "feynkit";
       runtimeRenderData = true;
-      packages = ["feynkit-model" "feynkit-ufo"];
+      packages = ["feynkit-kinematics" "feynkit-model" "feynkit-ufo"];
     }
     {
       name = "core";
