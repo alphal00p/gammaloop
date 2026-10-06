@@ -202,6 +202,22 @@ try:
     diagram = amplitude.diagrams[0]
     check_render_snapshot(diagram)
     check_render_snapshot(diagram.filter(edge=lambda edge: not edge.is_external))
+    # Naming belongs to the surrounding caption, not the SVG's title row.
+    renamed_data = json.loads(diagram.to_json())
+    renamed_data["name"] = "caption-only-name"
+    renamed = hep.FeynmanDiagram.from_json(model, json.dumps(renamed_data))
+    drawing = renamed.render()
+    assert renamed.name in drawing.to_html()
+    assert drawing.to_svg() == diagram.render().to_svg()
+    untitled_bounds = ET.fromstring(drawing.to_svg()).get("viewBox").split()
+    titled_bounds = (
+        ET.fromstring(
+            renamed.render(config=hep.RenderSettings(title="Explicit title")).to_svg()
+        )
+        .get("viewBox")
+        .split()
+    )
+    assert float(titled_bounds[3]) > float(untitled_bounds[3])
     config = hep.RenderSettings(show_particle=False, show_node_index=True)
     basis = diagram.loop_momentum_basis
     drawing = diagram.render(config=config, lmb=basis)
@@ -233,6 +249,26 @@ try:
         loops=1, max_vertices=2, allow_self_loops=True, progress=None
     )[0]
     original = cross.to_json()
+    tree = scalar.process(["phi"], ["phi", "phi"]).generate_diagrams(progress=None)[0]
+    exported = [cross, tree]
+    restored = hep.FeynmanDiagram.from_dot_set(
+        scalar, "\n".join(item.to_dot() for item in exported)
+    )
+    assert isinstance(restored, list)
+    assert [item.to_json() for item in restored] == [
+        item.to_json() for item in exported
+    ]
+    assert (
+        hep.FeynmanDiagram.from_dot_set(scalar, cross.to_dot())[0].to_json() == original
+    )
+    # An invalid second graph must not silently return the first one.
+    for invalid in ("digraph broken {", diagram.to_dot()):
+        try:
+            hep.FeynmanDiagram.from_dot_set(scalar, cross.to_dot() + "\n" + invalid)
+        except hep.DiagramError:
+            pass
+        else:
+            raise AssertionError("invalid DOT collection was partially imported")
     # Selection and graph algorithms must work without the Python Linnet wheel,
     # including partial half-edges, physics callbacks, and returned result objects.
     full = cross.filter(edge=lambda edge: True)
@@ -344,6 +380,11 @@ try:
     isolated = hep.FeynmanDiagram.from_dot(
         zero_scalar, "digraph isolated { a [num=2]; b [num=3]; }"
     )
+    compact = hep.FeynmanDiagram.from_dot_set(
+        zero_scalar,
+        "digraph first { a [num=2]; } digraph second { b [num=3]; }",
+    )
+    assert [item.name for item in compact] == ["first", "second"]
     assert not isolated.is_connected()
     components = isolated.connected_components()
     assert [component.isolated_node_indices() for component in components] == [[0], [1]]

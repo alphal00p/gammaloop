@@ -2399,10 +2399,11 @@ impl FeynmanDiagram {
         Ok(diagram)
     }
 
-    /// Parse one or more stable FeynKit DOT diagrams from a single document.
+    /// Parse one or more model-aware FeynKit DOT diagrams from a single document.
     ///
-    /// Each graph must use the dialect emitted by [`Self::to_dot`] and must
-    /// carry the same model fingerprint as `model`. This is the canonical
+    /// Each graph accepts the same compact or annotated dialect as [`Self::from_dot`].
+    /// Annotated exports must carry the same model fingerprint as `model`.
+    /// This is the canonical
     /// import path for a set of finalized cross-section diagrams because their
     /// typed physical cuts are retained graph by graph.
     pub fn from_dot_set(
@@ -3750,6 +3751,26 @@ mod tests {
                 .iter()
                 .all(|diagram| diagram.cuts() == first.cuts())
         );
+        assert_eq!(
+            FeynmanDiagram::from_dot_set(
+                first.model_arc(),
+                &format!("{input}\n// trailing comment\n")
+            )
+            .unwrap()
+            .len(),
+            2
+        );
+        for suffix in [
+            "digraph broken {",
+            "trailing garbage",
+            "/* unclosed comment",
+        ] {
+            assert!(
+                FeynmanDiagram::from_dot_set(first.model_arc(), &format!("{input}\n{suffix}"))
+                    .is_err(),
+                "accepted a valid prefix and discarded {suffix:?}"
+            );
+        }
     }
 
     #[test]

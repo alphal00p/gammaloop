@@ -42,7 +42,7 @@
   localCargoPatchSources = lib.fileset.unions (
     map (name: workspaceRoot + "/vendor/${name}")
     (lib.filter (name: builtins.pathExists (workspaceRoot + "/vendor/${name}"))
-      ["clarabel" "typst-library" "typst-svg"])
+      ["clarabel" "dot-parser" "typst-library" "typst-svg"])
   );
   cargoSources = lib.fileset.unions [
     (craneLib.fileset.commonCargoSources workspaceRoot)
