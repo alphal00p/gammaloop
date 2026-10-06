@@ -20,7 +20,7 @@ clarabel = { version = "0.11.1", optional = true }
 twofloat = { version = "0.8.4", optional = true }
 # derive_more = "0.99.17"
 # hibit_tree = "0.1.0-alpha.3"
-dot-parser = "0.5"
+dot-parser = { workspace = true }
 duplicate = "2.0.0"
 figment = { version = "0.10.19" }
 getrandom = { version = "0.2", default-features = false, features = ["custom"] }

@@ -1,7 +1,7 @@
 [workspace]
 resolver = "2"
 members = ["crates/*", "tests"]
-exclude = ["vendor/typst-library", "vendor/typst-svg"]
+exclude = ["vendor/typst-library", "vendor/typst-svg", "vendor/dot-parser"]
 default-members = ["crates/gammaloop-api"]
 
 [workspace.package]
@@ -19,7 +19,7 @@ clap = "4.6.1"
 color-eyre = { version = "0.6.5", default-features = false, features = ["capture-spantrace", "track-caller"] }
 colored = "3.1.1"
 dirs = "6.0.0"
-dot-parser = "0.5"
+dot-parser = { version = "0.5", path = "vendor/dot-parser" }
 eyre = "0.6.12"
 feynkit = { version = "0.1.0", path = "crates/feynkit/" }
 feynkit-amplitude = { version = "0.1.0", path = "crates/feynkit-amplitude/" }

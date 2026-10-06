@@ -17,9 +17,6 @@ import typing
 from symbolica import ComplexFloat, Float
 from symbolica.community.tensor import DiagramRender, DisplaySettings, LayoutSettings, Slot, StrokeStyle, TensorExpression, TensorName
 from symbolica.core import Expression
-from . import oneloop
-from . import sector_decomposition
-from . import vakint
 
 DiagramRender: typing.TypeAlias = symbolica.community.tensor.DiagramRender
 LayoutSettings: typing.TypeAlias = symbolica.community.tensor.LayoutSettings
@@ -2958,6 +2955,30 @@ class FeynmanDiagram:
             Compact physics DOT or annotated HEP DOT. Compact cross-sections pair
             initial-state legs with is_cut and specify comma-separated final_state particles.
         """
+    @staticmethod
+    def from_dot_set(model: Model, dot: builtins.str) -> builtins.list[FeynmanDiagram]:
+        r"""
+        Parse a document containing multiple Feynman diagrams in DOT format.
+        Graphs are returned in document order and validated against the model.
+
+        Examples
+        --------
+        Using the setup in the ``FeynmanDiagram`` class example:
+
+        >>> dot = "\n".join(item.to_dot() for item in result.diagrams)
+        >>> restored = hep.FeynmanDiagram.from_dot_set(model, dot)
+        >>> len(restored) == len(result.diagrams)
+        True
+
+        Parameters
+        ----------
+        model : Model
+            Model used to resolve particles and validate diagram metadata.
+        dot : str
+            DOT document containing graph definitions. Annotated exports retain
+            each diagram's momentum basis and physical cuts. Invalid graphs fail
+            the entire import without returning a partial list.
+        """
     def overall_factor_expression(self, *, evaluate: builtins.bool = False) -> Expression:
         r"""
         Return the diagram-wide multiplicative factor as a Symbolica expression.
@@ -3586,7 +3607,7 @@ class FeynmanDiagram:
 
         >>> print(diagram)
         """
-    def sector_decompose(self, *, regulator: symbolica.Expression, kinematics: typing.Optional[Kinematics] = None, dimension: typing.Optional[symbolica.Expression] = None, powers: typing.Optional[typing.Dict[int, int]] = None, numerator: None = None, scalar_values: typing.Optional[typing.Dict[symbolica.Expression, symbolica.Expression]] = None, auxiliary_momenta: typing.Optional[typing.Sequence[symbolica.Expression]] = None, measure_multiplier: typing.Optional[symbolica.Expression] = None, max_order: int = 0, coefficient_expansion: str = 'physical', observer: typing.Optional[typing.Callable[[symbolica.community.hepkit.sector_decomposition.GenerationSnapshot], typing.Optional[bool]]] = None) -> symbolica.community.hepkit.sector_decomposition.GeneratedIntegral:
+    def sector_decompose(self, *, regulator: symbolica.Expression, kinematics: typing.Optional[Kinematics] = None, dimension: typing.Optional[symbolica.Expression] = None, powers: typing.Optional[typing.Dict[int, int]] = None, numerator: None = None, scalar_values: typing.Optional[typing.Dict[symbolica.Expression, symbolica.Expression]] = None, auxiliary_momenta: typing.Optional[typing.Sequence[symbolica.Expression]] = None, measure_multiplier: typing.Optional[symbolica.Expression] = None, max_order: int = 0, coefficient_expansion: str = 'physical', observer: typing.Optional[typing.Callable[[symbolica.community.hepkit.sector_decomposition.GenerationSnapshot], typing.Optional[bool]]] = None, progress: typing.Union[typing.Literal["auto"], typing.Callable[[symbolica.community.hepkit.sector_decomposition.GenerationSnapshot], typing.Optional[bool]], None] = 'auto') -> symbolica.community.hepkit.sector_decomposition.GeneratedIntegral:
         r"""
         Generate Laurent integrands using the complete native diagram.
 
@@ -3621,6 +3642,9 @@ class FeynmanDiagram:
             Native physical or package coefficient convention.
         observer : callable or None
             Native generation events; False cancels at an event boundary.
+        progress : "auto", callable or None
+            Automatic marimo display unless observer is supplied; None disables it.
+            A callable receives every native event after observer and may cancel.
         """
 
 @typing.final
@@ -5251,7 +5275,7 @@ class IntegralFamily:
         labels : list[Expression]
             One distinct symbol or labeled call per denominator, in family order.
         """
-    def sector_decompose(self, *, regulator: symbolica.Expression, kinematics: typing.Optional[Kinematics] = None, dimension: typing.Optional[symbolica.Expression] = None, powers: typing.Optional[typing.Sequence[int]] = None, numerator: typing.Optional[symbolica.Expression] = None, scalar_values: typing.Optional[typing.Dict[symbolica.Expression, symbolica.Expression]] = None, auxiliary_momenta: typing.Optional[typing.Sequence[symbolica.Expression]] = None, measure_multiplier: typing.Optional[symbolica.Expression] = None, max_order: int = 0, coefficient_expansion: str = 'physical', observer: typing.Optional[typing.Callable[[symbolica.community.hepkit.sector_decomposition.GenerationSnapshot], typing.Optional[bool]]] = None) -> symbolica.community.hepkit.sector_decomposition.GeneratedIntegral:
+    def sector_decompose(self, *, regulator: symbolica.Expression, kinematics: typing.Optional[Kinematics] = None, dimension: typing.Optional[symbolica.Expression] = None, powers: typing.Optional[typing.Sequence[int]] = None, numerator: typing.Optional[symbolica.Expression] = None, scalar_values: typing.Optional[typing.Dict[symbolica.Expression, symbolica.Expression]] = None, auxiliary_momenta: typing.Optional[typing.Sequence[symbolica.Expression]] = None, measure_multiplier: typing.Optional[symbolica.Expression] = None, max_order: int = 0, coefficient_expansion: str = 'physical', observer: typing.Optional[typing.Callable[[symbolica.community.hepkit.sector_decomposition.GenerationSnapshot], typing.Optional[bool]]] = None, progress: typing.Union[typing.Literal["auto"], typing.Callable[[symbolica.community.hepkit.sector_decomposition.GenerationSnapshot], typing.Optional[bool]], None] = 'auto') -> symbolica.community.hepkit.sector_decomposition.GeneratedIntegral:
         r"""
         Generate Laurent integrands for an explicit family member.
 
@@ -5286,6 +5310,9 @@ class IntegralFamily:
             Native physical or package coefficient convention.
         observer : callable or None
             Native generation events; False cancels at an event boundary.
+        progress : "auto", callable or None
+            Automatic marimo display unless observer is supplied; None disables it.
+            A callable receives every native event after observer and may cancel.
         """
 
 class IntegralFamilyError(FeynkitError):
@@ -6772,6 +6799,44 @@ class Model:
         ----------
         name : str
             Coupling name.
+        """
+    def scalar_bindings(self, card: typing.Optional[ParameterCard] = None, *, overrides: typing.Optional[typing.Dict[symbolica.Expression, symbolica.Expression]] = None) -> typing.Dict[symbolica.Expression, symbolica.Expression]:
+        r"""
+        Return exact model scalar bindings with all named dependencies resolved.
+
+        Internal parameter and coupling definitions remain analytic; cached
+        dependent values are not used. Numerical model/card inputs are converted
+        to exact binary64 rationals. This operation does not mutate the model or
+        numerically recompute it. Unknown symbols and UFO functions outside the
+        returned map are retained, not evaluated.
+
+        Examples
+        --------
+        >>> from symbolica import E
+        >>> model = hep.Model.standard_model()
+        >>> values = model.scalar_bindings(overrides={
+        ...     model.parameter("MT").symbol: E("345/2"),
+        ...     model.parameter("ymt").symbol: E("345/2"),
+        ...     model.parameter("WT").symbol: E("0"),
+        ...     model.parameter("WH").symbol: E("0"),
+        ... })
+        >>> assert values[model.parameter("MT").symbol] == E("345/2")
+
+        Parameters
+        ----------
+        card : ParameterCard or None, optional
+            Restriction applied to a copy, including explicit internal overrides.
+            Pass it explicitly even if already applied to the model, because
+            the model does not retain the history of internal overrides.
+        overrides : dict[Expression, Expression] or None, optional
+            Exact scalar definitions, keyed by plain symbols. They take
+            precedence over model/card values before dependencies are resolved.
+            Model parameters can be set here without creating a parameter card.
+
+        Returns
+        -------
+        dict[Expression, Expression]
+            Native exact expressions keyed by model and additional override symbols.
         """
     def vertex_rule(self, name: builtins.str) -> VertexRule:
         r"""

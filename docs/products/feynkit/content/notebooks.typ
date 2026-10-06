@@ -62,7 +62,9 @@ drawing
 
 Pass an immutable `RenderSettings` object as `config`. Its named arguments and
 read-only properties support editor completion and `help(RenderSettings)`.
-Omitted options keep the renderer's defaults. `title` is plain text;
+Omitted options keep the renderer's defaults. Diagram names appear in the
+surrounding caption; SVGs have no title by default. Set `title` explicitly to
+add a plain-text heading, including in standalone SVG exports.
 `node_radius` is in graph units, and `node_fill` is a CSS color.
 `node_stroke` and `edge_stroke` accept a `StrokeStyle` with a CSS `paint`,
 `thickness` in points, and `dash` (`solid`, `dotted`, or `dashed`).

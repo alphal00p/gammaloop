@@ -584,7 +584,11 @@ analytic_numerator = model.expand_couplings(diagram.numerator_expression())
 
 This returns a new expression and preserves the stored named coefficients. Serialize with
 `to_json()` or `to_dot()` and restore with `FeynmanDiagram.from_json(model, text)` or
-`from_dot(model, text)`. The model fingerprint and structural validation protect the
+`from_dot(model, text)`. For a document containing multiple digraphs,
+`FeynmanDiagram.from_dot_set(model, text)` returns a list in document order.
+It accepts compact physics DOT and annotated exports; exports preserve each
+diagram's momentum basis and physical cuts. An invalid graph fails the whole import.
+The model fingerprint and structural validation protect the
 interpretation of stored IDs. Model serialization keeps `UFO` implicit and
 preserves all other Symbolica namespaces, so custom gauge symbols and tensor
 functions retain their identities through `Model.to_json()` and
