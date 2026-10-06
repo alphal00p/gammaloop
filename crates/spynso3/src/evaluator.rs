@@ -1,7 +1,11 @@
 //! Tensor-shaped results backed by Symbolica's public Python evaluator.
 use std::collections::HashMap;
 
-use pyo3::{exceptions::PyValueError, prelude::*, types::PyTuple};
+use pyo3::{
+    exceptions::PyValueError,
+    prelude::*,
+    types::{PyList, PyTuple},
+};
 #[cfg(feature = "python_stubgen")]
 use pyo3_stub_gen::derive::*;
 #[cfg(not(feature = "python_stubgen"))]
@@ -112,7 +116,12 @@ struct TensorEvaluationLayout {
 impl TensorEvaluationLayout {
     fn wrap(&self, rows: &Bound<'_, PyAny>, complex: bool) -> PyResult<Vec<Spensor>> {
         let layout = tensor_data_layout(self.descriptor.structure())?;
-        let rows = rows.call_method0("tolist")?;
+        // Symbolica returns nested lists when NumPy is unavailable.
+        let rows = if rows.is_instance_of::<PyList>() {
+            rows.clone()
+        } else {
+            rows.call_method0("tolist")?
+        };
         let tensors: Vec<MixedTensor<f64, ShadowedStructure<AbstractIndex>>> = if complex {
             rows.extract::<Vec<Vec<Complex<f64>>>>()?
                 .into_iter()

@@ -1,6 +1,9 @@
 """Expression/tensor evaluator parity and logical-layout regressions."""
 
 import inspect
+import subprocess
+import sys
+import textwrap
 import unittest
 
 import numpy as np
@@ -9,6 +12,55 @@ from symbolica.community import tensor as sp
 
 
 class EvaluatorParityTests(unittest.TestCase):
+    def test_list_and_ndarray_result_layouts(self):
+        # NumPy's optional C API is initialized lazily. Separate processes test
+        # both actual Symbolica output modes before any array API is touched.
+        source = textwrap.dedent("""
+            import sys
+            sequence = sys.argv[1] == "sequence"
+            if sequence:
+                sys.modules["numpy"] = None
+            else:
+                import numpy as np
+            from symbolica import E, S
+            from symbolica.community import tensor as sp
+
+            x = S("evaluator_sequence::x")
+            descriptor = sp.TensorName("evaluator_sequence::A")(
+                7, sp.Representation.euc(2), sp.Representation.mink(3)
+            )
+            tensor = sp.Tensor.dense(descriptor, [x, x**2, 3, 4, 5, 6]).permute_axes([1, 0])
+            for source in (tensor, tensor.to_sparse()):
+                evaluator = source.evaluator([x], jit_compile=False, n_cores=1)
+                for method, points in (
+                    ("evaluate", [[2.0], [-1.0]]),
+                    ("evaluate_complex", [[1.0 + 2.0j]]),
+                ):
+                    scalar = getattr(evaluator.scalar_evaluator, method)(points)
+                    assert isinstance(scalar, list if sequence else np.ndarray)
+                    expected = scalar if sequence else scalar.tolist()
+                    result = getattr(evaluator, method)(points)
+                    assert len(result) == len(points)
+                    for row, values, (value,) in zip(result, expected, points, strict=True):
+                        assert row[:] == values == [value, 4.0, value**2, 5.0, 3.0, 6.0]
+                        assert row.shape == (3, 2)
+                        assert row.structure == source.structure
+                        assert row.expression().arguments == source.expression().arguments
+                assert evaluator.evaluate([]) == []
+                try:
+                    evaluator.evaluate([[1.0, 2.0]])
+                except ValueError:
+                    pass
+                else:
+                    raise AssertionError("malformed evaluator input was accepted")
+            scalar = sp.TensorExpression(E("1i")).to_tensor()
+            result = scalar.evaluator([], jit_compile=False, n_cores=1).evaluate_complex([[]])[0]
+            assert result.shape == () and result[:] == [1j]
+        """)
+        for mode in ("sequence", "numpy"):
+            with self.subTest(mode=mode):
+                subprocess.run([sys.executable, "-c", source, mode], check=True)
+
     def test_factory_and_evaluation_signatures_match(self):
         self.assertEqual(
             inspect.signature(sp.Tensor.evaluator),
