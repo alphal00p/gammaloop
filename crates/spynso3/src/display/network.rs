@@ -623,6 +623,8 @@ pub(crate) fn svg_theme(svg: &str) -> String {
     );
     for (light, dark) in [
         ("#000000", "#e6ebf1"),
+        ("#3d2645", "#c8b6dc"),
+        ("#f5f5f5", "#2b3139"),
         ("#ffffff", "#1c2025"),
         ("#ffffff80", "#1c202580"),
         ("#666666", "#a6b3c5"),
