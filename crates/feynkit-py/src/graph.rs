@@ -2988,6 +2988,33 @@ impl PyFeynmanDiagram {
             .map_err(error::diagram)
     }
 
+    /// Parse a document containing multiple Feynman diagrams in DOT format.
+    /// Graphs are returned in document order and validated against the model.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``FeynmanDiagram`` class example:
+    ///
+    /// >>> dot = "\n".join(item.to_dot() for item in result.diagrams)
+    /// >>> restored = hep.FeynmanDiagram.from_dot_set(model, dot)
+    /// >>> len(restored) == len(result.diagrams)
+    /// True
+    ///
+    /// Parameters
+    /// ----------
+    /// model : Model
+    ///     Model used to resolve particles and validate diagram metadata.
+    /// dot : str
+    ///     DOT document containing graph definitions. Annotated exports retain
+    ///     each diagram's momentum basis and physical cuts. Invalid graphs fail
+    ///     the entire import without returning a partial list.
+    #[staticmethod]
+    fn from_dot_set(model: &PyModel, dot: &str) -> PyResult<Vec<Self>> {
+        FeynmanDiagram::from_dot_set(Arc::clone(&model.inner), dot)
+            .map(|diagrams| diagrams.into_iter().map(Into::into).collect())
+            .map_err(error::diagram)
+    }
+
     /// Return the deterministic name assigned during diagram generation.
     ///
     /// Examples

@@ -1,0 +1,66 @@
+
+not_quote = { !("\"") ~ ANY }
+not_lt_gt = { !("<" | ">") ~ ANY }
+
+keyword = _{"node" | "edge" | "graph" | "digraph" | "subgraph" | "strict" }
+ident1 = _{ !(keyword~WHITESPACE) ~ (ASCII_ALPHA | "_") ~ (ASCII_ALPHANUMERIC | "_")* }
+numeral = _{ "-"? ~ ( ("." ~ ASCII_DIGIT+) | ( ASCII_DIGIT+ ~ ("." ~ ASCII_DIGIT*)? ) ) }
+quote = _{ "\"" ~ ( ("\\\"") | not_quote)* ~ "\"" }
+html = _{ "<" ~ not_lt_gt+ ~ ">" }
+
+ident = @{ ident1 | numeral | quote | html }
+
+dotfile = { dotgraph+ ~ !ANY }
+
+dotgraph = { strict? ~ (graph | digraph) ~ ident? ~ "{" ~ stmt_list ~ "}" }
+
+stmt_list = { ( stmt ~ ";"? )* }
+stmt = { edge_stmt | attr_stmt | id_eq | node_stmt | subgraph }
+
+attr_stmt = { (graph | node | edge) ~ attr_list }
+attr_list = { "[" ~ a_list ~ "]" ~ attr_list? }
+a_list = { ident ~ "=" ~ ident ~ ( ";" | "," )? ~ a_list? }
+
+edge_stmt = { (subgraph | node_id) ~ edge_rhs ~ attr_list? }
+edge_rhs = { edgeop ~ (subgraph | node_id) ~ edge_rhs? }
+
+node_stmt = { node_id ~ attr_list? }
+node_id = { ident ~ ( port )? }
+
+port = {
+	 ":" ~ compass_pt
+	| ":" ~ ident ~ ( ":" ~ compass_pt)?
+	}
+
+edgeop = _{ "--" | "->" }
+
+graph = { "graph" }
+node = { "node" }
+edge = { "edge" }
+strict = { "strict" }
+digraph = { "digraph" }
+
+id_eq = { ident ~ "=" ~ ident }
+
+subgraph = { ("subgraph" ~ ident?)? ~ "{" ~ stmt_list ~ "}" }
+
+compass_pt = { n | ne | e | se | s | sw | w | nw | c | underscore }
+n = { "n" }
+ne = { "ne" }
+e = { "e" }
+se = { "se" }
+s = { "s" }
+sw = { "sw" }
+w = { "w" }
+nw = { "nw" }
+c = { "c" }
+underscore = { "_" }
+
+WHITESPACE = _{ " " | "\t" | NEWLINE }
+
+inline_comment = _{ "//" ~ (!NEWLINE ~ ANY)* }
+block_comment = _{ "/*" ~ (!"*/" ~ ANY)* ~ "*/" }
+preprocessor_begin = @{ (SOI | NEWLINE) ~ "#" }
+preprocessor_output = _{ preprocessor_begin ~ (!NEWLINE ~ ANY)* }
+COMMENT = _{ inline_comment | block_comment}
+

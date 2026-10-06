@@ -14,7 +14,7 @@ use linnet::half_edge::{
 };
 use serde_json::{Map, Value};
 
-use crate::{DiagramError, FeynmanDiagram, LoopMomentumBasis, display::typst_string};
+use crate::{DiagramError, FeynmanDiagram, LoopMomentumBasis};
 
 /// The physics palette of `physics-edge-style.typ` and the highlight paints.
 const INK: &str = "#3d2645";
@@ -398,12 +398,8 @@ impl FeynmanDiagram {
             nodes: node_drawings,
             edges: edge_drawings,
             preamble: format!("#set text(size: 9pt, fill: rgb({INK:?}))"),
-            // The title row is always shown; an empty name still takes a line.
-            title: Some(if self.name().is_empty() {
-                "#hide[X]".to_owned()
-            } else {
-                format!("#{}", typst_string(self.name()))
-            }),
+            // Notebook captions carry the name; callers can request an SVG title.
+            title: None,
             pages,
             layout: options.layout.clone(),
             layout_edges: None,
@@ -459,10 +455,10 @@ mod tests {
             (scalar.pattern, scalar.flow, scalar.momentum),
             (None, None, false)
         );
-        // Every edge shares one particle label below the title row.
+        // Every edge shares one particle label; the name stays outside the SVG.
         assert_eq!(scene.pages, ["[$ phi $]"]);
         assert!(scene.edges.iter().all(|edge| edge.label == Some(0)));
-        assert_eq!(scene.title.as_deref(), Some("#\"bubble\""));
+        assert!(scene.title.is_none());
         // Half-edges are numbered in builder order, as Typst's `build` does.
         assert_eq!(scalar.details.get("source-hedge"), Some(&1.into()));
         assert_eq!(scalar.details.get("sink-hedge"), Some(&2.into()));
