@@ -22,13 +22,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .unwrap_or(false);
     let model = Model::qcd();
     let process = Process::new(["g"], ["g"]).with_filters(
-        ["u", "c", "s", "t", "b"]
-            .into_iter()
-            .map(Into::into)
-            .collect(),
+        Some(
+            ["u", "c", "s", "t", "b"]
+                .into_iter()
+                .map(Into::into)
+                .collect(),
+        ),
+        None,
         None,
         vec![],
-    );
+    )?;
     let stage = Mutex::new(("start", Instant::now()));
     let options = GenerationOptions::default()
         .threads(threads)

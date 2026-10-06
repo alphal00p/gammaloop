@@ -6418,7 +6418,7 @@ class Model:
         json : str
             Serialized model object.
         """
-    def process(self, incoming: typing.Sequence[Particle | ParticleSelector | builtins.str | builtins.int], outgoing: typing.Sequence[Particle | ParticleSelector | builtins.str | builtins.int], *, particle_veto: typing.Optional[typing.Sequence[Particle | ParticleSelector | builtins.str | builtins.int]] = None, vertex_allow: typing.Optional[typing.Sequence[VertexRule | builtins.str]] = None, vertex_veto: typing.Optional[typing.Sequence[VertexRule | builtins.str]] = None) -> Process:
+    def process(self, incoming: typing.Sequence[Particle | ParticleSelector | builtins.str | builtins.int], outgoing: typing.Sequence[Particle | ParticleSelector | builtins.str | builtins.int], *, particle_veto: typing.Optional[typing.Sequence[Particle | ParticleSelector | builtins.str | builtins.int]] = None, particle_selection: typing.Optional[typing.Sequence[Particle | ParticleSelector | builtins.str | builtins.int]] = None, vertex_allow: typing.Optional[typing.Sequence[VertexRule | builtins.str]] = None, vertex_veto: typing.Optional[typing.Sequence[VertexRule | builtins.str]] = None) -> Process:
         r"""
         Define a process with model-validated external states and sector restrictions.
         The returned process is immutable; loops and other calculation choices are
@@ -6439,6 +6439,9 @@ class Model:
             Ordered outgoing external states.
         particle_veto : sequence[Particle | ParticleSelector | str | int] or None, optional
             Excluded species, including their antiparticles.
+        particle_selection : sequence[Particle | ParticleSelector | str | int] or None, optional
+            Allowed species, including their antiparticles. None allows all; an
+            empty list allows none. Mutually exclusive with particle_veto.
         vertex_allow : sequence[VertexRule | str] or None, optional
             Allowed interactions. None allows all; an empty list allows none.
         vertex_veto : sequence[VertexRule | str] or None, optional
@@ -8087,6 +8090,19 @@ class Process:
         >>> electron = process.model.particle("e-")
         """
     @property
+    def particle_selection(self) -> typing.Optional[builtins.list[ParticleSelector]]:
+        r"""
+        Allowed species, including their antiparticles. None allows all;
+        an empty list allows none. Shared by every generation operation.
+
+        Examples
+        --------
+        Using the setup in the ``Process`` class example:
+
+        >>> qed = model.process(["e-", "e+"], ["a", "a"], particle_selection=["e-", "a"])
+        >>> allowed_particles = qed.particle_selection
+        """
+    @property
     def particle_veto(self) -> builtins.list[ParticleSelector]:
         r"""
         The excluded particle selectors, shared by every generation operation.
@@ -8208,7 +8224,7 @@ class Process:
         alternatives : sequence[sequence[Particle | ParticleSelector | str | int]]
             Allowed outgoing particle lists.
         """
-    def with_filters(self, *, particle_veto: typing.Sequence[Particle | ParticleSelector | str | int] | types.EllipsisType | None = ..., vertex_allow: typing.Sequence[VertexRule | str] | types.EllipsisType | None = ..., vertex_veto: typing.Sequence[VertexRule | str] | types.EllipsisType | None = ...) -> Process:
+    def with_filters(self, *, particle_veto: typing.Sequence[Particle | ParticleSelector | str | int] | types.EllipsisType | None = ..., particle_selection: typing.Sequence[Particle | ParticleSelector | str | int] | types.EllipsisType | None = ..., vertex_allow: typing.Sequence[VertexRule | str] | types.EllipsisType | None = ..., vertex_veto: typing.Sequence[VertexRule | str] | types.EllipsisType | None = ...) -> Process:
         r"""
         Return a process with updated particle and vertex restrictions.
         Omitted fields are preserved; None clears a field. An empty vertex_allow
@@ -8225,6 +8241,9 @@ class Process:
         ----------
         particle_veto : sequence[Particle | ParticleSelector | str | int] or None, optional
             Replace the excluded species, including their antiparticles.
+        particle_selection : sequence[Particle | ParticleSelector | str | int] or None, optional
+            Replace the allowed species, including their antiparticles. An empty
+            list allows none. Clear particle_veto with None when switching modes.
         vertex_allow : sequence[VertexRule | str] or None, optional
             Replace the allowed interaction rules.
         vertex_veto : sequence[VertexRule | str] or None, optional
