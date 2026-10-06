@@ -3,6 +3,7 @@
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
+from symbolica.community import render
 from symbolica.community import hepkit as fk
 
 model = fk.Model(Path(__file__).parent / "fixtures/scalars_2p_3p.json")
@@ -117,7 +118,7 @@ diagram = next(
 snapshot = diagram.to_json()
 basis = diagram.loop_momentum_basis
 config = fk.RenderSettings(
-    layout=fk.LayoutSettings(impred_steps=40, impred_pull=1.5),
+    layout=render.LayoutSettings(impred_steps=40, impred_pull=1.5),
     show_particle=False,
     show_edge_index=True,
 )

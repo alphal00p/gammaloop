@@ -165,6 +165,7 @@ dependencies = [
  "feynkit-py",
  "gammaloop-api",
  "linnet-py",
+ "linnet-render-py",
  "pyo3",
  "pyo3-stub-gen",
  "spynso3",
@@ -1974,6 +1975,7 @@ dependencies = [
  "feynkit-ufo",
  "linnest",
  "linnet",
+ "linnet-render-py",
  "pyo3",
  "pyo3-stub-gen",
  "pyo3-stub-gen-derive",
@@ -3775,6 +3777,19 @@ dependencies = [
  "tempfile",
  "typst-renderer",
  "walkdir",
+]
+
+[[package]]
+name = "linnet-render-py"
+version = "0.1.0"
+dependencies = [
+ "linnest",
+ "linnet",
+ "pyo3",
+ "pyo3-stub-gen",
+ "pyo3-stub-gen-derive",
+ "serde_json",
+ "typst-renderer",
 ]
 
 [[package]]
@@ -6345,6 +6360,7 @@ dependencies = [
  "itertools 0.14.0",
  "linnest",
  "linnet",
+ "linnet-render-py",
  "pyo3",
  "pyo3-stub-gen",
  "pyo3-stub-gen-derive",

@@ -475,7 +475,7 @@
     "feynkit-cff" = ["crates/feynkit-model/tests/fixtures"];
     "feynkit-generator" = ["crates/feynkit-model/tests/fixtures"];
     "feynkit-model" = ["crates/feynkit-model/tests/fixtures"];
-    "feynkit-py" = ["crates/feynkit-model/tests/fixtures" "crates/feynkit-py/python/symbolica/community/hepkit/__init__.py" "crates/feynkit-py/tests/fixtures"];
+    "feynkit-py" = ["crates/feynkit-model/tests/fixtures" "crates/feynkit-py/python/symbolica/community/hepkit/__init__.py" "crates/feynkit-py/tests/fixtures" "crates/linnet-render-py/python/symbolica/community/render/__init__.py"];
     "alphal00p-docs-macros" = ["crates/alphal00p-docs-macros/tests/ui"];
     "alphal00p-docs-python-exporter" = ["crates/linnet-py/linnet.pyi" "docs/api/python"];
     clinnet = [
@@ -779,6 +779,7 @@
     "feynkit-py"
     "alphal00p-docs-python-exporter"
     "linnet-py"
+    "linnet-render-py"
     "spynso3"
   ];
 

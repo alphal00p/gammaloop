@@ -50,6 +50,7 @@
       "packages.x86_64-linux.crate-test-binaries-linnest"
       "packages.x86_64-linux.crate-test-binaries-linnet"
       "packages.x86_64-linux.crate-test-binaries-linnet-py"
+      "packages.x86_64-linux.crate-test-binaries-linnet-render-py"
       "packages.x86_64-linux.crate-test-binaries-typst-renderer"
     ];
     "checks.x86_64-linux.gammaloop-nextest-binaries-python-api" = [
@@ -156,6 +157,9 @@
     "packages.x86_64-linux.crate-test-binaries-linnet-py" = [
       "packages.x86_64-linux.crate-test-dependencies-linnet-py"
     ];
+    "packages.x86_64-linux.crate-test-binaries-linnet-render-py" = [
+      "packages.x86_64-linux.crate-test-dependencies-linnet-render-py"
+    ];
     "packages.x86_64-linux.crate-test-binaries-spenso" = [
       "packages.x86_64-linux.crate-test-dependencies-spenso"
     ];
@@ -227,6 +231,7 @@
       "packages.x86_64-linux.crate-test-dependencies-feynkit-py"
       "packages.x86_64-linux.crate-test-dependencies-gammaloop-api"
       "packages.x86_64-linux.crate-test-dependencies-linnet-py"
+      "packages.x86_64-linux.crate-test-dependencies-linnet-render-py"
       "packages.x86_64-linux.crate-test-dependencies-spynso3"
       "packages.x86_64-linux.crate-test-dependencies-vakint"
     ];
@@ -313,6 +318,7 @@
       "packages.x86_64-linux.crate-test-dependencies-feynkit-ufo"
       "packages.x86_64-linux.crate-test-dependencies-linnest"
       "packages.x86_64-linux.crate-test-dependencies-linnet"
+      "packages.x86_64-linux.crate-test-dependencies-linnet-render-py"
       "packages.x86_64-linux.crate-test-dependencies-spenso-macros"
       "packages.x86_64-linux.crate-test-dependencies-spynso3"
       "packages.x86_64-linux.crate-test-dependencies-typst-renderer"
@@ -420,6 +426,13 @@
       "packages.x86_64-linux.crate-test-dependencies-linnet"
       "packages.x86_64-linux.crate-test-dependencies-typst-renderer"
     ];
+    "packages.x86_64-linux.crate-test-dependencies-linnet-render-py" = [
+      "packages.x86_64-linux.cargoArtifacts"
+      "packages.x86_64-linux.crate-deps-gammaloop-workspace-hack"
+      "packages.x86_64-linux.crate-test-dependencies-linnest"
+      "packages.x86_64-linux.crate-test-dependencies-linnet"
+      "packages.x86_64-linux.crate-test-dependencies-typst-renderer"
+    ];
     "packages.x86_64-linux.crate-test-dependencies-spenso" = [
       "packages.x86_64-linux.cargoArtifacts"
       "packages.x86_64-linux.crate-deps-gammaloop-workspace-hack"
@@ -444,6 +457,7 @@
       "packages.x86_64-linux.crate-test-dependencies-idenso"
       "packages.x86_64-linux.crate-test-dependencies-linnest"
       "packages.x86_64-linux.crate-test-dependencies-linnet"
+      "packages.x86_64-linux.crate-test-dependencies-linnet-render-py"
       "packages.x86_64-linux.crate-test-dependencies-spenso"
       "packages.x86_64-linux.crate-test-dependencies-spenso-hep-lib"
       "packages.x86_64-linux.crate-test-dependencies-spenso-macros"
@@ -561,6 +575,7 @@
     "packages.x86_64-linux.crate-test-binaries-linnest"
     "packages.x86_64-linux.crate-test-binaries-linnet"
     "packages.x86_64-linux.crate-test-binaries-linnet-py"
+    "packages.x86_64-linux.crate-test-binaries-linnet-render-py"
     "packages.x86_64-linux.crate-test-binaries-spenso"
     "packages.x86_64-linux.crate-test-binaries-spenso-hep-lib"
     "packages.x86_64-linux.crate-test-binaries-spenso-macros"
@@ -596,6 +611,7 @@
     "packages.x86_64-linux.crate-test-dependencies-linnest"
     "packages.x86_64-linux.crate-test-dependencies-linnet"
     "packages.x86_64-linux.crate-test-dependencies-linnet-py"
+    "packages.x86_64-linux.crate-test-dependencies-linnet-render-py"
     "packages.x86_64-linux.crate-test-dependencies-spenso"
     "packages.x86_64-linux.crate-test-dependencies-spenso-hep-lib"
     "packages.x86_64-linux.crate-test-dependencies-spenso-macros"

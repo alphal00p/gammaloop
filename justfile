@@ -273,6 +273,7 @@ docs-check:
     cargo run --locked -p alphal00p-docs-catalogs --features vakint-reference --bin alphal00p-docs-vakint-reference -- --check
     cargo run --locked -p alphal00p-docs-python-exporter --features gammaloop -- gammaloop-python docs/api/python/gammaloop-python.pyi --check
     cargo run --locked -p alphal00p-docs-python-exporter --features linnet -- linnet-python docs/api/python/linnet-python.pyi --check
+    cargo run --locked -p alphal00p-docs-python-exporter --features render -- linnet-render docs/api/python/linnet-render.pyi --check
     cargo run --locked -p alphal00p-docs-python-exporter --features spenso -- spynso3 docs/api/python/spynso3.pyi --check
     cargo run --locked -p alphal00p-docs-python-exporter --features vakint -- vakint-community docs/api/python/vakint-community.pyi --check
     cargo test --locked -p alphal00p-docs-python-exporter

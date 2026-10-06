@@ -15,6 +15,8 @@ use symbolica::{
 };
 
 const FEYNKIT_WRAPPER: &str = include_str!("../python/symbolica/community/hepkit/__init__.py");
+const RENDER_WRAPPER: &str =
+    include_str!("../../linnet-render-py/python/symbolica/community/render/__init__.py");
 const MODEL_JSON: &str = include_str!("fixtures/scalars_2p_3p.json");
 const SPENSO_WRAPPER: &str = "from ..tensor_native import *\n\ninitialize_module()\n";
 
@@ -60,6 +62,7 @@ fn qcd_rich_display_requires_no_python_rendering_packages() {
         symbolica.add("community", &community)?;
         register_native::<FeynkitModule>(&core)?;
         register_native::<SpensoModule>(&core)?;
+        import_wrapper(py, &community, "symbolica.community.render", RENDER_WRAPPER)?;
         import_wrapper(
             py,
             &community,
@@ -183,6 +186,7 @@ fn feynkit_and_spenso_share_one_symbolica_kernel_in_both_import_orders() {
         symbolica.add("community", &community)?;
         register_native::<FeynkitModule>(&core)?;
         register_native::<SpensoModule>(&core)?;
+        import_wrapper(py, &community, "symbolica.community.render", RENDER_WRAPPER)?;
 
         for order in [["hepkit", "tensor"], ["tensor", "hepkit"]] {
             for name in order {

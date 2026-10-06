@@ -46,6 +46,7 @@ workspace-members = [
     "linnet",
     "linnest",
     "linnet-py",
+    "linnet-render-py",
     "spenso",
     "spenso-hep-lib",
     "spenso-macros",

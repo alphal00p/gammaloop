@@ -7,6 +7,7 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 
 from IPython.lib.pretty import pretty
+from symbolica.community import render
 from symbolica.community import hepkit as hep
 
 model = hep.Model.standard_model()
@@ -83,7 +84,7 @@ assert max(edge_x[:2]) < min(edge_x[2:])
 for config in (
     hep.RenderSettings(node_radius=5),
     hep.RenderSettings(node_radius=6),
-    hep.RenderSettings(layout=hep.LayoutSettings(impred_spacing=20)),
+    hep.RenderSettings(layout=render.LayoutSettings(impred_spacing=20)),
 ):
     larger = ET.fromstring(process.render(config=config).to_svg())
     assert float(larger.attrib["viewBox"].split()[2]) > width

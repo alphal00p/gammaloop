@@ -1096,14 +1096,14 @@ fn python_required_exports(component: &str) -> Result<&'static [&'static str]> {
             "to_typst",
             "trace",
         ]),
-        "feynkit-community" | "linnet-python" | "vakint-community" => Ok(&[]),
+        "feynkit-community" | "linnet-python" | "linnet-render" | "vakint-community" => Ok(&[]),
         _ => bail!("unknown Python component {component}"),
     }
 }
 
 fn python_export_is_supported(component: &str, name: &str) -> Result<bool> {
     match component {
-        "feynkit-community" | "linnet-python" | "vakint-community" => Ok(true),
+        "feynkit-community" | "linnet-python" | "linnet-render" | "vakint-community" => Ok(true),
         "gammaloop-python" | "spynso3" => Ok(python_required_exports(component)?.contains(&name)),
         _ => bail!("unknown Python component {component}"),
     }

@@ -1,3 +1,4 @@
+use linnet_render_py::PyDiagramRender;
 use std::{
     collections::{BTreeMap, BTreeSet},
     sync::Arc,
@@ -40,7 +41,7 @@ use pyo3_stub_gen::{
 
 use crate::{
     cff::{PyCffResult, PyCutPropagator, build_cff_for_diagram},
-    display::{PyDiagramRender, escape_html, render_diagram_html},
+    display::{escape_html, render_diagram_html},
     error,
     graph_interop::LinnetCache,
     integrals::PyIntegralFamily,
@@ -4164,8 +4165,9 @@ impl PyFeynmanDiagram {
     /// --------
     /// Using the setup in the ``FeynmanDiagram`` class example:
     ///
+    /// >>> from symbolica.community.render import LayoutSettings
     /// >>> settings = hep.RenderSettings(
-    /// ...     layout=hep.LayoutSettings(impred_steps=100), show_particle=False)
+    /// ...     layout=LayoutSettings(impred_steps=100), show_particle=False)
     /// >>> drawing = diagram.render(momenta=True, config=settings)
     /// >>> drawing
     /// >>> svg = drawing.to_svg()

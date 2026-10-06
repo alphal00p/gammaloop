@@ -60,7 +60,9 @@ Path("diagram.typ").write_text(drawing.to_linnest(), encoding="utf-8")
 drawing
 ```
 
-Pass an immutable `RenderSettings` object as `config`. Its named arguments and
+Pass an immutable `hepkit.RenderSettings` object as `config`. Shared
+`LayoutSettings`, `StrokeStyle`, and the returned `DiagramRender` live in
+`symbolica.community.render`, backed by the Linnet rendering bindings. Its named arguments and
 read-only properties support editor completion and `help(RenderSettings)`.
 Omitted options keep the renderer's defaults. Diagram names appear in the
 surrounding caption; SVGs have no title by default. Set `title` explicitly to
@@ -80,7 +82,8 @@ Particle and momentum presentation uses boolean `RenderSettings` arguments:
 
 // docs-example: compile
 ```python
-from symbolica.community.hepkit import RenderSettings, LayoutSettings, StrokeStyle
+from symbolica.community.hepkit import RenderSettings
+from symbolica.community.render import LayoutSettings, StrokeStyle
 
 settings = RenderSettings(
     layout=LayoutSettings(impred_steps=100),

@@ -8,11 +8,13 @@ import xml.etree.ElementTree as ET
 from symbolica.core import Expression
 
 E = Expression.parse
-from symbolica.community.tensor import (
+from symbolica.community.render import (
     DiagramRender,
     LayoutSettings,
     RenderSettings,
     StrokeStyle,
+)
+from symbolica.community.tensor import (
     Representation,
     Tensor,
     TensorExpression,

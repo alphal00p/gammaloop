@@ -26,7 +26,6 @@ pub use cff::{
     PyCffGenerator, PyCffOrientation, PyCffReport, PyCffResult, PyCffSurface, PyCffSurfaceGroup,
     PyCutPropagator,
 };
-pub use display::PyDiagramRender;
 pub use generation::{
     PyCancellationToken, PyDiagramGroup, PyGenerationProgress, PyGenerationReport,
     PyGenerationResult, PyGroupMember, PyNumeratorGrouping, PyParticleSelector, PyProcess,
@@ -47,7 +46,7 @@ pub use model::{
     PyParameterType, PyParticle, PyPropagator, PyVertexRule,
 };
 pub use progress::MarimoProgress;
-pub use render_settings::{PyLayoutSettings, PyRenderSettings, PyStrokeStyle};
+pub use render_settings::PyRenderSettings;
 pub use tensor::PyTensorReducer;
 #[cfg(feature = "ufo")]
 pub use ufo::{PyLoadedModel, PyUfoLoadDiagnostics, PyUfoLoader};
@@ -170,7 +169,7 @@ impl SymbolicaCommunityModule for FeynkitModule {
 /// Register FeynKit classes in an existing Symbolica community module.
 pub fn initialize_feynkit(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<symbols::PySymbols>()?;
-    module.add_class::<PyDiagramRender>()?;
+    linnet_render_py::register(module.py())?;
     render_settings::register(module)?;
     error::register(module)?;
     amplitude::register(module)?;
@@ -204,17 +203,6 @@ pub fn stub_info() -> pyo3_stub_gen::Result<pyo3_stub_gen::StubInfo> {
                 "FeynKit did not contribute a symbolica.community.hepkit stub module",
             )
         })?;
-    // Shared graph types retain one runtime identity and canonical graph stubs.
-    for name in ["LayoutSettings", "StrokeStyle", "DiagramRender"] {
-        module.variables.insert(
-            name,
-            pyo3_stub_gen::generate::VariableDef {
-                name,
-                type_: pyo3_stub_gen::TypeInfo::with_module("typing.TypeAlias", "typing".into()),
-                default: Some(format!("symbolica.community.graph.{name}")),
-            },
-        );
-    }
     // Type overrides preserve Rust default expressions verbatim in stubgen.
     // Render the automatic policy sentinel as its Python Ellipsis spelling,
     // automatic notebook progress as a Python string literal, and empty

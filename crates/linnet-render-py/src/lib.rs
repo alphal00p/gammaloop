@@ -5,44 +5,18 @@ use pyo3::{exceptions::PyValueError, prelude::*, types::PyDict};
 #[cfg(feature = "python_stubgen")]
 use pyo3_stub_gen::derive::{gen_stub_pyclass, gen_stub_pymethods};
 use serde_json::{Map, Value, json};
-use symbolica::api::python::{Citation, SymbolicaCommunityModule};
-
-/// Shared graph presentation types used by tensor and Feynman diagram renderers.
-pub struct GraphModule;
-
-impl SymbolicaCommunityModule for GraphModule {
-    fn get_name() -> String {
-        "graph".to_owned()
-    }
-
-    fn get_citations() -> Vec<Citation> {
-        Vec::new()
-    }
-
-    fn register_module(module: &Bound<'_, PyModule>) -> PyResult<()> {
-        module.add_class::<PyLayoutSettings>()?;
-        module.add_class::<PyStrokeStyle>()?;
-        module.add_class::<PyDiagramRender>()?;
-        Ok(())
-    }
-
-    fn initialize(_py: Python<'_>) -> PyResult<()> {
-        Ok(())
-    }
-}
-
 /// Immutable native graph layout overrides.
 /// None leaves an option to the renderer; it does not force a default override.
 /// Constructors and read-only properties expose options to help() and completion.
 ///
 /// Examples
 /// --------
-/// >>> from symbolica.community.graph import LayoutSettings
+/// >>> from symbolica.community.render import LayoutSettings
 /// >>> settings = LayoutSettings(impred_steps=100, impred_labels=True)
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     name = "LayoutSettings",
-    module = "symbolica.community.graph",
+    module = "symbolica.community.render",
     frozen,
     from_py_object
 )]
@@ -52,7 +26,7 @@ pub struct PyLayoutSettings {
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community.graph import LayoutSettings
+    /// >>> from symbolica.community.render import LayoutSettings
     /// >>> value = LayoutSettings().layout_algo
     #[pyo3(get)]
     layout_algo: Option<String>,
@@ -60,7 +34,7 @@ pub struct PyLayoutSettings {
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community.graph import LayoutSettings
+    /// >>> from symbolica.community.render import LayoutSettings
     /// >>> value = LayoutSettings().tree_dx
     #[pyo3(get)]
     tree_dx: Option<f64>,
@@ -68,7 +42,7 @@ pub struct PyLayoutSettings {
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community.graph import LayoutSettings
+    /// >>> from symbolica.community.render import LayoutSettings
     /// >>> value = LayoutSettings().tree_dy
     #[pyo3(get)]
     tree_dy: Option<f64>,
@@ -76,7 +50,7 @@ pub struct PyLayoutSettings {
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community.graph import LayoutSettings
+    /// >>> from symbolica.community.render import LayoutSettings
     /// >>> value = LayoutSettings().impred_steps
     #[pyo3(get)]
     impred_steps: Option<usize>,
@@ -84,7 +58,7 @@ pub struct PyLayoutSettings {
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community.graph import LayoutSettings
+    /// >>> from symbolica.community.render import LayoutSettings
     /// >>> value = LayoutSettings().impred_step_scale
     #[pyo3(get)]
     impred_step_scale: Option<usize>,
@@ -92,7 +66,7 @@ pub struct PyLayoutSettings {
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community.graph import LayoutSettings
+    /// >>> from symbolica.community.render import LayoutSettings
     /// >>> value = LayoutSettings().impred_spacing
     #[pyo3(get)]
     impred_spacing: Option<f64>,
@@ -100,7 +74,7 @@ pub struct PyLayoutSettings {
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community.graph import LayoutSettings
+    /// >>> from symbolica.community.render import LayoutSettings
     /// >>> value = LayoutSettings().impred_repulsion
     #[pyo3(get)]
     impred_repulsion: Option<f64>,
@@ -108,7 +82,7 @@ pub struct PyLayoutSettings {
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community.graph import LayoutSettings
+    /// >>> from symbolica.community.render import LayoutSettings
     /// >>> value = LayoutSettings().impred_attraction
     #[pyo3(get)]
     impred_attraction: Option<f64>,
@@ -116,7 +90,7 @@ pub struct PyLayoutSettings {
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community.graph import LayoutSettings
+    /// >>> from symbolica.community.render import LayoutSettings
     /// >>> value = LayoutSettings().impred_parallel_balance
     #[pyo3(get)]
     impred_parallel_balance: Option<f64>,
@@ -124,7 +98,7 @@ pub struct PyLayoutSettings {
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community.graph import LayoutSettings
+    /// >>> from symbolica.community.render import LayoutSettings
     /// >>> value = LayoutSettings().impred_pull
     #[pyo3(get)]
     impred_pull: Option<f64>,
@@ -132,7 +106,7 @@ pub struct PyLayoutSettings {
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community.graph import LayoutSettings
+    /// >>> from symbolica.community.render import LayoutSettings
     /// >>> value = LayoutSettings().impred_pull_balance
     #[pyo3(get)]
     impred_pull_balance: Option<f64>,
@@ -140,7 +114,7 @@ pub struct PyLayoutSettings {
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community.graph import LayoutSettings
+    /// >>> from symbolica.community.render import LayoutSettings
     /// >>> value = LayoutSettings().impred_external_max_points
     #[pyo3(get)]
     impred_external_max_points: Option<usize>,
@@ -148,7 +122,7 @@ pub struct PyLayoutSettings {
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community.graph import LayoutSettings
+    /// >>> from symbolica.community.render import LayoutSettings
     /// >>> value = LayoutSettings().impred_split_length_ratio
     #[pyo3(get)]
     impred_split_length_ratio: Option<f64>,
@@ -156,7 +130,7 @@ pub struct PyLayoutSettings {
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community.graph import LayoutSettings
+    /// >>> from symbolica.community.render import LayoutSettings
     /// >>> value = LayoutSettings().impred_contract_chord_ratio
     #[pyo3(get)]
     impred_contract_chord_ratio: Option<f64>,
@@ -164,7 +138,7 @@ pub struct PyLayoutSettings {
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community.graph import LayoutSettings
+    /// >>> from symbolica.community.render import LayoutSettings
     /// >>> value = LayoutSettings().impred_edge_clearance
     #[pyo3(get)]
     impred_edge_clearance: Option<f64>,
@@ -172,7 +146,7 @@ pub struct PyLayoutSettings {
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community.graph import LayoutSettings
+    /// >>> from symbolica.community.render import LayoutSettings
     /// >>> value = LayoutSettings().impred_node_edge_strength
     #[pyo3(get)]
     impred_node_edge_strength: Option<f64>,
@@ -180,7 +154,7 @@ pub struct PyLayoutSettings {
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community.graph import LayoutSettings
+    /// >>> from symbolica.community.render import LayoutSettings
     /// >>> value = LayoutSettings().impred_labels
     #[pyo3(get)]
     impred_labels: Option<bool>,
@@ -188,7 +162,7 @@ pub struct PyLayoutSettings {
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community.graph import LayoutSettings
+    /// >>> from symbolica.community.render import LayoutSettings
     /// >>> value = LayoutSettings().impred_level
     #[pyo3(get)]
     impred_level: Option<bool>,
@@ -202,7 +176,7 @@ impl PyLayoutSettings {
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community.graph import LayoutSettings
+    /// >>> from symbolica.community.render import LayoutSettings
     /// >>> settings = LayoutSettings(impred_steps=100, impred_labels=True)
     ///
     /// Parameters
@@ -295,7 +269,7 @@ impl PyLayoutSettings {
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community.graph import LayoutSettings
+    /// >>> from symbolica.community.render import LayoutSettings
     /// >>> text = repr(LayoutSettings(impred_steps=100, impred_labels=True))
     fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
         let fields = PyDict::new(py);
@@ -372,12 +346,12 @@ impl PyLayoutSettings {
 ///
 /// Examples
 /// --------
-/// >>> from symbolica.community.graph import StrokeStyle
+/// >>> from symbolica.community.render import StrokeStyle
 /// >>> settings = StrokeStyle(paint="#6f4d85", thickness=1.5)
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     name = "StrokeStyle",
-    module = "symbolica.community.graph",
+    module = "symbolica.community.render",
     frozen,
     from_py_object
 )]
@@ -387,7 +361,7 @@ pub struct PyStrokeStyle {
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community.graph import StrokeStyle
+    /// >>> from symbolica.community.render import StrokeStyle
     /// >>> value = StrokeStyle().paint
     #[pyo3(get)]
     paint: Option<String>,
@@ -395,7 +369,7 @@ pub struct PyStrokeStyle {
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community.graph import StrokeStyle
+    /// >>> from symbolica.community.render import StrokeStyle
     /// >>> value = StrokeStyle().thickness
     #[pyo3(get)]
     thickness: Option<f64>,
@@ -403,7 +377,7 @@ pub struct PyStrokeStyle {
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community.graph import StrokeStyle
+    /// >>> from symbolica.community.render import StrokeStyle
     /// >>> value = StrokeStyle().dash
     #[pyo3(get)]
     dash: Option<String>,
@@ -417,7 +391,7 @@ impl PyStrokeStyle {
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community.graph import StrokeStyle
+    /// >>> from symbolica.community.render import StrokeStyle
     /// >>> settings = StrokeStyle(paint="#6f4d85", thickness=1.5)
     ///
     /// Parameters
@@ -449,7 +423,7 @@ impl PyStrokeStyle {
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community.graph import StrokeStyle
+    /// >>> from symbolica.community.render import StrokeStyle
     /// >>> text = repr(StrokeStyle(paint="#6f4d85", thickness=1.5))
     fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
         let fields = PyDict::new(py);
@@ -481,12 +455,12 @@ impl PyStrokeStyle {
 ///
 /// Examples
 /// --------
-/// >>> from symbolica.community.tensor import RenderSettings
+/// >>> from symbolica.community.render import RenderSettings
 /// >>> settings = RenderSettings(node_radius=5)
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     name = "RenderSettings",
-    module = "symbolica.community.tensor",
+    module = "symbolica.community.render",
     frozen,
     from_py_object
 )]
@@ -496,7 +470,7 @@ pub struct PyRenderSettings {
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community.tensor import RenderSettings
+    /// >>> from symbolica.community.render import RenderSettings
     /// >>> value = RenderSettings().title
     #[pyo3(get)]
     title: Option<String>,
@@ -504,7 +478,7 @@ pub struct PyRenderSettings {
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community.tensor import RenderSettings
+    /// >>> from symbolica.community.render import RenderSettings
     /// >>> value = RenderSettings().layout
     #[pyo3(get)]
     layout: Option<PyLayoutSettings>,
@@ -512,7 +486,7 @@ pub struct PyRenderSettings {
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community.tensor import RenderSettings
+    /// >>> from symbolica.community.render import RenderSettings
     /// >>> value = RenderSettings().node_radius
     #[pyo3(get)]
     node_radius: Option<f64>,
@@ -520,7 +494,7 @@ pub struct PyRenderSettings {
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community.tensor import RenderSettings
+    /// >>> from symbolica.community.render import RenderSettings
     /// >>> value = RenderSettings().node_fill
     #[pyo3(get)]
     node_fill: Option<String>,
@@ -528,7 +502,7 @@ pub struct PyRenderSettings {
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community.tensor import RenderSettings
+    /// >>> from symbolica.community.render import RenderSettings
     /// >>> value = RenderSettings().node_stroke
     #[pyo3(get)]
     node_stroke: Option<PyStrokeStyle>,
@@ -536,7 +510,7 @@ pub struct PyRenderSettings {
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community.tensor import RenderSettings
+    /// >>> from symbolica.community.render import RenderSettings
     /// >>> value = RenderSettings().edge_stroke
     #[pyo3(get)]
     edge_stroke: Option<PyStrokeStyle>,
@@ -550,7 +524,7 @@ impl PyRenderSettings {
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community.tensor import RenderSettings
+    /// >>> from symbolica.community.render import RenderSettings
     /// >>> settings = RenderSettings(node_radius=5)
     ///
     /// Parameters
@@ -594,7 +568,7 @@ impl PyRenderSettings {
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community.tensor import RenderSettings
+    /// >>> from symbolica.community.render import RenderSettings
     /// >>> text = repr(RenderSettings(node_radius=5))
     fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
         let fields = PyDict::new(py);
@@ -815,7 +789,8 @@ impl PyRenderSettings {
 ///
 /// Examples
 /// --------
-/// >>> from symbolica.community.tensor import TensorNetwork, RenderSettings
+/// >>> from symbolica.community.render import RenderSettings
+/// >>> from symbolica.community.tensor import TensorNetwork
 /// >>> from symbolica import E
 /// >>> drawing = TensorNetwork(E("1")).render(config=RenderSettings(node_radius=5))
 /// >>> drawing
@@ -823,7 +798,7 @@ impl PyRenderSettings {
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     name = "DiagramRender",
-    module = "symbolica.community.graph",
+    module = "symbolica.community.render",
     frozen,
     skip_from_py_object
 )]
@@ -922,5 +897,66 @@ impl PyDiagramRender {
     /// 'DiagramRender()'
     fn __repr__(&self) -> &str {
         "DiagramRender()"
+    }
+}
+
+/// Install the shared module when a native graph consumer is initialized.
+/// The module owns its classes independently of Tensor and HepKit, and repeated
+/// consumer registration preserves the same Python module and class identities.
+pub fn register<'py>(py: Python<'py>) -> PyResult<Bound<'py, PyModule>> {
+    let modules = py.import("sys")?.getattr("modules")?;
+    let modules = modules.cast::<PyDict>()?;
+    let name = "symbolica.community.render_native";
+    if let Some(module) = modules.get_item(name)? {
+        return Ok(module.cast_into()?);
+    }
+    let module = PyModule::new(py, name)?;
+    module.add_class::<PyLayoutSettings>()?;
+    module.add_class::<PyStrokeStyle>()?;
+    module.add_class::<PyRenderSettings>()?;
+    module.add_class::<PyDiagramRender>()?;
+    modules.set_item(name, &module)?;
+    Ok(module)
+}
+
+#[cfg(feature = "python_stubgen")]
+pub fn stub_info() -> pyo3_stub_gen::Result<pyo3_stub_gen::StubInfo> {
+    pyo3_stub_gen::StubInfo::from_project_root(
+        "symbolica".to_owned(),
+        std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")),
+    )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn shared_module_registration_preserves_class_identity() {
+        Python::initialize();
+        Python::attach(|py| {
+            let module = register(py).unwrap();
+            let settings = module.getattr("RenderSettings").unwrap();
+            let again = register(py).unwrap();
+            assert!(module.is(&again));
+            assert!(settings.is(again.getattr("RenderSettings").unwrap()));
+            for name in [
+                "RenderSettings",
+                "LayoutSettings",
+                "StrokeStyle",
+                "DiagramRender",
+            ] {
+                assert_eq!(
+                    module
+                        .getattr(name)
+                        .unwrap()
+                        .getattr("__module__")
+                        .unwrap()
+                        .extract::<String>()
+                        .unwrap(),
+                    "symbolica.community.render"
+                );
+            }
+        });
     }
 }
