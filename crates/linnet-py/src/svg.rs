@@ -1,7 +1,7 @@
-use pyo3::PyResult;
 use pyo3::exceptions::PyRuntimeError;
+use pyo3::PyResult;
 
-use crate::PreparedRender;
+use crate::render::PreparedRender;
 
 impl PreparedRender {
     pub fn interactive_svg(svg: &str) -> PyResult<String> {
@@ -11,7 +11,7 @@ impl PreparedRender {
 
 #[cfg(test)]
 mod tests {
-    use crate::PreparedRender;
+    use crate::render::PreparedRender;
 
     #[test]
     fn svg_inspection_preserves_drawing_and_scopes_identity_links() {
@@ -76,11 +76,9 @@ mod tests {
             .descendants()
             .find(|node| node.has_tag_name("a"))
             .unwrap();
-        assert!(
-            target
-                .attributes()
-                .all(|attribute| attribute.name() != "href")
-        );
+        assert!(target
+            .attributes()
+            .all(|attribute| attribute.name() != "href"));
         assert_eq!(target.attribute("data-linnet-kind"), Some("edge"));
     }
 }

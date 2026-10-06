@@ -1,4 +1,5 @@
-use linnet_render_py::PyDiagramRender;
+use linnet_py::PyDiagramRender;
+use linnet_py::PyRenderSettings;
 use std::{
     collections::{BTreeMap, BTreeSet},
     sync::Arc,
@@ -41,13 +42,13 @@ use pyo3_stub_gen::{
 
 use crate::{
     cff::{PyCffResult, PyCutPropagator, build_cff_for_diagram},
-    display::{escape_html, render_diagram_html},
+    display::escape_html,
     error,
     graph_interop::LinnetCache,
     integrals::PyIntegralFamily,
     kinematics::{PyFourMomentum, PyKinematics, PyThreeMomentum},
     model::{PyModel, PyParticle, PyPropagator},
-    render_settings::PyRenderSettings,
+    render_settings::PyDiagramStyle,
     tensor::PyTensorReducer,
 };
 
@@ -2525,10 +2526,10 @@ impl PyFeynmanDiagram {
     /// --------
     /// Using the setup in the ``FeynmanDiagram`` class example:
     ///
-    /// >>> graph = diagram.to_linnet()
+    /// >>> graph = diagram.to_graph()
     /// >>> gluons = graph.filter(edge=lambda edge: edge.data.particle_name == "g")
-    #[gen_stub(override_return_type(type_repr="linnet.Graph", imports=("linnet")))]
-    fn to_linnet(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+    #[gen_stub(override_return_type(type_repr="symbolica.community.graph.Graph", imports=("symbolica.community.graph")))]
+    fn to_graph(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         self.linnet.graph(py, self)
     }
 
@@ -2541,7 +2542,7 @@ impl PyFeynmanDiagram {
     /// >>> region = diagram.subgraph(diagram.linnet_selection)
     /// >>> assert region.n_half_edges == len(diagram.half_edges)
     #[getter]
-    #[gen_stub(override_return_type(type_repr="linnet.Subgraph", imports=("linnet")))]
+    #[gen_stub(override_return_type(type_repr="symbolica.community.graph.Subgraph", imports=("symbolica.community.graph")))]
     fn linnet_selection(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         self.linnet
             .export_selection(py, self, &self.selection(), &self.isolated_nodes())
@@ -2569,7 +2570,7 @@ impl PyFeynmanDiagram {
     ///
     /// Parameters
     /// ----------
-    /// selection : Subgraph or linnet.Subgraph or None, optional
+    /// selection : Subgraph or symbolica.community.graph.Subgraph or None, optional
     ///     Existing selection from the same original diagram; exclusive with element IDs.
     /// nodes : list[int] or None, optional
     ///     Diagram vertex IDs to include, with all incident half-edges.
@@ -2581,7 +2582,7 @@ impl PyFeynmanDiagram {
     fn subgraph(
         &self,
         py: Python<'_>,
-        #[gen_stub(override_type(type_repr="Subgraph | linnet.Subgraph | None", imports=("linnet")))]
+        #[gen_stub(override_type(type_repr="Subgraph | symbolica.community.graph.Subgraph | None", imports=("symbolica.community.graph")))]
         selection: Option<&Bound<'_, PyAny>>,
         nodes: Option<Vec<usize>>,
         edges: Option<Vec<usize>>,
@@ -3314,7 +3315,7 @@ impl PyFeynmanDiagram {
     ///
     /// Parameters
     /// ----------
-    /// without : Subgraph or linnet.Subgraph or None, optional
+    /// without : Subgraph or symbolica.community.graph.Subgraph or None, optional
     ///     Ignored region, using GammaLoop boundary and local-factor selection semantics.
     /// in_lmb : bool, optional
     ///     Express edge momenta in the diagram's stored loop-momentum basis.
@@ -3325,7 +3326,7 @@ impl PyFeynmanDiagram {
     fn numerator_expression(
         &self,
         py: Python<'_>,
-        #[gen_stub(override_type(type_repr="Subgraph | linnet.Subgraph | None", imports=("linnet")))]
+        #[gen_stub(override_type(type_repr="Subgraph | symbolica.community.graph.Subgraph | None", imports=("symbolica.community.graph")))]
         without: Option<&Bound<'_, PyAny>>,
         in_lmb: bool,
         lmb: Option<&PyLoopMomentumBasis>,
@@ -3826,13 +3827,13 @@ impl PyFeynmanDiagram {
     ///
     /// Parameters
     /// ----------
-    /// contracted : Subgraph or linnet.Subgraph
+    /// contracted : Subgraph or symbolica.community.graph.Subgraph
     ///     Complete internal edges to contract, selected from this diagram.
     #[pyo3(signature = (contracted))]
     fn contracted_momentum_basis(
         &self,
         py: Python<'_>,
-        #[gen_stub(override_type(type_repr="Subgraph | linnet.Subgraph", imports=("linnet")))]
+        #[gen_stub(override_type(type_repr="Subgraph | symbolica.community.graph.Subgraph", imports=("symbolica.community.graph")))]
         contracted: &Bound<'_, PyAny>,
     ) -> PyResult<PyLoopMomentumBasis> {
         let selected = self.selection();
@@ -4132,26 +4133,29 @@ impl PyFeynmanDiagram {
     ///
     /// Parameters
     /// ----------
+    /// style : DiagramStyle or None, optional
+    ///     Particle, momentum, and physical index presentation.
     /// config : RenderSettings or None, optional
-    ///     Layout, drawing, style and physics settings, as in ``render``.
+    ///     Layout, drawing, and graph style settings, as in ``render``.
     /// momenta : bool, optional
     ///     Draw momentum arrows and labels in the stored basis.
     /// lmb : LoopMomentumBasis or None, optional
     ///     Routing from this diagram; also enables momentum display.
-    /// highlight : Subgraph or linnet.Subgraph or None, optional
+    /// highlight : Subgraph or symbolica.community.graph.Subgraph or None, optional
     ///     Region to highlight in the complete diagram.
-    #[pyo3(signature = (*, config=None, momenta=false, lmb=None, highlight=None))]
+    #[pyo3(signature = (*, config=None, style=None, momenta=false, lmb=None, highlight=None))]
     fn to_linnest(
         &self,
         py: Python<'_>,
         config: Option<&PyRenderSettings>,
+        style: Option<&PyDiagramStyle>,
         momenta: bool,
         lmb: Option<&PyLoopMomentumBasis>,
-        #[gen_stub(override_type(type_repr="Subgraph | linnet.Subgraph | None", imports=("linnet")))]
+        #[gen_stub(override_type(type_repr="Subgraph | symbolica.community.graph.Subgraph | None", imports=("symbolica.community.graph")))]
         highlight: Option<&Bound<'_, PyAny>>,
     ) -> PyResult<String> {
         Ok(typst_renderer::Document::svg_source(
-            &self.render_svg(py, config, momenta, lmb, highlight)?,
+            &self.render_svg(py, config, style, momenta, lmb, highlight)?,
         ))
     }
 
@@ -4165,16 +4169,18 @@ impl PyFeynmanDiagram {
     /// --------
     /// Using the setup in the ``FeynmanDiagram`` class example:
     ///
-    /// >>> from symbolica.community.render import LayoutSettings
-    /// >>> settings = hep.RenderSettings(
-    /// ...     layout=LayoutSettings(impred_steps=100), show_particle=False)
-    /// >>> drawing = diagram.render(momenta=True, config=settings)
+    /// >>> from symbolica.community.graph import LayoutSettings, RenderSettings
+    /// >>> settings = RenderSettings(
+    /// ...     layouts=LayoutSettings(impred_steps=100))
+    /// >>> drawing = diagram.render(momenta=True, config=settings, style=hep.DiagramStyle(show_particle=False))
     /// >>> drawing
     /// >>> svg = drawing.to_svg()
     /// >>> drawing = diagram.render(lmb=next(iter(diagram.loop_momentum_bases())))
     ///
     /// Parameters
     /// ----------
+    /// style : DiagramStyle or None, optional
+    ///     Particle, momentum, and physical index presentation.
     /// config : RenderSettings or None, optional
     ///     Immutable layout, styling, and physics overrides. Use ``help(RenderSettings)``
     ///     and ``help(LayoutSettings)`` to discover the supported options.
@@ -4182,26 +4188,28 @@ impl PyFeynmanDiagram {
     ///     ``split_initial_state=False`` to draw the sewn graph.
     /// momenta : bool, optional
     ///     Show momentum arrows and labels routed in the diagram's stored basis.
-    ///     Explicit physics settings in ``config`` override these display defaults.
+    ///     Explicit fields in ``style`` override these display defaults.
     /// lmb : LoopMomentumBasis or None, optional
     ///     Explicit routing from this diagram; also enables momentum display.
     ///     Rendering never changes the diagram's stored loop-momentum basis.
-    /// highlight : Subgraph or linnet.Subgraph or None, optional
+    /// highlight : Subgraph or symbolica.community.graph.Subgraph or None, optional
     ///     Highlight a region while preserving the full diagram as muted context.
     ///     A Subgraph highlights its own region by default.
-    #[pyo3(signature = (*, config=None, momenta=false, lmb=None, highlight=None))]
+    #[pyo3(signature = (*, config=None, style=None, momenta=false, lmb=None, highlight=None))]
     pub(crate) fn render(
         &self,
         py: Python<'_>,
         config: Option<&PyRenderSettings>,
+        style: Option<&PyDiagramStyle>,
         momenta: bool,
         lmb: Option<&PyLoopMomentumBasis>,
-        #[gen_stub(override_type(type_repr="Subgraph | linnet.Subgraph | None", imports=("linnet")))]
+        #[gen_stub(override_type(type_repr="Subgraph | symbolica.community.graph.Subgraph | None", imports=("symbolica.community.graph")))]
         highlight: Option<&Bound<'_, PyAny>>,
     ) -> PyResult<PyDiagramRender> {
-        let svg = self.render_svg(py, config, momenta, lmb, highlight)?;
-        let html = render_diagram_html(&self.inner, &svg);
-        Ok(PyDiagramRender::new(svg, html))
+        let drawing = self.render_drawing(py, config, style, momenta, lmb, highlight)?;
+        let html =
+            crate::display::render_diagram_html(&self.inner, &drawing.to_svg_pages()?.join("\n"));
+        Ok(drawing.with_html(html))
     }
 
     /// Render an HTML figure with the same options and hover information as ``render``.
@@ -4215,28 +4223,29 @@ impl PyFeynmanDiagram {
     ///
     /// Parameters
     /// ----------
+    /// style : DiagramStyle or None, optional
+    ///     Particle, momentum, and physical index presentation.
     /// config : RenderSettings or None, optional
-    ///     Layout, drawing, style and physics settings, as in ``render``.
+    ///     Layout, drawing, and graph style settings, as in ``render``.
     /// momenta : bool, optional
     ///     Draw momentum arrows and labels in the stored basis.
     /// lmb : LoopMomentumBasis or None, optional
     ///     Routing from this diagram; also enables momentum display.
-    /// highlight : Subgraph or linnet.Subgraph or None, optional
+    /// highlight : Subgraph or symbolica.community.graph.Subgraph or None, optional
     ///     Region to highlight in the complete diagram.
-    #[pyo3(signature = (*, config=None, momenta=false, lmb=None, highlight=None))]
+    #[pyo3(signature = (*, config=None, style=None, momenta=false, lmb=None, highlight=None))]
     fn to_html(
         &self,
         py: Python<'_>,
         config: Option<&PyRenderSettings>,
+        style: Option<&PyDiagramStyle>,
         momenta: bool,
         lmb: Option<&PyLoopMomentumBasis>,
-        #[gen_stub(override_type(type_repr="Subgraph | linnet.Subgraph | None", imports=("linnet")))]
+        #[gen_stub(override_type(type_repr="Subgraph | symbolica.community.graph.Subgraph | None", imports=("symbolica.community.graph")))]
         highlight: Option<&Bound<'_, PyAny>>,
     ) -> PyResult<String> {
-        Ok(self
-            .render(py, config, momenta, lmb, highlight)?
+        self.render(py, config, style, momenta, lmb, highlight)?
             .to_html()
-            .to_owned())
     }
 
     /// Render the diagram as HTML in Marimo, Jupyter, and IPython.
@@ -4248,7 +4257,7 @@ impl PyFeynmanDiagram {
     /// >>> from IPython.display import display
     /// >>> display(diagram)
     pub(crate) fn _repr_html_(&self, py: Python<'_>) -> PyResult<String> {
-        self.to_html(py, None, false, None, None)
+        self.to_html(py, None, None, false, None, None)
     }
 
     /// Return the raw SVG representation used by rich notebook frontends.
@@ -4260,7 +4269,7 @@ impl PyFeynmanDiagram {
     /// >>> from IPython.display import display
     /// >>> display(diagram)
     fn _repr_svg_(&self, py: Python<'_>) -> PyResult<String> {
-        self.render_svg(py, None, false, None, None)
+        self.render_svg(py, None, None, false, None, None)
     }
 
     /// Write a concise summary to an IPython pretty printer.
@@ -4676,10 +4685,24 @@ impl PyFeynmanDiagram {
         &self,
         py: Python<'_>,
         config: Option<&PyRenderSettings>,
+        style: Option<&PyDiagramStyle>,
         momenta: bool,
         lmb: Option<&PyLoopMomentumBasis>,
         highlight: Option<&Bound<'_, PyAny>>,
     ) -> PyResult<String> {
+        self.render_drawing(py, config, style, momenta, lmb, highlight)?
+            .to_svg()
+    }
+
+    fn render_drawing(
+        &self,
+        py: Python<'_>,
+        config: Option<&PyRenderSettings>,
+        style: Option<&PyDiagramStyle>,
+        momenta: bool,
+        lmb: Option<&PyLoopMomentumBasis>,
+        highlight: Option<&Bound<'_, PyAny>>,
+    ) -> PyResult<PyDiagramRender> {
         if let Some(basis) = lmb
             && !Arc::ptr_eq(&basis.owner, &self.owner)
         {
@@ -4687,12 +4710,12 @@ impl PyFeynmanDiagram {
                 "momentum basis belongs to a different diagram",
             ));
         }
-        let (config, options) = PyRenderSettings::resolve(config, momenta || lmb.is_some());
+        let options = PyDiagramStyle::resolve(style, momenta || lmb.is_some());
         let region = self.render_region(py, highlight)?;
         let isolated = region
             .as_ref()
             .map_or_else(BTreeSet::new, |r| r.isolated.clone());
-        let mut scene = self
+        let scene = self
             .inner
             .to_scene(
                 region.as_ref().map(|r| &r.hedges),
@@ -4701,10 +4724,7 @@ impl PyFeynmanDiagram {
                 &options,
             )
             .map_err(error::diagram)?;
-        config
-            .apply(&mut scene)
-            .map_err(pyo3::exceptions::PyValueError::new_err)?;
-        crate::display::render_scene(&scene)
+        PyDiagramRender::from_scene(py, scene, config)?.map_svg(crate::display::themed_svg)
     }
 
     /// The highlighted region: the argument, or this subgraph's own region.

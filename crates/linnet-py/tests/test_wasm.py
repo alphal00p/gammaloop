@@ -3,7 +3,7 @@
 import unittest
 from dataclasses import dataclass
 
-import linnet as lp
+from symbolica.community import graph as lp
 
 DOT = r"""digraph browser {
   0;
@@ -121,8 +121,8 @@ def wasm_runtime_smoke() -> None:
             }
         )
 
-    graph.render_config = lp.RenderConfig(
-        layouts=lp.LayoutOptions(
+    graph.render_config = lp.RenderSettings(
+        layouts=lp.LayoutSettings(
             algorithm=lp.LayoutAlgorithm.Force,
             direction=lp.LayoutDirection.Right,
             seed=7,
@@ -139,7 +139,7 @@ def wasm_runtime_smoke() -> None:
         drawing=lp.DrawOptions(show_half_edge_ids=True),
     )
 
-    prepared = graph.prepare_render()
+    prepared = graph.render()
     assert selected_nodes == list(range(graph.n_nodes))
     assert selected_edges == list(range(graph.n_edges))
     assert selected_half_edges == list(range(graph.n_half_edges))

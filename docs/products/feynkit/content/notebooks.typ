@@ -60,37 +60,34 @@ Path("diagram.typ").write_text(drawing.to_linnest(), encoding="utf-8")
 drawing
 ```
 
-Pass an immutable `hepkit.RenderSettings` object as `config`. Shared
-`LayoutSettings`, `StrokeStyle`, and the returned `DiagramRender` live in
-`symbolica.community.render`, backed by the Linnet rendering bindings. Its named arguments and
-read-only properties support editor completion and `help(RenderSettings)`.
-Omitted options keep the renderer's defaults. Diagram names appear in the
-surrounding caption; SVGs have no title by default. Set `title` explicitly to
-add a plain-text heading, including in standalone SVG exports.
-`node_radius` is in graph units, and `node_fill` is a CSS color.
-`node_stroke` and `edge_stroke` accept a `StrokeStyle` with a CSS `paint`,
-`thickness` in points, and `dash` (`solid`, `dotted`, or `dashed`).
+Pass `graph.RenderSettings` as `config`. Shared layout, stroke, drawing options, and
+`DiagramRender` snapshots live in `symbolica.community.graph`. Named constructors support
+editor completion and `help()`. Settings can be changed for future drawings; existing
+render results retain their original inputs. Diagram names appear in surrounding captions;
+set `title` explicitly to add a heading to the SVG. `DrawOptions.node_radius` uses graph
+units; `Stroke.thickness` uses points and `Stroke.paint` accepts a typed `Color`.
 
 `LayoutSettings` groups advanced layout controls such as `impred_steps`,
 `impred_spacing`, `impred_repulsion`, and `impred_labels`. Use
 `help(LayoutSettings)` for all options and their defaults. Invalid options and
 numeric values are rejected when constructing settings.
 
-Particle and momentum presentation uses boolean `RenderSettings` arguments:
+Particle and momentum presentation uses boolean `hepkit.DiagramStyle` arguments:
 `show_particle`, `show_momentum`, `show_edge_index`, `show_node_index`,
 `momentum_arrows`, `split_initial_state`, and `debug` (node and edge indices).
 
 // docs-example: compile
 ```python
-from symbolica.community.hepkit import RenderSettings
-from symbolica.community.render import LayoutSettings, StrokeStyle
+from symbolica.community import graph, hepkit
 
-settings = RenderSettings(
-    layout=LayoutSettings(impred_steps=100),
-    show_particle=False,
-    edge_stroke=StrokeStyle(paint="#6f4d85", thickness=1.2),
+settings = graph.RenderSettings(
+    layouts=graph.LayoutSettings(impred_steps=100),
+    drawing=graph.DrawOptions(
+        edge_stroke=graph.Stroke(paint=graph.Color("#6f4d85"), thickness=1.2),
+    ),
 )
-drawing = diagram.render(momenta=True, config=settings)
+style = hepkit.DiagramStyle(show_particle=False)
+drawing = diagram.render(momenta=True, config=settings, style=style)
 Path("momenta.svg").write_text(
     drawing.to_svg(), encoding="utf-8"
 )
@@ -161,7 +158,7 @@ from rendering and requires that package only when explicitly used.
 
 == Configured amplitude collections
 
-`amplitude.render()` returns an `AmplitudeRender` snapshot that displays directly
+`amplitude.render()` returns a `graph.DiagramRender` snapshot that displays directly
 in IPython, Jupyter, and Marimo. `config` accepts the same `RenderSettings` as
 individual diagrams, while `term_settings` controls the weighted tensor notation.
 The default preview shows six contributions; `max_diagrams=None` renders all.

@@ -2,7 +2,7 @@
 use std::collections::{BTreeSet, HashMap, HashSet};
 
 use crate::half_edge::{
-    HedgeGraph, NodeIndex, involution::Flow, nodestore::NodeStorageOps, subgraph::SubSetLike,
+    involution::Flow, nodestore::NodeStorageOps, subgraph::SubSetLike, HedgeGraph, NodeIndex,
 };
 
 use super::DirectionBasis;
@@ -156,10 +156,10 @@ impl<E, V, H, N: NodeStorageOps<NodeData = V>> HedgeGraph<E, V, H, N> {
 mod tests {
     use super::DirectionBasis;
     use crate::half_edge::{
-        HedgeGraph,
         builder::HedgeGraphBuilder,
         involution::{Flow, Orientation},
         subgraph::{ModifySubSet, SuBitGraph, SubSetLike},
+        HedgeGraph,
     };
 
     #[test]
@@ -259,7 +259,7 @@ mod tests {
     fn identification_history_is_not_counted_as_an_extra_component() {
         use crate::{
             half_edge::nodestore::NodeStorageVec,
-            tree::{Forest, child_vec::ChildVecStore},
+            tree::{child_vec::ChildVecStore, Forest},
         };
         let mut builder = HedgeGraphBuilder::<(), ()>::new();
         let first = builder.add_node(());

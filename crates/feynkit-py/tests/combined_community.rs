@@ -15,8 +15,8 @@ use symbolica::{
 };
 
 const FEYNKIT_WRAPPER: &str = include_str!("../python/symbolica/community/hepkit/__init__.py");
-const RENDER_WRAPPER: &str =
-    include_str!("../../linnet-render-py/python/symbolica/community/render/__init__.py");
+const GRAPH_WRAPPER: &str =
+    include_str!("../../linnet-py/python/symbolica/community/graph/__init__.py");
 const MODEL_JSON: &str = include_str!("fixtures/scalars_2p_3p.json");
 const SPENSO_WRAPPER: &str = "from ..tensor_native import *\n\ninitialize_module()\n";
 
@@ -33,6 +33,7 @@ fn shared_numeric_external_states_in_installed_host() {
         symbolica.add("core", &core)?;
         let community = install_package(py, "symbolica.community")?;
         symbolica.add("community", &community)?;
+        register_native::<linnet_py::GraphModule>(&core)?;
         register_native::<FeynkitModule>(&core)?;
         import_wrapper(
             py,
@@ -60,9 +61,10 @@ fn qcd_rich_display_requires_no_python_rendering_packages() {
         symbolica.add("core", &core)?;
         let community = install_package(py, "symbolica.community")?;
         symbolica.add("community", &community)?;
+        register_native::<linnet_py::GraphModule>(&core)?;
         register_native::<FeynkitModule>(&core)?;
         register_native::<SpensoModule>(&core)?;
-        import_wrapper(py, &community, "symbolica.community.render", RENDER_WRAPPER)?;
+        import_wrapper(py, &community, "symbolica.community.graph", GRAPH_WRAPPER)?;
         import_wrapper(
             py,
             &community,
@@ -79,6 +81,13 @@ fn qcd_rich_display_requires_no_python_rendering_packages() {
         locals.set_item("__name__", "network_display_tests")?;
         py.run(&network_tests, Some(&locals), Some(&locals))?;
         py.run(c"assert unittest.TextTestRunner().run(unittest.defaultTestLoader.loadTestsFromTestCase(NetworkDisplayTests)).wasSuccessful()", Some(&locals), Some(&locals))?;
+        symbolica.add("E", core.getattr("E")?)?;
+        let rendering_tests = CString::new(include_str!(
+            "../../linnet-py/tests/test_community_rendering.py"
+        )).unwrap();
+        locals.set_item("__name__", "community_rendering_tests")?;
+        py.run(&rendering_tests, Some(&locals), Some(&locals))?;
+        py.run(c"assert unittest.TextTestRunner().run(unittest.defaultTestLoader.loadTestsFromTestCase(CommunityRenderingTests)).wasSuccessful()", Some(&locals), Some(&locals))?;
         for name in ["network", "diagram"] {
             let source = locals.get_item(name)?.unwrap().call_method0("to_linnest")?.extract::<String>()?;
             let files = std::collections::BTreeMap::from([("main.typ".into(), source.into_bytes())]);
@@ -184,9 +193,10 @@ fn feynkit_and_spenso_share_one_symbolica_kernel_in_both_import_orders() {
 
         let community = install_package(py, "symbolica.community")?;
         symbolica.add("community", &community)?;
+        register_native::<linnet_py::GraphModule>(&core)?;
         register_native::<FeynkitModule>(&core)?;
         register_native::<SpensoModule>(&core)?;
-        import_wrapper(py, &community, "symbolica.community.render", RENDER_WRAPPER)?;
+        import_wrapper(py, &community, "symbolica.community.graph", GRAPH_WRAPPER)?;
 
         for order in [["hepkit", "tensor"], ["tensor", "hepkit"]] {
             for name in order {
@@ -201,6 +211,14 @@ fn feynkit_and_spenso_share_one_symbolica_kernel_in_both_import_orders() {
             let feynkit = PyModule::import(py, "symbolica.community.hepkit")?;
             let spenso = PyModule::import(py, "symbolica.community.tensor")?;
             let model = Model::from_json(MODEL_JSON).expect("fixture is a valid model");
+            // Structural ports require registered tensor heads before parsing.
+            let registration = PyDict::new(py);
+            registration.set_item("spenso", &spenso)?;
+            py.run(
+                c"spenso.TensorName.vector('feynkit_py_test::k')\nspenso.TensorName.vector('feynkit_py_test::p')",
+                Some(&registration),
+                Some(&registration),
+            )?;
             let tensor_numerator = Atom::parse(
                 "k(spenso::mink(D,mu))*k(spenso::mink(D,nu))",
                 "feynkit_py_test",
@@ -237,7 +255,7 @@ fn feynkit_and_spenso_share_one_symbolica_kernel_in_both_import_orders() {
                 Atom::parse("x + 1", "feynkit_py_test", ParseSettings::default()).unwrap(),
             );
             let indexed = Atom::parse(
-                "gammalooprs::Q(1,spenso::mink(4,gammalooprs::hedge(7)))*gammalooprs::Q(2,spenso::mink(4,gammalooprs::hedge(8)))*gammalooprs::Q(3,spenso::mink(4,gammalooprs::edge(7,0)))*gammalooprs::Q(4,spenso::mink(4,gammalooprs::vertex(7,0)))",
+                "gammalooprs::Q(1,spenso::mink(4,gammalooprs::hedge(7,0)))*gammalooprs::Q(2,spenso::mink(4,gammalooprs::hedge(8,0)))*gammalooprs::Q(3,spenso::mink(4,gammalooprs::edge(7,0)))*gammalooprs::Q(4,spenso::mink(4,gammalooprs::vertex(7,0)))",
                 "feynkit_py_test",
                 ParseSettings::default(),
             ).unwrap();
@@ -341,7 +359,7 @@ assert tensor_reduced == tensor_expected
 assert type(diagram_tensor_reduced) is core.Expression
 assert diagram_tensor_reduced == tensor_expected
 assert len(scalar_graphs) == 1
-assert scalar_graphs[0].numerator_expression() == tensor_expected
+assert scalar_graphs[0].numerator_expression().to_expression() == tensor_expected
 assert isinstance(scalar_graphs[0].numerator_expression(), spenso.TensorExpression)
 auto_reduced = scalar_graphs[0].tensor_reduce(tensor_dimension)
 assert isinstance(auto_reduced, spenso.TensorExpression)
@@ -362,7 +380,7 @@ expanded_expected = 3 + 2 * dot(graph_loop_vector, graph_loop_vector) * dot(
     projector_momentum(mink(tensor_dimension)),
 ) / tensor_dimension
 assert isinstance(expanded_reduced, spenso.TensorExpression)
-assert (expanded_reduced - expanded_expected).expand() == 0, str((expanded_reduced - expanded_expected).expand())
+assert (expanded_reduced - expanded_expected).to_expression().expand() == 0
 try:
     diagram.tensor_reduce(tensor_dimension, expression=expanded_input, projector=1)
 except feynkit.DiagramError:
@@ -385,10 +403,9 @@ assert isinstance(denominator, spenso.TensorExpression)
 assert denominator.rank == 0
 assert "ZERO" not in str(denominator)
 assert "Momentum" not in denominator._repr_latex_()
-assert indexed_diagram.numerator_expression() / denominator == (
-    indexed_diagram.numerator_expression() * denominator ** -1
-)
 indexed = indexed_diagram.numerator_expression()
+inverse_denominator = denominator ** -1
+assert indexed / denominator == indexed * inverse_denominator
 assert isinstance(indexed, spenso.TensorExpression)
 assert isinstance(indexed, core.Expression)
 assert indexed.rank == 4
@@ -399,11 +416,13 @@ assert "Momentum" not in str(indexed)
 assert "q₁" in str(indexed)
 assert "q_{1}" in indexed._repr_latex_()
 assert "Momentum" not in indexed.to_typst()
+# Raw index notation exposes the graph provenance under the alphabetic display default.
+raw_indices = spenso.DisplaySettings(index_style="raw")
 for label in ("e₇.₀", "v₇.₀"):
-    assert label in str(indexed), str(indexed)
+    assert label in indexed.format_tensor(settings=raw_indices)
 for label in ("e", "v"):
-    assert f"{label}_{{7.0}}" in indexed._repr_latex_()
-    assert f"attach({label},b:(7.0))" in indexed.to_typst()
+    assert f"{label}_{{7.0}}" in indexed.to_latex(settings=raw_indices)
+    assert f"attach({label},b:(7.0))" in indexed.to_typst(settings=raw_indices)
 for vertex in indexed_diagram.vertices:
     assert isinstance(vertex.numerator_expression(), spenso.TensorExpression)
 for edge in indexed_diagram.edges:

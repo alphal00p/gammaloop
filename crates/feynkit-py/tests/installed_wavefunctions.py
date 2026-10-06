@@ -24,12 +24,19 @@ for kind, helicity, expected in [
     assert state.components == expected
     adjoint = state.bar()
     assert adjoint.kind == kind + "_bar"
-    assert adjoint.components == [complex(x).conjugate() for x in expected[2:] + expected[:2]]
+    assert adjoint.components == [
+        complex(x).conjugate() for x in expected[2:] + expected[:2]
+    ]
     assert p.wavefunction(kind + "_bar", helicity) == adjoint
     assert adjoint.bar() == state
 
 massive = hep.FourMomentum(5.0, 0.0, 0.0, 3.0)
-assert massive.wavefunction("epsilon", hep.Helicity.ZERO).components == [0.75, 0, 0, 1.25]
+assert massive.wavefunction("epsilon", hep.Helicity.ZERO).components == [
+    0.75,
+    0,
+    0,
+    1.25,
+]
 scalar = massive.wavefunction("scalar", hep.Helicity.ZERO)
 assert scalar.kind == "scalar" and scalar.components == [1] and len(scalar) == 1
 assert scalar.bar() == scalar

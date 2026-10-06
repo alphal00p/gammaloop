@@ -1,7 +1,7 @@
 # /// script
 # requires-python = ">=3.10"
 # dependencies = [
-#     "linnet==0.1.0",
+#     "symbolica==3.0.1",
 #     "marimo==0.24.0",
 #     "typst==0.15.0",
 # ]
@@ -19,7 +19,7 @@ app = marimo.App(width="medium")
 def _():
     from dataclasses import dataclass
 
-    import linnet as lp
+    from symbolica.community import graph as lp
     import marimo as mo
 
     @dataclass(eq=False)
@@ -214,20 +214,20 @@ def _(
     )
 
     if layout_algorithm.value == lp.LayoutAlgorithm.Force:
-        _layouts = lp.LayoutOptions(
+        _layouts = lp.LayoutSettings(
             algorithm=lp.LayoutAlgorithm.Force,
             direction=lp.LayoutDirection.Right,
             directional_force=0.55,
             label_steps=60,
         )
     else:
-        _layouts = lp.LayoutOptions(
+        _layouts = lp.LayoutSettings(
             algorithm=lp.LayoutAlgorithm.StableLayered,
             direction=lp.LayoutDirection.Right,
             label_steps=60,
         )
 
-    graph.render_config = lp.RenderConfig(
+    graph.render_config = lp.RenderSettings(
         title="Document intake workflow",
         layouts=_layouts,
         drawing=lp.DrawOptions(show_half_edge_ids=show_half_edge_ids.value),
@@ -316,7 +316,7 @@ def _(graph, mo):
                 ## Explicit `to_svg()`
 
                 Returned **{len(svg):,} characters** of SVG in
-                **{_elapsed:.3f} s**. A sparse per-call `RenderConfig` can
+                **{_elapsed:.3f} s**. A sparse per-call `RenderSettings` can
                 override this render without mutating `graph.render_config`.
                 """
             ),

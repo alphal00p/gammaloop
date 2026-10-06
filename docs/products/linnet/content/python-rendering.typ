@@ -54,8 +54,8 @@ EC-planarization and ImPrEd pipeline by default. The same implementation runs
 in direct Typst and in CLI drawings. Layout controls remain explicit:
 
 ```python
-config = linnet.RenderConfig(
-    layouts=linnet.LayoutOptions(
+config = linnet.RenderSettings(
+    layouts=linnet.LayoutSettings(
         algorithm=linnet.LayoutAlgorithm.Impred,
         impred_parallel_balance=1.0,
         impred_pull=0.45,
@@ -77,10 +77,15 @@ selection using Shift-, Ctrl-, or Meta-click. These interactions do not update P
 selections automatically. In Marimo, direct rich display enables the embedded script; when
 embedding the SVG explicitly, use `mo.iframe(graph.to_svg())`.
 Drag the drawing to pan, or use Ctrl/Meta-scroll to zoom gently around the pointer.
-With the graph focused, `+` and `-` zoom in five-percent steps and `0` fits the drawing. Hover previews details beside the graph when space permits,
+At 100%, SVG points retain their physical size, so equally styled labels, vertices,
+and strokes have the same size across drawings. The viewport grows vertically to
+keep the whole drawing visible. Narrow columns or explicitly bounded previews
+can shrink the drawing to fit; the zoom indicator reports that actual scale.
+With the graph focused, `+` and `-` zoom in five-percent steps and `0` fits the
+drawing without enlarging it above 100%. Hover previews details beside the graph when space permits,
 and below it in narrow outputs. The preview disappears when the pointer leaves the element;
 keyboard focus also previews details. Clicking pins the details until the panel is closed.
-The graph's `RenderConfig`
+The graph's `RenderSettings`
 combines layout options, drawing defaults, and Python selectors. Only topology and the selectors'
 typed drawing results pass to Typst; application payloads stay in Python.
 

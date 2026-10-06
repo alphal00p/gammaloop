@@ -1,9 +1,12 @@
-use linnet_render_py::PyDiagramRender;
+use linnet_py::PyDiagramRender;
+use linnet_py::PyGraph;
+use linnet_py::PyRenderSettings;
 use std::{
     collections::{BTreeMap, VecDeque},
     sync::{Arc, Mutex},
     time::{Duration, Instant},
 };
+use symbolica::atom::Atom;
 
 use feynkit_generator::{
     CancellationToken, DiagramGroup, EdgeColor, FilterScope, GenerationControl, GenerationFilter,
@@ -33,10 +36,10 @@ use crate::{
     graph::PyFeynmanDiagram,
     model::{PyModel, PyParticle, PyVertexRule},
     progress::MarimoProgress,
-    render_settings::PyRenderSettings,
+    render_settings::PyDiagramStyle,
 };
 use symbolica::{
-    api::python::{ConvertibleToExpression, PythonExpression, PythonGraph},
+    api::python::{ConvertibleToExpression, PythonExpression},
     graph::Graph,
 };
 
@@ -608,10 +611,16 @@ impl PyProcess {
     ///
     /// Parameters
     /// ----------
+    /// style : DiagramStyle or None, optional
+    ///     Particle, momentum, and physical index presentation.
     /// config : RenderSettings or None, optional
     ///     Particle-label, layout and drawing overrides shared with Feynman diagrams.
-    #[pyo3(signature = (*, config=None))]
-    fn render(&self, config: Option<&PyRenderSettings>) -> PyResult<PyDiagramRender> {
+    #[pyo3(signature = (*, config=None, style=None))]
+    fn render(
+        &self,
+        config: Option<&PyRenderSettings>,
+        style: Option<&PyDiagramStyle>,
+    ) -> PyResult<PyDiagramRender> {
         let resolve = |state: &[ParticleSelector]| {
             state
                 .iter()
@@ -628,7 +637,7 @@ impl PyProcess {
             .iter()
             .map(|state| resolve(state))
             .collect::<PyResult<Vec<_>>>()?;
-        let svg = crate::display::process_svg(&self.model, &incoming, &outgoing, config)?;
+        let svg = crate::display::process_svg(&self.model, &incoming, &outgoing, config, style)?;
         let html = format!(
             "<figure class=\"feynkit-process\" style=\"max-width:100%;margin:.5rem 0\"><div style=\"width:360px;max-width:100%;overflow-x:auto\">{svg}</div><figcaption style=\"font-size:.85em;opacity:.75\">{}</figcaption></figure>",
             crate::display::escape_html(&self.__repr__())
@@ -645,7 +654,7 @@ impl PyProcess {
     /// >>> from IPython.display import display
     /// >>> display(process)
     fn _repr_svg_(&self) -> PyResult<String> {
-        Ok(self.render(None)?.to_svg().to_owned())
+        self.render(None, None)?.to_svg()
     }
 
     /// Display the process blob, model and active restrictions in notebooks.
@@ -657,7 +666,7 @@ impl PyProcess {
     /// >>> from IPython.display import display
     /// >>> display(process)
     fn _repr_html_(&self) -> PyResult<String> {
-        Ok(self.render(None)?.to_html().to_owned())
+        self.render(None, None)?.to_html()
     }
 
     /// Return a process accepting any of the supplied final states.
@@ -963,7 +972,7 @@ impl PyProcess {
     ///     The display closes on completion, cancellation, or error.
     ///     Observe stage changes and coalesced counts on the calling Python thread.
     ///     Callback exceptions propagate and stop generation.
-    /// filter : Callable[[symbolica.core.Graph, int], bool] or None, optional
+    /// filter : Callable[[symbolica.community.graph.Graph, int], bool] or None, optional
     ///     Prune partial topologies during enumeration. The first N vertices are
     ///     complete. False rejects only this search branch. Edge data is the base
     ///     particle PDG code; node data is 0 internally, -(index+1) for incoming
@@ -1022,7 +1031,7 @@ impl PyProcess {
         cancellation_token: Option<PyCancellationToken>,
         #[gen_stub(override_type(type_repr = "typing.Literal['auto'] | collections.abc.Callable[[GenerationProgress], None] | None", imports = ("collections.abc", "typing")))]
         progress: Option<Py<PyAny>>,
-        #[gen_stub(override_type(type_repr = "collections.abc.Callable[[symbolica.core.Graph, int], bool] | None", imports = ("collections.abc", "symbolica.core")))]
+        #[gen_stub(override_type(type_repr = "collections.abc.Callable[[symbolica.community.graph.Graph, int], bool] | None", imports = ("collections.abc", "symbolica.community.graph")))]
         filter: Option<Py<PyAny>>,
     ) -> PyResult<PyGenerationResult> {
         let generation_type = GenerationType::Amplitude;
@@ -1173,7 +1182,7 @@ impl PyProcess {
     ///     The display closes on completion, cancellation, or error.
     ///     Observe stage changes and coalesced counts on the calling Python thread.
     ///     Callback exceptions propagate and stop generation.
-    /// filter : Callable[[symbolica.core.Graph, int], bool] or None, optional
+    /// filter : Callable[[symbolica.community.graph.Graph, int], bool] or None, optional
     ///     Prune partial topologies during enumeration. The first N vertices are
     ///     complete. False rejects only this search branch. Edge data is the base
     ///     particle PDG code; node data is 0 internally, -(index+1) for incoming
@@ -1234,7 +1243,7 @@ impl PyProcess {
         cancellation_token: Option<PyCancellationToken>,
         #[gen_stub(override_type(type_repr = "typing.Literal['auto'] | collections.abc.Callable[[GenerationProgress], None] | None", imports = ("collections.abc", "typing")))]
         progress: Option<Py<PyAny>>,
-        #[gen_stub(override_type(type_repr = "collections.abc.Callable[[symbolica.core.Graph, int], bool] | None", imports = ("collections.abc", "symbolica.core")))]
+        #[gen_stub(override_type(type_repr = "collections.abc.Callable[[symbolica.community.graph.Graph, int], bool] | None", imports = ("collections.abc", "symbolica.community.graph")))]
         filter: Option<Py<PyAny>>,
     ) -> PyResult<PyAmplitude> {
         let generation_type = GenerationType::Amplitude;
@@ -1392,7 +1401,7 @@ impl PyProcess {
     ///     The display closes on completion, cancellation, or error.
     ///     Observe stage changes and coalesced counts on the calling Python thread.
     ///     Callback exceptions propagate and stop generation.
-    /// filter : Callable[[symbolica.core.Graph, int], bool] or None, optional
+    /// filter : Callable[[symbolica.community.graph.Graph, int], bool] or None, optional
     ///     Prune partial topologies during enumeration. The first N vertices are
     ///     complete. False rejects only this search branch. Edge data is the base
     ///     particle PDG code; node data is 0 internally, -(index+1) for incoming
@@ -1451,7 +1460,7 @@ impl PyProcess {
         cancellation_token: Option<PyCancellationToken>,
         #[gen_stub(override_type(type_repr = "typing.Literal['auto'] | collections.abc.Callable[[GenerationProgress], None] | None", imports = ("collections.abc", "typing")))]
         progress: Option<Py<PyAny>>,
-        #[gen_stub(override_type(type_repr = "collections.abc.Callable[[symbolica.core.Graph, int], bool] | None", imports = ("collections.abc", "symbolica.core")))]
+        #[gen_stub(override_type(type_repr = "collections.abc.Callable[[symbolica.community.graph.Graph, int], bool] | None", imports = ("collections.abc", "symbolica.community.graph")))]
         filter: Option<Py<PyAny>>,
     ) -> PyResult<PyGenerationResult> {
         let generation_type = GenerationType::CrossSection;
@@ -2767,6 +2776,7 @@ impl PyGenerationResult {
                 .map(PyFeynmanDiagram::from),
             None,
             None,
+            None,
             crate::display::PREVIEW_LIMIT,
         )
         .map(|(html, _)| html)
@@ -2949,9 +2959,7 @@ fn run_generation(
     let apply_filter =
         move |graph: &Graph<NodeColor, EdgeColor>, completed_vertices| -> PyResult<bool> {
             Python::attach(|py| {
-                // Replace these Python API calls with PythonGraph::from once Symbolica
-                // exposes its constructor. Keep the callback's Graph type unchanged.
-                let snapshot = py.get_type::<PythonGraph>().call0()?;
+                let mut snapshot = Graph::new();
                 for node in graph.nodes() {
                     let label = node.data.external.as_ref().map_or(0, |external| {
                         let index = external.index as i64 + 1;
@@ -2960,19 +2968,19 @@ fn run_generation(
                             feynkit_graph::ExternalState::Outgoing => index,
                         }
                     });
-                    snapshot.call_method1("add_node", (label,))?;
+                    snapshot.add_node(Atom::num(label));
                 }
                 for edge in graph.edges() {
-                    snapshot.call_method1(
-                        "add_edge",
-                        (
+                    snapshot
+                        .add_edge(
                             edge.vertices.0,
                             edge.vertices.1,
                             edge.directed,
-                            pdgs[edge.data.particle.index()],
-                        ),
-                    )?;
+                            Atom::num(pdgs[edge.data.particle.index()]),
+                        )
+                        .map_err(pyo3::exceptions::PyValueError::new_err)?;
                 }
+                let snapshot = PyGraph::from_symbolica(py, &snapshot)?;
                 filter
                     .as_ref()
                     .unwrap()
@@ -3352,8 +3360,11 @@ for generate in (fk.Process.generate_diagrams, fk.Process.generate_amplitude, fk
             crate::initialize_feynkit(&module).unwrap();
             let locals = PyDict::new(py);
             locals.set_item("fk", &module).unwrap();
+            locals.set_item("Graph", py.get_type::<PyGraph>()).unwrap();
+            let graph_module = PyModule::new(py, "symbolica.community.graph").unwrap();
+            linnet_py::register(&graph_module).unwrap();
             locals
-                .set_item("Graph", py.get_type::<PythonGraph>())
+                .set_item("node", graph_module.getattr("node").unwrap())
                 .unwrap();
             locals
                 .set_item(
@@ -3366,7 +3377,7 @@ import threading
 
 model = fk.Model.from_json(MODEL_JSON)
 process = model.process([1000], [1000, 1000], vertex_allow=["V_3_SCALAR_000"])
-settings = dict(max_vertices=3, threads=2)
+settings = dict(max_vertices=3, threads=2, numerator_grouping=fk.NumeratorGrouping("up_to_scalar"))
 caller = threading.get_ident()
 
 for via_model in (True, False):
@@ -3390,14 +3401,14 @@ for via_model in (True, False):
     def keep(graph, completed_vertices):
         assert threading.get_ident() == caller
         assert isinstance(graph, Graph)
-        assert 0 <= completed_vertices <= graph.num_nodes()
-        assert all(data == 1000 for source, target, directed, data in graph.edges())
+        assert 0 <= completed_vertices <= graph.n_nodes
+        assert all(edge.data == 1000 for edge in graph.edges())
         topologies.append((graph, completed_vertices))
         return True
 
     result = generate(progress=report, filter=keep)
     assert result.report.completed and len(result) == len(baseline)
-    assert topologies and any(n < g.num_nodes() for g, n in topologies)
+    assert topologies and any(n < g.n_nodes for g, n in topologies)
     assert updates[0].stage == "topologies"
     assert updates[-1].stage == "complete"
     assert updates[-1].completed == len(result)
@@ -3407,7 +3418,7 @@ for via_model in (True, False):
         if before.stage == after.stage:
             assert before.completed <= after.completed
     # Snapshots outlive enumeration and never mutate its internal graph.
-    topologies[0][0].add_node(42)
+    topologies[0][0].add_node(node(data=42))
     assert len(generate()) == len(baseline)
 
     updates.clear()

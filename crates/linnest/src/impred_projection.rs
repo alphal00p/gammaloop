@@ -3,7 +3,7 @@
 use crate::{TreeInitCfg, TypstGraph};
 use cgmath::{InnerSpace, Point2};
 use linnet::half_edge::involution::{EdgeIndex, Flow, HedgePair};
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 #[cfg(any(test, feature = "projection-service"))]
 use std::collections::BTreeSet;
 use std::{collections::BTreeMap, error::Error};
@@ -620,7 +620,11 @@ impl ProjectionSession {
                             format!("external edge {edge} endpoint identity disagrees").into()
                         );
                     }
-                    if source { route.len() - 1 } else { 0 }
+                    if source {
+                        route.len() - 1
+                    } else {
+                        0
+                    }
                 }
                 HedgePair::Split { .. } => {
                     return Err("split edges must be separated before ImPrEd layout".into());
@@ -712,12 +716,10 @@ impl ProjectionSession {
         if carrier_crossings(&positions, &routes)? != before_crossings {
             return Err("native seed constraints changed the embedding's crossings".into());
         }
-        seed["positions"] = json!(
-            positions
-                .iter()
-                .map(|(key, p)| (key, [p.x, p.y]))
-                .collect::<BTreeMap<_, _>>()
-        );
+        seed["positions"] = json!(positions
+            .iter()
+            .map(|(key, p)| (key, [p.x, p.y]))
+            .collect::<BTreeMap<_, _>>());
         seed["routes"] = json!(routes);
         seed["anchor_ids"] = json!(anchors);
         if let Some(object) = seed.as_object_mut() {
@@ -882,273 +884,13 @@ impl ProjectionService {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn edge_seed() -> Value {
-        json!({
-            "positions":{"v:0":[0.0,0.0],"v:1":[8.0,0.0]},
-            "node_ids":{"0":"v:0","1":"v:1"},
-            "routes":{"0":["v:0","v:1"]},
-            "external_ids":{},"incoming_ids":[],"outgoing_ids":[],"report":{},
-        })
-    }
-
-    #[test]
-    fn initializer_preserves_authored_pins_and_original_payload() {
-        let graph = TypstGraph::parse(
-            r#"digraph {
-            a [id=0 pos="x:2!" label="keep node"]
-            b [id=1 pos="y:-1!"]
-            a -> b [id=0 pos="x:5!" label="keep edge" particle="g"]
-        }"#,
-        )
-        .unwrap();
-        let (mut session, initialized) =
-            ProjectionSession::initialize(graph.clone(), edge_seed()).unwrap();
-        assert_eq!(initialized["state"]["positions"]["v:0"], json!([2.0, 0.0]));
-        assert_eq!(initialized["state"]["positions"]["v:1"], json!([8.0, -1.0]));
-        assert_eq!(
-            initialized["state"]["positions"]["native:anchor:0"],
-            json!([5.0, 0.0])
-        );
-        let final_state = session
-            .request(&json!({"op":"result","positions":{
-                "v:0":[-100.0,1.0],"v:1":[9.0,100.0],"native:anchor:0":[100.0,1.0]
-            }}))
-            .unwrap();
-        assert_eq!(
-            final_state["geometry"]["nodes"],
-            json!([[2.0, 1.0], [9.0, -1.0]])
-        );
-        assert_eq!(final_state["geometry"]["edges"], json!([[5.0, 1.0]]));
-        let result: TypstGraph = serde_json::from_value(final_state["graph"].clone()).unwrap();
-        assert_eq!(
-            result[EdgeIndex(0)].statements,
-            graph[EdgeIndex(0)].statements
-        );
-        assert_eq!(
-            result[crate::NodeIndex(0)].statements,
-            graph[crate::NodeIndex(0)].statements
-        );
-    }
-
-    #[test]
-    fn external_refinement_retains_identity_and_exports_half_routes() {
-        let graph = TypstGraph::parse(
-            r#"digraph {
-            ext [style=invis]
-            a [id=0]
-            ext -> a:0 [id=0]
-            a:1 -> ext [id=1]
-        }"#,
-        )
-        .unwrap();
-        let diagram = graph.impred_diagram().unwrap();
-        assert_eq!(diagram["edges"][0]["state"], "incoming");
-        assert_eq!(diagram["edges"][1]["state"], "outgoing");
-        let seed = json!({
-            "positions":{"v:0":[0.0,0.0],"x:0":[-3.0,0.0],"x:1":[3.0,0.0]},
-            "node_ids":{"0":"v:0"},"routes":{"0":["x:0","v:0"],"1":["v:0","x:1"]},
-            "external_ids":{"0":"x:0","1":"x:1"},"incoming_ids":["x:0"],"outgoing_ids":["x:1"],"report":{}
-        });
-        let (mut session, reply) = ProjectionSession::initialize(graph, seed).unwrap();
-        let mut state = reply["state"].clone();
-        state["positions"]["b:new"] = json!([1.5, 0.0]);
-        state["routes"]["1"] = json!(["v:0", "b:new", "x:1"]);
-        let updated = session.request(&json!({"op":"update_external_routes","positions":state["positions"],"routes":state["routes"]})).unwrap();
-        assert_eq!(updated["inserted_points"], 1);
-        let result = session
-            .result(&json!({"positions":state["positions"]}))
-            .unwrap();
-        assert_eq!(result["geometry"]["routes"], json!([[], [[1.5, 0.0]]]));
-        assert_eq!(
-            result["geometry"]["edges"],
-            json!([[-3.0, 0.0], [3.0, 0.0]])
-        );
-        state["positions"].as_object_mut().unwrap().remove("b:new");
-        state["routes"]["1"] = json!(["v:0", "x:1"]);
-        let contracted = session.request(&json!({"op":"update_external_routes","positions":state["positions"],"routes":state["routes"]})).unwrap();
-        assert_eq!(contracted["removed_points"], 1);
-        assert_eq!(contracted["constraints"], reply["ready"]["constraints"]);
-    }
-
-    #[test]
-    fn initializer_keeps_reversed_cut_groups_separate() {
-        let graph = TypstGraph::parse(
-            r#"digraph {
-                left [id=0]
-                right [id=1]
-                ext [style=invis]
-                right -> ext [id=0 pos="3,-1" pin="x:@+right,y:@cut-10" "group-start-y"=true]
-                right -> ext [id=1 pos="3,1" pin="x:@+right,y:@cut-20" "group-start-y"=true]
-                ext -> left [id=2 pos="-3,-1" pin="x:@-left,y:@cut-20" "group-start-y"=true]
-                ext -> left [id=3 pos="-3,1" pin="x:@-left,y:@cut-10" "group-start-y"=true]
-                left -> right [id=4]
-            }"#,
-        )
-        .unwrap();
-        let seed = json!({
-            "positions":{"v:0":[-1.0,0.0],"v:1":[1.0,0.0],
-                "x:0":[3.0,-1.0],"x:1":[3.0,1.0],
-                "x:2":[-3.0,-1.0],"x:3":[-3.0,1.0]},
-            "node_ids":{"0":"v:0","1":"v:1"},
-            "routes":{"0":["v:1","x:0"],"1":["v:1","x:1"],
-                "2":["x:2","v:0"],"3":["x:3","v:0"],"4":["v:0","v:1"]},
-            "external_ids":{"0":"x:0","1":"x:1","2":"x:2","3":"x:3"},
-            "incoming_ids":["x:2","x:3"],"outgoing_ids":["x:0","x:1"],"report":{}
-        });
-        let (session, initialized) = ProjectionSession::initialize(graph, seed).unwrap();
-        let mut positions = initialized["state"]["positions"].clone();
-        assert_eq!(positions["x:0"], json!([3.0, -1.0]));
-        assert_eq!(positions["x:1"], json!([3.0, 1.0]));
-        assert_eq!(positions["x:2"], json!([-3.0, 1.0]));
-        assert_eq!(positions["x:3"], json!([-3.0, -1.0]));
-        let mut layout = session.impred_layout().unwrap();
-        layout
-            .solve(linnet::half_edge::layout::impred::ImpredConfig {
-                steps: 0,
-                ..Default::default()
-            })
-            .unwrap();
-
-        // Subsequent proposals still average group-start members, rather than
-        // granting their canonical representative a different movement weight.
-        for (edge, y) in [(0, -2.0), (1, 2.0), (2, 6.0), (3, -6.0)] {
-            positions[format!("x:{edge}")][1] = json!(y);
-        }
-        let projected = session.project(&json!({"positions":positions})).unwrap();
-        assert_eq!(projected["positions"]["x:0"][1], -4.0);
-        assert_eq!(projected["positions"]["x:3"][1], -4.0);
-        assert_eq!(projected["positions"]["x:1"][1], 4.0);
-        assert_eq!(projected["positions"]["x:2"][1], 4.0);
-    }
-
-    #[test]
-    fn initializer_rejects_pins_that_destroy_the_carrier() {
-        let graph = TypstGraph::parse(
-            r#"digraph {
-            a [id=0 pos="x:8!"]
-            b [id=1]
-            a -> b [id=0]
-        }"#,
-        )
-        .unwrap();
-        let error = ProjectionSession::initialize(graph, edge_seed())
-            .err()
-            .unwrap();
-        assert!(error.to_string().contains("overlapping carrier"));
-    }
-
-    #[test]
-    fn native_solver_import_preserves_pins_and_physical_payload() {
-        let graph = TypstGraph::parse(
-            r#"digraph {
-                a [id=0 pos="x:2!" label="keep node"]
-                b [id=1 pos="y:-1!"]
-                a:0 -> b:1 [id=0 pos="x:5!" label="keep edge"]
-            }"#,
-        )
-        .unwrap();
-        let (session, _) = ProjectionSession::initialize(graph.clone(), edge_seed()).unwrap();
-        let mut layout = session.impred_layout().unwrap();
-        let imported = session.apply_impred_layout(&layout).unwrap();
-        assert_eq!(imported[crate::NodeIndex(0)].pos, Point2::new(2.0, 0.0));
-        assert_eq!(imported[crate::NodeIndex(1)].pos, Point2::new(8.0, -1.0));
-        assert_eq!(imported[EdgeIndex(0)].pos, Point2::new(5.0, 0.0));
-        // Authored statements survive; the paired label gains its carrier gap.
-        let mut statements = graph[EdgeIndex(0)].statements.clone();
-        statements.insert("layout-label-gap".into(), "0".into());
-        assert_eq!(imported[EdgeIndex(0)].statements, statements);
-        assert_eq!(imported.n_nodes(), graph.n_nodes());
-        assert_eq!(imported.n_edges(), graph.n_edges());
-        layout.positions[layout.node_points[0]][0] += 1.0;
-        assert!(
-            session
-                .apply_impred_layout(&layout)
-                .err()
-                .unwrap()
-                .to_string()
-                .contains("authored fixed coordinate")
-        );
-    }
-
-    #[test]
-    fn native_solver_import_keeps_source_and_sink_route_orientation() {
-        let graph =
-            TypstGraph::parse(r#"digraph { a [id=0] b [id=1] a:0 -> b:1 [id=0] }"#).unwrap();
-        let seed = json!({
-            "positions":{"v:0":[0.0,0.0],"v:1":[8.0,0.0],
-                "b:0":[1.0,1.0],"b:1":[4.0,2.0],"b:2":[7.0,1.0]},
-            "node_ids":{"0":"v:0","1":"v:1"},
-            "routes":{"0":["v:0","b:0","b:1","b:2","v:1"]},
-            "external_ids":{},"incoming_ids":[],"outgoing_ids":[],"report":{}
-        });
-        let (session, _) = ProjectionSession::initialize(graph, seed).unwrap();
-        let layout = session.impred_layout().unwrap();
-        let imported = session.apply_impred_layout(&layout).unwrap();
-        assert_eq!(imported[EdgeIndex(0)].pos, Point2::new(4.0, 2.0));
-        assert_eq!(
-            imported.graph[linnet::half_edge::involution::Hedge(0)].route_points,
-            vec![Point2::new(1.0, 1.0)]
-        );
-        assert_eq!(
-            imported.graph[linnet::half_edge::involution::Hedge(1)].route_points,
-            vec![Point2::new(7.0, 1.0)]
-        );
-    }
-
-    #[test]
-    fn impred_labels_follow_paired_carriers_in_every_label_layout() {
-        let mut graph = TypstGraph::parse(
-            r#"digraph {
-                ext [style=invis]
-                a [id=0]
-                b [id=1]
-                ext -> a:0 [id=0 "layout-label-gap"="0.7"]
-                a:1 -> b:2 [id=1 "layout-label-gap"="0.7"]
-            }"#,
-        )
-        .unwrap();
-        let seed = json!({
-            "positions":{"v:0":[0.0,0.0],"v:1":[4.0,0.0],"x:0":[-3.0,0.0]},
-            "node_ids":{"0":"v:0","1":"v:1"},
-            "routes":{"0":["x:0","v:0"],"1":["v:0","v:1"]},
-            "external_ids":{"0":"x:0"},"incoming_ids":["x:0"],"outgoing_ids":[],"report":{}
-        });
-        for label_layout in [
-            crate::LabelLayout::Normal,
-            crate::LabelLayout::DanglingTangent,
-            crate::LabelLayout::FixedLength,
-            crate::LabelLayout::FixedGap,
-        ] {
-            graph.layout_config.label_layout = label_layout;
-            let (session, _) = ProjectionSession::initialize(graph.clone(), seed.clone()).unwrap();
-            let imported = session
-                .apply_impred_layout(&session.impred_layout().unwrap())
-                .unwrap();
-            let gaps: Vec<_> = (0..2)
-                .map(|edge| {
-                    imported[EdgeIndex(edge)]
-                        .statements
-                        .get("layout-label-gap")
-                        .cloned()
-                })
-                .collect();
-            // Dangling gaps from an earlier force layout never survive ImPrEd.
-            assert_eq!(gaps, [None, Some("0".to_owned())]);
-        }
-    }
-}
-
 impl ProjectionSession {
     /// Build the shared native solver's dense coordinate view from the same
     /// immutable references used by projection and adaptive route ownership.
     pub fn impred_layout(&self) -> Result<linnet::half_edge::layout::impred::ImpredLayout> {
         use linnet::half_edge::layout::impred::{
-            EdgeLabel, ExternalFlow, ImpredLayout,
             movement::{AxisConstraint, PointRecord},
+            EdgeLabel, ExternalFlow, ImpredLayout,
         };
         let keys: Vec<_> = self.initial.keys().cloned().collect();
         let ids: BTreeMap<_, _> = keys
@@ -1401,5 +1143,263 @@ impl ProjectionSession {
         }
         graph.project_coordinates(CoordinateProjection::Proposal)?;
         Ok(graph)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn edge_seed() -> Value {
+        json!({
+            "positions":{"v:0":[0.0,0.0],"v:1":[8.0,0.0]},
+            "node_ids":{"0":"v:0","1":"v:1"},
+            "routes":{"0":["v:0","v:1"]},
+            "external_ids":{},"incoming_ids":[],"outgoing_ids":[],"report":{},
+        })
+    }
+
+    #[test]
+    fn initializer_preserves_authored_pins_and_original_payload() {
+        let graph = TypstGraph::parse(
+            r#"digraph {
+            a [id=0 pos="x:2!" label="keep node"]
+            b [id=1 pos="y:-1!"]
+            a -> b [id=0 pos="x:5!" label="keep edge" particle="g"]
+        }"#,
+        )
+        .unwrap();
+        let (mut session, initialized) =
+            ProjectionSession::initialize(graph.clone(), edge_seed()).unwrap();
+        assert_eq!(initialized["state"]["positions"]["v:0"], json!([2.0, 0.0]));
+        assert_eq!(initialized["state"]["positions"]["v:1"], json!([8.0, -1.0]));
+        assert_eq!(
+            initialized["state"]["positions"]["native:anchor:0"],
+            json!([5.0, 0.0])
+        );
+        let final_state = session
+            .request(&json!({"op":"result","positions":{
+                "v:0":[-100.0,1.0],"v:1":[9.0,100.0],"native:anchor:0":[100.0,1.0]
+            }}))
+            .unwrap();
+        assert_eq!(
+            final_state["geometry"]["nodes"],
+            json!([[2.0, 1.0], [9.0, -1.0]])
+        );
+        assert_eq!(final_state["geometry"]["edges"], json!([[5.0, 1.0]]));
+        let result: TypstGraph = serde_json::from_value(final_state["graph"].clone()).unwrap();
+        assert_eq!(
+            result[EdgeIndex(0)].statements,
+            graph[EdgeIndex(0)].statements
+        );
+        assert_eq!(
+            result[crate::NodeIndex(0)].statements,
+            graph[crate::NodeIndex(0)].statements
+        );
+    }
+
+    #[test]
+    fn external_refinement_retains_identity_and_exports_half_routes() {
+        let graph = TypstGraph::parse(
+            r#"digraph {
+            ext [style=invis]
+            a [id=0]
+            ext -> a:0 [id=0]
+            a:1 -> ext [id=1]
+        }"#,
+        )
+        .unwrap();
+        let diagram = graph.impred_diagram().unwrap();
+        assert_eq!(diagram["edges"][0]["state"], "incoming");
+        assert_eq!(diagram["edges"][1]["state"], "outgoing");
+        let seed = json!({
+            "positions":{"v:0":[0.0,0.0],"x:0":[-3.0,0.0],"x:1":[3.0,0.0]},
+            "node_ids":{"0":"v:0"},"routes":{"0":["x:0","v:0"],"1":["v:0","x:1"]},
+            "external_ids":{"0":"x:0","1":"x:1"},"incoming_ids":["x:0"],"outgoing_ids":["x:1"],"report":{}
+        });
+        let (mut session, reply) = ProjectionSession::initialize(graph, seed).unwrap();
+        let mut state = reply["state"].clone();
+        state["positions"]["b:new"] = json!([1.5, 0.0]);
+        state["routes"]["1"] = json!(["v:0", "b:new", "x:1"]);
+        let updated = session.request(&json!({"op":"update_external_routes","positions":state["positions"],"routes":state["routes"]})).unwrap();
+        assert_eq!(updated["inserted_points"], 1);
+        let result = session
+            .result(&json!({"positions":state["positions"]}))
+            .unwrap();
+        assert_eq!(result["geometry"]["routes"], json!([[], [[1.5, 0.0]]]));
+        assert_eq!(
+            result["geometry"]["edges"],
+            json!([[-3.0, 0.0], [3.0, 0.0]])
+        );
+        state["positions"].as_object_mut().unwrap().remove("b:new");
+        state["routes"]["1"] = json!(["v:0", "x:1"]);
+        let contracted = session.request(&json!({"op":"update_external_routes","positions":state["positions"],"routes":state["routes"]})).unwrap();
+        assert_eq!(contracted["removed_points"], 1);
+        assert_eq!(contracted["constraints"], reply["ready"]["constraints"]);
+    }
+
+    #[test]
+    fn initializer_keeps_reversed_cut_groups_separate() {
+        let graph = TypstGraph::parse(
+            r#"digraph {
+                left [id=0]
+                right [id=1]
+                ext [style=invis]
+                right -> ext [id=0 pos="3,-1" pin="x:@+right,y:@cut-10" "group-start-y"=true]
+                right -> ext [id=1 pos="3,1" pin="x:@+right,y:@cut-20" "group-start-y"=true]
+                ext -> left [id=2 pos="-3,-1" pin="x:@-left,y:@cut-20" "group-start-y"=true]
+                ext -> left [id=3 pos="-3,1" pin="x:@-left,y:@cut-10" "group-start-y"=true]
+                left -> right [id=4]
+            }"#,
+        )
+        .unwrap();
+        let seed = json!({
+            "positions":{"v:0":[-1.0,0.0],"v:1":[1.0,0.0],
+                "x:0":[3.0,-1.0],"x:1":[3.0,1.0],
+                "x:2":[-3.0,-1.0],"x:3":[-3.0,1.0]},
+            "node_ids":{"0":"v:0","1":"v:1"},
+            "routes":{"0":["v:1","x:0"],"1":["v:1","x:1"],
+                "2":["x:2","v:0"],"3":["x:3","v:0"],"4":["v:0","v:1"]},
+            "external_ids":{"0":"x:0","1":"x:1","2":"x:2","3":"x:3"},
+            "incoming_ids":["x:2","x:3"],"outgoing_ids":["x:0","x:1"],"report":{}
+        });
+        let (session, initialized) = ProjectionSession::initialize(graph, seed).unwrap();
+        let mut positions = initialized["state"]["positions"].clone();
+        assert_eq!(positions["x:0"], json!([3.0, -1.0]));
+        assert_eq!(positions["x:1"], json!([3.0, 1.0]));
+        assert_eq!(positions["x:2"], json!([-3.0, 1.0]));
+        assert_eq!(positions["x:3"], json!([-3.0, -1.0]));
+        let mut layout = session.impred_layout().unwrap();
+        layout
+            .solve(linnet::half_edge::layout::impred::ImpredConfig {
+                steps: 0,
+                ..Default::default()
+            })
+            .unwrap();
+
+        // Subsequent proposals still average group-start members, rather than
+        // granting their canonical representative a different movement weight.
+        for (edge, y) in [(0, -2.0), (1, 2.0), (2, 6.0), (3, -6.0)] {
+            positions[format!("x:{edge}")][1] = json!(y);
+        }
+        let projected = session.project(&json!({"positions":positions})).unwrap();
+        assert_eq!(projected["positions"]["x:0"][1], -4.0);
+        assert_eq!(projected["positions"]["x:3"][1], -4.0);
+        assert_eq!(projected["positions"]["x:1"][1], 4.0);
+        assert_eq!(projected["positions"]["x:2"][1], 4.0);
+    }
+
+    #[test]
+    fn initializer_rejects_pins_that_destroy_the_carrier() {
+        let graph = TypstGraph::parse(
+            r#"digraph {
+            a [id=0 pos="x:8!"]
+            b [id=1]
+            a -> b [id=0]
+        }"#,
+        )
+        .unwrap();
+        let error = ProjectionSession::initialize(graph, edge_seed())
+            .err()
+            .unwrap();
+        assert!(error.to_string().contains("overlapping carrier"));
+    }
+
+    #[test]
+    fn native_solver_import_preserves_pins_and_physical_payload() {
+        let graph = TypstGraph::parse(
+            r#"digraph {
+                a [id=0 pos="x:2!" label="keep node"]
+                b [id=1 pos="y:-1!"]
+                a:0 -> b:1 [id=0 pos="x:5!" label="keep edge"]
+            }"#,
+        )
+        .unwrap();
+        let (session, _) = ProjectionSession::initialize(graph.clone(), edge_seed()).unwrap();
+        let mut layout = session.impred_layout().unwrap();
+        let imported = session.apply_impred_layout(&layout).unwrap();
+        assert_eq!(imported[crate::NodeIndex(0)].pos, Point2::new(2.0, 0.0));
+        assert_eq!(imported[crate::NodeIndex(1)].pos, Point2::new(8.0, -1.0));
+        assert_eq!(imported[EdgeIndex(0)].pos, Point2::new(5.0, 0.0));
+        // Authored statements survive; the paired label gains its carrier gap.
+        let mut statements = graph[EdgeIndex(0)].statements.clone();
+        statements.insert("layout-label-gap".into(), "0".into());
+        assert_eq!(imported[EdgeIndex(0)].statements, statements);
+        assert_eq!(imported.n_nodes(), graph.n_nodes());
+        assert_eq!(imported.n_edges(), graph.n_edges());
+        layout.positions[layout.node_points[0]][0] += 1.0;
+        assert!(session
+            .apply_impred_layout(&layout)
+            .err()
+            .unwrap()
+            .to_string()
+            .contains("authored fixed coordinate"));
+    }
+
+    #[test]
+    fn native_solver_import_keeps_source_and_sink_route_orientation() {
+        let graph =
+            TypstGraph::parse(r#"digraph { a [id=0] b [id=1] a:0 -> b:1 [id=0] }"#).unwrap();
+        let seed = json!({
+            "positions":{"v:0":[0.0,0.0],"v:1":[8.0,0.0],
+                "b:0":[1.0,1.0],"b:1":[4.0,2.0],"b:2":[7.0,1.0]},
+            "node_ids":{"0":"v:0","1":"v:1"},
+            "routes":{"0":["v:0","b:0","b:1","b:2","v:1"]},
+            "external_ids":{},"incoming_ids":[],"outgoing_ids":[],"report":{}
+        });
+        let (session, _) = ProjectionSession::initialize(graph, seed).unwrap();
+        let layout = session.impred_layout().unwrap();
+        let imported = session.apply_impred_layout(&layout).unwrap();
+        assert_eq!(imported[EdgeIndex(0)].pos, Point2::new(4.0, 2.0));
+        assert_eq!(
+            imported.graph[linnet::half_edge::involution::Hedge(0)].route_points,
+            vec![Point2::new(1.0, 1.0)]
+        );
+        assert_eq!(
+            imported.graph[linnet::half_edge::involution::Hedge(1)].route_points,
+            vec![Point2::new(7.0, 1.0)]
+        );
+    }
+
+    #[test]
+    fn impred_labels_follow_paired_carriers_in_every_label_layout() {
+        let mut graph = TypstGraph::parse(
+            r#"digraph {
+                ext [style=invis]
+                a [id=0]
+                b [id=1]
+                ext -> a:0 [id=0 "layout-label-gap"="0.7"]
+                a:1 -> b:2 [id=1 "layout-label-gap"="0.7"]
+            }"#,
+        )
+        .unwrap();
+        let seed = json!({
+            "positions":{"v:0":[0.0,0.0],"v:1":[4.0,0.0],"x:0":[-3.0,0.0]},
+            "node_ids":{"0":"v:0","1":"v:1"},
+            "routes":{"0":["x:0","v:0"],"1":["v:0","v:1"]},
+            "external_ids":{"0":"x:0"},"incoming_ids":["x:0"],"outgoing_ids":[],"report":{}
+        });
+        for label_layout in [
+            crate::LabelLayout::Normal,
+            crate::LabelLayout::DanglingTangent,
+            crate::LabelLayout::FixedLength,
+            crate::LabelLayout::FixedGap,
+        ] {
+            graph.layout_config.label_layout = label_layout;
+            let (session, _) = ProjectionSession::initialize(graph.clone(), seed.clone()).unwrap();
+            let imported = session
+                .apply_impred_layout(&session.impred_layout().unwrap())
+                .unwrap();
+            let gaps: Vec<_> = (0..2)
+                .map(|edge| {
+                    imported[EdgeIndex(edge)]
+                        .statements
+                        .get("layout-label-gap")
+                        .cloned()
+                })
+                .collect();
+            // Dangling gaps from an earlier force layout never survive ImPrEd.
+            assert_eq!(gaps, [None, Some("0".to_owned())]);
+        }
     }
 }

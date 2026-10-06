@@ -192,7 +192,7 @@ macro_rules! drawing_class {
     ) => {
         #[doc = $doc]
         #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
-        #[pyclass(module = "linnet", unsendable, name = $python)]
+        #[pyclass(module = "symbolica.community.graph", unsendable, name = $python)]
         pub struct $rust {
             values: Option<Py<PyDict>>,
             guard: Option<DrawingGuard>,

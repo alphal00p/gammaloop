@@ -297,7 +297,9 @@ impl ImpredLayout {
             let Some(label) = label else { continue };
             if self.external[edge].is_some()
                 || label.extents.iter().any(|x| !x.is_finite() || *x < 0.0)
-                || label.center.is_some_and(|c| c.iter().any(|x| !x.is_finite()))
+                || label
+                    .center
+                    .is_some_and(|c| c.iter().any(|x| !x.is_finite()))
             {
                 return Err("ImPrEd labels need finite boxes on internal edges".into());
             }
@@ -806,7 +808,9 @@ impl ImpredLayout {
                 continue;
             }
             let anchor = self.point(self.anchor_points[edge]);
-            let away = label.center.map_or(anchor - center, |c| Vector2::from(c) - anchor);
+            let away = label
+                .center
+                .map_or(anchor - center, |c| Vector2::from(c) - anchor);
             let side = if away.dot(normal) < 0.0 { -1.0 } else { 1.0 };
             let rest = self.label_rest(edge, &label, normal, side, config);
             self.labels[edge] = Some(EdgeLabel {
@@ -853,7 +857,11 @@ impl ImpredLayout {
 
     /// The point, unit tangent and left normal at an arc distance along an
     /// edge's route polyline.
-    fn route_point_at(&self, edge: usize, arc: f64) -> Option<(Vector2<f64>, Vector2<f64>, Vector2<f64>)> {
+    fn route_point_at(
+        &self,
+        edge: usize,
+        arc: f64,
+    ) -> Option<(Vector2<f64>, Vector2<f64>, Vector2<f64>)> {
         let mut remaining = arc.max(0.0);
         let mut last = None;
         for pair in self.routes[edge].windows(2) {
@@ -877,13 +885,23 @@ impl ImpredLayout {
     /// Record each pinned label's placement relative to its carrier.
     fn pin_labels(&mut self) {
         for edge in 0..self.labels.len() {
-            let Some(label) = self.labels[edge] else { continue };
+            let Some(label) = self.labels[edge] else {
+                continue;
+            };
             let (true, Some(center)) = (label.pinned, label.center.map(Vector2::from)) else {
                 continue;
             };
-            let Some(frame) = self.label_frame(edge, center) else { continue };
-            let pin = [frame.arc / frame.length.max(1e-300), (center - frame.foot).dot(frame.normal)];
-            self.labels[edge] = Some(EdgeLabel { pin: Some(pin), ..label });
+            let Some(frame) = self.label_frame(edge, center) else {
+                continue;
+            };
+            let pin = [
+                frame.arc / frame.length.max(1e-300),
+                (center - frame.foot).dot(frame.normal),
+            ];
+            self.labels[edge] = Some(EdgeLabel {
+                pin: Some(pin),
+                ..label
+            });
         }
     }
 
@@ -938,9 +956,15 @@ impl ImpredLayout {
     /// search would choose.
     fn flip_labels(&mut self, model: &Model, config: ImpredConfig) {
         for edge in 0..self.labels.len() {
-            let Some(label) = self.labels[edge].filter(|label| !label.pinned) else { continue };
-            let Some(center) = label.center.map(Vector2::from) else { continue };
-            let Some(frame) = self.label_frame(edge, center) else { continue };
+            let Some(label) = self.labels[edge].filter(|label| !label.pinned) else {
+                continue;
+            };
+            let Some(center) = label.center.map(Vector2::from) else {
+                continue;
+            };
+            let Some(frame) = self.label_frame(edge, center) else {
+                continue;
+            };
             let side = if (center - frame.foot).dot(frame.normal) < 0.0 {
                 -1.0
             } else {
@@ -1025,8 +1049,7 @@ impl ImpredLayout {
                 } else {
                     1.0
                 };
-                let offset =
-                    box_support(label.extents, frame.normal) + LABEL_GAP * config.target;
+                let offset = box_support(label.extents, frame.normal) + LABEL_GAP * config.target;
                 let rest = frame.foot + side * offset * frame.normal;
                 let across = (rest - center).dot(frame.normal) * frame.normal;
                 let range = (frame.length * 3.0 / 32.0, frame.length * 29.0 / 32.0);
@@ -1397,7 +1420,8 @@ impl ImpredLayout {
         while epoch < config.steps {
             let stride = config.integration_stride(epoch);
             let u = config.warm_start
-                + (1.0 - config.warm_start) * epoch as f64 / config.steps.saturating_sub(1).max(1) as f64;
+                + (1.0 - config.warm_start) * epoch as f64
+                    / config.steps.saturating_sub(1).max(1) as f64;
             let pairs = self.point_segments(&model);
             let mut forces = self.forces(&model, &pairs, config, u, &pull);
             let label_forces = self.label_forces(&model, config, 2.0 + 2.0 * u, &mut forces);
@@ -1842,14 +1866,12 @@ mod tests {
                 assert_eq!(progress.last(), Some(&steps));
             }
         }
-        assert!(
-            ImpredConfig {
-                step_scale: 0,
-                ..fixture.config
-            }
-            .validate()
-            .is_err()
-        );
+        assert!(ImpredConfig {
+            step_scale: 0,
+            ..fixture.config
+        }
+        .validate()
+        .is_err());
     }
 
     fn dangling(points: &[[f64; 2]]) -> ImpredLayout {
@@ -1887,13 +1909,11 @@ mod tests {
         assert_eq!(layout.routes[0], vec![0, 2, 1]);
         assert_eq!(layout.positions[2], [4.0, 0.0]);
         let model = layout.model(&[true], 1.0);
-        assert!(
-            model
-                .pair_weights
-                .iter()
-                .flatten()
-                .all(|&value| value == 0.0)
-        );
+        assert!(model
+            .pair_weights
+            .iter()
+            .flatten()
+            .all(|&value| value == 0.0));
         let after = layout.segment_forces(&model, config, 1.0);
         assert_eq!(after[0], before[0] * 0.25);
         assert_eq!(after[2], Vector2::zero());

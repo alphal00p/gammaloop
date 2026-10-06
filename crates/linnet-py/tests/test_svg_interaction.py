@@ -8,7 +8,7 @@ from collections import Counter
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-import linnet as lp
+from symbolica.community import graph as lp
 
 SVG = "{http://www.w3.org/2000/svg}"
 XLINK = "{http://www.w3.org/1999/xlink}"
@@ -39,8 +39,8 @@ class SvgInteractionTests(unittest.TestCase):
                 extensions={"particle": self.unsafe_edge},
             ),
             lp.edge(lp.source(right), "outgoing"),
-            render_config=lp.RenderConfig(
-                layouts=lp.LayoutOptions(seed=19, steps=20, label_steps=10)
+            render_config=lp.RenderSettings(
+                layouts=lp.LayoutSettings(seed=19, steps=20, label_steps=10)
             ),
         )
 
@@ -168,11 +168,11 @@ class SvgInteractionTests(unittest.TestCase):
         self.assertEqual(ET.tostring(native_root), ET.tostring(decorated_root))
 
     def test_svg_file_and_rich_representations_share_the_prepared_drawing(self):
-        prepared = self.graph.prepare_render()
+        prepared = self.graph.render()
         expected = prepared.to_svg()
         with TemporaryDirectory() as directory:
             output = Path(directory) / "graph.svg"
-            self.assertEqual(prepared.render(output), output)
+            self.assertEqual(prepared.save(output), output)
             self.assertEqual(output.read_text(), expected)
         self.assertEqual(self.graph._repr_html_(), self.graph._repr_svg_())
         self.assertIn('data-linnet-interactive="true"', self.graph._repr_html_())

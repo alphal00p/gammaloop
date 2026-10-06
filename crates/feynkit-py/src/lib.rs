@@ -46,7 +46,7 @@ pub use model::{
     PyParameterType, PyParticle, PyPropagator, PyVertexRule,
 };
 pub use progress::MarimoProgress;
-pub use render_settings::PyRenderSettings;
+pub use render_settings::PyDiagramStyle;
 pub use tensor::PyTensorReducer;
 #[cfg(feature = "ufo")]
 pub use ufo::{PyLoadedModel, PyUfoLoadDiagnostics, PyUfoLoader};
@@ -169,7 +169,7 @@ impl SymbolicaCommunityModule for FeynkitModule {
 /// Register FeynKit classes in an existing Symbolica community module.
 pub fn initialize_feynkit(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<symbols::PySymbols>()?;
-    linnet_render_py::register(module.py())?;
+
     render_settings::register(module)?;
     error::register(module)?;
     amplitude::register(module)?;
@@ -348,6 +348,28 @@ if errors:
         ))?;
         Ok(())
     })
+}
+
+static CITATIONS_USED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+#[inline]
+pub(crate) fn record_usage() {
+    use std::sync::atomic::Ordering;
+    if !CITATIONS_USED.load(Ordering::Relaxed) {
+        CITATIONS_USED.store(true, Ordering::Relaxed);
+    }
+}
+
+static TENSOR_CITATIONS_USED: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
+
+#[inline]
+fn record_tensor_usage() {
+    record_usage();
+    spynso3::SpensoModule::record_usage();
+    if !TENSOR_CITATIONS_USED.load(std::sync::atomic::Ordering::Relaxed) {
+        TENSOR_CITATIONS_USED.store(true, std::sync::atomic::Ordering::Relaxed);
+    }
 }
 
 #[cfg(test)]
@@ -816,27 +838,5 @@ class Generator:
                 .to_string()
                 .contains("callable generate omits parameters: options")
         );
-    }
-}
-
-static CITATIONS_USED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
-
-#[inline]
-pub(crate) fn record_usage() {
-    use std::sync::atomic::Ordering;
-    if !CITATIONS_USED.load(Ordering::Relaxed) {
-        CITATIONS_USED.store(true, Ordering::Relaxed);
-    }
-}
-
-static TENSOR_CITATIONS_USED: std::sync::atomic::AtomicBool =
-    std::sync::atomic::AtomicBool::new(false);
-
-#[inline]
-fn record_tensor_usage() {
-    record_usage();
-    spynso3::SpensoModule::record_usage();
-    if !TENSOR_CITATIONS_USED.load(std::sync::atomic::Ordering::Relaxed) {
-        TENSOR_CITATIONS_USED.store(true, std::sync::atomic::Ordering::Relaxed);
     }
 }

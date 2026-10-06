@@ -1,7 +1,6 @@
 # /// script
 # requires-python = ">=3.11"
 # dependencies = [
-#     "linnet==0.1.0",
 #     "symbolica==3.0.1",
 #     "marimo==0.24.0",
 #     "typst==0.15.0",
@@ -20,7 +19,7 @@ app = marimo.App(width="medium", app_title="FeynKit DOT rendering")
 def _():
     import html
 
-    import linnet as lp
+    from symbolica.community import graph as lp
     import marimo as mo
     import symbolica.community.hepkit as fk
 
@@ -495,12 +494,12 @@ def _(
         }
     # The shared physics template lightens sink halves by 45% and owns the
     # particle, label, arrow, and placement conventions.
-    render_config = lp.RenderConfig(
+    render_config = lp.RenderSettings(
         drawing=lp.DrawOptions(
             debug_label_collisions=show_collision_boxes.value,
             label_collision_padding=label_collision_padding.value,
         ),
-        layouts=lp.LayoutOptions(
+        layouts=lp.LayoutSettings(
             algorithm=layout_algorithm.value,
             steps=force_steps.value,
             seed=force_seed.value,

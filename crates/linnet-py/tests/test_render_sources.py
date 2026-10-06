@@ -4,7 +4,7 @@ import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-import linnet as ln
+from symbolica.community import graph as ln
 
 
 class RenderSourcesTests(unittest.TestCase):
@@ -16,8 +16,8 @@ class RenderSourcesTests(unittest.TestCase):
             ln.edge(ln.source(left), "first", ln.sink(right)),
             ln.edge(ln.source(left), "second", ln.sink(right)),
         )
-        explicit = ln.RenderConfig(
-            layouts=ln.LayoutOptions(algorithm=ln.LayoutAlgorithm.Impred)
+        explicit = ln.RenderSettings(
+            layouts=ln.LayoutSettings(algorithm=ln.LayoutAlgorithm.Impred)
         )
         rendered = graph.to_svg()
         self.assertIn("<svg", rendered)
@@ -27,12 +27,12 @@ class RenderSourcesTests(unittest.TestCase):
         with TemporaryDirectory() as directory:
             module_path = Path(directory) / "labels.typ"
             module_path.write_text("#let label = [original label]\n")
-            config = ln.RenderConfig(
+            config = ln.RenderSettings(
                 title=ln.TypstModule.file(module_path).content("label"),
-                layouts=ln.LayoutOptions(seed=13, steps=0),
+                layouts=ln.LayoutSettings(seed=13, steps=0),
                 template_options={"marker": "original"},
             )
-            prepared = ln.PreparedRender.from_sources(
+            prepared = ln.DiagramRender.from_sources(
                 {
                     "main.typ": b"""#set page(width: auto, height: auto, fill: none)
 #assert.eq(_linnet_config.options.marker, "original")
@@ -66,8 +66,8 @@ class RenderSourcesTests(unittest.TestCase):
             right,
             ln.edge(ln.source(left), "edge", ln.sink(right)),
         )
-        config = ln.RenderConfig(
-            layouts=ln.LayoutOptions(algorithm=ln.LayoutAlgorithm.Force, steps=0),
+        config = ln.RenderSettings(
+            layouts=ln.LayoutSettings(algorithm=ln.LayoutAlgorithm.Force, steps=0),
             selectors=ln.DrawingSelectors(
                 source=lambda half_edge: ln.HalfEdgeDrawing(
                     route_points=[(0.5, 1), (1.5, 1)]
@@ -75,23 +75,49 @@ class RenderSourcesTests(unittest.TestCase):
                 sink=lambda half_edge: ln.HalfEdgeDrawing(route_points=[(3, -1)]),
             ),
         )
-        prepared = graph.prepare_render(config=config)
+        prepared = graph.render(config=config)
         self.assertIn("route-points", prepared.typst_source)
         svg = prepared.to_svg()
         self.assertIn("<svg", svg)
         self.assertNotEqual(
-            svg, graph.to_svg(config=ln.RenderConfig(layouts=config.layouts))
+            svg, graph.to_svg(config=ln.RenderSettings(layouts=config.layouts))
         )
+
+    def test_multipage_snapshot_and_exports(self):
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            result = ln.DiagramRender.from_sources(
+                {"main.typ": b"one #pagebreak() two"}
+            )
+            self.assertEqual(len(result.to_svg_pages()), 2)
+            with self.assertRaisesRegex(ValueError, "2 pages"):
+                result.to_svg()
+            self.assertIsNone(result._repr_svg_())
+            self.assertEqual(len(result.save_pages(root / "svg")), 2)
+            self.assertTrue(
+                all(
+                    path.read_bytes().startswith(b"<svg")
+                    for path in (root / "svg").iterdir()
+                )
+            )
+            self.assertEqual(len(result.save_pages(root / "png", format="png")), 2)
+            result.save(root / "portable.typ")
+            portable = ln.DiagramRender.from_sources(
+                {"main.typ": (root / "portable.typ").read_bytes()}
+            )
+            self.assertEqual(len(portable.to_svg_pages()), 2)
+            result.save(root / "all.pdf")
+            self.assertTrue((root / "all.pdf").read_bytes().startswith(b"%PDF"))
 
     def test_invalid_configuration_and_missing_entrypoint_are_rejected(self):
         with self.assertRaises(TypeError):
-            ln.PreparedRender.from_sources({"main.typ": b"hello"}, config={})
+            ln.DiagramRender.from_sources({"main.typ": b"hello"}, config={})
         with self.assertRaisesRegex(ValueError, "main.typ"):
-            ln.PreparedRender.from_sources({})
+            ln.DiagramRender.from_sources({})
         with self.assertRaisesRegex(ValueError, "templates or selectors"):
-            ln.PreparedRender.from_sources(
+            ln.DiagramRender.from_sources(
                 {"main.typ": b"hello"},
-                config=ln.RenderConfig(
+                config=ln.RenderSettings(
                     selectors=ln.DrawingSelectors(edge=lambda edge: None)
                 ),
             )

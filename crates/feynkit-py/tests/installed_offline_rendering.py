@@ -11,13 +11,13 @@ import re
 import sys
 import xml.etree.ElementTree as ET
 
-import symbolica.community.render
-from symbolica.community import render
+import symbolica.community.graph
+from symbolica.community import graph as render
 from symbolica.community import hepkit as hep
 from symbolica.community import tensor as spenso
 from symbolica.core import S
 
-assert symbolica.community.render is render
+assert symbolica.community.graph is render
 
 original_import = builtins.__import__
 
@@ -42,7 +42,7 @@ builtins.__import__ = import_without_renderers
 
 
 def check_render_snapshot(value):
-    config = hep.RenderSettings(node_radius=5)
+    config = render.RenderSettings(drawing=render.DrawOptions(node_radius=5))
     drawing = value.render(config=config)
     assert isinstance(drawing, render.DiagramRender)
     svg, html = drawing.to_svg(), drawing.to_html()
@@ -53,13 +53,8 @@ def check_render_snapshot(value):
     assert drawing._mime_() == ("text/html", html)
     assert "#image(bytes(" in drawing.to_linnest()
     assert repr(drawing) == "DiagramRender()"
-    # Settings are immutable and the completed drawing remains reusable.
-    try:
-        config.node_radius = 6
-    except AttributeError:
-        pass
-    else:
-        raise AssertionError("render settings must be immutable")
+    # Results snapshot mutable settings at construction.
+    config.drawing = render.DrawOptions(node_radius=6)
     assert drawing.to_svg() == svg
     assert drawing._repr_html_() == html
     assert drawing._mime_() == ("text/html", html)
@@ -69,9 +64,10 @@ try:
     # Constructor signatures, documented properties, and early errors make
     # settings discoverable without importing the optional graph bindings.
     for settings_type in (
-        hep.RenderSettings,
+        render.RenderSettings,
+        render.DrawOptions,
         render.LayoutSettings,
-        render.StrokeStyle,
+        render.Stroke,
     ):
         signature = inspect.signature(settings_type)
         assert signature.parameters
@@ -79,43 +75,47 @@ try:
             parameter.kind is inspect.Parameter.KEYWORD_ONLY
             for parameter in signature.parameters.values()
         )
-        assert repr(settings_type()) == f"{settings_type.__name__}()"
-    assert "node_radius" in pydoc.render_doc(hep.RenderSettings)
+        assert repr(settings_type()).startswith(f"{settings_type.__name__}(")
+    assert "node_radius" in pydoc.render_doc(render.DrawOptions)
     assert "impred_steps" in pydoc.render_doc(render.LayoutSettings)
     for construct, keywords in (
-        (hep.RenderSettings, {"node_radius": -1}),
-        (hep.RenderSettings, {"node_radius": float("nan")}),
-        (render.LayoutSettings, {"layout_algo": "unknown"}),
+        (render.DrawOptions, {"node_radius": -1}),
+        (render.DrawOptions, {"node_radius": float("nan")}),
+        (render.LayoutSettings, {"algorithm": "unknown"}),
         (render.LayoutSettings, {"tree_dx": 0}),
         (render.LayoutSettings, {"impred_step_scale": 0}),
         (render.LayoutSettings, {"impred_spacing": float("inf")}),
         (render.LayoutSettings, {"impred_external_max_points": 4}),
         (render.LayoutSettings, {"impred_contract_chord_ratio": 2}),
-        (render.StrokeStyle, {"thickness": -1}),
-        (render.StrokeStyle, {"dash": "unknown"}),
+        (render.Stroke, {"thickness": -1}),
+        (render.Stroke, {"dash": "unknown"}),
     ):
         try:
             construct(**keywords)
-        except ValueError:
+        except (TypeError, ValueError):
             pass
         else:
             raise AssertionError(f"invalid settings accepted: {keywords}")
     try:
-        hep.RenderSettings(show_partcle=False)
+        hep.DiagramStyle(show_partcle=False)
     except TypeError:
         pass
     else:
         raise AssertionError("misspelled setting names must be rejected")
     model = hep.Model.qcd()
     process = model.process(["g"], ["g"])
-    settings = hep.RenderSettings(
-        layout=render.LayoutSettings(impred_steps=2),
-        node_fill="#112233",
-        node_stroke=render.StrokeStyle(paint="#445566", thickness=2),
-        edge_stroke=render.StrokeStyle(paint="#778899", dash="dashed"),
+    settings = render.RenderSettings(
+        layouts=render.LayoutSettings(impred_steps=2),
+        drawing=render.DrawOptions(
+            node_fill=render.Color("#112233"),
+            node_stroke=render.Stroke(paint=render.Color("#445566"), thickness=2),
+            edge_stroke=render.Stroke(
+                paint=render.Color("#778899"),
+                dash=render.Dash(render.DashPattern.Dashed),
+            ),
+        ),
     )
-    assert settings.layout.impred_steps == 2
-    assert settings.node_stroke.thickness == 2
+    assert settings.layouts.pass_count == 1
     styled = ET.fromstring(process.render(config=settings).to_svg())
     assert any(node.get("fill") == "#112233" for node in styled.iter())
     assert any(node.get("stroke") == "#445566" for node in styled.iter())
@@ -134,13 +134,21 @@ try:
     # Check the rendered SVG: seed-only checks miss pins lost during layout.
     ns = "{http://www.w3.org/2000/svg}"
     for incoming, outgoing, config in (
-        (["g"], ["g"], hep.RenderSettings()),
-        (["u", "u~"], ["u", "u~"], hep.RenderSettings()),
-        (["g", "g"], ["g", "g", "g"], hep.RenderSettings()),
-        (["u"] * 4, [], hep.RenderSettings()),
-        ([], ["u"] * 4, hep.RenderSettings()),
-        (["u", "u~"], ["u", "u~"], hep.RenderSettings(node_radius=5)),
-        (["u", "u~"], ["u", "u~"], hep.RenderSettings(node_radius=6)),
+        (["g"], ["g"], render.RenderSettings()),
+        (["u", "u~"], ["u", "u~"], render.RenderSettings()),
+        (["g", "g"], ["g", "g", "g"], render.RenderSettings()),
+        (["u"] * 4, [], render.RenderSettings()),
+        ([], ["u"] * 4, render.RenderSettings()),
+        (
+            ["u", "u~"],
+            ["u", "u~"],
+            render.RenderSettings(drawing=render.DrawOptions(node_radius=5)),
+        ),
+        (
+            ["u", "u~"],
+            ["u", "u~"],
+            render.RenderSettings(drawing=render.DrawOptions(node_radius=6)),
+        ),
     ):
         drawing = ET.fromstring(
             model.process(incoming, outgoing).render(config=config).to_svg()
@@ -179,18 +187,22 @@ try:
     amplitude = process.generate_amplitude(loops=2, progress=None)
     assert len(amplitude.diagrams) == 48
     assert "<svg" in amplitude._repr_html_()
-    for name in ("DiagramRender", "LayoutSettings", "StrokeStyle", "RenderSettings"):
-        assert getattr(render, name).__module__ == "symbolica.community.render"
+    for name in ("DiagramRender", "LayoutSettings", "Stroke", "RenderSettings"):
+        assert getattr(render, name).__module__ == "symbolica.community.graph"
         assert not hasattr(spenso, name)
-    for name in ("DiagramRender", "LayoutSettings", "StrokeStyle"):
+    for name in ("DiagramRender", "LayoutSettings", "Stroke", "RenderSettings"):
         assert not hasattr(hep, name)
     assert inspect.signature(amplitude.render).parameters["max_diagrams"].default == 6
     snapshot = amplitude.render(
-        config=hep.RenderSettings(edge_stroke=render.StrokeStyle(paint="#123456")),
+        config=render.RenderSettings(
+            drawing=render.DrawOptions(
+                edge_stroke=render.Stroke(paint=render.Color("#123456"))
+            )
+        ),
         max_diagrams=2,
         term_settings=spenso.DisplaySettings(show_dimensions=True),
     )
-    assert isinstance(snapshot, hep.AmplitudeRender)
+    assert type(snapshot) is render.DiagramRender
     assert len(snapshot.diagrams) == 2
     assert all(isinstance(item, render.DiagramRender) for item in snapshot.diagrams)
     assert all("#123456" in item.to_svg() for item in snapshot.diagrams)
@@ -222,23 +234,24 @@ try:
     untitled_bounds = ET.fromstring(drawing.to_svg()).get("viewBox").split()
     titled_bounds = (
         ET.fromstring(
-            renamed.render(config=hep.RenderSettings(title="Explicit title")).to_svg()
+            renamed.render(
+                config=render.RenderSettings(title="Explicit title")
+            ).to_svg()
         )
         .get("viewBox")
         .split()
     )
     assert float(titled_bounds[3]) > float(untitled_bounds[3])
-    config = hep.RenderSettings(show_particle=False, show_node_index=True)
+    style = hep.DiagramStyle(show_particle=False, show_node_index=True)
     basis = diagram.loop_momentum_basis
-    drawing = diagram.render(config=config, lmb=basis)
-    assert drawing.to_html() == diagram.to_html(config=config, lmb=basis)
-    assert drawing.to_linnest() == diagram.to_linnest(config=config, lmb=basis)
+    drawing = diagram.render(style=style, lmb=basis)
+    assert drawing.to_html() == diagram.to_html(style=style, lmb=basis)
+    assert drawing.to_linnest() == diagram.to_linnest(style=style, lmb=basis)
     ET.fromstring(diagram.render().to_svg())
     ET.fromstring(
         diagram.render(
-            config=hep.RenderSettings(
-                layout=render.LayoutSettings(impred_steps=2), show_particle=False
-            )
+            config=render.RenderSettings(layouts=render.LayoutSettings(impred_steps=2)),
+            style=hep.DiagramStyle(show_particle=False),
         ).to_svg()
     )
     expression = diagram.numerator_expression()
@@ -246,9 +259,7 @@ try:
     assert "<math" in expression.to_html()
     ET.fromstring(expression.to_svg())
     # The remaining graph types also render without Typst graph plugins.
-    ET.fromstring(
-        process.render(config=hep.RenderSettings(show_particle=False)).to_svg()
-    )
+    ET.fromstring(process.render(style=hep.DiagramStyle(show_particle=False)).to_svg())
     network = spenso.TensorNetwork(spenso.TensorExpression(S("direct_svg_test::x") + 2))
     ET.fromstring(
         network.render(config=render.RenderSettings(title="Native network")).to_svg()
@@ -430,9 +441,7 @@ try:
         assert len(tree.fundamental_cycle(internal_half.id).edges) == 1
     sewn_identities = None
     for split in (False, True):
-        svg = cross.render(
-            config=hep.RenderSettings(split_initial_state=split)
-        ).to_svg()
+        svg = cross.render(style=hep.DiagramStyle(split_initial_state=split)).to_svg()
         root = ET.fromstring(svg)
         targets = [n for n in root.iter() if "data-linnet-kind" in n.attrib]
         identities = {

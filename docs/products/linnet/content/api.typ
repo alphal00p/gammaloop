@@ -40,42 +40,39 @@ Cargo features enable optional capabilities:
 An item shown in an all-features API reference may not be available in a default build. Check
 its required feature and your `Cargo.toml` before using it.
 
-== Shared notebook rendering bindings
+== Community graph bindings
 
-The `linnet-render-py` crate owns `symbolica.community.render`: immutable
-`RenderSettings`, `LayoutSettings`, `StrokeStyle`, and displayable `DiagramRender`
-snapshots. Tensor networks and HepKit share these native classes. Registering either
-consumer registers the native bindings; the `render` package exposes them through
-normal Python imports. No standalone Python `linnet` package is needed.
-Linnet computes layouts, Linnest draws SVG geometry in Rust, and the embedded Typst
-compiler typesets labels. The bindings do not depend on tensor or particle-physics APIs.
+The `linnet-py` binding library owns `symbolica.community.graph`. Install the complete
+Symbolica Community wheel to use its builders, live graph views, subgraphs, DOT codecs,
+layout streams, graph algorithms, and rendering. There is no separate Linnet Python wheel.
+
+`RenderSettings` combines drawing options, layout sequences, selectors, templates, and
+export configuration. `LayoutSettings`, `Stroke`, and `DiagramRender` are shared by graphs,
+HepKit diagrams, and tensor networks. Ordinary domain drawings use native SVG geometry and
+embedded Typst labels; advanced rendering uses the embedded Linnest Typst pipeline.
 
 ```python
-from symbolica.community.render import RenderSettings, LayoutSettings, StrokeStyle
+from symbolica.community import graph
 
-settings = RenderSettings(
-    layout=LayoutSettings(layout_algo="dot"),
-    edge_stroke=StrokeStyle(paint="#6f4d85", thickness=1.2),
+settings = graph.RenderSettings(
+    layouts=graph.LayoutSettings(algorithm=graph.LayoutAlgorithm.Dot),
+    drawing=graph.DrawOptions(
+        edge_stroke=graph.Stroke(paint=graph.Color("#6f4d85"), thickness=1.2),
+    ),
 )
 ```
 
-Tensor networks accept these settings directly in `render(config=...)`. HepKit's
-`RenderSettings` adds particle, momentum, and diagram-specific options while delegating
-generic drawing options to these bindings. Both return the shared `DiagramRender`.
-Its SVG and HTML exports reuse the completed snapshot, including notebook interaction.
+Call `.render(config=settings)` to capture a `DiagramRender`. Its SVG, HTML, source,
+and file exports reuse the snapshot, even after later graph or settings mutations.
+HepKit's physics-specific options live in `DiagramStyle`, passed separately as `style`.
+For multipage renders, use `to_svg_pages()`; `to_svg()` requires exactly one page.
 
-Clinnet and the standalone Python `linnet` package also support the full Typst
-render contract. Clinnet invokes an external Typst executable; the standalone Python
-package compiles Linnest through its `typst` dependency.
+`Graph.generate()` takes `EdgeSignature` values and returns graph/group-size pairs.
+`HalfEdge` is a live graph view. Canonicalization and isomorphism compare expression-compatible
+payloads; use `node_key`, `edge_key`, and `half_edge_key` for custom data. Canonicalization
+preserves payload references and drawing metadata, which does not affect equivalence.
 
-== Standalone Python distribution
-
-#boundary("Distribution and import have different names", [
-  Install the Python distribution `linnet`, then import `linnet`. It requires Python 3.10
-  or newer. It is a standalone extension and is not a `symbolica.community` module.
-  Its package version is independent of the Rust `linnet` version. Record both versions when
-  diagnosing compatibility between Rust and Python code.
-])
+== Python graph workflows
 
 Try the #link("playground/")[live Python playground] for editable DOT and a browser notebook,
 or start with the runnable graph example in the #link("quickstart/python/")[Python quickstart].
@@ -92,7 +89,7 @@ Linnet types:
 ```python
 from dataclasses import dataclass
 
-from linnet import build, edge, node, sink, source
+from symbolica.community.graph import build, edge, node, sink, source
 
 
 @dataclass
@@ -155,7 +152,7 @@ index, or live-node key. Incremental endpoints resolve a current live `Node`, na
 named `NodeSpec`:
 
 ```python
-from linnet import Compass, Graph, edge, node, sink, source
+from symbolica.community.graph import Compass, Graph, edge, node, sink, source
 
 graph = Graph()
 graph.add_node(node("in", data=UserNodeData(object()), label="incoming"))
@@ -196,7 +193,7 @@ or indexed nodes and edges, exact half-edge indices, or live-view predicates, th
 object with Linnet's topology algorithms and owning transformations:
 
 ```python
-from linnet import DirectionBasis
+from symbolica.community.graph import DirectionBasis
 
 # Explicit selections are unioned. Selecting a node includes its incident crown.
 selected = graph.subgraph(nodes=["in"], edges=["propagator"])
@@ -295,29 +292,29 @@ and `MathSymbol`, plus recursively validated arrays and string-keyed dictionarie
 layout, placement, routing, anchor, pattern, mark, and debug choices use their exported enums;
 the structured Python reference lists the choices for each option.
 
-`GraphStyleOptions`, `LayoutOptions`, and `DrawOptions` cover the corresponding generic Linnest
+`GraphStyleOptions`, `LayoutSettings`, and `DrawOptions` cover the corresponding generic Linnest
 surfaces. `DrawingSelectors` maps arbitrary Python data to detached typed drawing values at render
 time. Layout passes retain their order:
 
 ```python
-from linnet import (
+from symbolica.community.graph import (
     Color,
     DrawingSelectors,
     EdgeDrawing,
     LayoutAlgorithm,
     LayoutDirection,
-    LayoutOptions,
+    LayoutSettings,
     Length,
-    RenderConfig,
+    RenderSettings,
     Stroke,
 )
 
-layouts = LayoutOptions(
+layouts = LayoutSettings(
     algorithm=LayoutAlgorithm.Force,
     direction=LayoutDirection.Right,
     steps=200,
 ).then(label_steps=80)
-graph.render_config = RenderConfig(
+graph.render_config = RenderSettings(
     title="Example",
     layouts=layouts,
     selectors=DrawingSelectors(
@@ -333,7 +330,7 @@ graph.render_config = RenderConfig(
     ),
 )
 
-output = graph.render("diagram.pdf")
+output = graph.render().save("diagram.pdf")
 svg = graph.to_svg()
 graph  # the final expression in a notebook renders inline
 ```
@@ -368,24 +365,24 @@ half-edges, and draw the complement dotted and muted through Linnest's subgraph 
 Selecting one half of a paired edge highlights only that half; selected isolated nodes are
 highlighted too. The display uses the owner's layout, drawing values, and render configuration
 without changing the graph or its stored settings. `region.to_svg(config=None)` returns the
-same SVG explicitly, and `region.prepare_render(config=None)` prepares it for inspection or
-export through `PreparedRender`. Like other selection operations, rendering checks the topology
+same SVG explicitly, and `region.render(config=None)` prepares it for inspection or
+export through `DiagramRender`. Like other selection operations, rendering checks the topology
 revision and raises `ReferenceError` for a stale selection.
 
 The selected template's defaults are overlaid by the graph's `render_config` and then by a sparse
-per-call `config`. `render(output, config=None)` writes PDF, SVG, or PNG according to the output
-suffix. `to_svg(config=None)` returns SVG text; `_repr_html_()` supports interactive notebook
+per-call `config`. `render(config=None).save(output)` writes PDF, SVG, PNG, HTML, or portable Typst according to the output
+suffix. Use `save_pages(directory, format="svg")` to export each page separately. `to_svg(config=None)` returns SVG text; `_repr_html_()` supports interactive notebook
 display, while `_repr_svg_()` supplies the SVG representation. These are
 the only high-level rendering methods; there are no raw command-line inputs or string-expression
-escape hatches. The Python distribution depends on `typst` 0.15.0 and compiles in-process without
+escape hatches. The Community wheel embeds the Typst compiler and compiles in-process without
 looking up or launching a Typst executable. Generated inputs and imported modules remain alive
 until compilation completes. The wheel has no Clinnet dependency and embeds the Linnest, Kurvst,
 CeTZ 0.5.1, and oxifmt 1.0.0 assets required by its default renderer, so that path does not depend
 on an installed Typst package cache or a network fetch.
 
-For inspection tools, `prepare_render(config=None)` evaluates selectors once and returns a
-`PreparedRender`. Its `typst_source` property is the exact generated entrypoint subsequently used
-by `to_svg()` or `render(path)` on that preparation. It keeps the ephemeral entrypoint, versioned
+For inspection tools, `render(config=None)` evaluates selectors once and returns a
+`DiagramRender`. Its `typst_source` property is the exact generated entrypoint subsequently used
+by `to_svg()` or `save(path)` on that result. It keeps the ephemeral entrypoint, versioned
 topology-only CBOR graph spec, bundled assets, and snapshots of referenced user template/module
 source trees alive. Editing or deleting the original files after preparation therefore cannot
 change that preparation. The graph spec contains structural names, indices, incidence, flow, and
@@ -395,11 +392,11 @@ serialization and never inspects arbitrary Python `.data`.
 The shipped notebook display is generic and model-neutral, including for graphs with dangling
 edges. It never infers amplitude, cross-section, particle, or momentum semantics from topology.
 An application that needs those concepts selects its own template and passes that template's
-closed native settings through `RenderConfig.template_options`. `INHERIT` leaves the preceding
+closed native settings through `RenderSettings.template_options`. `INHERIT` leaves the preceding
 configuration layer unchanged, while `None` becomes Typst `none`.
 
 ```python
-domain_template = RenderConfig(
+domain_template = RenderSettings(
     template="templates/domain-figure.typ",
     source_root=".",
     template_options={
@@ -425,7 +422,7 @@ values, and their getters return copies, so replace those fields rather than try
 nested object in place. `overlay()` returns a new configuration, and a per-call overlay never
 mutates the graph's stored defaults.
 
-Python drawing selectors belong on `RenderConfig.selectors`. They may inspect arbitrary `.data`,
+Python drawing selectors belong on `RenderSettings.selectors`. They may inspect arbitrary `.data`,
 but must return the corresponding detached `NodeDrawing`, `EdgeDrawing`, or `HalfEdgeDrawing`, or
 `None` when no defaults apply. Selector fields fill only drawing fields that are absent on the
 element, so explicit element drawing remains authoritative. Only the validated drawing snapshot
@@ -435,13 +432,13 @@ payload; custom particle styling works the same way and is not a special Linnet 
 ```python
 from dataclasses import dataclass
 
-from linnet import (
+from symbolica.community.graph import (
     Color,
     DrawingSelectors,
     EdgeDrawing,
     Length,
     MathSymbol,
-    RenderConfig,
+    RenderSettings,
     Stroke,
 )
 
@@ -461,7 +458,7 @@ def particle_drawing(value):
     )
 
 
-particle_style_example = RenderConfig(
+particle_style_example = RenderSettings(
     selectors=DrawingSelectors(edge=particle_drawing),
 )
 ```
@@ -473,7 +470,7 @@ The #source-link(
   "crates/linnet-py/examples/physics_render_settings.py",
   label: "editable DOT physics notebook",
 ) loads a model and parses compact or annotated DOT with `FeynmanDiagram.from_dot(model, dot)`.
-FeynKit renders the parsed diagram with a shared `RenderConfig`, including momentum labels
+FeynKit renders the parsed diagram with a shared `RenderSettings`, including momentum labels
 from its stored loop momentum basis and interactive SVG hover and selection.
 Run it from a checkout using a Python environment with Marimo, Linnet, and the Symbolica host
 containing `symbolica.community.hepkit`:
@@ -485,7 +482,7 @@ once, then updates coordinates from `LayoutStream.from_dot(...)` frames. It also
 in an exported Marimo WebAssembly notebook with the bundled Emscripten wheel.
 
 ```python
-from linnet import LayoutStream
+from symbolica.community.graph import LayoutStream
 
 stream = LayoutStream.from_dot("digraph { a -> b; b -> c; c -> a; }", every=4)
 node_names, endpoints = stream.node_names, stream.endpoints
@@ -507,7 +504,7 @@ existing Python `Graph` or its payloads.
 Typst callbacks that require measured geometry use an explicit module function reference:
 
 ```python
-from linnet import TypstModule
+from symbolica.community.graph import TypstModule
 
 styles = TypstModule.file("styles.typ")
 graph.node("in").drawing.label = styles.content("incoming_label")
@@ -556,7 +553,7 @@ unique DOT representation. Supply a `DotCodec` to `Graph.from_dot`, `Graph.from_
 ```python
 from dataclasses import dataclass
 
-from linnet import (
+from symbolica.community.graph import (
     DotCodec,
     DotEdgeData,
     DotHalfEdgeData,

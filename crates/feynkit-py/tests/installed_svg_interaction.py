@@ -7,6 +7,7 @@ from pathlib import Path
 
 from IPython.core.formatters import DisplayFormatter
 from marimo._output.formatting import try_format
+from symbolica.community import graph as rendering
 from symbolica.community import hepkit as fk
 
 model = fk.Model(Path(__file__).parent / "fixtures/scalars_2p_3p.json")
@@ -32,7 +33,9 @@ diagram = next(
 region = diagram.filter(edge=lambda edge: not edge.is_external)
 
 for value in (model.process(["scalar_0"], ["scalar_0"]), diagram, region):
-    drawing = value.render(config=fk.RenderSettings(node_radius=5))
+    drawing = value.render(
+        config=rendering.RenderSettings(drawing=rendering.DrawOptions(node_radius=5))
+    )
     bundle, _ = DisplayFormatter().format(drawing)
     assert bundle["text/html"] == drawing.to_html()
     assert bundle["image/svg+xml"] == drawing.to_svg()
@@ -48,9 +51,9 @@ edges = {edge.id: edge for edge in diagram.edges}
 expected = (
     {("node", vertex.id) for vertex in diagram.vertices}
     | {("edge", edge_id) for edge_id in edges}
-    | {("halfedge", half.index) for half in diagram.to_linnet().half_edges()}
+    | {("halfedge", half.index) for half in diagram.to_graph().half_edges()}
 )
-canonical = ET.fromstring(diagram.to_linnet()._repr_html_())
+canonical = ET.fromstring(diagram.to_graph()._repr_html_())
 shared_script = canonical.find(namespace + "script").text
 
 for value in (diagram, region):
@@ -111,24 +114,24 @@ cross_section = (
     .diagrams[0]
 )
 snapshot = cross_section.to_json()
-graph = cross_section.to_linnet()
+graph = cross_section.to_graph()
 edges = {edge.id: edge for edge in cross_section.edges}
 expected = (
     {("node", vertex.id) for vertex in cross_section.vertices}
     | {("edge", edge_id) for edge_id in edges}
     | {("halfedge", half.index) for half in graph.half_edges()}
 )
-for config in (
-    fk.RenderSettings(),
-    fk.RenderSettings(split_initial_state=True),
-    fk.RenderSettings(split_initial_state=False),
+for style in (
+    fk.DiagramStyle(show_momentum=True),
+    fk.DiagramStyle(split_initial_state=True, show_momentum=True),
+    fk.DiagramStyle(split_initial_state=False, show_momentum=True),
 ):
-    split = config.split_initial_state is not False
+    split = style.split_initial_state is not False
     for value in (
         cross_section,
         cross_section.filter(edge=lambda edge: edge.is_external),
     ):
-        root = ET.fromstring(value.render(config=config, momenta=True).to_svg())
+        root = ET.fromstring(value.render(style=style).to_svg())
         targets = root.findall(".//*[@data-linnet-kind]")
         assert {
             (target.attrib["data-linnet-kind"], int(target.attrib["data-linnet-id"]))

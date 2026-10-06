@@ -71,7 +71,6 @@
         "kurvst"
         "linnet"
         "linnet-py"
-        "linnet-render-py"
         "linnest"
         "typst-renderer"
       ];

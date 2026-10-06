@@ -171,15 +171,12 @@ impl LinnetCacheHolder {
         let Some(selection) = selection else {
             return Ok(diagram.inner.underlying().full_filter());
         };
-        // A supplied Linnet selection already has its extension loaded. Do not
-        // import an optional dependency just to reject a foreign Python object.
-        let module = py
-            .import("sys")?
-            .getattr("modules")?
-            .call_method1("get", ("linnet",))?;
-        if module.is_none() || !selection.is_instance(&module.getattr("Subgraph")?)? {
+        if selection
+            .extract::<PyRef<'_, linnet_py::PySubgraph>>()
+            .is_err()
+        {
             return Err(pyo3::exceptions::PyTypeError::new_err(
-                "subgraph must be a linnet.Subgraph from diagram.to_linnet()",
+                "subgraph must be a symbolica.community.graph.Subgraph from diagram.to_graph()",
             ));
         }
         let graph = self.graph(py, diagram)?;
@@ -238,7 +235,7 @@ impl LinnetCacheHolder {
 
 impl LinnetExport {
     fn build(py: Python<'_>, diagram: &PyFeynmanDiagram) -> PyResult<Self> {
-        let module = py.import("linnet")?;
+        let module = py.import("symbolica.community.graph")?;
         // A selection retains its parent's topology and stable element IDs.
         // Export the complete owner graph even when the caller is a view.
         let diagram = diagram.whole();
