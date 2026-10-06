@@ -40,14 +40,33 @@ Cargo features enable optional capabilities:
 An item shown in an all-features API reference may not be available in a default build. Check
 its required feature and your `Cargo.toml` before using it.
 
-#boundary("Rendering runs through Typst", [
-  Linnet can compute layout coordinates, but the supported renderer is not a native Rust drawing
-  backend. Clinnet invokes an external Typst 0.15 executable for command-line figure batches;
-  `linnet` uses the `typst` Python package to compile the same Linnest render contract
-  in-process from its own native graph-spec preparation.
-  Use #link("guides/clinnet/")[Clinnet] for batch rendering, or use
-  #link("guides/linnest/")[Linnest] when a Typst document owns the final drawing.
-])
+== Shared notebook rendering bindings
+
+The `linnet-render-py` crate owns `symbolica.community.render`: immutable
+`RenderSettings`, `LayoutSettings`, `StrokeStyle`, and displayable `DiagramRender`
+snapshots. Tensor networks and HepKit share these native classes. Registering either
+consumer registers the native bindings; the `render` package exposes them through
+normal Python imports. No standalone Python `linnet` package is needed.
+Linnet computes layouts, Linnest draws SVG geometry in Rust, and the embedded Typst
+compiler typesets labels. The bindings do not depend on tensor or particle-physics APIs.
+
+```python
+from symbolica.community.render import RenderSettings, LayoutSettings, StrokeStyle
+
+settings = RenderSettings(
+    layout=LayoutSettings(layout_algo="dot"),
+    edge_stroke=StrokeStyle(paint="#6f4d85", thickness=1.2),
+)
+```
+
+Tensor networks accept these settings directly in `render(config=...)`. HepKit's
+`RenderSettings` adds particle, momentum, and diagram-specific options while delegating
+generic drawing options to these bindings. Both return the shared `DiagramRender`.
+Its SVG and HTML exports reuse the completed snapshot, including notebook interaction.
+
+Clinnet and the standalone Python `linnet` package also support the full Typst
+render contract. Clinnet invokes an external Typst executable; the standalone Python
+package compiles Linnest through its `typst` dependency.
 
 == Standalone Python distribution
 

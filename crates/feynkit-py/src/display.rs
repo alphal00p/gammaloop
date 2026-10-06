@@ -6,7 +6,7 @@ use crate::render_settings::PyRenderSettings;
 use pyo3::prelude::*;
 use std::{collections::BTreeMap, fmt::Write};
 
-pub use spynso3::display::graph::PyDiagramRender;
+use linnet_render_py::PyDiagramRender;
 
 pub(crate) fn escape_html(value: &str) -> String {
     let mut escaped = String::with_capacity(value.len());

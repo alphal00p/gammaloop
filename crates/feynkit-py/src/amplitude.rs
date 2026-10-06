@@ -1,3 +1,4 @@
+use linnet_render_py::PyDiagramRender;
 use std::{collections::BTreeMap, sync::Arc};
 
 use feynkit_amplitude::{Amplitude, AmplitudeLeg, AmplitudeOptions, SquaredAmplitude};
@@ -712,7 +713,7 @@ pub struct PyAmplitudeRender {
     ///
     /// >>> svg = drawing.diagrams[0].to_svg()
     #[pyo3(get)]
-    diagrams: Vec<crate::PyDiagramRender>,
+    diagrams: Vec<PyDiagramRender>,
 }
 
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]

@@ -1,3 +1,4 @@
+use linnet_render_py::PyDiagramRender;
 use std::{
     collections::{BTreeMap, VecDeque},
     sync::{Arc, Mutex},
@@ -28,7 +29,6 @@ use pyo3_stub_gen::{
 
 use crate::{
     amplitude::PyAmplitude,
-    display::PyDiagramRender,
     error,
     graph::PyFeynmanDiagram,
     model::{PyModel, PyParticle, PyVertexRule},

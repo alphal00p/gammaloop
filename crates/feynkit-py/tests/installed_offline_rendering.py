@@ -11,9 +11,13 @@ import re
 import sys
 import xml.etree.ElementTree as ET
 
+import symbolica.community.render
+from symbolica.community import render
 from symbolica.community import hepkit as hep
 from symbolica.community import tensor as spenso
 from symbolica.core import S
+
+assert symbolica.community.render is render
 
 original_import = builtins.__import__
 
@@ -40,7 +44,7 @@ builtins.__import__ = import_without_renderers
 def check_render_snapshot(value):
     config = hep.RenderSettings(node_radius=5)
     drawing = value.render(config=config)
-    assert isinstance(drawing, hep.DiagramRender)
+    assert isinstance(drawing, render.DiagramRender)
     svg, html = drawing.to_svg(), drawing.to_html()
     ET.fromstring(svg)
     assert svg in html
@@ -64,7 +68,11 @@ def check_render_snapshot(value):
 try:
     # Constructor signatures, documented properties, and early errors make
     # settings discoverable without importing the optional graph bindings.
-    for settings_type in (hep.RenderSettings, hep.LayoutSettings, hep.StrokeStyle):
+    for settings_type in (
+        hep.RenderSettings,
+        render.LayoutSettings,
+        render.StrokeStyle,
+    ):
         signature = inspect.signature(settings_type)
         assert signature.parameters
         assert all(
@@ -73,18 +81,18 @@ try:
         )
         assert repr(settings_type()) == f"{settings_type.__name__}()"
     assert "node_radius" in pydoc.render_doc(hep.RenderSettings)
-    assert "impred_steps" in pydoc.render_doc(hep.LayoutSettings)
+    assert "impred_steps" in pydoc.render_doc(render.LayoutSettings)
     for construct, keywords in (
         (hep.RenderSettings, {"node_radius": -1}),
         (hep.RenderSettings, {"node_radius": float("nan")}),
-        (hep.LayoutSettings, {"layout_algo": "unknown"}),
-        (hep.LayoutSettings, {"tree_dx": 0}),
-        (hep.LayoutSettings, {"impred_step_scale": 0}),
-        (hep.LayoutSettings, {"impred_spacing": float("inf")}),
-        (hep.LayoutSettings, {"impred_external_max_points": 4}),
-        (hep.LayoutSettings, {"impred_contract_chord_ratio": 2}),
-        (hep.StrokeStyle, {"thickness": -1}),
-        (hep.StrokeStyle, {"dash": "unknown"}),
+        (render.LayoutSettings, {"layout_algo": "unknown"}),
+        (render.LayoutSettings, {"tree_dx": 0}),
+        (render.LayoutSettings, {"impred_step_scale": 0}),
+        (render.LayoutSettings, {"impred_spacing": float("inf")}),
+        (render.LayoutSettings, {"impred_external_max_points": 4}),
+        (render.LayoutSettings, {"impred_contract_chord_ratio": 2}),
+        (render.StrokeStyle, {"thickness": -1}),
+        (render.StrokeStyle, {"dash": "unknown"}),
     ):
         try:
             construct(**keywords)
@@ -101,10 +109,10 @@ try:
     model = hep.Model.qcd()
     process = model.process(["g"], ["g"])
     settings = hep.RenderSettings(
-        layout=hep.LayoutSettings(impred_steps=2),
+        layout=render.LayoutSettings(impred_steps=2),
         node_fill="#112233",
-        node_stroke=hep.StrokeStyle(paint="#445566", thickness=2),
-        edge_stroke=hep.StrokeStyle(paint="#778899", dash="dashed"),
+        node_stroke=render.StrokeStyle(paint="#445566", thickness=2),
+        edge_stroke=render.StrokeStyle(paint="#778899", dash="dashed"),
     )
     assert settings.layout.impred_steps == 2
     assert settings.node_stroke.thickness == 2
@@ -171,18 +179,20 @@ try:
     amplitude = process.generate_amplitude(loops=2, progress=None)
     assert len(amplitude.diagrams) == 48
     assert "<svg" in amplitude._repr_html_()
-    assert hep.DiagramRender is spenso.DiagramRender
-    assert hep.LayoutSettings is spenso.LayoutSettings
-    assert hep.StrokeStyle is spenso.StrokeStyle
+    for name in ("DiagramRender", "LayoutSettings", "StrokeStyle", "RenderSettings"):
+        assert getattr(render, name).__module__ == "symbolica.community.render"
+        assert not hasattr(spenso, name)
+    for name in ("DiagramRender", "LayoutSettings", "StrokeStyle"):
+        assert not hasattr(hep, name)
     assert inspect.signature(amplitude.render).parameters["max_diagrams"].default == 6
     snapshot = amplitude.render(
-        config=hep.RenderSettings(edge_stroke=hep.StrokeStyle(paint="#123456")),
+        config=hep.RenderSettings(edge_stroke=render.StrokeStyle(paint="#123456")),
         max_diagrams=2,
         term_settings=spenso.DisplaySettings(show_dimensions=True),
     )
     assert isinstance(snapshot, hep.AmplitudeRender)
     assert len(snapshot.diagrams) == 2
-    assert all(isinstance(item, hep.DiagramRender) for item in snapshot.diagrams)
+    assert all(isinstance(item, render.DiagramRender) for item in snapshot.diagrams)
     assert all("#123456" in item.to_svg() for item in snapshot.diagrams)
     assert snapshot._mime_() == ("text/html", snapshot.to_html())
     assert snapshot._repr_html_() == snapshot.to_html()
@@ -227,7 +237,7 @@ try:
     ET.fromstring(
         diagram.render(
             config=hep.RenderSettings(
-                layout=hep.LayoutSettings(impred_steps=2), show_particle=False
+                layout=render.LayoutSettings(impred_steps=2), show_particle=False
             )
         ).to_svg()
     )
@@ -241,7 +251,7 @@ try:
     )
     network = spenso.TensorNetwork(spenso.TensorExpression(S("direct_svg_test::x") + 2))
     ET.fromstring(
-        network.render(config=spenso.RenderSettings(title="Native network")).to_svg()
+        network.render(config=render.RenderSettings(title="Native network")).to_svg()
     )
     assert "#image(bytes(" in network.to_linnest()
     scalar = hep.Model.phi3()

@@ -1,3 +1,4 @@
+use linnet_render_py::{PyDiagramRender, PyRenderSettings};
 use std::{collections::HashMap, ops::Deref, sync::Arc};
 
 pub(crate) mod execution;
@@ -1486,11 +1487,7 @@ impl SpensoNet {
     /// >>> network = TensorNetwork(tensor)
     /// >>> output = network.to_linnest()
     #[pyo3(signature = (*, config=None))]
-    fn to_linnest(
-        &self,
-        py: Python<'_>,
-        config: Option<&display::graph::PyRenderSettings>,
-    ) -> PyResult<String> {
+    fn to_linnest(&self, py: Python<'_>, config: Option<&PyRenderSettings>) -> PyResult<String> {
         Ok(typst_renderer::Document::svg_source(
             &self.render_graph(py, config)?,
         ))
@@ -1528,11 +1525,11 @@ impl SpensoNet {
     fn render(
         &self,
         py: Python<'_>,
-        config: Option<&display::graph::PyRenderSettings>,
-    ) -> PyResult<display::graph::PyDiagramRender> {
+        config: Option<&PyRenderSettings>,
+    ) -> PyResult<PyDiagramRender> {
         let svg = display::network::svg_theme(&self.render_graph(py, config)?);
         let html = display::network::html(&svg, &self.status());
-        Ok(display::graph::PyDiagramRender::new(svg, html))
+        Ok(PyDiagramRender::new(svg, html))
     }
 
     /// Produce compact plain-text tensor notation.
@@ -1710,11 +1707,7 @@ impl SpensoNet {
     /// >>> network = TensorNetwork(tensor)
     /// >>> output = network.to_html()
     #[pyo3(signature = (*, config=None))]
-    fn to_html(
-        &self,
-        py: Python<'_>,
-        config: Option<&display::graph::PyRenderSettings>,
-    ) -> PyResult<String> {
+    fn to_html(&self, py: Python<'_>, config: Option<&PyRenderSettings>) -> PyResult<String> {
         Ok(self.render(py, config)?.to_html().to_owned())
     }
 

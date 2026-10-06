@@ -13,6 +13,7 @@ from symbolica import (
     S,
     T,
 )
+from symbolica.community import render
 from symbolica.community import tensor as sp
 
 
@@ -75,8 +76,8 @@ def check_types(
     assert_type(expression.structure, sp.TensorStructure)
     assert_type(tensor.structure, sp.TensorStructure)
     assert_type(network.structure, sp.TensorStructure)
-    config = sp.RenderSettings(layout=sp.LayoutSettings(layout_algo="dot"))
-    assert_type(network.render(config=config), sp.DiagramRender)
+    config = render.RenderSettings(layout=render.LayoutSettings(layout_algo="dot"))
+    assert_type(network.render(config=config), render.DiagramRender)
     assert_type(network.render(config=config).to_svg(), str)
     assert_type(network.to_linnest(config=config), str)
     assert_type(network.to_html(config=config), str)
