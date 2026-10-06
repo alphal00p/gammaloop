@@ -11,6 +11,7 @@ mod integrals;
 mod kinematics;
 mod model;
 mod render_settings;
+mod sector_decomposition;
 mod tensor;
 #[cfg(feature = "ufo")]
 mod ufo;
