@@ -40,23 +40,41 @@ Cargo features enable optional capabilities:
 An item shown in an all-features API reference may not be available in a default build. Check
 its required feature and your `Cargo.toml` before using it.
 
-#boundary("Rendering runs through Typst", [
-  Linnet can compute layout coordinates, but the supported renderer is not a native Rust drawing
-  backend. Clinnet invokes an external Typst 0.15 executable for command-line figure batches;
-  `linnet-py` uses the `typst` Python package to compile the same Linnest render contract
-  in-process from its own native graph-spec preparation.
-  Use #link("guides/clinnet/")[Clinnet] for batch rendering, or use
-  #link("guides/linnest/")[Linnest] when a Typst document owns the final drawing.
-])
+== Community graph bindings
 
-== Standalone Python distribution
+The `linnet-py` binding library owns `symbolica.community.graph`. Install the complete
+Symbolica Community wheel to use its builders, live graph views, subgraphs, DOT codecs,
+layout streams, graph algorithms, and rendering. There is no separate Linnet Python wheel.
 
-#boundary("Distribution and import have different names", [
-  Install the Python distribution `linnet-py`, then import `linnet_py`. It requires Python 3.10
-  or newer. It is a standalone extension and is not a `symbolica.community` module.
-  Its package version is independent of the Rust `linnet` version. Record both versions when
-  diagnosing compatibility between Rust and Python code.
-])
+`RenderSettings` combines drawing options, layout sequences, and selectors.
+`LayoutSettings`, `Stroke`, `DiagramView`, and `DiagramRender` are shared by graphs,
+HepKit diagrams, and tensor networks. The notebook browser measures direct MathML labels
+before Rust lays out and draws the graph. Layout pass sequences run natively;
+unsupported settings raise errors.
+
+```python
+from symbolica.community import graph
+
+settings = graph.RenderSettings(
+    layouts=graph.LayoutSettings(algorithm=graph.LayoutAlgorithm.Dot),
+    drawing=graph.DrawOptions(
+        edge_stroke=graph.Stroke(paint=graph.Color("#6f4d85"), thickness=1.2),
+    ),
+)
+```
+
+Call `.render(config=settings)` to prepare a `DiagramView`, then display that same view.
+After browser measurement completes, `view.measured()` returns an immutable `DiagramRender`.
+Its SVG, HTML, and file exports reuse the snapshot, even after later graph or settings mutations.
+HepKit's physics-specific options live in `DiagramStyle`, passed separately as `style`.
+For multipage snapshots, use `to_svg_pages()`; `to_svg()` requires exactly one page.
+
+`Graph.generate()` takes `EdgeSignature` values and returns graph/group-size pairs.
+`HalfEdge` is a live graph view. Canonicalization and isomorphism compare expression-compatible
+payloads; use `node_key`, `edge_key`, and `half_edge_key` for custom data. Canonicalization
+preserves payload references and drawing metadata, which does not affect equivalence.
+
+== Python graph workflows
 
 Try the #link("playground/")[live Python playground] for editable DOT and a browser notebook,
 or start with the runnable graph example in the #link("quickstart/python/")[Python quickstart].
@@ -73,7 +91,7 @@ Linnet types:
 ```python
 from dataclasses import dataclass
 
-from linnet_py import build, edge, node, sink, source
+from symbolica.community.graph import build, edge, node, sink, source
 
 
 @dataclass
@@ -136,7 +154,7 @@ index, or live-node key. Incremental endpoints resolve a current live `Node`, na
 named `NodeSpec`:
 
 ```python
-from linnet_py import Compass, Graph, edge, node, sink, source
+from symbolica.community.graph import Compass, Graph, edge, node, sink, source
 
 graph = Graph()
 graph.add_node(node("in", data=UserNodeData(object()), label="incoming"))
@@ -177,7 +195,7 @@ or indexed nodes and edges, exact half-edge indices, or live-view predicates, th
 object with Linnet's topology algorithms and owning transformations:
 
 ```python
-from linnet_py import DirectionBasis
+from symbolica.community.graph import DirectionBasis
 
 # Explicit selections are unioned. Selecting a node includes its incident crown.
 selected = graph.subgraph(nodes=["in"], edges=["propagator"])
@@ -266,39 +284,40 @@ dangling edges or edges whose endpoints are outside the traversal tree. An `Orie
 edges, the orientation of each edge relative to the cut, and its winding number against a cycle from
 the same graph revision.
 
-=== Typed Typst configuration
+=== Typed drawing configuration
 
-Plain Python strings are always escaped Typst strings, never source expressions. `None` maps to
-Typst `none`, `AUTO` maps to `auto`, and `INHERIT` leaves the value from the preceding
-configuration layer intact. The closed native-value model also includes `Length`, `Ratio`,
+Plain Python strings are data, never executable source expressions. `TextLabel` carries text
+and `MathSymbol` carries mathematical labels. `AUTO` selects a field's automatic value, and
+`INHERIT` leaves the value from the preceding configuration layer intact.
+The closed native-value model also includes `Length`, `Ratio`,
 `RelativeLength`, `Angle`, `Fraction`, `Color`, `Stroke`, `Dash`, `Insets`, `Mark`, `TextLabel`,
 and `MathSymbol`, plus recursively validated arrays and string-keyed dictionaries. Finite
 layout, placement, routing, anchor, pattern, mark, and debug choices use their exported enums;
 the structured Python reference lists the choices for each option.
 
-`GraphStyleOptions`, `LayoutOptions`, and `DrawOptions` cover the corresponding generic Linnest
+`GraphStyleOptions`, `LayoutSettings`, and `DrawOptions` cover the corresponding generic Linnest
 surfaces. `DrawingSelectors` maps arbitrary Python data to detached typed drawing values at render
 time. Layout passes retain their order:
 
 ```python
-from linnet_py import (
+from symbolica.community.graph import (
     Color,
     DrawingSelectors,
     EdgeDrawing,
     LayoutAlgorithm,
     LayoutDirection,
-    LayoutOptions,
+    LayoutSettings,
     Length,
-    RenderConfig,
+    RenderSettings,
     Stroke,
 )
 
-layouts = LayoutOptions(
+layouts = LayoutSettings(
     algorithm=LayoutAlgorithm.Force,
     direction=LayoutDirection.Right,
     steps=200,
 ).then(label_steps=80)
-graph.render_config = RenderConfig(
+graph.render_config = RenderSettings(
     title="Example",
     layouts=layouts,
     selectors=DrawingSelectors(
@@ -314,9 +333,8 @@ graph.render_config = RenderConfig(
     ),
 )
 
-output = graph.render("diagram.pdf")
-svg = graph.to_svg()
-graph  # the final expression in a notebook renders inline
+view = graph.render()
+view  # the notebook browser measures labels and completes this view
 ```
 
 SVG output preserves the native drawing and adds vertex, edge, and half-edge inspection.
@@ -354,25 +372,75 @@ Use the Python selection API explicitly when applying graph algorithms to those 
 A `Subgraph` also renders directly as the final expression of a notebook cell:
 
 ```python
-domain_template = RenderConfig(
-    template="templates/domain-figure.typ",
-    source_root=".",
-    template_options={
-        "theme": "review",
-        "accent": Color("teal"),
-    },
-)
+region = graph.subgraph(edges=["propagator"])
+region
 ```
 
-`template_options` is intentionally a string-keyed dictionary because the selected template,
-not Linnet, defines that open schema. Its values still use the closed native-value model; it is
-not a dictionary of Typst source strings.
+The notebook view shows the full owning graph, highlights the selected
+half-edges, and draws the complement dotted and muted through Linnest's subgraph drawing mode.
+Selecting one half of a paired edge highlights only that half; selected isolated nodes are
+highlighted too. The display uses the owner's layout, drawing values, and render configuration
+without changing the graph or its stored settings. `region.render(config=None)` prepares a
+`DiagramView`; retain it for browser display and later snapshot exports.
+Like other selection operations, rendering checks the topology
+revision and raises `ReferenceError` for a stale selection.
 
-`source_root` identifies the project tree staged for file-based templates and modules. Set it when
-a source imports files outside its own directory, such as `../shared.typ`. Without an explicit
-root, Linnet uses the nearest ancestor containing `typst.toml`, or otherwise the source file's
-parent directory; it does not infer project boundaries from generic directory names such as
-`src`.
+The graph's `render_config` is overlaid by a sparse per-call `config`.
+Preparing a view evaluates selectors once and retains the resulting drawing inputs.
+Arbitrary Python `.data` stays in Python; selectors may explicitly convert it to drawing values.
+Display the retained view, then capture it in a later notebook cell after the drawing appears:
+
+```python
+snapshot = view.measured()
+svg = snapshot.to_svg()
+snapshot.save("diagram.svg")
+snapshot.save("diagram.html")
+```
+
+Default `view.snapshot()`, `view.to_svg()` and `view.to_html()` export complete
+static output without launching a browser. They reuse completed measurements,
+otherwise use optional typst-py outlining when available, otherwise estimated
+STIX MathML label bounds. Estimates leave measurement pending. Installing
+`anywidget` adds live notebook measurement; earlier snapshots remain immutable.
+
+An unfinished view raises a measurement-pending error only for strict `measured()`.
+No browser is started automatically. Scripts can explicitly use
+`view.measured(browser="chromium")`; install Playwright and Chromium first.
+The measured SVG embeds its font and XHTML `foreignObject` MathML labels.
+`snapshot.save_pages(directory, format="svg")` exports every captured SVG page.
+
+Vector-label exports are a separate explicit operation using optional Python
+`typst>=0.15`. They do not require a browser:
+
+```python
+vector = view.outlined()
+vector.save("diagram.pdf")
+vector.save("diagram.png")
+vector.save("diagram.typ")
+```
+
+Outlining measures labels with Typst and runs native layout for those boxes; it does not
+replace the browser-measured snapshot. PDF and PNG conversion uses the outlined SVG.
+`vector.to_linnest()` emits portable Typst source embedding that SVG.
+Default notebook rendering has no Typst compiler dependency. Standalone Typst packages
+and the documentation builder's Typst compiler remain independent tools.
+
+The notebook display is generic and model-neutral, including for graphs with dangling edges.
+Domain renderers supply their own native scenes and labels. Use typed settings and Python
+selectors for customization. `INHERIT` leaves the preceding configuration layer unchanged.
+
+```python
+config = RenderSettings(
+    layouts=LayoutSettings(impred_steps=50).then(impred_steps=20),
+    drawing=DrawOptions(node_fill=Color("teal")),
+)
+view = graph.render(config=config)
+view
+```
+
+Layout passes execute natively in order. An ImPrEd pass following another ImPrEd pass retains
+the previous geometry instead of constructing a fresh seed. Unsupported executable styles
+raise an error instead of falling back to full-document Typst compilation.
 
 `graph.render_config` is a live mutable object: assign its fields directly, or replace the whole
 configuration. The nested style, layout, drawing, and selector option objects are immutable
@@ -380,23 +448,23 @@ values, and their getters return copies, so replace those fields rather than try
 nested object in place. `overlay()` returns a new configuration, and a per-call overlay never
 mutates the graph's stored defaults.
 
-Python drawing selectors belong on `RenderConfig.selectors`. They may inspect arbitrary `.data`,
+Python drawing selectors belong on `RenderSettings.selectors`. They may inspect arbitrary `.data`,
 but must return the corresponding detached `NodeDrawing`, `EdgeDrawing`, or `HalfEdgeDrawing`, or
 `None` when no defaults apply. Selector fields fill only drawing fields that are absent on the
 element, so explicit element drawing remains authoritative. Only the validated drawing snapshot
-crosses the Python-to-Typst boundary. The example above happens to color an application-defined edge
+crosses the drawing boundary. The example above happens to color an application-defined edge
 payload; custom particle styling works the same way and is not a special Linnet mode:
 
 ```python
 from dataclasses import dataclass
 
-from linnet_py import (
+from symbolica.community.graph import (
     Color,
     DrawingSelectors,
     EdgeDrawing,
     Length,
     MathSymbol,
-    RenderConfig,
+    RenderSettings,
     Stroke,
 )
 
@@ -416,14 +484,15 @@ def particle_drawing(value):
     )
 
 
-particle_style_example = RenderConfig(
+particle_style_example = RenderSettings(
     selectors=DrawingSelectors(edge=particle_drawing),
 )
 ```
 
 This is ordinary userland settings composition: Linnet neither defines `ParticleStyle` nor
 inspects it. GammaLoop's richer particle decorations, momentum annotations, and diagram modes
-belong to GammaLoop's own template rather than to a `PhysicsOptions` type in `linnet_py`.
+belong to domain renderers, exposed through HepKit's `DiagramStyle` rather than a
+`PhysicsOptions` type in `linnet`.
 The #source-link(
   "crates/linnet-py/examples/physics_render_settings.py",
   label: "editable DOT physics notebook",
@@ -440,7 +509,7 @@ once, then updates coordinates from `LayoutStream.from_dot(...)` frames. It also
 in an exported Marimo WebAssembly notebook with the bundled Emscripten wheel.
 
 ```python
-from linnet_py import LayoutStream
+from symbolica.community.graph import LayoutStream
 
 stream = LayoutStream.from_dot("digraph { a -> b; b -> c; c -> a; }", every=4)
 node_names, endpoints = stream.node_names, stream.endpoints
@@ -456,51 +525,13 @@ iterator. Frames own their position data; changing an earlier frame's returned a
 cannot affect later frames. Node names and endpoint indices stay in the same order.
 This proof of concept supports a single DOT graph and the force algorithm. Its numeric
 geometry includes explicit DOT placement constraints and per-edge spring lengths, but
-not Typst label measurement, styling, or final label relaxation. It does not alter an
+not browser label measurement, styling, or final label relaxation. It does not alter an
 existing Python `Graph` or its payloads.
 
-Typst callbacks that require measured geometry use an explicit module function reference:
-
-```python
-from linnet_py import TypstModule
-
-styles = TypstModule.file("styles.typ")
-graph.node("in").drawing.label = styles.content("incoming_label")
-graph.edge("propagator").drawing.style = styles.function("edge_style").bind(
-    emphasis=True
-)
-graph.edge("propagator").drawing.extensions = {
-    "lane-map": styles.value("lane_map"),
-}
-```
-
-`TypstModule.file` and `TypstModule.package` are the only routes for custom executable Typst.
-`value`, `content`, and `function` select a typed export; `call` and `bind` construct typed
-applications. The binding never accepts a raw Typst expression and never calls Typst `eval`.
-
-A custom rendering template is a Typst module with one mandatory V1 export:
-
-```typst
-#let render(config) = {
-  assert(config.schema == "linnet-render-config")
-  assert(config.version == 1)
-  let options = config.at("options", default: (:))
-  // Read typed element values and template-owned options, then render content.
-  config.elements.nodes.at(0).label
-}
-```
-
-The bundled generic template uses this contract and ignores unknown domain concepts. A custom
-template that needs the native topology can import Linnest's `graph.typ` and call
-`graph.from-spec(read(config.at("graph-spec-path"), encoding: none))`, attach native values with
-Linnest's `attach-elements(g, config.elements)`, and delegate to `layout-graph(config, g)`.
-Final labels and styles are measured before layout so their sizes affect spacing.
-
-GammaLoop's separate `figure.typ` consumes DOT through `data-path`; it cannot be selected directly
-by this Python graph-spec adapter. GammaLoop supplies ordinary Typst particle/momentum callbacks
-and optional external-edge placement without Python. Python callers retain this API's own drawing
-records and selectors, or import styling through `TypstModule`; the physics notebook is an
-independent example of that interface.
+Custom graph behavior is expressed through Python drawing selectors and native scenes.
+Executable Typst module references cannot define graph geometry or styles. Use `TextLabel`
+and `MathSymbol` for labels; their sizes are measured before native layout. Standalone
+Typst documents can still use Linnest's separate Typst package.
 
 === Explicit DOT codecs
 
@@ -511,7 +542,7 @@ unique DOT representation. Supply a `DotCodec` to `Graph.from_dot`, `Graph.from_
 ```python
 from dataclasses import dataclass
 
-from linnet_py import (
+from symbolica.community.graph import (
     DotCodec,
     DotEdgeData,
     DotHalfEdgeData,

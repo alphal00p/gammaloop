@@ -3,33 +3,29 @@
 #let quickstart-python = [
 = Using Linnet from Python
 
-The `linnet_py` extension provides native Linnet graphs to Python 3.10 and newer. It is a real
-binding with runtime tests, but it is not currently published to PyPI.
-
-#callout("Developer preview: build from source", [
-  There is no supported `pip install linnet-py` release yet. The similarly named `linnet` project
-  on PyPI is unrelated. Use this page from a GammaLoop checkout until official `linnet-py` wheels
-  are published.
-])
-
-== Build the extension
-
-Install a stable Rust toolchain and Python 3.10 or newer, then run:
+Symbolica Community exposes native Linnet graphs as `symbolica.community.graph`.
+Build and install the complete Community wheel, or use the repository's notebook host:
 
 // docs-example: syntax
 ```sh
-git clone https://github.com/alphal00p/gammaloop.git
-cd gammaloop
-python3.10 -m venv .venv
-. .venv/bin/activate
-python -m pip install "maturin>=1.7,<2.0"
-maturin develop --locked \
-  --manifest-path crates/linnet-py/Cargo.toml \
-  --features extension-module,abi3
+python -m pip install "maturin>=1.13,<2"
+maturin develop --locked --manifest-path examples/notebooks/symbolica-host/Cargo.toml
 ```
 
-The declared Python dependencies install `typst` 0.15.0 alongside the extension. Python rendering
-uses that in-process binding; a `typst` command in `PATH` is neither required nor invoked.
+Graph rendering uses native Rust geometry and direct MathML labels. Notebook
+display requires `anywidget`; the live browser measures labels before the
+drawing is finalized. No Typst compiler is used for this path.
+
+The GammaLoop package and this checkout's isolated notebook host declare
+`notebook-display` (`anywidget>=0.9,<1`), `graph-export`
+(`playwright>=1.55,<2`) and `typst-export` (`typst>=0.15`) extras. Do not assume
+those extras exist in the currently released external Community wheel.
+For an existing host environment, install the dependencies you need directly:
+
+// docs-example: syntax
+```sh
+python -m pip install "anywidget>=0.9,<1"
+```
 
 == Parse and inspect a graph
 
@@ -37,7 +33,7 @@ Save this as `linnet_quickstart.py`:
 
 // docs-example: compile linnet-python-quickstart
 ```python
-import linnet_py as lp
+from symbolica.community import graph as lp
 
 codec = lp.DotCodec.topology()
 graph = lp.Graph.from_dot(
@@ -64,6 +60,34 @@ Run `python linnet_quickstart.py`. Success means the assertions pass and the gra
 DOT. `Graph` also exposes typed nodes, half-edges, subgraphs, cycles, oriented cuts, and
 traversal trees; use the #link("reference/python/")[Python reference] for the exact current
 surface.
+
+In a notebook, keep and display the configured view:
+
+```python
+from IPython.display import display
+
+view = graph.render()
+display(view)
+```
+
+After the browser finishes measuring, `snapshot = view.measured()` returns an
+immutable drawing. `snapshot.to_svg()`, `snapshot.to_html()` and
+`snapshot.save("graph.svg")` preserve its measured boxes and embedded font.
+`measured()` raises while labels are pending.
+
+Default `view.snapshot()`, `view.to_svg()` and `view.to_html()` export complete
+static output without launching a browser. They reuse completed measurements,
+otherwise use optional typst-py outlining when available, otherwise estimated
+STIX MathML label bounds. Estimates leave measurement pending. Installing
+`anywidget` adds live notebook measurement; earlier snapshots remain immutable.
+
+
+Scripts may explicitly request `view.measured(browser="chromium")`. Install
+`playwright>=1.55,<2` and run `python -m playwright install chromium` first.
+The default SVG contains browser MathML in XHTML `foreignObject` elements;
+use `view.outlined()` with optional Python typst-py (distribution `typst>=0.15`)
+for vector labels before PDF, PNG or Typst SVG import. Strict `measured()`
+never uses estimates or launches a browser implicitly.
 
 Continue with #link("guides/python-rendering/")[Rendering graphs from Python] to explore a
 complete graph with custom drawing selectors. The #link("playground/")[live Python playground]

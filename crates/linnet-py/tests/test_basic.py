@@ -1,19 +1,18 @@
+import ast
 import copy
 import gc
 import inspect
 import json
-import os
 import re
-import shutil
 import unittest
 import weakref
 from dataclasses import dataclass
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from unittest.mock import patch
 
-import linnet_py as lp
-import typst
+from rendering_metrics import external_metrics_snapshot
+
+from symbolica.community import graph as lp
 
 
 class Payload:
@@ -350,7 +349,7 @@ class TestGraphModel(unittest.TestCase):
         self.assertEqual(half_edge.flow, lp.Flow.Sink)
 
     def test_map_callbacks_and_omitted_callbacks_preserve_identity(self):
-        config = lp.RenderConfig(title=lp.TextLabel("base"))
+        config = lp.RenderSettings(title=lp.TextLabel("base"))
         graph, nodes, edges, half_edges = sample_graph(render_config=config)
         seen = []
 
@@ -599,7 +598,7 @@ class TestGraphModel(unittest.TestCase):
 
         def selector_cycle():
             callback = Callback()
-            config = lp.RenderConfig(selectors=lp.DrawingSelectors(node=callback))
+            config = lp.RenderSettings(selectors=lp.DrawingSelectors(node=callback))
             callback.config = config
             return weakref.ref(callback)
 
@@ -2391,27 +2390,18 @@ class TestTypedTypstSurface(unittest.TestCase):
         self.assertIs(lp.NodeDrawing().label, lp.INHERIT)
 
     def test_render_config_has_mutable_typed_properties(self):
-        config = lp.RenderConfig()
+        config = lp.RenderSettings()
         for value in (
-            config.template,
-            config.source_root,
             config.title,
             config.style,
             config.layouts,
             config.drawing,
             config.selectors,
-            config.template_options,
         ):
             self.assertIs(value, lp.INHERIT)
 
-        config.template = None
-        self.assertIsNone(config.template)
-        config.template = Path("template with spaces.typ")
-        self.assertEqual(Path(config.template), Path("template with spaces.typ"))
-        config.source_root = Path("project with spaces")
-        self.assertEqual(Path(config.source_root), Path("project with spaces"))
-        with self.assertRaisesRegex(TypeError, "unknown RenderConfig option"):
-            lp.RenderConfig(typst_executable="typst")
+        with self.assertRaisesRegex(TypeError, "unknown RenderSettings option"):
+            lp.RenderSettings(typst_executable="typst")
 
         config.title = lp.TextLabel("mutable")
         self.assertEqual(config.title.text, "mutable")
@@ -2420,7 +2410,7 @@ class TestTypedTypstSurface(unittest.TestCase):
         config.title = lp.INHERIT
         self.assertIs(config.title, lp.INHERIT)
 
-        config.layouts = lp.LayoutOptions().then(algorithm=lp.LayoutAlgorithm.Force)
+        config.layouts = lp.LayoutSettings().then(algorithm=lp.LayoutAlgorithm.Force)
         self.assertEqual(config.layouts.pass_count, 2)
         config.drawing = lp.DrawOptions(debug=lp.DebugLevel.Off)
         self.assertIsInstance(config.drawing, lp.DrawOptions)
@@ -2445,24 +2435,14 @@ class TestTypedTypstSurface(unittest.TestCase):
         self.assertIsInstance(config.style, lp.GraphStyleOptions)
         config.style = None
         self.assertIsNone(config.style)
-        config.template_options = {"nested": {"value": 1}}
-        snapshot = config.template_options
-        snapshot["nested"]["value"] = 2
-        self.assertEqual(config.template_options["nested"]["value"], 1)
-        config.template_options = None
-        self.assertIsNone(config.template_options)
-
         graph = lp.build(lp.node("only"))
         graph.render_config.title = lp.TextLabel("live graph default")
         self.assertEqual(graph.render_config.title.text, "live graph default")
 
         for field in (
-            "template",
-            "source_root",
             "layouts",
             "drawing",
             "selectors",
-            "template_options",
         ):
             setattr(config, field, lp.INHERIT)
             self.assertIs(getattr(config, field), lp.INHERIT)
@@ -2542,152 +2522,50 @@ class TestTypedTypstSurface(unittest.TestCase):
                 lp.EdgeDrawing(**retired_field)
 
     def test_drawing_selectors_validate_results_and_topology_stability(self):
-        with TemporaryDirectory(prefix="linnet selectors ") as directory:
-            root = Path(directory)
-            entrypoint = root / "entrypoint.typ"
-            template = root / "template.typ"
-            template.write_text("#let render(config) = [ok]\n", encoding="utf-8")
+        left = lp.node("left", data=UserNodePayload("left"))
+        right = lp.node("right", data=UserNodePayload("right"))
+        graph = lp.build(left, right, lp.edge(lp.source(left), "edge", lp.sink(right)))
+        seen = []
 
-            def compile_typst(input, **kwargs):
-                self.assertEqual(kwargs["format"], "svg")
-                entrypoint.write_bytes(input["main.typ"])
-                return b"<svg>fake</svg>"
+        def select(node):
+            seen.append(node)
+            return lp.NodeDrawing(label=lp.TextLabel(node.data.identifier))
 
-            invalid_selectors = (
-                (
-                    lp.DrawingSelectors(node=lambda _node: lp.EdgeDrawing()),
-                    "node drawing selector must return NodeDrawing",
-                ),
-                (
-                    lp.DrawingSelectors(edge=lambda _edge: lp.NodeDrawing()),
-                    "edge drawing selector must return EdgeDrawing",
-                ),
-                (
-                    lp.DrawingSelectors(source=lambda _half_edge: lp.EdgeDrawing()),
-                    "half-edge drawing selector must return HalfEdgeDrawing",
-                ),
-                (
-                    lp.DrawingSelectors(sink=lambda _half_edge: lp.AUTO),
-                    "half-edge drawing selector must return HalfEdgeDrawing",
-                ),
-            )
-            for selectors, message in invalid_selectors:
-                graph, _, _, _ = sample_graph()
-                with (
-                    self.subTest(selectors=selectors),
-                    self.assertRaisesRegex(TypeError, message),
-                ):
-                    graph.to_svg(
-                        config=lp.RenderConfig(
-                            template=template,
-                            selectors=selectors,
-                        )
-                    )
+        result = graph.render(
+            config=lp.RenderSettings(selectors=lp.DrawingSelectors(node=select))
+        )
+        self.assertEqual([node.data.identifier for node in seen], ["left", "right"])
+        self.assertIn("<svg", external_metrics_snapshot(result).to_svg())
+        self.assertEqual(len(seen), 2)
+        for selectors, message in (
+            (
+                lp.DrawingSelectors(node=lambda _: lp.EdgeDrawing()),
+                "node drawing selector",
+            ),
+            (
+                lp.DrawingSelectors(edge=lambda _: lp.NodeDrawing()),
+                "edge drawing selector",
+            ),
+            (
+                lp.DrawingSelectors(source=lambda _: lp.NodeDrawing()),
+                "half-edge drawing selector",
+            ),
+        ):
+            with self.assertRaisesRegex(TypeError, message):
+                graph.render(config=lp.RenderSettings(selectors=selectors))
+        graph.reorder_nodes([1, 0])
+        for node in seen:
+            with self.assertRaises(ReferenceError):
+                _ = node.data
 
-            node_data = [UserNodePayload("left"), UserNodePayload("right")]
-            edge_data = UserEdgePayload("depends-on")
-            source_data = UserHalfEdgePayload("producer")
-            sink_data = UserHalfEdgePayload("consumer")
-            left = lp.node("left", data=node_data[0], label="explicit left")
-            right = lp.node("right", data=node_data[1], label=lp.INHERIT)
-            connection = lp.edge(
-                lp.source(left, data=source_data, statement="explicit source"),
-                "connection",
-                lp.sink(right, data=sink_data),
-                data=edge_data,
-                label="explicit edge",
-                extensions={"priority": "explicit"},
-            )
-            graph = lp.build(left, right, connection)
-            captured = []
-
-            def select_node(node):
-                captured.append(node)
-                self.assertIs(node.data, node_data[node.index])
-                return lp.NodeDrawing(
-                    label=f"selected {node.data.identifier}",
-                    extensions={"selected-node-data": node.data.identifier},
-                )
-
-            def select_edge(edge):
-                captured.append(edge)
-                self.assertIs(edge.data, edge_data)
-                return lp.EdgeDrawing(
-                    label="selected edge",
-                    extensions={
-                        "priority": "selector",
-                        "selected-coupling": edge.data.coupling,
-                    },
-                )
-
-            def select_source(half_edge):
-                captured.append(half_edge)
-                self.assertIs(half_edge.data, source_data)
-                return lp.HalfEdgeDrawing(
-                    statement="selected source",
-                    extensions={"selected-port-data": half_edge.data.port},
-                )
-
-            def select_sink(half_edge):
-                captured.append(half_edge)
-                self.assertIs(half_edge.data, sink_data)
-                return lp.HalfEdgeDrawing(
-                    statement="selected sink",
-                    extensions={"selected-port-data": half_edge.data.port},
-                )
-
-            selectors = lp.DrawingSelectors(
-                node=select_node,
-                edge=select_edge,
-                source=select_source,
-                sink=select_sink,
-            )
-            with patch.object(typst, "compile", side_effect=compile_typst):
-                self.assertEqual(
-                    graph.to_svg(
-                        config=lp.RenderConfig(
-                            template=template,
-                            selectors=selectors,
-                        )
-                    ),
-                    "<svg>fake</svg>",
-                )
-            source = entrypoint.read_text(encoding="utf-8")
-            self.assertIn("explicit left", source)
-            self.assertNotIn("selected left", source)
-            self.assertIn("selected right", source)
-            self.assertIn("explicit edge", source)
-            self.assertNotIn("selected edge", source)
-            self.assertIn("selected-coupling", source)
-            self.assertIn('("priority"): "explicit"', source)
-            self.assertNotIn('("priority"): "selector"', source)
-            self.assertIn("explicit source", source)
-            self.assertNotIn("selected source", source)
-            self.assertIn("selected sink", source)
-            self.assertIn("producer", source)
-            self.assertIn("consumer", source)
-
+        def mutate(_node):
             graph.reorder_nodes([1, 0])
-            for view in captured:
-                with self.assertRaises(ReferenceError):
-                    _ = view.data
+            return lp.NodeDrawing()
 
-            mutating, _, _, _ = sample_graph()
-
-            def mutate_topology(_node):
-                mutating.reorder_nodes([1, 0])
-                return lp.NodeDrawing()
-
-            with self.assertRaisesRegex(
-                ReferenceError,
-                "must not mutate graph topology",
-            ):
-                mutating.to_svg(
-                    config=lp.RenderConfig(
-                        template=template,
-                        selectors=lp.DrawingSelectors(node=mutate_topology),
-                    )
-                )
+        with self.assertRaisesRegex(ReferenceError, "must not mutate graph topology"):
+            graph.render(
+                config=lp.RenderSettings(selectors=lp.DrawingSelectors(node=mutate))
+            )
 
     def test_complete_option_field_surfaces(self):
         stroke = lp.Stroke(
@@ -2864,19 +2742,19 @@ class TestTypedTypstSurface(unittest.TestCase):
         with self.assertRaises(TypeError):
             lp.NodeDrawing(placement={"ref": "left", "mode": lp.Placement.Pin})
         with self.assertRaises(TypeError):
-            lp.LayoutOptions(algorithm="force")
+            lp.LayoutSettings(algorithm="force")
         with self.assertRaises(TypeError):
-            lp.LayoutOptions(seed=-1)
+            lp.LayoutSettings(seed=-1)
         with self.assertRaises(TypeError):
-            lp.LayoutOptions(roots=[-1])
+            lp.LayoutSettings(roots=[-1])
         with self.assertRaises(TypeError):
-            lp.LayoutOptions(rank_same=[["node"]])
+            lp.LayoutSettings(rank_same=[["node"]])
         with self.assertRaises(TypeError):
-            lp.LayoutOptions(subgraph=[0, 1])
-        lp.LayoutOptions(subgraph=[True, False], rank_same=[[0, 1]])
+            lp.LayoutSettings(subgraph=[0, 1])
+        lp.LayoutSettings(subgraph=[True, False], rank_same=[[0, 1]])
         module = lp.TypstModule.file("selections.typ")
         selection = module.function("selection")
-        lp.LayoutOptions(
+        lp.LayoutSettings(
             subgraph=selection,
             rank_same=[[0, 1], selection, selection.bind(side="left")],
         )
@@ -2886,6 +2764,12 @@ class TestTypedTypstSurface(unittest.TestCase):
             lp.DrawOptions(node_outset=lp.Length.pt(1))
         with self.assertRaises(TypeError):
             lp.DrawOptions(show_half_edge_ids=1)
+        with self.assertRaises(TypeError):
+            lp.DrawOptions(label_collision_padding=-0.1)
+        for gap in (-0.1, True, "0.45", lp.Length.pt(1)):
+            with self.subTest(external_label_gap=gap), self.assertRaises(TypeError):
+                lp.DrawOptions(external_label_gap=gap)
+        lp.DrawOptions(external_label_gap=0)
         with self.assertRaises(TypeError):
             lp.DrawOptions(edge_split_gap=-0.1)
         with self.assertRaises(TypeError):
@@ -2927,7 +2811,7 @@ class TestTypedTypstSurface(unittest.TestCase):
             lp.DrawOptions(subgraph=[{"subgraph": [True, False], "unknown": {}}])
         static_content_fields = {
             "draw title": lambda value: lp.DrawOptions(title=value),
-            "render title": lambda value: lp.RenderConfig(title=value),
+            "render title": lambda value: lp.RenderSettings(title=value),
         }
         for name, static_content in static_content_fields.items():
             with self.subTest(field=name), self.assertRaises(TypeError):
@@ -2942,7 +2826,7 @@ class TestTypedTypstSurface(unittest.TestCase):
         with self.assertRaises(TypeError):
             lp.MathSymbol("p", subscript=True)
         with self.assertRaises(TypeError):
-            lp.RenderConfig(unknown_option=True)
+            lp.RenderSettings(unknown_option=True)
 
     def test_module_references_calls_and_binds_are_typed_values(self):
         with self.assertRaises(TypeError):
@@ -2966,28 +2850,25 @@ class TestTypedTypstSurface(unittest.TestCase):
             with self.subTest(reference=reference), self.assertRaises(TypeError):
                 reference.bind(fill="red")
 
-    def test_draw_cut_geometry_options_are_typed_and_serialized(self):
-        graph, _, _, _ = sample_graph(
-            render_config=lp.RenderConfig(
-                drawing=lp.DrawOptions(
-                    edge_split_gap=0.25,
-                    edge_dangling_tangent=lp.DanglingTangent.Vertical,
-                )
+    def test_draw_cut_geometry_options_require_native_support(self):
+        graph = lp.build(lp.node("node"))
+        with self.assertRaisesRegex(ValueError, "native SVG renderer"):
+            graph.render(
+                config=lp.RenderSettings(drawing=lp.DrawOptions(edge_split_gap=0.4))
             )
-        )
 
-        source = graph.prepare_render().typst_source
-        self.assertIn('("edge-split-gap"): 0.25', source)
-        self.assertIn('("edge-dangling-tangent"): "vertical"', source)
-
-        graph, _, _, _ = sample_graph(
-            render_config=lp.RenderConfig(
-                drawing=lp.DrawOptions(edge_dangling_tangent=lp.AUTO)
+    def test_dangling_centroid_repulsion_reaches_native_layout(self):
+        graph = lp.build(lp.node("node"))
+        config = lp.RenderSettings(
+            layouts=lp.LayoutSettings(
+                algorithm=lp.LayoutAlgorithm.Force,
+                steps=0,
+                dangling_centroid_repulsion=1.25,
+                external_pull=1.0,
             )
         )
         self.assertIn(
-            '("edge-dangling-tangent"): auto',
-            graph.prepare_render().typst_source,
+            "<svg", external_metrics_snapshot(graph.render(config=config)).to_svg()
         )
 
     def test_external_pull_balance_is_validated_and_preserved_across_passes(self):
@@ -3076,9 +2957,9 @@ class TestTypedTypstSurface(unittest.TestCase):
             lp.Mark,
             lp.DrawingSelectors,
             lp.GraphStyleOptions,
-            lp.LayoutOptions,
+            lp.LayoutSettings,
             lp.DrawOptions,
-            lp.RenderConfig,
+            lp.RenderSettings,
         )
         for constructor in constructors:
             with self.subTest(constructor=constructor):
@@ -3092,7 +2973,7 @@ class TestTypedTypstSurface(unittest.TestCase):
             (
                 parameter.kind
                 for parameter in inspect.signature(
-                    lp.LayoutOptions.then
+                    lp.LayoutSettings.then
                 ).parameters.values()
             ),
         )

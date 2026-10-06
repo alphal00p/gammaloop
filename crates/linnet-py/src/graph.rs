@@ -1,3 +1,4 @@
+mod algorithms;
 use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::PathBuf;
@@ -10,22 +11,35 @@ use linnet::half_edge::NodeIndex;
 use linnet::permutation::Permutation;
 use pyo3::class::gc::{PyTraverseError, PyVisit};
 use pyo3::exceptions::{PyIndexError, PyKeyError, PyReferenceError, PyTypeError, PyValueError};
-use pyo3::prelude::*;
-use pyo3::types::{PyAny, PyDict, PyTuple, PyType};
+use pyo3::types::{
+    PyAny, PyAnyMethods, PyDict, PyModule, PyModuleMethods, PyTuple, PyTupleMethods, PyType,
+};
+use pyo3::{pyclass, pyfunction, pymethods, wrap_pyfunction, Bound, Py, PyRef, PyResult, Python};
 
 use crate::dot::{self, PyDotCodec, PyEdgeValue, PyGlobalData, PyNodeValue};
 use crate::drawing::{
-    copy_drawing, drawing_dict, PyEdgeDrawing, PyHalfEdgeDrawing, PyNodeDrawing, EDGE_FIELDS,
-    HEDGE_FIELDS, NODE_FIELDS,
+    copy_drawing, drawing_dict, DrawingGuard, PyEdgeDrawing, PyHalfEdgeDrawing, PyNodeDrawing,
+    EDGE_FIELDS, HEDGE_FIELDS, NODE_FIELDS,
 };
 use crate::native_graph::{PyHedgeGraph, PyNodeStore};
 use crate::topology::{PyCutPartition, PyCycle, PyDirectionBasis, PySubgraph, PyTraversalTree};
 
+use crate::{render, PyDiagramView};
+
 static SPEC_ID: AtomicU64 = AtomicU64::new(0);
 
 /// The directed role of a half-edge within its edge.
-#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pyclass_enum)]
-#[pyclass(from_py_object, eq, eq_int, name = "Flow")]
+#[cfg_attr(
+    feature = "python_stubgen",
+    pyo3_stub_gen::derive::gen_stub_pyclass_enum
+)]
+#[pyclass(
+    module = "symbolica.community.graph",
+    from_py_object,
+    eq,
+    eq_int,
+    name = "Flow"
+)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum PyFlow {
     Source,
@@ -51,8 +65,17 @@ impl From<Flow> for PyFlow {
 }
 
 /// How an edge's declared endpoints determine its logical direction.
-#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pyclass_enum)]
-#[pyclass(from_py_object, eq, eq_int, name = "Orientation")]
+#[cfg_attr(
+    feature = "python_stubgen",
+    pyo3_stub_gen::derive::gen_stub_pyclass_enum
+)]
+#[pyclass(
+    module = "symbolica.community.graph",
+    from_py_object,
+    eq,
+    eq_int,
+    name = "Orientation"
+)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub enum PyOrientation {
     #[default]
@@ -82,8 +105,8 @@ impl From<Orientation> for PyOrientation {
 }
 
 /// A reusable declarative node description accepted by `build()` and `Graph.add_node()`.
-#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pyclass)]
-#[pyclass(unsendable, name = "NodeSpec")]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
+#[pyclass(module = "symbolica.community.graph", unsendable, name = "NodeSpec")]
 pub struct PyNodeSpec {
     token: u64,
     name: Option<String>,
@@ -176,8 +199,12 @@ impl EndpointRole {
 }
 
 /// A declarative edge endpoint produced by `source()` or `sink()`.
-#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pyclass)]
-#[pyclass(unsendable, name = "HalfEdgeSpec")]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
+#[pyclass(
+    module = "symbolica.community.graph",
+    unsendable,
+    name = "HalfEdgeSpec"
+)]
 pub struct PyHalfEdgeSpec {
     node: Option<Py<PyAny>>,
     role: EndpointRole,
@@ -185,8 +212,8 @@ pub struct PyHalfEdgeSpec {
     drawing: Option<Py<PyDict>>,
 }
 
-#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pymethods)]
-#[cfg_attr(not(feature = "python-stubs"), pyo3_stub_gen_derive::remove_gen_stub)]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
+#[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
 #[pymethods]
 impl PyHalfEdgeSpec {
     #[getter]
@@ -637,6 +664,21 @@ impl PyGraph {
     }
 }
 
+struct GraphDrawingGuard {
+    graph: Py<PyGraph>,
+    revision: u64,
+}
+
+impl DrawingGuard for GraphDrawingGuard {
+    fn check(&self, py: Python<'_>) -> PyResult<()> {
+        self.graph.borrow(py).check_revision(self.revision)
+    }
+
+    fn traverse(&self, visit: PyVisit<'_>) -> Result<(), PyTraverseError> {
+        visit.call(&self.graph)
+    }
+}
+
 #[derive(Clone, Copy)]
 enum ViewIndex {
     Node(usize),
@@ -647,8 +689,8 @@ enum ViewIndex {
 macro_rules! graph_view {
     ($doc:literal, $rust:ident, $python:literal, $index_variant:ident) => {
         #[doc = $doc]
-        #[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pyclass)]
-        #[pyclass(unsendable, name = $python)]
+        #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
+        #[pyclass(module = "symbolica.community.graph", unsendable, name = $python)]
         pub struct $rust {
             graph: Option<Py<PyGraph>>,
             index: usize,
@@ -842,8 +884,10 @@ impl PyNode {
         Ok(PyNodeDrawing::live(
             py,
             &state.as_ref().expect("checked").graph[NodeIndex(self.index)].drawing,
-            graph_obj.clone_ref(py),
-            self.revision,
+            Box::new(GraphDrawingGuard {
+                graph: graph_obj.clone_ref(py),
+                revision: self.revision,
+            }),
         ))
     }
 
@@ -933,8 +977,10 @@ impl PyEdge {
         Ok(PyEdgeDrawing::live(
             py,
             &state.as_ref().expect("checked").graph[EdgeIndex(self.index)].drawing,
-            graph_obj.clone_ref(py),
-            self.revision,
+            Box::new(GraphDrawingGuard {
+                graph: graph_obj.clone_ref(py),
+                revision: self.revision,
+            }),
         ))
     }
 
@@ -1026,8 +1072,10 @@ impl PyHalfEdge {
         Ok(PyHalfEdgeDrawing::live(
             py,
             &state.as_ref().expect("checked").graph[Hedge(self.index)].drawing,
-            graph_obj.clone_ref(py),
-            self.revision,
+            Box::new(GraphDrawingGuard {
+                graph: graph_obj.clone_ref(py),
+                revision: self.revision,
+            }),
         ))
     }
 
@@ -1139,7 +1187,7 @@ impl PyGraph {
         name: Option<String>,
         global_data: Option<PyGlobalData>,
         codec: Option<Py<PyDotCodec>>,
-        #[gen_stub(override_type(type_repr = "RenderConfig | None"))] render_config: Option<
+        #[gen_stub(override_type(type_repr = "RenderSettings | None"))] render_config: Option<
             Py<PyAny>,
         >,
         node_store: PyNodeStore,
@@ -1193,7 +1241,7 @@ impl PyGraph {
     }
 
     #[getter]
-    #[gen_stub(override_return_type(type_repr = "RenderConfig"))]
+    #[gen_stub(override_return_type(type_repr = "RenderSettings"))]
     fn render_config(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         Ok(self
             .state
@@ -1207,7 +1255,7 @@ impl PyGraph {
     #[setter]
     fn set_render_config(
         slf: &Bound<'_, Self>,
-        #[gen_stub(override_type(type_repr = "RenderConfig"))] value: Py<PyAny>,
+        #[gen_stub(override_type(type_repr = "RenderSettings"))] value: Py<PyAny>,
     ) -> PyResult<()> {
         let py = slf.py();
         crate::typst::validate_render_config(py, &value)?;
@@ -1412,6 +1460,23 @@ impl PyGraph {
         Ok(())
     }
 
+    /// Change an edge's direction and invalidate existing graph-element views.
+    fn set_orientation(
+        &self,
+        #[gen_stub(override_type(type_repr="builtins.int | builtins.str", imports=("builtins")))]
+        key: &Bound<'_, PyAny>,
+        orientation: PyOrientation,
+    ) -> PyResult<()> {
+        let index = self.resolve_edge(key)?;
+        let mut state = self.state.borrow_mut();
+        let state = state.as_mut().expect("checked");
+        state
+            .graph
+            .set_orientation(EdgeIndex(index), orientation.into());
+        state.revision += 1;
+        Ok(())
+    }
+
     fn reverse_edge(
         &self,
         #[gen_stub(override_type(type_repr="builtins.int | builtins.str", imports=("builtins")))]
@@ -1537,45 +1602,45 @@ impl PyGraph {
         dot::encode_graph(py, self, codec)
     }
 
-    /// Stage one render so its exact Typst source and compiled output stay correlated.
+    /// Snapshot a drawing, using native SVG geometry for ordinary graph settings.
     #[pyo3(signature = (*, config=None))]
-    fn prepare_render(
-        slf: Py<PyGraph>,
-        py: Python<'_>,
-        #[gen_stub(override_type(type_repr = "RenderConfig | None"))] config: Option<
-            &Bound<'_, PyAny>,
-        >,
-    ) -> PyResult<crate::render::PreparedRender> {
-        crate::render::prepare_graph(py, &slf, config)
-    }
-
-    #[pyo3(signature = (output, *, config=None))]
     fn render(
         slf: Py<PyGraph>,
         py: Python<'_>,
-        #[gen_stub(override_type(type_repr="builtins.str | os.PathLike[builtins.str]", imports=("builtins", "os")))]
-        output: PathBuf,
-        #[gen_stub(override_type(type_repr = "RenderConfig | None"))] config: Option<
+        #[gen_stub(override_type(type_repr = "RenderSettings | None"))] config: Option<
             &Bound<'_, PyAny>,
         >,
-    ) -> PyResult<PathBuf> {
-        crate::render::render_graph(py, &slf, output, config)
+    ) -> PyResult<PyDiagramView> {
+        render::render_graph(py, &slf, config, None)
     }
 
-    #[pyo3(signature = (*, config=None))]
+    #[pyo3(signature = (*, config=None, browser=None))]
     fn to_svg(
         slf: Py<PyGraph>,
         py: Python<'_>,
-        #[gen_stub(override_type(type_repr = "RenderConfig | None"))] config: Option<
+        #[gen_stub(override_type(type_repr = "RenderSettings | None"))] config: Option<
             &Bound<'_, PyAny>,
         >,
+        browser: Option<&str>,
     ) -> PyResult<String> {
-        crate::render::graph_to_svg(py, &slf, config)
+        render::render_graph(py, &slf, config, None)?
+            .snapshot(py, browser)?
+            .to_svg()
     }
 
     #[pyo3(signature = ())]
-    fn _repr_svg_(slf: Py<PyGraph>, py: Python<'_>) -> PyResult<String> {
-        crate::render::graph_to_svg(py, &slf, None)
+    fn _mime_(slf: Py<PyGraph>, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        render::render_graph(py, &slf, None, None)?._mime_(py)
+    }
+
+    #[pyo3(signature = (include=None, exclude=None))]
+    fn _repr_mimebundle_(
+        slf: Py<PyGraph>,
+        py: Python<'_>,
+        include: Option<Vec<String>>,
+        exclude: Option<Vec<String>>,
+    ) -> PyResult<Py<PyAny>> {
+        render::render_graph(py, &slf, None, None)?._repr_mimebundle_(py, include, exclude)
     }
 
     #[pyo3(name = "full_subgraph", signature = ())]
@@ -2384,6 +2449,7 @@ pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<PyHalfEdgeSpec>()?;
     module.add_class::<PyEdgeSpec>()?;
     module.add_class::<PyGraph>()?;
+    module.add_class::<algorithms::PyEdgeSignature>()?;
     module.add_class::<PyNode>()?;
     module.add_class::<PyEdge>()?;
     module.add_class::<PyHalfEdge>()?;

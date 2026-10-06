@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/alphal00p-docs-builder", "crates/alphal00p-docs-catalogs", "crates/alphal00p-docs-examples", "crates/alphal00p-docs-macros", "crates/alphal00p-docs-python-exporter", "crates/alphal00p-docs-schema", "crates/clinnet", "crates/feynkit", "crates/feynkit-amplitude", "crates/feynkit-cff", "crates/feynkit-generator", "crates/feynkit-graph", "crates/feynkit-kinematics", "crates/feynkit-model", "crates/feynkit-tensor", "crates/feynkit-ufo", "crates/gammaloop-api", "crates/gammaloop-tracing-filter", "crates/gammaloop-tracing-filter-macros", "crates/gammaloop-workspace-hack", "crates/gammalooprs", "crates/idenso", "crates/kurvst", "crates/linnest", "crates/linnet", "crates/linnet-py", "crates/spenso", "crates/spenso-hep-lib", "crates/spenso-macros", "crates/spynso3", "crates/symbolica-data", "crates/symbolica-notation", "crates/symbolica-utils", "crates/three-dimensional-reps", "crates/vakint", "tests"]
+members = ["crates/alphal00p-docs-builder", "crates/alphal00p-docs-catalogs", "crates/alphal00p-docs-examples", "crates/alphal00p-docs-macros", "crates/alphal00p-docs-python-exporter", "crates/alphal00p-docs-schema", "crates/clinnet", "crates/feynkit", "crates/feynkit-amplitude", "crates/feynkit-cff", "crates/feynkit-generator", "crates/feynkit-graph", "crates/feynkit-kinematics", "crates/feynkit-model", "crates/feynkit-tensor", "crates/feynkit-ufo", "crates/gammaloop-api", "crates/gammaloop-tracing-filter", "crates/gammaloop-tracing-filter-macros", "crates/gammaloop-workspace-hack", "crates/gammalooprs", "crates/idenso", "crates/kurvst", "crates/linnest", "crates/linnet", "crates/linnet-py", "crates/linnet-render-py", "crates/spenso", "crates/spenso-hep-lib", "crates/spenso-macros", "crates/spynso3", "crates/symbolica-data", "crates/symbolica-notation", "crates/symbolica-utils", "crates/three-dimensional-reps", "crates/vakint", "tests"]
 default-members = ["crates/gammaloop-api"]
 
 [workspace.package]
@@ -43,6 +43,7 @@ itertools = "0.14"
 json5 = "0.4.1"
 linnest = { path = "crates/linnest/" }
 linnet = { path = "crates/linnet/", default-features = false }
+linnet-render-py = { path = "crates/linnet-render-py/", default-features = false }
 momtrop = { git = "https://github.com/alphal00p/momtrop", rev = "2c80fae4dfb0f136ee07f750efd225d84feff072", default-features = false }
 ndarray = "0.17.2"
 notify = "8.2.0"
