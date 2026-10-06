@@ -70,13 +70,13 @@ assert evaluator.evaluate([[]])[0][1, 0] == 3.0
             citations[0]
                 .reasons
                 .iter()
-                .any(|reason| reason.contains("Executed a tensor network"))
+                .any(|reason| reason.contains("Tensor-network contractions"))
         );
         assert!(
             citations[0]
                 .reasons
                 .iter()
-                .any(|reason| reason.contains("Evaluated tensor components"))
+                .any(|reason| reason.contains("Numerical evaluation of tensor components"))
         );
 
         py.run(c"A.contract()", Some(&globals), None)?;
@@ -84,7 +84,7 @@ assert evaluator.evaluate([[]])[0][1, 0] == 3.0
         assert_eq!(citations.len(), 2);
         assert_eq!(citations[1].id, "10.5281/zenodo.18248409");
         assert_eq!(citations[1].reasons.len(), 1);
-        assert!(citations[1].reasons[0].contains("symbolic tensor contraction"));
+        assert!(citations[1].reasons[0].contains("Symbolic tensor contractions"));
 
         py.run(
             c"
@@ -104,17 +104,17 @@ word.simplify_algebra(gamma=True, color=False)
         assert!(
             reasons
                 .iter()
-                .any(|reason| reason.contains("Dirac gamma identities"))
+                .any(|reason| reason.contains("Dirac gamma algebra"))
         );
         assert!(
             !reasons
                 .iter()
-                .any(|reason| reason.contains("color identities"))
+                .any(|reason| reason.contains("Color algebra"))
         );
         assert!(
             !reasons
                 .iter()
-                .any(|reason| reason.contains("epsilon identities"))
+                .any(|reason| reason.contains("Levi-Civita identities"))
         );
 
         py.run(c"A.canonize()", Some(&globals), None)?;
