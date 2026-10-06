@@ -204,14 +204,14 @@ pub fn stub_info() -> pyo3_stub_gen::Result<pyo3_stub_gen::StubInfo> {
                 "FeynKit did not contribute a symbolica.community.hepkit stub module",
             )
         })?;
-    // Shared graph types retain one runtime identity and canonical tensor stubs.
+    // Shared graph types retain one runtime identity and canonical graph stubs.
     for name in ["LayoutSettings", "StrokeStyle", "DiagramRender"] {
         module.variables.insert(
             name,
             pyo3_stub_gen::generate::VariableDef {
                 name,
                 type_: pyo3_stub_gen::TypeInfo::with_module("typing.TypeAlias", "typing".into()),
-                default: Some(format!("symbolica.community.tensor.{name}")),
+                default: Some(format!("symbolica.community.graph.{name}")),
             },
         );
     }
