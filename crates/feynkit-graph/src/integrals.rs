@@ -13,6 +13,7 @@ use symbolica::domains::{
     rational::Q,
     rational_polynomial::{RationalPolynomial, RationalPolynomialField},
 };
+use symbolica::poly::PolyVariable;
 use symbolica::tensors::matrix::Matrix;
 use thiserror::Error;
 
@@ -72,7 +73,8 @@ pub enum IntegralFamilyError {
 /// The family tracks algebraic completeness and verifies affine loop-momentum
 /// maps. Parametric scaling certificates detect scaleless sectors in dimensional
 /// regularization. Integration prescriptions and IBP solutions require additional
-/// information beyond this algebraic representation.
+/// information beyond this algebraic representation. Raw Gaussian-rational
+/// number coefficients remain unsupported by the native rational coefficient field.
 #[derive(Clone, Debug)]
 pub struct IntegralFamily {
     kinematics: Kinematics,
@@ -93,28 +95,39 @@ impl IntegralFamily {
         expressions: &[impl AtomCore],
         variables: &[Atom],
     ) -> Result<(CoefficientMatrix, CoefficientMatrix), IntegralFamilyError> {
+        let polynomial_variables = variables
+            .iter()
+            .cloned()
+            .map(PolyVariable::try_from)
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(IntegralFamilyError::InvalidBasis)?;
         let mut entries: Vec<RationalPolynomial<IntegerRing, u16>> = Vec::new();
         for expression in expressions {
-            let coefficients = expression
-                .coefficient_list::<i32>(variables)
-                .into_iter()
-                .collect::<BTreeMap<_, _>>();
-            if coefficients
-                .keys()
-                .any(|key| !key.is_one() && !variables.contains(key))
-            {
-                return Err(IntegralFamilyError::InvalidBasis(
-                    "expected affine expressions".into(),
-                ));
+            // Convert before grouping: AtomField's statistical zero test can
+            // discard tiny symbolic coefficients after expansion. Keeping the
+            // denominator preserves the original affine row's normalization.
+            let rational = expression
+                .try_to_rational_polynomial(&Q, &Z, None)
+                .map_err(|e| IntegralFamilyError::InvalidBasis(e.to_string()))?;
+            let polynomial = rational
+                .to_polynomial(&polynomial_variables, false)
+                .map_err(|e| IntegralFamilyError::InvalidBasis(e.into()))?;
+            let mut row =
+                vec![RationalPolynomial::new(&Z, Default::default()); variables.len() + 1];
+            for term in &polynomial {
+                let mut powers = term.exponents.iter().enumerate().filter(|(_, p)| **p != 0);
+                let column = match (powers.next(), powers.next()) {
+                    (None, None) => variables.len(),
+                    (Some((index, 1)), None) => index,
+                    _ => {
+                        return Err(IntegralFamilyError::InvalidBasis(
+                            "expected affine expressions".into(),
+                        ));
+                    }
+                };
+                row[column] = term.coefficient.clone();
             }
-            for variable in variables.iter().chain(std::iter::once(&Atom::one())) {
-                let coefficient = coefficients.get(variable).cloned().unwrap_or_default();
-                entries.push(
-                    coefficient
-                        .try_to_rational_polynomial(&Q, &Z, None)
-                        .map_err(|e| IntegralFamilyError::InvalidBasis(e.to_string()))?,
-                );
-            }
+            entries.extend(row);
         }
         // Every entry must use the same variable ordering for exact arithmetic.
         if let Some((first, rest)) = entries.split_first_mut() {
@@ -246,39 +259,40 @@ impl IntegralFamily {
         )
     }
 
+    fn require_external_coefficient(&self, coefficient: &Atom) -> Result<(), IntegralFamilyError> {
+        let rep = Minkowski {}.new_rep(self.kinematics.dimension());
+        if self
+            .scalar_products
+            .iter()
+            .chain(&self.loop_momenta)
+            .any(|p| coefficient.contains(p.as_view()))
+            || self
+                .loop_momenta
+                .iter()
+                .any(|p| coefficient.contains(rep.vector(p.as_view(), []).as_view()))
+        {
+            return Err(IntegralFamilyError::InvalidBasis(format!(
+                "coefficient depends on loop momenta: {coefficient}"
+            )));
+        }
+        Ok(())
+    }
+
     fn rank_of(&self, denominators: &[Atom]) -> Result<usize, IntegralFamilyError> {
         if denominators.is_empty() {
             return Ok(0);
         }
-        let rep = Minkowski {}.new_rep(self.kinematics.dimension());
-        let loop_vectors = self
-            .loop_momenta
-            .iter()
-            .map(|p| rep.vector(p.as_view(), []))
-            .collect::<Vec<_>>();
-        // Reject hidden nonlinear dependence, including functions or inverse
-        // powers of a loop scalar product treated as polynomial coefficients.
-        for denominator in denominators {
-            for (key, coefficient) in denominator.coefficient_list::<i32>(&self.scalar_products) {
-                if !(key.is_one() || self.scalar_products.contains(&key))
-                    || self
-                        .scalar_products
-                        .iter()
-                        .any(|p| coefficient.contains(p.as_view()))
-                    || loop_vectors
-                        .iter()
-                        .chain(&self.loop_momenta)
-                        .any(|p| coefficient.contains(p.as_view()))
-                {
-                    return Err(IntegralFamilyError::InvalidBasis(format!(
-                        "denominator is not affine in the declared loop scalar products: {denominator}"
-                    )));
-                }
-            }
+        let (matrix, constants) = Self::affine_system(denominators, &self.scalar_products)?;
+        // Native rational-polynomial conversion treats functions and powers as
+        // external atoms. Reject any hidden loop dependence in those atoms too.
+        for coefficient in matrix
+            .row_iter()
+            .flatten()
+            .chain(constants.row_iter().flatten())
+        {
+            self.require_external_coefficient(&coefficient.to_expression())?;
         }
-        Atom::system_to_matrix::<u16, _, _>(denominators, &self.scalar_products)
-            .map(|(matrix, _)| matrix.rank())
-            .map_err(|error| IntegralFamilyError::InvalidBasis(error.to_string()))
+        Ok(matrix.rank())
     }
 
     /// Append independent candidates, then scalar products, to form a basis.
@@ -581,6 +595,114 @@ mod tests {
         assert!(matches!(
             family.scalar_product_rules(&[m2]),
             Err(IntegralFamilyError::InvalidLabels)
+        ));
+    }
+
+    #[test]
+    fn exact_affine_extraction_preserves_original_rational_row_scales() {
+        let k = parse!("family_exact_scale::k");
+        let p = parse!("family_exact_scale::p");
+        let kin = Kinematics::new();
+        let x = kin.scalar_product(&k, &k).unwrap();
+        let y = kin.scalar_product(&k, &p).unwrap();
+        let q = parse!("(family_exact_scale::a+family_exact_scale::b)/10^1000");
+        let expressions = [
+            (&x + Atom::num(2) * &y - 7) * &q / 3,
+            (Atom::num(3) * &x - &y + 5) / (Atom::num(11) * &q),
+        ];
+        let expected = [
+            vec![&q / 3, Atom::num(2) * &q / 3, Atom::num(7) * &q / 3],
+            vec![
+                Atom::num(3) / (Atom::num(11) * &q),
+                -Atom::one() / (Atom::num(11) * &q),
+                -Atom::num(5) / (Atom::num(11) * &q),
+            ],
+        ];
+        for expanded in [false, true] {
+            let input = expressions
+                .iter()
+                .map(|d| if expanded { d.expand() } else { d.clone() })
+                .collect::<Vec<_>>();
+            let (matrix, rhs) =
+                IntegralFamily::affine_system(&input, &[x.clone(), y.clone()]).unwrap();
+            for (i, row) in matrix.row_iter().enumerate() {
+                for (j, coefficient) in row.iter().enumerate() {
+                    assert!(
+                        (coefficient.to_expression() - &expected[i][j])
+                            .together()
+                            .is_zero()
+                    );
+                }
+                assert!(
+                    (rhs[(i as u32, 0)].to_expression() - &expected[i][2])
+                        .together()
+                        .is_zero()
+                );
+            }
+            let family =
+                IntegralFamily::new(vec![k.clone()], vec![p.clone()], input, &kin).unwrap();
+            assert_eq!(family.rank(), 2);
+            let labels = [
+                parse!("family_exact_scale::d1"),
+                parse!("family_exact_scale::d2"),
+            ];
+            for (expression, label) in expressions.iter().zip(&labels) {
+                let rewritten = family.rewrite_numerator(expression, &labels).unwrap();
+                assert!((rewritten - label).together().is_zero());
+            }
+        }
+    }
+
+    #[test]
+    fn tiny_hidden_loop_dependence_and_nonlinear_terms_are_rejected_exactly() {
+        let k = parse!("family_exact_guard::k");
+        let p = parse!("family_exact_guard::p");
+        let r = parse!("family_exact_guard::r");
+        let kin = Kinematics::new();
+        let x = kin.scalar_product(&k, &k).unwrap();
+        let y = kin.scalar_product(&k, &p).unwrap();
+        let hidden = symbolica::symbol!("family_exact_guard::hidden");
+        let family = IntegralFamily::new(
+            vec![k.clone()],
+            vec![p.clone()],
+            vec![x.clone(), y.clone()],
+            &kin,
+        )
+        .unwrap();
+        for scale in [
+            parse!("(family_exact_guard::a+family_exact_guard::b)/10^1000"),
+            parse!("(family_exact_guard::a+family_exact_guard::b)*10^1000"),
+        ] {
+            for bad in [
+                x.clone().pow(2),
+                x.clone().pow(-1),
+                hidden.call(&x),
+                hidden.call(&k),
+                kin.scalar_product(&k, &r).unwrap(),
+            ] {
+                for expanded in [false, true] {
+                    let bad = &scale * &bad;
+                    let bad = if expanded { bad.expand() } else { bad };
+                    assert!(matches!(
+                        IntegralFamily::new(
+                            vec![k.clone()],
+                            vec![p.clone()],
+                            vec![&y + &bad],
+                            &kin
+                        ),
+                        Err(IntegralFamilyError::InvalidBasis(_))
+                    ));
+                    assert!(matches!(
+                        family.require_external_coefficient(&bad),
+                        Err(IntegralFamilyError::InvalidBasis(_))
+                    ));
+                }
+            }
+            family.require_external_coefficient(&scale).unwrap();
+        }
+        assert!(matches!(
+            IntegralFamily::new(vec![k], vec![p], vec![parse!("𝑖") * x - 1], &kin),
+            Err(IntegralFamilyError::InvalidBasis(_))
         ));
     }
 }
