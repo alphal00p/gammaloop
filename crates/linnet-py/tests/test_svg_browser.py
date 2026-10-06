@@ -3,13 +3,140 @@
 import importlib.util
 import unittest
 
-import linnet as lp
+from symbolica.community import graph as lp
 
 
 @unittest.skipUnless(
     importlib.util.find_spec("playwright"), "Playwright is not installed"
 )
 class SvgBrowserTests(unittest.TestCase):
+    def test_physical_scale_is_shared_and_fitted_drawings_are_not_cropped(self):
+        from playwright.sync_api import sync_playwright
+
+        sizes = [(120, 80), (360, 80), (120, 600), (900, 80)]
+        drawings = []
+        for width, height in sizes:
+            source = (
+                f"#set page(width: {width}pt, height: {height}pt, margin: 0pt)\n"
+                '#link("#linnet-node-0")[#text(size: 12pt)[Same label]]'
+            )
+            drawings.append(
+                lp.DiagramRender.from_sources({"main.typ": source.encode()}).to_html()
+            )
+        document = "<style>figure { margin: 0; }</style>" + "".join(
+            f'<div id="graph-{index}" style="width:520px">{drawing}</div>'
+            for index, drawing in enumerate(drawings)
+        )
+        with sync_playwright() as playwright:
+            for engine in (playwright.chromium, playwright.webkit):
+                with self.subTest(browser=engine.name):
+                    browser = engine.launch()
+                    try:
+                        page = browser.new_page(
+                            viewport={"width": 1100, "height": 1000}
+                        )
+                        page.set_content(document)
+                        labels = []
+                        for index, (width, height) in enumerate(sizes):
+                            owner = page.locator(f"#graph-{index}")
+                            camera = owner.locator(".linnet-viewport")
+                            scale = camera.evaluate("s => s.getScreenCTM().a")
+                            expected = min(4 / 3, 520 / width)
+                            self.assertAlmostEqual(scale, expected, places=5)
+                            self.assertEqual(
+                                owner.locator("output").inner_text(),
+                                f"{round(100 * expected / (4 / 3))}%",
+                            )
+                            x, y, w, h = map(
+                                float, camera.get_attribute("viewBox").split()
+                            )
+                            self.assertLessEqual(x, 1e-6)
+                            self.assertLessEqual(y, 1e-6)
+                            self.assertGreaterEqual(x + w, width - 1e-6)
+                            self.assertGreaterEqual(y + h, height - 1e-6)
+                            labels.append(
+                                owner.locator(
+                                    '[data-linnet-kind="node"]'
+                                ).bounding_box()
+                            )
+                        # Identical authored text has identical displayed dimensions,
+                        # despite different drawing widths and a tall viewport.
+                        for label in labels[1:3]:
+                            self.assertAlmostEqual(
+                                label["height"], labels[0]["height"], places=3
+                            )
+                            self.assertAlmostEqual(
+                                label["width"], labels[0]["width"], places=3
+                            )
+                        self.assertGreater(
+                            page.locator("#graph-2 > figure > svg").bounding_box()[
+                                "height"
+                            ],
+                            800,
+                        )
+
+                        first = page.locator("#graph-0")
+                        camera = first.locator(".linnet-viewport")
+                        camera.focus()
+                        page.keyboard.press("+")
+                        first.evaluate("e => e.style.width = '300px'")
+                        page.wait_for_function(
+                            "document.querySelector('#graph-0 svg').viewBox.baseVal.width === 300"
+                        )
+                        self.assertAlmostEqual(
+                            camera.evaluate("s => s.getScreenCTM().a"), 1.4, places=5
+                        )
+                        self.assertEqual(first.locator("output").inner_text(), "105%")
+                        page.keyboard.press("0")
+                        self.assertEqual(first.locator("output").inner_text(), "100%")
+                    finally:
+                        browser.close()
+
+    def test_neutral_palette_follows_media_and_explicit_theme(self):
+        from playwright.sync_api import sync_playwright
+
+        left, right = lp.node("left"), lp.node("right")
+        graph = lp.build(left, right, lp.edge(lp.source(left), "p", lp.sink(right)))
+        with sync_playwright() as playwright:
+            for engine in (playwright.chromium, playwright.webkit):
+                with self.subTest(browser=engine.name):
+                    browser = engine.launch()
+                    try:
+                        page = browser.new_page()
+                        page.set_content(graph.render().to_html())
+                        paper = page.locator(
+                            'svg[data-linnet-interactive] [fill="#ffffff"]'
+                        ).first
+                        ink = page.locator(
+                            'svg[data-linnet-interactive] [fill="#000000"]'
+                        ).first
+                        self.assertGreater(paper.count(), 0)
+                        self.assertGreater(ink.count(), 0)
+                        for theme, background, foreground in (
+                            ("light", "rgb(255, 255, 255)", "rgb(0, 0, 0)"),
+                            ("dark", "rgb(28, 32, 37)", "rgb(230, 235, 241)"),
+                        ):
+                            page.emulate_media(color_scheme=theme)
+                            self.assertEqual(
+                                paper.evaluate("e => getComputedStyle(e).fill"),
+                                background,
+                            )
+                            self.assertEqual(
+                                ink.evaluate("e => getComputedStyle(e).fill"),
+                                foreground,
+                            )
+                        page.locator("html").evaluate("e => e.dataset.theme = 'light'")
+                        self.assertEqual(
+                            paper.evaluate("e => getComputedStyle(e).fill"),
+                            "rgb(255, 255, 255)",
+                        )
+                        self.assertEqual(
+                            ink.evaluate("e => getComputedStyle(e).fill"),
+                            "rgb(0, 0, 0)",
+                        )
+                    finally:
+                        browser.close()
+
     def test_collection_viewport_keeps_hover_and_pinned_details_inside_graph(self):
         from playwright.sync_api import sync_playwright
 

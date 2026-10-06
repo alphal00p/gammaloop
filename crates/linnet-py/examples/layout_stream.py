@@ -1,8 +1,8 @@
 # /// script
 # requires-python = ">=3.10"
 # dependencies = [
+#     "symbolica==3.0.1",
 #     "anywidget==0.9.18",
-#     "linnet==0.1.0",
 #     "marimo==0.24.0",
 #     "typst==0.15.0",
 # ]
@@ -22,7 +22,7 @@ def _():
     import sys
 
     import anywidget
-    import linnet as lp
+    from symbolica.community import graph as lp
     import marimo as mo
     import traitlets
 

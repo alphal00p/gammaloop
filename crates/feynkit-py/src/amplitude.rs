@@ -1,4 +1,4 @@
-use linnet_render_py::PyDiagramRender;
+use linnet_py::PyDiagramRender;
 use std::{collections::BTreeMap, sync::Arc};
 
 use feynkit_amplitude::{Amplitude, AmplitudeLeg, AmplitudeOptions, SquaredAmplitude};
@@ -378,11 +378,14 @@ impl PyAmplitude {
     /// --------
     /// Using the setup in the ``Amplitude`` class example:
     ///
-    /// >>> drawing = amplitude.render(config=hep.RenderSettings(node_radius=5), max_diagrams=2)
+    /// >>> from symbolica.community.graph import RenderSettings, DrawOptions
+    /// >>> drawing = amplitude.render(config=RenderSettings(drawing=DrawOptions(node_radius=5)), max_diagrams=2)
     /// >>> html = drawing.to_html()
     ///
     /// Parameters
     /// ----------
+    /// style : DiagramStyle or None, optional
+    ///     Particle, momentum, and physical index presentation.
     /// config : RenderSettings, optional
     ///     Layout, labels, and stroke settings shared by all diagrams.
     /// max_diagrams : int or None, optional
@@ -390,15 +393,16 @@ impl PyAmplitude {
     /// term_settings : DisplaySettings, optional
     ///     Tensor notation settings for each weighted contribution.
     ///
-    #[pyo3(signature = (*, config=None, max_diagrams=Some(6), term_settings=None),
-        text_signature = "($self, *, config=None, max_diagrams=6, term_settings=None)")]
+    #[pyo3(signature = (*, config=None, style=None, max_diagrams=Some(6), term_settings=None),
+        text_signature = "($self, *, config=None, style=None, max_diagrams=6, term_settings=None)")]
     fn render(
         &self,
         py: Python<'_>,
-        config: Option<&crate::PyRenderSettings>,
+        config: Option<&linnet_py::PyRenderSettings>,
+        style: Option<&crate::render_settings::PyDiagramStyle>,
         max_diagrams: Option<usize>,
         term_settings: Option<&spynso3::display::DisplaySettings>,
-    ) -> PyResult<PyAmplitudeRender> {
+    ) -> PyResult<PyDiagramRender> {
         let limit = max_diagrams.unwrap_or(self.inner.diagrams().len());
         let kwargs = pyo3::types::PyDict::new(py);
         if let Some(settings) = term_settings {
@@ -434,9 +438,10 @@ impl PyAmplitude {
                 .map(|diagram| PyFeynmanDiagram::from(diagram.as_ref().clone())),
             Some(&terms),
             config,
+            style,
             limit,
         )?;
-        Ok(PyAmplitudeRender { html, diagrams })
+        PyDiagramRender::from_diagrams(diagrams, html)
     }
     /// Render compact diagram rows with weighted operators and expandable graphs.
     ///
@@ -447,9 +452,8 @@ impl PyAmplitude {
     /// >>> from IPython.display import display
     /// >>> display(amplitude)
     fn _repr_html_(&self, py: Python<'_>) -> PyResult<String> {
-        Ok(self
-            .render(py, None, Some(crate::display::PREVIEW_LIMIT), None)?
-            .html)
+        self.render(py, None, None, Some(crate::display::PREVIEW_LIMIT), None)?
+            .to_html()
     }
 }
 
@@ -683,85 +687,7 @@ impl PySquaredAmplitude {
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<PyAmplitude>()?;
-    module.add_class::<PyAmplitudeRender>()?;
     module.add_class::<PySquaredAmplitude>()?;
     module.add_class::<PyAmplitudeLeg>()?;
     Ok(())
-}
-
-/// A rendered amplitude collection retaining its configured diagram snapshots.
-///
-/// Examples
-/// --------
-/// >>> from symbolica.community import hepkit as hep
-/// >>> process = hep.Model.phi4().process(["phi", "phi"], ["phi", "phi"])
-/// >>> amplitude = hep.Amplitude(process.generate_diagrams().diagrams)
-/// >>> drawing = amplitude.render(max_diagrams=None)
-#[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
-#[pyclass(
-    name = "AmplitudeRender",
-    module = "symbolica.community.hepkit",
-    frozen
-)]
-pub struct PyAmplitudeRender {
-    html: String,
-    /// Rendered diagram snapshots in contribution order, bounded by max_diagrams.
-    ///
-    /// Examples
-    /// --------
-    /// Using the setup in the ``AmplitudeRender`` class example:
-    ///
-    /// >>> svg = drawing.diagrams[0].to_svg()
-    #[pyo3(get)]
-    diagrams: Vec<PyDiagramRender>,
-}
-
-#[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
-#[pymethods]
-impl PyAmplitudeRender {
-    /// Export the configured collection as interactive notebook HTML.
-    ///
-    /// Examples
-    /// --------
-    /// Using the setup in the ``AmplitudeRender`` class example:
-    ///
-    /// >>> html = drawing.to_html()
-    fn to_html(&self) -> &str {
-        &self.html
-    }
-
-    /// Display the configured collection in IPython and Jupyter.
-    ///
-    /// Examples
-    /// --------
-    /// Using the setup in the ``AmplitudeRender`` class example:
-    ///
-    /// >>> from IPython.display import display
-    /// >>> display(drawing)
-    fn _repr_html_(&self) -> &str {
-        self.to_html()
-    }
-
-    /// Display the configured collection in Marimo.
-    ///
-    /// Examples
-    /// --------
-    /// Using the setup in the ``AmplitudeRender`` class example:
-    ///
-    /// >>> import marimo as mo
-    /// >>> mo.as_html(drawing)
-    fn _mime_(&self) -> (&str, &str) {
-        ("text/html", self.to_html())
-    }
-
-    /// Summarize the number of rendered contributions in text-only frontends.
-    ///
-    /// Examples
-    /// --------
-    /// Using the setup in the ``AmplitudeRender`` class example:
-    ///
-    /// >>> text = repr(drawing)
-    fn __repr__(&self) -> String {
-        format!("AmplitudeRender(diagrams={})", self.diagrams.len())
-    }
 }

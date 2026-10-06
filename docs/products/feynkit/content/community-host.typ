@@ -60,10 +60,10 @@ calling `set_license_key`. Keep expression-valued constants as static methods. A
 the native host, run `python crates/feynkit-py/tests/installed_import.py` against that installation
 to check that importing `E` and `hepkit` defers the license banner until the first operation.
 Notebook figures use embedded Rust SVG rendering and Typst labels; no Python
-Linnet or Typst dependency is needed. Registration also installs the shared
-`symbolica.community.render_native` module from `linnet-render-py`. Package
-`crates/linnet-render-py/python/symbolica/community/render` alongside HepKit so
-`symbolica.community.render` exposes its shared settings, snapshots, and type information. Include the UFO loader revision documented in the #link("guides/showcases/ufo/")[UFO import example]
+Linnet or Typst dependency is needed. Register `linnet_py::GraphModule` to install the shared
+`symbolica.community.graph_native` module from `linnet-py`. Package
+`crates/linnet-py/python/symbolica/community/graph` alongside HepKit so
+`symbolica.community.graph` exposes its shared settings, snapshots, and type information. Include the UFO loader revision documented in the #link("guides/showcases/ufo/")[UFO import example]
 when offering raw UFO import. Install it with `--no-deps` into the existing host environment:
 the host supplies the single Symbolica extension. The checkout's `uv.lock` instead installs a
 standalone Symbolica 3 kernel for GammaLoop development; do not sync that environment over a

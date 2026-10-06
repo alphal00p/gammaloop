@@ -1281,17 +1281,14 @@ mod tests {
         }
         dofs.validate(&after).unwrap();
         after[1][1] += 0.1;
-        assert!(
-            dofs.validate(&after)
-                .unwrap_err()
-                .contains("fixed reference")
-        );
+        assert!(dofs
+            .validate(&after)
+            .unwrap_err()
+            .contains("fixed reference"));
         metadata[0].shift[0] += 0.1;
-        assert!(
-            MovementDofs::new(&metadata, false)
-                .unwrap_err()
-                .contains("grouped coordinates")
-        );
+        assert!(MovementDofs::new(&metadata, false)
+            .unwrap_err()
+            .contains("grouped coordinates"));
     }
 
     #[test]
@@ -1304,8 +1301,8 @@ mod tests {
         assert!(MovementDofs::new(&metadata, false).is_err());
         let dofs = MovementDofs::new(&records(&[[0.0, 0.0]]), false).unwrap();
         assert!(dofs.project(&[[f64::NAN, 0.0]], &[], 1.0).is_err());
-        assert!(
-            dofs.project(
+        assert!(dofs
+            .project(
                 &[[0.0, 0.0]],
                 &[Halfplane {
                     point: 0,
@@ -1314,8 +1311,7 @@ mod tests {
                 }],
                 1.0
             )
-            .is_err()
-        );
+            .is_err());
         assert!(dofs.project(&[[0.0, 0.0]], &[], 0.0).is_err());
     }
 

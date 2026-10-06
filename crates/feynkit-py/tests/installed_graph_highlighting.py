@@ -1,9 +1,9 @@
-"""Exercise native Linnest highlights in an installed FeynKit host with typst-py."""
+"""Exercise native Linnest highlights in an installed FeynKit host with embedded Typst."""
 
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
-from symbolica.community import render
+from symbolica.community import graph as rendering
 from symbolica.community import hepkit as fk
 
 model = fk.Model(Path(__file__).parent / "fixtures/scalars_2p_3p.json")
@@ -25,7 +25,7 @@ diagram = next(
     )
     > 1
 )
-graph = diagram.to_linnet()
+graph = diagram.to_graph()
 snapshot = diagram.to_json()
 source = diagram.to_linnest()
 empty = graph.empty_subgraph()
@@ -49,9 +49,9 @@ highlights = [
 for selected in highlights:
     highlighted_source = diagram.to_linnest(highlight=selected)
     assert highlighted_source != source
-    assert "fill: none" in highlighted_source
     svg = diagram.render(highlight=selected).to_svg()
     root = ET.fromstring(svg)
+    assert any(element.get("fill") == "none" for element in root.iter())
     assert any(
         element.get("stroke", "").lower() == "#ffd166" for element in root.iter()
     ), "selected half-edges must retain gold strokes"
@@ -67,7 +67,7 @@ for selected in highlights:
 assert "<figure" in diagram.to_html(highlight=internal)
 
 other = fk.FeynmanDiagram.from_json(model, snapshot)
-for invalid in (other.to_linnet().full_subgraph(), object()):
+for invalid in (other.to_graph().full_subgraph(), object()):
     for render in (diagram.to_linnest, diagram.render, diagram.to_html):
         try:
             render(highlight=invalid)
@@ -95,7 +95,7 @@ cross_section = (
 )
 snapshot = cross_section.to_json()
 for selected in (
-    cross_section.to_linnet().full_subgraph(),
+    cross_section.to_graph().full_subgraph(),
     cross_section.cuts[0].left.subgraph,
 ):
     root = ET.fromstring(cross_section.render(highlight=selected).to_svg())
@@ -117,13 +117,18 @@ diagram = next(
 )
 snapshot = diagram.to_json()
 basis = diagram.loop_momentum_basis
-config = fk.RenderSettings(
-    layout=render.LayoutSettings(impred_steps=40, impred_pull=1.5),
+config = rendering.RenderSettings(
+    layouts=rendering.LayoutSettings(impred_steps=40, impred_pull=1.5),
+)
+style = fk.DiagramStyle(
     show_particle=False,
     show_edge_index=True,
 )
-assert diagram.render(momenta=True).to_svg() == diagram.render(lmb=basis).to_svg()
-svg = diagram.render(config=config, lmb=basis).to_svg()
+assert (
+    diagram.render(style=fk.DiagramStyle(show_momentum=True, momentum_arrows=True)).to_svg()
+    == diagram.render(lmb=basis).to_svg()
+)
+svg = diagram.render(config=config, style=style, lmb=basis).to_svg()
 root = ET.fromstring(svg)
 assert root.tag == "{http://www.w3.org/2000/svg}svg"
 assert 'data-linnet-interactive="true"' in svg
@@ -135,7 +140,7 @@ edge_details = [
 assert edge_details, "configurable SVGs must retain edge hover information"
 for signature in basis.edge_signatures.values():
     assert signature.format_momentum() in json.dumps(edge_details)
-assert config.show_particle is False and config.show_edge_index is True
+assert style.show_particle is False and style.show_edge_index is True
 assert diagram.to_json() == snapshot
 
 alternative = next(
@@ -163,17 +168,19 @@ for render in (diagram.render, diagram.to_html, diagram.to_linnest):
         raise AssertionError("render config must be a typed RenderSettings")
 
 region = diagram.filter(edge=lambda edge: not edge.is_external)
-assert "<svg" in region.render(lmb=basis, config=config).to_svg()
-assert "<figure" in diagram.to_html(momenta=True, config=config)
+assert "<svg" in region.render(lmb=basis, config=config, style=style).to_svg()
+assert "<figure" in diagram.to_html(
+    style=fk.DiagramStyle(show_momentum=True, momentum_arrows=True), config=config
+)
 print("installed rendering options and momentum checks passed")
 
 # Index controls must survive the native diagram-to-renderer boundary.
 unlabelled = ET.fromstring(
-    diagram.render(config=fk.RenderSettings(show_particle=False)).to_svg()
+    diagram.render(style=fk.DiagramStyle(show_particle=False)).to_svg()
 )
 indexed = ET.fromstring(
     diagram.render(
-        config=fk.RenderSettings(show_particle=False, show_node_index=True)
+        style=fk.DiagramStyle(show_particle=False, show_node_index=True)
     ).to_svg()
 )
 assert len(indexed.findall(".//{http://www.w3.org/2000/svg}use")) > len(

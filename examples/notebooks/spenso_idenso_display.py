@@ -4,7 +4,6 @@
 #     "symbolica==3.0.1",
 #     "marimo==0.24.0",
 #     "typst==0.15.0",
-#     "linnet==0.1.0",
 # ]
 # ///
 
@@ -39,7 +38,7 @@ def _(mo):
 
 @app.cell
 def _():
-    import linnet as lp
+    from symbolica.community import graph as lp
     import symbolica as sy
     from symbolica.community import tensor as spenso
     from symbolica.community.tensor import (

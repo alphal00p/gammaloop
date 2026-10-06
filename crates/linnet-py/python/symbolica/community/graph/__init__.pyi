@@ -2,10 +2,13 @@
 # ruff: noqa: E501, F401
 
 import builtins
+import decimal
 import enum
 import os
 import pathlib
 import typing
+from symbolica import ComplexFloat, Float
+from symbolica.core import Expression
 
 __all__ = [
     "AUTO",
@@ -16,6 +19,7 @@ __all__ = [
     "Cycle",
     "Dash",
     "DebugLevel",
+    "DiagramRender",
     "DirectionBasis",
     "DotCodec",
     "DotEdgeData",
@@ -23,6 +27,7 @@ __all__ = [
     "DotVertexData",
     "DrawOptions",
     "DrawingSelectors",
+    "EdgeSignature",
     "EdgeSpec",
     "Flow",
     "Fraction",
@@ -34,7 +39,7 @@ __all__ = [
     "Inherit",
     "Insets",
     "LayoutFrame",
-    "LayoutOptions",
+    "LayoutSettings",
     "LayoutStream",
     "Length",
     "Mark",
@@ -43,7 +48,6 @@ __all__ = [
     "NodeStore",
     "Orientation",
     "OrientedCut",
-    "PreparedRender",
     "Anchor",
     "Compass",
     "DanglingTangent",
@@ -76,7 +80,7 @@ __all__ = [
     "TextStyle",
     "Ratio",
     "RelativeLength",
-    "RenderConfig",
+    "RenderSettings",
     "Stroke",
     "Subgraph",
     "TextLabel",
@@ -91,6 +95,10 @@ __all__ = [
     "sink",
     "source",
 ]
+
+_RealLabel: typing.TypeAlias = Float | int | float | str | decimal.Decimal
+_ExpressionLabel: typing.TypeAlias = Expression | ComplexFloat | _RealLabel | complex | tuple[_RealLabel, _RealLabel] | None
+_LabelKey: typing.TypeAlias = typing.Callable[[typing.Any], _ExpressionLabel] | None
 
 class _TypstValueRef(typing.Protocol): ...
 class _TypstContentRef(typing.Protocol): ...
@@ -177,7 +185,7 @@ _HalfEdgeTarget: typing.TypeAlias = HalfEdge | builtins.int
 _GraphItem: typing.TypeAlias = NodeSpec | EdgeSpec
 _OptionalGlobalData: typing.TypeAlias = GlobalData | None
 _OptionalDotCodec: typing.TypeAlias = DotCodec | None
-_OptionalRenderConfig: typing.TypeAlias = RenderConfig | None
+_OptionalRenderSettings: typing.TypeAlias = RenderSettings | None
 _OptionalPaint: typing.TypeAlias = _Paint | None
 _OptionalLengthValue: typing.TypeAlias = _LengthValue | None
 _OptionalStrokeCap: typing.TypeAlias = StrokeCap | None | Inherit
@@ -242,7 +250,7 @@ _OptionalPadding: typing.TypeAlias = _Padding | None
 _TemplatePath: typing.TypeAlias = builtins.str | os.PathLike[builtins.str] | None | Inherit
 _SourceRootPath: typing.TypeAlias = builtins.str | os.PathLike[builtins.str] | None | Inherit
 _RenderStyle: typing.TypeAlias = GraphStyleOptions | None | Inherit
-_RenderLayouts: typing.TypeAlias = LayoutOptions | None | Inherit
+_RenderLayouts: typing.TypeAlias = LayoutSettings | None | Inherit
 _RenderDrawing: typing.TypeAlias = DrawOptions | None | Inherit
 _RenderSelectors: typing.TypeAlias = DrawingSelectors | None | Inherit
 _TemplateOptions: typing.TypeAlias = _NativeDict | None | Inherit
@@ -315,6 +323,44 @@ class Dash:
     def __new__(cls, pattern: DashPattern) -> Dash: ...
     @staticmethod
     def pattern(values: _LengthArray, *, phase: _LengthValue | None = None) -> Dash: ...
+    def __repr__(self) -> builtins.str: ...
+
+@typing.final
+class DiagramRender:
+    r"""
+    An immutable graph rendering with source inspection, file exports, and notebook display.
+    Render inputs and referenced assets are captured when the result is created.
+    """
+    @property
+    def diagrams(self) -> builtins.list[DiagramRender]:
+        r"""
+        Configured child snapshots for a rendered collection, in display order.
+        """
+    @property
+    def typst_source(self) -> builtins.str: ...
+    @staticmethod
+    def from_sources(sources: dict[str, bytes], *, config: typing.Optional[RenderSettings] = None) -> DiagramRender:
+        r"""
+        Snapshot an authored Typst project, including its referenced assets.
+        """
+    def to_svg(self) -> builtins.str:
+        r"""
+        Return the one-page SVG. Use to_svg_pages for multipage documents.
+        """
+    def to_svg_pages(self) -> builtins.list[builtins.str]: ...
+    def to_html(self) -> builtins.str: ...
+    def to_linnest(self) -> builtins.str: ...
+    def save(self, output: builtins.str | os.PathLike | pathlib.Path) -> pathlib.Path:
+        r"""
+        Export SVG, HTML, Typst, PDF, or PNG, selected by the filename suffix.
+        """
+    def save_pages(self, directory: builtins.str | os.PathLike | pathlib.Path, *, format: builtins.str = 'svg') -> builtins.list[pathlib.Path]:
+        r"""
+        Export every SVG or PNG page to a directory and return the written paths.
+        """
+    def _repr_html_(self) -> builtins.str: ...
+    def _repr_svg_(self) -> typing.Optional[builtins.str]: ...
+    def _mime_(self) -> tuple[builtins.str, builtins.str]: ...
     def __repr__(self) -> builtins.str: ...
 
 @typing.final
@@ -392,6 +438,22 @@ class DrawingSelectors:
     def __new__(cls, *, node: _NodeDrawingSelector = ..., edge: _EdgeDrawingSelector = ..., source: _HalfEdgeDrawingSelector = ..., sink: _HalfEdgeDrawingSelector = ...) -> DrawingSelectors: ...
 
 @typing.final
+class EdgeSignature:
+    r"""
+    A labeled port used in graph generation signatures.
+    Direction is outgoing (True), incoming (False), or undirected (None).
+    """
+    @property
+    def data(self) -> Expression: ...
+    @property
+    def direction(self) -> typing.Optional[builtins.bool]: ...
+    def __new__(cls, data: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal], direction: typing.Optional[builtins.bool] = None) -> EdgeSignature:
+        r"""
+        A labeled outgoing (True), incoming (False), or undirected (None) port.
+        """
+    def flip(self) -> EdgeSignature: ...
+
+@typing.final
 class EdgeSpec:
     r"""
     A reusable declarative edge description accepted by `build()` and `Graph.add_edge()`.
@@ -453,7 +515,7 @@ class Graph:
     Examples
     --------
     ```python
-    import linnet
+    from symbolica.community import graph as linnet
     graph = linnet.build(linnet.node("source"), linnet.node("sink"))
     ```
     """
@@ -464,9 +526,9 @@ class Graph:
     @global_data.setter
     def global_data(self, value: GlobalData) -> None: ...
     @property
-    def render_config(self) -> RenderConfig: ...
+    def render_config(self) -> RenderSettings: ...
     @render_config.setter
-    def render_config(self, value: RenderConfig) -> None: ...
+    def render_config(self, value: RenderSettings) -> None: ...
     @property
     def n_nodes(self) -> builtins.int: ...
     @property
@@ -478,7 +540,7 @@ class Graph:
         r"""
         Return the node-storage strategy used by this graph.
         """
-    def __new__(cls, *, name: typing.Optional[builtins.str] = None, global_data: typing.Optional[GlobalData] = None, codec: typing.Optional[DotCodec] = None, render_config: RenderConfig | None = None, node_store: NodeStore = NodeStore.Vec) -> Graph: ...
+    def __new__(cls, *, name: typing.Optional[builtins.str] = None, global_data: typing.Optional[GlobalData] = None, codec: typing.Optional[DotCodec] = None, render_config: RenderSettings | None = None, node_store: NodeStore = NodeStore.Vec) -> Graph: ...
     def __len__(self) -> builtins.int: ...
     def to_node_store(self, node_store: NodeStore) -> Graph:
         r"""
@@ -492,6 +554,10 @@ class Graph:
     def half_edges(self) -> builtins.list[HalfEdge]: ...
     def reorder_nodes(self, order: typing.Sequence[builtins.int]) -> None: ...
     def reorder_edges(self, order: typing.Sequence[builtins.int]) -> None: ...
+    def set_orientation(self, key: builtins.int | builtins.str, orientation: Orientation) -> None:
+        r"""
+        Change an edge's direction and invalidate existing graph-element views.
+        """
     def reverse_edge(self, key: builtins.int | builtins.str) -> None: ...
     def map(self, *, node: typing.Callable[[Node], typing.Any] | None = None, edge: typing.Callable[[Edge], typing.Any] | None = None, source: typing.Callable[[HalfEdge], typing.Any] | None = None, sink: typing.Callable[[HalfEdge], typing.Any] | None = None) -> Graph: ...
     @classmethod
@@ -501,12 +567,11 @@ class Graph:
     @classmethod
     def from_dot_file(cls, path: builtins.str | os.PathLike[builtins.str], codec: DotCodec, *, node_store: NodeStore = NodeStore.Vec) -> Graph: ...
     def to_dot(self, codec: typing.Optional[DotCodec] = None) -> builtins.str: ...
-    def prepare_render(self, *, config: RenderConfig | None = None) -> PreparedRender:
+    def render(self, *, config: RenderSettings | None = None) -> DiagramRender:
         r"""
         Stage one render so its exact Typst source and compiled output stay correlated.
         """
-    def render(self, output: builtins.str | os.PathLike[builtins.str], *, config: RenderConfig | None = None) -> pathlib.Path: ...
-    def to_svg(self, *, config: RenderConfig | None = None) -> builtins.str: ...
+    def to_svg(self, *, config: RenderSettings | None = None) -> builtins.str: ...
     def _repr_svg_(self) -> builtins.str: ...
     def _repr_html_(self) -> builtins.str:
         r"""
@@ -630,6 +695,26 @@ class Graph:
         Join another graph in place while leaving the other graph unchanged.
         """
     def __repr__(self) -> builtins.str: ...
+    def __copy__(self) -> Graph: ...
+    def canonize(self, *, node_key: _LabelKey = None, edge_key: _LabelKey = None, half_edge_key: _LabelKey = None) -> tuple[Graph, list[int], int, list[int]]:
+        r"""
+        Canonical graph, old-to-new vertex map, automorphism-group size, and vertex orbit.
+        Keys receive element payloads; names and drawing metadata do not affect equivalence.
+        """
+    def is_isomorphic(self, other: Graph, *, node_key: _LabelKey = None, edge_key: _LabelKey = None, half_edge_key: _LabelKey = None) -> builtins.bool: ...
+    def canonize_edges(self, *, edge_key: _LabelKey = None, half_edge_key: _LabelKey = None) -> None:
+        r"""
+        Sort edges canonically while fixing every vertex.
+        """
+    @staticmethod
+    def generate(external_edges: typing.Sequence[tuple[Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal], EdgeSignature]], vertex_signatures: typing.Sequence[typing.Sequence[EdgeSignature]], *, max_vertices: typing.Optional[builtins.int] = None, max_loops: typing.Optional[builtins.int] = None, max_bridges: typing.Optional[builtins.int] = None, allow_self_loops: typing.Optional[builtins.bool] = None, allow_zero_flow_edges: typing.Optional[builtins.bool] = None, filter_fn: typing.Callable[[Graph, int], bool] | None = None, progress_fn: typing.Callable[[Graph], bool] | None = None) -> list[tuple[Graph, int]]:
+        r"""
+        Generate connected labeled graphs and their automorphism-group sizes.
+        """
+    def to_mermaid(self) -> builtins.str:
+        r"""
+        Export a Mermaid flowchart, with escaped display labels and dangling terminals.
+        """
 
 @typing.final
 class GraphStyleOptions:
@@ -689,7 +774,7 @@ class LayoutFrame:
     def max_movement(self) -> builtins.float: ...
 
 @typing.final
-class LayoutOptions:
+class LayoutSettings:
     r"""
     One or more ordered Linnest layout passes.
 
@@ -712,10 +797,10 @@ class LayoutOptions:
     @property
     def pass_count(self) -> builtins.int: ...
     @staticmethod
-    def sequence(passes: typing.Sequence[LayoutOptions]) -> LayoutOptions: ...
+    def sequence(passes: typing.Sequence[LayoutSettings]) -> LayoutSettings: ...
     def __repr__(self) -> builtins.str: ...
-    def __new__(cls, *, impred_spacing: _Number = ..., impred_repulsion: _Number = ..., impred_attraction: _Number = ..., impred_parallel_balance: _Number = ..., impred_pull: _Number = ..., impred_pull_balance: _Number = ..., impred_pull_attachment: _Number = ..., impred_external_max_points: _Integer = ..., impred_split_length_ratio: _Number = ..., impred_contract_chord_ratio: _Number = ..., impred_edge_clearance: _Number = ..., impred_node_edge_strength: _Number = ..., impred_steps: _Integer = ..., impred_step_scale: _Integer = ..., impred_level: _Boolean = ..., impred_labels: _Boolean = ..., subgraph: _OptionalHedgeSelection = ..., viewport_width: _Number = ..., viewport_height: _Number = ..., tree_dx: _Number = ..., tree_dy: _Number = ..., steps: _Integer = ..., seed: _Integer = ..., step: _Number = ..., step_shrink: _Number = ..., cool: _Number = ..., accept_floor: _Number = ..., early_tolerance: _Number = ..., temperature: _Number = ..., delta: _Number = ..., beta: _Number = ..., spring_strength: _Number = ..., spring_length_scale: _Number = ..., initial_repulsion: _Number = ..., repulsion_growth: _Number = ..., centering_strength: _Number = ..., epochs: _Integer = ..., crossing_penalty: _Number = ..., dangling_repulsion: _Number = ..., dangling_centroid_repulsion: _Number = ..., external_pull: _Number = ..., external_pull_balance: _Number = ..., external_pull_attachment: _Number = ..., edge_edge_repulsion: _Number = ..., directional_force: _Number = ..., internal_label_length_scale: _Number = ..., external_label_length_scale: _Number = ..., label_spring: _Number = ..., label_charge: _Number = ..., label_steps: _Integer = ..., label_layout: _LabelLayoutValue = ..., label_step: _Number = ..., label_early_tolerance: _Number = ..., label_max_delta_scale: _Number = ..., edge_vertex_repulsion: _Number = ..., epsilon: _Number = ..., incremental_energy: _Boolean = ..., algorithm: _LayoutAlgorithmValue = ..., nodes: _LayoutNodesValue = ..., direction: _LayoutDirectionValue = ..., rank_align: _RankAlignmentValue = ..., roots: _NodeIndices = ..., rank_same: _NodeGroups = ..., route_edge_weight: _Number = ..., route_exit_weight: _Number = ..., route_label_width_scale: _Number = ..., route_label_width_cap: _Number = ..., z_spring: _Number = ..., z_spring_growth: _Number = ..., length_scale: _Number = ...) -> LayoutOptions: ...
-    def then(self, *, impred_spacing: _Number = ..., impred_repulsion: _Number = ..., impred_attraction: _Number = ..., impred_parallel_balance: _Number = ..., impred_pull: _Number = ..., impred_pull_balance: _Number = ..., impred_pull_attachment: _Number = ..., impred_external_max_points: _Integer = ..., impred_split_length_ratio: _Number = ..., impred_contract_chord_ratio: _Number = ..., impred_edge_clearance: _Number = ..., impred_node_edge_strength: _Number = ..., impred_steps: _Integer = ..., impred_step_scale: _Integer = ..., impred_level: _Boolean = ..., impred_labels: _Boolean = ..., subgraph: _OptionalHedgeSelection = ..., viewport_width: _Number = ..., viewport_height: _Number = ..., tree_dx: _Number = ..., tree_dy: _Number = ..., steps: _Integer = ..., seed: _Integer = ..., step: _Number = ..., step_shrink: _Number = ..., cool: _Number = ..., accept_floor: _Number = ..., early_tolerance: _Number = ..., temperature: _Number = ..., delta: _Number = ..., beta: _Number = ..., spring_strength: _Number = ..., spring_length_scale: _Number = ..., initial_repulsion: _Number = ..., repulsion_growth: _Number = ..., centering_strength: _Number = ..., epochs: _Integer = ..., crossing_penalty: _Number = ..., dangling_repulsion: _Number = ..., dangling_centroid_repulsion: _Number = ..., external_pull: _Number = ..., external_pull_balance: _Number = ..., external_pull_attachment: _Number = ..., edge_edge_repulsion: _Number = ..., directional_force: _Number = ..., internal_label_length_scale: _Number = ..., external_label_length_scale: _Number = ..., label_spring: _Number = ..., label_charge: _Number = ..., label_steps: _Integer = ..., label_layout: _LabelLayoutValue = ..., label_step: _Number = ..., label_early_tolerance: _Number = ..., label_max_delta_scale: _Number = ..., edge_vertex_repulsion: _Number = ..., epsilon: _Number = ..., incremental_energy: _Boolean = ..., algorithm: _LayoutAlgorithmValue = ..., nodes: _LayoutNodesValue = ..., direction: _LayoutDirectionValue = ..., rank_align: _RankAlignmentValue = ..., roots: _NodeIndices = ..., rank_same: _NodeGroups = ..., route_edge_weight: _Number = ..., route_exit_weight: _Number = ..., route_label_width_scale: _Number = ..., route_label_width_cap: _Number = ..., z_spring: _Number = ..., z_spring_growth: _Number = ..., length_scale: _Number = ...) -> LayoutOptions: ...
+    def __new__(cls, *, impred_spacing: _Number = ..., impred_repulsion: _Number = ..., impred_attraction: _Number = ..., impred_parallel_balance: _Number = ..., impred_pull: _Number = ..., impred_pull_balance: _Number = ..., impred_pull_attachment: _Number = ..., impred_external_max_points: _Integer = ..., impred_split_length_ratio: _Number = ..., impred_contract_chord_ratio: _Number = ..., impred_edge_clearance: _Number = ..., impred_node_edge_strength: _Number = ..., impred_steps: _Integer = ..., impred_step_scale: _Integer = ..., impred_level: _Boolean = ..., impred_labels: _Boolean = ..., subgraph: _OptionalHedgeSelection = ..., viewport_width: _Number = ..., viewport_height: _Number = ..., tree_dx: _Number = ..., tree_dy: _Number = ..., steps: _Integer = ..., seed: _Integer = ..., step: _Number = ..., step_shrink: _Number = ..., cool: _Number = ..., accept_floor: _Number = ..., early_tolerance: _Number = ..., temperature: _Number = ..., delta: _Number = ..., beta: _Number = ..., spring_strength: _Number = ..., spring_length_scale: _Number = ..., initial_repulsion: _Number = ..., repulsion_growth: _Number = ..., centering_strength: _Number = ..., epochs: _Integer = ..., crossing_penalty: _Number = ..., dangling_repulsion: _Number = ..., dangling_centroid_repulsion: _Number = ..., external_pull: _Number = ..., external_pull_balance: _Number = ..., external_pull_attachment: _Number = ..., edge_edge_repulsion: _Number = ..., directional_force: _Number = ..., internal_label_length_scale: _Number = ..., external_label_length_scale: _Number = ..., label_spring: _Number = ..., label_charge: _Number = ..., label_steps: _Integer = ..., label_layout: _LabelLayoutValue = ..., label_step: _Number = ..., label_early_tolerance: _Number = ..., label_max_delta_scale: _Number = ..., edge_vertex_repulsion: _Number = ..., epsilon: _Number = ..., incremental_energy: _Boolean = ..., algorithm: _LayoutAlgorithmValue = ..., nodes: _LayoutNodesValue = ..., direction: _LayoutDirectionValue = ..., rank_align: _RankAlignmentValue = ..., roots: _NodeIndices = ..., rank_same: _NodeGroups = ..., route_edge_weight: _Number = ..., route_exit_weight: _Number = ..., route_label_width_scale: _Number = ..., route_label_width_cap: _Number = ..., z_spring: _Number = ..., z_spring_growth: _Number = ..., length_scale: _Number = ...) -> LayoutSettings: ...
+    def then(self, *, impred_spacing: _Number = ..., impred_repulsion: _Number = ..., impred_attraction: _Number = ..., impred_parallel_balance: _Number = ..., impred_pull: _Number = ..., impred_pull_balance: _Number = ..., impred_pull_attachment: _Number = ..., impred_external_max_points: _Integer = ..., impred_split_length_ratio: _Number = ..., impred_contract_chord_ratio: _Number = ..., impred_edge_clearance: _Number = ..., impred_node_edge_strength: _Number = ..., impred_steps: _Integer = ..., impred_step_scale: _Integer = ..., impred_level: _Boolean = ..., impred_labels: _Boolean = ..., subgraph: _OptionalHedgeSelection = ..., viewport_width: _Number = ..., viewport_height: _Number = ..., tree_dx: _Number = ..., tree_dy: _Number = ..., steps: _Integer = ..., seed: _Integer = ..., step: _Number = ..., step_shrink: _Number = ..., cool: _Number = ..., accept_floor: _Number = ..., early_tolerance: _Number = ..., temperature: _Number = ..., delta: _Number = ..., beta: _Number = ..., spring_strength: _Number = ..., spring_length_scale: _Number = ..., initial_repulsion: _Number = ..., repulsion_growth: _Number = ..., centering_strength: _Number = ..., epochs: _Integer = ..., crossing_penalty: _Number = ..., dangling_repulsion: _Number = ..., dangling_centroid_repulsion: _Number = ..., external_pull: _Number = ..., external_pull_balance: _Number = ..., external_pull_attachment: _Number = ..., edge_edge_repulsion: _Number = ..., directional_force: _Number = ..., internal_label_length_scale: _Number = ..., external_label_length_scale: _Number = ..., label_spring: _Number = ..., label_charge: _Number = ..., label_steps: _Integer = ..., label_layout: _LabelLayoutValue = ..., label_step: _Number = ..., label_early_tolerance: _Number = ..., label_max_delta_scale: _Number = ..., edge_vertex_repulsion: _Number = ..., epsilon: _Number = ..., incremental_energy: _Boolean = ..., algorithm: _LayoutAlgorithmValue = ..., nodes: _LayoutNodesValue = ..., direction: _LayoutDirectionValue = ..., rank_align: _RankAlignmentValue = ..., roots: _NodeIndices = ..., rank_same: _NodeGroups = ..., route_edge_weight: _Number = ..., route_exit_weight: _Number = ..., route_label_width_scale: _Number = ..., route_label_width_cap: _Number = ..., z_spring: _Number = ..., z_spring_growth: _Number = ..., length_scale: _Number = ...) -> LayoutSettings: ...
 
 @typing.final
 class LayoutStream:
@@ -837,34 +922,6 @@ class OrientedCut:
         Return the signed intersection count with a cycle from the same graph revision.
         """
     def __repr__(self) -> builtins.str: ...
-
-@typing.final
-class PreparedRender:
-    r"""
-    One Typst render whose virtual project and generated entrypoint share a lifetime.
-    """
-    @property
-    def typst_source(self) -> builtins.str:
-        r"""
-        Return the exact generated Typst entrypoint for this preparation.
-        """
-    @staticmethod
-    def from_sources(sources: builtins.dict[builtins.str, builtins.bytes], *, config: RenderConfig | None = None) -> PreparedRender:
-        r"""
-        Prepare an authored main.typ document with the shared renderer assets.
-
-        The document can read ``_linnet_config`` for the typed layout, drawing,
-        style and template options. Referenced Typst modules are snapshotted.
-        A template or selectors require Graph.prepare_render instead.
-        """
-    def render(self, output: builtins.str | os.PathLike[builtins.str]) -> pathlib.Path:
-        r"""
-        Compile this preparation to a PDF, SVG, or PNG selected by the suffix.
-        """
-    def to_svg(self) -> builtins.str:
-        r"""
-        Compile this preparation and return its one-page SVG document.
-        """
 
 @typing.final
 class Edge:
@@ -1139,7 +1196,7 @@ class RelativeLength:
     def __repr__(self) -> builtins.str: ...
 
 @typing.final
-class RenderConfig:
+class RenderSettings:
     r"""
     Complete typed rendering configuration.
     """
@@ -1175,7 +1232,7 @@ class RenderConfig:
     def template_options(self) -> _TemplateOptions: ...
     @template_options.setter
     def template_options(self, value: _TemplateOptions) -> None: ...
-    def overlay(self, overlay: RenderConfig) -> RenderConfig: ...
+    def overlay(self, overlay: RenderSettings) -> RenderSettings: ...
     def native_drawing_options(self) -> tuple[dict[str, typing.Any], dict[str, typing.Any]] | None:
         r"""
         The options a native renderer can honour without Typst.
@@ -1187,13 +1244,13 @@ class RenderConfig:
 
         Examples
         --------
-        >>> import linnet as ln
-        >>> ln.RenderConfig(template_options={"momentum-arrows": True}).native_drawing_options()
+        >>> from symbolica.community import graph as ln
+        >>> ln.RenderSettings(template_options={"momentum-arrows": True}).native_drawing_options()
         ({'momentum-arrows': True}, {})
-        >>> ln.RenderConfig(drawing=ln.DrawOptions(node_radius=5)).native_drawing_options()
+        >>> ln.RenderSettings(drawing=ln.DrawOptions(node_radius=5)).native_drawing_options()
         """
     def __repr__(self) -> builtins.str: ...
-    def __new__(cls, *, template: _TemplatePath = ..., source_root: _SourceRootPath = ..., title: _AutoOptionalStaticContent = ..., style: _RenderStyle = ..., layouts: _RenderLayouts = ..., drawing: _RenderDrawing = ..., selectors: _RenderSelectors = ..., template_options: _TemplateOptions = ...) -> RenderConfig: ...
+    def __new__(cls, *, template: _TemplatePath = ..., source_root: _SourceRootPath = ..., title: _AutoOptionalStaticContent = ..., style: _RenderStyle = ..., layouts: _RenderLayouts = ..., drawing: _RenderDrawing = ..., selectors: _RenderSelectors = ..., template_options: _TemplateOptions = ...) -> RenderSettings: ...
 
 @typing.final
 class Stroke:
@@ -1250,12 +1307,12 @@ class Subgraph:
     def __lt__(self, other: Subgraph) -> builtins.bool: ...
     def __ge__(self, other: Subgraph) -> builtins.bool: ...
     def __gt__(self, other: Subgraph) -> builtins.bool: ...
-    def prepare_render(self, *, config: RenderConfig | None = None) -> PreparedRender:
+    def render(self, *, config: RenderSettings | None = None) -> DiagramRender:
         r"""
         Prepare the full owner graph with this selection highlighted and its complement dotted.
         The owner's layout, drawing configuration, and topology remain unchanged.
         """
-    def to_svg(self, *, config: RenderConfig | None = None) -> builtins.str:
+    def to_svg(self, *, config: RenderSettings | None = None) -> builtins.str:
         r"""
         Render this selection in the context of the full graph, including isolated nodes.
         """
@@ -1614,7 +1671,7 @@ class TextStyle(enum.Enum):
     Italic = ...
     Oblique = ...
 
-def build(*items: _GraphItem, name: _OptionalString = None, global_data: _OptionalGlobalData = None, codec: _OptionalDotCodec = None, render_config: _OptionalRenderConfig = None, node_store: NodeStore = NodeStore.Vec) -> Graph:
+def build(*items: _GraphItem, name: _OptionalString = None, global_data: _OptionalGlobalData = None, codec: _OptionalDotCodec = None, render_config: _OptionalRenderSettings = None, node_store: NodeStore = NodeStore.Vec) -> Graph:
     r"""
     Build a graph from declarative node and edge specs.
     """

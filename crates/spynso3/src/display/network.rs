@@ -384,10 +384,9 @@ impl SpensoNet {
     pub(crate) fn render_graph(
         &self,
         py: Python<'_>,
-        config: Option<&linnet_render_py::PyRenderSettings>,
-    ) -> PyResult<String> {
+        config: Option<&linnet_py::PyRenderSettings>,
+    ) -> PyResult<linnet_py::PyDiagramRender> {
         let json = py.import("json")?;
-        let config = config.cloned().unwrap_or_default().config();
         let snapshot: Value = serde_json::from_str(
             &json
                 .call_method1("dumps", (self.render_snapshot(py)?,))?
@@ -395,20 +394,8 @@ impl SpensoNet {
         )
         .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
         let runtime = pyo3::exceptions::PyRuntimeError::new_err;
-        let mut scene = Self::network_scene(&snapshot).map_err(runtime)?;
-        config
-            .apply(&mut scene)
-            .map_err(pyo3::exceptions::PyValueError::new_err)?;
-        let files = BTreeMap::from([("main.typ".into(), scene.label_document().into_bytes())]);
-        let pages = typst_renderer::Document::compile_sources(&files, "svg")
-            .map_err(runtime)?
-            .into_iter()
-            .map(String::from_utf8)
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(|e| runtime(e.to_string()))?;
-        let typeset = scene.typeset(&pages).map_err(runtime)?;
-        let svg = scene.render(&typeset).map_err(runtime)?;
-        Scene::interactive_svg(&svg).map_err(runtime)
+        let scene = Self::network_scene(&snapshot).map_err(runtime)?;
+        linnet_py::PyDiagramRender::from_scene(py, scene, config)
     }
 
     fn network_scene(snapshot: &Value) -> Result<Scene, String> {

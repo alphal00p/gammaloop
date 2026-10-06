@@ -165,7 +165,6 @@ dependencies = [
  "feynkit-py",
  "gammaloop-api",
  "linnet-py",
- "linnet-render-py",
  "pyo3",
  "pyo3-stub-gen",
  "spynso3",
@@ -1975,7 +1974,7 @@ dependencies = [
  "feynkit-ufo",
  "linnest",
  "linnet",
- "linnet-render-py",
+ "linnet-py",
  "pyo3",
  "pyo3-stub-gen",
  "pyo3-stub-gen-derive",
@@ -2594,7 +2593,7 @@ dependencies = [
 [[package]]
 name = "graphica"
 version = "3.0.1"
-source = "git+https://github.com/symbolica-dev/symbolica?branch=community#942bd2c0cd2ef16414d69c176fc9eff7b21c0ab2"
+source = "git+https://github.com/symbolica-dev/symbolica?branch=community#bbc2d73c70b46c3aced749d2fa668198f34a4b50"
 dependencies = [
  "ahash 0.8.12",
  "dyn-clone",
@@ -3774,22 +3773,10 @@ dependencies = [
  "rust-embed",
  "serde",
  "serde_json",
+ "symbolica",
  "tempfile",
  "typst-renderer",
  "walkdir",
-]
-
-[[package]]
-name = "linnet-render-py"
-version = "0.1.0"
-dependencies = [
- "linnest",
- "linnet",
- "pyo3",
- "pyo3-stub-gen",
- "pyo3-stub-gen-derive",
- "serde_json",
- "typst-renderer",
 ]
 
 [[package]]
@@ -4283,7 +4270,7 @@ dependencies = [
 [[package]]
 name = "numerica"
 version = "3.0.1"
-source = "git+https://github.com/symbolica-dev/symbolica?branch=community#942bd2c0cd2ef16414d69c176fc9eff7b21c0ab2"
+source = "git+https://github.com/symbolica-dev/symbolica?branch=community#bbc2d73c70b46c3aced749d2fa668198f34a4b50"
 dependencies = [
  "ahash 0.8.12",
  "astro-float",
@@ -6360,7 +6347,7 @@ dependencies = [
  "itertools 0.14.0",
  "linnest",
  "linnet",
- "linnet-render-py",
+ "linnet-py",
  "pyo3",
  "pyo3-stub-gen",
  "pyo3-stub-gen-derive",
@@ -6536,7 +6523,7 @@ dependencies = [
 [[package]]
 name = "symbolica"
 version = "3.0.1"
-source = "git+https://github.com/symbolica-dev/symbolica?branch=community#942bd2c0cd2ef16414d69c176fc9eff7b21c0ab2"
+source = "git+https://github.com/symbolica-dev/symbolica?branch=community#bbc2d73c70b46c3aced749d2fa668198f34a4b50"
 dependencies = [
  "ahash 0.8.12",
  "append-only-vec",

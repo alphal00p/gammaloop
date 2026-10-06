@@ -69,8 +69,7 @@ rust_components = [
   { id = "linnet", package = "linnet", kind = "library", version_source = "crates/linnet/Cargo.toml", features = ["native", "nodestore-vec", "serde", "bincode", "drawing", "symbolica"] },
 ]
 python_components = [
-  { id = "linnet-python", package = "linnet", kind = "maturin-distribution", version_source = "crates/linnet-py/pyproject.toml", module = "linnet", features = ["extension-module", "abi3-py310"] },
-  { id = "linnet-render", package = "linnet-render-py", kind = "symbolica-community-module", version_source = "crates/linnet-render-py/Cargo.toml", module = "symbolica.community.render", features = ["python_stubgen"] },
+  { id = "linnet-graph", package = "linnet-py", kind = "symbolica-community-module", version_source = "crates/linnet-py/Cargo.toml", module = "symbolica.community.graph", features = ["python_stubgen"] },
 ]
 
 [[product]]

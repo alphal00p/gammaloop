@@ -4,7 +4,7 @@
 //! measurement and candidate enumeration remain in Typst; this batches the
 //! per-candidate transforms, collision costs and search without changing positions,
 //! costs, or tie-breaking. Typst certifies every acceptance decision by the search.
-use serde::{Deserialize, Deserializer, Serialize, de::Error};
+use serde::{de::Error, Deserialize, Deserializer, Serialize};
 use std::{cell::Cell, collections::BTreeMap};
 
 #[derive(Deserialize)]
@@ -380,7 +380,11 @@ impl AttachmentSpec {
         }
         // Independent manual arrow/label shifts may put the finite arrow wholly
         // away from this ray; preserve the deliberate tangential placement.
-        if attached { Some(reach / scale) } else { None }
+        if attached {
+            Some(reach / scale)
+        } else {
+            None
+        }
     }
 }
 
@@ -2015,13 +2019,11 @@ mod tests {
     fn packed_records_preserve_numeric_types_footprints_and_interleaving() {
         use ciborium::Value;
         let mut packed = packed_candidate_wire();
-        let footprints = wire_value(serde_json::json!(
-            (0..4)
-                .map(|i| vec![serde_json::json!({
-                    "left":i,"right":i+1,"bottom":0,"top":1
-                })])
-                .collect::<Vec<_>>()
-        ));
+        let footprints = wire_value(serde_json::json!((0..4)
+            .map(|i| vec![serde_json::json!({
+                "left":i,"right":i+1,"bottom":0,"top":1
+            })])
+            .collect::<Vec<_>>()));
         *wire_field(&mut packed, "footprints") = footprints.clone();
         let mut records = candidate_records(packed.clone());
         let expected_sides = [
@@ -2046,13 +2048,11 @@ mod tests {
             } else {
                 assert_eq!(at.as_float().unwrap().to_bits(), (-0.0_f64).to_bits());
             }
-            assert!(
-                wire_field(record, "corners")
-                    .as_array()
-                    .unwrap()
-                    .iter()
-                    .all(|p| p.as_array().unwrap().len() == 3)
-            );
+            assert!(wire_field(record, "corners")
+                .as_array()
+                .unwrap()
+                .iter()
+                .all(|p| p.as_array().unwrap().len() == 3));
         }
         let expected = crate::graph_api::encode_cbor(&records[0]).unwrap();
         assert_eq!(
@@ -2094,13 +2094,11 @@ mod tests {
             wire_field(selected, "custom-key"),
             &Value::Integer(9007199254740993_i64.into())
         );
-        assert!(
-            wire_field(selected, "corners")
-                .as_array()
-                .unwrap()
-                .iter()
-                .all(|p| p.as_array().unwrap()[2] == Value::Float(0.7))
-        );
+        assert!(wire_field(selected, "corners")
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|p| p.as_array().unwrap()[2] == Value::Float(0.7)));
     }
     #[test]
     fn ordinary_search_projects_corner_maps_and_extra_coordinates_without_rewriting_them() {

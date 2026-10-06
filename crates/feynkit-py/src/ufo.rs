@@ -594,6 +594,15 @@ mod tests {
             let locals = PyDict::new(py);
             locals.set_item("fk", &module).unwrap();
             locals.set_item("MODEL_JSON", MODEL_JSON).unwrap();
+            locals
+                .set_item(
+                    "MODEL_PATH",
+                    concat!(
+                        env!("CARGO_MANIFEST_DIR"),
+                        "/tests/fixtures/scalars_2p_3p.json"
+                    ),
+                )
+                .unwrap();
             let code = CString::new(
                 r#"
 import sys
@@ -610,6 +619,10 @@ def load_model(**kwargs):
     return JsonValue(MODEL_JSON), JsonValue('{"mass_scalar_0":[2.5,0.0]}')
 
 package = types.ModuleType("ufo_model_loader")
+package.__path__ = []
+common = types.ModuleType("ufo_model_loader.common")
+common.DATA_PATH = "/unused"
+sys.modules["ufo_model_loader.common"] = common
 commands = types.ModuleType("ufo_model_loader.commands")
 commands.load_model = load_model
 package.commands = commands
@@ -620,10 +633,10 @@ loaded = fk.UfoLoader(
     restriction_name="massless",
     simplify_model=False,
     wrap_indices_in_lorentz_structures=False,
-).load("/models/scalars")
+).load(MODEL_PATH)
 diagnostics = loaded.diagnostics
 assert isinstance(diagnostics, fk.UfoLoadDiagnostics)
-assert str(diagnostics.source) == "/models/scalars"
+assert str(diagnostics.source) == MODEL_PATH
 assert diagnostics.restriction_name == "massless"
 assert diagnostics.simplify_model is False
 assert diagnostics.wrap_indices_in_lorentz_structures is False
@@ -645,6 +658,7 @@ except AttributeError:
 else:
     raise AssertionError("UfoLoadDiagnostics is mutable")
 
+del sys.modules["ufo_model_loader.common"]
 del sys.modules["ufo_model_loader.commands"]
 del sys.modules["ufo_model_loader"]
 "#,

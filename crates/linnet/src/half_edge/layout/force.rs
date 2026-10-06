@@ -1,18 +1,18 @@
 use cgmath::{EuclideanSpace, InnerSpace, Point2, Point3, Vector2, Vector3, Zero};
 
 use crate::half_edge::{
-    NodeIndex, NodeVec,
     involution::{EdgeIndex, EdgeVec, Flow, Hedge, HedgeVec},
     layout::spring::{
-        Constraint, HasPointConstraint, LayoutPointIndex, LayoutState, PointConstraint,
-        SpringChargeEnergy, apply_edge_shift_with_groups, apply_route_point_shift,
-        apply_vertex_shift_with_groups, directional_force_shift,
+        apply_edge_shift_with_groups, apply_route_point_shift, apply_vertex_shift_with_groups,
+        directional_force_shift, Constraint, HasPointConstraint, LayoutPointIndex, LayoutState,
+        PointConstraint, SpringChargeEnergy,
     },
     nodestore::NodeStorageOps,
     subgraph::SubSetLike,
     swap::Swap,
+    NodeIndex, NodeVec,
 };
-use rand::{Rng, SeedableRng, rngs::SmallRng};
+use rand::{rngs::SmallRng, Rng, SeedableRng};
 #[derive(Debug, Clone, Copy)]
 pub struct ForceLayoutConfig {
     pub steps: usize,
@@ -987,7 +987,6 @@ fn init_edge_z(
 mod tests {
     use super::*;
     use crate::half_edge::{
-        HedgeGraph, NoData,
         builder::HedgeGraphBuilder,
         involution::{Flow, HedgePair},
         layout::{
@@ -996,6 +995,7 @@ mod tests {
         },
         nodestore::DefaultNodeStore,
         subgraph::{ModifySubSet, SuBitGraph},
+        HedgeGraph, NoData,
     };
 
     type LayoutForces = (

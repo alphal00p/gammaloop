@@ -1,7 +1,7 @@
 //! Planar straight-line coordinates for an embedded drawing graph.
-use super::embedding::{Graph, Id, OrderedMap, Result, require};
+use super::embedding::{require, Graph, Id, OrderedMap, Result};
 use indexmap::IndexMap;
-use std::collections::{BTreeMap, BTreeSet, btree_map::Entry};
+use std::collections::{btree_map::Entry, BTreeMap, BTreeSet};
 
 pub(crate) type Point = [f64; 2];
 pub(crate) type Positions = OrderedMap<Point>;
@@ -20,12 +20,20 @@ pub(crate) fn subtract(a: Point, b: Point) -> Point {
 
 /// `std::min`: the first argument unless the second is strictly smaller.
 pub(crate) fn min(a: f64, b: f64) -> f64 {
-    if b < a { b } else { a }
+    if b < a {
+        b
+    } else {
+        a
+    }
 }
 
 /// `std::max`: the first argument unless the second is strictly larger.
 pub(crate) fn max(a: f64, b: f64) -> f64 {
-    if a < b { b } else { a }
+    if a < b {
+        b
+    } else {
+        a
+    }
 }
 
 pub(crate) fn point_segment(p: Point, a: Point, b: Point) -> Result<f64> {

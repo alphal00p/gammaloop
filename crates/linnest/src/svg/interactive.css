@@ -1,5 +1,8 @@
 svg[data-linnet-interactive] {
   display: block;
+  --linnet-paper: #ffffff;
+  --linnet-ink: #000000;
+  --linnet-neutral: #333333;
   --linnet-selection: #c18a18;
   --linnet-panel-bg: #fffdf9;
   --linnet-panel-ink: #302c35;
@@ -8,17 +11,26 @@ svg[data-linnet-interactive] {
 }
 @media (prefers-color-scheme: dark) {
   svg[data-linnet-interactive] {
+    --linnet-paper: #1c2025;
+    --linnet-ink: #e6ebf1;
+    --linnet-neutral: #b4bdc9;
     --linnet-selection: #ffd166;
     --linnet-panel-bg: #25212b;
     --linnet-panel-ink: #f5eff8;
   }
 }
 svg[data-linnet-interactive][data-theme="dark"] {
+  --linnet-paper: #1c2025;
+  --linnet-ink: #e6ebf1;
+  --linnet-neutral: #b4bdc9;
   --linnet-selection: #ffd166;
   --linnet-panel-bg: #25212b;
   --linnet-panel-ink: #f5eff8;
 }
 svg[data-linnet-interactive][data-theme="light"] {
+  --linnet-paper: #ffffff;
+  --linnet-ink: #000000;
+  --linnet-neutral: #333333;
   --linnet-selection: #c18a18;
   --linnet-panel-bg: #fffdf9;
   --linnet-panel-ink: #302c35;
@@ -195,3 +207,11 @@ svg[data-linnet-interactive] .linnet-inspector-shortcuts {
   font-size: 10px;
   color: color-mix(in srgb, var(--linnet-panel-ink) 65%, var(--linnet-panel-bg));
 }
+
+/* Neutral default paints follow the existing notebook theme bridge. Domain
+   palettes have higher specificity; SVG attributes retain light export colors. */
+:where(svg[data-linnet-interactive]) [fill="#ffffff"] { fill: var(--linnet-paper); }
+:where(svg[data-linnet-interactive]) [fill="#000000"] { fill: var(--linnet-ink); }
+:where(svg[data-linnet-interactive]) [stroke="#000000"] { stroke: var(--linnet-ink); }
+:where(svg[data-linnet-interactive]) [fill="#333333"] { fill: var(--linnet-neutral); }
+:where(svg[data-linnet-interactive]) [stroke="#333333"] { stroke: var(--linnet-neutral); }

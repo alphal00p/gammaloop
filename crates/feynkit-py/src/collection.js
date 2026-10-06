@@ -7,8 +7,9 @@
     const entries = [...root.querySelectorAll('template')];
     const mount = (index, stage) => {
       const fragment = entries[index].content.cloneNode(true);
-      const svg = fragment.querySelector('svg');
-      svg.dataset.linnetViewportHeight = '360';
+      for (const svg of fragment.querySelectorAll('svg')) {
+        svg.dataset.linnetViewportHeight = '360';
+      }
       const sources = [...fragment.querySelectorAll('script')];
       sources.forEach(source => source.remove());
       stage.replaceChildren(fragment);

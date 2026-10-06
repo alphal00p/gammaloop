@@ -5,11 +5,8 @@ edition = "2021"
 description = "Python bindings for linnet"
 license = "MIT"
 
-[package.metadata.maturin]
-name = "linnet"
-
 [lib]
-crate-type = ["cdylib", "rlib"]
+crate-type = ["rlib"]
 name = "linnet_py"
 
 [[bin]]
@@ -18,13 +15,14 @@ path = "src/bin/stubgen.rs"
 required-features = ["python_stubgen"]
 
 [dependencies]
+symbolica = { workspace = true, features = ["python_export"] }
 ciborium = "0.2.2"
 dot-parser = { workspace = true }
 linnet = { workspace = true, features = ["nodestore-vec", "serde"] }
 linnest = { workspace = true, features = ["svg"] }
 # Maturin follows path dependencies into sdists; render.rs embeds Kurvst's Typst assets.
 kurvst = { path = "../kurvst" }
-pyo3 = { workspace = true }
+pyo3 = { workspace = true, features = ["multiple-pymethods"] }
 pyo3-stub-gen = { workspace = true, default-features = false, features = ["infer_signature"], optional = true }
 pyo3-stub-gen-derive = { workspace = true, default-features = false }
 rust-embed = { version = "8.4", features = ["debug-embed", "include-exclude", "interpolate-folder-path"] }
@@ -40,7 +38,7 @@ pyo3-build-config = { workspace = true }
 walkdir = { workspace = true }
 
 [features]
-default = []
-abi3-py310 = ["pyo3/abi3-py310"]
-extension-module = ["pyo3/extension-module"]
-python_stubgen = ["dep:pyo3-stub-gen"]
+default = ["native"]
+native = ["symbolica/integer-gmp", "symbolica/float-mpfr"]
+wasm = ["symbolica/wasm"]
+python_stubgen = ["dep:pyo3-stub-gen", "symbolica/python_stubgen"]

@@ -28,7 +28,6 @@ from pathlib import Path
 
 EXAMPLES_DIR = Path(__file__).resolve().parent
 PUBLISHED_REQUIREMENTS = {
-    "linnet": '#     "linnet==0.1.0",',
     "symbolica": '#     "symbolica==3.0.1",',
     "ufo-model-loader": '#     "ufo-model-loader @ git+https://github.com/alphal00p/ufo_model_loader.git@70ddee6b416f8c8b340e0d087646d77095c5d24b",',
 }
@@ -40,7 +39,7 @@ class Notebook:
     ready_value: str
     docs_product: str
     docs_route: str
-    package: str = "linnet"
+    package: str = "symbolica"
 
     @property
     def source(self) -> Path:
@@ -52,7 +51,7 @@ class Notebook:
 
     @property
     def ready_selector(self) -> str:
-        if self.package == "symbolica":
+        if self.docs_product != "linnet":
             return f'[data-notebook-ready="{Path(self.filename).stem}"]'
         if self.ready_value == "quickstart":
             return '[data-notebook="python_quickstart"] svg[width$="pt"]'
@@ -96,7 +95,7 @@ NOTEBOOKS = (
 )
 
 
-def validate_notebook_wheel(wheel: Path, package: str = "linnet") -> Path:
+def validate_notebook_wheel(wheel: Path, package: str = "symbolica") -> Path:
     wheel = wheel.expanduser().resolve()
     filename = wheel.name.lower()
     if not wheel.is_file() or wheel.suffix != ".whl":
@@ -143,7 +142,7 @@ def validate_notebook_wheel(wheel: Path, package: str = "linnet") -> Path:
     return wheel
 
 
-def with_local_wheel(source: str, wheel_name: str, package: str = "linnet") -> str:
+def with_local_wheel(source: str, wheel_name: str, package: str = "symbolica") -> str:
     """Replace the published dependency in a temporary notebook copy."""
 
     published_requirement = PUBLISHED_REQUIREMENTS[package]
@@ -668,9 +667,9 @@ def parse_args(arguments: Sequence[str] | None = None) -> argparse.Namespace:
         "--wheel",
         type=Path,
         help=(
-            "Local Emscripten wheel: linnet for Linnet, or symbolica "
+            "Local Emscripten Symbolica Community wheel "
             "with FeynKit/Spenso/Idenso for GammaLoop and community showcases. Without this option the "
-            "published linnet==0.1.0 dependency is used."
+            "published Symbolica dependency is used."
         ),
     )
     parser.add_argument(
@@ -718,7 +717,7 @@ def main(arguments: Sequence[str] | None = None) -> int:
                 and notebook.docs_product == "spenso"
             )
             if options.docs
-            else (options.notebook is None and notebook.package == "linnet")
+            else (options.notebook is None and notebook.docs_product == "linnet")
             or Path(notebook.filename).stem == options.notebook
         )
     )
@@ -728,32 +727,20 @@ def main(arguments: Sequence[str] | None = None) -> int:
             "Select --docs or --notebook so one host wheel serves the export"
         )
     package = packages.pop()
-    if package == "symbolica" and not options.docs:
-        raise ValueError(
-            "Community showcases require --docs and a combined Symbolica WASM wheel"
-        )
     wheel = validate_notebook_wheel(options.wheel, package) if options.wheel else None
     dependency_wheel = (
         validate_notebook_wheel(
             options.dependency_wheel,
-            "ufo-model-loader" if options.docs == "feynkit" else "linnet",
+            "ufo-model-loader",
         )
         if options.dependency_wheel
         else None
     )
-    if (
-        options.docs in {"gammaloop", "spenso", "idenso", "feynkit"}
-        and dependency_wheel is None
-    ):
+    if options.docs == "feynkit" and dependency_wheel is None:
         raise ValueError(
-            "Community showcases require --dependency-wheel (Linnet or UFO loader)"
+            "The UFO showcase requires --dependency-wheel for the UFO loader"
         )
-    if dependency_wheel is not None and options.docs not in {
-        "gammaloop",
-        "spenso",
-        "idenso",
-        "feynkit",
-    }:
+    if dependency_wheel is not None and options.docs != "feynkit":
         raise ValueError("--dependency-wheel applies only to community showcases")
     with staged_notebooks(wheel, notebooks, dependency_wheel) as staged:
         lint(staged)

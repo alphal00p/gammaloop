@@ -186,25 +186,25 @@ The renderer passes native node, edge, and half-edge identities directly to Linn
 graph builder; DOT remains a separate export format.
 `render(config=...)` returns a displayable `DiagramRender` snapshot, while
 `to_linnest(config=...)` returns a self-contained Typst document embedding the SVG.
-Both accept typed `render.RenderSettings` values. Rust draws the graph directly
+Both accept typed `graph.RenderSettings` values. Rust draws the graph directly
 and the embedded Typst compiler typesets labels without graph plugins or MiTeX.
 
 Use `drawing.to_svg()` or `drawing.to_html()` for string exports. Graph settings are
-immutable typed values with discoverable constructors and properties:
+typed values with discoverable constructors:
 
 ```python
-from symbolica.community.render import RenderSettings, LayoutSettings, StrokeStyle
+from symbolica.community.graph import RenderSettings, LayoutSettings, LayoutAlgorithm, DrawOptions, Stroke, Color
 
 drawing = network.render(config=RenderSettings(
-    layout=LayoutSettings(layout_algo="dot"),
-    edge_stroke=StrokeStyle(paint="#6f4d85", thickness=1.5),
+    layouts=LayoutSettings(algorithm=LayoutAlgorithm.Dot),
+    drawing=DrawOptions(edge_stroke=Stroke(paint=Color("#6f4d85"), thickness=1.5)),
 ))
 drawing  # Displays directly in IPython, Jupyter, and Marimo.
 ```
 
-`RenderSettings`, `LayoutSettings`, `StrokeStyle`, and `DiagramRender` belong to
-`symbolica.community.render`, backed by the shared Linnet rendering bindings.
-HepKit keeps its physics-specific `RenderSettings` and uses the same layout,
+`RenderSettings`, `LayoutSettings`, `Stroke`, and `DiagramRender` belong to
+`symbolica.community.graph`, backed by the shared Linnet rendering bindings.
+HepKit keeps its physics-specific `DiagramStyle` and uses the same layout,
 stroke, and snapshot types.
 
 `to_html(config=...)` wraps the graph in a figure labelled `TensorNetwork`.

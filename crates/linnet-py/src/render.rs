@@ -5,13 +5,13 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use linnest::{
-    TypstEdgeSpec, TypstEndpointSpec, TypstGraphSpec, TypstNodeSpec, encode_graph_spec_bytes,
+    encode_graph_spec_bytes, TypstEdgeSpec, TypstEndpointSpec, TypstGraphSpec, TypstNodeSpec,
 };
 use linnet::half_edge::involution::{Flow, Hedge, HedgePair, Orientation};
 use linnet::half_edge::subgraph::{Inclusion, SubSetLike};
 use pyo3::exceptions::{PyReferenceError, PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
-use pyo3::types::{PyAny, PyDict, PyDictMethods, PyList, PyListMethods, PyModule};
+use pyo3::types::{PyAny, PyDict, PyDictMethods, PyList, PyListMethods};
 use rust_embed::RustEmbed;
 use walkdir::WalkDir;
 
@@ -20,8 +20,8 @@ use crate::graph::{PyEdge, PyGraph, PyHalfEdge, PyNode};
 use crate::native_graph::PyHedgeGraph;
 use crate::topology::PySubgraph;
 use crate::typst::{
-    RenderConfigTransport, SelectorCallbacks, TypstModuleSource, default_render_config,
-    evaluate_selector, render_config_transport, typst_string,
+    default_render_config, evaluate_selector, render_config_transport, typst_string,
+    RenderSettingsTransport, SelectorCallbacks, TypstModuleSource,
 };
 
 const LINNEST_PACKAGE_DIR: &str = "crates/linnest/typst";
@@ -126,6 +126,7 @@ fn apply_selector(
     elements: &Bound<'_, PyList>,
     views: impl IntoIterator<Item = PyResult<Py<PyAny>>>,
     kind: DrawingKind,
+    override_drawing: bool,
 ) -> PyResult<()> {
     let Some(selector) = selector else {
         return Ok(());
@@ -137,10 +138,11 @@ fn apply_selector(
         let patch = element_drawing(py, value.bind(py), kind)?;
         let element = elements.get_item(index)?.cast_into::<PyDict>()?;
         for (key, value) in patch.iter() {
-            if element
-                .get_item(&key)?
-                .as_ref()
-                .is_none_or(|value| crate::typst::is_inherit(value))
+            if override_drawing
+                || element
+                    .get_item(&key)?
+                    .as_ref()
+                    .is_none_or(|value| crate::typst::is_inherit(value))
             {
                 element.set_item(key, value)?;
             }
@@ -154,6 +156,7 @@ fn apply_selectors(
     graph: &Py<PyGraph>,
     elements: &Bound<'_, PyDict>,
     selectors: &SelectorCallbacks,
+    override_drawing: bool,
 ) -> PyResult<()> {
     let graph_ref = graph.borrow(py);
     let (revision, node_count, edge_count, half_edge_count, half_edge_roles) = {
@@ -185,6 +188,7 @@ fn apply_selectors(
             Ok(Py::new(py, PyNode::new(graph.clone_ref(py), index, revision))?.into_any())
         }),
         DrawingKind::Node,
+        override_drawing,
     )?;
 
     let edges = elements
@@ -199,6 +203,7 @@ fn apply_selectors(
             Ok(Py::new(py, PyEdge::new(graph.clone_ref(py), index, revision))?.into_any())
         }),
         DrawingKind::Edge,
+        override_drawing,
     )?;
 
     let half_edges = elements
@@ -225,10 +230,11 @@ fn apply_selectors(
             let patch = element_drawing(py, value.bind(py), DrawingKind::HalfEdge)?;
             let element = half_edges.get_item(index)?.cast_into::<PyDict>()?;
             for (key, value) in patch.iter() {
-                if element
-                    .get_item(&key)?
-                    .as_ref()
-                    .is_none_or(|value| crate::typst::is_inherit(value))
+                if override_drawing
+                    || element
+                        .get_item(&key)?
+                        .as_ref()
+                        .is_none_or(|value| crate::typst::is_inherit(value))
                 {
                     element.set_item(key, value)?;
                 }
@@ -245,7 +251,8 @@ fn request(
     py: Python<'_>,
     graph: &Py<PyGraph>,
     overlay: Option<&Bound<'_, PyAny>>,
-) -> PyResult<(Vec<u8>, RenderConfigTransport)> {
+    override_drawing: bool,
+) -> PyResult<(Vec<u8>, RenderSettingsTransport)> {
     let graph_ref = graph.borrow(py);
     let elements = base_elements(py, &graph_ref)?;
     let base = graph_ref
@@ -257,7 +264,13 @@ fn request(
         .clone_ref(py);
     let initial = render_config_transport(py, &base, overlay, elements.bind(py))?;
     drop(graph_ref);
-    apply_selectors(py, graph, elements.bind(py), &initial.selectors)?;
+    apply_selectors(
+        py,
+        graph,
+        elements.bind(py),
+        &initial.selectors,
+        override_drawing,
+    )?;
     let transport = render_config_transport(py, &base, overlay, elements.bind(py))?;
     let topology = topology_spec(&graph.borrow(py))?;
     Ok((topology, transport))
@@ -351,7 +364,7 @@ fn topology_spec(graph: &PyGraph) -> PyResult<Vec<u8>> {
 
 fn prepare(
     topology: Vec<u8>,
-    transport: RenderConfigTransport,
+    transport: RenderSettingsTransport,
     selection: Option<(Vec<bool>, Vec<usize>)>,
 ) -> PyResult<PreparedRender> {
     let mut prepared = PreparedRender::from_sources(BTreeMap::new())?;
@@ -452,6 +465,9 @@ fn write_embedded_assets<E: RustEmbed>(root: &Path) -> PyResult<()> {
                     parent.display()
                 ))
             })?;
+        }
+        if target.exists() {
+            fs::remove_file(&target).map_err(|error| PyRuntimeError::new_err(error.to_string()))?;
         }
         fs::write(&target, contents.data.as_ref()).map_err(|error| {
             PyRuntimeError::new_err(format!(
@@ -616,7 +632,7 @@ fn typst_project_path(path: &str) -> String {
 }
 
 fn entrypoint_source(
-    transport: &RenderConfigTransport,
+    transport: &RenderSettingsTransport,
     template: Option<&str>,
     module_files: &[Option<String>],
     topology_path: Option<&str>,
@@ -649,9 +665,6 @@ fn entrypoint_source(
     Ok(source)
 }
 
-/// One Typst render whose virtual project and generated entrypoint share a lifetime.
-#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
-#[pyclass(module = "linnet", frozen)]
 pub struct PreparedRender {
     _build_dir: tempfile::TempDir,
     files: BTreeMap<String, Vec<u8>>,
@@ -666,7 +679,8 @@ impl PreparedRender {
         let build_dir =
             tempfile::tempdir().map_err(|error| PyRuntimeError::new_err(error.to_string()))?;
         let build_root = canonicalize(build_dir.path(), "render directory")?;
-        write_embedded_assets::<EmbeddedTypstPackages>(&build_root.join(TYPST_PACKAGES_DIR))?;
+        fs::create_dir_all(build_root.join(TYPST_PACKAGES_DIR))
+            .map_err(|error| PyRuntimeError::new_err(error.to_string()))?;
         let package_store = canonicalize(
             &build_root.join(TYPST_PACKAGES_DIR),
             "bundled Typst package store",
@@ -685,6 +699,9 @@ impl PreparedRender {
             }
         }
 
+        // Bundled packages include required patches; user caches may add packages,
+        // but cannot replace these compiler inputs with an incompatible release.
+        write_embedded_assets::<EmbeddedTypstPackages>(&package_store)?;
         let mut files = BTreeMap::new();
         insert_embedded_assets::<EmbeddedLinnestPackage>(
             &mut files,
@@ -709,7 +726,7 @@ impl PreparedRender {
 
     fn configuration_source(
         &mut self,
-        transport: &RenderConfigTransport,
+        transport: &RenderSettingsTransport,
         default_template: Option<&str>,
         topology_path: Option<&str>,
     ) -> PyResult<String> {
@@ -753,7 +770,7 @@ impl PreparedRender {
         entrypoint_source(transport, template.as_deref(), &module_files, topology_path)
     }
 
-    fn typst_source_value(&self) -> PyResult<String> {
+    pub(crate) fn typst_source_value(&self) -> PyResult<String> {
         String::from_utf8(
             self.files
                 .get(ENTRYPOINT)
@@ -763,7 +780,7 @@ impl PreparedRender {
         .map_err(|error| PyRuntimeError::new_err(error.to_string()))
     }
 
-    fn render_to(&self, py: Python<'_>, output: PathBuf) -> PyResult<PathBuf> {
+    pub(crate) fn render_to(&self, py: Python<'_>, output: PathBuf) -> PyResult<PathBuf> {
         let format = output_format(&output)?;
         if let Some(parent) = output
             .parent()
@@ -821,35 +838,20 @@ impl PreparedRender {
     }
 }
 
-#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
-#[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
-#[pymethods]
 impl PreparedRender {
     /// Prepare an authored main.typ document with the shared renderer assets.
     ///
     /// The document can read ``_linnet_config`` for the typed layout, drawing,
     /// style and template options. Referenced Typst modules are snapshotted.
-    /// A template or selectors require Graph.prepare_render instead.
-    #[staticmethod]
-    #[pyo3(name = "from_sources", signature = (sources, *, config=None))]
+    /// A template or selectors require Graph.render instead.
     pub fn from_source_files(
         py: Python<'_>,
-        #[gen_stub(override_type(type_repr = "builtins.dict[builtins.str, builtins.bytes]", imports=("builtins")))]
+
         sources: BTreeMap<String, Vec<u8>>,
-        #[gen_stub(override_type(type_repr = "RenderConfig | None"))] config: Option<
-            &Bound<'_, PyAny>,
-        >,
+        config: Option<&Bound<'_, PyAny>>,
     ) -> PyResult<Self> {
         let base = default_render_config(py)?;
-        let config = config
-            .map(|config| Bound::new(py, crate::RenderConfig::from_authored_config(config)?))
-            .transpose()?;
-        let transport = render_config_transport(
-            py,
-            &base,
-            config.as_ref().map(Bound::as_any),
-            &PyDict::new(py),
-        )?;
+        let transport = render_config_transport(py, &base, config, &PyDict::new(py))?;
         if transport.template.is_some()
             || transport.selectors.node.is_some()
             || transport.selectors.edge.is_some()
@@ -857,7 +859,7 @@ impl PreparedRender {
             || transport.selectors.sink.is_some()
         {
             return Err(PyValueError::new_err(
-                "authored rendering accepts layout, drawing, style and template options; use Graph.prepare_render for templates or selectors",
+                "authored rendering accepts layout, drawing, style and template options; use Graph.render for templates or selectors",
             ));
         }
         let mut prepared = Self::from_sources(sources)?;
@@ -872,32 +874,6 @@ impl PreparedRender {
         prepared.files.insert(ENTRYPOINT.to_owned(), source);
         Ok(prepared)
     }
-
-    /// Return the exact generated Typst entrypoint for this preparation.
-    #[getter]
-    fn typst_source(&self) -> PyResult<String> {
-        self.typst_source_value()
-    }
-
-    /// Compile this preparation to a PDF, SVG, or PNG selected by the suffix.
-    fn render(
-        &self,
-        py: Python<'_>,
-        #[gen_stub(override_type(type_repr="builtins.str | os.PathLike[builtins.str]", imports=("builtins", "os")))]
-        output: PathBuf,
-    ) -> PyResult<PathBuf> {
-        self.render_to(py, output)
-    }
-
-    /// Compile this preparation and return its one-page SVG document.
-    fn to_svg(&self, py: Python<'_>) -> PyResult<String> {
-        self.svg(py)
-    }
-}
-
-pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
-    module.add_class::<PreparedRender>()?;
-    Ok(())
 }
 
 fn output_format(output: &Path) -> PyResult<&'static str> {
@@ -915,15 +891,6 @@ fn output_format(output: &Path) -> PyResult<&'static str> {
             output.display()
         ))),
     }
-}
-
-pub(crate) fn render_graph(
-    py: Python<'_>,
-    graph: &Py<PyGraph>,
-    output: PathBuf,
-    config: Option<&Bound<'_, PyAny>>,
-) -> PyResult<PathBuf> {
-    prepare_graph(py, graph, config, None)?.render_to(py, output)
 }
 
 pub(crate) fn graph_to_svg(
@@ -944,7 +911,7 @@ pub(crate) fn prepare_graph(
     if let Some(subgraph) = subgraph {
         subgraph.selection_for(py, graph, graph.borrow(py).revision()?)?;
     }
-    let (topology, transport) = request(py, graph, config)?;
+    let (topology, transport) = request(py, graph, config, false)?;
     let selection = if let Some(subgraph) = subgraph {
         let owner = graph.borrow(py);
         let (selected, isolated) = subgraph.selection_for(py, graph, owner.revision()?)?;
@@ -968,6 +935,21 @@ pub(crate) fn prepare_graph(
     prepare(topology, transport, selection)
 }
 
+/// Domain scenes retain their layout statements while selectors share live graph views.
+pub(crate) fn prepare_scene(
+    py: Python<'_>,
+    graph: &Py<PyGraph>,
+    spec: &TypstGraphSpec,
+) -> PyResult<PreparedRender> {
+    // Scene records are domain defaults, so explicit selectors take precedence.
+    let (_, transport) = request(py, graph, None, true)?;
+    prepare(
+        encode_graph_spec_bytes(spec).map_err(PyRuntimeError::new_err)?,
+        transport,
+        None,
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -976,11 +958,18 @@ mod tests {
     fn compiled_graph_inspection_preserves_native_drawing() {
         Python::initialize();
         Python::attach(|py| -> PyResult<()> {
-            let linnet = PyModule::new(py, "linnet")?;
-            crate::linnet_py(&linnet)?;
+            let modules = py.import("sys")?.getattr("modules")?;
+            let symbolica = pyo3::types::PyModule::new(py, "symbolica")?;
+            let community = pyo3::types::PyModule::new(py, "symbolica.community")?;
+            symbolica.add("community", &community)?;
+            modules.set_item("symbolica", &symbolica)?;
+            modules.set_item("symbolica.community", &community)?;
+            let linnet = pyo3::types::PyModule::new(py, "symbolica.community.graph")?;
+            community.add("graph", &linnet)?;
+            crate::register(&linnet)?;
             py.import("sys")?
                 .getattr("modules")?
-                .set_item("linnet", &linnet)?;
+                .set_item("symbolica.community.graph", &linnet)?;
             let source =
                 std::ffi::CString::new(include_str!("../tests/test_svg_interaction.py")).unwrap();
             let fixture = PyModule::from_code(
@@ -991,8 +980,8 @@ mod tests {
             )?;
             let case = fixture.getattr("SvgInteractionTests")?.call0()?;
             case.call_method0("setUp")?;
-            let prepared = case.getattr("graph")?.call_method0("prepare_render")?;
-            let prepared = prepared.extract::<PyRef<'_, PreparedRender>>()?;
+            let graph = case.getattr("graph")?.extract::<Py<PyGraph>>()?;
+            let prepared = prepare_graph(py, &graph, None, None)?;
             let pages = prepared.svg_pages(py)?;
             assert_eq!(pages.len(), 1);
             case.call_method1(
@@ -1024,22 +1013,18 @@ mod tests {
     #[test]
     fn extracts_typst_packages_for_offline_rendering() {
         let prepared = PreparedRender::from_sources(BTreeMap::new()).unwrap();
-        assert!(
-            prepared
-                .package_store
-                .join("preview/cetz/0.5.1/typst.toml")
-                .is_file()
-        );
+        assert!(prepared
+            .package_store
+            .join("preview/cetz/0.5.1/typst.toml")
+            .is_file());
     }
 
     #[test]
     fn embeds_linnest_and_kurvst_with_their_wasm_modules() {
         let prepared = PreparedRender::from_sources(BTreeMap::new()).unwrap();
-        assert!(
-            prepared
-                .files
-                .contains_key("crates/linnest/typst/src/graph.typ")
-        );
+        assert!(prepared
+            .files
+            .contains_key("crates/linnest/typst/src/graph.typ"));
         assert!(
             fs::metadata(prepared.root.join("crates/linnest/typst/linnest.wasm"))
                 .unwrap()
@@ -1052,11 +1037,9 @@ mod tests {
                 .len()
                 > 0
         );
-        assert!(
-            prepared
-                .files
-                .contains_key("crates/kurvst/typst/src/lib.typ")
-        );
+        assert!(prepared
+            .files
+            .contains_key("crates/kurvst/typst/src/lib.typ"));
         assert!(
             fs::metadata(prepared.root.join("crates/kurvst/typst/kurvst.wasm"))
                 .unwrap()

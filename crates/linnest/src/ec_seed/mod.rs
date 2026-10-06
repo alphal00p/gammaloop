@@ -8,10 +8,10 @@ mod spqr;
 #[cfg(test)]
 mod tests;
 
-use coordinates::{Point, Positions, cross, distance, max, min, point_segment, subtract};
+use coordinates::{cross, distance, max, min, point_segment, subtract, Point, Positions};
 use embedding::{
-    ConstraintTree, Ends, Expansion, Graph, Id, Ids, InsertionRecord, OrderedMap, Planarization,
-    Result, Set, as_set, replace, require,
+    as_set, replace, require, ConstraintTree, Ends, Expansion, Graph, Id, Ids, InsertionRecord,
+    OrderedMap, Planarization, Result, Set,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -1229,7 +1229,8 @@ impl SeedRequest {
                 } else {
                     "ec-planarized"
                 },
-                method: "Gutwenger–Klein–Mutzel EC expansion and optimal individual edge insertion; \
+                method:
+                    "Gutwenger–Klein–Mutzel EC expansion and optimal individual edge insertion; \
                          Chrobak–Payne coordinates",
                 constraint_tree: constraints.get(EXTERIOR).cloned(),
                 constraint_scope: if side_mode {

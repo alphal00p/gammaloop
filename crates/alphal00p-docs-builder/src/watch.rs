@@ -26,7 +26,6 @@ const QUIET_PERIOD: Duration = Duration::from_millis(100);
 const MAX_BATCH: Duration = Duration::from_millis(500);
 const FEYNKIT_PYTHON_CRATES: &[&str] = &[
     "feynkit-py",
-    "linnet-render-py",
     "feynkit-cff",
     "feynkit-generator",
     "feynkit-graph",
@@ -43,7 +42,6 @@ const FEYNKIT_PYTHON_CRATES: &[&str] = &[
 const LINNET_PYTHON_CRATES: &[&str] = &["linnet-py", "linnet"];
 const SPENSO_PYTHON_CRATES: &[&str] = &[
     "spynso3",
-    "linnet-render-py",
     "spenso",
     "spenso-macros",
     "spenso-hep-lib",
@@ -642,13 +640,7 @@ impl SiteBuilder {
                 "gammaloop-python",
                 &["gammaloop-api", "gammalooprs"][..],
             ),
-            ("linnet", "linnet", "linnet-python", LINNET_PYTHON_CRATES),
-            (
-                "linnet",
-                "render",
-                "linnet-render",
-                &["linnet-render-py", "linnest", "linnet"][..],
-            ),
+            ("linnet", "linnet", "linnet-graph", LINNET_PYTHON_CRATES),
             ("spenso", "spenso", "spynso3", SPENSO_PYTHON_CRATES),
             ("idenso", "spenso", "spynso3", SPENSO_PYTHON_CRATES),
             ("vakint", "vakint", "vakint-community", &["vakint"][..]),

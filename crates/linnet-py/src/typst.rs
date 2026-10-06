@@ -773,12 +773,17 @@ fn dictionary_source(
 
 /// Type of the `AUTO` sentinel, which requests automatic selection.
 #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
-#[pyclass(module = "linnet", skip_from_py_object, frozen, name = "Auto")]
+#[pyclass(
+    module = "symbolica.community.graph",
+    skip_from_py_object,
+    frozen,
+    name = "Auto"
+)]
 #[derive(Clone, Copy, Debug)]
 pub struct PyAuto;
 
 #[cfg(feature = "python_stubgen")]
-pyo3_stub_gen::module_variable!("linnet", "AUTO", PyAuto);
+pyo3_stub_gen::module_variable!("symbolica.community.graph", "AUTO", PyAuto);
 
 #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
 #[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
@@ -799,12 +804,17 @@ impl PyAuto {
 
 /// Type of the `INHERIT` sentinel, which preserves a lower-precedence setting.
 #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
-#[pyclass(module = "linnet", skip_from_py_object, frozen, name = "Inherit")]
+#[pyclass(
+    module = "symbolica.community.graph",
+    skip_from_py_object,
+    frozen,
+    name = "Inherit"
+)]
 #[derive(Clone, Copy, Debug)]
 struct PyInherit;
 
 #[cfg(feature = "python_stubgen")]
-pyo3_stub_gen::module_variable!("linnet", "INHERIT", PyInherit);
+pyo3_stub_gen::module_variable!("symbolica.community.graph", "INHERIT", PyInherit);
 
 #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
 #[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
@@ -832,7 +842,7 @@ macro_rules! typst_string_enum {
     ) => {
         $(#[$meta])*
         #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass_enum)]
-        #[pyclass(module = "linnet", from_py_object, eq, eq_int, name = $python)]
+        #[pyclass(module = "symbolica.community.graph", from_py_object, eq, eq_int, name = $python)]
         #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
         #[serde(rename_all = "kebab-case")]
         enum $rust {
@@ -1001,7 +1011,13 @@ typst_string_enum! {
     feature = "python_stubgen",
     pyo3_stub_gen::derive::gen_stub_pyclass_enum
 )]
-#[pyclass(module = "linnet", from_py_object, eq, eq_int, name = "DebugLevel")]
+#[pyclass(
+    module = "symbolica.community.graph",
+    from_py_object,
+    eq,
+    eq_int,
+    name = "DebugLevel"
+)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 enum PyDebugLevel {
@@ -1104,7 +1120,12 @@ typst_string_enum! {
 
 /// A Typst length such as `2pt` or `1.2em`.
 #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
-#[pyclass(module = "linnet", from_py_object, frozen, name = "Length")]
+#[pyclass(
+    module = "symbolica.community.graph",
+    from_py_object,
+    frozen,
+    name = "Length"
+)]
 #[derive(Clone, Debug, PartialEq)]
 struct PyLength {
     value: f64,
@@ -1169,7 +1190,12 @@ impl PyLength {
 
 /// A Typst ratio expressed in percent.
 #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
-#[pyclass(module = "linnet", from_py_object, frozen, name = "Ratio")]
+#[pyclass(
+    module = "symbolica.community.graph",
+    from_py_object,
+    frozen,
+    name = "Ratio"
+)]
 #[derive(Clone, Copy, Debug, PartialEq)]
 struct PyRatio {
     percent: f64,
@@ -1203,7 +1229,12 @@ impl PyRatio {
 
 /// A sum of a Typst ratio and length.
 #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
-#[pyclass(module = "linnet", from_py_object, frozen, name = "RelativeLength")]
+#[pyclass(
+    module = "symbolica.community.graph",
+    from_py_object,
+    frozen,
+    name = "RelativeLength"
+)]
 #[derive(Clone, Debug, PartialEq)]
 struct PyRelativeLength {
     ratio: Option<f64>,
@@ -1241,7 +1272,12 @@ impl PyRelativeLength {
 
 /// A Typst angle in degrees or radians.
 #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
-#[pyclass(module = "linnet", from_py_object, frozen, name = "Angle")]
+#[pyclass(
+    module = "symbolica.community.graph",
+    from_py_object,
+    frozen,
+    name = "Angle"
+)]
 #[derive(Clone, Debug, PartialEq)]
 struct PyAngle {
     value: f64,
@@ -1284,7 +1320,12 @@ impl PyAngle {
 
 /// A Typst fractional track size such as `1fr`.
 #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
-#[pyclass(module = "linnet", from_py_object, frozen, name = "Fraction")]
+#[pyclass(
+    module = "symbolica.community.graph",
+    from_py_object,
+    frozen,
+    name = "Fraction"
+)]
 #[derive(Clone, Copy, Debug, PartialEq)]
 struct PyFraction {
     value: f64,
@@ -1313,7 +1354,12 @@ impl PyFraction {
 
 /// A safe Typst color value.
 #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
-#[pyclass(module = "linnet", from_py_object, frozen, name = "Color")]
+#[pyclass(
+    module = "symbolica.community.graph",
+    from_py_object,
+    frozen,
+    name = "Color"
+)]
 #[derive(Clone, Debug, PartialEq)]
 struct PyColor {
     value: ColorValue,
@@ -1669,6 +1715,34 @@ impl FieldSpec {
     }
 
     fn validate(self, value: &NativeValue) -> PyResult<()> {
+        value.validate(0)?;
+        let numeric = match value {
+            NativeValue::Int(value) => Some(*value as f64),
+            NativeValue::Float(value) | NativeValue::Length(value, _) => Some(*value),
+            _ => None,
+        };
+        if let Some(number) = numeric {
+            let valid = match self.python {
+                "tree_dx" | "tree_dy" | "impred_step_scale" => number > 0.0,
+                "impred_external_max_points" => number == 0.0 || number >= 5.0,
+                "impred_contract_chord_ratio" => (0.0..=1.0).contains(&number),
+                "node_radius" | "thickness" => number >= 0.0,
+                _ => true,
+            };
+            if !valid {
+                return Err(PyValueError::new_err(format!(
+                    "{} is outside its supported range",
+                    self.python
+                )));
+            }
+        }
+        if self.python == "node_radius" {
+            if let NativeValue::Array(values) = value {
+                for value in values {
+                    self.validate(value)?;
+                }
+            }
+        }
         if matches!(value, NativeValue::Inherit)
             || (self.allow_none && matches!(value, NativeValue::None))
             || (self.allow_auto && matches!(value, NativeValue::Auto))
@@ -1743,7 +1817,12 @@ const STROKE_FIELDS: &[FieldSpec] = &[
 
 /// A typed Typst stroke dictionary.
 #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
-#[pyclass(module = "linnet", from_py_object, frozen, name = "Stroke")]
+#[pyclass(
+    module = "symbolica.community.graph",
+    from_py_object,
+    frozen,
+    name = "Stroke"
+)]
 #[derive(Clone, Debug, PartialEq)]
 struct PyStroke {
     values: BTreeMap<String, NativeValue>,
@@ -1772,7 +1851,12 @@ impl PyStroke {
 
 /// A named or explicit Typst dash pattern.
 #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
-#[pyclass(module = "linnet", from_py_object, frozen, name = "Dash")]
+#[pyclass(
+    module = "symbolica.community.graph",
+    from_py_object,
+    frozen,
+    name = "Dash"
+)]
 #[derive(Clone, Debug, PartialEq)]
 struct PyDash {
     value: DashValue,
@@ -1849,7 +1933,12 @@ const INSET_FIELDS: &[FieldSpec] = &[
 
 /// Typed CeTZ/Typst inset values.
 #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
-#[pyclass(module = "linnet", from_py_object, frozen, name = "Insets")]
+#[pyclass(
+    module = "symbolica.community.graph",
+    from_py_object,
+    frozen,
+    name = "Insets"
+)]
 #[derive(Clone, Debug, PartialEq)]
 struct PyInsets {
     values: BTreeMap<String, NativeValue>,
@@ -1903,7 +1992,12 @@ const MARK_FIELDS: &[FieldSpec] = &[
 
 /// Typed CeTZ mark configuration.
 #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
-#[pyclass(module = "linnet", from_py_object, frozen, name = "Mark")]
+#[pyclass(
+    module = "symbolica.community.graph",
+    from_py_object,
+    frozen,
+    name = "Mark"
+)]
 #[derive(Clone, Debug, PartialEq)]
 struct PyMark {
     values: BTreeMap<String, NativeValue>,
@@ -1964,7 +2058,12 @@ const TEXT_FIELDS: &[FieldSpec] = &[
 
 /// Literal text content with optional typed text styling.
 #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
-#[pyclass(module = "linnet", from_py_object, frozen, name = "TextLabel")]
+#[pyclass(
+    module = "symbolica.community.graph",
+    from_py_object,
+    frozen,
+    name = "TextLabel"
+)]
 #[derive(Clone, Debug, PartialEq)]
 struct PyTextLabel {
     value: TextValue,
@@ -2024,7 +2123,12 @@ fn math_script(value: &Bound<'_, PyAny>, what: &str) -> PyResult<MathScript> {
 
 /// Safe mathematical identifier content, optionally with scripts.
 #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
-#[pyclass(module = "linnet", from_py_object, frozen, name = "MathSymbol")]
+#[pyclass(
+    module = "symbolica.community.graph",
+    from_py_object,
+    frozen,
+    name = "MathSymbol"
+)]
 #[derive(Clone, Debug, PartialEq)]
 struct PyMathSymbol {
     value: MathValue,
@@ -2066,7 +2170,12 @@ impl PyMathSymbol {
 
 /// A local or package Typst module whose exports can be referenced safely.
 #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
-#[pyclass(module = "linnet", from_py_object, frozen, name = "TypstModule")]
+#[pyclass(
+    module = "symbolica.community.graph",
+    from_py_object,
+    frozen,
+    name = "TypstModule"
+)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct PyTypstModule {
     source: TypstModuleSource,
@@ -2166,7 +2275,12 @@ fn call_arguments(
 
 /// A typed export from a Typst module.
 #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
-#[pyclass(module = "linnet", from_py_object, frozen, name = "TypstRef")]
+#[pyclass(
+    module = "symbolica.community.graph",
+    from_py_object,
+    frozen,
+    name = "TypstRef"
+)]
 #[derive(Clone, Debug, PartialEq)]
 struct PyTypstRef {
     expression: TypstExpression,
@@ -2236,7 +2350,12 @@ impl PyTypstRef {
 
 /// A call to an explicitly imported Typst function.
 #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
-#[pyclass(module = "linnet", from_py_object, frozen, name = "TypstCall")]
+#[pyclass(
+    module = "symbolica.community.graph",
+    from_py_object,
+    frozen,
+    name = "TypstCall"
+)]
 #[derive(Clone, Debug, PartialEq)]
 struct PyTypstCall {
     expression: TypstExpression,
@@ -2253,7 +2372,12 @@ impl PyTypstCall {
 
 /// A Typst function partially applied through its native `.with` method.
 #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
-#[pyclass(module = "linnet", from_py_object, frozen, name = "TypstBind")]
+#[pyclass(
+    module = "symbolica.community.graph",
+    from_py_object,
+    frozen,
+    name = "TypstBind"
+)]
 #[derive(Clone, Debug, PartialEq)]
 struct PyTypstBind {
     expression: TypstExpression,
@@ -2552,7 +2676,11 @@ pub(crate) struct SelectorCallbacks {
 
 /// Per-render Python callbacks returning typed drawing patches.
 #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
-#[pyclass(module = "linnet", skip_from_py_object, name = "DrawingSelectors")]
+#[pyclass(
+    module = "symbolica.community.graph",
+    skip_from_py_object,
+    name = "DrawingSelectors"
+)]
 #[derive(Clone, Debug, Default)]
 struct PyDrawingSelectors {
     settings: SelectorSettings,
@@ -2607,7 +2735,12 @@ impl PyDrawingSelectors {
 
 /// Options applied by `linnest.graph.style` before layout measurement.
 #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
-#[pyclass(module = "linnet", from_py_object, frozen, name = "GraphStyleOptions")]
+#[pyclass(
+    module = "symbolica.community.graph",
+    from_py_object,
+    frozen,
+    name = "GraphStyleOptions"
+)]
 #[derive(Clone, Debug, Default, PartialEq)]
 struct PyGraphStyleOptions {
     values: BTreeMap<String, NativeValue>,
@@ -2845,16 +2978,21 @@ const LAYOUT_FIELDS: &[FieldSpec] = &[
 /// 0 gives uniform pull, 1 (the default) balances topology, and values above 1
 /// strengthen balancing. It does not change radial pull.
 #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
-#[pyclass(module = "linnet", from_py_object, frozen, name = "LayoutOptions")]
+#[pyclass(
+    module = "symbolica.community.graph",
+    from_py_object,
+    frozen,
+    name = "LayoutSettings"
+)]
 #[derive(Clone, Debug, PartialEq)]
-struct PyLayoutOptions {
+struct PyLayoutSettings {
     passes: Vec<BTreeMap<String, NativeValue>>,
 }
 
 #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
 #[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
 #[pymethods]
-impl PyLayoutOptions {
+impl PyLayoutSettings {
     #[new]
     #[pyo3(
         signature = (**kwargs),
@@ -2868,10 +3006,10 @@ impl PyLayoutOptions {
     }
 
     #[staticmethod]
-    fn sequence(passes: Vec<PyLayoutOptions>) -> PyResult<Self> {
+    fn sequence(passes: Vec<PyLayoutSettings>) -> PyResult<Self> {
         if passes.is_empty() {
             return Err(PyValueError::new_err(
-                "LayoutOptions.sequence needs at least one pass",
+                "LayoutSettings.sequence needs at least one pass",
             ));
         }
         Ok(Self {
@@ -2899,11 +3037,11 @@ impl PyLayoutOptions {
     }
 
     fn __repr__(&self) -> String {
-        format!("LayoutOptions(passes={})", self.passes.len())
+        format!("LayoutSettings(passes={})", self.passes.len())
     }
 }
 
-impl PyLayoutOptions {
+impl PyLayoutSettings {
     fn native(&self) -> NativeValue {
         NativeValue::Array(self.passes.iter().cloned().map(NativeValue::Dict).collect())
     }
@@ -3016,7 +3154,12 @@ const DRAW_FIELDS: &[FieldSpec] = &[
 
 /// Full typed option surface for `linnest.draw`.
 #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
-#[pyclass(module = "linnet", from_py_object, frozen, name = "DrawOptions")]
+#[pyclass(
+    module = "symbolica.community.graph",
+    from_py_object,
+    frozen,
+    name = "DrawOptions"
+)]
 #[derive(Clone, Debug, Default, PartialEq)]
 struct PyDrawOptions {
     values: BTreeMap<String, NativeValue>,
@@ -3090,9 +3233,13 @@ fn deep_overlay(
 
 /// Complete typed rendering configuration.
 #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
-#[pyclass(module = "linnet", skip_from_py_object, name = "RenderConfig")]
+#[pyclass(
+    module = "symbolica.community.graph",
+    skip_from_py_object,
+    name = "RenderSettings"
+)]
 #[derive(Clone, Debug, Default)]
-pub struct PyRenderConfig {
+pub struct PyRenderSettings {
     template: PathSetting,
     source_root: PathSetting,
     values: BTreeMap<String, NativeValue>,
@@ -3102,28 +3249,7 @@ pub struct PyRenderConfig {
 #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
 #[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
 #[pymethods]
-impl PyRenderConfig {
-    /// A value snapshot crosses extension-module boundaries without sharing
-    /// PyO3 type identities. Authored renderers cannot evaluate graph selectors.
-    #[gen_stub(skip)]
-    fn _authored_snapshot(&self) -> PyResult<String> {
-        if [
-            &self.selectors.node,
-            &self.selectors.edge,
-            &self.selectors.source,
-            &self.selectors.sink,
-        ]
-        .into_iter()
-        .any(|setting| matches!(setting, SelectorSetting::Value(_)))
-        {
-            return Err(PyValueError::new_err(
-                "authored rendering does not accept graph selectors",
-            ));
-        }
-        serde_json::to_string(&(&self.template, &self.source_root, &self.values))
-            .map_err(|error| PyValueError::new_err(error.to_string()))
-    }
-
+impl PyRenderSettings {
     #[new]
     #[pyo3(
         signature = (**kwargs),
@@ -3142,7 +3268,7 @@ impl PyRenderConfig {
         Ok(config)
     }
 
-    fn overlay(&self, overlay: &PyRenderConfig) -> Self {
+    fn overlay(&self, overlay: &PyRenderSettings) -> Self {
         self.merged(overlay)
     }
 
@@ -3205,7 +3331,7 @@ impl PyRenderConfig {
             )?
             .into_any()),
             Some(_) => Err(PyValueError::new_err(
-                "internal error: RenderConfig style has an invalid value",
+                "internal error: RenderSettings style has an invalid value",
             )),
         }
     }
@@ -3230,14 +3356,14 @@ impl PyRenderConfig {
                     .map(|pass| match pass {
                         NativeValue::Dict(values) => Ok(values.clone()),
                         _ => Err(PyValueError::new_err(
-                            "internal error: RenderConfig layouts contains an invalid pass",
+                            "internal error: RenderSettings layouts contains an invalid pass",
                         )),
                     })
                     .collect::<PyResult<Vec<_>>>()?;
-                Ok(Py::new(py, PyLayoutOptions { passes })?.into_any())
+                Ok(Py::new(py, PyLayoutSettings { passes })?.into_any())
             }
             Some(_) => Err(PyValueError::new_err(
-                "internal error: RenderConfig layouts has an invalid value",
+                "internal error: RenderSettings layouts has an invalid value",
             )),
         }
     }
@@ -3264,7 +3390,7 @@ impl PyRenderConfig {
             )?
             .into_any()),
             Some(_) => Err(PyValueError::new_err(
-                "internal error: RenderConfig drawing has an invalid value",
+                "internal error: RenderSettings drawing has an invalid value",
             )),
         }
     }
@@ -3326,10 +3452,10 @@ impl PyRenderConfig {
     ///
     /// Examples
     /// --------
-    /// >>> import linnet as ln
-    /// >>> ln.RenderConfig(template_options={"momentum-arrows": True}).native_drawing_options()
+    /// >>> from symbolica.community import graph as ln
+    /// >>> ln.RenderSettings(template_options={"momentum-arrows": True}).native_drawing_options()
     /// ({'momentum-arrows': True}, {})
-    /// >>> ln.RenderConfig(drawing=ln.DrawOptions(node_radius=5)).native_drawing_options()
+    /// >>> ln.RenderSettings(drawing=ln.DrawOptions(node_radius=5)).native_drawing_options()
     #[gen_stub(override_return_type(
         type_repr = "tuple[dict[str, typing.Any], dict[str, typing.Any]] | None",
         imports = ("typing")
@@ -3353,7 +3479,7 @@ impl PyRenderConfig {
 
     fn __repr__(&self) -> String {
         format!(
-            "RenderConfig(template={:?}, source_root={:?}, fields={})",
+            "RenderSettings(template={:?}, source_root={:?}, fields={})",
             self.template.resolved(),
             self.source_root.resolved(),
             self.values.len()
@@ -3426,9 +3552,9 @@ pyo3_stub_gen::inventory::submit! {
     pyo3_stub_gen::derive::gen_methods_from_python! { r#"
         import typing
 
-        class PyLayoutOptions:
-            def __new__(cls, *, impred_spacing: _Number = ..., impred_repulsion: _Number = ..., impred_attraction: _Number = ..., impred_parallel_balance: _Number = ..., impred_pull: _Number = ..., impred_pull_balance: _Number = ..., impred_pull_attachment: _Number = ..., impred_external_max_points: _Integer = ..., impred_split_length_ratio: _Number = ..., impred_contract_chord_ratio: _Number = ..., impred_edge_clearance: _Number = ..., impred_node_edge_strength: _Number = ..., impred_steps: _Integer = ..., impred_step_scale: _Integer = ..., impred_level: _Boolean = ..., impred_labels: _Boolean = ..., subgraph: _OptionalHedgeSelection = ..., viewport_width: _Number = ..., viewport_height: _Number = ..., tree_dx: _Number = ..., tree_dy: _Number = ..., steps: _Integer = ..., seed: _Integer = ..., step: _Number = ..., step_shrink: _Number = ..., cool: _Number = ..., accept_floor: _Number = ..., early_tolerance: _Number = ..., temperature: _Number = ..., delta: _Number = ..., beta: _Number = ..., spring_strength: _Number = ..., spring_length_scale: _Number = ..., initial_repulsion: _Number = ..., repulsion_growth: _Number = ..., centering_strength: _Number = ..., epochs: _Integer = ..., crossing_penalty: _Number = ..., dangling_repulsion: _Number = ..., dangling_centroid_repulsion: _Number = ..., external_pull: _Number = ..., external_pull_balance: _Number = ..., external_pull_attachment: _Number = ..., edge_edge_repulsion: _Number = ..., directional_force: _Number = ..., internal_label_length_scale: _Number = ..., external_label_length_scale: _Number = ..., label_spring: _Number = ..., label_charge: _Number = ..., label_steps: _Integer = ..., label_layout: _LabelLayoutValue = ..., label_step: _Number = ..., label_early_tolerance: _Number = ..., label_max_delta_scale: _Number = ..., edge_vertex_repulsion: _Number = ..., epsilon: _Number = ..., incremental_energy: _Boolean = ..., algorithm: _LayoutAlgorithmValue = ..., nodes: _LayoutNodesValue = ..., direction: _LayoutDirectionValue = ..., rank_align: _RankAlignmentValue = ..., roots: _NodeIndices = ..., rank_same: _NodeGroups = ..., route_edge_weight: _Number = ..., route_exit_weight: _Number = ..., route_label_width_scale: _Number = ..., route_label_width_cap: _Number = ..., z_spring: _Number = ..., z_spring_growth: _Number = ..., length_scale: _Number = ...) -> LayoutOptions: ...
-            def then(self, *, impred_spacing: _Number = ..., impred_repulsion: _Number = ..., impred_attraction: _Number = ..., impred_parallel_balance: _Number = ..., impred_pull: _Number = ..., impred_pull_balance: _Number = ..., impred_pull_attachment: _Number = ..., impred_external_max_points: _Integer = ..., impred_split_length_ratio: _Number = ..., impred_contract_chord_ratio: _Number = ..., impred_edge_clearance: _Number = ..., impred_node_edge_strength: _Number = ..., impred_steps: _Integer = ..., impred_step_scale: _Integer = ..., impred_level: _Boolean = ..., impred_labels: _Boolean = ..., subgraph: _OptionalHedgeSelection = ..., viewport_width: _Number = ..., viewport_height: _Number = ..., tree_dx: _Number = ..., tree_dy: _Number = ..., steps: _Integer = ..., seed: _Integer = ..., step: _Number = ..., step_shrink: _Number = ..., cool: _Number = ..., accept_floor: _Number = ..., early_tolerance: _Number = ..., temperature: _Number = ..., delta: _Number = ..., beta: _Number = ..., spring_strength: _Number = ..., spring_length_scale: _Number = ..., initial_repulsion: _Number = ..., repulsion_growth: _Number = ..., centering_strength: _Number = ..., epochs: _Integer = ..., crossing_penalty: _Number = ..., dangling_repulsion: _Number = ..., dangling_centroid_repulsion: _Number = ..., external_pull: _Number = ..., external_pull_balance: _Number = ..., external_pull_attachment: _Number = ..., edge_edge_repulsion: _Number = ..., directional_force: _Number = ..., internal_label_length_scale: _Number = ..., external_label_length_scale: _Number = ..., label_spring: _Number = ..., label_charge: _Number = ..., label_steps: _Integer = ..., label_layout: _LabelLayoutValue = ..., label_step: _Number = ..., label_early_tolerance: _Number = ..., label_max_delta_scale: _Number = ..., edge_vertex_repulsion: _Number = ..., epsilon: _Number = ..., incremental_energy: _Boolean = ..., algorithm: _LayoutAlgorithmValue = ..., nodes: _LayoutNodesValue = ..., direction: _LayoutDirectionValue = ..., rank_align: _RankAlignmentValue = ..., roots: _NodeIndices = ..., rank_same: _NodeGroups = ..., route_edge_weight: _Number = ..., route_exit_weight: _Number = ..., route_label_width_scale: _Number = ..., route_label_width_cap: _Number = ..., z_spring: _Number = ..., z_spring_growth: _Number = ..., length_scale: _Number = ...) -> LayoutOptions: ...
+        class PyLayoutSettings:
+            def __new__(cls, *, impred_spacing: _Number = ..., impred_repulsion: _Number = ..., impred_attraction: _Number = ..., impred_parallel_balance: _Number = ..., impred_pull: _Number = ..., impred_pull_balance: _Number = ..., impred_pull_attachment: _Number = ..., impred_external_max_points: _Integer = ..., impred_split_length_ratio: _Number = ..., impred_contract_chord_ratio: _Number = ..., impred_edge_clearance: _Number = ..., impred_node_edge_strength: _Number = ..., impred_steps: _Integer = ..., impred_step_scale: _Integer = ..., impred_level: _Boolean = ..., impred_labels: _Boolean = ..., subgraph: _OptionalHedgeSelection = ..., viewport_width: _Number = ..., viewport_height: _Number = ..., tree_dx: _Number = ..., tree_dy: _Number = ..., steps: _Integer = ..., seed: _Integer = ..., step: _Number = ..., step_shrink: _Number = ..., cool: _Number = ..., accept_floor: _Number = ..., early_tolerance: _Number = ..., temperature: _Number = ..., delta: _Number = ..., beta: _Number = ..., spring_strength: _Number = ..., spring_length_scale: _Number = ..., initial_repulsion: _Number = ..., repulsion_growth: _Number = ..., centering_strength: _Number = ..., epochs: _Integer = ..., crossing_penalty: _Number = ..., dangling_repulsion: _Number = ..., dangling_centroid_repulsion: _Number = ..., external_pull: _Number = ..., external_pull_balance: _Number = ..., external_pull_attachment: _Number = ..., edge_edge_repulsion: _Number = ..., directional_force: _Number = ..., internal_label_length_scale: _Number = ..., external_label_length_scale: _Number = ..., label_spring: _Number = ..., label_charge: _Number = ..., label_steps: _Integer = ..., label_layout: _LabelLayoutValue = ..., label_step: _Number = ..., label_early_tolerance: _Number = ..., label_max_delta_scale: _Number = ..., edge_vertex_repulsion: _Number = ..., epsilon: _Number = ..., incremental_energy: _Boolean = ..., algorithm: _LayoutAlgorithmValue = ..., nodes: _LayoutNodesValue = ..., direction: _LayoutDirectionValue = ..., rank_align: _RankAlignmentValue = ..., roots: _NodeIndices = ..., rank_same: _NodeGroups = ..., route_edge_weight: _Number = ..., route_exit_weight: _Number = ..., route_label_width_scale: _Number = ..., route_label_width_cap: _Number = ..., z_spring: _Number = ..., z_spring_growth: _Number = ..., length_scale: _Number = ...) -> LayoutSettings: ...
+            def then(self, *, impred_spacing: _Number = ..., impred_repulsion: _Number = ..., impred_attraction: _Number = ..., impred_parallel_balance: _Number = ..., impred_pull: _Number = ..., impred_pull_balance: _Number = ..., impred_pull_attachment: _Number = ..., impred_external_max_points: _Integer = ..., impred_split_length_ratio: _Number = ..., impred_contract_chord_ratio: _Number = ..., impred_edge_clearance: _Number = ..., impred_node_edge_strength: _Number = ..., impred_steps: _Integer = ..., impred_step_scale: _Integer = ..., impred_level: _Boolean = ..., impred_labels: _Boolean = ..., subgraph: _OptionalHedgeSelection = ..., viewport_width: _Number = ..., viewport_height: _Number = ..., tree_dx: _Number = ..., tree_dy: _Number = ..., steps: _Integer = ..., seed: _Integer = ..., step: _Number = ..., step_shrink: _Number = ..., cool: _Number = ..., accept_floor: _Number = ..., early_tolerance: _Number = ..., temperature: _Number = ..., delta: _Number = ..., beta: _Number = ..., spring_strength: _Number = ..., spring_length_scale: _Number = ..., initial_repulsion: _Number = ..., repulsion_growth: _Number = ..., centering_strength: _Number = ..., epochs: _Integer = ..., crossing_penalty: _Number = ..., dangling_repulsion: _Number = ..., dangling_centroid_repulsion: _Number = ..., external_pull: _Number = ..., external_pull_balance: _Number = ..., external_pull_attachment: _Number = ..., edge_edge_repulsion: _Number = ..., directional_force: _Number = ..., internal_label_length_scale: _Number = ..., external_label_length_scale: _Number = ..., label_spring: _Number = ..., label_charge: _Number = ..., label_steps: _Integer = ..., label_layout: _LabelLayoutValue = ..., label_step: _Number = ..., label_early_tolerance: _Number = ..., label_max_delta_scale: _Number = ..., edge_vertex_repulsion: _Number = ..., epsilon: _Number = ..., incremental_energy: _Boolean = ..., algorithm: _LayoutAlgorithmValue = ..., nodes: _LayoutNodesValue = ..., direction: _LayoutDirectionValue = ..., rank_align: _RankAlignmentValue = ..., roots: _NodeIndices = ..., rank_same: _NodeGroups = ..., route_edge_weight: _Number = ..., route_exit_weight: _Number = ..., route_label_width_scale: _Number = ..., route_label_width_cap: _Number = ..., z_spring: _Number = ..., z_spring_growth: _Number = ..., length_scale: _Number = ...) -> LayoutSettings: ...
     "# }
 }
 
@@ -3445,37 +3571,12 @@ pyo3_stub_gen::inventory::submit! {
 #[cfg(feature = "python_stubgen")]
 pyo3_stub_gen::inventory::submit! {
     pyo3_stub_gen::derive::gen_methods_from_python! { r#"
-        class PyRenderConfig:
-            def __new__(cls, *, template: _TemplatePath = ..., source_root: _SourceRootPath = ..., title: _AutoOptionalStaticContent = ..., style: _RenderStyle = ..., layouts: _RenderLayouts = ..., drawing: _RenderDrawing = ..., selectors: _RenderSelectors = ..., template_options: _TemplateOptions = ...) -> RenderConfig: ...
+        class PyRenderSettings:
+            def __new__(cls, *, template: _TemplatePath = ..., source_root: _SourceRootPath = ..., title: _AutoOptionalStaticContent = ..., style: _RenderStyle = ..., layouts: _RenderLayouts = ..., drawing: _RenderDrawing = ..., selectors: _RenderSelectors = ..., template_options: _TemplateOptions = ...) -> RenderSettings: ...
     "# }
 }
 
-impl PyRenderConfig {
-    /// Snapshot optional standalone configuration without importing its module.
-    pub fn from_authored_config(config: &Bound<'_, PyAny>) -> PyResult<Self> {
-        if let Ok(options) = config.cast::<PyDict>() {
-            return Self::new(Some(options));
-        }
-        let snapshot = config
-            .call_method0("_authored_snapshot")?
-            .extract::<String>()?;
-        let (template, source_root, values): (
-            PathSetting,
-            PathSetting,
-            BTreeMap<String, NativeValue>,
-        ) = serde_json::from_str(&snapshot)
-            .map_err(|error| PyValueError::new_err(error.to_string()))?;
-        for value in values.values() {
-            value.validate(0)?;
-        }
-        Ok(Self {
-            template,
-            source_root,
-            values,
-            selectors: SelectorSettings::default(),
-        })
-    }
-
+impl PyRenderSettings {
     fn assign(&mut self, key: &str, value: &Bound<'_, PyAny>) -> PyResult<()> {
         match key {
             "template" => {
@@ -3548,12 +3649,14 @@ impl PyRenderConfig {
                 } else if let Ok(options) = value.cast::<PyDict>() {
                     self.values.insert(
                         "layouts".to_owned(),
-                        PyLayoutOptions::new(Some(options))?.native(),
+                        PyLayoutSettings::new(Some(options))?.native(),
                     );
                 } else {
-                    let options = value.extract::<PyRef<'_, PyLayoutOptions>>().map_err(|_| {
-                        PyTypeError::new_err("layouts must be LayoutOptions, None, or INHERIT")
-                    })?;
+                    let options = value
+                        .extract::<PyRef<'_, PyLayoutSettings>>()
+                        .map_err(|_| {
+                            PyTypeError::new_err("layouts must be LayoutSettings, None, or INHERIT")
+                        })?;
                     self.values.insert("layouts".to_owned(), options.native());
                 }
             }
@@ -3615,7 +3718,7 @@ impl PyRenderConfig {
             }
             _ => {
                 return Err(PyTypeError::new_err(format!(
-                    "unknown RenderConfig option {key:?}"
+                    "unknown RenderSettings option {key:?}"
                 )));
             }
         }
@@ -3657,6 +3760,9 @@ impl PyRenderConfig {
         );
         values.insert("version".to_owned(), NativeValue::Int(1));
         values.insert("elements".to_owned(), elements);
+        values
+            .entry("title".to_owned())
+            .or_insert(NativeValue::None);
         NativeValue::Dict(values)
     }
 
@@ -3717,7 +3823,7 @@ impl PyRenderConfig {
 
 /// Resolved renderer transport plus its closed native Typst configuration.
 #[derive(Debug)]
-pub(crate) struct RenderConfigTransport {
+pub(crate) struct RenderSettingsTransport {
     pub(crate) config_source: String,
     pub(crate) imports: Vec<TypstImport>,
     pub(crate) template: Option<PathBuf>,
@@ -4467,24 +4573,24 @@ pub(crate) fn decode_dot_native(py: Python<'_>, text: &str) -> PyResult<Py<PyAny
 
 /// Create the sparse default configuration owned by every Python graph.
 pub(crate) fn default_render_config(py: Python<'_>) -> PyResult<Py<PyAny>> {
-    Ok(Py::new(py, PyRenderConfig::default())?.into_any())
+    Ok(Py::new(py, PyRenderSettings::default())?.into_any())
 }
 
-/// Reject non-RenderConfig graph defaults at the assignment boundary.
+/// Reject non-RenderSettings graph defaults at the assignment boundary.
 pub(crate) fn validate_render_config(py: Python<'_>, config: &Py<PyAny>) -> PyResult<()> {
     config
         .bind(py)
-        .extract::<PyRef<'_, PyRenderConfig>>()
+        .extract::<PyRef<'_, PyRenderSettings>>()
         .map(|_| ())
-        .map_err(|_| PyTypeError::new_err("expected RenderConfig"))
+        .map_err(|_| PyTypeError::new_err("expected RenderSettings"))
 }
 
-/// Snapshot a RenderConfig and reject all other objects.
+/// Snapshot a RenderSettings and reject all other objects.
 pub(crate) fn render_config_copy(py: Python<'_>, config: &Py<PyAny>) -> PyResult<Py<PyAny>> {
     let config = config
         .bind(py)
-        .extract::<PyRef<'_, PyRenderConfig>>()
-        .map_err(|_| PyTypeError::new_err("expected RenderConfig"))?
+        .extract::<PyRef<'_, PyRenderSettings>>()
+        .map_err(|_| PyTypeError::new_err("expected RenderSettings"))?
         .clone();
     Ok(Py::new(py, config)?.into_any())
 }
@@ -4493,18 +4599,18 @@ fn effective_render_config(
     py: Python<'_>,
     base: &Py<PyAny>,
     overlay: Option<&Bound<'_, PyAny>>,
-) -> PyResult<PyRenderConfig> {
+) -> PyResult<PyRenderSettings> {
     let base = base
         .bind(py)
-        .extract::<PyRef<'_, PyRenderConfig>>()
-        .map_err(|_| PyTypeError::new_err("base render configuration must be RenderConfig"))?
+        .extract::<PyRef<'_, PyRenderSettings>>()
+        .map_err(|_| PyTypeError::new_err("base render configuration must be RenderSettings"))?
         .clone();
     let Some(overlay) = overlay else {
         return Ok(base);
     };
     let overlay = overlay
-        .extract::<PyRef<'_, PyRenderConfig>>()
-        .map_err(|_| PyTypeError::new_err("config override must be RenderConfig"))?;
+        .extract::<PyRef<'_, PyRenderSettings>>()
+        .map_err(|_| PyTypeError::new_err("config override must be RenderSettings"))?;
     Ok(base.merged(&overlay))
 }
 
@@ -4514,12 +4620,12 @@ pub(crate) fn render_config_transport(
     base: &Py<PyAny>,
     overlay: Option<&Bound<'_, PyAny>>,
     elements: &Bound<'_, PyDict>,
-) -> PyResult<RenderConfigTransport> {
+) -> PyResult<RenderSettingsTransport> {
     let config = effective_render_config(py, base, overlay)?;
     let elements = native_from_py(elements.as_any(), 0)?;
     elements.validate(0)?;
     let (config_source, imports) = config.native(elements).render_source()?;
-    Ok(RenderConfigTransport {
+    Ok(RenderSettingsTransport {
         config_source,
         imports,
         template: config.template.resolved(),
@@ -4611,10 +4717,237 @@ pub(crate) fn register_typst_api(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<PyTypstBind>()?;
     module.add_class::<PyGraphStyleOptions>()?;
     module.add_class::<PyDrawingSelectors>()?;
-    module.add_class::<PyLayoutOptions>()?;
+    module.add_class::<PyLayoutSettings>()?;
     module.add_class::<PyDrawOptions>()?;
-    module.add_class::<PyRenderConfig>()?;
+    module.add_class::<PyRenderSettings>()?;
     module.add("AUTO", auto_singleton(module.py()))?;
     module.add("INHERIT", inherit_singleton(module.py()))?;
     Ok(())
+}
+
+impl NativeValue {
+    fn json(&self) -> PyResult<serde_json::Value> {
+        use serde_json::{json, Value};
+        Ok(match self {
+            Self::None | Self::Auto => Value::Null,
+            Self::Bool(v) => json!(v),
+            Self::Int(v) => json!(v),
+            Self::Float(v) => json!(v),
+            Self::String(v) => json!(v),
+            Self::Enum(v) => {
+                serde_json::from_str(&v.source()).unwrap_or_else(|_| json!(v.source()))
+            }
+            Self::Color(ColorValue::Named(v) | ColorValue::Hex(v)) => json!(v),
+            Self::Color(ColorValue::Rgba(r, g, b, a)) => {
+                json!(format!("#{r:02x}{g:02x}{b:02x}{:02x}", a.unwrap_or(255)))
+            }
+            Self::Length(v, LengthUnit::Pt) => json!(v),
+            Self::Length(v, LengthUnit::Mm) => json!(v * 72.0 / 25.4),
+            Self::Length(v, LengthUnit::Cm) => json!(v * 72.0 / 2.54),
+            Self::Length(v, LengthUnit::In) => json!(v * 72.0),
+            Self::Text(v) if v.options.is_empty() => json!(v.text),
+            Self::Dash(DashValue::Named(v)) => json!(v),
+            Self::Dict(values) | Self::Stroke(values) => Value::Object(
+                values
+                    .iter()
+                    .filter(|(_, v)| !matches!(v, Self::Inherit))
+                    .map(|(k, v)| Ok((k.clone(), v.json()?)))
+                    .collect::<PyResult<_>>()?,
+            ),
+            Self::Array(v) => Value::Array(v.iter().map(Self::json).collect::<PyResult<_>>()?),
+            _ => {
+                return Err(PyValueError::new_err(
+                    "this option requires the full Typst renderer",
+                ));
+            }
+        })
+    }
+}
+impl PyRenderSettings {
+    /// Convert the supported native subset; advanced settings use the Typst path.
+    pub fn config(&self) -> PyResult<linnest::svg::Config> {
+        use serde_json::{json, Map, Value};
+        if self.template.resolved().is_some()
+            || !(self.selectors.is_none() || self.selectors.is_inherit())
+        {
+            return Err(PyValueError::new_err(
+                "templates and selectors require the full Typst renderer",
+            ));
+        }
+        let mut config = linnest::svg::Config::default();
+        let object = |v: &NativeValue| -> PyResult<Map<String, Value>> {
+            match v.json()? {
+                Value::Object(map) => Ok(map),
+                Value::Null => Ok(Map::new()),
+                _ => Err(PyTypeError::new_err("expected an option group")),
+            }
+        };
+        for (key, value) in &self.values {
+            match key.as_str() {
+                "title" => config.title = value.json()?.as_str().map(str::to_owned),
+                "layouts" => match value {
+                    NativeValue::Array(passes) if passes.len() == 1 => {
+                        config.layouts = object(&passes[0])?
+                    }
+                    NativeValue::None => {}
+                    _ => {
+                        return Err(PyValueError::new_err(
+                            "layout sequences require the full Typst renderer",
+                        ));
+                    }
+                },
+                "style" => config.style = object(value)?,
+                "draw" => config.drawing = object(value)?,
+                "options" => config.template_options = object(value)?,
+                _ => {
+                    return Err(PyValueError::new_err(format!(
+                        "unsupported native setting {key}"
+                    )));
+                }
+            }
+        }
+        for (field, group, target) in [
+            ("node-fill", "node-style", "fill"),
+            ("node-stroke", "node-style", "stroke"),
+            ("edge-stroke", "edge-style", "stroke"),
+        ] {
+            if let Some(value) = config.drawing.remove(field) {
+                config
+                    .style
+                    .entry(group)
+                    .or_insert_with(|| json!({}))
+                    .as_object_mut()
+                    .ok_or_else(|| PyValueError::new_err("invalid style group"))?
+                    .insert(target.into(), value);
+            }
+        }
+        Ok(config)
+    }
+}
+
+/// References into a snapshotted domain label module retain typed content semantics.
+pub(crate) fn label_reference(py: Python<'_>, path: PathBuf, name: &str) -> PyResult<Py<PyAny>> {
+    Ok(Py::new(py, PyTypstModule::file(path).content(name)?)?.into_any())
+}
+pub(crate) fn point_length(py: Python<'_>, value: f64) -> PyResult<Py<PyAny>> {
+    Ok(Py::new(
+        py,
+        PyLength {
+            value,
+            unit: LengthUnit::Pt,
+        },
+    )?
+    .into_any())
+}
+
+/// Domain defaults participate in the same overlay model as user settings.
+impl PyRenderSettings {
+    pub(crate) fn scene_style(
+        &self,
+        py: Python<'_>,
+        module: PathBuf,
+        kind: &str,
+        defaults: &Bound<'_, PyDict>,
+    ) -> PyResult<Py<PyAny>> {
+        let empty = NativeValue::Dict(BTreeMap::new());
+        let function = PyTypstModule::file(module).function("scene-style")?;
+        let expression = TypstExpression::Bind {
+            function: Box::new(function.expression),
+            arguments: CallArguments {
+                positional: vec![
+                    NativeValue::String(kind.into()),
+                    native_from_py(defaults.as_any(), 0)?,
+                    self.values.get("style").unwrap_or(&empty).clone(),
+                    self.values.get("draw").unwrap_or(&empty).clone(),
+                ],
+                named: BTreeMap::new(),
+            },
+        };
+        Ok(Py::new(py, PyTypstBind { expression })?.into_any())
+    }
+
+    pub(crate) fn with_scene_defaults(
+        &self,
+        py: Python<'_>,
+        scene: &linnest::svg::Scene,
+        module: PathBuf,
+    ) -> PyResult<Self> {
+        let layout = py.import("json")?.call_method1(
+            "loads",
+            (serde_json::to_string(&scene.layout)
+                .map_err(|e| PyValueError::new_err(e.to_string()))?,),
+        )?;
+        let NativeValue::Dict(mut defaults) = native_from_py(&layout, 0)? else {
+            unreachable!()
+        };
+        defaults.insert(
+            "impred-labels".into(),
+            NativeValue::Bool(scene.label_feedback),
+        );
+        if let Some(edges) = &scene.layout_edges {
+            let mut bits = vec![
+                false;
+                scene
+                    .graph
+                    .edges
+                    .iter()
+                    .map(|e| usize::from(e.source.is_some()) + usize::from(e.sink.is_some()))
+                    .sum()
+            ];
+            for &index in edges {
+                let edge = &scene.graph.edges[index];
+                for end in [&edge.source, &edge.sink].into_iter().flatten() {
+                    if let Some(id) = end.id {
+                        bits[id] = true;
+                    }
+                }
+            }
+            defaults.insert(
+                "subgraph".into(),
+                NativeValue::Array(bits.into_iter().map(NativeValue::Bool).collect()),
+            );
+        }
+        let mut result = self.clone();
+        let module = PyTypstModule::file(module);
+        let drawing = ["draw-node", "source-style", "sink-style"]
+            .into_iter()
+            .map(|name| {
+                let function = Py::new(py, module.function(name)?)?;
+                Ok((name.into(), native_from_py(function.bind(py).as_any(), 0)?))
+            })
+            .collect::<PyResult<BTreeMap<_, _>>>()?;
+        let merged = match result.values.get("draw") {
+            Some(NativeValue::Dict(values)) => deep_overlay(&drawing, values),
+            _ => drawing,
+        };
+        result
+            .values
+            .insert("draw".into(), NativeValue::Dict(merged));
+        match result.values.get_mut("layouts") {
+            Some(NativeValue::Array(passes)) => {
+                if let Some(NativeValue::Dict(pass)) = passes.first_mut() {
+                    *pass = deep_overlay(&defaults, pass);
+                }
+            }
+            Some(_) => {}
+            None => {
+                result.values.insert(
+                    "layouts".into(),
+                    NativeValue::Array(vec![NativeValue::Dict(defaults)]),
+                );
+            }
+        }
+        Ok(result)
+    }
+}
+pub(crate) fn scene_color(py: Python<'_>, value: &str) -> PyResult<Py<PyAny>> {
+    if value == "none" {
+        Ok(py.None())
+    } else {
+        Ok(Py::new(py, PyColor::new(value)?)?.into_any())
+    }
+}
+
+pub(crate) fn scene_hatch(py: Python<'_>, path: PathBuf) -> PyResult<Py<PyAny>> {
+    Ok(Py::new(py, PyTypstModule::file(path).value("hatch")?)?.into_any())
 }

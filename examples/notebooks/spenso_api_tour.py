@@ -72,7 +72,7 @@ def example_specification():
         ),
         (
             "TensorNetwork",
-            "The default display draws the current executable graph through Linnest. render and to_linnest accept linnet.RenderConfig; expression() retains the source formula. execute evaluates the graph and result_tensor retrieves its data.",
+            "The default display draws the current executable graph through Linnest. render and to_linnest accept graph.RenderSettings; expression() retains the source formula. execute evaluates the graph and result_tensor retrieves its data.",
             'network = tensor("i", "j") * tensor("j", "k")\nexecuted_network = tensor("i", "j") * tensor("j", "k")\nexecuted_network.execute()\nnetwork_result = executed_network.result_tensor()',
             "network",
         ),

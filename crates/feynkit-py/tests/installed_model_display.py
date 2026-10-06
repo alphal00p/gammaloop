@@ -7,7 +7,7 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 
 from IPython.lib.pretty import pretty
-from symbolica.community import render
+from symbolica.community import graph as render
 from symbolica.community import hepkit as hep
 
 model = hep.Model.standard_model()
@@ -59,7 +59,8 @@ assert "prefers-color-scheme:dark" in svg
 assert "vertex_allow=[V_98]" in html.unescape(process._repr_html_())
 assert ET.fromstring(process._repr_svg_()).tag == root.tag
 assert (
-    ET.fromstring(process.render(config=hep.RenderSettings()).to_svg()).tag == root.tag
+    ET.fromstring(process.render(config=render.RenderSettings()).to_svg()).tag
+    == root.tag
 )
 
 # A large process blob must leave four visible legs, with incoming legs left of
@@ -82,9 +83,9 @@ assert max(edge_x[:2]) < min(edge_x[2:])
 
 # Radius changes retain visible external legs, and explicit layout settings win.
 for config in (
-    hep.RenderSettings(node_radius=5),
-    hep.RenderSettings(node_radius=6),
-    hep.RenderSettings(layout=render.LayoutSettings(impred_spacing=20)),
+    render.RenderSettings(drawing=render.DrawOptions(node_radius=5)),
+    render.RenderSettings(drawing=render.DrawOptions(node_radius=6)),
+    render.RenderSettings(layouts=render.LayoutSettings(impred_spacing=20)),
 ):
     larger = ET.fromstring(process.render(config=config).to_svg())
     assert float(larger.attrib["viewBox"].split()[2]) > width

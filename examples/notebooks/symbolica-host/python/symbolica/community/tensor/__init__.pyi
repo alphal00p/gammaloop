@@ -29,7 +29,7 @@ import numpy.typing
 import symbolica.core
 import typing
 from symbolica import ComplexFloat, Float
-from symbolica.community.render import DiagramRender, RenderSettings
+from symbolica.community.graph import DiagramRender, RenderSettings
 from symbolica.core import Condition, Evaluator, Expression, FormattedOutput, FunctionDefinition, HeldExpression, PatternRestriction, Replacement, Transformer
 
 AUTO: _AutoIndex

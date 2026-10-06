@@ -1,10 +1,10 @@
-use figment::{Figment, Profile, providers::Serialized};
+use figment::{providers::Serialized, Figment, Profile};
 use linnet::half_edge::subgraph::{SuBitGraph, SubSetLike};
 use linnet::parser::set::DotGraphSet;
 
 use crate::{
-    TypstGraph,
     graph_api::{decode_graph_bytes_list, decode_typst_graph, encode_cbor},
+    TypstGraph,
 };
 
 #[cfg(all(target_arch = "wasm32", feature = "typst-plugin"))]

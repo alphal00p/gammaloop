@@ -4,7 +4,7 @@ import gc
 import inspect
 from pathlib import Path
 
-import linnet
+from symbolica.community import graph as linnet
 from symbolica.community.tensor import TensorExpression
 
 from symbolica.community import hepkit as fk
@@ -30,7 +30,7 @@ diagram = next(
     == 3
 )
 snapshot = diagram.to_json()
-graph = diagram.to_linnet()
+graph = diagram.to_graph()
 raw_full = graph.full_subgraph()
 full = diagram.subgraph(raw_full)
 internal = diagram.filter(edge=lambda edge: not edge.is_external)
@@ -40,7 +40,7 @@ empty = diagram.subgraph()
 assert issubclass(fk.Subgraph, fk.FeynmanDiagram)
 assert type(internal) is fk.Subgraph
 assert isinstance(internal, fk.FeynmanDiagram)
-assert internal.to_linnet() is graph
+assert internal.to_graph() is graph
 assert type(internal.linnet_selection) is linnet.Subgraph
 assert internal.original.to_json() == snapshot
 assert internal.loop_count == diagram.loop_count
@@ -75,7 +75,7 @@ assert diagram.to_json() == snapshot
 copied = full.excise()
 assert type(copied) is fk.FeynmanDiagram
 assert copied.to_json() == snapshot
-assert copied.to_linnet() is not graph
+assert copied.to_graph() is not graph
 try:
     copied.subgraph(internal)
 except (ValueError, TypeError):

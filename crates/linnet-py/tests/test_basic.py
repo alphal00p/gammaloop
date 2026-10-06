@@ -14,7 +14,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
-import linnet as lp
+from symbolica.community import graph as lp
 
 
 class Payload:
@@ -351,7 +351,7 @@ class TestGraphModel(unittest.TestCase):
         self.assertEqual(half_edge.flow, lp.Flow.Sink)
 
     def test_map_callbacks_and_omitted_callbacks_preserve_identity(self):
-        config = lp.RenderConfig(title=lp.TextLabel("base"))
+        config = lp.RenderSettings(title=lp.TextLabel("base"))
         graph, nodes, edges, half_edges = sample_graph(render_config=config)
         seen = []
 
@@ -600,7 +600,7 @@ class TestGraphModel(unittest.TestCase):
 
         def selector_cycle():
             callback = Callback()
-            config = lp.RenderConfig(selectors=lp.DrawingSelectors(node=callback))
+            config = lp.RenderSettings(selectors=lp.DrawingSelectors(node=callback))
             callback.config = config
             return weakref.ref(callback)
 
@@ -2244,7 +2244,10 @@ class TestDotCodec(unittest.TestCase):
 
 class TestTypedTypstSurface(unittest.TestCase):
     def test_generated_stub_declares_aliases_and_only_exported_classes(self):
-        stub = Path(__file__).resolve().parents[1] / "linnet.pyi"
+        stub = (
+            Path(__file__).resolve().parents[1]
+            / "python/symbolica/community/graph/__init__.pyi"
+        )
         declarations = ast.parse(stub.read_text()).body
         aliases = {
             node.target.id
@@ -2257,7 +2260,7 @@ class TestTypedTypstSurface(unittest.TestCase):
             for node in declarations
             if isinstance(node, ast.ClassDef) and node.name == "Graph"
         )
-        self.assertIn("import linnet", ast.get_docstring(graph))
+        self.assertIn("symbolica.community", ast.get_docstring(graph))
 
         for node in declarations:
             if isinstance(node, ast.ClassDef) and not node.name.startswith("_"):
@@ -2321,7 +2324,7 @@ class TestTypedTypstSurface(unittest.TestCase):
         self.assertEqual(repr(lp.AUTO), "AUTO")
         self.assertEqual(repr(lp.INHERIT), "INHERIT")
 
-        layouts = lp.LayoutOptions(
+        layouts = lp.LayoutSettings(
             algorithm=lp.LayoutAlgorithm.Force,
             direction=lp.LayoutDirection.Right,
             label_layout=lp.LabelLayout.Normal,
@@ -2359,7 +2362,7 @@ class TestTypedTypstSurface(unittest.TestCase):
             edge_resolve_length=lp.EdgeLengthResolution.Min,
             debug=lp.DebugLevel.Off,
         )
-        base = lp.RenderConfig(
+        base = lp.RenderSettings(
             title=label,
             style=style,
             layouts=layouts,
@@ -2371,13 +2374,13 @@ class TestTypedTypstSurface(unittest.TestCase):
                 "mark": mark,
             },
         )
-        overlay = lp.RenderConfig(
+        overlay = lp.RenderSettings(
             title=None,
             selectors=lp.INHERIT,
             template_options={"nested": {"overlay": True}},
         )
         merged = base.overlay(overlay)
-        self.assertIn("RenderConfig", repr(merged))
+        self.assertIn("RenderSettings", repr(merged))
         self.assertEqual(
             merged.template_options["nested"],
             {"base": True, "overlay": True},
@@ -2398,7 +2401,7 @@ class TestTypedTypstSurface(unittest.TestCase):
         self.assertIs(lp.NodeDrawing().label, lp.INHERIT)
 
     def test_render_config_has_mutable_typed_properties(self):
-        config = lp.RenderConfig()
+        config = lp.RenderSettings()
         for value in (
             config.template,
             config.source_root,
@@ -2417,8 +2420,8 @@ class TestTypedTypstSurface(unittest.TestCase):
         self.assertEqual(Path(config.template), Path("template with spaces.typ"))
         config.source_root = Path("project with spaces")
         self.assertEqual(Path(config.source_root), Path("project with spaces"))
-        with self.assertRaisesRegex(TypeError, "unknown RenderConfig option"):
-            lp.RenderConfig(typst_executable="typst")
+        with self.assertRaisesRegex(TypeError, "unknown RenderSettings option"):
+            lp.RenderSettings(typst_executable="typst")
 
         config.title = lp.TextLabel("mutable")
         self.assertEqual(config.title.text, "mutable")
@@ -2427,7 +2430,7 @@ class TestTypedTypstSurface(unittest.TestCase):
         config.title = lp.INHERIT
         self.assertIs(config.title, lp.INHERIT)
 
-        config.layouts = lp.LayoutOptions().then(algorithm=lp.LayoutAlgorithm.Force)
+        config.layouts = lp.LayoutSettings().then(algorithm=lp.LayoutAlgorithm.Force)
         self.assertEqual(config.layouts.pass_count, 2)
         config.drawing = lp.DrawOptions(debug=lp.DebugLevel.Off)
         self.assertIsInstance(config.drawing, lp.DrawOptions)
@@ -2476,7 +2479,7 @@ class TestTypedTypstSurface(unittest.TestCase):
 
     def test_template_options_overlay_and_module_references_are_typed(self):
         module = lp.TypstModule.file("template options.typ")
-        base = lp.RenderConfig(
+        base = lp.RenderSettings(
             template_options={
                 "nested": {"base": 1, "shared": "base"},
                 "accent": module.value("accent"),
@@ -2484,7 +2487,7 @@ class TestTypedTypstSurface(unittest.TestCase):
             }
         )
         merged = base.overlay(
-            lp.RenderConfig(
+            lp.RenderSettings(
                 template_options={
                     "nested": {"overlay": 2, "shared": "overlay"},
                     "title": module.content("title"),
@@ -2501,14 +2504,14 @@ class TestTypedTypstSurface(unittest.TestCase):
         self.assertIn("TypstBind", repr(options["decorate"]))
         self.assertIn("TypstRef", repr(options["title"]))
         preserved = base.overlay(
-            lp.RenderConfig(template_options={"nested": {"base": lp.INHERIT}})
+            lp.RenderSettings(template_options={"nested": {"base": lp.INHERIT}})
         )
         self.assertEqual(preserved.template_options["nested"]["base"], 1)
         self.assertIsNone(
-            base.overlay(lp.RenderConfig(template_options=None)).template_options
+            base.overlay(lp.RenderSettings(template_options=None)).template_options
         )
         with self.assertRaises(TypeError):
-            lp.RenderConfig(template_options=["not", "a", "dictionary"])
+            lp.RenderSettings(template_options=["not", "a", "dictionary"])
 
     def test_drawing_fields_validate_their_declared_types(self):
         module = lp.TypstModule.file("drawing-values.typ")
@@ -2615,7 +2618,7 @@ class TestTypedTypstSurface(unittest.TestCase):
                     self.assertRaisesRegex(TypeError, message),
                 ):
                     graph.to_svg(
-                        config=lp.RenderConfig(
+                        config=lp.RenderSettings(
                             template=template,
                             selectors=selectors,
                         )
@@ -2679,8 +2682,8 @@ class TestTypedTypstSurface(unittest.TestCase):
                 source=select_source,
                 sink=select_sink,
             )
-            prepared = graph.prepare_render(
-                config=lp.RenderConfig(template=template, selectors=selectors)
+            prepared = graph.render(
+                config=lp.RenderSettings(template=template, selectors=selectors)
             )
             source = prepared.typst_source
             self.assertIn("<svg", prepared.to_svg())
@@ -2714,7 +2717,7 @@ class TestTypedTypstSurface(unittest.TestCase):
                 "must not mutate graph topology",
             ):
                 mutating.to_svg(
-                    config=lp.RenderConfig(
+                    config=lp.RenderSettings(
                         template=template,
                         selectors=lp.DrawingSelectors(node=mutate_topology),
                     )
@@ -2744,7 +2747,7 @@ class TestTypedTypstSurface(unittest.TestCase):
             source=lambda _half_edge: lp.HalfEdgeDrawing(style={"stroke": stroke}),
             sink=lambda _half_edge: lp.HalfEdgeDrawing(style={"stroke": stroke}),
         )
-        layouts = lp.LayoutOptions(
+        layouts = lp.LayoutSettings(
             subgraph=[True, False],
             viewport_width=12,
             viewport_height=8,
@@ -2862,7 +2865,7 @@ class TestTypedTypstSurface(unittest.TestCase):
                 "fill": lp.Color("red"),
             },
         }
-        config = lp.RenderConfig(
+        config = lp.RenderSettings(
             template=Path("template with spaces.typ"),
             title=lp.AUTO,
             style=style,
@@ -2872,7 +2875,7 @@ class TestTypedTypstSurface(unittest.TestCase):
             template_options=template_options,
         )
         self.assertEqual(layouts.pass_count, 1)
-        self.assertIn("RenderConfig", repr(config))
+        self.assertIn("RenderSettings", repr(config))
 
     def test_closed_native_model_rejects_arbitrary_values_and_reserved_extensions(self):
         nested = [lp.Color("red")]
@@ -2917,19 +2920,19 @@ class TestTypedTypstSurface(unittest.TestCase):
         with self.assertRaises(TypeError):
             lp.NodeDrawing(placement={"ref": "left", "mode": lp.Placement.Pin})
         with self.assertRaises(TypeError):
-            lp.LayoutOptions(algorithm="force")
+            lp.LayoutSettings(algorithm="force")
         with self.assertRaises(TypeError):
-            lp.LayoutOptions(seed=-1)
+            lp.LayoutSettings(seed=-1)
         with self.assertRaises(TypeError):
-            lp.LayoutOptions(roots=[-1])
+            lp.LayoutSettings(roots=[-1])
         with self.assertRaises(TypeError):
-            lp.LayoutOptions(rank_same=[["node"]])
+            lp.LayoutSettings(rank_same=[["node"]])
         with self.assertRaises(TypeError):
-            lp.LayoutOptions(subgraph=[0, 1])
-        lp.LayoutOptions(subgraph=[True, False], rank_same=[[0, 1]])
+            lp.LayoutSettings(subgraph=[0, 1])
+        lp.LayoutSettings(subgraph=[True, False], rank_same=[[0, 1]])
         module = lp.TypstModule.file("selections.typ")
         selection = module.function("selection")
-        lp.LayoutOptions(
+        lp.LayoutSettings(
             subgraph=selection,
             rank_same=[[0, 1], selection, selection.bind(side="left")],
         )
@@ -2986,7 +2989,7 @@ class TestTypedTypstSurface(unittest.TestCase):
             lp.DrawOptions(subgraph=[{"subgraph": [True, False], "unknown": {}}])
         static_content_fields = {
             "draw title": lambda value: lp.DrawOptions(title=value),
-            "render title": lambda value: lp.RenderConfig(title=value),
+            "render title": lambda value: lp.RenderSettings(title=value),
         }
         for name, static_content in static_content_fields.items():
             with self.subTest(field=name), self.assertRaises(TypeError):
@@ -3001,7 +3004,7 @@ class TestTypedTypstSurface(unittest.TestCase):
         with self.assertRaises(TypeError):
             lp.MathSymbol("p", subscript=True)
         with self.assertRaises(TypeError):
-            lp.RenderConfig(unknown_option=True)
+            lp.RenderSettings(unknown_option=True)
 
     def test_module_references_calls_and_binds_are_typed_values(self):
         with self.assertRaises(TypeError):
@@ -3027,7 +3030,7 @@ class TestTypedTypstSurface(unittest.TestCase):
 
     def test_draw_cut_geometry_options_are_typed_and_serialized(self):
         graph, _, _, _ = sample_graph(
-            render_config=lp.RenderConfig(
+            render_config=lp.RenderSettings(
                 drawing=lp.DrawOptions(
                     edge_split_gap=0.25,
                     label_collision_padding=0.3,
@@ -3037,26 +3040,26 @@ class TestTypedTypstSurface(unittest.TestCase):
             )
         )
 
-        source = graph.prepare_render().typst_source
+        source = graph.render().typst_source
         self.assertIn('("edge-split-gap"): 0.25', source)
         self.assertIn('("label-collision-padding"): 0.3', source)
         self.assertIn('("external-label-gap"): 0.65', source)
         self.assertIn('("edge-dangling-tangent"): "vertical"', source)
 
         graph, _, _, _ = sample_graph(
-            render_config=lp.RenderConfig(
+            render_config=lp.RenderSettings(
                 drawing=lp.DrawOptions(edge_dangling_tangent=lp.AUTO)
             )
         )
         self.assertIn(
             '("edge-dangling-tangent"): auto',
-            graph.prepare_render().typst_source,
+            graph.render().typst_source,
         )
 
     def test_dangling_centroid_repulsion_is_typed_and_serialized(self):
         graph, _, _, _ = sample_graph(
-            render_config=lp.RenderConfig(
-                layouts=lp.LayoutOptions(
+            render_config=lp.RenderSettings(
+                layouts=lp.LayoutSettings(
                     dangling_centroid_repulsion=1.25, external_pull=1.0
                 )
             )
@@ -3064,22 +3067,22 @@ class TestTypedTypstSurface(unittest.TestCase):
 
         self.assertIn(
             '("gamma-dangling-centroid"): 1.25',
-            graph.prepare_render().typst_source,
+            graph.render().typst_source,
         )
         self.assertIn(
             '("external-pull"): 1.0',
-            graph.prepare_render().typst_source,
+            graph.render().typst_source,
         )
 
     def test_external_pull_balance_is_validated_and_preserved_across_passes(self):
         layouts = (
-            lp.LayoutOptions(external_pull_balance=0)
+            lp.LayoutSettings(external_pull_balance=0)
             .then(external_pull_balance=0.25)
             .then(external_pull_balance=1)
             .then(external_pull_balance=2)
         )
-        graph, _, _, _ = sample_graph(render_config=lp.RenderConfig(layouts=layouts))
-        source = graph.prepare_render().typst_source
+        graph, _, _, _ = sample_graph(render_config=lp.RenderSettings(layouts=layouts))
+        source = graph.render().typst_source
         self.assertEqual(layouts.pass_count, 4)
         for value in ("0", "0.25", "1", "2"):
             self.assertIn(f'("external-pull-balance"): {value}', source)
@@ -3087,70 +3090,63 @@ class TestTypedTypstSurface(unittest.TestCase):
         for value in (-0.1, float("nan"), float("inf"), -float("inf")):
             with self.subTest(value=value):
                 with self.assertRaises((TypeError, ValueError)):
-                    lp.LayoutOptions(external_pull_balance=value)
+                    lp.LayoutSettings(external_pull_balance=value)
                 with self.assertRaises((TypeError, ValueError)):
-                    lp.LayoutOptions().then(external_pull_balance=value)
+                    lp.LayoutSettings().then(external_pull_balance=value)
 
     def test_impred_step_scale_is_typed_and_preserved_across_passes(self):
-        layouts = lp.LayoutOptions(
+        layouts = lp.LayoutSettings(
             algorithm=lp.LayoutAlgorithm.Impred, impred_steps=1500, impred_step_scale=1
         ).then(algorithm=lp.LayoutAlgorithm.Impred, impred_step_scale=2)
-        graph, _, _, _ = sample_graph(render_config=lp.RenderConfig(layouts=layouts))
-        source = graph.prepare_render().typst_source
+        graph, _, _, _ = sample_graph(render_config=lp.RenderSettings(layouts=layouts))
+        source = graph.render().typst_source
         self.assertEqual(layouts.pass_count, 2)
         self.assertIn('("impred-steps"): 1500', source)
         for value in (1, 2):
             self.assertIn(f'("impred-step-scale"): {value}', source)
         self.assertEqual(source.count('("impred-step-scale"):'), 2)
-        for constructor in (lp.LayoutOptions, lp.LayoutOptions.then):
+        for constructor in (lp.LayoutSettings, lp.LayoutSettings.then):
             self.assertIn(
                 "impred_step_scale", inspect.signature(constructor).parameters
             )
         for value in (-1, 1.5, "2", float("nan"), float("inf")):
             with self.subTest(value=value):
                 with self.assertRaises((TypeError, ValueError)):
-                    lp.LayoutOptions(impred_step_scale=value)
+                    lp.LayoutSettings(impred_step_scale=value)
                 with self.assertRaises((TypeError, ValueError)):
-                    lp.LayoutOptions().then(impred_step_scale=value)
+                    lp.LayoutSettings().then(impred_step_scale=value)
 
     def test_impred_level_is_typed_and_preserved_across_passes(self):
-        layouts = lp.LayoutOptions(
+        layouts = lp.LayoutSettings(
             algorithm=lp.LayoutAlgorithm.Impred, impred_level=False
         ).then(algorithm=lp.LayoutAlgorithm.Impred, impred_level=True)
-        graph, _, _, _ = sample_graph(render_config=lp.RenderConfig(layouts=layouts))
-        source = graph.prepare_render().typst_source
+        graph, _, _, _ = sample_graph(render_config=lp.RenderSettings(layouts=layouts))
+        source = graph.render().typst_source
         for value in ("false", "true"):
             self.assertIn(f'("impred-level"): {value}', source)
         self.assertEqual(source.count('("impred-level"):'), 2)
-        for constructor in (lp.LayoutOptions, lp.LayoutOptions.then):
+        for constructor in (lp.LayoutSettings, lp.LayoutSettings.then):
             self.assertIn("impred_level", inspect.signature(constructor).parameters)
         for value in (1, 0.0, "true"):
             with self.subTest(value=value):
                 with self.assertRaises((TypeError, ValueError)):
-                    lp.LayoutOptions(impred_level=value)
+                    lp.LayoutSettings(impred_level=value)
                 with self.assertRaises((TypeError, ValueError)):
-                    lp.LayoutOptions().then(impred_level=value)
+                    lp.LayoutSettings().then(impred_level=value)
 
-    def test_impred_step_scale_zero_is_rejected_by_shared_solver(self):
-        graph, _, _, _ = sample_graph(
-            render_config=lp.RenderConfig(
-                layouts=lp.LayoutOptions(
-                    algorithm=lp.LayoutAlgorithm.Impred, impred_step_scale=0
-                )
-            )
-        )
-        with self.assertRaisesRegex(RuntimeError, "step.scale.*positive"):
-            graph.to_svg()
+    def test_impred_step_scale_zero_is_rejected_before_rendering(self):
+        with self.assertRaisesRegex(ValueError, "impred_step_scale"):
+            lp.LayoutSettings(algorithm=lp.LayoutAlgorithm.Impred, impred_step_scale=0)
 
     def test_external_pull_attachment_is_validated_and_preserved_across_passes(self):
         layouts = (
-            lp.LayoutOptions(external_pull_attachment=0)
+            lp.LayoutSettings(external_pull_attachment=0)
             .then(external_pull_attachment=0.25)
             .then(external_pull_attachment=1)
             .then(external_pull_attachment=16)
         )
-        graph, _, _, _ = sample_graph(render_config=lp.RenderConfig(layouts=layouts))
-        source = graph.prepare_render().typst_source
+        graph, _, _, _ = sample_graph(render_config=lp.RenderSettings(layouts=layouts))
+        source = graph.render().typst_source
         self.assertEqual(layouts.pass_count, 4)
         for value in ("0", "0.25", "1", "16"):
             self.assertIn(f'("external-pull-attachment"): {value}', source)
@@ -3158,9 +3154,9 @@ class TestTypedTypstSurface(unittest.TestCase):
         for value in (-0.1, float("nan"), float("inf"), -float("inf")):
             with self.subTest(value=value):
                 with self.assertRaises((TypeError, ValueError)):
-                    lp.LayoutOptions(external_pull_attachment=value)
+                    lp.LayoutSettings(external_pull_attachment=value)
                 with self.assertRaises((TypeError, ValueError)):
-                    lp.LayoutOptions().then(external_pull_attachment=value)
+                    lp.LayoutSettings().then(external_pull_attachment=value)
 
     def test_typed_option_constructors_expose_explicit_runtime_signatures(self):
         constructors = (
@@ -3172,9 +3168,9 @@ class TestTypedTypstSurface(unittest.TestCase):
             lp.Mark,
             lp.DrawingSelectors,
             lp.GraphStyleOptions,
-            lp.LayoutOptions,
+            lp.LayoutSettings,
             lp.DrawOptions,
-            lp.RenderConfig,
+            lp.RenderSettings,
         )
         for constructor in constructors:
             with self.subTest(constructor=constructor):
@@ -3188,7 +3184,7 @@ class TestTypedTypstSurface(unittest.TestCase):
             (
                 parameter.kind
                 for parameter in inspect.signature(
-                    lp.LayoutOptions.then
+                    lp.LayoutSettings.then
                 ).parameters.values()
             ),
         )
@@ -3241,37 +3237,30 @@ class TestTypedTypstSurface(unittest.TestCase):
 
 
 class TestRendering(unittest.TestCase):
-    def test_authored_configuration_accepts_dicts_and_independent_type_snapshots(self):
-        typed = lp.RenderConfig(
+    def test_authored_configuration_uses_the_canonical_settings_type(self):
+        typed = lp.RenderSettings(
             selectors=lp.DrawingSelectors(node=None),
             template_options={"marker": "configured"},
         )
-
-        class IndependentConfig:
-            def _authored_snapshot(self):
-                return typed._authored_snapshot()
-
         sources = {
             "main.typ": b'#assert.eq(_linnet_config.options.marker, "configured")\n[ok]'
         }
-        for config in (
-            {"template_options": {"marker": "configured"}},
-            typed,
-            IndependentConfig(),
-        ):
-            self.assertIn(
-                "<svg", lp.PreparedRender.from_sources(sources, config=config).to_svg()
-            )
-        with self.assertRaisesRegex(ValueError, "graph selectors"):
-            lp.PreparedRender.from_sources(
+        self.assertIn(
+            "<svg", lp.DiagramRender.from_sources(sources, config=typed).to_svg()
+        )
+        for config in ({"template_options": {"marker": "configured"}}, object()):
+            with self.assertRaises(TypeError):
+                lp.DiagramRender.from_sources(sources, config=config)
+        with self.assertRaisesRegex(ValueError, "templates or selectors"):
+            lp.DiagramRender.from_sources(
                 sources,
-                config=lp.RenderConfig(
+                config=lp.RenderSettings(
                     selectors=lp.DrawingSelectors(node=lambda node: None)
                 ),
             )
 
     def test_single_ended_outset_reaches_large_node_boundary(self):
-        prepared = lp.PreparedRender.from_sources(
+        prepared = lp.DiagramRender.from_sources(
             {
                 "main.typ": b"""
 #import "crates/kurvst/typst/src/lib.typ": outset-point
@@ -3311,7 +3300,12 @@ class TestRendering(unittest.TestCase):
         )
         self.assertIn("prefers-color-scheme: dark", svg)
         self.assertIn('data-theme="dark"', svg)
-        self.assertNotIn('fill="#ffffff"', svg)
+        self.assertFalse(
+            any(
+                element.get("fill") == "#ffffff"
+                for element in ET.fromstring(svg).iter()
+            )
+        )
         self.assertIn('class="linnet-subgraph"', selected._repr_html_())
         self.assertIn("<svg", selected._repr_svg_())
         self.assertEqual(graph.to_dot(), before)
@@ -3348,9 +3342,9 @@ class TestRendering(unittest.TestCase):
                 "}\n",
                 encoding="utf-8",
             )
-            config = lp.RenderConfig(
+            config = lp.RenderSettings(
                 template=template,
-                layouts=lp.LayoutOptions(steps=0),
+                layouts=lp.LayoutSettings(steps=0),
                 selectors=lp.DrawingSelectors(
                     edge=lambda edge: lp.EdgeDrawing(
                         extensions={"selector-marker": "owner"}
@@ -3364,17 +3358,17 @@ class TestRendering(unittest.TestCase):
                 "node-style"
             )
             selected = graph.subgraph(nodes=["isolated"])
-            before = graph.prepare_render().typst_source
-            self.assertIn("<svg", selected.prepare_render().to_svg())
+            before = graph.render().typst_source
+            self.assertIn("<svg", selected.render().to_svg())
             self.assertEqual(selected.isolated_node_indices(), [2])
-            self.assertEqual(graph.prepare_render().typst_source, before)
+            self.assertEqual(graph.render().typst_source, before)
 
     def test_subgraph_rendering_rejects_stale_selection_before_compilation(self):
         graph, _, _, _ = sample_graph()
         selected = graph.full_subgraph()
         graph.add_node(lp.node("new"))
         for render in (
-            selected.prepare_render,
+            selected.render,
             selected.to_svg,
             selected._repr_svg_,
             selected._repr_html_,
@@ -3405,7 +3399,7 @@ class TestRendering(unittest.TestCase):
                 )
                 (package / "lib.typ").write_text(f"#let body = [{name}]\n")
             graph = lp.build(
-                lp.node("only"), render_config=lp.RenderConfig(template=template)
+                lp.node("only"), render_config=lp.RenderSettings(template=template)
             )
             with patch.dict(
                 os.environ,
@@ -3421,17 +3415,19 @@ class TestRendering(unittest.TestCase):
                     ("png", b"\x89PNG"),
                 ):
                     output = root / "nested output" / f"diagram.{suffix}"
-                    self.assertEqual(graph.render(output), output)
+                    self.assertEqual(graph.render().save(output), output)
                     self.assertTrue(output.read_bytes().startswith(signature))
-            with self.assertRaisesRegex(RuntimeError, "expected a .pdf, .svg, or .png"):
-                graph.render(root / "diagram.jpg")
+            with self.assertRaisesRegex(
+                ValueError, "expected .svg, .html, .typ, .pdf, or .png"
+            ):
+                graph.render().save(root / "diagram.jpg")
 
     def test_to_svg_accepts_one_page_and_rejects_multiple_pages(self):
         with TemporaryDirectory(prefix="linnet typst pages ") as directory:
             template = Path(directory) / "template.typ"
             template.write_text("#let render(config) = [ok]\n", encoding="utf-8")
             graph = lp.build(
-                lp.node("only"), render_config=lp.RenderConfig(template=template)
+                lp.node("only"), render_config=lp.RenderSettings(template=template)
             )
             self.assertIn("<svg", graph.to_svg())
             template.write_text(
@@ -3455,7 +3451,7 @@ class TestRendering(unittest.TestCase):
             )
             graph = lp.build(
                 lp.node("only"),
-                render_config=lp.RenderConfig(
+                render_config=lp.RenderSettings(
                     template=template,
                     source_root=project,
                 ),
@@ -3475,7 +3471,7 @@ class TestRendering(unittest.TestCase):
             template.write_text("#let render(config) = [ok]\n", encoding="utf-8")
             graph = lp.build(
                 lp.node("only"),
-                render_config=lp.RenderConfig(template=template),
+                render_config=lp.RenderSettings(template=template),
             )
 
             self.assertIn("<svg", graph.to_svg())
@@ -3498,7 +3494,7 @@ class TestRendering(unittest.TestCase):
             selector_calls = []
             graph = lp.build(
                 lp.node("only"),
-                render_config=lp.RenderConfig(
+                render_config=lp.RenderSettings(
                     template=template,
                     title=module.content("title"),
                     selectors=lp.DrawingSelectors(
@@ -3510,7 +3506,7 @@ class TestRendering(unittest.TestCase):
                 ),
             )
 
-            prepared = graph.prepare_render()
+            prepared = graph.render()
             source = prepared.typst_source
             self.assertEqual(selector_calls, [0])
             self.assertIn("prepared node", source)
@@ -3520,7 +3516,7 @@ class TestRendering(unittest.TestCase):
             svg = prepared.to_svg()
             self.assertIn("<svg", svg)
             output = root / "nested" / "prepared.svg"
-            self.assertEqual(prepared.render(output), output)
+            self.assertEqual(prepared.save(output), output)
             self.assertEqual(selector_calls, [0])
             self.assertEqual(prepared.typst_source, source)
             self.assertEqual(output.read_text(), svg)
@@ -3557,7 +3553,7 @@ class TestRendering(unittest.TestCase):
                     edge_statements={"codec-edge": "DOT_CODEC_EDGE_MUST_NOT_STAGE"},
                     node_statements={"codec-node": "DOT_CODEC_NODE_MUST_NOT_STAGE"},
                 ),
-                render_config=lp.RenderConfig(template=template),
+                render_config=lp.RenderSettings(template=template),
                 node_store=lp.NodeStore.Forest,
             )
 
@@ -3578,7 +3574,7 @@ class TestRendering(unittest.TestCase):
                 "}\n"
             )
             self.assertIn("<svg", graph.to_svg())
-            source = graph.prepare_render().typst_source
+            source = graph.render().typst_source
             self.assertNotIn("MUST_NOT_STAGE", source)
 
     def test_default_renderer_accepts_typed_placement(self):
@@ -3593,8 +3589,8 @@ class TestRendering(unittest.TestCase):
             lp.edge(lp.source(left), "line", lp.sink(right)),
         )
         subgraph = [True] * graph.n_half_edges
-        graph.render_config = lp.RenderConfig(
-            layouts=lp.LayoutOptions(
+        graph.render_config = lp.RenderSettings(
+            layouts=lp.LayoutSettings(
                 algorithm=lp.LayoutAlgorithm.StableLayered,
                 roots=[0],
                 rank_same=[[0, 1]],
@@ -3654,8 +3650,8 @@ class TestRendering(unittest.TestCase):
                         "inspect": module.function("inspect"),
                     },
                 ),
-                render_config=lp.RenderConfig(
-                    layouts=lp.LayoutOptions(steps=0, label_steps=0),
+                render_config=lp.RenderSettings(
+                    layouts=lp.LayoutSettings(steps=0, label_steps=0),
                 ),
             )
 
@@ -3670,8 +3666,8 @@ class TestRendering(unittest.TestCase):
             left,
             right,
             lp.edge(lp.source(left), "descriptive edge name", lp.sink(right)),
-            render_config=lp.RenderConfig(
-                layouts=lp.LayoutOptions(
+            render_config=lp.RenderSettings(
+                layouts=lp.LayoutSettings(
                     algorithm=lp.LayoutAlgorithm.Force,
                     seed=7,
                     steps=40,
@@ -3682,17 +3678,17 @@ class TestRendering(unittest.TestCase):
 
         automatic_ids = graph.to_svg()
         without_indices = graph.to_svg(
-            config=lp.RenderConfig(
+            config=lp.RenderSettings(
                 style=lp.GraphStyleOptions(node_label=None, edge_label=None),
             )
         )
         automatic_ids_with_half_edges = graph.to_svg(
-            config=lp.RenderConfig(
+            config=lp.RenderSettings(
                 drawing=lp.DrawOptions(show_half_edge_ids=True),
             )
         )
         explicit_math_ids = graph.to_svg(
-            config=lp.RenderConfig(
+            config=lp.RenderSettings(
                 drawing=lp.DrawOptions(show_half_edge_ids=True),
                 selectors=lp.DrawingSelectors(
                     node=lambda node: lp.NodeDrawing(
@@ -3736,7 +3732,7 @@ class TestRendering(unittest.TestCase):
         self.assertIn(
             "<svg",
             self_loop.to_svg(
-                config=lp.RenderConfig(
+                config=lp.RenderSettings(
                     drawing=lp.DrawOptions(show_half_edge_ids=True),
                 )
             ),
@@ -3775,8 +3771,8 @@ class TestRendering(unittest.TestCase):
             dependency("release", "transform", "publish"),
             dependency("snapshot", "transform", "archive"),
             dependency("audit", "archive", "publish"),
-            render_config=lp.RenderConfig(
-                layouts=lp.LayoutOptions(
+            render_config=lp.RenderSettings(
+                layouts=lp.LayoutSettings(
                     algorithm=lp.LayoutAlgorithm.Force,
                     seed=19,
                     steps=80,
@@ -3786,7 +3782,7 @@ class TestRendering(unittest.TestCase):
         )
 
         neutral = graph._repr_svg_()
-        self.assertEqual(neutral, graph.to_svg(config=lp.RenderConfig()))
+        self.assertEqual(neutral, graph.to_svg(config=lp.RenderSettings()))
         self.assertIn("<svg", neutral)
 
         with TemporaryDirectory(prefix="linnet custom options ") as directory:
@@ -3814,7 +3810,7 @@ class TestRendering(unittest.TestCase):
                 encoding="utf-8",
             )
             module = lp.TypstModule.file(module_path)
-            graph.render_config = lp.RenderConfig(
+            graph.render_config = lp.RenderSettings(
                 template=template,
                 template_options={
                     "diagram": {"kind": "workflow"},
@@ -3826,7 +3822,7 @@ class TestRendering(unittest.TestCase):
             )
             disabled = graph._repr_svg_()
             enabled = graph.to_svg(
-                config=lp.RenderConfig(
+                config=lp.RenderSettings(
                     template_options={"physics": {"momentum-arrows": True}}
                 )
             )
@@ -3915,7 +3911,7 @@ class TestRendering(unittest.TestCase):
                         "token": "edge",
                     },
                 ),
-                render_config=lp.RenderConfig(template=template),
+                render_config=lp.RenderSettings(template=template),
             )
 
             self.assertIn("<svg", graph.to_svg())
@@ -3957,11 +3953,11 @@ class TestRendering(unittest.TestCase):
             )
             graph = lp.build(
                 first,
-                render_config=lp.RenderConfig(template=template),
+                render_config=lp.RenderSettings(template=template),
             )
 
             output = root / "rendered diagram.svg"
-            self.assertEqual(graph.render(output), output)
+            self.assertEqual(graph.render().save(output), output)
             self.assertIn("<svg", output.read_text(encoding="utf-8"))
             self.assertIn("<svg", graph.to_svg())
             self.assertIn("<svg", graph._repr_svg_())
@@ -3978,7 +3974,7 @@ class TestRendering(unittest.TestCase):
             )
             module = lp.TypstModule.file(module_path)
             graph, _, _, _ = sample_graph(
-                render_config=lp.RenderConfig(
+                render_config=lp.RenderSettings(
                     template=template,
                     title=lp.TextLabel('")\n#let injected = true\n' + "x" * 100_000),
                     selectors=lp.DrawingSelectors(
@@ -3998,7 +3994,7 @@ class TestRendering(unittest.TestCase):
                 "particle-map": module.value("particle_map")
             }
 
-            source = graph.prepare_render().typst_source
+            source = graph.render().typst_source
             self.assertGreater(len(source.encode()), 100_000)
             self.assertEqual(source.count("drawing styles.typ"), 1)
             self.assertIn("foo-bar: 2", source)

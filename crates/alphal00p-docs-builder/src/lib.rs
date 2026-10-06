@@ -3158,7 +3158,9 @@ impl SiteBuilder {
             return Some(checked_in);
         }
         if component.package == "linnet" {
-            let path = self.root.join("crates/linnet-py/linnet.pyi");
+            let path = self
+                .root
+                .join("crates/linnet-py/python/symbolica/community/graph/__init__.pyi");
             if path.is_file() {
                 return Some(path);
             }
