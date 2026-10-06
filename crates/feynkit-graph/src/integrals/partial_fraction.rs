@@ -66,6 +66,7 @@ impl IntegralFamily {
                 relations.insert(support.clone(), self.first_dependence(&support)?);
             }
             let Some(relation) = &relations[&support] else {
+                self.require_external_coefficient(&coefficient)?;
                 result.push((coefficient, powers));
                 continue;
             };
@@ -163,6 +164,7 @@ impl IntegralFamily {
                     .map(|(i, c)| c * &self.denominators[*i])
                     .sum::<Atom>())
             .together();
+            self.require_external_coefficient(&constant)?;
             return Ok(Some(Dependence {
                 pivot,
                 coefficients,
@@ -197,6 +199,9 @@ mod tests {
         };
         let mut reconstructed = Atom::Zero;
         for (coefficient, term_powers) in terms {
+            for product in family.scalar_products() {
+                assert!(!coefficient.contains(product.as_view()));
+            }
             let active = denominators
                 .iter()
                 .zip(&term_powers)
@@ -296,5 +301,45 @@ mod tests {
             vec![],
             &kin,
         );
+    }
+
+    #[test]
+    fn expanded_tiny_symbolic_coefficients_keep_scalar_partial_fraction_weights() {
+        let k = parse!("apart_exact::k");
+        let p = parse!("apart_exact::p");
+        let kin = Kinematics::new();
+        let x = kin.scalar_product(&k, &k).unwrap();
+        let y = kin.scalar_product(&k, &p).unwrap();
+        for q in [
+            parse!("(apart_exact::a+apart_exact::b)/10^1000"),
+            parse!("(apart_exact::a+apart_exact::b)*10^1000"),
+            parse!("(apart_exact::a+apart_exact::b)/(apart_exact::c+apart_exact::d)"),
+            parse!("sin(apart_exact::a)+cos(apart_exact::b)"),
+        ] {
+            let denominators = [&x + &q * &y - 1, &x - 2, &y - 3];
+            let constant = Atom::one() + Atom::num(3) * &q;
+            let expected = BTreeMap::from([
+                (vec![0, 1, 1], Atom::one() / &constant),
+                (vec![1, 0, 1], -Atom::one() / &constant),
+                (vec![1, 1, 0], -&q / &constant),
+            ]);
+            for expanded in [false, true] {
+                let input: Vec<_> = denominators
+                    .iter()
+                    .map(|d| if expanded { d.expand() } else { d.clone() })
+                    .collect();
+                let family =
+                    IntegralFamily::new(vec![k.clone()], vec![p.clone()], input.clone(), &kin)
+                        .unwrap();
+                let terms = family.partial_fraction(&[1, 1, 1], 100).unwrap();
+                assert_eq!(terms.len(), 3, "expanded={expanded}");
+                for (coefficient, powers) in &terms {
+                    assert!(!coefficient.contains(x.as_view()));
+                    assert!(!coefficient.contains(y.as_view()));
+                    assert!((coefficient - &expected[powers]).together().is_zero());
+                }
+                verify(input, vec![1, 1, 1], vec![k.clone()], vec![p.clone()], &kin);
+            }
+        }
     }
 }
