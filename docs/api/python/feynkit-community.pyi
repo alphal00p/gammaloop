@@ -9,6 +9,7 @@ import linnet
 import os
 import pathlib
 import symbolica
+import symbolica.community.hepkit.sector_decomposition
 import symbolica.community.tensor
 import symbolica.core
 import types
@@ -16,6 +17,9 @@ import typing
 from symbolica import ComplexFloat, Float
 from symbolica.community.tensor import DiagramRender, DisplaySettings, LayoutSettings, Slot, StrokeStyle, TensorExpression, TensorName
 from symbolica.core import Expression
+from . import oneloop
+from . import sector_decomposition
+from . import vakint
 
 DiagramRender: typing.TypeAlias = symbolica.community.tensor.DiagramRender
 LayoutSettings: typing.TypeAlias = symbolica.community.tensor.LayoutSettings
@@ -3582,6 +3586,42 @@ class FeynmanDiagram:
 
         >>> print(diagram)
         """
+    def sector_decompose(self, *, regulator: symbolica.Expression, kinematics: typing.Optional[Kinematics] = None, dimension: typing.Optional[symbolica.Expression] = None, powers: typing.Optional[typing.Dict[int, int]] = None, numerator: None = None, scalar_values: typing.Optional[typing.Dict[symbolica.Expression, symbolica.Expression]] = None, auxiliary_momenta: typing.Optional[typing.Sequence[symbolica.Expression]] = None, measure_multiplier: typing.Optional[symbolica.Expression] = None, max_order: int = 0, coefficient_expansion: str = 'physical', observer: typing.Optional[typing.Callable[[symbolica.community.hepkit.sector_decomposition.GenerationSnapshot], typing.Optional[bool]]] = None) -> symbolica.community.hepkit.sector_decomposition.GeneratedIntegral:
+        r"""
+        Generate Laurent integrands using the complete native diagram.
+
+        Examples
+        --------
+        With a complete diagram and admitted numerical kinematics:
+
+        >>> generated = diagram.sector_decompose(regulator=eps, kinematics=kinematics)
+        >>> kernels = generated.compile()
+
+        Parameters
+        ----------
+        regulator : Expression
+            Dimensional regulator symbol.
+        kinematics : Kinematics
+            Numerical external point retaining its symbolic tensor dimension.
+        dimension : Expression or None
+            Integration dimension; defaults to 4 - 2*regulator.
+        powers : mapping[int, int] or None
+            Positive propagator powers by stable diagram edge ID.
+        numerator : None
+            Use the diagram's numerator; explicit overrides are rejected.
+        scalar_values : mapping[Expression, Expression] or None
+            Explicit masses, couplings and invariant substitutions.
+        auxiliary_momenta : sequence[Expression] or None
+            Additional external vector heads, such as polarizations.
+        measure_multiplier : Expression or None
+            Explicit multiplicative measure convention, applied once.
+        max_order : int
+            Largest signed epsilon power retained.
+        coefficient_expansion : str
+            Native physical or package coefficient convention.
+        observer : callable or None
+            Native generation events; False cancels at an event boundary.
+        """
 
 @typing.final
 class FormFactor:
@@ -3848,6 +3888,32 @@ class FourMomentum:
             Momentum along the y axis.
         pz : float
             Momentum along the z axis.
+        """
+    def wavefunction(self, kind: builtins.str, helicity: Helicity) -> Wavefunction:
+        r"""
+        Construct a fixed scalar, vector or spinor external state.
+
+        ``kind`` is ``scalar``, ``epsilon``, ``epsilon_bar``, ``u``, ``u_bar``,
+        ``v`` or ``v_bar``. Scalar helicity is zero; spinors use plus or minus.
+        A massive vector also admits zero helicity for a longitudinal state.
+        The inherited longitudinal convention is undefined at rest or zero mass
+        and raises ``KinematicsError``. All states use four-dimensional external
+        components and GammaLoop's MadGraph phases; no averaging is included.
+
+        Examples
+        --------
+        >>> from symbolica.community import hepkit as hep
+        >>> p = hep.FourMomentum(150.0, 0.0, 0.0, 150.0)
+        >>> eps = p.wavefunction("epsilon", hep.Helicity.PLUS)
+        >>> assert len(eps.components) == 4 and eps.bar().bar() == eps
+
+        Parameters
+        ----------
+        kind : str
+            Scalar, vector or spinor state kind, including the barred variants above.
+        helicity : Helicity
+            Fixed helicity; zero for scalars, plus/minus for spinors, and also zero
+            for a massive longitudinal vector with nonzero spatial momentum.
         """
     def components(self) -> tuple[builtins.float, builtins.float, builtins.float, builtins.float]:
         r"""
@@ -5184,6 +5250,42 @@ class IntegralFamily:
             Scalar numerator after tensor reduction and momentum routing.
         labels : list[Expression]
             One distinct symbol or labeled call per denominator, in family order.
+        """
+    def sector_decompose(self, *, regulator: symbolica.Expression, kinematics: typing.Optional[Kinematics] = None, dimension: typing.Optional[symbolica.Expression] = None, powers: typing.Optional[typing.Sequence[int]] = None, numerator: typing.Optional[symbolica.Expression] = None, scalar_values: typing.Optional[typing.Dict[symbolica.Expression, symbolica.Expression]] = None, auxiliary_momenta: typing.Optional[typing.Sequence[symbolica.Expression]] = None, measure_multiplier: typing.Optional[symbolica.Expression] = None, max_order: int = 0, coefficient_expansion: str = 'physical', observer: typing.Optional[typing.Callable[[symbolica.community.hepkit.sector_decomposition.GenerationSnapshot], typing.Optional[bool]]] = None) -> symbolica.community.hepkit.sector_decomposition.GeneratedIntegral:
+        r"""
+        Generate Laurent integrands for an explicit family member.
+
+        Examples
+        --------
+        For a numerical family, with powers in native denominator order:
+
+        >>> generated = family.sector_decompose(regulator=eps, powers=[1, 1], numerator=E("1"))
+        >>> kernels = generated.compile()
+
+        Parameters
+        ----------
+        regulator : Expression
+            Dimensional regulator symbol.
+        kinematics : Kinematics or None
+            Explicit point; None retains the family's scoped kinematics.
+        dimension : Expression or None
+            Integration dimension; defaults to 4 - 2*regulator.
+        powers : sequence[int]
+            Required signed powers; zero omits a slot and negative moves it to the numerator.
+        numerator : Expression
+            Required scalar numerator including explicit physical weights once.
+        scalar_values : mapping[Expression, Expression] or None
+            Explicit scalar substitutions applied consistently to the family.
+        auxiliary_momenta : sequence[Expression] or None
+            Additional external vector heads, such as polarizations.
+        measure_multiplier : Expression or None
+            Explicit multiplicative measure convention, applied once.
+        max_order : int
+            Largest signed epsilon power retained.
+        coefficient_expansion : str
+            Native physical or package coefficient convention.
+        observer : callable or None
+            Native generation events; False cancels at an event boundary.
         """
 
 class IntegralFamilyError(FeynkitError):
@@ -10897,6 +10999,97 @@ class VertexRule:
             IPython pretty printer receiving the text.
         cycle : bool
             Whether the object occurs recursively in the current display.
+        """
+
+@typing.final
+class Wavefunction:
+    r"""
+    A fixed numerical external state in GammaLoop's MadGraph phase convention.
+
+    Obtain states from ``FourMomentum.wavefunction(kind, helicity)``. Vector
+    components use ``(E,x,y,z)`` and signature ``+---``; spinors use the chiral
+    gamma-matrix basis. These external states have four components independently
+    of the dimension used for internal symbolic Lorentz/Dirac algebra. A scalar
+    has one component. No helicity sum, spin average or coupling is included.
+
+    Examples
+    --------
+    >>> from symbolica.community import hepkit as hep
+    >>> momentum = hep.FourMomentum(150.0, 0.0, 0.0, 150.0)
+    >>> state = momentum.wavefunction("epsilon", hep.Helicity.PLUS)
+    >>> assert state.kind == "epsilon" and len(state) == 4
+    """
+    @property
+    def kind(self) -> builtins.str:
+        r"""
+        One of ``scalar``, ``epsilon``, ``epsilon_bar``, ``u``, ``u_bar``, ``v``, ``v_bar``.
+
+        Examples
+        --------
+        Using the setup in the ``Wavefunction`` class example:
+
+        >>> assert state.kind == "epsilon"
+        """
+    @property
+    def components(self) -> builtins.list[complex]:
+        r"""
+        Return a copy of the numerical components as native Python complex values.
+
+        Examples
+        --------
+        Using the setup in the ``Wavefunction`` class example:
+
+        >>> values = state.components
+        >>> assert len(values) == 4 and values[0] == 0j
+        >>> assert abs(values[1] + 2**-0.5) < 1e-14
+        """
+    def bar(self) -> Wavefunction:
+        r"""
+        Conjugate a scalar/vector or take the chiral Dirac adjoint of a spinor.
+
+        Calling this twice restores both the original components and state kind.
+
+        Examples
+        --------
+        Using the setup in the ``Wavefunction`` class example:
+
+        >>> assert state.bar().kind == "epsilon_bar"
+        >>> assert state.bar().bar() == state
+        """
+    def __len__(self) -> builtins.int:
+        r"""
+        Return one for scalar states and four for vector or spinor states.
+
+        Examples
+        --------
+        Using the setup in the ``Wavefunction`` class example:
+
+        >>> assert len(state) == 4
+        """
+    def __repr__(self) -> builtins.str:
+        r"""
+        Describe the numerical state kind and its components.
+
+        Examples
+        --------
+        Using the setup in the ``Wavefunction`` class example:
+
+        >>> assert "Wavefunction" in repr(state)
+        """
+    def __eq__(self, other: Wavefunction) -> builtins.bool:
+        r"""
+        Compare both the external-state kind and its numerical components.
+
+        Examples
+        --------
+        Using the setup in the ``Wavefunction`` class example:
+
+        >>> assert state == state.bar().bar()
+
+        Parameters
+        ----------
+        other : Wavefunction
+            State to compare with this one.
         """
 
 @typing.final

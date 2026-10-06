@@ -9,6 +9,7 @@ import linnet
 import os
 import pathlib
 import symbolica
+import symbolica.community.hepkit.sector_decomposition
 import symbolica.community.tensor
 import symbolica.core
 import types
@@ -16,6 +17,9 @@ import typing
 from symbolica import ComplexFloat, Float
 from symbolica.community.tensor import DiagramRender, DisplaySettings, LayoutSettings, Slot, StrokeStyle, TensorExpression, TensorName
 from symbolica.core import Expression
+from . import oneloop
+from . import sector_decomposition
+from . import vakint
 
 DiagramRender: typing.TypeAlias = symbolica.community.tensor.DiagramRender
 LayoutSettings: typing.TypeAlias = symbolica.community.tensor.LayoutSettings
@@ -3582,6 +3586,42 @@ class FeynmanDiagram:
 
         >>> print(diagram)
         """
+    def sector_decompose(self, *, regulator: symbolica.Expression, kinematics: typing.Optional[Kinematics] = None, dimension: typing.Optional[symbolica.Expression] = None, powers: typing.Optional[typing.Dict[int, int]] = None, numerator: None = None, scalar_values: typing.Optional[typing.Dict[symbolica.Expression, symbolica.Expression]] = None, auxiliary_momenta: typing.Optional[typing.Sequence[symbolica.Expression]] = None, measure_multiplier: typing.Optional[symbolica.Expression] = None, max_order: int = 0, coefficient_expansion: str = 'physical', observer: typing.Optional[typing.Callable[[symbolica.community.hepkit.sector_decomposition.GenerationSnapshot], typing.Optional[bool]]] = None) -> symbolica.community.hepkit.sector_decomposition.GeneratedIntegral:
+        r"""
+        Generate Laurent integrands using the complete native diagram.
+
+        Examples
+        --------
+        With a complete diagram and admitted numerical kinematics:
+
+        >>> generated = diagram.sector_decompose(regulator=eps, kinematics=kinematics)
+        >>> kernels = generated.compile()
+
+        Parameters
+        ----------
+        regulator : Expression
+            Dimensional regulator symbol.
+        kinematics : Kinematics
+            Numerical external point retaining its symbolic tensor dimension.
+        dimension : Expression or None
+            Integration dimension; defaults to 4 - 2*regulator.
+        powers : mapping[int, int] or None
+            Positive propagator powers by stable diagram edge ID.
+        numerator : None
+            Use the diagram's numerator; explicit overrides are rejected.
+        scalar_values : mapping[Expression, Expression] or None
+            Explicit masses, couplings and invariant substitutions.
+        auxiliary_momenta : sequence[Expression] or None
+            Additional external vector heads, such as polarizations.
+        measure_multiplier : Expression or None
+            Explicit multiplicative measure convention, applied once.
+        max_order : int
+            Largest signed epsilon power retained.
+        coefficient_expansion : str
+            Native physical or package coefficient convention.
+        observer : callable or None
+            Native generation events; False cancels at an event boundary.
+        """
 
 @typing.final
 class FormFactor:
@@ -5210,6 +5250,42 @@ class IntegralFamily:
             Scalar numerator after tensor reduction and momentum routing.
         labels : list[Expression]
             One distinct symbol or labeled call per denominator, in family order.
+        """
+    def sector_decompose(self, *, regulator: symbolica.Expression, kinematics: typing.Optional[Kinematics] = None, dimension: typing.Optional[symbolica.Expression] = None, powers: typing.Optional[typing.Sequence[int]] = None, numerator: typing.Optional[symbolica.Expression] = None, scalar_values: typing.Optional[typing.Dict[symbolica.Expression, symbolica.Expression]] = None, auxiliary_momenta: typing.Optional[typing.Sequence[symbolica.Expression]] = None, measure_multiplier: typing.Optional[symbolica.Expression] = None, max_order: int = 0, coefficient_expansion: str = 'physical', observer: typing.Optional[typing.Callable[[symbolica.community.hepkit.sector_decomposition.GenerationSnapshot], typing.Optional[bool]]] = None) -> symbolica.community.hepkit.sector_decomposition.GeneratedIntegral:
+        r"""
+        Generate Laurent integrands for an explicit family member.
+
+        Examples
+        --------
+        For a numerical family, with powers in native denominator order:
+
+        >>> generated = family.sector_decompose(regulator=eps, powers=[1, 1], numerator=E("1"))
+        >>> kernels = generated.compile()
+
+        Parameters
+        ----------
+        regulator : Expression
+            Dimensional regulator symbol.
+        kinematics : Kinematics or None
+            Explicit point; None retains the family's scoped kinematics.
+        dimension : Expression or None
+            Integration dimension; defaults to 4 - 2*regulator.
+        powers : sequence[int]
+            Required signed powers; zero omits a slot and negative moves it to the numerator.
+        numerator : Expression
+            Required scalar numerator including explicit physical weights once.
+        scalar_values : mapping[Expression, Expression] or None
+            Explicit scalar substitutions applied consistently to the family.
+        auxiliary_momenta : sequence[Expression] or None
+            Additional external vector heads, such as polarizations.
+        measure_multiplier : Expression or None
+            Explicit multiplicative measure convention, applied once.
+        max_order : int
+            Largest signed epsilon power retained.
+        coefficient_expansion : str
+            Native physical or package coefficient convention.
+        observer : callable or None
+            Native generation events; False cancels at an event boundary.
         """
 
 class IntegralFamilyError(FeynkitError):
