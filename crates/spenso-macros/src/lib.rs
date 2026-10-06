@@ -487,10 +487,19 @@ pub fn track_usage(recorder: TokenStream, item: TokenStream) -> TokenStream {
                         .any(|attribute| attribute.path().is_ident("classattr"))
                 {
                     if recorder.on_success
-                        && (method.attrs.iter().any(|attr| attr.path().is_ident("getter"))
-                            || matches!(method.sig.ident.to_string().as_str(),
-                                "__repr__" | "__str__" | "__class_getitem__"
-                                | "_repr_html_" | "_repr_markdown_" | "_repr_pretty_"))
+                        && (method
+                            .attrs
+                            .iter()
+                            .any(|attr| attr.path().is_ident("getter"))
+                            || matches!(
+                                method.sig.ident.to_string().as_str(),
+                                "__repr__"
+                                    | "__str__"
+                                    | "__class_getitem__"
+                                    | "_repr_html_"
+                                    | "_repr_markdown_"
+                                    | "_repr_pretty_"
+                            ))
                     {
                         continue;
                     }
@@ -548,6 +557,7 @@ impl UsageRecorder {
         let output = &signature.output;
         // The closure keeps early returns and `?` inside the observed operation.
         *block = syn::parse_quote!({
+            #[allow(clippy::redundant_closure_call)]
             let result = (|| #output #block)();
             #record
             result

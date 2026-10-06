@@ -78,7 +78,7 @@ title = "Spenso"
 tagline = "Typed tensors, symbolic structures, and executable tensor networks"
 logo = "spenso"
 source = "docs/products/spenso/main.typ"
-citation = { title = "Spenso", creators = ["Lucien Huber", "Valentin Hirschi", "Ben Ruijl", "Mathijs Fraaije"], year = 2026, repository = "https://github.com/alphal00p/spenso", doi = "10.5281/zenodo.18248388" }
+citation = { title = "Spenso", creators = ["Lucien Huber"], year = 2026, repository = "https://github.com/alphal00p/spenso", doi = "10.5281/zenodo.18248388" }
 pages = [
   { id = "overview", title = "Overview", summary = "Typed tensor structures, data representations, contractions, networks, and companion packages.", source = "docs/products/spenso/content/overview.typ", symbol = "overview", route = "", group = "Start here" },
   { id = "quickstart", title = "Build your first Spenso tensor", summary = "Choose Python or Rust and reach a checked representation-aware tensor result.", source = "docs/products/spenso/content/quickstart.typ", symbol = "quickstart", route = "quickstart/", group = "Start here" },
@@ -111,7 +111,7 @@ id = "idenso"
 title = "Idenso"
 tagline = "Symbolic tensor identities for Spenso and Symbolica"
 source = "docs/products/idenso/main.typ"
-citation = { title = "Idenso", creators = ["Lucien Huber", "Valentin Hirschi", "Ben Ruijl", "Mathijs Fraaije"], year = 2026, repository = "https://github.com/alphal00p/spenso", doi = "10.5281/zenodo.18248409" }
+citation = { title = "Idenso", creators = ["Lucien Huber", "Ben Ruijl"], year = 2026, repository = "https://github.com/alphal00p/spenso", doi = "10.5281/zenodo.18248409" }
 pages = [
   { id = "overview", title = "Overview", summary = "Symbolic tensor identities, controlled rewrite stages, representation setup, and reversible cooking.", source = "docs/products/idenso/content/overview.typ", symbol = "overview", route = "", group = "Start here" },
   { id = "quickstart", title = "Simplify your first tensor expression", summary = "Choose Python or Rust to apply an Idenso identity while preserving the free-index structure.", source = "docs/products/idenso/content/quickstart.typ", symbol = "quickstart", route = "quickstart/", group = "Start here" },

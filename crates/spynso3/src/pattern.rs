@@ -340,7 +340,7 @@ impl PortPattern {
 
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
 #[cfg_attr(not(feature = "python_stubgen"), remove_gen_stub)]
-#[spenso_macros::track_usage(crate::record_usage)]
+#[spenso_macros::track_usage(crate::record_usage, on_success)]
 #[pymethods]
 impl PortPattern {
     /// Refer to a factor's input endpoint inside a chain or trace pattern.
@@ -618,7 +618,7 @@ impl TensorPattern {
 
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
 #[cfg_attr(not(feature = "python_stubgen"), remove_gen_stub)]
-#[spenso_macros::track_usage(crate::record_usage)]
+#[spenso_macros::track_usage(crate::record_usage, on_success)]
 #[pymethods]
 impl TensorPattern {
     /// Match a fixed tensor function with separately specified arguments and ports.

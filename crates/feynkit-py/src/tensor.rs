@@ -60,7 +60,7 @@ pub struct PyTensorReducer {
 
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
 #[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
-#[spenso_macros::track_usage(crate::record_tensor_usage)]
+#[spenso_macros::track_usage(crate::record_tensor_usage, on_success)]
 #[pymethods]
 impl PyTensorReducer {
     /// Configure the integrated momenta and independent external basis.
