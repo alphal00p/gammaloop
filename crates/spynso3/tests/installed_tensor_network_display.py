@@ -244,6 +244,7 @@ class NetworkDisplayTests(unittest.TestCase):
         for network in (
             TensorNetwork(E("2")),
             (p("mu") + q("mu")).to_network(),
+            (p("mu") * q("mu")).to_network(),
             TensorExpression.dirac_gamma(4)("a", "b", "mu").to_network(),
         ):
             with self.subTest(network=repr(network)):
@@ -251,6 +252,17 @@ class NetworkDisplayTests(unittest.TestCase):
                 self.assertIn("data-linnet-interactive", svg)
                 self.assertIn("spenso-network-svg", svg)
                 self.assertIn("light-dark", svg)
+                # Every emitted default paint must participate in theme switching,
+                # including operator backgrounds and Linnest's arrowheads.
+                root = ET.fromstring(svg)
+                styles = "".join(root.itertext())
+                for node in root.iter():
+                    for paint in ("fill", "stroke"):
+                        color = node.get(paint, "")
+                        if color.startswith("#"):
+                            self.assertIn(
+                                f'[{paint}="{color}"]{{{paint}:light-dark(', styles
+                            )
 
     def test_configured_snapshot_has_rich_display_and_is_stable(self):
         network = TensorNetwork(E("2 + x"))
