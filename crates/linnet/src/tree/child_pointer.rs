@@ -287,6 +287,41 @@ impl<V> ForestNodeStore for ParentChildStore<V> {
     type NodeData = V;
     type Store<T> = ParentChildStore<T>;
 
+    fn from_parents(nodes: impl IntoIterator<Item = PPNode<V>>) -> Self {
+        let mut nodes: Vec<_> = nodes
+            .into_iter()
+            .enumerate()
+            .map(|(index, parent_pointer)| {
+                let id = TreeNodeId(index);
+                PCNode {
+                    parent_pointer,
+                    child: None,
+                    neighbor_left: id,
+                    neighbor_right: id,
+                }
+            })
+            .collect();
+
+        // Parent-pointer conversion orders siblings by their original node ID.
+        // Link that same cyclic list directly, without per-parent child vectors
+        // or moving the payload through an intermediate forest store.
+        for index in 0..nodes.len() {
+            if let ParentId::Node(parent) = nodes[index].parent_pointer.parent {
+                let id = TreeNodeId(index);
+                if let Some(first) = nodes[parent.0].child {
+                    let last = nodes[first.0].neighbor_left;
+                    nodes[last.0].neighbor_right = id;
+                    nodes[index].neighbor_left = last;
+                    nodes[index].neighbor_right = first;
+                    nodes[first.0].neighbor_left = id;
+                } else {
+                    nodes[parent.0].child = Some(id);
+                }
+            }
+        }
+        Self { nodes }
+    }
+
     fn validate(&self) -> Result<Vec<(RootId, TreeNodeId)>, super::ForestError> {
         let mut roots = vec![];
         let mut seen: SubSet<TreeNodeId> = SubSet::full(self.n_nodes());
@@ -603,16 +638,13 @@ mod pc_preorder {
     pub struct PreorderIter<'a, V> {
         store: &'a ParentChildStore<V>,
         current: Option<TreeNodeId>,
-        // Could potentially add a stack or use the recursive logic helper
+        start: TreeNodeId,
+        first_sibling: TreeNodeId,
     }
 
-    #[allow(clippy::non_canonical_clone_impl)]
     impl<V> Clone for PreorderIter<'_, V> {
         fn clone(&self) -> Self {
-            Self {
-                store: self.store,
-                current: self.current,
-            }
+            *self
         }
     }
 
@@ -623,42 +655,38 @@ mod pc_preorder {
             PreorderIter {
                 store,
                 current: (!start.is_empty()).then_some(start),
+                start,
+                first_sibling: start,
             }
         }
 
-        // Helper based on the original logic
-        fn next_node_logic(&self, node: TreeNodeId) -> Option<TreeNodeId> {
-            // 1. If the current node has a (first) child, return it.
-            if let Some(child) = self.store.first_child(node) {
+        // Cache the first sibling so advancing along a crown does not repeatedly
+        // load the parent and its child pointer.
+        fn next_node_logic(&mut self, node: TreeNodeId) -> Option<TreeNodeId> {
+            if let Some(child) = self.store.nodes[node.0].child {
+                self.first_sibling = child;
                 return Some(child);
             }
-            // 2. Otherwise, climb upward
             let mut current = node;
-            loop {
-                // Try right sibling. Crucially, use right_neighbor_cyclic.
-                // Need to detect when we loop back to the first sibling without going up.
-                let right_neighbor = self.store.right_neighbor_cyclic(current);
-
-                // Find the parent's first child to detect cycle completion *at this level*.
-                let parent_id = self.store[&current];
-                let first_child_of_parent = match parent_id {
-                    ParentId::Node(p) | ParentId::PointingRoot(p) => self.store.nodes[p.0].child,
-                    ParentId::Root(_) => None,
-                };
-
-                // If there IS a right neighbor, AND it's NOT the first child (meaning we haven't wrapped)
-                if let Some(sibling) = right_neighbor {
-                    if Some(sibling) != first_child_of_parent {
-                        return Some(sibling); // Go to the sibling
-                    }
-                    // If sibling == first_child_of_parent, we wrapped around. Need to go up. Fall through.
+            while current != self.start {
+                let entry = &self.store.nodes[current.0];
+                if entry.neighbor_right != self.first_sibling {
+                    return Some(entry.neighbor_right);
                 }
-                // Only child or wrapped around siblings: move upward.
-                match parent_id {
-                    ParentId::Node(p) | ParentId::PointingRoot(p) => current = p,
-                    ParentId::Root(_) => return None, // Reached root while climbing; traversal ends
+                current = match entry.parent_pointer.parent {
+                    ParentId::Node(parent) | ParentId::PointingRoot(parent) => parent,
+                    ParentId::Root(_) => return None,
+                };
+                if current != self.start {
+                    self.first_sibling = match self.store[&current] {
+                        ParentId::Node(parent) | ParentId::PointingRoot(parent) => {
+                            self.store.nodes[parent.0].child.unwrap()
+                        }
+                        ParentId::Root(_) => return None,
+                    };
                 }
             }
+            None
         }
     }
 
@@ -710,6 +738,42 @@ impl<V> ForestNodeStorePreorder for ParentChildStore<V> {
     fn iter_preorder(&self, start: TreeNodeId) -> Self::Iterator<'_> {
         pc_preorder::PreorderIter::new(self, start)
     }
+
+    fn flatten_branches(&mut self, nodes: impl IntoIterator<Item = TreeNodeId>) {
+        for node in nodes {
+            self.flatten_branch(node);
+        }
+    }
+
+    #[inline]
+    fn flatten_branch(&mut self, node: TreeNodeId) -> TreeNodeId {
+        let Some((root, branch)) = self.branch(node) else {
+            return node;
+        };
+        if self.nodes[branch.0].child.is_none() {
+            return root;
+        }
+        let stop = self.nodes[branch.0].neighbor_right;
+        let mut current = branch;
+        loop {
+            // Splice each child ring immediately after its parent, retaining
+            // preorder without a stack or an intermediate incidence vector.
+            if let Some(child) = self.nodes[current.0].child.take() {
+                let next = self.nodes[current.0].neighbor_right;
+                let last = self.nodes[child.0].neighbor_left;
+                self.nodes[current.0].neighbor_right = child;
+                self.nodes[child.0].neighbor_left = current;
+                self.nodes[last.0].neighbor_right = next;
+                self.nodes[next.0].neighbor_left = last;
+            }
+            self.nodes[current.0].parent_pointer.parent = ParentId::Node(root);
+            current = self.nodes[current.0].neighbor_right;
+            if current == stop {
+                break;
+            }
+        }
+        root
+    }
 }
 
 impl<V> ForestNodeStoreBfs for ParentChildStore<V> {
@@ -730,39 +794,7 @@ impl<V> From<ParentChildStore<V>> for ParentPointerStore<V> {
 
 impl<V> From<ParentPointerStore<V>> for ParentChildStore<V> {
     fn from(value: ParentPointerStore<V>) -> Self {
-        let mut nodes: Vec<_> = value
-            .nodes
-            .into_iter()
-            .enumerate()
-            .map(|(index, parent_pointer)| {
-                let id = TreeNodeId(index);
-                PCNode {
-                    parent_pointer,
-                    child: None,
-                    neighbor_left: id,
-                    neighbor_right: id,
-                }
-            })
-            .collect();
-
-        // Parent-pointer conversion orders siblings by their original node ID.
-        // Link that same cyclic list directly, without per-parent child vectors
-        // or moving the payload through an intermediate forest store.
-        for index in 0..nodes.len() {
-            if let ParentId::Node(parent) = nodes[index].parent_pointer.parent {
-                let id = TreeNodeId(index);
-                if let Some(first) = nodes[parent.0].child {
-                    let last = nodes[first.0].neighbor_left;
-                    nodes[last.0].neighbor_right = id;
-                    nodes[index].neighbor_left = last;
-                    nodes[index].neighbor_right = first;
-                    nodes[first.0].neighbor_left = id;
-                } else {
-                    nodes[parent.0].child = Some(id);
-                }
-            }
-        }
-        Self { nodes }
+        Self::from_parents(value.nodes)
     }
 }
 
@@ -860,7 +892,92 @@ mod test {
     }
 
     #[test]
-    fn create() {}
+    fn subtree_traversal_and_branch_flattening_preserve_preorder() {
+        use crate::tree::{parent_pointer::ParentId, ForestNodeStorePreorder};
+
+        for forest_code in 0..720 {
+            let mut code = forest_code;
+            let mut original = ParentChildStore { nodes: Vec::new() };
+            for id in 0..6 {
+                let parent = code % (id + 1);
+                code /= id + 1;
+                if parent == id {
+                    original.add_root(id, RootId(id));
+                } else {
+                    original.add_child(id, TreeNodeId(parent));
+                }
+            }
+            // Exercise both ascending and shuffled node IDs.
+            for shuffled in [false, true] {
+                if shuffled {
+                    original.swap(TreeNodeId(0), TreeNodeId(5));
+                    original.swap(TreeNodeId(1), TreeNodeId(3));
+                }
+                let oracle = ChildVecStore::from(original.clone());
+                for start in (0..6).map(TreeNodeId).chain([TreeNodeId::EMPTY]) {
+                    let expected: Vec<_> = oracle.iter_preorder(start).collect();
+                    let mut iter = original.iter_preorder(start);
+                    for offset in 0..=expected.len() {
+                        assert_eq!(iter.collect::<Vec<_>>(), expected[offset..]);
+                        assert_eq!(iter.next(), expected.get(offset).copied());
+                    }
+                    assert_eq!(iter.next(), None);
+                    if start.is_empty() {
+                        continue;
+                    }
+
+                    // Flatten the branch containing `start`, then all branches at once.
+                    for nodes in [vec![start], (0..6).map(TreeNodeId).collect()] {
+                        let mut actual = original.clone();
+                        let mut flattened_oracle = oracle.clone();
+                        actual.flatten_branches(nodes.clone());
+                        flattened_oracle.flatten_branches(nodes.clone());
+                        assert_eq!(ChildVecStore::from(actual.clone()), flattened_oracle);
+                        // Single-branch calls return the root. The parent/child
+                        // store flattens just that branch; the child-vector store
+                        // flattens the whole tree once the branch is not flat.
+                        let (mut pc, mut cv, mut cv_expected) =
+                            (original.clone(), oracle.clone(), oracle.clone());
+                        for &node in &nodes {
+                            let root = original.root_node(node);
+                            assert_eq!(pc.flatten_branch(node), root);
+                            assert_eq!(cv.flatten_branch(node), root);
+                            if cv_expected.branch(node).is_some_and(|(_, branch)| {
+                                cv_expected.iter_children(branch).next().is_some()
+                            }) {
+                                let tree = original.iter_node_id();
+                                cv_expected.flatten_branches(
+                                    tree.filter(|&n| original.root_node(n) == root),
+                                );
+                            }
+                        }
+                        assert_eq!(pc, actual);
+                        assert_eq!(cv, cv_expected);
+                        actual.validate().unwrap();
+                        let branches: Vec<_> =
+                            nodes.iter().filter_map(|&n| original.branch(n)).collect();
+                        for (id, data) in original.iter_nodes() {
+                            assert_eq!(actual[id].as_ref(), data);
+                            let root = original.root_node(id);
+                            assert_eq!(
+                                actual.iter_preorder(root).collect::<Vec<_>>(),
+                                oracle.iter_preorder(root).collect::<Vec<_>>()
+                            );
+                            if original.branch(id).is_some_and(|b| branches.contains(&b)) {
+                                assert_eq!(actual.parent(id), ParentId::Node(root));
+                                assert_eq!(actual.iter_children(id).count(), 0);
+                            } else {
+                                assert_eq!(actual.parent(id), original.parent(id));
+                            }
+                        }
+                        let once = actual.clone();
+                        actual.flatten_branches(nodes);
+                        assert_eq!(actual, once);
+                    }
+                }
+            }
+        }
+    }
 
     #[test]
     fn swaps_match_child_vec_for_all_small_forests() {

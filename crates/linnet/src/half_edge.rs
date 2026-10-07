@@ -1558,7 +1558,13 @@ impl<E, V, H, N: NodeStorageOps<NodeData = V>> HedgeGraph<E, V, H, N> {
         self.edge_store.set_flow(hedge, flow);
     }
 
-    ///Permutes nodes not pointing to any root anymore to end of nodestore and then extract it
+    /// Discard inactive node records and return their payloads.
+    ///
+    /// Forest stores also flatten the identification trees merged since the
+    /// previous call, in time linear in the node records plus the merged crowns,
+    /// preserving half-edge IDs and crown order. Active node indices can change;
+    /// subsequent half-edge-to-node lookups no longer depend on identification
+    /// depth.
     pub fn forget_identification_history(&mut self) -> NodeVec<V> {
         self.node_store.forget_identification_history()
     }

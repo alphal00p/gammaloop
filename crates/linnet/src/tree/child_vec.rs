@@ -624,6 +624,121 @@ impl<V> ForestNodeStorePreorder for ChildVecStore<V> {
         // Use the generic PreorderIter helper
         PreorderIter::new(self, start)
     }
+
+    fn flatten_branches(&mut self, nodes: impl IntoIterator<Item = TreeNodeId>) {
+        // Lift branches directly below a root first. Nodes nested in them are
+        // then one hop from the root, so locating the remaining branches does
+        // not walk deep hierarchies.
+        let (mut direct, mut nested) = (Vec::new(), Vec::new());
+        for node in nodes {
+            match self.parent(node) {
+                ParentId::Node(root) if !matches!(self.parent(root), ParentId::Node(_)) => {
+                    direct.push((root, node))
+                }
+                ParentId::Node(_) => nested.push(node),
+                _ => {}
+            }
+        }
+        if direct.is_empty() && nested.is_empty() {
+            return;
+        }
+        let mut selected = SubSet::empty(self.n_nodes());
+        self.lift_branches(direct, &mut selected);
+        let nested = nested.into_iter().filter_map(|node| self.branch(node));
+        self.lift_branches(nested.collect(), &mut selected);
+    }
+
+    fn flatten_branch(&mut self, node: TreeNodeId) -> TreeNodeId {
+        let Some((root, branch)) = self.branch(node) else {
+            return node;
+        };
+        if self.nodes[branch.0].children.is_empty() {
+            return root;
+        }
+        // Inserting one branch into the root's children scans and shifts that
+        // list, so calls for many branches of one large crown would take
+        // quadratic time. Rebuild the whole crown in preorder instead; every
+        // later call on this tree then returns after the walk up.
+        let children = std::mem::take(&mut self.nodes[root.0].children);
+        let mut flat = Vec::with_capacity(children.len());
+        let mut stack = Vec::new();
+        for child in children {
+            flat.push(child);
+            if !self.nodes[child.0].children.is_empty() {
+                self.append_descendants(root, child, &mut flat, &mut stack);
+            }
+        }
+        self.nodes[root.0].children = flat;
+        root
+    }
+}
+
+impl<V> ChildVecStore<V> {
+    /// Move the descendants of each `(root, branch)` directly after the branch
+    /// among the root's children, in preorder. `selected` must be empty and is
+    /// left empty.
+    fn lift_branches(
+        &mut self,
+        mut branches: Vec<(TreeNodeId, TreeNodeId)>,
+        selected: &mut SubSet<TreeNodeId>,
+    ) {
+        branches.retain(|&(_, branch)| {
+            let lift = !self.nodes[branch.0].children.is_empty() && !selected.includes(&branch);
+            if lift {
+                selected.add(branch);
+            }
+            lift
+        });
+        branches.sort_unstable_by_key(|&(root, _)| root);
+        let mut stack = Vec::new();
+        for group in branches.chunk_by(|a, b| a.0 == b.0) {
+            let root = group[0].0;
+            let mut children = std::mem::take(&mut self.nodes[root.0].children);
+            // Reparenting appends, so branches attached since the last
+            // flattening form a suffix of the root's children. Rebuild only
+            // that suffix, moving each branch's descendants after it in preorder.
+            let mut pending = group.len();
+            let mut start = children.len();
+            while pending > 0 {
+                start -= 1;
+                pending -= usize::from(selected.includes(&children[start]));
+            }
+            for child in children.split_off(start) {
+                children.push(child);
+                if !selected.includes(&child) {
+                    continue;
+                }
+                selected.sub(child);
+                self.append_descendants(root, child, &mut children, &mut stack);
+            }
+            self.nodes[root.0].children = children;
+        }
+    }
+
+    /// Push the descendants of `branch` onto `out` in preorder, making each a
+    /// direct child of `root`. `stack` must be empty and is left empty.
+    fn append_descendants(
+        &mut self,
+        root: TreeNodeId,
+        branch: TreeNodeId,
+        out: &mut Vec<TreeNodeId>,
+        stack: &mut Vec<(TreeNodeId, usize)>,
+    ) {
+        // Index the child vectors instead of taking them, so their
+        // allocations are kept for reuse rather than freed.
+        stack.push((branch, 0));
+        while let Some((node, next)) = stack.last_mut() {
+            let Some(&descendant) = self.nodes[node.0].children.get(*next) else {
+                self.nodes[node.0].children.clear();
+                stack.pop();
+                continue;
+            };
+            *next += 1;
+            self.nodes[descendant.0].parent_pointer.parent = ParentId::Node(root);
+            out.push(descendant);
+            stack.push((descendant, 0));
+        }
+    }
 }
 impl<V> ForestNodeStoreBfs for ChildVecStore<V> {
     fn iter_bfs(&self, start: TreeNodeId) -> impl Iterator<Item = TreeNodeId> + '_ {

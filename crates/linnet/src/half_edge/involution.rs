@@ -1617,8 +1617,17 @@ impl<E> Involution<E> {
     /// returns the pair of hedges: (source, sink)
     pub fn add_pair(&mut self, data: E, directed: impl Into<Orientation>) -> (Hedge, Hedge) {
         let orientation = directed.into();
-        let source = self.add_identity(data, orientation, Flow::Source);
-        let sink = self.connect_to_identity(source).unwrap();
+        let source = self.inv.len();
+        let sink = Hedge(source.0 + 1);
+        // Both endpoints are new: write their final mappings directly instead
+        // of creating an identity and moving its data back out to connect it.
+        self.inv.reserve(2);
+        self.inv.push(InvolutiveMapping::Source {
+            data: EdgeData::new(data, orientation),
+            sink_idx: sink,
+        });
+        self.inv
+            .push(InvolutiveMapping::Sink { source_idx: source });
         (source, sink)
     }
 

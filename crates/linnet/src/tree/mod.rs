@@ -474,7 +474,7 @@ impl<U, P: ForestNodeStore> Forest<U, P> {
         if root_id.is_empty() {
             return root_id.is_active_empty();
         }
-        self.nodes.root_node(root_id) == root_id && self.nodes.root(root_id) == root
+        matches!(self.nodes.parent(root_id), ParentId::Root(id) if id == root)
     }
 
     pub fn validate_structure(&self) -> Result<(), ForestError> {
@@ -739,8 +739,14 @@ pub trait ForestNodeStore:
     fn swap(&mut self,a:TreeNodeId,b:TreeNodeId);
     fn set_root(&mut self,a:TreeNodeId,root:RootId);
 
-    fn from_pp(pp:ParentPointerStore<Self::NodeData>)->Self{
-        Self::from_store(Self::Store::<Self::NodeData>::from(pp))
+    fn from_pp(pp: ParentPointerStore<Self::NodeData>) -> Self {
+        Self::from_parents(pp.nodes)
+    }
+
+    /// Construct storage directly from ordered parent records.
+    fn from_parents(nodes: impl IntoIterator<Item = PPNode<Self::NodeData>>) -> Self {
+        let parents: ParentPointerStore<_> = nodes.into_iter().collect();
+        Self::from_store(Self::Store::<Self::NodeData>::from(parents))
     }
 
 
@@ -777,6 +783,19 @@ pub trait ForestNodeStore:
                 ParentId::Node(parent_node_id) => current = parent_node_id,
             }
         }
+    }
+
+    /// The root of `nodeid` and the ancestor of `nodeid` directly below it,
+    /// or `None` for a root.
+    fn branch(&self, nodeid: TreeNodeId) -> Option<(TreeNodeId, TreeNodeId)> {
+        let ParentId::Node(mut root) = self.parent(nodeid) else {
+            return None;
+        };
+        let mut branch = nodeid;
+        while let ParentId::Node(parent) = self.parent(root) {
+            (branch, root) = (root, parent);
+        }
+        Some((root, branch))
     }
 
     fn iter_nodes(&self) -> impl Iterator<Item = (TreeNodeId, Option<&Self::NodeData>)>;
@@ -829,6 +848,19 @@ pub trait ForestNodeStorePreorder: ForestNodeStore {
         Self: 'a;
     /// Returns a pre-order DFS iterator starting from `start`.
     fn iter_preorder(&self, start: TreeNodeId) -> Self::Iterator<'_>;
+
+    /// For each of `nodes`, make every node of its [branch](ForestNodeStore::branch)
+    /// a direct child of the root, preserving preorder, node IDs and payloads.
+    /// Roots and other branches are unchanged. This deliberately discards the
+    /// branch hierarchy; once a branch is flat, only the walk up remains.
+    fn flatten_branches(&mut self, nodes: impl IntoIterator<Item = TreeNodeId>);
+
+    /// Flatten at least the branch of `node` as [`flatten_branches`](Self::flatten_branches)
+    /// does, and return the root of its tree. A store may flatten the whole
+    /// tree when the branch is not flat, if that keeps repeated calls linear.
+    /// An already flat branch costs only the walk up, which replaces a
+    /// [`root_node`](ForestNodeStore::root_node) call.
+    fn flatten_branch(&mut self, node: TreeNodeId) -> TreeNodeId;
 }
 
 /// Trait for stores supporting breadth-first traversal.

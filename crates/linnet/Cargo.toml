@@ -84,3 +84,7 @@ native = [
 ]
 wasm = ["symbolica?/wasm", "symbolica-utils?/wasm"]
 # layout = ["dep:argmin"]
+
+[[bench]]
+name = "nodestores"
+harness = false

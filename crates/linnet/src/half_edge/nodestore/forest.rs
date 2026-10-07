@@ -92,7 +92,7 @@ impl From<RootId> for NodeIndex {
     }
 }
 
-impl<V, P: ForestNodeStore> Swap<Hedge> for Forest<V, P> {
+impl<V, P: ForestNodeStorePreorder> Swap<Hedge> for Forest<V, P> {
     fn len(&self) -> Hedge {
         Hedge(self.nodes.n_nodes())
     }
@@ -106,12 +106,17 @@ impl<V, P: ForestNodeStore> Swap<Hedge> for Forest<V, P> {
             let a = a.into();
             let b = b.into();
             self.nodes.swap(a, b);
-            let rid = self.nodes.root_node(a);
-            let r = self.root(rid);
-            self.roots[r.0].root_id = rid;
-            let rid = self.nodes.root_node(b);
-            let r = self.root(rid);
-            self.roots[r.0].root_id = rid;
+            for node in [a, b] {
+                // Discarded node records name their merged branches by node
+                // label, and the swap exchanged two labels without updating
+                // them. Flattening the branches at both positions leaves any
+                // stale record naming a flat branch, so the next forget still
+                // flattens every merged branch. A flat branch costs only the
+                // walk up to the root, which is needed here anyway.
+                let rid = self.nodes.flatten_branch(node);
+                let r = self.root(rid);
+                self.roots[r.0].root_id = rid;
+            }
         }
 
         #[cfg(test)]
@@ -274,13 +279,10 @@ impl<V, P: ForestNodeStore + ForestNodeStorePreorder + Clone> NodeStorageOps for
             });
         }
         Self {
-            nodes: P::from_pp(
+            nodes: P::from_parents(
                 entries
                     .into_iter()
-                    .collect::<Option<Vec<_>>>()
-                    .unwrap()
-                    .into_iter()
-                    .collect(),
+                    .map(|entry| entry.expect("hedge incidence must cover all half-edges")),
             ),
             roots,
         }
@@ -315,6 +317,17 @@ impl<V, P: ForestNodeStore + ForestNodeStorePreorder + Clone> NodeStorageOps for
                     active_nodes_upper_bound.0 += 1;
                 }
             }
+        }
+        if active_nodes_upper_bound.0 < self.roots.len() {
+            // Once history is discarded, its hierarchy has no remaining owner.
+            // Each forgotten root's former tree now hangs below an active root;
+            // flattening just those branches keeps future hedge-to-node lookups
+            // within one parent hop at a cost proportional to the merged crowns.
+            let absorbed = self.roots[active_nodes_upper_bound.0..]
+                .iter()
+                .map(|root| root.root_id)
+                .filter(|root_id| !root_id.is_empty());
+            self.nodes.flatten_branches(absorbed);
         }
         self.roots
             .split_off(active_nodes_upper_bound.0)
@@ -938,6 +951,240 @@ mod builder_tests {
             )
         }))
         .unwrap()
+    }
+
+    #[test]
+    fn discarding_history_flattens_crowns_without_changing_graph_data() {
+        use crate::{
+            half_edge::{builder::HedgeGraphBuilder, involution::Flow, HedgeGraph},
+            tree::parent_pointer::ParentId,
+        };
+
+        fn check<P: ForestNodeStore<NodeData = ()> + ForestNodeStorePreorder + Clone>() {
+            let mut builder = HedgeGraphBuilder::<usize, usize, usize>::new();
+            let nodes: Vec<_> = (0..34).map(|i| builder.add_node(i)).collect();
+            for i in 0..32 {
+                builder.add_edge(
+                    nodes[i].add_data(2 * i),
+                    nodes[(i + 1) % 32].add_data(2 * i + 1),
+                    i,
+                    i % 2 == 0,
+                );
+            }
+            builder.add_edge(nodes[0].add_data(64), nodes[0].add_data(65), 32, false);
+            builder.add_edge(nodes[0].add_data(66), nodes[1].add_data(67), 33, true);
+            builder.add_external_edge(nodes[1].add_data(68), 34, true, Flow::Sink);
+            let mut graph: HedgeGraph<_, _, _, Forest<_, P>> = builder.build();
+            for group in 0..2 {
+                let mut previous = nodes[group];
+                for layer in 1..16 {
+                    previous = graph.identify_nodes(&[nodes[group + 2 * layer], previous], group);
+                }
+            }
+            // Include an identified isolated node and a surviving isolated node.
+            graph.identify_nodes(&[nodes[30], nodes[32]], 0);
+            let snapshot = |graph: &HedgeGraph<usize, usize, usize, Forest<usize, P>>| {
+                graph
+                    .iter_hedges()
+                    .map(|(hedge, data)| {
+                        (
+                            hedge,
+                            *data,
+                            graph[graph.node_id(hedge)],
+                            graph.inv(hedge),
+                            graph.flow(hedge),
+                            graph[&hedge],
+                            graph[graph[&hedge]],
+                        )
+                    })
+                    .collect::<Vec<_>>()
+            };
+            let before = snapshot(&graph);
+            let crowns: Vec<_> = [nodes[30], nodes[31], nodes[33]]
+                .into_iter()
+                .map(|node| (graph[node], graph.iter_crown(node).collect::<Vec<_>>()))
+                .collect();
+            let removed = graph.forget_identification_history();
+            assert_eq!(removed.iter().count(), 31);
+            assert_eq!(snapshot(&graph), before);
+            assert_eq!(graph.n_nodes(), 3);
+            graph.check().unwrap();
+            for (node, crown, payload) in graph.iter_nodes() {
+                assert_eq!(
+                    crown.collect::<Vec<_>>(),
+                    crowns.iter().find(|(p, _)| p == payload).unwrap().1
+                );
+                for hedge in graph.iter_crown(node) {
+                    if let ParentId::Node(parent) = graph.node_store.nodes.parent(hedge.into()) {
+                        assert!(matches!(
+                            graph.node_store.nodes.parent(parent),
+                            ParentId::Root(_)
+                        ));
+                    }
+                }
+            }
+            assert_eq!(graph.forget_identification_history().iter().count(), 0);
+            assert_eq!(snapshot(&graph), before);
+            // Mutations and subgraph extraction still work after flattening.
+            let a = graph.node_id(Hedge(0));
+            let b = graph.node_id(Hedge(1));
+            graph = graph
+                .add_pair(a.add_data(69), b.add_data(70), 35, true)
+                .unwrap()
+                .2;
+            graph.check().unwrap();
+            let (_, extracted) = graph.node_store.extract_nodes([a]);
+            extracted.check_nodes().unwrap();
+            graph.node_store.check_nodes().unwrap();
+        }
+        check::<ParentChildStore<()>>();
+        check::<ChildVecStore<()>>();
+    }
+
+    #[test]
+    fn batched_forgetting_flattens_only_merged_trees() {
+        use crate::{
+            half_edge::{builder::HedgeGraphBuilder, HedgeGraph, NoData},
+            tree::parent_pointer::ParentId,
+        };
+        use std::collections::HashMap;
+
+        type Graph<P> = HedgeGraph<usize, usize, NoData, Forest<usize, P>>;
+        type Crowns = HashMap<usize, Vec<(Hedge, Option<TreeNodeId>)>>;
+
+        // Active crowns in order with each half-edge's parent node, by payload.
+        // Root labels are omitted because compaction renumbers nodes.
+        fn crowns<P: ForestNodeStorePreorder<NodeData = ()> + Clone>(graph: &Graph<P>) -> Crowns {
+            let store = &graph.node_store;
+            graph
+                .iter_nodes()
+                .filter(|(node, _, _)| store.is_active_root((*node).into()))
+                .map(|(_, crown, &payload)| {
+                    let parents = crown.map(|h| match store.nodes.parent(h.into()) {
+                        ParentId::Node(parent) => (h, Some(parent)),
+                        _ => (h, None),
+                    });
+                    (payload, parents.collect())
+                })
+                .collect()
+        }
+
+        fn check<P: ForestNodeStorePreorder<NodeData = ()> + Clone>() {
+            let n = 24;
+            let mut builder = HedgeGraphBuilder::new();
+            let nodes: Vec<_> = (0..n).map(|i| builder.add_node(i)).collect();
+            for i in 0..n {
+                builder.add_edge(nodes[i], nodes[(i + 1) % n], i, false);
+                builder.add_edge(nodes[i], nodes[(i + 5) % n], n + i, false);
+            }
+            let mut graph: Graph<P> = builder.build();
+            let reps: Vec<_> = (0..n)
+                .map(|i| graph.iter_crown(NodeIndex(i)).next().unwrap())
+                .collect();
+            let mut payload = n;
+            let mut merge = |graph: &mut Graph<P>, a: usize, b: usize| {
+                payload += 1;
+                let nodes = [graph.node_id(reps[a]), graph.node_id(reps[b])];
+                graph.identify_nodes(&nodes, payload);
+                payload
+            };
+            // Node 23 is never merged. Rerooting deepens its tree, which
+            // forgetting merge history leaves as it is.
+            let rerooted = 23;
+            let new_root = graph.iter_crown(NodeIndex(rerooted)).nth(2).unwrap();
+            let store = &mut graph.node_store;
+            let mut parents: ParentPointerStore<()> = store.nodes.clone().to_store().into();
+            let root = parents.change_root(new_root.into());
+            store.nodes = P::from_pp(parents);
+            store.roots[root.0].root_id = new_root.into();
+            let mut previous = crowns(&graph);
+            let is_flat = |crown: &[(Hedge, Option<TreeNodeId>)]| {
+                let root = Some(crown[0].0.into());
+                crown[0].1.is_none() && crown[1..].iter().all(|(_, parent)| *parent == root)
+            };
+            assert!(!is_flat(&previous[&rerooted]));
+            for batch in 0..4 {
+                let [a, b, c, d, e] = [1, 2, 3, 4, 5].map(|i| 5 * batch + i);
+                merge(&mut graph, 0, a);
+                // Nest absorbed trees three levels deep below the hub.
+                merge(&mut graph, b, c);
+                merge(&mut graph, d, b);
+                let mut hub = merge(&mut graph, 0, d);
+                if batch % 2 == 1 {
+                    // Move the whole hub below a fresh root.
+                    hub = merge(&mut graph, e, 0);
+                }
+                let mut merged = vec![hub];
+                if batch == 0 {
+                    // A separate merged node, left untouched by later batches.
+                    merged.push(merge(&mut graph, 21, 22));
+                }
+                let before = crowns(&graph);
+                graph.forget_identification_history();
+                assert_eq!(graph.n_nodes(), before.len());
+                graph.check().unwrap();
+                graph.node_store.check_nodes().unwrap();
+                let after = crowns(&graph);
+                assert_eq!(after.len(), before.len());
+                for (payload, crown) in &after {
+                    let hedges =
+                        |crown: &[(Hedge, _)]| crown.iter().map(|(h, _)| *h).collect::<Vec<_>>();
+                    assert_eq!(hedges(crown), hedges(&before[payload]));
+                    // Every merged crown is flat: preorder starts at the root.
+                    assert_eq!(is_flat(crown), *payload != rerooted);
+                    if !merged.contains(payload) {
+                        assert_eq!(crown, &previous[payload]);
+                    }
+                }
+                previous = after;
+            }
+            // The hub, the separate merge, node 23 and the unused nodes 5 and 15.
+            assert_eq!(graph.n_nodes(), 5);
+        }
+        check::<ParentChildStore<()>>();
+        check::<ChildVecStore<()>>();
+    }
+
+    #[test]
+    fn forgetting_after_hedge_swaps_flattens_merged_trees() {
+        use crate::{
+            half_edge::{builder::HedgeGraphBuilder, swap::Swap, HedgeGraph, NoData},
+            tree::parent_pointer::ParentId,
+        };
+
+        fn check<P: ForestNodeStorePreorder<NodeData = ()> + Clone>() {
+            let n = 8;
+            let mut builder = HedgeGraphBuilder::new();
+            let nodes: Vec<_> = (0..n).map(|i| builder.add_node(i)).collect();
+            for i in 0..n {
+                builder.add_edge(nodes[i], nodes[(i + 1) % n], i, false);
+                builder.add_edge(nodes[i], nodes[(i + 3) % n], n + i, false);
+            }
+            let base: HedgeGraph<usize, usize, NoData, Forest<usize, P>> = builder.build();
+            for absorbed in 1..n {
+                for other in (0..base.n_hedges()).map(Hedge) {
+                    let mut graph = base.clone();
+                    // Nest the absorbed crown two levels deep, then move the
+                    // label its discarded record names elsewhere.
+                    graph.identify_nodes(&[NodeIndex(0), NodeIndex(absorbed)], n);
+                    let label = Hedge(graph.node_store.roots[absorbed].root_id.0);
+                    Swap::<Hedge>::swap(&mut graph, label, other);
+                    graph.forget_identification_history();
+                    graph.check().unwrap();
+                    let store = &graph.node_store.nodes;
+                    for hedge in store.iter_node_id() {
+                        if let ParentId::Node(parent) = store.parent(hedge) {
+                            assert!(
+                                matches!(store.parent(parent), ParentId::Root(_)),
+                                "absorbed {absorbed}, swapped with {other}: {hedge:?} is deep"
+                            );
+                        }
+                    }
+                }
+            }
+        }
+        check::<ParentChildStore<()>>();
+        check::<ChildVecStore<()>>();
     }
 
     #[test]
