@@ -131,6 +131,7 @@ impl FeynmanDiagram {
                     },
                     NodeDrawing {
                         radius: 0.16,
+                        label_padding: Some(0.25),
                         label: None,
                         rectangular: false,
                         fill: "none".into(),
@@ -507,6 +508,7 @@ impl SceneOptions {
                 // Preserve the original 3 × 1.5em blob at 10pt in the native
                 // renderer's 13.5pt drawing units.
                 radius: 10.0 / 3.0,
+                label_padding: Some(0.25),
                 label: None,
                 rectangular: false,
                 fill: "url(#linnest-process-hatch)".into(),

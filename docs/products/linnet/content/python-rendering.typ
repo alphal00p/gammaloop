@@ -85,9 +85,17 @@ With the graph focused, `+` and `-` zoom in five-percent steps and `0` fits the
 drawing without enlarging it above 100%. Hover previews details beside the graph when space permits,
 and below it in narrow outputs. The preview disappears when the pointer leaves the element;
 keyboard focus also previews details. Clicking pins the details until the panel is closed.
-The graph's `RenderSettings`
-combines layout options, drawing defaults, and Python selectors. Only topology and the selectors'
-typed drawing results pass to Typst; application payloads stay in Python.
+The graph's `RenderSettings` combines layout options, drawing defaults, and Python selectors.
+Ordinary `Graph` and `Subgraph` drawings use Rust for layout and SVG geometry; Typst typesets
+only their labels. Custom templates, layout sequences, partial-edge styles, and other options
+outside the native renderer's supported subset use the complete Typst pipeline. Requested
+settings are retained in that path; application payloads stay in Python.
+
+`render()` snapshots the graph, settings, and selector results. `typst_source` retains the
+configuration source for inspection. SVG, PDF, PNG, and Typst exports of a native result use
+its rendered SVG snapshot, so exporting does not redraw the graph with a different renderer.
+Feynman diagrams and tensor networks retain their own default styles; passing shared drawing
+overrides is an explicit customization.
 
 The optional theme demonstrates that domain conventions belong in those selectors. It does not
 change the workflow records or require them to be serializable. For the complete types and
