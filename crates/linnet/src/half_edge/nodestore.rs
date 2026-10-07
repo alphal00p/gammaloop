@@ -64,22 +64,32 @@ pub trait NodeStorageOps: NodeStorage + Swap<Hedge> + Swap<NodeIndex> {
 
     // fn add_node(&mut self, node_data: Self::NodeData) -> NodeIndex;
 
-    /// Identifies `nodes` into a single node carrying `node_data_merge` and returns it.
+    /// Merges `nodes` into one surviving node carrying `node_data_merge` and returns it.
     ///
-    /// No half-edge, edge or other node index changes: absorbed nodes stay, with
-    /// their data, as identification history until
-    /// [`Self::forget_identification_history`]. Forest stores keep the node that
-    /// currently holds `nodes[0]` and merge every other requested node through the
-    /// node that absorbed it, so repeated and previously absorbed nodes are allowed.
-    /// While they retain history, Forest stores refuse to move half-edges or
-    /// renumber nodes (`delete`, `extract`, `extract_nodes`, swaps).
+    /// No half-edge, edge or node index changes: the other nodes stay in place, with
+    /// their data, as absorbed nodes (see [`Self::is_absorbed`]) until
+    /// [`Self::forget_identification_history`] compacts them away.
+    /// [`NodeStorageVec`] keeps the smallest index of `nodes`, and absorbed nodes
+    /// must not be passed again. Forest stores keep the node that currently holds
+    /// `nodes[0]` and merge every other requested node through the node that
+    /// absorbed it, so repeated and previously absorbed nodes are allowed. While
+    /// they retain history, Forest stores refuse to move half-edges or renumber
+    /// nodes (`delete`, `extract`, `extract_nodes`, swaps).
     fn identify_nodes(&mut self, nodes: &[NodeIndex], node_data_merge: Self::NodeData)
         -> NodeIndex;
 
-    /// Drops inactive nodes retained by identification operations and returns their data.
+    /// Whether `node` was merged into another one by [`Self::identify_nodes`] and
+    /// awaits [`Self::forget_identification_history`].
+    fn is_absorbed(&self, node: NodeIndex) -> bool;
+
+    /// Drops the absorbed nodes and returns their data; live nodes, isolated ones
+    /// included, are kept. Live nodes may be renumbered.
     fn forget_identification_history(&mut self) -> NodeVec<Self::NodeData>;
 
     /// Copies the topology into a parent-pointer forest while mapping borrowed node data.
+    ///
+    /// Forest stores keep their identification history. [`NodeStorageVec`] does not
+    /// record which node absorbed which, so its absorbed nodes become empty roots.
     fn to_forest<U, H>(
         &self,
         map_data: impl Fn(&Self::NodeData) -> U,

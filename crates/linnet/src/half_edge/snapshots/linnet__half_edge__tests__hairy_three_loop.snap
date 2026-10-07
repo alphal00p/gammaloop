@@ -227,5 +227,19 @@ HedgeGraph(
         id: PhantomData,
       ),
     ]),
+    absorbed: SubSet(
+      set: BitSeq(
+        order: "bitvec::order::Lsb0",
+        head: BitIdx(
+          width: 64,
+          index: 0,
+        ),
+        bits: 4,
+        data: [
+          0,
+        ],
+      ),
+      id: PhantomData,
+    ),
   ),
 )

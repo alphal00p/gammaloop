@@ -14,6 +14,7 @@ use linnet::{
         involution::{EdgeData, Flow, Hedge},
         nodestore::NodeStorageOps,
         subgraph::{Inclusion, ModifySubSet, SuBitGraph, SubGraphLike, SubSetLike, SubSetOps},
+        swap::partition_with,
         tree::SimpleTraversalTree,
     },
     permutation::Permutation,
@@ -925,29 +926,30 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
             .unwrap();
     }
 
+    /// Moves the slot orders of `subgraph`'s half-edges to the end with the same
+    /// swaps as [`HedgeGraph::delete_hedges`] and [`HedgeGraph::extract`] move the
+    /// half-edges, and returns the first moved position.
+    fn partition_slot_orders<S: SubSetLike>(&mut self, subgraph: &S) -> Hedge {
+        let n_hedges = Hedge(self.graph.n_hedges());
+        partition_with(
+            self,
+            Hedge(0),
+            n_hedges,
+            |_, h| !subgraph.includes(&h),
+            |s, a, b| {
+                s.slot_order.swap(a.0, b.0);
+                s.logical_slot_order.swap(a.0, b.0);
+            },
+        )
+    }
+
     pub fn extract<S: SubSetLike<Base = SuBitGraph>>(&mut self, subgraph: &S) -> Self
     where
         K: Clone + Display,
         FK: Clone + Display,
     {
         let _span = profile::span(Timer::GraphExtract);
-        let mut left = Hedge(0);
-        let mut extracted = Hedge(self.graph.n_hedges());
-        while left < extracted {
-            if !subgraph.includes(&left) {
-                //left is in the right place
-                left.0 += 1;
-            } else {
-                //left needs to be swapped
-                extracted.0 -= 1;
-                if !subgraph.includes(&extracted) {
-                    //only with an extracted that is in the wrong spot
-                    self.slot_order.swap(left.0, extracted.0);
-                    self.logical_slot_order.swap(left.0, extracted.0);
-                    left.0 += 1;
-                }
-            }
-        }
+        let left = self.partition_slot_orders(subgraph);
 
         let extracted = self.graph.extract(
             subgraph,
@@ -1898,24 +1900,7 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
     }
 
     pub fn delete<S: SubSetLike<Base = SuBitGraph>>(&mut self, subgraph: &S) {
-        let mut left = Hedge(0);
-        let mut extracted = Hedge(self.graph.n_hedges());
-        while left < extracted {
-            if !subgraph.includes(&left) {
-                //left is in the right place
-                left.0 += 1;
-            } else {
-                //left needs to be swapped
-                extracted.0 -= 1;
-                if !subgraph.includes(&extracted) {
-                    // println!("{extracted}<=>{left}");
-                    //only with an extracted that is in the wrong spot
-                    self.slot_order.swap(left.0, extracted.0);
-                    self.logical_slot_order.swap(left.0, extracted.0);
-                    left.0 += 1;
-                }
-            }
-        }
+        let left = self.partition_slot_orders(subgraph);
         self.graph.delete_hedges(subgraph);
         self.slot_order.truncate(left.0);
         self.logical_slot_order.truncate(left.0);

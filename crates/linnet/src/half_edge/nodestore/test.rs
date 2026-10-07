@@ -531,3 +531,29 @@ fn orientation_hedges() {
 
     println!("{}", aligned.base_dot())
 }
+
+#[test]
+fn both_stores_report_absorbed_nodes() {
+    fn check<N: NodeStorageOps<NodeData = ()>>() {
+        let mut builder = HedgeGraphBuilder::<(), ()>::new();
+        let [a, b, c, d] = [(); 4].map(|_| builder.add_node(()));
+        builder.add_edge(a, b, (), true);
+        let mut graph: HedgeGraph<(), (), _, N> = builder.build();
+        let ab = graph.identify_nodes(&[a, b], ());
+        let cd = graph.identify_nodes(&[c, d], ());
+
+        let absorbed: Vec<_> = (0..graph.n_nodes())
+            .map(NodeIndex)
+            .filter(|&n| graph.node_store.is_absorbed(n))
+            .collect();
+        assert_eq!(absorbed.len(), 2);
+        assert!(!absorbed.contains(&ab) && !absorbed.contains(&cd));
+        // The absorbed isolated node is not an extra component.
+        let components = graph.strongly_connected_components(
+            crate::half_edge::algorithms::DirectionBasis::Underlying,
+        );
+        assert_eq!(components, [vec![ab], vec![cd]]);
+    }
+    check::<NodeStorageVec<()>>();
+    check::<Forest<(), ChildVecStore<()>>>();
+}

@@ -35,13 +35,13 @@ impl<E, V, H, N: NodeStorageOps<NodeData = V>> HedgeGraph<E, V, H, N> {
     }
 
     /// Returns a topological ordering in the selected direction basis.
-    /// Identification-history aliases that share incidence are processed once.
+    /// Nodes absorbed by a pending identification are skipped.
     pub fn topo_sort_kahn(&self, basis: DirectionBasis) -> Result<Vec<NodeIndex>, TopoError> {
         let full = self.full_filter();
-        let structural_nodes = self.iter_nodes_of(&full).map(|(node, _, _)| node).chain(
-            self.iter_nodes()
-                .filter_map(|(node, mut crown, _)| crown.next().is_none().then_some(node)),
-        );
+        let structural_nodes = self
+            .iter_nodes_of(&full)
+            .map(|(node, _, _)| node)
+            .chain(self.iter_isolated_nodes());
         self.topo_sort_kahn_nodes(&full, structural_nodes, basis)
     }
 

@@ -646,24 +646,7 @@ impl<T> SmartEdgeVec<T> {
     }
 
     pub fn delete<S: SubSetLike>(&mut self, graph: &S) {
-        let mut left = Hedge(0);
-        let mut extracted = self.involution.len();
-
-        while left < extracted {
-            if !graph.includes(&left) {
-                //left is in the right place
-                left.0 += 1;
-            } else {
-                //left needs to be swapped
-                extracted.0 -= 1;
-                if !graph.includes(&extracted) {
-                    // println!("{extracted}<=>{left}");
-                    //only with an extracted that is in the wrong spot
-                    self.swap(left, extracted);
-                    left.0 += 1;
-                }
-            }
-        }
+        let left = <Self as Swap<Hedge>>::partition(self, |h| !graph.includes(h));
 
         for i in 0..(left.0) {
             if self.inv(Hedge(i)) >= left {
@@ -688,29 +671,9 @@ impl<T> SmartEdgeVec<T> {
 
         // The self involution is good and valid, but we now need to split the data carrying vec.
 
-        let mut split_at = EdgeIndex(0);
-
-        let mut extracted: EdgeIndex = self.len();
-
-        while split_at < extracted {
-            if self.data[split_at].1.any_hedge() < left {
-                //left is in the right place
-                split_at.0 += 1;
-            } else {
-                //left needs to be swapped
-                extracted.0 -= 1;
-                if self.data[extracted].1.any_hedge() < left {
-                    // println!("{extracted}<=>{split_at}");
-                    //only with an extracted that is in the wrong spot
-                    self.swap(split_at, extracted);
-                    // println!("{}", self.involution.display());
-
-                    split_at.0 += 1;
-                }
-            }
-        }
-
-        // println!("{}", self.involution.display());
+        let split_at = <Self as Swap<EdgeIndex>>::partition_from(self, EdgeIndex(0), |s, e| {
+            s.data[e].1.any_hedge() < left
+        });
 
         let _ = self.involution.inv.split_off(left);
         let _ = self.data.split_off(split_at);

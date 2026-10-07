@@ -1852,22 +1852,7 @@ impl<E> Involution<E> {
     }
 
     fn delete_impl<S: SubSetLike>(&mut self, graph: &S) -> (HedgeVec<InvolutiveMapping<E>>, Hedge) {
-        let mut left = Hedge(0);
-        let mut extracted = self.inv.len();
-        while left < extracted {
-            if !graph.includes(&left) {
-                //left is in the right place
-                left.0 += 1;
-            } else {
-                //left needs to be swapped
-                extracted.0 -= 1;
-                if !graph.includes(&extracted) {
-                    //only with an extracted that is in the wrong spot
-                    self.swap(left, extracted);
-                    left.0 += 1;
-                }
-            }
-        }
+        let left = self.partition(|h| !graph.includes(h));
 
         for i in 0..(left.0) {
             if self.inv(Hedge(i)) >= left {
