@@ -115,6 +115,64 @@ class BrowserPagingTests(unittest.TestCase):
         self.assertIn("Page rendering failed: bad notation", page["html"])
         self.assertEqual(self.value.to_expression(), self.original)
 
+    def test_wrapped_terms_never_shrink_or_wrap_inside_math_children(self):
+        summands = "+".join(f"layout::a{i}" for i in range(10))
+        nested = {
+            "product": f"z*({summands})",
+            "fraction": f"({summands})/(z+w)",
+            "power": f"({summands})^2",
+            "function": f"f({summands})",
+        }
+        for label, expression in nested.items():
+            with self.subTest(label=label):
+                pager = TensorExpression(E(expression)).paged()
+                self.addCleanup(pager.close)
+                page = pager._page()
+                self.assertPage(page)
+                roots = [
+                    ET.fromstring(m)
+                    for m in re.findall(r"<math\b.*?</math>", page["html"], re.DOTALL)
+                ]
+                self.assertFalse(
+                    any(
+                        "data-spenso-sum" in node.attrib
+                        for root in roots
+                        for node in root.iter()
+                    )
+                )
+        pager = TensorExpression(E(summands)).paged()
+        self.addCleanup(pager.close)
+        page = pager._page()
+        self.assertPage(page)
+        root = ET.fromstring(
+            re.search(r"<math\b.*?</math>", page["html"], re.DOTALL).group()
+        )
+        self.assertIn("data-spenso-sum", root.attrib)
+        self.assertTrue(all(group.get("style") == "flex:0 0 auto" for group in root))
+
+    def test_outer_sum_wrapper_chain_preserves_semantic_annotations(self):
+        import _spenso_paging
+
+        terms = "<mo>+</mo>".join(f"<mi>a{i}</mi>" for i in range(10))
+        document = (
+            "<html><body><math><semantics><mstyle><mrow>"
+            + terms
+            + "</mrow></mstyle><annotation encoding='text/plain'>sum</annotation>"
+            + "</semantics></math></body></html>"
+        )
+        with patch.object(
+            _spenso_paging, "compile_typst", return_value=document.encode()
+        ):
+            page = self.pager._page()
+        self.assertPage(page)
+        root = ET.fromstring(
+            re.search(r"<math\b.*?</math>", page["html"], re.DOTALL).group()
+        )
+        row = root.find("semantics/mstyle/mrow")
+        self.assertIn("data-spenso-sum", row.attrib)
+        self.assertEqual(root.find("semantics/annotation").text, "sum")
+        self.assertTrue(all(group.get("style") == "flex:0 0 auto" for group in row))
+
 
 if __name__ == "__main__":
     unittest.main()
