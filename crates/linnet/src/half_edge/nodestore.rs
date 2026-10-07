@@ -72,9 +72,10 @@ pub trait NodeStorageOps: NodeStorage + Swap<Hedge> + Swap<NodeIndex> {
     /// [`NodeStorageVec`] keeps the smallest index of `nodes`, and absorbed nodes
     /// must not be passed again. Forest stores keep the node that currently holds
     /// `nodes[0]` and merge every other requested node through the node that
-    /// absorbed it, so repeated and previously absorbed nodes are allowed. While
-    /// they retain history, Forest stores refuse to move half-edges or renumber
-    /// nodes (`delete`, `extract`, `extract_nodes`, swaps).
+    /// absorbed it, so repeated and previously absorbed nodes are allowed;
+    /// [`NodeForest`] resolves them the same way but keeps the node with the
+    /// largest crown. While they retain history, these stores refuse to move
+    /// half-edges or renumber nodes (`delete`, `extract`, `extract_nodes`, swaps).
     fn identify_nodes(&mut self, nodes: &[NodeIndex], node_data_merge: Self::NodeData)
         -> NodeIndex;
 
@@ -88,8 +89,9 @@ pub trait NodeStorageOps: NodeStorage + Swap<Hedge> + Swap<NodeIndex> {
 
     /// Copies the topology into a parent-pointer forest while mapping borrowed node data.
     ///
-    /// Forest stores keep their identification history. [`NodeStorageVec`] does not
-    /// record which node absorbed which, so its absorbed nodes become empty roots.
+    /// Forest stores and [`NodeForest`] keep their identification history.
+    /// [`NodeStorageVec`] does not record which node absorbed which, so its absorbed
+    /// nodes become empty roots.
     fn to_forest<U, H>(
         &self,
         map_data: impl Fn(&Self::NodeData) -> U,
@@ -111,7 +113,7 @@ pub trait NodeStorageOps: NodeStorage + Swap<Hedge> + Swap<NodeIndex> {
     /// Appends an unpaired half-edge incident to `source`.
     ///
     /// Fails with [`HedgeGraphError::NoNode`] if `source` is not in the store. Forest
-    /// stores also refuse nodes absorbed by an identification with
+    /// stores and [`NodeForest`] also refuse nodes absorbed by an identification with
     /// [`HedgeGraphError::InvalidNode`].
     fn add_dangling_edge(self, source: NodeIndex) -> Result<Self, HedgeGraphError>;
 
@@ -218,8 +220,10 @@ pub trait NodeStorage: Sized {
 }
 
 mod forest;
+mod node_forest;
 mod vec;
 
+pub use node_forest::{NodeForest, RingNeighborIter};
 pub use vec::BitVecNeighborIter;
 pub use vec::NodeStorageVec;
 

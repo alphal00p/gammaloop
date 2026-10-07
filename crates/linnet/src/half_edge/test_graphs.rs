@@ -679,3 +679,115 @@ impl TestGraph {
         Ok(())
     }
 }
+
+/// Graph algorithms give the same results on the ring node store, both on
+/// converted graphs and while identifications are pending.
+#[test]
+fn algorithms_agree_on_the_node_forest() {
+    use crate::half_edge::{algorithms::DirectionBasis, nodestore::NodeForest, subgraph::Cycle};
+
+    type Results = (
+        usize,
+        Vec<SuBitGraph>,
+        Vec<SuBitGraph>,
+        usize,
+        usize,
+        Vec<SuBitGraph>,
+        Result<Vec<SuBitGraph>, TadpoleError>,
+        usize,
+        Option<Vec<Cycle>>,
+        Option<Vec<SuBitGraph>>,
+    );
+
+    fn results<N: NodeStorageOps<NodeData = (), Base = SuBitGraph>>(
+        graph: &HedgeGraph<(), (), (), N>,
+        nodes: [NodeIndex; 2],
+    ) -> Results
+    where
+        for<'a> N::OpStorage<&'a ()>: Clone,
+    {
+        let full = graph.full_filter();
+        let sorted = |mut subgraphs: Vec<SuBitGraph>| {
+            subgraphs.sort();
+            subgraphs
+        };
+        let rank = graph.cyclotomatic_number(&full);
+        let cuts = (graph.n_nodes() <= 10).then(|| {
+            let [source, target] = nodes.map(|node| graph.combine_to_single_hedgenode(&[node]));
+            sorted(
+                graph
+                    .all_cuts(source, target)
+                    .into_iter()
+                    .map(|(left, _, _)| left)
+                    .collect(),
+            )
+        });
+        (
+            rank,
+            sorted(graph.all_spanning_forests_of(&full)),
+            sorted(graph.connected_components(&full)),
+            graph.count_connected_components(&full),
+            graph
+                .strongly_connected_components(DirectionBasis::Underlying)
+                .len(),
+            sorted(graph.all_bonds(&(..=3))),
+            graph.tadpoles(&[nodes[0]]),
+            graph.cycle_basis().0.len(),
+            (rank <= 6).then(|| graph.all_cycles(rank).unwrap()),
+            cuts,
+        )
+    }
+
+    let mut graphs: Vec<HedgeGraph<(), (), (), NodeStorageVec<()>>> = [
+        TestGraph::Petersen,
+        TestGraph::MoebiusLadder(4),
+        TestGraph::Complete(5),
+        TestGraph::Flower(4),
+        TestGraph::Cycle(5),
+    ]
+    .iter()
+    .map(|test_graph| test_graph.build().0)
+    .collect();
+    // A Feynman-like graph with externals, a tadpole, a self-loop and an
+    // isolated node.
+    let mut builder = HedgeGraphBuilder::new();
+    let nodes: Vec<_> = (0..7).map(|_| builder.add_node(())).collect();
+    for (a, b) in [
+        (0, 1),
+        (1, 2),
+        (2, 3),
+        (3, 0),
+        (1, 3),
+        (2, 4),
+        (4, 5),
+        (5, 5),
+        (4, 5),
+    ] {
+        builder.add_edge(nodes[a], nodes[b], (), a % 2 == 0);
+    }
+    builder.add_external_edge(nodes[0], (), true, Flow::Sink);
+    builder.add_external_edge(nodes[2], (), true, Flow::Source);
+    graphs.push(builder.build());
+
+    for graph in graphs {
+        let ends = [NodeIndex(0), NodeIndex(graph.n_nodes() / 2)];
+        let mut ring: HedgeGraph<(), (), (), NodeForest<()>> =
+            graph.clone().into_node_store().unwrap();
+        assert_eq!(results(&ring, ends), results(&graph, ends));
+
+        // Pending identifications: survivors differ, so compare through half-edges.
+        let mut graph = graph;
+        let (a, b) = (graph.node_id(Hedge(0)), graph.node_id(graph.inv(Hedge(0))));
+        graph.identify_nodes(&[a, b], ());
+        ring.identify_nodes(&[a, b], ());
+        let ends = [
+            graph.node_id(Hedge(0)),
+            graph.node_id(Hedge(graph.n_hedges() - 1)),
+        ];
+        let ring_ends = [
+            ring.node_id(Hedge(0)),
+            ring.node_id(Hedge(ring.n_hedges() - 1)),
+        ];
+        assert_eq!(results(&ring, ring_ends), results(&graph, ends));
+    }
+}

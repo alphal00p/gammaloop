@@ -557,3 +557,483 @@ fn both_stores_report_absorbed_nodes() {
     check::<NodeStorageVec<()>>();
     check::<Forest<(), ChildVecStore<()>>>();
 }
+
+/// Drives every node store through the same random sequence of graph edits and
+/// compares what does not depend on the store: node indices and survivors
+/// differ, but partitions, payloads, crowns and counts must agree.
+mod differential {
+    use std::fmt::Debug;
+
+    use crate::{
+        half_edge::{
+            builder::HedgeGraphBuilder,
+            involution::{Flow, Hedge, Orientation},
+            nodestore::{NodeForest, NodeStorageOps, NodeStorageVec},
+            subgraph::{ModifySubSet, SuBitGraph, SubSetLike},
+            HedgeGraph, NodeIndex,
+        },
+        tree::{child_pointer::ParentChildStore, child_vec::ChildVecStore, Forest},
+    };
+
+    type Graph<S> = HedgeGraph<usize, usize, usize, S>;
+
+    trait Store: NodeStorageOps<NodeData = usize, Base = SuBitGraph> + Clone {}
+    impl<S: NodeStorageOps<NodeData = usize, Base = SuBitGraph> + Clone> Store for S {}
+
+    struct Random(u64);
+
+    impl Random {
+        fn below(&mut self, bound: usize) -> usize {
+            self.0 ^= self.0 << 13;
+            self.0 ^= self.0 >> 7;
+            self.0 ^= self.0 << 17;
+            (self.0 % bound.max(1) as u64) as usize
+        }
+
+        fn one_in(&mut self, n: usize) -> bool {
+            self.below(n) == 0
+        }
+    }
+
+    /// A random graph with unique node, edge and half-edge payloads from `next`.
+    fn random_graph(
+        random: &mut Random,
+        next: &mut usize,
+    ) -> HedgeGraphBuilder<usize, usize, usize> {
+        let mut fresh = || {
+            *next += 1;
+            *next
+        };
+        let mut builder = HedgeGraphBuilder::new();
+        let nodes: Vec<_> = (0..1 + random.below(7))
+            .map(|_| builder.add_node(fresh()))
+            .collect();
+        for _ in 0..random.below(10) {
+            let (a, b) = (
+                nodes[random.below(nodes.len())],
+                nodes[random.below(nodes.len())],
+            );
+            builder.add_edge(
+                a.add_data(fresh()),
+                b.add_data(fresh()),
+                fresh(),
+                random.one_in(2),
+            );
+        }
+        for _ in 0..random.below(3) {
+            let flow = if random.one_in(2) {
+                Flow::Sink
+            } else {
+                Flow::Source
+            };
+            let node = nodes[random.below(nodes.len())];
+            builder.add_external_edge(node.add_data(fresh()), fresh(), true, flow);
+        }
+        builder
+    }
+
+    /// One store's graph, with its index of every logical node and the node
+    /// that each index was merged into by pending identifications.
+    struct Lane<S: Store> {
+        graph: Graph<S>,
+        slots: Vec<NodeIndex>,
+        merged_into: Vec<usize>,
+        /// Whether `identify_nodes` accepts absorbed nodes.
+        resolves_absorbed: bool,
+    }
+
+    /// What every store must agree on.
+    #[derive(Debug, PartialEq)]
+    struct Observation {
+        hedge_payloads: Vec<usize>,
+        involution: Vec<usize>,
+        partition: Vec<usize>,
+        node_payloads: Vec<usize>,
+        crowns: Vec<Vec<usize>>,
+        live_payloads: Vec<usize>,
+        isolated_payloads: Vec<usize>,
+    }
+
+    /// Checks a store's consistency and observes its live nodes.
+    ///
+    /// Forest stores keep the subtree an absorbed root owned until history is
+    /// forgotten, so their absorbed crowns overlap live ones and `check_nodes`
+    /// holds for every store only without pending identifications.
+    fn observe<S: Store>(graph: &Graph<S>, context: &str) -> Observation {
+        graph.check().unwrap();
+        let store = &graph.node_store;
+        let pending = graph
+            .iter_nodes()
+            .any(|(node, _, _)| store.is_absorbed(node));
+        if let Err(error) = store.check_nodes().map_err(|e| e.to_string()) {
+            assert!(
+                pending,
+                "{context}: {error} in {}",
+                std::any::type_name::<S>()
+            );
+        }
+        let n_hedges = graph.n_hedges();
+        let mut first_seen = vec![usize::MAX; graph.n_nodes()];
+        let mut partition = Vec::with_capacity(n_hedges);
+        let mut covered = 0;
+        let (mut live_payloads, mut isolated_payloads) = (vec![], vec![]);
+        for (node, crown, &payload) in graph.iter_nodes() {
+            if store.is_absorbed(node) {
+                continue;
+            }
+            let crown_len = crown.len();
+            assert_eq!(crown_len, crown.clone().count());
+            covered += crown_len;
+            for hedge in crown {
+                assert_eq!(graph.node_id(hedge), node);
+            }
+            live_payloads.push(payload);
+            if crown_len == 0 {
+                isolated_payloads.push(payload);
+            }
+        }
+        assert_eq!(
+            covered, n_hedges,
+            "{context}: live crowns cover the half-edges"
+        );
+        for hedge in 0..n_hedges {
+            let node = graph.node_id(Hedge(hedge)).0;
+            assert!(!graph.node_store.is_absorbed(NodeIndex(node)));
+            if first_seen[node] == usize::MAX {
+                first_seen[node] = partition.iter().max().map_or(0, |&m: &usize| m + 1);
+            }
+            partition.push(first_seen[node]);
+        }
+        live_payloads.sort();
+        isolated_payloads.sort();
+        let crowns = (0..n_hedges)
+            .map(|hedge| {
+                let mut crown: Vec<_> = graph
+                    .iter_crown(graph.node_id(Hedge(hedge)))
+                    .map(|h| h.0)
+                    .collect();
+                crown.sort();
+                crown
+            })
+            .collect();
+        Observation {
+            hedge_payloads: (0..n_hedges).map(|h| graph[Hedge(h)]).collect(),
+            involution: (0..n_hedges).map(|h| graph.inv(Hedge(h)).0).collect(),
+            node_payloads: (0..n_hedges)
+                .map(|h| graph[graph.node_id(Hedge(h))])
+                .collect(),
+            partition,
+            crowns,
+            live_payloads,
+            isolated_payloads,
+        }
+    }
+
+    impl<S: Store> Lane<S> {
+        fn new(builder: HedgeGraphBuilder<usize, usize, usize>, resolves_absorbed: bool) -> Self {
+            let graph: Graph<S> = builder.build();
+            let mut lane = Lane {
+                graph,
+                slots: vec![],
+                merged_into: vec![],
+                resolves_absorbed,
+            };
+            lane.renumbered();
+            lane
+        }
+
+        fn live(&self, slot: usize) -> usize {
+            let mut node = self.slots[slot].0;
+            while self.merged_into[node] != node {
+                node = self.merged_into[node];
+            }
+            node
+        }
+
+        /// Logical nodes follow payload order after a renumbering edit, which
+        /// leaves no pending identification.
+        fn renumbered(&mut self) {
+            let mut nodes: Vec<_> = self.graph.iter_nodes().map(|(n, _, &p)| (p, n)).collect();
+            nodes.sort();
+            self.slots = nodes.into_iter().map(|(_, node)| node).collect();
+            self.merged_into = (0..self.graph.n_nodes()).collect();
+        }
+
+        /// Appended nodes keep their order behind the existing ones.
+        fn appended(&mut self) {
+            let old = self.merged_into.len();
+            self.slots
+                .extend((old..self.graph.n_nodes()).map(NodeIndex));
+            self.merged_into.extend(old..self.graph.n_nodes());
+        }
+
+        fn identify(&mut self, slots: &[usize], payload: usize) {
+            let resolved: Vec<usize> = slots.iter().map(|&slot| self.live(slot)).collect();
+            let requested: Vec<NodeIndex> = if self.resolves_absorbed {
+                slots.iter().map(|&slot| self.slots[slot]).collect()
+            } else {
+                resolved.iter().copied().map(NodeIndex).collect()
+            };
+            let survivor = self.graph.identify_nodes(&requested, payload).0;
+            assert!(resolved.contains(&survivor));
+            for node in resolved {
+                self.merged_into[node] = survivor;
+                assert_eq!(
+                    self.graph.node_store.is_absorbed(NodeIndex(node)),
+                    node != survivor
+                );
+            }
+        }
+
+        /// Forgets and returns how many nodes were absorbed.
+        fn forget(&mut self) -> usize {
+            let removed = self
+                .graph
+                .forget_identification_history()
+                .into_iter()
+                .count();
+            self.renumbered();
+            removed
+        }
+    }
+
+    struct Lanes {
+        vec: Lane<NodeStorageVec<usize>>,
+        parent_child: Lane<Forest<usize, ParentChildStore<()>>>,
+        child_vec: Lane<Forest<usize, ChildVecStore<()>>>,
+        ring: Lane<NodeForest<usize>>,
+    }
+
+    /// Runs `$body` on every lane and returns the four results.
+    macro_rules! each {
+        ($lanes:expr, |$lane:ident| $body:expr) => {
+            [
+                {
+                    let $lane = &mut $lanes.vec;
+                    $body
+                },
+                {
+                    let $lane = &mut $lanes.parent_child;
+                    $body
+                },
+                {
+                    let $lane = &mut $lanes.child_vec;
+                    $body
+                },
+                {
+                    let $lane = &mut $lanes.ring;
+                    $body
+                },
+            ]
+        };
+    }
+
+    fn agree<T: PartialEq + Debug>(values: [T; 4], context: &str) -> T {
+        let [vec, parent_child, child_vec, ring] = values;
+        assert_eq!(vec, parent_child, "{context}: parent-child forest");
+        assert_eq!(vec, child_vec, "{context}: child-vector forest");
+        assert_eq!(vec, ring, "{context}: node forest");
+        vec
+    }
+
+    fn random_subgraph(random: &mut Random, n_hedges: usize) -> SuBitGraph {
+        let mut subgraph = SuBitGraph::empty(n_hedges);
+        for hedge in 0..n_hedges {
+            if random.one_in(3) {
+                subgraph.add(Hedge(hedge));
+            }
+        }
+        subgraph
+    }
+
+    impl Lanes {
+        fn new(builder: HedgeGraphBuilder<usize, usize, usize>) -> Self {
+            Lanes {
+                vec: Lane::new(builder.clone(), false),
+                parent_child: Lane::new(builder.clone(), true),
+                child_vec: Lane::new(builder.clone(), true),
+                ring: Lane::new(builder, true),
+            }
+        }
+
+        fn n_slots(&self) -> usize {
+            self.vec.slots.len()
+        }
+
+        fn forget(&mut self, context: &str) {
+            // Survivors, and so the absorbed payloads, differ between stores.
+            agree(each!(self, |lane| lane.forget()), context);
+        }
+
+        fn check(&mut self, context: &str) {
+            agree(each!(self, |lane| observe(&lane.graph, context)), context);
+            self.vec.graph.node_store.check_nodes().unwrap();
+            // The node forest keeps absorbed crowns empty and live ones ascending
+            // in every state.
+            let ring = &self.ring.graph.node_store;
+            ring.check_nodes().unwrap();
+            let live = (0..ring.node_bound()).filter(|&n| !ring.is_absorbed(NodeIndex(n)));
+            assert_eq!(ring.n_live(), live.count());
+            for node in 0..ring.node_bound() {
+                let crown: Vec<_> = ring.get_neighbor_iterator(NodeIndex(node)).collect();
+                assert!(crown.is_sorted_by(|a, b| a < b), "{context}: {crown:?}");
+                assert!(crown.is_empty() || !ring.is_absorbed(NodeIndex(node)));
+            }
+        }
+
+        fn step(&mut self, random: &mut Random, next: &mut usize) -> String {
+            let mut fresh = || {
+                *next += 1;
+                *next
+            };
+            let n_slots = self.n_slots();
+            // An empty graph can only grow.
+            let edit = if n_slots == 0 { 13 } else { random.below(16) };
+            match edit {
+                0..=4 => {
+                    // Possibly repeated or already absorbed nodes.
+                    let slots: Vec<_> = (0..1 + random.below(4))
+                        .map(|_| random.below(n_slots))
+                        .collect();
+                    let payload = fresh();
+                    each!(self, |lane| lane.identify(&slots, payload));
+                    format!("identify {slots:?}")
+                }
+                5 => {
+                    let slot = random.below(n_slots);
+                    let (hedge, edge, flow) = (fresh(), fresh(), random.one_in(2));
+                    let flow = if flow { Flow::Sink } else { Flow::Source };
+                    each!(self, |lane| {
+                        let node = NodeIndex(lane.live(slot));
+                        let graph = lane.graph.clone();
+                        lane.graph = graph
+                            .add_dangling_edge(node.add_data(hedge), edge, flow, true)
+                            .unwrap()
+                            .1;
+                    });
+                    format!("dangling at {slot}")
+                }
+                6 | 7 => {
+                    let (a, b) = (random.below(n_slots), random.below(n_slots));
+                    let (ha, hb, edge) = (fresh(), fresh(), fresh());
+                    each!(self, |lane| {
+                        let (na, nb) = (NodeIndex(lane.live(a)), NodeIndex(lane.live(b)));
+                        let graph = lane.graph.clone();
+                        lane.graph = graph
+                            .add_pair(na.add_data(ha), nb.add_data(hb), edge, Orientation::Default)
+                            .unwrap()
+                            .2;
+                    });
+                    format!("pair {a} {b}")
+                }
+                8 | 15 => {
+                    self.forget("forget");
+                    "forget".to_owned()
+                }
+                9 => {
+                    self.forget("forget before delete");
+                    let subgraph = random_subgraph(random, self.vec.graph.n_hedges());
+                    each!(self, |lane| {
+                        lane.graph.delete_hedges(&subgraph);
+                        lane.renumbered();
+                    });
+                    format!("delete {subgraph:?}")
+                }
+                10 => {
+                    self.forget("forget before extract");
+                    let n_hedges = self.vec.graph.n_hedges();
+                    if n_hedges == 0 {
+                        return "extract nothing".to_owned();
+                    }
+                    // The bitset store cannot extract an empty selection.
+                    let mut subgraph = random_subgraph(random, n_hedges);
+                    subgraph.add(Hedge(random.below(n_hedges)));
+                    let split_offset = 1_000_000;
+                    let extracted = each!(self, |lane| {
+                        let extracted = lane.graph.extract(
+                            &subgraph,
+                            |edge| edge.map(|data| *data),
+                            |edge| edge,
+                            |payload| payload + split_offset,
+                            |payload| payload,
+                        );
+                        lane.renumbered();
+                        observe(&extracted, "extracted")
+                    });
+                    agree(extracted, "extracted");
+                    format!("extract {subgraph:?}")
+                }
+                11 => {
+                    self.forget("forget before extract_nodes");
+                    let slots: Vec<_> = (0..random.below(3))
+                        .map(|_| random.below(self.n_slots()))
+                        .collect();
+                    let extracted = each!(self, |lane| {
+                        let nodes: Vec<_> = slots.iter().map(|&slot| lane.slots[slot]).collect();
+                        let extracted = lane.graph.extract_nodes(
+                            nodes,
+                            |edge| edge.map(|data| *data),
+                            |edge| edge,
+                        );
+                        lane.renumbered();
+                        observe(&extracted, "extracted")
+                    });
+                    agree(extracted, "extracted nodes");
+                    format!("extract nodes {slots:?}")
+                }
+                12 => {
+                    let n_hedges = self.vec.graph.n_hedges();
+                    if n_hedges == 0 {
+                        return "contract nothing".to_owned();
+                    }
+                    let mut subgraph = random_subgraph(random, n_hedges);
+                    subgraph.add(Hedge(random.below(n_hedges)));
+                    let payload = fresh();
+                    each!(self, |lane| {
+                        lane.graph.contract_subgraph(&subgraph, payload);
+                        lane.renumbered();
+                    });
+                    format!("contract {subgraph:?}")
+                }
+                _ => {
+                    let other = random_graph(random, next);
+                    let join = random.one_in(2);
+                    each!(self, |lane| {
+                        let other: Graph<_> = other.clone().build();
+                        if join {
+                            let graph = lane.graph.clone();
+                            lane.graph = graph
+                                .join(
+                                    other,
+                                    |af, ad, bf, bd| af == -bf && ad.data % 2 == bd.data % 2,
+                                    |af, ad, _, _| (af, ad),
+                                )
+                                .unwrap();
+                        } else {
+                            lane.graph.append_disconnected_mut(other).unwrap();
+                        }
+                        lane.appended();
+                    });
+                    format!("join {join}")
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn node_stores_agree_on_random_edits() {
+        for seed in 0..250u64 {
+            let mut random = Random(0x9e37_79b9_7f4a_7c15 ^ (seed + 1).wrapping_mul(0x2545_f491));
+            let mut next = 0;
+            let mut lanes = Lanes::new(random_graph(&mut random, &mut next));
+            lanes.check(&format!("seed {seed}: build"));
+            let mut history = vec![];
+            for _ in 0..24 {
+                history.push(lanes.step(&mut random, &mut next));
+                lanes.check(&format!("seed {seed}: {history:?}"));
+            }
+            lanes.forget(&format!("seed {seed}: final forget"));
+            lanes.check(&format!("seed {seed}: final"));
+        }
+    }
+}

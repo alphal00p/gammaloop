@@ -4,7 +4,10 @@ use std::hint::black_box;
 use criterion::{criterion_group, criterion_main, BatchSize, BenchmarkId, Criterion};
 use linnet::{
     half_edge::{
-        builder::HedgeGraphBuilder, involution::Hedge, nodestore::NodeStorageOps, swap::Swap,
+        builder::HedgeGraphBuilder,
+        involution::Hedge,
+        nodestore::{NodeForest, NodeStorageOps},
+        swap::Swap,
         HedgeGraph, NoData, NodeIndex,
     },
     permutation::Permutation,
@@ -225,6 +228,7 @@ fn bench_store<S: NodeStorageOps<NodeData = usize> + Clone>(c: &mut Criterion, n
 fn nodestores(c: &mut Criterion) {
     bench_store::<Forest<usize, ParentChildStore<()>>>(c, "parent_child");
     bench_store::<Forest<usize, ChildVecStore<()>>>(c, "child_vec");
+    bench_store::<NodeForest<usize>>(c, "node_forest");
 }
 
 criterion_group!(benches, nodestores);
