@@ -12,6 +12,7 @@
 #import "content/showcase-first-diagram.typ": showcase-first-diagram
 #import "content/showcase-models-and-diagrams.typ": showcase-models-and-diagrams
 #import "content/showcase-cff.typ": showcase-cff
+#import "content/showcase-numerical-integration.typ": showcase-numerical-integration
 #import "content/showcase-kinematics.typ": showcase-kinematics
 #import "content/showcase-ufo.typ": showcase-ufo
 #import "content/showcase-tensor-reduction.typ": showcase-tensor-reduction
@@ -38,6 +39,7 @@
     #showcase-first-diagram
     #showcase-models-and-diagrams
     #showcase-cff
+    #showcase-numerical-integration
     #showcase-kinematics
     #showcase-ufo
     #showcase-tensor-reduction
