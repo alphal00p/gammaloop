@@ -2415,8 +2415,9 @@ impl PyGenerationReport {
 )]
 #[derive(Clone)]
 pub struct PyGroupMember {
-    // The content-derived source ID requires 16-byte alignment. Python's wasm
-    // allocator guarantees only 8, so let Rust allocate the native payload.
+    // Box is required for alignment: the source ID contains a u128 requiring
+    // 16-byte alignment, but CPython's wasm32 object allocator guarantees only 8.
+    // Rust allocates the boxed payload with the required alignment; do not inline it.
     inner: Box<GroupMember>,
 }
 

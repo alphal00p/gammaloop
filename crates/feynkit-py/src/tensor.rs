@@ -55,8 +55,9 @@ use crate::error;
 )]
 #[derive(Clone)]
 pub struct PyTensorReducer {
-    // CPython's wasm allocator guarantees only 8-byte alignment, while the
-    // reducer's u128 pairing limits require 16. Keep that payload on the Rust heap.
+    // Box is required for alignment: CPython's wasm32 object allocator guarantees
+    // only 8 bytes, but the reducer's u128 pairing limits require 16. Rust allocates
+    // the boxed payload with the required alignment; do not inline it here.
     pub(crate) inner: Box<TensorReducer>,
 }
 
