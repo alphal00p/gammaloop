@@ -65,6 +65,11 @@ serde = "1.0"
 serde_json = { workspace = true }
 similar-asserts = "1.7.0"
 
+[[bench]]
+name = "canon"
+harness = false
+required-features = ["symbolica"]
+
 [features]
 default = ["native", "nodestore-vec", "serde"]
 bincode = ["dep:bincode", "serde"]

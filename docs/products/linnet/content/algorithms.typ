@@ -132,6 +132,19 @@ paths.
   adding post-enumeration filters.
 ])
 
+== Canonical forms and symmetry
+
+`HedgeGraph::canonize_by` takes one key function each for node, edge, and half-edge payloads
+(`canon::ignore` disregards one) and returns a `Canonization`: canonical half-edge, node, and edge
+labels, a `Certificate` that is equal exactly for isomorphic graphs, automorphism generators as
+half-edge permutations with their node permutations, orbits, and the exact automorphism count.
+Symmetry is half-edge symmetry: an automorphism permutes half-edges compatibly with the
+involution, so `m` interchangeable parallel edges or dangling legs contribute `m!` and an
+undirected self-loop with indistinguishable ends contributes `2`. Undirected edges ignore their
+stored source/sink roles, while directed edges and legs keep their physical direction, including
+`Reversed` orientations. `is_isomorphic_by` and `isomorphism_by` compare two graphs through their
+certificates.
+
 == Mutation boundaries
 
 Insertion extends a graph with the same declarative node and edge specs accepted by the builder.

@@ -227,6 +227,7 @@ impl std::fmt::Display for GVEdgeAttrs {
     }
 }
 pub mod builder;
+pub mod canon;
 pub mod nodestore;
 pub mod subgraph;
 pub mod swap;
