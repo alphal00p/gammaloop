@@ -12,6 +12,7 @@
 #import "content/threshold-subtraction.typ": threshold-subtraction
 #import "content/sampling.typ": sampling
 #import "content/events.typ": events
+#import "content/thermal-media.typ": thermal-media
 #import "content/diagnostics.typ": diagnostics
 #import "content/kurvst.typ": kurvst
 #import "content/api.typ": api
@@ -36,6 +37,7 @@
     #threshold-subtraction
     #sampling
     #events
+    #thermal-media
     #api
     #diagnostics
     #kurvst

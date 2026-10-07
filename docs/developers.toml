@@ -44,7 +44,9 @@ anchor = "load_state_manifest(&save_path)?"
 # only module/import paths changed, with numerical and persistence contracts unchanged.
 # No architecture impact 2026-10-03: the state-load test also checks reloaded
 # model values and coupling slots; State::load and persistence are unchanged.
-digest = "a98ab8e49709e53d3c55b79ede6311f61b689a8a"
+# Reviewed 2026-10-07: state version 11 persists the selected medium in graph
+# parameter builders, as documented in architecture-current.typ.
+digest = "6a94c2c669746b776d8f6b69ad275a884e3afab5"
 
 [[section.note.scope]]
 path = "crates/gammaloop-api/src/commands/integrate.rs"
@@ -99,7 +101,9 @@ anchor = "pub fn warm_up(&mut self, model"
 # basis; warm-up and numerical preparation ownership are unchanged.
 # Reviewed 2026-10-03: the module now declares process::fermi_surface, whose
 # zero-temperature localization is documented in architecture-current.typ.
-digest = "d34a4c6168d0b1678d4fee4c9b0c83a81e346fd1"
+# Reviewed 2026-10-07: LMB mass warm-up propagates the medium-parameter validation
+# documented in architecture-current.typ; warm-up ownership is unchanged.
+digest = "3be1c8b05541c59c8f830d23e9a05c443c93b4d3"
 
 [[section.note.scope]]
 path = "crates/gammalooprs/src/observables/events.rs"
@@ -155,7 +159,9 @@ anchor = "pub fn generate("
 # No-impact attestation 2026-09-22: diagram generation uses the shared
 # ParsingNet name for its existing parametric network type; generation and
 # filtering behavior, including the strict function policy, are unchanged.
-digest = "8fe09278dad3daca6cf5f47453b984daba9dead3"
+# No architecture impact 2026-10-07: graph parameter setup now propagates its
+# errors; diagram generation is unchanged.
+digest = "bd2cf342c9abd2e2899a046e89f50a740f8002a3"
 
 [[section.note]]
 id = "integration-dashboard"
@@ -229,7 +235,9 @@ anchor = "impl UVOrchestrator {"
 # Reviewed 2026-10-03: the orchestrator takes full generation settings and rejects
 # expanded-4D local counterterms for medium modes and vacuum subtraction, as
 # documented in Current Boundaries; backend selection is unchanged.
-digest = "a573be12ef39e2ca9b4b5c89cad0ce9cf5a596ca"
+# No architecture impact 2026-10-07: that medium check moved to a shared
+# GenerationSettings validator with the same condition.
+digest = "e1d14366edbdb159f9e6ca4acb2512000ca6391b"
 
 [[section.note]]
 id = "spenso-parsing-flow"

@@ -27,20 +27,6 @@ fixed momenta, the current fallback is the mean absolute value of their nonzero 
 not a physical reconstruction of $sqrt(s)$. Supply `e_cm` explicitly whenever its physical
 meaning matters.
 
-== Vacuum amplitude phase and pressure
-
-GammaLoop keeps equilibrium vacuum amplitudes in its Minkowski convention.
-For the complete connected vacuum-graph sum $A$, including model factors and
-counterterms, convert to the pressure contribution by hand: $delta p = -i A$.
-This holds at every loop order and also after vacuum subtraction. The
-#source-link("docs/architecture/phase-conventions.typ", label: "phase-convention derivation")
-follows from Wick rotating the single overall spacetime-volume factor; stripped
-integrals and arbitrary numerator replacements require their own conversion.
-
-Keep `integrator.integrated_phase = "imag"` and comparison targets in the Minkowski
-convention. The real pressure contribution is then the reported imaginary part
-of $A$, with its sign and uncertainty preserved.
-
 == Helicity and polarization
 
 Fixed external helicities use `-1`, `0`, or `+1`. Zero is the physical and documented
