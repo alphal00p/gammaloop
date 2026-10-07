@@ -3,7 +3,7 @@
 #let showcases = [
 = FeynKit notebook showcases
 
-Six executable Marimo notebooks cover every FeynKit component. Start with a small scalar
+Seven executable Marimo notebooks cover the FeynKit components and numerical integration. Start with a small scalar
 model, then choose the physics operation you want to explore. Diagrams, tables, and symbolic
 expressions are computed by the same APIs documented in the reference.
 
@@ -15,6 +15,8 @@ expressions are computed by the same APIs documented in the reference.
   parameter cards, process selectors, loop ranges, serialization, and momentum bases.
 - #link("guides/showcases/cff/")[Cross-Free Families] inspects orientations, surfaces,
   denominator products, and native Symbolica expressions.
+- #link("guides/showcases/numerical-integration/")[Numerical integration with CFF and LTD]
+  compares stability, coordinate maps, and adaptive sampling against OneLOop in a full native host.
 - #link("guides/showcases/kinematics/")[Kinematics and jets] covers momenta, Lorentz
   transformations, angular distances, and jet algorithms.
 - #link("guides/showcases/ufo/")[Loading UFO models] normalizes a raw model and inspects
@@ -28,11 +30,12 @@ expressions are computed by the same APIs documented in the reference.
   columns: (1fr, 2fr),
   table.header([Component], [Showcase]),
   [`feynkit` facade], [#link("guides/showcases/first-diagram/")[A first diagram]],
-  [`feynkit-py`], [All six notebooks through `symbolica.community.hepkit`],
+  [`feynkit-py`], [All seven notebooks through `symbolica.community.hepkit`],
   [`feynkit-model`], [#link("guides/showcases/models-and-diagrams/")[Models and parameter cards]],
   [`feynkit-generator`], [#link("guides/showcases/models-and-diagrams/")[Processes and generation]],
   [`feynkit-graph`], [#link("guides/showcases/models-and-diagrams/")[Serialization and momentum bases]],
   [`feynkit-cff`], [#link("guides/showcases/cff/")[Cross-Free Families]],
+  [CFF numerical evaluation and sampling], [#link("guides/showcases/numerical-integration/")[Numerical integration]],
   [`feynkit-kinematics`], [#link("guides/showcases/kinematics/")[Kinematics and jets]],
   [`feynkit-ufo`], [#link("guides/showcases/ufo/")[Loading UFO models]],
   [`feynkit-tensor`], [#link("guides/showcases/tensor-reduction/")[Vacuum tensor reduction]],
@@ -52,6 +55,10 @@ The UFO example additionally needs Python 3.11 or newer and the
 #link("guides/showcases/ufo/")[pinned Symbolica 3-compatible UFO loader]. Set
 `SYMBOLICA_LICENSE` through your local environment when required by your Symbolica
 distribution.
+
+The numerical integration showcase additionally needs the full native community
+host with OneLOop, NumPy, and Matplotlib. Its guide describes this separate
+environment; it is not included in the browser notebook exports.
 
 Run the following from the checkout, replacing the interpreter path with that environment's
 Python. The command opens an editable Marimo notebook using FeynKit's built-in models.
