@@ -92,8 +92,19 @@ pub trait NodeStorageOps: NodeStorage + Swap<Hedge> + Swap<NodeIndex> {
         map_data: impl FnMut(ND) -> Self::NodeData,
     ) -> Self;
 
-    /// Appends an unpaired half-edge incident to `source`.
-    fn add_dangling_edge(self, source: NodeIndex) -> Result<Self, HedgeGraphError>;
+    /// Appends an unpaired half-edge incident to `source` without changing existing indices.
+    /// An invalid source must be rejected before changing the store. For a valid
+    /// source and store, insertion succeeds and keeps the node ownership map current.
+    fn add_dangling_edge_mut(&mut self, source: NodeIndex) -> Result<(), HedgeGraphError>;
+
+    /// Consuming counterpart of [`Self::add_dangling_edge_mut`].
+    fn add_dangling_edge(mut self, source: NodeIndex) -> Result<Self, HedgeGraphError>
+    where
+        Self: Sized,
+    {
+        self.add_dangling_edge_mut(source)?;
+        Ok(self)
+    }
 
     /// Builds nodes from source and sink neighbor sets, assigning default data to each node.
     fn random(sources: &[Self::Neighbors], sinks: &[Self::Neighbors]) -> Self

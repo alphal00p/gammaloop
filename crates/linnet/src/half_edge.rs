@@ -914,19 +914,27 @@ impl<E, V, H, N: NodeStorageOps<NodeData = V>> HedgeGraph<E, V, H, N> {
         flow: Flow,
         orientation: impl Into<Orientation>,
     ) -> Result<(Hedge, Self), HedgeGraphError> {
+        let hedge = self.add_dangling_edge_mut(source, data, flow, orientation)?;
+        Ok((hedge, self))
+    }
+
+    /// Adds a dangling half-edge in place, preserving existing indices.
+    /// An invalid endpoint leaves the graph unchanged.
+    pub fn add_dangling_edge_mut(
+        &mut self,
+        source: impl Into<HedgeData<H>>,
+        data: E,
+        flow: Flow,
+        orientation: impl Into<Orientation>,
+    ) -> Result<Hedge, HedgeGraphError> {
         let source = source.into();
-
+        let orientation = orientation.into();
+        if source.node.0 >= self.n_nodes() {
+            return Err(HedgeGraphError::NoNode);
+        }
+        self.node_store.add_dangling_edge_mut(source.node)?;
         self.hedge_data.push(source.data);
-        let (edge_store, hedge) = self.edge_store.add_dangling_edge(data, flow, orientation);
-        let mut g = HedgeGraph {
-            hedge_data: self.hedge_data,
-            edge_store,
-            node_store: self.node_store.add_dangling_edge(source.node)?,
-        };
-
-        g.node_store.check_and_set_nodes()?;
-
-        Ok((hedge, g))
+        Ok(self.edge_store.add_dangling_edge(data, flow, orientation))
     }
 
     /// Adds a new paired edge between the `source` and `sink` nodes.
@@ -953,23 +961,32 @@ impl<E, V, H, N: NodeStorageOps<NodeData = V>> HedgeGraph<E, V, H, N> {
         data: E,
         orientation: impl Into<Orientation>,
     ) -> Result<(Hedge, Hedge, Self), HedgeGraphError> {
+        let (source, sink) = self.add_pair_mut(source, sink, data, orientation)?;
+        Ok((source, sink, self))
+    }
+
+    /// Adds a paired edge in place, preserving existing indices.
+    /// Both endpoints are checked before changing any storage.
+    pub fn add_pair_mut(
+        &mut self,
+        source: impl Into<HedgeData<H>>,
+        sink: impl Into<HedgeData<H>>,
+        data: E,
+        orientation: impl Into<Orientation>,
+    ) -> Result<(Hedge, Hedge), HedgeGraphError> {
         let source = source.into();
         let sink = sink.into();
+        let orientation = orientation.into();
+        if source.node.0 >= self.n_nodes() || sink.node.0 >= self.n_nodes() {
+            return Err(HedgeGraphError::NoNode);
+        }
+        // Each incidence append preserves the partition and its ownership map;
+        // rebuilding those maps afterward is unnecessary for a valid store.
+        self.node_store.add_dangling_edge_mut(source.node)?;
+        self.node_store.add_dangling_edge_mut(sink.node)?;
         self.hedge_data.push(source.data);
         self.hedge_data.push(sink.data);
-        let (edge_store, sourceh, sinkh) = self.edge_store.add_paired(data, orientation);
-        let mut g = HedgeGraph {
-            hedge_data: self.hedge_data,
-            edge_store,
-            node_store: self
-                .node_store
-                .add_dangling_edge(source.node)?
-                .add_dangling_edge(sink.node)?,
-        };
-
-        g.node_store.check_and_set_nodes()?;
-
-        Ok((sourceh, sinkh, g))
+        Ok(self.edge_store.add_paired(data, orientation))
     }
 
     /// Checks if the specified `subgraph` is connected.

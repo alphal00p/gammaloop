@@ -68,7 +68,7 @@ HepKit's physics-specific options live in `DiagramStyle`, passed separately as `
 For multipage renders, use `to_svg_pages()`; `to_svg()` requires exactly one page.
 
 `Graph.generate()` takes `EdgeSignature` values and returns graph/group-size pairs.
-`HalfEdge` is a live graph view. Canonicalization and isomorphism compare expression-compatible
+`HalfEdge` describes an endpoint; `HalfEdgeView` accesses a live incidence. Canonicalization and isomorphism compare expression-compatible
 payloads; use `node_key`, `edge_key`, and `half_edge_key` for custom data. Canonicalization
 preserves payload references and drawing metadata, which does not affect equivalence.
 
@@ -77,19 +77,19 @@ preserves payload references and drawing metadata, which does not affect equival
 Try the #link("playground/")[live Python playground] for editable DOT and a browser notebook,
 or start with the runnable graph example in the #link("quickstart/python/")[Python quickstart].
 
-The Python binding separates arbitrary application data from drawing data. `Node.data`,
-`Edge.data`, and `HalfEdge.data` may contain any Python object. Linnet retains those objects by
-reference: it does not copy, compare, hash, pickle, stringify, or send them to Typst. The matching
-`drawing` properties contain only validated, typed values that the renderer can stage safely.
+The Python binding separates reusable construction descriptions from live elements. `Node`,
+`Edge`, and `HalfEdge` describe graph elements. `NodeView`, `EdgeView`, and `HalfEdgeView`
+refer to elements of an existing graph. Both expose arbitrary Python `data` separately from
+validated `drawing` metadata. Payloads are retained by reference: constructing a graph does not
+copy, compare, hash, pickle, stringify, or send application objects to Typst.
 
-Build a graph declaratively with node specifications, endpoint specifications, and edge
-specifications. The payload classes below belong to the example application; they are not
-Linnet types:
+For a plain edge, use node descriptions directly. Explicit half-edges add endpoint-specific data
+or drawing only where needed:
 
 ```python
 from dataclasses import dataclass
 
-from symbolica.community.graph import build, edge, node, sink, source
+from symbolica.community.graph import Compass, Edge, Graph, HalfEdge, Node
 
 
 @dataclass
@@ -111,66 +111,86 @@ incoming_data = UserNodeData(state=object())
 outgoing_data = UserNodeData(state=object())
 propagator_data = UserEdgeData(interaction=object())
 
-incoming = node("in", data=incoming_data)
-outgoing = node("out", data=outgoing_data)
-graph = build(
-    incoming,
+incoming = Node("in", data=incoming_data)
+outgoing = Node("out", data=outgoing_data)
+propagator = Edge(
+    HalfEdge(incoming, data=UserHalfEdgeData(object()), compass=Compass.E),
     outgoing,
-    edge(
-        source(incoming),
-        "propagator",
-        sink(outgoing),
-        data=propagator_data,
-    ),
-    name="example",
+    name="propagator",
+    data=propagator_data,
 )
+graph = Graph(nodes=[incoming, outgoing], edges=[propagator], name="example")
 
 assert graph.node("in").data is incoming_data
 assert graph.edge("propagator").data is propagator_data
 ```
 
+`Edge(source, sink, ...)` accepts a `Node`, `HalfEdge`, node name, or node index in each slot.
+An omitted endpoint makes the edge dangling. The slot determines its source/sink flow; the
+separate `orientation` controls the edge's direction. A repeated node produces a self-loop with
+two distinct incidences. Half-edge descriptions are also reusable: putting the same description
+in two slots creates separate incidences carrying the same payload reference.
+
+`Graph(edges=[propagator])` infers the node descriptions referenced by its edges, deduplicated by
+Python object identity. Declare isolated nodes explicitly with `nodes=`. Names and integer
+endpoints resolve against declared or inferred nodes; unknown keys never implicitly create a
+node. Node names are unique within a graph, as are edge names in their own namespace. Names
+identify structure; visible labels belong to drawing metadata. Live node views are graph-bound,
+so batch construction rejects them; use their name or index explicitly when referencing a node
+in a new graph.
+
+Descriptions remain independent of every graph built from them:
+
+```python
+another = Graph(nodes=[incoming, outgoing], edges=[propagator])
+incoming.drawing.label = "used by the next build"
+graph.node("in").data = UserNodeData(object())
+assert another.node("in").data is incoming_data
+```
+
+Each graph owns its topology and copied drawing metadata. Arbitrary payload references may still
+be shared: replacing `data` affects one record, while mutating a shared Python object is visible
+to every record that references it. Explicit graph copies follow the same rule.
+
 `graph.node("in")`, `graph.edge("propagator")`, and `graph.half_edge(0)` return live views.
 Names and integer indices are accepted for node and edge lookup. Topology properties such as
 `index`, `incidence`, `source`, `sink`, `pair`, and `flow` are read-only, while `data` and every
-field on `drawing` are mutable. Endpoint-specific `source(..., data=...)` and
-`sink(..., data=...)` payloads are optional; use them only when the application has distinct
-half-edge data. Drawing fields include labels and styles as well as placement,
-routing, rank, size, bend, decoration, and half-edge anchor information. Put a
-template-specific field such as a particle or cut identifier in `drawing.extensions`; built-in
-field names are reserved and Linnet assigns no domain meaning to extensions.
+field on `drawing` are mutable. Drawing fields include labels, styles, placement, routing, rank,
+size, bend, decoration, and endpoint anchors. Put template-specific fields in
+`drawing.extensions`; built-in field names are reserved and Linnet assigns no domain meaning
+to extensions.
 
-`Graph.map(node=..., edge=..., source=..., sink=...)` evaluates the supplied callbacks against
-live element views and returns a new graph. An omitted callback preserves the exact Python data
-object. Drawing and rendering configuration are copied by value. Reordering nodes or edges and
-reversing an edge preserve each data/drawing association, but invalidate every older live view;
-using a stale view raises `ReferenceError`.
-
-Incremental edits reuse the declarative constructors instead of introducing a second set of
-drawing dictionaries. `add_node` accepts a `NodeSpec`; `add_edge` accepts the same internal or
-dangling `EdgeSpec` used by `build`. Declarative endpoints resolve a passed `NodeSpec`, name,
-index, or live-node key. Incremental endpoints resolve a current live `Node`, name, index, or a
-named `NodeSpec`:
+Incremental construction uses the same description types and supports direct shorthand:
 
 ```python
-from symbolica.community.graph import Compass, Graph, edge, node, sink, source
-
 graph = Graph()
-graph.add_node(node("in", data=UserNodeData(object()), label="incoming"))
-graph.add_node(node("out", data=UserNodeData(object())))
-
-propagator = graph.add_edge(edge(
-    source("in", data=UserHalfEdgeData(object()), compass=Compass.E),
-    "propagator",
-    sink(graph.node("out"), data=UserHalfEdgeData(object()), compass=Compass.W),
-    data=UserEdgeData(object()),
-    label="dependency",
-))
+incoming = graph.add_node("in", data=UserNodeData(object()), label="incoming")
+outgoing = graph.add_node("out", data=UserNodeData(object()))
+propagator = graph.add_edge(incoming, outgoing, name="propagator", data=UserEdgeData(object()))
+external = graph.add_edge(
+    source=HalfEdge(incoming, data=UserHalfEdgeData(object()), compass=Compass.E),
+    name="external",
+)
 ```
 
-Each successful insertion is one atomic topology revision and returns a fresh view. Reacquire a
-view by name or index after the next edit. Validation failures do not publish the candidate and
-therefore leave existing views live. Arbitrary data keeps Python object identity; specs and their
-drawing dictionaries are copied by value and remain reusable.
+`add_node(Node(...))` and `add_edge(Edge(...))` accept complete reusable descriptions. Incremental
+endpoints also accept live `NodeView` values from that graph. A named `Node` description resolves
+to an existing node; an anonymous description requires the live view returned by `add_node`.
+
+Insertion updates the native graph directly and preserves all pre-existing element views and
+live drawing objects. It does not copy the complete graph. Batch construction still avoids
+repeated storage maintenance; the cost of insertion depends on the chosen node store. Failed
+validation leaves topology and existing views unchanged. Each successful insertion advances the
+topology revision, invalidating older `Subgraph`, `Cycle`, `OrientedCut`, `CutPartition`, and
+`TraversalTree` results because their masks and relationships describe the earlier graph.
+
+`Graph.map(node=..., edge=..., source=..., sink=...)` evaluates callbacks against live views
+and returns a new graph. Omitted callbacks preserve payload references; drawing and rendering
+configuration are copied by value. Structural changes during mapping, filtering, or drawing
+selectors are rejected even when the callback's element view survives the insertion.
+Reordering, reversing, deleting, joining, splitting, or contracting existing structure invalidates
+older live element views conservatively; stale access raises `ReferenceError`. Reacquire a view
+by name or index after such a transformation.
 
 `split_edge(at, replacement, ...)` turns a paired edge into two dangling edges. The selected
 half-edge receives the detached replacement `EdgeValue`; the opposite half retains the original
@@ -182,7 +202,7 @@ aliases.
 
 The long-lived topology is Linnet's native `HedgeGraph`; it is not a separate Python adjacency
 model. `NodeStore.Vec` is the default dense node store, while `NodeStore.Forest` selects the
-identification-preserving forest store. Pass `node_store=` to `Graph`, `build`, or a DOT importer,
+identification-preserving forest store. Pass `node_store=` to `Graph` or a DOT importer,
 inspect `graph.node_store`, and use `graph.to_node_store(...)` for an explicit non-mutating
 conversion. Derived graphs preserve their input backend; append and join use the left graph's
 backend.

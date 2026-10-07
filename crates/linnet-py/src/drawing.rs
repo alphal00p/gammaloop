@@ -93,16 +93,21 @@ fn drawing_kind(fields: &[&str]) -> DrawingKind {
 
 pub(crate) struct DrawingGuard {
     graph: Py<PyGraph>,
-    revision: u64,
+    element_epoch: u64,
 }
 
 impl DrawingGuard {
-    pub(crate) fn new(graph: Py<PyGraph>, revision: u64) -> Self {
-        Self { graph, revision }
+    pub(crate) fn new(graph: Py<PyGraph>, element_epoch: u64) -> Self {
+        Self {
+            graph,
+            element_epoch,
+        }
     }
 
     fn check(&self, py: Python<'_>) -> PyResult<()> {
-        self.graph.borrow(py).check_revision(self.revision)
+        self.graph
+            .borrow(py)
+            .check_element_epoch(self.element_epoch)
     }
 }
 
@@ -203,11 +208,11 @@ macro_rules! drawing_class {
                 py: Python<'_>,
                 values: &Py<PyDict>,
                 graph: Py<PyGraph>,
-                revision: u64,
+                element_epoch: u64,
             ) -> Self {
                 Self {
                     values: Some(values.clone_ref(py)),
-                    guard: Some(DrawingGuard::new(graph, revision)),
+                    guard: Some(DrawingGuard::new(graph, element_epoch)),
                 }
             }
 

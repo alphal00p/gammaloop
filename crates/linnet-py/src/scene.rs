@@ -252,6 +252,7 @@ impl PyDiagramRender {
                 codec: None,
                 render_config: Py::new(py, settings)?.into_any(),
                 revision: 0,
+                element_epoch: 0,
             }),
         )?;
         // Preparation snapshots every referenced label file before the temporary module is dropped.

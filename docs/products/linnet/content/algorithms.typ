@@ -134,13 +134,16 @@ paths.
 
 == Mutation boundaries
 
-Insertion extends a graph with the same declarative node and edge specs accepted by the builder.
+Python insertion extends a graph with reusable `Node` and `Edge` descriptions or direct
+`add_node` / `add_edge` arguments. Existing live element views and their drawing metadata remain
+valid after appending nodes or edges. Structural selections and algorithm results are tied to the
+complete topology revision and become stale even after insertion.
 `split_edge` separates one paired edge into two dangling edges, while `connect` joins two exact
 dangling half-edges. Extraction copies a selected region, excision separates a graph along its
 boundary, sewing joins compatible dangling half-edges, and contraction identifies structure.
-These operations return replacement views or indexes where needed. Keep only the topology-independent
-payloads across an edit: graph-bound Python views are revision checked and become stale after every
-successful topology change.
+These transformations return replacement views or indices where needed and conservatively
+invalidate older live element views. Reacquire elements by name or index after changing existing
+structure. Detached Python payloads remain usable independently of graph topology.
 
 Transitive reduction is an owning transformation over a directed acyclic graph. The Python method
 returns a new graph, preserves arbitrary payload identity and copied drawing configuration, and

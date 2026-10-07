@@ -750,30 +750,15 @@ impl<N> NodeStorageOps for NodeStorageVec<N> {
 
         self.hedge_data.extend(other.hedge_data);
     }
-    fn add_dangling_edge(self, source: NodeIndex) -> Result<Self, HedgeGraphError> {
+    fn add_dangling_edge_mut(&mut self, source: NodeIndex) -> Result<(), HedgeGraphError> {
         if self.nodes.len() <= source {
             return Err(HedgeGraphError::NoNode);
         }
-        let nodes: NodeVec<_> = self
-            .nodes
-            .into_iter()
-            .map(|(i, mut k)| {
-                if i == source {
-                    k.push(true);
-                } else {
-                    k.push(false);
-                }
-                k
-            })
-            .collect();
-        let mut hedge_data = self.hedge_data;
-        hedge_data.push(source);
-
-        Ok(NodeStorageVec {
-            node_data: self.node_data,
-            hedge_data,
-            nodes,
-        })
+        for (node, crown) in self.nodes.iter_mut() {
+            crown.push(node == source);
+        }
+        self.hedge_data.push(source);
+        Ok(())
     }
 
     fn random(sources: &[Self::Neighbors], sinks: &[Self::Neighbors]) -> Self

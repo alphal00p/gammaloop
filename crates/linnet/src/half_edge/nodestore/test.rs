@@ -531,3 +531,110 @@ fn orientation_hedges() {
 
     println!("{}", aligned.base_dot())
 }
+
+#[test]
+fn in_place_edge_insertion_preserves_graph_on_invalid_endpoints() {
+    fn check<S>()
+    where
+        S: NodeStorageOps<NodeData = &'static str> + Clone + PartialEq + std::fmt::Debug,
+    {
+        let mut builder = HedgeGraphBuilder::<&str, &str, &str>::new();
+        let a = builder.add_node("a");
+        let b = builder.add_node("b");
+        builder.add_edge(a.add_data("a port"), b.add_data("b port"), "existing", true);
+        let mut graph: HedgeGraph<_, _, _, S> = builder.build();
+        let before = graph.clone();
+        let invalid = NodeIndex(graph.n_nodes());
+        for (source, sink) in [(invalid, b), (a, invalid)] {
+            assert!(matches!(
+                graph.add_pair_mut(
+                    source.add_data("new source"),
+                    sink.add_data("new sink"),
+                    "bad",
+                    true
+                ),
+                Err(HedgeGraphError::NoNode)
+            ));
+            assert_eq!(graph, before);
+        }
+        assert!(matches!(
+            graph.add_dangling_edge_mut(invalid.add_data("new port"), "bad", Flow::Sink, true),
+            Err(HedgeGraphError::NoNode)
+        ));
+        assert_eq!(graph, before);
+        graph.check().unwrap();
+        graph.node_store.check_nodes().unwrap();
+    }
+    check::<NodeStorageVec<_>>();
+    check::<Forest<_, ChildVecStore<()>>>();
+    check::<Forest<_, crate::tree::child_pointer::ParentChildStore<()>>>();
+}
+
+#[test]
+fn in_place_edge_insertion_keeps_indices_and_incidence_payloads() {
+    fn check<S: NodeStorageOps<NodeData = &'static str>>() {
+        let mut builder = HedgeGraphBuilder::<&str, &str, &str>::new();
+        let a = builder.add_node("a");
+        let b = builder.add_node("b");
+        let isolated = builder.add_node("isolated");
+        builder.add_edge(a.add_data("a port"), b.add_data("b port"), "existing", true);
+        let mut graph: HedgeGraph<_, _, _, S> = builder.build();
+        let original_edge = graph[&Hedge(0)];
+        let (source, sink) = graph
+            .add_pair_mut(
+                a.add_data("parallel source"),
+                b.add_data("parallel sink"),
+                "parallel",
+                false,
+            )
+            .unwrap();
+        let (loop_source, loop_sink) = graph
+            .add_pair_mut(
+                isolated.add_data("loop source"),
+                isolated.add_data("loop sink"),
+                "loop",
+                true,
+            )
+            .unwrap();
+        let dangling = graph
+            .add_dangling_edge_mut(
+                isolated.add_data("external port"),
+                "external",
+                Flow::Sink,
+                true,
+            )
+            .unwrap();
+        assert_eq!(graph.n_nodes(), 3);
+        assert_eq!(graph.n_edges(), 4);
+        assert_eq!(graph.n_hedges(), 7);
+        assert_eq!(graph[&Hedge(0)], original_edge);
+        assert_eq!(graph[original_edge], "existing");
+        assert_eq!(graph.node_id(Hedge(0)), a);
+        assert_eq!(graph.node_id(Hedge(1)), b);
+        assert_eq!(graph.inv(source), sink);
+        assert_eq!(graph.inv(loop_source), loop_sink);
+        assert_eq!(graph.node_id(loop_source), isolated);
+        assert_eq!(graph.node_id(loop_sink), isolated);
+        assert_eq!(graph.inv(dangling), dangling);
+        assert_eq!(graph.flow(dangling), Flow::Sink);
+        assert_eq!(graph.iter_crown(isolated).count(), 3);
+        let payloads: Vec<_> = graph.iter_hedges().map(|(_, data)| *data).collect();
+        assert_eq!(
+            payloads,
+            [
+                "a port",
+                "b port",
+                "parallel source",
+                "parallel sink",
+                "loop source",
+                "loop sink",
+                "external port"
+            ]
+        );
+        graph.check().unwrap();
+        graph.node_store.check_nodes().unwrap();
+    }
+    check::<NodeStorageVec<_>>();
+    check::<Forest<_, ChildVecStore<()>>>();
+    check::<Forest<_, crate::tree::child_pointer::ParentChildStore<()>>>();
+}

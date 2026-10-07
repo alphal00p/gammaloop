@@ -747,17 +747,20 @@ impl<V, P: ForestNodeStore + ForestNodeStorePreorder + Clone> NodeStorageOps for
         })
     }
 
-    fn add_dangling_edge(
-        mut self,
+    fn add_dangling_edge_mut(
+        &mut self,
         source: NodeIndex,
-    ) -> Result<Self, crate::half_edge::HedgeGraphError> {
-        let parent = self.roots[source.0].root_id;
-        if parent.is_empty() {
-            self.roots[source.0].root_id = self.nodes.add_dataless_root(source.into());
+    ) -> Result<(), crate::half_edge::HedgeGraphError> {
+        let root = self
+            .roots
+            .get_mut(source.0)
+            .ok_or(crate::half_edge::HedgeGraphError::NoNode)?;
+        if root.root_id.is_empty() {
+            root.root_id = self.nodes.add_dataless_root(source.into());
         } else {
-            self.nodes.add_dataless_child(parent);
+            self.nodes.add_dataless_child(root.root_id);
         }
-        Ok(self)
+        Ok(())
     }
 
     fn get_node_data_mut(&mut self, node_id: NodeIndex) -> &mut Self::NodeData {
