@@ -15,6 +15,7 @@ use std::{
 use eyre::eyre;
 use linnet::half_edge::{
     NodeIndex,
+    involution::Hedge,
     subgraph::{SuBitGraph, SubSetLike},
 };
 
@@ -463,11 +464,13 @@ pub trait ContractionStrategy<E, L, K, FK, Aind>: Sized {
 #[derive(Debug, Clone)]
 /// One current operand in a ready product contraction.
 ///
-/// `source` identifies an original or incrementally rewritten graph node when
-/// one exists. A materialized intermediate may have no source node yet.
+/// `source` is a half-edge of the original or incrementally rewritten graph
+/// node when one exists. A materialized intermediate may have no source node
+/// yet. In-place rewrites renumber nodes but keep half-edges in place, so the
+/// node is resolved from this half-edge on use.
 pub struct ProductOperand<K, Aind> {
     leaf: NetworkLeaf<K, Aind>,
-    source: Option<NodeIndex>,
+    source: Option<Hedge>,
 }
 
 impl<K, Aind> ProductOperand<K, Aind> {
@@ -477,8 +480,8 @@ impl<K, Aind> ProductOperand<K, Aind> {
     }
 
     /// Returns the graph node from which this operand came, if retained.
-    pub fn source(&self) -> Option<NodeIndex> {
-        self.source
+    pub fn source<FK>(&self, graph: &NetworkGraph<K, FK, Aind>) -> Option<NodeIndex> {
+        self.source.map(|hedge| graph.graph.node_id(hedge))
     }
 }
 
@@ -493,7 +496,7 @@ pub struct ProductContraction<K, Aind> {
 }
 
 struct ProductPairReplacement<K, Aind> {
-    nodes: [NodeIndex; 2],
+    sources: [Hedge; 2],
     position: usize,
     leaf: NetworkLeaf<K, Aind>,
 }
@@ -539,7 +542,7 @@ impl<K, Aind: AbsInd> ProductContraction<K, Aind> {
             match &graph.graph[*child] {
                 NetworkNode::Leaf(leaf) => operands.push(ProductOperand {
                     leaf: leaf.clone(),
-                    source: Some(*child),
+                    source: graph.graph.iter_crown(*child).next(),
                 }),
                 NetworkNode::Op(op) => {
                     return Err(TensorNetworkError::Other(eyre!(
@@ -665,7 +668,7 @@ impl<K, Aind: AbsInd> ProductContraction<K, Aind> {
     {
         for operand in &mut self.operands {
             if matches!(operand.leaf, NetworkLeaf::LibraryKey { .. }) {
-                let source = operand.source.ok_or_else(|| {
+                let source = operand.source(graph).ok_or_else(|| {
                     TensorNetworkError::Other(eyre!("library product operand lost source node"))
                 })?;
                 let tensor = graph.get_lib_data(lib, source)?;
@@ -1002,24 +1005,26 @@ impl<K, Aind: AbsInd> ProductContraction<K, Aind> {
                 let scalar_nodes = scalar_positions
                     .iter()
                     .map(|position| {
-                        self.operands[*position].source.ok_or_else(|| {
+                        self.operands[*position].source(graph).ok_or_else(|| {
                             TensorNetworkError::Other(eyre!(
                                 "scalar product operand lost source node"
                             ))
                         })
                     })
                     .collect::<Result<Vec<_>, _>>()?;
-                let node = graph.identify_nodes_marking_self_edges_and_duplicate_heads(
+                graph.identify_nodes_marking_self_edges_and_duplicate_heads(
                     &scalar_nodes,
                     NetworkNode::Leaf(NetworkLeaf::Scalar(scalar)),
                     ignored,
                 );
                 graph.finish_deferred_node_identifications();
+                // Every merged source half-edge now belongs to the merged node.
+                let source = self.operands[scalar_positions[0]].source;
                 self.replace_operands(
                     &scalar_positions,
                     ProductOperand {
                         leaf: NetworkLeaf::Scalar(scalar),
-                        source: Some(node),
+                        source,
                     },
                 );
                 Ok(ProductRewriteProgress::UpdatedProduct)
@@ -1078,7 +1083,7 @@ impl<K, Aind: AbsInd> ProductContraction<K, Aind> {
                 return Ok(NetworkLeaf::ScaledTensorSum(scaled));
             }
             NetworkLeaf::LibraryKey { .. } => {
-                let source = self.operands[operand].source.ok_or_else(|| {
+                let source = self.operands[operand].source(graph).ok_or_else(|| {
                     TensorNetworkError::Other(eyre!("library product operand lost source node"))
                 })?;
                 let tensor = graph.get_lib_data(lib, source)?;
@@ -1668,10 +1673,10 @@ impl<K, Aind: AbsInd> ProductContraction<K, Aind> {
         let Some((left, right, degree)) = self.best_degree_pair::<Store, LARGEST>(executor) else {
             return Ok(None);
         };
-        let left_node = self.operands[left].source.ok_or_else(|| {
+        let left_source = self.operands[left].source.ok_or_else(|| {
             TensorNetworkError::Other(eyre!("tensor product operand lost source node"))
         })?;
-        let right_node = self.operands[right].source.ok_or_else(|| {
+        let right_source = self.operands[right].source.ok_or_else(|| {
             TensorNetworkError::Other(eyre!("tensor product operand lost source node"))
         })?;
 
@@ -1720,7 +1725,7 @@ impl<K, Aind: AbsInd> ProductContraction<K, Aind> {
         }
 
         Ok(Some(ProductPairReplacement {
-            nodes: [left_node, right_node],
+            sources: [left_source, right_source],
             position: replacement_position,
             leaf: self.operands[replacement_position].leaf.clone(),
         }))
@@ -1786,13 +1791,16 @@ impl<K, Aind: AbsInd> ProductContraction<K, Aind> {
             return Ok(false);
         };
 
-        let node = graph.identify_nodes_marking_self_edges_and_duplicate_heads(
-            &replacement.nodes,
+        graph.identify_nodes_marking_self_edges_and_duplicate_heads(
+            &replacement
+                .sources
+                .map(|source| graph.graph.node_id(source)),
             NetworkNode::Leaf(replacement.leaf),
             ignored,
         );
         graph.finish_deferred_node_identifications();
-        self.operands[replacement.position].source = Some(node);
+        // Both source half-edges now belong to the merged node.
+        self.operands[replacement.position].source = Some(replacement.sources[0]);
         Ok(true)
     }
 
