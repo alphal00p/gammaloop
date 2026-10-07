@@ -248,7 +248,7 @@ pub(super) fn svg(typeset: &Typeset, layers: &[Element], targets: &[Target]) -> 
     let mut svg = String::with_capacity(256 * 1024);
     let _ = write!(
         svg,
-        r#"<svg viewBox="0 0 {w} {h}" width="{w}pt" height="{h}pt" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">"#,
+        r#"<svg viewBox="0 0 {w} {h}" data-linnet-renderer="native" width="{w}pt" height="{h}pt" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">"#,
         w = number(width),
         h = number(height)
     );
@@ -358,11 +358,17 @@ pub(super) fn svg(typeset: &Typeset, layers: &[Element], targets: &[Target]) -> 
                 let (lx, ly) = (x(b.left), y(b.top));
                 let _ = write!(
                     svg,
-                    r#"<g transform="translate({lx} {ly})">{body}</g><a href="{href}" transform="translate({lx} {ly})"><rect width="{w}" height="{h}" fill="transparent" stroke="none"/></a>"#,
+                    r#"<g transform="translate({lx} {ly})">{body}</g>"#,
                     body = page.body,
-                    w = number(page.width),
-                    h = number(page.height)
                 );
+                if let Some(href) = href {
+                    let _ = write!(
+                        svg,
+                        r#"<a href="{href}" transform="translate({lx} {ly})"><rect width="{w}" height="{h}" fill="transparent" stroke="none"/></a>"#,
+                        w = number(page.width),
+                        h = number(page.height)
+                    );
+                }
             }
             Element::Node {
                 at: [nx, ny],

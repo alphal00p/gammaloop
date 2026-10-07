@@ -4,6 +4,8 @@
 //! language. Strings are always data, never source, and executable Typst
 //! values can only enter through an explicit module export reference.
 
+mod native;
+
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write;
 use std::path::{Path, PathBuf};
@@ -3824,6 +3826,7 @@ impl PyRenderSettings {
 /// Resolved renderer transport plus its closed native Typst configuration.
 #[derive(Debug)]
 pub(crate) struct RenderSettingsTransport {
+    native: NativeValue,
     pub(crate) config_source: String,
     pub(crate) imports: Vec<TypstImport>,
     pub(crate) template: Option<PathBuf>,
@@ -4624,8 +4627,10 @@ pub(crate) fn render_config_transport(
     let config = effective_render_config(py, base, overlay)?;
     let elements = native_from_py(elements.as_any(), 0)?;
     elements.validate(0)?;
-    let (config_source, imports) = config.native(elements).render_source()?;
+    let native = config.native(elements);
+    let (config_source, imports) = native.render_source()?;
     Ok(RenderSettingsTransport {
+        native,
         config_source,
         imports,
         template: config.template.resolved(),
