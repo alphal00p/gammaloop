@@ -171,60 +171,28 @@ HedgeGraph(
     ]),
     nodes: NodeVec([
       SubSet(
-        set: BitSeq(
-          order: "bitvec::order::Lsb0",
-          head: BitIdx(
-            width: 64,
-            index: 0,
-          ),
-          bits: 15,
-          data: [
-            16473,
-          ],
-        ),
-        id: PhantomData,
+        len: 15,
+        words: [
+          16473,
+        ],
       ),
       SubSet(
-        set: BitSeq(
-          order: "bitvec::order::Lsb0",
-          head: BitIdx(
-            width: 64,
-            index: 0,
-          ),
-          bits: 15,
-          data: [
-            934,
-          ],
-        ),
-        id: PhantomData,
+        len: 15,
+        words: [
+          934,
+        ],
       ),
       SubSet(
-        set: BitSeq(
-          order: "bitvec::order::Lsb0",
-          head: BitIdx(
-            width: 64,
-            index: 0,
-          ),
-          bits: 15,
-          data: [
-            3072,
-          ],
-        ),
-        id: PhantomData,
+        len: 15,
+        words: [
+          3072,
+        ],
       ),
       SubSet(
-        set: BitSeq(
-          order: "bitvec::order::Lsb0",
-          head: BitIdx(
-            width: 64,
-            index: 0,
-          ),
-          bits: 15,
-          data: [
-            12288,
-          ],
-        ),
-        id: PhantomData,
+        len: 15,
+        words: [
+          12288,
+        ],
       ),
     ]),
   ),

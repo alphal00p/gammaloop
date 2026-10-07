@@ -5,52 +5,28 @@ expression: cycles
 [
   Cycle(
     filter: SubSet(
-      set: BitSeq(
-        order: "bitvec::order::Lsb0",
-        head: BitIdx(
-          width: 64,
-          index: 0,
-        ),
-        bits: 15,
-        data: [
-          32259,
-        ],
-      ),
-      id: PhantomData,
+      len: 15,
+      words: [
+        32259,
+      ],
     ),
     loop_count: Some(1),
   ),
   Cycle(
     filter: SubSet(
-      set: BitSeq(
-        order: "bitvec::order::Lsb0",
-        head: BitIdx(
-          width: 64,
-          index: 0,
-        ),
-        bits: 15,
-        data: [
-          32268,
-        ],
-      ),
-      id: PhantomData,
+      len: 15,
+      words: [
+        32268,
+      ],
     ),
     loop_count: Some(1),
   ),
   Cycle(
     filter: SubSet(
-      set: BitSeq(
-        order: "bitvec::order::Lsb0",
-        head: BitIdx(
-          width: 64,
-          index: 0,
-        ),
-        bits: 15,
-        data: [
-          32304,
-        ],
-      ),
-      id: PhantomData,
+      len: 15,
+      words: [
+        32304,
+      ],
     ),
     loop_count: Some(1),
   ),

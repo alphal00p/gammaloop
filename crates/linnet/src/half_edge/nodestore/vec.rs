@@ -28,7 +28,7 @@ use super::{NodeStorage, NodeStorageOps};
 )]
 #[cfg_attr(feature = "rkyv", archive(check_bytes))]
 /// An implementation of [`NodeStorage`] and [`NodeStorageOps`] that uses `Vec`s
-/// and `BitVec`s to store node information and their incident half-edges.
+/// and [`SuBitGraph`]s to store node information and their incident half-edges.
 ///
 /// This strategy is often straightforward but can have performance implications
 /// for certain operations like node deletion or identification if it involves
@@ -45,33 +45,32 @@ use super::{NodeStorage, NodeStorageOps};
 /// - `hedge_data`: A `Vec<NodeIndex>` where the index of the vector is a `Hedge`'s
 ///   underlying `usize` value, and the element at that index is the `NodeIndex`
 ///   to which the hedge is incident.
-/// - `nodes`: A `Vec<BitVec>`. Each index in the outer `Vec` corresponds to a
-///   `NodeIndex`. The `BitVec` at that index is a bitmask representing the set
+/// - `nodes`: A `Vec<SuBitGraph>`. Each index in the outer `Vec` corresponds to a
+///   `NodeIndex`. The set at that index is a bitmask representing the set
 ///   of half-edges incident to that node.
 pub struct NodeStorageVec<N> {
     /// Stores the custom data for each node. Indexed by `NodeIndex.0`.
     pub(crate) node_data: NodeVec<N>,
     /// Maps each half-edge index (`Hedge.0`) to the `NodeIndex` it belongs to.
     pub(crate) hedge_data: HedgeVec<NodeIndex>,
-    /// For each node (indexed by `NodeIndex.0`), stores a `BitVec` representing
-    /// the set of half-edges incident to it.
+    /// For each node (indexed by `NodeIndex.0`), stores the set of half-edges incident to it.
     pub(crate) nodes: NodeVec<SuBitGraph>, // Nodes
 }
 
 #[derive(Clone, Debug)]
 /// An iterator that yields the [`Hedge`] identifiers incident to a node,
-/// based on iterating over the set bits in a `BitVec`.
+/// based on iterating over the set bits in a [`SuBitGraph`].
 ///
 /// This is typically used by [`NodeStorageVec`] to provide an iterator
 /// for its `NeighborsIter` associated type.
-pub struct BitVecNeighborIter<'a> {
-    /// The underlying iterator over set bits in the `BitVec`.
+pub struct VecNeighborIter<'a> {
+    /// The underlying iterator over the set bits.
     iter_ones: SubSetIter<'a>,
     /// The size of the underlying set, used to rebuild a subgraph from the iterator.
     len: Hedge,
 }
 
-impl<'a> From<&'a SuBitGraph> for BitVecNeighborIter<'a> {
+impl<'a> From<&'a SuBitGraph> for VecNeighborIter<'a> {
     fn from(value: &'a SuBitGraph) -> Self {
         Self {
             iter_ones: value.included_iter(),
@@ -80,15 +79,15 @@ impl<'a> From<&'a SuBitGraph> for BitVecNeighborIter<'a> {
     }
 }
 
-impl<'a> From<BitVecNeighborIter<'a>> for SuBitGraph {
-    fn from(value: BitVecNeighborIter<'a>) -> Self {
+impl<'a> From<VecNeighborIter<'a>> for SuBitGraph {
+    fn from(value: VecNeighborIter<'a>) -> Self {
         let len = value.len;
         SuBitGraph::from_hedge_iter(value, len.0)
     }
 }
 
-impl<'a> From<BitVecNeighborIter<'a>> for HedgeNode {
-    fn from(value: BitVecNeighborIter<'a>) -> Self {
+impl<'a> From<VecNeighborIter<'a>> for HedgeNode {
+    fn from(value: VecNeighborIter<'a>) -> Self {
         HedgeNode {
             internal_graph: InternalSubGraph::empty(value.len.0),
             hairs: value.into(),
@@ -96,7 +95,7 @@ impl<'a> From<BitVecNeighborIter<'a>> for HedgeNode {
     }
 }
 
-impl Iterator for BitVecNeighborIter<'_> {
+impl Iterator for VecNeighborIter<'_> {
     type Item = Hedge;
     fn next(&mut self) -> Option<Self::Item> {
         self.iter_ones.next()
@@ -107,7 +106,7 @@ impl Iterator for BitVecNeighborIter<'_> {
     }
 }
 
-impl ExactSizeIterator for BitVecNeighborIter<'_> {
+impl ExactSizeIterator for VecNeighborIter<'_> {
     fn len(&self) -> usize {
         self.iter_ones.len()
     }
@@ -117,7 +116,7 @@ impl<N> NodeStorage for NodeStorageVec<N> {
     type NodeData = N;
     type Neighbors = SuBitGraph;
     type NeighborsIter<'a>
-        = BitVecNeighborIter<'a>
+        = VecNeighborIter<'a>
     where
         Self: 'a;
     type Storage<M> = NodeStorageVec<M>;
@@ -687,7 +686,7 @@ impl<N> NodeStorageOps for NodeStorageVec<N> {
     // }
 
     fn get_neighbor_iterator(&self, node_id: NodeIndex) -> Self::NeighborsIter<'_> {
-        BitVecNeighborIter {
+        VecNeighborIter {
             iter_ones: self.nodes[node_id].included_iter(),
             len: self.len(),
         }

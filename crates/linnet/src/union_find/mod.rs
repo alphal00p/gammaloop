@@ -54,8 +54,8 @@
 //!   of `node`'s set.
 //! - `extract(...)`: A more advanced operation to partition the Union-Find structure
 //!   itself based on a predicate, potentially creating a new `UnionFind` instance.
-//! - `from_bitvec_partition(partitions: Vec<(U, BitVec)>)`: Constructs a `UnionFind`
-//!   from a set of partitions defined by bitvectors.
+//! - `from_partition(partitions: Vec<(U, SubSet<ID>)>)`: Constructs a `UnionFind`
+//!   from a set of partitions defined by subsets.
 //!
 //! This data structure is commonly used in algorithms for graph connectivity,
 //! Kruskal's algorithm for minimum spanning trees, and other problems involving
@@ -744,6 +744,5 @@ impl<U> Index<&ParentPointer> for UnionFind<U> {
     }
 }
 
-// pub mod bitvec_find;
 #[cfg(test)]
 pub mod test;

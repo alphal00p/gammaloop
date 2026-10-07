@@ -14,7 +14,6 @@ path = "src/lib.rs"
 [dependencies]
 bincode = { workspace = true, features = ["serde"], optional = true }
 bincode-trait-derive = { workspace = true }
-bitvec = { version = "1.0.1" }
 cgmath = { version = "0.18.0", optional = true }
 clarabel = { version = "0.11.1", optional = true }
 twofloat = { version = "0.8.4", optional = true }
@@ -29,7 +28,7 @@ indexmap = { workspace = true }
 itertools = "0.14.0"
 paste = "1.0.15"
 rand = { version = "0.8.5", features = ["small_rng"] }
-rkyv = { version = "0.7", features = ["bitvec", "validation"], optional = true }
+rkyv = { version = "0.7", features = ["validation"], optional = true }
 serde = { workspace = true, features = ["derive"], optional = true }
 serde_repr = { workspace = true }
 symbolica = { workspace = true, default-features = false, optional = true }
@@ -45,6 +44,8 @@ features = ["compile-time-rng", "std"]
 gammaloop-workspace-hack = { version = "0.1", path = "../gammaloop-workspace-hack", optional = true }
 
 [dev-dependencies]
+# Reference for the property tests of the Linnet-owned bitsets.
+bitvec = "1.0.1"
 criterion = "0.5"
 figment = "0.10.19"
 # vers-vecs = { version = "1.6.1", features = ["simd"] }
@@ -74,7 +75,7 @@ nodestore-forest-child-vec = []
 nodestore-forest-parent-child = []
 nodestore-vec = []
 rkyv = ["dep:rkyv"]
-serde = ["bitvec/serde", "dep:serde"]
+serde = ["dep:serde"]
 symbolica = ["dep:symbolica", "dep:symbolica-utils"]
 native = [
   "dep:gammaloop-workspace-hack",

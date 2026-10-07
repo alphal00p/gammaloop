@@ -500,63 +500,11 @@ pub fn graph_layout_snapshot_bytes(arg: &[u8], options: &[u8]) -> Result<Vec<u8>
 }
 
 impl TypstGraph {
-    /// Decode a measured snapshot across WASM/native word sizes. Bitvec's serde
-    /// representation embeds its storage word width, so rebuild each node crown
-    /// with the destination width before deserializing the native graph.
+    /// Decode a measured snapshot. Node crowns serialize as 32-bit words, so
+    /// the snapshot is the same on WASM and native hosts and survives hosts
+    /// whose integers are doubles or signed 64-bit.
     pub fn from_layout_snapshot(snapshot: &serde_json::Value) -> Result<Self, String> {
-        let mut snapshot = snapshot.clone();
-        let nodes = snapshot
-            .pointer_mut("/graph/node_store/nodes")
-            .and_then(serde_json::Value::as_array_mut)
-            .ok_or("Layout snapshot has no node crowns")?;
-        for node in nodes {
-            let set = node
-                .get_mut("set")
-                .ok_or("Layout snapshot node has no crown")?;
-            if set.get("order").and_then(serde_json::Value::as_str) != Some("bitvec::order::Lsb0") {
-                return Err("Layout snapshot requires Lsb0 node crowns".to_owned());
-            }
-            let integer = |value: Option<&serde_json::Value>| {
-                value
-                    .and_then(serde_json::Value::as_u64)
-                    .ok_or("Invalid layout crown integer")
-            };
-            let width = integer(set.pointer("/head/width"))? as usize;
-            let head = integer(set.pointer("/head/index"))? as usize;
-            let bits = integer(set.get("bits"))? as usize;
-            if !matches!(width, 32 | 64) || head >= width {
-                return Err("Invalid layout crown storage width or head".to_owned());
-            }
-            let words = set
-                .get("data")
-                .and_then(serde_json::Value::as_array)
-                .ok_or("Layout crown has no storage words")?;
-            let end = head
-                .checked_add(bits)
-                .ok_or("Layout crown length overflow")?;
-            if words.len() != end.div_ceil(width) {
-                return Err("Layout crown storage does not match its bit count".to_owned());
-            }
-            let words = words
-                .iter()
-                .map(|word| integer(Some(word)))
-                .collect::<Result<Vec<_>, _>>()?;
-            if width == 32 && words.iter().any(|word| *word > u32::MAX as u64) {
-                return Err("Layout crown word exceeds its storage width".to_owned());
-            }
-            let native_width = usize::BITS as usize;
-            let mut packed = vec![0u64; bits.div_ceil(native_width)];
-            for bit in 0..bits {
-                let source = head + bit;
-                if (words[source / width] >> (source % width)) & 1 != 0 {
-                    packed[bit / native_width] |= 1 << (bit % native_width);
-                }
-            }
-            set["head"] = serde_json::json!({"width": native_width, "index": 0});
-            set["data"] = serde_json::json!(packed);
-        }
-        serde_json::from_value(snapshot)
-            .map_err(|error| format!("Invalid layout snapshot: {error}"))
+        Self::deserialize(snapshot).map_err(|error| format!("Invalid layout snapshot: {error}"))
     }
 }
 
@@ -3068,38 +3016,35 @@ mod tests {
     }
 
     #[test]
-    fn layout_snapshot_reconstructs_wasm32_node_crowns() {
+    fn layout_snapshot_node_crowns_are_host_independent() {
+        // 72 half-edges: each crown spans three 32-bit words.
         let source = format!("digraph {{ {} }}", "a -> b;".repeat(36));
         let graph = TypstGraph::parse(&source).unwrap();
         let mut snapshot = serde_json::to_value(&graph).unwrap();
-        for node in snapshot
-            .pointer_mut("/graph/node_store/nodes")
-            .unwrap()
-            .as_array_mut()
-            .unwrap()
-        {
-            let set = &mut node["set"];
-            let bits = set["bits"].as_u64().unwrap() as usize;
-            let old_width = set["head"]["width"].as_u64().unwrap() as usize;
-            let old = set["data"].as_array().unwrap();
-            let mut words = vec![0u32; bits.div_ceil(32)];
-            for bit in 0..bits {
-                if (old[bit / old_width].as_u64().unwrap() >> (bit % old_width)) & 1 != 0 {
-                    words[bit / 32] |= 1 << (bit % 32);
-                }
+        let nodes = snapshot
+            .pointer("/graph/node_store/nodes")
+            .and_then(serde_json::Value::as_array)
+            .unwrap();
+        for crown in nodes {
+            assert_eq!(crown["len"], 72);
+            let words = crown["words"].as_array().unwrap();
+            assert_eq!(words.len(), 3);
+            // Every word is exact as a double or a signed 64-bit integer.
+            for word in words {
+                assert!(word
+                    .as_u64()
+                    .is_some_and(|word| word <= u64::from(u32::MAX)));
             }
-            set["head"]["width"] = serde_json::json!(32);
-            set["data"] = serde_json::json!(words);
         }
         let restored = TypstGraph::from_layout_snapshot(&snapshot).unwrap();
         assert_eq!(
             encode_cbor(&restored).unwrap(),
             encode_cbor(&graph).unwrap()
         );
-        snapshot["graph"]["node_store"]["nodes"][0]["set"]["head"]["width"] = serde_json::json!(16);
+        snapshot["graph"]["node_store"]["nodes"][0]["words"][2] = serde_json::json!(1 << 8);
         assert!(TypstGraph::from_layout_snapshot(&snapshot)
             .unwrap_err()
-            .contains("storage width"));
+            .contains("past its last ID"));
     }
 
     fn cut_fixture(orientation: Orientation) -> TypstGraph {

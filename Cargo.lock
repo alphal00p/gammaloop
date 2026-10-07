@@ -527,7 +527,6 @@ checksum = "1bc2832c24239b0141d5674bb9174f9d68a8b5b3f2753311927c172ca46f7e9c"
 dependencies = [
  "funty",
  "radium",
- "serde",
  "tap",
  "wyz",
 ]
@@ -6265,7 +6264,6 @@ dependencies = [
  "append-only-vec",
  "bincode 2.0.1",
  "bincode-trait-derive",
- "bitvec",
  "blake3",
  "ciborium",
  "colored 3.1.1",

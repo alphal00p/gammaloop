@@ -95,8 +95,6 @@ use std::ops::{Index, IndexMut, RangeBounds};
 
 use ahash::{AHashMap, AHashSet};
 
-use bitvec::prelude::*;
-use bitvec::slice::IterOnes;
 use builder::{HedgeData, HedgeGraphBuilder, HedgeNodeBuilder};
 use hedgevec::{Accessors, SmartEdgeVec};
 use indexmap::IndexSet;
@@ -138,7 +136,7 @@ impl std::fmt::Display for NodeIndex {
     }
 }
 
-/// Iterator over the powerset of a bitvec, of size n < 64.
+/// Iterator over the powerset of a set of size n < 64.
 ///
 /// Generates all possible subsets of a set of up to 63 elements.
 /// The subsets are represented as `SuBitGraph`s.
@@ -3266,7 +3264,7 @@ impl<E, V, H, N: NodeStorage<NodeData = V>> IndexMut<&EdgeIndex> for HedgeGraph<
     }
 }
 
-pub struct NodeIterator<'a, E, V, H, N: NodeStorage<NodeData = V>, I = IterOnes<'a, usize, Lsb0>> {
+pub struct NodeIterator<'a, E, V, H, N: NodeStorage<NodeData = V>, I = SubSetIter<'a>> {
     graph: &'a HedgeGraph<E, V, H, N>,
     edges: I,
     seen: SubSet<NodeIndex>,
@@ -3301,7 +3299,7 @@ pub mod symbolica_interop;
 
 use subgraph::{
     BaseSubgraph, Cycle, FullOrEmpty, HedgeNode, Inclusion, InternalSubGraph, ModifySubSet,
-    OrientedCut, PairwiseSubSetOps, SubSetLike, SubSetOps,
+    OrientedCut, PairwiseSubSetOps, SubSetIter, SubSetLike, SubSetOps,
 };
 
 use thiserror::Error;

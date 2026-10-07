@@ -813,6 +813,10 @@ impl HedgePair {
         }
     }
 
+    /// Always inlined, so edge iteration keeps the pair in registers: returned
+    /// through memory, its narrow field stores cannot forward to the wide load
+    /// that copies it, which cost `all_bonds` nearly half its run time.
+    #[inline(always)]
     pub fn from_half_edge_with_subgraph<E, S: SubSetLike>(
         hedge: Hedge,
         involution: &Involution<E>,

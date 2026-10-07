@@ -38,7 +38,6 @@ bincode = { workspace = true, features = ["serde"] }
 #
 bincode-trait-derive = { version = "0.1.1" }
 # bincode = "2"
-bitvec = { version = "1.0.1", features = ["serde"] }
 # const_format = { version = "0.2.32", features = ["rust_1_51"] }
 constcat = "0.5.0"
 delegate = "0.12.0"

@@ -21,7 +21,8 @@ use super::{
 pub trait NodeStorageOps: NodeStorage + Swap<Hedge> + Swap<NodeIndex> {
     /// The type of storage returned after mapping operations that might change the node data type.
     type OpStorage<N>: NodeStorageOps<NodeData = N>;
-    /// The base type of subgraph used by this node storage (e.g., a `BitVec` to represent a set of hedges).
+    /// The base type of subgraph used by this node storage (e.g., a
+    /// [`SuBitGraph`](super::subgraph::SuBitGraph) to represent a set of hedges).
     type Base: BaseSubgraph;
     // where
     // Self: 'a;
@@ -200,8 +201,8 @@ pub trait NodeStorage: Sized {
 mod forest;
 mod vec;
 
-pub use vec::BitVecNeighborIter;
 pub use vec::NodeStorageVec;
+pub use vec::VecNeighborIter;
 
 #[cfg(all(
     feature = "nodestore-forest-child-vec",

@@ -1,6 +1,6 @@
 use itertools::Itertools;
 use linnet::{
-    half_edge::{HedgeGraph, NodeIndex, nodestore::BitVecNeighborIter},
+    half_edge::{HedgeGraph, NodeIndex, nodestore::VecNeighborIter},
     parser::DotVertexData,
 };
 
@@ -139,7 +139,7 @@ impl ParseVertex {
         parse_data: &'a ParseData,
     ) -> impl FnMut(
         &'a HedgeGraph<ParseEdge, &'a DotVertexData, ParseHedgeData>,
-        BitVecNeighborIter<'a>,
+        VecNeighborIter<'a>,
         &'a &'a DotVertexData,
     ) -> Result<Self> {
         move |g, n, v| {

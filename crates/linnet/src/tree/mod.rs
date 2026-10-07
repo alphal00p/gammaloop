@@ -647,14 +647,14 @@ impl<U, P: ForestNodeStore> Forest<U, P> {
     }
 }
 
-/// Construction from BitVec partition (remains the same)
+/// Construction from a partition into subsets
 impl<U, V> Forest<U, ParentPointerStore<V>> {
-    /// Creates a forest from a partition represented by a vector of (RootData, BitVec).
-    /// Each BitVec represents the set of node indices belonging to that tree/root.
+    /// Creates a forest from a partition represented by a vector of (RootData, SuBitGraph).
+    /// Each set represents the set of node indices belonging to that tree/root.
     /// Nodes within a set are linked arbitrarily (first encountered becomes root, others point to it).
     /// Node data is set to `()`.
     ///
-    /// Returns `Err(ForestError)` if the BitVecs have different lengths or overlap.
+    /// Returns `Err(ForestError)` if the sets have different lengths or overlap.
     fn from_bitvec_partition_impl<I: IntoIterator<Item = (U, SuBitGraph)>>(
         bitvec_part: I,
     ) -> Result<Self, ForestError> {
