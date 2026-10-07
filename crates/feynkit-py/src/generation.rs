@@ -2415,8 +2415,18 @@ impl PyGenerationReport {
 )]
 #[derive(Clone)]
 pub struct PyGroupMember {
-    inner: GroupMember,
+    // The content-derived source ID requires 16-byte alignment. Python's wasm
+    // allocator guarantees only 8, so let Rust allocate the native payload.
+    inner: Box<GroupMember>,
 }
+
+#[cfg(target_arch = "wasm32")]
+const _: () = {
+    assert!(std::mem::align_of::<PyGroupMember>() <= 8);
+    assert!(
+        std::mem::align_of::<<PyGroupMember as pyo3::impl_::pyclass::PyClassImpl>::Layout>() <= 8
+    );
+};
 
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
 #[spenso_macros::track_usage(crate::record_usage)]
@@ -2566,7 +2576,9 @@ impl PyDiagramGroup {
             .members
             .iter()
             .cloned()
-            .map(|inner| PyGroupMember { inner })
+            .map(|inner| PyGroupMember {
+                inner: Box::new(inner),
+            })
             .collect()
     }
 }
@@ -3103,6 +3115,15 @@ mod tests {
     use pyo3::types::PyDict;
 
     use super::*;
+
+    #[test]
+    fn group_member_wrapper_fits_wasm_allocator_alignment() {
+        assert!(std::mem::align_of::<PyGroupMember>() <= 8);
+        assert!(
+            std::mem::align_of::<<PyGroupMember as pyo3::impl_::pyclass::PyClassImpl>::Layout>()
+                <= 8
+        );
+    }
 
     #[test]
     fn automatic_progress_tracks_marimo_lifecycle() {

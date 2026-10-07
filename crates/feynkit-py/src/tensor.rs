@@ -55,8 +55,18 @@ use crate::error;
 )]
 #[derive(Clone)]
 pub struct PyTensorReducer {
-    pub(crate) inner: TensorReducer,
+    // CPython's wasm allocator guarantees only 8-byte alignment, while the
+    // reducer's u128 pairing limits require 16. Keep that payload on the Rust heap.
+    pub(crate) inner: Box<TensorReducer>,
 }
+
+#[cfg(target_arch = "wasm32")]
+const _: () = {
+    assert!(std::mem::align_of::<PyTensorReducer>() <= 8);
+    assert!(
+        std::mem::align_of::<<PyTensorReducer as pyo3::impl_::pyclass::PyClassImpl>::Layout>() <= 8
+    );
+};
 
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
 #[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
@@ -116,7 +126,9 @@ impl PyTensorReducer {
             let expression = vector.extract::<PyRef<'_, PythonExpression>>()?;
             inner = inner.with_external_vector(expression.expr.clone());
         }
-        Ok(Self { inner })
+        Ok(Self {
+            inner: Box::new(inner),
+        })
     }
 
     /// Construct a reducer that selects every ``gammalooprs::Q`` tensor.
@@ -148,7 +160,7 @@ impl PyTensorReducer {
     #[staticmethod]
     fn feynkit(dimension: &PythonExpression) -> Self {
         Self {
-            inner: TensorReducer::feynkit(dimension.expr.clone()),
+            inner: Box::new(TensorReducer::feynkit(dimension.expr.clone())),
         }
     }
 
@@ -182,7 +194,12 @@ impl PyTensorReducer {
     ///     Maximum number of labeled perfect matchings to enumerate.
     fn with_pairing_limit(&self, limit: usize) -> Self {
         Self {
-            inner: self.inner.clone().with_pairing_limit(limit as u128),
+            inner: Box::new(
+                self.inner
+                    .as_ref()
+                    .clone()
+                    .with_pairing_limit(limit as u128),
+            ),
         }
     }
 
@@ -200,7 +217,12 @@ impl PyTensorReducer {
     ///     Maximum Cartesian product of internal and projector matchings.
     fn with_pairing_product_limit(&self, limit: usize) -> Self {
         Self {
-            inner: self.inner.clone().with_pairing_product_limit(limit as u128),
+            inner: Box::new(
+                self.inner
+                    .as_ref()
+                    .clone()
+                    .with_pairing_product_limit(limit as u128),
+            ),
         }
     }
 
@@ -218,7 +240,7 @@ impl PyTensorReducer {
     ///     Maximum compact contraction classes to materialize.
     fn with_output_term_limit(&self, limit: usize) -> Self {
         Self {
-            inner: self.inner.clone().with_output_term_limit(limit),
+            inner: Box::new(self.inner.as_ref().clone().with_output_term_limit(limit)),
         }
     }
 
@@ -313,4 +335,18 @@ impl PyTensorReducer {
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<PyTensorReducer>()?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::PyTensorReducer;
+
+    #[test]
+    fn python_wrapper_fits_wasm_allocator_alignment() {
+        assert!(std::mem::align_of::<PyTensorReducer>() <= 8);
+        assert!(
+            std::mem::align_of::<<PyTensorReducer as pyo3::impl_::pyclass::PyClassImpl>::Layout>()
+                <= 8
+        );
+    }
 }
