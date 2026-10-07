@@ -898,15 +898,22 @@ pub(crate) fn graph_to_svg(
     graph: &Py<PyGraph>,
     config: Option<&Bound<'_, PyAny>>,
 ) -> PyResult<String> {
-    prepare_graph(py, graph, config, None)?.svg(py)
+    let pages = render_graph(py, graph, config, None)?.to_svg_pages()?;
+    match pages.as_slice() {
+        [svg] => Ok(svg.clone()),
+        _ => Err(PyRuntimeError::new_err(format!(
+            "Typst SVG render produced {} pages; expected exactly one",
+            pages.len()
+        ))),
+    }
 }
 
-pub(crate) fn prepare_graph(
+pub(crate) fn render_graph(
     py: Python<'_>,
     graph: &Py<PyGraph>,
     config: Option<&Bound<'_, PyAny>>,
     subgraph: Option<&PySubgraph>,
-) -> PyResult<PreparedRender> {
+) -> PyResult<crate::PyDiagramRender> {
     // Validate before callbacks and again after preparation of the graph records.
     if let Some(subgraph) = subgraph {
         subgraph.selection_for(py, graph, graph.borrow(py).revision()?)?;
@@ -932,7 +939,16 @@ pub(crate) fn prepare_graph(
     } else {
         None
     };
-    prepare(topology, transport, selection)
+    let envelope: linnest::TypstGraphSpecEnvelope = ciborium::from_reader(topology.as_slice())
+        .map_err(|error| PyRuntimeError::new_err(error.to_string()))?;
+    if let Some(scene) = transport.native_scene(envelope.graph, selection.as_ref()) {
+        let mut result = crate::PyDiagramRender::from_scene(py, scene, None)?;
+        // Keep inspecting the same snapshotted configuration even when Rust
+        // supplies geometry. File exports use the actual native SVG snapshot.
+        result.source = Some(prepare(topology, transport, selection)?.typst_source_value()?);
+        return Ok(result);
+    }
+    prepare(topology, transport, selection).map(crate::PyDiagramRender::prepared)
 }
 
 /// Domain scenes retain their layout statements while selectors share live graph views.
@@ -981,7 +997,8 @@ mod tests {
             let case = fixture.getattr("SvgInteractionTests")?.call0()?;
             case.call_method0("setUp")?;
             let graph = case.getattr("graph")?.extract::<Py<PyGraph>>()?;
-            let prepared = prepare_graph(py, &graph, None, None)?;
+            let (topology, transport) = request(py, &graph, None, false)?;
+            let prepared = prepare(topology, transport, None)?;
             let pages = prepared.svg_pages(py)?;
             assert_eq!(pages.len(), 1);
             case.call_method1(

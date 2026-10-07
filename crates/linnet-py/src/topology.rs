@@ -380,8 +380,7 @@ impl PySubgraph {
             &Bound<'_, PyAny>,
         >,
     ) -> PyResult<crate::PyDiagramRender> {
-        crate::render::prepare_graph(py, self.owner(py)?.as_unbound(), config, Some(self))
-            .map(crate::PyDiagramRender::prepared)
+        crate::render::render_graph(py, self.owner(py)?.as_unbound(), config, Some(self))
     }
 
     /// Render this selection in the context of the full graph, including isolated nodes.
