@@ -983,27 +983,8 @@ impl<E, V, H, N: NodeStorageOps<NodeData = V>> HedgeGraph<E, V, H, N> {
     /// # Returns
     /// `true` if the subgraph is connected, `false` otherwise.
     /// Returns `true` for an empty subgraph.
-    ///
-    /// # Panics
-    /// Panics if the traversal (used internally) fails, which can happen if the
-    /// starting node for traversal is not part of the `subgraph`.
     pub fn is_connected<S: SubGraphLike>(&self, subgraph: &S) -> bool {
-        if let Some(start) = subgraph.included_iter().next() {
-            let cover = SimpleTraversalTree::depth_first_traverse(
-                self,
-                subgraph,
-                &self.node_id(start),
-                None,
-            )
-            .unwrap()
-            .covers(subgraph);
-            for h in subgraph.included_iter() {
-                if !cover.includes(&h) {
-                    return false;
-                }
-            }
-        }
-        true
+        self.count_connected_components(subgraph) <= 1
     }
 
     /// Modifies a [`HedgeNode`] subgraph by removing "branches" or "tendrils".
@@ -2573,14 +2554,10 @@ impl<E, V, H, N: NodeStorageOps<NodeData = V>> HedgeGraph<E, V, H, N> {
 
 // Cycles
 impl<E, V, H, N: NodeStorageOps<NodeData = V>> HedgeGraph<E, V, H, N> {
+    /// The number of independent cycles of `subgraph`: internal edges + components - nodes.
     pub fn cyclotomatic_number<S: SubGraphLike>(&self, subgraph: &S) -> usize {
-        let n_hedges = self.count_internal_edges(subgraph);
-        // println!("n_hedges: {}", n_hedges);
-        let n_nodes = self.number_of_nodes_in_subgraph(subgraph);
-        // println!("n_nodes: {}", n_nodes);
-        let n_components = self.count_connected_components(subgraph);
-
-        n_hedges + n_components - n_nodes
+        let counts = self.connectivity_counts(subgraph);
+        counts.internal_edges - counts.merges
     }
 
     pub fn cycle_basis(&self) -> (Vec<Cycle>, SuBitGraph) {
@@ -2845,8 +2822,55 @@ impl<E, V, H, N: NodeStorageOps<NodeData = V>> HedgeGraph<E, V, H, N> {
 
 // Traversal Trees
 impl<E, V, H, N: NodeStorageOps<NodeData = V>> HedgeGraph<E, V, H, N> {
+    /// The number of components [`Self::connected_components`] returns, without building them.
     pub fn count_connected_components<S: SubGraphLike>(&self, subgraph: &S) -> usize {
-        self.connected_components(subgraph).len()
+        let counts = self.connectivity_counts(subgraph);
+        counts.touched_nodes - counts.merges
+    }
+
+    /// Counts the internal edges of `subgraph` and the nodes its hedges touch, merging
+    /// those nodes along the internal edges in one union-find pass.
+    ///
+    /// Each successful merge joins two components, so the touched nodes form
+    /// `touched_nodes - merges` components, and each internal edge whose merge fails
+    /// (self-loops included) closes a cycle. Dangling hedges and hedges whose partner is
+    /// not in `subgraph` touch their node but merge nothing.
+    fn connectivity_counts<S: SubSetLike>(&self, subgraph: &S) -> ConnectivityCounts {
+        const UNTOUCHED: usize = usize::MAX;
+        // Parents in a disjoint-set forest over the touched nodes.
+        let mut parent = vec![UNTOUCHED; self.n_nodes()];
+        let mut touched_nodes = 0;
+        let mut touch_root = |parent: &mut [usize], NodeIndex(mut node): NodeIndex| {
+            if parent[node] == UNTOUCHED {
+                parent[node] = node;
+                touched_nodes += 1;
+            }
+            while parent[node] != node {
+                // Path halving.
+                parent[node] = parent[parent[node]];
+                node = parent[node];
+            }
+            node
+        };
+
+        let (mut internal_edges, mut merges) = (0, 0);
+        for hedge in subgraph.included_iter() {
+            let root = touch_root(&mut parent, self.node_id(hedge));
+            let partner = self.inv(hedge);
+            if hedge < partner && subgraph.includes(&partner) {
+                internal_edges += 1;
+                let partner_root = touch_root(&mut parent, self.node_id(partner));
+                if root != partner_root {
+                    parent[root] = partner_root;
+                    merges += 1;
+                }
+            }
+        }
+        ConnectivityCounts {
+            internal_edges,
+            touched_nodes,
+            merges,
+        }
     }
 
     pub fn connected_components<S: SubGraphLike>(&self, subgraph: &S) -> Vec<SuBitGraph> {
@@ -3058,10 +3082,7 @@ impl<E, V, H, N: NodeStorageOps<NodeData = V>> HedgeGraph<E, V, H, N> {
     pub fn iter_nodes_of<'a, S: SubSetLike>(
         &'a self,
         subgraph: &'a S,
-    ) -> impl Iterator<Item = (NodeIndex, N::NeighborsIter<'a>, &'a V)>
-    where
-        N::NeighborsIter<'a>: Clone,
-    {
+    ) -> impl Iterator<Item = (NodeIndex, N::NeighborsIter<'a>, &'a V)> {
         NodeIterator {
             graph: self,
             edges: subgraph.included_iter(),
@@ -3266,6 +3287,14 @@ impl<E, V, H, N: NodeStorage<NodeData = V>> IndexMut<&EdgeIndex> for HedgeGraph<
     }
 }
 
+/// What [`HedgeGraph::connectivity_counts`] counts in one pass over a subgraph.
+struct ConnectivityCounts {
+    internal_edges: usize,
+    touched_nodes: usize,
+    /// Internal edges that joined two components.
+    merges: usize,
+}
+
 pub struct NodeIterator<'a, E, V, H, N: NodeStorage<NodeData = V>, I = IterOnes<'a, usize, Lsb0>> {
     graph: &'a HedgeGraph<E, V, H, N>,
     edges: I,
@@ -3274,25 +3303,18 @@ pub struct NodeIterator<'a, E, V, H, N: NodeStorage<NodeData = V>, I = IterOnes<
 
 impl<'a, E, V, H, I: Iterator<Item = Hedge>, N: NodeStorageOps<NodeData = V>> Iterator
     for NodeIterator<'a, E, V, H, N, I>
-where
-    N::NeighborsIter<'a>: Clone,
 {
     type Item = (NodeIndex, N::NeighborsIter<'a>, &'a V);
 
     fn next(&mut self) -> Option<Self::Item> {
-        if let Some(next) = self.edges.next() {
-            let node = self.graph.neighbors(next);
-            let node_pos = self.graph.id_from_crown(node.clone()).unwrap();
-
-            if self.seen[node_pos] {
-                self.next()
-            } else {
-                self.seen.add(node_pos);
-                Some((node_pos, node, &self.graph[node_pos]))
+        for hedge in self.edges.by_ref() {
+            let node = self.graph.node_id(hedge);
+            if !self.seen[node] {
+                self.seen.add(node);
+                return Some((node, self.graph.iter_crown(node), &self.graph[node]));
             }
-        } else {
-            None
         }
+        None
     }
 }
 

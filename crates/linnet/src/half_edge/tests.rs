@@ -792,7 +792,7 @@ use dot_parser::ast::CompassPt;
 use insta::assert_snapshot;
 use nodestore::NodeStorageVec;
 
-use crate::tree::{child_vec::ChildVecStore, Forest};
+use crate::tree::{child_pointer::ParentChildStore, child_vec::ChildVecStore, Forest};
 use crate::{dot, half_edge::swap::Swap, parser::DotGraph};
 
 use super::*;
@@ -1763,4 +1763,100 @@ fn extract_nodes() {
     // a.dot_serialize_fmt(&mut out, (), &|a| a.clone(), &|a| a.clone(), &|a| a.clone())
     //     .unwrap();
     println!("{}", a.base_dot());
+}
+
+/// The union-find connectivity counts and the node iterator must agree with the
+/// depth-first traversal on graphs with dangling hedges, split edges, self-loops,
+/// multi-edges and isolated nodes, and on subgraphs holding only one half of an edge.
+#[test]
+fn connectivity_counts_match_depth_first_traversal() {
+    fn dfs_is_connected<N: NodeStorageOps<NodeData = ()>>(
+        graph: &HedgeGraph<(), (), NoData, N>,
+        subgraph: &SuBitGraph,
+    ) -> bool {
+        subgraph.included_iter().next().is_none_or(|start| {
+            let cover = SimpleTraversalTree::depth_first_traverse(
+                graph,
+                subgraph,
+                &graph.node_id(start),
+                None,
+            )
+            .unwrap()
+            .covers(subgraph);
+            subgraph.included_iter().all(|h| cover.includes(&h))
+        })
+    }
+
+    fn check<N: NodeStorageOps<NodeData = ()>>(graph: &HedgeGraph<(), (), NoData, N>, seed: u64) {
+        let mut rng = SmallRng::seed_from_u64(seed);
+        for _ in 0..20 {
+            let mut subgraph: SuBitGraph = graph.empty_subgraph();
+            let density = rng.gen_range(0.0..=1.0);
+            for h in 0..graph.n_hedges() {
+                if rng.gen_bool(density) {
+                    subgraph.add(Hedge(h));
+                }
+            }
+
+            let nodes = graph.nodes(&subgraph);
+            let iterated = graph.iter_nodes_of(&subgraph).collect::<Vec<_>>();
+            assert_eq!(iterated.iter().map(|(n, ..)| *n).collect::<Vec<_>>(), nodes);
+            for (node, crown, _) in iterated {
+                assert!(crown.eq(graph.iter_crown(node)));
+            }
+            assert_eq!(graph.number_of_nodes_in_subgraph(&subgraph), nodes.len());
+
+            let components = graph.connected_components(&subgraph).len();
+            assert_eq!(graph.count_connected_components(&subgraph), components);
+            assert_eq!(
+                graph.is_connected(&subgraph),
+                dfs_is_connected(graph, &subgraph)
+            );
+            assert_eq!(
+                graph.cyclotomatic_number(&subgraph),
+                graph.count_internal_edges(&subgraph) + components - nodes.len()
+            );
+
+            let internal = InternalSubGraph::cleaned_filter_pessimist(subgraph, graph);
+            assert_eq!(
+                graph.cyclotomatic_number(&internal),
+                graph.count_internal_edges(&internal) + graph.connected_components(&internal).len()
+                    - graph.nodes(&internal).len()
+            );
+        }
+    }
+
+    for seed in 0..200 {
+        let mut rng = SmallRng::seed_from_u64(seed);
+        let mut builder = HedgeGraphBuilder::new();
+        let nodes = (0..rng.gen_range(1..10))
+            .map(|_| builder.add_node(()))
+            .collect::<Vec<_>>();
+        for _ in 0..rng.gen_range(0..15) {
+            let source = nodes[rng.gen_range(0..nodes.len())];
+            if rng.gen_bool(0.2) {
+                builder.add_external_edge(source, (), false, Flow::Source);
+            } else {
+                // Self-loops and multi-edges arise from repeated random endpoints.
+                let sink = nodes[rng.gen_range(0..nodes.len())];
+                builder.add_edge(source, sink, (), false);
+            }
+        }
+        let mut graph: HedgeGraph<(), (), NoData, NodeStorageVec<()>> = builder.build();
+        for h in 0..graph.n_hedges() {
+            if !graph.is_dangling(Hedge(h)) && rng.gen_bool(0.1) {
+                graph
+                    .split_edge(Hedge(h), EdgeData::new((), Orientation::Undirected))
+                    .unwrap();
+            }
+        }
+
+        check(&graph, seed);
+        let forest: HedgeGraph<_, _, _, Forest<(), ChildVecStore<()>>> =
+            graph.clone().into_node_store().unwrap();
+        check(&forest, seed);
+        let forest: HedgeGraph<_, _, _, Forest<(), ParentChildStore<()>>> =
+            graph.into_node_store().unwrap();
+        check(&forest, seed);
+    }
 }
