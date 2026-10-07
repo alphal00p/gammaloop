@@ -700,11 +700,13 @@ class Graph:
         r"""
         Canonical graph, old-to-new vertex map, automorphism-group size, and vertex orbit.
         Keys receive element payloads; names and drawing metadata do not affect equivalence.
+        The group counts permutations of identical dangling half-edges at a node, and swaps
+        the ends of an undirected edge only when they have equal half-edge keys.
         """
     def is_isomorphic(self, other: Graph, *, node_key: _LabelKey = None, edge_key: _LabelKey = None, half_edge_key: _LabelKey = None) -> builtins.bool: ...
     def canonize_edges(self, *, edge_key: _LabelKey = None, half_edge_key: _LabelKey = None) -> None:
         r"""
-        Sort edges canonically while fixing every vertex.
+        Sort edges by their endpoints and keys while fixing every vertex.
         """
     @staticmethod
     def generate(external_edges: typing.Sequence[tuple[Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal], EdgeSignature]], vertex_signatures: typing.Sequence[typing.Sequence[EdgeSignature]], *, max_vertices: typing.Optional[builtins.int] = None, max_loops: typing.Optional[builtins.int] = None, max_bridges: typing.Optional[builtins.int] = None, allow_self_loops: typing.Optional[builtins.bool] = None, allow_zero_flow_edges: typing.Optional[builtins.bool] = None, filter_fn: typing.Callable[[Graph, int], bool] | None = None, progress_fn: typing.Callable[[Graph], bool] | None = None) -> list[tuple[Graph, int]]:

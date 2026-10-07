@@ -1,9 +1,10 @@
-//! Graphica algorithms over a lossless, colored incidence graph.
+//! Graphica algorithms over a colored graph on the Linnet nodes.
 use super::*;
 use std::sync::{Arc, Mutex};
 use symbolica::{
     api::python::{ConvertibleToExpression, PythonExpression},
     atom::Atom,
+    domains::integer::Integer,
     graph::{GenerationSettings, Graph, HalfEdge},
 };
 
@@ -51,15 +52,30 @@ impl PyEdgeSignature {
     }
 }
 
-type Incidence = Graph<(u8, Atom), ()>;
+/// `(edge key, tail half-edge key, head half-edge key, direction)` as dense ranks. For a
+/// paired edge the direction is 0 when undirected and 1 when oriented from tail to head; for a
+/// dangling half-edge (head key 0) it is 0 when undirected, 1 out of and 2 into its node.
+type EdgeKey = (u32, u32, u32, u8);
+/// Graphica graph on the Linnet nodes. Dangling half-edges fold into the node colour, and
+/// the half-edge keys of a paired edge into its edge colour.
+type Folded = Graph<(u32, Vec<EdgeKey>), EdgeKey>;
 type CanonicalGraph = (PyGraph, Vec<usize>, Py<PyAny>, Vec<usize>);
-struct Encoding {
-    graph: Incidence,
-    nodes: Vec<usize>,
-    edges: Vec<usize>,
-    hedges: Vec<usize>,
+
+/// A paired edge or a dangling half-edge with its ends ordered independently of the stored
+/// source/sink roles.
+struct Normal {
+    tail: Hedge,
+    head: Option<Hedge>,
+    key: EdgeKey,
 }
-impl Encoding {
+
+/// Element keys indexed by node, edge and half-edge.
+struct Keys<T> {
+    nodes: Vec<T>,
+    edges: Vec<T>,
+    hedges: Vec<T>,
+}
+impl Keys<Atom> {
     fn key(py: Python<'_>, data: &Py<PyAny>, callback: Option<&Py<PyAny>>) -> PyResult<Atom> {
         let value = match callback {
             Some(f) => f.call1(py, (data,))?,
@@ -71,72 +87,161 @@ impl Encoding {
         value.extract::<ConvertibleToExpression>(py).map(|x|x.to_expression().expr)
             .map_err(|_|PyTypeError::new_err("graph labels must be expression-compatible; supply an element key callback for custom payloads"))
     }
+    fn read<'a>(
+        py: Python<'_>,
+        data: impl Iterator<Item = &'a Py<PyAny>>,
+        callback: Option<&Py<PyAny>>,
+    ) -> PyResult<Vec<Atom>> {
+        data.map(|data| Self::key(py, data, callback)).collect()
+    }
+    /// Edge and half-edge keys only; node payloads are not read.
+    fn edges(
+        py: Python<'_>,
+        graph: &PyHedgeGraph,
+        edge_key: Option<&Py<PyAny>>,
+        half_edge_key: Option<&Py<PyAny>>,
+    ) -> PyResult<Self> {
+        Ok(Self {
+            nodes: vec![],
+            edges: Self::read(
+                py,
+                graph.iter_edges().map(|(_, _, e)| &e.data.data),
+                edge_key,
+            )?,
+            hedges: Self::read(py, graph.iter_hedges().map(|(_, h)| &h.data), half_edge_key)?,
+        })
+    }
     fn new(
         py: Python<'_>,
-        state: &GraphState,
+        graph: &PyHedgeGraph,
         node_key: Option<&Py<PyAny>>,
         edge_key: Option<&Py<PyAny>>,
         half_edge_key: Option<&Py<PyAny>>,
     ) -> PyResult<Self> {
-        let mut graph = Graph::new();
-        let mut nodes = vec![0; state.graph.n_nodes()];
-        let mut edges = vec![0; state.graph.n_edges()];
-        let mut hedges = vec![0; state.graph.n_hedges()];
-        for (index, _, node) in state.graph.iter_nodes() {
-            nodes[index.0] = graph.add_node((0, Self::key(py, &node.data, node_key)?));
-        }
-        for (pair, index, edge) in state.graph.iter_edges() {
-            let center = graph.add_node((1, Self::key(py, &edge.data.data, edge_key)?));
-            edges[index.0] = center;
-            let ends = match pair {
-                HedgePair::Paired { source, sink } | HedgePair::Split { source, sink, .. } => {
-                    vec![(source, Flow::Source), (sink, Flow::Sink)]
-                }
-                HedgePair::Unpaired { hedge, flow } => vec![(hedge, flow)],
-            };
-            for (hedge, flow) in ends {
-                // Undirected source/sink storage order is not a graph invariant.
-                let role = match edge.orientation {
-                    Orientation::Undirected => 2,
-                    Orientation::Default => {
-                        if flow == Flow::Source {
-                            3
-                        } else {
-                            4
-                        }
-                    }
-                    Orientation::Reversed => {
-                        if flow == Flow::Source {
-                            4
-                        } else {
-                            3
-                        }
-                    }
-                };
-                let port = graph.add_node((
-                    role,
-                    Self::key(py, &state.graph[hedge].data, half_edge_key)?,
-                ));
-                hedges[hedge.0] = port;
-                graph
-                    .add_edge(center, port, false, ())
-                    .map_err(PyValueError::new_err)?;
-                graph
-                    .add_edge(port, nodes[state.graph.node_id(hedge).0], false, ())
-                    .map_err(PyValueError::new_err)?;
-            }
-        }
         Ok(Self {
-            graph,
-            nodes,
-            edges,
-            hedges,
+            nodes: Self::read(py, graph.iter_nodes().map(|(_, _, n)| &n.data), node_key)?,
+            ..Self::edges(py, graph, edge_key, half_edge_key)?
         })
     }
-    fn order(indices: &[usize], map: &[usize]) -> Vec<usize> {
-        let mut order = (0..indices.len()).collect::<Vec<_>>();
-        order.sort_by_key(|&i| map[indices[i]]);
-        order
+    /// Dense ranks in the intrinsic key order, shared by all graphs, so that the encoding
+    /// never depends on the input order.
+    fn rank<const N: usize>(keys: [Self; N]) -> [Keys<u32>; N] {
+        let mut sorted = keys
+            .iter()
+            .flat_map(|k| k.nodes.iter().chain(&k.edges).chain(&k.hedges))
+            .collect::<Vec<_>>();
+        sorted.sort_unstable();
+        sorted.dedup();
+        let rank = |keys: &[Atom]| {
+            keys.iter()
+                .map(|k| sorted.binary_search(&k).expect("key was collected") as u32)
+                .collect()
+        };
+        keys.each_ref().map(|k| Keys {
+            nodes: rank(&k.nodes),
+            edges: rank(&k.edges),
+            hedges: rank(&k.hedges),
+        })
+    }
+}
+impl Keys<u32> {
+    /// Order the ends of an edge by its physical direction, else by half-edge key, else by
+    /// node `position`.
+    fn normal(
+        &self,
+        graph: &PyHedgeGraph,
+        pair: HedgePair,
+        edge: EdgeIndex,
+        orientation: Orientation,
+        position: impl Fn(NodeIndex) -> usize,
+    ) -> Normal {
+        let data = self.edges[edge.0];
+        match pair {
+            HedgePair::Unpaired { hedge, flow } => Normal {
+                tail: hedge,
+                head: None,
+                key: (
+                    data,
+                    self.hedges[hedge.0],
+                    0,
+                    match (orientation, flow) {
+                        (Orientation::Undirected, _) => 0,
+                        (Orientation::Default, Flow::Source)
+                        | (Orientation::Reversed, Flow::Sink) => 1,
+                        _ => 2,
+                    },
+                ),
+            },
+            HedgePair::Paired { source, sink } | HedgePair::Split { source, sink, .. } => {
+                let rank = |h: Hedge| (self.hedges[h.0], position(graph.node_id(h)));
+                let (tail, head) = match orientation {
+                    Orientation::Default => (source, sink),
+                    Orientation::Reversed => (sink, source),
+                    Orientation::Undirected if rank(source) <= rank(sink) => (source, sink),
+                    Orientation::Undirected => (sink, source),
+                };
+                Normal {
+                    tail,
+                    head: Some(head),
+                    key: (
+                        data,
+                        self.hedges[tail.0],
+                        self.hedges[head.0],
+                        (orientation != Orientation::Undirected).into(),
+                    ),
+                }
+            }
+        }
+    }
+    /// The folded encoding, and the permutations of identical dangling half-edges at a node
+    /// that it hides from the automorphism group.
+    fn fold(&self, graph: &PyHedgeGraph) -> (Folded, Integer) {
+        let mut legs = vec![vec![]; graph.n_nodes()];
+        let mut links = vec![];
+        for (pair, index, edge) in graph.iter_edges() {
+            let normal = self.normal(graph, pair, index, edge.orientation, |n| n.0);
+            let tail = graph.node_id(normal.tail).0;
+            match normal.head {
+                None => legs[tail].push(normal.key),
+                Some(head) => links.push((tail, graph.node_id(head).0, normal.key)),
+            }
+        }
+        let mut folded = Folded::new();
+        let mut hidden = Integer::one();
+        for (&node, mut legs) in self.nodes.iter().zip(legs) {
+            legs.sort_unstable();
+            for run in legs.chunk_by(|a, b| a == b) {
+                hidden *= Integer::factorial(run.len() as u32);
+            }
+            folded.add_node((node, legs));
+        }
+        for (tail, head, key) in links {
+            // Distinct end keys orient an undirected edge, so swapping its ends is no symmetry.
+            folded
+                .add_edge(tail, head, key.3 != 0 || key.1 != key.2, key)
+                .expect("folded nodes exist");
+        }
+        (folded, hidden)
+    }
+    /// Edge order by normalized endpoint positions and keys.
+    fn edge_order(
+        &self,
+        graph: &PyHedgeGraph,
+        position: impl Fn(NodeIndex) -> usize + Copy,
+    ) -> Vec<usize> {
+        let mut order = graph
+            .iter_edges()
+            .map(|(pair, index, edge)| {
+                let normal = self.normal(graph, pair, index, edge.orientation, position);
+                let end = |h: Hedge| position(graph.node_id(h));
+                (
+                    (end(normal.tail), normal.head.map(end), normal.key),
+                    index.0,
+                )
+            })
+            .collect::<Vec<_>>();
+        order.sort_unstable();
+        order.into_iter().map(|(_, index)| index).collect()
     }
 }
 fn python_integer(py: Python<'_>, value: impl std::fmt::Display) -> PyResult<Py<PyAny>> {
@@ -212,6 +317,8 @@ impl PyGraph {
     }
     /// Canonical graph, old-to-new vertex map, automorphism-group size, and vertex orbit.
     /// Keys receive element payloads; names and drawing metadata do not affect equivalence.
+    /// The group counts permutations of identical dangling half-edges at a node, and swaps
+    /// the ends of an undirected edge only when they have equal half-edge keys.
     #[pyo3(signature=(*, node_key=None, edge_key=None, half_edge_key=None))]
     #[gen_stub(override_return_type(type_repr = "tuple[Graph, list[int], int, list[int]]"))]
     fn canonize(
@@ -222,85 +329,62 @@ impl PyGraph {
         #[gen_stub(override_type(type_repr = "_LabelKey"))] half_edge_key: Option<Py<PyAny>>,
     ) -> PyResult<CanonicalGraph> {
         // Release the original state before invoking user key callbacks.
-        let state = self
+        let mut state = self
             .state
             .borrow()
             .as_ref()
             .ok_or_else(|| PyReferenceError::new_err("graph has been cleared"))?
             .copy(py)?;
-        let encoded = Encoding::new(
+        let [keys] = Keys::rank([Keys::new(
             py,
-            &state,
+            &state.graph,
             node_key.as_ref(),
             edge_key.as_ref(),
             half_edge_key.as_ref(),
-        )?;
-        let canonical = py.detach(|| encoded.graph.canonize());
-        let node_order = Encoding::order(&encoded.nodes, &canonical.vertex_map);
-        let mut vertex_map = vec![0; node_order.len()];
-        for (new, &old) in node_order.iter().enumerate() {
-            vertex_map[old] = new;
-        }
-        let canonical_nodes = node_order
-            .iter()
-            .map(|&i| canonical.vertex_map[encoded.nodes[i]])
-            .collect::<Vec<_>>();
-        let orbit = canonical_nodes
-            .iter()
-            .map(|&v| {
-                canonical_nodes
-                    .iter()
-                    .position(|&n| n == canonical.orbit[v])
-                    .expect("vertex orbit preserves the node color")
+        )?]);
+        let (folded, hidden) = keys.fold(&state.graph);
+        let canonical = py.detach(|| folded.canonize());
+        let position = |n: NodeIndex| canonical.vertex_map[n.0];
+        let graph = &mut state.graph;
+        let edge_order = keys.edge_order(graph, position);
+        // Store every edge in its normal direction, so the result only depends on its class.
+        let flips = graph
+            .iter_edges()
+            .filter_map(|(pair, index, edge)| {
+                let normal = keys.normal(graph, pair, index, edge.orientation, position);
+                let (hedge, flow) = match pair {
+                    HedgePair::Unpaired { hedge, flow } => (hedge, flow),
+                    HedgePair::Paired { source, .. } | HedgePair::Split { source, .. } => {
+                        (source, Flow::Source)
+                    }
+                };
+                let wanted = if normal.tail == hedge && normal.key.3 != 2 {
+                    Flow::Source
+                } else {
+                    Flow::Sink
+                };
+                let flip = wanted != flow || edge.orientation == Orientation::Reversed;
+                flip.then_some((index, hedge, wanted, edge.orientation))
             })
-            .collect();
-        let result = Self::from_state(state);
-        {
-            let mut borrow = result.state.borrow_mut();
-            let graph = &mut borrow.as_mut().unwrap().graph;
-            let flips = graph
-                .iter_edges()
-                .filter_map(|(pair, index, edge)| {
-                    let flip = match pair {
-                        HedgePair::Paired { source, sink } => match edge.orientation {
-                            Orientation::Reversed => Some(source),
-                            Orientation::Undirected
-                                if canonical.vertex_map[encoded.hedges[source.0]]
-                                    > canonical.vertex_map[encoded.hedges[sink.0]] =>
-                            {
-                                Some(source)
-                            }
-                            _ => None,
-                        },
-                        HedgePair::Unpaired { hedge, .. }
-                            if edge.orientation == Orientation::Reversed =>
-                        {
-                            Some(hedge)
-                        }
-                        _ => None,
-                    };
-                    flip.map(|h| (index, h, edge.orientation))
-                })
-                .collect::<Vec<_>>();
-            for (index, hedge, orientation) in flips {
-                graph.set_flow(hedge, -graph.flow(hedge));
-                graph.set_orientation(
-                    index,
-                    if orientation == Orientation::Reversed {
-                        Orientation::Default
-                    } else {
-                        orientation
-                    },
-                );
+            .collect::<Vec<_>>();
+        for (index, hedge, flow, orientation) in flips {
+            graph.set_flow(hedge, flow);
+            if orientation == Orientation::Reversed {
+                graph.set_orientation(index, Orientation::Default);
             }
         }
+        let mut node_order = vec![0; canonical.vertex_map.len()];
+        for (old, &new) in canonical.vertex_map.iter().enumerate() {
+            node_order[new] = old;
+        }
+        let result = Self::from_state(state);
         result.reorder_nodes(node_order)?;
-        result.reorder_edges(Encoding::order(&encoded.edges, &canonical.vertex_map))?;
+        result.reorder_edges(edge_order)?;
         Ok((
             result,
-            vertex_map,
-            python_integer(py, canonical.automorphism_group_size)?,
-            orbit,
+            canonical.vertex_map,
+            python_integer(py, canonical.automorphism_group_size * hidden)?,
+            canonical.orbit,
         ))
     }
     #[pyo3(signature=(other, *, node_key=None, edge_key=None, half_edge_key=None))]
@@ -319,23 +403,21 @@ impl PyGraph {
                 .ok_or_else(|| PyReferenceError::new_err("graph has been cleared"))?
                 .copy(py)
         };
-        let a = Encoding::new(
-            py,
-            &copy(self)?,
-            node_key.as_ref(),
-            edge_key.as_ref(),
-            half_edge_key.as_ref(),
-        )?;
-        let b = Encoding::new(
-            py,
-            &copy(other)?,
-            node_key.as_ref(),
-            edge_key.as_ref(),
-            half_edge_key.as_ref(),
-        )?;
-        Ok(py.detach(|| a.graph.is_isomorphic(&b.graph)))
+        let (a, b) = (copy(self)?, copy(other)?);
+        let read = |state: &GraphState| {
+            Keys::new(
+                py,
+                &state.graph,
+                node_key.as_ref(),
+                edge_key.as_ref(),
+                half_edge_key.as_ref(),
+            )
+        };
+        let [ka, kb] = Keys::rank([read(&a)?, read(&b)?]);
+        let (fa, fb) = (ka.fold(&a.graph).0, kb.fold(&b.graph).0);
+        Ok(py.detach(|| fa.is_isomorphic(&fb)))
     }
-    /// Sort edges canonically while fixing every vertex.
+    /// Sort edges by their endpoints and keys while fixing every vertex.
     #[pyo3(signature=(*, edge_key=None, half_edge_key=None))]
     fn canonize_edges(
         &self,
@@ -343,28 +425,21 @@ impl PyGraph {
         #[gen_stub(override_type(type_repr = "_LabelKey"))] edge_key: Option<Py<PyAny>>,
         #[gen_stub(override_type(type_repr = "_LabelKey"))] half_edge_key: Option<Py<PyAny>>,
     ) -> PyResult<()> {
-        let mut state = self
+        let state = self
             .state
             .borrow()
             .as_ref()
             .ok_or_else(|| PyReferenceError::new_err("graph has been cleared"))?
             .copy(py)?;
-        let node_ids = state
-            .graph
-            .iter_nodes()
-            .map(|(index, _, _)| index)
-            .collect::<Vec<_>>();
-        for index in node_ids {
-            state.graph[index].data = py.None();
-        }
-        let mut encoded =
-            Encoding::new(py, &state, None, edge_key.as_ref(), half_edge_key.as_ref())?;
-        for (index, &v) in encoded.nodes.iter().enumerate() {
-            let _ = encoded.graph.set_node_data(v, (0, Atom::num(index as i64)));
-        }
-        let canonical = py.detach(|| encoded.graph.canonize());
+        let graph = &state.graph;
+        let [keys] = Keys::rank([Keys::edges(
+            py,
+            graph,
+            edge_key.as_ref(),
+            half_edge_key.as_ref(),
+        )?]);
         self.check_revision(state.revision)?;
-        self.reorder_edges(Encoding::order(&encoded.edges, &canonical.vertex_map))
+        self.reorder_edges(keys.edge_order(graph, |n| n.0))
     }
     /// Generate connected labeled graphs and their automorphism-group sizes.
     #[staticmethod]

@@ -71,6 +71,9 @@ For multipage renders, use `to_svg_pages()`; `to_svg()` requires exactly one pag
 `HalfEdge` is a live graph view. Canonicalization and isomorphism compare expression-compatible
 payloads; use `node_key`, `edge_key`, and `half_edge_key` for custom data. Canonicalization
 preserves payload references and drawing metadata, which does not affect equivalence.
+The stored source/sink roles of undirected edges never affect `canonize` or `is_isomorphic`;
+`canonize_edges` orders edges independently of them but keeps them. The automorphism-group
+size counts permutations of identical dangling half-edges at a node.
 
 == Python graph workflows
 
