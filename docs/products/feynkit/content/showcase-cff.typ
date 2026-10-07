@@ -41,6 +41,6 @@ notebook dependencies. The #link("guides/showcases/")[showcase gallery] gives th
 just notebook feynkit/02_cff_and_symbolica_marimo /path/to/python
 ```
 
-Continue with the #link("guides/showcases/")[other FeynKit showcases] or the
+Continue with #link("guides/showcases/numerical-integration/")[numerical integration with CFF and LTD], the #link("guides/showcases/")[other FeynKit showcases], or the
 #link("reference/python/feynkit-community/")[Python API reference].
 ]
