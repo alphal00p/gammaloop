@@ -1,7 +1,6 @@
 use std::{hash::Hash, num::TryFromIntError};
 
 use ahash::AHashSet;
-use bitvec::order::Lsb0;
 use indenter::CodeFormatter;
 use std::fmt::Write;
 
@@ -194,39 +193,6 @@ pub trait Inclusion<T> {
     fn includes(&self, other: &T) -> bool;
     /// Checks if this subgraph has any common elements with the `other` entity.
     fn intersects(&self, other: &T) -> bool;
-}
-
-/// An iterator over [`Hedge`]s included in a subgraph.
-///
-/// This struct typically wraps an iterator over set bits in a `BitVec`
-/// (like `bitvec::slice::IterOnes`) and maps the `usize` indices to `Hedge` types.
-#[derive(Clone, Debug)]
-pub struct SubSetIter<'a, ID = Hedge> {
-    /// The underlying iterator that yields `usize` indices, which are then mapped to `Hedge`.
-    iter: std::iter::Map<bitvec::slice::IterOnes<'a, usize, Lsb0>, fn(usize) -> ID>,
-}
-
-impl<ID> DoubleEndedIterator for SubSetIter<'_, ID> {
-    fn next_back(&mut self) -> Option<Self::Item> {
-        self.iter.next_back()
-    }
-}
-
-impl<ID> ExactSizeIterator for SubSetIter<'_, ID> {
-    fn len(&self) -> usize {
-        self.iter.len()
-    }
-}
-
-impl<ID> Iterator for SubSetIter<'_, ID> {
-    type Item = ID;
-    fn next(&mut self) -> Option<Self::Item> {
-        self.iter.next()
-    }
-
-    fn size_hint(&self) -> (usize, Option<usize>) {
-        self.iter.size_hint()
-    }
 }
 
 pub trait BaseSubgraph:
@@ -580,4 +546,4 @@ pub use empty::Empty;
 pub mod full;
 pub use full::FullOrEmpty;
 pub mod subset;
-pub use subset::SuBitGraph;
+pub use subset::{SuBitGraph, SubSetIter};

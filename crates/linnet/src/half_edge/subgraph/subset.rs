@@ -1,10 +1,8 @@
 use std::{
-    hash::Hash,
+    cmp::Ordering,
+    hash::{Hash, Hasher},
     marker::PhantomData,
-    ops::{
-        BitAndAssign, BitOrAssign, BitXorAssign, Index, Not, Range, RangeFrom, RangeInclusive,
-        RangeTo, RangeToInclusive,
-    },
+    ops::{Index, Not, Range, RangeFrom, RangeInclusive, RangeTo, RangeToInclusive},
 };
 
 use bitvec::{bitvec, order::Lsb0, vec::BitVec};
@@ -18,8 +16,8 @@ use crate::half_edge::{
     involution::{Flow, Hedge, HedgePair},
     nodestore::{NodeStorage, NodeStorageOps},
     subgraph::{
-        BaseSubgraph, Inclusion, ModifySubSet, SubGraphLike, SubGraphOps, SubSetIter, SubSetLike,
-        SubSetOps, BASE62_ALPHABET,
+        BaseSubgraph, Inclusion, ModifySubSet, SubGraphLike, SubGraphOps, SubSetLike, SubSetOps,
+        BASE62_ALPHABET,
     },
     swap::Swap,
     typed_vec::IndexLike,
@@ -89,7 +87,24 @@ where
         Ok(bitvec)
     }
 }
-#[derive(Clone, PartialEq, Eq, Hash, Debug, PartialOrd, Ord)]
+
+const WORD_BITS: usize = usize::BITS as usize;
+
+/// Mask of the live bits in the last raw word of a `len`-bit set.
+///
+/// `bitvec` leaves the dead bits past `len` unspecified (`!` and `truncate`
+/// leave them set), so every word-level read of a [`SubSet`] masks its last word.
+fn tail_mask(len: usize) -> usize {
+    usize::MAX >> ((WORD_BITS - len % WORD_BITS) % WORD_BITS)
+}
+
+/// A set of IDs `0..size` stored as a bitset.
+///
+/// Equality, hashing, ordering and the set algebra work on whole words. The
+/// order is lexicographic from ID 0 (the first ID in only one set decides,
+/// and the set that has it is greater), with a strict prefix before its
+/// extensions, i.e. the order of `bitvec`'s `BitSlice`.
+#[derive(Clone, Debug)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "bincode", derive(bincode::Encode, bincode::Decode))]
 #[cfg_attr(
@@ -102,6 +117,51 @@ pub struct SubSet<ID> {
     #[cfg_attr(feature = "rkyv", with(BitVecRkyv))]
     set: BitVec,
     id: std::marker::PhantomData<ID>,
+}
+
+impl<ID> PartialEq for SubSet<ID> {
+    fn eq(&self, other: &Self) -> bool {
+        self.set.len() == other.set.len() && self.words().eq(other.words())
+    }
+}
+
+impl<ID> Eq for SubSet<ID> {}
+
+impl<ID> Hash for SubSet<ID> {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        state.write_usize(self.set.len());
+        self.words().for_each(|word| state.write_usize(word));
+    }
+}
+
+impl<ID> PartialOrd for SubSet<ID> {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl<ID> Ord for SubSet<ID> {
+    fn cmp(&self, other: &Self) -> Ordering {
+        let common = self.set.len().min(other.set.len());
+        let n_words = common.div_ceil(WORD_BITS);
+        let words = self.raw()[..n_words].iter().zip(&other.raw()[..n_words]);
+        for (i, (&a, &b)) in words.enumerate() {
+            let diff = if i + 1 == n_words {
+                (a ^ b) & tail_mask(common)
+            } else {
+                a ^ b
+            };
+            if diff != 0 {
+                let first = diff.isolate_lowest_one();
+                return if a & first != 0 {
+                    Ordering::Greater
+                } else {
+                    Ordering::Less
+                };
+            }
+        }
+        self.set.len().cmp(&other.set.len())
+    }
 }
 
 impl<ID> Not for &SubSet<ID> {
@@ -150,8 +210,11 @@ impl<ID> SubSet<ID> {
     where
         ID: IndexLike,
     {
+        let mut set = self.set.split_off(at.into());
+        // `split_off` keeps the offset of `at` within its word.
+        set.force_align();
         Self {
-            set: self.set.split_off(at.into()),
+            set,
             id: PhantomData,
         }
     }
@@ -181,6 +244,137 @@ impl<ID> SubSet<ID> {
 
     pub fn clear(&mut self) {
         self.set.fill(false);
+    }
+
+    /// The raw words. A set starts at bit 0 of its first word, so bit `i` of
+    /// word `w` is ID `w * WORD_BITS + i`; the dead bits past the last ID are
+    /// unspecified.
+    fn raw(&self) -> &[usize] {
+        debug_assert_eq!(
+            self.set.as_bitptr().bit().into_inner(),
+            0,
+            "unaligned SubSet"
+        );
+        self.set.as_raw_slice()
+    }
+
+    fn raw_mut(&mut self) -> &mut [usize] {
+        debug_assert_eq!(
+            self.set.as_bitptr().bit().into_inner(),
+            0,
+            "unaligned SubSet"
+        );
+        self.set.as_raw_mut_slice()
+    }
+
+    /// The raw words, with the dead bits past the last ID cleared.
+    fn words(&self) -> impl Iterator<Item = usize> + '_ {
+        let mask = tail_mask(self.set.len());
+        let (last, body) = match self.raw().split_last() {
+            Some((&last, body)) => (Some(last & mask), body),
+            None => (None, &[][..]),
+        };
+        body.iter().copied().chain(last)
+    }
+
+    /// Replaces each word `a` of `self` by `op(a, b)` with `b` the matching word
+    /// of `other`, zero-extended or truncated to the length of `self`.
+    fn zip_words_with(&mut self, other: &Self, op: impl Fn(usize, usize) -> usize) {
+        let mut other = other.words();
+        for word in self.raw_mut() {
+            *word = op(*word, other.next().unwrap_or(0));
+        }
+    }
+}
+
+/// An iterator over the IDs included in a [`SubSet`], ascending from the front
+/// and descending from the back.
+///
+/// It consumes the lowest set bit of the front word or the highest set bit of
+/// the back word, and refills either from the untouched words in between.
+#[derive(Clone, Debug)]
+pub struct SubSetIter<'a, ID = Hedge> {
+    /// Remaining bits of the front word, whose bit 0 is ID `front_base`.
+    front: usize,
+    front_base: usize,
+    /// Untouched words strictly between the front and the back word.
+    middle: &'a [usize],
+    /// Remaining bits of the back word, whose bit 0 is ID `back_base`.
+    back: usize,
+    back_base: usize,
+    id: PhantomData<fn() -> ID>,
+}
+
+impl<'a, ID> SubSetIter<'a, ID> {
+    fn new(set: &'a SubSet<ID>) -> Self {
+        let mask = tail_mask(set.set.len());
+        let words = set.raw();
+        let (front, middle, back) = match words {
+            [] => (0, &[][..], 0),
+            [only] => (0, &[][..], only & mask),
+            [first, middle @ .., last] => (*first, middle, last & mask),
+        };
+        Self {
+            front,
+            front_base: 0,
+            middle,
+            back,
+            back_base: words.len().saturating_sub(1) * WORD_BITS,
+            id: PhantomData,
+        }
+    }
+}
+
+impl<ID: From<usize>> Iterator for SubSetIter<'_, ID> {
+    type Item = ID;
+    fn next(&mut self) -> Option<Self::Item> {
+        while self.front == 0 {
+            if let Some((&word, rest)) = self.middle.split_first() {
+                self.front = word;
+                self.front_base += WORD_BITS;
+                self.middle = rest;
+            } else if self.back != 0 {
+                self.front = std::mem::take(&mut self.back);
+                self.front_base = self.back_base;
+            } else {
+                return None;
+            }
+        }
+        let bit = self.front.trailing_zeros() as usize;
+        self.front &= self.front - 1;
+        Some(ID::from(self.front_base + bit))
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        let len = self.len();
+        (len, Some(len))
+    }
+}
+
+impl<ID: From<usize>> DoubleEndedIterator for SubSetIter<'_, ID> {
+    fn next_back(&mut self) -> Option<Self::Item> {
+        while self.back == 0 {
+            if let Some((&word, rest)) = self.middle.split_last() {
+                self.back = word;
+                self.back_base -= WORD_BITS;
+                self.middle = rest;
+            } else if self.front != 0 {
+                self.back = std::mem::take(&mut self.front);
+                self.back_base = self.front_base;
+            } else {
+                return None;
+            }
+        }
+        let bit = WORD_BITS - 1 - self.back.leading_zeros() as usize;
+        self.back ^= 1 << bit;
+        Some(ID::from(self.back_base + bit))
+    }
+}
+
+impl<ID: From<usize>> ExactSizeIterator for SubSetIter<'_, ID> {
+    fn len(&self) -> usize {
+        let middle: u32 = self.middle.iter().map(|word| word.count_ones()).sum();
+        (self.front.count_ones() + middle + self.back.count_ones()) as usize
     }
 }
 
@@ -284,11 +478,12 @@ impl<ID: IndexLike> Inclusion<Range<ID>> for SubSet<ID> {
 
 impl<ID: IndexLike> Inclusion<SubSet<ID>> for SubSet<ID> {
     fn includes(&self, other: &SubSet<ID>) -> bool {
-        &self.intersection(other) == other
+        self.set.len() == other.set.len()
+            && self.words().zip(other.words()).all(|(a, b)| b & !a == 0)
     }
 
     fn intersects(&self, other: &SubSet<ID>) -> bool {
-        !(self.intersection(other).is_empty())
+        self.words().zip(other.words()).any(|(a, b)| a & b != 0)
     }
 }
 
@@ -482,14 +677,11 @@ impl<ID: IndexLike> SubSetLike<ID> for SubSet<ID> {
         self.set.extend(other.set);
     }
     fn included_iter(&self) -> Self::BaseIter<'_> {
-        SubSetIter {
-            iter: self.set.iter_ones().map(ID::from),
-            // len: self.n_included(),
-        }
+        SubSetIter::new(self)
     }
 
     fn n_included(&self) -> usize {
-        self.set.count_ones()
+        self.words().map(|word| word.count_ones() as usize).sum()
     }
 
     fn empty(size: usize) -> Self {
@@ -599,33 +791,33 @@ impl<ID: IndexLike> SubSetLike<ID> for SubSet<ID> {
     }
 
     fn is_empty(&self) -> bool {
-        self.n_included() == 0
+        self.words().all(|word| word == 0)
     }
 }
 
 impl<ID: IndexLike> SubSetOps<ID> for SubSet<ID> {
     fn intersect_with(&mut self, other: &Self) {
-        self.set.bitand_assign(&other.set)
+        self.zip_words_with(other, |a, b| a & b)
     }
 
     fn union_with(&mut self, other: &Self) {
-        self.set.bitor_assign(&other.set)
+        self.zip_words_with(other, |a, b| a | b)
     }
 
     fn sym_diff_with(&mut self, other: &Self) {
-        self.set.bitxor_assign(&other.set)
+        self.zip_words_with(other, |a, b| a ^ b)
     }
 
     fn empty_union(&self, other: &Self) -> bool {
-        self.union(other).is_empty()
+        self.is_empty() && other.is_empty()
     }
 
     fn empty_intersection(&self, other: &Self) -> bool {
-        self.intersection(other).is_empty()
+        !self.intersects(other)
     }
 
     fn subtract_with(&mut self, other: &Self) {
-        self.set.bitand_assign(!other.set.clone());
+        self.zip_words_with(other, |a, b| a & !b)
     }
 }
 
@@ -634,10 +826,7 @@ impl SubGraphOps for SuBitGraph {
         &self,
         _graph: &HedgeGraph<E, V, H, N>,
     ) -> Self {
-        Self {
-            set: !self.set.clone(),
-            id: PhantomData,
-        }
+        !self
     }
 }
 
@@ -646,6 +835,12 @@ mod tests {
     use super::*;
     use crate::half_edge::involution::Hedge;
     use crate::half_edge::subgraph::SubSetLike;
+    use std::{
+        collections::VecDeque,
+        iter::{repeat, repeat_n},
+    };
+
+    use proptest::{prelude::*, sample::Index as SampleIndex};
 
     #[test]
     fn base62_roundtrip() {
@@ -676,5 +871,180 @@ mod tests {
                 .as_str(),
             a
         )
+    }
+
+    /// Lengths around the word boundaries, including the empty set.
+    const LENS: [usize; 9] = [0, 1, 63, 64, 65, 127, 128, 129, 200];
+
+    /// A set with the live bits `bits` and the dead bits of its last word set
+    /// from `garbage`, as `!` or `truncate` leave them.
+    fn subset(bits: &[bool], garbage: usize) -> SuBitGraph {
+        let mut set = reference(bits);
+        if let Some(last) = set.as_raw_mut_slice().last_mut() {
+            *last |= garbage & !tail_mask(bits.len());
+        }
+        SubSet {
+            set,
+            id: PhantomData,
+        }
+    }
+
+    /// A bitvec with zeroed dead bits, on which `bitvec`'s own ops are exact.
+    fn reference(bits: &[bool]) -> BitVec {
+        let mut set = BitVec::repeat(false, bits.len());
+        for (i, &bit) in bits.iter().enumerate() {
+            set.set(i, bit);
+        }
+        set
+    }
+
+    fn live(set: &SuBitGraph) -> BitVec {
+        set.set.iter().by_vals().collect()
+    }
+
+    fn bits() -> impl Strategy<Value = Vec<bool>> {
+        prop::sample::select(LENS.as_slice())
+            .prop_flat_map(|n| prop::collection::vec(any::<bool>(), n))
+    }
+
+    /// Pairs that are independent (any lengths), of equal length, subsets,
+    /// equal, one bit apart, or prefix and extension of each other.
+    fn pair() -> impl Strategy<Value = (Vec<bool>, Vec<bool>)> {
+        (bits(), bits(), 0..6u8, any::<SampleIndex>()).prop_map(|(a, r, relation, index)| {
+            let padded = || r.iter().copied().chain(repeat(false));
+            let b = match relation {
+                0 => r.clone(),
+                1 => a.iter().zip(padded()).map(|(_, y)| y).collect(),
+                2 => a.iter().zip(padded()).map(|(x, y)| *x && y).collect(),
+                3 => a.clone(),
+                4 => {
+                    let mut b = a.clone();
+                    if !b.is_empty() {
+                        let i = index.index(b.len());
+                        b[i] = !b[i];
+                    }
+                    b
+                }
+                _ => a.iter().chain(&r).take(r.len()).copied().collect(),
+            };
+            (a, b)
+        })
+    }
+
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(2000))]
+
+        #[test]
+        fn set_algebra_matches_bitvec(
+            (a, b) in pair(),
+            (ga, gb) in (any::<usize>(), any::<usize>()),
+        ) {
+            let (sa, sb) = (subset(&a, ga), subset(&b, gb));
+            let (ra, rb) = (reference(&a), reference(&b));
+            let other = |i: usize| b.get(i).copied().unwrap_or(false);
+
+            prop_assert_eq!(live(&sa.intersection(&sb)), ra.clone() & &rb);
+            prop_assert_eq!(live(&sa.union(&sb)), ra.clone() | &rb);
+            prop_assert_eq!(live(&sa.sym_diff(&sb)), ra.clone() ^ &rb);
+            let difference: BitVec = a.iter().enumerate().map(|(i, &x)| x && !other(i)).collect();
+            prop_assert_eq!(live(&sa.subtract(&sb)), difference);
+            prop_assert_eq!(live(&!&sa), !ra.clone());
+            prop_assert_eq!(live(&!sa.clone()), !ra.clone());
+
+            let common = a.iter().zip(&b).any(|(x, y)| *x && *y);
+            let included = a.len() == b.len() && a.iter().zip(&b).all(|(x, y)| *x || !*y);
+            prop_assert_eq!(sa.intersects(&sb), common);
+            prop_assert_eq!(sa.empty_intersection(&sb), !common);
+            prop_assert_eq!(sa.includes(&sb), included);
+            prop_assert_eq!(sa.empty_union(&sb), ra.not_any() && rb.not_any());
+            prop_assert_eq!(sa.is_empty(), ra.not_any());
+            prop_assert_eq!(sa.n_included(), ra.count_ones());
+        }
+
+        #[test]
+        fn eq_hash_and_ord_match_bitvec(
+            (a, b) in pair(),
+            (ga, gb, ga2) in (any::<usize>(), any::<usize>(), any::<usize>()),
+        ) {
+            let (sa, sb) = (subset(&a, ga), subset(&b, gb));
+            let (ra, rb) = (reference(&a), reference(&b));
+
+            prop_assert_eq!(sa == sb, ra == rb);
+            prop_assert_eq!(sa.cmp(&sb), ra.cmp(&rb));
+            prop_assert_eq!(sa.partial_cmp(&sb), Some(ra.cmp(&rb)));
+
+            // The same live bits with other dead bits: equal, equal hash.
+            let sa2 = subset(&a, ga2);
+            let state = ahash::RandomState::with_seeds(1, 2, 3, 4);
+            prop_assert_eq!(&sa, &sa2);
+            prop_assert_eq!(sa.cmp(&sa2), Ordering::Equal);
+            prop_assert_eq!(state.hash_one(&sa), state.hash_one(&sa2));
+            if sa == sb {
+                prop_assert_eq!(state.hash_one(&sa), state.hash_one(&sb));
+            }
+        }
+
+        #[test]
+        fn iteration_matches_bitvec(
+            a in bits(),
+            garbage in any::<usize>(),
+            from_back in prop::collection::vec(any::<bool>(), 0..210),
+        ) {
+            let set = subset(&a, garbage);
+            let ones: Vec<usize> = reference(&a).iter_ones().collect();
+
+            prop_assert_eq!(set.included_iter().map(|h| h.0).collect::<Vec<_>>(), ones.clone());
+            prop_assert_eq!(
+                set.included_iter().rev().map(|h| h.0).collect::<Vec<_>>(),
+                ones.iter().rev().copied().collect::<Vec<_>>()
+            );
+
+            let mut expected: VecDeque<usize> = ones.into();
+            let mut iter = set.included_iter();
+            for back in from_back.into_iter().chain(repeat_n(false, expected.len() + 1)) {
+                prop_assert_eq!(iter.len(), expected.len());
+                prop_assert_eq!(iter.size_hint(), (expected.len(), Some(expected.len())));
+                let (got, want) = if back {
+                    (iter.next_back(), expected.pop_back())
+                } else {
+                    (iter.next(), expected.pop_front())
+                };
+                prop_assert_eq!(got.map(|h| h.0), want);
+            }
+        }
+
+        #[test]
+        fn split_off_halves_are_word_aligned(
+            a in bits(),
+            garbage in any::<usize>(),
+            at in any::<SampleIndex>(),
+        ) {
+            // `bitvec`'s `split_off` keeps the in-word offset of `at`.
+            let at = at.index(a.len() + 1);
+            let mut head = subset(&a, garbage);
+            let tail = head.split_off(Hedge(at));
+            for (half, bits) in [(&head, &a[..at]), (&tail, &a[at..])] {
+                let expected = subset(bits, 0);
+                prop_assert_eq!(half, &expected);
+                prop_assert_eq!(half.n_included(), expected.n_included());
+                prop_assert!(half.included_iter().eq(expected.included_iter()));
+                prop_assert_eq!(live(&half.union(&expected)), reference(bits));
+            }
+        }
+    }
+
+    #[test]
+    fn complement_ignores_dead_bits() {
+        // `!` sets the dead bits of the last raw word.
+        let full = !SuBitGraph::empty(34);
+        assert_ne!(full.set.as_raw_slice()[0], tail_mask(34));
+        assert_eq!(full, SuBitGraph::full(34));
+        assert_eq!(full.n_included(), 34);
+        assert_eq!(full.included_iter().count(), 34);
+        assert_eq!(full.included_iter().next_back(), Some(Hedge(33)));
+        assert!((!full.clone()).is_empty());
+        assert!(full.includes(&SuBitGraph::full(34)));
+        let state = ahash::RandomState::with_seeds(1, 2, 3, 4);
+        assert_eq!(state.hash_one(&full), state.hash_one(SuBitGraph::full(34)));
     }
 }

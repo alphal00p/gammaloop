@@ -67,7 +67,7 @@ pub struct NodeStorageVec<N> {
 pub struct BitVecNeighborIter<'a> {
     /// The underlying iterator over set bits in the `BitVec`.
     iter_ones: SubSetIter<'a>,
-    /// The total number of possible hedges (size of the `BitVec`), used for `ExactSizeIterator`.
+    /// The size of the underlying set, used to rebuild a subgraph from the iterator.
     len: Hedge,
 }
 
@@ -100,6 +100,10 @@ impl Iterator for BitVecNeighborIter<'_> {
     type Item = Hedge;
     fn next(&mut self) -> Option<Self::Item> {
         self.iter_ones.next()
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        self.iter_ones.size_hint()
     }
 }
 
