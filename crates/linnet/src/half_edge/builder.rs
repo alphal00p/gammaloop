@@ -140,6 +140,17 @@ impl<E, V, H> HedgeGraphBuilder<E, V, H> {
         }
     }
 
+    /// An empty builder with room for `nodes` nodes and `hedges` half-edges.
+    pub fn with_capacity(nodes: usize, hedges: usize) -> Self {
+        HedgeGraphBuilder {
+            hedge_data: HedgeVec::with_capacity(hedges),
+            nodes: Vec::with_capacity(nodes),
+            involution: Involution {
+                inv: HedgeVec::with_capacity(hedges),
+            },
+        }
+    }
+
     /// Retain nodes in the requested order, preserving each node's hedge order.
     ///
     /// This compacts construction state before a node store is built. Edges

@@ -145,6 +145,45 @@ stored source/sink roles, while directed edges and legs keep their physical dire
 `Reversed` orientations. `is_isomorphic_by` and `isomorphism_by` compare two graphs through their
 certificates.
 
+== Feynman-graph generation
+
+`generate::GraphGenerator` enumerates the connected graphs built from vertex signatures and
+external legs, one per isomorphism class. A signature is a multiset of typed stubs: a field with a
+direction relative to the vertex (undirected for self-conjugate fields, incoming or outgoing for
+fermions, ghosts and other charged fields). Two stubs pair when they carry the same field and are
+both undirected, or one is outgoing and the other incoming. Legs are `(label, stub)` pairs that
+become dangling half-edges keyed by their label; repeating a label makes those legs
+interchangeable. Settings cover a loop range, a vertex bound (legs are not vertices), a bridge
+limit (`0` for one-particle-irreducible graphs), self-loops and zero-flow bridges (a bridge with no
+leg on one side), a filter on each complete graph (it does not prune the search), and progress and
+abort callbacks. Only paired edges count as bridges: a one-leg process keeps its graphs without
+internal bridges, where Graphica counts the leg as a zero-flow bridge and drops them.
+
+Each output carries the `HedgeGraph` (fields on edges, signature indices on nodes), its loop
+order, the exact automorphism count and the canonizer's certificate under the keys
+`(signature, field, Option<label>)`, so a graph from elsewhere can be matched against generated
+ones by canonizing it with the same keys. Signatures with identical stubs are distinct vertex rules.
+
+Generation runs in two stages per loop order. Untyped topologies are built by McKay's canonical
+augmentation, one vertex at a time: rule 1 keeps one multiplicity vector per orbit of the parent's
+node automorphism group, and rule 2 accepts a child only if the new vertex is in the orbit of its
+canonical deletion (the deletable vertex with the largest invariant, ties broken by a node
+canonization). Every prune (completability, permanent bridges, zero-flow bridges) is a necessary
+condition for completion, so each output appears exactly once. Each complete topology is then
+decorated with fields, orientations and vertex rules edge by edge, with partial vertices checked
+against the sub-multisets of the signatures, keeping one decoration per orbit of the topology's
+automorphism group. Typed canonical augmentation (signatures as the corollas) was measured as the
+alternative and visits about four times as many partial objects on QED and QCD processes.
+
+#callout("Streaming, deterministic order and parallelism", [
+  Both stages are resumable depth-first searches with explicit stacks, so the iterator streams:
+  each `next` searches only up to the next graph, and dropping it ends the search. Graphs come in
+  the depth-first order of the search. With the `rayon` feature, `parallel(true)` runs a window of
+  independent subtrees on the current thread pool, each at most a fixed number of graphs ahead of
+  the output, and returns their results in that same order, so the output does not depend on the
+  number of threads.
+])
+
 == Mutation boundaries
 
 Insertion extends a graph with the same declarative node and edge specs accepted by the builder.

@@ -44,7 +44,9 @@ mod tests;
 
 use std::cell::RefCell;
 
-use flat::{Flat, KeyTables, Twins};
+use flat::{Flat, Twins};
+pub(crate) use flat::{KeyTables, RawHedge, Role};
+pub(crate) use search::mix;
 use search::Search;
 
 use super::{
@@ -89,6 +91,27 @@ pub struct Certificate<KV, KE, KH> {
 }
 
 impl<KV, KE, KH> Certificate<KV, KE, KH> {
+    /// The certificate and automorphism count of a graph given by its node colours (ranks of the
+    /// node keys) and hedges; equal to those of [`HedgeGraph::canonize_by`] on the same graph with
+    /// keys whose sorted distinct values are `keys`.
+    pub(crate) fn of_hedges(
+        node_colours: &[u32],
+        hedges: &[RawHedge],
+        n_edges: usize,
+        keys: KeyTables<KV, KE, KH>,
+    ) -> (Self, Option<u128>) {
+        Workspace::with(|ws| {
+            ws.flat.load_hedges(
+                node_colours,
+                hedges,
+                n_edges,
+                keys.edges.len(),
+                keys.hedges.len(),
+            );
+            ws.certify(keys)
+        })
+    }
+
     /// The structural part, for hashing or storage next to the key tables.
     pub fn words(&self) -> &[u32] {
         &self.words
@@ -307,6 +330,43 @@ impl Orbits {
     }
 }
 
+/// Node canonization of a graph given by node colours and coloured undirected edges, for searches
+/// that keep their own light graph state (the graph generator): the canonical node order and the
+/// node automorphisms found, without hedge maps, certificates or twin handling. Nodes without
+/// edges are not permuted among themselves.
+#[derive(Debug, Default)]
+pub(crate) struct NodeCanon {
+    flat: Flat,
+    search: Search,
+}
+
+impl NodeCanon {
+    pub(crate) fn run(&mut self, node_colours: &[u32], edges: &[[u32; 3]]) {
+        self.flat.load_coloured(node_colours, edges);
+        self.search.run(&self.flat);
+    }
+
+    /// Nodes in canonical order.
+    pub(crate) fn lab(&self) -> &[u32] {
+        self.search.best_lab()
+    }
+
+    /// Generators of the node automorphism group, each as the image of every node.
+    pub(crate) fn generators(&self) -> impl Iterator<Item = &[u32]> {
+        (0..self.search.n_generators()).map(|i| self.search.generator(i))
+    }
+}
+
+/// `n!`, or `None` beyond `u128`.
+fn factorial(n: usize) -> Option<u128> {
+    (2..=n as u128).try_fold(1u128, |acc, k| acc.checked_mul(k))
+}
+
+/// A group order times a factor, `None` once either overflows.
+fn scaled(order: Option<u128>, factor: Option<u128>) -> Option<u128> {
+    order.zip(factor).and_then(|(a, b)| a.checked_mul(b))
+}
+
 /// Automorphism generators stored back to back, and the group order (`None` beyond `u128`).
 struct Group<'a> {
     n_hedges: usize,
@@ -332,33 +392,26 @@ impl Group<'_> {
     }
 
     fn scale(&mut self, factor: Option<u128>) {
-        self.order = self.order.zip(factor).and_then(|(a, b)| a.checked_mul(b));
-    }
-
-    fn factorial(n: usize) -> Option<u128> {
-        (2..=n as u128).try_fold(1u128, |acc, k| acc.checked_mul(k))
+        self.order = scaled(self.order, factor);
     }
 
     /// Twin hedges: the automorphisms fixing every node.
     fn add_twins(&mut self, class: Twins<'_>, inv: &[u32]) {
         let paired = |a: u32, b: u32| [(a, b), (inv[a as usize], inv[b as usize])];
+        self.scale(class.order());
         match class {
             Twins::Legs(hs) => {
-                self.scale(Self::factorial(hs.len()));
                 for w in hs.windows(2) {
                     self.push_swaps(&[(w[0], w[1])], &[]);
                 }
             }
             Twins::Edges(hs) => {
-                self.scale(Self::factorial(hs.len()));
                 for w in hs.windows(2) {
                     self.push_swaps(&paired(w[0], w[1]), &[]);
                 }
             }
             Twins::SymmetricLoops(hs) => {
                 // one flip and the loop swaps generate the wreath product Z2 wr S_m
-                self.scale(Self::factorial(hs.len()));
-                self.scale(2u128.checked_pow(hs.len() as u32));
                 self.push_swaps(&[(hs[0], inv[hs[0] as usize])], &[]);
                 for w in hs.windows(2) {
                     self.push_swaps(&paired(w[0], w[1]), &[]);
@@ -416,11 +469,7 @@ impl Workspace {
         let (n, n_hedges) = (g.n_nodes(), g.n_hedges());
         let lab = search.best_lab();
 
-        let mut words = Vec::with_capacity(2 + g.colour_table.len() + n + search.best_cert().len());
-        words.extend([n as u32, n_hedges as u32]);
-        words.extend_from_slice(&g.colour_table);
-        words.extend(lab.iter().map(|&v| g.ncol[v as usize]));
-        words.extend_from_slice(search.best_cert());
+        let words = Self::words(g, search);
 
         let mut node_map = vec![0; n];
         for (q, &v) in lab.iter().enumerate() {
@@ -465,13 +514,8 @@ impl Workspace {
             group.hedges.extend(pos.iter().map(|&p| at[p as usize]));
             group.nodes.extend_from_slice(gamma);
         }
-        // isolated nodes of equal colour are interchangeable
-        let isolated = |v: u32| g.hedges_of(v as usize).is_empty();
-        let same_class = |a: &u32, b: &u32| {
-            isolated(*a) && isolated(*b) && g.ncol[*a as usize] == g.ncol[*b as usize]
-        };
-        for run in lab.chunk_by(same_class).filter(|run| run.len() > 1) {
-            group.scale(Group::factorial(run.len()));
+        for run in g.isolated_runs(lab) {
+            group.scale(factorial(run.len()));
             for w in run.windows(2) {
                 group.push_swaps(&[], &[(w[0], w[1])]);
             }
@@ -492,6 +536,45 @@ impl Workspace {
             generator_nodes: group.nodes.clone(),
             automorphism_count: group.order,
         }
+    }
+
+    /// The certificate words of the searched graph.
+    fn words(g: &Flat, search: &Search) -> Vec<u32> {
+        let lab = search.best_lab();
+        let mut words =
+            Vec::with_capacity(2 + g.colour_table.len() + lab.len() + search.best_cert().len());
+        words.extend([g.n_nodes() as u32, g.n_hedges() as u32]);
+        words.extend_from_slice(&g.colour_table);
+        words.extend(lab.iter().map(|&v| g.ncol[v as usize]));
+        words.extend_from_slice(search.best_cert());
+        words
+    }
+
+    /// Certificate and automorphism count only: no labelling maps and no generators.
+    fn certify<KV, KE, KH>(
+        &mut self,
+        keys: KeyTables<KV, KE, KH>,
+    ) -> (Certificate<KV, KE, KH>, Option<u128>) {
+        let Workspace {
+            flat: g,
+            search,
+            scratch,
+            twins,
+            ..
+        } = self;
+        search.run(g);
+        let mut order = search.group_order;
+        g.twin_classes(scratch, twins, |class| order = scaled(order, class.order()));
+        for run in g.isolated_runs(search.best_lab()) {
+            order = scaled(order, factorial(run.len()));
+        }
+        let certificate = Certificate {
+            words: Self::words(g, search),
+            node_keys: keys.nodes,
+            edge_keys: keys.edges,
+            hedge_keys: keys.hedges,
+        };
+        (certificate, order)
     }
 }
 
@@ -522,6 +605,20 @@ impl<E, V, H, N: NodeStorageOps<NodeData = V>> HedgeGraph<E, V, H, N> {
         self.canonize_by(|v| v, |e| e, |h| h)
     }
 
+    /// The certificate and automorphism count of [`Self::canonize_by`], without the labelling
+    /// maps and automorphism generators.
+    pub(crate) fn certificate_by<'a, KV: Ord, KE: Ord, KH: Ord>(
+        &'a self,
+        node_key: impl FnMut(&'a V) -> KV,
+        edge_key: impl FnMut(&'a E) -> KE,
+        hedge_key: impl FnMut(&'a H) -> KH,
+    ) -> (Certificate<KV, KE, KH>, Option<u128>) {
+        Workspace::with(|ws| {
+            let keys = ws.flat.load(self, node_key, edge_key, hedge_key);
+            ws.certify(keys)
+        })
+    }
+
     /// Whether `other` is isomorphic to this graph under the given keys.
     pub fn is_isomorphic_by<'a, KV: Ord, KE: Ord, KH: Ord, N2: NodeStorageOps<NodeData = V>>(
         &'a self,
@@ -533,11 +630,11 @@ impl<E, V, H, N: NodeStorageOps<NodeData = V>> HedgeGraph<E, V, H, N> {
         self.n_nodes() == other.n_nodes()
             && self.n_hedges() == other.n_hedges()
             && self
-                .canonize_by(&mut node_key, &mut edge_key, &mut hedge_key)
-                .certificate()
+                .certificate_by(&mut node_key, &mut edge_key, &mut hedge_key)
+                .0
                 == other
-                    .canonize_by(&mut node_key, &mut edge_key, &mut hedge_key)
-                    .certificate()
+                    .certificate_by(&mut node_key, &mut edge_key, &mut hedge_key)
+                    .0
     }
 
     /// An isomorphism from this graph to `other` under the given keys, if one exists.

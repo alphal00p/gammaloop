@@ -34,6 +34,7 @@ serde = { workspace = true, features = ["derive"], optional = true }
 serde_repr = { workspace = true }
 symbolica = { workspace = true, default-features = false, optional = true }
 symbolica-utils = { workspace = true, optional = true }
+rayon = { workspace = true, optional = true }
 thiserror = { workspace = true }
 
 [dependencies.ahash]
@@ -59,7 +60,7 @@ iai-callgrind = "0.14.0"
 insta = { workspace = true, features = ["ron"] }
 kurbo = "0.13"
 # Keep optional drawing and serialization covered by isolated Linnet tests.
-linnet = { path = ".", features = ["drawing", "rkyv", "serde"] }
+linnet = { path = ".", features = ["drawing", "rkyv", "rayon", "serde"] }
 proptest = "1.6.0"
 serde = "1.0"
 serde_json = { workspace = true }
@@ -67,6 +68,11 @@ similar-asserts = "1.7.0"
 
 [[bench]]
 name = "canon"
+harness = false
+required-features = ["symbolica"]
+
+[[bench]]
+name = "generate"
 harness = false
 required-features = ["symbolica"]
 
@@ -78,6 +84,7 @@ energy_trace = []
 nodestore-forest-child-vec = []
 nodestore-forest-parent-child = []
 nodestore-vec = []
+rayon = ["dep:rayon"]
 rkyv = ["dep:rkyv"]
 serde = ["bitvec/serde", "dep:serde"]
 symbolica = ["dep:symbolica", "dep:symbolica-utils"]

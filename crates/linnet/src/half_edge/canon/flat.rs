@@ -15,13 +15,30 @@ use crate::half_edge::{
 /// Marks the missing opposite of a dangling hedge.
 pub(crate) const NONE: u32 = u32::MAX;
 
-const UNDIRECTED: u32 = 0;
-const TAIL: u32 = 1;
-const HEAD: u32 = 2;
-const LEG: u32 = 3;
-const LEG_OUT: u32 = 4;
-const LEG_IN: u32 = 5;
+/// Physical role of a hedge: the part of its colour that does not come from keys.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Role {
+    Undirected,
+    Tail,
+    Head,
+    Leg,
+    LegOut,
+    LegIn,
+}
+
 const ROLES: u32 = 6;
+
+/// One hedge of a graph given directly: its node, its opposite (itself for a dangling hedge), its
+/// edge, its role and the ranks of its edge and half-edge keys in the sorted distinct keys.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct RawHedge {
+    pub(crate) node: u32,
+    pub(crate) opposite: u32,
+    pub(crate) edge: u32,
+    pub(crate) role: Role,
+    pub(crate) edge_key: u32,
+    pub(crate) hedge_key: u32,
+}
 
 /// Hedges, their pairing, incidence, colours and a node -> hedges index, in `u32` words.
 #[derive(Debug, Default)]
@@ -95,7 +112,6 @@ impl Flat {
             ),
         };
 
-        let n_hedges = graph.n_hedges();
         self.inv.clear();
         self.node_of.clear();
         self.edge_of.clear();
@@ -105,32 +121,95 @@ impl Flat {
             let (opposite, edge, role) = match m {
                 InvolutiveMapping::Identity { data, underlying } => {
                     let role = match (data.orientation, underlying) {
-                        (Orientation::Undirected, _) => LEG,
+                        (Orientation::Undirected, _) => Role::Leg,
                         (Orientation::Default, Flow::Source)
-                        | (Orientation::Reversed, Flow::Sink) => LEG_OUT,
-                        _ => LEG_IN,
+                        | (Orientation::Reversed, Flow::Sink) => Role::LegOut,
+                        _ => Role::LegIn,
                     };
                     (h, data.data, role)
                 }
                 InvolutiveMapping::Source { data, sink_idx } => {
-                    (*sink_idx, data.data, edge_role(data.orientation, true))
+                    (*sink_idx, data.data, Role::of_edge(data.orientation, true))
                 }
                 InvolutiveMapping::Sink { source_idx } => {
                     let InvolutiveMapping::Source { data, .. } = &mapping[*source_idx] else {
                         unreachable!("a sink hedge pairs with a source hedge")
                     };
-                    (*source_idx, data.data, edge_role(data.orientation, false))
+                    (
+                        *source_idx,
+                        data.data,
+                        Role::of_edge(data.orientation, false),
+                    )
                 }
             };
             self.inv.push(opposite.0 as u32);
             self.node_of.push(graph.node_id(h).0 as u32);
             self.edge_of.push(edge.0 as u32);
             // provisional colour: the role; `colour` folds in the keys below
-            self.hcol.push(role);
+            self.hcol.push(role as u32);
         }
         self.colour(keys.edges.len(), keys.hedges.len());
+        self.index_nodes(self.ncol.len());
+        keys
+    }
 
-        let n_nodes = self.ncol.len();
+    /// Load a graph given directly by node colours and undirected `[a, b, colour]` edges, for
+    /// callers that keep their own light graph state and only need node canonization.
+    pub(crate) fn load_coloured(&mut self, ncol: &[u32], edges: &[[u32; 3]]) {
+        self.ncol.clear();
+        self.ncol.extend_from_slice(ncol);
+        self.colour_table.clear();
+        self.edge_key.clear();
+        self.edge_key.resize(edges.len(), 0);
+        self.hedge_key.clear();
+        self.inv.clear();
+        self.node_of.clear();
+        self.edge_of.clear();
+        self.hcol.clear();
+        for (e, &[a, b, colour]) in edges.iter().enumerate() {
+            let h = self.inv.len() as u32;
+            self.inv.extend([h + 1, h]);
+            self.node_of.extend([a, b]);
+            self.edge_of.extend([e as u32; 2]);
+            self.hcol.extend([colour; 2]);
+        }
+        self.index_nodes(ncol.len());
+    }
+
+    /// Load a graph given by node colours and its hedges, with keys already ranked into tables of
+    /// `n_edge_keys` and `n_hedge_keys` distinct values; the colours then match [`Self::load`] of
+    /// the same graph.
+    pub(crate) fn load_hedges(
+        &mut self,
+        node_colours: &[u32],
+        hedges: &[RawHedge],
+        n_edges: usize,
+        n_edge_keys: usize,
+        n_hedge_keys: usize,
+    ) {
+        self.ncol.clear();
+        self.ncol.extend_from_slice(node_colours);
+        self.edge_key.clear();
+        self.edge_key.resize(n_edges, 0);
+        self.hedge_key.clear();
+        self.inv.clear();
+        self.node_of.clear();
+        self.edge_of.clear();
+        self.hcol.clear();
+        for h in hedges {
+            self.inv.push(h.opposite);
+            self.node_of.push(h.node);
+            self.edge_of.push(h.edge);
+            self.hcol.push(h.role as u32);
+            self.edge_key[h.edge as usize] = h.edge_key;
+            self.hedge_key.push(h.hedge_key);
+        }
+        self.colour(n_edge_keys, n_hedge_keys);
+        self.index_nodes(node_colours.len());
+    }
+
+    /// Build the node -> hedges index `off`/`adj` from `node_of`.
+    fn index_nodes(&mut self, n_nodes: usize) {
         self.off.clear();
         self.off.resize(n_nodes + 1, 0);
         for &v in &self.node_of {
@@ -140,7 +219,7 @@ impl Flat {
             self.off[v + 1] += self.off[v];
         }
         self.adj.clear();
-        self.adj.resize(n_hedges, 0);
+        self.adj.resize(self.node_of.len(), 0);
         for (h, &v) in self.node_of.iter().enumerate() {
             let slot = &mut self.off[v as usize];
             self.adj[*slot as usize] = h as u32;
@@ -153,7 +232,6 @@ impl Flat {
         if n_nodes > 0 {
             self.off[0] = 0;
         }
-        keys
     }
 
     /// Replace the provisional roles in `hcol` by full hedge colours.
@@ -206,7 +284,30 @@ pub(crate) enum Twins<'a> {
     SymmetricLoops(&'a [u32]),
 }
 
+impl Twins<'_> {
+    /// Number of automorphisms permuting the class: `m!`, times `2^m` for symmetric self-loops.
+    pub(crate) fn order(&self) -> Option<u128> {
+        match self {
+            Twins::Legs(hs) | Twins::Edges(hs) => super::factorial(hs.len()),
+            Twins::SymmetricLoops(hs) => super::scaled(
+                super::factorial(hs.len()),
+                2u128.checked_pow(hs.len() as u32),
+            ),
+        }
+    }
+}
+
 impl Flat {
+    /// Runs of at least two isolated nodes of equal colour in the node order `lab`; their
+    /// permutations are automorphisms.
+    pub(crate) fn isolated_runs<'a>(&'a self, lab: &'a [u32]) -> impl Iterator<Item = &'a [u32]> {
+        let isolated = |v: u32| self.hedges_of(v as usize).is_empty();
+        lab.chunk_by(move |&a, &b| {
+            isolated(a) && isolated(b) && self.ncol[a as usize] == self.ncol[b as usize]
+        })
+        .filter(|run| run.len() > 1)
+    }
+
     /// Hedges at `v` sorted by `(colour, opposite node, opposite colour, hedge)`, with the
     /// opposite node given by `rank` (identity for input labels).
     fn sorted_hedges(&self, v: usize, rank: impl Fn(u32) -> u32, out: &mut Vec<([u32; 3], u32)>) {
@@ -300,11 +401,14 @@ impl Flat {
     }
 }
 
-fn edge_role(orientation: Orientation, source: bool) -> u32 {
-    match (orientation, source) {
-        (Orientation::Undirected, _) => UNDIRECTED,
-        (Orientation::Default, true) | (Orientation::Reversed, false) => TAIL,
-        _ => HEAD,
+impl Role {
+    /// Role of the source (`true`) or sink hedge of a paired edge.
+    fn of_edge(orientation: Orientation, source: bool) -> Role {
+        match (orientation, source) {
+            (Orientation::Undirected, _) => Role::Undirected,
+            (Orientation::Default, true) | (Orientation::Reversed, false) => Role::Tail,
+            _ => Role::Head,
+        }
     }
 }
 

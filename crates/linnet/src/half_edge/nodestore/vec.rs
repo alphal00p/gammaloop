@@ -607,25 +607,7 @@ impl<N> NodeStorageOps for NodeStorageVec<N> {
         self.node_data.into_iter()
     }
     fn build<I: IntoIterator<Item = HedgeNodeBuilder<N>>>(node_iter: I, n_hedges: usize) -> Self {
-        let mut nodes: NodeVec<SuBitGraph> = NodeVec::new();
-        let mut node_data = NodeVec::new();
-        let mut hedgedata: HedgeVec<_> = vec![None; n_hedges].into();
-
-        for (i, n) in node_iter.into_iter().enumerate() {
-            for h in &n.hedges {
-                hedgedata[*h] = Some(NodeIndex(i));
-            }
-            nodes.push(n.to_base(n_hedges));
-            node_data.push(n.data);
-        }
-
-        let hedge_data = hedgedata.into_iter().map(|(_, x)| x.unwrap()).collect();
-
-        NodeStorageVec {
-            node_data,
-            hedge_data,
-            nodes,
-        }
+        Self::build_with_mapping(node_iter, n_hedges, |data| data)
     }
 
     fn build_with_mapping<I: IntoIterator<Item = HedgeNodeBuilder<ND>>, ND>(
@@ -633,11 +615,13 @@ impl<N> NodeStorageOps for NodeStorageVec<N> {
         n_hedges: usize,
         mut map_data: impl FnMut(ND) -> Self::NodeData,
     ) -> Self {
-        let mut nodes: NodeVec<SuBitGraph> = NodeVec::new();
-        let mut node_data = NodeVec::new();
+        let node_iter = node_iter.into_iter();
+        let (n_nodes, _) = node_iter.size_hint();
+        let mut nodes: NodeVec<SuBitGraph> = NodeVec::with_capacity(n_nodes);
+        let mut node_data = NodeVec::with_capacity(n_nodes);
         let mut hedgedata: HedgeVec<_> = vec![None; n_hedges].into();
 
-        for (i, n) in node_iter.into_iter().enumerate() {
+        for (i, n) in node_iter.enumerate() {
             for h in &n.hedges {
                 hedgedata[*h] = Some(NodeIndex(i));
             }

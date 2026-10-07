@@ -3745,6 +3745,7 @@ dependencies = [
  "paste",
  "proptest",
  "rand 0.8.6",
+ "rayon",
  "rkyv",
  "serde",
  "serde_json",
