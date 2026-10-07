@@ -1577,7 +1577,7 @@ impl PyGraph {
         dot::encode_graph(py, self, codec)
     }
 
-    /// Stage one render so its exact Typst source and compiled output stay correlated.
+    /// Snapshot a drawing, using native SVG geometry for ordinary graph settings.
     #[pyo3(signature = (*, config=None))]
     fn render(
         slf: Py<PyGraph>,
@@ -1586,7 +1586,7 @@ impl PyGraph {
             &Bound<'_, PyAny>,
         >,
     ) -> PyResult<crate::PyDiagramRender> {
-        crate::render::prepare_graph(py, &slf, config, None).map(crate::PyDiagramRender::prepared)
+        crate::render::render_graph(py, &slf, config, None)
     }
 
     #[pyo3(signature = (*, config=None))]

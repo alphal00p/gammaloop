@@ -54,6 +54,8 @@ pub struct Scene {
 pub struct NodeDrawing {
     /// Radius/minimum half-size in drawing units.
     pub radius: f64,
+    /// Fit labels with this padding, or keep an explicit fixed radius.
+    pub label_padding: Option<f64>,
     pub label: Option<usize>,
     pub rectangular: bool,
     pub fill: String,
@@ -300,7 +302,7 @@ enum Element {
     Label {
         page: usize,
         bounds: Bounds,
-        href: String,
+        href: Option<String>,
     },
     Node {
         at: [f64; 2],
@@ -538,7 +540,7 @@ impl Drawing {
             layers.push(Element::Label {
                 page: placement.page,
                 bounds: candidate.bounds,
-                href: placement.href.clone(),
+                href: Some(placement.href.clone()),
             });
             chosen.push(candidate.bounds);
         }
@@ -562,12 +564,18 @@ impl Drawing {
                         bottom: at[1] - label.height / UNIT / 2.0,
                         top: at[1] + label.height / UNIT / 2.0,
                     },
-                    href: href.clone(),
+                    href: None,
                 });
             }
+            // One target covers both the node and its label. Separate
+            // overlapping anchors steal clicks from the keyboard-focusable one.
+            let (width, height) = drawing.size(typeset);
+            let label_size = drawing.label.map_or(0.0, |page| {
+                typeset.pages[page].width.max(typeset.pages[page].height)
+            });
             targets.push(Target {
                 at,
-                size: (drawing.radius * UNIT * 2.0).max(10.0),
+                size: (width.max(height) * UNIT * 2.0).max(label_size).max(10.0),
                 href: href.into(),
             });
         }
@@ -834,12 +842,15 @@ impl Drawing {
 
 impl NodeDrawing {
     fn size(&self, typeset: &Typeset) -> (f64, f64) {
+        let Some(padding) = self.label_padding else {
+            return (self.radius, self.radius);
+        };
         let Some(label) = self.label.map(|i| &typeset.pages[i]) else {
             return (self.radius, self.radius);
         };
         let (w, h) = (
-            (label.width / UNIT / 2.0 + 0.25).max(self.radius),
-            (label.height / UNIT / 2.0 + 0.25).max(self.radius),
+            (label.width / UNIT / 2.0 + padding).max(self.radius),
+            (label.height / UNIT / 2.0 + padding).max(self.radius),
         );
         if self.rectangular {
             (w, h)
@@ -992,6 +1003,7 @@ mod tests {
             nodes: (0..2)
                 .map(|_| NodeDrawing {
                     radius: NODE_RADIUS,
+                    label_padding: Some(0.25),
                     label: None,
                     rectangular: false,
                     fill: "none".into(),
@@ -1069,6 +1081,15 @@ mod tests {
         assert!(svg.contains("#linnet-halfedge-1?"));
         assert!(svg.contains("#linnet-node-1?"));
         assert!(svg.contains("&quot;particle&quot;:&quot;x&quot;"));
+    }
+
+    #[test]
+    fn node_labels_share_one_click_target_with_their_node() {
+        let mut scene = bubble(false);
+        scene.nodes[0].label = Some(0);
+        let svg = scene.render(&typeset(&scene)).unwrap();
+        assert_eq!(svg.matches("#linnet-node-0?").count(), 1);
+        assert_eq!(svg.matches("#linnet-node-1?").count(), 1);
     }
 
     #[test]

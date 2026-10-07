@@ -22,6 +22,8 @@ use std::{
 #[derive(Clone)]
 pub struct PyDiagramRender {
     project: Option<Arc<PreparedRender>>,
+    /// Original configuration source when geometry was rendered natively.
+    pub(crate) source: Option<String>,
     pub(crate) pages: Arc<OnceLock<Vec<String>>>,
     pub(crate) html: Option<String>,
     /// Configured child snapshots for a rendered collection, in display order.
@@ -32,6 +34,7 @@ impl PyDiagramRender {
     pub fn new(svg: String, html: String) -> Self {
         Self {
             project: None,
+            source: None,
             pages: Arc::new(OnceLock::from(vec![svg])),
             html: Some(html),
             diagrams: Vec::new(),
@@ -47,6 +50,7 @@ impl PyDiagramRender {
             .collect();
         Ok(Self {
             project: None,
+            source: None,
             pages: Arc::new(OnceLock::from(pages)),
             html: Some(html),
             diagrams,
@@ -55,6 +59,7 @@ impl PyDiagramRender {
     pub(crate) fn prepared(project: PreparedRender) -> Self {
         Self {
             project: Some(Arc::new(project)),
+            source: None,
             pages: Arc::new(OnceLock::new()),
             html: None,
             diagrams: Vec::new(),
@@ -121,6 +126,9 @@ impl PyDiagramRender {
     }
     #[getter]
     fn typst_source(&self) -> PyResult<String> {
+        if let Some(source) = &self.source {
+            return Ok(source.clone());
+        }
         match &self.project {
             Some(project) => project.typst_source_value(),
             None => self.to_linnest(),

@@ -462,6 +462,7 @@ impl SpensoNet {
             });
             scene.nodes.push(NodeDrawing {
                 radius: if operator { 0.6 } else { 0.35 },
+                label_padding: Some(0.25),
                 label: Some(page),
                 rectangular: !operator,
                 fill: if operator { "#f5f5f5" } else { "#ffffff" }.into(),
