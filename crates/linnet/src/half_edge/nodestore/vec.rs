@@ -48,6 +48,10 @@ use super::{NodeStorage, NodeStorageOps};
 /// - `nodes`: A `Vec<BitVec>`. Each index in the outer `Vec` corresponds to a
 ///   `NodeIndex`. The `BitVec` at that index is a bitmask representing the set
 ///   of half-edges incident to that node.
+/// - `absorbed`: The nodes merged into another one by
+///   [`NodeStorageOps::identify_nodes`]. They keep their index and data, have an
+///   empty crown, and are dropped by
+///   [`NodeStorageOps::forget_identification_history`].
 pub struct NodeStorageVec<N> {
     /// Stores the custom data for each node. Indexed by `NodeIndex.0`.
     pub(crate) node_data: NodeVec<N>,
@@ -56,6 +60,8 @@ pub struct NodeStorageVec<N> {
     /// For each node (indexed by `NodeIndex.0`), stores a `BitVec` representing
     /// the set of half-edges incident to it.
     pub(crate) nodes: NodeVec<SuBitGraph>, // Nodes
+    /// Nodes absorbed by a pending identification. Indexed by `NodeIndex.0`.
+    pub(crate) absorbed: SubSet<NodeIndex>,
 }
 
 #[derive(Clone, Debug)]
@@ -133,6 +139,21 @@ impl<N> NodeStorageVec<N> {
     //     }
     // }
 
+    /// A store without pending identifications.
+    fn new(
+        node_data: NodeVec<N>,
+        hedge_data: HedgeVec<NodeIndex>,
+        nodes: NodeVec<SuBitGraph>,
+    ) -> Self {
+        let n_nodes: NodeIndex = nodes.len();
+        Self {
+            node_data,
+            hedge_data,
+            nodes,
+            absorbed: SubSet::empty(n_nodes.0),
+        }
+    }
+
     fn from_hairs_and_data(
         node_data: impl Into<NodeVec<N>>,
         nodes: impl Into<NodeVec<SuBitGraph>>,
@@ -148,14 +169,11 @@ impl<N> NodeStorageVec<N> {
                 hedge_data[h] = Some(i);
             }
         }
-        Some(Self {
-            node_data,
-            hedge_data: hedge_data
-                .into_iter()
-                .map(|(_, i)| i)
-                .collect::<Option<HedgeVec<_>>>()?,
-            nodes,
-        })
+        let hedge_data = hedge_data
+            .into_iter()
+            .map(|(_, i)| i)
+            .collect::<Option<_>>()?;
+        Some(Self::new(node_data, hedge_data, nodes))
     }
 }
 
@@ -201,6 +219,7 @@ impl<N> Swap<NodeIndex> for NodeStorageVec<N> {
             }
             self.node_data.swap(a, b);
             self.nodes.swap(a, b);
+            self.absorbed.swap(a, b);
         }
     }
 }
@@ -214,6 +233,15 @@ impl<N> NodeStorageOps for NodeStorageVec<N> {
             if !self.nodes[*n].includes(&h) {
                 Err(HedgeGraphError::NodeDoesNotContainHedge(*n, h))?;
             }
+        }
+        if let Some(n) = self
+            .absorbed
+            .included_iter()
+            .find(|&n| !self.nodes[n].is_empty())
+        {
+            Err(HedgeGraphError::NodesDoNotPartition(format!(
+                "Absorbed node {n} still has half-edges"
+            )))?;
         }
 
         let self_n_h: Hedge = self.len();
@@ -299,6 +327,7 @@ impl<N> NodeStorageOps for NodeStorageVec<N> {
 
         let _ = self.nodes.split_off(overlapping_nodes);
         let _ = self.node_data.split_off(overlapping_nodes);
+        let _ = self.absorbed.split_off(overlapping_nodes);
         let _ = self.hedge_data.split_off(left);
 
         for i in 0..(left_nodes.0) {
@@ -351,6 +380,7 @@ impl<N> NodeStorageOps for NodeStorageVec<N> {
                 nodes: extracted_neighbors,
                 node_data: extracted_data,
                 hedge_data: extracted_hedges,
+                absorbed: self.absorbed.split_off(left_nodes),
             },
         )
     }
@@ -427,6 +457,8 @@ impl<N> NodeStorageOps for NodeStorageVec<N> {
         // println!("non_overlapping_extracted: {}", non_overlapping_extracted.0);
 
         let mut extracted_nodes = self.nodes.split_off(overlapping_nodes);
+        // Absorbed nodes have no half-edges, so they all stay before `left_nodes`.
+        let _ = self.absorbed.split_off(overlapping_nodes);
         let mut extracted_data: NodeVec<_> = self
             .node_data
             .split_off(overlapping_nodes)
@@ -475,92 +507,55 @@ impl<N> NodeStorageOps for NodeStorageVec<N> {
     //     NodeIndex(self.nodes.len() - 1)
     // }
 
+    /// Merges `nodes` into the smallest of them, which receives `node_data_merge`.
+    ///
+    /// The other nodes are marked absorbed: their crowns move to the survivor
+    /// and they keep their index and data until
+    /// [`Self::forget_identification_history`]. No hedge, edge or node index
+    /// changes. Costs `O(k·H/64)` plus the size of the absorbed crowns.
     fn identify_nodes(
         &mut self,
         nodes: &[NodeIndex],
         node_data_merge: Self::NodeData,
     ) -> NodeIndex {
-        let n_nodes: NodeIndex = self.len();
-        let n_hedgs: Hedge = self.len();
-        let mut removed = SubSet::<NodeIndex>::empty(n_nodes.0);
-        let mut full_node = SuBitGraph::empty(n_hedgs.0);
+        debug_assert!(
+            nodes.iter().all(|n| !self.absorbed.includes(n)),
+            "cannot identify nodes absorbed by a pending identification: {nodes:?}"
+        );
+        let survivor = *nodes
+            .iter()
+            .min()
+            .expect("identify_nodes needs at least one node");
+        let n_hedges: Hedge = self.len();
 
-        for n in nodes {
-            removed.add(*n);
-            full_node.union_with(&self.nodes[*n]);
-        }
-
-        let replacement = removed.included_iter().next().unwrap();
-
-        for r in removed.included_iter().skip(1).rev() {
-            // let last_index = self.nodes.len() - 1;
-
-            // Before doing anything, update any hedge pointers that point to the node being removed.
-            for (_, hedge) in self.hedge_data.iter_mut() {
-                if *hedge == r {
-                    *hedge = replacement;
-                }
+        for &node in nodes {
+            if node == survivor || self.absorbed.includes(&node) {
+                continue;
             }
-
-            // if r != last_index {
-            //     // Swap the target with the last element in both vectors.
-            //     self.nodes.swap(r, last_index);
-            //     self.node_data.swap(r, last_index);
-
-            //     // After swapping, update any hedge pointer that pointed to the moved element.
-            //     // It used to be at last_index, now it is at r.
-            //     for hedge in self.hedge_data.iter_mut() {
-            //         if *hedge == NodeIndex(last_index) {
-            //             *hedge = NodeIndex(r);
-            //         }
-            //     }
-            // }
-            // // Remove the (now last) element.
-
-            // self.nodes.pop();
-            // self.node_data.pop();
+            self.absorbed.add(node);
+            let crown = std::mem::replace(&mut self.nodes[node], SuBitGraph::empty(n_hedges.0));
+            for h in crown.included_iter() {
+                self.hedge_data[h] = survivor;
+            }
+            self.nodes[survivor].union_with(&crown);
         }
+        self.node_data[survivor] = node_data_merge;
 
-        self.nodes[replacement] = full_node;
-        self.node_data[replacement] = node_data_merge;
-
-        replacement
+        survivor
     }
 
+    fn is_absorbed(&self, node: NodeIndex) -> bool {
+        self.absorbed.includes(&node)
+    }
+
+    /// Swaps the absorbed nodes to the end, drops them and returns their data.
+    /// Live nodes, isolated ones included, are kept.
     fn forget_identification_history(&mut self) -> NodeVec<Self::NodeData> {
-        let n_nodes: NodeIndex = self.len();
-        let mut to_keep: SubSet<NodeIndex> = SubSet::empty(n_nodes.0);
-
-        for (_, h) in &self.hedge_data {
-            to_keep.add(*h);
-        }
-
-        let notk = !to_keep.clone();
-        let n_hedges: Hedge = self.len();
-        for n in notk.included_iter() {
-            self.nodes[n] = SuBitGraph::empty(n_hedges.0);
-        }
-
-        let mut left_nodes = NodeIndex(0);
-        let mut extracted_nodes = n_nodes;
-        while left_nodes < extracted_nodes {
-            if to_keep[left_nodes] {
-                //left is in the right place
-                left_nodes.0 += 1;
-            } else {
-                //left needs to be swapped
-                extracted_nodes.0 -= 1;
-                if to_keep[extracted_nodes] {
-                    //only with an extracted that is in the wrong spot
-                    self.swap(left_nodes, extracted_nodes);
-                    // self.nodes.swap(left_nodes.0, extracted_nodes.0);
-                    left_nodes.0 += 1;
-                }
-            }
-        }
-
-        let _ = self.nodes.split_off(left_nodes);
-        self.node_data.split_off(left_nodes)
+        let absorbed = self.absorbed.clone();
+        let live = <Self as Swap<NodeIndex>>::partition(self, |n| !absorbed.includes(n));
+        let _ = self.nodes.split_off(live);
+        let _ = self.absorbed.split_off(live);
+        self.node_data.split_off(live)
     }
 
     fn to_forest<U, H>(
@@ -572,7 +567,7 @@ impl<N> NodeStorageOps for NodeStorageVec<N> {
 
         let mut roots = vec![];
 
-        for ((_, set), (_, d)) in self.nodes.iter().zip(&self.node_data) {
+        for ((node, set), (_, d)) in self.nodes.iter().zip(&self.node_data) {
             let mut first = None;
             for i in set.included_iter() {
                 if let Some(root) = first {
@@ -582,7 +577,11 @@ impl<N> NodeStorageOps for NodeStorageVec<N> {
                     nodes[i.0] = Some(PPNode::dataless_root(RootId(roots.len())));
                 }
             }
-            let root_id = first.unwrap_or(TreeNodeId::EMPTY);
+            let root_id = first.unwrap_or(if self.absorbed.includes(&node) {
+                TreeNodeId::HISTORICAL_EMPTY
+            } else {
+                TreeNodeId::EMPTY
+            });
             roots.push(RootData {
                 root_id,
                 data: map_data(d),
@@ -607,25 +606,7 @@ impl<N> NodeStorageOps for NodeStorageVec<N> {
         self.node_data.into_iter()
     }
     fn build<I: IntoIterator<Item = HedgeNodeBuilder<N>>>(node_iter: I, n_hedges: usize) -> Self {
-        let mut nodes: NodeVec<SuBitGraph> = NodeVec::new();
-        let mut node_data = NodeVec::new();
-        let mut hedgedata: HedgeVec<_> = vec![None; n_hedges].into();
-
-        for (i, n) in node_iter.into_iter().enumerate() {
-            for h in &n.hedges {
-                hedgedata[*h] = Some(NodeIndex(i));
-            }
-            nodes.push(n.to_base(n_hedges));
-            node_data.push(n.data);
-        }
-
-        let hedge_data = hedgedata.into_iter().map(|(_, x)| x.unwrap()).collect();
-
-        NodeStorageVec {
-            node_data,
-            hedge_data,
-            nodes,
-        }
+        Self::build_with_mapping(node_iter, n_hedges, |data| data)
     }
 
     fn build_with_mapping<I: IntoIterator<Item = HedgeNodeBuilder<ND>>, ND>(
@@ -647,11 +628,7 @@ impl<N> NodeStorageOps for NodeStorageVec<N> {
 
         let hedge_data = hedgedata.into_iter().map(|(_, x)| x.unwrap()).collect();
 
-        NodeStorageVec {
-            node_data,
-            hedge_data,
-            nodes,
-        }
+        Self::new(node_data, hedge_data, nodes)
     }
 
     fn iter_nodes(
@@ -715,6 +692,8 @@ impl<N> NodeStorageOps for NodeStorageVec<N> {
             }))
             .collect();
 
+        let mut absorbed = self.absorbed;
+        absorbed.join_mut(other.absorbed);
         let mut hedge_data = self.hedge_data;
         hedge_data.extend(other.hedge_data);
 
@@ -722,6 +701,7 @@ impl<N> NodeStorageOps for NodeStorageVec<N> {
             node_data,
             hedge_data,
             nodes,
+            absorbed,
         }
     }
 
@@ -747,11 +727,12 @@ impl<N> NodeStorageOps for NodeStorageVec<N> {
             .collect();
 
         self.nodes.extend(nodes);
+        self.absorbed.join_mut(other.absorbed);
 
         self.hedge_data.extend(other.hedge_data);
     }
     fn add_dangling_edge(self, source: NodeIndex) -> Result<Self, HedgeGraphError> {
-        if self.nodes.len() <= source {
+        if self.nodes.len() <= source || self.absorbed.includes(&source) {
             return Err(HedgeGraphError::NoNode);
         }
         let nodes: NodeVec<_> = self
@@ -773,6 +754,7 @@ impl<N> NodeStorageOps for NodeStorageVec<N> {
             node_data: self.node_data,
             hedge_data,
             nodes,
+            absorbed: self.absorbed,
         })
     }
 
@@ -804,11 +786,7 @@ impl<N> NodeStorageOps for NodeStorageVec<N> {
             }
         }
 
-        NodeStorageVec {
-            node_data,
-            hedge_data,
-            nodes,
-        }
+        Self::new(node_data, hedge_data, nodes)
     }
 
     fn check_and_set_nodes(&mut self) -> Result<(), HedgeGraphError> {
@@ -858,6 +836,7 @@ impl<N> NodeStorageOps for NodeStorageVec<N> {
             node_data,
             hedge_data: self.hedge_data.clone(),
             nodes: self.nodes.clone(),
+            absorbed: self.absorbed.clone(),
         }
     }
 
@@ -916,6 +895,7 @@ impl<N> NodeStorageOps for NodeStorageVec<N> {
             node_data,
             hedge_data: self.hedge_data.clone(),
             nodes: self.nodes.clone(),
+            absorbed: self.absorbed.clone(),
         }
     }
 
@@ -939,6 +919,7 @@ impl<N> NodeStorageOps for NodeStorageVec<N> {
             node_data: node_data?,
             hedge_data: self.hedge_data.clone(),
             nodes: self.nodes.clone(),
+            absorbed: self.absorbed.clone(),
         })
     }
 
@@ -957,6 +938,7 @@ impl<N> NodeStorageOps for NodeStorageVec<N> {
             node_data,
             hedge_data: self.hedge_data,
             nodes: self.nodes,
+            absorbed: self.absorbed,
         }
     }
 
@@ -974,6 +956,7 @@ impl<N> NodeStorageOps for NodeStorageVec<N> {
             node_data,
             hedge_data: self.hedge_data,
             nodes: self.nodes,
+            absorbed: self.absorbed,
         })
     }
 
@@ -986,5 +969,149 @@ impl<N> NodeStorageOps for NodeStorageVec<N> {
             .zip(self.nodes.iter())
             .map(|((i, v), (_, h))| node_map(i, h.into(), v))
             .collect()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::half_edge::{
+        builder::HedgeGraphBuilder,
+        involution::{Flow, Hedge, Orientation},
+        nodestore::{NodeStorageOps, NodeStorageVec},
+        subgraph::{ModifySubSet, SuBitGraph},
+        HedgeGraph, NodeIndex,
+    };
+
+    type Graph<E = ()> = HedgeGraph<E, &'static str, (), NodeStorageVec<&'static str>>;
+
+    /// `a - b - c` plus two isolated nodes; node indices follow the names.
+    fn path_with_isolated_nodes() -> Graph {
+        let mut builder = HedgeGraphBuilder::new();
+        let [a, b, c, _, _] =
+            ["a", "b", "c", "isolated d", "isolated e"].map(|name| builder.add_node(name));
+        builder.add_edge(a, b, (), Orientation::Default);
+        builder.add_edge(b, c, (), Orientation::Default);
+        builder.build()
+    }
+
+    fn node_data<E>(graph: &Graph<E>) -> Vec<&'static str> {
+        graph.iter_nodes().map(|(_, _, data)| *data).collect()
+    }
+
+    fn forget(graph: &mut Graph) -> Vec<&'static str> {
+        let forgotten = graph.forget_identification_history();
+        graph.node_store.check_nodes().unwrap();
+        forgotten.into_iter().map(|(_, data)| data).collect()
+    }
+
+    #[test]
+    fn identify_moves_crowns_without_renumbering() {
+        let mut graph = path_with_isolated_nodes();
+        let merged = graph.identify_nodes(&[NodeIndex(2), NodeIndex(0)], "ac");
+
+        assert_eq!(merged, NodeIndex(0));
+        assert_eq!(graph.n_hedges(), 4);
+        assert_eq!(
+            node_data(&graph),
+            ["ac", "b", "c", "isolated d", "isolated e"]
+        );
+        assert_eq!(
+            graph.iter_crown(merged).collect::<Vec<_>>(),
+            [Hedge(0), Hedge(3)]
+        );
+        assert_eq!(graph.iter_crown(NodeIndex(2)).count(), 0);
+        assert_eq!(graph.node_id(Hedge(3)), merged);
+        graph.node_store.check_nodes().unwrap();
+    }
+
+    #[test]
+    fn pending_identification_allows_growing_the_graph() {
+        let mut graph = path_with_isolated_nodes();
+        let merged = graph.identify_nodes(&[NodeIndex(0), NodeIndex(2)], "ac");
+
+        let (_, graph) = graph
+            .add_dangling_edge(merged, (), Flow::Source, Orientation::Default)
+            .unwrap();
+        let (_, _, mut graph) = graph
+            .add_pair(merged, NodeIndex(3), (), Orientation::Default)
+            .unwrap();
+        graph
+            .append_disconnected_mut(path_with_isolated_nodes())
+            .unwrap();
+        assert_eq!(graph.n_nodes(), 10);
+        assert_eq!(graph.iter_crown(merged).count(), 4);
+
+        assert_eq!(forget(&mut graph), ["c"]);
+        assert_eq!(graph.n_nodes(), 9);
+    }
+
+    #[test]
+    fn pending_identification_rejects_attaching_to_absorbed_node() {
+        let mut graph = path_with_isolated_nodes();
+        graph.identify_nodes(&[NodeIndex(0), NodeIndex(2)], "ac");
+        assert!(graph
+            .add_dangling_edge(NodeIndex(2), (), Flow::Source, Orientation::Default)
+            .is_err());
+    }
+
+    #[test]
+    fn forget_drops_only_absorbed_nodes() {
+        let mut graph = path_with_isolated_nodes();
+        graph.identify_nodes(&[NodeIndex(0), NodeIndex(2)], "ac");
+
+        assert_eq!(forget(&mut graph), ["c"]);
+        assert_eq!(node_data(&graph), ["ac", "b", "isolated e", "isolated d"]);
+    }
+
+    #[test]
+    fn contraction_keeps_unrelated_isolated_nodes() {
+        let mut graph = path_with_isolated_nodes();
+        assert!(forget(&mut graph).is_empty());
+
+        let mut edge: SuBitGraph = graph.empty_subgraph();
+        edge.add(Hedge(0));
+        edge.add(Hedge(1));
+        graph.contract_subgraph(&edge, "ab");
+
+        let mut data = node_data(&graph);
+        data.sort();
+        assert_eq!(data, ["ab", "c", "isolated d", "isolated e"]);
+        graph.node_store.check_nodes().unwrap();
+    }
+
+    #[test]
+    fn extract_nodes_moves_pending_survivor_past_absorbed_node() {
+        let mut builder = HedgeGraphBuilder::new();
+        let [a, b, c, d] = ["a", "b", "c", "d"].map(|name| builder.add_node(name));
+        builder.add_edge(a, b, (), Orientation::Default);
+        builder.add_edge(c, d, (), Orientation::Default);
+        let mut graph: Graph = builder.build();
+        let merged = graph.identify_nodes(&[a, d], "ad");
+
+        // Extraction swaps the absorbed node `d` into the survivor's slot; its
+        // stale crown used to relabel the survivor's hedges and underflow.
+        let extracted = graph.extract_nodes([merged], |e| e.map(|_| ()), |e| e);
+
+        assert_eq!(node_data(&extracted), ["ad"]);
+        assert_eq!(extracted.n_hedges(), 2);
+        extracted.node_store.check_nodes().unwrap();
+        assert_eq!(node_data(&graph), ["d", "b", "c"]);
+        assert_eq!(graph.n_hedges(), 2);
+        assert_eq!(forget(&mut graph), ["d"]);
+        assert_eq!(node_data(&graph), ["c", "b"]);
+    }
+
+    #[test]
+    fn conversion_rejects_pending_identification() {
+        let mut graph = path_with_isolated_nodes();
+        graph.identify_nodes(&[NodeIndex(0), NodeIndex(2)], "ac");
+        assert!(graph
+            .clone()
+            .into_node_store::<NodeStorageVec<_>>()
+            .is_err());
+
+        forget(&mut graph);
+        let converted = graph.into_node_store::<NodeStorageVec<_>>().unwrap();
+        assert_eq!(converted.n_nodes(), 4);
     }
 }

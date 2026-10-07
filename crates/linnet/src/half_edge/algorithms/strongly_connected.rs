@@ -12,18 +12,18 @@ impl<E, V, H, N: NodeStorageOps<NodeData = V>> HedgeGraph<E, V, H, N> {
     /// from one component to another points to an earlier returned component.
     /// Nodes within each component are sorted. Among available sink components,
     /// the one with smallest node index comes first, making unrelated blocks
-    /// deterministic. Isolated nodes are included; identification aliases that
-    /// share incidence are visited once.
+    /// deterministic. Isolated nodes are included; nodes absorbed by a pending
+    /// identification are not.
     ///
     /// The iterative Tarjan traversal uses native half-edge crowns and requires
     /// no recursive call stack or copied adjacency graph. Ordering the resulting
     /// components also traverses native incidence. Complexity is O(V+E+V log V).
     pub fn strongly_connected_components(&self, basis: DirectionBasis) -> Vec<Vec<NodeIndex>> {
         let full = self.full_filter();
-        let nodes = self.iter_nodes_of(&full).map(|(node, _, _)| node).chain(
-            self.iter_nodes()
-                .filter_map(|(node, mut crown, _)| crown.next().is_none().then_some(node)),
-        );
+        let nodes = self
+            .iter_nodes_of(&full)
+            .map(|(node, _, _)| node)
+            .chain(self.iter_isolated_nodes());
         self.strongly_connected_nodes(&full, nodes, basis)
     }
 

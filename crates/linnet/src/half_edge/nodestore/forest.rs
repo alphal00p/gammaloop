@@ -734,6 +734,10 @@ impl<V, P: ForestNodeStore + ForestNodeStorePreorder + Clone> NodeStorageOps for
         first
     }
 
+    fn is_absorbed(&self, node: NodeIndex) -> bool {
+        !self.is_active_root(node.into())
+    }
+
     fn iter_nodes_mut(
         &mut self,
     ) -> impl Iterator<Item = (NodeIndex, Self::NeighborsIter<'_>, &mut Self::NodeData)> {

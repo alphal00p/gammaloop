@@ -424,7 +424,7 @@ impl<E, V, H, N: NodeStorageOps<NodeData = V>> HedgeGraph<E, V, H, N> {
     /// Node order, data, and incidence are retained as long as the source store represents a
     /// valid partition.
     ///
-    /// Forest stores may retain inactive roots after [`Self::identify_nodes`]. Those roots cannot
+    /// Node stores retain absorbed nodes after [`Self::identify_nodes`]. Those nodes cannot
     /// be represented by every backend, so this method returns an error instead of silently
     /// dropping their data. Call [`Self::forget_identification_history`] explicitly before
     /// conversion when compaction and the resulting node-ID changes are acceptable.
@@ -1563,7 +1563,9 @@ impl<E, V, H, N: NodeStorageOps<NodeData = V>> HedgeGraph<E, V, H, N> {
         self.node_store.forget_identification_history()
     }
 
-    ///Retains the NodeIndex ordering and just appends a new node.
+    /// Merges `nodes` into one surviving node and returns it; see
+    /// [`NodeStorageOps::identify_nodes`]. Renumbers nothing until
+    /// [`Self::forget_identification_history`].
     pub fn identify_nodes(&mut self, nodes: &[NodeIndex], node_data_merge: V) -> NodeIndex {
         self.node_store.identify_nodes(nodes, node_data_merge)
     }
@@ -1583,7 +1585,8 @@ impl<E, V, H, N: NodeStorageOps<NodeData = V>> HedgeGraph<E, V, H, N> {
         self.delete_hedges(subgraph);
     }
 
-    ///Retains the NodeIndex ordering and just appends a new node.
+    /// Like [`Self::identify_nodes`], also returning the half-edges that became
+    /// self-loops through this identification.
     pub fn identify_nodes_without_self_edges<S>(
         &mut self,
         nodes: &[NodeIndex],
@@ -3067,6 +3070,13 @@ impl<E, V, H, N: NodeStorageOps<NodeData = V>> HedgeGraph<E, V, H, N> {
             edges: subgraph.included_iter(),
             seen: SubSet::empty(self.n_nodes()),
         }
+    }
+
+    /// Nodes without half-edges, skipping those absorbed by a pending identification.
+    pub(crate) fn iter_isolated_nodes(&self) -> impl Iterator<Item = NodeIndex> + '_ {
+        self.iter_nodes().filter_map(|(node, mut crown, _)| {
+            (crown.next().is_none() && !self.node_store.is_absorbed(node)).then_some(node)
+        })
     }
 }
 
