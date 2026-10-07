@@ -92,7 +92,7 @@ impl From<RootId> for NodeIndex {
     }
 }
 
-impl<V, P: ForestNodeStorePreorder> Swap<Hedge> for Forest<V, P> {
+impl<V, P: ForestNodeStore> Swap<Hedge> for Forest<V, P> {
     fn len(&self) -> Hedge {
         Hedge(self.nodes.n_nodes())
     }
@@ -102,25 +102,8 @@ impl<V, P: ForestNodeStorePreorder> Swap<Hedge> for Forest<V, P> {
     }
 
     fn swap(&mut self, a: Hedge, b: Hedge) {
-        if a != b {
-            let a = a.into();
-            let b = b.into();
-            self.nodes.swap(a, b);
-            for node in [a, b] {
-                // Discarded node records name their merged branches by node
-                // label, and the swap exchanged two labels without updating
-                // them. Flattening the branches at both positions leaves any
-                // stale record naming a flat branch, so the next forget still
-                // flattens every merged branch. A flat branch costs only the
-                // walk up to the root, which is needed here anyway.
-                let rid = self.nodes.flatten_branch(node);
-                let r = self.root(rid);
-                self.roots[r.0].root_id = rid;
-            }
-        }
-
-        #[cfg(test)]
-        self.validate_structure().unwrap()
+        assert!(!self.has_identification_history(), "{HISTORY_RETAINED}");
+        self.swap_hedges(a, b);
     }
 }
 impl<V, P: ForestNodeStore> Swap<NodeIndex> for Forest<V, P> {
@@ -132,10 +115,35 @@ impl<V, P: ForestNodeStore> Swap<NodeIndex> for Forest<V, P> {
         self.roots.is_empty()
     }
     fn swap(&mut self, i: NodeIndex, j: NodeIndex) {
-        if i == j {
-            return;
-        }
+        assert!(!self.has_identification_history(), "{HISTORY_RETAINED}");
         self.swap_roots(RootId(i.0), RootId(j.0));
+    }
+}
+
+/// Identification history is retained only until it is forgotten: absorbed
+/// roots point at tree nodes by half-edge position and at their survivors by
+/// node index, so moving half-edges or renumbering nodes would corrupt it.
+const HISTORY_RETAINED: &str =
+    "moving half-edges or renumbering nodes of a Forest node store requires \
+     forget_identification_history() after identify_nodes()";
+
+impl<V, P: ForestNodeStore> Forest<V, P> {
+    /// Swaps two half-edges' tree nodes and repoints the roots owning them.
+    fn swap_hedges(&mut self, a: Hedge, b: Hedge) {
+        if a != b {
+            let a = a.into();
+            let b = b.into();
+            self.nodes.swap(a, b);
+            let rid = self.nodes.root_node(a);
+            let r = self.root(rid);
+            self.roots[r.0].root_id = rid;
+            let rid = self.nodes.root_node(b);
+            let r = self.root(rid);
+            self.roots[r.0].root_id = rid;
+        }
+
+        #[cfg(test)]
+        self.validate_structure().unwrap()
     }
 }
 
@@ -172,6 +180,7 @@ impl<V, P: ForestNodeStore + ForestNodeStorePreorder + Clone> NodeStorageOps for
         Ok(())
     }
     fn extract_nodes(&mut self, nodes: impl IntoIterator<Item = NodeIndex>) -> (SuBitGraph, Self) {
+        assert!(!self.has_identification_history(), "{HISTORY_RETAINED}");
         let nodes: HashSet<NodeIndex> = nodes.into_iter().collect();
         let n_hedges: Hedge = <Self as Swap<Hedge>>::len(self);
         let mut extracted = SuBitGraph::empty(n_hedges.0);
@@ -179,7 +188,7 @@ impl<V, P: ForestNodeStore + ForestNodeStorePreorder + Clone> NodeStorageOps for
         for node in 0..self.roots.len() {
             let node = NodeIndex(node);
             if nodes.contains(&node) {
-                if self.roots[node.0].root_id.is_active_empty() {
+                if self.roots[node.0].root_id.is_empty() {
                     isolated[node.0] = true;
                 } else {
                     extracted.union_with_iter(self.get_neighbor_iterator(node));
@@ -285,6 +294,7 @@ impl<V, P: ForestNodeStore + ForestNodeStorePreorder + Clone> NodeStorageOps for
                     .map(|entry| entry.expect("hedge incidence must cover all half-edges")),
             ),
             roots,
+            merged_into: Vec::new(),
         }
     }
 
@@ -329,6 +339,7 @@ impl<V, P: ForestNodeStore + ForestNodeStorePreorder + Clone> NodeStorageOps for
                 .filter(|root_id| !root_id.is_empty());
             self.nodes.flatten_branches(absorbed);
         }
+        self.merged_into.clear();
         self.roots
             .split_off(active_nodes_upper_bound.0)
             .into_iter()
@@ -339,6 +350,16 @@ impl<V, P: ForestNodeStore + ForestNodeStorePreorder + Clone> NodeStorageOps for
     fn extend_mut(&mut self, other: Self) {
         let nodeshift = TreeNodeId(self.nodes.n_nodes());
         let shift_roots_by = RootId(self.roots.len());
+        if self.has_identification_history() || other.has_identification_history() {
+            let mut links = other.merged_into;
+            links.resize(other.roots.len(), None);
+            self.merged_into.resize(shift_roots_by.0, None);
+            self.merged_into.extend(
+                links
+                    .into_iter()
+                    .map(|merged| merged.map(|r| RootId(r.0 + shift_roots_by.0))),
+            );
+        }
         self.roots.extend(other.roots.into_iter().map(|mut a| {
             if !a.root_id.is_empty() {
                 a.root_id.0 += nodeshift.0;
@@ -364,6 +385,7 @@ impl<V, P: ForestNodeStore + ForestNodeStorePreorder + Clone> NodeStorageOps for
         Forest {
             roots: a.roots,
             nodes: P::from_pp(a.nodes),
+            merged_into: a.merged_into,
         }
     }
 
@@ -371,6 +393,7 @@ impl<V, P: ForestNodeStore + ForestNodeStorePreorder + Clone> NodeStorageOps for
         &mut self,
         subgraph: &S,
     ) {
+        assert!(!self.has_identification_history(), "{HISTORY_RETAINED}");
         let mut left = Hedge(0);
         let mut extracted = self.len();
         // println!("{}", self.nodes.debug_draw(|_| None));
@@ -386,7 +409,7 @@ impl<V, P: ForestNodeStore + ForestNodeStorePreorder + Clone> NodeStorageOps for
                 if !subgraph.includes(&extracted) {
                     //only with an extracted that is in the wrong spot
                     // println!("{left}<->{extracted}");
-                    self.swap(left, extracted);
+                    self.swap_hedges(left, extracted);
                     left.0 += 1;
                 }
             }
@@ -485,6 +508,7 @@ impl<V, P: ForestNodeStore + ForestNodeStorePreorder + Clone> NodeStorageOps for
         mut split_node: impl FnMut(&Self::NodeData) -> V2,
         mut owned_node: impl FnMut(Self::NodeData) -> V2,
     ) -> Self::OpStorage<V2> {
+        assert!(!self.has_identification_history(), "{HISTORY_RETAINED}");
         let mut left = Hedge(0);
         let mut extracted = self.len();
         // println!("{}", self.nodes.debug_draw(|_| None));
@@ -500,7 +524,7 @@ impl<V, P: ForestNodeStore + ForestNodeStorePreorder + Clone> NodeStorageOps for
                 if !subgraph.includes(&extracted) {
                     //only with an extracted that is in the wrong spot
                     // println!("{left}<->{extracted}");
-                    self.swap(left, extracted);
+                    self.swap_hedges(left, extracted);
                     left.0 += 1;
                 }
             }
@@ -636,6 +660,7 @@ impl<V, P: ForestNodeStore + ForestNodeStorePreorder + Clone> NodeStorageOps for
         Forest {
             nodes: extracted_nodes,
             roots: overlapping_roots,
+            merged_into: Vec::new(),
         }
     }
 
@@ -653,6 +678,7 @@ impl<V, P: ForestNodeStore + ForestNodeStorePreorder + Clone> NodeStorageOps for
                     root_id: a.root_id,
                 })
                 .collect(),
+            merged_into: self.merged_into.clone(),
         }
     }
 
@@ -686,6 +712,7 @@ impl<V, P: ForestNodeStore + ForestNodeStorePreorder + Clone> NodeStorageOps for
                     }
                 })
                 .collect::<Result<Vec<_>, Er>>()?,
+            merged_into: self.merged_into.clone(),
         })
     }
 
@@ -718,33 +745,31 @@ impl<V, P: ForestNodeStore + ForestNodeStorePreorder + Clone> NodeStorageOps for
         nodes: &[NodeIndex],
         node_data_merge: Self::NodeData,
     ) -> NodeIndex {
-        let first = nodes[0];
-        let mut root = self.roots[first.0].root_id;
-
-        for i in nodes.iter().skip(1) {
-            let y = self.roots[i.0].root_id;
-            match (root.is_empty(), y.is_empty()) {
-                (true, true) => {
-                    self.roots[i.0].root_id = TreeNodeId::HISTORICAL_EMPTY;
-                }
-                (true, false) => {
-                    let y_root = self.nodes.root_node(y);
-                    self.nodes.set_root(y_root, first.into());
-                    root = y_root;
-                    self.roots[first.0].root_id = root;
-                }
-                (false, true) => {
-                    self.roots[i.0].root_id = TreeNodeId::HISTORICAL_EMPTY;
-                }
-                (false, false) => {
-                    self.nodes.make_root_of(root, y);
-                }
+        let survivor = self.active_root(nodes[0].into());
+        for &node in &nodes[1..] {
+            // Resolving after the previous merges also skips repeated nodes.
+            let absorbed = self.active_root(node.into());
+            if absorbed == survivor {
+                continue;
+            }
+            self.merge_into(absorbed, survivor);
+            let tree = self.roots[absorbed.0].root_id;
+            if tree.is_empty() {
+                continue;
+            }
+            let survivor_tree = self.roots[survivor.0].root_id;
+            if survivor_tree.is_empty() {
+                // The survivor takes over the whole tree, so the absorbed root
+                // keeps no crown of its own.
+                self.nodes.set_root(tree, survivor);
+                self.roots[survivor.0].root_id = tree;
+                self.roots[absorbed.0].root_id = TreeNodeId::EMPTY;
+            } else {
+                self.nodes.make_root_of(survivor_tree, tree);
             }
         }
-
-        self.roots[first.0].data = node_data_merge;
-
-        first
+        self.roots[survivor.0].data = node_data_merge;
+        survivor.into()
     }
 
     fn iter_nodes_mut(
@@ -764,7 +789,14 @@ impl<V, P: ForestNodeStore + ForestNodeStorePreorder + Clone> NodeStorageOps for
         mut self,
         source: NodeIndex,
     ) -> Result<Self, crate::half_edge::HedgeGraphError> {
-        let parent = self.roots[source.0].root_id;
+        let parent = self
+            .roots
+            .get(source.0)
+            .ok_or(crate::half_edge::HedgeGraphError::NoNode)?
+            .root_id;
+        if !self.is_active_root(source.into()) {
+            return Err(crate::half_edge::HedgeGraphError::InvalidNode(source));
+        }
         if parent.is_empty() {
             self.roots[source.0].root_id = self.nodes.add_dataless_root(source.into());
         } else {
@@ -799,6 +831,7 @@ impl<V, P: ForestNodeStore + ForestNodeStorePreorder + Clone> NodeStorageOps for
                 })
                 .collect(),
             nodes: self.nodes,
+            merged_into: self.merged_into,
         }
     }
 
@@ -827,6 +860,7 @@ impl<V, P: ForestNodeStore + ForestNodeStorePreorder + Clone> NodeStorageOps for
                 })
                 .collect::<Result<_, Err>>()?,
             nodes: self.nodes,
+            merged_into: self.merged_into,
         })
     }
 
@@ -850,6 +884,7 @@ impl<V, P: ForestNodeStore + ForestNodeStorePreorder + Clone> NodeStorageOps for
                     root_id: r.root_id,
                 })
                 .collect(),
+            merged_into: self.merged_into.clone(),
         }
     }
 
@@ -892,6 +927,7 @@ impl<V, P: ForestNodeStore + ForestNodeStorePreorder + Clone> NodeStorageOps for
                     }
                 })
                 .collect(),
+            merged_into: self.merged_into.clone(),
         }
     }
 }
@@ -1146,48 +1182,6 @@ mod builder_tests {
     }
 
     #[test]
-    fn forgetting_after_hedge_swaps_flattens_merged_trees() {
-        use crate::{
-            half_edge::{builder::HedgeGraphBuilder, swap::Swap, HedgeGraph, NoData},
-            tree::parent_pointer::ParentId,
-        };
-
-        fn check<P: ForestNodeStorePreorder<NodeData = ()> + Clone>() {
-            let n = 8;
-            let mut builder = HedgeGraphBuilder::new();
-            let nodes: Vec<_> = (0..n).map(|i| builder.add_node(i)).collect();
-            for i in 0..n {
-                builder.add_edge(nodes[i], nodes[(i + 1) % n], i, false);
-                builder.add_edge(nodes[i], nodes[(i + 3) % n], n + i, false);
-            }
-            let base: HedgeGraph<usize, usize, NoData, Forest<usize, P>> = builder.build();
-            for absorbed in 1..n {
-                for other in (0..base.n_hedges()).map(Hedge) {
-                    let mut graph = base.clone();
-                    // Nest the absorbed crown two levels deep, then move the
-                    // label its discarded record names elsewhere.
-                    graph.identify_nodes(&[NodeIndex(0), NodeIndex(absorbed)], n);
-                    let label = Hedge(graph.node_store.roots[absorbed].root_id.0);
-                    Swap::<Hedge>::swap(&mut graph, label, other);
-                    graph.forget_identification_history();
-                    graph.check().unwrap();
-                    let store = &graph.node_store.nodes;
-                    for hedge in store.iter_node_id() {
-                        if let ParentId::Node(parent) = store.parent(hedge) {
-                            assert!(
-                                matches!(store.parent(parent), ParentId::Root(_)),
-                                "absorbed {absorbed}, swapped with {other}: {hedge:?} is deep"
-                            );
-                        }
-                    }
-                }
-            }
-        }
-        check::<ParentChildStore<()>>();
-        check::<ChildVecStore<()>>();
-    }
-
-    #[test]
     fn direct_forest_builder_preserves_parent_root_and_crown_order() {
         for (parts, n_hedges) in [
             (vec![], 0),
@@ -1278,5 +1272,298 @@ mod builder_tests {
             assert_eq!(*root.data.lock().unwrap(), i + 10);
             assert_eq!(root.root_id, TreeNodeId(i));
         }
+    }
+}
+
+#[cfg(test)]
+mod identification_tests {
+    use std::{
+        collections::BTreeSet,
+        panic::{catch_unwind, AssertUnwindSafe},
+    };
+
+    use super::*;
+    use crate::{
+        half_edge::{builder::HedgeGraphBuilder, involution::Flow, HedgeGraph, HedgeGraphError},
+        tree::{child_pointer::ParentChildStore, child_vec::ChildVecStore},
+    };
+
+    trait Store: ForestNodeStore<NodeData = ()> + ForestNodeStorePreorder + Clone {}
+    impl<P: ForestNodeStore<NodeData = ()> + ForestNodeStorePreorder + Clone> Store for P {}
+
+    type Graph<P> = HedgeGraph<(), usize, (), Forest<usize, P>>;
+
+    /// A four-cycle on nodes 0..4 and two isolated nodes 4 and 5.
+    fn graph<P: Store>() -> Graph<P> {
+        let mut builder = HedgeGraphBuilder::new();
+        let nodes: Vec<_> = (0..6).map(|i| builder.add_node(i)).collect();
+        for i in 0..4 {
+            builder.add_edge(nodes[i], nodes[(i + 1) % 4], (), true);
+        }
+        builder.build()
+    }
+
+    fn crown<P: Store>(graph: &Graph<P>, node: usize) -> BTreeSet<Hedge> {
+        graph.iter_crown(NodeIndex(node)).collect()
+    }
+
+    macro_rules! for_both_stores {
+        ($check:ident) => {
+            $check::<ChildVecStore<()>>();
+            $check::<ParentChildStore<()>>();
+        };
+    }
+
+    #[test]
+    fn identifying_absorbed_nodes_merges_their_survivors() {
+        fn check<P: Store>() {
+            let mut graph = graph::<P>();
+            let original: Vec<_> = (0..6).map(|node| crown(&graph, node)).collect();
+            let n = NodeIndex;
+            assert_eq!(graph.identify_nodes(&[n(0), n(1)], 10), n(0));
+            // Repeated and absorbed nodes resolve to the node that absorbed them.
+            assert_eq!(graph.identify_nodes(&[n(1), n(0), n(1)], 11), n(0));
+            assert_eq!(graph.identify_nodes(&[n(3), n(3)], 12), n(3));
+            assert_eq!(graph.identify_nodes(&[n(2), n(1)], 13), n(2));
+            // Nodes without half-edges keep their survivor as well.
+            assert_eq!(graph.identify_nodes(&[n(4), n(5)], 14), n(4));
+            assert_eq!(graph.identify_nodes(&[n(5), n(3)], 15), n(4));
+            assert_eq!(graph.identify_nodes(&[n(3), n(1), n(5)], 16), n(4));
+            for hedge in original.iter().flatten() {
+                assert_eq!(graph.node_id(*hedge), n(4));
+            }
+            assert_eq!(graph[n(4)], 16);
+            assert_eq!(
+                crown(&graph, 4),
+                original.iter().flatten().copied().collect::<BTreeSet<_>>()
+            );
+
+            let mut removed: Vec<_> = graph
+                .forget_identification_history()
+                .into_iter()
+                .map(|(_, data)| data)
+                .collect();
+            removed.sort();
+            assert_eq!(removed, [1, 5, 11, 12, 13]);
+            assert_eq!(graph.n_nodes(), 1);
+            assert_eq!(graph[n(0)], 16);
+            graph.check().unwrap();
+        }
+        for_both_stores!(check);
+    }
+
+    #[test]
+    fn an_isolated_survivor_does_not_share_its_crown() {
+        fn check<P: Store>() {
+            let mut graph = graph::<P>();
+            let absorbed = crown(&graph, 0);
+            assert_eq!(
+                graph.identify_nodes(&[NodeIndex(4), NodeIndex(0)], 10),
+                NodeIndex(4)
+            );
+            assert_eq!(crown(&graph, 4), absorbed);
+            assert!(crown(&graph, 0).is_empty());
+            for hedge in &absorbed {
+                assert_eq!(graph.node_id(*hedge), NodeIndex(4));
+            }
+            assert_eq!(
+                graph
+                    .forget_identification_history()
+                    .into_iter()
+                    .map(|(_, data)| data)
+                    .collect::<Vec<_>>(),
+                [0]
+            );
+            graph.check().unwrap();
+            assert_eq!(graph.n_nodes(), 5);
+        }
+        for_both_stores!(check);
+    }
+
+    #[test]
+    fn dangling_edges_need_an_existing_node() {
+        fn check<P: Store>() {
+            assert!(matches!(
+                graph::<P>().node_store.add_dangling_edge(NodeIndex(6)),
+                Err(HedgeGraphError::NoNode)
+            ));
+        }
+        for_both_stores!(check);
+    }
+
+    #[test]
+    fn dangling_edges_need_an_active_node() {
+        fn check<P: Store>() {
+            let mut graph = graph::<P>();
+            graph.identify_nodes(&[NodeIndex(0), NodeIndex(1)], 10);
+            graph.identify_nodes(&[NodeIndex(4), NodeIndex(5)], 11);
+            for absorbed in [1, 5] {
+                assert!(matches!(
+                    graph.node_store.clone().add_dangling_edge(NodeIndex(absorbed)),
+                    Err(HedgeGraphError::InvalidNode(NodeIndex(node))) if node == absorbed
+                ));
+            }
+            for survivor in [0, 4] {
+                let store = graph
+                    .node_store
+                    .clone()
+                    .add_dangling_edge(NodeIndex(survivor));
+                let store = store.unwrap();
+                assert_eq!(store.node_id_ref(Hedge(8)), NodeIndex(survivor));
+            }
+        }
+        for_both_stores!(check);
+    }
+
+    #[test]
+    fn moving_half_edges_or_nodes_requires_forgotten_history() {
+        fn check<P: Store>() {
+            let mut graph = graph::<P>();
+            graph.identify_nodes(&[NodeIndex(1), NodeIndex(0)], 10);
+            let mut subgraph: SuBitGraph = graph.empty_subgraph();
+            subgraph.add(Hedge(0));
+            for operation in 0..5 {
+                let run = |store: &mut Forest<usize, P>| match operation {
+                    0 => store.delete(&subgraph),
+                    1 => drop(store.extract(&subgraph, |d| *d, |d| d)),
+                    2 => drop(store.extract_nodes([NodeIndex(2)])),
+                    3 => Swap::<Hedge>::swap(store, Hedge(0), Hedge(7)),
+                    _ => Swap::<NodeIndex>::swap(store, NodeIndex(2), NodeIndex(3)),
+                };
+                let mut store = graph.node_store.clone();
+                assert!(catch_unwind(AssertUnwindSafe(|| run(&mut store))).is_err());
+                let mut store = graph.node_store.clone();
+                store.forget_identification_history();
+                run(&mut store);
+                store.check_nodes().unwrap();
+            }
+        }
+        for_both_stores!(check);
+    }
+
+    #[test]
+    fn appending_a_store_shifts_its_identification_links() {
+        fn check<P: Store>() {
+            let mut appended = graph::<P>();
+            appended.identify_nodes(&[NodeIndex(1), NodeIndex(0)], 10);
+            for self_history in [false, true] {
+                let mut store = graph::<P>().node_store;
+                if self_history {
+                    store.identify_nodes(&[NodeIndex(2), NodeIndex(3)], 11);
+                }
+                store.extend_mut(appended.node_store.clone());
+                store.validate_structure().unwrap();
+                assert_eq!(
+                    store.identify_nodes(&[NodeIndex(6), NodeIndex(8)], 12),
+                    NodeIndex(7)
+                );
+                assert!(store.is_active_root(RootId(2)));
+                assert_eq!(store.is_active_root(RootId(3)), !self_history);
+                assert_eq!(
+                    store.forget_identification_history().len(),
+                    NodeIndex(2 + usize::from(self_history))
+                );
+                assert!(!store.has_identification_history());
+                store.check_nodes().unwrap();
+            }
+        }
+        for_both_stores!(check);
+    }
+
+    /// Random identifications of arbitrary, possibly absorbed or repeated nodes,
+    /// dangling edges and forgetting, against a union-find over node indices.
+    #[test]
+    fn random_identifications_match_a_union_find() {
+        fn check<P: Store>() {
+            let mut state = 0x9e37_79b9_7f4a_7c15_u64;
+            let mut random = |bound: usize| {
+                state ^= state << 13;
+                state ^= state >> 7;
+                state ^= state << 17;
+                (state % bound as u64) as usize
+            };
+            let find = |parent: &[usize], mut node: usize| {
+                while parent[node] != node {
+                    node = parent[node];
+                }
+                node
+            };
+            for _ in 0..300 {
+                let mut builder = HedgeGraphBuilder::new();
+                let n_nodes = 1 + random(7);
+                let nodes: Vec<_> = (0..n_nodes).map(|i| builder.add_node(i)).collect();
+                for _ in 0..random(10) {
+                    builder.add_edge(nodes[random(n_nodes)], nodes[random(n_nodes)], (), true);
+                }
+                let mut graph: Graph<P> = builder.build();
+                let node_ids = |graph: &Graph<P>| -> Vec<usize> {
+                    (0..graph.n_hedges())
+                        .map(|hedge| graph.node_id(Hedge(hedge)).0)
+                        .collect()
+                };
+                // Node payloads stay unique, so they identify nodes across forgetting.
+                let mut parent: Vec<usize> = (0..n_nodes).collect();
+                let mut owner = node_ids(&graph);
+                for step in 0..12 {
+                    match random(4) {
+                        0 | 1 => {
+                            let requested: Vec<_> =
+                                (0..=random(4)).map(|_| random(parent.len())).collect();
+                            let survivor = find(&parent, requested[0]);
+                            for &node in &requested {
+                                let node = find(&parent, node);
+                                parent[node] = survivor;
+                            }
+                            let requested: Vec<_> = requested.into_iter().map(NodeIndex).collect();
+                            assert_eq!(
+                                graph.identify_nodes(&requested, 100 * (step + 1)),
+                                NodeIndex(survivor)
+                            );
+                        }
+                        2 => {
+                            let node = random(parent.len());
+                            match graph.clone().add_dangling_edge(
+                                NodeIndex(node),
+                                (),
+                                Flow::Sink,
+                                true,
+                            ) {
+                                Ok((_, extended)) => {
+                                    assert_eq!(find(&parent, node), node);
+                                    graph = extended;
+                                    owner.push(node);
+                                }
+                                Err(HedgeGraphError::InvalidNode(_)) => {
+                                    assert_ne!(find(&parent, node), node)
+                                }
+                                Err(error) => panic!("{error}"),
+                            }
+                        }
+                        _ => {
+                            let payload =
+                                |graph: &Graph<P>, node| graph[NodeIndex(find(&parent, node))];
+                            let survivors: BTreeSet<_> = (0..parent.len())
+                                .map(|node| payload(&graph, node))
+                                .collect();
+                            let expected: Vec<_> =
+                                owner.iter().map(|&node| payload(&graph, node)).collect();
+                            graph.forget_identification_history();
+                            graph.check().unwrap();
+                            let nodes = graph.iter_nodes().map(|(_, _, data)| *data);
+                            assert_eq!(nodes.collect::<BTreeSet<_>>(), survivors);
+                            parent = (0..graph.n_nodes()).collect();
+                            owner = node_ids(&graph);
+                            let actual: Vec<_> =
+                                owner.iter().map(|&node| graph[NodeIndex(node)]).collect();
+                            assert_eq!(actual, expected);
+                        }
+                    }
+                    for (hedge, &node) in owner.iter().enumerate() {
+                        assert_eq!(graph.node_id(Hedge(hedge)), NodeIndex(find(&parent, node)));
+                    }
+                }
+            }
+        }
+        for_both_stores!(check);
     }
 }

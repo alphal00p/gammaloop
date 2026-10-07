@@ -64,23 +64,6 @@ pub struct ChildVecStore<V> {
     pub nodes: Vec<CVNode<V>>,
 }
 
-impl<V> ChildVecStore<V> {
-    fn rebuild_children_from_parents(&mut self) {
-        let len = self.nodes.len();
-        for node in &mut self.nodes {
-            node.children.clear();
-        }
-        for child_id in 0..len {
-            let child = TreeNodeId(child_id);
-            if let ParentId::Node(parent) = self[&child] {
-                if parent.0 < len {
-                    self.nodes[parent.0].children.push(child);
-                }
-            }
-        }
-    }
-}
-
 //
 // Indexing implementations, similar to ParentChildStore/ParentPointerStore.
 //
@@ -277,100 +260,13 @@ impl<V> ForestNodeStore for ChildVecStore<V> {
     }
 
     fn split_off(&mut self, at: TreeNodeId) -> Self {
-        self.rebuild_children_from_parents();
-        // println!("Boundary: {at}");
-        // println!("{}", self.debug_draw(|_| None));
-        let mut roots = vec![];
-        for mut current in self.iter_node_id() {
-            while let ParentId::Node(p) = self[&current] {
-                let mut newp = p;
-                // println!("parent {newp} of current {current}");
-                let mut crosses_boundary = false;
-                let mut split_root = false;
-                while !((newp < at) ^ (current >= at)) {
-                    crosses_boundary = true;
-                    // the pointer crosses the splitting boundary, we need to find a new pointer.
-                    // println!("New parent {newp} and current {current} on opposite sides of the boundary {at}");
-
-                    match self[&newp] {
-                        ParentId::Node(next) => {
-                            newp = next;
-                        }
-                        ParentId::Root(_) => {
-                            split_root = true;
-                            break;
-                        }
-                        ParentId::PointingRoot(next) => {
-                            newp = next;
-                        }
-                    }
-                }
-
-                if crosses_boundary {
-                    // The seach for a new parent within the boundary, has ended at a root, so the root_node is outside the boundary.
-                    if split_root {
-                        if let ParentId::Root(r) = self[&newp] {
-                            // set current to now be the root, and original root to point here.
-
-                            self.nodes[newp.0].parent_pointer.parent =
-                                ParentId::PointingRoot(current);
-                            self.nodes[current.0].parent_pointer.parent =
-                                ParentId::PointingRoot(newp);
-
-                            let pos_in_children =
-                                self.iter_children(newp).find_position(|a| *a == current);
-                            if let Some((pos, _)) = pos_in_children {
-                                self.nodes[newp.0].children.swap_remove(pos);
-                            }
-                            roots.push((r, newp, current));
-
-                            // println!("Turning {current} into pointing root pointing to {newp}, and {newp} into pointing root pointing to {current}");
-                        }
-                    } else {
-                        self.reparent(newp, current);
-                        // println!("making {newp} the new parent of {current}")
-                    }
-                }
-
-                current = p
-            }
-        }
-
-        for (r, n1, n2) in roots {
-            self.nodes[n1.0].parent_pointer.parent = ParentId::Root(r);
-            self.nodes[n2.0].parent_pointer.parent = ParentId::Root(r);
-        }
-
-        self.rebuild_children_from_parents();
-        // println!("{}", self.debug_draw(|_| None));
-        for n in self.iter_node_id() {
-            if n >= at {
-                // println!("Shifting children of {n}");
-                for n in &mut self.nodes[n.0].children {
-                    // print!("child {n}->");
-                    n.0 -= at.0;
-                    // println!("{n}");
-                }
-
-                // println!("Shifting parents of {n}");
-                if let ParentId::Node(n) = &mut self.nodes[n.0].parent_pointer.parent {
-                    // print!("parent {n}->");
-                    n.0 -= at.0;
-                    // println!("{n}");
-                }
-            }
-
-            if let ParentId::PointingRoot(rp) = self[&n] {
-                let root = self[&rp];
-                self.nodes[n.0].parent_pointer.parent = root;
-            }
-        }
-        let extracte_nodes = self.nodes.split_off(at.0);
-
-        // println!("{}", self.debug_draw(|_| None));
-        Self {
-            nodes: extracte_nodes,
-        }
+        // Splitting only rewrites parent pointers; children follow from them.
+        let mut parents = ParentPointerStore::from(ChildVecStore {
+            nodes: std::mem::take(&mut self.nodes),
+        });
+        let split = parents.split_off(at);
+        *self = parents.into();
+        split.into()
     }
 
     fn extend(&mut self, other: Self, shift_roots_by: RootId) {
@@ -646,30 +542,6 @@ impl<V> ForestNodeStorePreorder for ChildVecStore<V> {
         self.lift_branches(direct, &mut selected);
         let nested = nested.into_iter().filter_map(|node| self.branch(node));
         self.lift_branches(nested.collect(), &mut selected);
-    }
-
-    fn flatten_branch(&mut self, node: TreeNodeId) -> TreeNodeId {
-        let Some((root, branch)) = self.branch(node) else {
-            return node;
-        };
-        if self.nodes[branch.0].children.is_empty() {
-            return root;
-        }
-        // Inserting one branch into the root's children scans and shifts that
-        // list, so calls for many branches of one large crown would take
-        // quadratic time. Rebuild the whole crown in preorder instead; every
-        // later call on this tree then returns after the walk up.
-        let children = std::mem::take(&mut self.nodes[root.0].children);
-        let mut flat = Vec::with_capacity(children.len());
-        let mut stack = Vec::new();
-        for child in children {
-            flat.push(child);
-            if !self.nodes[child.0].children.is_empty() {
-                self.append_descendants(root, child, &mut flat, &mut stack);
-            }
-        }
-        self.nodes[root.0].children = flat;
-        root
     }
 }
 

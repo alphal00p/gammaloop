@@ -596,6 +596,7 @@ impl<N> NodeStorageOps for NodeStorageVec<N> {
                 .into_iter()
                 .collect(),
             roots,
+            merged_into: Vec::new(),
         }
     }
 

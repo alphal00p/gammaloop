@@ -7,7 +7,6 @@ use std::{collections::VecDeque, fmt::Write};
 use crate::half_edge::subgraph::{subset::SubSet, Inclusion, ModifySubSet, SubSetLike};
 
 use super::{
-    child_vec::ChildVecStore,
     parent_pointer::{PPNode, ParentId, ParentPointerStore},
     ForestError, ForestNodeStore, ForestNodeStoreAncestors, ForestNodeStoreBfs,
     ForestNodeStoreDown, ForestNodeStorePreorder, RootId, TreeNodeId,
@@ -460,13 +459,13 @@ impl<V> ForestNodeStore for ParentChildStore<V> {
     }
 
     fn split_off(&mut self, at: TreeNodeId) -> Self {
-        let tmp = ParentChildStore {
+        // Splitting only rewrites parent pointers; sibling rings follow from them.
+        let mut parents = ParentPointerStore::from(ParentChildStore {
             nodes: std::mem::take(&mut self.nodes),
-        };
-        let mut as_vec: ChildVecStore<V> = tmp.into();
-        let extracted = as_vec.split_off(at);
-        *self = ParentChildStore::from(as_vec);
-        ParentChildStore::from(extracted)
+        });
+        let split = parents.split_off(at);
+        *self = parents.into();
+        split.into()
     }
 
     fn extend(&mut self, other: Self, shift_roots_by: RootId) {
@@ -741,38 +740,32 @@ impl<V> ForestNodeStorePreorder for ParentChildStore<V> {
 
     fn flatten_branches(&mut self, nodes: impl IntoIterator<Item = TreeNodeId>) {
         for node in nodes {
-            self.flatten_branch(node);
-        }
-    }
-
-    #[inline]
-    fn flatten_branch(&mut self, node: TreeNodeId) -> TreeNodeId {
-        let Some((root, branch)) = self.branch(node) else {
-            return node;
-        };
-        if self.nodes[branch.0].child.is_none() {
-            return root;
-        }
-        let stop = self.nodes[branch.0].neighbor_right;
-        let mut current = branch;
-        loop {
-            // Splice each child ring immediately after its parent, retaining
-            // preorder without a stack or an intermediate incidence vector.
-            if let Some(child) = self.nodes[current.0].child.take() {
-                let next = self.nodes[current.0].neighbor_right;
-                let last = self.nodes[child.0].neighbor_left;
-                self.nodes[current.0].neighbor_right = child;
-                self.nodes[child.0].neighbor_left = current;
-                self.nodes[last.0].neighbor_right = next;
-                self.nodes[next.0].neighbor_left = last;
+            let Some((root, branch)) = self.branch(node) else {
+                continue;
+            };
+            if self.nodes[branch.0].child.is_none() {
+                continue;
             }
-            self.nodes[current.0].parent_pointer.parent = ParentId::Node(root);
-            current = self.nodes[current.0].neighbor_right;
-            if current == stop {
-                break;
+            let stop = self.nodes[branch.0].neighbor_right;
+            let mut current = branch;
+            loop {
+                // Splice each child ring immediately after its parent, retaining
+                // preorder without a stack or an intermediate incidence vector.
+                if let Some(child) = self.nodes[current.0].child.take() {
+                    let next = self.nodes[current.0].neighbor_right;
+                    let last = self.nodes[child.0].neighbor_left;
+                    self.nodes[current.0].neighbor_right = child;
+                    self.nodes[child.0].neighbor_left = current;
+                    self.nodes[last.0].neighbor_right = next;
+                    self.nodes[next.0].neighbor_left = last;
+                }
+                self.nodes[current.0].parent_pointer.parent = ParentId::Node(root);
+                current = self.nodes[current.0].neighbor_right;
+                if current == stop {
+                    break;
+                }
             }
         }
-        root
     }
 }
 
@@ -933,26 +926,6 @@ mod test {
                         actual.flatten_branches(nodes.clone());
                         flattened_oracle.flatten_branches(nodes.clone());
                         assert_eq!(ChildVecStore::from(actual.clone()), flattened_oracle);
-                        // Single-branch calls return the root. The parent/child
-                        // store flattens just that branch; the child-vector store
-                        // flattens the whole tree once the branch is not flat.
-                        let (mut pc, mut cv, mut cv_expected) =
-                            (original.clone(), oracle.clone(), oracle.clone());
-                        for &node in &nodes {
-                            let root = original.root_node(node);
-                            assert_eq!(pc.flatten_branch(node), root);
-                            assert_eq!(cv.flatten_branch(node), root);
-                            if cv_expected.branch(node).is_some_and(|(_, branch)| {
-                                cv_expected.iter_children(branch).next().is_some()
-                            }) {
-                                let tree = original.iter_node_id();
-                                cv_expected.flatten_branches(
-                                    tree.filter(|&n| original.root_node(n) == root),
-                                );
-                            }
-                        }
-                        assert_eq!(pc, actual);
-                        assert_eq!(cv, cv_expected);
                         actual.validate().unwrap();
                         let branches: Vec<_> =
                             nodes.iter().filter_map(|&n| original.branch(n)).collect();

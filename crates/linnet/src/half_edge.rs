@@ -1569,7 +1569,7 @@ impl<E, V, H, N: NodeStorageOps<NodeData = V>> HedgeGraph<E, V, H, N> {
         self.node_store.forget_identification_history()
     }
 
-    ///Retains the NodeIndex ordering and just appends a new node.
+    /// Identifies `nodes` into one node; see [`NodeStorageOps::identify_nodes`].
     pub fn identify_nodes(&mut self, nodes: &[NodeIndex], node_data_merge: V) -> NodeIndex {
         self.node_store.identify_nodes(nodes, node_data_merge)
     }

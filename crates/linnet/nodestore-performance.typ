@@ -19,16 +19,14 @@ jj change `vpoqpqxtumps`, authored by lcnbr.
   isolated nodes and active root identity; active node indices can still change
   through the existing root compaction. Cleanup scans the node records, as before,
   plus work proportional to the merged crowns, and subsequent root lookups need
-  at most one parent hop. Half-edge swaps flatten the branches at both swapped
-  positions, so cleanup still reaches every merged branch when a swap has made a
-  record's label stale.
+  at most one parent hop.
 
 The parent/child flattening operation splices sibling rings in place and allocates
 no temporary incidence vectors. Child-vector forests share the cleanup semantics:
 reparenting appends, so they rebuild only the suffix of a root's child vector that
-holds the merged branches, using one node bitset per cleanup, and rebuild a whole
-crown when a swap meets a deep branch. Identification retains its hierarchy until
-cleanup; Python defaults and rendering behavior are unchanged.
+holds the merged branches, using one node bitset per cleanup. Identification
+retains its hierarchy until cleanup; Python defaults and rendering behavior are
+unchanged.
 
 == Release measurements
 
@@ -137,47 +135,38 @@ call, so no wall-clock conclusion is drawn. Both strategies produce the same fla
 crowns for merged nodes, so traversal after cleanup is unchanged.
 
 Unlike flattening all roots, cleanup no longer flattens trees that only other
-operations made deep, such as rerooting, unless a node was merged into them or a
-half-edge swap touched them.
+operations made deep, such as rerooting, unless a node was merged into them.
 
 == Half-edge swaps
 
-Discarded node records name their merged branches by half-edge label. A half-edge
-swap (`permute`, `delete`, extraction) exchanges two labels without updating
-those records, so a later cleanup would flatten the wrong branch. Each swap
-therefore flattens the branches at both swapped positions; the walk up that this
-needs replaces the root lookup each swap already did. Parent/child forests flatten
-just those branches. Child-vector forests rebuild the whole crown once one of its
-branches is deep, because inserting single branches into a long child vector would
-take quadratic time.
+Discarded node records name their merged branches by half-edge label. Half-edge
+swaps (`permute`, `delete`, extraction) panic while identification history is
+retained (change `wullmwll`), so these labels stay valid until cleanup and swaps
+do not flatten. Change `vpoqpqxt` alone allowed such swaps and flattened the
+branches at both swapped positions, so that cleanup still reached every merged
+branch.
 
 Permuting the node store of the 9,800-half-edge grid with a fixed random
-permutation takes these instruction counts, in thousands; "64 pending" first merges
-64 nodes into a hub and discards history after the permutation:
+permutation takes these instruction counts, in thousands. "After N merges" first
+merges N nodes into a hub and discards history:
 
 #table(
   columns: 5,
-  [Workload], [Store], [Before], [Flatten all roots], [Flatten merged branches],
-  [No history], [Parent/child], [20,674], [20,674], [20,850],
-  [No history], [Child-vector], [2,325], [2,325], [2,579],
-  [64 pending, permutation], [Parent/child], [20,706], [20,706], [20,836],
-  [64 pending, permutation], [Child-vector], [2,351], [2,351], [2,812],
-  [64 pending, cleanup], [Parent/child], [111], [192], [53],
-  [64 pending, cleanup], [Child-vector], [119], [220], [58],
+  [Workload], [Store], [Before], [Flattening swaps], [Current],
+  [No history], [Parent/child], [20,674], [20,850], [20,579],
+  [No history], [Child-vector], [2,325], [2,579], [2,325],
+  [After 64 merges], [Parent/child], [21,031], [21,133], [20,852],
+  [After 64 merges], [Child-vector], [2,351], [2,800], [2,546],
+  [After 2,400 merges], [Parent/child], [23,505], [22,843], [22,565],
+  [After 2,400 merges], [Child-vector], [50,089], [1,611,814], [1,568,456],
 )
 
-These calls take more than 100 microseconds. Measured as above, wall-clock time
-relative to "Before" is 0.98 (0.98--0.99) for parent/child and 1.10
-(1.08--1.11) for child-vector without history, and 0.96 (0.96--0.97) and 1.14
-(1.14--1.19) with 64 merges pending, including the cleanup. Flattening all roots
-measures 1.00 to 1.02 in these cases, but can leave merged trees deep after a swap.
-
-Child-vector swaps scan the parent's child vector, so they cost time linear in the
-crown size once crowns are flat. After 2,400 merges into the hub and a cleanup,
-the same permutation takes 1,568 million instructions with
-flattening, against 50 million before; with the merges still pending, swap
-flattening reaches the same cost (1,612 million). Parent/child forests take 20 to
-24 million in all these cases.
+"Before" is `1730ba8ba41b`, "Flattening swaps" `vpoqpqxt` and "Current"
+`wullmwll`. Without history, a swap updates roots as in "Before", plus a
+constant-time history check. Child-vector swaps scan the parent's child vector,
+so they cost time linear in the crown size once cleanup has flattened the crowns:
+after 2,400 merges the permutation takes 31 times the instructions of "Before".
+Parent/child forests do not have this cost.
 
 == Remaining costs
 
@@ -199,28 +188,44 @@ run first grows those buffers outside the timer; parent/child then takes roughly
 local insertion gap also remains. Allocation-sensitive append timings vary, and
 no append speedup is claimed.
 
+Change `wullmwll` records which root absorbed which in a side table on `Forest`.
+The table is empty unless identification history is retained, and otherwise holds
+one `Option<RootId>` per root until the history is forgotten. Root records keep
+their 16 bytes for a `usize` payload, checking for retained history is O(1), and
+forgetting decides which roots are active from the table instead of the trees.
+
+Building, DFS, adjacency scanning and appending at 1,000 vertices, and DFS after
+identification at depth 32, are unchanged within the noise of a shared machine.
+Forgetting a freshly cloned depth-32 history on one pinned core takes 49
+microseconds instead of 54 for parent/child. The `discard_history/32` case clones
+its inputs in batches before timing them, so the trees start out of cache. There
+it reports about 85 microseconds instead of 64 for parent/child. Child-vector
+timings are noisy: 169 to 248 microseconds instead of 152 to 183 over four runs.
+Timing the phases of the parent/child cold case separately shows that choosing the active roots
+falls from 27 to 8 microseconds, while flattening rises from 50 to 151
+microseconds. The old activity check read each root's tree node, which brought the
+trees into cache before flattening.
+
 These are native topology measurements with integer payloads and no half-edge
 payload. They do not measure Python overhead, generation, canonicalization or
 rendering, and do not change the Community wheel.
 
 == Validation and reproduction
 
-The Linnet suite passes 264 tests. New coverage enumerates 720 small forests,
+The Linnet suite passes 273 tests. New coverage enumerates 720 small forests,
 including shuffled IDs and nonroot subtree starts, and flattens the branch of
-every node as well as all branches at once against the child-vector oracle,
-including the single-branch paths that swaps use; it
+every node as well as all branches at once against the child-vector oracle; it
 also checks flattening, loops, parallel edges, dangling edges, isolated nodes,
 payload preservation, subsequent mutation and extraction. Repeated identification
 batches, with absorbed trees nested three deep and a hub moved below a fresh root,
 check that every crown is flat after each cleanup, crown order is preserved and
-untouched crowns keep their exact tree, including one deepened by rerooting. For every
-absorbed node of an eight-node graph and every half-edge, swapping the absorbed
-record's label away before cleanup still leaves no half-edge two hops below its
-root. New paired-edge construction is compared
+untouched crowns keep their exact tree, including one deepened by rerooting.
+Half-edge and node swaps, deletion and extraction are checked to panic while
+history is retained. New paired-edge construction is compared
 against connecting identity edges for every orientation. Spenso's 40 network
 library tests pass.
 
-The 58 benchmark cases pass a smoke run. Clippy passes for Linnet's library,
+The 54 benchmark cases pass a smoke run. Clippy passes for Linnet's library,
 tests and benchmarks; existing vendored Clarabel warnings remain.
 
 ```sh
@@ -233,8 +238,8 @@ cargo test -p spenso --lib network
 
 The batched-cleanup instruction counts use `valgrind --tool=callgrind
 --toggle-collect` on non-inlined merge, cleanup and permutation functions that
-mirror the `hub_merge` and `permute` benchmarks, built against copies of the three
-revisions.
+mirror the `hub_merge` and `permute` benchmarks, built against copies of each
+compared revision.
 
 The benchmarks instantiate both forest types explicitly. The parent/child-default
 library also passes `cargo check --lib --no-default-features --features
@@ -247,4 +252,6 @@ The comparison harness, baseline and optimized executables, raw CSV files,
 compiler logs and revision/hash record are saved under
 `/shared/codex/graph-scale/nodestore-bench/parent-child-performance/`; the
 batched-cleanup harness, executable and raw counts are in its `batched-cleanup`
-subdirectory, and the swap measurements in `batched-cleanup/swaps`. CI remains disabled and this change has not been pushed.
+subdirectory, the swap measurements of `vpoqpqxt` in `batched-cleanup/swaps`, and
+the half-edge swap table above in `batched-cleanup/swap-removal`. CI remains
+disabled and this change has not been pushed.

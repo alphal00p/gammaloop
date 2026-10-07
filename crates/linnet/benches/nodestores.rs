@@ -203,30 +203,21 @@ fn bench_store<S: NodeStorageOps<NodeData = usize> + Clone>(c: &mut Criterion, n
                 );
             });
         }
-        // Half-edge swaps with no history, and with 64 merges pending.
+        // Half-edge swaps, which require identification history to be forgotten.
         let permutation = shuffle(graph.n_hedges());
-        let mut pending = graph.clone();
-        for &hedge in &representatives[1..=64] {
-            let hub = pending.node_id(representatives[0]);
-            pending.identify_nodes(&[hub, pending.node_id(hedge)], 0);
-        }
-        for (label, start) in [("permute", &graph), ("permute_pending64", &pending)] {
-            let mut permuted = start.clone();
-            Swap::<Hedge>::permute(&mut permuted, &permutation);
-            permuted.forget_identification_history();
-            permuted.check().unwrap();
-            group.bench_function(BenchmarkId::new(label, graph.n_hedges()), |b| {
-                b.iter_batched(
-                    || start.clone(),
-                    |mut graph| {
-                        Swap::<Hedge>::permute(&mut graph, black_box(&permutation));
-                        graph.forget_identification_history();
-                        graph
-                    },
-                    BatchSize::SmallInput,
-                );
-            });
-        }
+        let mut permuted = graph.clone();
+        Swap::<Hedge>::permute(&mut permuted, &permutation);
+        permuted.check().unwrap();
+        group.bench_function(BenchmarkId::new("permute", graph.n_hedges()), |b| {
+            b.iter_batched(
+                || graph.clone(),
+                |mut graph| {
+                    Swap::<Hedge>::permute(&mut graph, black_box(&permutation));
+                    graph
+                },
+                BatchSize::SmallInput,
+            );
+        });
     }
     group.finish();
 }

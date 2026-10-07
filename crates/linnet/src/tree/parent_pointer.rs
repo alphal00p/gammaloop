@@ -307,56 +307,48 @@ impl<V> ForestNodeStore for ParentPointerStore<V> {
         }
     }
 
-    // with path compression for split nodes
+    /// Moves the nodes from `at` on into a new store. A parent pointer crossing
+    /// `at` is redirected to the child's nearest ancestor on its own side. A tree
+    /// whose root lies on the other side gets a root on each side, with the same
+    /// [`RootId`].
     fn split_off(&mut self, at: TreeNodeId) -> Self {
-        for mut current in (0..self.nodes.len()).map(TreeNodeId) {
-            while let ParentId::Node(p) = self[&current] {
-                let mut newp = p;
-                while (newp <= at) ^ (current > at) {
-                    // the pointer crosses the splitting boundary, we need to find a new pointer.
-
-                    match self[&newp] {
-                        ParentId::Node(next) => {
-                            newp = next;
-                        }
-                        ParentId::Root(_) => {
-                            // split_root = true;
+        let crosses = |a: TreeNodeId, b: TreeNodeId| (a < at) != (b < at);
+        let mut split_roots = vec![];
+        for start in 0..self.nodes.len() {
+            let mut current = TreeNodeId(start);
+            while let ParentId::Node(parent) = self[&current] {
+                let mut ancestor = parent;
+                while crosses(current, ancestor) {
+                    match self[&ancestor] {
+                        // A root that was already split points to its
+                        // counterpart, which lies on the other side of it.
+                        ParentId::Node(next) | ParentId::PointingRoot(next) => ancestor = next,
+                        ParentId::Root(root) => {
+                            self.nodes[ancestor.0].parent = ParentId::PointingRoot(current);
+                            self.nodes[current.0].parent = ParentId::PointingRoot(ancestor);
+                            split_roots.push((root, ancestor, current));
                             break;
-                        }
-                        ParentId::PointingRoot(next) => {
-                            newp = next;
                         }
                     }
                 }
-
-                if let ParentId::Root(r) = self[&newp] {
-                    // set current to now be the root, and original root to point here.
-
-                    self.nodes[newp.0].parent = ParentId::PointingRoot(current);
-                    self.nodes[current.0].parent = ParentId::Root(r);
-                } else {
-                    self.reparent(newp, current);
+                if ancestor != parent && !crosses(current, ancestor) {
+                    self.reparent(ancestor, current);
                 }
-
-                current = p
+                current = parent;
             }
         }
+        for (root, a, b) in split_roots {
+            self.nodes[a.0].parent = ParentId::Root(root);
+            self.nodes[b.0].parent = ParentId::Root(root);
+        }
 
-        for n in (0..self.nodes.len()).map(TreeNodeId) {
-            if let ParentId::Node(n) = &mut self.nodes[n.0].parent {
-                if *n > at {
-                    n.0 -= at.0;
-                }
-            }
-
-            if let ParentId::PointingRoot(rp) = self[&n] {
-                let root = self[&rp];
-                self.nodes[n.0].parent = root;
+        let mut split = self.nodes.split_off(at.0);
+        for node in &mut split {
+            if let ParentId::Node(parent) = &mut node.parent {
+                parent.0 -= at.0;
             }
         }
-        Self {
-            nodes: self.nodes.split_off(at.0),
-        }
+        Self { nodes: split }
     }
 
     fn extend(&mut self, other: Self, shift_roots_by: RootId) {
@@ -372,7 +364,6 @@ impl<V> ForestNodeStore for ParentPointerStore<V> {
     }
 
     fn swap(&mut self, a: TreeNodeId, b: TreeNodeId) {
-        println!("Swap PP");
         for n in &mut self.nodes {
             if let ParentId::Node(pp) = &mut n.parent {
                 if *pp == a {

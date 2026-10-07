@@ -64,9 +64,15 @@ pub trait NodeStorageOps: NodeStorage + Swap<Hedge> + Swap<NodeIndex> {
 
     // fn add_node(&mut self, node_data: Self::NodeData) -> NodeIndex;
 
-    /// Identifies nodes, essentially turning them into a single node
-    /// Invalidates all previous NodeIndex values if using VecNodeStore.
-    /// Does not invalidate if using Forest as NodeStore
+    /// Identifies `nodes` into a single node carrying `node_data_merge` and returns it.
+    ///
+    /// No half-edge, edge or other node index changes: absorbed nodes stay, with
+    /// their data, as identification history until
+    /// [`Self::forget_identification_history`]. Forest stores keep the node that
+    /// currently holds `nodes[0]` and merge every other requested node through the
+    /// node that absorbed it, so repeated and previously absorbed nodes are allowed.
+    /// While they retain history, Forest stores refuse to move half-edges or
+    /// renumber nodes (`delete`, `extract`, `extract_nodes`, swaps).
     fn identify_nodes(&mut self, nodes: &[NodeIndex], node_data_merge: Self::NodeData)
         -> NodeIndex;
 
@@ -93,6 +99,10 @@ pub trait NodeStorageOps: NodeStorage + Swap<Hedge> + Swap<NodeIndex> {
     ) -> Self;
 
     /// Appends an unpaired half-edge incident to `source`.
+    ///
+    /// Fails with [`HedgeGraphError::NoNode`] if `source` is not in the store. Forest
+    /// stores also refuse nodes absorbed by an identification with
+    /// [`HedgeGraphError::InvalidNode`].
     fn add_dangling_edge(self, source: NodeIndex) -> Result<Self, HedgeGraphError>;
 
     /// Builds nodes from source and sink neighbor sets, assigning default data to each node.
