@@ -1103,6 +1103,7 @@ fn decode_parsed(
         codec: Some(codec),
         render_config: crate::typst::default_render_config(py)?,
         revision: 0,
+        element_epoch: 0,
     }))
 }
 

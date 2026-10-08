@@ -159,13 +159,14 @@ fn apply_selectors(
     override_drawing: bool,
 ) -> PyResult<()> {
     let graph_ref = graph.borrow(py);
-    let (revision, node_count, edge_count, half_edge_count, half_edge_roles) = {
+    let (revision, element_epoch, node_count, edge_count, half_edge_count, half_edge_roles) = {
         let state = graph_ref.state.borrow();
         let state = state
             .as_ref()
             .ok_or_else(|| PyReferenceError::new_err("graph has been cleared"))?;
         (
             state.revision,
+            state.element_epoch,
             state.graph.n_nodes(),
             state.graph.n_edges(),
             state.graph.n_hedges(),
@@ -185,7 +186,7 @@ fn apply_selectors(
         selectors.node.as_ref(),
         &nodes,
         (0..node_count).map(|index| {
-            Ok(Py::new(py, PyNode::new(graph.clone_ref(py), index, revision))?.into_any())
+            Ok(Py::new(py, PyNode::new(graph.clone_ref(py), index, element_epoch))?.into_any())
         }),
         DrawingKind::Node,
         override_drawing,
@@ -200,7 +201,7 @@ fn apply_selectors(
         selectors.edge.as_ref(),
         &edges,
         (0..edge_count).map(|index| {
-            Ok(Py::new(py, PyEdge::new(graph.clone_ref(py), index, revision))?.into_any())
+            Ok(Py::new(py, PyEdge::new(graph.clone_ref(py), index, element_epoch))?.into_any())
         }),
         DrawingKind::Edge,
         override_drawing,
@@ -215,7 +216,11 @@ fn apply_selectors(
         .enumerate()
         .take(half_edge_count)
     {
-        let view = Py::new(py, PyHalfEdge::new(graph.clone_ref(py), index, revision))?.into_any();
+        let view = Py::new(
+            py,
+            PyHalfEdge::new(graph.clone_ref(py), index, element_epoch),
+        )?
+        .into_any();
         let selector = if is_source {
             selectors.source.as_ref()
         } else {

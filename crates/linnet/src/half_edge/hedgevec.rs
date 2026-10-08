@@ -430,49 +430,28 @@ impl<T> SmartEdgeVec<T> {
     }
 
     pub(crate) fn add_dangling_edge(
-        self,
+        &mut self,
         data: T,
         flow: Flow,
         orientation: impl Into<Orientation>,
-    ) -> (Self, Hedge) {
-        let mut involution = self.involution;
-        let o = orientation.into();
-
-        let mut edge_data = self.data;
-        let edge_index = edge_data.len();
-        let hedge = involution.add_identity(edge_index, o, flow);
-        edge_data.push((data, HedgePair::Unpaired { hedge, flow }));
-
-        (
-            SmartEdgeVec {
-                data: edge_data,
-                involution,
-            },
-            hedge,
-        )
+    ) -> Hedge {
+        let edge_index = self.data.len();
+        let hedge = self
+            .involution
+            .add_identity(edge_index, orientation.into(), flow);
+        self.data.push((data, HedgePair::Unpaired { hedge, flow }));
+        hedge
     }
 
     pub(crate) fn add_paired(
-        self,
+        &mut self,
         data: T,
         orientation: impl Into<Orientation>,
-    ) -> (Self, Hedge, Hedge) {
-        let mut involution = self.involution;
-        let o = orientation.into();
-
-        let mut edge_data = self.data;
-        let edge_index = edge_data.len();
-        let (source, sink) = involution.add_pair(edge_index, o);
-        edge_data.push((data, HedgePair::Paired { source, sink }));
-
-        (
-            SmartEdgeVec {
-                data: edge_data,
-                involution,
-            },
-            source,
-            sink,
-        )
+    ) -> (Hedge, Hedge) {
+        let edge_index = self.data.len();
+        let (source, sink) = self.involution.add_pair(edge_index, orientation.into());
+        self.data.push((data, HedgePair::Paired { source, sink }));
+        (source, sink)
     }
 
     /// The first two arguments of the merge function correspond to the source hedge, and the second two to the sink hedge.

@@ -270,36 +270,28 @@ impl PyHedgeGraph {
     }
 
     pub(crate) fn add_dangling_edge(
-        self,
+        &mut self,
         endpoint: HedgeData<HalfEdgeRecord>,
         edge: EdgeRecord,
         flow: Flow,
         orientation: Orientation,
-    ) -> Result<(Hedge, Self), HedgeGraphError> {
+    ) -> Result<Hedge, HedgeGraphError> {
         match self {
-            Self::Vec(graph) => graph
-                .add_dangling_edge(endpoint, edge, flow, orientation)
-                .map(|(hedge, graph)| (hedge, Self::Vec(graph))),
-            Self::Forest(graph) => graph
-                .add_dangling_edge(endpoint, edge, flow, orientation)
-                .map(|(hedge, graph)| (hedge, Self::Forest(graph))),
+            Self::Vec(graph) => graph.add_dangling_edge_mut(endpoint, edge, flow, orientation),
+            Self::Forest(graph) => graph.add_dangling_edge_mut(endpoint, edge, flow, orientation),
         }
     }
 
     pub(crate) fn add_pair(
-        self,
+        &mut self,
         source: HedgeData<HalfEdgeRecord>,
         sink: HedgeData<HalfEdgeRecord>,
         edge: EdgeRecord,
         orientation: Orientation,
-    ) -> Result<(Hedge, Hedge, Self), HedgeGraphError> {
+    ) -> Result<(Hedge, Hedge), HedgeGraphError> {
         match self {
-            Self::Vec(graph) => graph
-                .add_pair(source, sink, edge, orientation)
-                .map(|(source, sink, graph)| (source, sink, Self::Vec(graph))),
-            Self::Forest(graph) => graph
-                .add_pair(source, sink, edge, orientation)
-                .map(|(source, sink, graph)| (source, sink, Self::Forest(graph))),
+            Self::Vec(graph) => graph.add_pair_mut(source, sink, edge, orientation),
+            Self::Forest(graph) => graph.add_pair_mut(source, sink, edge, orientation),
         }
     }
 

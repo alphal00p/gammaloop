@@ -931,7 +931,7 @@ impl<V> NodeStorageOps for NodeForest<V> {
     }
 
     /// Appends the new largest half-edge at the end of the ring of `source`.
-    fn add_dangling_edge(mut self, source: NodeIndex) -> Result<Self, HedgeGraphError> {
+    fn add_dangling_edge_mut(&mut self, source: NodeIndex) -> Result<(), HedgeGraphError> {
         let crown = self.crowns.get(source.0).ok_or(HedgeGraphError::NoNode)?;
         if !crown.is_live() {
             return Err(HedgeGraphError::InvalidNode(source));
@@ -941,7 +941,7 @@ impl<V> NodeStorageOps for NodeForest<V> {
         self.links.push(Link::NONE);
         let (mut rings, crowns) = self.rings();
         rings.append(&mut crowns[source.0], hedge);
-        Ok(self)
+        Ok(())
     }
 
     fn random(sources: &[Self::Neighbors], sinks: &[Self::Neighbors]) -> Self
@@ -1692,16 +1692,21 @@ mod tests {
     fn dangling_edges_need_a_live_node() {
         let mut store = store(&[&[0], &[1], &[]]);
         store.identify_nodes(&[NodeIndex(0), NodeIndex(1)], 10);
+        let before = store.clone();
         assert!(matches!(
-            store.clone().add_dangling_edge(NodeIndex(3)),
+            store.add_dangling_edge_mut(NodeIndex(3)),
             Err(HedgeGraphError::NoNode)
         ));
         assert!(matches!(
-            store.clone().add_dangling_edge(NodeIndex(1)),
+            store.add_dangling_edge_mut(NodeIndex(1)),
             Err(HedgeGraphError::InvalidNode(NodeIndex(1)))
         ));
-        let store = store.add_dangling_edge(NodeIndex(2)).unwrap();
-        let store = store.add_dangling_edge(NodeIndex(0)).unwrap();
+        assert_eq!(
+            (&store.label, crowns(&store)),
+            (&before.label, crowns(&before))
+        );
+        store.add_dangling_edge_mut(NodeIndex(2)).unwrap();
+        store.add_dangling_edge_mut(NodeIndex(0)).unwrap();
         assert_eq!(crowns(&store), [vec![0, 1, 3], vec![], vec![2]]);
         store.check_nodes().unwrap();
     }

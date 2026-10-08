@@ -166,12 +166,17 @@ impl<V, P: ForestNodeStore + ForestNodeStorePreorder + Clone> NodeStorageOps for
     type Base = SuBitGraph;
     type OpStorage<N> = Forest<N, P>;
 
+    /// Checks that the live roots' trees partition the half-edges. An absorbed
+    /// root's tree hangs below its survivor, so it is covered there.
     fn check_nodes(&self) -> Result<(), crate::half_edge::HedgeGraphError> {
         let n_hedges: Hedge = <Self as Swap<Hedge>>::len(self);
         let mut cover = SuBitGraph::empty(n_hedges.0);
 
-        for (i, _) in self.roots.iter().enumerate() {
+        for i in 0..self.roots.len() {
             let node_id = NodeIndex(i);
+            if self.is_absorbed(node_id) {
+                continue;
+            }
             for h in self.get_neighbor_iterator(node_id) {
                 if h >= n_hedges {
                     return Err(crate::half_edge::HedgeGraphError::InvalidHedge(h));
@@ -611,24 +616,23 @@ impl<V, P: ForestNodeStore + ForestNodeStorePreorder + Clone> NodeStorageOps for
         })
     }
 
-    fn add_dangling_edge(
-        mut self,
+    fn add_dangling_edge_mut(
+        &mut self,
         source: NodeIndex,
-    ) -> Result<Self, crate::half_edge::HedgeGraphError> {
-        let parent = self
-            .roots
-            .get(source.0)
-            .ok_or(crate::half_edge::HedgeGraphError::NoNode)?
-            .root_id;
+    ) -> Result<(), crate::half_edge::HedgeGraphError> {
+        if source.0 >= self.roots.len() {
+            return Err(crate::half_edge::HedgeGraphError::NoNode);
+        }
         if !self.is_active_root(source.into()) {
             return Err(crate::half_edge::HedgeGraphError::InvalidNode(source));
         }
-        if parent.is_empty() {
-            self.roots[source.0].root_id = self.nodes.add_dataless_root(source.into());
+        let root = &mut self.roots[source.0];
+        if root.root_id.is_empty() {
+            root.root_id = self.nodes.add_dataless_root(source.into());
         } else {
-            self.nodes.add_dataless_child(parent);
+            self.nodes.add_dataless_child(root.root_id);
         }
-        Ok(self)
+        Ok(())
     }
 
     fn get_node_data_mut(&mut self, node_id: NodeIndex) -> &mut Self::NodeData {

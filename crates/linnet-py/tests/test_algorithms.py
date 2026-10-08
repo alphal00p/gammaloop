@@ -9,9 +9,7 @@ from symbolica.community import graph as g
 
 
 def link(a, b, *, data=0, orientation=g.Orientation.Undirected, **kwargs):
-    return g.edge(
-        g.source(a), second=g.sink(b), data=data, orientation=orientation, **kwargs
-    )
+    return g.Edge(source=a, sink=b, data=data, orientation=orientation, **kwargs)
 
 
 class AlgorithmsTests(unittest.TestCase):
@@ -55,9 +53,9 @@ class AlgorithmsTests(unittest.TestCase):
             (6, 7),
             (7, 8),
         ]
-        graph = g.build(
-            *(g.node(str(i), data=value) for i, value in enumerate(labels)),
-            *(link(str(a), str(b)) for a, b in pairs),
+        graph = g.Graph(
+            nodes=[g.Node(str(i), data=value) for i, value in enumerate(labels)],
+            edges=[link(str(a), str(b)) for a, b in pairs],
         )
         canonical, mapping, size, orbit = graph.canonize()
         self.assertEqual(size, 8)
@@ -97,9 +95,9 @@ class AlgorithmsTests(unittest.TestCase):
         pairs = [(0, 0), (0, 3), (0, 4), (1, 2), (1, 3), (1, 4), (2, 3), (2, 4), (3, 4)]
         expected = None
         for order in permutations(range(5)):
-            graph = g.build(
-                *(g.node(str(i)) for i in range(5)),
-                *(link(str(order[a]), str(order[b])) for a, b in pairs),
+            graph = g.Graph(
+                nodes=[g.Node(str(i)) for i in range(5)],
+                edges=[link(str(order[a]), str(order[b])) for a, b in pairs],
             ).canonize()[0]
             topology = [
                 (edge.source.node.index, edge.sink.node.index) for edge in graph.edges()
@@ -126,20 +124,26 @@ class AlgorithmsTests(unittest.TestCase):
         self.assertEqual([size for _, size in generated], [1, 1, 1])
 
     def test_parallel_edges_and_self_loops_have_expected_symmetries(self):
-        parallel = g.build(
-            g.node("a", data=1), g.node("b", data=2), link("a", "b"), link("a", "b")
+        parallel = g.Graph(
+            nodes=[g.Node("a", data=1), g.Node("b", data=2)],
+            edges=[link("a", "b"), link("a", "b")],
         )
         self.assertEqual(parallel.canonize()[2], 2)
-        loop = g.build(g.node("a"), link("a", "a"))
+        loop = g.Graph(nodes=[g.Node("a")], edges=[link("a", "a")])
         self.assertEqual(loop.canonize()[2], 2)
-        directed = g.build(
-            g.node("a"), link("a", "a", orientation=g.Orientation.Default)
+        directed = g.Graph(
+            nodes=[g.Node("a")],
+            edges=[link("a", "a", orientation=g.Orientation.Default)],
         )
         self.assertEqual(directed.canonize()[2], 1)
 
     def test_dangling_half_edges_and_isolated_nodes(self):
-        a = g.build(g.node("a"), g.node("isolated"), g.edge(g.source("a"), data=1))
-        b = g.build(g.node("isolated"), g.node("b"), g.edge(g.source("b"), data=1))
+        a = g.Graph(
+            nodes=[g.Node("a"), g.Node("isolated")], edges=[g.Edge(source="a", data=1)]
+        )
+        b = g.Graph(
+            nodes=[g.Node("isolated"), g.Node("b")], edges=[g.Edge(source="b", data=1)]
+        )
         self.assertTrue(a.is_isomorphic(b))
         canonical, mapping, size, orbit = a.canonize()
         self.assertEqual(canonical.n_nodes, 2)
@@ -151,10 +155,12 @@ class AlgorithmsTests(unittest.TestCase):
 
     def test_custom_keys_preserve_payload_identity_and_drawing(self):
         payload = {"label": 4}
-        graph = g.build(
-            g.node("a", data=payload, label="custom"),
-            g.node("b", data={"label": 3}),
-            link("a", "b"),
+        graph = g.Graph(
+            nodes=[
+                g.Node("a", data=payload, label="custom"),
+                g.Node("b", data={"label": 3}),
+            ],
+            edges=[link("a", "b")],
         )
         with self.assertRaises(TypeError):
             graph.canonize()
@@ -166,21 +172,23 @@ class AlgorithmsTests(unittest.TestCase):
         )
 
     def test_drawing_metadata_does_not_color_the_graph(self):
-        a = g.build(g.node("a", label="first"), g.node("b"), link("a", "b"))
-        b = g.build(g.node("x", label="different"), g.node("y"), link("x", "y"))
+        a = g.Graph(
+            nodes=[g.Node("a", label="first"), g.Node("b")], edges=[link("a", "b")]
+        )
+        b = g.Graph(
+            nodes=[g.Node("x", label="different"), g.Node("y")], edges=[link("x", "y")]
+        )
         self.assertTrue(a.is_isomorphic(b))
         self.assertEqual(a.canonize()[2], 2)
 
     def test_half_edge_keys_and_direction(self):
-        a = g.build(
-            g.node("a", data=1),
-            g.node("b", data=2),
-            link("a", "b", orientation=g.Orientation.Default),
+        a = g.Graph(
+            nodes=[g.Node("a", data=1), g.Node("b", data=2)],
+            edges=[link("a", "b", orientation=g.Orientation.Default)],
         )
-        b = g.build(
-            g.node("a", data=1),
-            g.node("b", data=2),
-            link("b", "a", orientation=g.Orientation.Reversed),
+        b = g.Graph(
+            nodes=[g.Node("a", data=1), g.Node("b", data=2)],
+            edges=[link("b", "a", orientation=g.Orientation.Reversed)],
         )
         self.assertTrue(a.is_isomorphic(b))
         a.half_edges()[0].data = {"port": 7}
@@ -192,12 +200,12 @@ class AlgorithmsTests(unittest.TestCase):
         )
 
     def test_copy_and_canonicalization_do_not_stale_original_views(self):
-        original = g.build(g.node("a"), g.node("b"), link("a", "b"))
+        original = g.Graph(nodes=[g.Node("a"), g.Node("b")], edges=[link("a", "b")])
         view = original.node(0)
         cloned = copy.copy(original)
         original.canonize()
         self.assertIsNone(view.data)
-        cloned.add_node(g.node("new"))
+        cloned.add_node(g.Node("new"))
         self.assertEqual(original.n_nodes, 2)
 
     def test_callback_errors_propagate_and_generation_recovers(self):
@@ -218,18 +226,16 @@ class AlgorithmsTests(unittest.TestCase):
 
     def test_edge_canonicalization_ignores_fixed_vertex_payloads(self):
         payload = object()
-        graph = g.build(
-            g.node("a", data=payload),
-            g.node("b", data=object()),
-            link("a", "b", data=2),
-            link("a", "b", data=1),
+        graph = g.Graph(
+            nodes=[g.Node("a", data=payload), g.Node("b", data=object())],
+            edges=[link("a", "b", data=2), link("a", "b", data=1)],
         )
         graph.canonize_edges()
         self.assertIs(graph.node("a").data, payload)
         self.assertEqual(sorted(edge.data for edge in graph.edges()), [1, 2])
 
     def test_mermaid_escapes_labels(self):
-        graph = g.build(g.node("a", data='<bad "label">'))
+        graph = g.Graph(nodes=[g.Node("a", data='<bad "label">')])
         self.assertIn("&lt;bad &quot;label&quot;&gt;", graph.to_mermaid())
 
 

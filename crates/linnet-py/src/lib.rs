@@ -128,10 +128,15 @@ _AnchorValue: typing.TypeAlias = Anchor | Auto | None | Inherit
 _Radius: typing.TypeAlias = builtins.int | builtins.float | builtins.list[builtins.int | builtins.float] | builtins.tuple[builtins.int | builtins.float, ...] | _ValueExpression | Inherit
 _Padding: typing.TypeAlias = builtins.int | builtins.float | _NativeArray | _NativeDict | Insets | _ValueExpression | Inherit
 _OptionalString: typing.TypeAlias = builtins.str | None
-_OptionalHalfEdgeSpec: typing.TypeAlias = HalfEdgeSpec | None
-_EndpointTarget: typing.TypeAlias = NodeSpec | Node | builtins.int | builtins.str
-_HalfEdgeTarget: typing.TypeAlias = HalfEdge | builtins.int
-_GraphItem: typing.TypeAlias = NodeSpec | EdgeSpec
+_EndpointTarget: typing.TypeAlias = Node | NodeView | builtins.int | builtins.str
+_EdgeEndpoint: typing.TypeAlias = HalfEdge | _EndpointTarget | None
+_NodeInput: typing.TypeAlias = Node | builtins.str | None
+_EdgeInput: typing.TypeAlias = Edge | _EdgeEndpoint
+_OptionalOrientation: typing.TypeAlias = Orientation | None
+_OptionalNodeDrawing: typing.TypeAlias = NodeDrawing | None
+_OptionalEdgeDrawing: typing.TypeAlias = EdgeDrawing | None
+_OptionalHalfEdgeDrawing: typing.TypeAlias = HalfEdgeDrawing | None
+_HalfEdgeTarget: typing.TypeAlias = HalfEdgeView | builtins.int
 _OptionalGlobalData: typing.TypeAlias = GlobalData | None
 _OptionalDotCodec: typing.TypeAlias = DotCodec | None
 _OptionalRenderSettings: typing.TypeAlias = RenderSettings | None
@@ -162,9 +167,9 @@ _DrawingPoints: typing.TypeAlias = typing.Sequence[builtins.list[_DrawingCoordin
 _DrawingString: typing.TypeAlias = builtins.str | _ValueExpression | None | Inherit
 _DrawingAngle: typing.TypeAlias = builtins.int | builtins.float | Angle | _ValueExpression | None | Inherit
 _DrawingDecoration: typing.TypeAlias = Pattern | _StyleLayers | None | Inherit
-_NodeDrawingSelector: typing.TypeAlias = typing.Callable[[Node], NodeDrawing | None] | None | Inherit
-_EdgeDrawingSelector: typing.TypeAlias = typing.Callable[[Edge], EdgeDrawing | None] | None | Inherit
-_HalfEdgeDrawingSelector: typing.TypeAlias = typing.Callable[[HalfEdge], HalfEdgeDrawing | None] | None | Inherit
+_NodeDrawingSelector: typing.TypeAlias = typing.Callable[[NodeView], NodeDrawing | None] | None | Inherit
+_EdgeDrawingSelector: typing.TypeAlias = typing.Callable[[EdgeView], EdgeDrawing | None] | None | Inherit
+_HalfEdgeDrawingSelector: typing.TypeAlias = typing.Callable[[HalfEdgeView], HalfEdgeDrawing | None] | None | Inherit
 _HedgeSelection: typing.TypeAlias = builtins.list[builtins.bool] | builtins.tuple[builtins.bool, ...]
 _SubgraphExpression: typing.TypeAlias = _ValueExpression | _FunctionExpression
 _SubgraphSelection: typing.TypeAlias = _HedgeSelection | _SubgraphExpression
@@ -273,7 +278,10 @@ pub fn canonical_stub() -> pyo3_stub_gen::Result<String> {
         ("PyRankAlignment", "RankAlignment"),
         ("PyEdgeDrawing", "EdgeDrawing"),
         ("PyEdgeValue", "EdgeValue"),
-        ("PyHalfEdge", "HalfEdge"),
+        ("PyHalfEdgeSpec", "HalfEdge"),
+        ("PyNodeSpec", "Node"),
+        ("PyEdgeSpec", "Edge"),
+        ("PyHalfEdge", "HalfEdgeView"),
         ("PyOrientedCut", "OrientedCut"),
         ("PyLabelLayout", "LabelLayout"),
         ("PyMarkDirection", "MarkDirection"),
@@ -297,8 +305,8 @@ pub fn canonical_stub() -> pyo3_stub_gen::Result<String> {
         ("PyPattern", "Pattern"),
         ("PyRouting", "Routing"),
         ("PyAnchor", "Anchor"),
-        ("PyEdge", "Edge"),
-        ("PyNode", "Node"),
+        ("PyEdge", "EdgeView"),
+        ("PyNode", "NodeView"),
     ] {
         stub = stub.replace(rust, python);
     }

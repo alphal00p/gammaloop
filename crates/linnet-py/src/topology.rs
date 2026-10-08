@@ -226,7 +226,11 @@ impl PySubgraph {
             .map(|hedge| {
                 Py::new(
                     py,
-                    PyHalfEdge::new(graph.as_unbound().clone_ref(py), hedge.0, self.revision),
+                    PyHalfEdge::new(
+                        graph.as_unbound().clone_ref(py),
+                        hedge.0,
+                        graph.borrow().element_epoch()?,
+                    ),
                 )
             })
             .collect()
@@ -622,7 +626,11 @@ impl PyCutPartition {
                     PyEdge::new(
                         self.graph.as_ref().expect("checked").clone_ref(py),
                         edge,
-                        self.revision,
+                        self.graph
+                            .as_ref()
+                            .expect("checked")
+                            .borrow(py)
+                            .element_epoch()?,
                     ),
                 )
             })
@@ -688,7 +696,11 @@ impl PyOrientedCut {
                     PyEdge::new(
                         self.graph.as_ref().expect("checked").clone_ref(py),
                         edge,
-                        self.revision,
+                        self.graph
+                            .as_ref()
+                            .expect("checked")
+                            .borrow(py)
+                            .element_epoch()?,
                     ),
                 )
             })
@@ -700,7 +712,7 @@ impl PyOrientedCut {
     fn orientation(
         &self,
         py: Python<'_>,
-        #[gen_stub(override_type(type_repr="Edge | builtins.int | builtins.str", imports=("builtins")))]
+        #[gen_stub(override_type(type_repr="EdgeView | builtins.int | builtins.str", imports=("builtins")))]
         edge: &Bound<'_, PyAny>,
     ) -> PyResult<PyOrientation> {
         self.owner(py)?;
@@ -793,7 +805,11 @@ impl PyTraversalTree {
             PyNode::new(
                 self.graph.as_ref().expect("checked").clone_ref(py),
                 node,
-                self.revision,
+                self.graph
+                    .as_ref()
+                    .expect("checked")
+                    .borrow(py)
+                    .element_epoch()?,
             ),
         )
     }
@@ -820,7 +836,11 @@ impl PyTraversalTree {
         if let Some(node) = self.isolated_root {
             return Ok(vec![Py::new(
                 py,
-                PyNode::new(graph.as_unbound().clone_ref(py), node, self.revision),
+                PyNode::new(
+                    graph.as_unbound().clone_ref(py),
+                    node,
+                    graph.borrow().element_epoch()?,
+                ),
             )?]);
         }
         self.tree
@@ -829,7 +849,11 @@ impl PyTraversalTree {
             .map(|node| {
                 Py::new(
                     py,
-                    PyNode::new(graph.as_unbound().clone_ref(py), node.0, self.revision),
+                    PyNode::new(
+                        graph.as_unbound().clone_ref(py),
+                        node.0,
+                        graph.borrow().element_epoch()?,
+                    ),
                 )
             })
             .collect()
@@ -858,7 +882,11 @@ impl PyTraversalTree {
             .map(|hedge| {
                 Py::new(
                     py,
-                    PyHalfEdge::new(graph.as_unbound().clone_ref(py), hedge.0, self.revision),
+                    PyHalfEdge::new(
+                        graph.as_unbound().clone_ref(py),
+                        hedge.0,
+                        graph.borrow().element_epoch()?,
+                    ),
                 )
             })
             .collect()
@@ -868,7 +896,7 @@ impl PyTraversalTree {
     fn parent(
         &self,
         py: Python<'_>,
-        #[gen_stub(override_type(type_repr="Node | builtins.int | builtins.str", imports=("builtins")))]
+        #[gen_stub(override_type(type_repr="NodeView | builtins.int | builtins.str", imports=("builtins")))]
         node: &Bound<'_, PyAny>,
     ) -> PyResult<Option<Py<PyNode>>> {
         let node = self.resolve_node(py, node)?;
@@ -890,7 +918,7 @@ impl PyTraversalTree {
     fn children(
         &self,
         py: Python<'_>,
-        #[gen_stub(override_type(type_repr="Node | builtins.int | builtins.str", imports=("builtins")))]
+        #[gen_stub(override_type(type_repr="NodeView | builtins.int | builtins.str", imports=("builtins")))]
         node: &Bound<'_, PyAny>,
     ) -> PyResult<Vec<Py<PyNode>>> {
         let node = self.resolve_node(py, node)?;
@@ -919,7 +947,7 @@ impl PyTraversalTree {
     fn ancestors(
         &self,
         py: Python<'_>,
-        #[gen_stub(override_type(type_repr="Node | builtins.int | builtins.str", imports=("builtins")))]
+        #[gen_stub(override_type(type_repr="NodeView | builtins.int | builtins.str", imports=("builtins")))]
         node: &Bound<'_, PyAny>,
     ) -> PyResult<Vec<Py<PyNode>>> {
         let node = self.resolve_node(py, node)?;
@@ -1016,8 +1044,9 @@ fn resolve_node_target(
     revision: u64,
     key: &Bound<'_, PyAny>,
 ) -> PyResult<usize> {
+    graph.borrow(py).check_revision(revision)?;
     if let Ok(node) = key.extract::<PyRef<'_, PyNode>>() {
-        node.index_for_graph(py, graph, revision)
+        node.index_for_graph(py, graph, graph.borrow(py).element_epoch()?)
     } else {
         graph.borrow(py).resolve_node(key)
     }
@@ -1029,8 +1058,9 @@ fn resolve_edge_target(
     revision: u64,
     key: &Bound<'_, PyAny>,
 ) -> PyResult<usize> {
+    graph.borrow(py).check_revision(revision)?;
     if let Ok(edge) = key.extract::<PyRef<'_, PyEdge>>() {
-        edge.index_for_graph(py, graph, revision)
+        edge.index_for_graph(py, graph, graph.borrow(py).element_epoch()?)
     } else {
         graph.borrow(py).resolve_edge(key)
     }
@@ -1164,7 +1194,10 @@ impl PyGraph {
 
         if let Some(predicate) = node {
             for (index, crown) in node_crowns {
-                let view = Py::new(py, PyNode::new(slf.clone_ref(py), index, revision))?;
+                let view = Py::new(
+                    py,
+                    PyNode::new(slf.clone_ref(py), index, slf.borrow(py).element_epoch()?),
+                )?;
                 let include = predicate.call1(py, (view,))?.bind(py).is_truthy()?;
                 slf.borrow(py).check_revision(revision)?;
                 if include {
@@ -1178,7 +1211,10 @@ impl PyGraph {
         }
         if let Some(predicate) = edge {
             for (index, pair) in edge_pairs {
-                let view = Py::new(py, PyEdge::new(slf.clone_ref(py), index, revision))?;
+                let view = Py::new(
+                    py,
+                    PyEdge::new(slf.clone_ref(py), index, slf.borrow(py).element_epoch()?),
+                )?;
                 let include = predicate.call1(py, (view,))?.bind(py).is_truthy()?;
                 slf.borrow(py).check_revision(revision)?;
                 if include {
@@ -1188,7 +1224,10 @@ impl PyGraph {
         }
         if let Some(predicate) = half_edge {
             for index in 0..n_hedges {
-                let view = Py::new(py, PyHalfEdge::new(slf.clone_ref(py), index, revision))?;
+                let view = Py::new(
+                    py,
+                    PyHalfEdge::new(slf.clone_ref(py), index, slf.borrow(py).element_epoch()?),
+                )?;
                 let include = predicate.call1(py, (view,))?.bind(py).is_truthy()?;
                 slf.borrow(py).check_revision(revision)?;
                 if include {
@@ -1225,7 +1264,12 @@ impl PyGraph {
         };
         ids.extend(subgraph.isolated_nodes.iter().copied());
         ids.into_iter()
-            .map(|node| Py::new(py, PyNode::new(slf.clone_ref(py), node, revision)))
+            .map(|node| {
+                Py::new(
+                    py,
+                    PyNode::new(slf.clone_ref(py), node, slf.borrow(py).element_epoch()?),
+                )
+            })
             .collect()
     }
 
@@ -1248,7 +1292,12 @@ impl PyGraph {
                 .collect::<Vec<_>>()
         };
         ids.into_iter()
-            .map(|edge| Py::new(py, PyEdge::new(slf.clone_ref(py), edge.0, revision)))
+            .map(|edge| {
+                Py::new(
+                    py,
+                    PyEdge::new(slf.clone_ref(py), edge.0, slf.borrow(py).element_epoch()?),
+                )
+            })
             .collect()
     }
 
@@ -1460,7 +1509,12 @@ impl PyGraph {
         order.extend(directed);
         order
             .into_iter()
-            .map(|node| Py::new(py, PyNode::new(slf.clone_ref(py), node.0, revision)))
+            .map(|node| {
+                Py::new(
+                    py,
+                    PyNode::new(slf.clone_ref(py), node.0, slf.borrow(py).element_epoch()?),
+                )
+            })
             .collect()
     }
 

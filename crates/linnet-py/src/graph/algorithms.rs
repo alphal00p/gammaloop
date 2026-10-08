@@ -194,6 +194,7 @@ impl PyGraph {
             codec: None,
             render_config: crate::typst::default_render_config(py)?,
             revision: 0,
+            element_epoch: 0,
         }))
     }
 }

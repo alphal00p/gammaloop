@@ -122,7 +122,7 @@ class CommunityRenderingTests(unittest.TestCase):
         seen = []
 
         def select(edge):
-            self.assertIs(type(edge), graph.Edge)
+            self.assertIs(type(edge), graph.EdgeView)
             self.assertIn("particle", edge.data)
             seen.append(edge.index)
             return graph.EdgeDrawing(

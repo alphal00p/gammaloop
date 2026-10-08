@@ -12,8 +12,30 @@ python -m pip install "maturin>=1.13,<2"
 maturin develop --locked --manifest-path examples/notebooks/symbolica-host/Cargo.toml
 ```
 
-Rendering uses the embedded Rust Typst compiler. No separate Python Linnet or Typst
-package or external Typst executable is required.
+Ordinary drawings use native SVG, with the embedded Rust Typst compiler supplying labels.
+Advanced templates use the full Typst pipeline. No separate Python Linnet or Typst package or
+external Typst executable is required.
+
+== Construct a graph
+
+Use reusable descriptions for batch construction. Passing a node directly to an edge creates an
+incidence automatically; `HalfEdge` adds optional endpoint data:
+
+```python
+from symbolica.community.graph import Edge, Graph, HalfEdge, Node
+
+a = Node("a", data=1)
+b = Node("b", data=2)
+graph = Graph(edges=[Edge(a, HalfEdge(b, data="input port"), name="ab", data=3)])
+assert graph.node("a").data == 1
+assert graph.edge("ab").sink.data == "input port"
+```
+
+The referenced nodes are included automatically. Use `nodes=` for isolated nodes or when edges
+refer to node names or indices. The descriptions can construct several independent graphs.
+For incremental construction, `graph.add_node(...)` and `graph.add_edge(...)` return live views
+that remain valid after further insertions. See the #link("reference/interfaces/")[interface guide] for
+ownership and topology-mutation rules.
 
 == Parse and inspect a graph
 
