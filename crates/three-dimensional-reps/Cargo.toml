@@ -3,7 +3,7 @@ name = "three-dimensional-reps"
 version = "0.1.0"
 edition = "2024"
 
-description = "Generation of generalized CFF three-dimensional loop-energy representations."
+description = "Generation of CFF and LTD three-dimensional loop-energy representations."
 license = "MIT OR Apache-2.0"
 
 [lib]

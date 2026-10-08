@@ -13,16 +13,15 @@ use gammalooprs::{
     graph::Graph,
     integrands::process::ProcessIntegrand,
     processes::{Amplitude, CrossSection, Process, ProcessCollection},
-    settings::global::{MediumMode, UniformNumeratorSamplingScale},
+    settings::global::UniformNumeratorSamplingScale,
 };
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use symbolica::atom::AtomCore;
 use three_dimensional_reps::{
     generate_3d_expression, graph_info, render_expression_summary, validate_parsed_graph,
-    DisplayOptions, GenerationError, GraphInfo, GraphValidation, NumeratorDisplay,
-    NumeratorSamplingScaleMode, OrientationID, RepresentationMode, ThreeDExpression,
-    ThreeDGraphSource,
+    DisplayOptions, GraphInfo, GraphValidation, NumeratorDisplay, NumeratorSamplingScaleMode,
+    OrientationID, RepresentationMode, ThreeDExpression, ThreeDGraphSource,
 };
 
 use crate::{
@@ -35,7 +34,7 @@ use crate::{
 pub enum ThreeDRep {
     /// Check the selected graph for supported energy-representation kinematics.
     Validate(Validate),
-    /// Construct and export the selected graph's oriented CFF expression.
+    /// Construct and export the selected graph's CFF or LTD expression.
     Build(Build),
 }
 
@@ -141,7 +140,7 @@ pub struct Build {
     #[command(flatten)]
     pub selection: GraphSelectorArgs,
 
-    /// Three-dimensional representation to build. LTD is reserved but not implemented yet.
+    /// Three-dimensional representation to build.
     #[serde(default)]
     #[arg(long, alias = "family", value_enum, default_value = "cff")]
     pub representation: CliRepresentationMode,
@@ -161,11 +160,6 @@ pub struct Build {
     /// Suppress the formatted expression summary unless orientation details are requested.
     #[arg(long, default_value_t = false)]
     pub no_pretty: bool,
-
-    /// Hide the numerator in the CFF structure table.
-    #[serde(default)]
-    #[arg(long)]
-    pub no_numerator: bool,
 
     /// Disable ANSI colors in the formatted output.
     #[arg(long, default_value_t = false)]
@@ -197,8 +191,7 @@ struct ValidateOutput {
 #[derive(Debug, Serialize)]
 struct BuildOutput {
     backend: &'static str,
-    family: &'static str,
-    medium_mode: MediumMode,
+    family: RepresentationMode,
     process_id: usize,
     integrand_name: String,
     graph_id: usize,
@@ -340,12 +333,6 @@ impl Validate {
 impl Build {
     fn run(&self, state: &State, global_cli_settings: &CLISettings) -> Result<()> {
         let representation = RepresentationMode::from(self.representation);
-        if representation != RepresentationMode::Cff {
-            return Err(GenerationError::NotImplemented {
-                mode: representation,
-            }
-            .into());
-        }
         let selected = select_graph(state, &self.selection)?;
         let parsed = selected.graph.to_three_d_parsed_graph()?;
         let numerator_sampling_scale_mode = CliNumeratorSamplesNormalization::resolve(
@@ -359,7 +346,6 @@ impl Build {
             .graph
             .cff_3d_expression_options(numerator_sampling_scale_mode)?;
         options.representation = representation;
-        options.medium_mode = global_cli_settings.global.generation.medium.mode;
         let initial_state_cut_edges = selected
             .graph
             .iter_edges_of(&selected.graph.initial_state_cut)
@@ -379,8 +365,7 @@ impl Build {
         let expression = generate_3d_expression(selected.graph, &options)?.expression;
         let output = BuildOutput {
             backend: "gammaloop-3Drep",
-            family: "cff",
-            medium_mode: options.medium_mode,
+            family: representation,
             process_id: selected.process_id,
             integrand_name: selected.integrand_name.clone(),
             graph_id: selected.graph_id,
@@ -394,8 +379,12 @@ impl Build {
 
         if !self.no_save_json {
             let workspace = self.workspace_path(global_cli_settings);
-            let artifact_dir =
-                build_artifact_dir(&workspace, &selected, output.numerator_sampling_scale_mode);
+            let artifact_dir = build_artifact_dir(
+                &workspace,
+                &selected,
+                representation,
+                output.numerator_sampling_scale_mode,
+            );
             let json_path = self
                 .json_out
                 .clone()
@@ -415,8 +404,7 @@ impl Build {
         }
 
         if !self.no_pretty || self.show_details_for_orientation.is_some() {
-            let numerator = (!self.no_numerator)
-                .then(|| selected.graph.full_numerator_atom().to_canonical_string());
+            let numerator = selected.graph.full_numerator_atom().to_canonical_string();
             println!(
                 "{}",
                 render_expression_summary(
@@ -424,11 +412,12 @@ impl Build {
                     &output.graph,
                     energy_degree_bounds.as_deref(),
                     NumeratorDisplay {
-                        original: numerator.as_deref(),
+                        original: Some(&numerator),
                         simplified: None,
                     },
                     output.numerator_sampling_scale_mode,
                     &DisplayOptions {
+                        representation,
                         use_color: !self.no_color,
                         details_for_orientation: self.show_details_for_orientation.clone(),
                     },
@@ -495,11 +484,12 @@ fn graph_workspace_dir(workspace: &Path, selected: &SelectedGraph<'_>) -> PathBu
 fn build_artifact_dir(
     workspace: &Path,
     selected: &SelectedGraph<'_>,
+    representation: RepresentationMode,
     scale_mode: NumeratorSamplingScaleMode,
 ) -> PathBuf {
     graph_workspace_dir(workspace, selected)
         .join("build")
-        .join(format!("cff_{scale_mode:?}").to_lowercase())
+        .join(format!("{representation}_{scale_mode:?}").to_lowercase())
 }
 
 fn slug(value: &str) -> String {

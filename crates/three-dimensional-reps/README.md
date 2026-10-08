@@ -1,6 +1,6 @@
 # three-dimensional-reps
 
-`three-dimensional-reps` builds generalized CFF loop-energy representations
+`three-dimensional-reps` builds generalized CFF and LTD loop-energy representations
 used by GammaLoop. It owns the expression data model that was previously local
 to `gammalooprs::cff`.
 
@@ -24,8 +24,6 @@ Serde serialization is always enabled.
 
 - `display`: colored/table expression summaries.
 - `eval`: optional eager f64 diagnostic evaluator and oracle tests.
-- `json_schema`: JSON schema support for `MediumMode`; enabled by GammaLoop.
-- `python`: Python bindings for `MediumMode`.
 
 The compiled Symbolica runtime evaluator from the Python prototype is not part
 of this library crate. The normal workspace test suite enables `eval` through
@@ -36,27 +34,28 @@ cargo nextest run -p three-dimensional-reps --features eval \
   --no-fail-fast --retries 0
 ```
 
-Thermal generation uses `Generate3DExpressionOptions::medium_mode` and supports
-uniform numerator sampling scales in both equilibrium modes. GammaLoop supplies
-the model-dependent distributions; the standalone `eval` feature rejects thermal
-expressions because it does not accept those inputs. See the
-[CFF architecture](../../docs/architecture/architecture-current.typ#cff-production-and-numerator-energy-ownership)
-for thermal weights, numerator reduction, and ownership boundaries.
-
 The GammaLoop CLI-side `3Drep build` command is diagnostic-only: it validates,
-renders, and optionally writes the oriented expression. It forwards the configured
-medium to the shared generator and records it in the JSON output, but its input and
+renders, and optionally writes the oriented expression, but its input and
 expression preparation are not a GammaLoop production contract. Production
 evaluator construction remains in GammaLoop.
 
 ## Current Limits
 
-The vacuum production boundary covers affine CFF, bounded-energy CFF with
+The production boundary covers affine CFF, bounded-energy CFF with
 independent-occurrence normal form, multiloop high-power numerators, and uniform
-numerator sampling-scale modes. GammaLoop owns both UV orchestration orders
-in vacuum: direct local 3D subtraction on CFF expressions and 4D-local UV
-followed by an explicit-orientation CFF sum. Medium modes and optional vacuum
-subtraction support only direct local 3D subtraction; the local-4D option is
-rejected. `RepresentationMode::Ltd` is reserved for a
-future proper LTD backend and currently returns an explicit not-implemented
-error.
+numerator sampling-scale modes. GammaLoop owns both UV orchestration orders:
+direct local 3D subtraction on CFF expressions and 4D-local UV followed by an
+explicit-orientation CFF sum.
+
+The shared generator also supports `RepresentationMode::Ltd`: signed energy
+residues with affine numerator maps, explicit E/H surfaces, and term-local
+on-shell energy factors. Simple poles do not need numerator-degree bounds;
+repeated poles require explicit bounds for exact derivative-free polynomial
+sampling (`Some([])` selects an energy-independent numerator). All residue
+terms contribute to an evaluation, including the cancellation of H surfaces.
+Physical-pole selection retains the factorized numerator maps and requests
+polynomial bounds when a raised pole needs them.
+
+The LTD core and its tests are ported from `ltd_support` commits `6fac4ffaf4`
+and `6b35f5a2a4`. GammaLoop's production LTD orchestration and Python residue-map
+bindings are separate integrations.
