@@ -7,7 +7,7 @@ publish = false
 [dependencies]
 feynkit-py = { path = "../feynkit-py", optional = true, features = ["python_stubgen"] }
 gammaloop-api = { path = "../gammaloop-api", optional = true, default-features = false, features = ["python_stubgen"] }
-linnet-py = { path = "../linnet-py", optional = true, features = ["python_stubgen"] }
+linnet-py = { path = "../linnet-py", optional = true, features = ["community", "python_stubgen"] }
 pyo3 = { workspace = true, features = ["auto-initialize"] }
 pyo3-stub-gen = { workspace = true, features = ["infer_signature"] }
 spynso3 = { path = "../spynso3", optional = true, features = ["python_stubgen"] }
@@ -18,6 +18,6 @@ vakint = { workspace = true, optional = true, features = ["python_stubgen", "sym
 default = []
 feynkit = ["dep:feynkit-py"]
 gammaloop = ["dep:gammaloop-api"]
-linnet = ["dep:linnet-py"]
+linnet = ["dep:linnet-py", "symbolica/integer-gmp", "symbolica/float-mpfr"]
 spenso = ["dep:spynso3"]
 vakint = ["dep:symbolica", "dep:vakint"]

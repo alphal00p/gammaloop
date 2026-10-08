@@ -12,10 +12,10 @@ name = "linnet_py"
 [[bin]]
 name = "stubgen"
 path = "src/bin/stubgen.rs"
-required-features = ["python_stubgen"]
+required-features = ["community", "python_stubgen"]
 
 [dependencies]
-symbolica = { workspace = true, features = ["python_export"] }
+symbolica = { workspace = true, features = ["python_export"], optional = true }
 ciborium = "0.2.2"
 dot-parser = { workspace = true }
 linnet = { workspace = true, features = ["serde"] }
@@ -39,9 +39,7 @@ pyo3-build-config = { workspace = true }
 walkdir = { workspace = true }
 
 [features]
-default = ["native"]
-# Symbolica expressions as canonization keys of their own kind.
-community = []
-native = ["community", "symbolica/integer-gmp", "symbolica/float-mpfr"]
-wasm = ["community", "symbolica/wasm"]
-python_stubgen = ["dep:pyo3-stub-gen", "symbolica/python_stubgen"]
+# Symbolica Community registration, and Symbolica expressions as keys of their own kind. The
+# final extension selects Symbolica's arithmetic backends.
+community = ["dep:symbolica"]
+python_stubgen = ["dep:pyo3-stub-gen"]

@@ -32,9 +32,7 @@ impl PyEdgeSignature {
     #[new]
     #[pyo3(signature=(data, direction=None))]
     fn new(
-        #[gen_stub(override_type(type_repr = "typing.Hashable", imports = ("typing")))] data: Py<
-            PyAny,
-        >,
+        #[gen_stub(override_type(type_repr = "_Key"))] data: Py<PyAny>,
         direction: Option<bool>,
     ) -> Self {
         Self {
@@ -53,7 +51,7 @@ impl PyEdgeSignature {
 
     /// The field, as given.
     #[getter]
-    #[gen_stub(override_return_type(type_repr = "typing.Hashable", imports = ("typing")))]
+    #[gen_stub(override_return_type(type_repr = "_Key"))]
     fn data(&self, py: Python<'_>) -> Py<PyAny> {
         self.data.clone_ref(py)
     }
@@ -377,7 +375,7 @@ impl PyGenerationView {
     }
 
     /// The labels of the legs attached to `vertex`, with their slots at it.
-    #[gen_stub(override_return_type(type_repr = "list[tuple[typing.Hashable, EdgeSignature]]", imports = ("typing")))]
+    #[gen_stub(override_return_type(type_repr = "list[tuple[_Key, EdgeSignature]]"))]
     fn legs(&self, py: Python<'_>, vertex: usize) -> PyResult<Vec<(Py<PyAny>, PyEdgeSignature)>> {
         self.at(vertex, |view, vertex| {
             view.legs(vertex)
@@ -595,7 +593,7 @@ impl PyGraph {
     #[allow(clippy::too_many_arguments)]
     fn generate<'py>(
         py: Python<'py>,
-        #[gen_stub(override_type(type_repr = "typing.Sequence[tuple[typing.Hashable, EdgeSignature]]", imports = ("typing")))]
+        #[gen_stub(override_type(type_repr = "typing.Sequence[tuple[_Key, EdgeSignature]]", imports = ("typing")))]
         external_edges: Vec<(Bound<'py, PyAny>, Bound<'py, PyEdgeSignature>)>,
         vertex_signatures: Vec<Vec<Bound<'py, PyEdgeSignature>>>,
         #[gen_stub(override_type(type_repr = "int | range | None"))] loops: Option<LoopOrders>,

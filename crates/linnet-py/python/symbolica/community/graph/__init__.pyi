@@ -6,6 +6,7 @@ import enum
 import os
 import pathlib
 import typing
+from symbolica.core import Expression
 
 __all__ = [
     "AUTO",
@@ -90,7 +91,8 @@ __all__ = [
     "TypstRef",
 ]
 
-_LabelKey: typing.TypeAlias = typing.Callable[[typing.Any], typing.Hashable] | None
+_Key: typing.TypeAlias = typing.Hashable | Expression
+_LabelKey: typing.TypeAlias = typing.Callable[[typing.Any], _Key] | None
 
 class _TypstValueRef(typing.Protocol): ...
 class _TypstContentRef(typing.Protocol): ...
@@ -464,13 +466,13 @@ class EdgeSignature:
     incoming. Fields are hashable keys, compared and ordered like `Graph.canonize` keys.
     """
     @property
-    def data(self) -> typing.Hashable:
+    def data(self) -> _Key:
         r"""
         The field, as given.
         """
     @property
     def direction(self) -> typing.Optional[builtins.bool]: ...
-    def __new__(cls, data: typing.Hashable, direction: typing.Optional[builtins.bool] = None) -> EdgeSignature:
+    def __new__(cls, data: _Key, direction: typing.Optional[builtins.bool] = None) -> EdgeSignature:
         r"""
         A field `data` with an outgoing (True), incoming (False) or undirected (None) direction.
         """
@@ -543,7 +545,7 @@ class GenerationView:
         r"""
         Number of edges between the distinct vertices `u` and `v`.
         """
-    def legs(self, vertex: builtins.int) -> list[tuple[typing.Hashable, EdgeSignature]]:
+    def legs(self, vertex: builtins.int) -> list[tuple[_Key, EdgeSignature]]:
         r"""
         The labels of the legs attached to `vertex`, with their slots at it.
         """
@@ -811,7 +813,7 @@ class Graph:
         Export a Mermaid flowchart, with escaped display labels and dangling terminals.
         """
     @staticmethod
-    def generate(external_edges: typing.Sequence[tuple[typing.Hashable, EdgeSignature]], vertex_signatures: typing.Sequence[typing.Sequence[EdgeSignature]], *, loops: int | range | None = None, max_vertices: typing.Optional[builtins.int] = None, max_bridges: typing.Optional[builtins.int] = None, allow_self_loops: builtins.bool = False, allow_zero_flow_edges: builtins.bool = False, filter_fn: typing.Callable[[GenerationView], bool] | None = None, progress_fn: typing.Callable[[int, int, int], bool] | None = None) -> GeneratedGraphs:
+    def generate(external_edges: typing.Sequence[tuple[_Key, EdgeSignature]], vertex_signatures: typing.Sequence[typing.Sequence[EdgeSignature]], *, loops: int | range | None = None, max_vertices: typing.Optional[builtins.int] = None, max_bridges: typing.Optional[builtins.int] = None, allow_self_loops: builtins.bool = False, allow_zero_flow_edges: builtins.bool = False, filter_fn: typing.Callable[[GenerationView], bool] | None = None, progress_fn: typing.Callable[[int, int, int], bool] | None = None) -> GeneratedGraphs:
         r"""
         Stream the connected graphs built from `vertex_signatures` and the external legs, one per
         isomorphism class, with their automorphism-group orders (the symmetry factors).

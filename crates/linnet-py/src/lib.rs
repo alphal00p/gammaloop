@@ -44,7 +44,7 @@ pub fn stub_info() -> pyo3_stub_gen::Result<pyo3_stub_gen::StubInfo> {
 // are recursively checked before they can cross into Typst.  Keep the aliases
 // here so manual signatures and generated signatures share one closed model.
 #[cfg(feature = "python_stubgen")]
-const STUB_TYPE_ALIASES: &str = r#"_LabelKey: typing.TypeAlias = typing.Callable[[typing.Any], typing.Hashable] | None
+const STUB_TYPE_ALIASES: &str = r#"_LabelKey: typing.TypeAlias = typing.Callable[[typing.Any], _Key] | None
 
 class _TypstValueRef(typing.Protocol): ...
 class _TypstContentRef(typing.Protocol): ...
@@ -207,6 +207,18 @@ _RenderSelectors: typing.TypeAlias = DrawingSelectors | None | Inherit
 _TemplateOptions: typing.TypeAlias = _NativeDict | None | Inherit
 "#;
 
+/// The import and type of canonization and generation keys: only the Community
+/// build accepts Symbolica expressions as keys of their own kind.
+#[cfg(feature = "python_stubgen")]
+const STUB_KEY: (&str, &str) = if cfg!(feature = "community") {
+    (
+        "from symbolica.core import Expression\n",
+        "typing.Hashable | Expression",
+    )
+} else {
+    ("", "typing.Hashable")
+};
+
 /// Render the installed and documented Python surface from one stub inventory.
 #[cfg(feature = "python_stubgen")]
 pub fn canonical_stub() -> pyo3_stub_gen::Result<String> {
@@ -256,8 +268,9 @@ pub fn canonical_stub() -> pyo3_stub_gen::Result<String> {
         .map(|name| format!("    \"{name}\","))
         .collect::<Vec<_>>()
         .join("\n");
+    let (key_import, key) = STUB_KEY;
     let mut stub = format!(
-        "{}\n__all__ = [\n{exports}\n]\n\n{STUB_TYPE_ALIASES}\n\n{declarations}\n",
+        "{}{key_import}\n__all__ = [\n{exports}\n]\n\n_Key: typing.TypeAlias = {key}\n{STUB_TYPE_ALIASES}\n\n{declarations}\n",
         &generated[..import_end]
     );
     // pyo3-stub-gen retains Rust identifiers for classes declared by macros,
@@ -334,12 +347,36 @@ pub fn canonical_stub() -> pyo3_stub_gen::Result<String> {
 }
 
 /// Generic graphs and graph presentation share a single Community module.
+#[cfg(feature = "community")]
 pub struct GraphModule;
+#[cfg(feature = "community")]
 impl symbolica::api::python::SymbolicaCommunityModule for GraphModule {
     fn get_name() -> String {
         "graph".into()
     }
     fn register_module(module: &Bound<'_, PyModule>) -> PyResult<()> {
         register(module)
+    }
+}
+
+#[cfg(all(test, feature = "python_stubgen"))]
+mod tests {
+    #[test]
+    fn stub_keys_include_expressions_only_in_the_community_build() {
+        let stub = super::canonical_stub().unwrap();
+        let community = cfg!(feature = "community");
+        assert_eq!(
+            stub.contains("\nfrom symbolica.core import Expression\n"),
+            community
+        );
+        let key = if community {
+            "typing.Hashable | Expression"
+        } else {
+            "typing.Hashable"
+        };
+        assert!(stub.contains(&format!("\n_Key: typing.TypeAlias = {key}\n")));
+        assert!(stub.contains("typing.Callable[[typing.Any], _Key] | None"));
+        assert!(stub.contains("def data(self) -> _Key:"));
+        assert_eq!(stub.matches("typing.Hashable").count(), 1);
     }
 }
