@@ -46,8 +46,6 @@ impl<E: Clone, H: Clone> ThreeDExpression<OrientationID, E, H> {
         other_selected_surfaces: &[LinearEnergyExpr],
         energy_degree_bounds: Option<&[(usize, usize)]>,
     ) -> Result<Vec<Self>, GenerationError> {
-        #[cfg(feature = "generation-audit")]
-        crate::generation::audit::record_ltd_residue_selection();
         if !self.residual_denominators.is_empty() {
             return Err(GenerationError::InvalidResidueCoordinate(
                 "residual four-dimensional denominators must be resolved before pole selection"
@@ -400,7 +398,6 @@ mod tests {
                     loop_energy_map: vec![numerator_map.clone()],
                     edge_energy_map: vec![numerator_map.clone()],
                     variants: vec![CFFVariant {
-                        thermal_weight: Default::default(),
                         origin: None,
                         prefactor: Rational::one(),
                         half_edges: Vec::new(),
@@ -529,7 +526,6 @@ mod tests {
             edge_energy_map: vec![numerator_map.clone()],
             loop_energy_map: vec![numerator_map],
             variants: vec![CFFVariant {
-                thermal_weight: Default::default(),
                 origin: None,
                 prefactor: Rational::one(),
                 half_edges: Vec::new(),
@@ -633,7 +629,6 @@ mod tests {
             loop_energy_map: vec![numerator_map.clone()],
             edge_energy_map: vec![numerator_map],
             variants: vec![CFFVariant {
-                thermal_weight: Default::default(),
                 origin: None,
                 prefactor: Rational::one(),
                 half_edges: vec![EdgeIndex(0)],
