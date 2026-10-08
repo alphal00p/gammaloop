@@ -164,6 +164,7 @@ impl PyDiagramRender {
             label(&drawing, edge.label)?;
             let extensions = PyDict::new(py);
             extensions.set_item("scene-momentum", edge.momentum)?;
+            extensions.set_item("scene-momentum-offset", edge.momentum_offset)?;
             drawing.set_item("extensions", &extensions)?;
             let style = PyDict::new(py);
             style.set_item("stroke", stroke(py, &edge.stroke)?)?;

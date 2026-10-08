@@ -7,14 +7,24 @@ use pyo3::{
     prelude::*,
     types::{PyDict, PyList, PyModule},
 };
-use symbolica::api::python::create_symbolica_module;
+use symbolica::api::python::{SymbolicaCommunityModule, create_symbolica_module};
 
 #[test]
 fn cff_explorer_keeps_native_families_and_graph_identity() {
     Python::initialize();
     Python::attach(|py| -> PyResult<()> {
-        let core = PyModule::new(py, "core")?;
+        let core = PyModule::new(py, "symbolica")?;
         create_symbolica_module(&core)?;
+        // The display imports tensor formatters; use this binary's Symbolica types.
+        let community = PyModule::new(py, "symbolica.community")?;
+        let tensor = PyModule::new(py, "symbolica.community.tensor")?;
+        spynso3::SpensoModule::register_module(&tensor)?;
+        core.add("community", &community)?;
+        community.add("tensor", &tensor)?;
+        let modules = py.import("sys")?.getattr("modules")?;
+        modules.set_item("symbolica", &core)?;
+        modules.set_item("symbolica.community", &community)?;
+        modules.set_item("symbolica.community.tensor", &tensor)?;
         let fk = PyModule::new(py, "feynkit")?;
         feynkit_py::initialize_feynkit(&fk)?;
         let model =

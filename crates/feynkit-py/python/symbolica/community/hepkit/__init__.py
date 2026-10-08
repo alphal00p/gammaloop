@@ -1,4 +1,4 @@
-"""FeynKit graph generation, model loading, CFF, and kinematics tools."""
+"""FeynKit graph generation, model loading, CFF, LTD, and kinematics tools."""
 
 from symbolica.community.feynkit_native import *
 from symbolica.community.feynkit_native import initialize_module

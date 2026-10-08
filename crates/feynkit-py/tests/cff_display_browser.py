@@ -1,6 +1,6 @@
 """Run after CFF_DISPLAY_TEST_OUTPUT=DIR cargo test -p feynkit-py --test cff_display.
 
-Usage: python cff_display_browser.py DIR [chromium-executable]
+Usage: python cff_display_browser.py DIR [browser-executable] [chromium|webkit]
 """
 
 import html
@@ -8,6 +8,7 @@ import json
 import sys
 from pathlib import Path
 
+from generalized_energy_display_browser import assert_baselines
 from playwright.sync_api import sync_playwright
 
 
@@ -17,7 +18,7 @@ def payload(page):
 
 def choose_orientation(page, index):
     root = page.locator(".feynkit-cff-result").first
-    field = root.locator("[data-orientation-input]")
+    field = root.locator("[data-sum-input]")
     field.fill(str(index))
     field.press("Enter")
 
@@ -25,10 +26,10 @@ def choose_orientation(page, index):
 def assert_factors(page, orientation):
     families = page.locator(".feynkit-cff-result").first.evaluate("""root => {
       return [...root.querySelectorAll('[data-family-leaf]')].map(leaf => {
-        const factors = [...leaf.querySelectorAll('[data-factor-id]')].map(n => +n.dataset.factorId);
+        const factors = [...leaf.querySelectorAll('[data-factor-id]')].flatMap(n => Array(Number(n.dataset.factorPower || 1)).fill(+n.dataset.factorId));
         for (let node=leaf.parentElement; node && !node.matches('[data-orientation-sum]'); node=node.parentElement)
           if (node.classList.contains('hs-factor-node'))
-            factors.push(...[...node.querySelectorAll(':scope > .hs-factored-fraction [data-factor-id]')].map(n=>+n.dataset.factorId));
+            factors.push(...[...node.querySelectorAll(':scope > .hs-factored-fraction [data-factor-id]')].flatMap(n=>Array(Number(n.dataset.factorPower || 1)).fill(+n.dataset.factorId)));
         return [+leaf.dataset.familyLeaf, factors.sort((a,b)=>a-b)];
       });
     }""")
@@ -37,12 +38,13 @@ def assert_factors(page, orientation):
         assert factors == sorted(orientation["terms"][family]), (family, factors)
 
 
-def main(directory, executable=None):
+def main(directory, executable=None, engine="chromium"):
     sources = sorted(Path(directory).glob("cff-*.html"))
     assert sources, "Run the native CFF test first to export display fixtures"
     with sync_playwright() as playwright:
-        browser = playwright.chromium.launch(
-            executable_path=executable, args=["--no-sandbox"]
+        browser = getattr(playwright, engine).launch(
+            executable_path=executable,
+            args=["--no-sandbox"] if engine == "chromium" else [],
         )
         page = browser.new_page(viewport={"width": 800, "height": 1100})
         errors = []
@@ -53,13 +55,37 @@ def main(directory, executable=None):
             data = payload(page)
             if data["orientations"]:
                 assert_factors(page, data["orientations"][0])
-                assert page.locator("[data-orientation-input]").count() == 1
+                assert page.locator("[data-sum-input]").count() == 1
                 if len(data["orientations"]) == 1:
-                    assert page.locator("[data-total-orientation]").count() == 1
-                    assert page.locator("[data-choose-orientation]").count() == 0
+                    assert page.locator("[data-sum-id]").count() == 1
+                    assert page.locator("[data-sum-index]").count() == 0
             else:
-                assert page.locator("[data-orientation-input]").count() == 0
+                assert page.locator("[data-sum-input]").count() == 0
             assert not errors, errors
+
+        # Nested sums used to wrap at every level in WebKit. Check at a normal
+        # notebook cell width, not just a desktop-wide standalone document.
+        # Preserve real line breaks on small screens, without overflow.
+        page.set_content((Path(directory) / "cff-2.html").read_text())
+        choose_orientation(page, 97)
+        equation = page.locator(".hs-factored-equation")
+        page.set_viewport_size({"width": 736, "height": 1100})
+        tops = equation.locator("[data-family-leaf]").evaluate_all(
+            "nodes=>nodes.map(n=>n.getBoundingClientRect().top)"
+        )
+        assert len(tops) == 5
+        assert max(tops) - min(tops) < 2, tops
+        height = equation.bounding_box()["height"]
+        prefactor = equation.locator(".hs-factored-fraction[title]")
+        assert prefactor.locator("mfrac > mtext").first.text_content() == "−1"
+        # The prefactor and every family fraction share one mathematical axis,
+        # even though the family captions have their own height below it.
+        page.set_viewport_size({"width": 1200, "height": 1100})
+        assert_baselines(page)
+        page.set_viewport_size({"width": 320, "height": 1100})
+        assert equation.bounding_box()["height"] > height
+        assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
+        page.set_viewport_size({"width": 800, "height": 1100})
 
         page.set_content((Path(directory) / "collection.html").read_text())
         thumbnail = page.locator(".fk-thumbnail").first
@@ -123,27 +149,27 @@ def main(directory, executable=None):
         assert len(ids) == len(set(ids)), "SVG glyph IDs collide across displays"
         # The sum is also navigation: endpoints, adjacent terms, and one ID editor.
         choose_orientation(page, 10)
-        assert root.locator("[data-total-orientation]").evaluate_all(
-            "nodes=>nodes.map(n=>+n.dataset.totalOrientation)"
+        assert root.locator("[data-sum-id]").evaluate_all(
+            "nodes=>nodes.map(n=>+n.dataset.sumId)"
         ) == [0, 9, 10, 11, 685]
         assert root.locator(".hs-sum-math").inner_text().count("⋯") == 2
         root.get_by_role("button", name="Show orientation 9", exact=True).click()
-        assert root.locator("[data-orientation-input]").input_value() == "9"
+        assert root.locator("[data-sum-input]").input_value() == "9"
         root.get_by_role("button", name="Show orientation 10", exact=True).press(
             "Enter"
         )
-        assert root.locator("[data-orientation-input]").input_value() == "10"
+        assert root.locator("[data-sum-input]").input_value() == "10"
         root.get_by_role("button", name="Show orientation 11", exact=True).click()
-        assert root.locator("[data-orientation-input]").input_value() == "11"
+        assert root.locator("[data-sum-input]").input_value() == "11"
         root.get_by_role("button", name="Show orientation 685", exact=True).click()
-        assert root.locator("[data-total-orientation]").evaluate_all(
-            "nodes=>nodes.map(n=>+n.dataset.totalOrientation)"
+        assert root.locator("[data-sum-id]").evaluate_all(
+            "nodes=>nodes.map(n=>+n.dataset.sumId)"
         ) == [0, 684, 685]
         root.get_by_role("button", name="Show orientation 0", exact=True).click()
-        assert root.locator("[data-total-orientation]").evaluate_all(
-            "nodes=>nodes.map(n=>+n.dataset.totalOrientation)"
+        assert root.locator("[data-sum-id]").evaluate_all(
+            "nodes=>nodes.map(n=>+n.dataset.sumId)"
         ) == [0, 1, 685]
-        field = root.locator("[data-orientation-input]")
+        field = root.locator("[data-sum-input]")
         field.fill("10")
         field.press("Escape")
         assert field.input_value() == "0"
@@ -155,7 +181,7 @@ def main(directory, executable=None):
             field.press("Enter")
             assert field.input_value() == "1"
             assert root.locator('[data-status][data-error="true"]').count() == 1
-        assert other.locator("[data-orientation-input]").input_value() == "0"
+        assert other.locator("[data-sum-input]").input_value() == "0"
         orientation = next(o for o in data["orientations"] if len(o["terms"]) == 5)
         choose_orientation(page, orientation["id"])
         root.locator('[data-choose-family="1"]').click()
@@ -163,7 +189,7 @@ def main(directory, executable=None):
             root.locator('[data-choose-family="1"]').get_attribute("aria-pressed")
             == "true"
         )
-        assert other.locator("[data-orientation-input]").input_value() == "0"
+        assert other.locator("[data-sum-input]").input_value() == "0"
         assert_factors(page, orientation)
         factors = orientation["terms"][1]
         root.locator(f'[data-orientation-sum] [data-surface="{factors[0]}"]').click()
@@ -185,21 +211,27 @@ def main(directory, executable=None):
         assert root.locator("[data-graph] filter").count() == 2
         # Nested regions need separate boundaries. Their geometry must stay put
         # when another surface is selected, and must follow only internal edges.
-        first_outline = root.locator(
-            f'[data-outline-surface="{factors[0]}"]'
-        ).inner_html()
+        outline_geometry = (
+            "e=>[...e.querySelectorAll('circle,path')].map(n=>n.outerHTML)"
+        )
+        first_outline = root.locator(f'[data-outline-surface="{factors[0]}"]').evaluate(
+            outline_geometry
+        )
         for surface in factors[2:]:
             root.locator(f'[data-orientation-sum] [data-surface="{surface}"]').click(
                 modifiers=["Shift"]
             )
         outlines = root.locator("[data-outline-surface]").evaluate_all("""nodes =>
           nodes.map(n => ({id:+n.dataset.outlineSurface,
-            vertices:[...n.querySelectorAll('circle')].map(c=>+c.dataset.outlineVertex),
-            edges:[...n.querySelectorAll('path')].map(p=>+p.dataset.outlineEdge),
+            vertices:[...n.querySelectorAll('circle')].map(c=>+c.dataset.linnetShadeNode),
+            edges:[...n.querySelectorAll('path')].map(p=>JSON.parse(n.closest('svg[data-linnet-interactive]').querySelector(`[data-linnet-carrier][data-linnet-id="${p.dataset.linnetShadeHalfedge}"]`).dataset.linnetDetail).edge),
+            outline:+n.querySelector('feMorphology').getAttribute('radius'),
+            opacity:+getComputedStyle(n).opacity,
             radius:+n.querySelector('circle').getAttribute('r')}))
         """)
         assert {o["id"] for o in outlines} == set(factors)
         for outline in outlines:
+            assert outline["outline"] >= 1.5 and outline["opacity"] == 1
             members = set(data["surfaces"][outline["id"]]["v"])
             assert set(outline["vertices"]) == members
             assert set(outline["edges"]) == {
@@ -216,7 +248,9 @@ def main(directory, executable=None):
             )
         assert root.locator("[data-outline-surface]").count() == 1
         assert (
-            root.locator(f'[data-outline-surface="{factors[0]}"]').inner_html()
+            root.locator(f'[data-outline-surface="{factors[0]}"]').evaluate(
+                outline_geometry
+            )
             == first_outline
         )
         root.locator(f'[data-orientation-sum] [data-surface="{factors[1]}"]').click(
@@ -239,7 +273,7 @@ def main(directory, executable=None):
         # Edge bodies do not change orientation; only their arrowheads do.
         arrow = graph.locator('[data-flip-edge][aria-disabled="false"]').first
         edge = arrow.get_attribute("data-flip-edge")
-        before = root.locator("[data-orientation-input]").input_value()
+        before = root.locator("[data-sum-input]").input_value()
         point = graph.locator(
             f'path[data-edge="{edge}"][data-flow="source"]'
         ).first.evaluate("""path => {
@@ -248,22 +282,22 @@ def main(directory, executable=None):
           return {x:screen.x,y:screen.y};
         }""")
         page.mouse.click(**point)
-        assert root.locator("[data-orientation-input]").input_value() == before
+        assert root.locator("[data-sum-input]").input_value() == before
         camera.focus()
         camera.press("+")
         zoomed = camera.get_attribute("viewBox")
         assert camera.evaluate("s=>s.getScreenCTM().a") > geometry["scale"]
         arrow.click()
-        assert root.locator("[data-orientation-input]").input_value() != before
+        assert root.locator("[data-sum-input]").input_value() != before
         assert camera.get_attribute("viewBox") == zoomed
         flipped = graph.locator(f'[data-flip-edge="{edge}"]')
         assert flipped.evaluate("node=>node===document.activeElement")
         flipped.press("Enter")
-        assert root.locator("[data-orientation-input]").input_value() == before
+        assert root.locator("[data-sum-input]").input_value() == before
         flipped.press("Space")
-        assert root.locator("[data-orientation-input]").input_value() != before
-        assert other.locator("[data-orientation-input]").input_value() == "0"
-        before = root.locator("[data-orientation-input]").input_value()
+        assert root.locator("[data-sum-input]").input_value() != before
+        assert other.locator("[data-sum-input]").input_value() == "0"
+        before = root.locator("[data-sum-input]").input_value()
         bounds = flipped.bounding_box()
         page.mouse.move(
             bounds["x"] + bounds["width"] / 2, bounds["y"] + bounds["height"] / 2
@@ -271,7 +305,7 @@ def main(directory, executable=None):
         page.mouse.down()
         page.mouse.move(bounds["x"] + 50, bounds["y"] + 30, steps=5)
         page.mouse.up()
-        assert root.locator("[data-orientation-input]").input_value() == before
+        assert root.locator("[data-sum-input]").input_value() == before
         panned = camera.get_attribute("viewBox")
         assert panned != zoomed
         root.locator("[data-explorer] > summary").click()
@@ -300,8 +334,8 @@ def main(directory, executable=None):
         camera.focus()
         camera.press("0")
         assert abs(camera.evaluate("s=>s.getScreenCTM().a") - geometry["scale"]) < 1e-6
-        root.locator("[data-orientation-input]").fill("-1")
-        root.locator("[data-orientation-input]").press("Enter")
+        root.locator("[data-sum-input]").fill("-1")
+        root.locator("[data-sum-input]").press("Enter")
         assert root.locator('[data-status][data-error="true"]').count() == 1
         root.locator("[data-explorer] > summary").click()
         # Verify the displayed factorization against every native family, including
@@ -337,7 +371,7 @@ def main(directory, executable=None):
         assert not errors, errors
         browser.close()
         print(
-            "CFF browser: all 3432 families, sum navigation and ID editing, arrowhead clicks, centered camera, zoom/pan persistence, multiselection, nested outlines, instance isolation, themes and mobile widths passed"
+            "CFF browser: all 3432 families, expression wrapping and prefactor, sum navigation and ID editing, arrowhead clicks, centered camera, zoom/pan persistence, multiselection, nested outlines, instance isolation, themes and mobile widths passed"
         )
 
 

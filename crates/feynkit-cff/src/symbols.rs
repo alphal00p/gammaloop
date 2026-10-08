@@ -3,69 +3,74 @@
 use std::sync::LazyLock;
 
 use spenso::{
-    structure::abstract_index::AIND_SYMBOLS, symbolica_init::SymbolicaInitLazy, utils::to_subscript,
+    network::tags::TENSOR_PRINT_CALLBACK_TAG,
+    shadowing::symbolica_utils::{SpensoPrintBackend, SpensoPrintSettings},
+    structure::abstract_index::AIND_SYMBOLS,
+    symbolica_init::SymbolicaInitLazy,
+    utils::to_subscript,
 };
 use symbolica::{
     atom::{Atom, AtomCore, AtomView, Symbol},
     function,
-    printer::{PrintState, PrintUserData},
+    printer::{PrintOptions, PrintState},
     symbol,
 };
 
 use crate::EdgeId;
 
-macro_rules! spenso_print_simple_indexed {
-    ($a:ident, $opt:ident, $symbol:expr) => {
-        spenso_print_simple_indexed!($a, $opt, $symbol, $symbol)
+// The symbol owns its notation in native text, tensor MathML and graph Typst.
+// Canonical/plain serialization deliberately keeps the original function name.
+fn print_energy(
+    atom: AtomView<'_>,
+    options: &PrintOptions,
+    state: &PrintState,
+    on_shell: bool,
+) -> Option<String> {
+    let backend = if options.mode.is_latex() {
+        SpensoPrintBackend::Latex
+    } else {
+        SpensoPrintSettings::resolve(options)?.backend
     };
-    ($a:ident, $opt:ident, $symbol:expr, $typst_symbol:expr) => {{
-        match $opt.custom_print_mode.get("spenso") {
-            Some(PrintUserData::Integer(_)) => {
-                let AtomView::Fun(f) = $a else {
-                    return None;
-                };
-
-                let mut out = $symbol.to_string();
-                let mut args = f.iter();
-
-                let id = args.next().unwrap();
-                let Ok(i) = usize::try_from(id) else {
-                    return None;
-                };
-
-                if $opt.mode.is_typst() {
-                    out = $typst_symbol.to_string();
-                    out.push('_');
-                    out.push_str(&i.to_string());
-                } else {
-                    out.push_str(&to_subscript(i as isize));
-                }
-                let mut first = true;
-                for arg in args {
-                    if first {
-                        first = false;
-                        out.push('(');
-                    } else {
-                        out.push(',');
-                    }
-                    arg.format(&mut out, $opt, PrintState::new()).unwrap();
-                }
-                if !first {
-                    out.push(')');
-                }
-                Some(out)
+    let AtomView::Fun(function) = atom else {
+        return None;
+    };
+    if function.get_nargs() != 1 {
+        return None;
+    }
+    let index = function.iter().next()?;
+    let id = index.printer(options.clone()).to_string();
+    Some(match backend {
+        SpensoPrintBackend::Typst => {
+            let head = if on_shell { "E^(\"os\")" } else { "E" };
+            let value = format!("{head}_({id})");
+            if on_shell && state.in_exp_base {
+                format!("lr(({value}))")
+            } else {
+                value
             }
-            _ => None,
         }
-    }};
+        SpensoPrintBackend::Latex => {
+            let head = if on_shell { r"E^{\mathrm{os}}" } else { "E" };
+            let value = format!("{head}_{{{id}}}");
+            if on_shell && state.in_exp_base {
+                format!(r"\left({value}\right)")
+            } else {
+                value
+            }
+        }
+        SpensoPrintBackend::Plain => {
+            let head = if on_shell { "Eᵒˢ" } else { "E" };
+            let index = usize::try_from(index).ok()?;
+            format!("{head}{}", to_subscript(index as isize))
+        }
+    })
 }
 
 static ON_SHELL: LazyLock<Symbol> = LazyLock::new(|| {
     symbol!(
         "gammalooprs::OSE"; Scalar;
-        print = |a, opt, _state| {
-            spenso_print_simple_indexed!(a, opt, "Eᵒˢ", r#"E^("os")"#)
-        },
+        tag = TENSOR_PRINT_CALLBACK_TAG,
+        print = |a, opt, state| print_energy(a, opt, state, true),
         der = |_, arg, out| {
             if arg == 1 { **out = Atom::num(1); }
         }
@@ -74,7 +79,8 @@ static ON_SHELL: LazyLock<Symbol> = LazyLock::new(|| {
 static ENERGY: LazyLock<Symbol> = LazyLock::new(|| {
     symbol!(
         "gammalooprs::E",
-        print = |a, opt, _state| { spenso_print_simple_indexed!(a, opt, "E") }
+        tag = TENSOR_PRINT_CALLBACK_TAG,
+        print = |a, opt, state| print_energy(a, opt, state, false)
     )
 });
 
@@ -103,3 +109,42 @@ symbolica::initialize!(|| spenso::symbolica_init::in_symbolica_initializer(|| {
     on_shell();
     energy();
 }));
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn energy_notation_preserves_identity_and_handles_powers() {
+        let energy = on_shell_atom(EdgeId(3));
+        let canonical = energy.to_canonical_string();
+        assert_eq!(energy, symbolica::parse!("gammalooprs::OSE(3)"));
+        assert!(canonical.ends_with("::OSE(3)"));
+        assert!(on_shell().has_tag(TENSOR_PRINT_CALLBACK_TAG));
+        assert_eq!(
+            energy.printer(PrintOptions::typst()).to_string(),
+            "E^(\"os\")_(3)"
+        );
+        assert_eq!(
+            energy.printer(PrintOptions::latex()).to_string(),
+            r"E^{\mathrm{os}}_{3}"
+        );
+        let squared = energy
+            .clone()
+            .pow(2)
+            .printer(PrintOptions::typst())
+            .to_string();
+        assert!(squared.contains("lr((E^(\"os\")_(3)))"), "{squared}");
+        assert_eq!(energy.to_canonical_string(), canonical);
+        // Unsupported arities keep their ordinary spelling instead of panicking
+        // or silently discarding an argument.
+        for malformed in [on_shell().call(()), on_shell().call((3, 4))] {
+            assert!(
+                malformed
+                    .printer(PrintOptions::typst())
+                    .to_string()
+                    .contains("OSE")
+            );
+        }
+    }
+}

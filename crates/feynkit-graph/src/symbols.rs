@@ -1,6 +1,6 @@
 //! Canonical graph symbols shared with GammaLoop.
 use spenso::{
-    network::tags::SPENSO_TAG,
+    network::tags::{COMPONENT_LABELS_SUBSCRIPT_TAG, SPENSO_TAG},
     shadowing::symbolica_utils::SpensoPrintSettings,
     utils::{to_subscript, to_superscript},
 };
@@ -20,6 +20,7 @@ pub fn momentum() -> Symbol {
             tags = [
                 SPENSO_TAG.rank1.clone(),
                 SPENSO_TAG.tensor.clone(),
+                COMPONENT_LABELS_SUBSCRIPT_TAG.to_owned(),
                 "spenso::tensor-label:q".to_owned()
             ]
         )
@@ -116,8 +117,13 @@ pub fn loop_momentum() -> Symbol {
     static SYMBOL: LazyLock<Symbol> = LazyLock::new(|| {
         symbol!(
             "gammalooprs::K",
-            print = |a, opt, _state| { spenso::spenso_print_scripted_indexed!(a, opt, "k") },
-            tags = [SPENSO_TAG.rank1.clone(), SPENSO_TAG.tensor.clone()]
+            print = spenso::network::tags::tensor_print,
+            tags = [
+                SPENSO_TAG.rank1.clone(),
+                SPENSO_TAG.tensor.clone(),
+                COMPONENT_LABELS_SUBSCRIPT_TAG.to_owned(),
+                "spenso::tensor-label:k".to_owned()
+            ]
         )
     });
     *SymbolicaInitLazy::new(&SYMBOL)
@@ -127,8 +133,13 @@ pub fn external_momentum() -> Symbol {
     static SYMBOL: LazyLock<Symbol> = LazyLock::new(|| {
         symbol!(
             "gammalooprs::P",
-            print = |a, opt, _state| { spenso::spenso_print_scripted_indexed!(a, opt, "p") },
-            tags = [SPENSO_TAG.rank1.clone(), SPENSO_TAG.tensor.clone()]
+            print = spenso::network::tags::tensor_print,
+            tags = [
+                SPENSO_TAG.rank1.clone(),
+                SPENSO_TAG.tensor.clone(),
+                COMPONENT_LABELS_SUBSCRIPT_TAG.to_owned(),
+                "spenso::tensor-label:p".to_owned()
+            ]
         )
     });
     *SymbolicaInitLazy::new(&SYMBOL)
@@ -202,4 +213,53 @@ pub fn epsilonbar() -> Symbol {
         )
     });
     *SymbolicaInitLazy::new(&SYMBOL)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use spenso::structure::abstract_index::AIND_SYMBOLS;
+    use symbolica::{atom::AtomCore, printer::PrintOptions};
+
+    #[test]
+    fn momentum_components_keep_object_indices() {
+        for (head, label) in [
+            (momentum(), "q"),
+            (loop_momentum(), "k"),
+            (external_momentum(), "p"),
+        ] {
+            assert_eq!(
+                head.call(27).printer(PrintOptions::typst()).to_string(),
+                format!("{label}_27")
+            );
+            let component = head.call_args([Atom::num(27), AIND_SYMBOLS.cind.call(0)]);
+            assert_eq!(
+                component.printer(PrintOptions::typst()).to_string(),
+                format!("attach(attach({label},b:(27)),t:0)")
+            );
+            let plain = PrintOptions {
+                custom_print_mode: SpensoPrintSettings::typst().into(),
+                ..Default::default()
+            };
+            assert_eq!(
+                component.printer(plain).to_string(),
+                format!("{label}₂₇^(0)")
+            );
+            let latex = PrintOptions {
+                custom_print_mode: SpensoPrintSettings::typst().into(),
+                ..PrintOptions::latex()
+            };
+            assert_eq!(
+                component.printer(latex).to_string(),
+                format!("{label}_{{27}}^{{0}}")
+            );
+            assert!(
+                component
+                    .pow(2)
+                    .printer(PrintOptions::typst())
+                    .to_string()
+                    .contains("lr((attach(")
+            );
+        }
+    }
 }

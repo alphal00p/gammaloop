@@ -23,7 +23,7 @@
   if not edge.at("scene-momentum", default: false) { return (:) }
   let marked-half = if edge.at("sink-half-edge", default: none) == none { "source" } else { "sink" }
   let arrow = (
-    offset: 0.35, length: 1.4, ratio: 0.5, resolve-length: "min",
+    offset: edge.scene-momentum-offset, length: 1.4, ratio: 0.5, resolve-length: "min",
     stroke: (paint: rgb("#333333"), thickness: 1pt, cap: "round"),
     pattern: none,
     mark: if half == marked-half { (end: (symbol: "straight", scale: 0.8)) } else { none },

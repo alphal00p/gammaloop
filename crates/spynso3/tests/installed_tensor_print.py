@@ -31,6 +31,31 @@ def mathml(expression):
 
 
 class TensorPrintTests(unittest.TestCase):
+    def test_scalar_print_callbacks_do_not_require_tensor_tags(self):
+        head = S(
+            "tensor_print_tests::ScalarEnergy",
+            is_scalar=True,
+            tags=["spenso::print-callback"],
+            print={"typst": "cal(E)"},
+        )
+        expression = TensorExpression(head(27) ** 2)
+        before = expression.to_expression()
+        output = mathml(expression)
+        self.assertIn("ℰ", output)
+        self.assertNotIn("ScalarEnergy", output)
+        self.assertIn("<mn>2</mn>", output)
+        self.assertEqual(expression.to_expression(), before)
+
+        deferred = S(
+            "tensor_print_tests::DeferredScalar",
+            tags=["spenso::print-callback"],
+            print=lambda *args, **kwargs: None,
+        )
+        output = mathml(TensorExpression(deferred(27)))
+        self.assertIn("DeferredScalar", output)
+        self.assertIn("<mn>27</mn>", output)
+        self.assertNotIn("<msub", output)
+
     def test_grouped_factors_keep_their_mathml_parentheses(self):
         for source, expected_groups in (
             ("(1+1i)*x", 1),

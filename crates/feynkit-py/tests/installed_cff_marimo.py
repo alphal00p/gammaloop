@@ -20,8 +20,8 @@ diagram = (
     .generate_diagrams(loops=1, max_vertices=3, maximum_bridges=0, progress=None)
     .diagrams[0]
 )
-cff = diagram.cross_free_family()
-assert type(cff) is hep.CrossFreeFamily
+cff = diagram.integrate_energy(method="cff")
+assert type(cff) is hep.CffRepresentation
 
 # Exercise Marimo's actual dispatch: a raw text/html MIME hook bypasses its
 # script isolation and leaves the CFF controls visible but inactive.
@@ -40,4 +40,4 @@ payloads = [
 ]
 assert payloads[0] == payloads[1]
 assert len(payloads[0]["orientations"]) == len(cff.orientations)
-print("CrossFreeFamily: Marimo dispatch embeds the native explorer in an iframe")
+print("CffRepresentation: Marimo dispatch embeds the native explorer in an iframe")

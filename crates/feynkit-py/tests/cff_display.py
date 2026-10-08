@@ -27,9 +27,12 @@ def check_display(diagram, result):
             native.edge_orientations
         )
         expected = [
-            [(s.kind, s.index) for s in term if s.kind != "unit"]
-            for term in native.denominator_products()
-            if all(s.kind != "infinite" for s in term)
+            sorted(
+                ("h" if f.surface.kind == "H" else "energy", f.surface.index)
+                for f in family.factors
+                for _ in range(f.power)
+            )
+            for family in native.families
         ]
         actual = [
             [
@@ -38,12 +41,16 @@ def check_display(diagram, result):
             ]
             for term in displayed["terms"]
         ]
-        assert actual == expected
+        assert [sorted(term) for term in actual] == expected
     for native, displayed in zip(result.surfaces, data["surfaces"], strict=True):
         assert displayed["v"] == native.vertices
-        assert displayed["e"] == native.positive_energies
-        assert displayed["negative"] == native.negative_energies
-        assert displayed["q"] == [list(pair) for pair in native.external_shift]
+        assert displayed["e"] == [
+            e for e, c in native.energy_coefficients.items() if c == 1
+        ]
+        assert displayed["negative"] == [
+            e for e, c in native.energy_coefficients.items() if c == -1
+        ]
+        assert displayed["q"] == [[e, int(c)] for e, c in native.external_shift.items()]
     svg = ET.fromstring(
         re.search(r"<template data-drawing>(.*?)</template>", html, re.DOTALL).group(1)
     )
@@ -72,11 +79,11 @@ def check_cff_displays(fk, diagrams):
     assert not hasattr(fk, "CffResult")
     pages = []
     for diagram in diagrams:
-        result = diagram.cross_free_family()
-        assert type(result) is fk.CrossFreeFamily
-        assert type(result).__name__ == "CrossFreeFamily"
+        result = diagram.integrate_energy(method="cff")
+        assert type(result) is fk.CffRepresentation
+        assert type(result).__name__ == "CffRepresentation"
         assert type(result).__module__ == "symbolica.community.hepkit"
-        assert repr(result).startswith("CrossFreeFamily(")
+        assert repr(result).startswith("CffRepresentation(")
         assert not hasattr(diagram, "build_cff")
         assert not hasattr(diagram.subgraph(nodes=[0]), "build_cff")
         pages.append(check_display(diagram, result))
@@ -87,19 +94,31 @@ def check_cff_displays(fk, diagrams):
                 result.raised_surface_groups()[0]
             ):
                 pages.append(check_display(diagram, coefficient))
-            generator = fk.CffGenerator()
-            generator.fix_orientation(diagram.internal_edges[0].id, reversed=True)
-            pages.append(check_display(diagram, generator.generate(diagram)))
-            generator = fk.CffGenerator()
-            generator.contract_edge(diagram.internal_edges[0].id)
-            pages.append(check_display(diagram, generator.generate(diagram)))
             pages.append(
-                check_display(diagram, diagram.subgraph(nodes=[0]).cross_free_family())
+                check_display(
+                    diagram,
+                    diagram.integrate_energy(
+                        method="cff",
+                        fixed_orientations={diagram.internal_edges[0].id: True},
+                    ),
+                )
             )
-            cycle = fk.CffGenerator()
-            for edge, reverse in [(0, True), (1, False), (2, True), (3, False)]:
-                cycle.fix_orientation(edge, reversed=reverse)
-            zero = cycle.generate(diagram)
+            pages.append(
+                check_display(
+                    diagram,
+                    diagram.integrate_energy(
+                        method="cff", contracted_edges=[diagram.internal_edges[0].id]
+                    ),
+                )
+            )
+            pages.append(
+                check_display(
+                    diagram, diagram.subgraph(nodes=[0]).integrate_energy(method="cff")
+                )
+            )
+            zero = diagram.integrate_energy(
+                method="cff", fixed_orientations={0: True, 1: False, 2: True, 3: False}
+            )
             assert not zero.orientations
             pages.append(check_display(diagram, zero))
 

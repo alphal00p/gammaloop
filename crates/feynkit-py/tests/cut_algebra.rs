@@ -18,16 +18,27 @@ fn generalized_cuts_keep_derivative_actions_and_validate_coordinates() {
         create_symbolica_module(&core)?;
         let feynkit = PyModule::new(py, "feynkit")?;
         feynkit_py::initialize_feynkit(&feynkit)?;
-        let model = Arc::new(Model::from_json(include_str!("fixtures/scalars_2p_3p.json")).unwrap());
+        let model =
+            Arc::new(Model::from_json(include_str!("fixtures/scalars_2p_3p.json")).unwrap());
         let rule = model.vertex_rule_id("V_3_SCALAR_000").unwrap();
         let mut builder = FeynmanDiagram::builder(Arc::clone(&model), "cut-algebra-bubble");
         let left = builder.add_vertex(DiagramVertex::interaction("left", rule));
         let right = builder.add_vertex(DiagramVertex::interaction("right", rule));
         let scalar = || DiagramEdge::new(model.particle_id("scalar_0").unwrap(), false);
         let mut incoming = scalar();
-        incoming.external = Some(ExternalLeg { name: "p0".into(), index: 0, state: ExternalState::Incoming, connection: 0 });
+        incoming.external = Some(ExternalLeg {
+            name: "p0".into(),
+            index: 0,
+            state: ExternalState::Incoming,
+            connection: 0,
+        });
         let mut outgoing = scalar();
-        outgoing.external = Some(ExternalLeg { name: "p1".into(), index: 1, state: ExternalState::Outgoing, connection: 1 });
+        outgoing.external = Some(ExternalLeg {
+            name: "p1".into(),
+            index: 1,
+            state: ExternalState::Outgoing,
+            connection: 1,
+        });
         builder.add_edge(None, left, incoming).unwrap();
         builder.add_edge(right, None, outgoing).unwrap();
         builder.add_edge(left, right, scalar()).unwrap();
@@ -58,19 +69,12 @@ except fk.CffError:
     pass
 else:
     raise AssertionError('dependent on-shell energy accepted')
-result = diagram.cross_free_family()
-other = diagram.cross_free_family()
+result = diagram.integrate_energy(method="cff")
+other = diagram.integrate_energy(method="cff")
 surface = result.surfaces[0]
-assert result.to_expression() != result.to_expression(expand_surfaces=True)
-assert result.to_expression(normalized=True) != result.to_expression(expand_surfaces=True)
+assert result.to_expression(expand_surfaces=False) != result.to_expression()
 assert 'feynkit::E' not in str(result.to_expression())
-assert result.surface_expression(surface) != core.Expression.num(0)
-try:
-    other.surface_expression(surface)
-except fk.CffError:
-    pass
-else:
-    raise AssertionError('foreign surface accepted')
+assert surface.to_expression() != core.Expression.num(0)
 group = result.raised_surface_groups()[0]
 assert group.max_order == 1
 assert len(result.pole_coefficients(group)) == 1
@@ -80,7 +84,10 @@ except fk.CffError:
     pass
 else:
     raise AssertionError('foreign surface group accepted')
-assert result.residue(group, variable=q, root=1, surface=q-1, coefficient=q**2) == core.Expression.num(1)
+energy_factor = core.Expression.num(1)
+for energy in result.on_shell_energies.values():
+    energy_factor /= -2*energy.symbol
+assert result.residue(group, variable=q, root=1, surface=q-1, coefficient=q**2) == energy_factor
 "#,
         )
         .unwrap();

@@ -16,7 +16,10 @@ fn main() -> pyo3_stub_gen::Result<()> {
                 "FeynKit did not contribute a symbolica.community.hepkit stub module",
             )
         })?;
-    fs::write(STUB_PATH, normalize_stub_source(&module.to_string()))?;
+    fs::write(
+        STUB_PATH,
+        normalize_stub_source(&feynkit_py::FeynkitModule::stub_source(module)),
+    )?;
     Ok(())
 }
 

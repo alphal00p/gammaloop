@@ -10,9 +10,17 @@ from symbolica import Expression, S
 from symbolica.community import hepkit as feynkit
 from symbolica.community.tensor import TensorName
 
-
 assert feynkit.__name__ == "symbolica.community.hepkit"
-assert "symbolica.community.feynkit_native" in sys.modules
+# The host chooses the private registration name; public classes must have
+# exactly one loaded native owner, without importing the GammaLoop application.
+native_owners = [
+    module
+    for name, module in sys.modules.items()
+    if name.startswith("symbolica.community.")
+    and name.endswith("_native")
+    and getattr(module, "FeynmanDiagram", None) is feynkit.FeynmanDiagram
+]
+assert len(native_owners) == 1
 assert "_gammaloop" not in sys.modules
 
 for exported_type in (
@@ -20,7 +28,8 @@ for exported_type in (
     feynkit.Process,
     feynkit.FeynmanDiagram,
     feynkit.TensorReducer,
-    feynkit.CffGenerator,
+    feynkit.CffRepresentation,
+    feynkit.LtdRepresentation,
     feynkit.FourMomentum,
     feynkit.JetDefinition,
     feynkit.Helicity,
