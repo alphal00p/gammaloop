@@ -22,6 +22,8 @@ use symbolica::{
 pub const TENSOR_PRINT_HEAD_PREFIX: &str = "spenso::print-head:";
 /// Marks a user callable, as distinct from Spenso's own tensor print callback.
 pub const TENSOR_PRINT_CALLBACK_TAG: &str = "spenso::print-callback";
+/// Component labels that identify indexed objects, rather than function arguments.
+pub const COMPONENT_LABELS_SUBSCRIPT_TAG: &str = "spenso::component-labels:subscript";
 
 /// Resolve a user-supplied head without interpreting it as a literal symbol name.
 pub fn tensor_head_print(symbol: Symbol, backend: SpensoPrintBackend) -> Option<String> {
@@ -815,9 +817,28 @@ fn tensor_component_print(
     } else {
         Atom::var(head).format_string(options, PrintState::new())
     };
-    // Component parameters remain function arguments, even when abstract
-    // tensors display their labels as scripts.
-    if !labels.is_empty() {
+    // Indexed objects such as graph momenta retain their object label when a
+    // concrete component is selected. Other tensor parameters stay arguments.
+    if !labels.is_empty() && head.has_tag(COMPONENT_LABELS_SUBSCRIPT_TAG) {
+        let label = labels
+            .iter()
+            .map(|label| label.printer(options.clone()).to_string())
+            .collect::<Vec<_>>()
+            .join(",");
+        base = match resolved.backend {
+            SpensoPrintBackend::Typst => format!("attach({base},b:({label}))"),
+            SpensoPrintBackend::Latex => format!("{base}_{{{label}}}"),
+            SpensoPrintBackend::Plain => match labels {
+                [label] if isize::try_from(*label).is_ok() => {
+                    format!(
+                        "{base}{}",
+                        crate::utils::to_subscript(isize::try_from(*label).unwrap())
+                    )
+                }
+                _ => format!("{base}_({label})"),
+            },
+        };
+    } else if !labels.is_empty() {
         let latex = resolved.backend == SpensoPrintBackend::Latex;
         base.push_str(if latex { r"\!\left(" } else { "(" });
         for (position, label) in labels.iter().enumerate() {
@@ -957,6 +978,15 @@ pub fn tensor_print(
             .iter()
             .find_map(|tag| tag.strip_prefix("spenso::tensor-label:"))
     {
+        // Typst enables semantic printing without a caller-supplied Spenso flag.
+        // The indexed-head helper must receive the same resolved settings as
+        // concrete components and the rest of this printer.
+        let mut custom_print_mode = options.custom_print_mode.clone();
+        custom_print_mode.extend(ahash::HashMap::from(settings));
+        let options = &PrintOptions {
+            custom_print_mode,
+            ..options.clone()
+        };
         return crate::spenso_print_scripted_indexed!(atom, options, label);
     }
     if !matches!(resolved.backend, SpensoPrintBackend::Typst) {

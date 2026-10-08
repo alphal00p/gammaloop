@@ -45,6 +45,14 @@ svg[data-linnet-interactive] .linnet-pan-surface {
   fill: transparent;
   pointer-events: all;
 }
+/* SVG's default focus ring follows descendant bounds and can move on zoom.
+   Mark the fixed viewport instead, without obscuring the drawing. */
+svg[data-linnet-interactive] .linnet-viewport:focus { outline: none; }
+svg[data-linnet-interactive]:has(.linnet-viewport:focus-visible) .linnet-pan-surface {
+  stroke: var(--linnet-selection);
+  stroke-opacity: .5;
+  stroke-width: 1;
+}
 svg[data-linnet-interactive] .linnet-viewport.linnet-panning,
 svg[data-linnet-interactive] .linnet-panning [data-linnet-kind] {
   cursor: grabbing;
@@ -124,7 +132,7 @@ svg[data-linnet-interactive] [data-linnet-kind="node"][aria-pressed="true"] rect
 }
 svg[data-linnet-interactive] [data-linnet-kind="node"] rect { rx: 50%; }
 svg[data-linnet-interactive] .linnet-edge-highlight {
-  fill: var(--linnet-selection);
+  color: var(--linnet-selection);
   opacity: .2;
   pointer-events: none;
 }

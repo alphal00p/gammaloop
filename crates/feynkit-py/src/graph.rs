@@ -41,12 +41,13 @@ use pyo3_stub_gen::{
 };
 
 use crate::{
-    cff::{PyCrossFreeFamily, PyCutPropagator},
+    cff::{PyCffRepresentation, PyCutPropagator},
     display::escape_html,
     error,
     graph_interop::LinnetCache,
     integrals::PyIntegralFamily,
     kinematics::{PyFourMomentum, PyKinematics, PyThreeMomentum},
+    ltd::PyLtdRepresentation,
     model::{PyModel, PyParticle, PyPropagator},
     render_settings::PyDiagramStyle,
     tensor::PyTensorReducer,
@@ -1725,6 +1726,137 @@ impl PyLoopMomentumBasis {
             },),
         )?;
         Ok(())
+    }
+}
+
+#[cfg(feature = "python_stubgen")]
+submit! {
+    // Keep the common documentation on both overloads: Jedi exposes the last
+    // overload's docstring for either call, even when it lists both signatures.
+    gen_methods_from_python! {
+        r#"
+        import typing
+        import symbolica
+
+        class PyFeynmanDiagram:
+            @typing.overload
+            def integrate_energy(self, *, method: typing.Literal["cff"], max_orientations: typing.Optional[int] = None, fixed_orientations: typing.Optional[typing.Mapping[int, bool]] = None, contracted_edges: typing.Optional[typing.Sequence[int]] = None, initial_state_edges: typing.Optional[typing.Sequence[int]] = None, numerator: typing.Optional[symbolica.Expression] = None) -> pyo3_stub_gen.RustType["PyCffRepresentation"]:
+                r"""
+                Integrate propagators and an optional CFF numerator over loop energies.
+                
+                The measure is :math:`d\ell^0/(2\pi i)` per loop, with contours closed below.
+                Both representations include contour signs and on-shell factors, and share
+                ``gammalooprs::OSE(e)`` for :math:`E_e=\sqrt{\boldsymbol{q}_e^2+m_e^2}`.
+                CFF accepts a polynomial numerator; couplings, graph weights and the spatial measure are separate.
+                
+                CFF supports subgraph selections and the constraints below. LTD requires a
+                complete ordinary diagram and uses its stored ordered loop-momentum basis.
+                Display either result directly to explore its terms and surfaces in a notebook.
+                
+                Examples
+                --------
+                Using the setup in the ``FeynmanDiagram`` class example:
+                
+                >>> cff = diagram.integrate_energy(method="cff")
+                >>> ltd = diagram.integrate_energy(method="ltd")
+                >>> expression = cff.to_expression()
+                
+                Parameters
+                ----------
+                method : {"cff", "ltd"}
+                    Required representation choice. Literal arguments retain the concrete
+                    return type in editors and type checkers.
+                max_orientations : int or None, optional
+                    CFF-only limit on candidate orientations. None imposes no limit.
+                fixed_orientations : mapping[int, bool] or None, optional
+                    CFF-only constraints by physical edge ID: False keeps the stored
+                    direction; True reverses it. None leaves orientations unconstrained.
+                contracted_edges : sequence[int] or None, optional
+                    CFF-only physical edge IDs to contract before constructing surfaces.
+                    None contracts no edges.
+                initial_state_edges : sequence[int] or None, optional
+                    CFF-only physical edge IDs whose on-shell energies are moved into
+                    external energy shifts. None performs no such replacements.
+                numerator : Expression or None, optional
+                    CFF polynomial in ``gammalooprs::Q(e, spenso::cind(0))``, using physical
+                    internal edge IDs. Degree bounds are inferred before momentum routing.
+                    None selects scalar topology generation. Supplying a numerator uses the
+                    generalized backend and currently requires an unconstrained complete
+                    diagram. Express energy dependence explicitly; loop-basis energies and
+                    unevaluated energy-dependent functions are unsupported.
+                
+                Returns
+                -------
+                CffRepresentation or LtdRepresentation
+                    The selected scalar energy representation, with structured term and
+                    surface inspection, expression conversion and notebook display.
+                
+                Raises
+                ------
+                ValueError
+                    The method is unknown, or CFF-only options are supplied for LTD.
+                """
+
+            @typing.overload
+            def integrate_energy(self, *, method: typing.Literal["ltd"]) -> pyo3_stub_gen.RustType["PyLtdRepresentation"]:
+                r"""
+                Integrate propagators and an optional CFF numerator over loop energies.
+                
+                The measure is :math:`d\ell^0/(2\pi i)` per loop, with contours closed below.
+                Both representations include contour signs and on-shell factors, and share
+                ``gammalooprs::OSE(e)`` for :math:`E_e=\sqrt{\boldsymbol{q}_e^2+m_e^2}`.
+                CFF accepts a polynomial numerator; couplings, graph weights and the spatial measure are separate.
+                
+                CFF supports subgraph selections and the constraints below. LTD requires a
+                complete ordinary diagram and uses its stored ordered loop-momentum basis.
+                Display either result directly to explore its terms and surfaces in a notebook.
+                
+                Examples
+                --------
+                Using the setup in the ``FeynmanDiagram`` class example:
+                
+                >>> cff = diagram.integrate_energy(method="cff")
+                >>> ltd = diagram.integrate_energy(method="ltd")
+                >>> expression = cff.to_expression()
+                
+                Parameters
+                ----------
+                method : {"cff", "ltd"}
+                    Required representation choice. Literal arguments retain the concrete
+                    return type in editors and type checkers.
+                max_orientations : int or None, optional
+                    CFF-only limit on candidate orientations. None imposes no limit.
+                fixed_orientations : mapping[int, bool] or None, optional
+                    CFF-only constraints by physical edge ID: False keeps the stored
+                    direction; True reverses it. None leaves orientations unconstrained.
+                contracted_edges : sequence[int] or None, optional
+                    CFF-only physical edge IDs to contract before constructing surfaces.
+                    None contracts no edges.
+                initial_state_edges : sequence[int] or None, optional
+                    CFF-only physical edge IDs whose on-shell energies are moved into
+                    external energy shifts. None performs no such replacements.
+                numerator : Expression or None, optional
+                    CFF polynomial in ``gammalooprs::Q(e, spenso::cind(0))``, using physical
+                    internal edge IDs. Degree bounds are inferred before momentum routing.
+                    None selects scalar topology generation. Supplying a numerator uses the
+                    generalized backend and currently requires an unconstrained complete
+                    diagram. Express energy dependence explicitly; loop-basis energies and
+                    unevaluated energy-dependent functions are unsupported.
+                
+                Returns
+                -------
+                CffRepresentation or LtdRepresentation
+                    The selected scalar energy representation, with structured term and
+                    surface inspection, expression conversion and notebook display.
+                
+                Raises
+                ------
+                ValueError
+                    The method is unknown, or CFF-only options are supplied for LTD.
+                """
+
+
+        "#
     }
 }
 
@@ -4046,48 +4178,101 @@ impl PyFeynmanDiagram {
         self.inner.validate().map_err(error::diagram)
     }
 
-    /// Build the diagram's Cross-Free Family representation.
+    /// Integrate propagators and an optional CFF numerator over loop energies.
     ///
-    /// Edge constraints use the stable integer IDs exposed by
-    /// ``diagram.edges``. ``False`` fixes an edge in its stored direction and
-    /// ``True`` reverses it.
+    /// The measure is :math:`d\ell^0/(2\pi i)` per loop, with contours closed below.
+    /// Both representations include contour signs and on-shell factors, and share
+    /// ``gammalooprs::OSE(e)`` for :math:`E_e=\sqrt{\boldsymbol{q}_e^2+m_e^2}`.
+    /// CFF accepts a polynomial numerator; couplings, graph weights and the spatial measure are separate.
+    ///
+    /// CFF supports subgraph selections and the constraints below. LTD requires a
+    /// complete ordinary diagram and uses its stored ordered loop-momentum basis.
+    /// Display either result directly to explore its terms and surfaces in a notebook.
     ///
     /// Examples
     /// --------
     /// Using the setup in the ``FeynmanDiagram`` class example:
     ///
-    /// Construct and display the causal denominators of a one-loop diagram:
-    ///
-    /// >>> cff = diagram.cross_free_family(max_orientations=10_000)
-    /// >>> cff.to_expression()  # native Symbolica display in a notebook
+    /// >>> cff = diagram.integrate_energy(method="cff")
+    /// >>> ltd = diagram.integrate_energy(method="ltd")
+    /// >>> expression = cff.to_expression()
     ///
     /// Parameters
     /// ----------
+    /// method : {"cff", "ltd"}
+    ///     Required representation choice. Literal arguments retain the concrete
+    ///     return type in editors and type checkers.
     /// max_orientations : int or None, optional
-    ///     Maximum number of candidate orientations to inspect.
+    ///     CFF-only limit on candidate orientations. None imposes no limit.
     /// fixed_orientations : mapping[int, bool] or None, optional
-    ///     Edge IDs mapped to stored (false) or reversed (true) directions.
-    /// contracted_edges : iterable[int], optional
-    ///     Edge IDs to contract before constructing denominator surfaces.
-    /// initial_state_edges : iterable[int], optional
-    ///     Edge IDs to classify as incoming external lines.
-    #[pyo3(signature = (*, max_orientations=None, fixed_orientations=None, contracted_edges=None, initial_state_edges=None))]
-    fn cross_free_family(
+    ///     CFF-only constraints by physical edge ID: False keeps the stored
+    ///     direction; True reverses it. None leaves orientations unconstrained.
+    /// contracted_edges : sequence[int] or None, optional
+    ///     CFF-only physical edge IDs to contract before constructing surfaces.
+    ///     None contracts no edges.
+    /// initial_state_edges : sequence[int] or None, optional
+    ///     CFF-only physical edge IDs whose on-shell energies are moved into
+    ///     external energy shifts. None performs no such replacements.
+    /// numerator : Expression or None, optional
+    ///     CFF polynomial in ``gammalooprs::Q(e, spenso::cind(0))``, using physical
+    ///     internal edge IDs. Degree bounds are inferred before momentum routing.
+    ///     None selects scalar topology generation. Supplying a numerator uses the
+    ///     generalized backend and currently requires an unconstrained complete
+    ///     diagram. Express energy dependence explicitly; loop-basis energies and
+    ///     unevaluated energy-dependent functions are unsupported.
+    ///
+    /// Returns
+    /// -------
+    /// CffRepresentation or LtdRepresentation
+    ///     The selected scalar energy representation, with structured term and
+    ///     surface inspection, expression conversion and notebook display.
+    ///
+    /// Raises
+    /// ------
+    /// ValueError
+    ///     The method is unknown, or CFF-only options are supplied for LTD.
+    #[gen_stub(skip)]
+    #[pyo3(signature = (*, method, max_orientations=None, fixed_orientations=None, contracted_edges=None, initial_state_edges=None, numerator=None))]
+    #[allow(clippy::too_many_arguments)] // Python options remain explicit keyword-only arguments.
+    fn integrate_energy(
         &self,
         py: Python<'_>,
+        method: &str,
         max_orientations: Option<usize>,
         fixed_orientations: Option<BTreeMap<usize, bool>>,
         contracted_edges: Option<Vec<usize>>,
         initial_state_edges: Option<Vec<usize>>,
-    ) -> PyResult<PyCrossFreeFamily> {
-        PyCrossFreeFamily::from_diagram(
-            py,
-            self,
-            max_orientations,
-            fixed_orientations,
-            contracted_edges,
-            initial_state_edges,
-        )
+        numerator: Option<ConvertibleToExpression>,
+    ) -> PyResult<Py<PyAny>> {
+        match method {
+            "cff" => Py::new(
+                py,
+                PyCffRepresentation::from_diagram(
+                    py,
+                    self,
+                    max_orientations,
+                    fixed_orientations,
+                    contracted_edges,
+                    initial_state_edges,
+                    numerator,
+                )?,
+            )
+            .map(Py::into_any),
+            "ltd" => {
+                if max_orientations.is_some()
+                    || fixed_orientations.is_some()
+                    || contracted_edges.is_some()
+                    || initial_state_edges.is_some()
+                    || numerator.is_some()
+                {
+                    return Err(PyValueError::new_err(
+                        "numerator, orientation and contraction options apply only to method='cff'",
+                    ));
+                }
+                Py::new(py, PyLtdRepresentation::from_diagram(py, self)?).map(Py::into_any)
+            }
+            _ => Err(PyValueError::new_err("method must be 'cff' or 'ltd'")),
+        }
     }
 
     /// Serialize the complete diagram to JSON text.

@@ -587,14 +587,18 @@
   if settings.tensor-layout == "ports" { _ports(base, bras, kets) } else { base }
 }
 
-#let _render-tensor(ctx, settings) = {
-  let node = ctx.node
+#let _printed-call(ctx, settings) = {
   for (atom, normal, power) in settings.print-calls {
-    if node.at("atom", default: none) == atom {
+    if ctx.node.at("atom", default: none) == atom {
       let visual = if ctx.power-base { power } else { normal }
       if visual != none { return visual }
     }
   }
+  none
+}
+
+#let _render-tensor(ctx, settings) = {
+  let node = ctx.node
   if node.arguments.len() > 0 {
     let component = node.arguments.last()
     if _is-function(component) and _name(component) == "spenso::cind" and (
@@ -603,8 +607,11 @@
       let base = _head(ctx, node)
       let labels = node.arguments.slice(0, -1).map(argument => _visual(ctx, argument))
       if labels.len() > 0 {
-        // Component parameters are ordinary function arguments in every layout.
-        base = _tight((base, _parentheses(labels.join($,$))))
+        // Object labels (e.g. the edge of q_e) survive component selection;
+        // ordinary tensor parameters remain function arguments in every layout.
+        base = if _has-tag(node, "spenso::component-labels:subscript") {
+          math.attach(base, b: labels.join($,$))
+        } else { _tight((base, _parentheses(labels.join($,$)))) }
       }
       if component.arguments.len() == 0 { return base }
       let coordinates = component.arguments.map(index => _visual(ctx, index)).join($,$)
@@ -886,7 +893,7 @@
   if settings.commas == none {
     settings.insert("commas", settings.tensor-layout == "call")
   }
-  let tensor = ctx => if ctx.kind == "function" {
+  let printed-call = ctx => if ctx.kind == "function" {
     // The common dispatcher may encounter the broad package tensor tag before
     // a later document tag or class on the same symbol. Re-check the complete
     // document layer here so either kind of document override still wins over
@@ -895,10 +902,14 @@
     if renderer == none {
       renderer = _lookup-document-renderer(classes, ctx.classes)
     }
+    let is-tensor = ctx.tags.any(tag => tag in ("tensor", "spenso::tensor"))
     if renderer == none {
-      _render-tensor(ctx, settings)
+      let visual = _printed-call(ctx, settings)
+      if visual != none { visual }
+      else if is-tensor { _render-tensor(ctx, settings) }
+      else { (ctx.default)() }
     } else {
-      _invoke-document-renderer(renderer, _tensor-document-context(ctx, settings))
+      _invoke-document-renderer(renderer, if is-tensor { _tensor-document-context(ctx, settings) } else { ctx })
     }
   } else {
     (ctx.default)()
@@ -949,8 +960,9 @@
           math.attach(head, b: text(size: 0.75em, arguments.join([.])))
         }
       },
-      tensor: tensor,
-      "spenso::tensor": tensor,
+      tensor: printed-call,
+      "spenso::tensor": printed-call,
+      "spenso::print-callback": printed-call,
     ),
     fallback-head: _payload-head,
   )

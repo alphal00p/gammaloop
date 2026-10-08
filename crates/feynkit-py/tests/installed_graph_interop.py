@@ -85,8 +85,8 @@ assert full.momentum_basis().loop_edges
 assert full.loop_momentum_bases(limit=1)
 assert len(diagram.loop_momentum_basis.momentum_replacements()) == len(diagram.edges)
 assert (
-    full.cross_free_family().to_expression()
-    == diagram.cross_free_family().to_expression()
+    full.integrate_energy(method="cff").to_expression()
+    == diagram.integrate_energy(method="cff").to_expression()
 )
 
 cycles, covered = internal.cycle_basis()

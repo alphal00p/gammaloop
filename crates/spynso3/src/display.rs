@@ -60,7 +60,8 @@ use pyo3_stub_gen::derive::{gen_stub_pyclass, gen_stub_pyfunction, gen_stub_pyme
 
 const RENDER_TYP: &str = include_str!("../typst/render.typ");
 const NOTATION_TYP: &str = include_str!("../typst/notation.typ");
-const NOTEBOOK_STYLE: &str = include_str!("../typst/notebook.css");
+/// Shared math font and layout for notebook expressions and embedded consumers.
+pub const NOTEBOOK_STYLE: &str = include_str!("../typst/notebook.css");
 
 mod explorer;
 mod labels;

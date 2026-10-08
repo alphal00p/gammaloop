@@ -4,7 +4,8 @@
 = Overview
 
 FeynKit is a standalone particle-physics toolkit for validated models, Feynman diagrams,
-deterministic generation, Cross-Free Family (CFF) expressions, relativistic kinematics, and
+deterministic generation, cross-free family (CFF) and loop-tree duality (LTD)
+energy representations, relativistic kinematics, and
 covariant tensor reduction. Rust clients use the focused crates or the `feynkit` facade. Python
 clients use `symbolica.community.hepkit` inside a shared Symbolica kernel.
 
@@ -19,7 +20,7 @@ clients use `symbolica.community.hepkit` inside a shared Symbolica kernel.
 - Compare supported algebra and outstanding calculations with the
   #link("guides/feyncalc-coverage/")[FeynCalc example audit].
 - Explore every component in the #link("guides/showcases/")[executable notebook showcases].
-- Render diagrams and inspect CFF results with the #link("guides/notebooks/")[notebook guide].
+- Render diagrams and inspect CFF or LTD results with the #link("guides/notebooks/")[notebook guide].
 - Embed the Python module in a Symbolica distribution using the
   #link("guides/community-host/")[community-host integration guide].
 

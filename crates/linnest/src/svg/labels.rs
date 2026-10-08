@@ -10,8 +10,7 @@ use super::{curves, marks, UNIT};
 
 /// Clearance between an external label and its free endpoint.
 const EXTERNAL_GAP: f64 = 0.25;
-/// Momentum arrows: offset beside the edge, visible length and ratio cap, label gap.
-pub(super) const ARROW_OFFSET: f64 = 0.35;
+/// Momentum arrows: visible length and ratio cap, label gap.
 pub(super) const ARROW_WINDOW: (f64, f64) = (1.4, 0.5);
 const MOMENTUM_GAP: f64 = 0.2;
 /// Momentum stroke radius: 1pt in drawing units.
@@ -169,7 +168,7 @@ impl LabelPage {
 
 impl Typeset {
     /// Read the SVG pages of a scene's label document, title first when present.
-    pub(super) fn read(svgs: &[String], title: bool) -> Result<Self, String> {
+    pub fn read(svgs: &[String], title: bool) -> Result<Self, String> {
         let mut defs = BTreeMap::new();
         let mut pages = svgs
             .iter()
@@ -424,10 +423,11 @@ pub(super) fn momentum_candidates(
     path: &BezPath,
     metrics: [f64; 4],
     side: f64,
+    offset: f64,
 ) -> Result<(Vec<Candidate>, Vec<BezPath>), String> {
     let carriers = [side, -side]
         .iter()
-        .map(|&s| curves::layer(path, ARROW_OFFSET * s, None, 0.0))
+        .map(|&s| curves::layer(path, offset * s, None, 0.0))
         .collect::<Result<Vec<_>, _>>()?;
     let mut candidates = Vec::new();
     for (index, carrier) in carriers.iter().enumerate() {

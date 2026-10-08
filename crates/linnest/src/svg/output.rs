@@ -6,7 +6,7 @@ use std::sync::Arc;
 use kurbo::{BezPath, PathEl, Rect, Shape};
 use serde_json::Value;
 
-use super::{labels::Bounds, Dash, Element, Stroke, Target, Typeset, UNIT};
+use super::{arrow_stroke, labels::Bounds, marks, Dash, Element, Stroke, Target, Typeset, UNIT};
 use crate::{TypstDotEdge, TypstDotEndpoint, TypstDotNode};
 
 /// Canvas padding in drawing units; margin (2mm) and title gutter (1em) in points.
@@ -217,7 +217,15 @@ pub(super) fn svg(typeset: &Typeset, layers: &[Element], targets: &[Target]) -> 
         match element {
             Element::Carrier { .. } => {}
             Element::Path { path, .. } => include(path.bounding_box()),
-            Element::Chevron(points) | Element::Triangle(points) => {
+            Element::Momentum { path, .. } => {
+                include(path.bounding_box());
+                if let Some(points) = marks::CHEVRON.at_end(path) {
+                    for point in points {
+                        include(Rect::from_points(point, point));
+                    }
+                }
+            }
+            Element::Triangle(points) => {
                 for point in points {
                     include(Rect::from_points(*point, *point));
                 }
@@ -343,12 +351,21 @@ pub(super) fn svg(typeset: &Typeset, layers: &[Element], targets: &[Target]) -> 
                     path_data(path)
                 );
             }
-            Element::Chevron(points) => {
+            Element::Momentum { path, href } => {
                 let _ = write!(
                     svg,
-                    r#"<path fill="none" stroke="{INK}" stroke-width="1" stroke-linecap="round" stroke-linejoin="miter" d="{}"/>"#,
-                    polyline(points)
+                    r#"<a href="{href}" data-linnet-momentum="true"><path fill="none" {} d="{}"/>"#,
+                    stroke_attributes(&arrow_stroke()),
+                    path_data(path)
                 );
+                if let Some(points) = marks::CHEVRON.at_end(path) {
+                    let _ = write!(
+                        svg,
+                        r#"<path fill="none" stroke="{INK}" stroke-width="1" stroke-linecap="round" stroke-linejoin="miter" d="{}"/>"#,
+                        polyline(&points)
+                    );
+                }
+                svg.push_str("</a>");
             }
             Element::Triangle(points) => {
                 let _ = write!(

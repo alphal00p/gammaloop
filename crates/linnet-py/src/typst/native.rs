@@ -264,6 +264,7 @@ impl RenderSettingsTransport {
                 pattern: None,
                 flow: None,
                 momentum: false,
+                momentum_offset: EdgeDrawing::DEFAULT_MOMENTUM_OFFSET,
                 label,
                 details: scene.graph.edges[index]
                     .name

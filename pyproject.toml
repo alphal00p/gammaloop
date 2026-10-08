@@ -39,6 +39,8 @@ repository = "https://github.com/alphal00p/gammaloop"
 dev = [
   "PyYAML>=6.0.1,<7",
   "black>=23.12.1,<24",
+  "docstring-to-markdown>=0.17,<1",
+  "ty>=0.0.75",
   "inline-snapshot>=0.21.2",
   "marimo>=0.24,<0.25",
   "pytest>=8.3.5,<9",
@@ -74,6 +76,12 @@ ignore_missing_imports = true
 [tool.pyright]
 # reportPrivateImportUsage = "none"
 # include = ["gamm/gammaloop"]
+
+[tool.marimo.language_servers.ty]
+enabled = true
+
+[tool.marimo.diagnostics]
+enabled = true
 
 [tool.uv]
 package = false

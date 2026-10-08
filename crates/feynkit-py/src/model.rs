@@ -21,7 +21,7 @@ use pyo3_stub_gen::{
 };
 
 use crate::{
-    display::{escape_html, model_expression_html, model_record_html},
+    display::{escape_html, expression_html, record_html},
     error,
     generation::{PyProcess, SelectorInput, VertexInput},
 };
@@ -675,8 +675,8 @@ impl PyParticle {
             ),
             ("Spin", spin),
             ("Color", p.color.to_string()),
-            ("Charge", model_expression_html(py, self.charge())?),
-            ("Mass", model_expression_html(py, self.mass())?),
+            ("Charge", expression_html(py, self.charge())?),
+            ("Mass", expression_html(py, self.mass())?),
             ("Width", escape_html(self.width_parameter())),
             (
                 "Ghost / lepton number",
@@ -688,12 +688,12 @@ impl PyParticle {
             ),
         ];
         if let Some(y) = self.y_charge() {
-            rows.push(("Hypercharge (left)", model_expression_html(py, y)?));
+            rows.push(("Hypercharge (left)", expression_html(py, y)?));
         }
         if let Some(y) = self.y_charge_right() {
-            rows.push(("Hypercharge (right)", model_expression_html(py, y)?));
+            rows.push(("Hypercharge (right)", expression_html(py, y)?));
         }
-        Ok(model_record_html("Particle", self.name(), &rows))
+        Ok(record_html("Particle", self.name(), &rows))
     }
 
     /// Write the complete text summary to an IPython pretty printer.
@@ -1017,7 +1017,7 @@ impl PyParameter {
         let mut rows = vec![
             (
                 "Symbol",
-                model_expression_html(
+                expression_html(
                     py,
                     PythonExpression {
                         expr: Atom::var(symbol!(&format!("UFO::{}", p.name))),
@@ -1031,7 +1031,7 @@ impl PyParameter {
             ("Value", escape_html(&display_value(p.value))),
         ];
         if let Some(expression) = self.expression() {
-            rows.push(("Definition", model_expression_html(py, expression)?));
+            rows.push(("Definition", expression_html(py, expression)?));
         }
         if let Some(block) = &p.lhablock {
             rows.push((
@@ -1043,7 +1043,7 @@ impl PyParameter {
                 )),
             ));
         }
-        Ok(model_record_html("Parameter", self.name(), &rows))
+        Ok(record_html("Parameter", self.name(), &rows))
     }
 
     /// Write the complete text summary to an IPython pretty printer.
@@ -1215,11 +1215,11 @@ impl PyCoupling {
     /// >>> from IPython.display import display
     /// >>> display(coupling)
     fn _repr_html_(&self, py: Python<'_>) -> PyResult<String> {
-        Ok(model_record_html(
+        Ok(record_html(
             "Coupling",
             self.name(),
             &[
-                ("Definition", model_expression_html(py, self.expression())?),
+                ("Definition", expression_html(py, self.expression())?),
                 ("Orders", escape_html(&format!("{:?}", self.inner().orders))),
                 ("Value", escape_html(&display_value(self.inner().value))),
             ],
@@ -1474,7 +1474,7 @@ impl PyVertexRule {
             .map(|(i, c)| {
                 Ok(format!(
                     "<div>C<sub>{i}</sub> = {}</div>",
-                    model_expression_html(py, c.clone())?
+                    expression_html(py, c.clone())?
                 ))
             })
             .collect::<PyResult<Vec<_>>>()?
@@ -1486,7 +1486,7 @@ impl PyVertexRule {
             .enumerate()
             .map(|(i, id)| {
                 let l = self.model.lorentz_structure_by_id(*id).unwrap();
-                let expr = model_expression_html(
+                let expr = expression_html(
                     py,
                     PythonExpression {
                         expr: l.structure.clone(),
@@ -1504,7 +1504,7 @@ impl PyVertexRule {
             for (l, id) in row.iter().enumerate() {
                 if let Some(id) = id {
                     let g = self.model.coupling_by_id(*id).unwrap();
-                    let expr = model_expression_html(
+                    let expr = expression_html(
                         py,
                         PythonExpression {
                             expr: g.expression.clone(),
@@ -1517,7 +1517,7 @@ impl PyVertexRule {
         if couplings.is_empty() {
             couplings.push_str("No nonzero couplings");
         }
-        Ok(model_record_html(
+        Ok(record_html(
             "Vertex rule",
             self.name(),
             &[
@@ -1668,12 +1668,12 @@ impl PyLorentzStructure {
     /// >>> from IPython.display import display
     /// >>> display(lorentz)
     fn _repr_html_(&self, py: Python<'_>) -> PyResult<String> {
-        Ok(model_record_html(
+        Ok(record_html(
             "Lorentz structure",
             self.name(),
             &[
                 ("Spins (UFO)", format!("{:?}", self.inner().spins)),
-                ("Structure", model_expression_html(py, self.structure())?),
+                ("Structure", expression_html(py, self.structure())?),
             ],
         ))
     }
@@ -1828,16 +1828,13 @@ impl PyPropagator {
     /// >>> from IPython.display import display
     /// >>> display(propagator)
     fn _repr_html_(&self, py: Python<'_>) -> PyResult<String> {
-        Ok(model_record_html(
+        Ok(record_html(
             "Propagator",
             self.name(),
             &[
                 ("Particle", escape_html(self.particle())),
-                ("Numerator", model_expression_html(py, self.numerator())?),
-                (
-                    "Denominator",
-                    model_expression_html(py, self.denominator())?,
-                ),
+                ("Numerator", expression_html(py, self.numerator())?),
+                ("Denominator", expression_html(py, self.denominator())?),
             ],
         ))
     }
@@ -1995,10 +1992,10 @@ impl PyModelFunction {
     fn _repr_html_(&self, py: Python<'_>) -> PyResult<String> {
         let expression = self
             .expression()
-            .map(|e| model_expression_html(py, e))
+            .map(|e| expression_html(py, e))
             .transpose()?
             .unwrap_or_else(|| "Not defined in the model".to_owned());
-        Ok(model_record_html(
+        Ok(record_html(
             "Model function",
             self.name(),
             &[
@@ -2143,10 +2140,10 @@ impl PyFormFactor {
     fn _repr_html_(&self, py: Python<'_>) -> PyResult<String> {
         let expression = self
             .value()
-            .map(|e| model_expression_html(py, e))
+            .map(|e| expression_html(py, e))
             .transpose()?
             .unwrap_or_else(|| "Not defined in the model".to_owned());
-        Ok(model_record_html(
+        Ok(record_html(
             "Form factor",
             self.name(),
             &[
