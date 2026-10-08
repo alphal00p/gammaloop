@@ -46,23 +46,36 @@ impl Crown {
         self.absorbed_into == NONE
     }
 
-    /// Iterates over this crown's ring, linked by `next`.
+    /// Iterates over this crown's ring.
     #[inline]
-    fn ring<'a>(&self, next: &'a [u32]) -> RingNeighborIter<'a> {
+    fn ring<'a>(&self, links: &'a [Link]) -> RingNeighborIter<'a> {
         RingNeighborIter {
-            next,
+            links,
             cur: self.head,
             remaining: self.len,
         }
     }
 }
 
+/// A half-edge's neighbours in its node's ascending ring.
+#[derive(Clone, Copy, Debug)]
+struct Link {
+    next: u32,
+    prev: u32,
+}
+
+impl Link {
+    const NONE: Self = Link {
+        next: NONE,
+        prev: NONE,
+    };
+}
+
 /// The per-half-edge arrays of a [`NodeForest`]: each half-edge's node and its
-/// neighbours in its node's ascending ring.
+/// ring links.
 struct Rings<'a> {
     label: &'a mut [u32],
-    next: &'a mut [u32],
-    prev: &'a mut [u32],
+    links: &'a mut [Link],
 }
 
 impl Rings<'_> {
@@ -71,7 +84,7 @@ impl Rings<'_> {
         let mut hedge = crown.head;
         for _ in 0..crown.len {
             self.label[hedge as usize] = node;
-            hedge = self.next[hedge as usize];
+            hedge = self.links[hedge as usize].next;
         }
     }
 
@@ -82,13 +95,13 @@ impl Rings<'_> {
             crown.head = hedge;
             (hedge, hedge)
         } else {
-            (crown.head, self.prev[crown.head as usize])
+            (crown.head, self.links[crown.head as usize].prev)
         };
         crown.len += 1;
-        self.next[hedge as usize] = head;
-        self.prev[hedge as usize] = tail;
-        self.next[tail as usize] = hedge;
-        self.prev[head as usize] = hedge;
+        self.links[hedge as usize].next = head;
+        self.links[hedge as usize].prev = tail;
+        self.links[tail as usize].next = hedge;
+        self.links[head as usize].prev = hedge;
     }
 
     /// The largest member below `hedge` of the ring of `node` starting at
@@ -102,7 +115,7 @@ impl Rings<'_> {
     fn predecessor(&self, node: u32, head: u32, hedge: u32, mut from: u32) -> u32 {
         let (mut down, mut up) = (hedge - 1, hedge + 1);
         loop {
-            let next = self.next[from as usize];
+            let next = self.links[from as usize].next;
             if next == head || next > hedge {
                 return from;
             }
@@ -111,7 +124,7 @@ impl Rings<'_> {
                 return down;
             }
             if self.label[up as usize] == node {
-                return self.prev[up as usize];
+                return self.links[up as usize].prev;
             }
             down -= 1;
             up += 1;
@@ -123,25 +136,25 @@ impl Rings<'_> {
     /// `hedge` or `head`; returns the new head.
     #[inline]
     fn insert_into(&mut self, node: u32, head: u32, hedge: u32, from: u32) -> u32 {
-        let tail = self.prev[head as usize];
+        let tail = self.links[head as usize].prev;
         let after = if hedge > tail || hedge < head {
             tail
         } else {
             self.predecessor(node, head, hedge, from)
         };
-        let before = self.next[after as usize];
-        self.next[after as usize] = hedge;
-        self.prev[hedge as usize] = after;
-        self.next[hedge as usize] = before;
-        self.prev[before as usize] = hedge;
+        let before = self.links[after as usize].next;
+        self.links[after as usize].next = hedge;
+        self.links[hedge as usize].prev = after;
+        self.links[hedge as usize].next = before;
+        self.links[before as usize].prev = hedge;
         head.min(hedge)
     }
 
     /// Links `hedge`, labelled `node`, into the ring of `crown`.
     fn insert(&mut self, crown: &mut Crown, node: u32, hedge: u32) {
         crown.head = if crown.len == 0 {
-            self.next[hedge as usize] = hedge;
-            self.prev[hedge as usize] = hedge;
+            self.links[hedge as usize].next = hedge;
+            self.links[hedge as usize].prev = hedge;
             hedge
         } else {
             self.insert_into(node, crown.head, hedge, crown.head)
@@ -154,9 +167,12 @@ impl Rings<'_> {
         if crown.len == 1 {
             crown.head = NONE;
         } else {
-            let (prev, next) = (self.prev[hedge as usize], self.next[hedge as usize]);
-            self.next[prev as usize] = next;
-            self.prev[next as usize] = prev;
+            let (prev, next) = (
+                self.links[hedge as usize].prev,
+                self.links[hedge as usize].next,
+            );
+            self.links[prev as usize].next = next;
+            self.links[next as usize].prev = prev;
             if crown.head == hedge {
                 crown.head = next;
             }
@@ -175,7 +191,7 @@ impl Rings<'_> {
             // above the previous one.
             let (mut hedge, mut head, mut from) = (absorbed.head, target.head, target.head);
             for _ in 0..absorbed.len {
-                let next = self.next[hedge as usize];
+                let next = self.links[hedge as usize].next;
                 self.label[hedge as usize] = survivor;
                 head = self.insert_into(survivor, head, hedge, from);
                 from = hedge;
@@ -237,8 +253,7 @@ impl Rings<'_> {
 #[derive(Clone, Debug)]
 pub struct NodeForest<V> {
     label: Vec<u32>,
-    next: Vec<u32>,
-    prev: Vec<u32>,
+    links: Vec<Link>,
     crowns: Vec<Crown>,
     n_absorbed: u32,
     data: NodeVec<V>,
@@ -247,7 +262,7 @@ pub struct NodeForest<V> {
 /// Iterates over a [`NodeForest`] crown in ascending half-edge order.
 #[derive(Clone, Debug)]
 pub struct RingNeighborIter<'a> {
-    next: &'a [u32],
+    links: &'a [Link],
     cur: u32,
     remaining: u32,
 }
@@ -261,7 +276,7 @@ impl Iterator for RingNeighborIter<'_> {
             return None;
         }
         let hedge = self.cur;
-        self.cur = self.next[hedge as usize];
+        self.cur = self.links[hedge as usize].next;
         self.remaining -= 1;
         Some(Hedge(hedge as usize))
     }
@@ -299,12 +314,11 @@ impl<V> NodeForest<V> {
     fn from_labels(mut label: Vec<u32>, data: NodeVec<V>) -> Self {
         let n_hedges = label.len();
         let n_nodes: NodeIndex = data.len();
-        let (mut next, mut prev) = (vec![NONE; n_hedges], vec![NONE; n_hedges]);
+        let mut links = vec![Link::NONE; n_hedges];
         let mut crowns = vec![Crown::EMPTY; n_nodes.0];
         let mut rings = Rings {
             label: &mut label,
-            next: &mut next,
-            prev: &mut prev,
+            links: &mut links,
         };
         for hedge in 0..n_hedges {
             let node = rings.label[hedge];
@@ -312,8 +326,7 @@ impl<V> NodeForest<V> {
         }
         NodeForest {
             label,
-            next,
-            prev,
+            links,
             crowns,
             n_absorbed: 0,
             data,
@@ -322,7 +335,7 @@ impl<V> NodeForest<V> {
 
     #[inline]
     fn ring(&self, node: usize) -> RingNeighborIter<'_> {
-        self.crowns[node].ring(&self.next)
+        self.crowns[node].ring(&self.links)
     }
 
     /// Number of node slots, live or absorbed: the bound of every [`NodeIndex`]
@@ -380,8 +393,7 @@ impl<V> NodeForest<V> {
     fn rings(&mut self) -> (Rings<'_>, &mut [Crown]) {
         let rings = Rings {
             label: &mut self.label,
-            next: &mut self.next,
-            prev: &mut self.prev,
+            links: &mut self.links,
         };
         (rings, &mut self.crowns)
     }
@@ -486,8 +498,7 @@ impl<V> NodeForest<V> {
     fn with_data<V2>(&self, data: NodeVec<V2>) -> NodeForest<V2> {
         NodeForest {
             label: self.label.clone(),
-            next: self.next.clone(),
-            prev: self.prev.clone(),
+            links: self.links.clone(),
             crowns: self.crowns.clone(),
             n_absorbed: self.n_absorbed,
             data,
@@ -497,8 +508,7 @@ impl<V> NodeForest<V> {
     fn into_data<V2>(self, data: NodeVec<V2>) -> NodeForest<V2> {
         NodeForest {
             label: self.label,
-            next: self.next,
-            prev: self.prev,
+            links: self.links,
             crowns: self.crowns,
             n_absorbed: self.n_absorbed,
             data,
@@ -643,10 +653,10 @@ impl<V> NodeStorageOps for NodeForest<V> {
         let shift = |index: u32, by: u32| if index == NONE { NONE } else { index + by };
         self.label
             .extend(other.label.iter().map(|&node| node + node_shift));
-        self.next
-            .extend(other.next.iter().map(|&hedge| hedge + hedge_shift));
-        self.prev
-            .extend(other.prev.iter().map(|&hedge| hedge + hedge_shift));
+        self.links.extend(other.links.iter().map(|link| Link {
+            next: link.next + hedge_shift,
+            prev: link.prev + hedge_shift,
+        }));
         self.crowns.extend(other.crowns.iter().map(|crown| Crown {
             head: shift(crown.head, hedge_shift),
             len: crown.len,
@@ -853,8 +863,7 @@ impl<V> NodeStorageOps for NodeForest<V> {
         }
         let hedge = index_u32(self.label.len());
         self.label.push(source.0 as u32);
-        self.next.push(NONE);
-        self.prev.push(NONE);
+        self.links.push(Link::NONE);
         let (mut rings, crowns) = self.rings();
         rings.append(&mut crowns[source.0], hedge);
         Ok(self)
@@ -934,8 +943,8 @@ impl<V> NodeStorageOps for NodeForest<V> {
                         "crown of {node} does not ascend at {at}"
                     )));
                 }
-                let next = self.next[hedge as usize];
-                if self.prev[next as usize] != hedge {
+                let next = self.links[hedge as usize].next;
+                if self.links[next as usize].prev != hedge {
                     return Err(partition(format!("broken ring link after {at}")));
                 }
                 previous = Some(hedge);
@@ -980,16 +989,15 @@ impl<V> NodeStorageOps for NodeForest<V> {
         &'a mut self,
         mut node_map: impl FnMut(Self::NeighborsIter<'a>, &'a mut Self::NodeData) -> V2,
     ) -> Self::OpStorage<V2> {
-        let (next, crowns) = (&self.next, &self.crowns);
+        let (links, crowns) = (&self.links, &self.crowns);
         let data = self
             .data
             .iter_mut()
-            .map(|(node, data)| node_map(crowns[node.0].ring(next), data))
+            .map(|(node, data)| node_map(crowns[node.0].ring(links), data))
             .collect();
         NodeForest {
             label: self.label.clone(),
-            next: self.next.clone(),
-            prev: self.prev.clone(),
+            links: self.links.clone(),
             crowns: self.crowns.clone(),
             n_absorbed: self.n_absorbed,
             data,
@@ -1048,10 +1056,10 @@ impl<V> NodeStorageOps for NodeForest<V> {
     fn iter_nodes_mut(
         &mut self,
     ) -> impl Iterator<Item = (NodeIndex, Self::NeighborsIter<'_>, &mut Self::NodeData)> {
-        let (next, crowns) = (&self.next, &self.crowns);
+        let (links, crowns) = (&self.links, &self.crowns);
         self.data
             .iter_mut()
-            .map(move |(node, data)| (node, crowns[node.0].ring(next), data))
+            .map(move |(node, data)| (node, crowns[node.0].ring(links), data))
     }
 
     #[inline]
