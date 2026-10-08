@@ -1,0 +1,55 @@
+<div class="hs-total-sum" data-total-sum></div>
+<div class="hs-status" data-status role="status" aria-live="polite"></div>
+<div class="hs-orientation-sum" data-orientation-sum></div>
+<details class="hs-explore" data-explorer>
+  <summary>Explore graph and families</summary>
+  <div class="hs-graph" data-graph></div>
+  <div class="hs-family-bar">
+    <strong>Families</strong>
+    <div class="hs-family-pages">
+      <button
+        type="button"
+        class="hs-action"
+        data-page-step="-1"
+        aria-label="Previous family previews"
+      >
+        ←</button
+      ><span data-page-range></span
+      ><button
+        type="button"
+        class="hs-action"
+        data-page-step="1"
+        aria-label="Next family previews"
+      >
+        →
+      </button>
+    </div>
+  </div>
+  <div class="hs-family-grid" data-family-previews></div>
+</details>
+<div class="hs-detail" data-detail aria-live="polite"></div>
+<details class="hs-options">
+  <summary>Display options &amp; notation</summary>
+  <div class="hs-settings">
+    <label class="hs-check"
+      ><input type="checkbox" data-multiple />Multiple surfaces</label
+    >
+    <label class="hs-check"
+      ><input type="checkbox" data-contours />Outlines</label
+    >
+    <span data-selection-count aria-live="polite"></span>
+  </div>
+  <div class="hs-legend">
+    <span>Colors: surface boundaries</span>
+    <span>Pale bands: interior · rings: vertex membership</span>
+  </div>
+  <div class="hs-help">
+    Click an arrowhead to reverse an edge. Shift-click surface factors to add or
+    remove them.
+  </div>
+  <div class="hs-help">
+    C denotes the denominator sum; numerators, on-shell energy prefactors, and the
+    spatial integration measure are separate. Selecting an orientation or family
+    only changes the view.
+  </div>
+</details>

@@ -596,7 +596,7 @@ functions retain their identities through `Model.to_json()` and
 fingerprint.
 
 #callout("CFF IDs belong to their arena", [
-  `diagram.build_cff()` returns orientations, surfaces, generation statistics, and symbolic
+  `diagram.cross_free_family()` returns orientations, surfaces, generation statistics, and symbolic
   denominators. Rust `generate()` creates a fresh arena; `generate_into()` accepts a shared one.
   Resolve only the surface IDs referenced by an expression through its associated arena.
 ])

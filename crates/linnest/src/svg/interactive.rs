@@ -59,7 +59,11 @@ impl super::Scene {
                     .replace('>', "&gt;");
                 (title, detail)
             });
-            let tabindex = if seen.insert(identity) { 0 } else { -1 };
+            let tabindex = if !node.has_attribute("data-linnet-carrier") && seen.insert(identity) {
+                0
+            } else {
+                -1
+            };
             let range = node.range();
             let open_end = range.start + svg[range.clone()].find('>').expect("SVG anchor") + 1;
             // Keep the original transform and link geometry byte-for-byte. Removing the

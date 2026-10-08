@@ -215,6 +215,7 @@ pub(super) fn svg(typeset: &Typeset, layers: &[Element], targets: &[Target]) -> 
     let mut include = |rect: Rect| bounds = bounds.union(rect);
     for element in layers {
         match element {
+            Element::Carrier { .. } => {}
             Element::Path { path, .. } => include(path.bounding_box()),
             Element::Chevron(points) | Element::Triangle(points) => {
                 for point in points {
@@ -327,6 +328,13 @@ pub(super) fn svg(typeset: &Typeset, layers: &[Element], targets: &[Target]) -> 
     };
     for element in layers {
         match element {
+            Element::Carrier { path, href } => {
+                let _ = write!(
+                    svg,
+                    r#"<a href="{href}" data-linnet-carrier="true" style="display:none"><path d="{}"/></a>"#,
+                    path_data(path)
+                );
+            }
             Element::Path { path, stroke } => {
                 let _ = write!(
                     svg,
@@ -371,6 +379,7 @@ pub(super) fn svg(typeset: &Typeset, layers: &[Element], targets: &[Target]) -> 
                 }
             }
             Element::Node {
+                id,
                 at: [nx, ny],
                 size: (w, h),
                 rectangular,
@@ -380,7 +389,7 @@ pub(super) fn svg(typeset: &Typeset, layers: &[Element], targets: &[Target]) -> 
                 if *rectangular {
                     let _ = write!(
                         svg,
-                        r#"<rect x="{}" y="{}" width="{}" height="{}" rx="2" fill="{}" {}/>"#,
+                        r#"<rect data-linnet-node="{id}" x="{}" y="{}" width="{}" height="{}" rx="2" fill="{}" {}/>"#,
                         x(nx - w),
                         y(ny + h),
                         number(2.0 * w * UNIT),
@@ -391,7 +400,7 @@ pub(super) fn svg(typeset: &Typeset, layers: &[Element], targets: &[Target]) -> 
                 } else {
                     let _ = write!(
                         svg,
-                        r#"<circle cx="{}" cy="{}" r="{}" fill="{}" {}/>"#,
+                        r#"<circle data-linnet-node="{id}" cx="{}" cy="{}" r="{}" fill="{}" {}/>"#,
                         x(*nx),
                         y(*ny),
                         number(w * UNIT),
