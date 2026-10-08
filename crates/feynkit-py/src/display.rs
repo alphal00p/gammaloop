@@ -91,7 +91,7 @@ pub(crate) fn collection_html(
 ) -> PyResult<(String, Vec<PyDiagramRender>)> {
     let count = diagrams.len();
     let mut html = format!(
-        "<style>{}</style><section class=\"feynkit-collection\"><header><strong>{}</strong><small>{}</small></header>",
+        "<style>{}</style><section class=\"feynkit-collection\" data-feynkit-notebook data-linnet-frame-owner><header><strong>{}</strong><small>{}</small></header>",
         include_str!("collection.css"),
         escape_html(title),
         escape_html(subtitle),
@@ -140,8 +140,9 @@ pub(crate) fn collection_html(
     }
     write!(
         html,
-        "{templates}</section><script>{}</script>",
-        include_str!("collection.js")
+        "{templates}</section><script>{}</script><script>{}</script>",
+        include_str!("collection.js"),
+        include_str!("notebook.js")
     )
     .unwrap();
     Ok((html, drawings))

@@ -23,8 +23,8 @@ use symbolica::api::python::{Citation, SymbolicaCommunityModule};
 
 pub use amplitude::{PyAmplitude, PyAmplitudeLeg, PySquaredAmplitude};
 pub use cff::{
-    PyCffGenerator, PyCffOrientation, PyCffReport, PyCffResult, PyCffSurface, PyCffSurfaceGroup,
-    PyCutPropagator,
+    PyCffGenerator, PyCffOrientation, PyCffReport, PyCffSurface, PyCffSurfaceGroup,
+    PyCrossFreeFamily, PyCutPropagator,
 };
 pub use generation::{
     PyCancellationToken, PyDiagramGroup, PyGenerationProgress, PyGenerationReport,
@@ -451,6 +451,7 @@ assert not missing, f"native classes missing from the generated stub: {missing}"
                 "FeynmanDiagram",
                 "TensorReducer",
                 "CffGenerator",
+                "CrossFreeFamily",
                 "FourMomentum",
                 "JetDefinition",
                 "Helicity",
@@ -463,6 +464,7 @@ assert not missing, f"native classes missing from the generated stub: {missing}"
             for removed_function in [
                 "generate_diagrams",
                 "build_cff",
+                "cross_free_family",
                 "cluster_jets",
                 "load_ufo_model",
             ] {
@@ -562,7 +564,7 @@ routed = bases[0].route(
 )
 assert set(routed) == {edge.id for edge in json_diagram.edges}
 
-cff = json_diagram.build_cff()
+cff = json_diagram.cross_free_family()
 assert len(cff) > 0
 expression = cff.to_expression()
 assert "Cross-free family" in cff._repr_html_()

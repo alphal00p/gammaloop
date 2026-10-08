@@ -29,7 +29,21 @@ Symbolica, the notebook runtime, and this example's data.
 
 == What to explore
 
-Inspect the first orientation and its denominator products, then change the symbolic coupling multiplying the result. The surface arena remains available alongside the expression.
+Displaying `diagram.cross_free_family()` returns the interactive display of
+`symbolica.community.hepkit.CrossFreeFamily`. The compact view starts with the
+factored expression and selected surface definitions. Expand "Explore graph and
+families" to edit an orientation by clicking an arrowhead, choose a family
+preview, or compare surface regions on the native Linnet graph. Shift-click
+surface factors to select several surfaces. Shared
+denominator factors stay outside the family sum; the active family's path is
+highlighted in that expression. Selection only changes the display, never the
+underlying CFF result.
+
+The display's $C$ is shorthand for the denominator sum. Numerators, on-shell
+energy prefactors and the spatial integration measure stay separate. Use
+`to_expression()` to continue symbolically, or `to_expression(normalized=True)`
+to include the generated energy product and loop measure. The surface arena
+remains available alongside the expression.
 
 == Run locally
 

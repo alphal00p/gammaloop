@@ -74,7 +74,7 @@ def _(hep):
     )
     assert len(generated.diagrams) == 1
     diagram = generated.diagrams[0]
-    cff = diagram.build_cff()
+    cff = diagram.cross_free_family()
     diagram.render(momenta=True)
     return cff, diagram
 
@@ -100,6 +100,7 @@ def _(cff, diagram, mo):
             mo.md(
                 f"**{len(cff.orientations)} acyclic orientations** contribute to this triangle."
             ),
+            cff,
             cff.to_expression(expand_surfaces=True).formatted(),
         ]
     )

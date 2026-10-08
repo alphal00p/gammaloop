@@ -293,6 +293,11 @@ impl Laid {
 
 /// Painted elements in drawing order.
 enum Element {
+    /// Invisible structural paths for overlays, independent of particle decoration.
+    Carrier {
+        path: BezPath,
+        href: Arc<str>,
+    },
     Path {
         path: BezPath,
         stroke: Stroke,
@@ -305,6 +310,7 @@ enum Element {
         href: Option<String>,
     },
     Node {
+        id: usize,
         at: [f64; 2],
         size: (f64, f64),
         rectangular: bool,
@@ -396,6 +402,12 @@ impl Drawing {
                 }));
             }
             Self::paint_edge(drawing, &visible, &parts, &mut layers, &mut strokes)?;
+            for (index, path) in parts.iter().enumerate() {
+                layers.push(Element::Carrier {
+                    path: path.clone(),
+                    href: hrefs.regions[if index == 0 { 0 } else { 3 }].clone(),
+                });
+            }
 
             // The bend relative to the chord sets the preferred momentum side.
             let side = match (&edge.source, &edge.sink) {
@@ -548,6 +560,11 @@ impl Drawing {
             let at = laid.node(node.node);
             let href = output::node_href(node, &laid.edges, &drawing.details);
             layers.push(Element::Node {
+                id: drawing
+                    .details
+                    .get("node")
+                    .and_then(Value::as_u64)
+                    .map_or(node.node, |id| id as usize),
                 at,
                 size: drawing.size(typeset),
                 rectangular: drawing.rectangular,

@@ -41,7 +41,7 @@ use pyo3_stub_gen::{
 };
 
 use crate::{
-    cff::{PyCffResult, PyCutPropagator, build_cff_for_diagram},
+    cff::{PyCrossFreeFamily, PyCutPropagator},
     display::escape_html,
     error,
     graph_interop::LinnetCache,
@@ -4058,7 +4058,7 @@ impl PyFeynmanDiagram {
     ///
     /// Construct and display the causal denominators of a one-loop diagram:
     ///
-    /// >>> cff = diagram.build_cff(max_orientations=10_000)
+    /// >>> cff = diagram.cross_free_family(max_orientations=10_000)
     /// >>> cff.to_expression()  # native Symbolica display in a notebook
     ///
     /// Parameters
@@ -4072,15 +4072,15 @@ impl PyFeynmanDiagram {
     /// initial_state_edges : iterable[int], optional
     ///     Edge IDs to classify as incoming external lines.
     #[pyo3(signature = (*, max_orientations=None, fixed_orientations=None, contracted_edges=None, initial_state_edges=None))]
-    fn build_cff(
+    fn cross_free_family(
         &self,
         py: Python<'_>,
         max_orientations: Option<usize>,
         fixed_orientations: Option<BTreeMap<usize, bool>>,
         contracted_edges: Option<Vec<usize>>,
         initial_state_edges: Option<Vec<usize>>,
-    ) -> PyResult<PyCffResult> {
-        build_cff_for_diagram(
+    ) -> PyResult<PyCrossFreeFamily> {
+        PyCrossFreeFamily::from_diagram(
             py,
             self,
             max_orientations,

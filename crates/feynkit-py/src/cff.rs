@@ -1,6 +1,8 @@
+mod display;
+
 use std::{
     collections::{BTreeMap, BTreeSet},
-    sync::Arc,
+    sync::{Arc, OnceLock},
 };
 
 use feynkit_cff::{
@@ -29,7 +31,7 @@ use crate::{error, graph::PyFeynmanDiagram};
 /// A denominator surface appearing in a Cross-Free Family representation.
 ///
 /// Surfaces identify the combinations of on-shell energies that can occur in
-/// loop-energy denominators.  They are obtained from a ``CffResult`` rather
+/// loop-energy denominators.  They are obtained from a ``CrossFreeFamily`` rather
 /// than constructed directly.
 ///
 /// Examples
@@ -40,7 +42,7 @@ use crate::{error, graph::PyFeynmanDiagram};
 /// >>> process = model.process(["phi", "phi"], ["phi", "phi"])
 /// >>> result = process.generate_diagrams(loops=1)
 /// >>> diagram = result.diagrams[0]
-/// >>> result = diagram.build_cff()
+/// >>> result = diagram.cross_free_family()
 /// >>> surface = result.surfaces[0]
 /// >>> energy_combination = result.surface_expression(surface)
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
@@ -242,7 +244,7 @@ impl PyCffSurface {
 /// >>> process = model.process(["phi", "phi"], ["phi", "phi"])
 /// >>> result = process.generate_diagrams(loops=1)
 /// >>> diagram = result.diagrams[0]
-/// >>> result = diagram.build_cff()
+/// >>> result = diagram.cross_free_family()
 /// >>> orientation = result.orientations[0]
 /// >>> products = [[surface.symbol_name for surface in product]
 /// ...             for product in orientation.denominator_products()]
@@ -336,7 +338,7 @@ impl PyCffOrientation {
 /// >>> process = model.process(["phi", "phi"], ["phi", "phi"])
 /// >>> result = process.generate_diagrams(loops=1)
 /// >>> diagram = result.diagrams[0]
-/// >>> result = diagram.build_cff()
+/// >>> result = diagram.cross_free_family()
 /// >>> report = result.report
 /// >>> assert report.candidate_orientations >= report.acyclic_orientations
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
@@ -483,32 +485,34 @@ impl PyCffReport {
 /// >>> process = model.process(["phi", "phi"], ["phi", "phi"])
 /// >>> result = process.generate_diagrams(loops=1)
 /// >>> diagram = result.diagrams[0]
-/// >>> result = diagram.build_cff()
+/// >>> result = diagram.cross_free_family()
 /// >>> expression = result.to_expression()
 /// >>> assert result.report.acyclic_orientations == len(result.orientations)
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
-    name = "CffResult",
+    name = "CrossFreeFamily",
     module = "symbolica.community.hepkit",
     frozen,
     from_py_object
 )]
 #[derive(Clone)]
-pub struct PyCffResult {
+pub struct PyCrossFreeFamily {
     inner: CffResult,
     owner: Arc<()>,
     normalization: Atom,
+    diagram: Arc<feynkit_graph::FeynmanDiagram>,
+    drawing: Arc<OnceLock<String>>,
 }
 
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
 #[spenso_macros::track_usage(crate::record_usage)]
 #[pymethods]
-impl PyCffResult {
+impl PyCrossFreeFamily {
     /// Return generation statistics for this CFF result.
     ///
     /// Examples
     /// --------
-    /// Using the setup in the ``CffResult`` class example:
+    /// Using the setup in the ``CrossFreeFamily`` class example:
     ///
     /// >>> assert result.report.acyclic_orientations == len(result.orientations)
     #[getter]
@@ -522,7 +526,7 @@ impl PyCffResult {
     ///
     /// Examples
     /// --------
-    /// Using the setup in the ``CffResult`` class example:
+    /// Using the setup in the ``CrossFreeFamily`` class example:
     ///
     /// >>> products = [item.denominator_products() for item in result.orientations]
     #[getter]
@@ -544,7 +548,7 @@ impl PyCffResult {
     ///
     /// Examples
     /// --------
-    /// Using the setup in the ``CffResult`` class example:
+    /// Using the setup in the ``CrossFreeFamily`` class example:
     ///
     /// >>> energies = [result.surface_expression(surface) for surface in result.surfaces]
     #[getter]
@@ -574,7 +578,7 @@ impl PyCffResult {
     ///
     /// Examples
     /// --------
-    /// Using the setup in the ``CffResult`` class example:
+    /// Using the setup in the ``CrossFreeFamily`` class example:
     ///
     /// >>> result.to_expression(normalized=True)
     ///
@@ -603,7 +607,7 @@ impl PyCffResult {
     ///
     /// Examples
     /// --------
-    /// Using the setup in the ``CffResult`` class example:
+    /// Using the setup in the ``CrossFreeFamily`` class example:
     ///
     /// >>> result.surface_expression(result.surfaces[0])
     ///
@@ -634,7 +638,7 @@ impl PyCffResult {
     ///
     /// Examples
     /// --------
-    /// Using the setup in the ``CffResult`` class example:
+    /// Using the setup in the ``CrossFreeFamily`` class example:
     ///
     /// >>> groups = result.raised_surface_groups({3: 2})
     /// >>> [group.max_order for group in groups]
@@ -677,7 +681,7 @@ impl PyCffResult {
     ///
     /// Examples
     /// --------
-    /// Using the setup in the ``CffResult`` class example:
+    /// Using the setup in the ``CrossFreeFamily`` class example:
     ///
     /// >>> coefficients = result.pole_coefficients(result.raised_surface_groups()[0])
     /// >>> [coefficient.to_expression() for coefficient in coefficients]
@@ -696,6 +700,8 @@ impl PyCffResult {
                 inner,
                 owner: Arc::clone(&self.owner),
                 normalization: self.normalization.clone(),
+                diagram: Arc::clone(&self.diagram),
+                drawing: Arc::clone(&self.drawing),
             })
             .collect())
     }
@@ -707,7 +713,7 @@ impl PyCffResult {
     ///
     /// Examples
     /// --------
-    /// Using the setup in ``CffResult``, illustrate a simple pole locally
+    /// Using the setup in ``CrossFreeFamily``, illustrate a simple pole locally
     /// parameterized by ``surface=t`` with constant remaining coefficient:
     ///
     /// >>> t = S("t")
@@ -739,7 +745,7 @@ impl PyCffResult {
     ///
     /// Examples
     /// --------
-    /// Using the setup in ``CffResult``, illustrate a simple pole locally
+    /// Using the setup in ``CrossFreeFamily``, illustrate a simple pole locally
     /// parameterized by ``surface=t`` with constant remaining coefficient:
     ///
     /// >>> t = S("t")
@@ -801,7 +807,7 @@ impl PyCffResult {
     ///
     /// Examples
     /// --------
-    /// Using the setup in the ``CffResult`` class example:
+    /// Using the setup in the ``CrossFreeFamily`` class example:
     ///
     /// >>> denominator_term_count = len(result)
     fn __len__(&self) -> usize {
@@ -812,49 +818,57 @@ impl PyCffResult {
     ///
     /// Examples
     /// --------
-    /// Using the setup in the ``CffResult`` class example:
+    /// Using the setup in the ``CrossFreeFamily`` class example:
     ///
     /// >>> print(result)
     fn __repr__(&self) -> String {
         format!(
-            "CffResult(orientations={}, terms={}, surfaces={})",
+            "CrossFreeFamily(orientations={}, terms={}, surfaces={})",
             self.inner.expression.orientations().len(),
             self.inner.expression.unfolded_term_count(),
             self.inner.surfaces.energy_surfaces().len() + self.inner.surfaces.h_surfaces().len(),
         )
     }
 
-    /// Render the CFF report and its native Symbolica expression as HTML.
+    /// Explore orientations, factored families and surface regions on the native graph.
     ///
-    /// The expression fragment comes from ``Expression._repr_html_`` so its
-    /// Symbolica formatting is preserved in notebook output.
+    /// Arrowhead clicks select another retained orientation; they never change the result.
+    /// Shift-click surface factors to inspect several circlings together. The displayed
+    /// denominator sum excludes numerators, energy prefactors and the spatial measure.
     ///
     /// Examples
     /// --------
-    /// Using the setup in the ``CffResult`` class example:
+    /// Using the setup in the ``CrossFreeFamily`` class example:
     ///
     /// >>> from IPython.display import display
     /// >>> display(result)
-    fn _repr_html_(&self) -> PyResult<String> {
-        let report = PyCffReport {
-            inner: self.inner.report,
-        }
-        ._repr_html_();
-        let expression = self.to_expression(false, false)._repr_html_()?;
-        Ok(format!(
-            "<section class=\"feynkit-cff-result\" style=\"max-width:100%\">\
-             <h3 style=\"margin:.25rem 0\">Cross-free family</h3>{report}\
-             <div style=\"margin-top:.65rem\"><strong>Expression</strong>\
-             <div style=\"margin-top:.25rem;max-width:100%;overflow-x:auto\">{expression}</div>\
-             </div></section>"
-        ))
+    fn _repr_html_(&self, py: Python<'_>) -> PyResult<String> {
+        self.explorer_html(py)
+    }
+
+    /// Return Marimo's interactive presentation in a script-enabled iframe.
+    ///
+    /// Marimo uses this hook automatically when displaying the result.
+    /// Other notebook frontends use ``_repr_html_`` without requiring Marimo.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``CrossFreeFamily`` class example:
+    ///
+    /// >>> presentation = result._display_()
+    fn _display_(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        let html = self.explorer_html(py)?;
+        Ok(py
+            .import("marimo")?
+            .call_method1("iframe", (html,))?
+            .unbind())
     }
 
     /// Write a summary with Symbolica's native expression formatting.
     ///
     /// Examples
     /// --------
-    /// Using the setup in the ``CffResult`` class example:
+    /// Using the setup in the ``CrossFreeFamily`` class example:
     ///
     /// >>> from IPython.lib.pretty import pretty
     /// >>> text = pretty(result)
@@ -874,7 +888,7 @@ impl PyCffResult {
         pretty.call_method1(
             "text",
             (format!(
-                "CffResult(orientations={}, terms={}, surfaces={}, expression=",
+                "CrossFreeFamily(orientations={}, terms={}, surfaces={}, expression=",
                 self.inner.expression.orientations().len(),
                 self.inner.expression.unfolded_term_count(),
                 self.inner.surfaces.energy_surfaces().len()
@@ -1038,56 +1052,56 @@ impl PyCffGenerator {
     /// ----------
     /// diagram : FeynmanDiagram
     ///     Diagram or subgraph whose energy-flow orientations are enumerated.
-    fn generate(&self, py: Python<'_>, diagram: &PyFeynmanDiagram) -> PyResult<PyCffResult> {
+    fn generate(&self, py: Python<'_>, diagram: &PyFeynmanDiagram) -> PyResult<PyCrossFreeFamily> {
         let selection = diagram.selection();
-        PyCffResult::build(py, diagram, self.inner.options().clone(), selection)
+        PyCrossFreeFamily::build(py, diagram, self.inner.options().clone(), selection)
     }
-}
-
-pub(crate) fn build_cff_for_diagram(
-    py: Python<'_>,
-    diagram: &PyFeynmanDiagram,
-    max_orientations: Option<usize>,
-    fixed_orientations: Option<BTreeMap<usize, bool>>,
-    contracted_edges: Option<Vec<usize>>,
-    initial_state_edges: Option<Vec<usize>>,
-) -> PyResult<PyCffResult> {
-    let mut options = max_orientations.map_or_else(CffOptions::default, |maximum| {
-        CffOptions::default().with_max_orientations(maximum)
-    });
-    for (edge, reversed) in fixed_orientations.unwrap_or_default() {
-        options = options.with_fixed_orientation(
-            feynkit_cff::EdgeId::new(edge),
-            if reversed {
-                EdgeOrientation::Reversed
-            } else {
-                EdgeOrientation::Default
-            },
-        );
-    }
-    for edge in contracted_edges.unwrap_or_default() {
-        options = options.with_contracted_edge(feynkit_cff::EdgeId::new(edge));
-    }
-    for edge in initial_state_edges.unwrap_or_default() {
-        options = options.with_initial_state_edge(feynkit_cff::EdgeId::new(edge));
-    }
-
-    let selection = diagram.selection();
-    PyCffResult::build(py, diagram, options, selection)
 }
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<PyCffSurface>()?;
     module.add_class::<PyCffOrientation>()?;
     module.add_class::<PyCffReport>()?;
-    module.add_class::<PyCffResult>()?;
+    module.add_class::<PyCrossFreeFamily>()?;
     module.add_class::<PyCffGenerator>()?;
     module.add_class::<PyCffSurfaceGroup>()?;
     module.add_class::<PyCutPropagator>()?;
     Ok(())
 }
 
-impl PyCffResult {
+impl PyCrossFreeFamily {
+    pub(crate) fn from_diagram(
+        py: Python<'_>,
+        diagram: &PyFeynmanDiagram,
+        max_orientations: Option<usize>,
+        fixed_orientations: Option<BTreeMap<usize, bool>>,
+        contracted_edges: Option<Vec<usize>>,
+        initial_state_edges: Option<Vec<usize>>,
+    ) -> PyResult<Self> {
+        let mut options = max_orientations.map_or_else(CffOptions::default, |maximum| {
+            CffOptions::default().with_max_orientations(maximum)
+        });
+        for (edge, reversed) in fixed_orientations.unwrap_or_default() {
+            options = options.with_fixed_orientation(
+                feynkit_cff::EdgeId::new(edge),
+                if reversed {
+                    EdgeOrientation::Reversed
+                } else {
+                    EdgeOrientation::Default
+                },
+            );
+        }
+        for edge in contracted_edges.unwrap_or_default() {
+            options = options.with_contracted_edge(feynkit_cff::EdgeId::new(edge));
+        }
+        for edge in initial_state_edges.unwrap_or_default() {
+            options = options.with_initial_state_edge(feynkit_cff::EdgeId::new(edge));
+        }
+
+        let selection = diagram.selection();
+        Self::build(py, diagram, options, selection)
+    }
+
     fn validate_group(&self, group: &PyCffSurfaceGroup) -> PyResult<()> {
         if !Arc::ptr_eq(&self.owner, &group.owner) {
             return Err(error::CffError::new_err(
@@ -1143,6 +1157,8 @@ impl PyCffResult {
                 inner,
                 owner: Arc::new(()),
                 normalization,
+                diagram,
+                drawing: Arc::new(OnceLock::new()),
             })
         })
     }
@@ -1158,7 +1174,7 @@ impl PyCffResult {
 /// >>> process = model.process(["phi", "phi"], ["phi", "phi"])
 /// >>> result = process.generate_diagrams(loops=1)
 /// >>> diagram = result.diagrams[0]
-/// >>> result = diagram.build_cff()
+/// >>> result = diagram.cross_free_family()
 /// >>> group = result.raised_surface_groups()[0]
 /// >>> coefficients = result.pole_coefficients(group)
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
