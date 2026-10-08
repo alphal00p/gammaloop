@@ -3,6 +3,7 @@ use std::{
     sync::Arc,
 };
 
+use feynkit_generator::FeynmanDiagramRulesExt;
 use feynkit_graph::expressions::{GraphExpressions, PropagatorSymbols};
 use feynkit_graph::{
     DiagramCut, DiagramCutSide, DiagramEdge, DiagramEndpoint, DiagramHalfEdge,
@@ -2986,6 +2987,32 @@ impl PyFeynmanDiagram {
         FeynmanDiagram::from_dot(Arc::clone(&model.inner), dot)
             .map(Into::into)
             .map_err(error::diagram)
+    }
+
+    /// Instantiate the model's vertex and propagator Feynman rules.
+    ///
+    /// Returns a new diagram whose local numerator fragments are built in the
+    /// existing half-edge frame. Momentum routing, graph weights, numerator
+    /// prefactors and the external-state projector are retained.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community import hepkit as hep
+    /// >>> model = hep.Model.phi4()
+    /// >>> diagram = hep.FeynmanDiagram.from_dot(model, '''digraph sunrise {
+    /// ...     ext [style=invis];
+    /// ...     ext -> a [particle="phi"];
+    /// ...     a -> b [particle="phi"];
+    /// ...     a -> b [particle="phi"];
+    /// ...     a -> b [particle="phi"];
+    /// ...     b -> ext [particle="phi"];
+    /// ... }''').apply_feynman_rules()
+    /// >>> numerator = diagram.numerator_expression(in_lmb=True)
+    fn apply_feynman_rules(&self, py: Python<'_>) -> PyResult<Self> {
+        let diagram = Arc::clone(&self.inner);
+        py.detach(|| diagram.apply_feynman_rules())
+            .map(Into::into)
+            .map_err(error::generation)
     }
 
     /// Parse a document containing multiple Feynman diagrams in DOT format.

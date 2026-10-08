@@ -2955,6 +2955,28 @@ class FeynmanDiagram:
             Compact physics DOT or annotated HEP DOT. Compact cross-sections pair
             initial-state legs with is_cut and specify comma-separated final_state particles.
         """
+    def apply_feynman_rules(self) -> FeynmanDiagram:
+        r"""
+        Instantiate the model's vertex and propagator Feynman rules.
+
+        Returns a new diagram whose local numerator fragments are built in the
+        existing half-edge frame. Momentum routing, graph weights, numerator
+        prefactors and the external-state projector are retained.
+
+        Examples
+        --------
+        >>> from symbolica.community import hepkit as hep
+        >>> model = hep.Model.phi4()
+        >>> diagram = hep.FeynmanDiagram.from_dot(model, '''digraph sunrise {
+        ...     ext [style=invis];
+        ...     ext -> a [particle="phi"];
+        ...     a -> b [particle="phi"];
+        ...     a -> b [particle="phi"];
+        ...     a -> b [particle="phi"];
+        ...     b -> ext [particle="phi"];
+        ... }''').apply_feynman_rules()
+        >>> numerator = diagram.numerator_expression(in_lmb=True)
+        """
     @staticmethod
     def from_dot_set(model: Model, dot: builtins.str) -> builtins.list[FeynmanDiagram]:
         r"""
