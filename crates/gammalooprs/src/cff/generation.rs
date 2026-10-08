@@ -1305,6 +1305,7 @@ impl Graph {
         BTreeMap<EsurfaceID, CffEnergyFactorOwnership>,
     )> {
         let GeneratedThreeDExpression {
+            representation,
             mut expression,
             energy_factor_ownership,
             energy_factor_components,
@@ -1438,6 +1439,7 @@ impl Graph {
 
         Ok((
             GeneratedThreeDExpression {
+                representation,
                 expression: CFFExpression {
                     orientations: expression.orientations,
                     surfaces: surface_cache,

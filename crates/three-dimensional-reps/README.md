@@ -1,6 +1,6 @@
 # three-dimensional-reps
 
-`three-dimensional-reps` builds generalized CFF loop-energy representations
+`three-dimensional-reps` builds generalized CFF and LTD loop-energy representations
 used by GammaLoop. It owns the expression data model that was previously local
 to `gammalooprs::cff`.
 
@@ -46,6 +46,17 @@ The production boundary covers affine CFF, bounded-energy CFF with
 independent-occurrence normal form, multiloop high-power numerators, and uniform
 numerator sampling-scale modes. GammaLoop owns both UV orchestration orders:
 direct local 3D subtraction on CFF expressions and 4D-local UV followed by an
-explicit-orientation CFF sum. `RepresentationMode::Ltd` is reserved for a
-future proper LTD backend and currently returns an explicit not-implemented
-error.
+explicit-orientation CFF sum.
+
+The shared generator also supports `RepresentationMode::Ltd`: signed energy
+residues with affine numerator maps, explicit E/H surfaces, and term-local
+on-shell energy factors. Simple poles do not need numerator-degree bounds;
+repeated poles require explicit bounds for exact derivative-free polynomial
+sampling (`Some([])` selects an energy-independent numerator). All residue
+terms contribute to an evaluation, including the cancellation of H surfaces.
+Physical-pole selection retains the factorized numerator maps and requests
+polynomial bounds when a raised pole needs them.
+
+The LTD core and its tests are ported from `ltd_support` commits `6fac4ffaf4`
+and `6b35f5a2a4`. GammaLoop's production LTD orchestration and Python residue-map
+bindings are separate integrations.

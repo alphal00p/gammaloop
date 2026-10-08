@@ -48,7 +48,7 @@ use crate::{
 use color_eyre::Result;
 use three_dimensional_reps::{
     CffEnergyFactorOwnership, CffGlobalPrefactorSign, Generate3DExpressionOptions,
-    GeneratedThreeDExpression,
+    GeneratedThreeDExpression, RepresentationMode,
 };
 
 pub mod orientations;
@@ -888,7 +888,9 @@ fn select_indexed_cff_residues(
         residues = apply_indexed_residue_selection(
             residues,
             CutCffResidueAxis::RightThreshold,
-            |expression| expression.select_esurface_residue(right_threshold),
+            |expression| {
+                expression.select_esurface_residue(right_threshold, RepresentationMode::Cff)
+            },
         );
     }
 
@@ -899,7 +901,9 @@ fn select_indexed_cff_residues(
             // Powered poles are completed in the canonical causal basis, so
             // left- and right-threshold selections use the same positive-
             // energy Cutkosky convention as ordinary CFF terms.
-            |expression| expression.select_esurface_residue(left_threshold),
+            |expression| {
+                expression.select_esurface_residue(left_threshold, RepresentationMode::Cff)
+            },
         );
     }
 
@@ -912,7 +916,7 @@ fn select_indexed_cff_residues(
                 // signs and local-series coordinates remain LTD-owned.
                 expression
                     .restrict_to_cut_alternatives(&lu.cut_edge_alternatives)
-                    .select_esurface_residue(&lu.raised_group)
+                    .select_esurface_residue(&lu.raised_group, RepresentationMode::Cff)
             });
     }
 

@@ -55,8 +55,8 @@ pub use surface::{
 };
 pub use tree::{ExpressionTree, ExpressionTreeError, NodeId, TreeNode};
 
-/// Generalized CFF generation, including repeated poles and bounded numerator
-/// energy dependence, shared with GammaLoop's production runtime.
+/// Generalized CFF and LTD generation, including repeated poles and bounded
+/// numerator energy dependence, shared with GammaLoop's production runtime.
 pub use three_dimensional_reps as generalized;
 pub use three_dimensional_reps::{
     Generate3DExpressionOptions, GeneratedThreeDExpression, ParsedGraph, ThreeDGraphSource,

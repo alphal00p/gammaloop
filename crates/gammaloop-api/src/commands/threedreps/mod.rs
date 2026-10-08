@@ -20,9 +20,8 @@ use serde::{Deserialize, Serialize};
 use symbolica::atom::AtomCore;
 use three_dimensional_reps::{
     generate_3d_expression, graph_info, render_expression_summary, validate_parsed_graph,
-    DisplayOptions, GenerationError, GraphInfo, GraphValidation, NumeratorDisplay,
-    NumeratorSamplingScaleMode, OrientationID, RepresentationMode, ThreeDExpression,
-    ThreeDGraphSource,
+    DisplayOptions, GraphInfo, GraphValidation, NumeratorDisplay, NumeratorSamplingScaleMode,
+    OrientationID, RepresentationMode, ThreeDExpression, ThreeDGraphSource,
 };
 
 use crate::{
@@ -35,7 +34,7 @@ use crate::{
 pub enum ThreeDRep {
     /// Check the selected graph for supported energy-representation kinematics.
     Validate(Validate),
-    /// Construct and export the selected graph's oriented CFF expression.
+    /// Construct and export the selected graph's CFF or LTD expression.
     Build(Build),
 }
 
@@ -141,7 +140,7 @@ pub struct Build {
     #[command(flatten)]
     pub selection: GraphSelectorArgs,
 
-    /// Three-dimensional representation to build. LTD is reserved but not implemented yet.
+    /// Three-dimensional representation to build.
     #[serde(default)]
     #[arg(long, alias = "family", value_enum, default_value = "cff")]
     pub representation: CliRepresentationMode,
@@ -192,7 +191,7 @@ struct ValidateOutput {
 #[derive(Debug, Serialize)]
 struct BuildOutput {
     backend: &'static str,
-    family: &'static str,
+    family: RepresentationMode,
     process_id: usize,
     integrand_name: String,
     graph_id: usize,
@@ -334,12 +333,6 @@ impl Validate {
 impl Build {
     fn run(&self, state: &State, global_cli_settings: &CLISettings) -> Result<()> {
         let representation = RepresentationMode::from(self.representation);
-        if representation != RepresentationMode::Cff {
-            return Err(GenerationError::NotImplemented {
-                mode: representation,
-            }
-            .into());
-        }
         let selected = select_graph(state, &self.selection)?;
         let parsed = selected.graph.to_three_d_parsed_graph()?;
         let numerator_sampling_scale_mode = CliNumeratorSamplesNormalization::resolve(
@@ -372,7 +365,7 @@ impl Build {
         let expression = generate_3d_expression(selected.graph, &options)?.expression;
         let output = BuildOutput {
             backend: "gammaloop-3Drep",
-            family: "cff",
+            family: representation,
             process_id: selected.process_id,
             integrand_name: selected.integrand_name.clone(),
             graph_id: selected.graph_id,
@@ -386,8 +379,12 @@ impl Build {
 
         if !self.no_save_json {
             let workspace = self.workspace_path(global_cli_settings);
-            let artifact_dir =
-                build_artifact_dir(&workspace, &selected, output.numerator_sampling_scale_mode);
+            let artifact_dir = build_artifact_dir(
+                &workspace,
+                &selected,
+                representation,
+                output.numerator_sampling_scale_mode,
+            );
             let json_path = self
                 .json_out
                 .clone()
@@ -420,6 +417,7 @@ impl Build {
                     },
                     output.numerator_sampling_scale_mode,
                     &DisplayOptions {
+                        representation,
                         use_color: !self.no_color,
                         details_for_orientation: self.show_details_for_orientation.clone(),
                     },
@@ -486,11 +484,12 @@ fn graph_workspace_dir(workspace: &Path, selected: &SelectedGraph<'_>) -> PathBu
 fn build_artifact_dir(
     workspace: &Path,
     selected: &SelectedGraph<'_>,
+    representation: RepresentationMode,
     scale_mode: NumeratorSamplingScaleMode,
 ) -> PathBuf {
     graph_workspace_dir(workspace, selected)
         .join("build")
-        .join(format!("cff_{scale_mode:?}").to_lowercase())
+        .join(format!("{representation}_{scale_mode:?}").to_lowercase())
 }
 
 fn slug(value: &str) -> String {
