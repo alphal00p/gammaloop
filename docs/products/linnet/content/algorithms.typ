@@ -173,7 +173,14 @@ node automorphism group, and rule 2 accepts a child only if the new vertex is in
 canonical deletion (the deletable vertex with the largest invariant, ties broken by a node
 canonization). Every prune (completability, permanent bridges, zero-flow bridges) is a necessary
 condition for completion, so each output appears exactly once; the filter prunes stage 1 and the
-partial field assignments of stage 2 the same way. Each complete topology is then
+partial field assignments of stage 2 the same way. Once the counts force every remaining vertex to
+be a pendant on an open stub, the pendants are hung all at once, one assignment per orbit. Three or
+more legs with distinct labels and a common stub are placed as anonymous legs while the topology
+is shaped and labelled afterwards, each label on one vertex per orbit of the group fixing the
+previous labels, so many distinct legs cost few symmetric topologies instead of a search through
+labelled dead ends. Twin vertices (equal corollas and multiplicities to every other vertex) are
+exchanged by an automorphism, so rule-2 ties among twins and groups whose colour classes are twin
+classes need no node canonization. Each complete topology is then
 decorated with fields, orientations and vertex rules edge by edge, with partial vertices checked
 against the sub-multisets of the signatures, keeping one decoration per orbit of the topology's
 automorphism group. Typed canonical augmentation (signatures as the corollas) was measured as the
@@ -184,8 +191,11 @@ alternative and visits about four times as many partial objects on QED and QCD p
   each `next` searches only up to the next graph, and dropping it ends the search. Graphs come in
   the depth-first order of the search. With the `rayon` feature, `parallel(true)` runs a window of
   independent subtrees on the current thread pool, each at most a fixed number of graphs ahead of
-  the output, and returns their results in that same order, so the output does not depend on the
-  number of threads.
+  the output, splits the unsearched rest of the oldest subtrees while fewer subtrees than threads
+  can advance, and returns their results in that same order, so the output does not depend on the
+  number of threads. The first step runs only the oldest subtree, up to its first graph, and
+  further steps buffer one graph per subtree until the first is returned, so the first graph does
+  not wait for a step of the whole window.
 ])
 
 == Mutation boundaries

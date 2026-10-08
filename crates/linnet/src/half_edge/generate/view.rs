@@ -54,8 +54,13 @@ impl<F: Sync, L: Sync> Prune for Pruner<'_, F, L> {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Stage {
     /// An untyped, connected topology, partial or complete: vertices with their degrees, attached
-    /// legs, self-loops and edge multiplicities, and open stubs that later vertices will pair.
-    /// Legs not attached yet go to later vertices.
+    /// legs, self-loops and edge multiplicities, and open stubs that later vertices or legs will
+    /// take. Legs not attached yet go to later vertices or to open stubs.
+    ///
+    /// Three or more legs with distinct labels and a common stub are placed as anonymous stubs
+    /// while vertices and edges are added, and labelled one at a time once every vertex and edge is
+    /// placed: until its label is assigned, such a leg is an open stub of its vertex and an
+    /// unplaced leg.
     Topology,
     /// A complete topology with fields and orientations on some of its edges.
     Fields,
@@ -97,7 +102,7 @@ pub struct Bridge {
 
 /// A set of vertices of a [`GraphView`].
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
-pub struct VertexSet(u64);
+pub struct VertexSet(pub(super) u64);
 
 impl VertexSet {
     pub fn contains(self, v: usize) -> bool {
@@ -174,9 +179,9 @@ impl<'a, F, L> GraphView<'a, F, L> {
         self.topology().vertices[v].degree as usize
     }
 
-    /// Stubs of `v` not paired yet; zero from [`Stage::Fields`] on.
+    /// Stubs of `v` not taken by an edge or a leg yet; zero from [`Stage::Fields`] on.
     pub fn open_stubs(&self, v: usize) -> usize {
-        self.topology().vertices[v].open as usize
+        self.topology().free_stubs(&self.compiled.model, v) as usize
     }
 
     pub fn self_loops(&self, v: usize) -> usize {
@@ -190,7 +195,7 @@ impl<'a, F, L> GraphView<'a, F, L> {
 
     /// The legs attached to `v`, with their stubs at `v`.
     pub fn legs(&self, v: usize) -> impl Iterator<Item = (&'a L, Stub<&'a F>)> + 'a {
-        let (compiled, packed) = (self.compiled, self.topology().vertices[v].legs);
+        let (compiled, packed) = (self.compiled, self.topology().vertices[v].labelled);
         compiled.legs.iter().enumerate().flat_map(move |(c, leg)| {
             let stub = Stub {
                 field: &compiled.fields[leg.field as usize],
@@ -203,7 +208,12 @@ impl<'a, F, L> GraphView<'a, F, L> {
 
     /// Legs not attached to a vertex yet; zero from [`Stage::Fields`] on.
     pub fn unplaced_legs(&self) -> usize {
-        self.topology().unplaced() as usize
+        let t = self.topology();
+        let placed: usize = t.vertices[..t.n]
+            .iter()
+            .map(|v| v.n_legs as usize - v.unlabelled(&self.compiled.model) as usize)
+            .sum();
+        self.compiled.model.legs.total as usize - placed
     }
 
     /// Independent cycles of the edges placed so far.
@@ -270,12 +280,13 @@ impl<'a, F, L> GraphView<'a, F, L> {
     /// The bridges with a final side; a bridge of a complete topology is listed once per side.
     pub fn bridges(&self) -> Vec<Bridge> {
         let mut bridges = vec![];
-        self.topology().closed_sides(|ends, side| {
-            bridges.push(Bridge {
-                ends,
-                side: VertexSet(side),
-            })
-        });
+        self.topology()
+            .closed_sides(&self.compiled.model, |ends, side| {
+                bridges.push(Bridge {
+                    ends,
+                    side: VertexSet(side),
+                })
+            });
         bridges
     }
 
@@ -348,12 +359,13 @@ impl<'a, F, L> GraphView<'a, F, L> {
             builder.add_node(node(v));
         }
         for v in 0..t.n {
+            let labelled = t.vertices[v].labelled;
             for (c, leg) in compiled.legs.iter().enumerate() {
                 let (orientation, underlying) = match leg.flow {
                     None => (Orientation::Undirected, Flow::Source),
                     Some(flow) => (Orientation::Default, flow),
                 };
-                for _ in 0..compiled.model.legs.count(t.vertices[v].legs, c) {
+                for _ in 0..compiled.model.legs.count(labelled, c) {
                     let stub = Stub {
                         field: &compiled.fields[leg.field as usize],
                         flow: leg.flow,

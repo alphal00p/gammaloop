@@ -24,7 +24,7 @@ const GHOST: u8 = 7;
 struct Ratio(u128, u128);
 
 impl Ratio {
-    fn sum<'a, F: 'a, L: 'a>(diagrams: impl IntoIterator<Item = &'a Diagram<F, L>>) -> Ratio {
+    fn new(p: u128, q: u128) -> Ratio {
         fn gcd(a: u128, b: u128) -> u128 {
             if b == 0 {
                 a
@@ -32,12 +32,19 @@ impl Ratio {
                 gcd(b, a % b)
             }
         }
+        let g = gcd(p, q);
+        Ratio(p / g, q / g)
+    }
+
+    fn sum<'a, F: 'a, L: 'a>(diagrams: impl IntoIterator<Item = &'a Diagram<F, L>>) -> Ratio {
         diagrams.into_iter().fold(Ratio(0, 1), |Ratio(p, q), d| {
             let s = d.automorphism_count.expect("small symmetry factor");
-            let (p, q) = (p * s + q, q * s);
-            let g = gcd(p, q);
-            Ratio(p / g, q / g)
+            Ratio::new(p * s + q, q * s)
         })
+    }
+
+    fn divided(self, k: u128) -> Ratio {
+        Ratio::new(self.0, self.1 * k)
     }
 }
 
@@ -235,6 +242,81 @@ fn legs_with_equal_labels_are_interchangeable() {
     let diagrams = run(qcd(gluons(&[1, 1, 2, 2])).loops(1..=1));
     assert_eq!(diagrams.len(), 61);
     check_canonical(&diagrams);
+}
+
+/// Distinct legs with a common stub are labelled on shaped topologies: phi^3 has `(2n - 5)!!`
+/// trees with `n` distinct legs, phi^3 + phi^4 the counts verified against Graphica, and every
+/// tree is rigid.
+#[test]
+fn distinct_legs_are_labelled_on_shaped_topologies() {
+    for (n, phi3, phi34) in [(4, 3, 4), (5, 15, 25), (6, 105, 220), (7, 945, 2485)] {
+        let labels: Vec<u8> = (1..=n).collect();
+        for (degrees, count) in [(&[3][..], phi3), (&[3, 4][..], phi34)] {
+            let diagrams = run(phi(degrees, &labels).loops(0..=0));
+            assert_eq!(diagrams.len(), count, "{degrees:?} trees with {n} legs");
+            assert!(diagrams.iter().all(|d| d.automorphism_count == Some(1)));
+            if n <= 6 {
+                check_canonical(&diagrams);
+            }
+        }
+    }
+    // e- e+ -> n photons: n! trees, one per order of the photons along the electron line
+    let electron = Stub::incoming(ELECTRON);
+    for n in 1..=5u8 {
+        let mut externals = vec![(1, electron.clone()), (2, electron.clone().flipped())];
+        externals.extend((3..3 + n).map(|l| (l, Stub::undirected(PHOTON))));
+        let diagrams = run(qed(externals).loops(0..=0));
+        assert_eq!(diagrams.len(), (1..=n as usize).product::<usize>());
+        check_canonical(&diagrams);
+    }
+    // the pendants completing a tree hang on bridges: five legs make two internal bridges
+    let five = || phi(&[3], &[1, 2, 3, 4, 5]).loops(0..=0);
+    assert!(run(five().max_bridges(1)).is_empty());
+    assert_eq!(run(five().max_bridges(2)).len(), 15);
+}
+
+/// Equal labels divide the sum of `1/|Aut|` by the factorials of their multiplicities (orbit
+/// counting), whether the other legs are labelled on shaped topologies or not.
+#[test]
+fn equal_labels_divide_the_sums_of_distinct_ones() {
+    let sum = |generator: GraphGenerator<u8, u8>| Ratio::sum(&run(generator));
+    for loops in 0..=1 {
+        let gg = |labels: &[u8]| sum(qcd(gluons(labels)).loops(loops..=loops));
+        let distinct = gg(&[1, 2, 3, 4, 5]);
+        assert_eq!(gg(&[1, 1, 2, 3, 4]), distinct.divided(2), "L{loops}");
+        assert_eq!(gg(&[1, 1, 1, 2, 3]), distinct.divided(6), "L{loops}");
+    }
+    for (loops, n) in [(1, 5u8), (2, 4)] {
+        let phi3 = |labels: &[u8]| {
+            let generator = phi(&[3], labels).allow_zero_flow_edges(false);
+            sum(generator.loops(loops..=loops))
+        };
+        let distinct: Vec<u8> = (1..=n).collect();
+        let factorial = (1..=n as u128).product();
+        assert_eq!(
+            phi3(&vec![1; n as usize]),
+            phi3(&distinct).divided(factorial)
+        );
+    }
+}
+
+#[test]
+fn many_distinct_legs_stream() {
+    // forty distinct legs: phi^3 has one graph per labelled topology, and the first three trees
+    // cost three of them
+    let topologies = Arc::new(AtomicUsize::new(0));
+    let seen = topologies.clone();
+    let labels: Vec<u8> = (1..=40).collect();
+    let generator = phi(&[3], &labels).loops(0..=0).progress(move |progress| {
+        seen.store(progress.topologies, Ordering::Relaxed);
+        true
+    });
+    let first: Vec<_> = generator.iter().unwrap().take(3).collect();
+    assert_eq!(topologies.load(Ordering::Relaxed), 3);
+    assert!(first
+        .iter()
+        .all(|d| d.graph.n_nodes() == 38 && d.automorphism_count == Some(1)));
+    check_canonical(&first);
 }
 
 #[test]
@@ -500,10 +582,14 @@ fn gggg_tree() -> GraphGenerator<u8, u8> {
 
 #[test]
 fn filters_that_reject_too_early_lose_graphs() {
-    // the s, t and u channels and the contact graph; pruning keeps only the contact graph
+    // the s, t and u channels and the contact graph; the rule veto keeps only the contact graph
     assert_eq!(run(gggg_tree()).len(), 4);
     assert_eq!(run(gggg_tree().filter(vetoes_undecided_rules)).len(), 1);
-    assert_eq!(run(gggg_tree().filter(rejects_partial_topologies)).len(), 1);
+    // the four distinct gluons are labelled after the contact vertex is placed, so the contact
+    // graph has partial topologies too; with two pairs of equal labels, it is placed at once
+    assert_eq!(run(gggg_tree().filter(rejects_partial_topologies)).len(), 0);
+    let pairs = qcd(gluons(&[1, 1, 2, 2])).loops(0..=0);
+    assert_eq!(run(pairs.filter(rejects_partial_topologies)).len(), 1);
 }
 
 #[test]
@@ -531,83 +617,94 @@ fn heredity_check_follows_parallel_subtrees() {
         .parallel(true));
 }
 
-#[test]
-fn views_describe_the_search_states() {
-    let stages = Arc::new(std::sync::Mutex::new(HashSet::new()));
-    let seen = stages.clone();
-    let generator = qcd(vec![
-        (1, Stub::undirected(GLUON)),
-        (2, Stub::incoming(QUARK)),
-        (3, Stub::outgoing(QUARK)),
-    ])
-    .loops(1..=1)
-    .filter(move |view| {
-        seen.lock().unwrap().insert(view.stage());
-        let n = view.n_vertices();
-        let edges: Vec<_> = view.edges().collect();
-        let legs: usize = (0..n).map(|v| view.legs(v).count()).sum();
-        // stubs are legs, edge ends or open
-        let ends = |v| {
-            edges
-                .iter()
-                .map(|e| e.vertices.iter().filter(|&&w| w == v).count())
+/// The invariants every view satisfies, at every stage, with `n_legs` legs in the process.
+fn check_view(view: &View<'_>, n_legs: usize) {
+    let n = view.n_vertices();
+    let edges: Vec<_> = view.edges().collect();
+    let legs: usize = (0..n).map(|v| view.legs(v).count()).sum();
+    // stubs are legs, edge ends or open
+    let ends = |v| {
+        edges
+            .iter()
+            .map(|e| e.vertices.iter().filter(|&&w| w == v).count())
+            .sum::<usize>()
+    };
+    assert!((0..n).all(|v| view.degree(v) == view.legs(v).count() + ends(v) + view.open_stubs(v)));
+    assert_eq!(legs + view.unplaced_legs(), n_legs);
+    assert_eq!(edges.len() + 1, n + view.loops());
+    let graph = view.graph();
+    assert_eq!((graph.n_nodes(), graph.n_edges()), (n, edges.len() + legs));
+    for bridge in view.bridges() {
+        let [outside, inside] = bridge.ends;
+        assert!(bridge.side.contains(inside) && !bridge.side.contains(outside));
+        assert!(bridge.side.iter().all(|v| view.open_stubs(v) == 0));
+        // the bridge is the only edge leaving the side
+        let leaving = |v| {
+            (0..n)
+                .filter(|&w| !bridge.side.contains(w))
+                .map(|w| view.multiplicity(v, w))
                 .sum::<usize>()
         };
-        assert!(
-            (0..n).all(|v| view.degree(v) == view.legs(v).count() + ends(v) + view.open_stubs(v))
+        assert!(bridge
+            .side
+            .iter()
+            .all(|v| leaving(v) == usize::from(v == inside)));
+    }
+    match view.stage() {
+        Stage::Topology => assert!(edges.iter().all(|e| e.stub.is_none())),
+        Stage::Fields => {
+            assert!(view.is_topology_complete());
+            // fields are assigned in edge order; a vertex fits rules once its stubs are known
+            let assigned = edges.iter().take_while(|e| e.stub.is_some()).count();
+            assert!(assigned > 0 && edges[assigned..].iter().all(|e| e.stub.is_none()));
+            for v in 0..n {
+                let known = edges[assigned..].iter().all(|e| !e.vertices.contains(&v));
+                assert_eq!(view.rules(v).is_some(), known);
+            }
+        }
+        Stage::Complete => {
+            assert!(edges.iter().all(|e| e.stub.is_some()));
+            assert!((0..n).all(|v| view.rules(v).unwrap().len() == 1));
+            let complete = view.complete_graph().unwrap();
+            assert_eq!(complete.n_edges(), graph.n_edges());
+        }
+    }
+}
+
+#[test]
+fn views_describe_the_search_states() {
+    let quarks = || {
+        vec![
+            (1, Stub::undirected(GLUON)),
+            (2, Stub::incoming(QUARK)),
+            (3, Stub::outgoing(QUARK)),
+        ]
+    };
+    // four distinct gluons are labelled after their topology is shaped: until then they are open
+    // stubs and unplaced legs
+    for externals in [quarks(), gluons(&[1, 2, 3, 4])] {
+        let stages = Arc::new(std::sync::Mutex::new(HashSet::new()));
+        let seen = stages.clone();
+        let n_legs = externals.len();
+        let generator = qcd(externals.clone()).loops(1..=1).filter(move |view| {
+            // some legs placed and some not: for the gluons, only while labelling
+            let placed = (0..view.n_vertices()).any(|v| view.legs(v).count() > 0);
+            let partial = view.stage() == Stage::Topology && placed && view.unplaced_legs() > 0;
+            seen.lock().unwrap().insert((view.stage(), partial));
+            check_view(view, n_legs);
+            true
+        });
+        let filtered = run(generator);
+        let stages = stages.lock().unwrap();
+        assert_eq!(
+            stages.iter().map(|(s, _)| s).collect::<HashSet<_>>().len(),
+            3
         );
-        assert_eq!(legs + view.unplaced_legs(), 3);
-        assert_eq!(edges.len() + 1, n + view.loops());
-        let graph = view.graph();
-        assert_eq!((graph.n_nodes(), graph.n_edges()), (n, edges.len() + legs));
-        for bridge in view.bridges() {
-            let [outside, inside] = bridge.ends;
-            assert!(bridge.side.contains(inside) && !bridge.side.contains(outside));
-            assert!(bridge.side.iter().all(|v| view.open_stubs(v) == 0));
-            // the bridge is the only edge leaving the side
-            let leaving = |v| {
-                (0..n)
-                    .filter(|&w| !bridge.side.contains(w))
-                    .map(|w| view.multiplicity(v, w))
-                    .sum::<usize>()
-            };
-            assert!(bridge
-                .side
-                .iter()
-                .all(|v| leaving(v) == usize::from(v == inside)));
-        }
-        match view.stage() {
-            Stage::Topology => assert!(edges.iter().all(|e| e.stub.is_none())),
-            Stage::Fields => {
-                assert!(view.is_topology_complete());
-                // fields are assigned in edge order; a vertex fits rules once its stubs are known
-                let assigned = edges.iter().take_while(|e| e.stub.is_some()).count();
-                assert!(assigned > 0 && edges[assigned..].iter().all(|e| e.stub.is_none()));
-                for v in 0..n {
-                    let known = edges[assigned..].iter().all(|e| !e.vertices.contains(&v));
-                    assert_eq!(view.rules(v).is_some(), known);
-                }
-            }
-            Stage::Complete => {
-                assert!(edges.iter().all(|e| e.stub.is_some()));
-                assert!((0..n).all(|v| view.rules(v).unwrap().len() == 1));
-                let complete = view.complete_graph().unwrap();
-                assert_eq!(complete.n_edges(), graph.n_edges());
-            }
-        }
-        true
-    });
-    let filtered = run(generator);
-    let stages = stages.lock().unwrap();
-    assert_eq!(stages.len(), 3);
-    let unfiltered = run(qcd(vec![
-        (1, Stub::undirected(GLUON)),
-        (2, Stub::incoming(QUARK)),
-        (3, Stub::outgoing(QUARK)),
-    ])
-    .loops(1..=1));
-    assert_eq!(certificates(&filtered), certificates(&unfiltered));
-    check_canonical(&filtered);
+        assert!(stages.contains(&(Stage::Topology, true)));
+        let unfiltered = run(qcd(externals).loops(1..=1));
+        assert_eq!(certificates(&filtered), certificates(&unfiltered));
+        check_canonical(&filtered);
+    }
 }
 
 #[test]
@@ -772,6 +869,9 @@ fn output_order_does_not_depend_on_threads() {
             phi(&[3], &[]).loops(5..=5),
             phi(&[3, 4], &[1, 2]).loops(3..=3),
             qcd(gluons(&[1, 2, 3, 4])).loops(1..=1),
+            phi(&[3], &[1, 2, 3, 4, 5, 6, 7]).loops(0..=0),
+            // several loop orders, of which only the first starts with the oldest subtree alone
+            phi(&[3, 4], &[1, 2, 3, 4]).loops(0..=2),
         ]
     };
     for (sequential, parallel) in generators().into_iter().zip(generators()) {
@@ -1027,7 +1127,7 @@ mod graphica {
             },
             Case {
                 externals: labelled(&[electron.flip(), electron, photon, photon]),
-                signatures: qed,
+                signatures: qed.clone(),
                 loops: 1,
                 max_bridges: None,
                 zero_flow_edges: true,
@@ -1041,9 +1141,45 @@ mod graphica {
             },
             Case {
                 externals: labelled(&[HalfEdge::outgoing(GHOST), HalfEdge::incoming(GHOST)]),
-                signatures: qcd,
+                signatures: qcd.clone(),
                 loops: 2,
                 max_bridges: Some(0),
+                zero_flow_edges: false,
+            },
+            // distinct legs with a common stub: labelled on shaped topologies
+            Case {
+                externals: labelled(&[phi; 7]),
+                signatures: vec![vec![phi; 3]],
+                loops: 0,
+                max_bridges: None,
+                zero_flow_edges: false,
+            },
+            Case {
+                externals: labelled(&[phi; 6]),
+                signatures: vec![vec![phi; 3], vec![phi; 4]],
+                loops: 0,
+                max_bridges: None,
+                zero_flow_edges: false,
+            },
+            Case {
+                externals: labelled(&[phi; 5]),
+                signatures: vec![vec![phi; 3]],
+                loops: 2,
+                max_bridges: None,
+                zero_flow_edges: false,
+            },
+            Case {
+                externals: [1, 1, 2, 3, 4].map(|l| (l, gluon)).to_vec(),
+                signatures: qcd,
+                loops: 1,
+                max_bridges: None,
+                zero_flow_edges: false,
+            },
+            Case {
+                externals: labelled(&[electron.flip(), electron, photon, photon, photon]),
+                signatures: qed.clone(),
+                loops: 1,
+                max_bridges: None,
                 zero_flow_edges: false,
             },
         ];

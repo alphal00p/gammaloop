@@ -104,12 +104,8 @@ impl Decorator {
         }
         self.stubs.clear();
         for v in 0..n {
-            let mut stubs = StubSet::new(topology.vertices[v].degree);
-            for c in 0..model.legs.n_classes() {
-                for _ in 0..model.legs.count(topology.vertices[v].legs, c) {
-                    stubs.insert(model.legs.stub[c]);
-                }
-            }
+            let vertex = &topology.vertices[v];
+            let stubs = model.leg_stubs(vertex.degree, vertex.legs);
             if !model.feasible(&stubs) {
                 return;
             }

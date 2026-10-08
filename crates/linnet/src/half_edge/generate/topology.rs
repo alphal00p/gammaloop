@@ -9,13 +9,31 @@
 //! Rule 1 keeps one augmentation per orbit of the parent's node automorphism group: the
 //! multiplicity vector must be lexicographically minimal among its images. Rule 2 accepts a child
 //! only if the added vertex is in the automorphism orbit of the child's canonical deletion: the
-//! deletable vertex with the largest cheap invariant (open stubs first), ties broken by the largest
-//! canonical position. The invariants of the parent's vertices determine most of the child's, so
-//! rule 2 mostly rejects before the child is built. Every prune is a necessary condition for
-//! completing to a valid output, so every ancestor of an output along its canonical deletion path
-//! survives and every output is generated exactly once. The generator's filter is called on every
-//! accepted child and prunes it too: it is hereditary, so a rejected object has no accepted output
-//! below it.
+//! deletable vertex with the largest cheap invariant (legs first, then open stubs), ties broken by
+//! the largest canonical position. The invariants of the parent's vertices determine most of the
+//! child's, so rule 2 mostly rejects before the child is built. Every prune is a necessary
+//! condition for completing to a valid output, so every ancestor of an output along its canonical
+//! deletion path survives and every output is generated exactly once. The generator's filter is
+//! called on every accepted child and prunes it too: it is hereditary, so a rejected object has no
+//! accepted output below it.
+//!
+//! Two kinds of steps keep processes with many external legs from searching dead ends:
+//!
+//! - Pendants: once the counts force every remaining vertex to be a pendant (one sewn stub, no
+//!   self-loop) on an open stub, the pendants are hung all at once, one assignment of pendant types
+//!   per orbit of the object's group (rule 1), and kept if canonical deletions of the result remove
+//!   exactly the pendants (rule 2). Added one at a time, every subset of them would be a canonical
+//!   object, most without a canonical completion.
+//! - Labels: three or more legs with distinct labels and a common stub are placed as anonymous
+//!   legs of one slot class, so the search sees few, symmetric objects. Once the topology is
+//!   shaped (every vertex, edge and leg placed), the labels are assigned one at a time in a fixed
+//!   order, each to one vertex per orbit of the group fixing the vertices of the previous labels;
+//!   the last of these stabilizers is the node group of the labelled topology.
+//!
+//! Anonymous legs make many twins: vertices with equal corollas, open stubs and multiplicities to
+//! every other vertex, such as leaves of one type on one neighbour. Exchanging two twins is an
+//! automorphism, so a rule-2 tie among twins needs no canonization, and neither does the group of
+//! an object whose colour classes are classes of twins: their transpositions generate it.
 //!
 //! The search is a depth-first traversal with an explicit stack of levels, so it can stop at every
 //! complete topology and resume later: generation streams without buffering subtrees.
@@ -25,8 +43,8 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use ahash::AHashSet;
 
 use super::{
-    model::Model,
-    view::{Prune, State as View},
+    model::{Legs, Model},
+    view::{Prune, State as View, VertexSet},
     AbortCheck,
 };
 use crate::half_edge::canon::{mix, NodeCanon, Orbits};
@@ -95,6 +113,16 @@ impl Limits {
         }
     }
 
+    /// The most vertices that can be added to `n` vertices with remaining budget `r`; negative if
+    /// none.
+    fn most_new(&self, n: usize, r: i32) -> i32 {
+        let i = r - self.low;
+        if n > self.max_vertices || !(0..self.width as i32).contains(&i) {
+            return -1;
+        }
+        self.most[(self.max_vertices - n) * self.width + i as usize] as i32
+    }
+
     /// Some further vertices can bring `n` vertices with `open` open stubs, `legs` unplaced legs
     /// and remaining budget `r` to a connected complete graph (necessary conditions). `m` new
     /// vertices bring `r + 2m` stubs, which must absorb the open stubs and the legs and pair up
@@ -119,13 +147,17 @@ impl Limits {
     }
 }
 
-/// Packed vertex invariant: open stubs, degree, self-loops, legs, distinct neighbours (fewer is
-/// larger) and a hash of the neighbour degrees and multiplicities.
+/// Packed vertex invariant: legs, open stubs (four bits each: a vertex has at most 15 stubs),
+/// degree, self-loops, distinct neighbours (fewer is larger) and a hash of the neighbour degrees
+/// and multiplicities.
+///
+/// Legs come first so that canonical deletions take the vertices with the most legs: the search
+/// adds them last, and those that complete the topology as pendants all at once.
 fn invariant(open: u8, degree: u8, loops: u8, legs: u8, neighbours: u32, weight: u64) -> u64 {
-    (open as u64) << 56
+    (legs as u64) << 60
+        | (open as u64) << 56
         | (degree as u64) << 48
         | (loops as u64) << 40
-        | (legs as u64) << 32
         | ((64 - neighbours) as u64) << 24
         | (weight & WEIGHT)
 }
@@ -145,8 +177,11 @@ pub(crate) struct Topology {
     pub(crate) vertices: Vec<Vertex>,
     /// Multiplicities between distinct vertices, `cap x cap`.
     adj: Vec<u8>,
+    /// Slot legs not attached to a vertex yet, packed by slot class, and their number.
     unplaced: u64,
     unplaced_count: u32,
+    /// Labels of anonymous slots not assigned yet.
+    unlabelled: u32,
     /// Remaining `sum (degree - 2)`.
     budget: i32,
     open_total: u32,
@@ -162,11 +197,22 @@ pub(crate) struct Vertex {
     pub(crate) open: u8,
     pub(crate) loops: u8,
     pub(crate) n_legs: u8,
-    /// Packed leg multiset.
+    /// Leg multiset, packed by slot class.
     pub(crate) legs: u64,
+    /// Its legs with a label, packed by label class, and the anonymous ones among them, packed by
+    /// slot class.
+    pub(crate) labelled: u64,
+    labelled_slots: u64,
     /// Sum of the edge weights of the neighbours, for the invariant.
     weight: u64,
     nbr: u64,
+}
+
+impl Vertex {
+    /// Its anonymous legs without a label.
+    pub(crate) fn unlabelled(&self, model: &Model) -> u32 {
+        model.slots.size(model.anonymous(self.legs)) - model.slots.size(self.labelled_slots)
+    }
 }
 
 /// The vertex an augmentation adds.
@@ -175,6 +221,8 @@ struct Corolla {
     degree: u8,
     legs: u64,
     n_legs: u32,
+    /// The legs of its labelled slot classes, packed by label class.
+    labelled: u64,
     loops: u8,
     /// Stubs not used by legs or self-loops.
     free: u8,
@@ -196,28 +244,57 @@ impl Topology {
             cap,
             vertices: vec![Vertex::default(); cap],
             adj: vec![0; cap * cap],
-            unplaced: model.legs.all,
-            unplaced_count: model.legs.total,
+            unplaced: model.slots.all,
+            unplaced_count: model.slots.total,
+            unlabelled: model.labelling.len() as u32,
             budget: limits.budget,
             open_total: 0,
             vetoed: false,
         }
     }
 
-    /// Legs not attached to a vertex yet.
-    pub(crate) fn unplaced(&self) -> u32 {
-        self.unplaced_count
-    }
-
     pub(crate) fn multiplicity(&self, u: usize, v: usize) -> u8 {
         self.adj[u * self.cap + v]
     }
 
+    /// Every vertex, edge and leg is placed and every leg labelled.
     pub(crate) fn is_complete(&self) -> bool {
+        self.is_shaped() && self.unlabelled == 0
+    }
+
+    /// Every vertex, edge and leg is placed; anonymous legs may still lack their labels.
+    fn is_shaped(&self) -> bool {
         self.n > 0 && self.budget == 0 && self.open_total == 0 && self.unplaced_count == 0
     }
 
+    /// Stubs of `v` not taken by an edge or a labelled leg yet: open stubs and anonymous legs
+    /// without a label.
+    pub(crate) fn free_stubs(&self, model: &Model, v: usize) -> u32 {
+        self.vertices[v].open as u32 + self.vertices[v].unlabelled(model)
+    }
+
+    /// Index of the next label to assign in [`Model::labelling`].
+    fn next_label(&self, model: &Model) -> usize {
+        model.labelling.len() - self.unlabelled as usize
+    }
+
+    /// Give the anonymous leg of slot class `slot` at `v` the label of class `label`.
+    fn assign(&mut self, model: &Model, v: usize, (slot, label): (usize, usize)) {
+        let vertex = &mut self.vertices[v];
+        vertex.labelled_slots += model.slots.one(slot);
+        vertex.labelled += model.legs.one(label);
+        self.unlabelled -= 1;
+    }
+
+    fn unassign(&mut self, model: &Model, v: usize, (slot, label): (usize, usize)) {
+        let vertex = &mut self.vertices[v];
+        vertex.labelled_slots -= model.slots.one(slot);
+        vertex.labelled -= model.legs.one(label);
+        self.unlabelled += 1;
+    }
+
     /// Add `corolla` as vertex `n`, sewing `counts[u]` of its stubs to vertex `u`.
+    #[inline(always)]
     fn push(&mut self, corolla: &Corolla, counts: &[u8]) {
         let w = self.n;
         let sewn: u8 = counts[..w].iter().sum();
@@ -225,6 +302,8 @@ impl Topology {
         self.vertices[w].loops = corolla.loops;
         self.vertices[w].legs = corolla.legs;
         self.vertices[w].n_legs = corolla.n_legs as u8;
+        self.vertices[w].labelled = corolla.labelled;
+        self.vertices[w].labelled_slots = 0;
         self.vertices[w].open = corolla.free - sewn;
         self.vertices[w].nbr = 0;
         self.vertices[w].weight = 0;
@@ -246,6 +325,7 @@ impl Topology {
         self.open_total = self.open_total + self.vertices[w].open as u32 - sewn as u32;
     }
 
+    #[inline(always)]
     fn pop(&mut self, corolla: &Corolla, counts: &[u8]) {
         self.n -= 1;
         let w = self.n;
@@ -263,6 +343,37 @@ impl Topology {
         self.unplaced += corolla.legs;
         self.unplaced_count += corolla.n_legs;
         self.budget += corolla.degree as i32 - 2;
+    }
+
+    /// Exchange the numbers of vertices `a` and `b`.
+    fn swap(&mut self, a: usize, b: usize) {
+        let cap = self.cap;
+        self.vertices.swap(a, b);
+        for v in &mut self.vertices[..self.n] {
+            if (v.nbr >> a ^ v.nbr >> b) & 1 == 1 {
+                v.nbr ^= 1 << a | 1 << b;
+            }
+        }
+        for v in 0..self.n {
+            self.adj.swap(a * cap + v, b * cap + v);
+        }
+        for v in 0..self.n {
+            self.adj.swap(v * cap + a, v * cap + b);
+        }
+    }
+
+    /// `a` and `b` are twins: equal corollas, open stubs and labels, and equal multiplicities to
+    /// every other vertex, so exchanging them is an automorphism. Twins of one vertex are twins of
+    /// each other.
+    fn twins(&self, a: usize, b: usize) -> bool {
+        let (x, y) = (&self.vertices[a], &self.vertices[b]);
+        let others = !(1u64 << a | 1u64 << b);
+        (x.degree, x.open, x.loops, x.legs, x.labelled)
+            == (y.degree, y.open, y.loops, y.legs, y.labelled)
+            && x.nbr & others == y.nbr & others
+            && VertexSet(x.nbr & others)
+                .iter()
+                .all(|v| self.multiplicity(a, v) == self.multiplicity(b, v))
     }
 
     /// The vertices other than `x` are connected.
@@ -306,10 +417,7 @@ impl Topology {
     /// Second-order invariant: a commutative hash of the neighbours' invariants and multiplicities.
     fn refined(&self, v: usize, invariants: &[(u64, u64)]) -> u64 {
         let mut sum = 0u64;
-        let mut f = self.vertices[v].nbr;
-        while f != 0 {
-            let u = f.trailing_zeros() as usize;
-            f &= f - 1;
+        for u in VertexSet(self.vertices[v].nbr).iter() {
             let (packed, legs) = invariants[u];
             sum = sum.wrapping_add(mix(packed ^ mix(legs ^ self.multiplicity(u, v) as u64)));
         }
@@ -329,74 +437,90 @@ impl Topology {
             .sum();
         let unplaced = self.unplaced_count;
         let mut ok = true;
-        self.lowlink(0, usize::MAX, scratch, &mut |_, sub_open, sub_legs| {
-            let (rest_open, rest_legs) = (total_open - sub_open, total_legs - sub_legs);
-            if sub_open > 0 && rest_open > 0 {
-                return;
-            }
-            permanent += 1;
-            if limits.max_bridges.is_some_and(|max| permanent > max) {
-                ok = false;
-            }
-            if !limits.zero_flow_edges {
-                let zero_flow = |closed_legs: u32, other_legs: u32| {
-                    closed_legs == 0 || other_legs + unplaced == 0
-                };
-                if (sub_open == 0 && zero_flow(sub_legs, rest_legs))
-                    || (rest_open == 0 && zero_flow(rest_legs, sub_legs))
-                {
+        let stubs = |v: &Vertex| (v.open as u32, v.n_legs as u32);
+        self.lowlink(
+            0,
+            usize::MAX,
+            scratch,
+            &stubs,
+            &mut |_, sub_open, sub_legs| {
+                let (rest_open, rest_legs) = (total_open - sub_open, total_legs - sub_legs);
+                if sub_open > 0 && rest_open > 0 {
+                    return;
+                }
+                permanent += 1;
+                if limits.max_bridges.is_some_and(|max| permanent > max) {
                     ok = false;
                 }
-            }
-        });
+                if !limits.zero_flow_edges {
+                    let zero_flow = |closed_legs: u32, other_legs: u32| {
+                        closed_legs == 0 || other_legs + unplaced == 0
+                    };
+                    if (sub_open == 0 && zero_flow(sub_legs, rest_legs))
+                        || (rest_open == 0 && zero_flow(rest_legs, sub_legs))
+                    {
+                        ok = false;
+                    }
+                }
+            },
+        );
         ok
     }
 
-    /// The bridges whose `side` (the vertices beyond `ends[1]`) has no open stubs: no later edge
-    /// reaches that side, so the bridge and the subgraph on that side are final. A complete
-    /// topology reports every bridge once per side.
-    pub(crate) fn closed_sides(&self, mut side: impl FnMut([usize; 2], u64)) {
+    /// The bridges whose `side` (the vertices beyond `ends[1]`) has no free stubs: no later edge
+    /// or label reaches that side, so the bridge and the subgraph on that side are final. A
+    /// complete topology reports every bridge once per side.
+    pub(crate) fn closed_sides(&self, model: &Model, mut side: impl FnMut([usize; 2], u64)) {
         if self.n == 0 {
             return;
         }
         let mut scratch = BridgeScratch::default();
         scratch.reset(self.n);
         let all = u64::MAX >> (64 - self.n);
-        let total_open = self.open_total;
-        self.lowlink(0, usize::MAX, &mut scratch, &mut |[v, u], open, _| {
-            if open != 0 && open != total_open {
-                return;
-            }
-            // without the bridge, `u` reaches its side only
-            let far = self.reach(u, all & !(1 << v));
-            if open == 0 {
-                side([v, u], far);
-            }
-            if open == total_open {
-                side([u, v], all & !far);
-            }
-        });
+        let total_open = (0..self.n).map(|v| self.free_stubs(model, v)).sum::<u32>();
+        let stubs = |v: &Vertex| (v.open as u32 + v.unlabelled(model), 0);
+        self.lowlink(
+            0,
+            usize::MAX,
+            &mut scratch,
+            &stubs,
+            &mut |[v, u], open, _| {
+                if open != 0 && open != total_open {
+                    return;
+                }
+                // without the bridge, `u` reaches its side only
+                let far = self.reach(u, all & !(1 << v));
+                if open == 0 {
+                    side([v, u], far);
+                }
+                if open == total_open {
+                    side([u, v], all & !far);
+                }
+            },
+        );
     }
 
     /// Depth-first low-link pass from `v`; calls `bridge([parent, child], open, legs)` with the
-    /// totals of the child's side of every bridge. Returns the subtree totals.
+    /// totals of `stubs` (open stubs and legs per vertex) over the child's side of every bridge.
+    /// Returns the subtree totals.
     fn lowlink(
         &self,
         v: usize,
         parent: usize,
         s: &mut BridgeScratch,
+        stubs: &impl Fn(&Vertex) -> (u32, u32),
         bridge: &mut impl FnMut([usize; 2], u32, u32),
     ) -> (u32, u32) {
         s.time += 1;
         s.disc[v] = s.time;
         s.low[v] = s.time;
-        let mut totals = (self.vertices[v].open as u32, self.vertices[v].n_legs as u32);
+        let mut totals = stubs(&self.vertices[v]);
         let mut f = self.vertices[v].nbr;
         while f != 0 {
             let u = f.trailing_zeros() as usize;
             f &= f - 1;
             if s.disc[u] == 0 {
-                let sub = self.lowlink(u, v, s, bridge);
+                let sub = self.lowlink(u, v, s, stubs, bridge);
                 totals.0 += sub.0;
                 totals.1 += sub.1;
                 s.low[v] = s.low[v].min(s.low[u]);
@@ -496,11 +620,181 @@ struct Level {
     sewings: SewingOrbits,
     /// Whether `sewn` and `counts` enumerate the sewings of `corolla`.
     sewing: bool,
+    /// How the children of the object at this depth are made.
+    mode: Mode,
+    /// [`Mode::Label`]: the vertices that can take the label, the current one at `next - 1`.
+    targets: Vec<usize>,
+    /// [`Mode::Pendants`]: the current assignment of pendants to open stubs.
+    pendants: Pendants,
     /// Whether the current augmentation is applied to the topology.
     pushed: bool,
+    /// The children found so far, and whether the rest was split off (see [`Search::split`]).
+    children: usize,
+    done: bool,
     /// While checking the filter's heredity: the filter rejected the object at this depth or one
     /// on the way to it. Kept only with a filter.
     vetoed: bool,
+}
+
+impl Level {
+    /// Remove the child applied at this level from `t`.
+    fn unapply(&mut self, t: &mut Topology, model: &Model) {
+        match self.mode {
+            Mode::Vertex => t.pop(&self.corolla, &self.counts),
+            Mode::Pendants => self.pop_pendants(t),
+            Mode::Label => {
+                let label = model.labelling[t.next_label(model) - 1];
+                t.unassign(model, self.targets[self.next - 1], label);
+            }
+        }
+    }
+
+    /// Hang the pendants of the current assignment, stub by stub.
+    fn push_pendants(&mut self, t: &mut Topology) {
+        let p = &self.pendants;
+        for (&u, &c) in p.owners.iter().zip(&p.choice) {
+            self.counts[u] = 1;
+            t.push(&p.types[c], &self.counts);
+            self.counts[u] = 0;
+        }
+    }
+
+    fn pop_pendants(&mut self, t: &mut Topology) {
+        for i in (0..self.pendants.owners.len()).rev() {
+            self.pop_pendant(t, i);
+        }
+    }
+
+    /// Remove the last vertex of `t`, the pendant of stub `i`.
+    fn pop_pendant(&mut self, t: &mut Topology, i: usize) {
+        let p = &self.pendants;
+        let u = p.owners[i];
+        self.counts[u] = 1;
+        t.pop(&p.types[p.choice[i]], &self.counts);
+        self.counts[u] = 0;
+    }
+}
+
+/// How the children of an object are made.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+enum Mode {
+    /// Add one vertex, sewn to open stubs.
+    #[default]
+    Vertex,
+    /// Hang a pendant vertex on every open stub at once: every completion of the object consists
+    /// of pendants.
+    Pendants,
+    /// Label an anonymous leg of a shaped object.
+    Label,
+}
+
+/// Pendant vertices (one sewn stub, no self-loop) hung on the open stubs of an object, one per
+/// stub. Assignments of pendant types to stubs are enumerated in lexicographic order,
+/// non-decreasing at each vertex, using exactly the unplaced legs.
+#[derive(Debug, Default)]
+struct Pendants {
+    /// The pendant types.
+    types: Vec<Corolla>,
+    /// The vertex of each open stub, ascending.
+    owners: Vec<usize>,
+    /// The type at each stub.
+    choice: Vec<usize>,
+    /// `used[i]`: the legs of the pendants at the stubs before `i`, packed by slot class.
+    used: Vec<u64>,
+    /// Per vertex of the object: its first stub in `owners`.
+    start: Vec<usize>,
+    /// The stub of each pendant vertex while rule 2 removes them.
+    order: Vec<usize>,
+    /// The assignments met so far, as for [`SewingOrbits`].
+    marked: AHashSet<Vec<usize>>,
+    stack: Vec<Vec<usize>>,
+}
+
+impl Pendants {
+    /// Advance to the next assignment (the first if `first`) that places exactly `legs`; `false`
+    /// after the last.
+    fn next(&mut self, slots: &Legs, legs: u64, first: bool) -> bool {
+        let k = self.owners.len();
+        let mut i = if first {
+            self.choice.clear();
+            self.choice.resize(k, 0);
+            self.marked.clear();
+            self.used.clear();
+            self.used.resize(k + 1, 0);
+            0
+        } else {
+            self.choice[k - 1] += 1;
+            k - 1
+        };
+        loop {
+            if self.choice[i] == self.types.len() {
+                if i == 0 {
+                    return false;
+                }
+                i -= 1;
+                self.choice[i] += 1;
+                continue;
+            }
+            let add = self.types[self.choice[i]].legs;
+            if !slots.fits(self.used[i], add, legs) {
+                self.choice[i] += 1;
+                continue;
+            }
+            self.used[i + 1] = self.used[i] + add;
+            if i + 1 == k {
+                if self.used[k] == legs {
+                    return true;
+                }
+                self.choice[i] += 1;
+                continue;
+            }
+            i += 1;
+            // non-decreasing at each vertex: pendants on one vertex are interchangeable
+            self.choice[i] = if self.owners[i] == self.owners[i - 1] {
+                self.choice[i - 1]
+            } else {
+                0
+            };
+        }
+    }
+
+    /// The stubs of vertex `u` in `owners`.
+    fn block(&self, u: usize) -> std::ops::Range<usize> {
+        self.start[u]..self.start.get(u + 1).copied().unwrap_or(self.owners.len())
+    }
+
+    /// Rule 1, as for sewings ([`SewingOrbits`]): assignments are met in lexicographic order and
+    /// only their legs are checked before, so the first assignment met of an orbit under the group
+    /// generated by `generators` (stride: the object's vertices) is its smallest. Marks that orbit.
+    fn first(&mut self, generators: &[u32]) -> bool {
+        let n = self.start.len();
+        let fixes = |g: &[u32]| {
+            (0..n).all(|u| self.choice[self.block(g[u] as usize)] == self.choice[self.block(u)])
+        };
+        if generators.chunks_exact(n).all(fixes) {
+            // a fixed assignment is alone in its orbit
+            return true;
+        }
+        if !self.marked.insert(self.choice.clone()) {
+            return false;
+        }
+        let mut stack = std::mem::take(&mut self.stack);
+        stack.push(self.choice.clone());
+        while let Some(choice) = stack.pop() {
+            for g in generators.chunks_exact(n) {
+                let mut image = choice.clone();
+                for u in 0..n {
+                    image[self.block(g[u] as usize)].copy_from_slice(&choice[self.block(u)]);
+                }
+                if !self.marked.contains(&image) {
+                    self.marked.insert(image.clone());
+                    stack.push(image);
+                }
+            }
+        }
+        self.stack = stack;
+        true
+    }
 }
 
 /// The open vertices of an object with their numbers of open stubs. Multiplicity vectors with a
@@ -612,7 +906,7 @@ pub(crate) struct Buffers {
     colours: Vec<u32>,
     /// Invariants of the current object.
     invariants: Vec<(u64, u64)>,
-    keys: Vec<((u64, u64, u64), u32)>,
+    keys: Vec<((u64, u64, u64, u64), u32)>,
     edges: Vec<[u32; 3]>,
     orbits: Orbits,
     bridges: BridgeScratch,
@@ -687,12 +981,28 @@ impl Search {
         }
     }
 
-    /// Enumerate the accepted children of `topology` (a complete one is its own only child).
-    pub(crate) fn children(model: &Model, topology: Topology, buf: Buffers) -> Self {
-        Search {
+    /// The accepted children of `topology` after the first `skip` (a complete one is its own only
+    /// child), searched with `buf`.
+    pub(crate) fn children(
+        cx: &Context<'_>,
+        topology: Topology,
+        skip: usize,
+        buf: &mut Buffers,
+    ) -> Vec<Topology> {
+        let mut search = Search {
             children_only: true,
-            ..Search::new(model, topology, buf)
+            ..Search::new(cx.model, topology, std::mem::take(buf))
+        };
+        let mut children = vec![];
+        let mut found = 0;
+        while search.next(cx) {
+            if found >= skip {
+                children.push(search.topology().clone());
+            }
+            found += 1;
         }
+        *buf = search.buf;
+        children
     }
 
     pub(crate) fn into_buffers(self) -> Buffers {
@@ -737,29 +1047,34 @@ impl Search {
                     self.state = State::At(0);
                 }
                 State::At(depth) => {
-                    let level = &mut self.buf.levels[depth];
-                    if level.pushed {
-                        level.pushed = false;
-                        self.topology.pop(&level.corolla, &level.counts);
-                    }
+                    self.undo(cx.model, depth);
                     if cx.stop.load(Ordering::Relaxed) {
                         self.state = State::Done;
                         return false;
                     }
-                    if !self.next_augmentation(cx, depth) {
+                    let child = depth + 1;
+                    let Level { mode, done, .. } = self.buf.levels[depth];
+                    let advanced = !done
+                        && match mode {
+                            Mode::Vertex => self.next_augmentation(cx, depth),
+                            Mode::Pendants => self.next_pendants(cx, depth),
+                            Mode::Label => self.next_label(cx.model, depth),
+                        };
+                    if !advanced {
                         self.state = match depth {
                             0 => State::Done,
                             _ => State::At(depth - 1),
                         };
                         continue;
                     }
-                    let level = &mut self.buf.levels[depth];
-                    self.topology.push(&level.corolla, &level.counts);
-                    level.pushed = true;
-                    let child = depth + 1;
-                    self.buf.level(child).known = false;
-                    if !self.accepted(cx.limits, depth) {
-                        continue;
+                    if mode == Mode::Vertex {
+                        let level = &mut self.buf.levels[depth];
+                        self.topology.push(&level.corolla, &level.counts);
+                        level.pushed = true;
+                        self.buf.level(child).known = false;
+                        if !self.accepted(cx.limits, depth) {
+                            continue;
+                        }
                     }
                     if let Some(filter) = cx.filter {
                         self.buf.levels[child].vetoed = self.buf.levels[depth].vetoed;
@@ -767,6 +1082,7 @@ impl Search {
                             continue;
                         }
                     }
+                    self.buf.levels[depth].children += 1;
                     if self.topology.is_complete() || self.children_only {
                         self.found(child);
                         return true;
@@ -808,60 +1124,290 @@ impl Search {
         self.found = depth;
         self.topology.vetoed = self.buf.levels[depth].vetoed;
         if self.need_generators && !self.children_only && !self.buf.levels[depth].known {
-            self.canonize(depth);
+            self.canonize(depth, false);
         }
     }
 
-    /// Canonize the object (node colours from the vertex invariants, edges coloured by their
-    /// multiplicity) and store its node automorphism generators at `depth`. Distinct invariants
-    /// already make the object rigid.
-    fn canonize(&mut self, depth: usize) {
+    /// Store the node automorphism generators of the object at `depth`, and with `labelling` its
+    /// canonical labelling (`canon.lab()`). Node colours come from the vertex invariants and the
+    /// labelled legs, edges are coloured by their multiplicity. The canonizer runs only if the
+    /// labelling is asked for or some colour class is not a class of twins: distinct colours
+    /// make the object rigid, and since automorphisms preserve colours, the transpositions of
+    /// twins then generate the group.
+    fn canonize(&mut self, depth: usize, labelling: bool) {
+        let t = &self.topology;
+        let n = t.n;
+        let Buffers {
+            canon,
+            levels,
+            invariants,
+            keys,
+            colours,
+            edges,
+            ..
+        } = &mut self.buf;
+        invariants.clear();
+        invariants.extend((0..n).map(|v| t.invariant(v)));
+        keys.clear();
+        keys.extend((0..n).map(|v| {
+            let (packed, legs) = invariants[v];
+            let refined = t.refined(v, invariants);
+            ((packed, legs, t.vertices[v].labelled, refined), v as u32)
+        }));
+        keys.sort_unstable();
+        let level = &mut levels[depth];
+        level.generators.clear();
+        level.known = true;
+        colours.clear();
+        colours.resize(n, 0);
+        let (mut rank, mut first, mut twins) = (0, 0, true);
+        for i in 0..n {
+            if i > 0 && keys[i].0 != keys[i - 1].0 {
+                rank += 1;
+                first = i;
+            }
+            let (a, b) = (keys[first].1, keys[i].1);
+            colours[b as usize] = rank;
+            if i > first && twins {
+                twins = t.twins(a as usize, b as usize);
+                level.generators.extend((0..n as u32).map(|x| match x {
+                    _ if x == a => b,
+                    _ if x == b => a,
+                    _ => x,
+                }));
+            }
+        }
+        // distinct colours leave no tie to break, so `twins` holds then too
+        if twins && !labelling {
+            return;
+        }
+        level.generators.clear();
+        edges.clear();
+        for u in 0..n {
+            for v in VertexSet(t.vertices[u].nbr & above(u)).iter() {
+                edges.push([u as u32, v as u32, t.multiplicity(u, v) as u32]);
+            }
+        }
+        canon.run(colours, edges);
+        level.generators.extend(canon.generators().flatten());
+    }
+
+    /// Set up the enumeration of the children of the object at `depth`: labels for a shaped
+    /// object, augmentations otherwise.
+    fn prepare(&mut self, cx: &Context<'_>, depth: usize) {
+        if self.topology.is_shaped() {
+            self.prepare_labels(cx.model, depth);
+        } else {
+            self.prepare_augmentations(cx, depth);
+        }
+    }
+
+    /// The vertices that can take the next label of the shaped object at `depth`: one per orbit
+    /// of the object's node automorphism group, the group fixing the vertices of the labels
+    /// assigned so far. Labels are assigned in a fixed order, so choosing each one up to the
+    /// stabilizer of the previous ones yields every labelling once up to isomorphism.
+    fn prepare_labels(&mut self, model: &Model, depth: usize) {
+        if !self.buf.levels[depth].known {
+            self.canonize(depth, false);
+        }
+        let t = &self.topology;
+        let n = t.n;
+        let (slot, _) = model.labelling[t.next_label(model)];
+        let Buffers { orbits, levels, .. } = &mut self.buf;
+        let level = &mut levels[depth];
+        orbits.reset(n);
+        for g in level.generators.chunks_exact(n) {
+            orbits.join(g);
+        }
+        level.targets.clear();
+        level.targets.extend((0..n).filter(|&v| {
+            let vertex = &t.vertices[v];
+            model.slots.count(vertex.legs, slot) > model.slots.count(vertex.labelled_slots, slot)
+                && orbits.find(v as u32) == v as u32
+        }));
+        level.mode = Mode::Label;
+        level.next = 0;
+        level.pushed = false;
+        level.children = 0;
+        level.done = false;
+    }
+
+    /// Give the next label of the shaped object at `depth` to its next target vertex; `false`
+    /// after the last. The child is rigid if the object is.
+    fn next_label(&mut self, model: &Model, depth: usize) -> bool {
+        let level = &mut self.buf.levels[depth];
+        let Some(&v) = level.targets.get(level.next) else {
+            return false;
+        };
+        level.next += 1;
+        level.pushed = true;
+        let rigid = level.generators.is_empty();
+        let label = model.labelling[self.topology.next_label(model)];
+        self.topology.assign(model, v, label);
+        let child = self.buf.level(depth + 1);
+        child.known = rigid;
+        if rigid {
+            child.generators.clear();
+        }
+        true
+    }
+
+    /// Undo the augmentation or label applied at `depth`, if any.
+    fn undo(&mut self, model: &Model, depth: usize) {
+        let level = &mut self.buf.levels[depth];
+        if level.pushed {
+            level.pushed = false;
+            level.unapply(&mut self.topology, model);
+        }
+    }
+
+    /// Hand the children of the object at the shallowest depth that has some left to the caller,
+    /// as objects to search separately: in the search order they come after everything else this
+    /// search still finds, which no longer includes them. Their search uses `buf`.
+    pub(crate) fn split(&mut self, cx: &Context<'_>, buf: &mut Buffers) -> Vec<Topology> {
+        let State::At(deepest) = self.state else {
+            return vec![];
+        };
+        for depth in 0..=deepest {
+            if self.buf.levels[depth].done {
+                continue;
+            }
+            // the object at `depth`, and the children it has after those already found
+            let mut object = self.topology.clone();
+            for level in self.buf.levels[depth..=deepest].iter_mut().rev() {
+                if level.pushed {
+                    level.unapply(&mut object, cx.model);
+                }
+            }
+            object.vetoed = self.buf.levels[depth].vetoed;
+            let rest = Search::children(cx, object, self.buf.levels[depth].children, buf);
+            self.buf.levels[depth].done = true;
+            if !rest.is_empty() {
+                return rest;
+            }
+        }
+        vec![]
+    }
+
+    /// Hang the next assignment of pendants on the open stubs of the object at `depth` that is
+    /// minimal under the object's group (rule 1) and whose pendants are the last vertices on the
+    /// canonical deletion path of the result (rule 2); `false` after the last.
+    fn next_pendants(&mut self, cx: &Context<'_>, depth: usize) -> bool {
+        loop {
+            let level = &mut self.buf.levels[depth];
+            let first = level.next == 0;
+            level.next = 1;
+            if !level
+                .pendants
+                .next(&cx.model.slots, self.topology.unplaced, first)
+            {
+                return false;
+            }
+            if !self.buf.levels[depth].known {
+                self.canonize(depth, false);
+            }
+            let level = &mut self.buf.levels[depth];
+            if !level.pendants.first(&level.generators) {
+                continue;
+            }
+            let level = &mut self.buf.levels[depth];
+            level.push_pendants(&mut self.topology);
+            level.pushed = true;
+            self.buf.level(depth + 1).known = false;
+            let limits = cx.limits;
+            if (limits.max_bridges.is_none() && limits.zero_flow_edges
+                || self.topology.bridges_allow(limits, &mut self.buf.bridges))
+                && self.pendants_canonical(depth)
+            {
+                return true;
+            }
+            let level = &mut self.buf.levels[depth];
+            level.pop_pendants(&mut self.topology);
+            level.pushed = false;
+        }
+    }
+
+    /// Rule 2 for the pendants just hung on the object at `depth`: canonical deletions of the
+    /// result remove the pendants one by one, so the object is an ancestor of the result on its
+    /// canonical construction path. Leaves the result as it found it.
+    fn pendants_canonical(&mut self, depth: usize) -> bool {
+        let k = self.buf.levels[depth].pendants.owners.len();
+        let base = self.topology.n - k;
+        let mut order = std::mem::take(&mut self.buf.levels[depth].pendants.order);
+        order.clear();
+        order.extend(0..k);
+        let mut left = k;
+        while left > 0 {
+            let n = base + left;
+            let pendants = (u64::MAX >> (64 - n)) & !((1u64 << base) - 1);
+            let Some(p) = self.canonical_deletion(depth + 1, pendants) else {
+                break;
+            };
+            if p != n - 1 {
+                self.topology.swap(p, n - 1);
+                order.swap(p - base, n - 1 - base);
+            }
+            self.buf.levels[depth].pop_pendant(&mut self.topology, order[left - 1]);
+            left -= 1;
+        }
+        let canonical = left == 0;
+        let level = &mut self.buf.levels[depth];
+        for &i in order[..left].iter().rev() {
+            level.pop_pendant(&mut self.topology, i);
+        }
+        level.pendants.order = order;
+        level.push_pendants(&mut self.topology);
+        self.buf.levels[depth + 1].known = false;
+        canonical
+    }
+
+    /// The canonical deletion of the object, as rule 2 chooses it (the deletable vertex with the
+    /// largest invariant, then second-order invariant, then canonical position), if a vertex in
+    /// its orbit is in `candidates`: that vertex. The automorphism generators are stored at
+    /// `scratch`.
+    fn canonical_deletion(&mut self, scratch: usize, candidates: u64) -> Option<usize> {
         let t = &self.topology;
         let n = t.n;
         let buf = &mut self.buf;
         buf.invariants.clear();
         buf.invariants.extend((0..n).map(|v| t.invariant(v)));
-        buf.keys.clear();
-        buf.keys.extend((0..n).map(|v| {
-            let (packed, legs) = buf.invariants[v];
-            ((packed, legs, t.refined(v, &buf.invariants)), v as u32)
-        }));
-        buf.keys.sort_unstable();
-        buf.colours.clear();
-        buf.colours.resize(n, 0);
-        let mut rank = 0;
-        for i in 0..n {
-            if i > 0 && buf.keys[i].0 != buf.keys[i - 1].0 {
-                rank += 1;
-            }
-            buf.colours[buf.keys[i].1 as usize] = rank;
-        }
-        let rigid = rank as usize + 1 == n;
-        if !rigid {
-            buf.edges.clear();
-            for u in 0..n {
-                let mut f = t.vertices[u].nbr & above(u);
-                while f != 0 {
-                    let v = f.trailing_zeros() as usize;
-                    f &= f - 1;
-                    buf.edges
-                        .push([u as u32, v as u32, t.multiplicity(u, v) as u32]);
+        let mut best = None;
+        let mut ties = 0u64;
+        for x in (0..n).filter(|&x| t.connected_without(x)) {
+            let key = (buf.invariants[x], t.refined(x, &buf.invariants));
+            match best.map_or(std::cmp::Ordering::Greater, |b| key.cmp(&b)) {
+                std::cmp::Ordering::Greater => {
+                    best = Some(key);
+                    ties = 1 << x;
                 }
+                std::cmp::Ordering::Equal => ties |= 1 << x,
+                std::cmp::Ordering::Less => {}
             }
-            buf.canon.run(&buf.colours, &buf.edges);
         }
-        let Buffers { canon, levels, .. } = buf;
-        let level = &mut levels[depth];
-        level.generators.clear();
-        if !rigid {
-            level.generators.extend(canon.generators().flatten());
+        // a vertex with a unique key is alone in its orbit, and twins share one
+        let first = ties.trailing_zeros() as usize;
+        if VertexSet(ties).iter().all(|x| t.twins(first, x)) {
+            return VertexSet(ties & candidates).iter().next();
         }
-        level.known = true;
+        self.canonize(scratch, true);
+        let lab = self.buf.canon.lab();
+        let star = (0..n)
+            .rev()
+            .map(|q| lab[q] as usize)
+            .find(|&v| ties >> v & 1 == 1)
+            .expect("a deletable vertex");
+        let Buffers { orbits, levels, .. } = &mut self.buf;
+        orbits.reset(n);
+        for g in levels[scratch].generators.chunks_exact(n) {
+            orbits.join(g);
+        }
+        let orbit = orbits.find(star as u32);
+        (0..n).find(|&x| candidates >> x & 1 == 1 && orbits.find(x as u32) == orbit)
     }
 
-    /// Set up the enumeration of the children of the object at `depth`: the open vertices, the
-    /// invariants for rule 2 and the corollas, in search order.
-    fn prepare(&mut self, cx: &Context<'_>, depth: usize) {
+    /// Set up the augmentations of the object at `depth`: the open vertices, the invariants for
+    /// rule 2 and the corollas, in search order.
+    fn prepare_augmentations(&mut self, cx: &Context<'_>, depth: usize) {
         let (model, limits) = (cx.model, cx.limits);
         let t = &self.topology;
         let n = t.n;
@@ -887,7 +1433,7 @@ impl Search {
         // a vertex holds at most its degree in legs
         let max_degree = model.degrees.last().copied().unwrap_or(0);
         model
-            .legs
+            .slots
             .subsets(t.unplaced, max_degree as u32, &mut level.subsets);
         level.corollas.clear();
         for &degree in &model.degrees {
@@ -902,6 +1448,7 @@ impl Search {
                     0
                 };
                 let unplaced = t.unplaced_count - n_legs;
+                let labelled = model.labelled(legs);
                 for loops in 0..=max_loops {
                     let free = (degree as u32 - n_legs - 2 * loops) as u8;
                     if n > 0 && free == 0
@@ -913,6 +1460,7 @@ impl Search {
                         degree,
                         legs,
                         n_legs,
+                        labelled,
                         loops: loops as u8,
                         free,
                         budget,
@@ -924,6 +1472,35 @@ impl Search {
         level.next = 0;
         level.sewing = false;
         level.pushed = false;
+        level.children = 0;
+        level.done = false;
+        level.mode = Mode::Vertex;
+        // every completion hangs one pendant on each open stub: no further cycle (open stubs and
+        // budget take exactly the unplaced legs) and no more new vertices than open stubs
+        let open = t.open_total as i32;
+        if n > 0
+            && open > 0
+            && open + t.budget == t.unplaced_count as i32
+            && limits.most_new(n, t.budget) == open
+        {
+            level.mode = Mode::Pendants;
+            let pendants = &mut level.pendants;
+            pendants.types.clear();
+            pendants.types.extend(
+                level
+                    .corollas
+                    .iter()
+                    .filter(|c| c.free == 1 && c.loops == 0),
+            );
+            pendants.owners.clear();
+            pendants.start.clear();
+            for u in 0..n {
+                pendants.start.push(pendants.owners.len());
+                let open = t.vertices[u].open as usize;
+                pendants.owners.extend(std::iter::repeat_n(u, open));
+            }
+            level.counts.resize(t.cap, 0);
+        }
     }
 
     /// Move the cursor of the level at `depth` to its next augmentation that passes rule 1 and
@@ -1061,7 +1638,7 @@ impl Search {
     /// as the first sewing met of its orbit ([`SewingOrbits`]).
     fn minimal(&mut self, depth: usize, counts: &[u8]) -> bool {
         if !self.buf.levels[depth].known {
-            self.canonize(depth);
+            self.canonize(depth, false);
         }
         let level = &mut self.buf.levels[depth];
         level.sewings.first(counts, &level.generators)
@@ -1117,20 +1694,18 @@ impl Search {
             }
         }));
         let refined = t.refined(w, &buf.invariants);
-        let mut f = ties;
-        while f != 0 {
-            let x = f.trailing_zeros() as usize;
-            f &= f - 1;
+        for x in VertexSet(ties).iter() {
             match t.refined(x, &buf.invariants).cmp(&refined) {
                 std::cmp::Ordering::Greater => return false,
                 std::cmp::Ordering::Less => ties &= !(1 << x),
                 std::cmp::Ordering::Equal => {}
             }
         }
-        if ties == 0 {
+        // twins of the new vertex are in its orbit
+        if ties == 0 || VertexSet(ties).iter().all(|x| t.twins(w, x)) {
             return true;
         }
-        self.canonize(parent + 1);
+        self.canonize(parent + 1, true);
         let lab = self.buf.canon.lab();
         let star = (0..n)
             .rev()
@@ -1151,7 +1726,121 @@ impl Search {
 
 #[cfg(test)]
 mod tests {
-    use super::OpenStubs;
+    use super::{Corolla, Legs, Limits, Model, OpenStubs, Pendants, Topology};
+
+    #[test]
+    fn twins_have_equal_corollas_and_neighbours() {
+        // phi^3 with anonymous legs
+        let model = Model::new(1, &[vec![0; 3]], &[(0, 1); 5]).unwrap();
+        let limits = Limits::new(&model, 3, 3, None, true, true);
+        let corolla = |n_legs: u32| Corolla {
+            degree: 3,
+            legs: n_legs as u64 * model.slots.one(0),
+            n_legs,
+            free: 3 - n_legs as u8,
+            ..Corolla::default()
+        };
+        // adjacent, with one leg and one open stub each
+        let mut t = Topology::empty(&model, &limits);
+        t.push(&corolla(1), &[]);
+        t.push(&corolla(1), &[1]);
+        assert!(t.twins(0, 1));
+        // the path 0 - 1 - 2 with two legs at its ends and one in the middle
+        let mut t = Topology::empty(&model, &limits);
+        t.push(&corolla(2), &[]);
+        t.push(&corolla(1), &[1]);
+        t.push(&corolla(2), &[0, 1]);
+        assert!(t.twins(0, 2) && t.twins(2, 0));
+        assert!(!t.twins(0, 1) && !t.twins(1, 2));
+    }
+
+    #[test]
+    fn twins_have_equal_multiplicities() {
+        // phi^4: vertices 2 and 3 share the neighbours 0 and 1, which look alike, but with swapped
+        // multiplicities, so exchanging 2 and 3 alone is not an automorphism
+        let model = Model::new(1, &[vec![0; 4]], &[]).unwrap();
+        let limits = Limits::new(&model, 8, 4, None, true, true);
+        let phi4 = Corolla {
+            degree: 4,
+            free: 4,
+            ..Corolla::default()
+        };
+        let mut t = Topology::empty(&model, &limits);
+        t.push(&phi4, &[]);
+        t.push(&phi4, &[0]);
+        t.push(&phi4, &[2, 1]);
+        t.push(&phi4, &[1, 2, 0]);
+        assert_eq!(t.invariant(0), t.invariant(1));
+        assert_eq!(t.invariant(2), t.invariant(3));
+        assert!(!t.twins(2, 3) && !t.twins(0, 1));
+    }
+
+    #[test]
+    fn pendant_assignments_are_kept_once_per_orbit() {
+        // two vertices with two open stubs each, exchanged by the group; pendants with one or two
+        // legs, six legs in all
+        let legs = Legs::new(&[(0, 6)]).unwrap();
+        let mut pendants = Pendants {
+            types: (1..=2)
+                .map(|k| Corolla {
+                    legs: k,
+                    ..Corolla::default()
+                })
+                .collect(),
+            owners: vec![0, 0, 1, 1],
+            start: vec![0, 2],
+            ..Pendants::default()
+        };
+        for (generators, expected) in [
+            (&[][..], &[[0, 0, 1, 1], [0, 1, 0, 1], [1, 1, 0, 0]][..]),
+            (&[1, 0], &[[0, 0, 1, 1], [0, 1, 0, 1]]),
+        ] {
+            let mut kept = vec![];
+            let mut first = true;
+            while pendants.next(&legs, legs.all, first) {
+                first = false;
+                if pendants.first(generators) {
+                    kept.push(pendants.choice.clone());
+                }
+            }
+            assert_eq!(kept, expected);
+        }
+    }
+
+    #[test]
+    fn pendant_assignments_use_the_legs_exactly_once_per_multiset() {
+        // one leg class with five legs; pendants carrying one, two or three legs; stubs 0 and 1
+        // on vertex 0, stub 2 on vertex 1
+        let legs = Legs::new(&[(0, 5)]).unwrap();
+        let mut pendants = Pendants {
+            types: (1..=3)
+                .map(|k| Corolla {
+                    legs: k,
+                    ..Corolla::default()
+                })
+                .collect(),
+            owners: vec![0, 0, 1],
+            ..Pendants::default()
+        };
+        let mut seen = vec![];
+        let mut first = true;
+        while pendants.next(&legs, legs.all, first) {
+            first = false;
+            seen.push(pendants.choice.clone());
+        }
+        // legs per type are 1, 2, 3; the two pendants on vertex 0 are a multiset
+        let mut expected = vec![];
+        for a in 0..3 {
+            for b in a..3 {
+                for c in 0..3 {
+                    if a + b + c + 3 == 5 {
+                        expected.push(vec![a, b, c]);
+                    }
+                }
+            }
+        }
+        assert_eq!(seen, expected);
+    }
 
     #[test]
     fn compositions_with_a_fixed_sum_are_enumerated_once() {

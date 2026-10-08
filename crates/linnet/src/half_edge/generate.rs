@@ -40,15 +40,23 @@
 //!
 //! Generation runs in two stages per loop order. Untyped topologies (vertex degrees from the
 //! signatures, legs attached, loop order, vertex and bridge limits) are built by canonical
-//! augmentation one vertex at a time ([`topology`]); every complete topology is then decorated
-//! with fields, orientations and vertex rules, one decoration per orbit of its automorphism group
-//! ([`decorate`]). Only accepted diagrams are materialized as [`HedgeGraph`]s and canonized.
+//! augmentation one vertex at a time ([`topology`]), except that the pendant vertices completing a
+//! topology are added at once. Three or more legs with distinct labels and a common stub are
+//! placed as anonymous legs and labelled once the topology is shaped, each label up to the
+//! stabilizer of the previous ones, so many distinct legs cost few topologies. Every complete
+//! topology is then decorated with fields, orientations and vertex rules, one decoration per orbit
+//! of its automorphism group ([`decorate`]). Only accepted diagrams are materialized as
+//! [`HedgeGraph`]s and canonized.
 //!
 //! Both stages are resumable depth-first searches, so [`Diagrams`] streams: each `next` call
 //! searches only up to the next diagram and nothing is buffered. Output order is the depth-first
 //! order of the search and does not depend on parallelism: with the `rayon` feature,
 //! [`GraphGenerator::parallel`] runs independent subtrees on the current thread pool, each at most
-//! a fixed number of diagrams ahead of the output, and emits their results in that order.
+//! a fixed number of diagrams ahead of the output, and emits their results in that order. The
+//! search starts from a few subtrees per thread; while fewer subtrees than threads can advance,
+//! the unsearched rest of the oldest ones is split off into new subtrees. The first step runs only
+//! the oldest subtree, up to its first diagram, and further steps buffer one diagram per subtree
+//! until the first is emitted, so the first graph does not wait for a step of the whole window.
 //!
 //! ## Filtering
 //!
@@ -294,10 +302,12 @@ where
     /// Keep only the graphs accepted by `filter`, and prune the search with it.
     ///
     /// `filter` sees every state of the search as a [`GraphView`]. Stage 1 builds untyped
-    /// topologies ([`Stage::Topology`]) up to each complete topology; stage 2 assigns fields to
-    /// the edges of an accepted complete topology ([`Stage::Fields`]) up to each complete graph
-    /// ([`Stage::Complete`]), seen before it is canonized. The output is the graphs whose complete
-    /// topology and complete graph `filter` accepts.
+    /// topologies ([`Stage::Topology`]) up to each complete topology: a vertex at a time, the
+    /// pendant vertices that complete a topology at once, then the labels of anonymous legs one at
+    /// a time (see [`Stage::Topology`]). Stage 2 assigns fields to the edges of an accepted
+    /// complete topology ([`Stage::Fields`]) up to each complete graph ([`Stage::Complete`]), seen
+    /// before it is canonized. The output is the graphs whose complete topology and complete graph
+    /// `filter` accepts.
     ///
     /// A rejected state is dropped with everything that completes it, so `filter` must be
     /// hereditary within each stage: when it rejects a partial topology, it rejects every complete
@@ -404,6 +414,7 @@ where
             scratch: None,
             tasks: VecDeque::new(),
             window: VecDeque::new(),
+            alone: true,
             ready: VecDeque::new(),
             stop: AtomicBool::new(false),
             progress: Progress::default(),
@@ -559,13 +570,14 @@ impl<F: Clone + Ord, L: Clone + Ord> Compiled<F, L> {
         hedges.clear();
         let mut n_edges = 0;
         for v in 0..t.n {
+            let labelled = t.vertices[v].labelled;
             for (c, leg) in self.legs.iter().enumerate() {
                 let role = match leg.flow {
                     None => Role::Leg,
                     Some(Flow::Sink) => Role::LegIn,
                     Some(Flow::Source) => Role::LegOut,
                 };
-                for _ in 0..model.legs.count(t.vertices[v].legs, c) {
+                for _ in 0..model.legs.count(labelled, c) {
                     let h = hedges.len() as u32;
                     hedges.push(RawHedge {
                         node: v as u32,
@@ -777,9 +789,10 @@ impl Run {
     }
 }
 
-/// Subtrees per thread in a parallel search; a window of [`WINDOW_PER_THREAD`] per thread runs
-/// at once, each buffering at most [`AHEAD`] diagrams before it is the oldest.
-const TASKS_PER_THREAD: usize = 64;
+/// Subtrees per thread a parallel search starts from (splitting balances the rest); a window of
+/// [`WINDOW_PER_THREAD`] per thread runs at once, each buffering at most [`AHEAD`] diagrams before
+/// it is the oldest.
+const TASKS_PER_THREAD: usize = 8;
 const WINDOW_PER_THREAD: usize = 16;
 const AHEAD: usize = 1024;
 
@@ -803,16 +816,33 @@ impl<F: Clone + Ord + Sync, L: Clone + Ord + Sync> Slot<F, L> {
         }
     }
 
-    /// Search until [`AHEAD`] diagrams are buffered or the subtree is exhausted.
-    fn advance(&mut self, cx: &RunContext<'_, F, L>) {
-        if self.done || self.diagrams.len() >= AHEAD {
+    /// Whether a step of the window that buffers up to `ahead` diagrams advances it.
+    fn active(&self, ahead: usize) -> bool {
+        !self.done && self.diagrams.len() < ahead
+    }
+
+    /// Hand the rest of the running search's shallowest unfinished level to new subtrees, which
+    /// come right after this one in the output.
+    fn split(&mut self, cx: &RunContext<'_, F, L>) -> Vec<Topology> {
+        let Some(run) = &mut self.run else {
+            return vec![];
+        };
+        let mut scratch = Scratch::take();
+        let split = run.search.split(&cx.search(), &mut scratch.search);
+        scratch.give();
+        split
+    }
+
+    /// Search until `ahead` diagrams are buffered or the subtree is exhausted.
+    fn advance(&mut self, cx: &RunContext<'_, F, L>, ahead: usize) {
+        if !self.active(ahead) {
             return;
         }
         let run = self.run.get_or_insert_with(|| {
             let task = self.task.take().expect("an unstarted slot has its task");
             Run::new(&cx.compiled.model, task, Scratch::take())
         });
-        while self.diagrams.len() < AHEAD {
+        while self.diagrams.len() < ahead {
             let Some(diagram) = run.next(cx, &mut || self.topologies += 1) else {
                 self.done = true;
                 self.run.take().expect("running").into_scratch().give();
@@ -837,6 +867,9 @@ pub struct Diagrams<'g, F, L> {
     /// order, and diagrams of finished ones not emitted yet.
     tasks: VecDeque<Topology>,
     window: VecDeque<Slot<F, L>>,
+    /// Whether the next step runs only the oldest subtree, up to its first diagram: the first step,
+    /// so that the first graph does not wait for a step of the whole window.
+    alone: bool,
     ready: VecDeque<Diagram<F, L>>,
     stop: AtomicBool,
     progress: Progress,
@@ -922,13 +955,7 @@ where
                     return vec![item];
                 }
                 let mut scratch = Scratch::take();
-                let buffers = std::mem::take(&mut scratch.search);
-                let mut search = Search::children(cx.model, item, buffers);
-                let mut children = vec![];
-                while search.next(&cx) {
-                    children.push(search.topology().clone());
-                }
-                scratch.search = search.into_buffers();
+                let children = Search::children(&cx, item, 0, &mut scratch.search);
                 scratch.give();
                 children
             });
@@ -951,15 +978,43 @@ where
             return false;
         }
         let cx = RunContext::new(self.generator, &self.compiled, &self.current, &self.stop);
-        #[cfg(feature = "rayon")]
-        {
-            use rayon::prelude::*;
+        // until the first diagram is out, a step buffers one diagram per subtree
+        let ahead = if self.progress.diagrams == 0 {
+            1
+        } else {
+            AHEAD
+        };
+        if std::mem::take(&mut self.alone) {
+            self.window[0].advance(&cx, ahead);
+        } else {
+            // a subtree that holds the output back runs alone: split the rest of the running
+            // searches, oldest first, until every thread has a subtree that is neither finished nor
+            // full, or the window is full (each slot buffers diagrams; the last split may add the
+            // children of one level beyond it)
+            let threads = self.threads();
+            let mut i = 0;
+            while i < self.window.len()
+                && self.window.len() < window
+                && self.window.iter().filter(|slot| slot.active(AHEAD)).count() < threads
+            {
+                let split = self.window[i].split(&cx);
+                i += 1;
+                for (k, task) in split.into_iter().enumerate() {
+                    self.window.insert(i + k, Slot::new(task));
+                }
+            }
+            #[cfg(feature = "rayon")]
+            {
+                use rayon::prelude::*;
+                self.window
+                    .par_iter_mut()
+                    .for_each(|slot| slot.advance(&cx, ahead));
+            }
+            #[cfg(not(feature = "rayon"))]
             self.window
-                .par_iter_mut()
-                .for_each(|slot| slot.advance(&cx));
+                .iter_mut()
+                .for_each(|slot| slot.advance(&cx, ahead));
         }
-        #[cfg(not(feature = "rayon"))]
-        self.window.iter_mut().for_each(|slot| slot.advance(&cx));
         while let Some(oldest) = self.window.front_mut() {
             self.ready.extend(oldest.diagrams.drain(..));
             let topologies = std::mem::take(&mut oldest.topologies);

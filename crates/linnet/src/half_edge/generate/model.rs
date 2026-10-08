@@ -6,6 +6,10 @@
 //! vertex degree into one `u128` key, looked up in two tables built from the signatures: every
 //! sub-multiset of a signature of degree `d` (partial vertices that can still be completed) and
 //! every full signature (the vertex rules with exactly these stubs).
+//!
+//! External legs are packed by label class (interchangeable legs: equal label and stub) on complete
+//! topologies, and by slot class while the topology search places them, where distinct labels with
+//! a common stub can share an anonymous class.
 
 use ahash::{AHashMap, AHashSet};
 
@@ -105,7 +109,7 @@ pub(crate) struct Legs {
 }
 
 impl Legs {
-    fn new(classes: &[(u8, u8)]) -> Result<Self, GenerationError> {
+    pub(crate) fn new(classes: &[(u8, u8)]) -> Result<Self, GenerationError> {
         let mut legs = Legs::default();
         let mut offset = 0u32;
         for &(stub, mult) in classes {
@@ -136,6 +140,20 @@ impl Legs {
         1 << self.offset[class]
     }
 
+    /// Adding the legs `add` to `used` stays within `total`, class by class.
+    pub(crate) fn fits(&self, used: u64, add: u64, total: u64) -> bool {
+        (0..self.n_classes()).all(|c| {
+            self.count(used, c) as u32 + self.count(add, c) as u32 <= self.count(total, c) as u32
+        })
+    }
+
+    /// Number of legs in `packed`.
+    pub(crate) fn size(&self, packed: u64) -> u32 {
+        (0..self.n_classes())
+            .map(|c| self.count(packed, c) as u32)
+            .sum()
+    }
+
     /// Every sub-multiset of `packed` with at most `max_len` legs, with its size.
     pub(crate) fn subsets(&self, packed: u64, max_len: u32, out: &mut Vec<(u64, u32)>) {
         out.clear();
@@ -161,7 +179,17 @@ pub(crate) struct Model {
     exact: AHashMap<u128, Vec<u32>>,
     pub(crate) labels: Vec<Label>,
     pub(crate) loop_labels: Vec<LoopLabel>,
+    /// The external legs by label class, as complete topologies carry them.
     pub(crate) legs: Legs,
+    /// The external legs as the topology search places them: three or more label classes of
+    /// multiplicity one with a common stub form one anonymous slot class, whose labels are assigned
+    /// once the topology is shaped; every other label class is its own slot class. With two such
+    /// legs, labelling costs about what the symmetric topologies save.
+    pub(crate) slots: Legs,
+    /// Per slot class: its label class, `None` for an anonymous one.
+    slot_labels: Vec<Option<usize>>,
+    /// The labels of anonymous slots in assignment order: `(slot class, label class)`.
+    pub(crate) labelling: Vec<(usize, usize)>,
     /// Every vertex has at most one rule for its stubs.
     pub(crate) unique_rules: bool,
 }
@@ -260,6 +288,34 @@ impl Model {
             }
         }
         let unique_rules = exact.values().all(|rules| rules.len() == 1);
+        // slot classes in the order of their first label class
+        let anonymous = |&(stub, mult): &(u8, u8)| {
+            mult == 1 && legs.iter().filter(|&&other| other == (stub, 1)).count() > 2
+        };
+        let mut slots: Vec<(u8, u8)> = vec![];
+        let mut slot_labels = vec![];
+        let mut labelling = vec![];
+        for (c, class) in legs.iter().enumerate() {
+            if !anonymous(class) {
+                slots.push(*class);
+                slot_labels.push(Some(c));
+                continue;
+            }
+            let s = match (0..slots.len())
+                .find(|&s| slot_labels[s].is_none() && slots[s].0 == class.0)
+            {
+                Some(s) => {
+                    slots[s].1 += 1;
+                    s
+                }
+                None => {
+                    slots.push(*class);
+                    slot_labels.push(None);
+                    slots.len() - 1
+                }
+            };
+            labelling.push((s, c));
+        }
         Ok(Model {
             degrees,
             partial,
@@ -267,8 +323,31 @@ impl Model {
             labels,
             loop_labels,
             legs: Legs::new(legs)?,
+            slots: Legs::new(&slots)?,
+            slot_labels,
+            labelling,
             unique_rules,
         })
+    }
+
+    /// The legs of the labelled slot classes in `slots` (packed by slot class), packed by label
+    /// class.
+    pub(crate) fn labelled(&self, slots: u64) -> u64 {
+        self.slot_labels
+            .iter()
+            .enumerate()
+            .filter_map(|(s, c)| Some(self.slots.count(slots, s) as u64 * self.legs.one((*c)?)))
+            .sum()
+    }
+
+    /// The legs of the anonymous slot classes in `slots`.
+    pub(crate) fn anonymous(&self, slots: u64) -> u64 {
+        self.slot_labels
+            .iter()
+            .enumerate()
+            .filter(|(_, c)| c.is_none())
+            .map(|(s, _)| self.slots.count(slots, s) as u64 * self.slots.one(s))
+            .sum()
     }
 
     /// The stubs fit into some signature of their degree.
@@ -281,18 +360,20 @@ impl Model {
         self.exact.get(&stubs.key()).map_or(&[], Vec::as_slice)
     }
 
-    /// The legs in `packed` fit at a vertex of this degree.
-    pub(crate) fn legs_fit(&self, degree: u8, packed: u64) -> bool {
-        if packed == 0 {
-            return true;
-        }
+    /// The legs in `slots` (packed by slot class) fit at a vertex of this degree.
+    pub(crate) fn legs_fit(&self, degree: u8, slots: u64) -> bool {
+        slots == 0 || self.feasible(&self.leg_stubs(degree, slots))
+    }
+
+    /// The stubs of the legs in `slots` at a vertex of this degree.
+    pub(crate) fn leg_stubs(&self, degree: u8, slots: u64) -> StubSet {
         let mut stubs = StubSet::new(degree);
-        for c in 0..self.legs.n_classes() {
-            for _ in 0..self.legs.count(packed, c) {
-                stubs.insert(self.legs.stub[c]);
+        for c in 0..self.slots.n_classes() {
+            for _ in 0..self.slots.count(slots, c) {
+                stubs.insert(self.slots.stub[c]);
             }
         }
-        self.feasible(&stubs)
+        stubs
     }
 
     /// Edges can take only one label and vertices one rule: a topology has one diagram.
