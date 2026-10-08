@@ -12,9 +12,18 @@ python -m pip install "maturin>=1.13,<2"
 maturin develop --locked --manifest-path examples/notebooks/symbolica-host/Cargo.toml
 ```
 
+The standalone `linnet-py` distribution provides the same graphs without Symbolica as
+`linnet_py`; import from `linnet_py` instead of `symbolica.community.graph` in the examples
+below. Only the Community module accepts Symbolica expressions as graph keys.
+
+// docs-example: syntax
+```sh
+python -m pip install ./crates/linnet-py
+```
+
 Ordinary drawings use native SVG, with the embedded Rust Typst compiler supplying labels.
-Advanced templates use the full Typst pipeline. No separate Python Linnet or Typst package or
-external Typst executable is required.
+Advanced templates use the full Typst pipeline. No separate Typst package or external Typst
+executable is required.
 
 == Construct a graph
 

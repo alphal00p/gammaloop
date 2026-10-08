@@ -93,7 +93,7 @@ impl<E, V, H> GraphExpressions<E, V> for HedgeGraph<E, V, H> {
         is_dummy: impl Fn(&E) -> bool,
     ) -> Atom {
         let mut numerator = Atom::one();
-        let mut seen: SubSet<NodeIndex> = SubSet::empty(self.n_nodes());
+        let mut seen: SubSet<NodeIndex> = SubSet::empty(self.node_bound());
         for (node, _, _) in self.iter_nodes_of(without) {
             seen.add(node);
         }

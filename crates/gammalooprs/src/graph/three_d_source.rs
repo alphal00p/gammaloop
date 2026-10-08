@@ -2571,7 +2571,7 @@ impl<'a> GraphThreeDSource<'a> {
         // Denominators absent from this additive 4D term are contracted only
         // in the source topology. The typed atom remains untouched and keeps
         // exact multiplicity and denominator expressions.
-        let mut parent = (0..self.graph.n_nodes()).collect_vec();
+        let mut parent = (0..self.graph.node_bound()).collect_vec();
         for (pair, edge_id, edge_data) in self.graph.underlying.iter_edges() {
             if edge_data.data.is_dummy || !self.contracts_edge(edge_id) {
                 continue;
@@ -2687,7 +2687,7 @@ impl<'a> GraphThreeDSource<'a> {
             .filter(|(_, (uses_uv_loop_basis, _, _, _, _))| *uses_uv_loop_basis)
             .map(|(source_edge, _)| *source_edge)
             .collect::<BTreeSet<_>>();
-        let mut uv_parent = (0..self.graph.n_nodes()).collect_vec();
+        let mut uv_parent = (0..self.graph.node_bound()).collect_vec();
         for (pair, edge_id, edge) in self.graph.underlying.iter_edges() {
             if edge.data.is_dummy
                 || !self.uv_edges.contains(&edge_id)
@@ -3229,7 +3229,7 @@ impl ThreeDGraphSource for GraphThreeDSource<'_> {
         // Keep contraction virtual here: linnet graph contraction mutates/deletes
         // edges, while the CFF expression must still map back to the original
         // EdgeIndex values used by GammaLoop's energy and surface caches.
-        let mut parent = (0..self.graph.n_nodes()).collect_vec();
+        let mut parent = (0..self.graph.node_bound()).collect_vec();
         for (pair, edge_id, edge_data) in self.graph.underlying.iter_edges() {
             if edge_data.data.is_dummy || !self.contracts_edge(edge_id) {
                 continue;

@@ -4,7 +4,7 @@ use cgmath::Point2;
 
 use crate::half_edge::{
     involution::{EdgeIndex, EdgeVec, HedgePair},
-    nodestore::NodeStorageOps,
+    nodestore::Topology,
     subgraph::SubSetLike,
     HedgeGraph, NodeIndex, NodeVec,
 };
@@ -128,7 +128,7 @@ struct SameRankEdge {
     sink: NodeIndex,
 }
 
-impl<E, V, H, N: NodeStorageOps<NodeData = V>> HedgeGraph<E, V, H, N> {
+impl<E, V, H, N: Topology> HedgeGraph<E, V, H, N> {
     pub fn layered_layout<S: SubSetLike>(
         &self,
         subgraph: &S,
@@ -206,7 +206,7 @@ impl<E, V, H, N: NodeStorageOps<NodeData = V>> HedgeGraph<E, V, H, N> {
         included: &NodeVec<bool>,
         roots: &[NodeIndex],
     ) -> Vec<NodeIndex> {
-        let mut seen = vec![false; self.n_nodes()];
+        let mut seen = vec![false; self.node_bound()];
         let mut nodes = Vec::new();
 
         for &root in roots {
@@ -227,7 +227,7 @@ impl<E, V, H, N: NodeStorageOps<NodeData = V>> HedgeGraph<E, V, H, N> {
     }
 
     fn layered_order_positions(&self, ordered_nodes: &[NodeIndex]) -> Vec<usize> {
-        let mut order = vec![usize::MAX; self.n_nodes()];
+        let mut order = vec![usize::MAX; self.node_bound()];
         for (position, &node) in ordered_nodes.iter().enumerate() {
             order[node.0] = position;
         }
@@ -292,7 +292,7 @@ impl<E, V, H, N: NodeStorageOps<NodeData = V>> HedgeGraph<E, V, H, N> {
         let mut merged: Vec<_> = (0..groups.len()).collect();
         for (group_index, group) in groups.iter().enumerate() {
             for &node in group {
-                if node.0 < self.n_nodes() && included[node] {
+                if node.0 < self.node_bound() && included[node] {
                     // Same-rank constraints are transitive across overlapping groups.
                     if let Some(previous) = group_by_node[node] {
                         let current_root = find_disjoint_root(&mut merged, group_index);
@@ -461,9 +461,9 @@ impl<E, V, H, N: NodeStorageOps<NodeData = V>> HedgeGraph<E, V, H, N> {
         selected_edges: &[LayoutEdge],
         ranks: &NodeVec<usize>,
     ) -> Vec<f64> {
-        let mut children = vec![Vec::<NodeIndex>::new(); self.n_nodes()];
-        let mut has_parent = vec![false; self.n_nodes()];
-        let mut forest_parent = (0..self.n_nodes()).collect::<Vec<_>>();
+        let mut children = vec![Vec::<NodeIndex>::new(); self.node_bound()];
+        let mut has_parent = vec![false; self.node_bound()];
+        let mut forest_parent = (0..self.node_bound()).collect::<Vec<_>>();
         let mut candidates = Vec::<(NodeIndex, NodeIndex)>::new();
         for edge in selected_edges {
             if ranks[edge.source] == ranks[edge.sink] {
@@ -503,8 +503,8 @@ impl<E, V, H, N: NodeStorageOps<NodeData = V>> HedgeGraph<E, V, H, N> {
             node_children.dedup();
         }
 
-        let mut seen = vec![false; self.n_nodes()];
-        let mut hierarchy_order = vec![f64::INFINITY; self.n_nodes()];
+        let mut seen = vec![false; self.node_bound()];
+        let mut hierarchy_order = vec![f64::INFINITY; self.node_bound()];
         let mut next = 0usize;
         for &root in ordered_nodes {
             if !has_parent[root.0] {
@@ -556,7 +556,7 @@ impl<E, V, H, N: NodeStorageOps<NodeData = V>> HedgeGraph<E, V, H, N> {
     }
 }
 
-struct LayeredWorkspace<'a, E, V, H, N: NodeStorageOps<NodeData = V>> {
+struct LayeredWorkspace<'a, E, V, H, N: Topology> {
     graph: &'a HedgeGraph<E, V, H, N>,
     config: &'a LayeredConfig,
     geometry: &'a LayeredGeometry,
@@ -568,7 +568,7 @@ struct LayeredWorkspace<'a, E, V, H, N: NodeStorageOps<NodeData = V>> {
     neighbors: Vec<Vec<(usize, f64)>>,
 }
 
-impl<'a, E, V, H, N: NodeStorageOps<NodeData = V>> LayeredWorkspace<'a, E, V, H, N> {
+impl<'a, E, V, H, N: Topology> LayeredWorkspace<'a, E, V, H, N> {
     #[allow(clippy::too_many_arguments)]
     fn new(
         graph: &'a HedgeGraph<E, V, H, N>,
@@ -591,7 +591,7 @@ impl<'a, E, V, H, N: NodeStorageOps<NodeData = V>> LayeredWorkspace<'a, E, V, H,
             geometry,
             layers: vec![Vec::new(); Self::real_layer(max_rank) + 2],
             items: Vec::new(),
-            node_items: vec![None; graph.n_nodes()],
+            node_items: vec![None; graph.node_bound()],
             edge_paths: (0..graph.n_edges()).map(|_| Vec::new()).collect(),
             edge_weights: (0..graph.n_edges()).map(|_| 0.0).collect(),
             neighbors: Vec::new(),

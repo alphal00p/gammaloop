@@ -40,11 +40,12 @@ Cargo features enable optional capabilities:
 An item shown in an all-features API reference may not be available in a default build. Check
 its required feature and your `Cargo.toml` before using it.
 
-== Community graph bindings
+== Python bindings
 
-The `linnet-py` binding library owns `symbolica.community.graph`. Install the complete
-Symbolica Community wheel to use its builders, live graph views, subgraphs, DOT codecs,
-layout streams, graph algorithms, and rendering. There is no separate Linnet Python wheel.
+The `linnet-py` binding library owns `symbolica.community.graph`, with builders, live graph
+views, subgraphs, DOT codecs, layout streams, graph algorithms, and rendering. Install the
+complete Symbolica Community wheel, or the standalone `linnet-py` wheel, which provides the same
+bindings as `linnet_py` without Symbolica expressions as graph keys.
 
 `RenderSettings` combines drawing options, layout sequences, selectors, templates, and
 export configuration. `LayoutSettings`, `Stroke`, and `DiagramRender` are shared by graphs,
@@ -67,10 +68,28 @@ and file exports reuse the snapshot, even after later graph or settings mutation
 HepKit's physics-specific options live in `DiagramStyle`, passed separately as `style`.
 For multipage renders, use `to_svg_pages()`; `to_svg()` requires exactly one page.
 
-`Graph.generate()` takes `EdgeSignature` values and returns graph/group-size pairs.
-`HalfEdge` describes an endpoint; `HalfEdgeView` accesses a live incidence. Canonicalization and isomorphism compare expression-compatible
-payloads; use `node_key`, `edge_key`, and `half_edge_key` for custom data. Canonicalization
-preserves payload references and drawing metadata, which does not affect equivalence.
+`Graph.generate()` runs Linnet's native generator on `EdgeSignature` slots, whose fields and leg
+labels are hashable keys like canonization keys, and streams `(graph, symmetry factor)` pairs in
+depth-first order: nodes carry their signature index, edges their field, and each external leg is
+a dangling half-edge labelled by its leg label. Its `filter_fn` prunes the search through
+`GenerationView`s of partial topologies, partial field assignments and complete graphs; it must be
+hereditary within each stage, rejecting every completion of a state it rejects. The search runs
+without the GIL; `filter_fn` and `progress_fn` take it only while they run.
+`HalfEdge` describes an endpoint; `HalfEdgeView` accesses a live incidence. Canonicalization and
+isomorphism run Linnet's native canonizer on the payloads, or on what `node_key`, `edge_key`,
+and `half_edge_key` return for them. Keys must be hashable. Distinct keys sort by kind: `None`,
+numbers (`numbers.Real`, NaN rejected), strings, bytes, tuples (element-wise) and Symbolica
+expressions, then other values. Keys of different kinds never compare equal, so `Decimal(1)` or
+`1+0j` differ from `1`. Within a kind keys compare by Python equality and order by `<`, except
+expressions, which compare and order structurally, and other values, which order by type name and
+`repr`. Canonical forms need that `repr` to be the same for equal keys and to differ for distinct
+ones, so `canonize` rejects other keys whose `repr` violates this within a call or is the default
+address-based one; a custom `repr` that embeds addresses, like a function's, goes undetected.
+`is_isomorphic` only needs equality. Canonicalization preserves payload references and drawing
+metadata, which does not affect equivalence; group orders beyond 128 bits raise `OverflowError`.
+The stored source/sink roles of undirected edges never affect `canonize` or `is_isomorphic`;
+`canonize_edges` orders edges independently of them but keeps them. The automorphism-group
+size counts permutations of identical dangling half-edges at a node.
 
 == Python graph workflows
 

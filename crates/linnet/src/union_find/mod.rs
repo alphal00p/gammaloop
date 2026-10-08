@@ -53,7 +53,7 @@
 //! - `map_set_data_of(node: ParentPointer, f: F)`: Allows mutable access to the data
 //!   of `node`'s set.
 //! - `from_partition(partitions: Vec<(U, SubSet<ID>)>)`: Constructs a `UnionFind`
-//!   from a set of partitions defined by bitsets.
+//!   from a set of partitions defined by subsets.
 //!
 //! This data structure is commonly used in algorithms for graph connectivity,
 //! Kruskal's algorithm for minimum spanning trees, and other problems involving

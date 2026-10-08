@@ -1,4 +1,6 @@
 mod algorithms;
+mod generate;
+mod keys;
 use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::PathBuf;
@@ -6,6 +8,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 use linnet::half_edge::builder::{HedgeData, HedgeGraphBuilder};
 use linnet::half_edge::involution::{EdgeIndex, Flow, Hedge, HedgePair, Orientation};
+use linnet::half_edge::remap::{HedgeRemap, NodeRemap};
 use linnet::half_edge::swap::Swap;
 use linnet::half_edge::{EdgeAccessors, HedgeGraph, NodeIndex};
 use linnet::permutation::Permutation;
@@ -13,6 +16,7 @@ use pyo3::class::gc::{PyTraverseError, PyVisit};
 use pyo3::exceptions::{PyIndexError, PyKeyError, PyReferenceError, PyTypeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::{PyAny, PyDict, PyType};
+use pyo3::IntoPyObjectExt;
 
 use crate::dot::{self, PyDotCodec, PyEdgeValue, PyGlobalData, PyNodeValue};
 use crate::drawing::{
@@ -21,6 +25,10 @@ use crate::drawing::{
 };
 use crate::topology::{PyCutPartition, PyCycle, PyDirectionBasis, PySubgraph, PyTraversalTree};
 
+/// Python graphs compact every identification and never open topology
+/// checkpoints, so renumbering them cannot fail.
+pub(crate) const SETTLED: &str = "Python graphs keep no pending identifications";
+
 static SPEC_ID: AtomicU64 = AtomicU64::new(0);
 
 /// The directed role of a half-edge within its edge.
@@ -28,13 +36,9 @@ static SPEC_ID: AtomicU64 = AtomicU64::new(0);
     feature = "python_stubgen",
     pyo3_stub_gen::derive::gen_stub_pyclass_enum
 )]
-#[pyclass(
-    module = "symbolica.community.graph",
-    from_py_object,
-    eq,
-    eq_int,
-    name = "Flow"
-)]
+#[pyclass(from_py_object, eq, eq_int, name = "Flow")]
+#[cfg_attr(feature = "community", pyo3(module = "symbolica.community.graph"))]
+#[cfg_attr(not(feature = "community"), pyo3(module = "linnet_py"))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum PyFlow {
     Source,
@@ -64,13 +68,9 @@ impl From<Flow> for PyFlow {
     feature = "python_stubgen",
     pyo3_stub_gen::derive::gen_stub_pyclass_enum
 )]
-#[pyclass(
-    module = "symbolica.community.graph",
-    from_py_object,
-    eq,
-    eq_int,
-    name = "Orientation"
-)]
+#[pyclass(from_py_object, eq, eq_int, name = "Orientation")]
+#[cfg_attr(feature = "community", pyo3(module = "symbolica.community.graph"))]
+#[cfg_attr(not(feature = "community"), pyo3(module = "linnet_py"))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub enum PyOrientation {
     #[default]
@@ -101,7 +101,9 @@ impl From<Orientation> for PyOrientation {
 
 /// A reusable node description accepted by `Graph` and `Graph.add_node()`.
 #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
-#[pyclass(module = "symbolica.community.graph", unsendable, name = "Node")]
+#[pyclass(unsendable, name = "Node")]
+#[cfg_attr(feature = "community", pyo3(module = "symbolica.community.graph"))]
+#[cfg_attr(not(feature = "community"), pyo3(module = "linnet_py"))]
 pub struct PyNodeSpec {
     token: u64,
     name: Option<String>,
@@ -213,7 +215,9 @@ pub(crate) enum EndpointRole {
 
 /// A reusable incidence description whose role is chosen by its edge endpoint.
 #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
-#[pyclass(module = "symbolica.community.graph", unsendable, name = "HalfEdge")]
+#[pyclass(unsendable, name = "HalfEdge")]
+#[cfg_attr(feature = "community", pyo3(module = "symbolica.community.graph"))]
+#[cfg_attr(not(feature = "community"), pyo3(module = "linnet_py"))]
 pub struct PyHalfEdgeSpec {
     node: Option<Py<PyAny>>,
     data: Option<Py<PyAny>>,
@@ -307,7 +311,9 @@ impl PyHalfEdgeSpec {
 
 /// A reusable edge description accepted by `Graph` and `Graph.add_edge()`.
 #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
-#[pyclass(module = "symbolica.community.graph", unsendable, name = "Edge")]
+#[pyclass(unsendable, name = "Edge")]
+#[cfg_attr(feature = "community", pyo3(module = "symbolica.community.graph"))]
+#[cfg_attr(not(feature = "community"), pyo3(module = "linnet_py"))]
 pub struct PyEdgeSpec {
     name: Option<String>,
     source: Option<Py<PyHalfEdgeSpec>>,
@@ -510,6 +516,37 @@ impl GraphState {
         Ok(state)
     }
 
+    /// Move node `order[i]` to position `i`, keeping every payload with its element.
+    pub(crate) fn reorder_nodes(&mut self, order: Vec<usize>) -> PyResult<()> {
+        let order = checked_order(order, self.graph.node_bound(), "node")?;
+        (self.graph)
+            .permute_nodes(&NodeRemap::from_permutation(&Permutation::from_inv(order)))
+            .expect(SETTLED);
+        Ok(())
+    }
+
+    /// Move edge `order[i]` to position `i`, and its half-edges along, source first.
+    pub(crate) fn reorder_edges(&mut self, order: Vec<usize>) -> PyResult<()> {
+        let order = checked_order(order, self.graph.n_edges(), "edge")?;
+        let hedge_order = order
+            .iter()
+            .flat_map(|index| match self.graph[&EdgeIndex(*index)].1 {
+                HedgePair::Paired { source, sink } | HedgePair::Split { source, sink, .. } => {
+                    [Some(source.0), Some(sink.0)]
+                }
+                HedgePair::Unpaired { hedge, .. } => [Some(hedge.0), None],
+            })
+            .flatten()
+            .collect();
+        (self.graph)
+            .permute_hedges(&HedgeRemap::from_permutation(&Permutation::from_inv(
+                hedge_order,
+            )))
+            .expect(SETTLED);
+        <PyHedgeGraph as Swap<EdgeIndex>>::permute(&mut self.graph, &Permutation::from_inv(order));
+        Ok(())
+    }
+
     pub(crate) fn derived(&self, py: Python<'_>, graph: PyHedgeGraph) -> PyResult<Self> {
         Ok(Self {
             graph,
@@ -532,7 +569,9 @@ impl GraphState {
 /// graph = linnet.Graph(nodes=[linnet.Node("source"), linnet.Node("sink")])
 /// ```
 #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
-#[pyclass(module = "symbolica.community.graph", unsendable, name = "Graph")]
+#[pyclass(unsendable, name = "Graph")]
+#[cfg_attr(feature = "community", pyo3(module = "symbolica.community.graph"))]
+#[cfg_attr(not(feature = "community"), pyo3(module = "linnet_py"))]
 pub struct PyGraph {
     pub(crate) state: RefCell<Option<GraphState>>,
 }
@@ -643,7 +682,7 @@ impl PyGraph {
             .as_ref()
             .ok_or_else(|| PyReferenceError::new_err("graph has been cleared"))?;
         if let Some(index) = index {
-            return (index < state.graph.n_nodes())
+            return (index < state.graph.node_bound())
                 .then_some(index)
                 .ok_or_else(|| PyIndexError::new_err("node index out of range"));
         }
@@ -725,7 +764,9 @@ macro_rules! graph_view {
     ($doc:literal, $rust:ident, $python:literal, $index_variant:ident) => {
         #[doc = $doc]
         #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
-        #[pyclass(module = "symbolica.community.graph", unsendable, name = $python)]
+        #[pyclass(unsendable, name = $python)]
+        #[cfg_attr(feature = "community", pyo3(module = "symbolica.community.graph"))]
+        #[cfg_attr(not(feature = "community"), pyo3(module = "linnet_py"))]
         pub struct $rust {
             graph: Option<Py<PyGraph>>,
             index: usize,
@@ -1322,7 +1363,7 @@ impl PyGraph {
             .as_ref()
             .ok_or_else(|| PyReferenceError::new_err("graph has been cleared"))?
             .graph
-            .n_nodes())
+            .n_live())
     }
 
     #[getter]
@@ -1404,7 +1445,7 @@ impl PyGraph {
             .as_ref()
             .expect("checked")
             .graph
-            .n_nodes();
+            .node_bound();
         drop(graph);
         (0..len)
             .map(|index| Py::new(py, PyNode::new(slf.clone_ref(py), index, epoch)))
@@ -1450,8 +1491,7 @@ impl PyGraph {
         let state = state
             .as_mut()
             .ok_or_else(|| PyReferenceError::new_err("graph has been cleared"))?;
-        let order = checked_order(order, state.graph.n_nodes(), "node")?;
-        <PyHedgeGraph as Swap<NodeIndex>>::permute(&mut state.graph, &Permutation::from_inv(order));
+        state.reorder_nodes(order)?;
         state.revision += 1;
         state.element_epoch += 1;
         Ok(())
@@ -1462,22 +1502,7 @@ impl PyGraph {
         let state = state
             .as_mut()
             .ok_or_else(|| PyReferenceError::new_err("graph has been cleared"))?;
-        let order = checked_order(order, state.graph.n_edges(), "edge")?;
-        let hedge_order = order
-            .iter()
-            .flat_map(|index| match state.graph[&EdgeIndex(*index)].1 {
-                HedgePair::Paired { source, sink } | HedgePair::Split { source, sink, .. } => {
-                    [Some(source.0), Some(sink.0)]
-                }
-                HedgePair::Unpaired { hedge, .. } => [Some(hedge.0), None],
-            })
-            .flatten()
-            .collect();
-        <PyHedgeGraph as Swap<Hedge>>::permute(
-            &mut state.graph,
-            &Permutation::from_inv(hedge_order),
-        );
-        <PyHedgeGraph as Swap<EdgeIndex>>::permute(&mut state.graph, &Permutation::from_inv(order));
+        state.reorder_edges(order)?;
         state.revision += 1;
         state.element_epoch += 1;
         Ok(())
@@ -1546,7 +1571,7 @@ impl PyGraph {
             (state.revision, state.element_epoch, state.copy(py)?)
         };
 
-        for index in 0..mapped.graph.n_nodes() {
+        for index in 0..mapped.graph.node_bound() {
             if let Some(callback) = &node {
                 mapped.graph[NodeIndex(index)].data =
                     callback.call1(py, (view_for(py, &slf, epoch, ViewIndex::Node(index))?,))?;
@@ -2169,7 +2194,7 @@ impl PyGraph {
             .ok_or_else(|| PyReferenceError::new_err("graph has been cleared"))?;
         Ok(format!(
             "Graph(nodes={}, edges={}, half_edges={})",
-            state.graph.n_nodes(),
+            state.graph.n_live(),
             state.graph.n_edges(),
             state.graph.n_hedges(),
         ))
@@ -2333,6 +2358,49 @@ impl PyEdgeSpec {
 }
 
 impl PyGraph {
+    /// The Python graph of `graph`, its payloads converted to Python objects, with default
+    /// drawings and render configuration.
+    pub fn from_hedge_graph<E, V, H>(py: Python<'_>, graph: HedgeGraph<E, V, H>) -> PyResult<Self>
+    where
+        E: for<'py> IntoPyObject<'py>,
+        V: for<'py> IntoPyObject<'py>,
+        H: for<'py> IntoPyObject<'py>,
+    {
+        let graph = graph.map_result(
+            |_, _, data| {
+                Ok(NodeRecord {
+                    name: None,
+                    data: data.into_py_any(py)?,
+                    drawing: drawing_dict(py, NODE_FIELDS, None)?,
+                })
+            },
+            |_, _, _, _, edge| {
+                edge.map_result(|data| {
+                    Ok(EdgeRecord {
+                        name: None,
+                        data: data.into_py_any(py)?,
+                        drawing: drawing_dict(py, EDGE_FIELDS, None)?,
+                    })
+                })
+            },
+            |_, data| {
+                Ok::<_, PyErr>(HalfEdgeRecord {
+                    data: data.into_py_any(py)?,
+                    drawing: drawing_dict(py, HEDGE_FIELDS, None)?,
+                })
+            },
+        )?;
+        Ok(Self::from_state(GraphState {
+            graph,
+            name: None,
+            global_data: PyGlobalData::default(),
+            codec: None,
+            render_config: crate::typst::default_render_config(py)?,
+            revision: 0,
+            element_epoch: 0,
+        }))
+    }
+
     fn from_specs(
         py: Python<'_>,
         mut nodes: Vec<Py<PyNodeSpec>>,
@@ -2501,7 +2569,7 @@ pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<PyHalfEdgeSpec>()?;
     module.add_class::<PyEdgeSpec>()?;
     module.add_class::<PyGraph>()?;
-    module.add_class::<algorithms::PyEdgeSignature>()?;
+    generate::register(module)?;
     module.add_class::<PyNode>()?;
     module.add_class::<PyEdge>()?;
     module.add_class::<PyHalfEdge>()?;

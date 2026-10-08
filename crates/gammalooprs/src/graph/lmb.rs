@@ -1750,7 +1750,7 @@ pub mod test {
             &shrunken,
             &g.underlying[g.node_id(root)],
         );
-        contracted.forget_identification_history();
+        contracted.compact();
         let surviving_crown = contracted.full_crown(&remainder);
         assert_eq!(
             surviving_crown.included_iter().collect::<Vec<_>>(),

@@ -3553,7 +3553,7 @@ where
     if profile::enabled() {
         eprintln!(
             "spenso_profile execute.plan graph_nodes={} graph_hedges={} ignored_hedges={} rerooted={} ready_batch={} batch_subgraph_hedges={}",
-            graph.graph.n_nodes(),
+            graph.graph.n_live(),
             graph.graph.n_hedges(),
             ignored.n_included(),
             rerooted,

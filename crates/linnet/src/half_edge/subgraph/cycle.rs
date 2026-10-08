@@ -3,7 +3,7 @@ use std::{num::TryFromIntError, ops::Add};
 use ahash::AHashSet;
 
 use crate::half_edge::{
-    nodestore::NodeStorageOps,
+    nodestore::Topology,
     subgraph::{ModifySubSet, SuBitGraph, SubSetLike, SubSetOps},
     Hedge, HedgeGraph, PowersetIterator,
 };
@@ -28,7 +28,7 @@ pub struct SignedCycle {
 }
 
 impl SignedCycle {
-    pub fn from_cycle<V, E, H, N: NodeStorageOps<NodeData = V>>(
+    pub fn from_cycle<V, E, H, N: Topology>(
         cycle: &Cycle,
         according_to: Hedge,
         graph: &HedgeGraph<E, V, H, N>,
@@ -86,7 +86,7 @@ pub struct Cycle {
     pub loop_count: Option<usize>,
 }
 impl Cycle {
-    pub fn internal_graph<E, V, H, N: NodeStorageOps<NodeData = V>>(
+    pub fn internal_graph<E, V, H, N: Topology>(
         self,
         graph: &HedgeGraph<E, V, H, N>,
     ) -> InternalSubGraph {
@@ -98,10 +98,7 @@ impl Cycle {
             loop_count: None,
         }
     }
-    pub fn is_circuit<E, V, H, N: NodeStorageOps<NodeData = V>>(
-        &self,
-        graph: &HedgeGraph<E, V, H, N>,
-    ) -> bool {
+    pub fn is_circuit<E, V, H, N: Topology>(&self, graph: &HedgeGraph<E, V, H, N>) -> bool {
         for (_, c, _) in graph.iter_nodes_of(&self.filter) {
             let adgacent = c.filter(|a| self.filter.includes(a));
             let count = adgacent.count();
@@ -114,7 +111,7 @@ impl Cycle {
         }
         true
     }
-    pub fn new_circuit<E, V, H, N: NodeStorageOps<NodeData = V>>(
+    pub fn new_circuit<E, V, H, N: Topology>(
         filter: SuBitGraph,
         graph: &HedgeGraph<E, V, H, N>,
     ) -> Option<Self> {
@@ -128,7 +125,7 @@ impl Cycle {
             None
         }
     }
-    pub fn new<E, V, H, N: NodeStorageOps<NodeData = V>>(
+    pub fn new<E, V, H, N: Topology>(
         filter: SuBitGraph,
         graph: &HedgeGraph<E, V, H, N>,
     ) -> Option<Self> {

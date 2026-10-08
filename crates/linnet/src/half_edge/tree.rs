@@ -15,7 +15,7 @@ use super::{
     subgraph::{
         cycle::SignedCycle, Cycle, Inclusion, InternalSubGraph, ModifySubSet, SubSetLike, SubSetOps,
     },
-    HedgeGraph, HedgeGraphError, NodeIndex, NodeStorageOps,
+    HedgeGraph, HedgeGraphError, NodeIndex, Topology,
 };
 
 // pub struct HedgeTree<V, P: ForestNodeStore<NodeData = ()>, E> {
@@ -35,7 +35,7 @@ use super::{
 //     'a,
 //     E,
 //     V,
-//     N: NodeStorage<NodeData = V>,
+//     N: Topology,
 //     P: ForestNodeStore<NodeData = ()>,
 // > {
 //     graph: &'a HedgeGraph<E, V, N>,
@@ -527,10 +527,7 @@ impl<P: ForestNodeStore<NodeData = ()>> SimpleTraversalTree<P> {
         }
     }
 
-    pub fn dot<E, V, H, N: NodeStorageOps<NodeData = V>>(
-        &self,
-        graph: &HedgeGraph<E, V, H, N>,
-    ) -> String {
+    pub fn dot<E, V, H, N: Topology>(&self, graph: &HedgeGraph<E, V, H, N>) -> String {
         let mut structure = graph.just_structure();
         structure.align_superficial_to_tree(self);
 
@@ -622,7 +619,7 @@ impl<P: ForestNodeStore<NodeData = ()>> SimpleTraversalTree<P> {
 }
 
 impl SimpleTraversalTree {
-    pub fn empty<E, V, H, N: NodeStorageOps<NodeData = V>>(graph: &HedgeGraph<E, V, H, N>) -> Self {
+    pub fn empty<E, V, H, N: Topology>(graph: &HedgeGraph<E, V, H, N>) -> Self {
         let forest = graph.node_store.to_forest(|_| TTRoot::None);
         SimpleTraversalTree {
             forest,
@@ -634,7 +631,7 @@ impl SimpleTraversalTree {
     //     self.forest.root()
     // }
 
-    pub fn depth_first_traverse<S: SubGraphLike, E, V, H, N: NodeStorageOps<NodeData = V>>(
+    pub fn depth_first_traverse<S: SubGraphLike, E, V, H, N: Topology>(
         graph: &HedgeGraph<E, V, H, N>,
         subgraph: &S,
         root_node: &NodeIndex,
@@ -703,7 +700,7 @@ impl SimpleTraversalTree {
         Ok(init)
     }
 
-    pub fn breadth_first_traverse<S: SubGraphLike, E, V, H, N: NodeStorageOps<NodeData = V>>(
+    pub fn breadth_first_traverse<S: SubGraphLike, E, V, H, N: Topology>(
         graph: &HedgeGraph<E, V, H, N>,
         subgraph: &S,
         root_node: &NodeIndex,
@@ -822,7 +819,7 @@ pub struct OwnedTraversalTree {
 //         leaves
 //     }
 
-//     pub fn leaf_nodes<V, N: NodeStorageOps<NodeData = V>, E>(
+//     pub fn leaf_nodes<V, N: Topology, E>(
 //         &self,
 //         graph: &HedgeGraph<E, V, N>,
 //     ) -> Vec<NodeIndex> {
@@ -848,7 +845,7 @@ pub struct OwnedTraversalTree {
 //         leaves.into_iter().collect()
 //     }
 
-//     pub fn child_nodes<V, N: NodeStorageOps<NodeData = V>, E>(
+//     pub fn child_nodes<V, N: Topology, E>(
 //         &self,
 //         parent: NodeIndex,
 //         graph: &HedgeGraph<E, V, N>,

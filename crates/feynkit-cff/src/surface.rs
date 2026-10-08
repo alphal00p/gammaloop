@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use linnet::half_edge::{
     HedgeGraph,
     involution::{Flow, HedgePair},
-    nodestore::NodeStorageOps,
+    nodestore::Topology,
     subgraph::{OrientedCut, SubGraphLike},
 };
 use serde::{Deserialize, Serialize};
@@ -298,7 +298,7 @@ impl EnergySurface {
         initial_state_cut: Option<&OrientedCut>,
     ) -> Result<Self, CffError>
     where
-        N: NodeStorageOps<NodeData = V>,
+        N: Topology,
         C: SubGraphLike,
         S: SubGraphLike,
     {

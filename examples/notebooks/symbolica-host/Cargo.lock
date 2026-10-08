@@ -353,7 +353,6 @@ checksum = "1bc2832c24239b0141d5674bb9174f9d68a8b5b3f2753311927c172ca46f7e9c"
 dependencies = [
  "funty",
  "radium",
- "serde",
  "tap",
  "wyz",
 ]
@@ -639,8 +638,6 @@ checksum = "c8d4a3bb8b1e0c1050499d1815f5ab16d04f0959b233085fb31653fbfc9d98f9"
 [[package]]
 name = "clarabel"
 version = "0.11.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d950c870fad4feed732bc3f7da489d223ba3911eac0522e6512eed7e659cfafe"
 dependencies = [
  "amd",
  "cfg-if",
@@ -653,7 +650,6 @@ dependencies = [
  "serde-big-array",
  "serde_json",
  "thiserror 1.0.69",
- "web-time",
 ]
 
 [[package]]
@@ -1770,7 +1766,7 @@ dependencies = [
 [[package]]
 name = "graphica"
 version = "3.0.1"
-source = "git+https://github.com/symbolica-dev/symbolica?branch=community#bbc2d73c70b46c3aced749d2fa668198f34a4b50"
+source = "git+https://github.com/symbolica-dev/symbolica?branch=community#ed2374f1d880d52c3a7ca48cd7c22f4baad5c020"
 dependencies = [
  "ahash 0.8.12",
  "dyn-clone",
@@ -2630,7 +2626,6 @@ dependencies = [
  "ahash 0.8.12",
  "bincode 2.0.1",
  "bincode-trait-derive",
- "bitvec",
  "cgmath",
  "clarabel",
  "dot-parser",
@@ -2666,6 +2661,7 @@ dependencies = [
  "pyo3-stub-gen-derive",
  "roxmltree 0.21.1",
  "rust-embed",
+ "self_cell",
  "serde",
  "serde_json",
  "symbolica",
@@ -2967,7 +2963,7 @@ dependencies = [
 [[package]]
 name = "numerica"
 version = "3.0.1"
-source = "git+https://github.com/symbolica-dev/symbolica?branch=community#bbc2d73c70b46c3aced749d2fa668198f34a4b50"
+source = "git+https://github.com/symbolica-dev/symbolica?branch=community#ed2374f1d880d52c3a7ca48cd7c22f4baad5c020"
 dependencies = [
  "ahash 0.8.12",
  "astro-float",
@@ -4420,7 +4416,6 @@ dependencies = [
  "append-only-vec",
  "bincode 2.0.1",
  "bincode-trait-derive",
- "bitvec",
  "blake3",
  "ciborium",
  "colored 3.1.1",
@@ -4604,7 +4599,7 @@ dependencies = [
 [[package]]
 name = "symbolica"
 version = "3.0.1"
-source = "git+https://github.com/symbolica-dev/symbolica?branch=community#bbc2d73c70b46c3aced749d2fa668198f34a4b50"
+source = "git+https://github.com/symbolica-dev/symbolica?branch=community#ed2374f1d880d52c3a7ca48cd7c22f4baad5c020"
 dependencies = [
  "ahash 0.8.12",
  "append-only-vec",
@@ -6147,16 +6142,6 @@ name = "web-sys"
 version = "0.3.97"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2eadbac71025cd7b0834f20d1fe8472e8495821b4e9801eb0a60bd1f19827602"
-dependencies = [
- "js-sys",
- "wasm-bindgen",
-]
-
-[[package]]
-name = "web-time"
-version = "0.2.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "aa30049b1c872b72c89866d458eae9f20380ab280ffd1b1e18df2d3e2d98cfe0"
 dependencies = [
  "js-sys",
  "wasm-bindgen",

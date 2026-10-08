@@ -130,6 +130,16 @@ impl VertexSet {
     }
 }
 
+impl FromIterator<usize> for VertexSet {
+    /// The set of the given vertices; panics on a vertex of 64 or more, which no view has.
+    fn from_iter<I: IntoIterator<Item = usize>>(vertices: I) -> Self {
+        VertexSet(vertices.into_iter().fold(0, |bits, v| {
+            assert!(v < 64, "vertex {v} is out of range");
+            bits | 1 << v
+        }))
+    }
+}
+
 impl<'a, F, L> GraphView<'a, F, L> {
     pub(super) fn new(compiled: &'a Compiled<F, L>, loops: usize, state: State<'a>) -> Self {
         GraphView {
@@ -226,8 +236,25 @@ impl<'a, F, L> GraphView<'a, F, L> {
         paired / 2 + 1 - t.n
     }
 
-    /// Independent cycles of the subgraph on the connected set `side`, such as the side of a
-    /// [`Bridge`].
+    /// Whether `side` is non-empty and connected by the edges placed so far.
+    pub fn is_connected(&self, side: VertexSet) -> bool {
+        let Some(first) = side.iter().next() else {
+            return false;
+        };
+        let (mut reached, mut stack) = (VertexSet(1 << first), vec![first]);
+        while let Some(u) = stack.pop() {
+            for v in side.iter() {
+                if !reached.contains(v) && self.multiplicity(u, v) > 0 {
+                    reached.0 |= 1 << v;
+                    stack.push(v);
+                }
+            }
+        }
+        reached == side
+    }
+
+    /// Independent cycles of the subgraph on the connected set `side` (see
+    /// [`is_connected`](Self::is_connected)), such as the side of a [`Bridge`].
     pub fn loops_in(&self, side: VertexSet) -> usize {
         let edges: usize = side
             .iter()

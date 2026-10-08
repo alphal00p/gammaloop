@@ -9,7 +9,7 @@ use super::{
     },
     subgraph::{ModifySubSet, SubSetLike},
     swap::Swap,
-    HedgeGraph, HedgeGraphError, NodeStorage,
+    HedgeGraph, HedgeGraphError, Topology,
 };
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -258,7 +258,7 @@ impl<T> SmartEdgeVec<T> {
         Ok(data)
     }
 
-    pub fn map_data<T2, V, N: NodeStorage<NodeData = V>>(
+    pub fn map_data<T2, N>(
         self,
         node_store: &N,
         mut edge_map: impl FnMut(
@@ -290,7 +290,7 @@ impl<T> SmartEdgeVec<T> {
             involution,
         }
     }
-    pub fn map_data_result<T2, V, N: NodeStorage<NodeData = V>, Err>(
+    pub fn map_data_result<T2, N, Err>(
         self,
         node_store: &N,
         mut edge_map: impl FnMut(
@@ -329,7 +329,7 @@ impl<T> SmartEdgeVec<T> {
         })
     }
 
-    pub fn map_data_ref<'a, T2, V, H, N: NodeStorage<NodeData = V>>(
+    pub fn map_data_ref<'a, T2, V, H, N: Topology>(
         &'a self,
         graph: &'a HedgeGraph<T, V, H, N>,
         mut edge_map: impl FnMut(
@@ -384,7 +384,7 @@ impl<T> SmartEdgeVec<T> {
         }
     }
 
-    pub fn map_data_ref_result<'a, T2, V, H, N: NodeStorage<NodeData = V>, Er>(
+    pub fn map_data_ref_result<'a, T2, V, H, N: Topology, Er>(
         &'a self,
         graph: &'a HedgeGraph<T, V, H, N>,
         mut edge_map: impl FnMut(

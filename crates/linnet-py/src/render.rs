@@ -158,7 +158,7 @@ fn apply_selectors(
     override_drawing: bool,
 ) -> PyResult<()> {
     let graph_ref = graph.borrow(py);
-    let (revision, element_epoch, node_count, edge_count, half_edge_count, half_edge_roles) = {
+    let (revision, element_epoch, node_bound, edge_count, half_edge_count, half_edge_roles) = {
         let state = graph_ref.state.borrow();
         let state = state
             .as_ref()
@@ -166,7 +166,7 @@ fn apply_selectors(
         (
             state.revision,
             state.element_epoch,
-            state.graph.n_nodes(),
+            state.graph.node_bound(),
             state.graph.n_edges(),
             state.graph.n_hedges(),
             (0..state.graph.n_hedges())
@@ -184,7 +184,7 @@ fn apply_selectors(
         py,
         selectors.node.as_ref(),
         &nodes,
-        (0..node_count).map(|index| {
+        (0..node_bound).map(|index| {
             Ok(Py::new(py, PyNode::new(graph.clone_ref(py), index, element_epoch))?.into_any())
         }),
         DrawingKind::Node,
@@ -978,18 +978,14 @@ mod tests {
     fn compiled_graph_inspection_preserves_native_drawing() {
         Python::initialize();
         Python::attach(|py| -> PyResult<()> {
-            let modules = py.import("sys")?.getattr("modules")?;
-            let symbolica = pyo3::types::PyModule::new(py, "symbolica")?;
-            let community = pyo3::types::PyModule::new(py, "symbolica.community")?;
-            symbolica.add("community", &community)?;
-            modules.set_item("symbolica", &symbolica)?;
-            modules.set_item("symbolica.community", &community)?;
-            let linnet = pyo3::types::PyModule::new(py, "symbolica.community.graph")?;
-            community.add("graph", &linnet)?;
+            let linnet = PyModule::new(py, crate::PythonModule::Standalone.name())?;
             crate::register(&linnet)?;
+            // The fixture imports the bindings from the suite's support module.
+            let support = PyModule::new(py, "linnet_under_test")?;
+            support.add("graph", linnet)?;
             py.import("sys")?
                 .getattr("modules")?
-                .set_item("symbolica.community.graph", &linnet)?;
+                .set_item("linnet_under_test", support)?;
             let source =
                 std::ffi::CString::new(include_str!("../tests/test_svg_interaction.py")).unwrap();
             let fixture = PyModule::from_code(

@@ -66,7 +66,7 @@ impl ProjectionSession {
         let nodes = id_keys(&seed["node_ids"], "node_ids")?;
         let anchors = id_keys(&seed["anchor_ids"], "anchor_ids")?;
         let graph: TypstGraph = serde_json::from_value(template.clone())?;
-        if nodes.keys().copied().ne(0..graph.n_nodes())
+        if nodes.keys().copied().ne(0..graph.node_bound())
             || anchors.keys().copied().ne(0..graph.n_edges())
         {
             return Err("seed IDs do not match graph topology".into());
@@ -507,20 +507,20 @@ impl TypstGraph {
             }
             edges.push(edge);
         }
-        Ok(json!({"vertices":(0..self.n_nodes()).collect::<Vec<_>>(), "edges":edges}))
+        Ok(json!({"vertices":(0..self.node_bound()).collect::<Vec<_>>(), "edges":edges}))
     }
 
     fn project_coordinates(&mut self, stage: CoordinateProjection) -> Result<()> {
         self.validate_layout()?;
         // Group references are user input: reject invalid targets before indexing.
-        for constraint in (0..self.n_nodes())
+        for constraint in (0..self.node_bound())
             .map(|i| self[crate::NodeIndex(i)].constraints)
             .chain((0..self.n_edges()).map(|i| self[EdgeIndex(i)].constraints))
         {
             for axis in [constraint.x, constraint.y] {
                 if let crate::Constraint::Grouped(reference, _) = axis {
                     let valid = match reference {
-                        crate::LayoutPointIndex::Node(node) => node.0 < self.n_nodes(),
+                        crate::LayoutPointIndex::Node(node) => node.0 < self.node_bound(),
                         crate::LayoutPointIndex::Edge(edge) => edge.0 < self.n_edges(),
                     };
                     if !valid {
@@ -559,7 +559,7 @@ impl ProjectionSession {
         let nodes = id_keys(&seed["node_ids"], "node_ids")?;
         let mut routes: BTreeMap<usize, Vec<String>> =
             serde_json::from_value(seed["routes"].clone())?;
-        if nodes.keys().copied().ne(0..graph.n_nodes())
+        if nodes.keys().copied().ne(0..graph.node_bound())
             || routes.keys().copied().ne(0..graph.n_edges())
         {
             return Err("seed IDs do not match physical graph topology".into());
@@ -753,7 +753,7 @@ impl ProjectionSession {
         graph.project_coordinates(CoordinateProjection::Proposal)?;
         let pair = |p: Point2<f64>| [p.x, p.y];
         let geometry = json!({
-            "nodes":(0..graph.n_nodes()).map(|i| pair(graph[crate::NodeIndex(i)].pos)).collect::<Vec<_>>(),
+            "nodes":(0..graph.node_bound()).map(|i| pair(graph[crate::NodeIndex(i)].pos)).collect::<Vec<_>>(),
             "edges":(0..graph.n_edges()).map(|i| pair(graph[EdgeIndex(i)].pos)).collect::<Vec<_>>(),
             "routes":(0..graph.n_hedges()).map(|i| graph[crate::Hedge(i)].route_points.iter().copied().map(pair).collect::<Vec<_>>()).collect::<Vec<_>>(),
         });
@@ -1028,7 +1028,7 @@ impl ProjectionSession {
         layout: &linnet::half_edge::layout::impred::ImpredLayout,
     ) -> Result<TypstGraph> {
         let mut graph: TypstGraph = serde_json::from_value(self.template.clone())?;
-        if layout.node_points.len() != graph.n_nodes()
+        if layout.node_points.len() != graph.node_bound()
             || layout.anchor_points.len() != graph.n_edges()
             || layout.routes.len() != graph.n_edges()
         {
@@ -1325,7 +1325,7 @@ mod tests {
         let mut statements = graph[EdgeIndex(0)].statements.clone();
         statements.insert("layout-label-gap".into(), "0".into());
         assert_eq!(imported[EdgeIndex(0)].statements, statements);
-        assert_eq!(imported.n_nodes(), graph.n_nodes());
+        assert_eq!(imported.n_live(), graph.n_live());
         assert_eq!(imported.n_edges(), graph.n_edges());
         layout.positions[layout.node_points[0]][0] += 1.0;
         assert!(session

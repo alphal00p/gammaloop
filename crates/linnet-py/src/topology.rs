@@ -22,13 +22,9 @@ use crate::graph::{PyEdge, PyGraph, PyHalfEdge, PyHedgeGraph, PyNode, PyOrientat
     feature = "python_stubgen",
     pyo3_stub_gen::derive::gen_stub_pyclass_enum
 )]
-#[pyclass(
-    module = "symbolica.community.graph",
-    from_py_object,
-    eq,
-    eq_int,
-    name = "DirectionBasis"
-)]
+#[pyclass(from_py_object, eq, eq_int, name = "DirectionBasis")]
+#[cfg_attr(feature = "community", pyo3(module = "symbolica.community.graph"))]
+#[cfg_attr(not(feature = "community"), pyo3(module = "linnet_py"))]
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum PyDirectionBasis {
     /// Follow the source/sink roles stored by the half-edge involution.
@@ -49,7 +45,9 @@ impl From<PyDirectionBasis> for DirectionBasis {
 
 /// A graph-bound structural selection.
 #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
-#[pyclass(module = "symbolica.community.graph", unsendable, name = "Subgraph")]
+#[pyclass(unsendable, name = "Subgraph")]
+#[cfg_attr(feature = "community", pyo3(module = "symbolica.community.graph"))]
+#[cfg_attr(not(feature = "community"), pyo3(module = "linnet_py"))]
 pub struct PySubgraph {
     graph: Option<Py<PyGraph>>,
     revision: u64,
@@ -210,7 +208,7 @@ impl PySubgraph {
         let graph = self.owner(py)?.borrow();
         let state = graph.state.borrow();
         let graph = &state.as_ref().expect("checked").graph;
-        if node >= graph.n_nodes() {
+        if node >= graph.node_bound() {
             return Err(PyIndexError::new_err("node index out of range"));
         }
         Ok(self.isolated_nodes.contains(&node)
@@ -441,7 +439,9 @@ impl PySubgraph {
 
 /// A cycle in a particular graph revision.
 #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
-#[pyclass(module = "symbolica.community.graph", unsendable, name = "Cycle")]
+#[pyclass(unsendable, name = "Cycle")]
+#[cfg_attr(feature = "community", pyo3(module = "symbolica.community.graph"))]
+#[cfg_attr(not(feature = "community"), pyo3(module = "linnet_py"))]
 pub struct PyCycle {
     graph: Option<Py<PyGraph>>,
     revision: u64,
@@ -511,7 +511,9 @@ impl PyCycle {
 
 /// An oriented cut in a particular graph revision.
 #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
-#[pyclass(module = "symbolica.community.graph", unsendable, name = "OrientedCut")]
+#[pyclass(unsendable, name = "OrientedCut")]
+#[cfg_attr(feature = "community", pyo3(module = "symbolica.community.graph"))]
+#[cfg_attr(not(feature = "community"), pyo3(module = "linnet_py"))]
 pub struct PyOrientedCut {
     graph: Option<Py<PyGraph>>,
     revision: u64,
@@ -545,11 +547,9 @@ impl PyOrientedCut {
 
 /// One source-side, oriented-boundary, target-side cut partition.
 #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
-#[pyclass(
-    module = "symbolica.community.graph",
-    unsendable,
-    name = "CutPartition"
-)]
+#[pyclass(unsendable, name = "CutPartition")]
+#[cfg_attr(feature = "community", pyo3(module = "symbolica.community.graph"))]
+#[cfg_attr(not(feature = "community"), pyo3(module = "linnet_py"))]
 pub struct PyCutPartition {
     graph: Option<Py<PyGraph>>,
     revision: u64,
@@ -757,11 +757,9 @@ impl PyOrientedCut {
 
 /// A graph-bound DFS or BFS traversal tree.
 #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
-#[pyclass(
-    module = "symbolica.community.graph",
-    unsendable,
-    name = "TraversalTree"
-)]
+#[pyclass(unsendable, name = "TraversalTree")]
+#[cfg_attr(feature = "community", pyo3(module = "symbolica.community.graph"))]
+#[cfg_attr(not(feature = "community"), pyo3(module = "linnet_py"))]
 pub struct PyTraversalTree {
     graph: Option<Py<PyGraph>>,
     revision: u64,

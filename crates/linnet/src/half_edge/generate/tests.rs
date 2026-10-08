@@ -8,7 +8,7 @@ use std::{
 
 use proptest::prelude::*;
 
-use super::{Diagram, GenerationError, GraphGenerator, GraphView, Stage, Stub};
+use super::{Diagram, GenerationError, GraphGenerator, GraphView, Stage, Stub, VertexSet};
 use crate::half_edge::{canon::Certificate, involution::HedgePair, HedgeGraph};
 
 /// Field codes of the test models.
@@ -634,9 +634,20 @@ fn check_view(view: &View<'_>, n_legs: usize) {
     assert_eq!(edges.len() + 1, n + view.loops());
     let graph = view.graph();
     assert_eq!((graph.n_nodes(), graph.n_edges()), (n, edges.len() + legs));
+    // the placed vertices are connected, pairs exactly when adjacent, the empty set never
+    assert!(n == 0 || view.is_connected((0..n).collect()));
+    assert!(!view.is_connected(VertexSet::default()));
+    for u in 0..n {
+        for v in u + 1..n {
+            let pair = [u, v].into_iter().collect();
+            assert_eq!(view.is_connected(pair), view.multiplicity(u, v) > 0);
+        }
+    }
     for bridge in view.bridges() {
         let [outside, inside] = bridge.ends;
         assert!(bridge.side.contains(inside) && !bridge.side.contains(outside));
+        assert_eq!(bridge.side.iter().collect::<VertexSet>(), bridge.side);
+        assert!(view.is_connected(bridge.side));
         assert!(bridge.side.iter().all(|v| view.open_stubs(v) == 0));
         // the bridge is the only edge leaving the side
         let leaving = |v| {

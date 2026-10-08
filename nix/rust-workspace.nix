@@ -800,6 +800,7 @@
     "gammaloop-tracing-filter" = ["clap" "symbolica"];
     idenso = ["reference-cases"];
     linnet = ["drawing" "symbolica"];
+    "linnet-py" = ["community"];
     spenso = ["shadowing"];
   };
 

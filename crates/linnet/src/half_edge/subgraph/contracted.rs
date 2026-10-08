@@ -2,7 +2,7 @@ use std::ops::{Range, RangeFrom, RangeInclusive, RangeTo, RangeToInclusive};
 
 use crate::half_edge::builder::HedgeNodeBuilder;
 use crate::half_edge::involution::HedgePair;
-use crate::half_edge::nodestore::NodeStorageOps;
+use crate::half_edge::nodestore::Topology;
 use crate::half_edge::subgraph::{SuBitGraph, SubGraphLike, SubGraphOps};
 use crate::half_edge::{Hedge, HedgeGraph};
 
@@ -122,10 +122,7 @@ impl Inclusion<RangeInclusive<Hedge>> for ContractedSubGraph {
     }
 }
 impl SubGraphLike for ContractedSubGraph {
-    fn nedges<E, V, H, N: NodeStorageOps<NodeData = V>>(
-        &self,
-        graph: &HedgeGraph<E, V, H, N>,
-    ) -> usize {
+    fn nedges<E, V, H, N: Topology>(&self, graph: &HedgeGraph<E, V, H, N>) -> usize {
         self.allhedges.nedges(graph)
     }
 }
@@ -187,10 +184,7 @@ impl SubSetLike for ContractedSubGraph {
 }
 
 impl SubGraphOps for ContractedSubGraph {
-    fn complement<E, V, H, N: NodeStorageOps<NodeData = V>>(
-        &self,
-        graph: &HedgeGraph<E, V, H, N>,
-    ) -> Self {
+    fn complement<E, V, H, N: Topology>(&self, graph: &HedgeGraph<E, V, H, N>) -> Self {
         let externalhedges =
             (!self.allhedges.clone()).intersection(&!self.internal_graph.filter.clone());
 

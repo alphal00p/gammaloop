@@ -2,7 +2,7 @@ use std::ops::{Range, RangeFrom, RangeInclusive, RangeTo, RangeToInclusive};
 
 use crate::half_edge::{
     involution::{Hedge, HedgePair},
-    nodestore::NodeStorageOps,
+    nodestore::Topology,
     subgraph::{SuBitGraph, SubGraphLike},
     HedgeGraph,
 };
@@ -211,10 +211,7 @@ impl Iterator for RangeHedgeIter {
 }
 
 impl SubGraphLike for FullOrEmpty {
-    fn nedges<E, V, H, N: NodeStorageOps<NodeData = V>>(
-        &self,
-        graph: &HedgeGraph<E, V, H, N>,
-    ) -> usize {
+    fn nedges<E, V, H, N: Topology>(&self, graph: &HedgeGraph<E, V, H, N>) -> usize {
         let mut count = 0;
         for i in self.included_iter() {
             if i != graph.inv(i) && self.includes(&graph.inv(i)) {

@@ -527,7 +527,6 @@ checksum = "1bc2832c24239b0141d5674bb9174f9d68a8b5b3f2753311927c172ca46f7e9c"
 dependencies = [
  "funty",
  "radium",
- "serde",
  "tap",
  "wyz",
 ]
@@ -2593,7 +2592,7 @@ dependencies = [
 [[package]]
 name = "graphica"
 version = "3.0.1"
-source = "git+https://github.com/symbolica-dev/symbolica?branch=community#bbc2d73c70b46c3aced749d2fa668198f34a4b50"
+source = "git+https://github.com/symbolica-dev/symbolica?branch=community#ed2374f1d880d52c3a7ca48cd7c22f4baad5c020"
 dependencies = [
  "ahash 0.8.12",
  "dyn-clone",
@@ -3772,6 +3771,7 @@ dependencies = [
  "pyo3-stub-gen-derive",
  "roxmltree 0.21.1",
  "rust-embed",
+ "self_cell",
  "serde",
  "serde_json",
  "symbolica",
@@ -4271,7 +4271,7 @@ dependencies = [
 [[package]]
 name = "numerica"
 version = "3.0.1"
-source = "git+https://github.com/symbolica-dev/symbolica?branch=community#bbc2d73c70b46c3aced749d2fa668198f34a4b50"
+source = "git+https://github.com/symbolica-dev/symbolica?branch=community#ed2374f1d880d52c3a7ca48cd7c22f4baad5c020"
 dependencies = [
  "ahash 0.8.12",
  "astro-float",
@@ -6266,7 +6266,6 @@ dependencies = [
  "append-only-vec",
  "bincode 2.0.1",
  "bincode-trait-derive",
- "bitvec",
  "blake3",
  "ciborium",
  "colored 3.1.1",
@@ -6524,7 +6523,7 @@ dependencies = [
 [[package]]
 name = "symbolica"
 version = "3.0.1"
-source = "git+https://github.com/symbolica-dev/symbolica?branch=community#bbc2d73c70b46c3aced749d2fa668198f34a4b50"
+source = "git+https://github.com/symbolica-dev/symbolica?branch=community#ed2374f1d880d52c3a7ca48cd7c22f4baad5c020"
 dependencies = [
  "ahash 0.8.12",
  "append-only-vec",

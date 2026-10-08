@@ -755,14 +755,14 @@ const LINNET: &[RustExampleSpec] = &[
         "use linnet::half_edge::subgraph::SubGraphLike;"
     ),
     example!(
-        "NodeStorage",
+        "Topology",
         "rust",
-        "use linnet::half_edge::nodestore::NodeStorage;"
+        "use linnet::half_edge::nodestore::Topology;"
     ),
     example!(
-        "NodeStorageOps",
+        "Checkpoint",
         "rust",
-        "use linnet::half_edge::nodestore::NodeStorageOps;"
+        "use linnet::half_edge::nodestore::Checkpoint;"
     ),
 ];
 
@@ -1208,8 +1208,8 @@ mod tests {
             ),
             (
                 "linnet",
-                "NodeStorageOps",
-                "linnet::half_edge::nodestore::NodeStorageOps",
+                "Topology",
+                "linnet::half_edge::nodestore::Topology",
             ),
             (
                 "spenso",
@@ -1442,8 +1442,8 @@ mod tests {
             "Inclusion",
             "BaseSubgraph",
             "SubGraphLike",
-            "NodeStorage",
-            "NodeStorageOps",
+            "Topology",
+            "Checkpoint",
         ] {
             assert!(
                 rust.iter().any(|example| example.id == entry),

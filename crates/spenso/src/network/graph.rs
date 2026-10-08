@@ -12,7 +12,7 @@ use linnet::{
         HedgeGraph, HedgeGraphError, NodeIndex,
         builder::HedgeGraphBuilder,
         involution::{EdgeData, Flow, Hedge},
-        nodestore::NodeStorageOps,
+        remap::{NodeRemap, Renumbering},
         subgraph::{Inclusion, ModifySubSet, SuBitGraph, SubGraphLike, SubSetLike, SubSetOps},
         swap::partition_with,
         tree::SimpleTraversalTree,
@@ -39,6 +39,10 @@ use super::{
     library::{Library, LibraryTensor},
     profile::{self, Counter, Timer},
 };
+
+/// Network graphs compact identifications before deleting or extracting
+/// half-edges and never open topology checkpoints.
+const SETTLED: &str = "network graphs renumber only without pending identifications";
 
 #[derive(
     Debug,
@@ -575,7 +579,6 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
         self.graph[node] = node_data;
         self.invalidate_logical_layout(node);
         self.delete(&traced_slots);
-        self.graph.node_store.check_and_set_nodes().unwrap();
     }
 
     pub(crate) fn replace_node_ignoring_self_loop_slots(
@@ -592,7 +595,6 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
 
         self.graph[node] = node_data;
         self.invalidate_logical_layout(node);
-        self.graph.node_store.check_and_set_nodes().unwrap();
     }
 
     /// Reconcile component axes using their established source storage order.
@@ -927,15 +929,8 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
     /// Moves the slot orders of `subgraph`'s half-edges to the end with the same
     /// swaps as [`HedgeGraph::delete_hedges`] and [`HedgeGraph::extract`] move the
     /// half-edges, and returns the first moved position.
-    /// Moves the slot orders of half-edges outside `subgraph` to the front,
-    /// matching the partition of [`HedgeGraph::delete_hedges`], and follows
-    /// `tracked` to its new position.
-    fn partition_slot_orders<S: SubSetLike>(
-        &mut self,
-        subgraph: &S,
-        tracked: &mut Option<Hedge>,
-    ) -> Hedge {
-        let n_hedges = Hedge(self.graph.n_hedges());
+    fn partition_slot_orders<S: SubSetLike>(&mut self, subgraph: &S) -> Hedge {
+        let n_hedges = Hedge(self.slot_order.len());
         partition_with(
             self,
             Hedge(0),
@@ -944,9 +939,6 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
             |s, kept, moved| {
                 s.slot_order.swap(kept.0, moved.0);
                 s.logical_slot_order.swap(kept.0, moved.0);
-                if *tracked == Some(moved) {
-                    *tracked = Some(kept);
-                }
             },
         )
     }
@@ -957,18 +949,17 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
         FK: Clone + Display,
     {
         let _span = profile::span(Timer::GraphExtract);
-        let left = self.partition_slot_orders(subgraph, &mut None);
-
-        let extracted = self.graph.extract(
-            subgraph,
-            |a| a.map(Clone::clone),
-            |a| a,
-            |a| {
-                // println!("a{a}");
-                a.clone()
-            },
-            |a| a,
-        );
+        let left = self.partition_slot_orders(subgraph);
+        let (extracted, _) = self
+            .graph
+            .extract(
+                subgraph,
+                |a| a.map(Clone::clone),
+                |a| a,
+                |a| a.clone(),
+                |a| a,
+            )
+            .expect(SETTLED);
 
         let slot_order = self.slot_order.split_off(left.0);
         let logical_slot_order = self.logical_slot_order.split_off(left.0);
@@ -1814,7 +1805,7 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
         let ready_batch = self.ready_operation_batch_ignoring(hidden);
 
         NetworkOperationReadiness {
-            node_count: self.graph.n_nodes(),
+            node_count: self.graph.n_live(),
             hedge_count: self.graph.n_hedges(),
             hidden_hedge_count: hidden.n_included(),
             cached_expression_node_count: cached_expression_nodes.len(),
@@ -1914,43 +1905,25 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
         });
     }
 
-    pub fn delete<S: SubSetLike<Base = SuBitGraph>>(&mut self, subgraph: &S) {
-        self.delete_tracking(subgraph, None);
-    }
-
-    /// Deletes `subgraph` and returns where the kept half-edge `tracked` lands.
-    ///
-    /// The partition matches [`HedgeGraph::delete_hedges`]: kept half-edges
-    /// from the tail fill the slots of deleted ones.
-    fn delete_tracking<S: SubSetLike<Base = SuBitGraph>>(
-        &mut self,
-        subgraph: &S,
-        mut tracked: Option<Hedge>,
-    ) -> Option<Hedge> {
-        let left = self.partition_slot_orders(subgraph, &mut tracked);
-        self.graph.delete_hedges(subgraph);
+    /// Deletes `subgraph` and returns where the remaining half-edges and nodes
+    /// went.
+    pub fn delete<S: SubSetLike<Base = SuBitGraph>>(&mut self, subgraph: &S) -> Renumbering {
+        let left = self.partition_slot_orders(subgraph);
+        let renumbering = self.graph.delete_hedges(subgraph).expect(SETTLED);
         self.slot_order.truncate(left.0);
         self.logical_slot_order.truncate(left.0);
         debug_assert_eq!(self.slot_order.len(), self.graph.n_hedges());
-        tracked
+        renumbering
     }
 
-    /// Forgets identification history, deletes `sub` and returns the index
-    /// `node` has afterwards.
-    ///
-    /// Both steps renumber nodes, so `node` is recovered through one of its
-    /// half-edges outside `sub`; every network node keeps its head port.
+    /// Compacts identifications, deletes `sub` and returns the index `node`
+    /// has afterwards; every network node keeps its head port.
     fn compact_identified(&mut self, node: NodeIndex, sub: &SuBitGraph) -> NodeIndex {
-        let anchor = self
-            .graph
-            .iter_crown(node)
-            .find(|hedge| !sub.includes(hedge));
-        self.graph.forget_identification_history();
-        self.graph.node_store.check_and_set_nodes().unwrap();
-        let anchor = self.delete_tracking(sub, anchor);
-        self.graph.node_store.check_and_set_nodes().unwrap();
-        self.graph
-            .node_id(anchor.expect("an identified network node keeps its head port"))
+        let compacted = self.graph.compact();
+        let deleted = self.delete(sub);
+        (compacted.get(node))
+            .and_then(|node| deleted.nodes.get(node))
+            .expect("an identified network node keeps its head port")
     }
 
     /// Identifies `nodes`, deletes the self-edges this creates and compacts
@@ -2025,14 +1998,13 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
         }
     }
 
-    /// Drops the nodes absorbed by deferred identifications.
+    /// Drops the nodes absorbed by deferred identifications and returns where
+    /// every node went.
     ///
-    /// This renumbers nodes, so a `NodeIndex` taken before is invalid
-    /// afterwards. Half-edges keep their positions; resolve nodes through
-    /// them with `node_id`.
-    pub fn finish_deferred_node_identifications(&mut self) {
-        self.graph.forget_identification_history();
-        self.graph.node_store.check_and_set_nodes().unwrap();
+    /// This renumbers nodes: map a `NodeIndex` taken before through the
+    /// returned remap. Half-edges keep their positions.
+    pub fn finish_deferred_node_identifications(&mut self) -> NodeRemap {
+        self.graph.compact()
     }
 
     pub fn dot(&self) -> String
@@ -2641,8 +2613,8 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
             .count()
     }
 
-    pub fn n_nodes(&self) -> usize {
-        self.graph.n_nodes()
+    pub fn n_live(&self) -> usize {
+        self.graph.n_live()
     }
 
     #[allow(clippy::result_large_err, clippy::type_complexity)]
@@ -2764,7 +2736,7 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
         if profile::enabled() {
             eprintln!(
                 "spenso_profile merge_ops.start nodes={} hedges={}",
-                self.graph.n_nodes(),
+                self.graph.n_live(),
                 self.graph.n_hedges()
             );
         }
@@ -2860,15 +2832,15 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
 
         // println!("{}", self.graph.dot(&to_del));
 
-        self.graph.forget_identification_history();
+        self.graph.compact();
         if profile::enabled() {
-            eprintln!("spenso_profile merge_ops.after_forget");
+            eprintln!("spenso_profile merge_ops.after_compact");
         }
         self.delete(&to_del);
         if profile::enabled() {
             eprintln!(
                 "spenso_profile merge_ops.end nodes={} hedges={}",
-                self.graph.n_nodes(),
+                self.graph.n_live(),
                 self.graph.n_hedges()
             );
         }
@@ -2896,9 +2868,9 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
         let join_profile = profile::enabled().then(|| {
             (
                 Instant::now(),
-                self.graph.n_nodes(),
+                self.graph.n_live(),
                 self.graph.n_hedges(),
-                other.graph.n_nodes(),
+                other.graph.n_live(),
                 other.graph.n_hedges(),
             )
         });
@@ -2908,7 +2880,7 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
             if elapsed.as_millis() >= 50 {
                 eprintln!(
                     "spenso_profile slow graph.join elapsed={elapsed:.3?} self_nodes={self_nodes} self_hedges={self_hedges} other_nodes={other_nodes} other_hedges={other_hedges} out_nodes={} out_hedges={}",
-                    self.graph.n_nodes(),
+                    self.graph.n_live(),
                     self.graph.n_hedges(),
                 );
             }
@@ -3012,11 +2984,11 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NMul for NetworkGraph<K, FK, Aind> {
         let _span = profile::span(Timer::GraphNMul);
         profile::bump(Counter::GraphNMul, 1);
         let all = iter.into_iter().collect::<Vec<_>>();
-        if profile::enabled() && (all.len() > 100 || self.graph.n_nodes() > 100) {
+        if profile::enabled() && (all.len() > 100 || self.graph.n_live() > 100) {
             eprintln!(
                 "spenso_profile graph.n_mul.start inputs={} self_nodes={} self_hedges={}",
                 all.len() + 1,
-                self.graph.n_nodes(),
+                self.graph.n_live(),
                 self.graph.n_hedges(),
             );
         }
@@ -3079,12 +3051,12 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NAdd for NetworkGraph<K, FK, Aind> {
         profile::bump(Counter::GraphNAdd, 1);
         let all = iter.into_iter().collect::<Vec<_>>();
         let slots = self.dangling_indices();
-        if profile::enabled() && (all.len() > 100 || self.graph.n_nodes() > 100) {
+        if profile::enabled() && (all.len() > 100 || self.graph.n_live() > 100) {
             eprintln!(
                 "spenso_profile graph.n_add.start inputs={} slots={} self_nodes={} self_hedges={}",
                 all.len() + 1,
                 slots.len(),
-                self.graph.n_nodes(),
+                self.graph.n_live(),
                 self.graph.n_hedges(),
             );
         }
@@ -3550,7 +3522,7 @@ pub mod test {
             }
             let mut iter = operands.into_iter();
             let actual = iter.next().unwrap().n_mul(iter);
-            assert_eq!(actual.graph.n_nodes(), expected.graph.n_nodes());
+            assert_eq!(actual.graph.n_live(), expected.graph.n_live());
             assert_eq!(actual.graph.n_hedges(), expected.graph.n_hedges());
             assert_eq!(actual.slot_order, expected.slot_order);
             assert_eq!(actual.logical_slot_order, expected.logical_slot_order);
@@ -3685,7 +3657,7 @@ pub mod test {
                 NetworkNode::Leaf(NetworkLeaf::LocalTensor(3)),
             );
             graph.graph.check().unwrap();
-            assert_eq!(graph.graph.n_nodes(), 3);
+            assert_eq!(graph.graph.n_live(), 3);
             assert_eq!(node, leaf(&graph, 3), "merging {nodes:?}");
             // Two open ports and both product heads; the shared index is gone.
             assert_eq!(graph.graph.iter_crown(node).count(), 4);
@@ -4117,7 +4089,7 @@ pub mod test {
                     .identify_nodes_without_self_edges::<SuBitGraph>(&nodes, NetworkNode::Op(op));
                 removed.union_with(&edges);
             }
-            expected.graph.forget_identification_history();
+            expected.graph.compact();
             expected.delete(&removed);
             graph.merge_ops();
             graph.graph.check().unwrap();
@@ -4385,7 +4357,7 @@ pub mod test {
         expr.merge_ops();
         expr.cache_expr_tree_roots();
 
-        let node_count = expr.n_nodes();
+        let node_count = expr.n_live();
         let hedge_count = expr.graph.n_hedges();
         let op_ref = expr.ready_operation_ref().unwrap();
 
@@ -4400,8 +4372,8 @@ pub mod test {
         let expected = expr.operation_hedges(op_ref.op_node(), op_ref.children());
         assert_eq!(op_ref.hedges(), &expected);
         assert!(op_ref.hedges().len() >= op_ref.leaf_count());
-        assert_eq!(op_ref.graph().n_nodes(), node_count);
-        assert_eq!(expr.n_nodes(), node_count);
+        assert_eq!(op_ref.graph().n_live(), node_count);
+        assert_eq!(expr.n_live(), node_count);
         assert_eq!(expr.graph.n_hedges(), hedge_count);
     }
 
@@ -4681,7 +4653,7 @@ pub mod test {
 
         assert_eq!(op_ref.op(), &op);
         assert_eq!(op_ref.leaf_count(), extracted_leaf_count);
-        assert_eq!(extracted.n_nodes(), op_ref.leaf_count() + 1);
+        assert_eq!(extracted.n_live(), op_ref.leaf_count() + 1);
     }
 
     #[test]
@@ -4766,6 +4738,6 @@ pub mod test {
 
         assert_eq!(legacy_op, ref_op);
         assert_eq!(legacy_leaf_count, ref_leaf_count);
-        assert_eq!(legacy_extracted.n_nodes(), ref_extracted.n_nodes());
+        assert_eq!(legacy_extracted.n_live(), ref_extracted.n_live());
     }
 }

@@ -51,10 +51,13 @@ impl FeynmanDiagram {
             .into_iter()
             .collect::<BTreeSet<_>>();
         for &VertexId(vertex) in isolated_vertices {
-            if vertex >= self.graph.n_nodes() {
+            // Nodes absorbed by a pending identification are no vertices.
+            if vertex >= self.graph.node_bound()
+                || !self.graph.node_store.is_live(NodeIndex(vertex))
+            {
                 return Err(DiagramError::UnknownVertex {
                     vertex,
-                    vertices: self.graph.n_nodes(),
+                    vertices: self.graph.node_bound(),
                 });
             }
             let node = NodeIndex(vertex);
@@ -63,8 +66,7 @@ impl FeynmanDiagram {
             }
             retained.insert(node);
         }
-        if subgraph.n_included() == self.graph.n_hedges() && retained.len() == self.graph.n_nodes()
-        {
+        if subgraph.n_included() == self.graph.n_hedges() && retained.len() == self.graph.n_live() {
             return Ok(self.clone());
         }
 
@@ -355,7 +357,7 @@ mod tests {
         let mut selected: SuBitGraph = parent.graph.empty_subgraph();
         selected.add(parent.graph[&EdgeIndex(2)].1);
         let result = parent.excise(&selected, &[]).unwrap();
-        assert_eq!(result.graph.n_nodes(), 2);
+        assert_eq!(result.graph.n_live(), 2);
         assert_eq!(result.graph.n_edges(), 5);
         assert_eq!(result.graph.n_internals(), 1);
         assert_eq!(result.graph.n_hedges(), parent.graph.n_hedges());
@@ -388,7 +390,7 @@ mod tests {
                 .unwrap(),
         );
         let result = parent.excise(&selected, &[]).unwrap();
-        assert_eq!(result.graph.n_nodes(), 1);
+        assert_eq!(result.graph.n_live(), 1);
         assert_eq!(result.graph.n_edges(), 3);
         assert_eq!(result.graph.n_internals(), 0);
         assert_eq!(result.numerator(), &Atom::one());
@@ -472,12 +474,21 @@ mod tests {
         let empty: SuBitGraph = parent.graph.empty_subgraph();
         let none = parent.excise(&empty, &[]).unwrap();
         let one = parent.excise(&empty, &[VertexId(1)]).unwrap();
-        assert_eq!(none.graph.n_nodes(), 0);
-        assert_eq!(one.graph.n_nodes(), 1);
+        assert_eq!(none.graph.n_live(), 0);
+        assert_eq!(one.graph.n_live(), 1);
         assert_eq!(one.vertex(VertexId(0)).unwrap().name, "second");
         none.validate().unwrap();
         one.validate().unwrap();
         assert!(parent.excise(&empty, &[VertexId(2)]).is_err());
+        let mut pending = parent.clone();
+        let survivor = parent.graph[NodeIndex(0)].clone();
+        pending
+            .graph
+            .identify_nodes(&[NodeIndex(0), NodeIndex(1)], survivor);
+        assert!(matches!(
+            pending.excise(&empty, &[VertexId(1)]),
+            Err(DiagramError::UnknownVertex { vertex: 1, .. })
+        ));
         assert!(parent.excise(&SuBitGraph::empty(1), &[]).is_err());
         let parent = bubble();
         assert!(

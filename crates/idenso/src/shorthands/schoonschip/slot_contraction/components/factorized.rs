@@ -2334,7 +2334,7 @@ mod lazy_tests {
             let source = super::super::tests::input(source);
             let scope = ContractionScope::parse(source.as_view()).unwrap();
             assert_eq!(scope.ports.len(), nodes, "{source}");
-            assert_eq!(scope.network.graph.graph.n_nodes(), nodes, "{source}");
+            assert_eq!(scope.network.graph.graph.n_live(), nodes, "{source}");
             assert!(scope.opened.values().all(|entry| entry.get().is_none()));
         }
     }
@@ -2539,7 +2539,7 @@ mod lazy_tests {
             let source = Atom::mul_many([core, first.clone(), second.clone()]);
             let scope = ContractionScope::parse(source.as_view()).unwrap();
             assert_eq!(scope.ports.len(), 5, "one product and four factor leaves");
-            assert_eq!(scope.network.graph.graph.n_nodes(), 5);
+            assert_eq!(scope.network.graph.graph.n_live(), 5);
             let protected = scope
                 .factors(scope.root)
                 .into_iter()

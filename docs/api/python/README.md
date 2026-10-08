@@ -45,8 +45,10 @@ See the [FeynKit manual](../../products/feynkit/content/overview.typ) for usage.
 The Linnet invocation renders one canonical StubInfo surface, including its
 deterministic `__all__`, and writes or checks the package stub
 `crates/linnet-py/python/symbolica/community/graph/__init__.pyi`, its notebook-host
-copy, and `docs/api/python/linnet-graph.pyi`. Its import
-test compares that same surface with the extension's real runtime exports.
+copy, and `docs/api/python/linnet-graph.pyi`. It also writes or checks the
+standalone `crates/linnet-py/linnet_py.pyi`, which differs only by excluding
+Symbolica expressions from graph keys. Its import test compares that same
+Community surface with the extension's real runtime exports.
 
 Do not combine the inventory features: PyO3 stub registration uses a
 process-wide inventory. GammaLoop's additional callable-signature acceptance

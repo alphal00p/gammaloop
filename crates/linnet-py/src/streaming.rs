@@ -8,12 +8,9 @@ use pyo3::prelude::*;
 
 /// A position snapshot from one continuous force-layout run.
 #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
-#[pyclass(
-    module = "symbolica.community.graph",
-    frozen,
-    name = "LayoutFrame",
-    get_all
-)]
+#[pyclass(frozen, name = "LayoutFrame", get_all)]
+#[cfg_attr(feature = "community", pyo3(module = "symbolica.community.graph"))]
+#[cfg_attr(not(feature = "community"), pyo3(module = "linnet_py"))]
 pub(crate) struct PyLayoutFrame {
     nodes: Vec<(f64, f64)>,
     edges: Vec<(f64, f64)>,
@@ -28,11 +25,9 @@ pub(crate) struct PyLayoutFrame {
 /// Topology is fixed for the lifetime of the stream. Frames contain only
 /// coordinates and progress, so notebook viewers can retain their SVG elements.
 #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
-#[pyclass(
-    module = "symbolica.community.graph",
-    unsendable,
-    name = "LayoutStream"
-)]
+#[pyclass(unsendable, name = "LayoutStream")]
+#[cfg_attr(feature = "community", pyo3(module = "symbolica.community.graph"))]
+#[cfg_attr(not(feature = "community"), pyo3(module = "linnet_py"))]
 pub(crate) struct PyLayoutStream {
     stream: ForceLayoutStream,
     every: usize,

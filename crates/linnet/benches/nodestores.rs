@@ -4,7 +4,8 @@ use std::hint::black_box;
 use criterion::{criterion_group, criterion_main, BatchSize, BenchmarkId, Criterion};
 use linnet::{
     half_edge::{
-        builder::HedgeGraphBuilder, involution::Hedge, swap::Swap, HedgeGraph, NoData, NodeIndex,
+        builder::HedgeGraphBuilder, involution::Hedge, remap::HedgeRemap, HedgeGraph, NoData,
+        NodeIndex,
     },
     permutation::Permutation,
 };
@@ -28,7 +29,7 @@ fn build(nodes: usize, matching: bool) -> Graph {
 }
 
 fn dfs(graph: &Graph) -> usize {
-    let mut seen = vec![false; graph.n_nodes()];
+    let mut seen = vec![false; graph.node_bound()];
     let mut stack = vec![NodeIndex(0)];
     seen[0] = true;
     let mut count = 0;
@@ -46,7 +47,7 @@ fn dfs(graph: &Graph) -> usize {
 }
 
 fn append(mut graph: Graph) -> Graph {
-    let n = graph.n_nodes();
+    let n = graph.node_bound();
     for i in 0..32 {
         graph = graph
             .add_pair(NodeIndex(i % n), NodeIndex((i + n / 2) % n), 1, false)
@@ -77,21 +78,21 @@ fn grid(side: usize) -> (Graph, Vec<Hedge>) {
     (graph, representatives)
 }
 
-/// Merge every node into the first one, discarding history after each batch,
+/// Merge every node into the first one, compacting after each batch,
 /// as batched tensor-network contraction does.
 fn hub_merge(graph: &mut Graph, representatives: &[Hedge], batch: usize) {
     for (merged, &hedge) in representatives[1..].iter().enumerate() {
         let hub = graph.node_id(representatives[0]);
         graph.identify_nodes(&[hub, graph.node_id(hedge)], merged);
         if (merged + 1) % batch == 0 {
-            graph.forget_identification_history();
+            graph.compact();
         }
     }
-    graph.forget_identification_history();
+    graph.compact();
 }
 
 /// A fixed pseudo-random permutation of `n` half-edges.
-fn shuffle(n: usize) -> Permutation {
+fn shuffle(n: usize) -> HedgeRemap {
     let mut map: Vec<usize> = (0..n).collect();
     let mut state: u64 = 0x9E37_79B9_7F4A_7C15;
     for i in (1..n).rev() {
@@ -100,7 +101,7 @@ fn shuffle(n: usize) -> Permutation {
         state ^= state << 17;
         map.swap(i, (state % (i as u64 + 1)) as usize);
     }
-    Permutation::from_map(map)
+    HedgeRemap::from_permutation(&Permutation::from_map(map))
 }
 
 fn bench_store(c: &mut Criterion, name: &str) {
@@ -160,31 +161,31 @@ fn bench_store(c: &mut Criterion, name: &str) {
                     history.identify_nodes(&[NodeIndex(group + 128 * layer), previous], group);
             }
         }
-        group.bench_function(BenchmarkId::new("discard_history", depth), |b| {
+        group.bench_function(BenchmarkId::new("compact", depth), |b| {
             b.iter_batched(
                 || history.clone(),
                 |mut graph| {
-                    black_box(graph.forget_identification_history());
+                    black_box(graph.compact());
                     graph
                 },
                 BatchSize::SmallInput,
             );
         });
-        history.forget_identification_history();
+        history.compact();
         history.check().unwrap();
-        assert_eq!(history.n_nodes(), 128);
+        assert_eq!(history.n_live(), 128);
         assert_eq!(dfs(&history), 128);
         group.bench_function(BenchmarkId::new("dfs_after_identification", depth), |b| {
             b.iter(|| dfs(black_box(&history)));
         });
     }
-    // 960 and 9,800 half-edges, forgetting after every 64 merges or only once.
+    // 960 and 9,800 half-edges, compacting after every 64 merges or only once.
     for side in [16, 50] {
         let (graph, representatives) = grid(side);
         let mut merged = graph.clone();
         hub_merge(&mut merged, &representatives, 64);
         merged.check().unwrap();
-        assert_eq!(merged.n_nodes(), 1);
+        assert_eq!(merged.n_live(), 1);
         for (label, batch) in [("hub_merge_batch64", 64), ("hub_merge_once", usize::MAX)] {
             group.bench_function(BenchmarkId::new(label, graph.n_hedges()), |b| {
                 b.iter_batched(
@@ -197,16 +198,16 @@ fn bench_store(c: &mut Criterion, name: &str) {
                 );
             });
         }
-        // Half-edge swaps, which require identification history to be forgotten.
+        // Half-edge permutations, which require compacted identifications.
         let permutation = shuffle(graph.n_hedges());
         let mut permuted = graph.clone();
-        Swap::<Hedge>::permute(&mut permuted, &permutation);
+        permuted.permute_hedges(&permutation).unwrap();
         permuted.check().unwrap();
         group.bench_function(BenchmarkId::new("permute", graph.n_hedges()), |b| {
             b.iter_batched(
                 || graph.clone(),
                 |mut graph| {
-                    Swap::<Hedge>::permute(&mut graph, black_box(&permutation));
+                    graph.permute_hedges(black_box(&permutation)).unwrap();
                     graph
                 },
                 BatchSize::SmallInput,

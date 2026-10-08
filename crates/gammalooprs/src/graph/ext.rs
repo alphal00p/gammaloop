@@ -1,10 +1,10 @@
 use ahash::AHashMap;
 use itertools::Itertools;
 use linnet::half_edge::{
-    HedgeGraph, HedgeGraphError, NoData, NodeIndex,
+    HedgeGraph, HedgeGraphError, NoData,
     builder::HedgeGraphBuilder,
     involution::{HedgePair, Orientation},
-    nodestore::NodeStorageOps,
+    nodestore::Topology,
 };
 use symbolica::graph::Graph as SymbolicaGraph;
 
@@ -15,9 +15,7 @@ pub trait HedgeGraphExt<N, E> {
     fn to_sym(graph: &Self) -> Result<SymbolicaGraph<&N, &E>, Self::Error>;
 }
 
-impl<N: Clone, E: Clone, S: NodeStorageOps<NodeData = N>> HedgeGraphExt<N, E>
-    for HedgeGraph<E, N, NoData, S>
-{
+impl<N: Clone, E: Clone, S: Topology> HedgeGraphExt<N, E> for HedgeGraph<E, N, NoData, S> {
     fn from_sym(graph: SymbolicaGraph<N, E>) -> Self {
         let mut builder = HedgeGraphBuilder::new();
         let mut map = AHashMap::new();
@@ -49,8 +47,8 @@ impl<N: Clone, E: Clone, S: NodeStorageOps<NodeData = N>> HedgeGraphExt<N, E>
         let mut graph = SymbolicaGraph::new();
         let mut map = AHashMap::new();
 
-        for (n, (_, _, node)) in value.iter_nodes().enumerate() {
-            map.insert(NodeIndex(n), graph.add_node(node));
+        for (n, _, node) in value.iter_nodes() {
+            map.insert(n, graph.add_node(node));
         }
 
         for (i, _, d) in value.iter_edges() {

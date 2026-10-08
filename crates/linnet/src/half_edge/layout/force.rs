@@ -7,7 +7,7 @@ use crate::half_edge::{
         directional_force_shift, Constraint, HasPointConstraint, LayoutPointIndex, LayoutState,
         PointConstraint, SpringChargeEnergy,
     },
-    nodestore::NodeStorageOps,
+    nodestore::Topology,
     subgraph::SubSetLike,
     swap::Swap,
     NodeIndex, NodeVec,
@@ -53,7 +53,7 @@ pub fn force_directed_layout<'a, E, V, H, N>(
 ) where
     E: HasPointConstraint,
     V: HasPointConstraint,
-    N: NodeStorageOps<NodeData = V> + Clone,
+    N: Topology + Clone,
 {
     let mut session = ForceLayoutSession::new(state.clone(), *energy, cfg);
     session.run_to_end();
@@ -68,7 +68,7 @@ pub struct ForceLayoutSession<'a, E, V, H, N>
 where
     E: HasPointConstraint,
     V: HasPointConstraint,
-    N: NodeStorageOps<NodeData = V> + Clone,
+    N: Topology + Clone,
 {
     state: LayoutState<'a, E, V, H, N>,
     energy: SpringChargeEnergy,
@@ -102,7 +102,7 @@ impl<'a, E, V, H, N> ForceLayoutSession<'a, E, V, H, N>
 where
     E: HasPointConstraint,
     V: HasPointConstraint,
-    N: NodeStorageOps<NodeData = V> + Clone,
+    N: Topology + Clone,
 {
     pub fn new(
         mut state: LayoutState<'a, E, V, H, N>,
@@ -362,7 +362,7 @@ impl ForceWorkSet {
     where
         E: HasPointConstraint,
         V: HasPointConstraint,
-        N: NodeStorageOps<NodeData = V> + Clone,
+        N: Topology + Clone,
     {
         let n = state.vertex_points.len().0;
         let m = state.edge_points.len().0;
@@ -501,7 +501,7 @@ fn apply_initial_jitter<'a, E, V, H, N>(
 ) where
     E: HasPointConstraint,
     V: HasPointConstraint,
-    N: NodeStorageOps<NodeData = V> + Clone,
+    N: Topology + Clone,
 {
     for &idx in &workset.movable_nodes {
         let shift = Vector2::new(
@@ -550,7 +550,7 @@ impl ForceBuffers {
     where
         E: HasPointConstraint,
         V: HasPointConstraint,
-        N: NodeStorageOps<NodeData = V> + Clone,
+        N: Topology + Clone,
     {
         let nodes = state.vertex_points.len().0;
         let edges = state.edge_points.len().0;
@@ -587,7 +587,7 @@ impl ForceBuffers {
     ) where
         E: HasPointConstraint,
         V: HasPointConstraint,
-        N: NodeStorageOps<NodeData = V> + Clone,
+        N: Topology + Clone,
     {
         let (node_z, edge_z, route_z) = depths;
         for &node in &workset.active_nodes {
@@ -1015,7 +1015,7 @@ mod tests {
     where
         E: HasPointConstraint,
         V: HasPointConstraint,
-        N: NodeStorageOps<NodeData = V> + Clone,
+        N: Topology + Clone,
     {
         let mut buffers = ForceBuffers::new(state);
         buffers.compute(state, energy, (node_z, edge_z, route_z), scale, workset);

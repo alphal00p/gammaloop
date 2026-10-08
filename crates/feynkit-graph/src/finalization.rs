@@ -4,6 +4,7 @@ use linnet::{
     half_edge::{
         EdgeAccessors,
         involution::Hedge,
+        remap::HedgeRemap,
         subgraph::{ModifySubSet, OrientedCut},
         swap::Swap,
     },
@@ -231,7 +232,12 @@ impl FeynmanDiagramBuilder {
                 operation: "ordering initial-state half-edges",
                 message: error.to_string(),
             })?;
-            <HedgeGraph<_, _> as Swap<Hedge>>::permute(&mut pending, &permutation);
+            (pending)
+                .permute_hedges(&HedgeRemap::from_permutation(&permutation))
+                .map_err(|error| DiagramError::Invariant {
+                    operation: "ordering initial-state half-edges",
+                    message: error.to_string(),
+                })?;
         }
         let permutation = Permutation::from_mappings(
             pending
@@ -312,7 +318,12 @@ impl FeynmanDiagramBuilder {
                         message: error.to_string(),
                     }
                 })?;
-            <HedgeGraph<_, _> as Swap<Hedge>>::permute(&mut graph, &permutation);
+            (graph)
+                .permute_hedges(&HedgeRemap::from_permutation(&permutation))
+                .map_err(|error| DiagramError::Invariant {
+                    operation: "restoring half-edge order",
+                    message: error.to_string(),
+                })?;
         }
         let mut half_edges = BTreeMap::new();
         let mut signs = BTreeMap::new();

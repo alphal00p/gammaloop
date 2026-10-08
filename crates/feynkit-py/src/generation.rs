@@ -3370,13 +3370,21 @@ for generate in (fk.Process.generate_diagrams, fk.Process.generate_amplitude, fk
             locals.set_item("Graph", py.get_type::<PyGraph>()).unwrap();
             let graph_module = PyModule::new(py, "symbolica.community.graph").unwrap();
             linnet_py::register(&graph_module).unwrap();
-            locals
-                .set_item("Node", graph_module.getattr("Node").unwrap())
-                .unwrap();
+            for name in ["Node", "Orientation"] {
+                locals
+                    .set_item(name, graph_module.getattr(name).unwrap())
+                    .unwrap();
+            }
             locals
                 .set_item(
                     "MODEL_JSON",
                     include_str!("../tests/fixtures/scalars_2p_3p.json"),
+                )
+                .unwrap();
+            locals
+                .set_item(
+                    "SM_MODEL_JSON",
+                    include_str!("../../feynkit-model/tests/fixtures/sm.json"),
                 )
                 .unwrap();
             let code = CString::new(r#"
@@ -3450,6 +3458,25 @@ for via_model in (True, False):
         else:
             raise AssertionError("non-callable callback was accepted")
     assert len(generate()) == len(baseline)
+
+# Directed snapshot edges point from source to sink: an incoming electron (-1) flows into the
+# graph as an electron or out of it as a positron, an incoming positron (-2) the other way.
+sm_model = fk.Model.from_json(SM_MODEL_JSON)
+directed = []
+def flows(graph, completed_vertices):
+    for edge in graph.edges():
+        if edge.orientation == Orientation.Undirected:
+            continue
+        assert edge.orientation == Orientation.Default and abs(edge.data) == 11
+        source, sink = edge.source.node.data, edge.sink.node.data
+        for leg, particle in ((-1, 11), (-2, -11)):
+            if leg in (source, sink):
+                assert (edge.data == particle) == (source == leg)
+                directed.append(edge.data)
+    return True
+annihilation = sm_model.process(["e-", "e+"], ["a", "a"], particle_selection=["e-", 22])
+assert len(annihilation.generate_diagrams(progress=None, filter=flows)) == 2
+assert directed
 "#).unwrap();
             py.run(&code, Some(&locals), Some(&locals)).unwrap();
         });

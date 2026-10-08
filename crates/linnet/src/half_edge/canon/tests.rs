@@ -4,13 +4,13 @@ use super::{ignore, Canonization};
 use crate::half_edge::{
     builder::HedgeGraphBuilder,
     involution::{Flow, Hedge, Orientation},
-    nodestore::{NodeForest, NodeStorageOps},
+    nodestore::NodeStorageOps,
     HedgeGraph, NodeIndex,
 };
 use crate::{half_edge::swap::Swap, permutation::Permutation};
 
 /// Edge data, node data and half-edge data are all keys.
-type G = HedgeGraph<u8, u8, u8, NodeForest<u8>>;
+type G = HedgeGraph<u8, u8, u8>;
 
 #[derive(Clone, Copy, Debug)]
 enum Element {
@@ -897,13 +897,12 @@ mod graphica {
         builder::HedgeGraphBuilder,
         canon::ignore,
         involution::{Flow, HedgePair, Orientation},
-        nodestore::NodeForest,
         HedgeGraph,
     };
 
     /// Node data: 0 for vertices, the leg label for external nodes.
     type Plain = Graph<usize, u8>;
-    type L = HedgeGraph<u8, usize, usize, NodeForest<usize>>;
+    type L = HedgeGraph<u8, usize, usize>;
 
     fn aut(g: &Plain) -> u128 {
         g.canonize()
@@ -1159,7 +1158,7 @@ mod graphica {
 fn many_distinct_keys_use_the_dense_colour_table() {
     // 20k parallel edges with distinct edge and half-edge keys overflow one-word colours
     let n = 20_000u32;
-    let build = |swap: bool| {
+    let build = |swap: bool| -> HedgeGraph<u32, u8, u32> {
         let mut builder = HedgeGraphBuilder::new();
         let (a, b) = (builder.add_node(0u8), builder.add_node(0u8));
         for e in 0..n {
@@ -1170,7 +1169,7 @@ fn many_distinct_keys_use_the_dense_colour_table() {
             };
             builder.add_edge(a.add_data(ka), b.add_data(kb), e, Orientation::Undirected);
         }
-        builder.build::<NodeForest<u8>>()
+        builder.build()
     };
     let (g, swapped) = (build(false), build(true));
     let mut flat = super::flat::Flat::default();

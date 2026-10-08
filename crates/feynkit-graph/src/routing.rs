@@ -454,7 +454,7 @@ impl<E, V, H> MomentumRouting for HedgeGraph<E, V, H> {
                 &component, node_data,
             );
         }
-        contracted.forget_identification_history();
+        contracted.compact();
 
         // A fully contracted component can have no node in the remainder.
         // Remove only its retired crown endpoints; the opposite endpoints at
@@ -1313,7 +1313,7 @@ impl crate::FeynmanDiagram {
                 "requested tree edges {requested:?} do not form a spanning forest"
             ))
         };
-        let mut components = UnionFind::new(vec![(); self.graph.n_nodes()]);
+        let mut components = UnionFind::new(vec![(); self.graph.node_bound()]);
         for edge in requested {
             if edge.0 >= self.graph.n_edges() {
                 return Err(crate::DiagramError::InvalidLoopMomentumBasis(format!(

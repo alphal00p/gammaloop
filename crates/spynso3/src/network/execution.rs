@@ -263,7 +263,7 @@ impl SpensoNet {
     pub(crate) fn status(&self) -> ExecutionStatus {
         let mut graph = self.network.graph.clone();
         graph.cache_expr_tree_roots();
-        let nodes = graph.n_nodes();
+        let nodes = graph.n_live();
         let operations = graph
             .graph
             .iter_nodes()

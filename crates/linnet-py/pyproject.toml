@@ -1,0 +1,43 @@
+[project]
+name = "linnet-py"
+version = "0.1.0"
+description = "Native Python bindings and in-process Typst rendering for Linnet graphs"
+readme = "README.md"
+license = "MIT"
+license-files = [
+  "LICENSE",
+  "licenses/*",
+  "vendor/typst-packages/PROVENANCE.typ",
+  "vendor/typst-packages/preview/cetz/0.5.1/LICENSE",
+  "vendor/typst-packages/preview/oxifmt/1.0.0/LICENSE*",
+  "vendor/typst-packages/preview/mitex/0.2.6/LICENSE",
+]
+requires-python = ">=3.10"
+dependencies = []
+
+[project.urls]
+Repository = "https://github.com/alphal00p/gammaloop"
+Documentation = "https://alphal00p.github.io/gammaloop/linnet/"
+
+[tool.maturin]
+module-name = "linnet_py"
+bindings = "pyo3"
+features = ["standalone", "abi3-py310"]
+
+[tool.cibuildwheel]
+build = "cp314-*"
+test-sources = [
+  "crates/linnet-py/tests",
+  "crates/linnet-py/linnet_py.pyi",
+  "crates/linnest/typst/src",
+  "crates/linnest/typst/linnest.wasm",
+  "docs/products/linnet/content/quickstart-python.typ",
+]
+test-command = "python -m unittest discover -s crates/linnet-py/tests -p 'test_*.py'"
+
+[tool.cibuildwheel.pyodide]
+repair-wheel-command = ""
+
+[build-system]
+requires = ["maturin>=1.13.2,<2"]
+build-backend = "maturin"

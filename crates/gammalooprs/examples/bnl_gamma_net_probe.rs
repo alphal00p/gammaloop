@@ -91,7 +91,7 @@ fn run_network(label: &str, atom: &Atom) -> Result<()> {
     println!(
         "{label}_network_parse\telapsed_ms={:.3}\tnodes={}\tedges={}\ttensors={}",
         parse_started.elapsed().as_secs_f64() * 1000.0,
-        net.graph.n_nodes(),
+        net.graph.n_live(),
         net.graph.graph.n_edges(),
         net.store.tensors.len()
     );

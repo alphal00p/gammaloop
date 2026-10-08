@@ -13,9 +13,8 @@ use linnet::{
             impred::{ImpredConfig, ImpredLayout},
             spring::{Constraint, LayoutPointIndex, PointConstraint},
         },
-        nodestore::{NodeForest, NodeStorageOps},
+        nodestore::NodeForest,
         subgraph::{Inclusion, SuBitGraph, SubSetLike},
-        swap::Swap,
         NodeIndex,
     },
     parser::{
@@ -847,16 +846,16 @@ fn apply_typst_graph_structural_patch(
     let original_edge_positions = (0..graph.graph.n_edges())
         .map(|index| graph.graph[EdgeIndex(index)].pos)
         .collect::<Vec<_>>();
-    let mut patched_node_positions = vec![false; graph.graph.n_nodes()];
+    let mut patched_node_positions = vec![false; graph.graph.node_bound()];
     let mut patched_edge_positions = vec![false; graph.graph.n_edges()];
     let mut refresh_positions = false;
 
     for node in patch.nodes {
-        if node.index >= graph.graph.n_nodes() {
+        if node.index >= graph.graph.node_bound() {
             return Err(format!(
                 "Node structural patch index {} is out of bounds for graph with {} nodes",
                 node.index,
-                graph.graph.n_nodes()
+                graph.graph.node_bound()
             ));
         }
 
@@ -1024,7 +1023,7 @@ fn point_statements_changed(statements: &BTreeMap<String, String>) -> bool {
 }
 
 fn typst_node_positions(graph: &TypstGraph) -> Vec<ResolvedPoint> {
-    let mut positions = vec![ResolvedPoint::default(); graph.graph.n_nodes()];
+    let mut positions = vec![ResolvedPoint::default(); graph.graph.node_bound()];
     for (index, _, node) in graph.graph.iter_nodes() {
         positions[index.0] = ResolvedPoint {
             x: node.pos.x,
@@ -1038,7 +1037,7 @@ fn typst_node_positions(graph: &TypstGraph) -> Vec<ResolvedPoint> {
 
 fn refresh_structural_state_from_statements(graph: &mut TypstGraph) {
     let mut group_map = HashMap::new();
-    for index in 0..graph.graph.n_nodes() {
+    for index in 0..graph.graph.node_bound() {
         let index = NodeIndex(index);
         let node = &mut graph.graph[index];
         let statements = node.statements.clone();
@@ -1158,11 +1157,11 @@ fn apply_graph_data_patch(
     }
 
     for node in patch.nodes {
-        if node.index >= graph.graph.n_nodes() {
+        if node.index >= graph.graph.node_bound() {
             return Err(format!(
                 "Node data patch index {} is out of bounds for graph with {} nodes",
                 node.index,
-                graph.graph.n_nodes()
+                graph.graph.node_bound()
             ));
         }
         if let Some(data) = node.data {
@@ -1546,11 +1545,9 @@ impl TypstGraph {
         let invalid = || "Invalid cut input graph topology".to_string();
         let involution: &Involution = self.graph.as_ref();
         let mappings: Vec<_> = involution.iter().map(|(_, mapping)| mapping).collect();
-        let node_hedges: Hedge = self.graph.node_store.len();
         if mappings.len() != self.n_hedges()
             || self.iter_hedges().count() != self.n_hedges()
-            || node_hedges.0 != self.n_hedges()
-            || self.graph.node_store.iter().count() != self.n_nodes()
+            || self.graph.node_store.n_hedges() != self.n_hedges()
         {
             return Err(invalid());
         }
@@ -1620,10 +1617,11 @@ impl TypstGraph {
         }
         let mut graph = decode_typst_graph(arg)?;
         graph.validate_cut_topology()?;
-        let (n_nodes, n_edges, n_hedges) = (graph.n_nodes(), graph.n_edges(), graph.n_hedges());
+        let (node_bound, n_edges, n_hedges) =
+            (graph.node_bound(), graph.n_edges(), graph.n_hedges());
         let mut result = TypstCutResult {
             graph: Vec::new(),
-            nodes: (0..n_nodes).map(Some).collect(),
+            nodes: (0..node_bound).map(Some).collect(),
             edges: (0..n_edges)
                 .map(|edge| TypstCutEdgeOrigin {
                     edge,
@@ -1667,7 +1665,7 @@ impl TypstGraph {
                 .ok_or_else(too_large)?;
         }
         let extra_endpoints = 2 * (windings - entries.len());
-        let output_nodes = n_nodes
+        let output_nodes = node_bound
             .checked_add(extra_endpoints)
             .filter(|n| *n <= MAX_ITEMS)
             .ok_or_else(too_large)?;
@@ -1813,7 +1811,7 @@ pub fn graph_join_by_edge_key_bytes(
     validate_join_identities(&left.graph, &spec.key, false)?;
     validate_join_identities(&right.graph, &spec.key, false)?;
     validate_join_names(&left.graph, &right.graph)?;
-    let left_nodes = left.graph.iter_nodes().count();
+    let left_nodes = left.graph.node_bound();
     let left_hedges = left.graph.iter_hedges().count();
     let left_map = edge_origin_map(&left.graph);
     let right_map = edge_origin_map(&right.graph);
@@ -1858,7 +1856,7 @@ pub fn graph_join_by_hedge_key_bytes(
     validate_join_identities(&left.graph, &spec.key, true)?;
     validate_join_identities(&right.graph, &spec.key, true)?;
     validate_join_names(&left.graph, &right.graph)?;
-    let left_nodes = left.graph.iter_nodes().count();
+    let left_nodes = left.graph.node_bound();
     let left_hedges = left.graph.iter_hedges().count();
     let left_map = edge_origin_map(&left.graph);
     let right_map = edge_origin_map(&right.graph);
@@ -2027,10 +2025,8 @@ fn encode_join_result(
 ) -> Result<Vec<u8>, String> {
     let graph_bytes = encode_typst_graph(&graph)?;
     let dot = graph.to_dot_graph();
-    let nodes = dot
-        .iter_nodes()
-        .enumerate()
-        .map(|(i, _)| TypstJoinOrigin {
+    let nodes = (0..dot.node_bound())
+        .map(|i| TypstJoinOrigin {
             left: (i < left_nodes).then_some(i),
             right: if i >= left_nodes {
                 Some(i - left_nodes)
@@ -2177,7 +2173,7 @@ fn graph_from_spec(spec: TypstGraphSpec) -> Result<DotGraph, String> {
 
     let mut graph = DotGraph {
         global_data,
-        graph: builder.build::<NodeForest<DotVertexData>>(),
+        graph: builder.build::<NodeForest>(),
     };
     graph
         .apply_explicit_id_ordering()
@@ -3030,7 +3026,7 @@ mod tests {
             encode_cbor(&graph).unwrap()
         );
         let mut corrupt = snapshot;
-        corrupt["graph"]["node_store"]["label"][0] = serde_json::json!(99);
+        corrupt["graph"]["node_store"]["topology"]["label"][0] = serde_json::json!(99);
         assert!(TypstGraph::from_layout_snapshot(&corrupt)
             .unwrap_err()
             .contains("Invalid layout snapshot"));
@@ -3168,10 +3164,10 @@ mod tests {
                     let result = cut_result(&graph, &[entry]).unwrap();
                     let output = decode_typst_graph(&result.graph).unwrap();
                     output.check().unwrap();
-                    assert_eq!(output.n_nodes(), 3 + 2 * (winding - 1));
+                    assert_eq!(output.n_live(), 3 + 2 * (winding - 1));
                     assert_eq!(output.n_edges(), 3 + winding);
                     assert_eq!(output.n_hedges(), 5 + 2 * (winding - 1));
-                    assert_eq!(result.nodes.len(), output.n_nodes());
+                    assert_eq!(result.nodes.len(), output.node_bound());
                     assert_eq!(result.edges.len(), output.n_edges());
                     assert_eq!(result.hedges.len(), output.n_hedges());
                     assert_eq!(output.name, graph.name);
@@ -3368,7 +3364,7 @@ mod tests {
             let bytes = crate::api::layout_parsed_graph_bytes(&cut.graph, &settings).unwrap();
             let after = decode_typst_graph(&bytes).unwrap();
             after.check().unwrap();
-            assert_eq!(after.n_nodes(), before.n_nodes());
+            assert_eq!(after.n_live(), before.n_live());
             assert_eq!(after.n_hedges(), before.n_hedges());
             assert_eq!(after.n_edges(), before.n_edges());
             for ((pair, edge, data), (original_pair, original_edge, _)) in
@@ -3402,7 +3398,7 @@ mod tests {
             assert_eq!(result.graph, bytes);
             assert_eq!(
                 result.nodes,
-                (0..graph.n_nodes()).map(Some).collect::<Vec<_>>()
+                (0..graph.node_bound()).map(Some).collect::<Vec<_>>()
             );
             assert_eq!(
                 result.hedges,
@@ -3489,7 +3485,7 @@ mod tests {
         );
         assert_eq!(
             recut.nodes,
-            (0..output.n_nodes()).map(Some).collect::<Vec<_>>()
+            (0..output.node_bound()).map(Some).collect::<Vec<_>>()
         );
     }
 
@@ -3670,7 +3666,7 @@ mod tests {
         }
         let mut graph = cut_fixture(Orientation::Default);
         graph.graph.node_store = HedgeGraphBuilder::<TypstEdge, TypstNode, TypstHedge>::new()
-            .build::<NodeForest<TypstNode>>()
+            .build::<NodeForest>()
             .node_store;
         assert!(cut_result(
             &graph,
@@ -3846,7 +3842,7 @@ mod tests {
             }
             graph.layout_with_subgraph(None).unwrap();
             let positions = |graph: &TypstGraph| {
-                let nodes = (0..graph.n_nodes())
+                let nodes = (0..graph.node_bound())
                     .map(|index| graph.graph[NodeIndex(index)].pos)
                     .collect::<Vec<_>>();
                 let edges = (0..graph.n_edges())

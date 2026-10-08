@@ -82,7 +82,7 @@ fn schoonschip_only_symbolic_chain_without_compact_vector_stays_opaque() {
         .unwrap();
 
     assert_eq!(net.state, NetworkState::SelfDualTensor);
-    assert_eq!(net.graph.n_nodes(), 1);
+    assert_eq!(net.graph.n_live(), 1);
     assert_eq!(net.graph.dangling_indices().len(), 2);
     assert_eq!(net.store.tensors.len(), 1);
     assert_eq!(net.store.tensors[0].name(), Some(SPENSO_TAG.chain));

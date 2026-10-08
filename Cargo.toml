@@ -1,7 +1,7 @@
 [workspace]
 resolver = "2"
 members = ["crates/*", "tests"]
-exclude = ["vendor/typst-library", "vendor/typst-svg", "vendor/dot-parser"]
+exclude = ["vendor/typst-library", "vendor/typst-svg", "vendor/dot-parser", "vendor/clarabel"]
 default-members = ["crates/gammaloop-api"]
 
 [workspace.package]

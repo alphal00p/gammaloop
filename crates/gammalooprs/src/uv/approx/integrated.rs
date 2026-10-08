@@ -1091,7 +1091,7 @@ pub(crate) fn to_vakint_integrand<
             graph.identify_nodes(&nodes_to_merge, ());
         }
 
-        graph.forget_identification_history();
+        graph.compact();
         debug_tags!(#uv, #integrated, #vakint, #graph, #dump;
             log.graph = %graph.base_dot(),
             "Graph"

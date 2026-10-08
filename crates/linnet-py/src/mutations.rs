@@ -14,7 +14,7 @@ use crate::dot::{PyEdgeValue, PyNodeValue};
 use crate::drawing::copy_drawing;
 use crate::graph::{
     EdgeRecord, GraphState, IncrementalEdgeRecords, NodeRecord, PyEdge, PyEdgeSpec, PyFlow,
-    PyGraph, PyHalfEdge, PyHedgeGraph, PyNode, PyNodeSpec, PyOrientation,
+    PyGraph, PyHalfEdge, PyHedgeGraph, PyNode, PyNodeSpec, PyOrientation, SETTLED,
 };
 use crate::topology::PySubgraph;
 
@@ -38,11 +38,14 @@ impl PyGraph {
         }
         // Augmented subgraphs only store zero-crown nodes, so neither edge
         // mapping callback can be reached during this native node extraction.
-        graph.extract_nodes(
-            isolated_nodes.iter().copied().map(NodeIndex),
-            |_| unreachable!("an isolated node cannot split an edge"),
-            |_| unreachable!("an isolated node cannot own an edge"),
-        )
+        graph
+            .extract_nodes(
+                isolated_nodes.iter().copied().map(NodeIndex),
+                |_| unreachable!("an isolated node cannot split an edge"),
+                |_| unreachable!("an isolated node cannot own an edge"),
+            )
+            .expect(SETTLED)
+            .0
     }
 
     pub(crate) fn split_off(
@@ -57,36 +60,39 @@ impl PyGraph {
         let mut extracted = if subgraph.is_empty() {
             HedgeGraphBuilder::new().build()
         } else {
-            graph.extract(
-                subgraph,
-                |edge| EdgeData {
-                    orientation: edge.orientation,
-                    data: edge.data.copy(py).unwrap_or_else(|copy_error| {
-                        if error.borrow().is_none() {
-                            *error.borrow_mut() = Some(copy_error);
-                        }
-                        EdgeRecord {
-                            name: edge.data.name.clone(),
-                            data: edge.data.data.clone_ref(py),
-                            drawing: pyo3::types::PyDict::new(py).unbind(),
-                        }
-                    }),
-                },
-                |edge| edge,
-                |node| {
-                    node.copy(py).unwrap_or_else(|copy_error| {
-                        if error.borrow().is_none() {
-                            *error.borrow_mut() = Some(copy_error);
-                        }
-                        NodeRecord {
-                            name: node.name.clone(),
-                            data: node.data.clone_ref(py),
-                            drawing: pyo3::types::PyDict::new(py).unbind(),
-                        }
-                    })
-                },
-                |node| node,
-            )
+            graph
+                .extract(
+                    subgraph,
+                    |edge| EdgeData {
+                        orientation: edge.orientation,
+                        data: edge.data.copy(py).unwrap_or_else(|copy_error| {
+                            if error.borrow().is_none() {
+                                *error.borrow_mut() = Some(copy_error);
+                            }
+                            EdgeRecord {
+                                name: edge.data.name.clone(),
+                                data: edge.data.data.clone_ref(py),
+                                drawing: pyo3::types::PyDict::new(py).unbind(),
+                            }
+                        }),
+                    },
+                    |edge| edge,
+                    |node| {
+                        node.copy(py).unwrap_or_else(|copy_error| {
+                            if error.borrow().is_none() {
+                                *error.borrow_mut() = Some(copy_error);
+                            }
+                            NodeRecord {
+                                name: node.name.clone(),
+                                data: node.data.clone_ref(py),
+                                drawing: pyo3::types::PyDict::new(py).unbind(),
+                            }
+                        })
+                    },
+                    |node| node,
+                )
+                .expect(SETTLED)
+                .0
         };
         match error.into_inner() {
             Some(error) => Err(error),
@@ -361,7 +367,7 @@ impl PyGraph {
                     )));
                 }
             }
-            graph.n_nodes()
+            graph.node_bound()
         };
         // Complete Python allocation and validation before changing live storage.
         let result = Py::new(py, PyNode::new(slf.clone_ref(py), index, epoch))?;
@@ -600,7 +606,7 @@ impl PyGraph {
             .ok_or_else(|| PyReferenceError::new_err("graph has been cleared"))?
             .copy(py)?;
         Self::split_isolated_nodes(&mut candidate.graph, &isolated_nodes);
-        candidate.graph.delete_hedges(&filter);
+        candidate.graph.delete_hedges(&filter).expect(SETTLED);
         slf.borrow(py).check_revision(revision)?;
         candidate.revision = revision + 1;
         candidate.element_epoch += 1;
@@ -650,7 +656,7 @@ impl PyGraph {
             .iter_nodes_of(&filter)
             .all(|(_, mut crown, _)| crown.all(|hedge| filter.includes(&hedge)));
         if closed {
-            graph.delete_hedges(&filter);
+            graph.delete_hedges(&filter).expect(SETTLED);
             graph.add_node(replacement);
         } else {
             graph.contract_subgraph(&filter, replacement);

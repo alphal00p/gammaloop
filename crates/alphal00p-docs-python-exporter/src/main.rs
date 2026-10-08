@@ -63,34 +63,36 @@ fn main() -> Result<(), Box<dyn Error>> {
     if let Some(parent) = output.parent() {
         fs::create_dir_all(parent)?;
     }
-    let rendered = render(&component, module)?;
-    let mut normalized = rendered
-        .trim_end()
-        .lines()
-        .map(str::trim_end)
-        .collect::<Vec<_>>()
-        .join("\n");
-    normalized.push('\n');
+    let normalized = normalize(&render(&component, module)?);
+    let crates = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("..");
     let mut outputs = vec![output];
     match component.as_str() {
-        "feynkit-community" => outputs.push(
-            PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-                .join("../feynkit-py/python/symbolica/community/hepkit/__init__.pyi"),
-        ),
+        "feynkit-community" => outputs
+            .push(crates.join("feynkit-py/python/symbolica/community/hepkit/__init__.pyi")),
         "linnet-graph" => outputs.extend([
-            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../linnet-py/python/symbolica/community/graph/__init__.pyi"),
-            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../examples/notebooks/symbolica-host/python/symbolica/community/graph/__init__.pyi"),
+            crates.join("linnet-py/python/symbolica/community/graph/__init__.pyi"),
+            crates.join("../examples/notebooks/symbolica-host/python/symbolica/community/graph/__init__.pyi"),
         ]),
-        "spynso3" => outputs.push(
-            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(
-                "../../examples/notebooks/symbolica-host/python/symbolica/community/tensor/__init__.pyi",
-            ),
-        ),
+        "spynso3" => outputs.push(crates.join(
+            "../examples/notebooks/symbolica-host/python/symbolica/community/tensor/__init__.pyi",
+        )),
         _ => {}
     }
     outputs.sort();
     outputs.dedup();
-    for output in outputs {
+    let mut outputs = outputs
+        .into_iter()
+        .map(|output| (output, normalized.clone()))
+        .collect::<Vec<_>>();
+    // The standalone distribution ships the same classes without Symbolica keys.
+    #[cfg(feature = "linnet")]
+    if component == "linnet-graph" {
+        outputs.push((
+            crates.join("linnet-py/linnet_py.pyi"),
+            normalize(&linnet_py::PythonModule::Standalone.stub()?),
+        ));
+    }
+    for (output, normalized) in outputs {
         if check {
             let checked_in = fs::read_to_string(&output)?;
             if checked_in != normalized {
@@ -116,6 +118,18 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
     }
     Ok(())
+}
+
+/// Trim trailing whitespace from every line and end with exactly one newline.
+fn normalize(rendered: &str) -> String {
+    let mut normalized = rendered
+        .trim_end()
+        .lines()
+        .map(str::trim_end)
+        .collect::<Vec<_>>()
+        .join("\n");
+    normalized.push('\n');
+    normalized
 }
 
 #[cfg(any(feature = "feynkit", feature = "gammaloop", feature = "linnet"))]
@@ -152,7 +166,8 @@ fn validate_runtime_stub_surface(
     let stub = if module_name == "symbolica.community.graph" {
         // Macro-generated classes need the same name normalization as the shipped stub.
         pyo3::Python::attach(|py| -> pyo3::PyResult<BTreeSet<String>> {
-            let source = linnet_py::canonical_stub()
+            let source = linnet_py::PythonModule::Community
+                .stub()
                 .map_err(|error| pyo3::exceptions::PyRuntimeError::new_err(error.to_string()))?;
             let ast = py.import("ast")?;
             let mut names = BTreeSet::new();
@@ -200,7 +215,7 @@ fn render(
         "spynso3" => Ok(spynso3::SpensoModule::stub_source(module)),
         "feynkit-community" => Ok(module.to_string().trim_end().to_owned()),
         #[cfg(feature = "linnet")]
-        "linnet-graph" => Ok(linnet_py::canonical_stub()?),
+        "linnet-graph" => Ok(linnet_py::PythonModule::Community.stub()?),
         _ => Ok(module.to_string()),
     }
 }
@@ -542,7 +557,9 @@ def validate(runtime_module, stub_source):
     #[cfg(feature = "linnet")]
     #[test]
     fn linnet_package_and_docs_share_the_typed_stub_info_surface() {
-        let canonical = linnet_py::canonical_stub().unwrap();
+        use linnet_py::PythonModule;
+
+        let canonical = PythonModule::Community.stub().unwrap();
         assert_eq!(
             canonical,
             include_str!("../../linnet-py/python/symbolica/community/graph/__init__.pyi")
@@ -550,6 +567,15 @@ def validate(runtime_module, stub_source):
         assert_eq!(
             canonical,
             include_str!("../../../docs/api/python/linnet-graph.pyi")
+        );
+        // The standalone stub differs only by the keys it accepts.
+        let standalone = PythonModule::Standalone.stub().unwrap();
+        assert_eq!(standalone, include_str!("../../linnet-py/linnet_py.pyi"));
+        assert_eq!(
+            standalone,
+            canonical
+                .replace("from symbolica.core import Expression\n", "")
+                .replace("typing.Hashable | Expression", "typing.Hashable")
         );
         for declaration in [
             "_NativeValue: typing.TypeAlias = (",

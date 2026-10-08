@@ -9,7 +9,7 @@ use itertools::{EitherOrBoth, Itertools};
 use linnet::half_edge::{
     GVEdgeAttrs, HedgeGraph,
     involution::{EdgeIndex, EdgeVec, Orientation, SignOrZero},
-    nodestore::NodeStorageOps,
+    nodestore::Topology,
 };
 use serde::{Deserialize, Serialize};
 use symbolica::{
@@ -205,7 +205,7 @@ impl OrientationData {
         }
     }
 
-    pub fn dot<E, V, N: NodeStorageOps<NodeData = V>>(&self, graph: &HedgeGraph<E, V, N>) {
+    pub fn dot<E, V, N: Topology>(&self, graph: &HedgeGraph<E, V, N>) {
         let mut writer = String::new();
         writer.push_str("digraph {{");
 

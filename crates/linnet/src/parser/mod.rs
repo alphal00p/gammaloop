@@ -24,14 +24,14 @@
 //! )
 //! .unwrap();
 //!
-//! assert_eq!(graph.n_nodes(), 2);
+//! assert_eq!(graph.n_live(), 2);
 //! assert_eq!(graph.n_edges(), 1);
 //! assert_eq!(graph.n_hedges(), 2);
 //!
 //! let mut output = String::new();
 //! graph.write_fmt(&mut output).unwrap();
 //! let round_trip: DotGraph = DotGraph::from_string(output).unwrap();
-//! assert_eq!(round_trip.n_nodes(), graph.n_nodes());
+//! assert_eq!(round_trip.n_live(), graph.n_live());
 //! assert_eq!(round_trip.n_edges(), graph.n_edges());
 //! ```
 //!
@@ -66,7 +66,8 @@ use crate::{
     half_edge::{
         builder::HedgeGraphBuilder,
         involution::{EdgeIndex, Hedge},
-        nodestore::{NodeForest, NodeStorage, NodeStorageOps},
+        nodestore::{NodeForest, Topology},
+        remap::{HedgeRemap, NodeRemap},
         subgraph::{ModifySubSet, SubGraphLike, SubSetLike},
         swap::Swap,
         GVEdgeAttrs, HedgeGraph, NodeIndex,
@@ -194,14 +195,14 @@ pub use hedge::DotHedgeData;
     derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
 )]
 #[cfg_attr(feature = "rkyv", archive(check_bytes))]
-pub struct DotGraph<N: NodeStorage<NodeData = DotVertexData> = NodeForest<DotVertexData>> {
+pub struct DotGraph<N: Topology = NodeForest> {
     /// Graph-level DOT metadata, including its name, payload, and attribute defaults.
     pub global_data: GlobalData,
     /// Parsed half-edge topology together with its DOT edge, vertex, and half-edge data.
     pub graph: HedgeGraph<DotEdgeData, DotVertexData, DotHedgeData, N>,
 }
 
-impl<N: NodeStorage<NodeData = DotVertexData>> Deref for DotGraph<N> {
+impl<N: Topology> Deref for DotGraph<N> {
     type Target = HedgeGraph<DotEdgeData, DotVertexData, DotHedgeData, N>;
 
     fn deref(&self) -> &Self::Target {
@@ -209,7 +210,7 @@ impl<N: NodeStorage<NodeData = DotVertexData>> Deref for DotGraph<N> {
     }
 }
 
-impl<N: NodeStorage<NodeData = DotVertexData>> DerefMut for DotGraph<N> {
+impl<N: Topology> DerefMut for DotGraph<N> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.graph
     }
@@ -225,7 +226,7 @@ pub enum NodeIdOrDangling {
 
 mod subgraph_free;
 
-impl<S: NodeStorageOps<NodeData = DotVertexData>> DotGraph<S> {
+impl<S: Topology> DotGraph<S> {
     pub fn compass_subgraph<Sub: ModifySubSet<Hedge> + SubSetLike>(
         &self,
         cps: Option<CompassPt>,
@@ -250,7 +251,7 @@ impl<S: NodeStorageOps<NodeData = DotVertexData>> DotGraph<S> {
 
         writeln!(writer, "{:4}", self.global_data)?;
 
-        for (n, (_, _, v)) in self.iter_nodes().enumerate() {
+        for (n, _, v) in self.iter_nodes() {
             let mut node_data: DotVertexData = v.clone();
             node_data.remove_common(&self.global_data);
 
@@ -310,7 +311,7 @@ impl<S: NodeStorageOps<NodeData = DotVertexData>> DotGraph<S> {
         writer.indent(1);
 
         write!(writer, "{}", self.global_data)?;
-        for (n, (_, _, v)) in self.iter_nodes().enumerate() {
+        for (n, _, v) in self.iter_nodes() {
             let mut node_data: DotVertexData = v.clone();
             node_data.remove_common(&self.global_data);
             let data = node_data.to_string();
@@ -517,7 +518,7 @@ impl<S: NodeStorageOps<NodeData = DotVertexData>> DotGraph<S> {
 pub mod error;
 pub use error::{DotParseError, ExplicitIdKind, HedgeParseError, HedgeParseExt};
 
-impl<S: NodeStorageOps<NodeData = DotVertexData>> DotGraph<S> {
+impl<S: Topology> DotGraph<S> {
     pub fn apply_explicit_id_ordering(&mut self) -> Result<(), DotParseError> {
         // println!("Built: {}", self.debug_dot());
 
@@ -562,14 +563,14 @@ impl<S: NodeStorageOps<NodeData = DotVertexData>> DotGraph<S> {
         }
 
         let mut used_nodes = HashSet::new();
-        let n_nodes = self.n_nodes();
+        let node_bound = self.node_bound();
         let mut node_map = self.new_nodevec(|_, _, v| v.index);
         for id in node_map.iter().filter_map(|(_, id)| *id) {
-            if id.0 >= n_nodes {
+            if id.0 >= node_bound {
                 return Err(DotParseError::ExplicitIdOutOfBounds {
                     kind: ExplicitIdKind::Node,
                     id: id.0,
-                    len: n_nodes,
+                    len: node_bound,
                 });
             }
             if !used_nodes.insert(id) {
@@ -629,12 +630,14 @@ impl<S: NodeStorageOps<NodeData = DotVertexData>> DotGraph<S> {
         // println!("Edge Perm: {edge_perm}");
         // println!("Node Perm: {node_perm}");
 
-        <HedgeGraph<_, _, _, _> as Swap<Hedge>>::permute(&mut self.graph, &hedge_perm);
-        // println!("Permuted Hedge Graph: {}", g.debug_dot());
+        const SETTLED: &str = "parsed graphs have no pending identifications";
+        (self.graph)
+            .permute_hedges(&HedgeRemap::from_permutation(&hedge_perm))
+            .expect(SETTLED);
         <HedgeGraph<_, _, _, _> as Swap<EdgeIndex>>::permute(&mut self.graph, &edge_perm);
-        // println!("Permuted Edge Graph: {}", g.debug_dot());
-        <HedgeGraph<_, _, _, _> as Swap<NodeIndex>>::permute(&mut self.graph, &node_perm);
-        // println!("Permuted Node Graph:{}", g.debug_dot());
+        (self.graph)
+            .permute_nodes(&NodeRemap::from_permutation(&node_perm))
+            .expect(SETTLED);
         Ok(())
     }
 }
@@ -646,7 +649,7 @@ macro_rules! dot {
     };
 }
 
-impl<E, V, H, N: NodeStorageOps<NodeData = V>> HedgeGraph<E, V, H, N> {
+impl<E, V, H, N: Topology> HedgeGraph<E, V, H, N> {
     pub fn dot_serialize_of<S: SubGraphLike>(
         &self,
         subgraph: &S,
@@ -725,7 +728,7 @@ pub mod test {
 
     use crate::{
         half_edge::{nodestore::NodeForest, subgraph::SuBitGraph},
-        parser::{DotGraph, DotParseError, DotVertexData, ExplicitIdKind, HedgeParseError},
+        parser::{DotGraph, DotParseError, ExplicitIdKind, HedgeParseError},
     };
 
     use super::GraphSet;
@@ -759,12 +762,48 @@ pub mod test {
 
         println!("Parsed as:{}", graph.debug_dot());
         // println!("Inv:{}", graph.graph.as_ref());
-        assert_eq!(graph.n_nodes(), 2);
+        assert_eq!(graph.n_live(), 2);
         assert_eq!(graph.n_internals(), 1);
         let g = graph.back_and_forth_dot();
         let gg = g.clone().back_and_forth_dot();
         // println!("{g:?}");
         assert_eq!(g, gg);
+    }
+
+    /// Nodes absorbed by a pending identification are not written: both DOT
+    /// writers and the Symbolica conversion show the identified graph, as
+    /// compacting first would.
+    #[test]
+    fn pending_identifications_are_written_as_the_identified_graph() {
+        let mut graph: DotGraph = DotGraph::from_string("digraph { a -> b; b -> c; }").unwrap();
+        let named = |graph: &DotGraph, name: &str| {
+            (graph.iter_nodes())
+                .find(|(_, _, node)| node.name.as_deref() == Some(name))
+                .map(|(index, _, _)| index)
+                .unwrap()
+        };
+        let (a, c) = (named(&graph, "a"), named(&graph, "c"));
+        let merged = graph[a].clone();
+        graph.identify_nodes(&[a, c], merged);
+        let mut compacted = graph.clone();
+        compacted.compact();
+
+        let mut written = String::new();
+        graph.write_fmt(&mut written).unwrap();
+        let back: DotGraph = DotGraph::from_string(written).unwrap();
+        assert_eq!(
+            (back.n_live(), back.node_bound(), back.n_edges()),
+            (2, 2, 2)
+        );
+        assert_eq!(
+            graph.clone().back_and_forth_dot(),
+            compacted.back_and_forth_dot()
+        );
+        #[cfg(feature = "symbolica")]
+        {
+            let identified = symbolica::graph::Graph::try_from(graph.graph).unwrap();
+            assert_eq!((identified.nodes().len(), identified.edges().len()), (2, 2));
+        }
     }
 
     #[test]
@@ -948,7 +987,7 @@ pub mod test {
 
     #[test]
     fn graph_sets_return_semantic_errors() {
-        let parsed = GraphSet::<_, _, _, _, NodeForest<DotVertexData>>::from_string(
+        let parsed = GraphSet::<_, _, _, _, NodeForest>::from_string(
             "digraph valid { a -> b; } digraph invalid { a -> b [dir=sideways]; }",
         );
         let error = parsed.unwrap_err();
@@ -1104,7 +1143,7 @@ pub mod test {
             }
             "#;
 
-        let set = GraphSet::<_, _, _, _, NodeForest<DotVertexData>>::from_string(s).unwrap();
+        let set = GraphSet::<_, _, _, _, NodeForest>::from_string(s).unwrap();
         assert_eq!(set.set.len(), 2);
 
         for g in set {
@@ -1222,7 +1261,7 @@ pub mod test {
             aligned.dot_display(&aligned.full_filter()),
             graph2.dot_display(&graph2.full_filter())
         );
-        // assert_eq!(graph.n_nodes(), 2);
+        // assert_eq!(graph.n_live(), 2);
         // assert_eq!(graph.n_internals(), 1);
     }
 

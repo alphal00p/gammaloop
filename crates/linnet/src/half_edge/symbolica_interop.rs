@@ -3,7 +3,7 @@ use ahash::AHashMap;
 use super::{
     builder::HedgeGraphBuilder,
     involution::{HedgePair, Orientation},
-    nodestore::NodeStorageOps,
+    nodestore::Topology,
     HedgeGraph, HedgeGraphError,
 };
 
@@ -27,7 +27,7 @@ impl<N: Clone, E: Clone> From<symbolica::graph::Graph<N, E>> for HedgeGraph<E, N
     }
 }
 
-impl<N: Clone, E: Clone, H, S: NodeStorageOps<NodeData = N>> TryFrom<HedgeGraph<E, N, H, S>>
+impl<N: Clone, E: Clone, H, S: Topology> TryFrom<HedgeGraph<E, N, H, S>>
     for symbolica::graph::Graph<N, E>
 {
     type Error = HedgeGraphError;
@@ -36,7 +36,7 @@ impl<N: Clone, E: Clone, H, S: NodeStorageOps<NodeData = N>> TryFrom<HedgeGraph<
         let mut graph = symbolica::graph::Graph::new();
         let mut map = AHashMap::new();
 
-        for (i, node) in value.node_store.iter() {
+        for (i, _, node) in value.iter_nodes() {
             map.insert(i, graph.add_node(node.clone()));
         }
 

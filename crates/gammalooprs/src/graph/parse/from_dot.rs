@@ -34,7 +34,7 @@ impl IntoFinalizedRuntimeGraph<Vec<Graph>> for String {
             DotVertexData,
             DotHedgeData,
             linnet::parser::GlobalData,
-            NodeForest<DotVertexData>,
+            NodeForest,
         > = GraphSet::from_string(self)
             .map_err(|error| color_eyre::eyre::eyre!("DOT parsing error: {error}"))?;
 
@@ -44,7 +44,7 @@ impl IntoFinalizedRuntimeGraph<Vec<Graph>> for String {
 
 impl IntoFinalizedRuntimeGraph<Graph> for String {
     fn into_finalized_runtime_graph(self, model: &Model) -> Result<Graph> {
-        let graph: DotGraph<NodeForest<DotVertexData>> = DotGraph::from_string(self)
+        let graph: DotGraph<NodeForest> = DotGraph::from_string(self)
             .map_err(|error| color_eyre::eyre::eyre!("DOT parsing error: {error}"))?;
 
         Graph::from_parsed_with_validation(ParseGraph::from_parsed(graph, model)?, model)
@@ -58,7 +58,7 @@ impl IntoFinalizedRuntimeGraph<Vec<Graph>> for &str {
             DotVertexData,
             DotHedgeData,
             linnet::parser::GlobalData,
-            NodeForest<DotVertexData>,
+            NodeForest,
         > = GraphSet::from_string(self)
             .map_err(|error| color_eyre::eyre::eyre!("DOT parsing error: {error}"))?;
 
@@ -68,7 +68,7 @@ impl IntoFinalizedRuntimeGraph<Vec<Graph>> for &str {
 
 impl IntoFinalizedRuntimeGraph<Graph> for &str {
     fn into_finalized_runtime_graph(self, model: &Model) -> Result<Graph> {
-        let graph: DotGraph<NodeForest<DotVertexData>> = DotGraph::from_string(self)
+        let graph: DotGraph<NodeForest> = DotGraph::from_string(self)
             .map_err(|error| color_eyre::eyre::eyre!("DOT parsing error: {error}"))?;
 
         Graph::from_parsed_with_validation(ParseGraph::from_parsed(graph, model)?, model)

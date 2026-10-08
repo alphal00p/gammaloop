@@ -4,6 +4,7 @@ import gc
 import inspect
 import json
 import os
+import pickle
 import re
 import shutil
 import unittest
@@ -14,7 +15,8 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
-from symbolica.community import graph as lp
+from linnet_under_test import COMMUNITY, NAME
+from linnet_under_test import graph as lp
 
 
 class Payload:
@@ -1652,8 +1654,14 @@ class TestDotCodec(unittest.TestCase):
             re.DOTALL,
         )
         self.assertIsNotNone(example)
+        code = example.group(1)
+        if not COMMUNITY:
+            # The guide imports the Community module; run it on the standalone one.
+            community_import = "from symbolica.community import graph as lp\n"
+            self.assertIn(community_import, code)
+            code = code.replace(community_import, f"import {NAME} as lp\n")
         exec(
-            compile(example.group(1), str(source_path), "exec"),
+            compile(code, str(source_path), "exec"),
             {"print": lambda *_args, **_kwargs: None},
         )
 
@@ -2011,9 +2019,10 @@ class TestDotCodec(unittest.TestCase):
 
 class TestTypedTypstSurface(unittest.TestCase):
     def test_generated_stub_declares_aliases_and_only_exported_classes(self):
-        stub = (
-            Path(__file__).resolve().parents[1]
-            / "python/symbolica/community/graph/__init__.pyi"
+        stub = Path(__file__).resolve().parents[1] / (
+            "python/symbolica/community/graph/__init__.pyi"
+            if COMMUNITY
+            else "linnet_py.pyi"
         )
         declarations = ast.parse(stub.read_text()).body
         aliases = {
@@ -2033,6 +2042,26 @@ class TestTypedTypstSurface(unittest.TestCase):
             if isinstance(node, ast.ClassDef) and not node.name.startswith("_"):
                 with self.subTest(name=node.name):
                     self.assertIsInstance(getattr(lp, node.name), type)
+
+    def test_classes_are_published_under_the_module_of_their_build(self):
+        # Each build compiles every class under its own module, so reprs,
+        # pickled references and CPython's own messages name it.
+        classes = [value for value in vars(lp).values() if isinstance(value, type)]
+        self.assertIn(lp.Graph, classes)
+        for cls in classes:
+            with self.subTest(name=cls.__name__):
+                self.assertEqual(cls.__module__, NAME)
+                self.assertIs(pickle.loads(pickle.dumps(cls)), cls)
+        self.assertEqual(repr(lp.Graph), f"<class '{NAME}.Graph'>")
+        module = re.escape(NAME)
+        with self.assertRaisesRegex(
+            TypeError, rf"'{module}\.Auto' object is not subscriptable"
+        ):
+            lp.AUTO[0]
+        with self.assertRaisesRegex(
+            AttributeError, rf"'{module}\.Graph' object has no attribute"
+        ):
+            lp.Graph().missing
 
     def test_native_values_drawing_and_configuration_smoke(self):
         length = lp.Length.mm(2)

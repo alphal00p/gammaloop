@@ -3,7 +3,7 @@
 use std::hint::black_box;
 
 use criterion::{criterion_group, criterion_main, Criterion};
-use linnet::half_edge::{nodestore::NodeForest, HedgeGraph};
+use linnet::half_edge::HedgeGraph;
 use symbolica::graph::{GenerationSettings, Graph, HalfEdge};
 
 type Plain = Graph<usize, u8>;
@@ -46,7 +46,7 @@ fn canon(c: &mut Criterion) {
         ),
     ];
     for (name, graphs) in sets {
-        let linnet: Vec<HedgeGraph<u8, usize, (), NodeForest<usize>>> =
+        let linnet: Vec<HedgeGraph<u8, usize, ()>> =
             graphs.iter().cloned().map(HedgeGraph::from).collect();
         let mut group = c.benchmark_group(name);
         group.bench_function("linnet", |b| {
