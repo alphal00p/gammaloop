@@ -13,12 +13,9 @@ use std::{
 /// An immutable graph rendering with source inspection, file exports, and notebook display.
 /// Render inputs and referenced assets are captured when the result is created.
 #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
-#[pyclass(
-    module = "symbolica.community.graph",
-    name = "DiagramRender",
-    frozen,
-    skip_from_py_object
-)]
+#[pyclass(name = "DiagramRender", frozen, skip_from_py_object)]
+#[cfg_attr(feature = "community", pyo3(module = "symbolica.community.graph"))]
+#[cfg_attr(not(feature = "community"), pyo3(module = "linnet_py"))]
 #[derive(Clone)]
 pub struct PyDiagramRender {
     project: Option<Arc<PreparedRender>>,

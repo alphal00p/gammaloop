@@ -775,17 +775,14 @@ fn dictionary_source(
 
 /// Type of the `AUTO` sentinel, which requests automatic selection.
 #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
-#[pyclass(
-    module = "symbolica.community.graph",
-    skip_from_py_object,
-    frozen,
-    name = "Auto"
-)]
+#[pyclass(skip_from_py_object, frozen, name = "Auto")]
+#[cfg_attr(feature = "community", pyo3(module = "symbolica.community.graph"))]
+#[cfg_attr(not(feature = "community"), pyo3(module = "linnet_py"))]
 #[derive(Clone, Copy, Debug)]
 pub struct PyAuto;
 
 #[cfg(feature = "python_stubgen")]
-pyo3_stub_gen::module_variable!("symbolica.community.graph", "AUTO", PyAuto);
+pyo3_stub_gen::module_variable!(crate::PythonModule::COMPILED.name(), "AUTO", PyAuto);
 
 #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
 #[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
@@ -806,17 +803,14 @@ impl PyAuto {
 
 /// Type of the `INHERIT` sentinel, which preserves a lower-precedence setting.
 #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
-#[pyclass(
-    module = "symbolica.community.graph",
-    skip_from_py_object,
-    frozen,
-    name = "Inherit"
-)]
+#[pyclass(skip_from_py_object, frozen, name = "Inherit")]
+#[cfg_attr(feature = "community", pyo3(module = "symbolica.community.graph"))]
+#[cfg_attr(not(feature = "community"), pyo3(module = "linnet_py"))]
 #[derive(Clone, Copy, Debug)]
 struct PyInherit;
 
 #[cfg(feature = "python_stubgen")]
-pyo3_stub_gen::module_variable!("symbolica.community.graph", "INHERIT", PyInherit);
+pyo3_stub_gen::module_variable!(crate::PythonModule::COMPILED.name(), "INHERIT", PyInherit);
 
 #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
 #[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
@@ -844,7 +838,9 @@ macro_rules! typst_string_enum {
     ) => {
         $(#[$meta])*
         #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass_enum)]
-        #[pyclass(module = "symbolica.community.graph", from_py_object, eq, eq_int, name = $python)]
+        #[pyclass(from_py_object, eq, eq_int, name = $python)]
+        #[cfg_attr(feature = "community", pyo3(module = "symbolica.community.graph"))]
+        #[cfg_attr(not(feature = "community"), pyo3(module = "linnet_py"))]
         #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
         #[serde(rename_all = "kebab-case")]
         enum $rust {
@@ -1013,13 +1009,9 @@ typst_string_enum! {
     feature = "python_stubgen",
     pyo3_stub_gen::derive::gen_stub_pyclass_enum
 )]
-#[pyclass(
-    module = "symbolica.community.graph",
-    from_py_object,
-    eq,
-    eq_int,
-    name = "DebugLevel"
-)]
+#[pyclass(from_py_object, eq, eq_int, name = "DebugLevel")]
+#[cfg_attr(feature = "community", pyo3(module = "symbolica.community.graph"))]
+#[cfg_attr(not(feature = "community"), pyo3(module = "linnet_py"))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 enum PyDebugLevel {
@@ -1122,12 +1114,9 @@ typst_string_enum! {
 
 /// A Typst length such as `2pt` or `1.2em`.
 #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
-#[pyclass(
-    module = "symbolica.community.graph",
-    from_py_object,
-    frozen,
-    name = "Length"
-)]
+#[pyclass(from_py_object, frozen, name = "Length")]
+#[cfg_attr(feature = "community", pyo3(module = "symbolica.community.graph"))]
+#[cfg_attr(not(feature = "community"), pyo3(module = "linnet_py"))]
 #[derive(Clone, Debug, PartialEq)]
 struct PyLength {
     value: f64,
@@ -1192,12 +1181,9 @@ impl PyLength {
 
 /// A Typst ratio expressed in percent.
 #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
-#[pyclass(
-    module = "symbolica.community.graph",
-    from_py_object,
-    frozen,
-    name = "Ratio"
-)]
+#[pyclass(from_py_object, frozen, name = "Ratio")]
+#[cfg_attr(feature = "community", pyo3(module = "symbolica.community.graph"))]
+#[cfg_attr(not(feature = "community"), pyo3(module = "linnet_py"))]
 #[derive(Clone, Copy, Debug, PartialEq)]
 struct PyRatio {
     percent: f64,
@@ -1231,12 +1217,9 @@ impl PyRatio {
 
 /// A sum of a Typst ratio and length.
 #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
-#[pyclass(
-    module = "symbolica.community.graph",
-    from_py_object,
-    frozen,
-    name = "RelativeLength"
-)]
+#[pyclass(from_py_object, frozen, name = "RelativeLength")]
+#[cfg_attr(feature = "community", pyo3(module = "symbolica.community.graph"))]
+#[cfg_attr(not(feature = "community"), pyo3(module = "linnet_py"))]
 #[derive(Clone, Debug, PartialEq)]
 struct PyRelativeLength {
     ratio: Option<f64>,
@@ -1274,12 +1257,9 @@ impl PyRelativeLength {
 
 /// A Typst angle in degrees or radians.
 #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
-#[pyclass(
-    module = "symbolica.community.graph",
-    from_py_object,
-    frozen,
-    name = "Angle"
-)]
+#[pyclass(from_py_object, frozen, name = "Angle")]
+#[cfg_attr(feature = "community", pyo3(module = "symbolica.community.graph"))]
+#[cfg_attr(not(feature = "community"), pyo3(module = "linnet_py"))]
 #[derive(Clone, Debug, PartialEq)]
 struct PyAngle {
     value: f64,
@@ -1322,12 +1302,9 @@ impl PyAngle {
 
 /// A Typst fractional track size such as `1fr`.
 #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
-#[pyclass(
-    module = "symbolica.community.graph",
-    from_py_object,
-    frozen,
-    name = "Fraction"
-)]
+#[pyclass(from_py_object, frozen, name = "Fraction")]
+#[cfg_attr(feature = "community", pyo3(module = "symbolica.community.graph"))]
+#[cfg_attr(not(feature = "community"), pyo3(module = "linnet_py"))]
 #[derive(Clone, Copy, Debug, PartialEq)]
 struct PyFraction {
     value: f64,
@@ -1356,12 +1333,9 @@ impl PyFraction {
 
 /// A safe Typst color value.
 #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
-#[pyclass(
-    module = "symbolica.community.graph",
-    from_py_object,
-    frozen,
-    name = "Color"
-)]
+#[pyclass(from_py_object, frozen, name = "Color")]
+#[cfg_attr(feature = "community", pyo3(module = "symbolica.community.graph"))]
+#[cfg_attr(not(feature = "community"), pyo3(module = "linnet_py"))]
 #[derive(Clone, Debug, PartialEq)]
 struct PyColor {
     value: ColorValue,
@@ -1819,12 +1793,9 @@ const STROKE_FIELDS: &[FieldSpec] = &[
 
 /// A typed Typst stroke dictionary.
 #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
-#[pyclass(
-    module = "symbolica.community.graph",
-    from_py_object,
-    frozen,
-    name = "Stroke"
-)]
+#[pyclass(from_py_object, frozen, name = "Stroke")]
+#[cfg_attr(feature = "community", pyo3(module = "symbolica.community.graph"))]
+#[cfg_attr(not(feature = "community"), pyo3(module = "linnet_py"))]
 #[derive(Clone, Debug, PartialEq)]
 struct PyStroke {
     values: BTreeMap<String, NativeValue>,
@@ -1853,12 +1824,9 @@ impl PyStroke {
 
 /// A named or explicit Typst dash pattern.
 #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
-#[pyclass(
-    module = "symbolica.community.graph",
-    from_py_object,
-    frozen,
-    name = "Dash"
-)]
+#[pyclass(from_py_object, frozen, name = "Dash")]
+#[cfg_attr(feature = "community", pyo3(module = "symbolica.community.graph"))]
+#[cfg_attr(not(feature = "community"), pyo3(module = "linnet_py"))]
 #[derive(Clone, Debug, PartialEq)]
 struct PyDash {
     value: DashValue,
@@ -1935,12 +1903,9 @@ const INSET_FIELDS: &[FieldSpec] = &[
 
 /// Typed CeTZ/Typst inset values.
 #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
-#[pyclass(
-    module = "symbolica.community.graph",
-    from_py_object,
-    frozen,
-    name = "Insets"
-)]
+#[pyclass(from_py_object, frozen, name = "Insets")]
+#[cfg_attr(feature = "community", pyo3(module = "symbolica.community.graph"))]
+#[cfg_attr(not(feature = "community"), pyo3(module = "linnet_py"))]
 #[derive(Clone, Debug, PartialEq)]
 struct PyInsets {
     values: BTreeMap<String, NativeValue>,
@@ -1994,12 +1959,9 @@ const MARK_FIELDS: &[FieldSpec] = &[
 
 /// Typed CeTZ mark configuration.
 #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
-#[pyclass(
-    module = "symbolica.community.graph",
-    from_py_object,
-    frozen,
-    name = "Mark"
-)]
+#[pyclass(from_py_object, frozen, name = "Mark")]
+#[cfg_attr(feature = "community", pyo3(module = "symbolica.community.graph"))]
+#[cfg_attr(not(feature = "community"), pyo3(module = "linnet_py"))]
 #[derive(Clone, Debug, PartialEq)]
 struct PyMark {
     values: BTreeMap<String, NativeValue>,
@@ -2060,12 +2022,9 @@ const TEXT_FIELDS: &[FieldSpec] = &[
 
 /// Literal text content with optional typed text styling.
 #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
-#[pyclass(
-    module = "symbolica.community.graph",
-    from_py_object,
-    frozen,
-    name = "TextLabel"
-)]
+#[pyclass(from_py_object, frozen, name = "TextLabel")]
+#[cfg_attr(feature = "community", pyo3(module = "symbolica.community.graph"))]
+#[cfg_attr(not(feature = "community"), pyo3(module = "linnet_py"))]
 #[derive(Clone, Debug, PartialEq)]
 struct PyTextLabel {
     value: TextValue,
@@ -2125,12 +2084,9 @@ fn math_script(value: &Bound<'_, PyAny>, what: &str) -> PyResult<MathScript> {
 
 /// Safe mathematical identifier content, optionally with scripts.
 #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
-#[pyclass(
-    module = "symbolica.community.graph",
-    from_py_object,
-    frozen,
-    name = "MathSymbol"
-)]
+#[pyclass(from_py_object, frozen, name = "MathSymbol")]
+#[cfg_attr(feature = "community", pyo3(module = "symbolica.community.graph"))]
+#[cfg_attr(not(feature = "community"), pyo3(module = "linnet_py"))]
 #[derive(Clone, Debug, PartialEq)]
 struct PyMathSymbol {
     value: MathValue,
@@ -2172,12 +2128,9 @@ impl PyMathSymbol {
 
 /// A local or package Typst module whose exports can be referenced safely.
 #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
-#[pyclass(
-    module = "symbolica.community.graph",
-    from_py_object,
-    frozen,
-    name = "TypstModule"
-)]
+#[pyclass(from_py_object, frozen, name = "TypstModule")]
+#[cfg_attr(feature = "community", pyo3(module = "symbolica.community.graph"))]
+#[cfg_attr(not(feature = "community"), pyo3(module = "linnet_py"))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct PyTypstModule {
     source: TypstModuleSource,
@@ -2277,12 +2230,9 @@ fn call_arguments(
 
 /// A typed export from a Typst module.
 #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
-#[pyclass(
-    module = "symbolica.community.graph",
-    from_py_object,
-    frozen,
-    name = "TypstRef"
-)]
+#[pyclass(from_py_object, frozen, name = "TypstRef")]
+#[cfg_attr(feature = "community", pyo3(module = "symbolica.community.graph"))]
+#[cfg_attr(not(feature = "community"), pyo3(module = "linnet_py"))]
 #[derive(Clone, Debug, PartialEq)]
 struct PyTypstRef {
     expression: TypstExpression,
@@ -2352,12 +2302,9 @@ impl PyTypstRef {
 
 /// A call to an explicitly imported Typst function.
 #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
-#[pyclass(
-    module = "symbolica.community.graph",
-    from_py_object,
-    frozen,
-    name = "TypstCall"
-)]
+#[pyclass(from_py_object, frozen, name = "TypstCall")]
+#[cfg_attr(feature = "community", pyo3(module = "symbolica.community.graph"))]
+#[cfg_attr(not(feature = "community"), pyo3(module = "linnet_py"))]
 #[derive(Clone, Debug, PartialEq)]
 struct PyTypstCall {
     expression: TypstExpression,
@@ -2374,12 +2321,9 @@ impl PyTypstCall {
 
 /// A Typst function partially applied through its native `.with` method.
 #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
-#[pyclass(
-    module = "symbolica.community.graph",
-    from_py_object,
-    frozen,
-    name = "TypstBind"
-)]
+#[pyclass(from_py_object, frozen, name = "TypstBind")]
+#[cfg_attr(feature = "community", pyo3(module = "symbolica.community.graph"))]
+#[cfg_attr(not(feature = "community"), pyo3(module = "linnet_py"))]
 #[derive(Clone, Debug, PartialEq)]
 struct PyTypstBind {
     expression: TypstExpression,
@@ -2678,11 +2622,9 @@ pub(crate) struct SelectorCallbacks {
 
 /// Per-render Python callbacks returning typed drawing patches.
 #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
-#[pyclass(
-    module = "symbolica.community.graph",
-    skip_from_py_object,
-    name = "DrawingSelectors"
-)]
+#[pyclass(skip_from_py_object, name = "DrawingSelectors")]
+#[cfg_attr(feature = "community", pyo3(module = "symbolica.community.graph"))]
+#[cfg_attr(not(feature = "community"), pyo3(module = "linnet_py"))]
 #[derive(Clone, Debug, Default)]
 struct PyDrawingSelectors {
     settings: SelectorSettings,
@@ -2737,12 +2679,9 @@ impl PyDrawingSelectors {
 
 /// Options applied by `linnest.graph.style` before layout measurement.
 #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
-#[pyclass(
-    module = "symbolica.community.graph",
-    from_py_object,
-    frozen,
-    name = "GraphStyleOptions"
-)]
+#[pyclass(from_py_object, frozen, name = "GraphStyleOptions")]
+#[cfg_attr(feature = "community", pyo3(module = "symbolica.community.graph"))]
+#[cfg_attr(not(feature = "community"), pyo3(module = "linnet_py"))]
 #[derive(Clone, Debug, Default, PartialEq)]
 struct PyGraphStyleOptions {
     values: BTreeMap<String, NativeValue>,
@@ -2980,12 +2919,9 @@ const LAYOUT_FIELDS: &[FieldSpec] = &[
 /// 0 gives uniform pull, 1 (the default) balances topology, and values above 1
 /// strengthen balancing. It does not change radial pull.
 #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
-#[pyclass(
-    module = "symbolica.community.graph",
-    from_py_object,
-    frozen,
-    name = "LayoutSettings"
-)]
+#[pyclass(from_py_object, frozen, name = "LayoutSettings")]
+#[cfg_attr(feature = "community", pyo3(module = "symbolica.community.graph"))]
+#[cfg_attr(not(feature = "community"), pyo3(module = "linnet_py"))]
 #[derive(Clone, Debug, PartialEq)]
 struct PyLayoutSettings {
     passes: Vec<BTreeMap<String, NativeValue>>,
@@ -3156,12 +3092,9 @@ const DRAW_FIELDS: &[FieldSpec] = &[
 
 /// Full typed option surface for `linnest.draw`.
 #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
-#[pyclass(
-    module = "symbolica.community.graph",
-    from_py_object,
-    frozen,
-    name = "DrawOptions"
-)]
+#[pyclass(from_py_object, frozen, name = "DrawOptions")]
+#[cfg_attr(feature = "community", pyo3(module = "symbolica.community.graph"))]
+#[cfg_attr(not(feature = "community"), pyo3(module = "linnet_py"))]
 #[derive(Clone, Debug, Default, PartialEq)]
 struct PyDrawOptions {
     values: BTreeMap<String, NativeValue>,
@@ -3235,11 +3168,9 @@ fn deep_overlay(
 
 /// Complete typed rendering configuration.
 #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
-#[pyclass(
-    module = "symbolica.community.graph",
-    skip_from_py_object,
-    name = "RenderSettings"
-)]
+#[pyclass(skip_from_py_object, name = "RenderSettings")]
+#[cfg_attr(feature = "community", pyo3(module = "symbolica.community.graph"))]
+#[cfg_attr(not(feature = "community"), pyo3(module = "linnet_py"))]
 #[derive(Clone, Debug, Default)]
 pub struct PyRenderSettings {
     template: PathSetting,

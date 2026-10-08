@@ -31,13 +31,9 @@ static SPEC_ID: AtomicU64 = AtomicU64::new(0);
     feature = "python_stubgen",
     pyo3_stub_gen::derive::gen_stub_pyclass_enum
 )]
-#[pyclass(
-    module = "symbolica.community.graph",
-    from_py_object,
-    eq,
-    eq_int,
-    name = "Flow"
-)]
+#[pyclass(from_py_object, eq, eq_int, name = "Flow")]
+#[cfg_attr(feature = "community", pyo3(module = "symbolica.community.graph"))]
+#[cfg_attr(not(feature = "community"), pyo3(module = "linnet_py"))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum PyFlow {
     Source,
@@ -67,13 +63,9 @@ impl From<Flow> for PyFlow {
     feature = "python_stubgen",
     pyo3_stub_gen::derive::gen_stub_pyclass_enum
 )]
-#[pyclass(
-    module = "symbolica.community.graph",
-    from_py_object,
-    eq,
-    eq_int,
-    name = "Orientation"
-)]
+#[pyclass(from_py_object, eq, eq_int, name = "Orientation")]
+#[cfg_attr(feature = "community", pyo3(module = "symbolica.community.graph"))]
+#[cfg_attr(not(feature = "community"), pyo3(module = "linnet_py"))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub enum PyOrientation {
     #[default]
@@ -104,7 +96,9 @@ impl From<Orientation> for PyOrientation {
 
 /// A reusable node description accepted by `Graph` and `Graph.add_node()`.
 #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
-#[pyclass(module = "symbolica.community.graph", unsendable, name = "Node")]
+#[pyclass(unsendable, name = "Node")]
+#[cfg_attr(feature = "community", pyo3(module = "symbolica.community.graph"))]
+#[cfg_attr(not(feature = "community"), pyo3(module = "linnet_py"))]
 pub struct PyNodeSpec {
     token: u64,
     name: Option<String>,
@@ -216,7 +210,9 @@ pub(crate) enum EndpointRole {
 
 /// A reusable incidence description whose role is chosen by its edge endpoint.
 #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
-#[pyclass(module = "symbolica.community.graph", unsendable, name = "HalfEdge")]
+#[pyclass(unsendable, name = "HalfEdge")]
+#[cfg_attr(feature = "community", pyo3(module = "symbolica.community.graph"))]
+#[cfg_attr(not(feature = "community"), pyo3(module = "linnet_py"))]
 pub struct PyHalfEdgeSpec {
     node: Option<Py<PyAny>>,
     data: Option<Py<PyAny>>,
@@ -310,7 +306,9 @@ impl PyHalfEdgeSpec {
 
 /// A reusable edge description accepted by `Graph` and `Graph.add_edge()`.
 #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
-#[pyclass(module = "symbolica.community.graph", unsendable, name = "Edge")]
+#[pyclass(unsendable, name = "Edge")]
+#[cfg_attr(feature = "community", pyo3(module = "symbolica.community.graph"))]
+#[cfg_attr(not(feature = "community"), pyo3(module = "linnet_py"))]
 pub struct PyEdgeSpec {
     name: Option<String>,
     source: Option<Py<PyHalfEdgeSpec>>,
@@ -563,7 +561,9 @@ impl GraphState {
 /// graph = linnet.Graph(nodes=[linnet.Node("source"), linnet.Node("sink")])
 /// ```
 #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
-#[pyclass(module = "symbolica.community.graph", unsendable, name = "Graph")]
+#[pyclass(unsendable, name = "Graph")]
+#[cfg_attr(feature = "community", pyo3(module = "symbolica.community.graph"))]
+#[cfg_attr(not(feature = "community"), pyo3(module = "linnet_py"))]
 pub struct PyGraph {
     pub(crate) state: RefCell<Option<GraphState>>,
 }
@@ -713,7 +713,9 @@ macro_rules! graph_view {
     ($doc:literal, $rust:ident, $python:literal, $index_variant:ident) => {
         #[doc = $doc]
         #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
-        #[pyclass(module = "symbolica.community.graph", unsendable, name = $python)]
+        #[pyclass(unsendable, name = $python)]
+        #[cfg_attr(feature = "community", pyo3(module = "symbolica.community.graph"))]
+        #[cfg_attr(not(feature = "community"), pyo3(module = "linnet_py"))]
         pub struct $rust {
             graph: Option<Py<PyGraph>>,
             index: usize,

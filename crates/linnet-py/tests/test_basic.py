@@ -4,6 +4,7 @@ import gc
 import inspect
 import json
 import os
+import pickle
 import re
 import shutil
 import unittest
@@ -2033,6 +2034,25 @@ class TestTypedTypstSurface(unittest.TestCase):
             if isinstance(node, ast.ClassDef) and not node.name.startswith("_"):
                 with self.subTest(name=node.name):
                     self.assertIsInstance(getattr(lp, node.name), type)
+
+    def test_classes_are_published_under_the_community_module(self):
+        # The Community build compiles every class under this package, so
+        # reprs, pickled references and CPython's own messages name it.
+        classes = [value for value in vars(lp).values() if isinstance(value, type)]
+        self.assertIn(lp.Graph, classes)
+        for cls in classes:
+            with self.subTest(name=cls.__name__):
+                self.assertEqual(cls.__module__, "symbolica.community.graph")
+                self.assertIs(pickle.loads(pickle.dumps(cls)), cls)
+        self.assertEqual(repr(lp.Graph), "<class 'symbolica.community.graph.Graph'>")
+        with self.assertRaisesRegex(
+            TypeError, r"'symbolica\.community\.graph\.Auto' object is not subscriptable"
+        ):
+            lp.AUTO[0]
+        with self.assertRaisesRegex(
+            AttributeError, r"'symbolica\.community\.graph\.Graph' object has no attribute"
+        ):
+            lp.Graph().missing
 
     def test_native_values_drawing_and_configuration_smoke(self):
         length = lp.Length.mm(2)

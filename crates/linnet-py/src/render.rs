@@ -978,20 +978,21 @@ mod tests {
     fn compiled_graph_inspection_preserves_native_drawing() {
         Python::initialize();
         Python::attach(|py| -> PyResult<()> {
-            let modules = py.import("sys")?.getattr("modules")?;
-            let symbolica = pyo3::types::PyModule::new(py, "symbolica")?;
-            let community = pyo3::types::PyModule::new(py, "symbolica.community")?;
-            symbolica.add("community", &community)?;
-            modules.set_item("symbolica", &symbolica)?;
-            modules.set_item("symbolica.community", &community)?;
-            let linnet = pyo3::types::PyModule::new(py, "symbolica.community.graph")?;
-            community.add("graph", &linnet)?;
+            let name = crate::PythonModule::Standalone.name();
+            let linnet = pyo3::types::PyModule::new(py, name)?;
             crate::register(&linnet)?;
             py.import("sys")?
                 .getattr("modules")?
-                .set_item("symbolica.community.graph", &linnet)?;
-            let source =
-                std::ffi::CString::new(include_str!("../tests/test_svg_interaction.py")).unwrap();
+                .set_item(name, &linnet)?;
+            // The fixture imports the Community package; it only needs the
+            // classes, so import them from a top-level module instead.
+            let fixture_source = include_str!("../tests/test_svg_interaction.py");
+            let community_import = "from symbolica.community import graph as lp\n";
+            assert!(fixture_source.contains(community_import));
+            let source = std::ffi::CString::new(
+                fixture_source.replace(community_import, &format!("import {name} as lp\n")),
+            )
+            .unwrap();
             let fixture = PyModule::from_code(
                 py,
                 &source,

@@ -18,7 +18,9 @@ use super::*;
 /// edge when their fields are equal and both are undirected, or one is outgoing and the other
 /// incoming. Fields are hashable keys, compared and ordered like `Graph.canonize` keys.
 #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
-#[pyclass(module = "symbolica.community.graph", name = "EdgeSignature", frozen)]
+#[pyclass(name = "EdgeSignature", frozen)]
+#[cfg_attr(feature = "community", pyo3(module = "symbolica.community.graph"))]
+#[cfg_attr(not(feature = "community"), pyo3(module = "linnet_py"))]
 pub(crate) struct PyEdgeSignature {
     data: Py<PyAny>,
     flow: Option<Flow>,
@@ -79,15 +81,9 @@ impl PyEdgeSignature {
     feature = "python_stubgen",
     pyo3_stub_gen::derive::gen_stub_pyclass_enum
 )]
-#[pyclass(
-    module = "symbolica.community.graph",
-    from_py_object,
-    frozen,
-    eq,
-    eq_int,
-    hash,
-    name = "GenerationStage"
-)]
+#[pyclass(from_py_object, frozen, eq, eq_int, hash, name = "GenerationStage")]
+#[cfg_attr(feature = "community", pyo3(module = "symbolica.community.graph"))]
+#[cfg_attr(not(feature = "community"), pyo3(module = "linnet_py"))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub(crate) enum PyGenerationStage {
     /// A connected untyped topology, partial or complete: vertices with their degrees, attached
@@ -231,11 +227,9 @@ impl Callbacks {
 /// Vertices are numbered `0..n_vertices` and keep their numbers in every completion of the state:
 /// the topology stage adds vertices with higher numbers, the later stages fields and signatures.
 #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
-#[pyclass(
-    module = "symbolica.community.graph",
-    unsendable,
-    name = "GenerationView"
-)]
+#[pyclass(unsendable, name = "GenerationView")]
+#[cfg_attr(feature = "community", pyo3(module = "symbolica.community.graph"))]
+#[cfg_attr(not(feature = "community"), pyo3(module = "linnet_py"))]
 pub(crate) struct PyGenerationView {
     /// The viewed state; cleared before the filter call that borrows it returns.
     view: Cell<Option<NonNull<GraphView<'static, u32, u32>>>>,
@@ -477,7 +471,9 @@ type Diagrams<'g> = generate::Diagrams<'g, u32, u32>;
 /// The graphs of `Graph.generate` with their automorphism-group orders, in depth-first search
 /// order; each step searches up to the next graph.
 #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
-#[pyclass(module = "symbolica.community.graph", name = "GeneratedGraphs")]
+#[pyclass(name = "GeneratedGraphs")]
+#[cfg_attr(feature = "community", pyo3(module = "symbolica.community.graph"))]
+#[cfg_attr(not(feature = "community"), pyo3(module = "linnet_py"))]
 pub(crate) struct PyGeneratedGraphs {
     search: Search,
     objects: Arc<Objects>,

@@ -20,11 +20,9 @@ use crate::graph::{EdgeRecord, GraphState, HalfEdgeRecord, NodeRecord, PyGraph};
 
 /// DOT graph metadata kept separate from arbitrary Python element data.
 #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
-#[pyclass(
-    module = "symbolica.community.graph",
-    from_py_object,
-    name = "GlobalData"
-)]
+#[pyclass(from_py_object, name = "GlobalData")]
+#[cfg_attr(feature = "community", pyo3(module = "symbolica.community.graph"))]
+#[cfg_attr(not(feature = "community"), pyo3(module = "linnet_py"))]
 #[derive(Clone, Debug)]
 pub struct PyGlobalData {
     pub(crate) inner: GlobalData,
@@ -119,11 +117,9 @@ impl PyGlobalData {
 
 /// The DOT-representable record exchanged for one node by a `DotCodec`.
 #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
-#[pyclass(
-    module = "symbolica.community.graph",
-    from_py_object,
-    name = "DotVertexData"
-)]
+#[pyclass(from_py_object, name = "DotVertexData")]
+#[cfg_attr(feature = "community", pyo3(module = "symbolica.community.graph"))]
+#[cfg_attr(not(feature = "community"), pyo3(module = "linnet_py"))]
 #[derive(Clone, Debug)]
 pub struct PyDotVertexData {
     pub(crate) inner: DotVertexData,
@@ -174,11 +170,9 @@ impl PyDotVertexData {
 
 /// The DOT-representable record exchanged for one edge by a `DotCodec`.
 #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
-#[pyclass(
-    module = "symbolica.community.graph",
-    from_py_object,
-    name = "DotEdgeData"
-)]
+#[pyclass(from_py_object, name = "DotEdgeData")]
+#[cfg_attr(feature = "community", pyo3(module = "symbolica.community.graph"))]
+#[cfg_attr(not(feature = "community"), pyo3(module = "linnet_py"))]
 #[derive(Clone, Debug)]
 pub struct PyDotEdgeData {
     pub(crate) inner: DotEdgeData,
@@ -264,11 +258,9 @@ fn compass_name(value: CompassPt) -> &'static str {
 
 /// The DOT-representable record exchanged for one half-edge by a `DotCodec`.
 #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
-#[pyclass(
-    module = "symbolica.community.graph",
-    from_py_object,
-    name = "DotHalfEdgeData"
-)]
+#[pyclass(from_py_object, name = "DotHalfEdgeData")]
+#[cfg_attr(feature = "community", pyo3(module = "symbolica.community.graph"))]
+#[cfg_attr(not(feature = "community"), pyo3(module = "linnet_py"))]
 #[derive(Clone, Debug)]
 pub struct PyDotHalfEdgeData {
     pub(crate) inner: DotHedgeData,
@@ -328,7 +320,9 @@ macro_rules! value_class {
     ($doc:literal, $rust:ident, $python:literal, $drawing:ident, $fields:ident) => {
         #[doc = $doc]
         #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
-        #[pyclass(module = "symbolica.community.graph", unsendable, name = $python)]
+        #[pyclass(unsendable, name = $python)]
+        #[cfg_attr(feature = "community", pyo3(module = "symbolica.community.graph"))]
+        #[cfg_attr(not(feature = "community"), pyo3(module = "linnet_py"))]
         pub struct $rust {
             pub(crate) data: Option<Py<PyAny>>,
             pub(crate) drawing: Option<Py<PyDict>>,
@@ -442,7 +436,9 @@ enum CodecKind {
 
 /// An explicit mapping between graph values and DOT-representable records.
 #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
-#[pyclass(module = "symbolica.community.graph", unsendable, name = "DotCodec")]
+#[pyclass(unsendable, name = "DotCodec")]
+#[cfg_attr(feature = "community", pyo3(module = "symbolica.community.graph"))]
+#[cfg_attr(not(feature = "community"), pyo3(module = "linnet_py"))]
 pub struct PyDotCodec {
     kind: Option<CodecKind>,
 }

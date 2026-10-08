@@ -30,6 +30,26 @@ pub fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     Ok(())
 }
 
+/// A Python module that publishes Linnet's classes.
+#[derive(Clone, Copy, Debug)]
+pub enum PythonModule {
+    /// The standalone `linnet-py` distribution.
+    Standalone,
+    /// The Symbolica Community submodule registered by [`GraphModule`].
+    #[cfg(feature = "community")]
+    Community,
+}
+
+impl PythonModule {
+    pub const fn name(self) -> &'static str {
+        match self {
+            PythonModule::Standalone => "linnet_py",
+            #[cfg(feature = "community")]
+            PythonModule::Community => "symbolica.community.graph",
+        }
+    }
+}
+
 #[cfg(feature = "python_stubgen")]
 pub fn stub_info() -> pyo3_stub_gen::Result<pyo3_stub_gen::StubInfo> {
     // Dependency classes without an explicit module belong to Symbolica;
@@ -207,25 +227,39 @@ _RenderSelectors: typing.TypeAlias = DrawingSelectors | None | Inherit
 _TemplateOptions: typing.TypeAlias = _NativeDict | None | Inherit
 "#;
 
-/// The import and type of canonization and generation keys: only the Community
-/// build accepts Symbolica expressions as keys of their own kind.
 #[cfg(feature = "python_stubgen")]
-const STUB_KEY: (&str, &str) = if cfg!(feature = "community") {
-    (
-        "from symbolica.core import Expression\n",
-        "typing.Hashable | Expression",
-    )
-} else {
-    ("", "typing.Hashable")
-};
+impl PythonModule {
+    /// The module every class is compiled into, and so filed under in the stub
+    /// inventory. `#[pyclass]` fixes the qualified type name at compile time,
+    /// so each class selects it with
+    /// `#[cfg_attr(feature = "community", pyo3(module = ...))]`.
+    #[cfg(feature = "community")]
+    pub(crate) const COMPILED: Self = Self::Community;
+    #[cfg(not(feature = "community"))]
+    pub(crate) const COMPILED: Self = Self::Standalone;
 
-/// Render the installed and documented Python surface from one stub inventory.
+    /// Render this module's installed and documented Python surface. Only the
+    /// Community build accepts Symbolica expressions as keys of their own kind.
+    pub fn stub(self) -> pyo3_stub_gen::Result<String> {
+        match self {
+            PythonModule::Standalone => render_stub("", "typing.Hashable"),
+            #[cfg(feature = "community")]
+            PythonModule::Community => render_stub(
+                "from symbolica.core import Expression\n",
+                "typing.Hashable | Expression",
+            ),
+        }
+    }
+}
+
+/// Render the Python surface from the one stub inventory, with the given
+/// import and type of graph keys.
 #[cfg(feature = "python_stubgen")]
-pub fn canonical_stub() -> pyo3_stub_gen::Result<String> {
+fn render_stub(key_import: &str, key: &str) -> pyo3_stub_gen::Result<String> {
     let info = stub_info()?;
     let module = info
         .modules
-        .get("symbolica.community.graph")
+        .get(PythonModule::COMPILED.name())
         .expect("linnet StubInfo must contain the linnet module");
     let mut exports = module
         .class
@@ -268,7 +302,6 @@ pub fn canonical_stub() -> pyo3_stub_gen::Result<String> {
         .map(|name| format!("    \"{name}\","))
         .collect::<Vec<_>>()
         .join("\n");
-    let (key_import, key) = STUB_KEY;
     let mut stub = format!(
         "{}{key_import}\n__all__ = [\n{exports}\n]\n\n_Key: typing.TypeAlias = {key}\n{STUB_TYPE_ALIASES}\n\n{declarations}\n",
         &generated[..import_end]
@@ -359,24 +392,72 @@ impl symbolica::api::python::SymbolicaCommunityModule for GraphModule {
     }
 }
 
-#[cfg(all(test, feature = "python_stubgen"))]
+#[cfg(test)]
 mod tests {
+    use pyo3::{prelude::*, types::PyType};
+
     #[test]
-    fn stub_keys_include_expressions_only_in_the_community_build() {
-        let stub = super::canonical_stub().unwrap();
-        let community = cfg!(feature = "community");
-        assert_eq!(
-            stub.contains("\nfrom symbolica.core import Expression\n"),
-            community
-        );
-        let key = if community {
-            "typing.Hashable | Expression"
+    fn classes_are_named_after_the_module_of_their_build() {
+        let expected = if cfg!(feature = "community") {
+            "symbolica.community.graph"
         } else {
-            "typing.Hashable"
+            "linnet_py"
         };
-        assert!(stub.contains(&format!("\n_Key: typing.TypeAlias = {key}\n")));
-        assert!(stub.contains("typing.Callable[[typing.Any], _Key] | None"));
-        assert!(stub.contains("def data(self) -> _Key:"));
-        assert_eq!(stub.matches("typing.Hashable").count(), 1);
+        Python::initialize();
+        Python::attach(|py| -> PyResult<()> {
+            let module = PyModule::new(py, "graph")?;
+            super::register(&module)?;
+            let mut classes = 0;
+            for (name, value) in module.dict() {
+                if let Ok(class) = value.cast::<PyType>() {
+                    assert_eq!(class.module()?.to_str()?, expected, "{name}");
+                    classes += 1;
+                }
+            }
+            assert!(classes > 50, "{classes} classes");
+            // CPython's own messages print the compiled type name, not `__module__`.
+            let error = module
+                .getattr("AUTO")?
+                .getattr("missing")
+                .unwrap_err()
+                .to_string();
+            assert!(
+                error.contains(&format!("'{expected}.Auto' object has no attribute")),
+                "{error}"
+            );
+            Ok(())
+        })
+        .unwrap();
+    }
+
+    #[cfg(feature = "python_stubgen")]
+    #[test]
+    fn stub_keys_include_expressions_only_for_the_community_module() {
+        use super::PythonModule;
+
+        let stubs = [(PythonModule::Standalone, "typing.Hashable", false)].into_iter();
+        #[cfg(feature = "community")]
+        let stubs = stubs.chain([(
+            PythonModule::Community,
+            "typing.Hashable | Expression",
+            true,
+        )]);
+        for (module, key, imports_expression) in stubs {
+            let stub = module.stub().unwrap();
+            assert_eq!(
+                stub.contains("\nfrom symbolica.core import Expression\n"),
+                imports_expression
+            );
+            assert!(stub.contains(&format!("\n_Key: typing.TypeAlias = {key}\n")));
+            assert!(stub.contains("typing.Callable[[typing.Any], _Key] | None"));
+            assert!(stub.contains("def data(self) -> _Key:"));
+            assert_eq!(stub.matches("typing.Hashable").count(), 1);
+        }
+        // The module path never enters the stub body, so every build renders
+        // the checked-in standalone stub.
+        assert_eq!(
+            PythonModule::Standalone.stub().unwrap(),
+            include_str!("../linnet_py.pyi")
+        );
     }
 }
