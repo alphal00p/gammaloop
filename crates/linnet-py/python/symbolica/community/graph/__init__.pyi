@@ -2,13 +2,10 @@
 # ruff: noqa: E501, F401
 
 import builtins
-import decimal
 import enum
 import os
 import pathlib
 import typing
-from symbolica import ComplexFloat, Float
-from symbolica.core import Expression
 
 __all__ = [
     "AUTO",
@@ -31,6 +28,9 @@ __all__ = [
     "EdgeSignature",
     "Flow",
     "Fraction",
+    "GeneratedGraphs",
+    "GenerationStage",
+    "GenerationView",
     "GlobalData",
     "Graph",
     "GraphStyleOptions",
@@ -458,18 +458,27 @@ class Edge:
 @typing.final
 class EdgeSignature:
     r"""
-    A labeled port used in graph generation signatures.
-    Direction is outgoing (True), incoming (False), or undirected (None).
+    A typed slot of a vertex signature or an external leg: a field and its direction relative to
+    its vertex, outgoing (True), incoming (False) or undirected (None). Two slots pair into an
+    edge when their fields are equal and both are undirected, or one is outgoing and the other
+    incoming. Fields are hashable keys, compared and ordered like `Graph.canonize` keys.
     """
     @property
-    def data(self) -> Expression: ...
+    def data(self) -> typing.Hashable:
+        r"""
+        The field, as given.
+        """
     @property
     def direction(self) -> typing.Optional[builtins.bool]: ...
-    def __new__(cls, data: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal], direction: typing.Optional[builtins.bool] = None) -> EdgeSignature:
+    def __new__(cls, data: typing.Hashable, direction: typing.Optional[builtins.bool] = None) -> EdgeSignature:
         r"""
-        A labeled outgoing (True), incoming (False), or undirected (None) port.
+        A field `data` with an outgoing (True), incoming (False) or undirected (None) direction.
         """
-    def flip(self) -> EdgeSignature: ...
+    def flip(self) -> EdgeSignature:
+        r"""
+        The same field with the opposite direction.
+        """
+    def __repr__(self) -> builtins.str: ...
 
 @typing.final
 class Fraction:
@@ -480,6 +489,97 @@ class Fraction:
     def value(self) -> builtins.float: ...
     def __new__(cls, value: builtins.float) -> Fraction: ...
     def __repr__(self) -> builtins.str: ...
+
+@typing.final
+class GeneratedGraphs:
+    r"""
+    The graphs of `Graph.generate` with their automorphism-group orders, in depth-first search
+    order; each step searches up to the next graph.
+    """
+    def __iter__(self) -> GeneratedGraphs: ...
+    def __next__(self) -> tuple[Graph, int]: ...
+
+@typing.final
+class GenerationView:
+    r"""
+    A search state of `Graph.generate`, as its `filter_fn` sees it. Valid only during the call
+    that received it.
+
+    Vertices are numbered `0..n_vertices` and keep their numbers in every completion of the state:
+    the topology stage adds vertices with higher numbers, the later stages fields and signatures.
+    """
+    @property
+    def stage(self) -> GenerationStage: ...
+    @property
+    def loop_order(self) -> builtins.int:
+        r"""
+        The loop order being generated.
+        """
+    @property
+    def n_vertices(self) -> builtins.int: ...
+    @property
+    def loops(self) -> builtins.int:
+        r"""
+        Independent cycles of the edges placed so far.
+        """
+    @property
+    def unplaced_legs(self) -> builtins.int:
+        r"""
+        Legs not attached to a vertex yet; zero from `GenerationStage.Fields` on.
+        """
+    @property
+    def is_topology_complete(self) -> builtins.bool:
+        r"""
+        Every vertex, edge and leg is placed; always true from `GenerationStage.Fields` on.
+        """
+    def degree(self, vertex: builtins.int) -> builtins.int: ...
+    def open_stubs(self, vertex: builtins.int) -> builtins.int:
+        r"""
+        Slots of `vertex` not taken by an edge or a leg yet; zero from `GenerationStage.Fields`
+        on.
+        """
+    def self_loops(self, vertex: builtins.int) -> builtins.int: ...
+    def multiplicity(self, u: builtins.int, v: builtins.int) -> builtins.int:
+        r"""
+        Number of edges between the distinct vertices `u` and `v`.
+        """
+    def legs(self, vertex: builtins.int) -> list[tuple[typing.Hashable, EdgeSignature]]:
+        r"""
+        The labels of the legs attached to `vertex`, with their slots at it.
+        """
+    def edges(self) -> builtins.list[tuple[builtins.int, builtins.int, typing.Optional[EdgeSignature]]]:
+        r"""
+        Every edge between vertices as `(u, v, slot)`, equal ends for a self-loop, with the field
+        and direction at `u` once assigned: an outgoing slot points the edge from `u` to `v`. From
+        `GenerationStage.Fields` on, the edges with a field come first.
+        """
+    def rules(self, vertex: builtins.int) -> typing.Optional[builtins.list[builtins.int]]:
+        r"""
+        The indices of the signatures that fit `vertex` once every slot of it has a field (from
+        `GenerationStage.Fields` on), and in a complete graph the signature of `vertex`.
+        """
+    def bridges(self) -> builtins.list[tuple[builtins.int, builtins.int, builtins.list[builtins.int]]]:
+        r"""
+        The bridges with a final side, as `(outside, inside, side)`: `side` holds `inside` and has
+        no open slots, so no later vertex or edge attaches to it and the bridge stays a bridge. A
+        bridge of a complete topology is listed once per side.
+        """
+    def loops_in(self, side: typing.Sequence[builtins.int]) -> builtins.int:
+        r"""
+        Independent cycles of the subgraph on the non-empty connected vertex set `side`, such as
+        the side of a bridge; raises ValueError for another set.
+        """
+    def graph(self) -> Graph:
+        r"""
+        The state as a graph: the edges placed so far with their field once assigned (None
+        before), the legs labelled as in generated graphs, and on each node the index of its
+        signature once it is the only one that fits (None before). Open slots are left out.
+        """
+    def complete_graph(self) -> typing.Optional[Graph]:
+        r"""
+        The complete graph as `Graph.generate` yields it; None before
+        `GenerationStage.Complete`.
+        """
 
 @typing.final
 class GlobalData:
@@ -706,14 +806,44 @@ class Graph:
         Sort edges by their endpoints and keys, ordered as in `canonize`, while fixing every
         vertex.
         """
-    @staticmethod
-    def generate(external_edges: typing.Sequence[tuple[Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal], EdgeSignature]], vertex_signatures: typing.Sequence[typing.Sequence[EdgeSignature]], *, max_vertices: typing.Optional[builtins.int] = None, max_loops: typing.Optional[builtins.int] = None, max_bridges: typing.Optional[builtins.int] = None, allow_self_loops: typing.Optional[builtins.bool] = None, allow_zero_flow_edges: typing.Optional[builtins.bool] = None, filter_fn: typing.Callable[[Graph, int], bool] | None = None, progress_fn: typing.Callable[[Graph], bool] | None = None) -> list[tuple[Graph, int]]:
-        r"""
-        Generate connected labeled graphs and their automorphism-group sizes.
-        """
     def to_mermaid(self) -> builtins.str:
         r"""
         Export a Mermaid flowchart, with escaped display labels and dangling terminals.
+        """
+    @staticmethod
+    def generate(external_edges: typing.Sequence[tuple[typing.Hashable, EdgeSignature]], vertex_signatures: typing.Sequence[typing.Sequence[EdgeSignature]], *, loops: int | range | None = None, max_vertices: typing.Optional[builtins.int] = None, max_bridges: typing.Optional[builtins.int] = None, allow_self_loops: builtins.bool = False, allow_zero_flow_edges: builtins.bool = False, filter_fn: typing.Callable[[GenerationView], bool] | None = None, progress_fn: typing.Callable[[int, int, int], bool] | None = None) -> GeneratedGraphs:
+        r"""
+        Stream the connected graphs built from `vertex_signatures` and the external legs, one per
+        isomorphism class, with their automorphism-group orders (the symmetry factors).
+
+        `external_edges` pairs each leg label with its slot at the vertex the leg attaches to;
+        legs with equal labels and slots are interchangeable. Fields and labels are hashable keys,
+        compared and ordered like `canonize` keys. A generated graph has a node per vertex with the
+        index of its signature as data, an edge per propagator with its field as data, directed
+        from the outgoing to the incoming slot, and per leg a dangling half-edge with the leg
+        label as data and the direction of the leg's slot; paired half-edges carry None.
+        Signatures with identical slots are distinct vertex rules and give distinct graphs.
+
+        `loops` is a loop order or a `range` of them. `loops` or `max_vertices` (legs are not
+        vertices) must bound the search, and `max_vertices` is needed with signatures of two or
+        fewer slots. `max_bridges=0` keeps one-particle-irreducible graphs; legs are never
+        bridges. `allow_zero_flow_edges` allows bridges with no leg on one side.
+
+        `filter_fn` prunes the search. It sees every search state as a `GenerationView`: partial
+        untyped topologies (`GenerationStage.Topology`), then for each accepted complete topology
+        partial field assignments (`Fields`) and complete graphs (`Complete`). A rejected state is
+        dropped with everything that completes it, so the filter must be hereditary within each
+        stage: when it rejects a partial topology, it rejects every complete topology completing
+        it, and when it rejects a partial field assignment, every complete graph completing it.
+        The output is then exactly the graphs whose complete topology and complete graph it
+        accepts. Each state costs a call: test a condition at the stage that decides it and
+        accept the earlier states, and keep verdicts on complete graphs independent of the vertex
+        numbering.
+
+        `progress_fn(loops, topologies, graphs)` runs after every complete topology and every
+        yielded graph; returning False stops the generation. The search runs without the GIL,
+        which the callbacks take while they run. An exception in a callback, or a signal such as
+        KeyboardInterrupt, stops the generation and is raised by the step that saw it.
         """
 
 @typing.final
@@ -1432,6 +1562,27 @@ class Flow(enum.Enum):
     """
     Source = ...
     Sink = ...
+
+@typing.final
+class GenerationStage(enum.Enum):
+    r"""
+    How far a `GenerationView` is built.
+    """
+    Topology = ...
+    r"""
+    A connected untyped topology, partial or complete: vertices with their degrees, attached
+    legs, edges without fields, and open slots that later vertices or legs take. Three or more
+    legs with distinct labels and a common slot are open slots and unplaced legs until every
+    vertex and edge is placed, then labelled one at a time.
+    """
+    Fields = ...
+    r"""
+    A complete topology with fields on some of its edges.
+    """
+    Complete = ...
+    r"""
+    A complete graph: every edge has a field and every vertex a signature.
+    """
 
 @typing.final
 class Orientation(enum.Enum):

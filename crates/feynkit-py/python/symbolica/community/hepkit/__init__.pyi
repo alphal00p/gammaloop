@@ -8740,9 +8740,9 @@ class Process:
             Prune partial topologies during enumeration. The first N vertices are
             complete. False rejects only this search branch. Edge data is the base
             particle PDG code; node data is 0 internally, -(index+1) for incoming
-            legs and +(index+1) for outgoing legs. Mutating the snapshot does not
-            change enumeration. Keep callbacks cheap: each snapshot is constructed
-            using Symbolica's Python Graph API.
+            legs and +(index+1) for outgoing legs, all ints; half-edge data is
+            None. Mutating the snapshot does not change enumeration. Keep
+            callbacks cheap: each call builds a new snapshot graph.
         cancellation_token : CancellationToken or None, optional
             Shared token for cancelling a running generation task. Token cancellation
             returns an incomplete result; Python signal-handler exceptions, including
@@ -8853,9 +8853,9 @@ class Process:
             Prune partial topologies during enumeration. The first N vertices are
             complete. False rejects only this search branch. Edge data is the base
             particle PDG code; node data is 0 internally, -(index+1) for incoming
-            legs and +(index+1) for outgoing legs. Mutating the snapshot does not
-            change enumeration. Keep callbacks cheap: each snapshot is constructed
-            using Symbolica's Python Graph API.
+            legs and +(index+1) for outgoing legs, all ints; half-edge data is
+            None. Mutating the snapshot does not change enumeration. Keep
+            callbacks cheap: each call builds a new snapshot graph.
         cancellation_token : CancellationToken or None, optional
             Shared token for cancelling a running generation task. Token cancellation
             returns an incomplete result; Python signal-handler exceptions, including
@@ -8967,9 +8967,9 @@ class Process:
             Prune partial topologies during enumeration. The first N vertices are
             complete. False rejects only this search branch. Edge data is the base
             particle PDG code; node data is 0 internally, -(index+1) for incoming
-            legs and +(index+1) for outgoing legs. Mutating the snapshot does not
-            change enumeration. Keep callbacks cheap: each snapshot is constructed
-            using Symbolica's Python Graph API.
+            legs and +(index+1) for outgoing legs, all ints; half-edge data is
+            None. Mutating the snapshot does not change enumeration. Keep
+            callbacks cheap: each call builds a new snapshot graph.
         cancellation_token : CancellationToken or None, optional
             Shared token for cancelling a running generation task. Token cancellation
             returns an incomplete result; Python signal-handler exceptions, including

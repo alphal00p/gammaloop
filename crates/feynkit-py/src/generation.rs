@@ -6,7 +6,6 @@ use std::{
     sync::{Arc, Mutex},
     time::{Duration, Instant},
 };
-use symbolica::atom::Atom;
 
 use feynkit_generator::{
     CancellationToken, DiagramGroup, EdgeColor, FilterScope, GenerationControl, GenerationFilter,
@@ -17,6 +16,7 @@ use feynkit_generator::{
 };
 use feynkit_graph::{DiagramId, EdgeId};
 use feynkit_model::Model;
+use linnet::half_edge::{builder::HedgeGraphBuilder, involution::Orientation};
 use pyo3::{
     FromPyObject, IntoPyObjectExt,
     exceptions::{PyIndexError, PyTypeError, PyValueError},
@@ -976,9 +976,9 @@ impl PyProcess {
     ///     Prune partial topologies during enumeration. The first N vertices are
     ///     complete. False rejects only this search branch. Edge data is the base
     ///     particle PDG code; node data is 0 internally, -(index+1) for incoming
-    ///     legs and +(index+1) for outgoing legs. Mutating the snapshot does not
-    ///     change enumeration. Keep callbacks cheap: each snapshot is constructed
-    ///     using Symbolica's Python Graph API.
+    ///     legs and +(index+1) for outgoing legs, all ints; half-edge data is
+    ///     None. Mutating the snapshot does not change enumeration. Keep
+    ///     callbacks cheap: each call builds a new snapshot graph.
     /// cancellation_token : CancellationToken or None, optional
     ///     Shared token for cancelling a running generation task. Token cancellation
     ///     returns an incomplete result; Python signal-handler exceptions, including
@@ -1186,9 +1186,9 @@ impl PyProcess {
     ///     Prune partial topologies during enumeration. The first N vertices are
     ///     complete. False rejects only this search branch. Edge data is the base
     ///     particle PDG code; node data is 0 internally, -(index+1) for incoming
-    ///     legs and +(index+1) for outgoing legs. Mutating the snapshot does not
-    ///     change enumeration. Keep callbacks cheap: each snapshot is constructed
-    ///     using Symbolica's Python Graph API.
+    ///     legs and +(index+1) for outgoing legs, all ints; half-edge data is
+    ///     None. Mutating the snapshot does not change enumeration. Keep
+    ///     callbacks cheap: each call builds a new snapshot graph.
     /// cancellation_token : CancellationToken or None, optional
     ///     Shared token for cancelling a running generation task. Token cancellation
     ///     returns an incomplete result; Python signal-handler exceptions, including
@@ -1405,9 +1405,9 @@ impl PyProcess {
     ///     Prune partial topologies during enumeration. The first N vertices are
     ///     complete. False rejects only this search branch. Edge data is the base
     ///     particle PDG code; node data is 0 internally, -(index+1) for incoming
-    ///     legs and +(index+1) for outgoing legs. Mutating the snapshot does not
-    ///     change enumeration. Keep callbacks cheap: each snapshot is constructed
-    ///     using Symbolica's Python Graph API.
+    ///     legs and +(index+1) for outgoing legs, all ints; half-edge data is
+    ///     None. Mutating the snapshot does not change enumeration. Keep
+    ///     callbacks cheap: each call builds a new snapshot graph.
     /// cancellation_token : CancellationToken or None, optional
     ///     Shared token for cancelling a running generation task. Token cancellation
     ///     returns an incomplete result; Python signal-handler exceptions, including
@@ -2946,28 +2946,34 @@ fn run_generation(
     let apply_filter =
         move |graph: &Graph<NodeColor, EdgeColor>, completed_vertices| -> PyResult<bool> {
             Python::attach(|py| {
-                let mut snapshot = Graph::new();
-                for node in graph.nodes() {
-                    let label = node.data.external.as_ref().map_or(0, |external| {
-                        let index = external.index as i64 + 1;
-                        match external.state {
-                            feynkit_graph::ExternalState::Incoming => -index,
-                            feynkit_graph::ExternalState::Outgoing => index,
-                        }
-                    });
-                    snapshot.add_node(Atom::num(label));
-                }
+                // half-edges carry None
+                let mut snapshot = HedgeGraphBuilder::<_, _, Option<()>>::new();
+                let nodes: Vec<_> = graph
+                    .nodes()
+                    .iter()
+                    .map(|node| {
+                        snapshot.add_node(node.data.external.as_ref().map_or(0, |external| {
+                            let index = external.index as i64 + 1;
+                            match external.state {
+                                feynkit_graph::ExternalState::Incoming => -index,
+                                feynkit_graph::ExternalState::Outgoing => index,
+                            }
+                        }))
+                    })
+                    .collect();
                 for edge in graph.edges() {
-                    snapshot
-                        .add_edge(
-                            edge.vertices.0,
-                            edge.vertices.1,
-                            edge.directed,
-                            Atom::num(pdgs[edge.data.particle.index()]),
-                        )
-                        .map_err(pyo3::exceptions::PyValueError::new_err)?;
+                    snapshot.add_edge(
+                        nodes[edge.vertices.0],
+                        nodes[edge.vertices.1],
+                        pdgs[edge.data.particle.index()],
+                        if edge.directed {
+                            Orientation::Default
+                        } else {
+                            Orientation::Undirected
+                        },
+                    );
                 }
-                let snapshot = PyGraph::from_symbolica(py, &snapshot)?;
+                let snapshot = PyGraph::from_hedge_graph(py, snapshot.build())?;
                 filter
                     .as_ref()
                     .unwrap()
@@ -3341,13 +3347,21 @@ for generate in (fk.Process.generate_diagrams, fk.Process.generate_amplitude, fk
             locals.set_item("Graph", py.get_type::<PyGraph>()).unwrap();
             let graph_module = PyModule::new(py, "symbolica.community.graph").unwrap();
             linnet_py::register(&graph_module).unwrap();
-            locals
-                .set_item("Node", graph_module.getattr("Node").unwrap())
-                .unwrap();
+            for name in ["Node", "Orientation"] {
+                locals
+                    .set_item(name, graph_module.getattr(name).unwrap())
+                    .unwrap();
+            }
             locals
                 .set_item(
                     "MODEL_JSON",
                     include_str!("../tests/fixtures/scalars_2p_3p.json"),
+                )
+                .unwrap();
+            locals
+                .set_item(
+                    "SM_MODEL_JSON",
+                    include_str!("../../feynkit-model/tests/fixtures/sm.json"),
                 )
                 .unwrap();
             let code = CString::new(r#"
@@ -3380,7 +3394,14 @@ for via_model in (True, False):
         assert threading.get_ident() == caller
         assert isinstance(graph, Graph)
         assert 0 <= completed_vertices <= graph.n_nodes
-        assert all(edge.data == 1000 for edge in graph.edges())
+        # snapshot payloads: int PDG codes on undirected scalar edges, int leg labels on
+        # nodes (-1 for the incoming leg 0, +2 and +3 for the outgoing legs 1 and 2), None on
+        # half-edges
+        assert all(type(edge.data) is int and edge.data == 1000 for edge in graph.edges())
+        assert all(edge.orientation == Orientation.Undirected for edge in graph.edges())
+        assert all(type(node.data) is int for node in graph.nodes())
+        assert sorted(node.data for node in graph.nodes() if node.data) == [-1, 2, 3]
+        assert all(half_edge.data is None for half_edge in graph.half_edges())
         topologies.append((graph, completed_vertices))
         return True
 
@@ -3421,6 +3442,25 @@ for via_model in (True, False):
         else:
             raise AssertionError("non-callable callback was accepted")
     assert len(generate()) == len(baseline)
+
+# Directed snapshot edges point from source to sink: an incoming electron (-1) flows into the
+# graph as an electron or out of it as a positron, an incoming positron (-2) the other way.
+sm_model = fk.Model.from_json(SM_MODEL_JSON)
+directed = []
+def flows(graph, completed_vertices):
+    for edge in graph.edges():
+        if edge.orientation == Orientation.Undirected:
+            continue
+        assert edge.orientation == Orientation.Default and abs(edge.data) == 11
+        source, sink = edge.source.node.data, edge.sink.node.data
+        for leg, particle in ((-1, 11), (-2, -11)):
+            if leg in (source, sink):
+                assert (edge.data == particle) == (source == leg)
+                directed.append(edge.data)
+    return True
+annihilation = sm_model.process(["e-", "e+"], ["a", "a"], particle_selection=["e-", 22])
+assert len(annihilation.generate_diagrams(progress=None, filter=flows)) == 2
+assert directed
 "#).unwrap();
             py.run(&code, Some(&locals), Some(&locals)).unwrap();
         });

@@ -1,5 +1,6 @@
-//! Canonization keys: element payloads, or what the key callbacks make of them, as ids that
-//! identify equal keys and as ranks in an order that only depends on the key values.
+//! Canonization and generation keys: element payloads, what the key callbacks make of them, or
+//! generation fields and leg labels, as ids that identify equal keys and as ranks in an order
+//! that only depends on the key values.
 use std::cmp::Ordering;
 use std::collections::hash_map::{Entry, HashMap};
 
@@ -165,7 +166,12 @@ impl<'a, 'py> PayloadKeys<'a, 'py> {
         self.terms.len() as u32 - 1
     }
 
-    fn term(&mut self, element: &'static str, value: &Bound<'py, PyAny>) -> PyResult<u32> {
+    /// The id of the key `value`, equal for equal keys read through `self`.
+    pub(crate) fn term(
+        &mut self,
+        element: &'static str,
+        value: &Bound<'py, PyAny>,
+    ) -> PyResult<u32> {
         #[cfg(feature = "community")]
         if let Some(id) = self.expression(value) {
             return Ok(id);
@@ -309,9 +315,10 @@ impl<'a, 'py> PayloadKeys<'a, 'py> {
         }
     }
 
-    /// Ranks of the key ids in their value order, so that they never depend on the element
-    /// order. Only canonical forms need this; equal ids for equal keys suffice to compare graphs.
-    pub(crate) fn rank(&self, keys: ElementKeys<u32>) -> PyResult<ElementKeys<u32>> {
+    /// The rank of every key id in the value order, so that ranks never depend on the order in
+    /// which the keys were read. Only canonical forms and generation need this; equal ids for
+    /// equal keys suffice to compare graphs.
+    pub(crate) fn ranks(&self) -> PyResult<Vec<u32>> {
         let mut position = vec![0; self.terms.len()];
         for objects in self.objects[..Kind::Other as usize].iter().flatten() {
             // Distinct values never tie on `==`, so pairs sort by value; Python's sort, unlike
@@ -332,6 +339,12 @@ impl<'a, 'py> PayloadKeys<'a, 'py> {
         for (r, term) in order.into_iter().enumerate() {
             rank[term as usize] = r as u32;
         }
+        Ok(rank)
+    }
+
+    /// The element keys as ranks; see [`Self::ranks`].
+    pub(crate) fn rank(&self, keys: ElementKeys<u32>) -> PyResult<ElementKeys<u32>> {
+        let rank = self.ranks()?;
         let ranked = |terms: Vec<u32>| terms.into_iter().map(|t| rank[t as usize]).collect();
         Ok(ElementKeys {
             nodes: ranked(keys.nodes),
@@ -342,7 +355,11 @@ impl<'a, 'py> PayloadKeys<'a, 'py> {
 }
 
 fn hint(element: &str, keys: &str) -> String {
-    format!("pass {element}_key= to map payloads to {keys} keys")
+    match element {
+        // generation has no key callbacks
+        "field" | "label" => format!("use {keys} {element}s"),
+        _ => format!("pass {element}_key= to map payloads to {keys} keys"),
+    }
 }
 
 /// `error` from interning `value`, explained if the value's type is unhashable.

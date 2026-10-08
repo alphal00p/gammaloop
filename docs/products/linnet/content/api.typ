@@ -67,7 +67,13 @@ and file exports reuse the snapshot, even after later graph or settings mutation
 HepKit's physics-specific options live in `DiagramStyle`, passed separately as `style`.
 For multipage renders, use `to_svg_pages()`; `to_svg()` requires exactly one page.
 
-`Graph.generate()` takes `EdgeSignature` values and returns graph/group-size pairs.
+`Graph.generate()` runs Linnet's native generator on `EdgeSignature` slots, whose fields and leg
+labels are hashable keys like canonization keys, and streams `(graph, symmetry factor)` pairs in
+depth-first order: nodes carry their signature index, edges their field, and each external leg is
+a dangling half-edge labelled by its leg label. Its `filter_fn` prunes the search through
+`GenerationView`s of partial topologies, partial field assignments and complete graphs; it must be
+hereditary within each stage, rejecting every completion of a state it rejects. The search runs
+without the GIL; `filter_fn` and `progress_fn` take it only while they run.
 `HalfEdge` describes an endpoint; `HalfEdgeView` accesses a live incidence. Canonicalization and
 isomorphism run Linnet's native canonizer on the payloads, or on what `node_key`, `edge_key`,
 and `half_edge_key` return for them. Keys must be hashable. Distinct keys sort by kind: `None`,

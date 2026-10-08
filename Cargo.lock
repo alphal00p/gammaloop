@@ -3772,6 +3772,7 @@ dependencies = [
  "pyo3-stub-gen-derive",
  "roxmltree 0.21.1",
  "rust-embed",
+ "self_cell",
  "serde",
  "serde_json",
  "symbolica",

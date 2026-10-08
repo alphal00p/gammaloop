@@ -1,63 +1,18 @@
-//! Canonization with Linnet's native canonizer, and Graphica graph generation.
+//! Canonization with Linnet's native canonizer.
 use super::keys::{ElementKeys, PayloadKeys};
 use super::*;
 use pyo3::exceptions::PyOverflowError;
-use std::sync::{Arc, Mutex};
-use symbolica::{
-    api::python::{ConvertibleToExpression, PythonExpression},
-    atom::Atom,
-    graph::{GenerationSettings, Graph, HalfEdge},
-};
-
-/// A labeled port used in graph generation signatures.
-/// Direction is outgoing (True), incoming (False), or undirected (None).
-#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
-#[pyclass(
-    module = "symbolica.community.graph",
-    name = "EdgeSignature",
-    from_py_object,
-    frozen
-)]
-#[derive(Clone)]
-pub struct PyEdgeSignature {
-    edge: HalfEdge<Atom>,
-}
-#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
-#[pymethods]
-impl PyEdgeSignature {
-    /// A labeled outgoing (True), incoming (False), or undirected (None) port.
-    #[new]
-    #[pyo3(signature=(data, direction=None))]
-    fn new(data: ConvertibleToExpression, direction: Option<bool>) -> Self {
-        let data = data.to_expression().expr;
-        Self {
-            edge: match direction {
-                Some(true) => HalfEdge::outgoing(data),
-                Some(false) => HalfEdge::incoming(data),
-                None => HalfEdge::undirected(data),
-            },
-        }
-    }
-    fn flip(&self) -> Self {
-        Self {
-            edge: self.edge.flip(),
-        }
-    }
-    #[getter]
-    fn data(&self) -> PythonExpression {
-        self.edge.data.clone().into()
-    }
-    #[getter]
-    fn direction(&self) -> Option<bool> {
-        self.edge.direction
-    }
-}
 
 /// `(edge key, tail half-edge key, head half-edge key, direction)` as dense ranks. For a
 /// paired edge the direction is 0 when undirected and 1 when oriented from tail to head; for a
 /// dangling half-edge (head key 0) it is 0 when undirected, 1 out of and 2 into its node.
 type EdgeKey = (u32, u32, u32, u8);
 type CanonicalGraph = (PyGraph, Vec<usize>, u128, Vec<usize>);
+
+/// An automorphism-group order, which Linnet counts up to `u128::MAX`.
+pub(super) fn automorphism_order(count: Option<u128>) -> PyResult<u128> {
+    count.ok_or_else(|| PyOverflowError::new_err("the automorphism group order exceeds 2**128"))
+}
 
 /// A paired edge or a dangling half-edge with its ends ordered independently of the stored
 /// source/sink roles.
@@ -179,65 +134,6 @@ impl ElementKeys<u32> {
         }
     }
 }
-fn python_integer(py: Python<'_>, value: impl std::fmt::Display) -> PyResult<Py<PyAny>> {
-    Ok(py
-        .import("builtins")?
-        .getattr("int")?
-        .call1((value.to_string(),))?
-        .unbind())
-}
-impl PyGraph {
-    /// Construct the common Python graph directly from a native Graphica graph.
-    pub fn from_symbolica(py: Python<'_>, graph: &Graph<Atom, Atom>) -> PyResult<Self> {
-        let mut builder = HedgeGraphBuilder::new();
-        let nodes = graph
-            .nodes()
-            .iter()
-            .map(|node| {
-                Ok(builder.add_node(NodeRecord {
-                    name: None,
-                    data: Py::new(py, PythonExpression::from(node.data.clone()))?.into_any(),
-                    drawing: drawing_dict(py, NODE_FIELDS, None)?,
-                }))
-            })
-            .collect::<PyResult<Vec<_>>>()?;
-        for edge in graph.edges() {
-            let endpoint = |index| -> PyResult<_> {
-                Ok(HedgeData {
-                    is_in_subgraph: false,
-                    node: nodes[index],
-                    data: HalfEdgeRecord {
-                        data: py.None(),
-                        drawing: drawing_dict(py, HEDGE_FIELDS, None)?,
-                    },
-                })
-            };
-            builder.add_edge(
-                endpoint(edge.vertices.0)?,
-                endpoint(edge.vertices.1)?,
-                EdgeRecord {
-                    name: None,
-                    data: Py::new(py, PythonExpression::from(edge.data.clone()))?.into_any(),
-                    drawing: drawing_dict(py, EDGE_FIELDS, None)?,
-                },
-                if edge.directed {
-                    Orientation::Default
-                } else {
-                    Orientation::Undirected
-                },
-            );
-        }
-        Ok(Self::from_state(GraphState {
-            graph: builder.build(),
-            name: None,
-            global_data: PyGlobalData::default(),
-            codec: None,
-            render_config: crate::typst::default_render_config(py)?,
-            revision: 0,
-            element_epoch: 0,
-        }))
-    }
-}
 impl PyGraph {
     /// A copy of the state, so that key callbacks run while no borrow is held.
     fn state_copy(&self, py: Python<'_>) -> PyResult<GraphState> {
@@ -285,9 +181,7 @@ impl PyGraph {
         let keys = keys.rank(read)?;
         let ranked = keys.ranked(&state.graph);
         let canonical = py.detach(|| ranked.canonize_by(|&v| v, |&e| e, |&h| h));
-        let size = canonical.automorphism_count().ok_or_else(|| {
-            PyOverflowError::new_err("the automorphism group order exceeds 2**128")
-        })?;
+        let size = automorphism_order(canonical.automorphism_count())?;
         let position = |n: NodeIndex| canonical.canonical_node(n).0;
         let n = state.graph.n_nodes();
         let vertex_map = (0..n).map(|v| position(NodeIndex(v))).collect::<Vec<_>>();
@@ -352,113 +246,6 @@ impl PyGraph {
         let keys = keys.rank(read)?;
         self.check_revision(state.revision)?;
         self.reorder_edges(keys.edge_order(&state.graph, |n| n.0))
-    }
-    /// Generate connected labeled graphs and their automorphism-group sizes.
-    #[staticmethod]
-    #[pyo3(signature=(external_edges,vertex_signatures,*,max_vertices=None,max_loops=None,max_bridges=None,allow_self_loops=None,allow_zero_flow_edges=None,filter_fn=None,progress_fn=None))]
-    #[allow(clippy::too_many_arguments)]
-    #[gen_stub(override_return_type(type_repr = "list[tuple[Graph, int]]"))]
-    fn generate(
-        py: Python<'_>,
-        external_edges: Vec<(ConvertibleToExpression, PyEdgeSignature)>,
-        vertex_signatures: Vec<Vec<PyEdgeSignature>>,
-        max_vertices: Option<usize>,
-        max_loops: Option<usize>,
-        max_bridges: Option<usize>,
-        allow_self_loops: Option<bool>,
-        allow_zero_flow_edges: Option<bool>,
-        #[gen_stub(override_type(type_repr="typing.Callable[[Graph, int], bool] | None", imports=("typing")))]
-        filter_fn: Option<Py<PyAny>>,
-        #[gen_stub(override_type(type_repr="typing.Callable[[Graph], bool] | None", imports=("typing")))]
-        progress_fn: Option<Py<PyAny>>,
-    ) -> PyResult<Vec<(Self, Py<PyAny>)>> {
-        if max_vertices.is_none() && max_loops.is_none() {
-            return Err(PyValueError::new_err("set max_vertices or max_loops"));
-        }
-        let external = external_edges
-            .into_iter()
-            .map(|(v, e)| (v.to_expression().expr, e.edge))
-            .collect::<Vec<_>>();
-        let signatures = vertex_signatures
-            .into_iter()
-            .map(|s| s.into_iter().map(|e| e.edge).collect())
-            .collect::<Vec<_>>();
-        let mut settings = GenerationSettings::new();
-        if let Some(v) = max_vertices {
-            settings = settings.max_vertices(v);
-        }
-        if let Some(v) = max_loops {
-            settings = settings.max_loops(v);
-        }
-        if let Some(v) = max_bridges {
-            settings = settings.max_bridges(v);
-        }
-        if let Some(v) = allow_self_loops {
-            settings = settings.allow_self_loops(v);
-        }
-        if let Some(v) = allow_zero_flow_edges {
-            settings = settings.allow_zero_flow_edges(v);
-        }
-        let error: Arc<Mutex<Option<PyErr>>> = Arc::new(Mutex::new(None));
-        if let Some(callback) = filter_fn {
-            let error = error.clone();
-            settings = settings.filter_fn(Box::new(move |g, n| {
-                Python::attach(|py| {
-                    let result = Self::from_symbolica(py, g)
-                        .and_then(|g| callback.call1(py, (g, n))?.extract::<bool>(py));
-                    match result {
-                        Ok(v) => v,
-                        Err(e) => {
-                            *error.lock().unwrap() = Some(e);
-                            false
-                        }
-                    }
-                })
-            }));
-        }
-        if let Some(callback) = progress_fn {
-            let error = error.clone();
-            settings = settings.progress_fn(Box::new(move |g| {
-                Python::attach(|py| {
-                    let result = Self::from_symbolica(py, g)
-                        .and_then(|g| callback.call1(py, (g,))?.extract::<bool>(py));
-                    match result {
-                        Ok(v) => v,
-                        Err(e) => {
-                            *error.lock().unwrap() = Some(e);
-                            false
-                        }
-                    }
-                })
-            }));
-        }
-        let abort = error.clone();
-        settings = settings.abort_check(Box::new(move || {
-            if abort.lock().unwrap().is_some() {
-                return true;
-            }
-            Python::attach(|py| match py.check_signals() {
-                Ok(()) => false,
-                Err(e) => {
-                    *abort.lock().unwrap() = Some(e);
-                    true
-                }
-            })
-        }));
-        let generated = py.detach(|| {
-            Graph::generate(&external, &signatures, settings).unwrap_or_else(|partial| partial)
-        });
-        if let Some(error) = error.lock().unwrap().take() {
-            if !error.is_instance_of::<pyo3::exceptions::PyKeyboardInterrupt>(py) {
-                return Err(error);
-            }
-        }
-        let mut generated = generated.into_iter().collect::<Vec<_>>();
-        generated.sort_by(|a, b| a.0.cmp(&b.0));
-        generated
-            .into_iter()
-            .map(|(graph, size)| Ok((Self::from_symbolica(py, &graph)?, python_integer(py, size)?)))
-            .collect()
     }
     /// Export a Mermaid flowchart, with escaped display labels and dangling terminals.
     fn to_mermaid(&self, py: Python<'_>) -> PyResult<String> {

@@ -1,4 +1,5 @@
 mod algorithms;
+mod generate;
 mod keys;
 use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet};
@@ -14,6 +15,7 @@ use pyo3::class::gc::{PyTraverseError, PyVisit};
 use pyo3::exceptions::{PyIndexError, PyKeyError, PyReferenceError, PyTypeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::{PyAny, PyDict, PyType};
+use pyo3::IntoPyObjectExt;
 
 use crate::dot::{self, PyDotCodec, PyEdgeValue, PyGlobalData, PyNodeValue};
 use crate::drawing::{
@@ -2303,6 +2305,49 @@ impl PyEdgeSpec {
 }
 
 impl PyGraph {
+    /// The Python graph of `graph`, its payloads converted to Python objects, with default
+    /// drawings and render configuration.
+    pub fn from_hedge_graph<E, V, H>(py: Python<'_>, graph: HedgeGraph<E, V, H>) -> PyResult<Self>
+    where
+        E: for<'py> IntoPyObject<'py>,
+        V: for<'py> IntoPyObject<'py>,
+        H: for<'py> IntoPyObject<'py>,
+    {
+        let graph = graph.map_result(
+            |_, _, data| {
+                Ok(NodeRecord {
+                    name: None,
+                    data: data.into_py_any(py)?,
+                    drawing: drawing_dict(py, NODE_FIELDS, None)?,
+                })
+            },
+            |_, _, _, _, edge| {
+                edge.map_result(|data| {
+                    Ok(EdgeRecord {
+                        name: None,
+                        data: data.into_py_any(py)?,
+                        drawing: drawing_dict(py, EDGE_FIELDS, None)?,
+                    })
+                })
+            },
+            |_, data| {
+                Ok::<_, PyErr>(HalfEdgeRecord {
+                    data: data.into_py_any(py)?,
+                    drawing: drawing_dict(py, HEDGE_FIELDS, None)?,
+                })
+            },
+        )?;
+        Ok(Self::from_state(GraphState {
+            graph,
+            name: None,
+            global_data: PyGlobalData::default(),
+            codec: None,
+            render_config: crate::typst::default_render_config(py)?,
+            revision: 0,
+            element_epoch: 0,
+        }))
+    }
+
     fn from_specs(
         py: Python<'_>,
         mut nodes: Vec<Py<PyNodeSpec>>,
@@ -2471,7 +2516,7 @@ pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<PyHalfEdgeSpec>()?;
     module.add_class::<PyEdgeSpec>()?;
     module.add_class::<PyGraph>()?;
-    module.add_class::<algorithms::PyEdgeSignature>()?;
+    generate::register(module)?;
     module.add_class::<PyNode>()?;
     module.add_class::<PyEdge>()?;
     module.add_class::<PyHalfEdge>()?;

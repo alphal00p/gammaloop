@@ -374,12 +374,14 @@ class CanonizeTests(unittest.TestCase):
         gluon = g.EdgeSignature(S("g"))
         quark = g.EdgeSignature(S("q"), direction=False)
         rng = random.Random(3)
-        generated = g.Graph.generate(
-            [(1, gluon), (2, gluon)],
-            [[gluon] * 3, [quark.flip(), quark, gluon], [gluon] * 4],
-            max_loops=3,
-            max_bridges=0,
-            allow_self_loops=True,
+        generated = list(
+            g.Graph.generate(
+                [(1, gluon), (2, gluon)],
+                [[gluon] * 3, [quark.flip(), quark, gluon], [gluon] * 4],
+                loops=range(4),
+                max_bridges=0,
+                allow_self_loops=True,
+            )
         )
         self.assertEqual(len(generated), 210)
         for graph, size in generated:
@@ -390,44 +392,27 @@ class CanonizeTests(unittest.TestCase):
             self.assertEqual(shape(other.canonize()[0]), shape(canonical))
 
     def test_dangling_legs_count_like_identical_external_vertices(self):
-        # Graphica sees external legs as degree-one vertices; with one shared colour their
-        # permutations are graph automorphisms, which dangling legs must reproduce.
+        # With one shared colour, permutations of dangling legs at a node are
+        # automorphisms, exactly as for legs ending in identical degree-one vertices.
         phi = g.EdgeSignature(S("phi"))
         generated = g.Graph.generate(
-            [(i, phi) for i in range(1, 5)], [[phi] * 3, [phi] * 4], max_loops=1
+            [(i, phi) for i in range(1, 5)], [[phi] * 3, [phi] * 4], loops=range(2)
         )
         for graph, _ in generated:
-            degree = [0] * graph.n_nodes
-            for h in graph.half_edges():
-                degree[h.node.index] += 1
-            external = [i for i, d in enumerate(degree) if d == 1]
-            vertices = g.Graph(
-                nodes=[
-                    g.Node(str(i), data=0 if i in external else 1)
-                    for i in range(graph.n_nodes)
-                ],
-                edges=[
-                    link(str(e.source.node.index), str(e.sink.node.index), e.data)
-                    for e in graph.edges()
-                ],
+            names = [str(i) for i in range(graph.n_nodes)]
+            vertices = [g.Node(name, data=1) for name in names]
+            links = []
+            for e in graph.edges():
+                ends = [str(h.node.index) for h in (e.source, e.sink) if h is not None]
+                if len(ends) == 1:
+                    ends.append(f"leg{len(vertices)}")
+                    vertices.append(g.Node(ends[1], data=0))
+                links.append(link(*ends, e.data))
+            external = g.Graph(nodes=vertices, edges=links)
+            dangling = graph.canonize(
+                node_key=lambda _: 1, half_edge_key=lambda _: None
             )
-            legs = g.Graph(
-                nodes=[
-                    g.Node(str(i), data=1)
-                    for i in range(graph.n_nodes)
-                    if i not in external
-                ],
-                edges=[
-                    link(str(a), str(b), e.data)
-                    if external.count(a) + external.count(b) == 0
-                    else leg(
-                        str(b if a in external else a), e.data, orientation=UNDIRECTED
-                    )
-                    for e in graph.edges()
-                    for a, b in [(e.source.node.index, e.sink.node.index)]
-                ],
-            )
-            self.assertEqual(legs.canonize()[2], vertices.canonize()[2])
+            self.assertEqual(dangling[2], external.canonize()[2])
 
     def test_edge_canonicalization_sorts_without_moving_vertices(self):
         graph = g.Graph(
