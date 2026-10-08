@@ -73,3 +73,6 @@ LTD residue terms must be summed together for their H-surface cancellation.
 Physical-pole localization uses the same factorized affine maps. When
 localization creates a raised pole, its Laurent coefficients request polynomial
 bounds lazily; ordinary simple-pole generation remains independent of them.
+The LTD core and its tests were independently integrated on the feature branch
+from `ltd_support` commits `6fac4ffaf4` and `6b35f5a2a4`; production generation
+uses the shared implementation and the same certified pole maps.
