@@ -4,6 +4,8 @@ version = "0.17.0"
 edition = "2021"
 description = "A library for working with half-edge data structures, and subgraphs, and drawing them"
 license = "MIT"
+# nauty-derived fixtures (Apache-2.0) and the tests that read them stay out of the package
+exclude = ["tests/nauty/**", "tests/resources/nauty/**"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 

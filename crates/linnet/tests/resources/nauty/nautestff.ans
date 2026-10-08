@@ -1,0 +1,7 @@
+      41890 graphs : nonedges=16; components=1; radius=2; diameter=2
+    1082094 graphs : nonedges=16; components=1; radius=2; diameter=3
+      26682 graphs : nonedges=16; components=1; radius=2; diameter=4
+       7360 graphs : nonedges=16; components=1; radius=3; diameter=3
+ 1158026 graphs altogether; cpu=0.89 sec
+>A ./countg --ee,cc,z,Z
+Number of directed graphs: 1158026 
