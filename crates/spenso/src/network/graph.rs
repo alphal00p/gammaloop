@@ -929,16 +929,26 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
     /// Moves the slot orders of `subgraph`'s half-edges to the end with the same
     /// swaps as [`HedgeGraph::delete_hedges`] and [`HedgeGraph::extract`] move the
     /// half-edges, and returns the first moved position.
-    fn partition_slot_orders<S: SubSetLike>(&mut self, subgraph: &S) -> Hedge {
+    /// Moves the slot orders of half-edges outside `subgraph` to the front,
+    /// matching the partition of [`HedgeGraph::delete_hedges`], and follows
+    /// `tracked` to its new position.
+    fn partition_slot_orders<S: SubSetLike>(
+        &mut self,
+        subgraph: &S,
+        tracked: &mut Option<Hedge>,
+    ) -> Hedge {
         let n_hedges = Hedge(self.graph.n_hedges());
         partition_with(
             self,
             Hedge(0),
             n_hedges,
             |_, h| !subgraph.includes(&h),
-            |s, a, b| {
-                s.slot_order.swap(a.0, b.0);
-                s.logical_slot_order.swap(a.0, b.0);
+            |s, kept, moved| {
+                s.slot_order.swap(kept.0, moved.0);
+                s.logical_slot_order.swap(kept.0, moved.0);
+                if *tracked == Some(moved) {
+                    *tracked = Some(kept);
+                }
             },
         )
     }
@@ -949,7 +959,7 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
         FK: Clone + Display,
     {
         let _span = profile::span(Timer::GraphExtract);
-        let left = self.partition_slot_orders(subgraph);
+        let left = self.partition_slot_orders(subgraph, &mut None);
 
         let extracted = self.graph.extract(
             subgraph,
@@ -1900,12 +1910,49 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
     }
 
     pub fn delete<S: SubSetLike<Base = SuBitGraph>>(&mut self, subgraph: &S) {
-        let left = self.partition_slot_orders(subgraph);
+        self.delete_tracking(subgraph, None);
+    }
+
+    /// Deletes `subgraph` and returns where the kept half-edge `tracked` lands.
+    ///
+    /// The partition matches [`HedgeGraph::delete_hedges`]: kept half-edges
+    /// from the tail fill the slots of deleted ones.
+    fn delete_tracking<S: SubSetLike<Base = SuBitGraph>>(
+        &mut self,
+        subgraph: &S,
+        mut tracked: Option<Hedge>,
+    ) -> Option<Hedge> {
+        let left = self.partition_slot_orders(subgraph, &mut tracked);
         self.graph.delete_hedges(subgraph);
         self.slot_order.truncate(left.0);
         self.logical_slot_order.truncate(left.0);
         debug_assert_eq!(self.slot_order.len(), self.graph.n_hedges());
+        tracked
     }
+
+    /// Forgets identification history, deletes `sub` and returns the index
+    /// `node` has afterwards.
+    ///
+    /// Both steps renumber nodes, so `node` is recovered through one of its
+    /// half-edges outside `sub`; every network node keeps its head port.
+    fn compact_identified(&mut self, node: NodeIndex, sub: &SuBitGraph) -> NodeIndex {
+        let anchor = self
+            .graph
+            .iter_crown(node)
+            .find(|hedge| !sub.includes(hedge));
+        self.graph.forget_identification_history();
+        self.graph.node_store.check_and_set_nodes().unwrap();
+        let anchor = self.delete_tracking(sub, anchor);
+        self.graph.node_store.check_and_set_nodes().unwrap();
+        self.graph
+            .node_id(anchor.expect("an identified network node keeps its head port"))
+    }
+
+    /// Identifies `nodes`, deletes the self-edges this creates and compacts
+    /// the graph. Pre-existing self-edges are kept.
+    ///
+    /// The returned index is valid after compaction; any other `NodeIndex`
+    /// taken before this call is not.
     pub fn identify_nodes_without_self_edges(
         &mut self,
         nodes: &[NodeIndex],
@@ -1916,17 +1963,7 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
             .graph
             .identify_nodes_without_self_edges::<SuBitGraph>(nodes, node_data);
         self.invalidate_logical_layout(n);
-
-        self.graph.forget_identification_history();
-        self.graph.node_store.check_and_set_nodes().unwrap();
-        self.delete(&sub);
-
-        self.graph.node_store.check_and_set_nodes().unwrap();
-        // println!(
-        //     "identify_nodes_without_self_edges res:{}",
-        //     self.dot_simple()
-        // );
-        n
+        self.compact_identified(n, &sub)
     }
 
     pub fn identify_subgraph_nodes_without_deleting_self_edges(
@@ -1947,12 +1984,16 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
         Some(node)
     }
 
+    /// Identifies `nodes` and marks the created self-edges and duplicate head
+    /// edges in `ignored` without deleting them.
+    ///
+    /// Callers finish with [`Self::finish_deferred_node_identifications`].
     pub fn identify_nodes_marking_self_edges_and_duplicate_heads(
         &mut self,
         nodes: &[NodeIndex],
         node_data: NetworkNode<K, FK, Aind>,
         ignored: &mut SuBitGraph,
-    ) -> NodeIndex {
+    ) {
         let _span = profile::span(Timer::IdentifyNodes);
         let (node, self_edges) = self
             .graph
@@ -1977,53 +2018,16 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
                 ignored.add(other);
             }
         }
-
-        node
     }
 
+    /// Drops the nodes absorbed by deferred identifications.
+    ///
+    /// This renumbers nodes, so a `NodeIndex` taken before is invalid
+    /// afterwards. Half-edges keep their positions; resolve nodes through
+    /// them with `node_id`.
     pub fn finish_deferred_node_identifications(&mut self) {
         self.graph.forget_identification_history();
         self.graph.node_store.check_and_set_nodes().unwrap();
-    }
-
-    pub fn identify_nodes_without_self_edges_merge_heads(
-        &mut self,
-        nodes: &[NodeIndex],
-        node_data: NetworkNode<K, FK, Aind>,
-    ) -> NodeIndex {
-        // println!("Identifying:{:?}", nodes);
-        let (n, mut sub) = self
-            .graph
-            .identify_nodes_without_self_edges::<SuBitGraph>(nodes, node_data);
-        self.invalidate_logical_layout(n);
-
-        let mut first = true;
-        for h in self.graph.iter_crown(n) {
-            // println!("{h}");
-            if self.graph[[&h]].is_head() && self.graph.inv(h) != h {
-                if first {
-                    first = false;
-                } else {
-                    sub.add(h);
-                    sub.add(self.graph.inv(h));
-                }
-            }
-        }
-
-        // println!(
-        //     "Deleting: res:{}",
-        //     self.dot_impl_of(&sub, |i| i.to_string(), |_| "".into(), |i| i.to_string())
-        // );
-        self.graph.forget_identification_history();
-        self.graph.node_store.check_and_set_nodes().unwrap();
-        self.delete(&sub);
-        self.graph.node_store.check_and_set_nodes().unwrap();
-        // println!(
-        //     "identify_nodes_without_self_edges_merge_heads res:{}",
-        //     self.dot_simple()
-        // );
-
-        n
     }
 
     pub fn dot(&self) -> String
@@ -3618,6 +3622,46 @@ pub mod test {
         assert_eq!(graph, before);
         assert_eq!(graph.slots(node), vec![slot, slot]);
         assert!(graph.bound_ports(node).is_empty());
+    }
+
+    #[test]
+    fn identified_node_index_survives_compaction() {
+        use super::NMul;
+
+        type Graph = NetworkGraph<i8>;
+        let tensor = |id, labels: &[usize]| {
+            let structure = Canonicalized::<OrderedStructure>::from_iter(
+                labels.iter().map(|&index| Minkowski {}.new_slot(4, index)),
+            )
+            .into_canonical();
+            Graph::tensor(&structure, NetworkLeaf::LocalTensor(id))
+        };
+        let leaf = |graph: &Graph, id| {
+            graph
+                .graph
+                .iter_nodes()
+                .find_map(|(node, _, data)| {
+                    matches!(data, NetworkNode::Leaf(NetworkLeaf::LocalTensor(found)) if *found == id)
+                        .then_some(node)
+                })
+                .unwrap()
+        };
+        let mut moved = false;
+        for (survivor, absorbed) in [(0, 1), (1, 0), (1, 2), (2, 1)] {
+            let mut graph = tensor(0, &[1, 2]).n_mul([tensor(1, &[2, 3]), tensor(2, &[3, 4])]);
+            let nodes = [leaf(&graph, survivor), leaf(&graph, absorbed)];
+            let node = graph.identify_nodes_without_self_edges(
+                &nodes,
+                NetworkNode::Leaf(NetworkLeaf::LocalTensor(3)),
+            );
+            graph.graph.check().unwrap();
+            assert_eq!(graph.graph.n_nodes(), 3);
+            assert_eq!(node, leaf(&graph, 3), "merging {nodes:?}");
+            // Two open ports and both product heads; the shared index is gone.
+            assert_eq!(graph.graph.iter_crown(node).count(), 4);
+            moved |= node != nodes[0];
+        }
+        assert!(moved, "compaction must move some survivor for this test");
     }
 
     #[cfg(feature = "shadowing")]
