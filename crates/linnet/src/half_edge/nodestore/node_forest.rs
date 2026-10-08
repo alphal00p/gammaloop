@@ -57,6 +57,25 @@ impl Crown {
     }
 }
 
+/// Entry `i` of the class table of a [`NodeForest`], which holds two inverse
+/// permutations of the table's positions in one allocation: the class of node
+/// slot `i` and the node slot of class `i`. Positions at and behind the node
+/// count hold the free classes, so a free class's slot is behind the nodes too.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct ClassEntry {
+    /// The class of node slot `i`, or a free class.
+    class: u32,
+    /// The node slot of class `i`.
+    slot: u32,
+}
+
+impl ClassEntry {
+    /// Class `i` at slot `i`.
+    fn identity(i: u32) -> Self {
+        ClassEntry { class: i, slot: i }
+    }
+}
+
 /// A half-edge's neighbours in its node's ascending ring.
 #[derive(Clone, Copy, Debug)]
 struct Link {
@@ -71,7 +90,7 @@ impl Link {
     };
 }
 
-/// The per-half-edge arrays of a [`NodeForest`]: each half-edge's node and its
+/// The per-half-edge arrays of a [`NodeForest`]: each half-edge's class and its
 /// ring links.
 struct Rings<'a> {
     label: &'a mut [u32],
@@ -79,11 +98,11 @@ struct Rings<'a> {
 }
 
 impl Rings<'_> {
-    /// Labels every half-edge of the ring of `crown` as `node`.
-    fn relabel(&mut self, crown: &Crown, node: u32) {
+    /// Labels every half-edge of the ring of `crown` with `class`.
+    fn relabel(&mut self, crown: &Crown, class: u32) {
         let mut hedge = crown.head;
         for _ in 0..crown.len {
-            self.label[hedge as usize] = node;
+            self.label[hedge as usize] = class;
             hedge = self.links[hedge as usize].next;
         }
     }
@@ -104,15 +123,15 @@ impl Rings<'_> {
         self.links[head as usize].prev = hedge;
     }
 
-    /// The largest member below `hedge` of the ring of `node` starting at
+    /// The largest member below `hedge` of the ring of `class` starting at
     /// `head`, with `head < hedge` below the ring's largest member; `from` is a
     /// member below `hedge`.
     ///
     /// Walks the ring up from `from` while scanning labels down and up from
     /// `hedge`, so the cost is three times the smallest of the members walked and
     /// the half-edges between `hedge` and either ring neighbour. Every half-edge
-    /// labelled `node` must already be in the ring.
-    fn predecessor(&self, node: u32, head: u32, hedge: u32, mut from: u32) -> u32 {
+    /// labelled `class` must already be in the ring.
+    fn predecessor(&self, class: u32, head: u32, hedge: u32, mut from: u32) -> u32 {
         let (mut down, mut up) = (hedge - 1, hedge + 1);
         loop {
             let next = self.links[from as usize].next;
@@ -120,10 +139,10 @@ impl Rings<'_> {
                 return from;
             }
             from = next;
-            if self.label[down as usize] == node {
+            if self.label[down as usize] == class {
                 return down;
             }
-            if self.label[up as usize] == node {
+            if self.label[up as usize] == class {
                 return self.links[up as usize].prev;
             }
             down -= 1;
@@ -131,16 +150,16 @@ impl Rings<'_> {
         }
     }
 
-    /// Links `hedge`, labelled `node`, at its ascending position into the
+    /// Links `hedge`, labelled `class`, at its ascending position into the
     /// non-empty ring starting at `head`, searching from the member `from` below
     /// `hedge` or `head`; returns the new head.
     #[inline]
-    fn insert_into(&mut self, node: u32, head: u32, hedge: u32, from: u32) -> u32 {
+    fn insert_into(&mut self, class: u32, head: u32, hedge: u32, from: u32) -> u32 {
         let tail = self.links[head as usize].prev;
         let after = if hedge > tail || hedge < head {
             tail
         } else {
-            self.predecessor(node, head, hedge, from)
+            self.predecessor(class, head, hedge, from)
         };
         let before = self.links[after as usize].next;
         self.links[after as usize].next = hedge;
@@ -150,14 +169,14 @@ impl Rings<'_> {
         head.min(hedge)
     }
 
-    /// Links `hedge`, labelled `node`, into the ring of `crown`.
-    fn insert(&mut self, crown: &mut Crown, node: u32, hedge: u32) {
+    /// Links `hedge`, labelled `class`, into the ring of `crown`.
+    fn insert(&mut self, crown: &mut Crown, class: u32, hedge: u32) {
         crown.head = if crown.len == 0 {
             self.links[hedge as usize].next = hedge;
             self.links[hedge as usize].prev = hedge;
             hedge
         } else {
-            self.insert_into(node, crown.head, hedge, crown.head)
+            self.insert_into(class, crown.head, hedge, crown.head)
         };
         crown.len += 1;
     }
@@ -180,11 +199,11 @@ impl Rings<'_> {
         crown.len -= 1;
     }
 
-    /// Relabels the ring of `absorbed` as `survivor` and merges it into the ring
-    /// of `target`, the crown of `survivor`, in ascending order.
-    fn merge(&mut self, target: &mut Crown, survivor: u32, absorbed: &Crown) {
+    /// Relabels the ring of `absorbed` with `class`, the class of `target`, and
+    /// merges it into the ring of `target` in ascending order.
+    fn merge(&mut self, target: &mut Crown, class: u32, absorbed: &Crown) {
         if target.len == 0 {
-            self.relabel(absorbed, survivor);
+            self.relabel(absorbed, class);
             target.head = absorbed.head;
         } else {
             // Absorbed half-edges ascend, so each one's predecessor is at or
@@ -192,8 +211,8 @@ impl Rings<'_> {
             let (mut hedge, mut head, mut from) = (absorbed.head, target.head, target.head);
             for _ in 0..absorbed.len {
                 let next = self.links[hedge as usize].next;
-                self.label[hedge as usize] = survivor;
-                head = self.insert_into(survivor, head, hedge, from);
+                self.label[hedge as usize] = class;
+                head = self.insert_into(class, head, hedge, from);
                 from = hedge;
                 hedge = next;
             }
@@ -205,13 +224,22 @@ impl Rings<'_> {
 
 /// A node store that keeps each crown as a circular ring of half-edges.
 ///
-/// Every half-edge stores its node (`label`, one load per
-/// [`NodeStorageOps::node_id_ref`]) and its ring neighbours. Each ring is
+/// Every half-edge stores the class of its node and its ring neighbours; a class
+/// table maps classes to node slots, so [`NodeStorageOps::node_id_ref`] costs two
+/// loads and moving a node to another slot never relabels its crown. Each ring is
 /// ascending from the node's smallest half-edge in every state, also while
 /// identifications are pending, so crown order never depends on history. Per node
-/// the store keeps the ring head and length, an optional anchor half-edge and
-/// whether the node was absorbed by an identification; payloads live in a
-/// separate [`NodeVec`].
+/// the store keeps its class, the ring head and length, an optional anchor
+/// half-edge and whether the node was absorbed by an identification; payloads
+/// live in a separate [`NodeVec`].
+///
+/// # Classes
+///
+/// Class ids are stable while their node lives, whatever its slot. Builds,
+/// deletions and extractions number classes like slots. The classes of the nodes
+/// dropped by [`NodeStorageOps::forget_identification_history`] become free and
+/// [`NodeStorageOps::extend_mut`] reuses them before minting new ones, so the
+/// class table never outgrows the largest node count since the last rebuild.
 ///
 /// # Node counts
 ///
@@ -227,14 +255,15 @@ impl Rings<'_> {
 /// request order on ties; repeated and absorbed nodes resolve to the node that
 /// absorbed them. Absorbed half-edges are relabelled immediately (weighted
 /// quick-find, so a half-edge is relabelled `O(log H)` times) and spliced into
-/// the survivor's ring in ascending position. The survivor keeps its anchor or
-/// adopts the first absorbed one.
+/// the survivor's ring in ascending position, taking the survivor's class. The
+/// survivor keeps its anchor or adopts the first absorbed one.
 ///
 /// # Compaction
 ///
 /// Forgetting, deleting and extracting renumber nodes with the shared tail-fill
 /// kernel [`partition_with`]: holes are filled from the tail, so live nodes may
-/// change index. Moving half-edges or renumbering nodes (delete, extract,
+/// change index. Forgetting moves node records and class table entries only, in
+/// `O(1)` per moved node. Moving half-edges or renumbering nodes (delete, extract,
 /// extract_nodes, swaps) requires forgotten history. Live nodes without
 /// half-edges are kept like any other node.
 ///
@@ -248,13 +277,15 @@ impl Rings<'_> {
 /// # Equality
 ///
 /// Comparison and hashing use the canonical image: each half-edge's node, which
-/// nodes are live, and the payloads. Ring links, anchors and the node an absorbed
-/// node was merged into are not compared.
+/// nodes are live, and the payloads. Classes, ring links, anchors and the node an
+/// absorbed node was merged into are not compared.
 #[derive(Clone, Debug)]
 pub struct NodeForest<V> {
+    /// The class of each half-edge's node.
     label: Vec<u32>,
     links: Vec<Link>,
     crowns: Vec<Crown>,
+    classes: Vec<ClassEntry>,
     n_absorbed: u32,
     data: NodeVec<V>,
 }
@@ -310,7 +341,8 @@ fn index_u32(index: usize) -> u32 {
 }
 
 impl<V> NodeForest<V> {
-    /// Builds the store from each half-edge's node, with live nodes without anchors.
+    /// Builds the store from each half-edge's node, with live nodes without
+    /// anchors and each node's class equal to its slot.
     fn from_labels(mut label: Vec<u32>, data: NodeVec<V>) -> Self {
         let n_hedges = label.len();
         let n_nodes: NodeIndex = data.len();
@@ -328,6 +360,7 @@ impl<V> NodeForest<V> {
             label,
             links,
             crowns,
+            classes: (0..n_nodes.0 as u32).map(ClassEntry::identity).collect(),
             n_absorbed: 0,
             data,
         }
@@ -336,6 +369,24 @@ impl<V> NodeForest<V> {
     #[inline]
     fn ring(&self, node: usize) -> RingNeighborIter<'_> {
         self.crowns[node].ring(&self.links)
+    }
+
+    /// The node slot of `hedge`.
+    #[inline]
+    fn node_of(&self, hedge: usize) -> u32 {
+        let class = self.label[hedge] as usize;
+        debug_assert!(class < self.classes.len());
+        // SAFETY: labels enter through `from_labels`, which indexes the node
+        // records, as many as classes, with each of them, or are copied from the
+        // class table, which never shrinks; so every label is below its length.
+        unsafe { self.classes.get_unchecked(class).slot }
+    }
+
+    /// Each half-edge's node slot: the labels of the canonical image.
+    fn nodes(&self) -> impl Iterator<Item = u32> + '_ {
+        self.label
+            .iter()
+            .map(|&class| self.classes[class as usize].slot)
     }
 
     /// Number of node slots, live or absorbed: the bound of every [`NodeIndex`]
@@ -364,7 +415,8 @@ impl<V> NodeForest<V> {
         self.crowns[node.0].anchor = match anchor {
             Some(hedge) => {
                 assert_eq!(
-                    self.label[hedge.0] as usize, node.0,
+                    self.node_of(hedge.0) as usize,
+                    node.0,
                     "anchor {hedge} is not in the crown of {node}"
                 );
                 hedge.0 as u32
@@ -408,9 +460,10 @@ impl<V> NodeForest<V> {
             },
         );
         self.n_absorbed += 1;
+        let class = self.classes[survivor as usize].class;
         let (mut rings, crowns) = self.rings();
         let target = &mut crowns[survivor as usize];
-        rings.merge(target, survivor, &crown);
+        rings.merge(target, class, &crown);
         if target.anchor == NONE {
             target.anchor = crown.anchor;
         }
@@ -426,12 +479,15 @@ impl<V> NodeForest<V> {
         assert_eq!(self.n_absorbed, 0, "{HISTORY_RETAINED}");
     }
 
-    /// Swaps two node slots with their crowns, anchors, states and payloads.
+    /// Swaps two node slots with their classes, crowns, anchors, states and
+    /// payloads in `O(1)`: half-edges keep their class.
     fn swap_slots(&mut self, a: usize, b: usize) {
-        let (mut rings, crowns) = self.rings();
-        rings.relabel(&crowns[a], b as u32);
-        rings.relabel(&crowns[b], a as u32);
-        crowns.swap(a, b);
+        self.crowns.swap(a, b);
+        let (class_a, class_b) = (self.classes[a].class, self.classes[b].class);
+        self.classes[a].class = class_b;
+        self.classes[b].class = class_a;
+        self.classes[class_a as usize].slot = b as u32;
+        self.classes[class_b as usize].slot = a as u32;
         self.data.swap(NodeIndex(a), NodeIndex(b));
     }
 
@@ -484,7 +540,7 @@ impl<V> NodeForest<V> {
         let (order, left) = self.hedge_order(moved);
         let mut n_moved = vec![0; self.crowns.len()];
         for &hedge in &order[left..] {
-            n_moved[self.label[hedge as usize] as usize] += 1;
+            n_moved[self.node_of(hedge as usize) as usize] += 1;
         }
         let split_node: Vec<bool> = (self.crowns.iter().zip(&n_moved))
             .map(|(crown, &n_moved)| n_moved < crown.len)
@@ -500,6 +556,7 @@ impl<V> NodeForest<V> {
             label: self.label.clone(),
             links: self.links.clone(),
             crowns: self.crowns.clone(),
+            classes: self.classes.clone(),
             n_absorbed: self.n_absorbed,
             data,
         }
@@ -510,6 +567,7 @@ impl<V> NodeForest<V> {
             label: self.label,
             links: self.links,
             crowns: self.crowns,
+            classes: self.classes,
             n_absorbed: self.n_absorbed,
             data,
         }
@@ -523,7 +581,7 @@ impl<V> NodeForest<V> {
 
 impl<V: PartialEq> PartialEq for NodeForest<V> {
     fn eq(&self, other: &Self) -> bool {
-        self.label == other.label
+        self.nodes().eq(other.nodes())
             && self.live_mask().eq(other.live_mask())
             && self.data == other.data
     }
@@ -533,7 +591,7 @@ impl<V: Eq> Eq for NodeForest<V> {}
 
 impl<V: PartialOrd> PartialOrd for NodeForest<V> {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        match self.label.cmp(&other.label) {
+        match self.nodes().cmp(other.nodes()) {
             std::cmp::Ordering::Equal => {}
             ordering => return Some(ordering),
         }
@@ -547,8 +605,8 @@ impl<V: PartialOrd> PartialOrd for NodeForest<V> {
 
 impl<V: Ord> Ord for NodeForest<V> {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        self.label
-            .cmp(&other.label)
+        self.nodes()
+            .cmp(other.nodes())
             .then_with(|| self.live_mask().cmp(other.live_mask()))
             .then_with(|| self.data.cmp(&other.data))
     }
@@ -556,7 +614,10 @@ impl<V: Ord> Ord for NodeForest<V> {
 
 impl<V: Hash> Hash for NodeForest<V> {
     fn hash<H: Hasher>(&self, state: &mut H) {
-        self.label.hash(state);
+        self.label.len().hash(state);
+        for node in self.nodes() {
+            node.hash(state);
+        }
         for live in self.live_mask() {
             live.hash(state);
         }
@@ -582,15 +643,19 @@ impl<V> Swap<Hedge> for NodeForest<V> {
             return;
         }
         let (a, b) = (a.0 as u32, b.0 as u32);
-        let (node_a, node_b) = (self.label[a as usize], self.label[b as usize]);
+        let (class_a, class_b) = (self.label[a as usize], self.label[b as usize]);
+        let (node_a, node_b) = (
+            self.classes[class_a as usize].slot,
+            self.classes[class_b as usize].slot,
+        );
         if node_a != node_b {
             let (mut rings, crowns) = self.rings();
             rings.unlink(&mut crowns[node_a as usize], a);
             rings.unlink(&mut crowns[node_b as usize], b);
-            rings.label[a as usize] = node_b;
-            rings.label[b as usize] = node_a;
-            rings.insert(&mut crowns[node_a as usize], node_a, b);
-            rings.insert(&mut crowns[node_b as usize], node_b, a);
+            rings.label[a as usize] = class_b;
+            rings.label[b as usize] = class_a;
+            rings.insert(&mut crowns[node_a as usize], class_a, b);
+            rings.insert(&mut crowns[node_b as usize], class_b, a);
         }
         for node in [node_a, node_b] {
             let anchor = &mut self.crowns[node as usize].anchor;
@@ -643,16 +708,25 @@ impl<V> NodeStorageOps for NodeForest<V> {
     }
 
     /// Appends `other` behind `self`, shifting its half-edges and nodes; pending
-    /// identifications on either side are kept.
+    /// identifications on either side are kept. Appended nodes take the free
+    /// classes of `self` first.
     fn extend_mut(&mut self, other: Self) {
         let hedge_shift = index_u32(self.label.len());
         let node_shift = index_u32(self.crowns.len());
         // The shifted indices must stay below `NONE` as well.
         index_u32(self.label.len() + other.label.len());
-        index_u32(self.crowns.len() + other.crowns.len());
+        let n_nodes = index_u32(self.crowns.len() + other.crowns.len());
+        for class in self.classes.len() as u32..n_nodes {
+            self.classes.push(ClassEntry::identity(class));
+        }
+        let classes = &self.classes[node_shift as usize..n_nodes as usize];
+        self.label.extend(
+            other
+                .label
+                .iter()
+                .map(|&class| classes[other.classes[class as usize].slot as usize].class),
+        );
         let shift = |index: u32, by: u32| if index == NONE { NONE } else { index + by };
-        self.label
-            .extend(other.label.iter().map(|&node| node + node_shift));
         self.links.extend(other.links.iter().map(|link| Link {
             next: link.next + hedge_shift,
             prev: link.prev + hedge_shift,
@@ -756,8 +830,9 @@ impl<V> NodeStorageOps for NodeForest<V> {
         !self.crowns[node.0].is_live()
     }
 
-    /// Fills the absorbed slots from the tail with [`partition_with`], relabelling
-    /// only the moved crowns, and returns the absorbed payloads.
+    /// Fills the absorbed slots from the tail with [`partition_with`], moving node
+    /// records and classes but no half-edge labels, and returns the absorbed
+    /// payloads. The absorbed nodes' classes become free.
     fn forget_identification_history(&mut self) -> NodeVec<Self::NodeData> {
         if self.n_absorbed == 0 {
             return NodeVec::new();
@@ -862,7 +937,7 @@ impl<V> NodeStorageOps for NodeForest<V> {
             return Err(HedgeGraphError::InvalidNode(source));
         }
         let hedge = index_u32(self.label.len());
-        self.label.push(source.0 as u32);
+        self.label.push(self.classes[source.0].class);
         self.links.push(Link::NONE);
         let (mut rings, crowns) = self.rings();
         rings.append(&mut crowns[source.0], hedge);
@@ -898,12 +973,28 @@ impl<V> NodeStorageOps for NodeForest<V> {
         Ok(())
     }
 
-    /// Checks that the rings ascend, close and partition the half-edges
-    /// consistently with the labels, that absorbed nodes have no crown and lead
-    /// to live nodes, and that anchors lie in their crowns.
+    /// Checks that the class table is a permutation covering the node slots, that
+    /// the rings ascend, close and partition the half-edges consistently with the
+    /// labels, that absorbed nodes have no crown and lead to live nodes, and that
+    /// anchors lie in their crowns.
     fn check_nodes(&self) -> Result<(), HedgeGraphError> {
         let partition = HedgeGraphError::NodesDoNotPartition;
         let n_nodes = self.crowns.len();
+        let n_classes = self.classes.len();
+        if n_classes < n_nodes
+            || (self.classes.iter().enumerate()).any(|(at, entry)| {
+                (self.classes.get(entry.class as usize)).map(|entry| entry.slot) != Some(at as u32)
+            })
+        {
+            return Err(partition("class table is not a permutation".to_owned()));
+        }
+        if (self.label.iter()).any(|&class| {
+            class as usize >= n_classes || self.classes[class as usize].slot as usize >= n_nodes
+        }) {
+            return Err(partition(
+                "half-edge labelled with a missing node".to_owned(),
+            ));
+        }
         let mut covered = 0;
         for (node, crown) in self.crowns.iter().enumerate() {
             if !crown.is_live() {
@@ -932,7 +1023,7 @@ impl<V> NodeStorageOps for NodeForest<V> {
                 if hedge as usize >= self.label.len() {
                     return Err(HedgeGraphError::InvalidHedge(at));
                 }
-                if self.label[hedge as usize] as usize != node {
+                if self.node_of(hedge as usize) as usize != node {
                     return Err(HedgeGraphError::NodeDoesNotContainHedge(
                         NodeIndex(node),
                         at,
@@ -954,12 +1045,14 @@ impl<V> NodeStorageOps for NodeForest<V> {
                 return Err(partition(format!("crown of {node} does not close")));
             }
             covered += crown.len as usize;
-            if crown.anchor != NONE && self.label.get(crown.anchor as usize) != Some(&(node as u32))
+            if crown.anchor != NONE
+                && (crown.anchor as usize >= self.label.len()
+                    || self.node_of(crown.anchor as usize) as usize != node)
             {
                 return Err(partition(format!("anchor of {node} is outside its crown")));
             }
         }
-        if covered != self.label.len() || self.label.iter().any(|&node| node as usize >= n_nodes) {
+        if covered != self.label.len() {
             return Err(partition("crowns do not cover the half-edges".to_owned()));
         }
         if self.count_absorbed() != self.n_absorbed {
@@ -999,6 +1092,7 @@ impl<V> NodeStorageOps for NodeForest<V> {
             label: self.label.clone(),
             links: self.links.clone(),
             crowns: self.crowns.clone(),
+            classes: self.classes.clone(),
             n_absorbed: self.n_absorbed,
             data,
         }
@@ -1064,7 +1158,7 @@ impl<V> NodeStorageOps for NodeForest<V> {
 
     #[inline]
     fn node_id_ref(&self, hedge: Hedge) -> NodeIndex {
-        NodeIndex(self.label[hedge.0] as usize)
+        NodeIndex(self.node_of(hedge.0) as usize)
     }
 
     #[inline]
@@ -1120,7 +1214,7 @@ impl Compaction {
         let shift = nodes.start as u32;
         let label = self.order[hedges.clone()]
             .iter()
-            .map(|&old| self.new_id[store.label[old as usize] as usize] - shift)
+            .map(|&old| self.new_id[store.node_of(old as usize) as usize] - shift)
             .collect();
         let mut side = NodeForest::from_labels(label, data);
         for (crown, &old) in side.crowns.iter_mut().zip(&self.node_order[nodes]) {
@@ -1156,7 +1250,7 @@ mod serialization {
     #[derive(serde::Serialize)]
     #[serde(rename = "NodeForest")]
     struct PartsRef<'a, V> {
-        label: &'a [u32],
+        label: Vec<u32>,
         anchor: Vec<Option<u32>>,
         absorbed_into: Vec<Option<u32>>,
         data: &'a [V],
@@ -1175,11 +1269,14 @@ mod serialization {
     }
 
     impl<V> NodeForest<V> {
-        pub(super) fn optional_parts(&self) -> (Vec<Option<u32>>, Vec<Option<u32>>) {
-            self.crowns
+        /// Each half-edge's node, and each node's anchor and merge target.
+        pub(super) fn stored_parts(&self) -> (Vec<u32>, Vec<Option<u32>>, Vec<Option<u32>>) {
+            let (anchor, absorbed_into) = self
+                .crowns
                 .iter()
                 .map(|crown| (optional(crown.anchor), optional(crown.absorbed_into)))
-                .unzip()
+                .unzip();
+            (self.nodes().collect(), anchor, absorbed_into)
         }
 
         /// Rebuilds a store from its parts, rejecting inconsistent ones.
@@ -1217,9 +1314,9 @@ mod serialization {
 
     impl<V: serde::Serialize> serde::Serialize for NodeForest<V> {
         fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-            let (anchor, absorbed_into) = self.optional_parts();
+            let (label, anchor, absorbed_into) = self.stored_parts();
             PartsRef {
-                label: &self.label,
+                label,
                 anchor,
                 absorbed_into,
                 data: &self.data.0,
@@ -1249,8 +1346,8 @@ mod binary {
 
     impl<V: Encode> Encode for NodeForest<V> {
         fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
-            let (anchor, absorbed_into) = self.optional_parts();
-            self.label.encode(encoder)?;
+            let (label, anchor, absorbed_into) = self.stored_parts();
+            label.encode(encoder)?;
             anchor.encode(encoder)?;
             absorbed_into.encode(encoder)?;
             self.data.0.encode(encoder)
@@ -1444,6 +1541,86 @@ mod tests {
         assert_eq!(store.node_id_ref(Hedge(3)), NodeIndex(2));
         store.check_nodes().unwrap();
         assert!(store.forget_identification_history().0.is_empty());
+    }
+
+    /// A hub at the highest index moves into the first hole with its class, so
+    /// none of its half-edges is relabelled; the image matches a fresh build.
+    #[test]
+    fn forget_moves_a_hub_without_relabelling_its_crown() {
+        let mut moved = store(&[&[0], &[1], &[2], &[3, 4, 5, 6]]);
+        let hub = NodeIndex(3);
+        moved.set_anchor(hub, Some(Hedge(5)));
+        moved.identify_nodes(&[NodeIndex(0), hub], 10);
+        moved.identify_nodes(&[hub, NodeIndex(2)], 11);
+        let labels = moved.label.clone();
+        assert_eq!(payloads(moved.forget_identification_history()), [2, 0]);
+        assert_eq!(moved.label, labels);
+        // Classes 2 and 0 of the dropped nodes are free behind the node slots.
+        assert_eq!(
+            moved
+                .classes
+                .iter()
+                .map(|entry| entry.class)
+                .collect::<Vec<_>>(),
+            [3, 1, 2, 0]
+        );
+        assert_eq!((moved.n_live(), moved.node_bound()), (2, 2));
+        assert_eq!(crowns(&moved), [vec![0, 2, 3, 4, 5, 6], vec![1]]);
+        assert_eq!(moved.node_id_ref(Hedge(4)), NodeIndex(0));
+        assert_eq!(moved.anchor(NodeIndex(0)), Some(Hedge(5)));
+        moved.check_nodes().unwrap();
+        let mut fresh = store(&[&[0, 2, 3, 4, 5, 6], &[1]]);
+        *fresh.get_node_data_mut(NodeIndex(0)) = 11;
+        assert_eq!(moved, fresh);
+        assert_eq!(hash(&moved), hash(&fresh));
+        // Serialization stores nodes, not classes.
+        #[cfg(feature = "serde")]
+        {
+            fresh.set_anchor(NodeIndex(0), Some(Hedge(5)));
+            assert_eq!(
+                serde_json::to_string(&moved).unwrap(),
+                serde_json::to_string(&fresh).unwrap()
+            );
+        }
+    }
+
+    /// Appended nodes reuse the classes that forgetting freed, so repeated
+    /// identify, forget and append cycles keep the class table bounded, also
+    /// when the appended store has moved classes of its own.
+    #[test]
+    fn classes_are_reused_across_identify_forget_and_append() {
+        let mut store = store(&[&[0, 1], &[2], &[3]]);
+        for round in 0..20 {
+            // Its hub sits last and moves into slot 0 when forgetting.
+            let mut other = super::tests::store(&[&[0], &[3], &[1, 2]]);
+            other.identify_nodes(&[NodeIndex(0), NodeIndex(2)], 100);
+            other.forget_identification_history();
+            assert_eq!(other.classes[0], ClassEntry { class: 2, slot: 2 });
+            let shift = store.node_bound();
+            let n_hedges = store.label.len();
+            store.extend_mut(other);
+            store.check_nodes().unwrap();
+            assert!(
+                store.classes.len() <= 5,
+                "round {round}: {:?}",
+                store.classes
+            );
+            assert_eq!(crown(&store, shift), [n_hedges, n_hedges + 1, n_hedges + 2]);
+            assert_eq!(crown(&store, shift + 1), [n_hedges + 3]);
+            // Merge both appended nodes into the node of half-edge 0 and forget.
+            let first = store.node_id_ref(Hedge(0));
+            store.identify_nodes(&[NodeIndex(shift), first], round);
+            store.identify_nodes(&[first, NodeIndex(shift + 1)], round);
+            store.forget_identification_history();
+            store.check_nodes().unwrap();
+            assert_eq!(store.node_bound(), 3);
+            let merged = store.node_id_ref(Hedge(0)).0;
+            let mut expected = vec![0, 1];
+            expected.extend(4..store.label.len());
+            assert_eq!(crown(&store, merged), expected);
+            assert_eq!(crown(&store, store.node_id_ref(Hedge(2)).0), [2]);
+            assert_eq!(crown(&store, store.node_id_ref(Hedge(3)).0), [3]);
+        }
     }
 
     #[test]
@@ -1700,7 +1877,7 @@ mod tests {
         let unmerged = store(&[&[0], &[]]);
         let mut merged = unmerged.clone();
         merged.identify_nodes(&[NodeIndex(0), NodeIndex(1)], 0);
-        assert_eq!(merged.label, unmerged.label);
+        assert!(merged.nodes().eq(unmerged.nodes()));
         assert_eq!(merged.data, unmerged.data);
         assert_ne!(merged, unmerged);
         assert_eq!(merged.cmp(&unmerged), std::cmp::Ordering::Less);
