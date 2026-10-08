@@ -1327,6 +1327,24 @@ struct PropagatorNumeratorKey {
     hedges: [usize; 2],
 }
 
+/// Feynman-rule numerators for a finalized topology, using its attached model.
+pub trait FeynmanDiagramRulesExt {
+    /// Instantiate vertex and propagator numerators in an imported diagram's
+    /// existing half-edge frame, using its interaction-slot assignments.
+    ///
+    /// The diagram's routing, overall factor, numerator prefactor and projector
+    /// are retained. Existing local numerator fragments are replaced with the
+    /// model's Feynman rules, just as during diagram generation.
+    fn apply_feynman_rules(&self) -> Result<FeynmanDiagram, GenerationError>;
+}
+
+impl FeynmanDiagramRulesExt for FeynmanDiagram {
+    fn apply_feynman_rules(&self) -> Result<FeynmanDiagram, GenerationError> {
+        self.validate()?;
+        Generator::new(self.model_arc()).construct_numerators(self.clone())
+    }
+}
+
 impl Generator {
     pub fn new(model: impl Into<Arc<Model>>) -> Self {
         Self {
@@ -7176,6 +7194,58 @@ mod tests {
         assert!(combined.contains("spenso::t("));
         assert!(combined.contains("spenso::f("));
         assert!(combined.contains("spenso::g("));
+    }
+
+    #[test]
+    fn apply_feynman_rules_to_compact_dot() {
+        let generator = Generator::new(scalar_model());
+        let diagram = FeynmanDiagram::from_dot(
+            Arc::clone(&generator.model),
+            r#"digraph bubble {
+                ext [style=invis];
+                ext -> a [particle="phi"];
+                a -> b [particle="phi", lmb_id=0];
+                a -> b [particle="phi"];
+                b -> ext [particle="phi"];
+            }"#,
+        )
+        .unwrap();
+        assert_eq!(diagram.numerator(), &Atom::one());
+        let routed = diagram.loop_momentum_basis().clone();
+        let id = diagram.id();
+        let diagram = diagram.apply_feynman_rules().unwrap();
+        assert_eq!(diagram.numerator(), &test_atom("GC1^2"));
+        assert_eq!(diagram.loop_momentum_basis(), &routed);
+        assert_eq!(diagram.id(), id);
+        diagram.validate().unwrap();
+    }
+
+    #[test]
+    fn apply_feynman_rules_matches_generated_local_factors() {
+        let generator = Generator::new(standard_model());
+        let generated = generator
+            .generate(
+                &Process::new(["g"], ["g"]),
+                &GenerationOptions::default()
+                    .with_loop_count(1, 1)
+                    .unwrap()
+                    .threads(1)
+                    .max_vertices(2)
+                    .with_graph_filter(GenerationFilter::CouplingOrders(BTreeMap::from([
+                        ("QCD".to_owned(), (2, Some(2))),
+                        ("QED".to_owned(), (0, Some(0))),
+                    ]))),
+                GenerationType::Amplitude,
+            )
+            .unwrap();
+        assert!(!generated.diagrams.is_empty());
+        for diagram in generated.diagrams {
+            let topology = diagram.clone().with_numerator(Atom::one()).unwrap();
+            let restored = topology.apply_feynman_rules().unwrap();
+            assert_eq!(restored.to_json().unwrap(), diagram.to_json().unwrap());
+            let reapplied = restored.apply_feynman_rules().unwrap();
+            assert_eq!(reapplied.to_json().unwrap(), restored.to_json().unwrap());
+        }
     }
 
     #[test]
