@@ -233,6 +233,7 @@ impl std::fmt::Display for GVEdgeAttrs {
 pub mod builder;
 pub mod nodestore;
 pub mod remap;
+mod spanning_forests;
 pub mod subgraph;
 pub mod swap;
 
@@ -2410,122 +2411,6 @@ impl<E, V, H, N: Topology> HedgeGraph<E, V, H, N> {
             }
             regions.insert(s);
         }
-    }
-}
-
-// Cycles
-impl<E, V, H, N: Topology> HedgeGraph<E, V, H, N> {
-    /// Gives all subgraphs corresponding to all the spanning trees of the graph.
-    ///
-    /// See Winter, Pawel, “An Algorithm for the Enumeration of Spanning Trees,”
-    /// *BIT Numerical Mathematics* 26, no. 1 (1986): 44–62,
-    /// <https://doi.org/10.1007/BF01939361>.
-    pub fn all_spanning_forests_of<S: SubGraphLike>(&self, subgraph: &S) -> Vec<S::Base>
-    where
-        for<'a> N: Clone,
-        S::Base: SubSetLike<Base = S::Base>
-            + SubSetOps
-            + Clone
-            + ModifySubSet<HedgePair>
-            + ModifySubSet<Hedge>,
-    {
-        let ref_self = self.to_ref();
-
-        let exts = self.internal_crown(subgraph);
-
-        if subgraph.is_empty() {
-            return vec![];
-        }
-        let mut visited_edges: SuBitGraph = self.empty_subgraph();
-
-        let mut nodes = vec![];
-
-        // Iterate over all edges in the subgraph
-        for hedge_index in subgraph.included_iter() {
-            if !visited_edges.includes(&hedge_index) {
-                // Perform DFS to find all reachable edges from this edge
-
-                //
-                let root_node = self.node_id(hedge_index);
-                let tree =
-                    SimpleTraversalTree::depth_first_traverse(self, subgraph, &root_node, None)
-                        .unwrap();
-
-                let reachable_edges = tree.covers(subgraph);
-
-                visited_edges.union_with(&reachable_edges);
-                let mut nodes_of_tree = tree.node_order();
-                nodes_of_tree.remove(0);
-                nodes.extend(nodes_of_tree);
-            }
-        }
-
-        let mut included = subgraph.included().clone();
-        for h in exts.included_iter() {
-            included.sub(h);
-        }
-
-        ref_self.contract_edge_for_spanning(nodes, included)
-    }
-
-    fn contract_edge_for_spanning<S>(self, mut nodes: Vec<NodeIndex>, mut subgraph: S) -> Vec<S>
-    where
-        V: Clone,
-        E: Clone,
-        H: Clone,
-        N: Clone,
-        S: SubSetOps + Clone + SubSetLike<Base = S> + ModifySubSet<HedgePair> + ModifySubSet<Hedge>,
-    {
-        let mut trees = vec![];
-        if let Some(node) = nodes.pop() {
-            for h in self.iter_crown(node) {
-                //This is an internal edge
-                if subgraph.includes(&h) && subgraph.includes(&self.inv(h)) {
-                    //we found an neighboring vertex in the graph
-                    if let Some(new_node) = self.involved_node_id(h) {
-                        // This is not a dangling edge
-                        // if new_node != node {
-
-                        let node_data_merge = self[node].clone();
-                        let mut new_self = self.clone();
-
-                        // We now identify node and new_node. All spanning trees of this contracted graph will be spanning trees of the full graph, when adding one of the parallel edges
-                        let (mapped_node, parallel): (_, S::Base) = new_self
-                            .identify_nodes_without_self_edges(&[node, new_node], node_data_merge);
-
-                        let mapped_nodes = nodes
-                            .iter()
-                            .map(|a| {
-                                if *a == new_node || *a == node {
-                                    mapped_node
-                                } else {
-                                    *a
-                                }
-                            })
-                            .collect();
-
-                        for v in new_self
-                            .contract_edge_for_spanning(mapped_nodes, subgraph.subtract(&parallel))
-                        // recurse with a the node identified graph and the contracted edge subgraph
-                        {
-                            // v is the set of spanning trees of the contracted graph
-                            for (p, _, _) in self.iter_edges_of(&parallel.intersection(&subgraph)) {
-                                let mut with_p = v.clone();
-                                with_p.add(p);
-                                trees.push(with_p);
-                            }
-                        }
-
-                        // Remove all these edges from consideration.
-                        subgraph.subtract_with(&parallel);
-                    }
-                }
-            }
-        } else {
-            trees.push(self.empty_subgraph())
-        }
-
-        trees
     }
 }
 

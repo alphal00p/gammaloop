@@ -682,7 +682,7 @@ impl TestGraph {
 /// after compacting them: absorbed nodes are not part of the graph.
 #[test]
 fn algorithms_ignore_pending_identifications() {
-    use crate::half_edge::{algorithms::DirectionBasis, subgraph::Cycle};
+    use crate::half_edge::{algorithms::DirectionBasis, nodestore::Checkpoint, subgraph::Cycle};
 
     type Results = (
         usize,
@@ -697,7 +697,7 @@ fn algorithms_ignore_pending_identifications() {
         Option<Vec<SuBitGraph>>,
     );
 
-    fn results<N: Topology>(graph: &HedgeGraph<(), (), (), N>, nodes: [NodeIndex; 2]) -> Results {
+    fn results<N: Checkpoint>(graph: &HedgeGraph<(), (), (), N>, nodes: [NodeIndex; 2]) -> Results {
         let full = graph.full_filter();
         let sorted = |mut subgraphs: Vec<SuBitGraph>| {
             subgraphs.sort();
