@@ -692,4 +692,57 @@ mod tests {
         // a two-point bubble carries one momentum
         assert_eq!(count(&bubble_on_line()), 1);
     }
+
+    #[test]
+    fn a_tadpole_on_a_one_particle_irreducible_two_point_core_is_not_a_self_energy() {
+        // the triangle a, b, c with legs at a and b, and a bridge from c to a self-loop at d
+        let mut graph = PlainGraph::default();
+        let [a, d, b, c] = [(); 4].map(|_| graph.add_vertex());
+        graph.add_leg(a, true);
+        graph.add_leg(b, true);
+        for ends in [(a, b), (a, c), (b, c), (c, d), (d, d)] {
+            graph.add_edge(ends, Some(true));
+        }
+        let self_energy = SpecialTopologyVetoes {
+            self_energy: all_vetoes(false).self_energy,
+            ..Default::default()
+        };
+        assert!(!self_energy.vetoes(&graph));
+        let tadpoles = SpecialTopologyVetoes {
+            tadpoles: all_vetoes(false).tadpoles,
+            ..Default::default()
+        };
+        assert!(tadpoles.vetoes(&graph));
+    }
+
+    #[test]
+    fn a_bubble_inside_a_one_particle_irreducible_vertex_is_not_a_factorized_loop() {
+        // legs at b, c and a; the bubble d = e lies on the internal line c - d - e - b
+        let mut graph = PlainGraph::default();
+        let [a, b, c, d, e] = [(); 5].map(|_| graph.add_vertex());
+        graph.add_leg(b, true);
+        graph.add_leg(c, true);
+        graph.add_leg(a, true);
+        for ends in [(a, b), (a, c), (b, e), (c, d), (d, e), (d, e)] {
+            graph.add_edge(ends, Some(true));
+        }
+        assert_eq!(Blocks::new(&graph).factorized_loops(), 0);
+        let mut vetoes = all_vetoes(true);
+        vetoes.factorized_loop_range = Some((0, 0));
+        assert!(!vetoes.vetoes(&graph));
+    }
+
+    #[test]
+    fn a_one_particle_irreducible_one_point_graph_has_no_special_topologies() {
+        // the leg vertex a joined to both ends of the bubble b = c
+        let mut graph = PlainGraph::default();
+        let [a, b, c] = [(); 3].map(|_| graph.add_vertex());
+        graph.add_leg(a, true);
+        for ends in [(a, b), (a, c), (b, c), (b, c)] {
+            graph.add_edge(ends, Some(true));
+        }
+        assert!(!all_vetoes(true).vetoes(&graph));
+        // its single block carries the one external momentum
+        assert_eq!(Blocks::new(&graph).factorized_loops(), 1);
+    }
 }

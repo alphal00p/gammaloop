@@ -8662,9 +8662,12 @@ class Process:
             Exact order or inclusive range for this call, default zero. Cross sections count
             loops in the sewn forward graph; two-particle tree cuts need loops=1.
         symmetrize_initial : bool, optional
-            Identify graphs related by initial-state permutations; default False.
+            Identify graphs related by initial-state permutations; default False. In a cross
+            section a permutation moves each sewn final-state copy with its incoming leg.
         symmetrize_final : bool or None, optional
             Identify final-state permutations; None uses True for cross sections and False for amplitudes.
+            The final state of a cross section is the sewn copies of the initial state, so either
+            flag identifies the same permutations of identical sewn pairs, counted once.
         symmetrize_left_right : bool, optional
             Identify cross-section graphs related by exchanging amplitude sides.
         symmetrize_external_fermions : bool, optional
@@ -8744,7 +8747,11 @@ class Process:
             verdict must be hereditary within each stage. Edge data is the PDG code of the
             particle of the line, directed along its flow, or None before its field is
             assigned. External legs are dangling half-edges whose data is the pair
-            (state, index), with index None for legs symmetrized within their state.
+            (state, index), with index None for amplitude legs symmetrized within their state.
+            Cross-section legs keep their index; diagrams related by permuting identical
+            sewn pairs are identified after the search, so verdicts should not depend on
+            which identical pair carries which index. A "complete"-stage callback can add
+            vetoes to the built-in filters, for example a different self-energy definition.
             Node data is None. Mutating the snapshot does not change enumeration. Keep
             callbacks cheap: each snapshot is a new Python graph.
         cancellation_token : CancellationToken or None, optional
@@ -8779,9 +8786,12 @@ class Process:
             Exact order or inclusive range for this call, default zero. Cross sections count
             loops in the sewn forward graph; two-particle tree cuts need loops=1.
         symmetrize_initial : bool, optional
-            Identify graphs related by initial-state permutations; default False.
+            Identify graphs related by initial-state permutations; default False. In a cross
+            section a permutation moves each sewn final-state copy with its incoming leg.
         symmetrize_final : bool or None, optional
             Identify final-state permutations; None uses True for cross sections and False for amplitudes.
+            The final state of a cross section is the sewn copies of the initial state, so either
+            flag identifies the same permutations of identical sewn pairs, counted once.
         symmetrize_left_right : bool, optional
             Identify cross-section graphs related by exchanging amplitude sides.
         symmetrize_external_fermions : bool, optional
@@ -8861,7 +8871,11 @@ class Process:
             verdict must be hereditary within each stage. Edge data is the PDG code of the
             particle of the line, directed along its flow, or None before its field is
             assigned. External legs are dangling half-edges whose data is the pair
-            (state, index), with index None for legs symmetrized within their state.
+            (state, index), with index None for amplitude legs symmetrized within their state.
+            Cross-section legs keep their index; diagrams related by permuting identical
+            sewn pairs are identified after the search, so verdicts should not depend on
+            which identical pair carries which index. A "complete"-stage callback can add
+            vetoes to the built-in filters, for example a different self-energy definition.
             Node data is None. Mutating the snapshot does not change enumeration. Keep
             callbacks cheap: each snapshot is a new Python graph.
         cancellation_token : CancellationToken or None, optional
@@ -8897,9 +8911,12 @@ class Process:
             Exact order or inclusive range for this call, default zero. Cross sections count
             loops in the sewn forward graph; two-particle tree cuts need loops=1.
         symmetrize_initial : bool, optional
-            Identify graphs related by initial-state permutations; default False.
+            Identify graphs related by initial-state permutations; default False. In a cross
+            section a permutation moves each sewn final-state copy with its incoming leg.
         symmetrize_final : bool or None, optional
             Identify final-state permutations; None uses True for cross sections and False for amplitudes.
+            The final state of a cross section is the sewn copies of the initial state, so either
+            flag identifies the same permutations of identical sewn pairs, counted once.
         symmetrize_left_right : bool, optional
             Identify cross-section graphs related by exchanging amplitude sides.
         symmetrize_external_fermions : bool, optional
@@ -8979,7 +8996,11 @@ class Process:
             verdict must be hereditary within each stage. Edge data is the PDG code of the
             particle of the line, directed along its flow, or None before its field is
             assigned. External legs are dangling half-edges whose data is the pair
-            (state, index), with index None for legs symmetrized within their state.
+            (state, index), with index None for amplitude legs symmetrized within their state.
+            Cross-section legs keep their index; diagrams related by permuting identical
+            sewn pairs are identified after the search, so verdicts should not depend on
+            which identical pair carries which index. A "complete"-stage callback can add
+            vetoes to the built-in filters, for example a different self-energy definition.
             Node data is None. Mutating the snapshot does not change enumeration. Keep
             callbacks cheap: each snapshot is a new Python graph.
         cancellation_token : CancellationToken or None, optional

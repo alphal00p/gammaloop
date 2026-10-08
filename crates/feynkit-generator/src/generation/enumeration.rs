@@ -11,6 +11,7 @@
 //! complete graphs.
 
 use std::{
+    cmp::Ordering,
     collections::{BTreeMap, BTreeSet},
     sync::Arc,
 };
@@ -193,11 +194,16 @@ pub(crate) struct ProcessExternals {
     legs: Vec<(ExternalLabel, ParticleStub)>,
     /// Interchangeable legs and their momentum labels in increasing index order.
     classes: BTreeMap<(ExternalLabel, ParticleStub), Vec<ExternalNode>>,
+    /// The non-identity permutations of interchangeable sewn pairs, as maps of exact leg labels.
+    sewn_pair_permutations: Vec<BTreeMap<ExternalLabel, ExternalLabel>>,
 }
 
 impl ProcessExternals {
+    /// `sewn_pairs` are classes of interchangeable `[incoming, outgoing]` sewn pairs: a
+    /// permutation within a class moves both legs of every pair at once.
     pub(crate) fn new(
         externals: impl IntoIterator<Item = (ExternalLabel, ParticleStub, ExternalNode)>,
+        sewn_pairs: impl IntoIterator<Item = Vec<[ExternalLabel; 2]>>,
     ) -> Self {
         let mut legs = vec![];
         let mut classes: BTreeMap<_, Vec<_>> = BTreeMap::new();
@@ -208,7 +214,60 @@ impl ProcessExternals {
         for externals in classes.values_mut() {
             externals.sort();
         }
-        Self { legs, classes }
+        let mut sewn_pair_permutations = vec![BTreeMap::new()];
+        for pairs in sewn_pairs {
+            let pairs = &pairs;
+            sewn_pair_permutations = sewn_pair_permutations
+                .into_iter()
+                .flat_map(|permutation| {
+                    permutations(pairs.len()).map(move |images| {
+                        let mut permutation = permutation.clone();
+                        for (pair, image) in pairs.iter().zip(images) {
+                            permutation.insert(pair[0], pairs[image][0]);
+                            permutation.insert(pair[1], pairs[image][1]);
+                        }
+                        permutation
+                    })
+                })
+                .collect();
+        }
+        sewn_pair_permutations
+            .retain(|permutation| permutation.iter().any(|(from, to)| from != to));
+        Self {
+            legs,
+            classes,
+            sewn_pair_permutations,
+        }
+    }
+
+    /// The number of sewn-pair permutations that fix the isomorphism class of `diagram`, or
+    /// `None` when one maps it to a smaller certificate.
+    ///
+    /// The generator labels sewn pairs exactly, so a class of diagrams related by permuting
+    /// interchangeable pairs is generated once per member. The member with the smallest
+    /// certificate represents the class, and its automorphism count is multiplied by the
+    /// returned stabilizer order to give the automorphisms of the sewn graph.
+    pub(crate) fn sewn_pair_stabilizer(
+        &self,
+        diagram: &Diagram<ParticleId, ExternalLabel>,
+    ) -> Option<u128> {
+        let mut stabilizer = 1;
+        for permutation in &self.sewn_pair_permutations {
+            let image = diagram
+                .graph
+                .canonize_by(
+                    |&rule| rule,
+                    |field| *field,
+                    |label| label.map(|label| permutation.get(&label).copied().unwrap_or(label)),
+                )
+                .into_certificate();
+            match image.cmp(&diagram.certificate) {
+                Ordering::Less => return None,
+                Ordering::Equal => stabilizer += 1,
+                Ordering::Greater => {}
+            }
+        }
+        Some(stabilizer)
     }
 
     pub(crate) fn legs(&self) -> impl Iterator<Item = (ExternalLabel, ParticleStub)> + '_ {
@@ -530,6 +589,24 @@ pub(crate) fn closed_loops(nodes: usize, ends: &[(usize, usize)]) -> Result<usiz
         closed_loops += usize::from(closed);
     }
     Ok(closed_loops)
+}
+
+/// The permutations of `0..n`, as the image of each element.
+fn permutations(n: usize) -> impl Iterator<Item = Vec<usize>> {
+    let mut all = vec![vec![]];
+    for length in 0..n {
+        all = all
+            .into_iter()
+            .flat_map(|permutation: Vec<usize>| {
+                (0..=length).map(move |position| {
+                    let mut permutation = permutation.clone();
+                    permutation.insert(position, length);
+                    permutation
+                })
+            })
+            .collect();
+    }
+    all.into_iter()
 }
 
 #[cfg(test)]

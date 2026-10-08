@@ -1448,12 +1448,19 @@ impl Generator {
                     if options.cancellation_requested() {
                         return Ok(None);
                     }
-                    let graph = externals.graph(diagram, &signatures);
-                    let symmetry = diagram
-                        .automorphism_count
-                        .and_then(|count| u64::try_from(count).ok())
-                        .ok_or(GenerationError::SymmetryFactor)?;
-                    let input = self.diagram_input(&resolved, graph, symmetry, options)?;
+                    // Diagrams related by permuting sewn pairs are kept once.
+                    let input = match externals.sewn_pair_stabilizer(diagram) {
+                        None => None,
+                        Some(stabilizer) => {
+                            let graph = externals.graph(diagram, &signatures);
+                            let symmetry = diagram
+                                .automorphism_count
+                                .and_then(|count| count.checked_mul(stabilizer))
+                                .and_then(|count| u64::try_from(count).ok())
+                                .ok_or(GenerationError::SymmetryFactor)?;
+                            self.diagram_input(&resolved, graph, symmetry, options)?
+                        }
+                    };
                     let mut count = prepared_count.lock().unwrap();
                     *count += 1;
                     options.report_progress(
@@ -2888,6 +2895,13 @@ impl ResolvedProcess {
 
     /// The external legs of the generated graphs: incoming legs first, then the outgoing legs
     /// (the incoming states again for a cross section).
+    ///
+    /// The outgoing legs of a cross section are the sewn copies of the incoming states, so they
+    /// have no symmetry of their own: a permutation of identical initial states must move each
+    /// sewn copy with its incoming leg. Such a diagonal permutation is not a symmetry of
+    /// independent leg labels, so every cross-section leg is labelled exactly and the
+    /// interchangeable sewn pairs are identified after generation; see
+    /// [`ProcessExternals::sewn_pair_stabilizer`].
     fn externals(&self, model: &Model) -> Result<ProcessExternals, GenerationError> {
         let incoming = self
             .incoming
@@ -2904,7 +2918,27 @@ impl ResolvedProcess {
             .enumerate()
             .map(|(index, (particle, state))| self.external(model, particle, index, state))
             .collect::<Result<Vec<_>, _>>()?;
-        Ok(ProcessExternals::new(externals))
+        let mut sewn_pairs = BTreeMap::<&str, Vec<_>>::new();
+        if self.generation_type == GenerationType::CrossSection
+            && (self.symmetrize_initial || self.symmetrize_final)
+        {
+            for (index, particle) in self.incoming.iter().enumerate() {
+                sewn_pairs.entry(&particle.name).or_default().push([
+                    ExternalLabel::Exact {
+                        state: ExternalState::Incoming,
+                        index,
+                    },
+                    ExternalLabel::Exact {
+                        state: ExternalState::Outgoing,
+                        index: self.incoming.len() + index,
+                    },
+                ]);
+            }
+        }
+        Ok(ProcessExternals::new(
+            externals,
+            sewn_pairs.into_values().filter(|pairs| pairs.len() > 1),
+        ))
     }
 
     fn external(
@@ -2919,12 +2953,12 @@ impl ResolvedProcess {
             ExternalState::Incoming => particle,
             ExternalState::Outgoing => model.antiparticle(particle)?,
         };
-        let symmetrized_within_state = match state {
-            ExternalState::Incoming => self.symmetrize_initial,
-            ExternalState::Outgoing => self.symmetrize_final,
-        } && (self.generation_type == GenerationType::CrossSection
-            || !particle.is_fermion()
-            || self.symmetrize_external_fermions);
+        let symmetrized_within_state = self.generation_type == GenerationType::Amplitude
+            && match state {
+                ExternalState::Incoming => self.symmetrize_initial,
+                ExternalState::Outgoing => self.symmetrize_final,
+            }
+            && (!particle.is_fermion() || self.symmetrize_external_fermions);
         // Left/right symmetry is one global transformation of a sewn graph,
         // not an independent automorphism of every external pair. It is
         // applied after generation when canonical diagram keys are built.
@@ -7044,6 +7078,109 @@ mod tests {
         ));
     }
 
+    /// The symmetrized cross sections of `g g -> u u~` at one loop and the boxes among them as
+    /// `(sewn copies on adjacent vertices, symmetry factor)`.
+    fn gluon_fusion_boxes(
+        symmetrize_initial: bool,
+        symmetrize_final: bool,
+    ) -> (Vec<DiagramId>, f64, Vec<(bool, u64)>) {
+        let process = Process::new(["g", "g"], ["u", "u~"])
+            .with_particle_filters(
+                Some(["d", "c", "s", "t"].into_iter().map(Into::into).collect()),
+                None,
+                None,
+                vec![],
+            )
+            .unwrap();
+        let options = GenerationOptions::default()
+            .with_loop_count(1, 1)
+            .unwrap()
+            .threads(1)
+            .symmetrize_initial(symmetrize_initial)
+            .symmetrize_final(symmetrize_final);
+        let result = Generator::new(Model::qcd())
+            .generate(&process, &options, GenerationType::CrossSection)
+            .unwrap();
+        let mut boxes = vec![];
+        for diagram in &result.diagrams {
+            let mut internal = BTreeSet::new();
+            let mut sewn = vec![];
+            for (_, ends, edge) in diagram.edges() {
+                let ends = (ends.source.unwrap(), ends.target.unwrap());
+                if edge.external.is_some() {
+                    sewn.push(ends);
+                } else if edge.directed {
+                    internal.insert(ends);
+                    internal.insert((ends.1, ends.0));
+                }
+            }
+            // the quark loop through all four vertices
+            if diagram.vertices().count() == 4 && internal.len() == 8 {
+                let adjacent = sewn
+                    .iter()
+                    .map(|ends| internal.contains(ends))
+                    .collect::<Vec<_>>();
+                assert_eq!(adjacent[0], adjacent[1]);
+                boxes.push((adjacent[0], diagram.symmetry_factor()));
+            }
+        }
+        boxes.sort();
+        let total = result
+            .diagrams
+            .iter()
+            .map(|diagram| 1.0 / diagram.symmetry_factor() as f64)
+            .sum();
+        (
+            result.diagrams.iter().map(FeynmanDiagram::id).collect(),
+            total,
+            boxes,
+        )
+    }
+
+    #[test]
+    fn symmetrized_cross_sections_permute_sewn_pairs_together() {
+        let (_, exact_total, exact_boxes) = gluon_fusion_boxes(false, false);
+        // the crossed and the planar sewing, each with both orientations of the quark loop
+        assert_eq!(exact_boxes, [(false, 1), (false, 1), (true, 1), (true, 1)]);
+        let symmetrized = gluon_fusion_boxes(true, true);
+        // exchanging both sewn pairs reverses the quark loop: one box of each sewing remains
+        assert_eq!(symmetrized.2, [(false, 1), (true, 1)]);
+        assert_eq!(symmetrized.1, exact_total / 2.0);
+        // the sewn copies follow their incoming legs, so either flag requests the same symmetry
+        assert_eq!(gluon_fusion_boxes(true, false), symmetrized);
+        assert_eq!(gluon_fusion_boxes(false, true), symmetrized);
+    }
+
+    #[test]
+    fn one_particle_irreducibility_keeps_one_point_loop_graphs() {
+        // the only 1PI two-loop scalar tadpole: the leg vertex joined to both ends of a bubble
+        let options = GenerationOptions::default()
+            .with_loop_count(2, 2)
+            .unwrap()
+            .threads(1)
+            .with_graph_filter(GenerationFilter::LoopOneParticleIrreducible);
+        let result = Generator::new(scalar_model())
+            .generate(
+                &Process::new(["phi"], Vec::<&str>::new()),
+                &options,
+                GenerationType::Amplitude,
+            )
+            .unwrap();
+        assert_eq!(result.diagrams.len(), 1);
+        let diagram = &result.diagrams[0];
+        assert_eq!(diagram.vertices().count(), 3);
+        let mut lines = BTreeMap::<_, usize>::new();
+        for (_, ends, edge) in diagram.edges() {
+            if edge.external.is_none() {
+                let (a, b) = (ends.source.unwrap(), ends.target.unwrap());
+                *lines.entry((a.min(b), a.max(b))).or_default() += 1;
+            }
+        }
+        let mut multiplicities = lines.into_values().collect::<Vec<_>>();
+        multiplicities.sort();
+        assert_eq!(multiplicities, [1, 1, 2]);
+    }
+
     #[test]
     fn external_canonical_classes_keep_global_left_right_symmetry_out_of_raw_generation() {
         let model = fermion_model();
@@ -7090,16 +7227,25 @@ mod tests {
             ]
         );
 
+        // Sewn pairs are permuted after generation, so cross-section legs are always exact.
         let cross_section = Process::new([1_i64, -1], [22_i64]);
         assert_eq!(
             classes(
                 cross_section,
                 GenerationType::CrossSection,
-                GenerationOptions::default().symmetrize_initial(true)
+                GenerationOptions::default()
+                    .symmetrize_initial(true)
+                    .symmetrize_final(true)
             ),
             vec![
-                ExternalLabel::WithinState(ExternalState::Incoming),
-                ExternalLabel::WithinState(ExternalState::Incoming),
+                ExternalLabel::Exact {
+                    state: ExternalState::Incoming,
+                    index: 0,
+                },
+                ExternalLabel::Exact {
+                    state: ExternalState::Incoming,
+                    index: 1,
+                },
                 ExternalLabel::Exact {
                     state: ExternalState::Outgoing,
                     index: 2,
