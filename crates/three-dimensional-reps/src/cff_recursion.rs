@@ -582,9 +582,9 @@ fn enumerate_cff_branches(
             let (numerator, numerator_sign) =
                 ThermalNumerator::from_edge_lists_canonicalized(outgoing, incoming);
             prefactor *= Rational::from(surface_sign * numerator_sign);
-            if !numerator.is_trivial() {
-                branch_weight.numerators.push(numerator);
-            }
+            // if !numerator.is_trivial() {
+            branch_weight.numerators.push(numerator);
+            // }
         }
         let mut sub = Vec::new();
         enumerate_cff_branches(&child, parsed, edge_signs, medium_mode, &mut sub);
