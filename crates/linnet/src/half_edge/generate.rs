@@ -49,12 +49,42 @@
 //! order of the search and does not depend on parallelism: with the `rayon` feature,
 //! [`GraphGenerator::parallel`] runs independent subtrees on the current thread pool, each at most
 //! a fixed number of diagrams ahead of the output, and emits their results in that order.
+//!
+//! ## Filtering
+//!
+//! [`GraphGenerator::filter`] prunes both searches. It sees each search state as a [`GraphView`]:
+//! partial untyped topologies in stage 1, partial field assignments in stage 2 and the complete
+//! graphs, and a rejected state is dropped with everything below it. A hereditary filter (one that
+//! rejects every completion of a state it rejects) thus yields exactly the complete graphs it
+//! accepts, and cuts the search as early as its conditions are decided:
+//!
+//! ```
+//! use linnet::half_edge::generate::{GraphGenerator, Stub};
+//!
+//! // gg -> gg at one loop without ghosts: ghost fields are decided edge by edge in stage 2
+//! let (g, q, c) = (Stub::undirected('g'), Stub::incoming('q'), Stub::incoming('c'));
+//! let signatures = [
+//!     vec![q.clone().flipped(), q, g.clone()],
+//!     vec![g.clone(); 3],
+//!     vec![g.clone(); 4],
+//!     vec![c.clone().flipped(), c, g.clone()],
+//! ];
+//! let generator = GraphGenerator::new((1..=4).map(|l| (l, g.clone())), signatures)
+//!     .allow_self_loops(true)
+//!     .loops(1..=1);
+//! let no_ghosts = generator.filter(|view| {
+//!     view.edges().all(|e| e.stub.is_none_or(|s| *s.field != 'c'))
+//! });
+//! let diagrams: Vec<_> = no_ghosts.iter().unwrap().collect();
+//! assert_eq!(diagrams.len(), 111);
+//! ```
 
 mod decorate;
 mod model;
 #[cfg(test)]
 mod tests;
 mod topology;
+mod view;
 
 use std::{
     cell::RefCell,
@@ -66,12 +96,13 @@ use std::{
 use decorate::{Decoration, Decorator, Edge};
 use model::{Direction, Model, INCOMING, OUTGOING, UNDIRECTED};
 use topology::{Context, Limits, Search, Topology, MAX_VERTICES};
+pub use view::{Bridge, EdgeView, GraphView, Stage, VertexSet};
+use view::{Prune, Pruner, State};
 
 use super::{
-    builder::HedgeGraphBuilder,
     canon::{Certificate, KeyTables, RawHedge, Role},
-    involution::{Flow, Orientation},
-    HedgeGraph, NodeIndex,
+    involution::Flow,
+    HedgeGraph,
 };
 
 /// A typed half-edge slot of a vertex or an external leg.
@@ -161,7 +192,7 @@ pub enum GenerationError {
     TooManyVertices,
 }
 
-type Filter<F, L> = dyn Fn(&HedgeGraph<F, usize, Option<L>>) -> bool + Send + Sync;
+type Filter<F, L> = dyn Fn(&GraphView<'_, F, L>) -> bool + Send + Sync;
 type ProgressFn = dyn Fn(&Progress) -> bool + Send + Sync;
 type AbortCheck = dyn Fn() -> bool + Send + Sync;
 
@@ -180,6 +211,7 @@ pub struct GraphGenerator<F, L> {
     #[cfg(feature = "rayon")]
     parallel: bool,
     filter: Option<Box<Filter<F, L>>>,
+    check_heredity: bool,
     progress: Option<Box<ProgressFn>>,
     abort_check: Option<Box<AbortCheck>>,
 }
@@ -206,6 +238,7 @@ where
             #[cfg(feature = "rayon")]
             parallel: false,
             filter: None,
+            check_heredity: false,
             progress: None,
             abort_check: None,
         }
@@ -258,14 +291,39 @@ where
         self
     }
 
-    /// Keep only graphs accepted by `filter`, called on each complete graph before it is
-    /// canonized. It does not prune the search: rejected graphs are still generated, and only
-    /// the structural settings above cut the search itself.
+    /// Keep only the graphs accepted by `filter`, and prune the search with it.
+    ///
+    /// `filter` sees every state of the search as a [`GraphView`]. Stage 1 builds untyped
+    /// topologies ([`Stage::Topology`]) up to each complete topology; stage 2 assigns fields to
+    /// the edges of an accepted complete topology ([`Stage::Fields`]) up to each complete graph
+    /// ([`Stage::Complete`]), seen before it is canonized. The output is the graphs whose complete
+    /// topology and complete graph `filter` accepts.
+    ///
+    /// A rejected state is dropped with everything that completes it, so `filter` must be
+    /// hereditary within each stage: when it rejects a partial topology, it rejects every complete
+    /// topology completing it (with more vertices, edges and legs), and when it rejects a partial
+    /// field assignment, it rejects every complete graph completing it (with more fields and the
+    /// vertex rules). Each state costs a call, so a condition is best tested where it is decided:
+    /// one on the topology alone in stage 1, accepting every state from [`Stage::Fields`] on, and
+    /// one on complete graphs only at [`Stage::Complete`], accepting every earlier state.
+    /// [`Self::check_heredity`] validates a filter.
+    ///
+    /// The view shows each graph in one vertex numbering, so the verdict on complete graphs
+    /// should not depend on it.
     pub fn filter(
         mut self,
-        filter: impl Fn(&HedgeGraph<F, usize, Option<L>>) -> bool + Send + Sync + 'static,
+        filter: impl Fn(&GraphView<'_, F, L>) -> bool + Send + Sync + 'static,
     ) -> Self {
         self.filter = Some(Box::new(filter));
+        self
+    }
+
+    /// Validate the heredity of the filter instead of pruning with it: search every partial state,
+    /// and panic when the filter accepts a complete topology or a complete graph although it
+    /// rejected a partial state of the same stage that it completes. The output is that of a
+    /// hereditary filter, at the cost of the search without the partial prunes.
+    pub fn check_heredity(mut self, check: bool) -> Self {
+        self.check_heredity = check;
         self
     }
 
@@ -431,72 +489,33 @@ impl<F: Clone + Ord, L: Clone + Ord> Compiled<F, L> {
         })
     }
 
-    /// Materialize, filter and certify a decorated topology.
+    /// Filter, materialize and certify a decorated topology.
     fn diagram(
         &self,
-        d: &Decoration<'_>,
+        d: Decoration<'_>,
         loops: usize,
         filter: Option<&Filter<F, L>>,
         raw: &mut RawDiagram,
     ) -> Option<Diagram<F, L>> {
-        let graph = self.materialize(d);
-        if filter.is_some_and(|f| !f(&graph)) {
-            return None;
+        let mut view = GraphView::new(self, loops, State::Decoration(d));
+        if let Some(filter) = filter {
+            if !filter(&view) {
+                return None;
+            }
+            assert!(
+                !d.vetoed,
+                "the filter is not hereditary: it accepts a graph but rejected a partial field \
+                 assignment it completes"
+            );
         }
-        let (certificate, automorphism_count) = self.certify(d, raw);
+        let graph = view.take_complete_graph();
+        let (certificate, automorphism_count) = self.certify(&d, raw);
         Some(Diagram {
             graph,
             loops,
             automorphism_count,
             certificate,
         })
-    }
-
-    fn materialize(&self, d: &Decoration<'_>) -> HedgeGraph<F, usize, Option<L>> {
-        let t = d.topology;
-        let model = &self.model;
-        let n_legs = model.legs.total as usize;
-        let mut builder = HedgeGraphBuilder::with_capacity(t.n, n_legs + 2 * d.edges.len());
-        for &rule in d.rules {
-            builder.add_node(rule as usize);
-        }
-        for v in 0..t.n {
-            for (c, leg) in self.legs.iter().enumerate() {
-                let (orientation, underlying) = match leg.flow {
-                    None => (Orientation::Undirected, Flow::Source),
-                    Some(flow) => (Orientation::Default, flow),
-                };
-                for _ in 0..model.legs.count(t.vertices[v].legs, c) {
-                    builder.add_external_edge(
-                        NodeIndex(v).add_data(Some(self.labels[leg.label as usize].clone())),
-                        self.fields[leg.field as usize].clone(),
-                        orientation,
-                        underlying,
-                    );
-                }
-            }
-        }
-        for (edge, &l) in d.edges.iter().zip(d.labels) {
-            let (u, v) = (NodeIndex(edge.u as usize), NodeIndex(edge.v as usize));
-            if edge.u == edge.v {
-                let label = model.loop_labels[l as usize];
-                let orientation = if label.directed {
-                    Orientation::Default
-                } else {
-                    Orientation::Undirected
-                };
-                builder.add_edge(u, u, self.fields[label.field as usize].clone(), orientation);
-                continue;
-            }
-            let label = model.labels[l as usize];
-            let field = self.fields[label.field as usize].clone();
-            match label.direction {
-                Direction::Undirected => builder.add_edge(u, v, field, Orientation::Undirected),
-                Direction::Forward => builder.add_edge(u, v, field, Orientation::Default),
-                Direction::Backward => builder.add_edge(v, u, field, Orientation::Default),
-            }
-        }
-        builder.build()
     }
 
     /// The certificate of the materialized graph under `canonize_by(|&s| s, F::clone,
@@ -644,12 +663,14 @@ impl Scratch {
 /// What a generation step needs besides its own state.
 struct RunContext<'a, F, L> {
     compiled: &'a Compiled<F, L>,
-    search: Context<'a>,
+    limits: &'a Limits,
+    stop: &'a AtomicBool,
+    abort_check: Option<&'a AbortCheck>,
     loops: usize,
-    filter: Option<&'a Filter<F, L>>,
+    filter: Option<Pruner<'a, F, L>>,
 }
 
-impl<'a, F, L> RunContext<'a, F, L> {
+impl<'a, F: Sync, L: Sync> RunContext<'a, F, L> {
     fn new(
         generator: &'a GraphGenerator<F, L>,
         compiled: &'a Compiled<F, L>,
@@ -659,14 +680,31 @@ impl<'a, F, L> RunContext<'a, F, L> {
         let (loops, limits) = current.as_ref().expect("a loop order is running");
         RunContext {
             compiled,
-            search: Context {
-                model: &compiled.model,
-                limits,
-                stop,
-                abort_check: generator.abort_check.as_deref(),
-            },
+            limits,
+            stop,
+            abort_check: generator.abort_check.as_deref(),
             loops: *loops,
-            filter: generator.filter.as_deref(),
+            filter: generator.filter.as_deref().map(|filter| Pruner {
+                compiled,
+                filter,
+                loops: *loops,
+                check_heredity: generator.check_heredity,
+            }),
+        }
+    }
+
+    /// The filter as both stages prune with it.
+    fn prune(&self) -> Option<&dyn Prune> {
+        self.filter.as_ref().map(|filter| filter as &dyn Prune)
+    }
+
+    fn search(&self) -> Context<'_> {
+        Context {
+            model: &self.compiled.model,
+            limits: self.limits,
+            stop: self.stop,
+            abort_check: self.abort_check,
+            filter: self.prune(),
         }
     }
 }
@@ -707,27 +745,29 @@ impl Run {
 
     /// The next diagram; `None` when the subtree is exhausted or the generation stops.
     /// `topology` is called on every complete topology before it is decorated.
-    fn next<F: Clone + Ord, L: Clone + Ord>(
+    fn next<F: Clone + Ord + Sync, L: Clone + Ord + Sync>(
         &mut self,
         cx: &RunContext<'_, F, L>,
         topology: &mut dyn FnMut(),
     ) -> Option<Diagram<F, L>> {
         let model = &cx.compiled.model;
+        let filter = cx.filter.as_ref().map(|pruner| pruner.filter);
         loop {
             while self.decorating {
-                let Some(d) = self.decorator.next(model, self.search.topology()) else {
+                let t = self.search.topology();
+                let Some(d) = self.decorator.next(model, t, cx.prune()) else {
                     self.decorating = false;
                     break;
                 };
-                if let Some(diagram) = cx.compiled.diagram(&d, cx.loops, cx.filter, &mut self.raw) {
+                if let Some(diagram) = cx.compiled.diagram(d, cx.loops, filter, &mut self.raw) {
                     return Some(diagram);
                 }
             }
-            if !self.search.next(&cx.search) {
+            if !self.search.next(&cx.search()) {
                 return None;
             }
             topology();
-            if cx.search.stop.load(Ordering::Relaxed) {
+            if cx.stop.load(Ordering::Relaxed) {
                 return None;
             }
             self.decorator
@@ -752,7 +792,7 @@ struct Slot<F, L> {
     done: bool,
 }
 
-impl<F: Clone + Ord, L: Clone + Ord> Slot<F, L> {
+impl<F: Clone + Ord + Sync, L: Clone + Ord + Sync> Slot<F, L> {
     fn new(task: Topology) -> Self {
         Slot {
             task: Some(task),
@@ -856,26 +896,22 @@ where
         };
         self.progress.loops = loops;
         let root = Topology::empty(&self.compiled.model, &limits);
+        self.current = Some((loops, limits));
         if self.parallel() {
-            self.tasks = self.frontier(root, &limits).into();
+            self.tasks = self.frontier(root).into();
         } else {
             let scratch = self.scratch.take().unwrap_or_else(Scratch::take);
             self.run = Some(Run::new(&self.compiled.model, root, scratch));
         }
-        self.current = Some((loops, limits));
         true
     }
 
     /// Split the search into subtrees, breadth-first and in search order, until there are enough
     /// to balance the threads.
-    fn frontier(&self, root: Topology, limits: &Limits) -> Vec<Topology> {
+    fn frontier(&self, root: Topology) -> Vec<Topology> {
         let target = TASKS_PER_THREAD * self.threads();
-        let cx = Context {
-            model: &self.compiled.model,
-            limits,
-            stop: &self.stop,
-            abort_check: self.generator.abort_check.as_deref(),
-        };
+        let run = RunContext::new(self.generator, &self.compiled, &self.current, &self.stop);
+        let cx = run.search();
         let mut items = vec![root];
         while items.len() < target
             && !self.stop.load(Ordering::Relaxed)

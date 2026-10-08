@@ -7,13 +7,16 @@
 //! every label against the sub-multisets of the signatures of their degree, and bundles are
 //! ordered breadth-first from the legs so that vertices complete early. A complete labelling is
 //! kept if it is lexicographically minimal among its images under `H`; the vertex rules are then
-//! chosen as minimal tuples under the stabilizer of the labelling.
+//! chosen as minimal tuples under the stabilizer of the labelling. The generator's filter sees every
+//! partial labelling that fits the signatures and prunes the labellings it rejects with all their
+//! extensions.
 
 use std::cmp::Ordering;
 
 use super::{
     model::{Model, StubSet},
     topology::{Group, Topology},
+    view::{Prune, State},
 };
 
 /// One edge of the topology: `u <= v`, a self-loop when equal.
@@ -24,15 +27,22 @@ pub(crate) struct Edge {
     bundle: u16,
 }
 
-/// A complete diagram on a topology.
+/// A diagram on a complete topology: labels on a prefix of its edges, and vertex rules once all
+/// edges are labelled and the rules are chosen.
+#[derive(Clone, Copy)]
 pub(crate) struct Decoration<'d> {
     pub(crate) topology: &'d Topology,
     pub(crate) edges: &'d [Edge],
-    /// Per edge: a [`super::model::Label`] index, or a [`super::model::LoopLabel`] index for
-    /// self-loops.
+    /// Per labelled edge: a [`super::model::Label`] index, or a [`super::model::LoopLabel`] index
+    /// for self-loops.
     pub(crate) labels: &'d [u8],
-    /// Per vertex: the signature index.
+    /// Per vertex: the stubs of its legs and labelled edges.
+    pub(crate) stubs: &'d [StubSet],
+    /// Per vertex: the signature index; empty until the rules are chosen.
     pub(crate) rules: &'d [u32],
+    /// While checking the filter's heredity: the filter rejected a partial labelling of this
+    /// diagram.
+    pub(crate) vetoed: bool,
 }
 
 #[derive(Debug, Default)]
@@ -60,6 +70,9 @@ pub(crate) struct Decorator {
     /// Number of edges labelled so far, and whether the labelling extends (or backtracks next).
     assigned: usize,
     descending: bool,
+    /// While checking the filter's heredity: the first edge whose partial labelling the filter
+    /// rejected.
+    vetoed: Option<usize>,
 }
 
 /// Where the decoration of a topology stands.
@@ -81,6 +94,7 @@ impl Decorator {
     /// per isomorphism class.
     pub(crate) fn start(&mut self, model: &Model, topology: &Topology, generators: &[u32]) {
         self.phase = Phase::Done;
+        self.vetoed = None;
         let n = topology.n;
         let single = model.single_diagram();
         if single {
@@ -116,8 +130,14 @@ impl Decorator {
         self.phase = Phase::Labels;
     }
 
-    /// The next diagram on the topology given to [`Self::start`].
-    pub(crate) fn next<'d>(&'d mut self, model: &Model, t: &'d Topology) -> Option<Decoration<'d>> {
+    /// The next diagram on the topology given to [`Self::start`], with its partial labellings
+    /// pruned by `filter`.
+    pub(crate) fn next<'d>(
+        &'d mut self,
+        model: &Model,
+        t: &'d Topology,
+        filter: Option<&dyn Prune>,
+    ) -> Option<Decoration<'d>> {
         loop {
             match self.phase {
                 Phase::Done => return None,
@@ -133,7 +153,14 @@ impl Decorator {
                     self.phase = Phase::Labels;
                 }
                 Phase::Labels => {
-                    if !self.next_labelling(model) {
+                    // without a filter, every labelling is kept at no cost
+                    let labelled = match filter {
+                        None => self.next_labelling(model, &mut |_, _| true),
+                        Some(filter) => {
+                            self.next_labelling(model, &mut |d: &mut Self, e| d.keeps(t, filter, e))
+                        }
+                    };
+                    if !labelled {
                         self.phase = Phase::Done;
                     } else if self.labelling_minimal(model) {
                         self.choices.clear();
@@ -144,11 +171,22 @@ impl Decorator {
             }
         }
         Some(Decoration {
+            rules: &self.rules,
+            vetoed: self.vetoed.is_some(),
+            ..self.labelled(t, self.edges.len())
+        })
+    }
+
+    /// The diagram with its first `n` edges labelled and no rules.
+    fn labelled<'d>(&'d self, t: &'d Topology, n: usize) -> Decoration<'d> {
+        Decoration {
             topology: t,
             edges: &self.edges,
-            labels: &self.labels,
-            rules: &self.rules,
-        })
+            labels: &self.labels[..n],
+            stubs: &self.stubs,
+            rules: &[],
+            vetoed: false,
+        }
     }
 
     /// Label every edge with the only label and every vertex with its only rule; `false` if a
@@ -284,9 +322,14 @@ impl Decorator {
         }
     }
 
-    /// Advance to the next complete labelling whose vertices all fit a signature, depth-first
-    /// over the edges; `false` after the last.
-    fn next_labelling(&mut self, model: &Model) -> bool {
+    /// Advance to the next complete labelling whose vertices all fit a signature and whose
+    /// prefixes are kept (`keeps(self, e)` judges the labelling up to edge `e`), depth-first over
+    /// the edges; `false` after the last.
+    fn next_labelling(
+        &mut self,
+        model: &Model,
+        keeps: &mut impl FnMut(&mut Self, usize) -> bool,
+    ) -> bool {
         loop {
             if self.descending {
                 let e = self.assigned;
@@ -300,7 +343,7 @@ impl Decorator {
                 } else {
                     0
                 };
-                self.descending = self.place(model, e, first as usize);
+                self.descending = self.place(model, e, first as usize, keeps);
             } else {
                 // backtrack: the last labelled edge takes its next label
                 let Some(e) = self.assigned.checked_sub(1) else {
@@ -309,13 +352,20 @@ impl Decorator {
                 self.assigned = e;
                 let l = self.labels[e];
                 self.unplace(model, e, l);
-                self.descending = self.place(model, e, l as usize + 1);
+                self.descending = self.place(model, e, l as usize + 1, keeps);
             }
         }
     }
 
-    /// Give edge `e` the first label from `first` on that keeps its vertices feasible.
-    fn place(&mut self, model: &Model, e: usize, first: usize) -> bool {
+    /// Give edge `e` the first label from `first` on that keeps its vertices feasible and that
+    /// `keeps`.
+    fn place(
+        &mut self,
+        model: &Model,
+        e: usize,
+        first: usize,
+        keeps: &mut impl FnMut(&mut Self, usize) -> bool,
+    ) -> bool {
         let Edge { u, v, .. } = self.edges[e];
         let (u, v) = (u as usize, v as usize);
         if u == v {
@@ -325,8 +375,10 @@ impl Decorator {
                 self.stubs[u].insert(b);
                 if model.feasible(&self.stubs[u]) {
                     self.labels[e] = l as u8;
-                    self.assigned = e + 1;
-                    return true;
+                    if keeps(self, e) {
+                        self.assigned = e + 1;
+                        return true;
+                    }
                 }
                 self.stubs[u].remove(a);
                 self.stubs[u].remove(b);
@@ -337,12 +389,31 @@ impl Decorator {
                 self.stubs[v].insert(label.at_v);
                 if model.feasible(&self.stubs[u]) && model.feasible(&self.stubs[v]) {
                     self.labels[e] = l as u8;
-                    self.assigned = e + 1;
-                    return true;
+                    if keeps(self, e) {
+                        self.assigned = e + 1;
+                        return true;
+                    }
                 }
                 self.stubs[u].remove(label.at_u);
                 self.stubs[v].remove(label.at_v);
             }
+        }
+        false
+    }
+
+    /// Whether `filter` keeps the labelling up to edge `e`. While checking heredity, a rejection
+    /// is recorded instead of pruning.
+    fn keeps(&mut self, t: &Topology, filter: &dyn Prune, e: usize) -> bool {
+        // a rejection recorded at `e` or later was undone by backtracking
+        if self.vetoed.is_some_and(|v| v >= e) {
+            self.vetoed = None;
+        }
+        if filter.keeps(State::Decoration(self.labelled(t, e + 1))) {
+            return true;
+        }
+        if filter.checks_heredity() {
+            self.vetoed.get_or_insert(e);
+            return true;
         }
         false
     }

@@ -52,6 +52,12 @@ impl StubSet {
         self.bytes[14] = 0;
     }
 
+    /// Holds as many stubs as its degree.
+    pub(crate) fn is_full(&self) -> bool {
+        let degree = self.bytes[15] as usize;
+        degree == 0 || self.bytes[degree - 1] != 0
+    }
+
     pub(crate) fn key(&self) -> u128 {
         u128::from_le_bytes(self.bytes)
     }
@@ -310,7 +316,9 @@ mod tests {
             b.insert(s);
         }
         assert_eq!(a.key(), b.key());
+        assert!(a.is_full());
         a.remove(5);
+        assert!(!a.is_full());
         b.remove(5);
         assert_eq!(a.key(), b.key());
         assert_ne!(a.key(), StubSet::new(3).key());

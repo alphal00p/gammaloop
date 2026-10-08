@@ -13,7 +13,9 @@
 //! canonical position. The invariants of the parent's vertices determine most of the child's, so
 //! rule 2 mostly rejects before the child is built. Every prune is a necessary condition for
 //! completing to a valid output, so every ancestor of an output along its canonical deletion path
-//! survives and every output is generated exactly once.
+//! survives and every output is generated exactly once. The generator's filter is called on every
+//! accepted child and prunes it too: it is hereditary, so a rejected object has no accepted output
+//! below it.
 //!
 //! The search is a depth-first traversal with an explicit stack of levels, so it can stop at every
 //! complete topology and resume later: generation streams without buffering subtrees.
@@ -22,7 +24,11 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 use ahash::AHashSet;
 
-use super::{model::Model, AbortCheck};
+use super::{
+    model::Model,
+    view::{Prune, State as View},
+    AbortCheck,
+};
 use crate::half_edge::canon::{mix, NodeCanon, Orbits};
 
 /// Largest number of vertices: neighbour sets are `u64` bit sets.
@@ -144,6 +150,9 @@ pub(crate) struct Topology {
     /// Remaining `sum (degree - 2)`.
     budget: i32,
     open_total: u32,
+    /// While checking the filter's heredity: the filter rejected this partial topology or one
+    /// on the way to it.
+    pub(crate) vetoed: bool,
 }
 
 /// One vertex of a [`Topology`].
@@ -152,7 +161,7 @@ pub(crate) struct Vertex {
     pub(crate) degree: u8,
     pub(crate) open: u8,
     pub(crate) loops: u8,
-    n_legs: u8,
+    pub(crate) n_legs: u8,
     /// Packed leg multiset.
     pub(crate) legs: u64,
     /// Sum of the edge weights of the neighbours, for the invariant.
@@ -191,7 +200,13 @@ impl Topology {
             unplaced_count: model.legs.total,
             budget: limits.budget,
             open_total: 0,
+            vetoed: false,
         }
+    }
+
+    /// Legs not attached to a vertex yet.
+    pub(crate) fn unplaced(&self) -> u32 {
+        self.unplaced_count
     }
 
     pub(crate) fn multiplicity(&self, u: usize, v: usize) -> u8 {
@@ -253,10 +268,12 @@ impl Topology {
     /// The vertices other than `x` are connected.
     fn connected_without(&self, x: usize) -> bool {
         let all = (u64::MAX >> (64 - self.n)) & !(1 << x);
-        if all == 0 {
-            return true;
-        }
-        let mut seen = 1u64 << all.trailing_zeros();
+        all == 0 || self.reach(all.trailing_zeros() as usize, all) == all
+    }
+
+    /// The vertices that `from` reaches within the set `within`, which contains it.
+    fn reach(&self, from: usize, within: u64) -> u64 {
+        let mut seen = 1u64 << from;
         let mut frontier = seen;
         while frontier != 0 {
             let mut next = 0;
@@ -265,11 +282,11 @@ impl Topology {
                 next |= self.vertices[f.trailing_zeros() as usize].nbr;
                 f &= f - 1;
             }
-            next &= all & !seen;
+            next &= within & !seen;
             seen |= next;
             frontier = next;
         }
-        seen == all
+        seen
     }
 
     /// Cheap isomorphism invariant of a vertex, with its leg multiset as the tie breaker; the
@@ -312,7 +329,7 @@ impl Topology {
             .sum();
         let unplaced = self.unplaced_count;
         let mut ok = true;
-        self.lowlink(0, usize::MAX, scratch, &mut |sub_open, sub_legs| {
+        self.lowlink(0, usize::MAX, scratch, &mut |_, sub_open, sub_legs| {
             let (rest_open, rest_legs) = (total_open - sub_open, total_legs - sub_legs);
             if sub_open > 0 && rest_open > 0 {
                 return;
@@ -335,14 +352,40 @@ impl Topology {
         ok
     }
 
-    /// Depth-first low-link pass from `v`; calls `bridge(open, legs)` with the totals of the far
-    /// side of every bridge. Returns the subtree totals.
+    /// The bridges whose `side` (the vertices beyond `ends[1]`) has no open stubs: no later edge
+    /// reaches that side, so the bridge and the subgraph on that side are final. A complete
+    /// topology reports every bridge once per side.
+    pub(crate) fn closed_sides(&self, mut side: impl FnMut([usize; 2], u64)) {
+        if self.n == 0 {
+            return;
+        }
+        let mut scratch = BridgeScratch::default();
+        scratch.reset(self.n);
+        let all = u64::MAX >> (64 - self.n);
+        let total_open = self.open_total;
+        self.lowlink(0, usize::MAX, &mut scratch, &mut |[v, u], open, _| {
+            if open != 0 && open != total_open {
+                return;
+            }
+            // without the bridge, `u` reaches its side only
+            let far = self.reach(u, all & !(1 << v));
+            if open == 0 {
+                side([v, u], far);
+            }
+            if open == total_open {
+                side([u, v], all & !far);
+            }
+        });
+    }
+
+    /// Depth-first low-link pass from `v`; calls `bridge([parent, child], open, legs)` with the
+    /// totals of the child's side of every bridge. Returns the subtree totals.
     fn lowlink(
         &self,
         v: usize,
         parent: usize,
         s: &mut BridgeScratch,
-        bridge: &mut dyn FnMut(u32, u32),
+        bridge: &mut impl FnMut([usize; 2], u32, u32),
     ) -> (u32, u32) {
         s.time += 1;
         s.disc[v] = s.time;
@@ -359,7 +402,7 @@ impl Topology {
                 s.low[v] = s.low[v].min(s.low[u]);
                 // a parallel edge to the parent already lowered `low[u]`
                 if s.low[u] > s.disc[v] {
-                    bridge(sub.0, sub.1);
+                    bridge([v, u], sub.0, sub.1);
                 }
             } else if u != parent || self.multiplicity(u, v) > 1 {
                 s.low[v] = s.low[v].min(s.disc[u]);
@@ -455,6 +498,9 @@ struct Level {
     sewing: bool,
     /// Whether the current augmentation is applied to the topology.
     pushed: bool,
+    /// While checking the filter's heredity: the filter rejected the object at this depth or one
+    /// on the way to it. Kept only with a filter.
+    vetoed: bool,
 }
 
 /// The open vertices of an object with their numbers of open stubs. Multiplicity vectors with a
@@ -587,6 +633,7 @@ pub(crate) struct Context<'a> {
     pub(crate) limits: &'a Limits,
     pub(crate) stop: &'a AtomicBool,
     pub(crate) abort_check: Option<&'a AbortCheck>,
+    pub(crate) filter: Option<&'a dyn Prune>,
 }
 
 impl Context<'_> {
@@ -674,7 +721,9 @@ impl Search {
             match self.state {
                 State::Done => return false,
                 State::Start => {
-                    self.buf.level(0).known = false;
+                    let root = self.buf.level(0);
+                    root.known = false;
+                    root.vetoed = self.topology.vetoed;
                     if self.topology.is_complete() {
                         self.state = State::Done;
                         self.found(0);
@@ -712,6 +761,12 @@ impl Search {
                     if !self.accepted(cx.limits, depth) {
                         continue;
                     }
+                    if let Some(filter) = cx.filter {
+                        self.buf.levels[child].vetoed = self.buf.levels[depth].vetoed;
+                        if !self.filter_keeps(filter, child) {
+                            continue;
+                        }
+                    }
                     if self.topology.is_complete() || self.children_only {
                         self.found(child);
                         return true;
@@ -727,9 +782,31 @@ impl Search {
         }
     }
 
+    /// Whether `filter` keeps the object at `depth`. While checking heredity, a rejected partial
+    /// topology is marked instead of pruned, and a complete topology that the filter keeps must
+    /// have no rejected part.
+    fn filter_keeps(&mut self, filter: &dyn Prune, depth: usize) -> bool {
+        let keeps = filter.keeps(View::Topology(&self.topology));
+        if !filter.checks_heredity() {
+            return keeps;
+        }
+        let vetoed = &mut self.buf.levels[depth].vetoed;
+        if !self.topology.is_complete() {
+            *vetoed |= !keeps;
+            return true;
+        }
+        assert!(
+            !(keeps && *vetoed),
+            "the filter is not hereditary: it accepts a complete topology but rejected a partial \
+             topology it completes"
+        );
+        keeps
+    }
+
     /// Record the object at `depth` as found, with its generators if it is a complete topology.
     fn found(&mut self, depth: usize) {
         self.found = depth;
+        self.topology.vetoed = self.buf.levels[depth].vetoed;
         if self.need_generators && !self.children_only && !self.buf.levels[depth].known {
             self.canonize(depth);
         }

@@ -6,8 +6,10 @@ use std::{
     },
 };
 
-use super::{Diagram, GenerationError, GraphGenerator, Stub};
-use crate::half_edge::{involution::HedgePair, HedgeGraph};
+use proptest::prelude::*;
+
+use super::{Diagram, GenerationError, GraphGenerator, GraphView, Stage, Stub};
+use crate::half_edge::{canon::Certificate, involution::HedgePair, HedgeGraph};
 
 /// Field codes of the test models.
 const PHI: u8 = 0;
@@ -71,23 +73,32 @@ fn qed(externals: Vec<(u8, Stub<u8>)>) -> GraphGenerator<u8, u8> {
     .allow_self_loops(true)
 }
 
-/// QCD with gluons, one quark flavour and ghosts.
-fn qcd(externals: Vec<(u8, Stub<u8>)>) -> GraphGenerator<u8, u8> {
-    let (g, q, c) = (
+/// QCD (signatures 0 to 3: qqg, ggg, gggg, ccg) and, with `qed`, the photon couplings of the quark
+/// and the electron (4: qqa, 5: eea).
+fn qcd_qed(externals: Vec<(u8, Stub<u8>)>, qed: bool) -> GraphGenerator<u8, u8> {
+    let (g, q, c, a, e) = (
         Stub::undirected(GLUON),
         Stub::incoming(QUARK),
         Stub::incoming(GHOST),
+        Stub::undirected(PHOTON),
+        Stub::incoming(ELECTRON),
     );
-    GraphGenerator::new(
-        externals,
-        [
-            vec![q.clone().flipped(), q, g.clone()],
-            vec![g.clone(); 3],
-            vec![g.clone(); 4],
-            vec![c.clone().flipped(), c, g],
-        ],
-    )
-    .allow_self_loops(true)
+    let mut signatures = vec![
+        vec![q.clone().flipped(), q.clone(), g.clone()],
+        vec![g.clone(); 3],
+        vec![g.clone(); 4],
+        vec![c.clone().flipped(), c, g],
+    ];
+    if qed {
+        signatures.push(vec![q.clone().flipped(), q, a.clone()]);
+        signatures.push(vec![e.clone().flipped(), e, a]);
+    }
+    GraphGenerator::new(externals, signatures).allow_self_loops(true)
+}
+
+/// QCD with gluons, one quark flavour and ghosts.
+fn qcd(externals: Vec<(u8, Stub<u8>)>) -> GraphGenerator<u8, u8> {
+    qcd_qed(externals, false)
 }
 
 fn gluons(labels: &[u8]) -> Vec<(u8, Stub<u8>)> {
@@ -327,14 +338,349 @@ fn filter_keeps_exactly_the_accepted_graphs() {
             _ => true,
         })
     };
-    let filtered = run(phi(&[3], &[1, 2]).loops(4..=4).filter(no_loops));
+    // on complete graphs only, and pruning partial topologies with self-loops
+    let complete = run(phi(&[3], &[1, 2])
+        .loops(4..=4)
+        .filter(move |view| view.complete_graph().is_none_or(no_loops)));
+    let pruned = run(phi(&[3], &[1, 2])
+        .loops(4..=4)
+        .filter(|view| (0..view.n_vertices()).all(|v| view.self_loops(v) == 0)));
     let disallowed = run(phi(&[3], &[1, 2]).allow_self_loops(false).loops(4..=4));
-    let certificates = |d: &[Diagram<u8, u8>]| {
-        d.iter()
-            .map(|d| d.certificate.clone())
-            .collect::<HashSet<_>>()
+    let set = |d: &[Diagram<u8, u8>]| certificates(d).into_iter().collect::<HashSet<_>>();
+    assert_eq!(set(&complete), set(&disallowed));
+    assert_eq!(set(&pruned), set(&disallowed));
+}
+
+fn certificates(diagrams: &[Diagram<u8, u8>]) -> Vec<Certificate<usize, u8, Option<u8>>> {
+    diagrams.iter().map(|d| d.certificate.clone()).collect()
+}
+
+type View<'a> = GraphView<'a, u8, u8>;
+
+/// No self-energy insertion on an external leg: no bridge cuts off a side with a single leg and a
+/// loop. Decided in stage 1 as soon as such a side is final, and by the complete topology.
+fn no_leg_self_energies(view: &View<'_>) -> bool {
+    view.stage() != Stage::Topology
+        || view.bridges().iter().all(|bridge| {
+            let legs: usize = bridge.side.iter().map(|v| view.legs(v).count()).sum();
+            legs != 1 || view.loops_in(bridge.side) == 0
+        })
+}
+
+/// No internal edge carries `field` (a particle veto): decided edge by edge in stage 2.
+fn without_field(field: u8) -> impl Fn(&View<'_>) -> bool + Clone + Send + Sync {
+    move |view| {
+        view.edges()
+            .all(|e| e.stub.is_none_or(|stub| *stub.field != field))
+    }
+}
+
+/// No vertex uses signature `rule` (a vertex veto): decided once every rule that fits a vertex is
+/// vetoed, in stage 1 for the four-gluon vertex (the only one of degree four).
+fn without_rule(rule: u32) -> impl Fn(&View<'_>) -> bool + Clone + Send + Sync {
+    move |view| {
+        (0..view.n_vertices()).all(|v| match view.rules(v) {
+            Some(rules) => rules.iter().any(|&r| r != rule),
+            None => rule != 2 || view.degree(v) != 4,
+        })
+    }
+}
+
+/// QCD coupling order at most `max` in [`qcd_qed`]: the sum over vertices of the smallest order
+/// of the signatures that can still fit, a lower bound that only grows as the graph is built.
+fn qcd_order_at_most(max: usize) -> impl Fn(&View<'_>) -> bool + Clone + Send + Sync {
+    const ORDER: [usize; 6] = [1, 1, 2, 1, 0, 0];
+    move |view| {
+        let lower: usize = (0..view.n_vertices())
+            .map(|v| match view.rules(v) {
+                Some(rules) => rules.iter().map(|&r| ORDER[r as usize]).min().unwrap(),
+                None if view.degree(v) == 4 => 2,
+                None => 0,
+            })
+            .sum();
+        lower <= max
+    }
+}
+
+/// Graphs of a run with `filter`, and the number of states the search visited.
+fn run_counting(
+    generator: GraphGenerator<u8, u8>,
+    filter: impl Fn(&View<'_>) -> bool + Send + Sync + 'static,
+) -> (Vec<Diagram<u8, u8>>, usize) {
+    let states = Arc::new(AtomicUsize::new(0));
+    let visits = states.clone();
+    let diagrams = run(generator.filter(move |view| {
+        visits.fetch_add(1, Ordering::Relaxed);
+        filter(view)
+    }));
+    (diagrams, states.load(Ordering::Relaxed))
+}
+
+/// Pruning with a hereditary filter emits the graphs that the filter accepts when only asked about
+/// complete topologies and complete graphs, in the same order, and the heredity check accepts the
+/// filter. Returns the states visited with and without pruning.
+fn assert_prunes_like_post_filter(
+    generator: impl Fn() -> GraphGenerator<u8, u8>,
+    filter: impl Fn(&View<'_>) -> bool + Clone + Send + Sync + 'static,
+) -> (usize, usize) {
+    let (pruned, pruned_states) = run_counting(generator(), filter.clone());
+    let post = filter.clone();
+    let (post_filtered, states) = run_counting(generator(), move |view| match view.stage() {
+        Stage::Topology => !view.is_topology_complete() || post(view),
+        Stage::Fields => true,
+        Stage::Complete => post(view),
+    });
+    let checked = run(generator().filter(filter.clone()).check_heredity(true));
+    let parallel = run(generator().filter(filter).parallel(true));
+    assert_eq!(certificates(&pruned), certificates(&post_filtered));
+    assert_eq!(certificates(&checked), certificates(&post_filtered));
+    assert_eq!(certificates(&parallel), certificates(&post_filtered));
+    (pruned_states, states)
+}
+
+#[test]
+fn hereditary_filters_prune_to_the_post_filtered_graphs() {
+    let gggg = || qcd(gluons(&[1, 2, 3, 4])).loops(1..=1);
+    let ee_qq = |loops| {
+        move || {
+            let (e, q) = (Stub::incoming(ELECTRON), Stub::incoming(QUARK));
+            let legs = vec![
+                (1, e.clone()),
+                (2, e.flipped()),
+                (3, q.clone()),
+                (4, q.flipped()),
+            ];
+            qcd_qed(legs, true).loops(loops..=loops)
+        }
     };
-    assert_eq!(certificates(&filtered), certificates(&disallowed));
+    // stage 1: self-energies on legs are cut before the topology is complete
+    let (pruned, all) = assert_prunes_like_post_filter(gggg, no_leg_self_energies);
+    assert!(pruned < all, "{pruned} < {all}");
+    // stage 1 for the four-gluon vertex, stage 2 for the others
+    let (pruned, all) = assert_prunes_like_post_filter(gggg, without_rule(2));
+    assert!(pruned < all, "{pruned} < {all}");
+    assert_prunes_like_post_filter(gggg, without_rule(0));
+    // stage 2 only, edge by edge
+    let (pruned, all) = assert_prunes_like_post_filter(gggg, without_field(GHOST));
+    assert!(pruned < all, "{pruned} < {all}");
+    let ghostless = run(gggg())
+        .into_iter()
+        .filter(|d| d.graph.iter_edges().all(|(_, _, f)| *f.data != GHOST))
+        .collect::<Vec<_>>();
+    assert_eq!(
+        certificates(&run(gggg().filter(without_field(GHOST)))),
+        certificates(&ghostless)
+    );
+    // stages 1 and 2
+    let (pruned, all) = assert_prunes_like_post_filter(ee_qq(2), qcd_order_at_most(0));
+    assert!(pruned < all, "{pruned} < {all}");
+    for max in 1..=4 {
+        assert_prunes_like_post_filter(ee_qq(2), qcd_order_at_most(max));
+    }
+    // a conjunction of hereditary filters is hereditary
+    let (bridges, order) = (no_leg_self_energies, qcd_order_at_most(2));
+    assert_prunes_like_post_filter(ee_qq(2), move |view| bridges(view) && order(view));
+}
+
+/// A filter that vetoes the eventual vertex rule while it is undecided in stage 2.
+fn vetoes_undecided_rules(view: &View<'_>) -> bool {
+    view.stage() != Stage::Fields
+        || (0..view.n_vertices()).all(|v| view.rules(v).is_none_or(|rules| rules != [1]))
+}
+
+/// Rejects the partial topologies, which are completed by every topology with two vertices or
+/// more.
+fn rejects_partial_topologies(view: &View<'_>) -> bool {
+    view.stage() != Stage::Topology || view.is_topology_complete()
+}
+
+fn gggg_tree() -> GraphGenerator<u8, u8> {
+    qcd(gluons(&[1, 2, 3, 4])).loops(0..=0)
+}
+
+#[test]
+fn filters_that_reject_too_early_lose_graphs() {
+    // the s, t and u channels and the contact graph; pruning keeps only the contact graph
+    assert_eq!(run(gggg_tree()).len(), 4);
+    assert_eq!(run(gggg_tree().filter(vetoes_undecided_rules)).len(), 1);
+    assert_eq!(run(gggg_tree().filter(rejects_partial_topologies)).len(), 1);
+}
+
+#[test]
+#[should_panic(expected = "not hereditary")]
+fn heredity_check_reports_rejected_partial_labellings() {
+    run(gggg_tree()
+        .filter(vetoes_undecided_rules)
+        .check_heredity(true));
+}
+
+#[test]
+#[should_panic(expected = "not hereditary")]
+fn heredity_check_reports_rejected_partial_topologies() {
+    run(gggg_tree()
+        .filter(rejects_partial_topologies)
+        .check_heredity(true));
+}
+
+#[test]
+#[should_panic(expected = "not hereditary")]
+fn heredity_check_follows_parallel_subtrees() {
+    run(gggg_tree()
+        .filter(rejects_partial_topologies)
+        .check_heredity(true)
+        .parallel(true));
+}
+
+#[test]
+fn views_describe_the_search_states() {
+    let stages = Arc::new(std::sync::Mutex::new(HashSet::new()));
+    let seen = stages.clone();
+    let generator = qcd(vec![
+        (1, Stub::undirected(GLUON)),
+        (2, Stub::incoming(QUARK)),
+        (3, Stub::outgoing(QUARK)),
+    ])
+    .loops(1..=1)
+    .filter(move |view| {
+        seen.lock().unwrap().insert(view.stage());
+        let n = view.n_vertices();
+        let edges: Vec<_> = view.edges().collect();
+        let legs: usize = (0..n).map(|v| view.legs(v).count()).sum();
+        // stubs are legs, edge ends or open
+        let ends = |v| {
+            edges
+                .iter()
+                .map(|e| e.vertices.iter().filter(|&&w| w == v).count())
+                .sum::<usize>()
+        };
+        assert!(
+            (0..n).all(|v| view.degree(v) == view.legs(v).count() + ends(v) + view.open_stubs(v))
+        );
+        assert_eq!(legs + view.unplaced_legs(), 3);
+        assert_eq!(edges.len() + 1, n + view.loops());
+        let graph = view.graph();
+        assert_eq!((graph.n_nodes(), graph.n_edges()), (n, edges.len() + legs));
+        for bridge in view.bridges() {
+            let [outside, inside] = bridge.ends;
+            assert!(bridge.side.contains(inside) && !bridge.side.contains(outside));
+            assert!(bridge.side.iter().all(|v| view.open_stubs(v) == 0));
+            // the bridge is the only edge leaving the side
+            let leaving = |v| {
+                (0..n)
+                    .filter(|&w| !bridge.side.contains(w))
+                    .map(|w| view.multiplicity(v, w))
+                    .sum::<usize>()
+            };
+            assert!(bridge
+                .side
+                .iter()
+                .all(|v| leaving(v) == usize::from(v == inside)));
+        }
+        match view.stage() {
+            Stage::Topology => assert!(edges.iter().all(|e| e.stub.is_none())),
+            Stage::Fields => {
+                assert!(view.is_topology_complete());
+                // fields are assigned in edge order; a vertex fits rules once its stubs are known
+                let assigned = edges.iter().take_while(|e| e.stub.is_some()).count();
+                assert!(assigned > 0 && edges[assigned..].iter().all(|e| e.stub.is_none()));
+                for v in 0..n {
+                    let known = edges[assigned..].iter().all(|e| !e.vertices.contains(&v));
+                    assert_eq!(view.rules(v).is_some(), known);
+                }
+            }
+            Stage::Complete => {
+                assert!(edges.iter().all(|e| e.stub.is_some()));
+                assert!((0..n).all(|v| view.rules(v).unwrap().len() == 1));
+                let complete = view.complete_graph().unwrap();
+                assert_eq!(complete.n_edges(), graph.n_edges());
+            }
+        }
+        true
+    });
+    let filtered = run(generator);
+    let stages = stages.lock().unwrap();
+    assert_eq!(stages.len(), 3);
+    let unfiltered = run(qcd(vec![
+        (1, Stub::undirected(GLUON)),
+        (2, Stub::incoming(QUARK)),
+        (3, Stub::outgoing(QUARK)),
+    ])
+    .loops(1..=1));
+    assert_eq!(certificates(&filtered), certificates(&unfiltered));
+    check_canonical(&filtered);
+}
+
+#[test]
+fn views_of_complete_graphs_match_the_emitted_graphs() {
+    // charged fields are directed, and both conversions of a complete view agree
+    let electron = Stub::incoming(ELECTRON);
+    let legs = vec![
+        (1, electron.clone()),
+        (2, electron.flipped()),
+        (3, Stub::undirected(PHOTON)),
+    ];
+    let generator = qed(legs.clone()).loops(1..=1).filter(|view| {
+        if let Some(complete) = view.complete_graph() {
+            for e in view.edges() {
+                let stub = e.stub.unwrap();
+                assert_eq!(stub.flow.is_some(), *stub.field == ELECTRON);
+            }
+            let graph = view.graph();
+            assert!(graph.iter_nodes().all(|(_, _, &rule)| rule == Some(0)));
+            assert!(graph
+                .iter_edges()
+                .zip(complete.iter_edges())
+                .all(|((_, _, a), (_, _, b))| a.orientation == b.orientation
+                    && *a.data == Some(*b.data)));
+        }
+        true
+    });
+    let diagrams = run(generator);
+    assert_eq!(
+        certificates(&diagrams),
+        certificates(&run(qed(legs).loops(1..=1)))
+    );
+    check_canonical(&diagrams);
+}
+
+proptest! {
+    #![proptest_config(ProptestConfig::with_cases(48))]
+
+    /// Conjunctions of hereditary filters prune to the post-filtered graphs on processes of QCD
+    /// with photons and electrons.
+    #[test]
+    fn pruning_matches_post_filtering(
+        process in 0usize..5,
+        vetoed_fields in proptest::collection::vec(prop_oneof![Just(QUARK), Just(GHOST), Just(PHOTON)], 0..2),
+        vetoed_rules in proptest::collection::vec(0u32..6, 0..2),
+        max_order in proptest::option::of(0usize..4),
+        self_energies in any::<bool>(),
+    ) {
+        let (g, q, e, a) = (
+            Stub::undirected(GLUON),
+            Stub::incoming(QUARK),
+            Stub::incoming(ELECTRON),
+            Stub::undirected(PHOTON),
+        );
+        let (legs, loops) = [
+            (vec![g.clone(), g.clone(), g.clone(), g.clone()], 1),
+            (vec![e.clone(), e.clone().flipped(), q.clone(), q.clone().flipped()], 2),
+            (vec![q.clone(), q.clone().flipped(), g.clone(), a.clone()], 1),
+            (vec![e.clone(), e.clone().flipped(), a.clone(), a.clone()], 2),
+            (vec![g.clone(), g], 2),
+        ][process].clone();
+        let generator = move || {
+            let legs = legs.iter().cloned().enumerate().map(|(i, s)| (i as u8, s)).collect();
+            qcd_qed(legs, true).loops(loops..=loops)
+        };
+        let filter = move |view: &View<'_>| {
+            vetoed_fields.iter().all(|&f| without_field(f)(view))
+                && vetoed_rules.iter().all(|&r| without_rule(r)(view))
+                && max_order.is_none_or(|max| qcd_order_at_most(max)(view))
+                && (!self_energies || no_leg_self_energies(view))
+        };
+        assert_prunes_like_post_filter(generator, filter);
+    }
 }
 
 #[test]
@@ -375,11 +721,11 @@ fn generation_streams() {
     assert_eq!(topologies.load(Ordering::Relaxed), 3);
     check_canonical(&first);
 
-    // progress sees every topology, so it stops a run whose graphs are all filtered out
+    // progress sees every complete topology, so it stops a run whose graphs are all filtered out
     let seen = topologies.clone();
     let generator = phi(&[3, 4], &[1, 2])
         .loops(3..=3)
-        .filter(|_| false)
+        .filter(|view| !view.is_complete())
         .progress(move |progress| {
             seen.store(progress.topologies, Ordering::Relaxed);
             progress.topologies < 5
@@ -506,6 +852,18 @@ mod graphica {
         }
 
         fn native(&self) -> HashMap<Key, u128> {
+            Self::certified(self.generator())
+        }
+
+        fn certified(generator: GraphGenerator<u8, u8>) -> HashMap<Key, u128> {
+            generator
+                .iter()
+                .unwrap()
+                .map(|d| (d.certificate, d.automorphism_count.unwrap()))
+                .collect()
+        }
+
+        fn generator(&self) -> GraphGenerator<u8, u8> {
             // Graphica's external half-edge is the stub at the external node
             let externals = self
                 .externals
@@ -523,13 +881,13 @@ mod graphica {
                 generator = generator.max_bridges(b);
             }
             generator
-                .iter()
-                .unwrap()
-                .map(|d| (d.certificate, d.automorphism_count.unwrap()))
-                .collect()
         }
 
-        fn graphica(&self) -> HashMap<Key, u128> {
+        /// Graphica's graphs that `keep` accepts.
+        fn graphica(
+            &self,
+            keep: impl Fn(&HedgeGraph<u8, usize, Option<u8>>) -> bool,
+        ) -> HashMap<Key, u128> {
             let mut settings = GenerationSettings::new()
                 .max_loops(self.loops)
                 .max_vertices(self.externals.len() + self.max_vertices())
@@ -542,10 +900,10 @@ mod graphica {
                 .unwrap()
                 .into_iter()
                 .filter(|(g, _)| g.num_loops() == self.loops)
-                .map(|(g, aut)| {
-                    let (certificate, _) =
-                        self.to_linnet(&g).certificate_by(|&s| s, |&f| f, |&h| h);
-                    (certificate, aut.to_string().parse().unwrap())
+                .filter_map(|(g, aut)| {
+                    let graph = self.to_linnet(&g);
+                    let (certificate, _) = graph.certificate_by(|&s| s, |&f| f, |&h| h);
+                    keep(&graph).then(|| (certificate, aut.to_string().parse().unwrap()))
                 })
                 .collect()
         }
@@ -612,6 +970,24 @@ mod graphica {
         }
     }
 
+    /// QCD signatures in the order of [`qcd`](super::qcd).
+    fn qcd_signatures() -> Vec<Vec<HalfEdge<u8>>> {
+        let gluon = HalfEdge::undirected(GLUON);
+        vec![
+            vec![HalfEdge::outgoing(QUARK), HalfEdge::incoming(QUARK), gluon],
+            vec![gluon; 3],
+            vec![gluon; 4],
+            vec![HalfEdge::outgoing(GHOST), HalfEdge::incoming(GHOST), gluon],
+        ]
+    }
+
+    fn labelled(legs: &[HalfEdge<u8>]) -> Vec<(u8, HalfEdge<u8>)> {
+        legs.iter()
+            .enumerate()
+            .map(|(i, &h)| (i as u8 + 1, h))
+            .collect()
+    }
+
     #[test]
     fn sets_and_symmetry_factors_match_graphica() {
         let phi = HalfEdge::undirected(PHI);
@@ -619,18 +995,7 @@ mod graphica {
         let gluon = HalfEdge::undirected(GLUON);
         let electron = HalfEdge::incoming(ELECTRON);
         let qed = vec![vec![electron, electron.flip(), photon]];
-        let qcd = vec![
-            vec![HalfEdge::outgoing(QUARK), HalfEdge::incoming(QUARK), gluon],
-            vec![gluon; 3],
-            vec![gluon; 4],
-            vec![HalfEdge::outgoing(GHOST), HalfEdge::incoming(GHOST), gluon],
-        ];
-        let labelled = |legs: &[HalfEdge<u8>]| {
-            legs.iter()
-                .enumerate()
-                .map(|(i, &h)| (i as u8 + 1, h))
-                .collect::<Vec<_>>()
-        };
+        let qcd = qcd_signatures();
         let cases = [
             Case {
                 externals: vec![],
@@ -683,7 +1048,7 @@ mod graphica {
             },
         ];
         for (i, case) in cases.iter().enumerate() {
-            let (native, graphica) = (case.native(), case.graphica());
+            let (native, graphica) = (case.native(), case.graphica(|_| true));
             assert!(!native.is_empty(), "case {i} is empty");
             assert_eq!(native, graphica, "case {i}");
         }
@@ -703,13 +1068,41 @@ mod graphica {
         };
         for loops in 1..=3 {
             let all = case(loops, None, true);
-            assert_eq!(all.native(), all.graphica(), "L{loops}");
+            assert_eq!(all.native(), all.graphica(|_| true), "L{loops}");
             for restricted in [case(loops, None, false), case(loops, Some(0), true)] {
-                assert!(restricted.graphica().is_empty(), "L{loops}");
+                assert!(restricted.graphica(|_| true).is_empty(), "L{loops}");
                 let native = restricted.native();
                 assert!(!native.is_empty(), "L{loops}");
                 assert!(native.keys().all(|k| all.native().contains_key(k)));
             }
+        }
+    }
+
+    /// Pruning with a particle or vertex veto gives the Graphica graphs without that particle or
+    /// vertex.
+    #[test]
+    fn pruned_sets_match_filtered_graphica() {
+        let gluon = HalfEdge::undirected(GLUON);
+        let quark = HalfEdge::incoming(QUARK);
+        for externals in [
+            labelled(&[gluon, gluon, gluon, gluon]),
+            labelled(&[quark, quark.flip(), gluon, gluon]),
+        ] {
+            let case = Case {
+                externals,
+                signatures: qcd_signatures(),
+                loops: 1,
+                max_bridges: None,
+                zero_flow_edges: false,
+            };
+            let native = Case::certified(case.generator().filter(without_field(GHOST)));
+            let graphica = case.graphica(|g| g.iter_edges().all(|(_, _, f)| *f.data != GHOST));
+            assert!(!native.is_empty() && native.len() < case.native().len());
+            assert_eq!(native, graphica);
+            let native = Case::certified(case.generator().filter(without_rule(2)));
+            let graphica = case.graphica(|g| g.iter_nodes().all(|(_, _, &rule)| rule != 2));
+            assert!(!native.is_empty() && native.len() < case.native().len());
+            assert_eq!(native, graphica);
         }
     }
 }

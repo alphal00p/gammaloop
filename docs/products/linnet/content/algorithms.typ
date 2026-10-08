@@ -155,8 +155,11 @@ both undirected, or one is outgoing and the other incoming. Legs are `(label, st
 become dangling half-edges keyed by their label; repeating a label makes those legs
 interchangeable. Settings cover a loop range, a vertex bound (legs are not vertices), a bridge
 limit (`0` for one-particle-irreducible graphs), self-loops and zero-flow bridges (a bridge with no
-leg on one side), a filter on each complete graph (it does not prune the search), and progress and
-abort callbacks. Only paired edges count as bridges: a one-leg process keeps its graphs without
+leg on one side), a filter that prunes the search, and progress and abort callbacks. The filter
+sees read-only views of the partial untyped topologies, the partial field assignments and the
+complete graphs; it must be hereditary (reject every completion of a state it rejects), so the
+output is exactly the complete graphs it accepts, and a validation mode searches without pruning
+and fails when a rejected state completes to an accepted graph. Only paired edges count as bridges: a one-leg process keeps its graphs without
 internal bridges, where Graphica counts the leg as a zero-flow bridge and drops them.
 
 Each output carries the `HedgeGraph` (fields on edges, signature indices on nodes), its loop
@@ -169,7 +172,8 @@ augmentation, one vertex at a time: rule 1 keeps one multiplicity vector per orb
 node automorphism group, and rule 2 accepts a child only if the new vertex is in the orbit of its
 canonical deletion (the deletable vertex with the largest invariant, ties broken by a node
 canonization). Every prune (completability, permanent bridges, zero-flow bridges) is a necessary
-condition for completion, so each output appears exactly once. Each complete topology is then
+condition for completion, so each output appears exactly once; the filter prunes stage 1 and the
+partial field assignments of stage 2 the same way. Each complete topology is then
 decorated with fields, orientations and vertex rules edge by edge, with partial vertices checked
 against the sub-multisets of the signatures, keeping one decoration per orbit of the topology's
 automorphism group. Typed canonical augmentation (signatures as the corollas) was measured as the
