@@ -30,6 +30,19 @@ pub fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     Ok(())
 }
 
+// Classes take the Community module path whenever `community` is enabled, so a
+// standalone module in that build would publish mislabeled classes. Feature
+// unification would also export `PyInit_linnet_py` from Symbolica's extension.
+#[cfg(all(feature = "standalone", feature = "community"))]
+compile_error!("the `standalone` linnet_py module cannot be built with `community`");
+
+/// Graphs, topology, layout, and rendering backed by Linnet.
+#[cfg(feature = "standalone")]
+#[pymodule]
+fn linnet_py(module: &Bound<'_, PyModule>) -> PyResult<()> {
+    register(module)
+}
+
 /// A Python module that publishes Linnet's classes.
 #[derive(Clone, Copy, Debug)]
 pub enum PythonModule {

@@ -6,7 +6,7 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from symbolica.community import graph
+from linnet_under_test import graph
 
 
 class NativeRenderingTests(unittest.TestCase):

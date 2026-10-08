@@ -19,13 +19,14 @@ full = [
 
 [dependencies]
 typst = "=0.15.1"
-typst-library = "=0.15.1"
+# The paths name the workspace patches, so Maturin also carries them into sdists.
+typst-library = { version = "=0.15.1", path = "../../vendor/typst-library" }
 typst-kit = { version = "=0.15.1", default-features = false }
 comemo = "0.5"
 typst-html = "=0.15.1"
 typst-layout = "=0.15.1"
 typst-pdf = { version = "=0.15.1", optional = true }
 typst-render = { version = "=0.15.1", optional = true }
-typst-svg = "=0.15.1"
+typst-svg = { version = "=0.15.1", path = "../../vendor/typst-svg" }
 
 tempfile = "3.8"

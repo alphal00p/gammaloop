@@ -4,7 +4,7 @@ import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from symbolica.community import graph as ln
+from linnet_under_test import graph as ln
 
 
 class RenderSourcesTests(unittest.TestCase):

@@ -6,6 +6,12 @@ The registry metadata, lockfiles, and workspace-dependent `Cargo.toml.orig`
 are omitted; normalized Cargo manifests remain buildable outside upstream's
 workspace. Modified files identify this patch in their first line.
 
+`typst-renderer` names both directories as path dependencies as well as the
+workspace patches, so Maturin carries them into the `linnet-py` source
+distribution. Each directory's added `rustfmt.toml` keeps `cargo fmt --all`
+from reformatting the vendored source. The other `vendor/` crates follow the
+same convention.
+
 The notebook needs Typst's language evaluator, text shaping, math layout,
 SVG exporter/importer, and HTML/MathML exporter. Graph layout and line drawing
 run directly in Rust and never call a Typst plugin. The compiler library does
@@ -51,7 +57,8 @@ weight 450, so the Book face preserves the upstream default math appearance. Kee
 fonts preserves arbitrary user labels; no glyph subsetting is applied.
 The selected files total 4,227,456 bytes, replacing the 17-font bundle.
 Their upstream `NOTICE` is preserved alongside them and copied into the
-notebook wheel's license directory. Update that copy when changing the fonts.
+license directories of the notebook wheel and `linnet-py`. Update those copies
+when changing the fonts.
 
 == Updating and validation
 

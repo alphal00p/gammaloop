@@ -7,8 +7,8 @@ import weakref
 from collections import Counter
 from itertools import permutations
 
-from symbolica import E, S
-from symbolica.community import graph as g
+from linnet_under_test import COMMUNITY, field
+from linnet_under_test import graph as g
 
 
 def link(a, b, *, data=0, orientation=g.Orientation.Undirected, **kwargs):
@@ -162,8 +162,8 @@ class AlgorithmsTests(unittest.TestCase):
         self.assertIn("&lt;bad &quot;label&quot;&gt;", graph.to_mermaid())
 
 
-GLUON = g.EdgeSignature(S("g"))
-QUARK = g.EdgeSignature(S("q"), direction=False)
+GLUON = g.EdgeSignature(field("g"))
+QUARK = g.EdgeSignature(field("q"), direction=False)
 QCD = [[GLUON] * 3, [QUARK.flip(), QUARK, GLUON], [GLUON] * 4]
 
 
@@ -265,7 +265,10 @@ class GenerationTests(unittest.TestCase):
 
         self.assertEqual(count(1, 1.0), 1)
         self.assertEqual(count(1, "1"), 0)
-        self.assertEqual(count(1, E("1")), 0)
+        if COMMUNITY:
+            from symbolica import E
+
+            self.assertEqual(count(1, E("1")), 0)
         with self.assertRaisesRegex(TypeError, "use hashable fields"):
             g.Graph.generate([], [[g.EdgeSignature([1])] * 3], loops=0)
 

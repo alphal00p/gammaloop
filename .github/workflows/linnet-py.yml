@@ -1,0 +1,62 @@
+name: Linnet Python distribution
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/linnet-py.yml'
+      - '.cargo/**'
+      - 'Cargo.lock'
+      - 'Cargo.toml'
+      - 'crates/kurvst/**'
+      - 'crates/linnest/**'
+      - 'crates/linnet/**'
+      - 'crates/linnet-py/**'
+      - 'crates/typst-renderer/**'
+      - 'docs/products/linnet/content/quickstart-python.typ'
+      - 'vendor/**'
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  standalone:
+    name: Standalone wheel and sdist
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          # The wheel targets the Python 3.10 stable ABI.
+          python-version: '3.10'
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - run: python -m pip install 'maturin>=1.13.2,<2'
+
+      - name: Build
+        working-directory: crates/linnet-py
+        env:
+          CARGO_PROFILE_RELEASE_LTO: thin
+        run: |
+          maturin build --release --locked --out ../../dist
+          maturin sdist --out ../../dist
+
+      # Symbolica is absent, so the suite tests `linnet_py`.
+      - name: Test
+        run: |
+          python -m pip install dist/*.whl
+          python -m unittest discover -s crates/linnet-py/tests -p 'test_*.py'
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linnet-py-dist
+          path: dist/*
+          if-no-files-found: error

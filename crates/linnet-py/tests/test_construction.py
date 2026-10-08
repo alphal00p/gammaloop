@@ -4,7 +4,7 @@ import gc
 import unittest
 from functools import partial
 
-from symbolica.community import graph as g
+from linnet_under_test import graph as g
 
 
 class ConstructionTests(unittest.TestCase):

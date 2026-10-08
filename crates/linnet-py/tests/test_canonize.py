@@ -8,8 +8,8 @@ from decimal import Decimal
 from fractions import Fraction
 from itertools import permutations
 
-from symbolica import E, S
-from symbolica.community import graph as g
+from linnet_under_test import COMMUNITY, community_only, field
+from linnet_under_test import graph as g
 
 UNDIRECTED = g.Orientation.Undirected
 DEFAULT = g.Orientation.Default
@@ -371,8 +371,8 @@ class CanonizeTests(unittest.TestCase):
                 self.assertEqual(result[3], orbit)
 
     def test_generated_graphs_keep_their_symmetry_factors(self):
-        gluon = g.EdgeSignature(S("g"))
-        quark = g.EdgeSignature(S("q"), direction=False)
+        gluon = g.EdgeSignature(field("g"))
+        quark = g.EdgeSignature(field("q"), direction=False)
         rng = random.Random(3)
         generated = list(
             g.Graph.generate(
@@ -394,7 +394,7 @@ class CanonizeTests(unittest.TestCase):
     def test_dangling_legs_count_like_identical_external_vertices(self):
         # With one shared colour, permutations of dangling legs at a node are
         # automorphisms, exactly as for legs ending in identical degree-one vertices.
-        phi = g.EdgeSignature(S("phi"))
+        phi = g.EdgeSignature(field("phi"))
         generated = g.Graph.generate(
             [(i, phi) for i in range(1, 5)], [[phi] * 3, [phi] * 4], loops=range(2)
         )
@@ -508,8 +508,13 @@ def isolated(*payloads):
 class KeyTests(unittest.TestCase):
     def test_mixed_kinds_sort_by_kind_then_value(self):
         late, early = Opaque("b"), Opaque("a")
-        payloads = [late, (2, "x"), b"b", "s", E("x"), 2, None, 1.5, (1, "y"), early]
-        expected = [None, 1.5, 2, "s", b"b", (1, "y"), (2, "x"), E("x"), early, late]
+        payloads = [late, (2, "x"), b"b", "s", 2, None, 1.5, (1, "y"), early]
+        expected = [None, 1.5, 2, "s", b"b", (1, "y"), (2, "x"), early, late]
+        if COMMUNITY:
+            from symbolica import E
+
+            payloads.insert(4, E("x"))
+            expected.insert(expected.index(early), E("x"))
         rng = random.Random(5)
         for _ in range(5):
             rng.shuffle(payloads)
@@ -530,7 +535,10 @@ class KeyTests(unittest.TestCase):
         self.assertEqual(isolated(1, 1.0).canonize()[2], 2)
         self.assertEqual(isolated(1, "1").canonize()[2], 1)
 
+    @community_only
     def test_expressions_are_their_own_kind(self):
+        from symbolica import E
+
         self.assertTrue(isolated(E("x+1")).is_isomorphic(isolated(E("1+x"))))
         self.assertFalse(isolated(E("1")).is_isomorphic(isolated(1)))
         self.assertFalse(isolated((E("1"), 2)).is_isomorphic(isolated((1, 2))))

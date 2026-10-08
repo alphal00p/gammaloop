@@ -3,7 +3,7 @@
 import math
 import unittest
 
-from symbolica.community import graph as lp
+from linnet_under_test import graph as lp
 
 DOT = """digraph {
     incoming [style=invis]

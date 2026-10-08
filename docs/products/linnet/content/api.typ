@@ -40,11 +40,12 @@ Cargo features enable optional capabilities:
 An item shown in an all-features API reference may not be available in a default build. Check
 its required feature and your `Cargo.toml` before using it.
 
-== Community graph bindings
+== Python bindings
 
-The `linnet-py` binding library owns `symbolica.community.graph`. Install the complete
-Symbolica Community wheel to use its builders, live graph views, subgraphs, DOT codecs,
-layout streams, graph algorithms, and rendering. There is no separate Linnet Python wheel.
+The `linnet-py` binding library owns `symbolica.community.graph`, with builders, live graph
+views, subgraphs, DOT codecs, layout streams, graph algorithms, and rendering. Install the
+complete Symbolica Community wheel, or the standalone `linnet-py` wheel, which provides the same
+bindings as `linnet_py` without Symbolica expressions as graph keys.
 
 `RenderSettings` combines drawing options, layout sequences, selectors, templates, and
 export configuration. `LayoutSettings`, `Stroke`, and `DiagramRender` are shared by graphs,

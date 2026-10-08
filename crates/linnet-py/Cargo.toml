@@ -42,4 +42,8 @@ walkdir = { workspace = true }
 # Symbolica Community registration, and Symbolica expressions as keys of their own kind. The
 # final extension selects Symbolica's arithmetic backends.
 community = ["dep:symbolica"]
+# The `linnet_py` extension module, built only for the standalone `linnet-py` wheel. Rust
+# consumers link these bindings into their own extension module and must leave it off.
+standalone = []
+abi3-py310 = ["pyo3/abi3-py310"]
 python_stubgen = ["dep:pyo3-stub-gen"]

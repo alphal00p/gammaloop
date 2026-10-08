@@ -6,7 +6,12 @@ from tempfile import TemporaryDirectory
 import unittest
 import xml.etree.ElementTree as ET
 
-from symbolica import E
+# HepKit diagrams and tensor networks exist only in the Symbolica Community
+# wheel. FeynKit's Rust tests run this file without the suite's support module.
+try:
+    from symbolica import E
+except ModuleNotFoundError:
+    raise unittest.SkipTest("needs the Symbolica Community wheel") from None
 from symbolica.community import graph, hepkit, tensor
 
 

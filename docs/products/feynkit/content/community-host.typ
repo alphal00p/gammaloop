@@ -60,7 +60,8 @@ calling `set_license_key`. Keep expression-valued constants as static methods. A
 the native host, run `python crates/feynkit-py/tests/installed_import.py` against that installation
 to check that importing `E` and `hepkit` defers the license banner until the first operation.
 Notebook figures use embedded Rust SVG rendering and Typst labels; no Python
-Linnet or Typst dependency is needed. Enable `linnet-py`'s `community` feature and register
+Linnet or Typst dependency is needed. Enable `linnet-py`'s `community` feature (never its
+`standalone` feature, which belongs to the separate `linnet-py` wheel) and register
 `linnet_py::GraphModule` to install the shared `symbolica.community.graph_native` module. Package
 `crates/linnet-py/python/symbolica/community/graph` alongside HepKit so
 `symbolica.community.graph` exposes its shared settings, snapshots, and type information. Include the UFO loader revision documented in the #link("guides/showcases/ufo/")[UFO import example]

@@ -1,1 +1,2 @@
-# Just use defaults for everything...
+# Vendored source: `cargo fmt --all` reaches it as a path dependency.
+disable_all_formatting = true

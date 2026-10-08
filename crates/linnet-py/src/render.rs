@@ -978,21 +978,16 @@ mod tests {
     fn compiled_graph_inspection_preserves_native_drawing() {
         Python::initialize();
         Python::attach(|py| -> PyResult<()> {
-            let name = crate::PythonModule::Standalone.name();
-            let linnet = pyo3::types::PyModule::new(py, name)?;
+            let linnet = PyModule::new(py, crate::PythonModule::Standalone.name())?;
             crate::register(&linnet)?;
+            // The fixture imports the bindings from the suite's support module.
+            let support = PyModule::new(py, "linnet_under_test")?;
+            support.add("graph", linnet)?;
             py.import("sys")?
                 .getattr("modules")?
-                .set_item(name, &linnet)?;
-            // The fixture imports the Community package; it only needs the
-            // classes, so import them from a top-level module instead.
-            let fixture_source = include_str!("../tests/test_svg_interaction.py");
-            let community_import = "from symbolica.community import graph as lp\n";
-            assert!(fixture_source.contains(community_import));
-            let source = std::ffi::CString::new(
-                fixture_source.replace(community_import, &format!("import {name} as lp\n")),
-            )
-            .unwrap();
+                .set_item("linnet_under_test", support)?;
+            let source =
+                std::ffi::CString::new(include_str!("../tests/test_svg_interaction.py")).unwrap();
             let fixture = PyModule::from_code(
                 py,
                 &source,
