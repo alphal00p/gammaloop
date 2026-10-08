@@ -9,15 +9,16 @@ use std::{
 use bincode::{Decode, Encode};
 use linnet::{
     half_edge::{
-        HedgeGraph, HedgeGraphError, NoData, NodeIndex,
+        HedgeGraph, HedgeGraphError, NodeIndex,
         builder::HedgeGraphBuilder,
         involution::{EdgeData, Flow, Hedge},
         nodestore::NodeStorageOps,
         subgraph::{Inclusion, ModifySubSet, SuBitGraph, SubGraphLike, SubSetLike, SubSetOps},
+        swap::partition_with,
         tree::SimpleTraversalTree,
     },
     permutation::Permutation,
-    tree::{Forest, child_pointer::ParentChildStore, child_vec::ChildVecStore},
+    tree::{child_pointer::ParentChildStore, child_vec::ChildVecStore},
 };
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -67,9 +68,7 @@ pub struct NetworkGraph<K, FK = i8, Aind = AbstractIndex> {
 pub(super) type NetworkGraphBuilder<K, FK, Aind> =
     HedgeGraphBuilder<NetworkEdge<Aind>, NetworkNode<K, FK, Aind>>;
 
-pub type NetworkNodeStore<K, FK, Aind> = Forest<NetworkNode<K, FK, Aind>, ParentChildStore<()>>;
-pub type NetworkHedgeGraph<K, FK, Aind> =
-    HedgeGraph<NetworkEdge<Aind>, NetworkNode<K, FK, Aind>, NoData, NetworkNodeStore<K, FK, Aind>>;
+pub type NetworkHedgeGraph<K, FK, Aind> = HedgeGraph<NetworkEdge<Aind>, NetworkNode<K, FK, Aind>>;
 
 pub type ReadyNetworkOp<K, FK = i8, Aind = AbstractIndex> = (
     NetworkGraph<K, FK, Aind>,
@@ -925,29 +924,40 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
             .unwrap();
     }
 
+    /// Moves the slot orders of `subgraph`'s half-edges to the end with the same
+    /// swaps as [`HedgeGraph::delete_hedges`] and [`HedgeGraph::extract`] move the
+    /// half-edges, and returns the first moved position.
+    /// Moves the slot orders of half-edges outside `subgraph` to the front,
+    /// matching the partition of [`HedgeGraph::delete_hedges`], and follows
+    /// `tracked` to its new position.
+    fn partition_slot_orders<S: SubSetLike>(
+        &mut self,
+        subgraph: &S,
+        tracked: &mut Option<Hedge>,
+    ) -> Hedge {
+        let n_hedges = Hedge(self.graph.n_hedges());
+        partition_with(
+            self,
+            Hedge(0),
+            n_hedges,
+            |_, h| !subgraph.includes(&h),
+            |s, kept, moved| {
+                s.slot_order.swap(kept.0, moved.0);
+                s.logical_slot_order.swap(kept.0, moved.0);
+                if *tracked == Some(moved) {
+                    *tracked = Some(kept);
+                }
+            },
+        )
+    }
+
     pub fn extract<S: SubSetLike<Base = SuBitGraph>>(&mut self, subgraph: &S) -> Self
     where
         K: Clone + Display,
         FK: Clone + Display,
     {
         let _span = profile::span(Timer::GraphExtract);
-        let mut left = Hedge(0);
-        let mut extracted = Hedge(self.graph.n_hedges());
-        while left < extracted {
-            if !subgraph.includes(&left) {
-                //left is in the right place
-                left.0 += 1;
-            } else {
-                //left needs to be swapped
-                extracted.0 -= 1;
-                if !subgraph.includes(&extracted) {
-                    //only with an extracted that is in the wrong spot
-                    self.slot_order.swap(left.0, extracted.0);
-                    self.logical_slot_order.swap(left.0, extracted.0);
-                    left.0 += 1;
-                }
-            }
-        }
+        let left = self.partition_slot_orders(subgraph, &mut None);
 
         let extracted = self.graph.extract(
             subgraph,
@@ -1435,22 +1445,30 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
         self.cache_expr_tree_roots_ignoring(&hidden)
     }
 
+    /// Caches the expression tree in the node anchors and returns how many
+    /// changed: each node the tree visits is anchored at the half-edge leading to
+    /// its parent, and the head node at the head.
     pub fn cache_expr_tree_roots_ignoring<S>(&mut self, hidden: &S) -> usize
     where
         S: SubSetLike<Base = SuBitGraph>,
     {
-        let new_roots = {
-            let tt = self.expr_tree_ignoring(hidden);
-            // Each visited node supplies one independent crown root. Discovery
-            // order therefore needs no child-vector copy of the traversal forest.
-            tt.node_order()
-                .into_iter()
-                .map(|node| tt.root_hedge(node).into())
-                .collect::<Vec<_>>()
-        };
-
-        // Release the traversal forest before converting the graph's node store.
-        self.graph.node_store.reroot_many(new_roots)
+        let tt = self.expr_tree_ignoring(hidden);
+        let head = self.head();
+        let head_node = self.graph.node_id(head);
+        let mut changed = 0;
+        // Each visited node has one independent anchor, so any order will do.
+        for node in tt.node_order() {
+            let anchor = if node == head_node {
+                head
+            } else {
+                tt.root_hedge(node)
+            };
+            if self.graph.node_store.anchor(node) != Some(anchor) {
+                self.graph.node_store.set_anchor(node, Some(anchor));
+                changed += 1;
+            }
+        }
+        changed
     }
 
     pub fn cached_expr_children(&self, node: NodeIndex) -> Vec<NodeIndex> {
@@ -1488,8 +1506,7 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
                     return None;
                 }
 
-                (self.graph.node_store.root_hedge_for_node(other_node) == other)
-                    .then_some(other_node)
+                (self.graph.node_store.anchor(other_node) == Some(other)).then_some(other_node)
             })
             .collect::<Vec<_>>();
 
@@ -1898,29 +1915,49 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
     }
 
     pub fn delete<S: SubSetLike<Base = SuBitGraph>>(&mut self, subgraph: &S) {
-        let mut left = Hedge(0);
-        let mut extracted = Hedge(self.graph.n_hedges());
-        while left < extracted {
-            if !subgraph.includes(&left) {
-                //left is in the right place
-                left.0 += 1;
-            } else {
-                //left needs to be swapped
-                extracted.0 -= 1;
-                if !subgraph.includes(&extracted) {
-                    // println!("{extracted}<=>{left}");
-                    //only with an extracted that is in the wrong spot
-                    self.slot_order.swap(left.0, extracted.0);
-                    self.logical_slot_order.swap(left.0, extracted.0);
-                    left.0 += 1;
-                }
-            }
-        }
+        self.delete_tracking(subgraph, None);
+    }
+
+    /// Deletes `subgraph` and returns where the kept half-edge `tracked` lands.
+    ///
+    /// The partition matches [`HedgeGraph::delete_hedges`]: kept half-edges
+    /// from the tail fill the slots of deleted ones.
+    fn delete_tracking<S: SubSetLike<Base = SuBitGraph>>(
+        &mut self,
+        subgraph: &S,
+        mut tracked: Option<Hedge>,
+    ) -> Option<Hedge> {
+        let left = self.partition_slot_orders(subgraph, &mut tracked);
         self.graph.delete_hedges(subgraph);
         self.slot_order.truncate(left.0);
         self.logical_slot_order.truncate(left.0);
         debug_assert_eq!(self.slot_order.len(), self.graph.n_hedges());
+        tracked
     }
+
+    /// Forgets identification history, deletes `sub` and returns the index
+    /// `node` has afterwards.
+    ///
+    /// Both steps renumber nodes, so `node` is recovered through one of its
+    /// half-edges outside `sub`; every network node keeps its head port.
+    fn compact_identified(&mut self, node: NodeIndex, sub: &SuBitGraph) -> NodeIndex {
+        let anchor = self
+            .graph
+            .iter_crown(node)
+            .find(|hedge| !sub.includes(hedge));
+        self.graph.forget_identification_history();
+        self.graph.node_store.check_and_set_nodes().unwrap();
+        let anchor = self.delete_tracking(sub, anchor);
+        self.graph.node_store.check_and_set_nodes().unwrap();
+        self.graph
+            .node_id(anchor.expect("an identified network node keeps its head port"))
+    }
+
+    /// Identifies `nodes`, deletes the self-edges this creates and compacts
+    /// the graph. Pre-existing self-edges are kept.
+    ///
+    /// The returned index is valid after compaction; any other `NodeIndex`
+    /// taken before this call is not.
     pub fn identify_nodes_without_self_edges(
         &mut self,
         nodes: &[NodeIndex],
@@ -1931,17 +1968,7 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
             .graph
             .identify_nodes_without_self_edges::<SuBitGraph>(nodes, node_data);
         self.invalidate_logical_layout(n);
-
-        self.graph.forget_identification_history();
-        self.graph.node_store.check_and_set_nodes().unwrap();
-        self.delete(&sub);
-
-        self.graph.node_store.check_and_set_nodes().unwrap();
-        // println!(
-        //     "identify_nodes_without_self_edges res:{}",
-        //     self.dot_simple()
-        // );
-        n
+        self.compact_identified(n, &sub)
     }
 
     pub fn identify_subgraph_nodes_without_deleting_self_edges(
@@ -1962,12 +1989,16 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
         Some(node)
     }
 
+    /// Identifies `nodes` and marks the created self-edges and duplicate head
+    /// edges in `ignored` without deleting them.
+    ///
+    /// Callers finish with [`Self::finish_deferred_node_identifications`].
     pub fn identify_nodes_marking_self_edges_and_duplicate_heads(
         &mut self,
         nodes: &[NodeIndex],
         node_data: NetworkNode<K, FK, Aind>,
         ignored: &mut SuBitGraph,
-    ) -> NodeIndex {
+    ) {
         let _span = profile::span(Timer::IdentifyNodes);
         let (node, self_edges) = self
             .graph
@@ -1992,53 +2023,16 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
                 ignored.add(other);
             }
         }
-
-        node
     }
 
+    /// Drops the nodes absorbed by deferred identifications.
+    ///
+    /// This renumbers nodes, so a `NodeIndex` taken before is invalid
+    /// afterwards. Half-edges keep their positions; resolve nodes through
+    /// them with `node_id`.
     pub fn finish_deferred_node_identifications(&mut self) {
         self.graph.forget_identification_history();
         self.graph.node_store.check_and_set_nodes().unwrap();
-    }
-
-    pub fn identify_nodes_without_self_edges_merge_heads(
-        &mut self,
-        nodes: &[NodeIndex],
-        node_data: NetworkNode<K, FK, Aind>,
-    ) -> NodeIndex {
-        // println!("Identifying:{:?}", nodes);
-        let (n, mut sub) = self
-            .graph
-            .identify_nodes_without_self_edges::<SuBitGraph>(nodes, node_data);
-        self.invalidate_logical_layout(n);
-
-        let mut first = true;
-        for h in self.graph.iter_crown(n) {
-            // println!("{h}");
-            if self.graph[[&h]].is_head() && self.graph.inv(h) != h {
-                if first {
-                    first = false;
-                } else {
-                    sub.add(h);
-                    sub.add(self.graph.inv(h));
-                }
-            }
-        }
-
-        // println!(
-        //     "Deleting: res:{}",
-        //     self.dot_impl_of(&sub, |i| i.to_string(), |_| "".into(), |i| i.to_string())
-        // );
-        self.graph.forget_identification_history();
-        self.graph.node_store.check_and_set_nodes().unwrap();
-        self.delete(&sub);
-        self.graph.node_store.check_and_set_nodes().unwrap();
-        // println!(
-        //     "identify_nodes_without_self_edges_merge_heads res:{}",
-        //     self.dot_simple()
-        // );
-
-        n
     }
 
     pub fn dot(&self) -> String
@@ -3476,6 +3470,31 @@ pub mod test {
 
     use super::{NetworkGraph, NetworkNode, NetworkOp};
 
+    impl NetworkGraph<i8> {
+        /// The oracle for the cached expression tree: anchors the nodes in
+        /// preorder of the traversal, the head node at the head.
+        fn anchor_in_preorder(&mut self, hidden: &SuBitGraph) {
+            let tree = self.expr_tree_ignoring(hidden).cast::<ChildVecStore<()>>();
+            let head = self.head();
+            let root = self.graph.node_id(head);
+            let anchors: Vec<_> = (tree.iter_preorder_tree_nodes(&self.graph, root))
+                .map(|node| {
+                    (
+                        node,
+                        if node == root {
+                            head
+                        } else {
+                            tree.root_hedge(node)
+                        },
+                    )
+                })
+                .collect();
+            for (node, anchor) in anchors {
+                self.graph.node_store.set_anchor(node, Some(anchor));
+            }
+        }
+    }
+
     #[test]
     fn batch_product_preserves_sequential_join_endpoints_and_layouts() {
         use super::{NMul, NetworkEdge};
@@ -3633,6 +3652,46 @@ pub mod test {
         assert_eq!(graph, before);
         assert_eq!(graph.slots(node), vec![slot, slot]);
         assert!(graph.bound_ports(node).is_empty());
+    }
+
+    #[test]
+    fn identified_node_index_survives_compaction() {
+        use super::NMul;
+
+        type Graph = NetworkGraph<i8>;
+        let tensor = |id, labels: &[usize]| {
+            let structure = Canonicalized::<OrderedStructure>::from_iter(
+                labels.iter().map(|&index| Minkowski {}.new_slot(4, index)),
+            )
+            .into_canonical();
+            Graph::tensor(&structure, NetworkLeaf::LocalTensor(id))
+        };
+        let leaf = |graph: &Graph, id| {
+            graph
+                .graph
+                .iter_nodes()
+                .find_map(|(node, _, data)| {
+                    matches!(data, NetworkNode::Leaf(NetworkLeaf::LocalTensor(found)) if *found == id)
+                        .then_some(node)
+                })
+                .unwrap()
+        };
+        let mut moved = false;
+        for (survivor, absorbed) in [(0, 1), (1, 0), (1, 2), (2, 1)] {
+            let mut graph = tensor(0, &[1, 2]).n_mul([tensor(1, &[2, 3]), tensor(2, &[3, 4])]);
+            let nodes = [leaf(&graph, survivor), leaf(&graph, absorbed)];
+            let node = graph.identify_nodes_without_self_edges(
+                &nodes,
+                NetworkNode::Leaf(NetworkLeaf::LocalTensor(3)),
+            );
+            graph.graph.check().unwrap();
+            assert_eq!(graph.graph.n_nodes(), 3);
+            assert_eq!(node, leaf(&graph, 3), "merging {nodes:?}");
+            // Two open ports and both product heads; the shared index is gone.
+            assert_eq!(graph.graph.iter_crown(node).count(), 4);
+            moved |= node != nodes[0];
+        }
+        assert!(moved, "compaction must move some survivor for this test");
     }
 
     #[cfg(feature = "shadowing")]
@@ -4219,15 +4278,7 @@ pub mod test {
             }
             for _ in 0..2 {
                 let mut oracle = graph.clone();
-                let roots = {
-                    let tree = oracle
-                        .expr_tree_ignoring(&hidden)
-                        .cast::<ChildVecStore<()>>();
-                    tree.iter_preorder_tree_nodes(&oracle.graph, root)
-                        .map(|node| tree.root_hedge(node).into())
-                        .collect::<Vec<_>>()
-                };
-                oracle.graph.node_store.reroot_many(roots);
+                oracle.anchor_in_preorder(&hidden);
                 graph.cache_expr_tree_roots_ignoring(&hidden);
                 assert_eq!(
                     graph
@@ -4445,16 +4496,7 @@ pub mod test {
             }
             for _ in 0..2 {
                 let mut preorder_oracle = graph.clone();
-                let old_roots = {
-                    let tree = preorder_oracle
-                        .expr_tree_ignoring(&hidden)
-                        .cast::<ChildVecStore<()>>();
-                    let root = preorder_oracle.graph.node_id(preorder_oracle.head());
-                    tree.iter_preorder_tree_nodes(&preorder_oracle.graph, root)
-                        .map(|node| tree.root_hedge(node).into())
-                        .collect::<Vec<_>>()
-                };
-                preorder_oracle.graph.node_store.reroot_many(old_roots);
+                preorder_oracle.anchor_in_preorder(&hidden);
                 graph.cache_expr_tree_roots_ignoring(&hidden);
                 assert_eq!(
                     graph

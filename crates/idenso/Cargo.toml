@@ -10,7 +10,7 @@ bincode = { workspace = true, optional = true }
 bincode-trait-derive = { workspace = true, optional = true }
 eyre = { workspace = true }
 itertools = { workspace = true }
-linnet = { workspace = true, default-features = false, features = ["nodestore-vec", "serde"] }
+linnet = { workspace = true, default-features = false, features = ["serde"] }
 spenso = { workspace = true, default-features = false, features = ["shadowing"] }
 spenso-macros = { workspace = true, default-features = false }
 symbolica = { workspace = true }

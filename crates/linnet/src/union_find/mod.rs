@@ -52,10 +52,8 @@
 //!   associated with the set containing `node`.
 //! - `map_set_data_of(node: ParentPointer, f: F)`: Allows mutable access to the data
 //!   of `node`'s set.
-//! - `extract(...)`: A more advanced operation to partition the Union-Find structure
-//!   itself based on a predicate, potentially creating a new `UnionFind` instance.
-//! - `from_bitvec_partition(partitions: Vec<(U, BitVec)>)`: Constructs a `UnionFind`
-//!   from a set of partitions defined by bitvectors.
+//! - `from_partition(partitions: Vec<(U, SubSet<ID>)>)`: Constructs a `UnionFind`
+//!   from a set of partitions defined by bitsets.
 //!
 //! This data structure is commonly used in algorithms for graph connectivity,
 //! Kruskal's algorithm for minimum spanning trees, and other problems involving
@@ -138,16 +136,6 @@ pub struct SetData<U> {
     pub(crate) data: Option<U>,
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[cfg_attr(feature = "bincode", derive(bincode::Encode, bincode::Decode))]
-enum SetSplit {
-    Left,
-    FullyExtracted,
-    Split,
-    Unset,
-}
-
 pub fn left<E>(l: E, _: E) -> E {
     l
 }
@@ -161,191 +149,8 @@ impl<U> UnionFind<U> {
         self.nodes.len()
     }
 
-    pub fn swap_set_data(&mut self, a: SetIndex, b: SetIndex) {
-        self.set_data.swap(a.0, b.0);
-        for n in &mut self.nodes {
-            if let UFNode::Root { set_data_idx, .. } = n.get_mut() {
-                if *set_data_idx == a {
-                    *set_data_idx = a;
-                } else if *set_data_idx == b {
-                    *set_data_idx = b;
-                }
-            }
-        }
-    }
-
-    // if true,then extract
-    #[allow(clippy::manual_map)]
-    pub fn extract<O>(
-        &mut self,
-        mut part: impl FnMut(ParentPointer) -> bool,
-        mut split_set_data: impl FnMut(&U) -> O,
-        mut extract_set_data: impl FnMut(U) -> O,
-    ) -> UnionFind<O> {
-        let mut left = Hedge(0);
-        let mut extracted = Hedge(self.nodes.len());
-        let mut set_split = vec![SetSplit::Unset; self.set_data.len()];
-
-        while left < extracted {
-            if !part(left) {
-                //left is in the right place
-                left.0 += 1;
-                let root = self.find_data_index(left);
-                match set_split[root.0] {
-                    SetSplit::Left => {}
-                    SetSplit::Unset => set_split[root.0] = SetSplit::Left,
-                    SetSplit::FullyExtracted => set_split[root.0] = SetSplit::Split,
-                    SetSplit::Split => {}
-                }
-            } else {
-                //left needs to be swapped
-                extracted.0 -= 1;
-                let root = self.find_data_index(extracted);
-                if !part(extracted) {
-                    //only with an extracted that is in the wrong spot
-                    match set_split[root.0] {
-                        SetSplit::Left => {}
-                        SetSplit::Unset => set_split[root.0] = SetSplit::Left,
-                        SetSplit::FullyExtracted => set_split[root.0] = SetSplit::Split,
-                        SetSplit::Split => {}
-                    }
-                    self.swap(left, extracted);
-                    left.0 += 1;
-                } else {
-                    match set_split[root.0] {
-                        SetSplit::Left => set_split[root.0] = SetSplit::Split,
-                        SetSplit::Unset => set_split[root.0] = SetSplit::FullyExtracted,
-                        SetSplit::FullyExtracted => {}
-                        SetSplit::Split => {}
-                    }
-                }
-            }
-        }
-
-        let mut left_nodes = SetIndex(0);
-        let mut extracted_nodes = SetIndex(self.n_sets());
-        while left_nodes < extracted_nodes {
-            if let SetSplit::Left = set_split[left_nodes.0] {
-                //left is in the right place
-                left_nodes.0 += 1;
-            } else {
-                //left needs to be swapped
-                extracted_nodes.0 -= 1;
-                if let SetSplit::Left = set_split[extracted_nodes.0] {
-                    //only with an extracted that is in the wrong spot
-                    self.swap_set_data(left_nodes, extracted_nodes);
-                    left_nodes.0 += 1;
-                }
-            }
-        }
-        let mut overlapping_nodes = left_nodes;
-        let mut non_overlapping_extracted = SetIndex(self.n_sets());
-
-        while overlapping_nodes < non_overlapping_extracted {
-            if let SetSplit::Split = set_split[overlapping_nodes.0] {
-                //overlapping is in the right place, is a split node
-                overlapping_nodes.0 += 1;
-            } else {
-                //overlapping needs to be swapped
-                non_overlapping_extracted.0 -= 1;
-                if let SetSplit::Split = set_split[non_overlapping_extracted.0] {
-                    //only with an extracted that is in the wrong spot
-                    self.swap_set_data(overlapping_nodes, non_overlapping_extracted);
-                    overlapping_nodes.0 += 1;
-                }
-            }
-        }
-
-        let mut extracted_nodes = self.nodes.split_off(overlapping_nodes.0);
-        let extracted_data: Vec<_> = self
-            .set_data
-            .split_off(overlapping_nodes.0)
-            .into_iter()
-            .map(|a| SetData {
-                data: if let Some(data) = a.data {
-                    Some(extract_set_data(data))
-                } else {
-                    None
-                },
-                root_pointer: a.root_pointer,
-            })
-            .collect();
-
-        let mut overlapping_data = vec![];
-
-        for i in (left_nodes.0)..(overlapping_nodes.0) {
-            let data = Some(split_set_data(&self[SetIndex(i)]));
-            let root_pointer = self[&SetIndex(i)].root_pointer;
-
-            overlapping_data.push(SetData { root_pointer, data })
-        }
-
-        overlapping_data.extend(extracted_data);
-
-        for n in &mut extracted_nodes {
-            if let UFNode::Root { set_data_idx, .. } = n.get_mut() {
-                set_data_idx.0 -= left_nodes.0
-            }
-        }
-
-        UnionFind {
-            nodes: extracted_nodes,
-            set_data: overlapping_data,
-        }
-    }
-
-    pub fn swap(&mut self, a: ParentPointer, b: ParentPointer) {
-        match (self.is_child(a), self.is_child(b)) {
-            (true, true) => {}
-            (true, false) => {
-                for n in &mut self.nodes {
-                    if let UFNode::Child(pp) = n.get_mut() {
-                        if *pp == a {
-                            *pp = b;
-                        }
-                    }
-                }
-            }
-            (false, true) => {
-                for n in &mut self.nodes {
-                    if let UFNode::Child(pp) = n.get_mut() {
-                        if *pp == b {
-                            *pp = a;
-                        }
-                    }
-                }
-            }
-            (false, false) => {
-                for n in &mut self.nodes {
-                    if let UFNode::Child(pp) = n.get_mut() {
-                        if *pp == a {
-                            *pp = b;
-                        } else if *pp == b {
-                            *pp = a;
-                        }
-                    }
-                }
-            }
-        }
-        self.nodes.swap(a.0, b.0);
-    }
-
     pub fn n_sets(&self) -> usize {
         self.set_data.len()
-    }
-
-    pub fn extend(&mut self, mut other: Self) {
-        let shift_nodes = self.set_data.len();
-        let shift_set = self.nodes.len();
-        other.nodes.iter_mut().for_each(|a| match a.get_mut() {
-            UFNode::Child(a) => a.0 += shift_set,
-            UFNode::Root { set_data_idx, .. } => set_data_idx.0 += shift_nodes,
-        });
-        other
-            .set_data
-            .iter_mut()
-            .for_each(|a| a.root_pointer.0 += shift_set);
-        self.set_data.extend(other.set_data);
     }
 
     pub fn iter_set_data(&self) -> impl Iterator<Item = (SetIndex, &U)> {
@@ -744,6 +549,5 @@ impl<U> Index<&ParentPointer> for UnionFind<U> {
     }
 }
 
-// pub mod bitvec_find;
 #[cfg(test)]
 pub mod test;

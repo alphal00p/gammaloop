@@ -55,7 +55,7 @@ assert [diagram.to_json() for diagram in cross_section.diagrams] == snapshots
 empty = process.generate_diagrams(
     loops=0,
     max_vertices=1,
-    filter=lambda diagram, completed_vertices: False,
+    filter=lambda graph, stage: False,
     progress=None,
 )
 html = empty._repr_html_()

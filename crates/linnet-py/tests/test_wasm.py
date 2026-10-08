@@ -102,15 +102,15 @@ def wasm_runtime_smoke() -> None:
     selected_edges: list[int] = []
     selected_half_edges: list[int] = []
 
-    def node_drawing(node: lp.Node) -> lp.NodeDrawing:
+    def node_drawing(node: lp.NodeView) -> lp.NodeDrawing:
         selected_nodes.append(node.index)
         return lp.NodeDrawing(label=lp.MathSymbol("n", subscript=node.index))
 
-    def edge_drawing(edge: lp.Edge) -> lp.EdgeDrawing:
+    def edge_drawing(edge: lp.EdgeView) -> lp.EdgeDrawing:
         selected_edges.append(edge.index)
         return lp.EdgeDrawing(label=lp.MathSymbol("p", subscript=edge.index))
 
-    def half_edge_drawing(half_edge: lp.HalfEdge) -> lp.HalfEdgeDrawing:
+    def half_edge_drawing(half_edge: lp.HalfEdgeView) -> lp.HalfEdgeDrawing:
         selected_half_edges.append(half_edge.index)
         return lp.HalfEdgeDrawing(
             style={

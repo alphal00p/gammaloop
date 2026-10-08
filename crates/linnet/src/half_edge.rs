@@ -97,7 +97,7 @@ use ahash::{AHashMap, AHashSet};
 
 use bitvec::prelude::*;
 use bitvec::slice::IterOnes;
-use builder::{HedgeData, HedgeGraphBuilder, HedgeNodeBuilder};
+use builder::{HedgeData, HedgeGraphBuilder};
 use hedgevec::{Accessors, SmartEdgeVec};
 use indexmap::IndexSet;
 use involution::{
@@ -106,7 +106,7 @@ use involution::{
 };
 
 use itertools::Itertools;
-use nodestore::{DefaultNodeStore, NodeStorage, NodeStorageOps};
+use nodestore::{NodeForest, NodeStorage, NodeStorageOps};
 use rand::{rngs::SmallRng, Rng, SeedableRng};
 use swap::Swap;
 
@@ -261,9 +261,8 @@ pub mod swap;
 /// - `H`: The type of data associated with each individual half-edge.
 /// - `S`: The node storage strategy, implementing the [`NodeStorage`] trait.
 ///   This determines how node data and their connectivity to half-edges
-///   are stored. Defaults to [`DefaultNodeStore<V>`] (feature-selected; `nodestore-vec` uses
-///   [`nodestore::NodeStorageVec<V>`]).
-pub struct HedgeGraph<E, V, H = NoData, S: NodeStorage<NodeData = V> = DefaultNodeStore<V>> {
+///   are stored. Defaults to [`NodeForest<V>`].
+pub struct HedgeGraph<E, V, H = NoData, S: NodeStorage<NodeData = V> = NodeForest<V>> {
     pub(crate) hedge_data: HedgeVec<H>,
     /// Edge data and the involution that pairs internal half-edges or marks
     /// dangling half-edges as identity entries.
@@ -420,69 +419,6 @@ impl<E, V, H, N: NodeStorageOps<NodeData = V>> HedgeGraph<E, V, H, N> {
         Ok(())
     }
 
-    /// Rebuilds this graph with a different node-storage backend.
-    ///
-    /// Edge and half-edge storage is moved unchanged, so edge and half-edge IDs remain stable.
-    /// Node order, data, and incidence are retained as long as the source store represents a
-    /// valid partition.
-    ///
-    /// Forest stores may retain inactive roots after [`Self::identify_nodes`]. Those roots cannot
-    /// be represented by every backend, so this method returns an error instead of silently
-    /// dropping their data. Call [`Self::forget_identification_history`] explicitly before
-    /// conversion when compaction and the resulting node-ID changes are acceptable.
-    pub fn into_node_store<M>(self) -> Result<HedgeGraph<E, V, H, M>, HedgeGraphError>
-    where
-        M: NodeStorageOps<NodeData = V>,
-    {
-        self.node_store.check_nodes()?;
-        let mut topology = self
-            .node_store
-            .to_forest::<(), ()>(|_| ())
-            .cast::<crate::tree::child_vec::ChildVecStore<()>>();
-        let retained = topology.forget_identification_history();
-        let retained_count: NodeIndex = retained.len();
-        if retained_count.0 != 0 {
-            return Err(HedgeGraphError::NodesDoNotPartition(
-                "node store retains inactive identification roots".to_owned(),
-            ));
-        }
-
-        let n_hedges = self.n_hedges();
-        let node_store_hedges: Hedge = self.node_store.len();
-        let hedge_data_hedges: Hedge = self.hedge_data.len();
-        if node_store_hedges.0 != n_hedges || hedge_data_hedges.0 != n_hedges {
-            return Err(HedgeGraphError::DataLengthMismatch);
-        }
-
-        let HedgeGraph {
-            hedge_data,
-            edge_store,
-            node_store,
-        } = self;
-        let crowns = node_store.new_nodevec(|_, neighbors, _| neighbors.collect::<Vec<_>>());
-        let node_data = node_store.drain().collect::<Vec<_>>();
-        let crown_count: NodeIndex = crowns.len();
-        if crown_count.0 != node_data.len() {
-            return Err(HedgeGraphError::DataLengthMismatch);
-        }
-
-        let mut nodes = Vec::with_capacity(crown_count.0);
-        for ((crown_id, hedges), (data_id, data)) in crowns.into_iter().zip(node_data) {
-            if crown_id != data_id {
-                return Err(HedgeGraphError::DataLengthMismatch);
-            }
-            nodes.push(HedgeNodeBuilder { data, hedges });
-        }
-
-        let node_store = M::build(nodes, n_hedges);
-        node_store.check_nodes()?;
-        Ok(HedgeGraph {
-            hedge_data,
-            edge_store,
-            node_store,
-        })
-    }
-
     /// Deletes all half-edges specified in the `subgraph` from the graph.
     ///
     /// This operation modifies both the `edge_store` and `node_store` to remove
@@ -492,23 +428,7 @@ impl<E, V, H, N: NodeStorageOps<NodeData = V>> HedgeGraph<E, V, H, N> {
     /// - `subgraph`: A subgraph specifying the set of half-edges to delete.
     ///   `S` must implement `SubGraph` with `Base = N::Base`.
     pub fn delete_hedges<S: SubSetLike<Base = N::Base>>(&mut self, subgraph: &S) {
-        let mut left = Hedge(0);
-        let mut extracted: Hedge = self.len();
-        while left < extracted {
-            if !subgraph.includes(&left) {
-                //left is in the right place
-                left.0 += 1;
-            } else {
-                //left needs to be swapped
-                extracted.0 -= 1;
-                if !subgraph.includes(&extracted) {
-                    // println!("{extracted}<=>{left}");
-                    //only with an extracted that is in the wrong spot
-                    self.hedge_data.swap(left, extracted);
-                    left.0 += 1;
-                }
-            }
-        }
+        let left = self.hedge_data.partition(|h| !subgraph.includes(h));
         let _ = self.hedge_data.split_off(left);
 
         self.edge_store.delete(subgraph);
@@ -611,23 +531,7 @@ impl<E, V, H, N: NodeStorageOps<NodeData = V>> HedgeGraph<E, V, H, N> {
             .edge_store
             .extract(subgraph, split_edge_fn, internal_data);
 
-        let mut left = Hedge(0);
-        let mut extracted: Hedge = self.len();
-        while left < extracted {
-            if !subgraph.includes(&left) {
-                //left is in the right place
-                left.0 += 1;
-            } else {
-                //left needs to be swapped
-                extracted.0 -= 1;
-                if !subgraph.includes(&extracted) {
-                    // println!("{extracted}<=>{left}");
-                    //only with an extracted that is in the wrong spot
-                    self.hedge_data.swap(left, extracted);
-                    left.0 += 1;
-                }
-            }
-        }
+        let left = self.hedge_data.partition(|h| !subgraph.includes(h));
         let new_hedge_data = self.hedge_data.split_off(left);
 
         let new_node_store = self.node_store.extract(subgraph, split_node, owned_node);
@@ -908,7 +812,7 @@ impl<E, V, H, N: NodeStorageOps<NodeData = V>> HedgeGraph<E, V, H, N> {
     /// - `Ok((Hedge, Self))`: A tuple containing the `Hedge` identifier of the new
     ///   dangling half-edge and the modified graph.
     /// - `Err(HedgeGraphError::NoNode)`: If the `source` node index is invalid for the node store.
-    /// - Other `HedgeGraphError` variants may arise from internal node store operations.
+    /// - `Err(HedgeGraphError::InvalidNode)`: If an identification absorbed `source`.
     pub fn add_dangling_edge(
         mut self,
         source: impl Into<HedgeData<H>>,
@@ -916,19 +820,30 @@ impl<E, V, H, N: NodeStorageOps<NodeData = V>> HedgeGraph<E, V, H, N> {
         flow: Flow,
         orientation: impl Into<Orientation>,
     ) -> Result<(Hedge, Self), HedgeGraphError> {
+        let hedge = self.add_dangling_edge_mut(source, data, flow, orientation)?;
+        Ok((hedge, self))
+    }
+
+    /// Appends a node without half-edges in place and returns its index;
+    /// existing indices are preserved.
+    pub fn add_node(&mut self, data: V) -> NodeIndex {
+        self.node_store.add_node(data)
+    }
+
+    /// Adds a dangling half-edge in place, preserving existing indices.
+    /// An invalid endpoint leaves the graph unchanged.
+    pub fn add_dangling_edge_mut(
+        &mut self,
+        source: impl Into<HedgeData<H>>,
+        data: E,
+        flow: Flow,
+        orientation: impl Into<Orientation>,
+    ) -> Result<Hedge, HedgeGraphError> {
         let source = source.into();
-
+        let orientation = orientation.into();
+        self.node_store.add_dangling_edge_mut(source.node)?;
         self.hedge_data.push(source.data);
-        let (edge_store, hedge) = self.edge_store.add_dangling_edge(data, flow, orientation);
-        let mut g = HedgeGraph {
-            hedge_data: self.hedge_data,
-            edge_store,
-            node_store: self.node_store.add_dangling_edge(source.node)?,
-        };
-
-        g.node_store.check_and_set_nodes()?;
-
-        Ok((hedge, g))
+        Ok(self.edge_store.add_dangling_edge(data, flow, orientation))
     }
 
     /// Adds a new paired edge between the `source` and `sink` nodes.
@@ -947,7 +862,7 @@ impl<E, V, H, N: NodeStorageOps<NodeData = V>> HedgeGraph<E, V, H, N> {
     /// - `Ok((Hedge, Hedge, Self))`: A tuple containing the `Hedge` identifiers for the
     ///   source-incident half-edge, the sink-incident half-edge, and the modified graph.
     /// - `Err(HedgeGraphError::NoNode)`: If `source` or `sink` node indices are invalid.
-    /// - Other `HedgeGraphError` variants may arise from internal node store operations.
+    /// - `Err(HedgeGraphError::InvalidNode)`: If an identification absorbed `source` or `sink`.
     pub fn add_pair(
         mut self,
         source: impl Into<HedgeData<H>>,
@@ -955,23 +870,43 @@ impl<E, V, H, N: NodeStorageOps<NodeData = V>> HedgeGraph<E, V, H, N> {
         data: E,
         orientation: impl Into<Orientation>,
     ) -> Result<(Hedge, Hedge, Self), HedgeGraphError> {
+        let (source, sink) = self.add_pair_mut(source, sink, data, orientation)?;
+        Ok((source, sink, self))
+    }
+
+    /// Rejects `node` with [`HedgeGraphError::NoNode`] if it is out of range and
+    /// with [`HedgeGraphError::InvalidNode`] if an identification absorbed it.
+    fn require_live_node(&self, node: NodeIndex) -> Result<(), HedgeGraphError> {
+        if node.0 >= self.n_nodes() {
+            Err(HedgeGraphError::NoNode)
+        } else if self.node_store.is_absorbed(node) {
+            Err(HedgeGraphError::InvalidNode(node))
+        } else {
+            Ok(())
+        }
+    }
+
+    /// Adds a paired edge in place, preserving existing indices.
+    /// Both endpoints are checked before changing any storage.
+    pub fn add_pair_mut(
+        &mut self,
+        source: impl Into<HedgeData<H>>,
+        sink: impl Into<HedgeData<H>>,
+        data: E,
+        orientation: impl Into<Orientation>,
+    ) -> Result<(Hedge, Hedge), HedgeGraphError> {
         let source = source.into();
         let sink = sink.into();
+        let orientation = orientation.into();
+        self.require_live_node(source.node)?;
+        self.require_live_node(sink.node)?;
+        // Each incidence append preserves the partition and its ownership map;
+        // rebuilding those maps afterward is unnecessary for a valid store.
+        self.node_store.add_dangling_edge_mut(source.node)?;
+        self.node_store.add_dangling_edge_mut(sink.node)?;
         self.hedge_data.push(source.data);
         self.hedge_data.push(sink.data);
-        let (edge_store, sourceh, sinkh) = self.edge_store.add_paired(data, orientation);
-        let mut g = HedgeGraph {
-            hedge_data: self.hedge_data,
-            edge_store,
-            node_store: self
-                .node_store
-                .add_dangling_edge(source.node)?
-                .add_dangling_edge(sink.node)?,
-        };
-
-        g.node_store.check_and_set_nodes()?;
-
-        Ok((sourceh, sinkh, g))
+        Ok(self.edge_store.add_paired(data, orientation))
     }
 
     /// Checks if the specified `subgraph` is connected.
@@ -1560,12 +1495,20 @@ impl<E, V, H, N: NodeStorageOps<NodeData = V>> HedgeGraph<E, V, H, N> {
         self.edge_store.set_flow(hedge, flow);
     }
 
-    ///Permutes nodes not pointing to any root anymore to end of nodestore and then extract it
+    /// Discard inactive node records and return their payloads.
+    ///
+    /// Forest stores also flatten the identification trees merged since the
+    /// previous call, in time linear in the node records plus the merged crowns,
+    /// preserving half-edge IDs and crown order. Active node indices can change;
+    /// subsequent half-edge-to-node lookups no longer depend on identification
+    /// depth.
     pub fn forget_identification_history(&mut self) -> NodeVec<V> {
         self.node_store.forget_identification_history()
     }
 
-    ///Retains the NodeIndex ordering and just appends a new node.
+    /// Merges `nodes` into one surviving node and returns it; see
+    /// [`NodeStorageOps::identify_nodes`]. Renumbers nothing until
+    /// [`Self::forget_identification_history`].
     pub fn identify_nodes(&mut self, nodes: &[NodeIndex], node_data_merge: V) -> NodeIndex {
         self.node_store.identify_nodes(nodes, node_data_merge)
     }
@@ -1585,7 +1528,8 @@ impl<E, V, H, N: NodeStorageOps<NodeData = V>> HedgeGraph<E, V, H, N> {
         self.delete_hedges(subgraph);
     }
 
-    ///Retains the NodeIndex ordering and just appends a new node.
+    /// Like [`Self::identify_nodes`], also returning the half-edges that became
+    /// self-loops through this identification.
     pub fn identify_nodes_without_self_edges<S>(
         &mut self,
         nodes: &[NodeIndex],
@@ -3069,6 +3013,13 @@ impl<E, V, H, N: NodeStorageOps<NodeData = V>> HedgeGraph<E, V, H, N> {
             edges: subgraph.included_iter(),
             seen: SubSet::empty(self.n_nodes()),
         }
+    }
+
+    /// Nodes without half-edges, skipping those absorbed by a pending identification.
+    pub(crate) fn iter_isolated_nodes(&self) -> impl Iterator<Item = NodeIndex> + '_ {
+        self.iter_nodes().filter_map(|(node, mut crown, _)| {
+            (crown.next().is_none() && !self.node_store.is_absorbed(node)).then_some(node)
+        })
     }
 }
 

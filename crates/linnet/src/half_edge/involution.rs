@@ -1616,10 +1616,14 @@ impl<E> Involution<E> {
     /// add a connected pair of hedges to the involution
     /// returns the pair of hedges: (source, sink)
     pub fn add_pair(&mut self, data: E, directed: impl Into<Orientation>) -> (Hedge, Hedge) {
+        let orientation = directed.into();
         let source = self.inv.len();
         let sink = Hedge(source.0 + 1);
+        // Both endpoints are new: write their final mappings directly instead
+        // of creating an identity and moving its data back out to connect it.
+        self.inv.reserve(2);
         self.inv.push(InvolutiveMapping::Source {
-            data: EdgeData::new(data, directed.into()),
+            data: EdgeData::new(data, orientation),
             sink_idx: sink,
         });
         self.inv
@@ -1848,22 +1852,7 @@ impl<E> Involution<E> {
     }
 
     fn delete_impl<S: SubSetLike>(&mut self, graph: &S) -> (HedgeVec<InvolutiveMapping<E>>, Hedge) {
-        let mut left = Hedge(0);
-        let mut extracted = self.inv.len();
-        while left < extracted {
-            if !graph.includes(&left) {
-                //left is in the right place
-                left.0 += 1;
-            } else {
-                //left needs to be swapped
-                extracted.0 -= 1;
-                if !graph.includes(&extracted) {
-                    //only with an extracted that is in the wrong spot
-                    self.swap(left, extracted);
-                    left.0 += 1;
-                }
-            }
-        }
+        let left = self.partition(|h| !graph.includes(h));
 
         for i in 0..(left.0) {
             if self.inv(Hedge(i)) >= left {

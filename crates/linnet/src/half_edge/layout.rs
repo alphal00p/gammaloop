@@ -1,4 +1,4 @@
-use super::{nodestore::NodeStorageVec, HedgeGraph};
+use super::HedgeGraph;
 
 pub mod spring;
 
@@ -10,11 +10,11 @@ pub mod impred;
 
 pub mod layered;
 
-impl<E, V, H> HedgeGraph<E, V, H, NodeStorageVec<V>> {
+impl<E, V, H> HedgeGraph<E, V, H> {
     // pub fn layout(
     //     self,
     //     mut settings: LayoutSettings,
-    // ) -> HedgeGraph<LayoutEdge<E>, LayoutVertex<V>, H, NodeStorageVec<LayoutVertex<V>>> {
+    // ) -> HedgeGraph<LayoutEdge<E>, LayoutVertex<V>, H> {
     //     let energy = GraphLayoutEnergy {
     //         graph: &self,
     //         positions: &settings.positions,

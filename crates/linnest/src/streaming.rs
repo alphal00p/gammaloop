@@ -4,7 +4,7 @@ use linnet::{
     half_edge::{
         involution::{Flow, HedgePair},
         layout::force::ForceLayoutSession,
-        nodestore::DefaultNodeStore,
+        nodestore::NodeForest,
         NodeIndex,
     },
     parser::set::DotGraphSet,
@@ -13,7 +13,7 @@ use linnet::{
 use crate::{LayoutAlgo, TypstEdge, TypstGraph, TypstHedge, TypstNode, TypstPoint};
 
 type NativeForceSession<'a> =
-    ForceLayoutSession<'a, TypstEdge, TypstNode, TypstHedge, DefaultNodeStore<TypstNode>>;
+    ForceLayoutSession<'a, TypstEdge, TypstNode, TypstHedge, NodeForest<TypstNode>>;
 
 self_cell::self_cell! {
     struct ForceLayoutCell {

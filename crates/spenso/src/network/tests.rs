@@ -1535,6 +1535,68 @@ fn contraction_strategies_match_independent_coordinate_sum() {
 }
 
 #[test]
+fn in_place_product_rewrites_follow_operands_across_node_compaction() {
+    use crate::{
+        network::{
+            ExecutionResult, Network, Sequential, SmallestDegree, SmallestDegreeIter,
+            graph::NMul,
+            library::{DummyLibrary, DummyLibraryTensor, panicing::ErroringLibrary},
+            store::NetworkStore,
+        },
+        structure::{
+            OrderedStructure,
+            representation::{Euclidean, RepName},
+        },
+        tensors::data::DenseTensor,
+    };
+
+    type Tensor = DenseTensor<f64, OrderedStructure<Euclidean>>;
+    type Net = Network<NetworkStore<Tensor, f64>, DummyKey, DummyKey>;
+    type LibTensor = DummyLibraryTensor<Tensor>;
+    type Lib = DummyLibrary<Tensor, DummyKey>;
+    type FnLib = ErroringLibrary<DummyKey>;
+
+    let tensor = |ids: &[usize], data: &[f64]| {
+        let structure =
+            OrderedStructure::new(ids.iter().map(|&id| Euclidean {}.new_slot(2, id)).collect())
+                .into_canonical();
+        Net::from_tensor(DenseTensor::from_storage_data(data.to_vec(), structure).unwrap())
+    };
+    // Each in-place pair or scalar merge compacts the graph nodes, which moves
+    // nodes from the tail into the freed slots. Operands contracted later must
+    // still name their own graph nodes.
+    let original = Net::from_scalar(2.0).n_mul([
+        tensor(&[1], &[1.0, 2.0]),
+        tensor(&[1, 2], &[1.0, 2.0, 3.0, 4.0]),
+        Net::from_scalar(3.0),
+        tensor(&[2, 3], &[5.0, -1.0, 2.0, 7.0]),
+        tensor(&[3, 4], &[-2.0, 3.0, 1.0, 1.0]),
+        Net::from_scalar(5.0),
+        tensor(&[4, 5], &[4.0, 0.0, -3.0, 2.0]),
+    ]);
+
+    let lib = Lib::new();
+    let fn_lib = FnLib::new();
+    let mut expected = original.clone();
+    expected
+        .execute::<Sequential, SmallestDegree, LibTensor, Lib, FnLib>(&lib, &fn_lib)
+        .unwrap();
+    let ExecutionResult::Val(expected) = expected.result_tensor::<LibTensor, Lib>(&lib).unwrap()
+    else {
+        panic!("expected the tensor with the open chain end");
+    };
+    let mut actual = original;
+    actual
+        .execute::<Sequential, SmallestDegreeIter<16>, LibTensor, Lib, FnLib>(&lib, &fn_lib)
+        .unwrap();
+    let ExecutionResult::Val(actual) = actual.result_tensor::<LibTensor, Lib>(&lib).unwrap() else {
+        panic!("expected the tensor with the open chain end");
+    };
+    assert_eq!(actual.structure, expected.structure);
+    assert_eq!(actual.data, expected.data);
+}
+
+#[test]
 fn ready_sum_boundary_closure_matches_coordinates_across_execution_strategies() {
     use crate::{
         network::{

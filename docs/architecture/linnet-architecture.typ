@@ -57,15 +57,12 @@ edge-pair inclusion semantics, so an edge crossing a subset boundary becomes a s
 than silently disappearing. Concrete forms such as `SuBitGraph`, `InternalSubGraph`,
 `HedgeNode`, `Cycle`, and `OrientedCut` add the invariants needed by particular algorithms.
 
-The default build resolves `DefaultNodeStore` to `NodeStorageVec`. The two forest-backed node
-stores are mutually exclusive features. The distinction matters: vector-backed node
-identification can invalidate previous `NodeIndex` values, whereas the forest-backed
-implementations preserve identification history until it is explicitly forgotten.
-`HedgeGraph::into_node_store` consumes a graph and rebuilds only its node store: node order,
-payloads, and incidence are retained, while edge and half-edge storage and IDs move unchanged.
-The conversion preserves active isolated nodes but rejects retained forest identification roots;
-callers must explicitly forget that history first when compaction and changed node IDs are
-acceptable.
+Nodes live in `NodeForest`, the only node store. Each node's crown is a ring of its half-edges
+that ascends from the smallest one in every state, so crown order never depends on history.
+Identification never renumbers: absorbed nodes keep their slot and payload until
+`forget_identification_history` compacts them away, so earlier `NodeIndex` values stay valid
+until then. `node_bound()` counts every slot and is the size for dense side tables; `n_live()`
+counts the nodes that were not absorbed.
 
 == Construction and data flow
 
@@ -81,7 +78,8 @@ HedgeGraphBuilder
 ```
 
 Mutation methods update all three stores. Adding an edge extends half-edge data, edge storage,
-and node incidence. Extraction and deletion partition the same half-edge set in each store.
+and node incidence; `add_node` appends an empty-crown node in place. Neither renumbers existing
+nodes, edges or half-edges. Extraction and deletion partition the same half-edge set in each store.
 Complete-node extraction also moves explicitly selected empty-crown nodes, which have no
 half-edge representation in that partition.
 Joining extends the stores and then revalidates node incidence; sewing converts matched identity

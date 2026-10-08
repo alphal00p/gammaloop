@@ -469,17 +469,17 @@ fn parse_scalar_tensors_step_by() {
       layout = "neato";
 
       4	 [label = "∏"];
-      3	 [label = "T:(d(mink(4,2)))^2"];
       1	 [label = "S:a*c"];
       2	 [label = "T:b(mink(4,1))"];
       0	 [label = "T:d(mink(4,1))"];
+      3	 [label = "T:(d(mink(4,2)))^2"];
       ext0	 [style=invis];
       4:0:s	-> ext0	 [id=0 color="red"];
       1:5:s	-> 4:4:s	 [id=1  color="red:blue;0.5"];
       2:6:s	-> 4:3:s	 [id=2  color="red:blue;0.5"];
       2:7:s	-> 0:9:s	 [id=3 dir=none  color="red:blue;0.5" label="mink4|1"];
       0:8:s	-> 4:2:s	 [id=4  color="red:blue;0.5"];
-      3:1:s	-> 4:10:s	 [id=5  color="red:blue;0.5"];
+      3:10:s	-> 4:1:s	 [id=5  color="red:blue;0.5"];
     }
     "#
     );
@@ -499,8 +499,8 @@ fn parse_scalar_tensors_step_by() {
       ext0	 [style=invis];
       2:0:s	-> ext0	 [id=0 color="red"];
       1:5:s	-> 2:4:s	 [id=1  color="red:blue;0.5"];
-      0:1:s	-> 2:3:s	 [id=2  color="red:blue;0.5"];
-      3:6:s	-> 2:2:s	 [id=3  color="red:blue;0.5"];
+      3:6:s	-> 2:3:s	 [id=2  color="red:blue;0.5"];
+      0:2:s	-> 2:1:s	 [id=3  color="red:blue;0.5"];
     }
     "#
     );

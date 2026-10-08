@@ -115,6 +115,7 @@ impl FeynmanDiagram {
             let tag = attributes
                 .get("is_cut")
                 .map(|value| value.parse::<usize>().expect("validated cut tag"));
+            let mut generation_leg = None;
             let (source, sink) = match pair {
                 HedgePair::Paired { source, sink } | HedgePair::Split { source, sink, .. } => {
                     if tag.is_some() {
@@ -147,25 +148,31 @@ impl FeynmanDiagram {
                         .get("name")
                         .cloned()
                         .unwrap_or_else(|| format!("ext{index}"));
-                    let external = if sewn {
-                        Some(builder.add_generation_external(name, index, state, connection))
-                    } else {
-                        edge.external = Some(ExternalLeg {
-                            name,
-                            index,
-                            state,
-                            connection,
-                        });
-                        None
+                    let leg = ExternalLeg {
+                        name,
+                        index,
+                        state,
+                        connection,
                     };
-                    let internal = Some(nodes[&parsed.node_id(hedge)]);
+                    let internal = nodes[&parsed.node_id(hedge)];
+                    if sewn {
+                        generation_leg = Some((internal, flow, leg));
+                    } else {
+                        edge.external = Some(leg);
+                    }
                     match flow {
-                        Flow::Sink => (external, internal),
-                        Flow::Source => (internal, external),
+                        Flow::Sink => (None, Some(internal)),
+                        Flow::Source => (Some(internal), None),
                     }
                 }
             };
-            let added = builder.add_edge(source, sink, edge)?;
+            // Slots are assigned from the matched interactions below.
+            let added = match generation_leg {
+                Some((vertex, flow, leg)) => {
+                    builder.add_generation_external(vertex, flow, edge, VertexSlot(0), leg)?
+                }
+                None => builder.add_edge(source, sink, edge)?,
+            };
             if let Some(value) = attributes.get("lmb_id") {
                 let slot =
                     value

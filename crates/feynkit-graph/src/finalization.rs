@@ -22,78 +22,47 @@ impl FeynmanDiagramBuilder {
     pub(super) fn finalize(self) -> Result<FeynmanDiagram, DiagramError> {
         let generated = !self.generation_externals.is_empty();
         let mut external_indices = BTreeSet::new();
-        for (vertex, external) in &self.generation_externals {
+        for external in self.generation_externals.values() {
             if !external_indices.insert(external.index) {
                 return Err(DiagramError::DuplicateExternalIndex(external.index));
             }
-            let degree = self
-                .edges
-                .iter()
-                .map(|(ends, _)| {
-                    usize::from(ends.source == Some(*vertex))
-                        + usize::from(ends.target == Some(*vertex))
-                })
-                .sum();
-            if degree != 1 {
-                return Err(DiagramError::InvalidExternalDegree {
-                    vertex: vertex.0,
-                    degree,
-                });
-            }
-            if self.vertices[vertex.0].numerator != Atom::one() {
-                return Err(DiagramError::ExternalVertexNumerator { vertex: vertex.0 });
-            }
         }
         let mut builder = HedgeGraphBuilder::new();
-        let mut vertices = BTreeMap::new();
-        for (id, vertex) in self.vertices.iter().enumerate() {
-            if !self.generation_externals.contains_key(&VertexId(id)) {
-                vertices.insert(VertexId(id), builder.add_node(vertex.clone()));
-            }
-        }
+        let vertices: BTreeMap<_, _> = self
+            .vertices
+            .iter()
+            .enumerate()
+            .map(|(id, vertex)| (VertexId(id), builder.add_node(vertex.clone())))
+            .collect();
         let mut connections = BTreeMap::<usize, (Option<usize>, Option<usize>)>::new();
         let mut externals = BTreeMap::new();
         let mut internal = Vec::new();
         for (id, (endpoints, edge)) in self.edges.iter().enumerate() {
-            let external = endpoints
-                .source
-                .and_then(|v| self.generation_externals.get(&v))
-                .map(|leg| (leg.clone(), endpoints.target, Flow::Sink, edge.target_slot))
-                .or_else(|| {
-                    endpoints
-                        .target
-                        .and_then(|v| self.generation_externals.get(&v))
-                        .map(|leg| {
-                            (
-                                leg.clone(),
-                                endpoints.source,
-                                Flow::Source,
-                                edge.source_slot,
-                            )
-                        })
-                });
-            if let Some((leg, attachment, old_flow, slot)) = external {
-                if edge.numerator != Atom::one() {
-                    return Err(DiagramError::ExternalEdgeNumerator { edge: id });
-                }
-                let attachment = attachment
-                    .filter(|v| vertices.contains_key(v))
-                    .ok_or(DiagramError::ExternalToExternalEdge { edge: id })?;
-                let entry = connections.entry(leg.connection).or_default();
-                let target = match leg.state {
-                    ExternalState::Incoming => &mut entry.0,
-                    ExternalState::Outgoing => &mut entry.1,
-                };
-                if target.replace(id).is_some() {
-                    return Err(DiagramError::InvalidExternalConnectionStates {
-                        connection: leg.connection,
-                        state: leg.state.as_str(),
-                    });
-                }
-                externals.insert(id, (leg, attachment, old_flow, slot));
-            } else {
+            let Some(leg) = self.generation_externals.get(&EdgeId(id)) else {
                 internal.push(id);
+                continue;
+            };
+            // The flow and slot of the leg at its attachment vertex.
+            let (attachment, old_flow, slot) = match (endpoints.source, endpoints.target) {
+                (Some(vertex), None) => (vertex, Flow::Source, edge.source_slot),
+                (None, Some(vertex)) => (vertex, Flow::Sink, edge.target_slot),
+                _ => unreachable!("generated legs are dangling edges"),
+            };
+            if edge.numerator != Atom::one() {
+                return Err(DiagramError::ExternalEdgeNumerator { edge: id });
             }
+            let entry = connections.entry(leg.connection).or_default();
+            let target = match leg.state {
+                ExternalState::Incoming => &mut entry.0,
+                ExternalState::Outgoing => &mut entry.1,
+            };
+            if target.replace(id).is_some() {
+                return Err(DiagramError::InvalidExternalConnectionStates {
+                    connection: leg.connection,
+                    state: leg.state.as_str(),
+                });
+            }
+            externals.insert(id, (leg.clone(), attachment, old_flow, slot));
         }
         let orientation = |edge: &DiagramEdge| -> Result<Orientation, DiagramError> {
             Ok(if !edge.directed {
@@ -537,24 +506,20 @@ impl FeynmanDiagramBuilder {
         if generated {
             let mut incoming = BTreeSet::new();
             let mut outgoing = BTreeSet::new();
-            for (edge, (endpoints, _)) in self.edges.iter().enumerate() {
-                for (vertex, endpoint) in [
-                    (endpoints.source, DiagramEndpoint::Source),
-                    (endpoints.target, DiagramEndpoint::Target),
-                ] {
-                    if let Some(external) =
-                        vertex.and_then(|vertex| self.generation_externals.get(&vertex))
-                    {
-                        let half_edge = DiagramHalfEdge {
-                            edge: EdgeId(edge),
-                            endpoint,
-                        };
-                        match external.state {
-                            ExternalState::Incoming => incoming.insert(half_edge),
-                            ExternalState::Outgoing => outgoing.insert(half_edge),
-                        };
-                    }
-                }
+            for (edge, external) in &self.generation_externals {
+                // The provisional end of the leg away from its attachment vertex.
+                let half_edge = DiagramHalfEdge {
+                    edge: *edge,
+                    endpoint: if self.edges[edge.0].0.source.is_none() {
+                        DiagramEndpoint::Source
+                    } else {
+                        DiagramEndpoint::Target
+                    },
+                };
+                match external.state {
+                    ExternalState::Incoming => incoming.insert(half_edge),
+                    ExternalState::Outgoing => outgoing.insert(half_edge),
+                };
             }
             diagram.finalize_cut_indices(&half_edges, &incoming, &outgoing)?;
         }

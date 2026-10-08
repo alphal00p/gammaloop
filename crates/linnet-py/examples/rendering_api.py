@@ -50,9 +50,10 @@ def _(mo):
     mo.md(r"""
     # Linnet Python rendering
 
-    A graph's ordinary notebook representation is a model-neutral Linnest
-    drawing. `Graph._repr_svg_()` powers the automatic display; `to_svg()` and
-    `render(path)` expose the same embedded Rust Typst pipeline explicitly.
+    A graph displays directly in a notebook. Ordinary drawings use native SVG
+    geometry and Typst labels. `render()` captures a `DiagramRender` snapshot;
+    use its `to_svg()` or `save(path)` methods to inspect or export the result.
+    Advanced settings use the embedded Typst drawing pipeline.
 
     Domain-specific conventions are ordinary Python render settings, not modes
     built into Linnet. The example data below is an application workflow: every
@@ -64,14 +65,6 @@ def _(mo):
 
 @app.cell
 def _(lp, mo):
-    node_store = mo.ui.dropdown(
-        options={
-            "Dense Vec": lp.NodeStore.Vec,
-            "Identification Forest": lp.NodeStore.Forest,
-        },
-        value="Dense Vec",
-        label="Node store",
-    )
     layout_algorithm = mo.ui.dropdown(
         options={
             "Stable layered": lp.LayoutAlgorithm.StableLayered,
@@ -89,12 +82,12 @@ def _(lp, mo):
         label="Half-edge IDs (optional)",
     )
     controls = mo.hstack(
-        [node_store, layout_algorithm, custom_theme, show_half_edge_ids],
+        [layout_algorithm, custom_theme, show_half_edge_ids],
         justify="start",
         gap=1.5,
     )
     controls
-    return custom_theme, layout_algorithm, node_store, show_half_edge_ids
+    return custom_theme, layout_algorithm, show_half_edge_ids
 
 
 @app.cell
@@ -106,7 +99,6 @@ def _(
     layout_algorithm,
     lp,
     mo,
-    node_store,
     show_half_edge_ids,
 ):
     runtime_context = object()
@@ -119,98 +111,124 @@ def _(
     audit_data = TaskRecord("compliance", 4, runtime_context)
     publish_data = TaskRecord("delivery", 2, runtime_context)
 
-    receive = lp.node("receive", data=receive_data)
-    parse = lp.node("parse", data=parse_data)
-    validate = lp.node("validate", data=validate_data)
-    normalize = lp.node("normalize", data=normalize_data)
-    quarantine = lp.node("quarantine", data=quarantine_data)
-    index = lp.node("index", data=index_data)
-    audit = lp.node("audit", data=audit_data)
-    publish = lp.node("publish", data=publish_data)
+    receive = lp.Node("receive", data=receive_data)
+    parse = lp.Node("parse", data=parse_data)
+    validate = lp.Node("validate", data=validate_data)
+    normalize = lp.Node("normalize", data=normalize_data)
+    quarantine = lp.Node("quarantine", data=quarantine_data)
+    index = lp.Node("index", data=index_data)
+    audit = lp.Node("audit", data=audit_data)
+    publish = lp.Node("publish", data=publish_data)
 
     request_channel = ChannelRecord("https", 256, runtime_context)
     request_port = EndpointRecord("request body", runtime_context)
-    graph = lp.build(
-        receive,
-        parse,
-        validate,
-        normalize,
-        quarantine,
-        index,
-        audit,
-        publish,
-        lp.edge(
-            lp.sink(receive, data=request_port),
-            "requests",
-            data=request_channel,
-        ),
-        lp.edge(
-            lp.source(
-                receive,
-                data=EndpointRecord("accepted documents", runtime_context),
+    graph = lp.Graph(
+        nodes=[receive, parse, validate, normalize, quarantine, index, audit, publish],
+        edges=[
+            lp.Edge(
+                sink=lp.HalfEdge(receive, data=request_port),
+                name="requests",
+                data=request_channel,
             ),
-            "decode queue",
-            lp.sink(parse, data=EndpointRecord("raw documents", runtime_context)),
-            data=ChannelRecord("memory queue", 128, runtime_context),
-        ),
-        lp.edge(
-            lp.source(parse, data=EndpointRecord("syntax tree", runtime_context)),
-            "parsed documents",
-            lp.sink(validate, data=EndpointRecord("candidate", runtime_context)),
-            data=ChannelRecord("bounded queue", 96, runtime_context),
-        ),
-        lp.edge(
-            lp.source(validate, data=EndpointRecord("valid", runtime_context)),
-            "accepted",
-            lp.sink(normalize, data=EndpointRecord("source record", runtime_context)),
-            data=ChannelRecord("stream", 128, runtime_context),
-        ),
-        lp.edge(
-            lp.source(validate, data=EndpointRecord("rejected", runtime_context)),
-            "rejected",
-            lp.sink(
-                quarantine,
-                data=EndpointRecord("failed record", runtime_context),
+            lp.Edge(
+                source=lp.HalfEdge(
+                    receive, data=EndpointRecord("accepted documents", runtime_context)
+                ),
+                sink=lp.HalfEdge(
+                    parse, data=EndpointRecord("raw documents", runtime_context)
+                ),
+                name="decode queue",
+                data=ChannelRecord("memory queue", 128, runtime_context),
             ),
-            data=ChannelRecord("durable queue", 512, runtime_context),
-        ),
-        lp.edge(
-            lp.source(normalize, data=EndpointRecord("canonical", runtime_context)),
-            "index feed",
-            lp.sink(index, data=EndpointRecord("document", runtime_context)),
-            data=ChannelRecord("batch", 64, runtime_context),
-        ),
-        lp.edge(
-            lp.source(normalize, data=EndpointRecord("change log", runtime_context)),
-            "normalization log",
-            lp.sink(audit, data=EndpointRecord("normal changes", runtime_context)),
-            data=ChannelRecord("append log", 1024, runtime_context),
-        ),
-        lp.edge(
-            lp.source(quarantine, data=EndpointRecord("incident", runtime_context)),
-            "incident log",
-            lp.sink(audit, data=EndpointRecord("exceptions", runtime_context)),
-            data=ChannelRecord("append log", 1024, runtime_context),
-        ),
-        lp.edge(
-            lp.source(index, data=EndpointRecord("index version", runtime_context)),
-            "search snapshot",
-            lp.sink(publish, data=EndpointRecord("search input", runtime_context)),
-            data=ChannelRecord("snapshot", 8, runtime_context),
-        ),
-        lp.edge(
-            lp.source(audit, data=EndpointRecord("approval", runtime_context)),
-            "release approval",
-            lp.sink(publish, data=EndpointRecord("approval input", runtime_context)),
-            data=ChannelRecord("event", 32, runtime_context),
-        ),
-        lp.edge(
-            lp.source(publish, data=EndpointRecord("release", runtime_context)),
-            "published documents",
-            data=ChannelRecord("https", 256, runtime_context),
-        ),
+            lp.Edge(
+                source=lp.HalfEdge(
+                    parse, data=EndpointRecord("syntax tree", runtime_context)
+                ),
+                sink=lp.HalfEdge(
+                    validate, data=EndpointRecord("candidate", runtime_context)
+                ),
+                name="parsed documents",
+                data=ChannelRecord("bounded queue", 96, runtime_context),
+            ),
+            lp.Edge(
+                source=lp.HalfEdge(
+                    validate, data=EndpointRecord("valid", runtime_context)
+                ),
+                sink=lp.HalfEdge(
+                    normalize, data=EndpointRecord("source record", runtime_context)
+                ),
+                name="accepted",
+                data=ChannelRecord("stream", 128, runtime_context),
+            ),
+            lp.Edge(
+                source=lp.HalfEdge(
+                    validate, data=EndpointRecord("rejected", runtime_context)
+                ),
+                sink=lp.HalfEdge(
+                    quarantine, data=EndpointRecord("failed record", runtime_context)
+                ),
+                name="rejected",
+                data=ChannelRecord("durable queue", 512, runtime_context),
+            ),
+            lp.Edge(
+                source=lp.HalfEdge(
+                    normalize, data=EndpointRecord("canonical", runtime_context)
+                ),
+                sink=lp.HalfEdge(
+                    index, data=EndpointRecord("document", runtime_context)
+                ),
+                name="index feed",
+                data=ChannelRecord("batch", 64, runtime_context),
+            ),
+            lp.Edge(
+                source=lp.HalfEdge(
+                    normalize, data=EndpointRecord("change log", runtime_context)
+                ),
+                sink=lp.HalfEdge(
+                    audit, data=EndpointRecord("normal changes", runtime_context)
+                ),
+                name="normalization log",
+                data=ChannelRecord("append log", 1024, runtime_context),
+            ),
+            lp.Edge(
+                source=lp.HalfEdge(
+                    quarantine, data=EndpointRecord("incident", runtime_context)
+                ),
+                sink=lp.HalfEdge(
+                    audit, data=EndpointRecord("exceptions", runtime_context)
+                ),
+                name="incident log",
+                data=ChannelRecord("append log", 1024, runtime_context),
+            ),
+            lp.Edge(
+                source=lp.HalfEdge(
+                    index, data=EndpointRecord("index version", runtime_context)
+                ),
+                sink=lp.HalfEdge(
+                    publish, data=EndpointRecord("search input", runtime_context)
+                ),
+                name="search snapshot",
+                data=ChannelRecord("snapshot", 8, runtime_context),
+            ),
+            lp.Edge(
+                source=lp.HalfEdge(
+                    audit, data=EndpointRecord("approval", runtime_context)
+                ),
+                sink=lp.HalfEdge(
+                    publish, data=EndpointRecord("approval input", runtime_context)
+                ),
+                name="release approval",
+                data=ChannelRecord("event", 32, runtime_context),
+            ),
+            lp.Edge(
+                source=lp.HalfEdge(
+                    publish, data=EndpointRecord("release", runtime_context)
+                ),
+                name="published documents",
+                data=ChannelRecord("https", 256, runtime_context),
+            ),
+        ],
         name="document-intake-workflow",
-        node_store=node_store.value,
     )
 
     if layout_algorithm.value == lp.LayoutAlgorithm.Force:

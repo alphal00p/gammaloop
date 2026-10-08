@@ -3,13 +3,11 @@ use ahash::AHashMap;
 use super::{
     builder::HedgeGraphBuilder,
     involution::{HedgePair, Orientation},
-    nodestore::{NodeStorageOps, NodeStorageVec},
+    nodestore::NodeStorageOps,
     HedgeGraph, HedgeGraphError,
 };
 
-impl<N: Clone, E: Clone> From<symbolica::graph::Graph<N, E>>
-    for HedgeGraph<E, N, (), NodeStorageVec<N>>
-{
+impl<N: Clone, E: Clone> From<symbolica::graph::Graph<N, E>> for HedgeGraph<E, N, ()> {
     fn from(graph: symbolica::graph::Graph<N, E>) -> Self {
         let mut builder = HedgeGraphBuilder::new();
         let mut map = AHashMap::new();

@@ -4,13 +4,13 @@ use super::{ignore, Canonization};
 use crate::half_edge::{
     builder::HedgeGraphBuilder,
     involution::{Flow, Hedge, Orientation},
-    nodestore::{NodeStorageOps, NodeStorageVec},
+    nodestore::{NodeForest, NodeStorageOps},
     HedgeGraph, NodeIndex,
 };
 use crate::{half_edge::swap::Swap, permutation::Permutation};
 
 /// Edge data, node data and half-edge data are all keys.
-type G = HedgeGraph<u8, u8, u8, NodeStorageVec<u8>>;
+type G = HedgeGraph<u8, u8, u8, NodeForest<u8>>;
 
 #[derive(Clone, Copy, Debug)]
 enum Element {
@@ -897,13 +897,13 @@ mod graphica {
         builder::HedgeGraphBuilder,
         canon::ignore,
         involution::{Flow, HedgePair, Orientation},
-        nodestore::NodeStorageVec,
+        nodestore::NodeForest,
         HedgeGraph,
     };
 
     /// Node data: 0 for vertices, the leg label for external nodes.
     type Plain = Graph<usize, u8>;
-    type L = HedgeGraph<u8, usize, usize, NodeStorageVec<usize>>;
+    type L = HedgeGraph<u8, usize, usize, NodeForest<usize>>;
 
     fn aut(g: &Plain) -> u128 {
         g.canonize()
@@ -1170,7 +1170,7 @@ fn many_distinct_keys_use_the_dense_colour_table() {
             };
             builder.add_edge(a.add_data(ka), b.add_data(kb), e, Orientation::Undirected);
         }
-        builder.build::<NodeStorageVec<u8>>()
+        builder.build::<NodeForest<u8>>()
     };
     let (g, swapped) = (build(false), build(true));
     let mut flat = super::flat::Flat::default();

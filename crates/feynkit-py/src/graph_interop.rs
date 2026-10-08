@@ -10,7 +10,7 @@ use pyo3::{
     PyTraverseError, PyVisit,
     exceptions::{PyRuntimeError, PyValueError},
     prelude::*,
-    types::{PyDict, PyTuple},
+    types::PyDict,
 };
 
 use crate::graph::PyFeynmanDiagram;
@@ -240,34 +240,37 @@ impl LinnetExport {
         // Export the complete owner graph even when the caller is a view.
         let diagram = diagram.whole();
         let native = diagram.inner.underlying();
-        let mut items = Vec::new();
+        let node_type = module.getattr("Node")?;
+        let half_edge_type = module.getattr("HalfEdge")?;
+        let edge_type = module.getattr("Edge")?;
+        let mut nodes = Vec::new();
         for vertex in diagram.vertices() {
             let kwargs = PyDict::new(py);
             kwargs.set_item("data", Py::new(py, vertex)?)?;
-            items.push(module.getattr("node")?.call((), Some(&kwargs))?.unbind());
+            nodes.push(node_type.call((), Some(&kwargs))?.unbind());
         }
         let edges = diagram.edges();
+        let mut edge_specs = Vec::new();
         for (pair, edge, data) in native.iter_edges() {
-            let endpoint = |hedge: Hedge, flow: Flow| -> PyResult<Py<PyAny>> {
+            let endpoint = |hedge: Hedge| -> PyResult<Py<PyAny>> {
                 let kwargs = PyDict::new(py);
                 kwargs.set_item("data", hedge.0)?;
-                Ok(module
-                    .getattr(match flow {
-                        Flow::Source => "source",
-                        Flow::Sink => "sink",
-                    })?
+                Ok(half_edge_type
                     .call((native.node_id(hedge).0,), Some(&kwargs))?
                     .unbind())
             };
-            let (first, second) = match pair {
-                HedgePair::Paired { source, sink } => (
-                    endpoint(source, Flow::Source)?,
-                    Some(endpoint(sink, Flow::Sink)?),
-                ),
-                HedgePair::Unpaired { hedge, flow } => (endpoint(hedge, flow)?, None),
+            let (source, sink) = match pair {
+                HedgePair::Paired { source, sink } => {
+                    (Some(endpoint(source)?), Some(endpoint(sink)?))
+                }
+                HedgePair::Unpaired { hedge, flow } => match flow {
+                    Flow::Source => (Some(endpoint(hedge)?), None),
+                    Flow::Sink => (None, Some(endpoint(hedge)?)),
+                },
                 HedgePair::Split { .. } => unreachable!("whole diagrams have no split edges"),
             };
             let kwargs = PyDict::new(py);
+            kwargs.set_item("name", format!("e{}", edge.0))?;
             kwargs.set_item("data", Py::new(py, edges[edge.0].clone())?)?;
             kwargs.set_item(
                 "orientation",
@@ -279,18 +282,13 @@ impl LinnetExport {
                         Orientation::Undirected => "Undirected",
                     })?,
             )?;
-            items.push(
-                module
-                    .getattr("edge")?
-                    .call((first, format!("e{}", edge.0), second), Some(&kwargs))?
-                    .unbind(),
-            );
+            edge_specs.push(edge_type.call((source, sink), Some(&kwargs))?.unbind());
         }
         let kwargs = PyDict::new(py);
+        kwargs.set_item("nodes", nodes)?;
+        kwargs.set_item("edges", edge_specs)?;
         kwargs.set_item("name", diagram.inner.name())?;
-        let graph = module
-            .getattr("build")?
-            .call(PyTuple::new(py, items)?, Some(&kwargs))?;
+        let graph = module.getattr("Graph")?.call((), Some(&kwargs))?;
         let mut native_hedges = vec![0; native.n_hedges()];
         let mut exported_hedges = vec![0; native.n_hedges()];
         for hedge in graph.call_method0("half_edges")?.try_iter()? {

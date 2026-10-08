@@ -5,7 +5,10 @@ use itertools::Itertools;
 use linnet::half_edge::{
     HedgeGraph, NodeIndex,
     involution::{EdgeData, EdgeIndex, EdgeVec, Flow, HedgePair},
-    subgraph::{InternalSubGraph, ModifySubSet, SuBitGraph, SubGraphLike, SubSetLike, SubSetOps},
+    subgraph::{
+        BaseSubgraph, InternalSubGraph, ModifySubSet, SuBitGraph, SubGraphLike, SubSetLike,
+        SubSetOps,
+    },
 };
 
 use spenso::{
@@ -485,7 +488,7 @@ impl FeynmanGraph for Graph {
     // }
 
     fn add_signs_to_edges(&self, node_id: NodeIndex) -> Vec<isize> {
-        let node_hairs: SuBitGraph = self.iter_crown(node_id).into();
+        let node_hairs = SuBitGraph::from_hedge_iter(self.iter_crown(node_id), self.n_hedges());
 
         self.iter_edges_of(&node_hairs)
             .map(|(_, edge_index, _)| {

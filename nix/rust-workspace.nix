@@ -567,6 +567,8 @@
       "tests/resources/graphs/uv_tests/rqft_a_3l_no_ghost.dot"
       "tests/resources/graphs/uv_tests/rqft_ghG_3l.dot"
     ];
+    # The nauty validation test reads nauty's driver script and answer files at runtime.
+    linnet = ["crates/linnet/tests/resources/nauty"];
     "gammaloop-integration-tests" = [
       "assets/plot_approach_result.py"
       "examples/api"

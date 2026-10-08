@@ -7,19 +7,18 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use linnet::half_edge::builder::{HedgeData, HedgeGraphBuilder};
 use linnet::half_edge::involution::{EdgeIndex, Flow, Hedge, HedgePair, Orientation};
 use linnet::half_edge::swap::Swap;
-use linnet::half_edge::NodeIndex;
+use linnet::half_edge::{EdgeAccessors, HedgeGraph, NodeIndex};
 use linnet::permutation::Permutation;
 use pyo3::class::gc::{PyTraverseError, PyVisit};
 use pyo3::exceptions::{PyIndexError, PyKeyError, PyReferenceError, PyTypeError, PyValueError};
 use pyo3::prelude::*;
-use pyo3::types::{PyAny, PyDict, PyTuple, PyType};
+use pyo3::types::{PyAny, PyDict, PyType};
 
 use crate::dot::{self, PyDotCodec, PyEdgeValue, PyGlobalData, PyNodeValue};
 use crate::drawing::{
     copy_drawing, drawing_dict, PyEdgeDrawing, PyHalfEdgeDrawing, PyNodeDrawing, EDGE_FIELDS,
     HEDGE_FIELDS, NODE_FIELDS,
 };
-use crate::native_graph::{PyHedgeGraph, PyNodeStore};
 use crate::topology::{PyCutPartition, PyCycle, PyDirectionBasis, PySubgraph, PyTraversalTree};
 
 static SPEC_ID: AtomicU64 = AtomicU64::new(0);
@@ -100,9 +99,9 @@ impl From<Orientation> for PyOrientation {
     }
 }
 
-/// A reusable declarative node description accepted by `build()` and `Graph.add_node()`.
+/// A reusable node description accepted by `Graph` and `Graph.add_node()`.
 #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
-#[pyclass(module = "symbolica.community.graph", unsendable, name = "NodeSpec")]
+#[pyclass(module = "symbolica.community.graph", unsendable, name = "Node")]
 pub struct PyNodeSpec {
     token: u64,
     name: Option<String>,
@@ -133,6 +132,32 @@ impl PyNodeSpec {
 #[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
 #[pymethods]
 impl PyNodeSpec {
+    #[new]
+    #[pyo3(signature = (name=None, *, data=None, drawing=None, **options))]
+    #[gen_stub(skip)]
+    fn new(
+        py: Python<'_>,
+        name: Option<String>,
+        data: Option<Py<PyAny>>,
+        drawing: Option<PyRef<'_, PyNodeDrawing>>,
+        options: Option<&Bound<'_, PyDict>>,
+    ) -> PyResult<Self> {
+        let options = drawing_dict(py, NODE_FIELDS, options)?;
+        let values = if let Some(drawing) = drawing {
+            let values = drawing.clone_values(py)?;
+            values.bind(py).update(options.bind(py).as_mapping())?;
+            values
+        } else {
+            options
+        };
+        Ok(Self {
+            token: SPEC_ID.fetch_add(1, Ordering::Relaxed),
+            name,
+            data: Some(data.unwrap_or_else(|| py.None())),
+            drawing: Some(values),
+        })
+    }
+
     #[getter]
     fn name(&self) -> Option<&str> {
         self.name.as_deref()
@@ -147,8 +172,9 @@ impl PyNodeSpec {
     }
 
     #[setter]
-    fn set_data(&mut self, value: Py<PyAny>) {
-        self.data = Some(value);
+    fn set_data(slf: &Bound<'_, Self>, value: Py<PyAny>) {
+        let old = slf.borrow_mut().data.replace(value);
+        drop(old);
     }
 
     #[getter]
@@ -161,8 +187,8 @@ impl PyNodeSpec {
 
     fn __repr__(&self) -> String {
         match &self.name {
-            Some(name) => format!("node({name:?})"),
-            None => "node()".to_string(),
+            Some(name) => format!("Node({name:?})"),
+            None => "Node()".to_string(),
         }
     }
 
@@ -185,25 +211,11 @@ pub(crate) enum EndpointRole {
     Sink,
 }
 
-impl EndpointRole {
-    fn flow(self) -> PyFlow {
-        match self {
-            Self::Source => PyFlow::Source,
-            Self::Sink => PyFlow::Sink,
-        }
-    }
-}
-
-/// A declarative edge endpoint produced by `source()` or `sink()`.
+/// A reusable incidence description whose role is chosen by its edge endpoint.
 #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
-#[pyclass(
-    module = "symbolica.community.graph",
-    unsendable,
-    name = "HalfEdgeSpec"
-)]
+#[pyclass(module = "symbolica.community.graph", unsendable, name = "HalfEdge")]
 pub struct PyHalfEdgeSpec {
     node: Option<Py<PyAny>>,
-    role: EndpointRole,
     data: Option<Py<PyAny>>,
     drawing: Option<Py<PyDict>>,
 }
@@ -212,9 +224,48 @@ pub struct PyHalfEdgeSpec {
 #[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
 #[pymethods]
 impl PyHalfEdgeSpec {
+    #[new]
+    #[pyo3(signature = (node, *, data=None, drawing=None, **options))]
+    #[gen_stub(skip)]
+    fn new(
+        py: Python<'_>,
+        node: Py<PyAny>,
+        data: Option<Py<PyAny>>,
+        drawing: Option<PyRef<'_, PyHalfEdgeDrawing>>,
+        options: Option<&Bound<'_, PyDict>>,
+    ) -> PyResult<Self> {
+        let target = node.bind(py);
+        if !target.is_instance_of::<PyNodeSpec>()
+            && !target.is_instance_of::<PyNode>()
+            && target.extract::<usize>().is_err()
+            && target.extract::<String>().is_err()
+        {
+            return Err(PyTypeError::new_err(
+                "an endpoint must be a Node, NodeView, integer index, or node name",
+            ));
+        }
+        let options = drawing_dict(py, HEDGE_FIELDS, options)?;
+        let values = if let Some(drawing) = drawing {
+            let values = drawing.clone_values(py)?;
+            values.bind(py).update(options.bind(py).as_mapping())?;
+            values
+        } else {
+            options
+        };
+        Ok(Self {
+            node: Some(node),
+            data: Some(data.unwrap_or_else(|| py.None())),
+            drawing: Some(values),
+        })
+    }
+
     #[getter]
-    fn flow(&self) -> PyFlow {
-        self.role.flow()
+    #[gen_stub(override_return_type(type_repr = "_EndpointTarget"))]
+    fn node(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        self.node
+            .as_ref()
+            .map(|node| node.clone_ref(py))
+            .ok_or_else(|| PyReferenceError::new_err("half-edge specification has been cleared"))
     }
 
     #[getter]
@@ -226,8 +277,9 @@ impl PyHalfEdgeSpec {
     }
 
     #[setter]
-    fn set_data(&mut self, value: Py<PyAny>) {
-        self.data = Some(value);
+    fn set_data(slf: &Bound<'_, Self>, value: Py<PyAny>) {
+        let old = slf.borrow_mut().data.replace(value);
+        drop(old);
     }
 
     #[getter]
@@ -253,13 +305,13 @@ impl PyHalfEdgeSpec {
     }
 }
 
-/// A reusable declarative edge description accepted by `build()` and `Graph.add_edge()`.
+/// A reusable edge description accepted by `Graph` and `Graph.add_edge()`.
 #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
-#[pyclass(module = "symbolica.community.graph", unsendable, name = "EdgeSpec")]
+#[pyclass(module = "symbolica.community.graph", unsendable, name = "Edge")]
 pub struct PyEdgeSpec {
     name: Option<String>,
-    first: Option<Py<PyHalfEdgeSpec>>,
-    second: Option<Py<PyHalfEdgeSpec>>,
+    source: Option<Py<PyHalfEdgeSpec>>,
+    sink: Option<Py<PyHalfEdgeSpec>>,
     data: Option<Py<PyAny>>,
     drawing: Option<Py<PyDict>>,
     orientation: PyOrientation,
@@ -269,6 +321,53 @@ pub struct PyEdgeSpec {
 #[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
 #[pymethods]
 impl PyEdgeSpec {
+    #[new]
+    #[pyo3(signature = (source=None, sink=None, *, name=None, data=None, orientation=PyOrientation::Default, drawing=None, **options))]
+    #[gen_stub(skip)]
+    #[allow(clippy::too_many_arguments)]
+    fn new(
+        py: Python<'_>,
+        source: Option<Py<PyAny>>,
+        sink: Option<Py<PyAny>>,
+        name: Option<String>,
+        data: Option<Py<PyAny>>,
+        orientation: PyOrientation,
+        drawing: Option<PyRef<'_, PyEdgeDrawing>>,
+        options: Option<&Bound<'_, PyDict>>,
+    ) -> PyResult<Self> {
+        if source.is_none() && sink.is_none() {
+            return Err(PyValueError::new_err("an edge needs at least one endpoint"));
+        }
+        let source = source.map(|value| Self::endpoint(py, value)).transpose()?;
+        let sink = sink.map(|value| Self::endpoint(py, value)).transpose()?;
+        let options = drawing_dict(py, EDGE_FIELDS, options)?;
+        let values = if let Some(drawing) = drawing {
+            let values = drawing.clone_values(py)?;
+            values.bind(py).update(options.bind(py).as_mapping())?;
+            values
+        } else {
+            options
+        };
+        Ok(Self {
+            name,
+            source,
+            sink,
+            data: Some(data.unwrap_or_else(|| py.None())),
+            drawing: Some(values),
+            orientation,
+        })
+    }
+
+    #[getter]
+    fn source(&self, py: Python<'_>) -> Option<Py<PyHalfEdgeSpec>> {
+        self.source.as_ref().map(|value| value.clone_ref(py))
+    }
+
+    #[getter]
+    fn sink(&self, py: Python<'_>) -> Option<Py<PyHalfEdgeSpec>> {
+        self.sink.as_ref().map(|value| value.clone_ref(py))
+    }
+
     #[getter]
     fn name(&self) -> Option<&str> {
         self.name.as_deref()
@@ -283,8 +382,9 @@ impl PyEdgeSpec {
     }
 
     #[setter]
-    fn set_data(&mut self, value: Py<PyAny>) {
-        self.data = Some(value);
+    fn set_data(slf: &Bound<'_, Self>, value: Py<PyAny>) {
+        let old = slf.borrow_mut().data.replace(value);
+        drop(old);
     }
 
     #[getter]
@@ -302,164 +402,29 @@ impl PyEdgeSpec {
 
     #[gen_stub(skip)]
     fn __traverse__(&self, visit: PyVisit<'_>) -> Result<(), PyTraverseError> {
-        visit.call(&self.first)?;
-        visit.call(&self.second)?;
+        visit.call(&self.source)?;
+        visit.call(&self.sink)?;
         visit.call(&self.data)?;
         visit.call(&self.drawing)
     }
 
     #[gen_stub(skip)]
     fn __clear__(&mut self) {
-        self.first = None;
-        self.second = None;
+        self.source = None;
+        self.sink = None;
         self.data = None;
         self.drawing = None;
     }
 }
 
-/// Describe a node while preserving its arbitrary Python data by identity.
-#[cfg_attr(
-    feature = "python_stubgen",
-    pyo3_stub_gen::derive::gen_stub_pyfunction(
-        module = "symbolica.community.graph",
-        python = r#"
-    import typing
-
-    def node(name: _OptionalString = None, *, data: typing.Any = None, label: _OptionalStaticContent = ..., placement: _PlacementValue = ..., shift: _DrawingPoint = ..., rank: _OptionalInteger = ..., minimum_size: _OptionalNumber = ..., maximum_size: _OptionalNumber = ..., style: _OptionalStyle = ..., label_style: _OptionalStyle = ..., extensions: _NativeDict = ...) -> NodeSpec:
-        """Describe a node while preserving its arbitrary Python data by identity."""
-        ...
-"#
-    )
-)]
-#[pyfunction(signature = (name=None, *, data=None, **drawing))]
-pub fn node(
-    py: Python<'_>,
-    name: Option<String>,
-    data: Option<Py<PyAny>>,
-    drawing: Option<&Bound<'_, PyDict>>,
-) -> PyResult<PyNodeSpec> {
-    Ok(PyNodeSpec {
-        token: SPEC_ID.fetch_add(1, Ordering::Relaxed),
-        name,
-        data: Some(data.unwrap_or_else(|| py.None())),
-        drawing: Some(drawing_dict(py, NODE_FIELDS, drawing)?),
-    })
-}
-
-fn endpoint(
-    py: Python<'_>,
-    node: Py<PyAny>,
-    role: EndpointRole,
-    data: Option<Py<PyAny>>,
-    drawing: Option<&Bound<'_, PyDict>>,
-) -> PyResult<PyHalfEdgeSpec> {
-    let target = node.bind(py);
-    if !target.is_instance_of::<PyNodeSpec>()
-        && !target.is_instance_of::<PyNode>()
-        && target.extract::<usize>().is_err()
-        && target.extract::<String>().is_err()
-    {
-        return Err(PyTypeError::new_err(
-            "an endpoint target must be a NodeSpec, live Node, integer index, or node name",
-        ));
-    }
-    Ok(PyHalfEdgeSpec {
-        node: Some(node),
-        role,
-        data: Some(data.unwrap_or_else(|| py.None())),
-        drawing: Some(drawing_dict(py, HEDGE_FIELDS, drawing)?),
-    })
-}
-
-/// Attach a source endpoint resolved by `build()` or `Graph.add_edge()`.
-#[cfg_attr(
-    feature = "python_stubgen",
-    pyo3_stub_gen::derive::gen_stub_pyfunction(
-        module = "symbolica.community.graph",
-        python = r#"
-    import typing
-
-    def source(node: _EndpointTarget, *, data: typing.Any = None, label: _OptionalStaticContent = ..., statement: _DrawingString = ..., port_label: _DrawingString = ..., compass: _CompassValue = ..., anchor: _AnchorValue = ..., routing: _RoutingValue = ..., style: _OptionalStyleLayers = ..., extensions: _NativeDict = ...) -> HalfEdgeSpec:
-        """Attach a source endpoint. Build resolves specs, names, indices, and live-node keys; incremental insertion resolves current graph references."""
-        ...
-"#
-    )
-)]
-#[pyfunction(signature = (node, *, data=None, **drawing))]
-pub fn source(
-    py: Python<'_>,
-    node: Py<PyAny>,
-    data: Option<Py<PyAny>>,
-    drawing: Option<&Bound<'_, PyDict>>,
-) -> PyResult<PyHalfEdgeSpec> {
-    endpoint(py, node, EndpointRole::Source, data, drawing)
-}
-
-/// Attach a sink endpoint resolved by `build()` or `Graph.add_edge()`.
-#[cfg_attr(
-    feature = "python_stubgen",
-    pyo3_stub_gen::derive::gen_stub_pyfunction(
-        module = "symbolica.community.graph",
-        python = r#"
-    import typing
-
-    def sink(node: _EndpointTarget, *, data: typing.Any = None, label: _OptionalStaticContent = ..., statement: _DrawingString = ..., port_label: _DrawingString = ..., compass: _CompassValue = ..., anchor: _AnchorValue = ..., routing: _RoutingValue = ..., style: _OptionalStyleLayers = ..., extensions: _NativeDict = ...) -> HalfEdgeSpec:
-        """Attach a sink endpoint. Build resolves specs, names, indices, and live-node keys; incremental insertion resolves current graph references."""
-        ...
-"#
-    )
-)]
-#[pyfunction(signature = (node, *, data=None, **drawing))]
-pub fn sink(
-    py: Python<'_>,
-    node: Py<PyAny>,
-    data: Option<Py<PyAny>>,
-    drawing: Option<&Bound<'_, PyDict>>,
-) -> PyResult<PyHalfEdgeSpec> {
-    endpoint(py, node, EndpointRole::Sink, data, drawing)
-}
-
-/// Describe an edge from one or two endpoint specs.
-#[cfg_attr(
-    feature = "python_stubgen",
-    pyo3_stub_gen::derive::gen_stub_pyfunction(
-        module = "symbolica.community.graph",
-        python = r#"
-    import typing
-
-    def edge(first: HalfEdgeSpec, name: _OptionalString = None, second: _OptionalHalfEdgeSpec = None, *, data: typing.Any = None, orientation: Orientation = Orientation.Default, label: _OptionalStaticContent = ..., placement: _PlacementValue = ..., label_position: _DrawingPoint = ..., label_offset: _OptionalNumber = ..., label_angle: _DrawingAngle = ..., bend: _DrawingAngle = ..., routing: _RoutingValue = ..., minimum_length: _OptionalInteger = ..., same_rank: _OptionalBoolean = ..., style: _OptionalStyleLayers = ..., label_style: _OptionalStyle = ..., decoration: _DrawingDecoration = ..., extensions: _NativeDict = ...) -> EdgeSpec:
-        """Describe an edge from one or two endpoint specs."""
-        ...
-"#
-    )
-)]
-#[pyfunction(signature = (first, name=None, second=None, *, data=None, orientation=PyOrientation::Default, **drawing))]
-pub fn edge(
-    py: Python<'_>,
-    first: Py<PyHalfEdgeSpec>,
-    name: Option<String>,
-    second: Option<Py<PyHalfEdgeSpec>>,
-    data: Option<Py<PyAny>>,
-    orientation: PyOrientation,
-    drawing: Option<&Bound<'_, PyDict>>,
-) -> PyResult<PyEdgeSpec> {
-    if let Some(second) = &second {
-        let first_role = first.borrow(py).role;
-        let second_role = second.borrow(py).role;
-        if first_role == second_role {
-            return Err(PyValueError::new_err(
-                "an internal edge needs one source and one sink",
-            ));
+impl PyEdgeSpec {
+    fn endpoint(py: Python<'_>, value: Py<PyAny>) -> PyResult<Py<PyHalfEdgeSpec>> {
+        if value.bind(py).is_instance_of::<PyHalfEdgeSpec>() {
+            value.extract(py).map_err(Into::into)
+        } else {
+            Py::new(py, PyHalfEdgeSpec::new(py, value, None, None, None)?)
         }
     }
-    Ok(PyEdgeSpec {
-        name,
-        first: Some(first),
-        second,
-        data: Some(data.unwrap_or_else(|| py.None())),
-        drawing: Some(drawing_dict(py, EDGE_FIELDS, drawing)?),
-        orientation,
-    })
 }
 
 pub(crate) struct NodeRecord {
@@ -498,6 +463,9 @@ pub(crate) struct EdgeRecord {
     pub(crate) drawing: Py<PyDict>,
 }
 
+/// The Linnet graph behind a Python graph.
+pub(crate) type PyHedgeGraph = HedgeGraph<EdgeRecord, NodeRecord, HalfEdgeRecord>;
+
 pub(crate) struct IncrementalEdgeRecords {
     pub(crate) source: Option<HedgeData<HalfEdgeRecord>>,
     pub(crate) sink: Option<HedgeData<HalfEdgeRecord>>,
@@ -522,17 +490,23 @@ pub(crate) struct GraphState {
     pub(crate) codec: Option<Py<PyDotCodec>>,
     pub(crate) render_config: Py<PyAny>,
     pub(crate) revision: u64,
+    pub(crate) element_epoch: u64,
 }
 
 impl GraphState {
     pub(crate) fn copy_graph(&self, py: Python<'_>) -> PyResult<PyHedgeGraph> {
-        self.graph.copy(py)
+        self.graph.map_data_ref_result(
+            |_, _, node| node.copy(py),
+            |_, _, _, edge| edge.map_result(|edge| edge.copy(py)),
+            |(_, half_edge)| half_edge.copy(py),
+        )
     }
 
     pub(crate) fn copy(&self, py: Python<'_>) -> PyResult<Self> {
         let revision = self.revision;
         let mut state = self.derived(py, self.copy_graph(py)?)?;
         state.revision = revision;
+        state.element_epoch = self.element_epoch;
         Ok(state)
     }
 
@@ -544,6 +518,7 @@ impl GraphState {
             codec: self.codec.as_ref().map(|codec| codec.clone_ref(py)),
             render_config: crate::typst::render_config_copy(py, &self.render_config)?,
             revision: 0,
+            element_epoch: 0,
         })
     }
 }
@@ -554,7 +529,7 @@ impl GraphState {
 /// --------
 /// ```python
 /// from symbolica.community import graph as linnet
-/// graph = linnet.build(linnet.node("source"), linnet.node("sink"))
+/// graph = linnet.Graph(nodes=[linnet.Node("source"), linnet.Node("sink")])
 /// ```
 #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(module = "symbolica.community.graph", unsendable, name = "Graph")]
@@ -563,12 +538,60 @@ pub struct PyGraph {
 }
 
 impl PyGraph {
+    // PyO3 calls this only for supplied arguments, preserving explicit Python None.
+    fn supplied_data(value: &Bound<'_, PyAny>) -> PyResult<Option<Py<PyAny>>> {
+        Ok(Some(value.clone().unbind()))
+    }
+
     pub(crate) fn from_state(state: GraphState) -> Self {
         Self {
             state: RefCell::new(Some(state)),
         }
     }
 
+    /// Construct the common Python graph from a native Linnet graph, mapping every node, edge
+    /// and half-edge payload to its Python data. Structure and orientations are kept.
+    pub fn from_hedge_graph<E, V, H>(
+        py: Python<'_>,
+        graph: &HedgeGraph<E, V, H>,
+        mut node: impl FnMut(&V) -> PyResult<Py<PyAny>>,
+        mut edge: impl FnMut(&E) -> PyResult<Py<PyAny>>,
+        mut hedge: impl FnMut(&H) -> PyResult<Py<PyAny>>,
+    ) -> PyResult<Self> {
+        let graph = graph.map_data_ref_result(
+            |_, _, data| {
+                Ok::<_, PyErr>(NodeRecord {
+                    name: None,
+                    data: node(data)?,
+                    drawing: drawing_dict(py, NODE_FIELDS, None)?,
+                })
+            },
+            |_, _, _, data| {
+                data.map_result(|data| {
+                    Ok(EdgeRecord {
+                        name: None,
+                        data: edge(data)?,
+                        drawing: drawing_dict(py, EDGE_FIELDS, None)?,
+                    })
+                })
+            },
+            |(_, data)| {
+                Ok(HalfEdgeRecord {
+                    data: hedge(data)?,
+                    drawing: drawing_dict(py, HEDGE_FIELDS, None)?,
+                })
+            },
+        )?;
+        Ok(Self::from_state(GraphState {
+            graph,
+            name: None,
+            global_data: PyGlobalData::default(),
+            codec: None,
+            render_config: crate::typst::default_render_config(py)?,
+            revision: 0,
+            element_epoch: 0,
+        }))
+    }
     pub(crate) fn check_revision(&self, revision: u64) -> PyResult<()> {
         let state = self.state.borrow();
         let state = state
@@ -590,22 +613,46 @@ impl PyGraph {
             .ok_or_else(|| PyReferenceError::new_err("graph has been cleared"))
     }
 
+    pub(crate) fn element_epoch(&self) -> PyResult<u64> {
+        self.state
+            .borrow()
+            .as_ref()
+            .map(|state| state.element_epoch)
+            .ok_or_else(|| PyReferenceError::new_err("graph has been cleared"))
+    }
+
+    pub(crate) fn check_element_epoch(&self, epoch: u64) -> PyResult<()> {
+        if self.element_epoch()? != epoch {
+            return Err(PyReferenceError::new_err(
+                "this graph element view is stale after a topology transformation",
+            ));
+        }
+        Ok(())
+    }
+
     pub(crate) fn resolve_node(&self, key: &Bound<'_, PyAny>) -> PyResult<usize> {
+        // Integer conversion can invoke Python __index__ and mutate this graph.
+        let index = key.extract::<usize>().ok();
+        let name = if index.is_none() {
+            key.extract::<String>().ok()
+        } else {
+            None
+        };
         let state = self.state.borrow();
         let state = state
             .as_ref()
             .ok_or_else(|| PyReferenceError::new_err("graph has been cleared"))?;
-        if let Ok(index) = key.extract::<usize>() {
+        if let Some(index) = index {
             return (index < state.graph.n_nodes())
                 .then_some(index)
                 .ok_or_else(|| PyIndexError::new_err("node index out of range"));
         }
-        if let Ok(name) = key.extract::<String>() {
+        if let Some(name) = name {
             return state
                 .graph
-                .iter_nodes()
-                .find_map(|(index, _, node)| {
-                    (node.name.as_deref() == Some(name.as_str())).then_some(index.0)
+                .iter_node_ids()
+                .find_map(|index| {
+                    (state.graph[index].name.as_deref() == Some(name.as_str())).then_some(index.0)
                 })
                 .ok_or_else(|| PyKeyError::new_err(format!("unknown node {name:?}")));
         }
@@ -613,16 +660,23 @@ impl PyGraph {
     }
 
     pub(crate) fn resolve_edge(&self, key: &Bound<'_, PyAny>) -> PyResult<usize> {
+        // Integer conversion can invoke Python __index__ and mutate this graph.
+        let index = key.extract::<usize>().ok();
+        let name = if index.is_none() {
+            key.extract::<String>().ok()
+        } else {
+            None
+        };
         let state = self.state.borrow();
         let state = state
             .as_ref()
             .ok_or_else(|| PyReferenceError::new_err("graph has been cleared"))?;
-        if let Ok(index) = key.extract::<usize>() {
+        if let Some(index) = index {
             return (index < state.graph.n_edges())
                 .then_some(index)
                 .ok_or_else(|| PyIndexError::new_err("edge index out of range"));
         }
-        if let Ok(name) = key.extract::<String>() {
+        if let Some(name) = name {
             return state
                 .graph
                 .iter_edges()
@@ -640,13 +694,13 @@ impl PyGraph {
         owner: &Py<PyGraph>,
         key: &Bound<'_, PyAny>,
     ) -> PyResult<usize> {
-        let revision = self.revision()?;
+        let epoch = self.element_epoch()?;
         if let Ok(view) = key.extract::<PyRef<'_, PyHalfEdge>>() {
-            return view.index_for_graph(py, owner, revision);
+            return view.index_for_graph(py, owner, epoch);
         }
-        let index = key
-            .extract::<usize>()
-            .map_err(|_| PyTypeError::new_err("half-edge key must be an integer or HalfEdge"))?;
+        let index = key.extract::<usize>().map_err(|_| {
+            PyTypeError::new_err("half-edge key must be an integer or HalfEdgeView")
+        })?;
         let len = self
             .state
             .borrow()
@@ -675,15 +729,15 @@ macro_rules! graph_view {
         pub struct $rust {
             graph: Option<Py<PyGraph>>,
             index: usize,
-            revision: u64,
+            epoch: u64,
         }
 
         impl $rust {
-            pub(crate) fn new(graph: Py<PyGraph>, index: usize, revision: u64) -> Self {
+            pub(crate) fn new(graph: Py<PyGraph>, index: usize, epoch: u64) -> Self {
                 Self {
                     graph: Some(graph),
                     index,
-                    revision,
+                    epoch,
                 }
             }
 
@@ -692,7 +746,7 @@ macro_rules! graph_view {
                     .graph
                     .as_ref()
                     .ok_or_else(|| PyReferenceError::new_err("graph view has been cleared"))?;
-                graph.borrow(py).check_revision(self.revision)?;
+                graph.borrow(py).check_element_epoch(self.epoch)?;
                 Ok(graph.bind(py))
             }
 
@@ -707,19 +761,19 @@ macro_rules! graph_view {
 graph_view!(
     "A live node view whose data and drawing metadata update its graph.",
     PyNode,
-    "Node",
+    "NodeView",
     Node
 );
 graph_view!(
     "A live edge view whose data and drawing metadata update its graph.",
     PyEdge,
-    "Edge",
+    "EdgeView",
     Edge
 );
 graph_view!(
     "A live half-edge view whose data and drawing metadata update its graph.",
     PyHalfEdge,
-    "HalfEdge",
+    "HalfEdgeView",
     Hedge
 );
 
@@ -728,12 +782,12 @@ impl PyNode {
         &self,
         py: Python<'_>,
         graph: &Py<PyGraph>,
-        revision: u64,
+        epoch: u64,
     ) -> PyResult<usize> {
         let owner = self.owner(py)?;
-        if self.revision != revision || !owner.is(graph.bind(py)) {
+        if self.epoch != epoch || !owner.is(graph.bind(py)) {
             return Err(PyValueError::new_err(
-                "node endpoint belongs to a different graph revision",
+                "node endpoint belongs to a different graph",
             ));
         }
         Ok(self.index)
@@ -745,12 +799,12 @@ impl PyHalfEdge {
         &self,
         py: Python<'_>,
         graph: &Py<PyGraph>,
-        revision: u64,
+        epoch: u64,
     ) -> PyResult<usize> {
         let owner = self.owner(py)?;
-        if self.revision != revision || !owner.is(graph.bind(py)) {
+        if self.epoch != epoch || !owner.is(graph.bind(py)) {
             return Err(PyValueError::new_err(
-                "half-edge belongs to a different graph revision",
+                "half-edge belongs to a different graph",
             ));
         }
         Ok(self.index)
@@ -762,13 +816,11 @@ impl PyEdge {
         &self,
         py: Python<'_>,
         graph: &Py<PyGraph>,
-        revision: u64,
+        epoch: u64,
     ) -> PyResult<usize> {
         let owner = self.owner(py)?;
-        if self.revision != revision || !owner.is(graph.bind(py)) {
-            return Err(PyValueError::new_err(
-                "edge belongs to a different graph revision",
-            ));
+        if self.epoch != epoch || !owner.is(graph.bind(py)) {
+            return Err(PyValueError::new_err("edge belongs to a different graph"));
         }
         Ok(self.index)
     }
@@ -808,7 +860,7 @@ impl PyEdge {
             .map(|index| {
                 Py::new(
                     py,
-                    PyHalfEdge::new(graph_obj.clone_ref(py), index.0, self.revision),
+                    PyHalfEdge::new(graph_obj.clone_ref(py), index.0, self.epoch),
                 )
             })
             .transpose()
@@ -849,11 +901,16 @@ impl PyNode {
 
     #[setter]
     fn set_data(slf: &Bound<'_, Self>, value: Py<PyAny>) -> PyResult<()> {
-        let py = slf.py();
-        let view = slf.borrow();
-        let graph = view.owner(py)?.borrow();
-        graph.state.borrow_mut().as_mut().expect("checked").graph[NodeIndex(view.index)].data =
-            value;
+        let old = {
+            let view = slf.borrow();
+            let graph = view.owner(slf.py())?.borrow();
+            let mut state = graph.state.borrow_mut();
+            std::mem::replace(
+                &mut state.as_mut().expect("checked").graph[NodeIndex(view.index)].data,
+                value,
+            )
+        };
+        drop(old);
         Ok(())
     }
 
@@ -866,7 +923,7 @@ impl PyNode {
             py,
             &state.as_ref().expect("checked").graph[NodeIndex(self.index)].drawing,
             graph_obj.clone_ref(py),
-            self.revision,
+            self.epoch,
         ))
     }
 
@@ -882,7 +939,7 @@ impl PyNode {
             .map(|hedge| {
                 Py::new(
                     py,
-                    PyHalfEdge::new(graph_obj.clone_ref(py), hedge.0, self.revision),
+                    PyHalfEdge::new(graph_obj.clone_ref(py), hedge.0, self.epoch),
                 )
             })
             .collect()
@@ -890,8 +947,8 @@ impl PyNode {
 
     fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
         Ok(match self.name(py)? {
-            Some(name) => format!("Node({}: {name:?})", self.index),
-            None => format!("Node({})", self.index),
+            Some(name) => format!("NodeView({}: {name:?})", self.index),
+            None => format!("NodeView({})", self.index),
         })
     }
 
@@ -940,11 +997,16 @@ impl PyEdge {
 
     #[setter]
     fn set_data(slf: &Bound<'_, Self>, value: Py<PyAny>) -> PyResult<()> {
-        let py = slf.py();
-        let view = slf.borrow();
-        let graph = view.owner(py)?.borrow();
-        graph.state.borrow_mut().as_mut().expect("checked").graph[EdgeIndex(view.index)].data =
-            value;
+        let old = {
+            let view = slf.borrow();
+            let graph = view.owner(slf.py())?.borrow();
+            let mut state = graph.state.borrow_mut();
+            std::mem::replace(
+                &mut state.as_mut().expect("checked").graph[EdgeIndex(view.index)].data,
+                value,
+            )
+        };
+        drop(old);
         Ok(())
     }
 
@@ -957,7 +1019,7 @@ impl PyEdge {
             py,
             &state.as_ref().expect("checked").graph[EdgeIndex(self.index)].drawing,
             graph_obj.clone_ref(py),
-            self.revision,
+            self.epoch,
         ))
     }
 
@@ -985,8 +1047,8 @@ impl PyEdge {
 
     fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
         Ok(match self.name(py)? {
-            Some(name) => format!("Edge({}: {name:?})", self.index),
-            None => format!("Edge({})", self.index),
+            Some(name) => format!("EdgeView({}: {name:?})", self.index),
+            None => format!("EdgeView({})", self.index),
         })
     }
 
@@ -1034,10 +1096,16 @@ impl PyHalfEdge {
 
     #[setter]
     fn set_data(slf: &Bound<'_, Self>, value: Py<PyAny>) -> PyResult<()> {
-        let py = slf.py();
-        let view = slf.borrow();
-        let graph = view.owner(py)?.borrow();
-        graph.state.borrow_mut().as_mut().expect("checked").graph[Hedge(view.index)].data = value;
+        let old = {
+            let view = slf.borrow();
+            let graph = view.owner(slf.py())?.borrow();
+            let mut state = graph.state.borrow_mut();
+            std::mem::replace(
+                &mut state.as_mut().expect("checked").graph[Hedge(view.index)].data,
+                value,
+            )
+        };
+        drop(old);
         Ok(())
     }
 
@@ -1050,7 +1118,7 @@ impl PyHalfEdge {
             py,
             &state.as_ref().expect("checked").graph[Hedge(self.index)].drawing,
             graph_obj.clone_ref(py),
-            self.revision,
+            self.epoch,
         ))
     }
 
@@ -1064,10 +1132,7 @@ impl PyHalfEdge {
             .expect("checked")
             .graph
             .node_id(Hedge(self.index));
-        Py::new(
-            py,
-            PyNode::new(graph_obj.clone_ref(py), node.0, self.revision),
-        )
+        Py::new(py, PyNode::new(graph_obj.clone_ref(py), node.0, self.epoch))
     }
 
     #[getter]
@@ -1076,10 +1141,7 @@ impl PyHalfEdge {
         let graph = graph_obj.borrow(py);
         let state = graph.state.borrow();
         let edge = state.as_ref().expect("checked").graph[&Hedge(self.index)];
-        Py::new(
-            py,
-            PyEdge::new(graph_obj.clone_ref(py), edge.0, self.revision),
-        )
+        Py::new(py, PyEdge::new(graph_obj.clone_ref(py), edge.0, self.epoch))
     }
 
     #[getter]
@@ -1094,7 +1156,7 @@ impl PyHalfEdge {
             .map(|pair| {
                 Py::new(
                     py,
-                    PyHalfEdge::new(graph_obj.clone_ref(py), pair.0, self.revision),
+                    PyHalfEdge::new(graph_obj.clone_ref(py), pair.0, self.epoch),
                 )
             })
             .transpose()
@@ -1102,7 +1164,7 @@ impl PyHalfEdge {
 
     fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
         self.owner(py)?;
-        Ok(format!("HalfEdge({})", self.index))
+        Ok(format!("HalfEdgeView({})", self.index))
     }
 
     #[gen_stub(skip)]
@@ -1135,18 +1197,18 @@ fn checked_order(order: Vec<usize>, len: usize, kind: &str) -> PyResult<Vec<usiz
 fn view_for(
     py: Python<'_>,
     graph: &Py<PyGraph>,
-    revision: u64,
+    epoch: u64,
     index: ViewIndex,
 ) -> PyResult<Py<PyAny>> {
     Ok(match index {
         ViewIndex::Node(index) => {
-            Py::new(py, PyNode::new(graph.clone_ref(py), index, revision))?.into_any()
+            Py::new(py, PyNode::new(graph.clone_ref(py), index, epoch))?.into_any()
         }
         ViewIndex::Edge(index) => {
-            Py::new(py, PyEdge::new(graph.clone_ref(py), index, revision))?.into_any()
+            Py::new(py, PyEdge::new(graph.clone_ref(py), index, epoch))?.into_any()
         }
         ViewIndex::Hedge(index) => {
-            Py::new(py, PyHalfEdge::new(graph.clone_ref(py), index, revision))?.into_any()
+            Py::new(py, PyHalfEdge::new(graph.clone_ref(py), index, epoch))?.into_any()
         }
     })
 }
@@ -1155,32 +1217,42 @@ fn view_for(
 #[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
 #[pymethods]
 impl PyGraph {
+    /// Build a graph once from reusable descriptions. Referenced Node descriptions
+    /// are included automatically; named and indexed endpoints must resolve.
     #[new]
-    #[pyo3(signature = (*, name=None, global_data=None, codec=None, render_config=None, node_store=PyNodeStore::Vec))]
+    #[pyo3(signature = (*, nodes=None, edges=None, name=None, global_data=None, codec=None, render_config=None))]
     fn new(
         py: Python<'_>,
+        #[gen_stub(override_type(type_repr = "typing.Iterable[Node] | None", imports=("typing")))]
+        nodes: Option<&Bound<'_, PyAny>>,
+        #[gen_stub(override_type(type_repr = "typing.Iterable[Edge] | None", imports=("typing")))]
+        edges: Option<&Bound<'_, PyAny>>,
         name: Option<String>,
         global_data: Option<PyGlobalData>,
         codec: Option<Py<PyDotCodec>>,
         #[gen_stub(override_type(type_repr = "RenderSettings | None"))] render_config: Option<
             Py<PyAny>,
         >,
-        node_store: PyNodeStore,
     ) -> PyResult<Self> {
-        Ok(Self::from_state(GraphState {
-            graph: PyHedgeGraph::empty(node_store),
-            name,
-            global_data: global_data.unwrap_or_default(),
-            codec,
-            render_config: match render_config {
-                Some(config) => {
-                    crate::typst::validate_render_config(py, &config)?;
-                    config
-                }
-                None => crate::typst::default_render_config(py)?,
-            },
-            revision: 0,
-        }))
+        let nodes = nodes
+            .map(|items| {
+                items
+                    .try_iter()?
+                    .map(|item| item?.extract().map_err(Into::into))
+                    .collect::<PyResult<Vec<_>>>()
+            })
+            .transpose()?
+            .unwrap_or_default();
+        let edges = edges
+            .map(|items| {
+                items
+                    .try_iter()?
+                    .map(|item| item?.extract().map_err(Into::into))
+                    .collect::<PyResult<Vec<_>>>()
+            })
+            .transpose()?
+            .unwrap_or_default();
+        Self::from_specs(py, nodes, edges, name, global_data, codec, render_config)
     }
 
     #[getter]
@@ -1280,32 +1352,6 @@ impl PyGraph {
             .n_hedges())
     }
 
-    /// Return the node-storage strategy used by this graph.
-    #[getter]
-    fn node_store(&self) -> PyResult<PyNodeStore> {
-        Ok(self
-            .state
-            .borrow()
-            .as_ref()
-            .ok_or_else(|| PyReferenceError::new_err("graph has been cleared"))?
-            .graph
-            .node_store())
-    }
-
-    /// Copy this graph into another node-storage strategy.
-    #[pyo3(signature = (node_store))]
-    fn to_node_store(&self, py: Python<'_>, node_store: PyNodeStore) -> PyResult<Self> {
-        let state = self.state.borrow();
-        let state = state
-            .as_ref()
-            .ok_or_else(|| PyReferenceError::new_err("graph has been cleared"))?;
-        let graph = state
-            .copy_graph(py)?
-            .into_node_store(node_store)
-            .map_err(|error| PyValueError::new_err(error.to_string()))?;
-        Ok(Self::from_state(state.derived(py, graph)?))
-    }
-
     #[pyo3(signature = (key))]
     fn node(
         slf: Py<PyGraph>,
@@ -1314,8 +1360,8 @@ impl PyGraph {
         py: Python<'_>,
     ) -> PyResult<Py<PyNode>> {
         let index = slf.borrow(py).resolve_node(key)?;
-        let revision = slf.borrow(py).revision()?;
-        Py::new(py, PyNode::new(slf.clone_ref(py), index, revision))
+        let epoch = slf.borrow(py).element_epoch()?;
+        Py::new(py, PyNode::new(slf.clone_ref(py), index, epoch))
     }
 
     #[pyo3(signature = (key))]
@@ -1326,14 +1372,14 @@ impl PyGraph {
         py: Python<'_>,
     ) -> PyResult<Py<PyEdge>> {
         let index = slf.borrow(py).resolve_edge(key)?;
-        let revision = slf.borrow(py).revision()?;
-        Py::new(py, PyEdge::new(slf.clone_ref(py), index, revision))
+        let epoch = slf.borrow(py).element_epoch()?;
+        Py::new(py, PyEdge::new(slf.clone_ref(py), index, epoch))
     }
 
     #[pyo3(signature = (index))]
     fn half_edge(slf: Py<PyGraph>, index: usize, py: Python<'_>) -> PyResult<Py<PyHalfEdge>> {
         let graph = slf.borrow(py);
-        let revision = graph.revision()?;
+        let epoch = graph.element_epoch()?;
         let len = graph
             .state
             .borrow()
@@ -1345,13 +1391,13 @@ impl PyGraph {
             return Err(PyIndexError::new_err("half-edge index out of range"));
         }
         drop(graph);
-        Py::new(py, PyHalfEdge::new(slf.clone_ref(py), index, revision))
+        Py::new(py, PyHalfEdge::new(slf.clone_ref(py), index, epoch))
     }
 
     #[pyo3(signature = ())]
     fn nodes(slf: Py<PyGraph>, py: Python<'_>) -> PyResult<Vec<Py<PyNode>>> {
         let graph = slf.borrow(py);
-        let revision = graph.revision()?;
+        let epoch = graph.element_epoch()?;
         let len = graph
             .state
             .borrow()
@@ -1361,14 +1407,14 @@ impl PyGraph {
             .n_nodes();
         drop(graph);
         (0..len)
-            .map(|index| Py::new(py, PyNode::new(slf.clone_ref(py), index, revision)))
+            .map(|index| Py::new(py, PyNode::new(slf.clone_ref(py), index, epoch)))
             .collect()
     }
 
     #[pyo3(signature = ())]
     fn edges(slf: Py<PyGraph>, py: Python<'_>) -> PyResult<Vec<Py<PyEdge>>> {
         let graph = slf.borrow(py);
-        let revision = graph.revision()?;
+        let epoch = graph.element_epoch()?;
         let len = graph
             .state
             .borrow()
@@ -1378,14 +1424,14 @@ impl PyGraph {
             .n_edges();
         drop(graph);
         (0..len)
-            .map(|index| Py::new(py, PyEdge::new(slf.clone_ref(py), index, revision)))
+            .map(|index| Py::new(py, PyEdge::new(slf.clone_ref(py), index, epoch)))
             .collect()
     }
 
     #[pyo3(signature = ())]
     fn half_edges(slf: Py<PyGraph>, py: Python<'_>) -> PyResult<Vec<Py<PyHalfEdge>>> {
         let graph = slf.borrow(py);
-        let revision = graph.revision()?;
+        let epoch = graph.element_epoch()?;
         let len = graph
             .state
             .borrow()
@@ -1395,7 +1441,7 @@ impl PyGraph {
             .n_hedges();
         drop(graph);
         (0..len)
-            .map(|index| Py::new(py, PyHalfEdge::new(slf.clone_ref(py), index, revision)))
+            .map(|index| Py::new(py, PyHalfEdge::new(slf.clone_ref(py), index, epoch)))
             .collect()
     }
 
@@ -1407,6 +1453,7 @@ impl PyGraph {
         let order = checked_order(order, state.graph.n_nodes(), "node")?;
         <PyHedgeGraph as Swap<NodeIndex>>::permute(&mut state.graph, &Permutation::from_inv(order));
         state.revision += 1;
+        state.element_epoch += 1;
         Ok(())
     }
 
@@ -1432,6 +1479,7 @@ impl PyGraph {
         );
         <PyHedgeGraph as Swap<EdgeIndex>>::permute(&mut state.graph, &Permutation::from_inv(order));
         state.revision += 1;
+        state.element_epoch += 1;
         Ok(())
     }
 
@@ -1449,6 +1497,7 @@ impl PyGraph {
             .graph
             .set_orientation(EdgeIndex(index), orientation.into());
         state.revision += 1;
+        state.element_epoch += 1;
         Ok(())
     }
 
@@ -1471,6 +1520,7 @@ impl PyGraph {
         }
         state.graph.set_orientation(edge, orientation);
         state.revision += 1;
+        state.element_epoch += 1;
         Ok(())
     }
 
@@ -1478,28 +1528,28 @@ impl PyGraph {
     fn map(
         slf: Py<PyGraph>,
         py: Python<'_>,
-        #[gen_stub(override_type(type_repr="typing.Callable[[Node], typing.Any] | None", imports=("typing")))]
+        #[gen_stub(override_type(type_repr="typing.Callable[[NodeView], typing.Any] | None", imports=("typing")))]
         node: Option<Py<PyAny>>,
-        #[gen_stub(override_type(type_repr="typing.Callable[[Edge], typing.Any] | None", imports=("typing")))]
+        #[gen_stub(override_type(type_repr="typing.Callable[[EdgeView], typing.Any] | None", imports=("typing")))]
         edge: Option<Py<PyAny>>,
-        #[gen_stub(override_type(type_repr="typing.Callable[[HalfEdge], typing.Any] | None", imports=("typing")))]
+        #[gen_stub(override_type(type_repr="typing.Callable[[HalfEdgeView], typing.Any] | None", imports=("typing")))]
         source: Option<Py<PyAny>>,
-        #[gen_stub(override_type(type_repr="typing.Callable[[HalfEdge], typing.Any] | None", imports=("typing")))]
+        #[gen_stub(override_type(type_repr="typing.Callable[[HalfEdgeView], typing.Any] | None", imports=("typing")))]
         sink: Option<Py<PyAny>>,
     ) -> PyResult<Self> {
-        let (revision, mut mapped) = {
+        let (revision, epoch, mut mapped) = {
             let graph = slf.borrow(py);
             let state_ref = graph.state.borrow();
             let state = state_ref
                 .as_ref()
                 .ok_or_else(|| PyReferenceError::new_err("graph has been cleared"))?;
-            (state.revision, state.copy(py)?)
+            (state.revision, state.element_epoch, state.copy(py)?)
         };
 
         for index in 0..mapped.graph.n_nodes() {
             if let Some(callback) = &node {
                 mapped.graph[NodeIndex(index)].data =
-                    callback.call1(py, (view_for(py, &slf, revision, ViewIndex::Node(index))?,))?;
+                    callback.call1(py, (view_for(py, &slf, epoch, ViewIndex::Node(index))?,))?;
             }
         }
         let source_callback = source.as_ref();
@@ -1507,7 +1557,7 @@ impl PyGraph {
         for index in 0..mapped.graph.n_edges() {
             if let Some(callback) = &edge {
                 mapped.graph[EdgeIndex(index)].data =
-                    callback.call1(py, (view_for(py, &slf, revision, ViewIndex::Edge(index))?,))?;
+                    callback.call1(py, (view_for(py, &slf, epoch, ViewIndex::Edge(index))?,))?;
             }
             let pair = mapped.graph[&EdgeIndex(index)].1;
             for (hedge, callback) in match pair {
@@ -1520,56 +1570,49 @@ impl PyGraph {
                 },
             } {
                 if let (Some(hedge), Some(callback)) = (hedge, callback) {
-                    mapped.graph[hedge].data = callback.call1(
-                        py,
-                        (view_for(py, &slf, revision, ViewIndex::Hedge(hedge.0))?,),
-                    )?;
+                    mapped.graph[hedge].data = callback
+                        .call1(py, (view_for(py, &slf, epoch, ViewIndex::Hedge(hedge.0))?,))?;
                 }
             }
         }
         slf.borrow(py).check_revision(revision)?;
         mapped.revision = 0;
+        mapped.element_epoch = 0;
         Ok(Self::from_state(mapped))
     }
 
     #[classmethod]
-    #[pyo3(signature = (source, codec, *, node_store=PyNodeStore::Vec))]
     fn from_dot(
         _cls: &Bound<'_, PyType>,
         py: Python<'_>,
         source: &str,
         codec: Py<PyDotCodec>,
-        node_store: PyNodeStore,
     ) -> PyResult<Self> {
-        dot::decode_dot(py, source, codec, node_store)
+        dot::decode_dot(py, source, codec)
     }
 
     #[classmethod]
-    #[pyo3(signature = (source, codec, *, node_store=PyNodeStore::Vec))]
     fn from_dot_set(
         _cls: &Bound<'_, PyType>,
         py: Python<'_>,
         source: &str,
         codec: Py<PyDotCodec>,
-        node_store: PyNodeStore,
     ) -> PyResult<Vec<Self>> {
-        dot::decode_dot_set(py, source, codec, node_store)
+        dot::decode_dot_set(py, source, codec)
     }
 
     #[classmethod]
-    #[pyo3(signature = (path, codec, *, node_store=PyNodeStore::Vec))]
     fn from_dot_file(
         _cls: &Bound<'_, PyType>,
         py: Python<'_>,
         #[gen_stub(override_type(type_repr="builtins.str | os.PathLike[builtins.str]", imports=("builtins", "os")))]
         path: PathBuf,
         codec: Py<PyDotCodec>,
-        node_store: PyNodeStore,
     ) -> PyResult<Self> {
         let source = std::fs::read_to_string(&path).map_err(|error| {
             PyValueError::new_err(format!("failed to read {}: {error}", path.display()))
         })?;
-        dot::decode_dot(py, &source, codec, node_store)
+        dot::decode_dot(py, &source, codec)
     }
 
     #[pyo3(signature = (codec=None))]
@@ -1645,11 +1688,11 @@ impl PyGraph {
     fn py_filter(
         slf: Py<PyGraph>,
         py: Python<'_>,
-        #[gen_stub(override_type(type_repr="typing.Callable[[Node], builtins.bool] | None", imports=("builtins", "typing")))]
+        #[gen_stub(override_type(type_repr="typing.Callable[[NodeView], builtins.bool] | None", imports=("builtins", "typing")))]
         node: Option<Py<PyAny>>,
-        #[gen_stub(override_type(type_repr="typing.Callable[[Edge], builtins.bool] | None", imports=("builtins", "typing")))]
+        #[gen_stub(override_type(type_repr="typing.Callable[[EdgeView], builtins.bool] | None", imports=("builtins", "typing")))]
         edge: Option<Py<PyAny>>,
-        #[gen_stub(override_type(type_repr="typing.Callable[[HalfEdge], builtins.bool] | None", imports=("builtins", "typing")))]
+        #[gen_stub(override_type(type_repr="typing.Callable[[HalfEdgeView], builtins.bool] | None", imports=("builtins", "typing")))]
         half_edge: Option<Py<PyAny>>,
     ) -> PyResult<PySubgraph> {
         Self::filter(slf, py, node, edge, half_edge)
@@ -1754,9 +1797,9 @@ impl PyGraph {
     fn py_is_reachable(
         slf: Py<PyGraph>,
         py: Python<'_>,
-        #[gen_stub(override_type(type_repr="Node | builtins.int | builtins.str", imports=("builtins")))]
+        #[gen_stub(override_type(type_repr="NodeView | builtins.int | builtins.str", imports=("builtins")))]
         source: &Bound<'_, PyAny>,
-        #[gen_stub(override_type(type_repr="Node | builtins.int | builtins.str", imports=("builtins")))]
+        #[gen_stub(override_type(type_repr="NodeView | builtins.int | builtins.str", imports=("builtins")))]
         target: &Bound<'_, PyAny>,
         subgraph: Option<&PySubgraph>,
         direction: PyDirectionBasis,
@@ -1904,7 +1947,7 @@ impl PyGraph {
     fn py_tadpoles(
         slf: Py<PyGraph>,
         py: Python<'_>,
-        #[gen_stub(override_type(type_repr="typing.Sequence[Node | builtins.int | builtins.str]", imports=("builtins", "typing")))]
+        #[gen_stub(override_type(type_repr="typing.Sequence[NodeView | builtins.int | builtins.str]", imports=("builtins", "typing")))]
         externals: Vec<Py<PyAny>>,
     ) -> PyResult<Vec<PySubgraph>> {
         Self::tadpoles(slf, py, externals)
@@ -1923,24 +1966,94 @@ impl PyGraph {
         Self::all_cuts(slf, py, source, target)
     }
 
-    /// Append one declarative node and return its fresh live view.
-    #[pyo3(name = "add_node", signature = (spec))]
+    /// Append a node description or construct one from a name, payload, and drawing.
+    /// Existing element views remain valid; topology selections must be recomputed.
+    #[pyo3(name = "add_node", signature = (node=None, *, name=None, data=None, drawing=None, **options))]
+    #[gen_stub(skip)]
     fn py_add_node(
         slf: Py<PyGraph>,
         py: Python<'_>,
-        spec: PyRef<'_, PyNodeSpec>,
+        node: Option<Py<PyAny>>,
+        name: Option<String>,
+        #[pyo3(from_py_with = PyGraph::supplied_data)] data: Option<Py<PyAny>>,
+        drawing: Option<PyRef<'_, PyNodeDrawing>>,
+        options: Option<&Bound<'_, PyDict>>,
     ) -> PyResult<Py<PyNode>> {
-        Self::add_node(slf, py, spec)
+        let spec = if let Some(node) = node {
+            if node.bind(py).is_instance_of::<PyNodeSpec>() {
+                if name.is_some()
+                    || data.is_some()
+                    || drawing.is_some()
+                    || options.is_some_and(|options| !options.is_empty())
+                {
+                    return Err(PyTypeError::new_err(
+                        "a Node description cannot be combined with node options",
+                    ));
+                }
+                node.extract::<Py<PyNodeSpec>>(py)?
+            } else {
+                if name.is_some() {
+                    return Err(PyTypeError::new_err("node name was supplied twice"));
+                }
+                let name = node.extract::<String>(py).map_err(|_| {
+                    PyTypeError::new_err("add_node() expects a Node description or a node name")
+                })?;
+                Py::new(py, PyNodeSpec::new(py, Some(name), data, drawing, options)?)?
+            }
+        } else {
+            Py::new(py, PyNodeSpec::new(py, name, data, drawing, options)?)?
+        };
+        Self::add_node(slf, py, spec.borrow(py))
     }
 
-    /// Append one declarative internal or dangling edge and return its fresh live view.
-    #[pyo3(name = "add_edge", signature = (spec))]
+    /// Append an edge description or construct an internal or dangling edge.
+    /// Node endpoints create fresh incidences; HalfEdge endpoints supply richer data.
+    #[pyo3(name = "add_edge", signature = (source=None, sink=None, *, name=None, data=None, orientation=None, drawing=None, **options))]
+    #[gen_stub(skip)]
+    #[allow(clippy::too_many_arguments)]
     fn py_add_edge(
         slf: Py<PyGraph>,
         py: Python<'_>,
-        spec: PyRef<'_, PyEdgeSpec>,
+        source: Option<Py<PyAny>>,
+        sink: Option<Py<PyAny>>,
+        name: Option<String>,
+        #[pyo3(from_py_with = PyGraph::supplied_data)] data: Option<Py<PyAny>>,
+        orientation: Option<PyOrientation>,
+        drawing: Option<PyRef<'_, PyEdgeDrawing>>,
+        options: Option<&Bound<'_, PyDict>>,
     ) -> PyResult<Py<PyEdge>> {
-        Self::add_edge(slf, py, spec)
+        let spec = if source
+            .as_ref()
+            .is_some_and(|value| value.bind(py).is_instance_of::<PyEdgeSpec>())
+        {
+            if sink.is_some()
+                || name.is_some()
+                || data.is_some()
+                || orientation.is_some()
+                || drawing.is_some()
+                || options.is_some_and(|options| !options.is_empty())
+            {
+                return Err(PyTypeError::new_err(
+                    "an Edge description cannot be combined with edge options",
+                ));
+            }
+            source.expect("checked").extract::<Py<PyEdgeSpec>>(py)?
+        } else {
+            Py::new(
+                py,
+                PyEdgeSpec::new(
+                    py,
+                    source,
+                    sink,
+                    name,
+                    data,
+                    orientation.unwrap_or(PyOrientation::Default),
+                    drawing,
+                    options,
+                )?,
+            )?
+        };
+        Self::add_edge(slf, py, spec.borrow(py))
     }
 
     /// Split a paired edge at one half-edge, preserving the opposite edge value.
@@ -2027,9 +2140,9 @@ impl PyGraph {
         slf: Py<PyGraph>,
         py: Python<'_>,
         other: Py<PyGraph>,
-        #[gen_stub(override_type(type_repr="typing.Callable[[HalfEdge, HalfEdge], builtins.bool]", imports=("builtins", "typing")))]
+        #[gen_stub(override_type(type_repr="typing.Callable[[HalfEdgeView, HalfEdgeView], builtins.bool]", imports=("builtins", "typing")))]
         matching: Py<PyAny>,
-        #[gen_stub(override_type(type_repr="typing.Callable[[HalfEdge, HalfEdge], tuple[Flow, Orientation, builtins.str | None, EdgeValue]]", imports=("builtins", "typing")))]
+        #[gen_stub(override_type(type_repr="typing.Callable[[HalfEdgeView, HalfEdgeView], tuple[Flow, Orientation, builtins.str | None, EdgeValue]]", imports=("builtins", "typing")))]
         merge: Py<PyAny>,
     ) -> PyResult<PyGraph> {
         Self::join(slf, py, other, matching, merge)
@@ -2041,9 +2154,9 @@ impl PyGraph {
         slf: Py<PyGraph>,
         py: Python<'_>,
         other: Py<PyGraph>,
-        #[gen_stub(override_type(type_repr="typing.Callable[[HalfEdge, HalfEdge], builtins.bool]", imports=("builtins", "typing")))]
+        #[gen_stub(override_type(type_repr="typing.Callable[[HalfEdgeView, HalfEdgeView], builtins.bool]", imports=("builtins", "typing")))]
         matching: Py<PyAny>,
-        #[gen_stub(override_type(type_repr="typing.Callable[[HalfEdge, HalfEdge], tuple[Flow, Orientation, builtins.str | None, EdgeValue]]", imports=("builtins", "typing")))]
+        #[gen_stub(override_type(type_repr="typing.Callable[[HalfEdgeView, HalfEdgeView], tuple[Flow, Orientation, builtins.str | None, EdgeValue]]", imports=("builtins", "typing")))]
         merge: Py<PyAny>,
     ) -> PyResult<()> {
         Self::join_mut(slf, py, other, matching, merge)
@@ -2055,11 +2168,10 @@ impl PyGraph {
             .as_ref()
             .ok_or_else(|| PyReferenceError::new_err("graph has been cleared"))?;
         Ok(format!(
-            "Graph(nodes={}, edges={}, half_edges={}, node_store={:?})",
+            "Graph(nodes={}, edges={}, half_edges={})",
             state.graph.n_nodes(),
             state.graph.n_edges(),
             state.graph.n_hedges(),
-            state.graph.node_store(),
         ))
     }
 
@@ -2093,131 +2205,87 @@ impl PyGraph {
     }
 }
 
-fn endpoint_record(
-    py: Python<'_>,
-    endpoint: &Py<PyHalfEdgeSpec>,
-    node_indices: &BTreeMap<u64, NodeIndex>,
-    node_names: &BTreeMap<String, NodeIndex>,
-    node_count: usize,
-) -> PyResult<(EndpointRole, HedgeData<HalfEdgeRecord>)> {
-    let endpoint = endpoint.borrow(py);
-    let target = endpoint
-        .node
-        .as_ref()
-        .ok_or_else(|| PyReferenceError::new_err("half-edge specification has been cleared"))?
-        .bind(py);
-    let index = if let Ok(node) = target.extract::<PyRef<'_, PyNodeSpec>>() {
-        node_indices.get(&node.token).copied().ok_or_else(|| {
-            PyValueError::new_err(
-                "an edge endpoint refers to a node that was not passed to build()",
-            )
-        })?
-    } else if let Ok(node) = target.extract::<PyRef<'_, PyNode>>() {
-        if let Some(name) = node.name(py)? {
-            node_names.get(&name).copied().ok_or_else(|| {
-                PyValueError::new_err(format!(
-                    "live node endpoint name {name:?} does not match a node passed to build()"
-                ))
-            })?
-        } else {
-            let index = node.index(py)?;
+impl PyHalfEdgeSpec {
+    fn snapshot(&self, py: Python<'_>, node: NodeIndex) -> PyResult<HedgeData<HalfEdgeRecord>> {
+        Ok(HedgeData {
+            node,
+            is_in_subgraph: false,
+            data: HalfEdgeRecord {
+                data: self
+                    .data
+                    .as_ref()
+                    .ok_or_else(|| {
+                        PyReferenceError::new_err("half-edge specification has been cleared")
+                    })?
+                    .clone_ref(py),
+                drawing: copy_drawing(
+                    py,
+                    self.drawing.as_ref().ok_or_else(|| {
+                        PyReferenceError::new_err("half-edge specification has been cleared")
+                    })?,
+                )?,
+            },
+        })
+    }
+
+    fn record_for_build(
+        &self,
+        py: Python<'_>,
+        node_indices: &BTreeMap<u64, NodeIndex>,
+        node_names: &BTreeMap<String, NodeIndex>,
+        node_count: usize,
+    ) -> PyResult<HedgeData<HalfEdgeRecord>> {
+        let target = self.node(py)?;
+        let target = target.bind(py);
+        let node = if let Ok(spec) = target.extract::<PyRef<'_, PyNodeSpec>>() {
+            *node_indices
+                .get(&spec.token)
+                .expect("referenced specifications were collected")
+        } else if target.is_instance_of::<PyNode>() {
+            return Err(PyValueError::new_err(
+                "Graph() cannot use a NodeView from another graph; use its name or index explicitly",
+            ));
+        } else if let Ok(index) = target.extract::<usize>() {
             (index < node_count)
                 .then_some(NodeIndex(index))
                 .ok_or_else(|| PyIndexError::new_err("node endpoint index out of range"))?
-        }
-    } else if let Ok(index) = target.extract::<usize>() {
-        (index < node_count)
-            .then_some(NodeIndex(index))
-            .ok_or_else(|| PyIndexError::new_err("node endpoint index out of range"))?
-    } else if let Ok(name) = target.extract::<String>() {
-        node_names
-            .get(&name)
-            .copied()
-            .ok_or_else(|| PyKeyError::new_err(format!("unknown node {name:?}")))?
-    } else {
-        return Err(PyTypeError::new_err(
-            "an endpoint target must be a NodeSpec, live Node, integer index, or node name",
-        ));
-    };
-    Ok((
-        endpoint.role,
-        HedgeData {
-            node: index,
-            is_in_subgraph: false,
-            data: HalfEdgeRecord {
-                data: endpoint
-                    .data
-                    .as_ref()
-                    .ok_or_else(|| {
-                        PyReferenceError::new_err("half-edge specification has been cleared")
-                    })?
-                    .clone_ref(py),
-                drawing: copy_drawing(
-                    py,
-                    endpoint.drawing.as_ref().ok_or_else(|| {
-                        PyReferenceError::new_err("half-edge specification has been cleared")
-                    })?,
-                )?,
-            },
-        },
-    ))
-}
+        } else if let Ok(name) = target.extract::<String>() {
+            node_names
+                .get(&name)
+                .copied()
+                .ok_or_else(|| PyKeyError::new_err(format!("unknown node {name:?}")))?
+        } else {
+            return Err(PyTypeError::new_err(
+                "an endpoint must be a Node, integer index, or node name",
+            ));
+        };
+        self.snapshot(py, node)
+    }
 
-fn endpoint_record_for_graph(
-    py: Python<'_>,
-    endpoint: &Py<PyHalfEdgeSpec>,
-    graph: &Py<PyGraph>,
-    revision: u64,
-) -> PyResult<(EndpointRole, HedgeData<HalfEdgeRecord>)> {
-    let endpoint = endpoint.borrow(py);
-    let target = endpoint
-        .node
-        .as_ref()
-        .ok_or_else(|| PyReferenceError::new_err("half-edge specification has been cleared"))?
-        .bind(py);
-    let node = if let Ok(view) = target.extract::<PyRef<'_, PyNode>>() {
-        view.index_for_graph(py, graph, revision)?
-    } else if let Ok(spec) = target.extract::<PyRef<'_, PyNodeSpec>>() {
-        let name = spec.name.as_deref().ok_or_else(|| {
-            PyTypeError::new_err(
-                "Graph.add_edge() cannot resolve an unnamed NodeSpec; use a live Node or index",
-            )
-        })?;
-        let graph = graph.borrow(py);
-        let state = graph.state.borrow();
-        let index = state
-            .as_ref()
-            .expect("checked")
-            .graph
-            .iter_nodes()
-            .find_map(|(index, _, node)| (node.name.as_deref() == Some(name)).then_some(index.0))
-            .ok_or_else(|| PyKeyError::new_err(format!("unknown node {name:?}")))?;
-        index
-    } else {
-        graph.borrow(py).resolve_node(target)?
-    };
-    Ok((
-        endpoint.role,
-        HedgeData {
-            node: NodeIndex(node),
-            is_in_subgraph: false,
-            data: HalfEdgeRecord {
-                data: endpoint
-                    .data
-                    .as_ref()
-                    .ok_or_else(|| {
-                        PyReferenceError::new_err("half-edge specification has been cleared")
-                    })?
-                    .clone_ref(py),
-                drawing: copy_drawing(
-                    py,
-                    endpoint.drawing.as_ref().ok_or_else(|| {
-                        PyReferenceError::new_err("half-edge specification has been cleared")
-                    })?,
-                )?,
-            },
-        },
-    ))
+    fn record_for_graph(
+        &self,
+        py: Python<'_>,
+        graph: &Py<PyGraph>,
+        epoch: u64,
+    ) -> PyResult<HedgeData<HalfEdgeRecord>> {
+        let target = self.node(py)?;
+        let target = target.bind(py);
+        let node = if let Ok(view) = target.extract::<PyRef<'_, PyNode>>() {
+            view.index_for_graph(py, graph, epoch)?
+        } else if let Ok(spec) = target.extract::<PyRef<'_, PyNodeSpec>>() {
+            let name = spec.name.as_deref().ok_or_else(|| {
+                PyTypeError::new_err(
+                    "Graph.add_edge() cannot resolve an unnamed Node; use the NodeView returned by add_node()",
+                )
+            })?;
+            graph
+                .borrow(py)
+                .resolve_node(name.into_pyobject(py)?.as_any())?
+        } else {
+            graph.borrow(py).resolve_node(target)?
+        };
+        self.snapshot(py, NodeIndex(node))
+    }
 }
 
 impl PyEdgeSpec {
@@ -2242,177 +2310,193 @@ impl PyEdgeSpec {
         &self,
         py: Python<'_>,
         graph: &Py<PyGraph>,
-        revision: u64,
+        epoch: u64,
     ) -> PyResult<IncrementalEdgeRecords> {
-        let first = endpoint_record_for_graph(
-            py,
-            self.first
-                .as_ref()
-                .ok_or_else(|| PyReferenceError::new_err("edge specification has been cleared"))?,
-            graph,
-            revision,
-        )?;
-        let second = self
-            .second
+        let edge = self.snapshot(py)?;
+        let source = self
+            .source
             .as_ref()
-            .map(|endpoint| endpoint_record_for_graph(py, endpoint, graph, revision))
+            .map(|endpoint| endpoint.borrow(py).record_for_graph(py, graph, epoch))
             .transpose()?;
-        let (source, sink) = match (first, second) {
-            ((EndpointRole::Source, source), Some((EndpointRole::Sink, sink)))
-            | ((EndpointRole::Sink, sink), Some((EndpointRole::Source, source))) => {
-                (Some(source), Some(sink))
-            }
-            ((EndpointRole::Source, source), None) => (Some(source), None),
-            ((EndpointRole::Sink, sink), None) => (None, Some(sink)),
-            _ => {
-                return Err(PyValueError::new_err(
-                    "an internal edge needs one source and one sink",
-                ));
-            }
-        };
+        let sink = self
+            .sink
+            .as_ref()
+            .map(|endpoint| endpoint.borrow(py).record_for_graph(py, graph, epoch))
+            .transpose()?;
         Ok(IncrementalEdgeRecords {
             source,
             sink,
-            edge: self.snapshot(py)?,
+            edge,
             orientation: self.orientation,
         })
     }
 }
 
-/// Build a graph from declarative node and edge specs.
-#[cfg_attr(
-    feature = "python_stubgen",
-    pyo3_stub_gen::derive::gen_stub_pyfunction(
-        module = "symbolica.community.graph",
-        python = r#"
-    import typing
-
-    def build(*items: _GraphItem, name: _OptionalString = None, global_data: _OptionalGlobalData = None, codec: _OptionalDotCodec = None, render_config: _OptionalRenderSettings = None, node_store: NodeStore = NodeStore.Vec) -> Graph:
-        """Build a graph from declarative node and edge specs."""
-        ...
-"#
-    )
-)]
-#[pyfunction(signature = (*items, name=None, global_data=None, codec=None, render_config=None, node_store=PyNodeStore::Vec))]
-pub fn build(
-    py: Python<'_>,
-    items: &Bound<'_, PyTuple>,
-    name: Option<String>,
-    global_data: Option<PyGlobalData>,
-    codec: Option<Py<PyDotCodec>>,
-    render_config: Option<Py<PyAny>>,
-    node_store: PyNodeStore,
-) -> PyResult<PyGraph> {
-    let mut node_specs = Vec::<Py<PyNodeSpec>>::new();
-    let mut edge_specs = Vec::<Py<PyEdgeSpec>>::new();
-    for item in items.iter() {
-        if item.is_instance_of::<PyNodeSpec>() {
-            node_specs.push(item.extract()?);
-        } else if item.is_instance_of::<PyEdgeSpec>() {
-            edge_specs.push(item.extract()?);
-        } else {
-            return Err(PyTypeError::new_err(
-                "build() accepts only values returned by node() and edge()",
-            ));
-        }
-    }
-
-    let mut names = BTreeSet::new();
-    let mut node_indices = BTreeMap::new();
-    let mut node_names = BTreeMap::new();
-    let mut builder = HedgeGraphBuilder::<EdgeRecord, NodeRecord, HalfEdgeRecord>::new();
-    for spec in &node_specs {
-        let spec = spec.borrow(py);
-        if let Some(name) = &spec.name {
-            if !names.insert(name.clone()) {
-                return Err(PyValueError::new_err(format!(
-                    "duplicate node name {name:?}"
-                )));
-            }
-        }
-        let index = builder.add_node(spec.snapshot(py)?);
-        if let Some(name) = &spec.name {
-            node_names.insert(name.clone(), index);
-        }
-        if node_indices.insert(spec.token, index).is_some() {
-            return Err(PyValueError::new_err(
-                "the same node specification was passed to build() more than once",
-            ));
-        }
-    }
-
-    names.clear();
-    for spec in edge_specs {
-        let spec = spec.borrow(py);
-        if let Some(name) = &spec.name {
-            if !names.insert(name.clone()) {
-                return Err(PyValueError::new_err(format!(
-                    "duplicate edge name {name:?}"
-                )));
-            }
-        }
-        let first = endpoint_record(
-            py,
-            spec.first
-                .as_ref()
-                .ok_or_else(|| PyReferenceError::new_err("edge specification has been cleared"))?,
-            &node_indices,
-            &node_names,
-            node_specs.len(),
-        )?;
-        let second = spec
-            .second
-            .as_ref()
-            .map(|endpoint| {
-                endpoint_record(py, endpoint, &node_indices, &node_names, node_specs.len())
-            })
-            .transpose()?;
-        let (source, sink) = match (first, second) {
-            ((EndpointRole::Source, source), Some((EndpointRole::Sink, sink)))
-            | ((EndpointRole::Sink, sink), Some((EndpointRole::Source, source))) => {
-                (Some(source), Some(sink))
-            }
-            ((EndpointRole::Source, source), None) => (Some(source), None),
-            ((EndpointRole::Sink, sink), None) => (None, Some(sink)),
-            _ => {
+impl PyGraph {
+    fn from_specs(
+        py: Python<'_>,
+        mut nodes: Vec<Py<PyNodeSpec>>,
+        edges: Vec<Py<PyEdgeSpec>>,
+        name: Option<String>,
+        global_data: Option<PyGlobalData>,
+        codec: Option<Py<PyDotCodec>>,
+        render_config: Option<Py<PyAny>>,
+    ) -> PyResult<Self> {
+        let mut tokens = BTreeSet::new();
+        for node in &nodes {
+            if !tokens.insert(node.borrow(py).token) {
                 return Err(PyValueError::new_err(
-                    "an internal edge needs one source and one sink",
+                    "the same Node was supplied more than once",
                 ));
             }
-        };
-        let record = spec.snapshot(py)?;
-        match (source, sink) {
-            (Some(source), Some(sink)) => builder.add_edge(source, sink, record, spec.orientation),
-            (Some(source), None) => {
-                builder.add_external_edge(source, record, spec.orientation, Flow::Source)
-            }
-            (None, Some(sink)) => {
-                builder.add_external_edge(sink, record, spec.orientation, Flow::Sink)
-            }
-            (None, None) => unreachable!("validated edge has an endpoint"),
         }
-    }
-
-    Ok(PyGraph::from_state(GraphState {
-        graph: PyHedgeGraph::build(builder, node_store),
-        name,
-        global_data: global_data.unwrap_or_default(),
-        codec,
-        render_config: match render_config {
-            Some(config) => {
-                crate::typst::validate_render_config(py, &config)?;
-                config
+        // A referenced Node is a reusable description, never adopted by the graph.
+        // Explicit nodes retain their order; inferred nodes follow first occurrence.
+        for edge in &edges {
+            let edge = edge.borrow(py);
+            for endpoint in [&edge.source, &edge.sink].into_iter().flatten() {
+                let target = endpoint.borrow(py).node(py)?;
+                if let Ok(node) = target.extract::<Py<PyNodeSpec>>(py) {
+                    if tokens.insert(node.borrow(py).token) {
+                        nodes.push(node);
+                    }
+                }
             }
-            None => crate::typst::default_render_config(py)?,
-        },
-        revision: 0,
-    }))
+        }
+
+        let mut names = BTreeSet::new();
+        let mut node_indices = BTreeMap::new();
+        let mut node_names = BTreeMap::new();
+        let mut builder = HedgeGraphBuilder::<EdgeRecord, NodeRecord, HalfEdgeRecord>::new();
+        for spec in &nodes {
+            let spec = spec.borrow(py);
+            if let Some(name) = &spec.name {
+                if !names.insert(name.clone()) {
+                    return Err(PyValueError::new_err(format!(
+                        "duplicate node name {name:?}"
+                    )));
+                }
+            }
+            let index = builder.add_node(spec.snapshot(py)?);
+            if let Some(name) = &spec.name {
+                node_names.insert(name.clone(), index);
+            }
+            node_indices.insert(spec.token, index);
+        }
+
+        names.clear();
+        for spec in edges {
+            let spec = spec.borrow(py);
+            if let Some(name) = &spec.name {
+                if !names.insert(name.clone()) {
+                    return Err(PyValueError::new_err(format!(
+                        "duplicate edge name {name:?}"
+                    )));
+                }
+            }
+            let source = spec
+                .source
+                .as_ref()
+                .map(|endpoint| {
+                    endpoint.borrow(py).record_for_build(
+                        py,
+                        &node_indices,
+                        &node_names,
+                        nodes.len(),
+                    )
+                })
+                .transpose()?;
+            let sink = spec
+                .sink
+                .as_ref()
+                .map(|endpoint| {
+                    endpoint.borrow(py).record_for_build(
+                        py,
+                        &node_indices,
+                        &node_names,
+                        nodes.len(),
+                    )
+                })
+                .transpose()?;
+            let record = spec.snapshot(py)?;
+            match (source, sink) {
+                (Some(source), Some(sink)) => {
+                    builder.add_edge(source, sink, record, spec.orientation)
+                }
+                (Some(source), None) => {
+                    builder.add_external_edge(source, record, spec.orientation, Flow::Source)
+                }
+                (None, Some(sink)) => {
+                    builder.add_external_edge(sink, record, spec.orientation, Flow::Sink)
+                }
+                (None, None) => {
+                    return Err(PyValueError::new_err("an edge needs at least one endpoint"))
+                }
+            }
+        }
+
+        Ok(Self::from_state(GraphState {
+            graph: builder.build(),
+            name,
+            global_data: global_data.unwrap_or_default(),
+            codec,
+            render_config: match render_config {
+                Some(config) => {
+                    crate::typst::validate_render_config(py, &config)?;
+                    config
+                }
+                None => crate::typst::default_render_config(py)?,
+            },
+            revision: 0,
+            element_epoch: 0,
+        }))
+    }
+}
+
+#[cfg(feature = "python_stubgen")]
+pyo3_stub_gen::inventory::submit! {
+    pyo3_stub_gen::derive::gen_methods_from_python! { r#"
+        import typing
+
+        class PyNodeSpec:
+            def __new__(cls, name: _OptionalString = None, *, data: typing.Any = None, drawing: _OptionalNodeDrawing = None, label: _OptionalStaticContent = ..., placement: _PlacementValue = ..., shift: _DrawingPoint = ..., rank: _OptionalInteger = ..., minimum_size: _OptionalNumber = ..., maximum_size: _OptionalNumber = ..., style: _OptionalStyle = ..., label_style: _OptionalStyle = ..., extensions: _NativeDict = ...) -> Node: ...
+    "# }
+}
+
+#[cfg(feature = "python_stubgen")]
+pyo3_stub_gen::inventory::submit! {
+    pyo3_stub_gen::derive::gen_methods_from_python! { r#"
+        import typing
+
+        class PyHalfEdgeSpec:
+            def __new__(cls, node: _EndpointTarget, *, data: typing.Any = None, drawing: _OptionalHalfEdgeDrawing = None, label: _OptionalStaticContent = ..., statement: _DrawingString = ..., port_label: _DrawingString = ..., compass: _CompassValue = ..., route_points: _DrawingPoints = ..., anchor: _AnchorValue = ..., routing: _RoutingValue = ..., style: _OptionalStyleLayers = ..., extensions: _NativeDict = ...) -> HalfEdge: ...
+    "# }
+}
+
+#[cfg(feature = "python_stubgen")]
+pyo3_stub_gen::inventory::submit! {
+    pyo3_stub_gen::derive::gen_methods_from_python! { r#"
+        import typing
+
+        class PyEdgeSpec:
+            def __new__(cls, source: _EdgeEndpoint = None, sink: _EdgeEndpoint = None, *, name: _OptionalString = None, data: typing.Any = None, orientation: Orientation = Orientation.Default, drawing: _OptionalEdgeDrawing = None, label: _OptionalStaticContent = ..., placement: _PlacementValue = ..., label_position: _DrawingPoint = ..., label_offset: _OptionalNumber = ..., label_angle: _DrawingAngle = ..., bend: _DrawingAngle = ..., routing: _RoutingValue = ..., minimum_length: _OptionalInteger = ..., same_rank: _OptionalBoolean = ..., style: _OptionalStyleLayers = ..., label_style: _OptionalStyle = ..., decoration: _DrawingDecoration = ..., extensions: _NativeDict = ...) -> Edge: ...
+    "# }
+}
+
+#[cfg(feature = "python_stubgen")]
+pyo3_stub_gen::inventory::submit! {
+    pyo3_stub_gen::derive::gen_methods_from_python! { r#"
+        import typing
+
+        class PyGraph:
+            def add_node(self, node: _NodeInput = None, *, name: _OptionalString = None, data: typing.Any = None, drawing: _OptionalNodeDrawing = None, label: _OptionalStaticContent = ..., placement: _PlacementValue = ..., shift: _DrawingPoint = ..., rank: _OptionalInteger = ..., minimum_size: _OptionalNumber = ..., maximum_size: _OptionalNumber = ..., style: _OptionalStyle = ..., label_style: _OptionalStyle = ..., extensions: _NativeDict = ...) -> NodeView: ...
+            def add_edge(self, source: _EdgeInput = None, sink: _EdgeEndpoint = None, *, name: _OptionalString = None, data: typing.Any = None, orientation: _OptionalOrientation = None, drawing: _OptionalEdgeDrawing = None, label: _OptionalStaticContent = ..., placement: _PlacementValue = ..., label_position: _DrawingPoint = ..., label_offset: _OptionalNumber = ..., label_angle: _DrawingAngle = ..., bend: _DrawingAngle = ..., routing: _RoutingValue = ..., minimum_length: _OptionalInteger = ..., same_rank: _OptionalBoolean = ..., style: _OptionalStyleLayers = ..., label_style: _OptionalStyle = ..., decoration: _DrawingDecoration = ..., extensions: _NativeDict = ...) -> EdgeView: ...
+    "# }
 }
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<PyFlow>()?;
     module.add_class::<PyOrientation>()?;
-    module.add_class::<PyNodeStore>()?;
     module.add_class::<PyNodeSpec>()?;
     module.add_class::<PyHalfEdgeSpec>()?;
     module.add_class::<PyEdgeSpec>()?;
@@ -2421,10 +2505,5 @@ pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<PyNode>()?;
     module.add_class::<PyEdge>()?;
     module.add_class::<PyHalfEdge>()?;
-    module.add_function(wrap_pyfunction!(node, module)?)?;
-    module.add_function(wrap_pyfunction!(source, module)?)?;
-    module.add_function(wrap_pyfunction!(sink, module)?)?;
-    module.add_function(wrap_pyfunction!(edge, module)?)?;
-    module.add_function(wrap_pyfunction!(build, module)?)?;
     Ok(())
 }

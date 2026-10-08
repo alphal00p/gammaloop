@@ -23,6 +23,12 @@ use idenso::{
         AlgebraContraction, AlgebraSettings, SymbolicTensor, inference::TensorInferenceError,
     },
 };
+use linnet::half_edge::{
+    HedgeGraph, NoData, NodeIndex,
+    builder::HedgeGraphBuilder,
+    canon::{Certificate, ignore},
+    involution::{Flow, Orientation},
+};
 use spenso::{
     network::{
         MinResultRank, Network, Sequential,
@@ -56,7 +62,6 @@ use symbolica::{
         Atom, AtomCore, AtomOrView, AtomView, FunctionBuilder, Symbol, representation::FunView,
     },
     function,
-    graph::Graph,
     id::Replacement,
     symbol,
 };
@@ -299,12 +304,6 @@ pub(crate) struct GroupingOutcome {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-enum TopologyVertex {
-    Internal,
-    External(ExternalLeg),
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 enum InternalParticleColor {
     MassAndSpin { mass: ParameterId, spin: i64 },
     Exact(ParticleId),
@@ -320,7 +319,7 @@ enum TopologyEdge {
     },
 }
 
-type TopologyKey = Graph<TopologyVertex, TopologyEdge>;
+type TopologyKey = Certificate<NoData, TopologyEdge, NoData>;
 
 struct PreparedNumerator {
     exact: Atom,
@@ -1554,63 +1553,45 @@ fn canonical_topologies(
     options: &GraphGroupingOptions,
     symmetrize_left_right: bool,
 ) -> Result<Vec<CanonicalTopology>, GroupingError> {
-    let mut topologies = vec![topology_key_variant(diagram, model, options, None)?];
-    if symmetrize_left_right && let Some(partners) = left_right_partners(diagram) {
-        topologies.push(topology_key_variant(
-            diagram,
-            model,
-            options,
-            Some(&partners),
-        )?);
+    let mut topologies = vec![topology_key_variant(diagram, model, options, false)?];
+    if symmetrize_left_right && is_sewn(diagram) {
+        topologies.push(topology_key_variant(diagram, model, options, true)?);
     }
     Ok(topologies)
 }
 
-fn left_right_partners(diagram: &FeynmanDiagram) -> Option<BTreeMap<ExternalLeg, ExternalLeg>> {
-    let external = diagram
+/// Whether every external edge of `diagram` is a sewn initial-state edge.
+fn is_sewn(diagram: &FeynmanDiagram) -> bool {
+    let mut external = diagram
         .edges()
         .filter(|(_, _, edge)| edge.external.is_some())
-        .collect::<Vec<_>>();
-    if external.is_empty()
-        || external
-            .iter()
-            .any(|(_, endpoints, _)| endpoints.source.is_none() || endpoints.target.is_none())
-    {
-        return None;
-    }
-    Some(
-        external
-            .into_iter()
-            .map(|(_, _, edge)| {
-                let leg = edge.external.as_ref().expect("external edge").clone();
-                (leg.clone(), leg)
-            })
-            .collect(),
-    )
+        .peekable();
+    external.peek().is_some()
+        && external
+            .all(|(_, endpoints, _)| endpoints.source.is_some() && endpoints.target.is_some())
 }
 
+/// The canonical topology of `diagram`, with the sewn initial-state edges reversed for the
+/// global left/right exchange when `left_right_swapped`.
 fn topology_key_variant(
     diagram: &FeynmanDiagram,
     model: &Model,
     options: &GraphGroupingOptions,
-    left_right_partners: Option<&BTreeMap<ExternalLeg, ExternalLeg>>,
+    left_right_swapped: bool,
 ) -> Result<CanonicalTopology, GroupingError> {
-    let mut graph = Graph::new();
-    for _ in diagram.vertices() {
-        graph.add_node(TopologyVertex::Internal);
-    }
+    let mut graph = HedgeGraphBuilder::new();
+    let nodes: Vec<NodeIndex> = diagram.vertices().map(|_| graph.add_node(())).collect();
     for (_, endpoints, edge) in diagram.edges() {
-        let external = edge.external.is_some();
-        let (directed, color) = if external {
+        let (orientation, color) = if let Some(external) = &edge.external {
             // External edges retain both their exact particle species and
             // direction: exchanging different mass-degenerate external states
             // would change the process rather than merely its topology.
             (
-                true,
+                Orientation::Default,
                 TopologyEdge::External {
                     particle: edge.particle,
                     directed: edge.directed,
-                    external: edge.external.clone().expect("external edge"),
+                    external: external.clone(),
                 },
             )
         } else {
@@ -1625,40 +1606,43 @@ fn topology_key_variant(
             } else {
                 InternalParticleColor::Exact(edge.particle)
             };
-            (false, TopologyEdge::Internal(color))
+            (Orientation::Undirected, TopologyEdge::Internal(color))
         };
-        let mut source = endpoints.source.map(|vertex| vertex.0);
-        let mut target = endpoints.target.map(|vertex| vertex.0);
-        if source.is_none() || target.is_none() {
-            let node = graph.add_node(TopologyVertex::External(edge.external.clone().ok_or_else(
-                || {
-                    GroupingError::TopologyConstruction(
-                        "dangling edge has no external metadata".into(),
-                    )
-                },
-            )?));
-            if source.is_none() {
-                source = Some(node);
-            } else {
-                target = Some(node);
-            }
-        }
-        let (mut source, mut target) = (
-            source.expect("completed endpoint"),
-            target.expect("completed endpoint"),
-        );
-        if left_right_partners.is_some() && external {
+        let (mut source, mut target) = (endpoints.source, endpoints.target);
+        if left_right_swapped && edge.external.is_some() {
             std::mem::swap(&mut source, &mut target);
         }
-        graph
-            .add_edge(source, target, directed, color)
-            .map_err(|error| GroupingError::TopologyConstruction(error.to_string()))?;
+        match (source, target) {
+            (Some(source), Some(target)) => {
+                graph.add_edge(nodes[source.0], nodes[target.0], color, orientation)
+            }
+            (Some(_), None) | (None, Some(_)) if edge.external.is_none() => {
+                return Err(GroupingError::TopologyConstruction(
+                    "dangling edge has no external metadata".into(),
+                ));
+            }
+            (Some(vertex), None) => {
+                graph.add_external_edge(nodes[vertex.0], color, orientation, Flow::Source)
+            }
+            (None, Some(vertex)) => {
+                graph.add_external_edge(nodes[vertex.0], color, orientation, Flow::Sink)
+            }
+            (None, None) => {
+                return Err(GroupingError::TopologyConstruction(
+                    "edge has no attached vertex".into(),
+                ));
+            }
+        }
     }
-    let canonical = graph.canonize();
+    let graph: HedgeGraph<TopologyEdge, ()> = graph.build();
+    let canonical = graph.canonize_by(ignore, Clone::clone, ignore);
     Ok(CanonicalTopology {
-        key: canonical.graph,
-        vertex_map: canonical.vertex_map[..diagram.vertices().count()].to_vec(),
-        left_right_swapped: left_right_partners.is_some(),
+        vertex_map: nodes
+            .into_iter()
+            .map(|node| canonical.canonical_node(node).0)
+            .collect(),
+        key: canonical.into_certificate(),
+        left_right_swapped,
     })
 }
 
@@ -1668,7 +1652,7 @@ mod tests {
 
     use feynkit_graph::{
         DiagramCut, DiagramCutSide, DiagramEdge, DiagramEndpoint, DiagramHalfEdge, DiagramVertex,
-        ExternalState, VertexId,
+        ExternalState, VertexId, VertexSlot,
     };
     use spenso::structure::representation::{Minkowski, RepName};
 
@@ -1753,6 +1737,61 @@ mod tests {
         )
     }
 
+    fn leg(name: &str, index: usize, state: ExternalState, connection: usize) -> ExternalLeg {
+        ExternalLeg {
+            name: name.to_owned(),
+            index,
+            state,
+            connection,
+        }
+    }
+
+    /// Builds fixtures with the endpoint slots in edge insertion order, as `add_edge` assigns
+    /// them, for internal edges and generated legs alike.
+    struct FixtureBuilder {
+        builder: feynkit_graph::FeynmanDiagramBuilder,
+        degrees: BTreeMap<VertexId, usize>,
+    }
+
+    impl FixtureBuilder {
+        fn new(builder: feynkit_graph::FeynmanDiagramBuilder) -> Self {
+            Self {
+                builder,
+                degrees: BTreeMap::new(),
+            }
+        }
+
+        fn slot(&mut self, vertex: VertexId) -> VertexSlot {
+            let degree = self.degrees.entry(vertex).or_default();
+            *degree += 1;
+            VertexSlot(*degree - 1)
+        }
+
+        fn add_vertex(&mut self, vertex: DiagramVertex) -> VertexId {
+            self.builder.add_vertex(vertex)
+        }
+
+        fn add_edge(&mut self, source: VertexId, target: VertexId, edge: DiagramEdge) -> EdgeId {
+            let (source_slot, target_slot) = (self.slot(source), self.slot(target));
+            self.builder
+                .add_edge_with_slots(source, target, edge, source_slot, target_slot)
+                .unwrap()
+        }
+
+        fn add_leg(
+            &mut self,
+            vertex: VertexId,
+            flow: Flow,
+            edge: DiagramEdge,
+            leg: ExternalLeg,
+        ) -> EdgeId {
+            let slot = self.slot(vertex);
+            self.builder
+                .add_generation_external(vertex, flow, edge, slot, leg)
+                .unwrap()
+        }
+    }
+
     fn diagram_with_atoms(
         model: &Arc<Model>,
         name: &str,
@@ -1761,36 +1800,32 @@ mod tests {
         internal_pdg: i64,
         external_pdg: i64,
     ) -> FeynmanDiagram {
-        let mut builder = FeynmanDiagram::builder(Arc::clone(model), name)
-            .numerator(numerator)
-            .projector(projector);
-        builder.add_generation_external("in", 0, ExternalState::Incoming, 0);
+        let mut builder = FixtureBuilder::new(
+            FeynmanDiagram::builder(Arc::clone(model), name)
+                .numerator(numerator)
+                .projector(projector),
+        );
         let interaction = model.vertex_rule_id("V").unwrap();
-        builder.add_vertex(DiagramVertex::interaction("left", interaction));
-        builder.add_vertex(DiagramVertex::interaction("right", interaction));
-        builder.add_generation_external("out", 1, ExternalState::Outgoing, 1);
-        builder
-            .add_edge(
-                VertexId(0),
-                VertexId(1),
-                DiagramEdge::new(particle(model, external_pdg), false),
-            )
-            .unwrap();
-        builder
-            .add_edge(
-                VertexId(1),
-                VertexId(2),
-                DiagramEdge::new(particle(model, internal_pdg), false),
-            )
-            .unwrap();
-        builder
-            .add_edge(
-                VertexId(2),
-                VertexId(3),
-                DiagramEdge::new(particle(model, external_pdg), false),
-            )
-            .unwrap();
-        builder.build().unwrap()
+        let left = builder.add_vertex(DiagramVertex::interaction("left", interaction));
+        let right = builder.add_vertex(DiagramVertex::interaction("right", interaction));
+        builder.add_leg(
+            left,
+            Flow::Sink,
+            DiagramEdge::new(particle(model, external_pdg), false),
+            leg("in", 0, ExternalState::Incoming, 0),
+        );
+        builder.add_edge(
+            left,
+            right,
+            DiagramEdge::new(particle(model, internal_pdg), false),
+        );
+        builder.add_leg(
+            right,
+            Flow::Source,
+            DiagramEdge::new(particle(model, external_pdg), false),
+            leg("out", 1, ExternalState::Outgoing, 1),
+        );
+        builder.builder.build().unwrap()
     }
 
     fn routed_projector_diagram(
@@ -1798,30 +1833,39 @@ mod tests {
         name: &str,
         internal_edges_first: bool,
     ) -> FeynmanDiagram {
-        let mut builder = FeynmanDiagram::builder(Arc::clone(model), name);
-        let incoming = builder.add_generation_external("in", 0, ExternalState::Incoming, 0);
+        let mut builder = FixtureBuilder::new(FeynmanDiagram::builder(Arc::clone(model), name));
         let interaction = model.vertex_rule_id("V").unwrap();
         let left = builder.add_vertex(DiagramVertex::interaction("left", interaction));
         let right = builder.add_vertex(DiagramVertex::interaction("right", interaction));
-        let outgoing = builder.add_generation_external("out", 1, ExternalState::Outgoing, 1);
         let scalar = || DiagramEdge::new(particle(model, 25), false);
         let vector = || DiagramEdge::new(particle(model, 21), false);
-        let add_internals = |builder: &mut feynkit_graph::FeynmanDiagramBuilder| {
-            let first = builder.add_edge(left, right, scalar()).unwrap();
-            let second = builder.add_edge(left, right, scalar()).unwrap();
+        let add_internals = |builder: &mut FixtureBuilder| {
+            let first = builder.add_edge(left, right, scalar());
+            let second = builder.add_edge(left, right, scalar());
             if internal_edges_first { first } else { second }
+        };
+        let add_incoming = |builder: &mut FixtureBuilder| {
+            builder.add_leg(
+                left,
+                Flow::Sink,
+                vector(),
+                leg("in", 0, ExternalState::Incoming, 0),
+            )
         };
         let (incoming_edge, loop_edge) = if internal_edges_first {
             let loop_edge = add_internals(&mut builder);
-            let incoming_edge = builder.add_edge(incoming, left, vector()).unwrap();
-            builder.add_edge(right, outgoing, vector()).unwrap();
-            (incoming_edge, loop_edge)
+            (add_incoming(&mut builder), loop_edge)
         } else {
-            let incoming_edge = builder.add_edge(incoming, left, vector()).unwrap();
-            let loop_edge = add_internals(&mut builder);
-            builder.add_edge(right, outgoing, vector()).unwrap();
-            (incoming_edge, loop_edge)
+            let incoming_edge = add_incoming(&mut builder);
+            (incoming_edge, add_internals(&mut builder))
         };
+        builder.add_leg(
+            right,
+            Flow::Source,
+            vector(),
+            leg("out", 1, ExternalState::Outgoing, 1),
+        );
+        let builder = builder.builder;
         let endpoint = feynkit_graph::symbols::hedge_index().call((
             (2 * incoming_edge.0 + 1) as i64,
             if internal_edges_first { 2_i64 } else { 1_i64 },
@@ -1904,27 +1948,30 @@ mod tests {
         permuted_ids: bool,
         global_left_right_swap: bool,
     ) -> FeynmanDiagram {
-        let mut builder = FeynmanDiagram::builder(Arc::clone(model), name);
+        /// An edge end: a vertex or the far end of a generated leg.
+        #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+        enum End {
+            Vertex(VertexId),
+            Incoming,
+            Outgoing,
+        }
+        let mut builder = FixtureBuilder::new(FeynmanDiagram::builder(Arc::clone(model), name));
         let internal = |name: &str| DiagramVertex {
             name: name.to_owned(),
             interaction: None,
 
             numerator: Atom::one(),
         };
-        let (incoming, left, right, outgoing, marker) = if permuted_ids {
+        let (left, right, marker) = if permuted_ids {
             let marker = builder.add_vertex(internal("marker"));
-            let outgoing = builder.add_generation_external("out", 1, ExternalState::Outgoing, 0);
             let right = builder.add_vertex(internal("right"));
-            let incoming = builder.add_generation_external("in", 0, ExternalState::Incoming, 0);
             let left = builder.add_vertex(internal("left"));
-            (incoming, left, right, outgoing, marker)
+            (left, right, marker)
         } else {
-            let incoming = builder.add_generation_external("in", 0, ExternalState::Incoming, 0);
             let left = builder.add_vertex(internal("left"));
             let right = builder.add_vertex(internal("right"));
-            let outgoing = builder.add_generation_external("out", 1, ExternalState::Outgoing, 0);
             let marker = builder.add_vertex(internal("marker"));
-            (incoming, left, right, outgoing, marker)
+            (left, right, marker)
         };
         let (source_side, target_side) = if global_left_right_swap {
             (right, left)
@@ -1934,27 +1981,47 @@ mod tests {
         let scalar = || DiagramEdge::new(particle(model, 25), false);
         let mut edges = Vec::new();
         let mut add_edge = |source, target| {
-            let edge = builder.add_edge(source, target, scalar()).unwrap();
+            let edge = match (source, target) {
+                (End::Vertex(source), End::Vertex(target)) => {
+                    builder.add_edge(source, target, scalar())
+                }
+                (End::Incoming, End::Vertex(target)) => builder.add_leg(
+                    target,
+                    Flow::Sink,
+                    scalar(),
+                    leg("in", 0, ExternalState::Incoming, 0),
+                ),
+                (End::Vertex(source), End::Outgoing) => builder.add_leg(
+                    source,
+                    Flow::Source,
+                    scalar(),
+                    leg("out", 1, ExternalState::Outgoing, 0),
+                ),
+                _ => unreachable!("legs end at a vertex"),
+            };
             edges.push((edge, source, target));
         };
+        let [left, right, marker, source_side, target_side] =
+            [left, right, marker, source_side, target_side].map(End::Vertex);
         if permuted_ids {
             add_edge(left, marker);
-            add_edge(target_side, outgoing);
+            add_edge(target_side, End::Outgoing);
             add_edge(left, right);
-            add_edge(incoming, source_side);
+            add_edge(End::Incoming, source_side);
             add_edge(left, right);
         } else {
-            add_edge(incoming, source_side);
+            add_edge(End::Incoming, source_side);
             add_edge(left, right);
             add_edge(left, right);
             add_edge(left, marker);
-            add_edge(target_side, outgoing);
+            add_edge(target_side, End::Outgoing);
         }
+        let builder = builder.builder;
 
         let left_vertices = if global_left_right_swap {
-            BTreeSet::from([incoming, right])
+            BTreeSet::from([End::Incoming, right])
         } else {
-            BTreeSet::from([incoming, left, marker])
+            BTreeSet::from([End::Incoming, left, marker])
         };
         let mut left_half_edges = Vec::new();
         let mut right_half_edges = Vec::new();
@@ -2019,13 +2086,8 @@ mod tests {
     }
 
     fn left_right_diagram(model: &Arc<Model>, attachment: LeftRightAttachment) -> FeynmanDiagram {
-        let mut builder = FeynmanDiagram::builder(Arc::clone(model), "left-right");
-        let external = [
-            builder.add_generation_external("in0", 0, ExternalState::Incoming, 0),
-            builder.add_generation_external("in1", 1, ExternalState::Incoming, 1),
-            builder.add_generation_external("out0", 2, ExternalState::Outgoing, 0),
-            builder.add_generation_external("out1", 3, ExternalState::Outgoing, 1),
-        ];
+        let mut builder =
+            FixtureBuilder::new(FeynmanDiagram::builder(Arc::clone(model), "left-right"));
         let interaction = model.vertex_rule_id("V").unwrap();
         let left = builder.add_vertex(DiagramVertex::interaction("left", interaction));
         let right = builder.add_vertex(DiagramVertex::interaction("right", interaction));
@@ -2035,23 +2097,27 @@ mod tests {
             LeftRightAttachment::GlobalSwap => [right, right, left, left],
             LeftRightAttachment::PartialSwap => [right, left, left, right],
         };
-        for (index, (&external, &target)) in external.iter().zip(&targets).enumerate() {
-            let (source, target) = if index < 2 {
-                (external, target)
-            } else {
-                (target, external)
+        let legs = [
+            ("in0", 0, ExternalState::Incoming, 0),
+            ("in1", 1, ExternalState::Incoming, 1),
+            ("out0", 2, ExternalState::Outgoing, 0),
+            ("out1", 3, ExternalState::Outgoing, 1),
+        ];
+        for ((name, index, state, connection), vertex) in legs.into_iter().zip(targets) {
+            let flow = match state {
+                ExternalState::Incoming => Flow::Sink,
+                ExternalState::Outgoing => Flow::Source,
             };
-            builder
-                .add_edge(source, target, DiagramEdge::new(particle(model, 25), false))
-                .unwrap();
+            builder.add_leg(
+                vertex,
+                flow,
+                DiagramEdge::new(particle(model, 25), false),
+                leg(name, index, state, connection),
+            );
         }
-        builder
-            .add_edge(left, right, DiagramEdge::new(particle(model, 25), false))
-            .unwrap();
-        builder
-            .add_edge(left, marker, DiagramEdge::new(particle(model, 25), false))
-            .unwrap();
-        builder.build().unwrap()
+        builder.add_edge(left, right, DiagramEdge::new(particle(model, 25), false));
+        builder.add_edge(left, marker, DiagramEdge::new(particle(model, 25), false));
+        builder.builder.build().unwrap()
     }
 
     fn exact_options() -> GraphGroupingOptions {

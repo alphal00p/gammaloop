@@ -12,18 +12,18 @@ impl<E, V, H, N: NodeStorageOps<NodeData = V>> HedgeGraph<E, V, H, N> {
     /// from one component to another points to an earlier returned component.
     /// Nodes within each component are sorted. Among available sink components,
     /// the one with smallest node index comes first, making unrelated blocks
-    /// deterministic. Isolated nodes are included; identification aliases that
-    /// share incidence are visited once.
+    /// deterministic. Isolated nodes are included; nodes absorbed by a pending
+    /// identification are not.
     ///
     /// The iterative Tarjan traversal uses native half-edge crowns and requires
     /// no recursive call stack or copied adjacency graph. Ordering the resulting
     /// components also traverses native incidence. Complexity is O(V+E+V log V).
     pub fn strongly_connected_components(&self, basis: DirectionBasis) -> Vec<Vec<NodeIndex>> {
         let full = self.full_filter();
-        let nodes = self.iter_nodes_of(&full).map(|(node, _, _)| node).chain(
-            self.iter_nodes()
-                .filter_map(|(node, mut crown, _)| crown.next().is_none().then_some(node)),
-        );
+        let nodes = self
+            .iter_nodes_of(&full)
+            .map(|(node, _, _)| node)
+            .chain(self.iter_isolated_nodes());
         self.strongly_connected_nodes(&full, nodes, basis)
     }
 
@@ -257,10 +257,6 @@ mod tests {
 
     #[test]
     fn identification_history_is_not_counted_as_an_extra_component() {
-        use crate::{
-            half_edge::nodestore::NodeStorageVec,
-            tree::{child_vec::ChildVecStore, Forest},
-        };
         let mut builder = HedgeGraphBuilder::<(), ()>::new();
         let first = builder.add_node(());
         let historical = builder.add_node(());
@@ -268,27 +264,9 @@ mod tests {
         let isolated = builder.add_node(());
         builder.add_edge(first, target, (), true);
         builder.add_edge(historical, target, (), true);
-        let mut vector: HedgeGraph<_, _, _, NodeStorageVec<()>> = builder.clone().build();
-        let merged = vector.identify_nodes(&[first, historical], ());
-        let result = vector.strongly_connected_components(DirectionBasis::Underlying);
-        assert_eq!(result.len(), 3);
-        assert_eq!(
-            result
-                .iter()
-                .flatten()
-                .copied()
-                .collect::<std::collections::BTreeSet<_>>(),
-            [merged, target, isolated]
-                .into_iter()
-                .collect::<std::collections::BTreeSet<_>>()
-        );
-        assert!(
-            result.iter().position(|c| c.contains(&target)).unwrap()
-                < result.iter().position(|c| c.contains(&merged)).unwrap()
-        );
-        let mut forest: HedgeGraph<_, _, _, Forest<(), ChildVecStore<()>>> = builder.build();
-        let merged = forest.identify_nodes(&[first, historical], ());
-        let result = forest.strongly_connected_components(DirectionBasis::Underlying);
+        let mut graph: HedgeGraph<_, _> = builder.build();
+        let merged = graph.identify_nodes(&[first, historical], ());
+        let result = graph.strongly_connected_components(DirectionBasis::Underlying);
         assert_eq!(result.len(), 3);
         assert_eq!(
             result

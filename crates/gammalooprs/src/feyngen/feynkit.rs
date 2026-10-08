@@ -159,10 +159,10 @@ mod tests {
     use feynkit_generator::{GenerationOptions, Process};
     use feynkit_graph::{
         DiagramCut, DiagramCutSide, DiagramEdge, DiagramEndpoint, DiagramHalfEdge, DiagramVertex,
-        EdgeId, ExternalState, FeynmanDiagram, LoopMomentumBasis,
+        EdgeId, ExternalLeg, ExternalState, FeynmanDiagram, LoopMomentumBasis, VertexSlot,
     };
     use linnet::half_edge::{
-        involution::{EdgeIndex, Hedge, HedgePair, Orientation},
+        involution::{EdgeIndex, Flow, Hedge, HedgePair, Orientation},
         subgraph::{Inclusion, SuBitGraph, SubGraphLike, SubSetLike, SubSetOps},
     };
     use symbolica::{
@@ -229,12 +229,12 @@ mod tests {
         let particle = model.particle_id("phi").unwrap();
         let interaction = model.vertex_rule_id("V").unwrap();
         let left_numerator = if vertex_dummy {
-            atom("gammalooprs::vertex(1,0)")
+            atom("gammalooprs::vertex(0,0)")
         } else {
             atom("kept_vertex_fragment")
         };
         let numerator = if vertex_dummy {
-            atom("gammalooprs::vertex(1,0)*kept_vertex_fragment*kept_edge_fragment^2")
+            atom("gammalooprs::vertex(0,0)*kept_vertex_fragment*kept_edge_fragment^2")
         } else {
             atom("kept_vertex_fragment^2*kept_edge_fragment^2")
         };
@@ -244,7 +244,6 @@ mod tests {
             .numerator(numerator)
             .numerator_prefactor(atom("kept_prefactor"))
             .projector(atom("kept_projector"));
-        let incoming = builder.add_generation_external("incoming", 0, ExternalState::Incoming, 0);
         let left = builder.add_vertex(DiagramVertex {
             numerator: left_numerator,
             ..DiagramVertex::interaction("left", interaction)
@@ -253,9 +252,14 @@ mod tests {
             numerator: atom("kept_vertex_fragment"),
             ..DiagramVertex::interaction("right", interaction)
         });
-        let outgoing = builder.add_generation_external("outgoing", 1, ExternalState::Outgoing, 1);
         builder
-            .add_edge(incoming, left, DiagramEdge::new(particle, false))
+            .add_generation_external(
+                left,
+                Flow::Sink,
+                DiagramEdge::new(particle, false),
+                VertexSlot(0),
+                leg("incoming", 0, ExternalState::Incoming, 0),
+            )
             .unwrap();
         for _ in 0..2 {
             let mut edge = DiagramEdge::new(particle, false);
@@ -263,7 +267,13 @@ mod tests {
             builder.add_edge(left, right, edge).unwrap();
         }
         builder
-            .add_edge(right, outgoing, DiagramEdge::new(particle, false))
+            .add_generation_external(
+                right,
+                Flow::Source,
+                DiagramEdge::new(particle, false),
+                VertexSlot(2),
+                leg("outgoing", 1, ExternalState::Outgoing, 1),
+            )
             .unwrap();
         let diagram = builder.build().unwrap();
         if let Some(basis) = basis {
@@ -273,12 +283,20 @@ mod tests {
         }
     }
 
+    fn leg(name: &str, index: usize, state: ExternalState, connection: usize) -> ExternalLeg {
+        ExternalLeg {
+            name: name.to_owned(),
+            index,
+            state,
+            connection,
+        }
+    }
+
     fn legacy_order_bubble(model: &Arc<Model>, basis: Option<LoopMomentumBasis>) -> FeynmanDiagram {
         let particle = model.particle_id("phi").unwrap();
         let interaction = model.vertex_rule_id("V").unwrap();
         let mut builder = FeynmanDiagram::builder(Arc::clone(model), "legacy_order_bubble")
             .numerator(atom("kept_vertex_fragment^4"));
-        let incoming = builder.add_generation_external("incoming", 0, ExternalState::Incoming, 0);
         let interaction_vertex = |name| DiagramVertex {
             numerator: atom("kept_vertex_fragment"),
             ..DiagramVertex::interaction(name, interaction)
@@ -287,16 +305,21 @@ mod tests {
         let second = builder.add_vertex(interaction_vertex("second"));
         let third = builder.add_vertex(interaction_vertex("third"));
         let fourth = builder.add_vertex(interaction_vertex("fourth"));
-        let outgoing = builder.add_generation_external("outgoing", 1, ExternalState::Outgoing, 0);
-
+        builder
+            .add_generation_external(
+                first,
+                Flow::Sink,
+                DiagramEdge::new(particle, false),
+                VertexSlot(0),
+                leg("incoming", 0, ExternalState::Incoming, 0),
+            )
+            .unwrap();
         for (expected, source, target) in [
-            (0, incoming, first),
             (1, first, second),
             (2, second, third),
             (3, second, third),
             (4, third, fourth),
             (5, first, fourth),
-            (6, fourth, outgoing),
         ] {
             assert_eq!(
                 builder
@@ -305,6 +328,15 @@ mod tests {
                 EdgeId(expected)
             );
         }
+        builder
+            .add_generation_external(
+                fourth,
+                Flow::Source,
+                DiagramEdge::new(particle, false),
+                VertexSlot(2),
+                leg("outgoing", 1, ExternalState::Outgoing, 0),
+            )
+            .unwrap();
         let diagram = builder.build().unwrap();
         let diagram = if let Some(basis) = basis {
             diagram.with_loop_momentum_edges(&basis.loop_edges).unwrap()
@@ -340,14 +372,6 @@ mod tests {
         let particle = model.particle_id("phi").unwrap();
         let interaction = model.vertex_rule_id("V").unwrap();
         let mut builder = FeynmanDiagram::builder(Arc::clone(model), "two_connections");
-        let incoming_0 =
-            builder.add_generation_external("incoming_0", 0, ExternalState::Incoming, 0);
-        let incoming_1 =
-            builder.add_generation_external("incoming_1", 1, ExternalState::Incoming, 1);
-        let outgoing_0 =
-            builder.add_generation_external("outgoing_0", 2, ExternalState::Outgoing, 0);
-        let outgoing_1 =
-            builder.add_generation_external("outgoing_1", 3, ExternalState::Outgoing, 1);
         let internal = (0..4)
             .map(|index| {
                 builder.add_vertex(DiagramVertex::interaction(format!("v{index}"), interaction))
@@ -358,10 +382,32 @@ mod tests {
         // The second incoming edge points from its interaction vertex toward
         // the incoming external vertex. The sewing bridge must nevertheless
         // expose that connection as +P1 in the runtime coordinate frame.
-        builder.add_edge(incoming_0, internal[0], scalar()).unwrap();
-        builder.add_edge(internal[1], incoming_1, scalar()).unwrap();
-        builder.add_edge(internal[2], outgoing_0, scalar()).unwrap();
-        builder.add_edge(internal[3], outgoing_1, scalar()).unwrap();
+        for (vertex, flow, leg) in [
+            (
+                0,
+                Flow::Sink,
+                leg("incoming_0", 0, ExternalState::Incoming, 0),
+            ),
+            (
+                1,
+                Flow::Source,
+                leg("incoming_1", 1, ExternalState::Incoming, 1),
+            ),
+            (
+                2,
+                Flow::Source,
+                leg("outgoing_0", 2, ExternalState::Outgoing, 0),
+            ),
+            (
+                3,
+                Flow::Source,
+                leg("outgoing_1", 3, ExternalState::Outgoing, 1),
+            ),
+        ] {
+            builder
+                .add_generation_external(internal[vertex], flow, scalar(), VertexSlot(0), leg)
+                .unwrap();
+        }
         builder
             .add_edge(internal[0], internal[1], scalar())
             .unwrap();

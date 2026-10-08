@@ -1,20 +1,31 @@
+mod enumeration;
+mod graph;
+mod special_topologies;
+
 use std::{
-    collections::{BTreeMap, BTreeSet, HashMap, HashSet},
+    collections::{BTreeMap, BTreeSet, HashMap},
     fmt,
-    hash::{Hash, Hasher},
-    sync::{Arc, Mutex, RwLock},
+    sync::{
+        Arc, Mutex, RwLock,
+        atomic::{AtomicUsize, Ordering},
+    },
 };
 
 use feynkit_graph::{
     DiagramCut, DiagramCutSide, DiagramEdge, DiagramEndpoint, DiagramError, DiagramHalfEdge,
-    DiagramId, DiagramThresholdCandidate, DiagramVertex, EdgeId, ExternalState, FeynmanDiagram,
-    VertexSlot,
+    DiagramId, DiagramThresholdCandidate, DiagramVertex, EdgeId, ExternalLeg, ExternalState,
+    FeynmanDiagram, VertexSlot,
 };
 use feynkit_model::{Model, ModelError, Particle, ParticleId, VertexRule, VertexRuleId};
 use idenso::{color::CS, dirac::AGS, epsilon::EPSILON_SYMBOL, representations::Bispinor};
-use linnet::half_edge::involution::Flow;
-use linnet::half_edge::subgraph::{InternalSubGraph, SuBitGraph, SubSetLike};
-use linnet::half_edge::{HedgeGraph, NodeIndex};
+use linnet::half_edge::{
+    HedgeGraph, NodeIndex,
+    builder::HedgeGraphBuilder,
+    canon::ignore,
+    generate::GraphGenerator,
+    involution::{Flow, Orientation},
+    subgraph::{InternalSubGraph, SuBitGraph, SubSetLike},
+};
 use rayon::ThreadPoolBuildError;
 #[cfg(not(target_arch = "wasm32"))]
 use rayon::{ThreadPoolBuilder, prelude::*};
@@ -25,7 +36,6 @@ use spenso::{
 };
 use symbolica::{
     atom::{Atom, AtomCore, AtomView, FunctionBuilder},
-    graph::{GenerationSettings, Graph, HalfEdge},
     symbol,
 };
 use thiserror::Error;
@@ -35,9 +45,15 @@ use feynkit_amplitude::ColorRepresentation;
 use crate::{
     FilterScope, GenerationFilter, GenerationFilterKind, GenerationOptions, GenerationType,
     GroupingError, NumeratorGrouping, ParticleSelector, Process, ProcessError, SelectorError,
-    SelfEnergyFilterOptions, SewnFilterOptions, SnailFilterOptions, TadpoleFilterOptions,
-    VertexSelector, grouping, momentum_symbol,
+    SewnFilterOptions, grouping, momentum_symbol,
 };
+pub use enumeration::{ExternalLabel, GenerationView};
+use enumeration::{
+    ParticleStub, ProcessExternals, Pruner, VertexSignatures, closed_loops, incoming_stub,
+    resolved_vertex,
+};
+pub use graph::ExternalNode;
+use graph::{Endpoint, GeneratedEdge, GeneratedGraph, PlainNodes, PlainVertex};
 
 #[derive(Debug, Error)]
 pub enum GenerationError {
@@ -55,10 +71,10 @@ pub enum GenerationError {
     Diagram(#[from] DiagramError),
     #[error("failed to build generation thread pool: {0}")]
     ThreadPool(#[from] ThreadPoolBuildError),
-    #[error("graph automorphism factor cannot be represented by u64: {0}")]
-    SymmetryFactor(String),
-    #[error("could not assign an interaction to node {node} with signature {signature:?}")]
-    MissingInteraction { node: usize, signature: Vec<String> },
+    #[error("graph automorphism factor cannot be represented by u64")]
+    SymmetryFactor,
+    #[error(transparent)]
+    Enumeration(#[from] linnet::half_edge::generate::GenerationError),
     #[error("option {option} for filter {filter} in the {scope} scope is not implemented")]
     UnsupportedFilterOption {
         scope: FilterScope,
@@ -101,10 +117,6 @@ pub enum GenerationError {
         "fermion flow branches at vertex {vertex} with degree {degree}; branching fermion chains are not supported"
     )]
     UnsupportedFermionBranching { vertex: usize, degree: usize },
-    #[error("spanning-tree edge between nodes {node} and {parent} is missing")]
-    MissingSpanningTreeEdge { node: usize, parent: usize },
-    #[error("external node {node} has no incident edge")]
-    MissingExternalEdge { node: usize },
     #[error("external leg {index} has no resolved particle")]
     MissingExternalParticle { index: usize },
     #[error("external fermion flow must have exactly two legs, found {legs:?}")]
@@ -189,7 +201,10 @@ pub struct DiagramGroup {
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct GenerationReport {
+    /// Complete untyped topologies accepted during enumeration.
     pub topology_count: usize,
+    /// Enumerated diagrams: topologies with fields and vertex rules, before the cut and
+    /// charge-conjugation filters that need their canonical frame.
     pub interaction_assignment_count: usize,
     /// Number of diagrams retained after exact zero-numerator removal.
     pub retained_count: usize,
@@ -1359,104 +1374,43 @@ impl Generator {
         )?;
         let process = &expanded_process;
         let resolved = ResolvedProcess::new(&self.model, process, generation_type, options)?;
-        let signatures = InteractionSignatures::new(&self.model, options)?;
-        let external_edges = resolved.external_edges(&self.model)?;
-        let generation_signatures: Vec<_> = signatures.keys().cloned().collect();
+        let signatures = VertexSignatures::new(&self.model, options)?;
+        let externals = resolved.externals(&self.model)?;
+        let pruner = Pruner::new(&self.model, options, &signatures)?;
 
-        let progress_count = Arc::new(Mutex::new(0));
-        let progress_options = options.clone();
         options.report_progress("topologies", 0, None);
-        // Fast cut filter switch multiplicity is no longer a separate CLI option;
-        // FeynKit owns the physical-cut filtering strategy.
-        let mut settings = GenerationSettings::new()
-            .max_loops(*options.loop_count().end())
+        let topologies = Arc::new(AtomicUsize::new(0));
+        let mut generator = GraphGenerator::new(externals.legs(), signatures.stubs.clone())
+            .loops(options.loop_count())
             .allow_self_loops(options.allow_self_loops)
             .allow_zero_flow_edges(options.allow_zero_flow_edges)
-            .progress_fn(Box::new(move |_| {
-                let mut count = progress_count.lock().unwrap();
-                *count += 1;
-                progress_options.report_progress("topologies", *count, None);
-                !progress_options.cancellation_requested()
-            }));
-        if let Some(filter) = options.filter.clone() {
-            let filter_options = options.clone();
-            settings = settings.filter_fn(Box::new(move |graph, completed_vertices| {
-                !filter_options.cancellation_requested() && filter(graph, completed_vertices)
-            }));
-        }
+            .filter(move |view| pruner.keeps(view))
+            .progress({
+                let options = options.clone();
+                let topologies = Arc::clone(&topologies);
+                move |progress| {
+                    topologies.store(progress.topologies, Ordering::Relaxed);
+                    options.report_progress("topologies", progress.topologies, None);
+                    !options.cancellation_requested()
+                }
+            })
+            .abort_check({
+                let options = options.clone();
+                move || options.cancellation_requested()
+            });
         if let Some(maximum) = options.max_vertices {
-            // Symbolica counts the degree-one external nodes as vertices. The
-            // public FeynKit option counts interaction vertices instead.
-            settings = settings.max_vertices(maximum.checked_add(external_edges.len()).ok_or(
-                GenerationError::ArithmeticOverflow("the Symbolica vertex limit"),
-            )?);
+            generator = generator.max_vertices(maximum);
         }
         if let Some(maximum) = options.max_bridges(*options.loop_count().start()) {
-            settings = settings.max_bridges(maximum);
+            generator = generator.max_bridges(maximum);
         }
-        let abort_options = options.clone();
-        settings = settings.abort_check(Box::new(move || abort_options.cancellation_requested()));
-
-        let generated = Graph::generate(&external_edges, &generation_signatures, settings);
-        let (raw_graphs, mut completed) = match generated {
-            Ok(graphs) => (graphs, true),
-            Err(graphs) => (graphs, false),
+        #[cfg(not(target_arch = "wasm32"))]
+        let generator = generator.parallel(true);
+        let enumerate = || {
+            generator
+                .iter()
+                .map(|diagrams| diagrams.collect::<Vec<_>>())
         };
-        if options.cancellation_requested() {
-            completed = false;
-        }
-
-        let mut raw_graphs: Vec<_> = raw_graphs.into_iter().collect();
-        // Sort for reproducible generated IDs, then discard contributions below
-        // the requested loop range before more expensive processing.
-        raw_graphs.sort_by(|left, right| left.0.cmp(&right.0));
-        raw_graphs.retain(|(graph, _)| options.loop_count().contains(&graph.num_loops()));
-        let mut filtered_graphs = Vec::with_capacity(raw_graphs.len());
-        let total = raw_graphs.len();
-        options.report_progress("topology_filters", 0, Some(total));
-        for (index, entry) in raw_graphs.into_iter().enumerate() {
-            if options.cancellation_requested() {
-                completed = false;
-                break;
-            }
-            if self.passes_topology_filters(&entry.0, options)? {
-                filtered_graphs.push(entry);
-            }
-            options.report_progress("topology_filters", index + 1, Some(total));
-        }
-        let raw_graphs = filtered_graphs;
-        let topology_count = raw_graphs.len();
-
-        let assignments = Mutex::new(0);
-        options.report_progress("interactions", 0, Some(topology_count));
-        let color_graphs = || {
-            #[cfg(target_arch = "wasm32")]
-            let graphs = raw_graphs.iter();
-            #[cfg(not(target_arch = "wasm32"))]
-            let graphs = raw_graphs.par_iter();
-            graphs
-                .filter_map(|(graph, symmetry)| {
-                    if options.cancellation_requested() {
-                        return None;
-                    }
-                    let symmetry = match u64::try_from(symmetry.clone()) {
-                        Ok(symmetry) => symmetry,
-                        Err(error) => {
-                            return Some(Err(GenerationError::SymmetryFactor(error.to_string())));
-                        }
-                    };
-                    let result = self
-                        .assign_interactions(graph, &signatures)
-                        .map(|graphs| (graphs, symmetry));
-                    let mut count = assignments.lock().unwrap();
-                    *count += 1;
-                    options.report_progress("interactions", *count, Some(topology_count));
-                    Some(result)
-                })
-                .collect::<Result<Vec<_>, GenerationError>>()
-        };
-        #[cfg(target_arch = "wasm32")]
-        let colored = color_graphs()?;
         #[cfg(not(target_arch = "wasm32"))]
         let pool = {
             let mut pool = ThreadPoolBuilder::new();
@@ -1467,106 +1421,57 @@ impl Generator {
             }
             pool.build()?
         };
+        let mut generated = if externals.vetoed(&self.model, options) {
+            Vec::new()
+        } else {
+            #[cfg(target_arch = "wasm32")]
+            let generated = enumerate()?;
+            #[cfg(not(target_arch = "wasm32"))]
+            let generated = pool.install(enumerate)?;
+            generated
+        };
+        let mut completed = !options.cancellation_requested();
+        // The certificate order is canonical, hence reproducible, and it fixes the names.
+        generated.sort_by(|left, right| left.certificate.cmp(&right.certificate));
+        let topology_count = topologies.load(Ordering::Relaxed);
+        let interaction_assignment_count = generated.len();
+
+        let prepared_count = Mutex::new(0);
+        options.report_progress("interaction_filters", 0, Some(interaction_assignment_count));
+        let prepare = || {
+            #[cfg(target_arch = "wasm32")]
+            let diagrams = generated.iter();
+            #[cfg(not(target_arch = "wasm32"))]
+            let diagrams = generated.par_iter();
+            diagrams
+                .map(|diagram| {
+                    if options.cancellation_requested() {
+                        return Ok(None);
+                    }
+                    let graph = externals.graph(diagram, &signatures);
+                    let symmetry = diagram
+                        .automorphism_count
+                        .and_then(|count| u64::try_from(count).ok())
+                        .ok_or(GenerationError::SymmetryFactor)?;
+                    let input = self.diagram_input(&resolved, graph, symmetry, options)?;
+                    let mut count = prepared_count.lock().unwrap();
+                    *count += 1;
+                    options.report_progress(
+                        "interaction_filters",
+                        *count,
+                        Some(interaction_assignment_count),
+                    );
+                    Ok(input)
+                })
+                .collect::<Result<Vec<_>, GenerationError>>()
+        };
+        #[cfg(target_arch = "wasm32")]
+        let diagram_inputs = prepare()?;
         #[cfg(not(target_arch = "wasm32"))]
-        let colored = pool.install(color_graphs)?;
+        let diagram_inputs = pool.install(prepare)?;
+        let diagram_inputs = diagram_inputs.into_iter().flatten().collect::<Vec<_>>();
         if options.cancellation_requested() {
             completed = false;
-        }
-        let mut colored: Vec<_> = colored
-            .into_iter()
-            .flat_map(|(graphs, symmetry)| {
-                graphs
-                    .into_iter()
-                    .map(move |(graph, multiplicity)| ColoredTopology {
-                        graph,
-                        symmetry,
-                        multiplicity,
-                        cut_partitions: Vec::new(),
-                        topology_threshold_candidates: Vec::new(),
-                    })
-            })
-            .collect();
-        colored.sort_by(|left, right| left.graph.cmp(&right.graph));
-        let interaction_assignment_count = colored.len();
-
-        let mut diagram_inputs = Vec::new();
-        options.report_progress("interaction_filters", 0, Some(interaction_assignment_count));
-        for (index, mut topology) in colored.into_iter().enumerate() {
-            options.report_progress(
-                "interaction_filters",
-                index,
-                Some(interaction_assignment_count),
-            );
-            if options.cancellation_requested() {
-                completed = false;
-                break;
-            }
-            topology.graph = resolved.canonicalize_numerator_graph(
-                &topology.graph,
-                &self.model,
-                &options.numerator_grouping,
-            )?;
-            if generation_type == GenerationType::CrossSection {
-                let inventory = resolved.cut_partitions(&topology.graph, &self.model, options)?;
-                topology.cut_partitions = inventory.physical;
-                topology.topology_threshold_candidates = inventory.topology_threshold_candidates;
-                if topology.cut_partitions.is_empty()
-                    || !self.retain_cut_amplitude_partitions(&mut topology, options)?
-                    || !resolved.passes_sewn_filter(&topology.graph, options)
-                {
-                    continue;
-                }
-            }
-            topology.graph =
-                ResolvedProcess::repair_cp_interaction_rules(topology.graph, &self.model)?;
-            let fermion_loop_count = self.closed_fermion_loop_count(&topology.graph, false)?;
-            if !self.passes_interaction_filters(&topology.graph, fermion_loop_count, options)? {
-                continue;
-            }
-            let grassmann_loop_count = self.closed_fermion_loop_count(&topology.graph, true)?;
-            // Canonicalization fixes the stable vertex/edge-ID frame used by
-            // cuts and routing.  The physical representative must still have
-            // each fermion chain oriented consistently before its numerator
-            // is instantiated.  Reversing an edge keeps its stable ID, so the
-            // only cut metadata that needs transport is the source/target
-            // endpoint attached to each half-edge.
-            let normalized = resolved.normalize_fermion_flows(&topology.graph, &self.model)?;
-            let representative = ColoredTopology {
-                graph: normalized.graph,
-                symmetry: topology.symmetry,
-                multiplicity: topology.multiplicity,
-                cut_partitions: transport_cut_metadata(
-                    &topology.cut_partitions,
-                    &normalized.reversed_edges,
-                ),
-                topology_threshold_candidates: transport_threshold_candidate_metadata(
-                    &topology.topology_threshold_candidates,
-                    &normalized.reversed_edges,
-                ),
-            };
-            // Without numerator comparisons, the normalized physical graph is
-            // already the representative. Its orientation-independent key also
-            // provides the same deterministic ordering.
-            let (topology, reversed_edges) =
-                if matches!(options.numerator_grouping, NumeratorGrouping::None) {
-                    (representative.clone(), BTreeSet::new())
-                } else {
-                    (topology, normalized.reversed_edges)
-                };
-            diagram_inputs.push((
-                topology,
-                representative,
-                grassmann_loop_count,
-                normalized.signs,
-                reversed_edges,
-            ));
-        }
-        if !options.cancellation_requested() {
-            options.report_progress(
-                "interaction_filters",
-                interaction_assignment_count,
-                Some(interaction_assignment_count),
-            );
         }
         let total = diagram_inputs.len();
         options.report_progress("numerators", 0, Some(total));
@@ -1579,67 +1484,17 @@ impl Generator {
             let inputs = diagram_inputs.into_par_iter();
             inputs
                 .enumerate()
-                .map(
-                    |(
-                        index,
-                        (comparison, representative, grassmann_loop_count, signs, reversed_edges),
-                    )| {
-                        if options.cancellation_requested() {
-                            return Ok::<_, GenerationError>(None);
-                        }
-                        let name = format!("{}{index:0width$}", options.graph_prefix);
-                        let identical = comparison == representative;
-                        let signs = FermionSigns {
-                            internal_loop_negative: grassmann_loop_count % 2 == 1,
-                            ..signs
-                        };
-                        let internal_reversals = comparison
-                            .graph
-                            .edges()
-                            .iter()
-                            .enumerate()
-                            .filter(|(_, edge)| {
-                                [edge.vertices.0, edge.vertices.1].iter().all(|vertex| {
-                                    matches!(
-                                        comparison.graph.nodes()[*vertex].data,
-                                        ColoredNode::Interaction(_)
-                                    )
-                                })
-                            })
-                            .map(|(edge, _)| reversed_edges.contains(&EdgeId(edge)))
-                            .collect::<Vec<_>>();
-                        let comparison = self.to_diagram(
-                            name.clone(),
-                            generation_type,
-                            comparison,
-                            signs,
-                            options,
-                        )?;
-                        let representative = if identical {
-                            comparison.clone()
-                        } else {
-                            self.to_diagram(name, generation_type, representative, signs, options)?
-                        };
-                        // Finalization orders external carriers before the internal edges.
-                        // Transport the comparison-to-representative reversals into that
-                        // finalized edge frame; process flow fixes all external carriers.
-                        let reversed_edges = comparison
-                            .edges()
-                            .filter(|(_, _, edge)| edge.external.is_none())
-                            .zip(internal_reversals)
-                            .filter_map(|((edge, _, _), reversed)| reversed.then_some(edge))
-                            .collect();
-                        let pair = DiagramPair {
-                            comparison,
-                            representative,
-                            reversed_edges,
-                        };
-                        let mut count = constructed.lock().unwrap();
-                        *count += 1;
-                        options.report_progress("numerators", *count, Some(total));
-                        Ok(Some(pair))
-                    },
-                )
+                .map(|(index, input)| {
+                    if options.cancellation_requested() {
+                        return Ok::<_, GenerationError>(None);
+                    }
+                    let name = format!("{}{index:0width$}", options.graph_prefix);
+                    let pair = self.diagram_pair(name, generation_type, input, options)?;
+                    let mut count = constructed.lock().unwrap();
+                    *count += 1;
+                    options.report_progress("numerators", *count, Some(total));
+                    Ok(Some(pair))
+                })
                 .collect::<Result<Vec<_>, _>>()
         };
         #[cfg(target_arch = "wasm32")]
@@ -1702,20 +1557,15 @@ impl Generator {
                 });
             }
         }
-        let mut keyed_diagrams = diagram_pairs
-            .into_iter()
-            .map(|pair| Ok((pair.comparison.canonical_key()?, pair)))
-            .collect::<Result<Vec<_>, GenerationError>>()?;
-        keyed_diagrams.sort_by(|left, right| left.0.cmp(&right.0));
-        let width = keyed_diagrams
+        let width = diagram_pairs
             .len()
             .saturating_sub(1)
             .to_string()
             .len()
             .max(1);
-        let mut comparison_diagrams = Vec::with_capacity(keyed_diagrams.len());
-        let mut representatives = Vec::with_capacity(keyed_diagrams.len());
-        for (index, (_, mut pair)) in keyed_diagrams.into_iter().enumerate() {
+        let mut comparison_diagrams = Vec::with_capacity(diagram_pairs.len());
+        let mut representatives = Vec::with_capacity(diagram_pairs.len());
+        for (index, mut pair) in diagram_pairs.into_iter().enumerate() {
             let name = format!("{}{index:0width$}", options.graph_prefix);
             let selected_by_id = options
                 .selected_diagram_ids
@@ -1885,6 +1735,124 @@ impl Generator {
             zero_numerator_count,
         );
         Ok(result)
+    }
+
+    /// Canonicalize a generated diagram, apply the cut and interaction filters that need its
+    /// canonical frame, and normalize its fermion flows.
+    fn diagram_input(
+        &self,
+        resolved: &ResolvedProcess,
+        graph: GeneratedGraph,
+        symmetry: u64,
+        options: &GenerationOptions,
+    ) -> Result<Option<DiagramInput>, GenerationError> {
+        let mut topology = ColoredTopology {
+            graph: resolved.canonicalize_numerator_graph(
+                &graph,
+                &self.model,
+                &options.numerator_grouping,
+            )?,
+            symmetry,
+            cut_partitions: Vec::new(),
+            topology_threshold_candidates: Vec::new(),
+        };
+        if resolved.generation_type == GenerationType::CrossSection {
+            let inventory = resolved.cut_partitions(&topology.graph, &self.model, options)?;
+            topology.cut_partitions = inventory.physical;
+            topology.topology_threshold_candidates = inventory.topology_threshold_candidates;
+            if topology.cut_partitions.is_empty()
+                || !self.retain_cut_amplitude_partitions(&mut topology, options)?
+                || !resolved.passes_sewn_filter(&topology.graph, options)
+            {
+                return Ok(None);
+            }
+        }
+        topology.graph = ResolvedProcess::repair_cp_interaction_rules(topology.graph, &self.model)?;
+        if !self.passes_vertex_selection(&topology.graph, options) {
+            return Ok(None);
+        }
+        let grassmann_loop_count = self.closed_fermion_loop_count(&topology.graph, true)?;
+        // Canonicalization fixes the stable vertex/edge-ID frame used by
+        // cuts and routing.  The physical representative must still have
+        // each fermion chain oriented consistently before its numerator
+        // is instantiated.  Reversing an edge keeps its stable ID, so the
+        // only cut metadata that needs transport is the source/target
+        // endpoint attached to each half-edge.
+        let normalized = resolved.normalize_fermion_flows(&topology.graph, &self.model)?;
+        let representative = ColoredTopology {
+            graph: normalized.graph,
+            symmetry,
+            cut_partitions: transport_cut_metadata(
+                &topology.cut_partitions,
+                &normalized.reversed_edges,
+            ),
+            topology_threshold_candidates: transport_threshold_candidate_metadata(
+                &topology.topology_threshold_candidates,
+                &normalized.reversed_edges,
+            ),
+        };
+        // Without numerator comparisons, the normalized physical graph is
+        // already the representative.
+        let (comparison, reversed_edges) =
+            if matches!(options.numerator_grouping, NumeratorGrouping::None) {
+                (representative.clone(), BTreeSet::new())
+            } else {
+                (topology, normalized.reversed_edges)
+            };
+        Ok(Some(DiagramInput {
+            comparison,
+            representative,
+            signs: FermionSigns {
+                internal_loop_negative: grassmann_loop_count % 2 == 1,
+                ..normalized.signs
+            },
+            reversed_edges,
+        }))
+    }
+
+    /// Finalize the comparison and representative diagrams of a prepared input.
+    fn diagram_pair(
+        &self,
+        name: String,
+        generation_type: GenerationType,
+        input: DiagramInput,
+        options: &GenerationOptions,
+    ) -> Result<DiagramPair, GenerationError> {
+        let DiagramInput {
+            comparison,
+            representative,
+            signs,
+            reversed_edges,
+        } = input;
+        let identical = comparison == representative;
+        let internal_reversals = comparison
+            .graph
+            .edges()
+            .enumerate()
+            .filter(|(_, edge)| !edge.is_external())
+            .map(|(edge, _)| reversed_edges.contains(&EdgeId(edge)))
+            .collect::<Vec<_>>();
+        let comparison =
+            self.to_diagram(name.clone(), generation_type, comparison, signs, options)?;
+        let representative = if identical {
+            comparison.clone()
+        } else {
+            self.to_diagram(name, generation_type, representative, signs, options)?
+        };
+        // Finalization orders external carriers before the internal edges, which keep the
+        // canonical order. Transport the comparison-to-representative reversals into that
+        // finalized edge frame; process flow fixes all external carriers.
+        let reversed_edges = comparison
+            .edges()
+            .filter(|(_, _, edge)| edge.external.is_none())
+            .zip(internal_reversals)
+            .filter_map(|((edge, _, _), reversed)| reversed.then_some(edge))
+            .collect();
+        Ok(DiagramPair {
+            comparison,
+            representative,
+            reversed_edges,
+        })
     }
 
     fn validate_options(
@@ -2103,548 +2071,22 @@ impl Generator {
         Ok(())
     }
 
-    fn assign_interactions(
-        &self,
-        graph: &Graph<NodeColor, EdgeColor>,
-        signatures: &InteractionSignatures,
-    ) -> Result<Vec<InteractionAssignment>, GenerationError> {
-        let mut assignments: Vec<Vec<ColoredNode>> = vec![Vec::new()];
-        for (node_index, node) in graph.nodes().iter().enumerate() {
-            let choices = if let Some(external) = &node.data.external {
-                vec![ColoredNode::External(external.clone())]
-            } else {
-                let mut signature = Vec::new();
-                for edge_id in &node.edges {
-                    let edge = &graph.edges()[*edge_id];
-                    let direction = edge.directed.then_some(edge.vertices.0 == node_index);
-                    signature.push(EdgeColor {
-                        particle: edge.data.particle,
-                        direction,
-                    });
-                    // A self-loop contributes both half-edges to the
-                    // interaction signature.
-                    if edge.vertices.0 == edge.vertices.1 {
-                        signature.push(EdgeColor {
-                            particle: edge.data.particle,
-                            direction: direction.map(|value| !value),
-                        });
-                    }
-                }
-                signature.sort();
-                signatures
-                    .rules(&signature)
-                    .ok_or_else(|| GenerationError::MissingInteraction {
-                        node: node_index,
-                        signature: signature
-                            .iter()
-                            .map(|edge| {
-                                format!("{:?}:particle#{}", edge.direction, edge.particle.index())
-                            })
-                            .collect(),
-                    })?
+    /// The vertex selections, rechecked after charge-conjugation repair: the generator only
+    /// offers selected rules, but a repaired rule may be excluded.
+    fn passes_vertex_selection(&self, graph: &GeneratedGraph, options: &GenerationOptions) -> bool {
+        options.graph_filters.iter().all(|filter| match filter {
+            GenerationFilter::VertexAllow(selectors) => graph.vertices().all(|rule| {
+                selectors
                     .iter()
-                    .cloned()
-                    .map(ColoredNode::Interaction)
-                    .collect()
-            };
-
-            assignments = assignments
-                .into_iter()
-                .flat_map(|assignment| {
-                    choices.iter().cloned().map(move |choice| {
-                        let mut next = assignment.clone();
-                        next.push(choice);
-                        next
-                    })
-                })
-                .collect();
-        }
-
-        let mut grouped = BTreeMap::new();
-        for assignment in assignments {
-            let mut colored = Graph::new();
-            for node in assignment {
-                colored.add_node(node);
-            }
-            for edge in graph.edges() {
-                colored
-                    .add_edge(edge.vertices.0, edge.vertices.1, edge.directed, edge.data)
-                    .map_err(|error| GenerationError::GraphConstruction(error.to_string()))?;
-            }
-            *grouped.entry(colored.canonize().graph).or_insert(0) += 1;
-        }
-        Ok(grouped.into_iter().collect())
-    }
-
-    fn passes_topology_filters(
-        &self,
-        graph: &Graph<NodeColor, EdgeColor>,
-        options: &GenerationOptions,
-    ) -> Result<bool, GenerationError> {
-        let self_energy = options
-            .graph_filters
-            .iter()
-            .find_map(|filter| match filter {
-                GenerationFilter::SelfEnergy(options) => Some(options),
-                _ => None,
-            });
-        let tadpoles = options
-            .graph_filters
-            .iter()
-            .find_map(|filter| match filter {
-                GenerationFilter::Tadpoles(options) => Some(options),
-                _ => None,
-            });
-        let zero_snails = options
-            .graph_filters
-            .iter()
-            .find_map(|filter| match filter {
-                GenerationFilter::ZeroSnails(options) => Some(options),
-                _ => None,
-            });
-        let factorized_loop_range = options
-            .graph_filters
-            .iter()
-            .find_map(|filter| match filter {
-                GenerationFilter::FactorizedLoopTopologiesCountRange(range) => Some(range),
-                _ => None,
-            });
-        if self.veto_special_topologies(
-            graph,
-            self_energy,
-            tadpoles,
-            zero_snails,
-            factorized_loop_range,
-        )? {
-            return Ok(false);
-        }
-
-        for filter in &options.graph_filters {
-            match filter {
-                GenerationFilter::LoopOneParticleIrreducible if graph.num_loops() > 0 => {
-                    let mut tree = graph.get_spanning_tree(0);
-                    tree.chain_decomposition();
-                    if tree.count_bridges() != 0 {
-                        return Ok(false);
-                    }
-                }
-                GenerationFilter::ParticleVeto(vetoed)
-                    if graph.edges().iter().any(|edge| {
-                        vetoed.iter().any(|selector| match selector {
-                            ParticleSelector::Id { particle, .. } => {
-                                *particle == edge.data.particle
-                                    || self.model.particle_by_id(*particle).is_ok_and(|selected| {
-                                        selected.antiparticle == edge.data.particle
-                                    })
-                            }
-                            ParticleSelector::Name(_) | ParticleSelector::Pdg(_) => {
-                                unreachable!("generation selectors are resolved before use")
-                            }
-                        })
-                    }) =>
-                {
-                    return Ok(false);
-                }
-                GenerationFilter::LoopCountRange((minimum, maximum))
-                    if !(*minimum..=*maximum).contains(&graph.num_loops()) =>
-                {
-                    return Ok(false);
-                }
-                GenerationFilter::ParticleVeto(_)
-                | GenerationFilter::VertexAllow(_)
-                | GenerationFilter::VertexVeto(_)
-                | GenerationFilter::MaxNumberOfBridges(_)
-                | GenerationFilter::LoopOneParticleIrreducible
-                | GenerationFilter::CouplingOrders(_)
-                | GenerationFilter::LoopCountRange(_)
-                | GenerationFilter::FermionLoopCountRange(_)
-                | GenerationFilter::SelfEnergy(_)
-                | GenerationFilter::Tadpoles(_)
-                | GenerationFilter::ZeroSnails(_)
-                | GenerationFilter::Sewn(_)
-                | GenerationFilter::BlobRange(_)
-                | GenerationFilter::SpectatorRange(_)
-                | GenerationFilter::FactorizedLoopTopologiesCountRange(_)
-                | GenerationFilter::PerturbativeOrders(_) => {}
-            }
-        }
-        Ok(true)
-    }
-
-    fn veto_special_topologies(
-        &self,
-        graph: &Graph<NodeColor, EdgeColor>,
-        veto_self_energy: Option<&SelfEnergyFilterOptions>,
-        veto_tadpole: Option<&TadpoleFilterOptions>,
-        veto_snails: Option<&SnailFilterOptions>,
-        factorized_loop_topologies_count_range: Option<&(usize, usize)>,
-    ) -> Result<bool, GenerationError> {
-        if veto_self_energy.is_none()
-            && veto_tadpole.is_none()
-            && veto_snails.is_none()
-            && factorized_loop_topologies_count_range.is_none()
-        {
-            return Ok(false);
-        }
-
-        let external_nodes: Vec<_> = graph
-            .nodes()
-            .iter()
-            .enumerate()
-            .filter_map(|(index, node)| node.data.external.as_ref().map(|_| index))
-            .collect();
-        if graph.nodes().is_empty() {
-            return Ok(factorized_loop_topologies_count_range
-                .is_some_and(|range| !(range.0..=range.1).contains(&0)));
-        }
-        let roots: Vec<_> = if external_nodes.is_empty() {
-            vec![0]
-        } else {
-            external_nodes
-        };
-        let mut external_particles = BTreeMap::new();
-        for (node_index, node) in graph.nodes().iter().enumerate() {
-            if let Some(external) = &node.data.external {
-                let edge_id = node
-                    .edges
-                    .first()
-                    .ok_or(GenerationError::MissingExternalEdge { node: node_index })?;
-                let edge = &graph.edges()[*edge_id];
-                external_particles.insert(
-                    external.index,
-                    self.model.particle_by_id(edge.data.particle)?,
-                );
-            }
-        }
-
-        // Test vetoing from all external spanning-tree root positions to make
-        // sure the result does not depend on spanning-tree directions.
-        // TODO rewrite and improve the vetoing logic of special topologies.
-        for root in roots {
-            if !self.veto_special_topologies_with_spanning_tree_root(
-                graph,
-                veto_self_energy,
-                veto_tadpole,
-                veto_snails,
-                factorized_loop_topologies_count_range,
-                &external_particles,
-                root,
-            )? {
-                return Ok(false);
-            }
-        }
-        Ok(true)
-    }
-
-    #[allow(clippy::too_many_arguments)]
-    fn veto_special_topologies_with_spanning_tree_root(
-        &self,
-        graph: &Graph<NodeColor, EdgeColor>,
-        veto_self_energy: Option<&SelfEnergyFilterOptions>,
-        veto_tadpole: Option<&TadpoleFilterOptions>,
-        veto_snails: Option<&SnailFilterOptions>,
-        factorized_loop_topologies_count_range: Option<&(usize, usize)>,
-        external_particles: &BTreeMap<usize, &Particle>,
-        spanning_tree_root: usize,
-    ) -> Result<bool, GenerationError> {
-        let max_external = external_particles.len();
-        let spanning_tree_node_external_index = graph.nodes()[spanning_tree_root]
-            .data
-            .external
-            .as_ref()
-            .map(|external| external.index);
-        let mut spanning_tree = graph.get_spanning_tree(spanning_tree_root);
-        spanning_tree.chain_decomposition();
-
-        let mut node_children = vec![vec![]; spanning_tree.nodes.len()];
-        for (node_index, node) in spanning_tree.nodes.iter().enumerate() {
-            node_children[node.parent].push(node_index);
-        }
-
-        let mut external_momenta_routing = vec![vec![]; spanning_tree.nodes.len()];
-        for (node_index, node) in graph.nodes().iter().enumerate() {
-            let Some(external) = &node.data.external else {
-                continue;
-            };
-            if node_index == spanning_tree_root {
-                continue;
-            }
-            external_momenta_routing[node_index].push(external.index);
-            let mut next_node = spanning_tree.nodes[node_index].parent;
-            while next_node != spanning_tree_root {
-                external_momenta_routing[next_node].push(external.index);
-                next_node = spanning_tree.nodes[next_node].parent;
-            }
-        }
-        if let Some(root_external_index) = spanning_tree_node_external_index {
-            for route in &mut external_momenta_routing {
-                if route.len() == max_external - 1 {
-                    *route = vec![root_external_index];
-                }
-            }
-        }
-
-        // See https://arxiv.org/pdf/1209.0700 for information on the logic of
-        // this algorithm.
-
-        // Tuple format: (external leg id, back-edge start node position,
-        // back-edge position in list, chain id).
-        let mut self_energy_attachments: HashSet<(usize, usize, usize, usize)> = HashSet::new();
-        // Tuple format: (back-edge start node position, back-edge position in
-        // list, chain id).
-        let mut vacuum_attachments: HashSet<(usize, usize, usize)> = HashSet::new();
-        // Tuple format: (back-edge start node position, back-edge position in
-        // list, chain id).
-        let mut self_loops: HashSet<(usize, usize, usize)> = HashSet::new();
-        let mut factorized_loop_count = 0;
-
-        let mut visited_nodes = vec![false; spanning_tree.nodes.len()];
-        for &node_index in &spanning_tree.order {
-            let node = &spanning_tree.nodes[node_index];
-            for (back_edge_index, back_edge) in node.back_edges.iter().enumerate() {
-                let chain_id = node_index;
-                if back_edge.target == node_index {
-                    factorized_loop_count += 1;
-                    self_loops.insert((node_index, back_edge_index, chain_id));
-                    continue;
-                }
-                let mut self_energy_external_leg_id = None;
-                let mut current_chain_node = back_edge.target;
-                let mut is_valid_chain = true;
-                loop {
-                    if current_chain_node == node_index {
-                        factorized_loop_count += 1;
-                        break;
-                    }
-                    let momenta = &external_momenta_routing[current_chain_node];
-                    if momenta.len() == 1 {
-                        if self_energy_external_leg_id.is_some_and(|leg_id| leg_id != momenta[0]) {
-                            is_valid_chain = false;
-                            break;
-                        }
-                        self_energy_external_leg_id = Some(momenta[0]);
-                        for child in &node_children[current_chain_node] {
-                            if !external_momenta_routing[*child].is_empty()
-                                && external_momenta_routing[*child][0] != momenta[0]
-                            {
-                                is_valid_chain = false;
-                                break;
-                            }
-                        }
-                        if !is_valid_chain {
-                            break;
-                        }
-                    } else if !momenta.is_empty() {
-                        is_valid_chain = false;
-                        break;
-                    }
-                    if spanning_tree.nodes[current_chain_node].chain_id.is_none()
-                        || visited_nodes[current_chain_node]
-                    {
-                        is_valid_chain = false;
-                        break;
-                    }
-                    visited_nodes[current_chain_node] = true;
-                    current_chain_node = spanning_tree.nodes[current_chain_node].parent;
-                }
-
-                if is_valid_chain {
-                    if let Some(leg_id) = self_energy_external_leg_id {
-                        // Make sure the self-energy attachment point does not
-                        // receive any other external momenta. For 1 -> 1
-                        // processes, also verify that it is not the whole graph.
-                        if external_momenta_routing[node_index].as_slice() == [leg_id]
-                            && (max_external > 2
-                                || spanning_tree
-                                    .nodes
-                                    .iter()
-                                    .filter(|node| !node.external && node.chain_id.is_none())
-                                    .count()
-                                    > 1)
-                        {
-                            self_energy_attachments.insert((
-                                leg_id,
-                                node_index,
-                                back_edge_index,
-                                chain_id,
-                            ));
-                        }
-                    } else {
-                        vacuum_attachments.insert((node_index, back_edge_index, chain_id));
-                    }
-                }
-            }
-        }
-
-        if factorized_loop_topologies_count_range.is_some_and(|(minimum, maximum)| {
-            factorized_loop_count < *minimum || factorized_loop_count > *maximum
-        }) {
-            return Ok(true);
-        }
-
-        let mut tree_bridge_node_indices = HashSet::new();
-        for (node_index, node) in spanning_tree.nodes.iter().enumerate() {
-            if node.chain_id.is_none()
-                && !node.external
-                && !external_momenta_routing[node_index].is_empty()
-                && !spanning_tree.nodes[node.parent]
-                    .back_edges
+                    .any(|selector| resolved_vertex(selector) == rule)
+            }),
+            GenerationFilter::VertexVeto(selectors) => graph.vertices().all(|rule| {
+                !selectors
                     .iter()
-                    .any(|end| node_index == end.target)
-            {
-                tree_bridge_node_indices.insert(node_index);
-            }
-        }
-
-        // Confirm self-energies by checking that the back-edge start node is a
-        // bridge.
-        for (leg_id, back_edge_start_node_index, _, _) in &self_energy_attachments {
-            if tree_bridge_node_indices.contains(back_edge_start_node_index)
-                && let Some(options) = veto_self_energy
-            {
-                let particle = external_particles
-                    .get(leg_id)
-                    .ok_or(GenerationError::MissingExternalParticle { index: *leg_id })?;
-                let massless = self
-                    .model
-                    .particle_is_massless(self.model.particle_id(&particle.name)?);
-                if (!massless && options.veto_massive) || (massless && options.veto_massless) {
-                    return Ok(true);
-                }
-            }
-        }
-
-        // For vacuum attachments, differentiate snails (the start node is a
-        // tree bridge) from tadpoles (the start node is not a tree bridge).
-        for (back_edge_start_node_index, _, _) in vacuum_attachments.iter().chain(self_loops.iter())
-        {
-            let attachment_particle_is_massive = if max_external > 0 {
-                let mut first_tree_attachment_node_index = *back_edge_start_node_index;
-                while external_momenta_routing[first_tree_attachment_node_index].is_empty()
-                    && spanning_tree.nodes[first_tree_attachment_node_index]
-                        .chain_id
-                        .is_none()
-                {
-                    first_tree_attachment_node_index =
-                        spanning_tree.nodes[first_tree_attachment_node_index].parent;
-                }
-                let parent = spanning_tree.nodes[first_tree_attachment_node_index].parent;
-                let edge = graph
-                    .edges()
-                    .iter()
-                    .find(|edge| {
-                        edge.vertices == (first_tree_attachment_node_index, parent)
-                            || edge.vertices == (parent, first_tree_attachment_node_index)
-                    })
-                    .ok_or(GenerationError::MissingSpanningTreeEdge {
-                        node: first_tree_attachment_node_index,
-                        parent,
-                    })?;
-                !self.model.particle_is_massless(edge.data.particle)
-            } else {
-                // Always consider the attachment particle massive for vacuum
-                // graphs: without external legs there is no supported way to
-                // differentiate massive and massless attachments.
-                true
-            };
-
-            if !tree_bridge_node_indices.contains(back_edge_start_node_index)
-                && spanning_tree.nodes[*back_edge_start_node_index]
-                    .chain_id
-                    .is_none()
-            {
-                if let Some(options) = veto_tadpole
-                    && ((attachment_particle_is_massive && options.veto_attached_to_massive)
-                        || (!attachment_particle_is_massive && options.veto_attached_to_massless))
-                {
-                    return Ok(true);
-                }
-            } else if let Some(options) = veto_snails
-                && ((attachment_particle_is_massive && options.veto_attached_to_massive)
-                    || (!attachment_particle_is_massive && options.veto_attached_to_massless))
-            {
-                return Ok(true);
-            }
-        }
-
-        Ok(false)
-    }
-
-    fn passes_interaction_filters(
-        &self,
-        graph: &Graph<ColoredNode, EdgeColor>,
-        fermion_loop_count: usize,
-        options: &GenerationOptions,
-    ) -> Result<bool, GenerationError> {
-        for filter in &options.graph_filters {
-            match filter {
-                GenerationFilter::CouplingOrders(required) => {
-                    let actual = self.coupling_orders(graph)?;
-                    if !required.iter().all(|(name, (minimum, maximum))| {
-                        let value = actual.get(name).copied().unwrap_or(0);
-                        value >= *minimum && maximum.is_none_or(|maximum| value <= maximum)
-                    }) {
-                        return Ok(false);
-                    }
-                }
-                GenerationFilter::FermionLoopCountRange((minimum, maximum)) => {
-                    if !(*minimum..=*maximum).contains(&fermion_loop_count) {
-                        return Ok(false);
-                    }
-                }
-                GenerationFilter::VertexAllow(selectors) => {
-                    let allowed = selectors
-                        .iter()
-                        .map(|selector| match selector {
-                            VertexSelector::Id { vertex, .. } => *vertex,
-                            VertexSelector::Name(_) => {
-                                unreachable!("generation selectors are resolved before use")
-                            }
-                        })
-                        .collect::<BTreeSet<_>>();
-                    if graph.nodes().iter().any(|node| {
-                        matches!(
-                            node.data,
-                            ColoredNode::Interaction(rule) if !allowed.contains(&rule)
-                        )
-                    }) {
-                        return Ok(false);
-                    }
-                }
-                GenerationFilter::VertexVeto(selectors) => {
-                    let vetoed = selectors
-                        .iter()
-                        .map(|selector| match selector {
-                            VertexSelector::Id { vertex, .. } => *vertex,
-                            VertexSelector::Name(_) => {
-                                unreachable!("generation selectors are resolved before use")
-                            }
-                        })
-                        .collect::<BTreeSet<_>>();
-                    if graph.nodes().iter().any(|node| {
-                        matches!(
-                            node.data,
-                            ColoredNode::Interaction(rule) if vetoed.contains(&rule)
-                        )
-                    }) {
-                        return Ok(false);
-                    }
-                }
-                GenerationFilter::ParticleVeto(_)
-                | GenerationFilter::MaxNumberOfBridges(_)
-                | GenerationFilter::LoopOneParticleIrreducible
-                | GenerationFilter::LoopCountRange(_)
-                | GenerationFilter::SelfEnergy(_)
-                | GenerationFilter::Tadpoles(_)
-                | GenerationFilter::ZeroSnails(_)
-                | GenerationFilter::Sewn(_)
-                | GenerationFilter::BlobRange(_)
-                | GenerationFilter::SpectatorRange(_)
-                | GenerationFilter::FactorizedLoopTopologiesCountRange(_)
-                | GenerationFilter::PerturbativeOrders(_) => {}
-            }
-        }
-        Ok(true)
+                    .any(|selector| resolved_vertex(selector) == rule)
+            }),
+            _ => true,
+        })
     }
 
     fn retain_cut_amplitude_partitions(
@@ -2687,84 +2129,27 @@ impl Generator {
         Ok(!topology.cut_partitions.is_empty())
     }
 
-    fn coupling_orders(
-        &self,
-        graph: &Graph<ColoredNode, EdgeColor>,
-    ) -> Result<BTreeMap<String, usize>, GenerationError> {
-        let mut result = BTreeMap::new();
-        for node in graph.nodes() {
-            let ColoredNode::Interaction(rule_id) = &node.data else {
-                continue;
-            };
-            let rule = self.model.vertex_rule_by_id(*rule_id)?;
-            for (name, order) in rule.coupling_orders(&self.model) {
-                *result.entry(name).or_insert(0) += order;
-            }
-        }
-        Ok(result)
-    }
-
     // Count closed, non-branching fermion components, optionally including ghosts
     // for the Grassmann sign. The fermion-loop filter excludes ghosts. Branching
-    // components are rejected explicitly below.
+    // components are rejected explicitly.
     fn closed_fermion_loop_count(
         &self,
-        graph: &Graph<ColoredNode, EdgeColor>,
+        graph: &GeneratedGraph,
         include_ghosts: bool,
     ) -> Result<usize, GenerationError> {
-        let mut adjacency = vec![Vec::new(); graph.nodes().len()];
-        let mut degrees = vec![0; graph.nodes().len()];
-        // Build adjacency using only the selected Grassmann edges. A self-loop
-        // contributes degree two.
-        for edge in graph.edges() {
-            let particle = self.model.particle_by_id(edge.data.particle)?;
-            if !(particle.is_fermion() && !particle.is_ghost()
-                || include_ghosts && particle.is_ghost())
+        let nodes = graph.plain_nodes();
+        let mut ends = Vec::new();
+        for (id, edge) in graph.edges().enumerate() {
+            let particle = self.model.particle_by_id(edge.particle)?;
+            if particle.is_fermion() && !particle.is_ghost()
+                || include_ghosts && particle.is_ghost()
             {
-                continue;
-            }
-            let (left, right) = edge.vertices;
-            if left == right {
-                degrees[left] += 2;
-                adjacency[left].push(right);
-            } else {
-                degrees[left] += 1;
-                degrees[right] += 1;
-                adjacency[left].push(right);
-                adjacency[right].push(left);
+                ends.push(nodes.ends(id, &edge));
             }
         }
-
-        for (vertex, degree) in degrees.iter().copied().enumerate() {
-            if degree > 2 {
-                return Err(GenerationError::UnsupportedFermionBranching { vertex, degree });
-            }
-        }
-
-        let mut visited = vec![false; graph.nodes().len()];
-        let mut closed_loops = 0;
-        for start in 0..graph.nodes().len() {
-            if degrees[start] == 0 || visited[start] {
-                continue;
-            }
-            let mut stack = vec![start];
-            let mut closed = true;
-            while let Some(vertex) = stack.pop() {
-                if visited[vertex] {
-                    continue;
-                }
-                visited[vertex] = true;
-                closed &= degrees[vertex] == 2;
-                stack.extend(
-                    adjacency[vertex]
-                        .iter()
-                        .copied()
-                        .filter(|neighbor| !visited[*neighbor]),
-                );
-            }
-            closed_loops += usize::from(closed);
-        }
-        Ok(closed_loops)
+        closed_loops(nodes.len(), &ends).map_err(|(vertex, degree)| {
+            GenerationError::UnsupportedFermionBranching { vertex, degree }
+        })
     }
 
     fn to_diagram(
@@ -2775,19 +2160,13 @@ impl Generator {
         fermion_signs: FermionSigns,
         options: &GenerationOptions,
     ) -> Result<FeynmanDiagram, GenerationError> {
-        // Symbolica's automorphism factor is a denominator in the overall
-        // multiplier.
+        // The automorphism count of the rule-coloured graph is a denominator
+        // in the overall multiplier.
         let mut factors = vec![
             symbol!("feynkit_generator_factor::AutG")
                 .call(topology.symmetry)
                 .pow(-1),
         ];
-        if topology.multiplicity != 1 {
-            factors.push(
-                symbol!("feynkit_generator_factor::CouplingsMultiplicity")
-                    .call(topology.multiplicity),
-            );
-        }
         if fermion_signs.internal_loop_negative {
             factors.push(symbol!("feynkit_generator_factor::InternalFermionLoopSign").call(-1));
         }
@@ -2809,23 +2188,14 @@ impl Generator {
             factors.push(symbol!("feynkit_generator_factor::AntiFermionSpinSumSign").call(sign));
         }
         let overall_factor = Atom::mul_many(factors);
-        let incoming_count = topology
-            .graph
-            .nodes()
-            .iter()
-            .filter(|node| {
-                matches!(
-                    node.data,
-                    ColoredNode::External(ExternalNode {
-                        state: ExternalState::Incoming,
-                        ..
-                    })
-                )
-            })
+        let graph = &topology.graph;
+        let incoming_count = graph
+            .externals()
+            .filter(|(_, external, _)| external.state == ExternalState::Incoming)
             .count();
         let projector = match &options.projector {
             Some(projector) => projector.clone(),
-            None => self.external_state_projector(&topology.graph)?,
+            None => self.external_state_projector(graph)?,
         };
         let mut builder = FeynmanDiagram::builder(Arc::clone(&self.model), name)
             .canonical_loop_momentum_basis()
@@ -2836,9 +2206,39 @@ impl Generator {
             .cuts(topology.cut_partitions.clone())
             .topology_threshold_candidates(topology.topology_threshold_candidates.clone());
         let mut endpoint_slots = BTreeMap::new();
-        for (index, node) in topology.graph.nodes().iter().enumerate() {
-            let vertex = match &node.data {
-                ColoredNode::External(external) => {
+        for (vertex, rule_id) in graph.vertices().enumerate() {
+            let rule = self.model.vertex_rule_by_id(rule_id)?;
+            let legs = self.interaction_half_edges(graph, vertex, rule)?;
+            for (slot, leg) in legs.iter().enumerate() {
+                endpoint_slots.insert((leg.edge, leg.flow), VertexSlot(slot));
+            }
+            builder.add_vertex(DiagramVertex::interaction(format!("v{vertex}"), rule_id));
+        }
+        for (edge_index, edge) in graph.edges().enumerate() {
+            let diagram_edge = DiagramEdge::new(edge.particle, edge.directed);
+            let slot = |flow| {
+                endpoint_slots
+                    .get(&(edge_index, flow))
+                    .copied()
+                    .unwrap_or(VertexSlot(0))
+            };
+            match (edge.source, edge.sink) {
+                (Endpoint::Vertex(source), Endpoint::Vertex(sink)) => {
+                    builder.add_edge_with_slots(
+                        feynkit_graph::VertexId(source),
+                        feynkit_graph::VertexId(sink),
+                        diagram_edge,
+                        slot(Flow::Source),
+                        slot(Flow::Sink),
+                    )?;
+                }
+                (Endpoint::External(external), Endpoint::Vertex(vertex))
+                | (Endpoint::Vertex(vertex), Endpoint::External(external)) => {
+                    let flow = if edge.sink == Endpoint::Vertex(vertex) {
+                        Flow::Sink
+                    } else {
+                        Flow::Source
+                    };
                     let connection = match (generation_type, external.state) {
                         (GenerationType::Amplitude, _) | (_, ExternalState::Incoming) => {
                             external.index
@@ -2851,41 +2251,22 @@ impl Generator {
                             })?,
                     };
                     builder.add_generation_external(
-                        format!("ext{}", external.index),
-                        external.index,
-                        external.state,
-                        connection,
-                    );
-                    continue;
+                        feynkit_graph::VertexId(vertex),
+                        flow,
+                        diagram_edge,
+                        slot(flow),
+                        ExternalLeg {
+                            name: format!("ext{}", external.index),
+                            index: external.index,
+                            state: external.state,
+                            connection,
+                        },
+                    )?;
                 }
-                ColoredNode::Interaction(rule_id) => {
-                    let rule = self.model.vertex_rule_by_id(*rule_id)?;
-                    let legs = self.interaction_half_edges(&topology.graph, index, rule)?;
-                    for (slot, leg) in legs.iter().enumerate() {
-                        endpoint_slots.insert((leg.edge, leg.flow), VertexSlot(slot));
-                    }
-                    DiagramVertex::interaction(format!("v{index}"), *rule_id)
+                (Endpoint::External(_), Endpoint::External(_)) => {
+                    unreachable!("generated edges touch an interaction vertex")
                 }
-            };
-            builder.add_vertex(vertex);
-        }
-        for (edge_index, edge) in topology.graph.edges().iter().enumerate() {
-            let diagram_edge = DiagramEdge::new(edge.data.particle, edge.directed);
-            let source_slot = endpoint_slots
-                .get(&(edge_index, Flow::Source))
-                .copied()
-                .unwrap_or(VertexSlot(0));
-            let target_slot = endpoint_slots
-                .get(&(edge_index, Flow::Sink))
-                .copied()
-                .unwrap_or(VertexSlot(0));
-            builder.add_edge_with_slots(
-                feynkit_graph::VertexId(edge.vertices.0),
-                feynkit_graph::VertexId(edge.vertices.1),
-                diagram_edge,
-                source_slot,
-                target_slot,
-            )?;
+            }
         }
         let diagram = builder.build()?;
         self.construct_numerators(diagram)
@@ -2962,21 +2343,11 @@ impl Generator {
         Ok(diagram.with_numerator_fragments(vertices, edges)?)
     }
 
-    fn external_state_projector(
-        &self,
-        graph: &Graph<ColoredNode, EdgeColor>,
-    ) -> Result<Atom, GenerationError> {
+    fn external_state_projector(&self, graph: &GeneratedGraph) -> Result<Atom, GenerationError> {
         let mut projector = Atom::one();
-        for (vertex, node) in graph.nodes().iter().enumerate() {
-            let ColoredNode::External(external) = &node.data else {
-                continue;
-            };
-            let edge_id = *node
-                .edges
-                .first()
-                .ok_or(GenerationError::MissingExternalEdge { node: vertex })?;
-            let edge = &graph.edges()[edge_id];
-            let flow = if edge.vertices.0 == vertex {
+        for (edge_id, external, _) in graph.externals() {
+            // The half-edge at the attachment vertex.
+            let flow = if graph.edge(edge_id).source.external().is_some() {
                 Flow::Sink
             } else {
                 Flow::Source
@@ -3018,7 +2389,7 @@ impl Generator {
 
     fn interaction_half_edges(
         &self,
-        graph: &Graph<ColoredNode, EdgeColor>,
+        graph: &GeneratedGraph,
         vertex: usize,
         rule: &VertexRule,
     ) -> Result<Vec<NumeratorHalfEdge>, GenerationError> {
@@ -3030,7 +2401,7 @@ impl Generator {
         let mut ordered = Vec::with_capacity(rule.particles.len());
         for (leg, particle_id) in rule.particles.iter().enumerate() {
             let particle = self.model.particle_by_id(*particle_id)?;
-            let expected = ResolvedProcess::vertex_half_edge(&self.model, particle)?;
+            let expected = incoming_stub(&self.model, particle);
             let Some(position) = available
                 .iter()
                 .position(|(_, signature)| *signature == expected)
@@ -3150,181 +2521,67 @@ impl Generator {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct EdgeColor {
-    pub particle: ParticleId,
-    pub direction: Option<bool>,
-}
-
-impl fmt::Display for EdgeColor {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(formatter, "particle#{}", self.particle.index())
-    }
-}
-
+/// The incident half-edges of `vertex` with the stub each one presents to the vertex: the
+/// particle entering the vertex through it, as in the all-incoming UFO convention.
 fn available_interaction_half_edges(
-    graph: &Graph<ColoredNode, EdgeColor>,
+    graph: &GeneratedGraph,
     vertex: usize,
     model: &Model,
-) -> Result<Vec<(NumeratorHalfEdge, HalfEdge<EdgeColor>)>, GenerationError> {
-    let mut available = Vec::new();
-    for edge_id in &graph.nodes()[vertex].edges {
-        let edge = &graph.edges()[*edge_id];
-        let particle = model.particle_by_id(edge.data.particle)?;
-        let base = if particle.is_antiparticle() {
-            particle.antiparticle
-        } else {
-            edge.data.particle
-        };
-        if edge.vertices.0 == vertex {
-            available.push((
+) -> Result<Vec<(NumeratorHalfEdge, ParticleStub)>, GenerationError> {
+    graph
+        .incident(vertex)
+        .into_iter()
+        .map(|(edge_id, flow)| {
+            let edge = graph.edge(edge_id);
+            let particle = model.particle_by_id(edge.particle)?;
+            let entering = if flow == Flow::Sink || !edge.directed {
+                particle
+            } else {
+                model.antiparticle(particle)?
+            };
+            Ok((
                 NumeratorHalfEdge {
-                    edge: *edge_id,
-                    flow: Flow::Source,
-                    hedge: 2 * *edge_id,
+                    edge: edge_id,
+                    flow,
+                    hedge: 2 * edge_id + usize::from(flow == Flow::Sink),
                     spin: 0,
                     color: 1,
                 },
-                HalfEdge {
-                    data: EdgeColor {
-                        particle: base,
-                        direction: None,
-                    },
-                    direction: edge.directed.then_some(!particle.is_antiparticle()),
-                },
-            ));
-        }
-        if edge.vertices.1 == vertex {
-            available.push((
-                NumeratorHalfEdge {
-                    edge: *edge_id,
-                    flow: Flow::Sink,
-                    hedge: 2 * *edge_id + 1,
-                    spin: 0,
-                    color: 1,
-                },
-                HalfEdge {
-                    data: EdgeColor {
-                        particle: base,
-                        direction: None,
-                    },
-                    direction: edge.directed.then_some(particle.is_antiparticle()),
-                },
-            ));
-        }
-    }
-    Ok(available)
+                incoming_stub(model, entering),
+            ))
+        })
+        .collect()
 }
 
 fn vertex_rule_signature(
     model: &Model,
     rule: &VertexRule,
-) -> Result<Vec<HalfEdge<EdgeColor>>, GenerationError> {
+) -> Result<Vec<ParticleStub>, GenerationError> {
     let mut signature = rule
         .particles
         .iter()
-        .map(|particle| ResolvedProcess::vertex_half_edge(model, model.particle_by_id(*particle)?))
+        .map(|particle| Ok(incoming_stub(model, model.particle_by_id(*particle)?)))
         .collect::<Result<Vec<_>, GenerationError>>()?;
     signature.sort();
     Ok(signature)
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct ExternalNode {
-    pub index: usize,
-    pub state: ExternalState,
-    pub particle: ParticleId,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-enum ExternalCanonicalClass {
-    Exact { state: ExternalState, index: usize },
-    WithinState(ExternalState),
-}
-
-#[derive(Debug, Clone, Default)]
-pub struct NodeColor {
-    pub external: Option<ExternalNode>,
-    external_class: Option<ExternalCanonicalClass>,
-}
-
-impl NodeColor {
-    fn key(&self) -> Option<(ParticleId, ExternalCanonicalClass)> {
-        self.external.as_ref().map(|external| {
-            (
-                external.particle,
-                self.external_class
-                    .expect("external nodes always have a canonical class"),
-            )
-        })
-    }
-}
-
-impl PartialEq for NodeColor {
-    fn eq(&self, other: &Self) -> bool {
-        self.key() == other.key()
-    }
-}
-
-impl Eq for NodeColor {}
-
-impl PartialOrd for NodeColor {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-impl Ord for NodeColor {
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        self.key().cmp(&other.key())
-    }
-}
-
-impl Hash for NodeColor {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        self.key().hash(state);
-    }
-}
-
-impl fmt::Display for NodeColor {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match &self.external {
-            Some(external) => write!(formatter, "ext{}", external.index),
-            None => formatter.write_str("v"),
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-enum ColoredNode {
-    External(ExternalNode),
-    Interaction(VertexRuleId),
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-struct NumeratorCanonicalNode(i64);
-
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-struct NumeratorCanonicalEdge(String);
-
-type InteractionAssignment = (Graph<ColoredNode, EdgeColor>, usize);
-
-impl fmt::Display for ColoredNode {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::External(external) => write!(formatter, "ext{}", external.index),
-            Self::Interaction(rule) => write!(formatter, "vertex#{}", rule.index()),
-        }
-    }
-}
-
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 struct ColoredTopology {
-    graph: Graph<ColoredNode, EdgeColor>,
+    graph: GeneratedGraph,
     symmetry: u64,
-    multiplicity: usize,
     cut_partitions: Vec<DiagramCut>,
     topology_threshold_candidates: Vec<DiagramThresholdCandidate>,
+}
+
+/// A canonicalized diagram ready for finalization: the frame used for numerator comparisons,
+/// the physical representative with normalized fermion flows, and the edges reversed between
+/// them.
+struct DiagramInput {
+    comparison: ColoredTopology,
+    representative: ColoredTopology,
+    signs: FermionSigns,
+    reversed_edges: BTreeSet<EdgeId>,
 }
 
 struct DiagramPair {
@@ -3429,8 +2686,7 @@ struct FermionSigns {
 }
 
 struct NormalizedFermionFlow {
-    #[cfg_attr(not(test), allow(dead_code))]
-    graph: Graph<ColoredNode, EdgeColor>,
+    graph: GeneratedGraph,
     reversed_edges: BTreeSet<EdgeId>,
     signs: FermionSigns,
 }
@@ -3441,73 +2697,128 @@ struct FermionNormalizationState<'a> {
     particles: &'a mut [Option<ParticleId>],
 }
 
-fn normalize_fermion_component(
-    graph: &Graph<ColoredNode, EdgeColor>,
-    starting_edge: usize,
-    adjacency: &[Vec<(usize, usize)>],
-    state: &mut FermionNormalizationState<'_>,
-    model: &Model,
-    canonicalize_virtual_start: bool,
-) -> Result<BTreeSet<usize>, GenerationError> {
-    let starting = &graph.edges()[starting_edge];
-    let starting_particle = model.particle_by_id(starting.data.particle)?;
-    let reverse_start = canonicalize_virtual_start && starting_particle.is_antiparticle();
-    let (left, right) = if reverse_start {
-        (starting.vertices.1, starting.vertices.0)
-    } else {
-        starting.vertices
-    };
-    let chain_is_antiparticle = starting_particle.is_antiparticle() && !reverse_start;
-    state.visited_edges[starting_edge] = true;
-    state.vertices[starting_edge] = Some((left, right));
-    state.particles[starting_edge] = Some(if reverse_start {
-        starting_particle.antiparticle
-    } else {
-        starting.data.particle
-    });
-    let mut external_legs = BTreeSet::new();
-    let mut record_external = |node_id: usize| {
-        if let ColoredNode::External(external) = &graph.nodes()[node_id].data {
-            external_legs.insert(external.index);
-        }
-    };
-    record_external(left);
-    record_external(right);
+/// The fermion and ghost lines of a graph, in its plain-node numbering.
+struct FermionLines<'a> {
+    graph: &'a GeneratedGraph,
+    nodes: PlainNodes,
+    /// The plain nodes of the ends of every edge.
+    ends: Vec<(usize, usize)>,
+    /// For every node, the anticommuting edges at it with their other end.
+    adjacency: Vec<Vec<(usize, usize)>>,
+}
 
-    // Read both ways from the first edge, flipping each subsequent edge when
-    // needed so that the complete chain has one consistent orientation.
-    for (mut current, read_forward) in [(right, true), (left, false)] {
-        while let Some(&(edge_id, next)) = adjacency[current]
-            .iter()
-            .find(|(edge_id, _)| !state.visited_edges[*edge_id])
-        {
-            state.visited_edges[edge_id] = true;
-            let vertices = if read_forward {
-                (current, next)
+impl<'a> FermionLines<'a> {
+    fn new(graph: &'a GeneratedGraph, model: &Model) -> Result<Self, GenerationError> {
+        let nodes = graph.plain_nodes();
+        let ends: Vec<_> = graph
+            .edges()
+            .enumerate()
+            .map(|(id, edge)| nodes.ends(id, &edge))
+            .collect();
+        let mut adjacency = vec![Vec::new(); nodes.len()];
+        let mut degrees = vec![0; nodes.len()];
+        for (edge_id, edge) in graph.edges().enumerate() {
+            let particle = model.particle_by_id(edge.particle)?;
+            if !(particle.is_fermion() || particle.is_ghost()) {
+                continue;
+            }
+            let (left, right) = ends[edge_id];
+            adjacency[left].push((edge_id, right));
+            if left == right {
+                degrees[left] += 2;
             } else {
-                (next, current)
-            };
-            state.vertices[edge_id] = Some(vertices);
-            let edge = &graph.edges()[edge_id];
-            let particle = model.particle_by_id(edge.data.particle)?;
-            // Legacy GammaLoop represents a complete charged chain with the
-            // same particle (or antiparticle) on every edge.  When a
-            // canonical edge points against the chain, reversing only its
-            // endpoints is not enough: choose the conjugate precisely when
-            // needed to match the species selected by the starting edge.
-            state.particles[edge_id] = Some(
-                if vertices != edge.vertices && particle.is_antiparticle() != chain_is_antiparticle
-                {
-                    particle.antiparticle
-                } else {
-                    edge.data.particle
-                },
-            );
-            record_external(next);
-            current = next;
+                adjacency[right].push((edge_id, left));
+                degrees[left] += 1;
+                degrees[right] += 1;
+            }
         }
+        if let Some((vertex, degree)) = degrees
+            .iter()
+            .copied()
+            .enumerate()
+            .find(|(_, degree)| *degree > 2)
+        {
+            return Err(GenerationError::UnsupportedFermionBranching { vertex, degree });
+        }
+        Ok(Self {
+            graph,
+            nodes,
+            ends,
+            adjacency,
+        })
     }
-    Ok(external_legs)
+
+    /// Orient the line through `starting_edge` and return the external legs it connects.
+    fn normalize(
+        &self,
+        starting_edge: usize,
+        state: &mut FermionNormalizationState<'_>,
+        model: &Model,
+        canonicalize_virtual_start: bool,
+    ) -> Result<BTreeSet<usize>, GenerationError> {
+        let (graph, nodes, ends, adjacency) =
+            (self.graph, &self.nodes, &self.ends, &self.adjacency);
+        let starting = graph.edge(starting_edge);
+        let starting_particle = model.particle_by_id(starting.particle)?;
+        let reverse_start = canonicalize_virtual_start && starting_particle.is_antiparticle();
+        let (left, right) = if reverse_start {
+            (ends[starting_edge].1, ends[starting_edge].0)
+        } else {
+            ends[starting_edge]
+        };
+        let chain_is_antiparticle = starting_particle.is_antiparticle() && !reverse_start;
+        state.visited_edges[starting_edge] = true;
+        state.vertices[starting_edge] = Some((left, right));
+        state.particles[starting_edge] = Some(if reverse_start {
+            starting_particle.antiparticle
+        } else {
+            starting.particle
+        });
+        let mut external_legs = BTreeSet::new();
+        let mut record_external = |node: usize| {
+            if let Some(external) = nodes.external(node) {
+                external_legs.insert(external.index);
+            }
+        };
+        record_external(left);
+        record_external(right);
+
+        // Read both ways from the first edge, flipping each subsequent edge when
+        // needed so that the complete chain has one consistent orientation.
+        for (mut current, read_forward) in [(right, true), (left, false)] {
+            while let Some(&(edge_id, next)) = adjacency[current]
+                .iter()
+                .find(|(edge_id, _)| !state.visited_edges[*edge_id])
+            {
+                state.visited_edges[edge_id] = true;
+                let vertices = if read_forward {
+                    (current, next)
+                } else {
+                    (next, current)
+                };
+                state.vertices[edge_id] = Some(vertices);
+                let edge = graph.edge(edge_id);
+                let particle = model.particle_by_id(edge.particle)?;
+                // Legacy GammaLoop represents a complete charged chain with the
+                // same particle (or antiparticle) on every edge.  When a
+                // canonical edge points against the chain, reversing only its
+                // endpoints is not enough: choose the conjugate precisely when
+                // needed to match the species selected by the starting edge.
+                state.particles[edge_id] = Some(
+                    if vertices != ends[edge_id]
+                        && particle.is_antiparticle() != chain_is_antiparticle
+                    {
+                        particle.antiparticle
+                    } else {
+                        edge.particle
+                    },
+                );
+                record_external(next);
+                current = next;
+            }
+        }
+        Ok(external_legs)
+    }
 }
 
 fn all_incoming_particle<'model>(
@@ -3534,133 +2845,6 @@ fn permutation_is_odd(values: &[usize]) -> bool {
         .sum::<usize>()
         % 2
         == 1
-}
-
-struct InteractionSignatures(BTreeMap<Vec<HalfEdge<EdgeColor>>, Vec<VertexRuleId>>);
-
-impl InteractionSignatures {
-    fn new(model: &Model, options: &GenerationOptions) -> Result<Self, GenerationError> {
-        let allowed = options
-            .graph_filters
-            .iter()
-            .find_map(|filter| match filter {
-                GenerationFilter::VertexAllow(selectors) => Some(
-                    selectors
-                        .iter()
-                        .map(|selector| match selector {
-                            VertexSelector::Id { vertex, .. } => *vertex,
-                            VertexSelector::Name(_) => {
-                                unreachable!("generation selectors are resolved before use")
-                            }
-                        })
-                        .collect::<BTreeSet<_>>(),
-                ),
-                _ => None,
-            });
-        let vetoed = options
-            .graph_filters
-            .iter()
-            .find_map(|filter| match filter {
-                GenerationFilter::VertexVeto(selectors) => Some(
-                    selectors
-                        .iter()
-                        .map(|selector| match selector {
-                            VertexSelector::Id { vertex, .. } => *vertex,
-                            VertexSelector::Name(_) => {
-                                unreachable!("generation selectors are resolved before use")
-                            }
-                        })
-                        .collect::<BTreeSet<_>>(),
-                ),
-                _ => None,
-            });
-        let particle_vetoes = options
-            .graph_filters
-            .iter()
-            .find_map(|filter| match filter {
-                GenerationFilter::ParticleVeto(selectors) => Some(
-                    selectors
-                        .iter()
-                        .map(|selector| match selector {
-                            ParticleSelector::Id { particle, .. } => *particle,
-                            ParticleSelector::Name(_) | ParticleSelector::Pdg(_) => {
-                                unreachable!("generation selectors are resolved before use")
-                            }
-                        })
-                        .collect::<BTreeSet<_>>(),
-                ),
-                _ => None,
-            });
-        let mut signatures: BTreeMap<Vec<_>, Vec<_>> = BTreeMap::new();
-        for (rule_index, rule) in model.vertex_rules().iter().enumerate() {
-            let rule_id = model.vertex_rule_id_at(rule_index)?;
-            if allowed
-                .as_ref()
-                .is_some_and(|allowed| !allowed.contains(&rule_id))
-                || vetoed
-                    .as_ref()
-                    .is_some_and(|vetoed| vetoed.contains(&rule_id))
-            {
-                continue;
-            }
-            // Coupling powers are nonnegative. A vertex exceeding a graph-wide
-            // upper bound cannot occur in an accepted graph, so exclude its
-            // signature before enumerating topologies (especially QED=0).
-            let orders = rule.coupling_orders(model);
-            if options.graph_filters.iter().any(|filter| {
-                matches!(filter, GenerationFilter::CouplingOrders(required)
-                    if required.iter().any(|(name, (_, maximum))|
-                        maximum.is_some_and(|maximum| orders.get(name).copied().unwrap_or(0) > maximum)))
-            }) {
-                continue;
-            }
-            let mut signature = Vec::new();
-            let mut rejected = false;
-            for particle_id in &rule.particles {
-                let particle = model.particle_by_id(*particle_id)?;
-                if particle_vetoes.as_ref().is_some_and(|vetoed| {
-                    vetoed.contains(particle_id) || vetoed.contains(&particle.antiparticle)
-                }) {
-                    rejected = true;
-                    break;
-                }
-                signature.push(ResolvedProcess::vertex_half_edge(model, particle)?);
-            }
-            if !rejected {
-                signature.sort();
-                signatures.entry(signature).or_default().push(rule_id);
-            }
-        }
-        // Stable signature and rule ordering makes graph generation
-        // reproducible.
-        for rules in signatures.values_mut() {
-            rules.sort();
-        }
-        Ok(Self(signatures))
-    }
-
-    fn keys(&self) -> impl Iterator<Item = &Vec<HalfEdge<EdgeColor>>> {
-        self.0.keys()
-    }
-
-    fn rules(&self, signature: &[EdgeColor]) -> Option<&[VertexRuleId]> {
-        let mut half_edges: Vec<_> = signature
-            .iter()
-            .map(|edge| HalfEdge {
-                direction: edge.direction,
-                data: EdgeColor {
-                    particle: edge.particle,
-                    direction: None,
-                },
-            })
-            .collect();
-        // `EdgeColor` and `HalfEdge<EdgeColor>` have different derived orderings:
-        // the former orders by PDG first, while the latter orders by direction
-        // first. Restore the key ordering used when interaction signatures were
-        // built before performing the lookup.
-        half_edges.sort();
-        self.0.get(&half_edges).map(Vec::as_slice)
-    }
 }
 
 struct ResolvedProcess {
@@ -3702,61 +2886,38 @@ impl ResolvedProcess {
         })
     }
 
-    fn external_edges(
-        &self,
-        model: &Model,
-    ) -> Result<Vec<(NodeColor, HalfEdge<EdgeColor>)>, GenerationError> {
-        let mut result = Vec::new();
-        for (index, particle) in self.incoming.iter().enumerate() {
-            result.push(self.external_edge(model, particle, index, ExternalState::Incoming)?);
+    /// The external legs of the generated graphs: incoming legs first, then the outgoing legs
+    /// (the incoming states again for a cross section).
+    fn externals(&self, model: &Model) -> Result<ProcessExternals, GenerationError> {
+        let incoming = self
+            .incoming
+            .iter()
+            .map(|particle| (particle, ExternalState::Incoming));
+        let outgoing = match self.generation_type {
+            GenerationType::Amplitude => &self.outgoing[0],
+            GenerationType::CrossSection => &self.incoming,
         }
-        match self.generation_type {
-            GenerationType::Amplitude => {
-                for (offset, particle) in self.outgoing[0].iter().enumerate() {
-                    result.push(self.external_edge(
-                        model,
-                        particle,
-                        self.incoming.len() + offset,
-                        ExternalState::Outgoing,
-                    )?);
-                }
-            }
-            GenerationType::CrossSection => {
-                for (offset, particle) in self.incoming.iter().enumerate() {
-                    result.push(self.external_edge(
-                        model,
-                        particle,
-                        self.incoming.len() + offset,
-                        ExternalState::Outgoing,
-                    )?);
-                }
-            }
-        }
-        Ok(result)
+        .iter()
+        .map(|particle| (particle, ExternalState::Outgoing));
+        let externals = incoming
+            .chain(outgoing)
+            .enumerate()
+            .map(|(index, (particle, state))| self.external(model, particle, index, state))
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(ProcessExternals::new(externals))
     }
 
-    fn external_edge(
+    fn external(
         &self,
         model: &Model,
         particle: &Particle,
         index: usize,
         state: ExternalState,
-    ) -> Result<(NodeColor, HalfEdge<EdgeColor>), GenerationError> {
-        // Symbolica represents every non-self-conjugate species by its particle
-        // entry; particle versus antiparticle is encoded by edge direction.
-        let base = if particle.is_antiparticle() {
-            particle.antiparticle
-        } else {
-            model.particle_id(&particle.name)?
-        };
-        let particle_id = model.particle_id(&particle.name)?;
-        let direction = if model.particle_is_self_conjugate(particle_id) {
-            None
-        } else {
-            Some(match (state, particle.is_antiparticle()) {
-                (ExternalState::Incoming, false) | (ExternalState::Outgoing, true) => true,
-                (ExternalState::Incoming, true) | (ExternalState::Outgoing, false) => false,
-            })
+    ) -> Result<(ExternalLabel, ParticleStub, ExternalNode), GenerationError> {
+        // An outgoing particle enters the graph as its antiparticle.
+        let entering = match state {
+            ExternalState::Incoming => particle,
+            ExternalState::Outgoing => model.antiparticle(particle)?,
         };
         let symmetrized_within_state = match state {
             ExternalState::Incoming => self.symmetrize_initial,
@@ -3767,26 +2928,18 @@ impl ResolvedProcess {
         // Left/right symmetry is one global transformation of a sewn graph,
         // not an independent automorphism of every external pair. It is
         // applied after generation when canonical diagram keys are built.
-        let external_class = if symmetrized_within_state {
-            ExternalCanonicalClass::WithinState(state)
+        let label = if symmetrized_within_state {
+            ExternalLabel::WithinState(state)
         } else {
-            ExternalCanonicalClass::Exact { state, index }
+            ExternalLabel::Exact { state, index }
         };
         Ok((
-            NodeColor {
-                external: Some(ExternalNode {
-                    index,
-                    state,
-                    particle: model.particle_id(&particle.name)?,
-                }),
-                external_class: Some(external_class),
-            },
-            HalfEdge {
-                direction,
-                data: EdgeColor {
-                    particle: base,
-                    direction: None,
-                },
+            label,
+            incoming_stub(model, entering),
+            ExternalNode {
+                index,
+                state,
+                particle: model.particle_id(&particle.name)?,
             },
         ))
     }
@@ -3803,10 +2956,10 @@ impl ResolvedProcess {
     /// momenta are instantiated identically for isomorphic diagrams.
     fn canonicalize_numerator_graph(
         &self,
-        graph: &Graph<ColoredNode, EdgeColor>,
+        graph: &GeneratedGraph,
         model: &Model,
         grouping: &NumeratorGrouping,
-    ) -> Result<Graph<ColoredNode, EdgeColor>, GenerationError> {
+    ) -> Result<GeneratedGraph, GenerationError> {
         let grouping_options = match grouping {
             NumeratorGrouping::Identical(options)
             | NumeratorGrouping::UpToSign(options)
@@ -3841,222 +2994,183 @@ impl ResolvedProcess {
 
     fn canonicalize_numerator_graph_pass(
         &self,
-        graph: &Graph<ColoredNode, EdgeColor>,
+        graph: &GeneratedGraph,
         model: &Model,
         exact_internal_particles: bool,
         include_left_right_remapping: bool,
         use_left_right_external_colors: bool,
-    ) -> Result<Graph<ColoredNode, EdgeColor>, GenerationError> {
-        let mut candidates = Vec::new();
-        let mut remappings = vec![BTreeMap::new()];
-        if include_left_right_remapping {
-            let external_nodes = graph
-                .nodes()
-                .iter()
-                .enumerate()
-                .filter_map(|(node, value)| match &value.data {
-                    ColoredNode::External(external) => Some((external.index, node)),
-                    ColoredNode::Interaction(_) => None,
-                })
-                .collect::<BTreeMap<_, _>>();
-            let incoming_count = self.incoming.len();
-            if external_nodes.len() != 2 * incoming_count {
-                return Err(GenerationError::GraphConstruction(format!(
-                    "left/right canonicalization expected {} sewn external nodes, found {}",
-                    2 * incoming_count,
-                    external_nodes.len()
-                )));
-            }
-            remappings.push(
-                (0..incoming_count)
-                    .flat_map(|index| {
-                        [
-                            (
-                                external_nodes[&index],
-                                external_nodes[&(incoming_count + index)],
-                            ),
-                            (
-                                external_nodes[&(incoming_count + index)],
-                                external_nodes[&index],
-                            ),
-                        ]
-                    })
-                    .collect(),
-            );
+    ) -> Result<GeneratedGraph, GenerationError> {
+        let incoming_count = self.incoming.len();
+        let externals: BTreeMap<usize, ExternalNode> = graph
+            .externals()
+            .map(|(_, external, _)| (external.index, external))
+            .collect();
+        if include_left_right_remapping && externals.len() != 2 * incoming_count {
+            return Err(GenerationError::GraphConstruction(format!(
+                "left/right canonicalization expected {} sewn external legs, found {}",
+                2 * incoming_count,
+                externals.len()
+            )));
         }
-        for (swapped, remapping) in remappings.into_iter().enumerate() {
-            let mut skeleton = Graph::new();
-            for node in graph.nodes() {
-                let color = match &node.data {
-                    ColoredNode::External(external) => {
-                        let index = i64::try_from(external.index).map_err(|_| {
-                            GenerationError::ArithmeticOverflow("an external canonical color")
-                        })?;
-                        let incoming_count = i64::try_from(self.incoming.len()).map_err(|_| {
-                            GenerationError::ArithmeticOverflow("an external canonical color")
-                        })?;
-                        if use_left_right_external_colors {
-                            if index < incoming_count {
-                                -2001 - index
-                            } else {
-                                -3001 - (index - incoming_count)
-                            }
-                        } else {
-                            index + 1
-                        }
-                    }
-                    ColoredNode::Interaction(_) => 0,
-                };
-                skeleton.add_node(NumeratorCanonicalNode(color));
-            }
-            for edge in graph.edges() {
-                let external = matches!(
-                    graph.nodes()[edge.vertices.0].data,
-                    ColoredNode::External(_)
-                ) || matches!(
-                    graph.nodes()[edge.vertices.1].data,
-                    ColoredNode::External(_)
-                );
-                let mut vertices = (
-                    remapping
-                        .get(&edge.vertices.0)
-                        .copied()
-                        .unwrap_or(edge.vertices.0),
-                    remapping
-                        .get(&edge.vertices.1)
-                        .copied()
-                        .unwrap_or(edge.vertices.1),
-                );
-                // As in the legacy comparison graph, all external edges point
-                // into the interaction graph.  Internal direction is omitted
-                // from the reduced skeleton but restored below.
-                let external_outgoing = matches!(
-                    graph.nodes()[edge.vertices.1].data,
-                    ColoredNode::External(_)
-                );
-                if external_outgoing {
-                    vertices = (vertices.1, vertices.0);
-                }
-                let color = if external {
-                    let particle = if external_outgoing {
-                        model.particle_by_id(edge.data.particle)?.antiparticle
-                    } else {
-                        edge.data.particle
-                    };
-                    model.particle_by_id(particle)?.name.clone()
-                } else if exact_internal_particles {
-                    model.particle_by_id(edge.data.particle)?.name.clone()
+        // The global left/right exchange swaps every sewn incoming leg with its outgoing
+        // partner.
+        let partner = |external: ExternalNode| {
+            let index = if external.index < incoming_count {
+                external.index + incoming_count
+            } else {
+                external.index - incoming_count
+            };
+            externals[&index]
+        };
+        let external_color = |external: ExternalNode| -> Result<i64, GenerationError> {
+            let overflow = || GenerationError::ArithmeticOverflow("an external canonical color");
+            let index = i64::try_from(external.index).map_err(|_| overflow())?;
+            let incoming_count = i64::try_from(incoming_count).map_err(|_| overflow())?;
+            Ok(if use_left_right_external_colors {
+                if index < incoming_count {
+                    -2001 - index
                 } else {
-                    let particle = model.particle_by_id(edge.data.particle)?;
+                    -3001 - (index - incoming_count)
+                }
+            } else {
+                index + 1
+            })
+        };
+        // External edges are colored by the particle entering the interaction graph.
+        // Internal direction is omitted from the reduced skeleton but restored below.
+        let edge_colors = graph
+            .edges()
+            .map(|edge| {
+                let particle = model.particle_by_id(edge.particle)?;
+                Ok(if edge.is_external() {
+                    if edge.sink.external().is_some() {
+                        model.antiparticle(particle)?
+                    } else {
+                        particle
+                    }
+                    .name
+                    .clone()
+                } else if exact_internal_particles {
+                    particle.name.clone()
+                } else {
                     format!(
                         "{} | {}",
                         model.parameter_by_id(particle.mass)?.name,
                         particle.spin
                     )
-                };
-                skeleton
-                    .add_edge(
-                        vertices.0,
-                        vertices.1,
-                        external,
-                        NumeratorCanonicalEdge(color),
-                    )
-                    .map_err(|error| GenerationError::GraphConstruction(error.to_string()))?;
-            }
-            candidates.push((swapped == 1, remapping, skeleton.canonize()));
-        }
-        candidates.sort_by(|left, right| {
-            (left.2.graph.nodes(), left.2.graph.edges())
-                .cmp(&(right.2.graph.nodes(), right.2.graph.edges()))
-        });
-        let (left_right_swapped, remapping, canonical) = candidates
-            .into_iter()
-            .next()
-            .ok_or_else(|| GenerationError::GraphConstruction("no canonical graph".to_owned()))?;
-        let mut canonical_to_input = vec![0; graph.nodes().len()];
-        for (input, canonical_position) in canonical.vertex_map.iter().copied().enumerate() {
-            canonical_to_input[canonical_position] =
-                remapping.get(&input).copied().unwrap_or(input);
-        }
-        let mut input_to_canonical = vec![0; graph.nodes().len()];
-        for (canonical_position, input) in canonical_to_input.iter().copied().enumerate() {
-            input_to_canonical[input] = canonical_position;
-        }
-
-        let mut result = Graph::new();
-        for input in canonical_to_input.iter().copied() {
-            // The selected global remapping is an involution. Applying it
-            // a second time keeps each physical external label attached to
-            // its original process state while adopting the selected
-            // topology.
-            let data = remapping.get(&input).copied().unwrap_or(input);
-            result.add_node(graph.nodes()[data].data.clone());
-        }
-
-        let mut edges = graph
-            .edges()
-            .iter()
-            .map(|edge| {
-                let external = matches!(
-                    graph.nodes()[edge.vertices.0].data,
-                    ColoredNode::External(_)
-                ) || matches!(
-                    graph.nodes()[edge.vertices.1].data,
-                    ColoredNode::External(_)
-                );
-                let external_outgoing = matches!(
-                    graph.nodes()[edge.vertices.1].data,
-                    ColoredNode::External(_)
-                );
-                let flipped = external_outgoing
-                    || (!external
-                        && input_to_canonical[edge.vertices.0]
-                            > input_to_canonical[edge.vertices.1]);
-                let vertices = if flipped {
-                    (
-                        input_to_canonical[edge.vertices.1],
-                        input_to_canonical[edge.vertices.0],
-                    )
-                } else {
-                    (
-                        input_to_canonical[edge.vertices.0],
-                        input_to_canonical[edge.vertices.1],
-                    )
-                };
-                let mut data = edge.data;
-                if edge.directed && flipped {
-                    data.particle = model.particle_by_id(data.particle)?.antiparticle;
-                }
-                if edge.directed && left_right_swapped {
-                    data.particle = model.particle_by_id(data.particle)?.antiparticle;
-                }
-                let pdg_code = model.particle_by_id(data.particle)?.pdg_code;
-                Ok((vertices, edge.directed, data, pdg_code))
+                })
             })
             .collect::<Result<Vec<_>, GenerationError>>()?;
-        // Match the UFO/GammaLoop canonical momentum convention. Signed PDG
-        // order is deliberately used here rather than model insertion order:
-        // CP-conjugate charged lines can otherwise acquire the same edge/LMB
-        // order even when their legacy canonical representatives differ.
-        edges.sort_by_key(|(vertices, _, _, pdg_code)| (vertices.0, vertices.1, *pdg_code));
-        for (vertices, directed, data, _) in edges {
-            result
-                .add_edge(vertices.0, vertices.1, directed, data)
-                .map_err(|error| GenerationError::GraphConstruction(error.to_string()))?;
+        let mut candidates = Vec::new();
+        for swapped in [false, true] {
+            if swapped && !include_left_right_remapping {
+                continue;
+            }
+            let mut skeleton = HedgeGraphBuilder::new();
+            let nodes: Vec<NodeIndex> = (0..graph.n_vertices())
+                .map(|_| skeleton.add_node(()))
+                .collect();
+            for (edge, color) in graph.edges().zip(&edge_colors) {
+                match (edge.source, edge.sink) {
+                    (Endpoint::Vertex(source), Endpoint::Vertex(sink)) => skeleton.add_edge(
+                        nodes[source],
+                        nodes[sink],
+                        color,
+                        Orientation::Undirected,
+                    ),
+                    (Endpoint::External(external), Endpoint::Vertex(vertex))
+                    | (Endpoint::Vertex(vertex), Endpoint::External(external)) => {
+                        let shown = if swapped { partner(external) } else { external };
+                        skeleton.add_external_edge(
+                            nodes[vertex].add_data(Some(external_color(shown)?)),
+                            color,
+                            Orientation::Default,
+                            Flow::Sink,
+                        )
+                    }
+                    (Endpoint::External(_), Endpoint::External(_)) => {
+                        unreachable!("generated edges touch an interaction vertex")
+                    }
+                }
+            }
+            let skeleton: HedgeGraph<&String, (), Option<i64>> = skeleton.build();
+            let canonical = skeleton.canonize_by(ignore, |color| (*color).clone(), |color| *color);
+            let positions: Vec<usize> = (0..graph.n_vertices())
+                .map(|vertex| canonical.canonical_node(NodeIndex(vertex)).0)
+                .collect();
+            candidates.push((canonical.into_certificate(), swapped, positions));
         }
-        Ok(result)
+        let (_, left_right_swapped, positions) = candidates
+            .into_iter()
+            .min_by(|left, right| (&left.0, left.1).cmp(&(&right.0, right.1)))
+            .ok_or_else(|| GenerationError::GraphConstruction("no canonical graph".to_owned()))?;
+
+        let mut vertices = vec![None; graph.n_vertices()];
+        for (vertex, rule) in graph.vertices().enumerate() {
+            vertices[positions[vertex]] = Some(rule);
+        }
+        // The selected global exchange is an involution. Applying it to the legs keeps each
+        // physical external label attached to its original process state while adopting the
+        // selected topology.
+        let endpoint = |endpoint: Endpoint| match endpoint {
+            Endpoint::Vertex(vertex) => Endpoint::Vertex(positions[vertex]),
+            Endpoint::External(external) if left_right_swapped => {
+                Endpoint::External(partner(external))
+            }
+            Endpoint::External(external) => Endpoint::External(external),
+        };
+        let mut edges = graph
+            .edges()
+            .map(|edge| {
+                // All external edges point into the interaction graph and internal
+                // edges point from the lower to the higher canonical vertex.
+                let flipped = edge.sink.external().is_some()
+                    || matches!(
+                        (edge.source, edge.sink),
+                        (Endpoint::Vertex(source), Endpoint::Vertex(sink))
+                            if positions[source] > positions[sink]
+                    );
+                let mut particle = edge.particle;
+                if edge.directed && flipped != left_right_swapped {
+                    particle = model.particle_by_id(particle)?.antiparticle;
+                }
+                let (source, sink) = if flipped {
+                    (edge.sink, edge.source)
+                } else {
+                    (edge.source, edge.sink)
+                };
+                let pdg_code = model.particle_by_id(particle)?.pdg_code;
+                Ok((
+                    GeneratedEdge {
+                        source: endpoint(source),
+                        sink: endpoint(sink),
+                        particle,
+                        directed: edge.directed,
+                    },
+                    pdg_code,
+                ))
+            })
+            .collect::<Result<Vec<_>, GenerationError>>()?;
+        // Match the UFO/GammaLoop canonical momentum convention, which diagram finalization
+        // also uses for internal edges. Signed PDG order is deliberately used here rather than
+        // model insertion order: CP-conjugate charged lines can otherwise acquire the same
+        // edge/LMB order even when their legacy canonical representatives differ.
+        edges.sort_by_key(|(edge, pdg_code)| (edge.source, edge.sink, *pdg_code));
+        Ok(GeneratedGraph::new(
+            vertices
+                .into_iter()
+                .map(|rule| rule.expect("canonical positions are a permutation")),
+            edges.into_iter().map(|(edge, _)| edge),
+        ))
     }
 
     fn repair_cp_interaction_rules(
-        graph: Graph<ColoredNode, EdgeColor>,
+        graph: GeneratedGraph,
         model: &Model,
-    ) -> Result<Graph<ColoredNode, EdgeColor>, GenerationError> {
+    ) -> Result<GeneratedGraph, GenerationError> {
         let mut replacements = BTreeMap::new();
-        for (vertex, node) in graph.nodes().iter().enumerate() {
-            let ColoredNode::Interaction(rule_id) = &node.data else {
-                continue;
-            };
-            let rule = model.vertex_rule_by_id(*rule_id)?;
+        for (vertex, rule_id) in graph.vertices().enumerate() {
+            let rule = model.vertex_rule_by_id(rule_id)?;
             let expected = vertex_rule_signature(model, rule)?;
             let mut actual = available_interaction_half_edges(&graph, vertex, model)?
                 .into_iter()
@@ -4069,10 +3183,8 @@ impl ResolvedProcess {
 
             let mut cp_expected = expected
                 .iter()
-                .map(|half_edge| HalfEdge {
-                    direction: half_edge.direction.map(|direction| !direction),
-                    data: half_edge.data,
-                })
+                .cloned()
+                .map(ParticleStub::flipped)
                 .collect::<Vec<_>>();
             cp_expected.sort();
             let coupling_orders = rule.coupling_orders(model);
@@ -4102,19 +3214,13 @@ impl ResolvedProcess {
         if replacements.is_empty() {
             return Ok(graph);
         }
-        let mut repaired = Graph::new();
-        for (vertex, node) in graph.nodes().iter().enumerate() {
-            let data = replacements
-                .get(&vertex)
-                .map_or_else(|| node.data.clone(), |rule| ColoredNode::Interaction(*rule));
-            repaired.add_node(data);
-        }
-        for edge in graph.edges() {
-            repaired
-                .add_edge(edge.vertices.0, edge.vertices.1, edge.directed, edge.data)
-                .map_err(|error| GenerationError::GraphConstruction(error.to_string()))?;
-        }
-        Ok(repaired)
+        Ok(GeneratedGraph::new(
+            graph
+                .vertices()
+                .enumerate()
+                .map(|(vertex, rule)| replacements.get(&vertex).copied().unwrap_or(rule)),
+            graph.edges(),
+        ))
     }
 
     // Normalize every fermion chain before exposing the diagram. A chain keeps
@@ -4123,46 +3229,21 @@ impl ResolvedProcess {
     // first edge in canonical edge order.
     fn normalize_fermion_flows(
         &self,
-        graph: &Graph<ColoredNode, EdgeColor>,
+        graph: &GeneratedGraph,
         model: &Model,
     ) -> Result<NormalizedFermionFlow, GenerationError> {
-        let mut adjacency = vec![Vec::new(); graph.nodes().len()];
-        let mut degrees = vec![0; graph.nodes().len()];
-        for (edge_id, edge) in graph.edges().iter().enumerate() {
-            let particle = model.particle_by_id(edge.data.particle)?;
-            if !(particle.is_fermion() || particle.is_ghost()) {
-                continue;
-            }
-            let (left, right) = edge.vertices;
-            adjacency[left].push((edge_id, right));
-            if left == right {
-                degrees[left] += 2;
-            } else {
-                adjacency[right].push((edge_id, left));
-                degrees[left] += 1;
-                degrees[right] += 1;
-            }
-        }
-        for (vertex, degree) in degrees.iter().copied().enumerate() {
-            if degree > 2 {
-                return Err(GenerationError::UnsupportedFermionBranching { vertex, degree });
-            }
-        }
-
-        let external_nodes: BTreeMap<_, _> = graph
-            .nodes()
-            .iter()
-            .enumerate()
-            .filter_map(|(node_id, node)| match &node.data {
-                ColoredNode::External(external) => {
-                    Some((external.index, (node_id, external.clone())))
-                }
-                ColoredNode::Interaction(_) => None,
+        let lines = FermionLines::new(graph, model)?;
+        let (nodes, ends) = (&lines.nodes, &lines.ends);
+        let external_nodes: BTreeMap<_, _> = (0..nodes.len())
+            .filter_map(|node| {
+                nodes
+                    .external(node)
+                    .map(|external| (external.index, (node, external)))
             })
             .collect();
-        let mut visited_edges = vec![false; graph.edges().len()];
-        let mut normalized_vertices = vec![None; graph.edges().len()];
-        let mut normalized_particles = vec![None; graph.edges().len()];
+        let mut visited_edges = vec![false; graph.n_edges()];
+        let mut normalized_vertices = vec![None; graph.n_edges()];
+        let mut normalized_particles = vec![None; graph.n_edges()];
         let mut normalization = FermionNormalizationState {
             visited_edges: &mut visited_edges,
             vertices: &mut normalized_vertices,
@@ -4176,20 +3257,13 @@ impl ResolvedProcess {
 
         // First fix flows connected to external legs, then all internal flows.
         for (node_id, external) in external_nodes.values() {
-            let Some((edge_id, _)) = adjacency[*node_id]
+            let Some((edge_id, _)) = lines.adjacency[*node_id]
                 .iter()
                 .find(|(edge_id, _)| !normalization.visited_edges[*edge_id])
             else {
                 continue;
             };
-            let legs = normalize_fermion_component(
-                graph,
-                *edge_id,
-                &adjacency,
-                &mut normalization,
-                model,
-                false,
-            )?;
+            let legs = lines.normalize(*edge_id, &mut normalization, model, false)?;
             let legs = legs.into_iter().collect::<Vec<_>>();
             // Both spinor and ghost chains anticommute. Ghosts therefore
             // enter external permutation signs even though their scalar
@@ -4236,61 +3310,48 @@ impl ResolvedProcess {
                 .push((anti_leg, particle_leg));
             line_pairings.push((*first_leg, *second_leg));
         }
-        for edge_id in 0..graph.edges().len() {
-            let particle = model.particle_by_id(graph.edges()[edge_id].data.particle)?;
+        for edge_id in 0..graph.n_edges() {
+            let particle = model.particle_by_id(graph.edge(edge_id).particle)?;
             if (particle.is_fermion() || particle.is_ghost())
                 && !normalization.visited_edges[edge_id]
             {
-                normalize_fermion_component(
-                    graph,
-                    edge_id,
-                    &adjacency,
-                    &mut normalization,
-                    model,
-                    true,
-                )?;
+                lines.normalize(edge_id, &mut normalization, model, true)?;
             }
         }
 
-        let mut normalized_graph = Graph::new();
-        for node in graph.nodes() {
-            normalized_graph.add_node(node.data.clone());
-        }
         let mut reversed_edges = BTreeSet::new();
-        for (edge_id, edge) in graph.edges().iter().enumerate() {
-            let particle = model.particle_by_id(edge.data.particle)?;
+        let mut edges = Vec::with_capacity(graph.n_edges());
+        for (edge_id, edge) in graph.edges().enumerate() {
+            let particle = model.particle_by_id(edge.particle)?;
             let canonicalize_virtual_antiparticle = normalized_vertices[edge_id].is_none()
-                && matches!(
-                    (
-                        &graph.nodes()[edge.vertices.0].data,
-                        &graph.nodes()[edge.vertices.1].data
-                    ),
-                    (ColoredNode::Interaction(_), ColoredNode::Interaction(_))
-                )
+                && !edge.is_external()
                 && particle.is_antiparticle()
                 && !(particle.is_fermion() || particle.is_ghost());
             let (left, right) = normalized_vertices[edge_id].unwrap_or({
                 if canonicalize_virtual_antiparticle {
-                    (edge.vertices.1, edge.vertices.0)
+                    (ends[edge_id].1, ends[edge_id].0)
                 } else {
-                    edge.vertices
+                    ends[edge_id]
                 }
             });
-            let mut data = edge.data;
-            data.particle = normalized_particles[edge_id].unwrap_or({
+            let particle = normalized_particles[edge_id].unwrap_or({
                 if canonicalize_virtual_antiparticle {
                     particle.antiparticle
                 } else {
-                    edge.data.particle
+                    edge.particle
                 }
             });
-            if (left, right) != edge.vertices {
+            if (left, right) != ends[edge_id] {
                 reversed_edges.insert(EdgeId(edge_id));
             }
-            normalized_graph
-                .add_edge(left, right, edge.directed, data)
-                .map_err(|error| GenerationError::GraphConstruction(error.to_string()))?;
+            edges.push(GeneratedEdge {
+                source: nodes.endpoint(left),
+                sink: nodes.endpoint(right),
+                particle,
+                directed: edge.directed,
+            });
         }
+        let normalized_graph = GeneratedGraph::new(graph.vertices(), edges);
 
         let concatenated_lines = pairings
             .values()
@@ -4381,33 +3442,11 @@ impl ResolvedProcess {
         Ok(loops)
     }
 
-    fn vertex_half_edge(
-        model: &Model,
-        particle: &Particle,
-    ) -> Result<HalfEdge<EdgeColor>, GenerationError> {
-        let base = if particle.is_antiparticle() {
-            particle.antiparticle
-        } else {
-            model.particle_id(&particle.name)?
-        };
-        Ok(HalfEdge {
-            direction: if model.particle_is_self_conjugate(model.particle_id(&particle.name)?) {
-                None
-            } else {
-                Some(particle.is_antiparticle())
-            },
-            data: EdgeColor {
-                particle: base,
-                direction: None,
-            },
-        })
-    }
-
     // Enumerate exact s-channel cuts for cross-section generation. The caller
     // applies amplitude-level constraints to the returned partitions.
     fn cut_partitions(
         &self,
-        graph: &Graph<ColoredNode, EdgeColor>,
+        graph: &GeneratedGraph,
         model: &Model,
         options: &GenerationOptions,
     ) -> Result<CutPartitionInventory, GenerationError> {
@@ -4424,7 +3463,7 @@ impl ResolvedProcess {
                 Ok(particle_ids)
             })
             .collect::<Result<_, ModelError>>()?;
-        let he_graph: HedgeGraph<EdgeColor, ColoredNode, ()> = graph.clone().into();
+        let he_graph = graph.with_external_vertices();
         // Legacy cross-section cuts were enumerated after sewing each incoming
         // external leg to its outgoing partner.  The resulting source/target
         // nodes are the internal attachment nodes, and an initial-state edge
@@ -4435,7 +3474,7 @@ impl ResolvedProcess {
         let mut source = BTreeSet::new();
         let mut target = BTreeSet::new();
         for (node_id, neighbours, node) in he_graph.iter_nodes() {
-            if let ColoredNode::External(external) = node {
+            if let PlainVertex::External(external) = node {
                 let incident = neighbours.collect::<Vec<_>>();
                 if incident.len() != 1 {
                     return Err(GenerationError::GraphConstruction(format!(
@@ -4462,14 +3501,8 @@ impl ResolvedProcess {
         }
         let initial_state_edges = graph
             .edges()
-            .iter()
             .enumerate()
-            .filter_map(|(edge, data)| {
-                let (source, target) = data.vertices;
-                (matches!(graph.nodes()[source].data, ColoredNode::External(_))
-                    || matches!(graph.nodes()[target].data, ColoredNode::External(_)))
-                .then_some(EdgeId(edge))
-            })
+            .filter_map(|(edge, data)| data.is_external().then_some(EdgeId(edge)))
             .collect::<BTreeSet<_>>();
 
         let default_blob_range = 1..=1;
@@ -4524,7 +3557,7 @@ impl ResolvedProcess {
         let summarize_side = |subgraph: &SuBitGraph| -> Result<DiagramCutSide, GenerationError> {
             let mut coupling_orders = BTreeMap::new();
             for (_, _, node) in he_graph.iter_nodes_of(subgraph) {
-                let ColoredNode::Interaction(rule_id) = node else {
+                let PlainVertex::Interaction(rule_id) = node else {
                     continue;
                 };
                 for (name, order) in model.vertex_rule_by_id(*rule_id)?.coupling_orders(model) {
@@ -4575,7 +3608,7 @@ impl ResolvedProcess {
             let mut cut_content = cut
                 .iter_left_hedges()
                 .map(|hedge| {
-                    let particle = he_graph[[&hedge]].particle;
+                    let particle = he_graph[[&hedge]];
                     if matches!(he_graph.flow(hedge), Flow::Sink) {
                         Ok(model.particle_by_id(particle)?.antiparticle)
                     } else {
@@ -4621,11 +3654,7 @@ impl ResolvedProcess {
             })
     }
 
-    fn passes_sewn_filter(
-        &self,
-        graph: &Graph<ColoredNode, EdgeColor>,
-        options: &GenerationOptions,
-    ) -> bool {
+    fn passes_sewn_filter(&self, graph: &GeneratedGraph, options: &GenerationOptions) -> bool {
         let Some(SewnFilterOptions {
             filter_tadpoles: true,
         }) = options
@@ -4639,12 +3668,12 @@ impl ResolvedProcess {
             return true;
         };
 
-        let mut graph: HedgeGraph<EdgeColor, ColoredNode, ()> = graph.clone().into();
+        let mut graph = graph.with_external_vertices();
         let external_nodes: Vec<_> = graph
             .iter_nodes()
             .filter_map(|(node, _, color)| match color {
-                ColoredNode::External(external) => Some((external.index, node, color.clone())),
-                ColoredNode::Interaction(_) => None,
+                PlainVertex::External(external) => Some((external.index, node, *color)),
+                PlainVertex::Interaction(_) => None,
             })
             .collect();
         let externals: Vec<_> = external_nodes.iter().map(|(_, node, _)| *node).collect();
@@ -4656,7 +3685,7 @@ impl ResolvedProcess {
             .expect("external nodes are distinct graph terminals with incident edges")
             .len()
             + 1;
-        let by_index: BTreeMap<usize, (NodeIndex, ColoredNode)> = external_nodes
+        let by_index: BTreeMap<usize, (NodeIndex, PlainVertex)> = external_nodes
             .into_iter()
             .map(|(index, node, color)| (index, (node, color)))
             .collect();
@@ -4665,12 +3694,12 @@ impl ResolvedProcess {
             if let (Some((left, color)), Some((right, _))) =
                 (by_index.get(&incoming), by_index.get(&outgoing))
             {
-                graph.identify_nodes(&[*left, *right], color.clone());
+                graph.identify_nodes(&[*left, *right], *color);
             }
         }
-        // NodeStorageVec retains the crowns of nodes that were identified so
-        // callers can inspect the identification history. Cycle detection must
-        // run on the sewn quotient graph, without those historical crowns.
+        // The node store retains the nodes absorbed by identification so callers
+        // can inspect the history. Cycle detection must run on the sewn quotient
+        // graph, without those absorbed nodes.
         graph.forget_identification_history();
         let non_bridges = graph.non_bridges();
         graph.count_connected_components(&non_bridges) == connected_components_before
@@ -4679,7 +3708,7 @@ impl ResolvedProcess {
 
 #[cfg(test)]
 mod tests {
-    use crate::{CancellationToken, GraphGroupingOptions, NumeratorGrouping};
+    use crate::{CancellationToken, GraphGroupingOptions, NumeratorGrouping, VertexSelector};
     use feynkit_model::Model;
     use symbolica::parser::ParseSettings;
 
@@ -4906,10 +3935,97 @@ mod tests {
         model.vertex_rule_id(name).unwrap()
     }
 
-    fn edge(model: &Model, pdg: i64) -> EdgeColor {
-        EdgeColor {
-            particle: particle(model, pdg),
-            direction: None,
+    fn edge(model: &Model, pdg: i64) -> ParticleId {
+        particle(model, pdg)
+    }
+
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    enum ColoredNode {
+        External(ExternalNode),
+        Interaction(VertexRuleId),
+    }
+
+    /// A generated-graph fixture written with degree-one external vertices; [`Self::build`]
+    /// turns them into legs and keeps the edge order.
+    #[derive(Debug, Clone, Default)]
+    struct Graph {
+        nodes: Vec<ColoredNode>,
+        edges: Vec<(usize, usize, bool, ParticleId)>,
+    }
+
+    impl Graph {
+        fn new() -> Self {
+            Self::default()
+        }
+
+        fn add_node(&mut self, node: ColoredNode) -> usize {
+            self.nodes.push(node);
+            self.nodes.len() - 1
+        }
+
+        /// Undirected edges are stored from the lower to the higher node, as Graphica did.
+        fn add_edge(
+            &mut self,
+            source: usize,
+            sink: usize,
+            directed: bool,
+            particle: ParticleId,
+        ) -> Result<usize, String> {
+            let (source, sink) = if !directed && source > sink {
+                (sink, source)
+            } else {
+                (source, sink)
+            };
+            self.edges.push((source, sink, directed, particle));
+            Ok(self.edges.len() - 1)
+        }
+
+        fn interactions(&self) -> Vec<usize> {
+            (0..self.nodes.len())
+                .filter(|node| matches!(self.nodes[*node], ColoredNode::Interaction(_)))
+                .collect()
+        }
+
+        fn build(&self) -> GeneratedGraph {
+            let interactions = self.interactions();
+            let endpoint = |node: usize| match self.nodes[node] {
+                ColoredNode::External(external) => Endpoint::External(external),
+                ColoredNode::Interaction(_) => Endpoint::Vertex(
+                    interactions
+                        .iter()
+                        .position(|vertex| *vertex == node)
+                        .unwrap(),
+                ),
+            };
+            GeneratedGraph::new(
+                interactions.iter().map(|node| match self.nodes[*node] {
+                    ColoredNode::Interaction(rule) => rule,
+                    ColoredNode::External(_) => unreachable!(),
+                }),
+                self.edges
+                    .iter()
+                    .map(|&(source, sink, directed, particle)| GeneratedEdge {
+                        source: endpoint(source),
+                        sink: endpoint(sink),
+                        particle,
+                        directed,
+                    }),
+            )
+        }
+
+        /// The fixture nodes of the ends of `edge` in a graph built from this fixture.
+        fn ends(&self, graph: &GeneratedGraph, edge: usize) -> (usize, usize) {
+            let interactions = self.interactions();
+            let node = |endpoint: Endpoint| match endpoint {
+                Endpoint::Vertex(vertex) => interactions[vertex],
+                Endpoint::External(external) => self
+                    .nodes
+                    .iter()
+                    .position(|node| *node == ColoredNode::External(external))
+                    .unwrap(),
+            };
+            let edge = graph.edge(edge);
+            (node(edge.source), node(edge.sink))
         }
     }
 
@@ -5270,11 +4386,11 @@ mod tests {
         // vertices. It therefore admitted partitions which crossed an initial
         // external edge and two or more internal edges; stripping that edge in
         // the runtime bridge turned them into non-s-t threshold candidates.
-        let old_graph: HedgeGraph<EdgeColor, ColoredNode, ()> = graph.clone().into();
+        let old_graph = graph.build().with_external_vertices();
         let mut old_source = Vec::new();
         let mut old_target = Vec::new();
         for (node, _, color) in old_graph.iter_nodes() {
-            let ColoredNode::External(external) = color else {
+            let PlainVertex::External(external) = color else {
                 continue;
             };
             match external.state {
@@ -5302,7 +4418,7 @@ mod tests {
         );
 
         let inventory = resolved
-            .cut_partitions(&graph, &model, &GenerationOptions::default())
+            .cut_partitions(&graph.build(), &model, &GenerationOptions::default())
             .unwrap();
         assert_eq!(inventory.topology_threshold_candidates.len(), 1);
         let crossing = inventory.topology_threshold_candidates[0]
@@ -5364,8 +4480,6 @@ mod tests {
         let model = Arc::new(scalar_model());
         let particle = model.particle_id("phi").unwrap();
         let mut builder = FeynmanDiagram::builder(model, "gl-like-routing");
-        let outgoing_0 = builder.add_generation_external("out0", 0, ExternalState::Outgoing, 0);
-        let outgoing_1 = builder.add_generation_external("out1", 1, ExternalState::Outgoing, 1);
         let vertices = (0..8)
             .map(|vertex| {
                 builder.add_vertex(DiagramVertex {
@@ -5376,18 +4490,25 @@ mod tests {
                 })
             })
             .collect::<Vec<_>>();
-        assert_eq!(
-            builder
-                .add_edge(outgoing_0, vertices[7], DiagramEdge::new(particle, false),)
-                .unwrap(),
-            EdgeId(0),
-        );
-        assert_eq!(
-            builder
-                .add_edge(outgoing_1, vertices[7], DiagramEdge::new(particle, false),)
-                .unwrap(),
-            EdgeId(1),
-        );
+        for index in 0..2 {
+            assert_eq!(
+                builder
+                    .add_generation_external(
+                        vertices[7],
+                        Flow::Sink,
+                        DiagramEdge::new(particle, false),
+                        VertexSlot(0),
+                        ExternalLeg {
+                            name: format!("out{index}"),
+                            index,
+                            state: ExternalState::Outgoing,
+                            connection: index,
+                        },
+                    )
+                    .unwrap(),
+                EdgeId(index),
+            );
+        }
         for (edge, source, target) in [
             (0, 0, 1),
             (1, 0, 3),
@@ -5442,7 +4563,9 @@ mod tests {
         vector_graph
             .add_edge(right, outgoing, false, edge(&generator.model, 22))
             .unwrap();
-        let vector_projector = generator.external_state_projector(&vector_graph).unwrap();
+        let vector_projector = generator
+            .external_state_projector(&vector_graph.build())
+            .unwrap();
         assert_eq!(
             function_count(&vector_projector, feynkit_graph::symbols::epsilon()),
             1
@@ -5468,7 +4591,9 @@ mod tests {
             .add_edge(scalar, internal, false, edge(&generator.model, 25))
             .unwrap();
         assert_eq!(
-            generator.external_state_projector(&scalar_graph).unwrap(),
+            generator
+                .external_state_projector(&scalar_graph.build())
+                .unwrap(),
             Atom::one()
         );
     }
@@ -5671,6 +4796,109 @@ mod tests {
 
         assert!(!generated.report.completed);
         assert!(generated.diagrams.is_empty());
+    }
+
+    /// The overall factor with the generator's symbolic factors replaced by their arguments.
+    fn numeric_factor(diagram: &FeynmanDiagram) -> Atom {
+        diagram
+            .overall_factor()
+            .replace_map(|term, _, out| {
+                if let AtomView::Fun(function) = term
+                    && function.get_symbol().get_namespace() == "feynkit_generator_factor"
+                {
+                    **out = function.iter().next().unwrap().to_owned();
+                }
+            })
+            .expand()
+    }
+
+    #[test]
+    fn split_vertices_with_identical_fields_give_distinct_diagrams() {
+        let mut definition = serde_json::to_value(scalar_model()).unwrap();
+        let rules = definition["vertex_rules"].as_array_mut().unwrap();
+        let mut counterterm = rules[0].clone();
+        counterterm["name"] = serde_json::json!("V1_CT");
+        rules.push(counterterm);
+        let model: Model = serde_json::from_value(definition).unwrap();
+        let generated = Generator::new(model.clone())
+            .generate(
+                &Process::new(["phi"], ["phi"]),
+                &GenerationOptions::default()
+                    .with_loop_count(1, 1)
+                    .unwrap()
+                    .threads(1),
+                GenerationType::Amplitude,
+            )
+            .unwrap();
+        // The bubble with either rule at either vertex: the legs distinguish the vertices, and
+        // the two internal lines are interchangeable.
+        let mut rules = generated
+            .diagrams
+            .iter()
+            .map(|diagram| {
+                assert_eq!(diagram.symmetry_factor(), 2);
+                assert_eq!(numeric_factor(diagram), Atom::num(1) / Atom::num(2));
+                diagram
+                    .vertices()
+                    .map(|(_, vertex)| {
+                        model
+                            .vertex_rule_by_id(vertex.interaction.unwrap())
+                            .unwrap()
+                            .name
+                            .clone()
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .collect::<Vec<_>>();
+        for rules in &mut rules {
+            rules.sort();
+        }
+        rules.sort();
+        assert_eq!(
+            rules,
+            [
+                ["V1", "V1"],
+                ["V1", "V1_CT"],
+                ["V1", "V1_CT"],
+                ["V1_CT", "V1_CT"]
+            ]
+        );
+    }
+
+    #[test]
+    fn symmetrized_external_momenta_are_assigned_canonically() {
+        let generator = Generator::new(Model::qcd());
+        let process = Process::new(["g", "g"], ["g", "g"]);
+        let options = GenerationOptions::default()
+            .with_loop_count(0, 0)
+            .unwrap()
+            .symmetrize_initial(true)
+            .symmetrize_final(true);
+        let ids = |threads| {
+            generator
+                .generate(
+                    &process,
+                    &options.clone().threads(threads),
+                    GenerationType::Amplitude,
+                )
+                .unwrap()
+                .diagrams
+                .iter()
+                .map(|diagram| {
+                    let mut legs = diagram
+                        .edges()
+                        .filter_map(|(_, _, edge)| edge.external.as_ref().map(|leg| leg.index))
+                        .collect::<Vec<_>>();
+                    legs.sort();
+                    assert_eq!(legs, [0, 1, 2, 3]);
+                    diagram.id()
+                })
+                .collect::<Vec<_>>()
+        };
+        let serial = ids(1);
+        // s channel, t channel (the u channel exchanges the final gluons) and the contact vertex
+        assert_eq!(serial.len(), 3);
+        assert_eq!(serial, ids(4));
     }
 
     #[test]
@@ -5905,33 +5133,23 @@ mod tests {
     }
 
     #[test]
-    fn directed_and_undirected_half_edges_use_the_interaction_key_order() {
+    fn vertex_signatures_present_ufo_particles_as_incoming_stubs() {
         let model = fermion_model();
         let options =
             GenerationOptions::default().with_graph_filter(GenerationFilter::VertexAllow(vec![
                 VertexSelector::Name("V".to_owned()),
             ]));
         let options = options.resolve_selectors(&model).unwrap();
-        let signatures = InteractionSignatures::new(&model, &options).unwrap();
-        let mut signature = vec![
-            EdgeColor {
-                particle: particle(&model, 1),
-                direction: Some(false),
-            },
-            EdgeColor {
-                particle: particle(&model, 1),
-                direction: Some(true),
-            },
-            EdgeColor {
-                particle: particle(&model, 22),
-                direction: None,
-            },
-        ];
-        signature.sort();
-
+        let signatures = VertexSignatures::new(&model, &options).unwrap();
+        assert_eq!(signatures.rules, [vertex(&model, "V")]);
+        // UFO particles enter the vertex: the antifermion f~ is an outgoing f.
         assert_eq!(
-            signatures.rules(&signature).unwrap(),
-            &[vertex(&model, "V")]
+            signatures.stubs,
+            [vec![
+                ParticleStub::outgoing(particle(&model, 1)),
+                ParticleStub::incoming(particle(&model, 1)),
+                ParticleStub::undirected(particle(&model, 22)),
+            ]]
         );
     }
 
@@ -5958,39 +5176,26 @@ mod tests {
             state: ExternalState::Incoming,
             particle: particle(&model, -1),
         }));
-        let fermion = EdgeColor {
-            particle: particle(&model, 1),
-            direction: None,
-        };
+        let fermion = particle(&model, 1);
         graph
             .add_edge(particle_vertex, left, true, fermion)
             .unwrap();
         graph
-            .add_edge(
-                right,
-                left,
-                true,
-                EdgeColor {
-                    particle: particle(&model, -1),
-                    direction: None,
-                },
-            )
+            .add_edge(right, left, true, particle(&model, -1))
             .unwrap();
         graph.add_edge(right, antiparticle, true, fermion).unwrap();
 
-        let normalized = process.normalize_fermion_flows(&graph, &model).unwrap();
-        assert_eq!(
-            normalized.graph.edges()[0].vertices,
-            (particle_vertex, left)
-        );
-        assert_eq!(normalized.graph.edges()[1].vertices, (left, right));
-        assert_eq!(normalized.graph.edges()[2].vertices, (right, antiparticle));
+        let normalized = process
+            .normalize_fermion_flows(&graph.build(), &model)
+            .unwrap();
+        assert_eq!(graph.ends(&normalized.graph, 0), (particle_vertex, left));
+        assert_eq!(graph.ends(&normalized.graph, 1), (left, right));
+        assert_eq!(graph.ends(&normalized.graph, 2), (right, antiparticle));
         assert_eq!(
             normalized
                 .graph
                 .edges()
-                .iter()
-                .map(|edge| edge.data.particle)
+                .map(|edge| edge.particle)
                 .collect::<Vec<_>>(),
             vec![particle(&model, 1); 3],
         );
@@ -6009,7 +5214,7 @@ mod tests {
                 .symmetrize_external_fermions(true),
         )
         .unwrap()
-        .normalize_fermion_flows(&graph, &model)
+        .normalize_fermion_flows(&graph.build(), &model)
         .unwrap();
         assert!(!symmetrized.signs.include_external_ordering);
         assert!(!symmetrized.signs.external_ordering_negative);
@@ -6054,18 +5259,17 @@ mod tests {
             state: ExternalState::Incoming,
             particle: particle(&model, -1),
         }));
-        let flow = EdgeColor {
-            particle: particle(&model, 1),
-            direction: None,
-        };
+        let flow = particle(&model, 1);
         graph.add_edge(ghost, left, true, flow).unwrap();
         graph.add_edge(right, left, true, flow).unwrap();
         graph.add_edge(right, antighost, true, flow).unwrap();
 
-        let normalized = process.normalize_fermion_flows(&graph, &model).unwrap();
-        assert_eq!(normalized.graph.edges()[0].vertices, (ghost, left));
-        assert_eq!(normalized.graph.edges()[1].vertices, (left, right));
-        assert_eq!(normalized.graph.edges()[2].vertices, (right, antighost));
+        let normalized = process
+            .normalize_fermion_flows(&graph.build(), &model)
+            .unwrap();
+        assert_eq!(graph.ends(&normalized.graph, 0), (ghost, left));
+        assert_eq!(graph.ends(&normalized.graph, 1), (left, right));
+        assert_eq!(graph.ends(&normalized.graph, 2), (right, antighost));
         // The all-incoming order [ghost, antighost] is one transposition
         // from the canonical [antighost, ghost] order, just as for spinors.
         assert!(normalized.signs.external_ordering_negative);
@@ -6159,7 +5363,11 @@ mod tests {
                 .iter()
                 .map(|graph| {
                     process
-                        .canonicalize_numerator_graph(graph, &model, &NumeratorGrouping::None)
+                        .canonicalize_numerator_graph(
+                            &graph.build(),
+                            &model,
+                            &NumeratorGrouping::None,
+                        )
                         .unwrap()
                 })
                 .collect::<Vec<_>>();
@@ -6196,10 +5404,7 @@ mod tests {
             .collect::<Vec<_>>();
         let left = graph.add_node(ColoredNode::Interaction(vertex(&model, "V")));
         let right = graph.add_node(ColoredNode::Interaction(vertex(&model, "V")));
-        let charged = EdgeColor {
-            particle: particle(&model, 1),
-            direction: None,
-        };
+        let charged = particle(&model, 1);
         graph
             .add_edge(external_nodes[0], left, true, charged)
             .unwrap();
@@ -6221,51 +5426,32 @@ mod tests {
             (external_nodes[3], external_nodes[1]),
         ]);
         let mut mirror = Graph::new();
-        for node in graph.nodes() {
-            mirror.add_node(node.data.clone());
+        for node in &graph.nodes {
+            mirror.add_node(*node);
         }
-        for edge in graph.edges() {
-            let mut data = edge.data;
-            data.particle = model.particle_by_id(data.particle).unwrap().antiparticle;
+        for &(source, sink, directed, particle) in &graph.edges {
             mirror
                 .add_edge(
-                    external_swap
-                        .get(&edge.vertices.0)
-                        .copied()
-                        .unwrap_or(edge.vertices.0),
-                    external_swap
-                        .get(&edge.vertices.1)
-                        .copied()
-                        .unwrap_or(edge.vertices.1),
-                    edge.directed,
-                    data,
+                    external_swap.get(&source).copied().unwrap_or(source),
+                    external_swap.get(&sink).copied().unwrap_or(sink),
+                    directed,
+                    model.particle_by_id(particle).unwrap().antiparticle,
                 )
                 .unwrap();
         }
 
         let grouping = NumeratorGrouping::UpToScalar(GraphGroupingOptions::default());
         let canonical = process
-            .canonicalize_numerator_graph(&graph, &model, &grouping)
+            .canonicalize_numerator_graph(&graph.build(), &model, &grouping)
             .unwrap();
         let canonical_mirror = process
-            .canonicalize_numerator_graph(&mirror, &model, &grouping)
+            .canonicalize_numerator_graph(&mirror.build(), &model, &grouping)
             .unwrap();
         assert_eq!(canonical, canonical_mirror);
 
         let internal_edge = canonical
             .edges()
-            .iter()
-            .enumerate()
-            .find(|(_, edge)| {
-                matches!(
-                    canonical.nodes()[edge.vertices.0].data,
-                    ColoredNode::Interaction(_)
-                ) && matches!(
-                    canonical.nodes()[edge.vertices.1].data,
-                    ColoredNode::Interaction(_)
-                )
-            })
-            .map(|(edge, _)| edge)
+            .position(|edge| !edge.is_external())
             .unwrap();
         let generator = Generator::new(model.clone());
         let (particle_numerator, particle_fallback) = generator
@@ -6280,7 +5466,7 @@ mod tests {
         let (propagator, used_antiparticle_fallback) = generator
             .propagator_numerator(
                 model
-                    .particle_by_id(canonical.edges()[internal_edge].data.particle)
+                    .particle_by_id(canonical.edge(internal_edge).particle)
                     .unwrap(),
             )
             .unwrap();
@@ -6337,12 +5523,11 @@ mod tests {
             }
 
             let canonical = process
-                .canonicalize_numerator_graph(&graph, &model, &grouping)
+                .canonicalize_numerator_graph(&graph.build(), &model, &grouping)
                 .unwrap();
             let pdgs = canonical
                 .edges()
-                .iter()
-                .map(|edge| model.particle_by_id(edge.data.particle).unwrap().pdg_code)
+                .map(|edge| model.particle_by_id(edge.particle).unwrap().pdg_code)
                 .collect::<Vec<_>>();
             assert!(pdgs.windows(2).all(|pair| pair[0] <= pair[1]), "{pdgs:?}");
         }
@@ -6364,15 +5549,12 @@ mod tests {
                 .unwrap();
         }
 
-        let repaired = ResolvedProcess::repair_cp_interaction_rules(graph, &model).unwrap();
-        assert_eq!(
-            repaired.nodes()[interaction].data,
-            ColoredNode::Interaction(vertex(&model, "V_117"))
-        );
+        let repaired = ResolvedProcess::repair_cp_interaction_rules(graph.build(), &model).unwrap();
+        assert_eq!(repaired.vertices().next().unwrap(), vertex(&model, "V_117"));
         let rule = model.vertex_rule("V_117").unwrap();
         assert_eq!(
             Generator::new(model.clone())
-                .interaction_half_edges(&repaired, interaction, rule)
+                .interaction_half_edges(&repaired, 0, rule)
                 .unwrap()
                 .len(),
             rule.particles.len()
@@ -6394,11 +5576,8 @@ mod tests {
                 .add_edge(interaction, external, true, edge(&model, pdg))
                 .unwrap();
         }
-        let repaired = ResolvedProcess::repair_cp_interaction_rules(graph, &model).unwrap();
-        assert_eq!(
-            repaired.nodes()[interaction].data,
-            ColoredNode::Interaction(vertex(&model, "V_117"))
-        );
+        let repaired = ResolvedProcess::repair_cp_interaction_rules(graph.build(), &model).unwrap();
+        assert_eq!(repaired.vertices().next().unwrap(), vertex(&model, "V_117"));
 
         let resolved_options = |filter| {
             GenerationOptions::default()
@@ -6421,21 +5600,15 @@ mod tests {
         let generator = Generator::new(model);
 
         assert!(
-            !generator
-                .passes_interaction_filters(&repaired, 0, &allow_original)
-                .unwrap(),
+            !generator.passes_vertex_selection(&repaired, &allow_original),
             "a CP repair must not bypass an allow-list"
         );
         assert!(
-            !generator
-                .passes_interaction_filters(&repaired, 0, &veto_repaired)
-                .unwrap(),
+            !generator.passes_vertex_selection(&repaired, &veto_repaired),
             "a CP repair must not bypass a veto-list"
         );
         assert!(
-            generator
-                .passes_interaction_filters(&repaired, 0, &allow_repaired)
-                .unwrap(),
+            generator.passes_vertex_selection(&repaired, &allow_repaired),
             "the finalized CP rule should pass when explicitly allowed"
         );
     }
@@ -6465,15 +5638,7 @@ mod tests {
             particle: particle(&model, 22),
         }));
         graph
-            .add_edge(
-                interaction,
-                interaction,
-                true,
-                EdgeColor {
-                    particle: particle(&model, -1),
-                    direction: None,
-                },
-            )
+            .add_edge(interaction, interaction, true, particle(&model, -1))
             .unwrap();
         graph
             .add_edge(external, interaction, false, edge(&model, 22))
@@ -6484,9 +5649,8 @@ mod tests {
                 "antiparticle-propagator".to_owned(),
                 GenerationType::Amplitude,
                 ColoredTopology {
-                    graph,
+                    graph: graph.build(),
                     symmetry: 1,
-                    multiplicity: 1,
                     cut_partitions: Vec::new(),
                     topology_threshold_candidates: Vec::new(),
                 },
@@ -6611,21 +5775,12 @@ mod tests {
     }
 
     #[test]
-    fn vertex_orders_take_each_order_maximum_and_graph_orders_sum_vertices() {
+    fn vertex_orders_take_each_order_maximum() {
         let model = fermion_model();
         let rule_orders = model.vertex_rule("V").unwrap().coupling_orders(&model);
         assert_eq!(
             rule_orders,
             BTreeMap::from([("QCD".to_owned(), 2), ("QED".to_owned(), 3)])
-        );
-
-        let generator = Generator::new(model);
-        let mut graph = Graph::new();
-        graph.add_node(ColoredNode::Interaction(vertex(&generator.model, "V")));
-        graph.add_node(ColoredNode::Interaction(vertex(&generator.model, "V")));
-        assert_eq!(
-            generator.coupling_orders(&graph).unwrap(),
-            BTreeMap::from([("QCD".to_owned(), 4), ("QED".to_owned(), 6)])
         );
     }
 
@@ -7099,8 +6254,8 @@ mod tests {
                 ("QED".to_owned(), (0, Some(0))),
             ])),
         );
-        let signatures = InteractionSignatures::new(&model, &options).unwrap();
-        let rules: BTreeSet<_> = signatures.0.values().flatten().copied().collect();
+        let signatures = VertexSignatures::new(&model, &options).unwrap();
+        let rules: BTreeSet<_> = signatures.rules.iter().copied().collect();
         assert!(!rules.is_empty());
         for (index, rule) in model.vertex_rules().iter().enumerate() {
             let orders = rule.coupling_orders(&model);
@@ -7193,34 +6348,24 @@ mod tests {
                 interaction,
                 interaction,
                 true,
-                EdgeColor {
-                    particle: particle(&generator.model, 1),
-                    direction: None,
-                },
+                particle(&generator.model, 1),
             )
             .unwrap();
         graph
-            .add_edge(
-                interaction,
-                external,
-                false,
-                EdgeColor {
-                    particle: particle(&generator.model, 22),
-                    direction: None,
-                },
-            )
+            .add_edge(interaction, external, false, particle(&generator.model, 22))
             .unwrap();
 
-        let loop_count = generator.closed_fermion_loop_count(&graph, false).unwrap();
+        let loop_count = generator
+            .closed_fermion_loop_count(&graph.build(), false)
+            .unwrap();
         assert_eq!(loop_count, 1);
         let diagram = generator
             .to_diagram(
                 "loop".to_owned(),
                 GenerationType::Amplitude,
                 ColoredTopology {
-                    graph,
+                    graph: graph.build(),
                     symmetry: 3,
-                    multiplicity: 2,
                     cut_partitions: Vec::new(),
                     topology_threshold_candidates: Vec::new(),
                 },
@@ -7233,7 +6378,7 @@ mod tests {
             .unwrap();
         assert_eq!(
             diagram.overall_factor(),
-            &factor_atom("InternalFermionLoopSign(-1)*CouplingsMultiplicity(2)/AutG(3)")
+            &factor_atom("InternalFermionLoopSign(-1)/AutG(3)")
         );
     }
 
@@ -7272,20 +6417,12 @@ mod tests {
                 (4, 5, 21),
             ] {
                 graph
-                    .add_edge(
-                        left,
-                        right,
-                        true,
-                        EdgeColor {
-                            particle: particle(&model, pdg),
-                            direction: None,
-                        },
-                    )
+                    .add_edge(left, right, true, particle(&model, pdg))
                     .unwrap();
             }
             signs.push(
                 process
-                    .normalize_fermion_flows(&graph, &model)
+                    .normalize_fermion_flows(&graph.build(), &model)
                     .unwrap()
                     .signs
                     .external_ordering_negative,
@@ -7415,12 +6552,16 @@ mod tests {
                     graph.add_edge(a, b, true, edge(model, pdg)).unwrap();
                 }
                 assert_eq!(
-                    generator.closed_fermion_loop_count(&graph, true).unwrap(),
+                    generator
+                        .closed_fermion_loop_count(&graph.build(), true)
+                        .unwrap(),
                     expected,
                     "{name}"
                 );
                 assert_eq!(
-                    generator.closed_fermion_loop_count(&graph, false).unwrap(),
+                    generator
+                        .closed_fermion_loop_count(&graph.build(), false)
+                        .unwrap(),
                     expected_fermions,
                     "fermion filter: {name}"
                 );
@@ -7442,11 +6583,23 @@ mod tests {
             state: ExternalState::Outgoing,
             particle: particle(&generator.model, 9000005),
         }));
+        let gluon = graph.add_node(ColoredNode::External(ExternalNode {
+            index: 2,
+            state: ExternalState::Outgoing,
+            particle: particle(&generator.model, 21),
+        }));
+        // an open ghost line through one vertex
+        let line = graph.add_node(ColoredNode::Interaction(vertex(&generator.model, "V_35")));
+        let ghost = edge(&generator.model, 9000005);
+        graph.add_edge(incoming, line, true, ghost).unwrap();
+        graph.add_edge(line, outgoing, true, ghost).unwrap();
         graph
-            .add_edge(incoming, outgoing, true, edge(&generator.model, 9000005))
+            .add_edge(line, gluon, false, edge(&generator.model, 21))
             .unwrap();
         assert_eq!(
-            generator.closed_fermion_loop_count(&graph, true).unwrap(),
+            generator
+                .closed_fermion_loop_count(&graph.build(), true)
+                .unwrap(),
             0
         );
 
@@ -7462,11 +6615,15 @@ mod tests {
                 )
                 .unwrap();
             assert_eq!(
-                generator.closed_fermion_loop_count(&graph, true).unwrap(),
+                generator
+                    .closed_fermion_loop_count(&graph.build(), true)
+                    .unwrap(),
                 loop_count,
             );
             assert_eq!(
-                generator.closed_fermion_loop_count(&graph, false).unwrap(),
+                generator
+                    .closed_fermion_loop_count(&graph.build(), false)
+                    .unwrap(),
                 0
             );
         }
@@ -7506,9 +6663,8 @@ mod tests {
                 "positive".to_owned(),
                 GenerationType::Amplitude,
                 ColoredTopology {
-                    graph: Graph::new(),
+                    graph: GeneratedGraph::new([], []),
                     symmetry: 1,
-                    multiplicity: 1,
                     cut_partitions: Vec::new(),
                     topology_threshold_candidates: Vec::new(),
                 },
@@ -7536,20 +6692,12 @@ mod tests {
         for _ in 0..3 {
             let endpoint = graph.add_node(ColoredNode::Interaction(vertex(&generator.model, "V")));
             graph
-                .add_edge(
-                    center,
-                    endpoint,
-                    true,
-                    EdgeColor {
-                        particle: particle(&generator.model, 1),
-                        direction: None,
-                    },
-                )
+                .add_edge(center, endpoint, true, particle(&generator.model, 1))
                 .unwrap();
         }
 
         assert!(matches!(
-            generator.closed_fermion_loop_count(&graph, false),
+            generator.closed_fermion_loop_count(&graph.build(), false),
             Err(GenerationError::UnsupportedFermionBranching {
                 vertex,
                 degree: 3
@@ -7677,18 +6825,6 @@ mod tests {
     #[test]
     fn public_limits_report_arithmetic_overflow() {
         let model = fermion_model();
-        let generator = Generator::new(model.clone());
-        assert!(matches!(
-            generator.generate(
-                &photon_process(),
-                &GenerationOptions::default().max_vertices(usize::MAX),
-                GenerationType::Amplitude
-            ),
-            Err(GenerationError::ArithmeticOverflow(
-                "the Symbolica vertex limit"
-            ))
-        ));
-
         let options =
             GenerationOptions::default().with_graph_filter(GenerationFilter::PerturbativeOrders(
                 BTreeMap::from([("QED".to_owned(), usize::MAX), ("QCD".to_owned(), 1)]),
@@ -7832,7 +6968,7 @@ mod tests {
                 .with_graph_filter(GenerationFilter::SpectatorRange(0..=0));
             assert!(
                 resolved
-                    .cut_partitions(&graph, &model, &options)
+                    .cut_partitions(&graph.build(), &model, &options)
                     .unwrap()
                     .physical
                     .is_empty()
@@ -7872,7 +7008,7 @@ mod tests {
 
         let options = GenerationOptions::default()
             .with_graph_filter(GenerationFilter::Sewn(SewnFilterOptions::default()));
-        assert!(process.passes_sewn_filter(&graph, &options));
+        assert!(process.passes_sewn_filter(&graph.build(), &options));
 
         let mut factorized = Graph::new();
         let externals: Vec<_> = (0..4)
@@ -7897,9 +7033,9 @@ mod tests {
             factorized.add_edge(external, right, false, photon).unwrap();
         }
         factorized.add_edge(left, right, false, photon).unwrap();
-        assert!(!process.passes_sewn_filter(&factorized, &options));
+        assert!(!process.passes_sewn_filter(&factorized.build(), &options));
         assert!(process.passes_sewn_filter(
-            &factorized,
+            &factorized.build(),
             &GenerationOptions::default().with_graph_filter(GenerationFilter::Sewn(
                 SewnFilterOptions {
                     filter_tadpoles: false,
@@ -7914,10 +7050,10 @@ mod tests {
         let classes = |process: Process, generation_type, options: GenerationOptions| {
             ResolvedProcess::new(&model, &process, generation_type, &options)
                 .unwrap()
-                .external_edges(&model)
+                .externals(&model)
                 .unwrap()
-                .into_iter()
-                .map(|(node, _)| node.external_class.unwrap())
+                .legs()
+                .map(|(label, _)| label)
                 .collect::<Vec<_>>()
         };
         let process = Process::new([1_i64, -1, 22], Vec::<i64>::new());
@@ -7928,15 +7064,15 @@ mod tests {
                 GenerationOptions::default().symmetrize_initial(true)
             ),
             vec![
-                ExternalCanonicalClass::Exact {
+                ExternalLabel::Exact {
                     state: ExternalState::Incoming,
                     index: 0,
                 },
-                ExternalCanonicalClass::Exact {
+                ExternalLabel::Exact {
                     state: ExternalState::Incoming,
                     index: 1,
                 },
-                ExternalCanonicalClass::WithinState(ExternalState::Incoming),
+                ExternalLabel::WithinState(ExternalState::Incoming),
             ]
         );
         assert_eq!(
@@ -7948,9 +7084,9 @@ mod tests {
                     .symmetrize_external_fermions(true)
             ),
             vec![
-                ExternalCanonicalClass::WithinState(ExternalState::Incoming),
-                ExternalCanonicalClass::WithinState(ExternalState::Incoming),
-                ExternalCanonicalClass::WithinState(ExternalState::Incoming),
+                ExternalLabel::WithinState(ExternalState::Incoming),
+                ExternalLabel::WithinState(ExternalState::Incoming),
+                ExternalLabel::WithinState(ExternalState::Incoming),
             ]
         );
 
@@ -7962,13 +7098,13 @@ mod tests {
                 GenerationOptions::default().symmetrize_initial(true)
             ),
             vec![
-                ExternalCanonicalClass::WithinState(ExternalState::Incoming),
-                ExternalCanonicalClass::WithinState(ExternalState::Incoming),
-                ExternalCanonicalClass::Exact {
+                ExternalLabel::WithinState(ExternalState::Incoming),
+                ExternalLabel::WithinState(ExternalState::Incoming),
+                ExternalLabel::Exact {
                     state: ExternalState::Outgoing,
                     index: 2,
                 },
-                ExternalCanonicalClass::Exact {
+                ExternalLabel::Exact {
                     state: ExternalState::Outgoing,
                     index: 3,
                 },
@@ -7983,19 +7119,19 @@ mod tests {
                 GenerationOptions::default().symmetrize_left_right(true)
             ),
             vec![
-                ExternalCanonicalClass::Exact {
+                ExternalLabel::Exact {
                     state: ExternalState::Incoming,
                     index: 0,
                 },
-                ExternalCanonicalClass::Exact {
+                ExternalLabel::Exact {
                     state: ExternalState::Incoming,
                     index: 1,
                 },
-                ExternalCanonicalClass::Exact {
+                ExternalLabel::Exact {
                     state: ExternalState::Outgoing,
                     index: 2,
                 },
-                ExternalCanonicalClass::Exact {
+                ExternalLabel::Exact {
                     state: ExternalState::Outgoing,
                     index: 3,
                 },
@@ -8038,22 +7174,11 @@ mod tests {
                 interaction,
                 interaction,
                 true,
-                EdgeColor {
-                    particle: particle(&generator.model, 1),
-                    direction: None,
-                },
+                particle(&generator.model, 1),
             )
             .unwrap();
         graph
-            .add_edge(
-                interaction,
-                external,
-                false,
-                EdgeColor {
-                    particle: particle(&generator.model, 22),
-                    direction: None,
-                },
-            )
+            .add_edge(interaction, external, false, particle(&generator.model, 22))
             .unwrap();
 
         let diagram = generator
@@ -8061,9 +7186,8 @@ mod tests {
                 "localized".to_owned(),
                 GenerationType::Amplitude,
                 ColoredTopology {
-                    graph,
+                    graph: graph.build(),
                     symmetry: 1,
-                    multiplicity: 1,
                     cut_partitions: Vec::new(),
                     topology_threshold_candidates: Vec::new(),
                 },

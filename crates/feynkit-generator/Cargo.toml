@@ -23,6 +23,9 @@ spenso-hep-lib = { workspace = true }
 symbolica = { workspace = true, default-features = false }
 thiserror = { workspace = true }
 
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+linnet = { workspace = true, features = ["rayon"] }
+
 [dev-dependencies]
 serde_json = { workspace = true }
 

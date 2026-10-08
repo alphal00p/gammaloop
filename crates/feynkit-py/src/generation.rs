@@ -6,17 +6,17 @@ use std::{
     sync::{Arc, Mutex},
     time::{Duration, Instant},
 };
-use symbolica::atom::Atom;
 
 use feynkit_generator::{
-    CancellationToken, DiagramGroup, EdgeColor, FilterScope, GenerationControl, GenerationFilter,
-    GenerationOptions, GenerationProgress, GenerationReport, GenerationResult, GenerationType,
-    GraphGroupingOptions, GroupMember, ModelProcessExt, NodeColor, NumeratorGrouping,
+    CancellationToken, DiagramGroup, ExternalLabel, FilterScope, GenerationControl,
+    GenerationFilter, GenerationOptions, GenerationProgress, GenerationReport, GenerationResult,
+    GenerationType, GraphGroupingOptions, GroupMember, ModelProcessExt, NumeratorGrouping,
     ParticleSelector, Process, SelfEnergyFilterOptions, SewnFilterOptions, SnailFilterOptions,
     TadpoleFilterOptions, VertexSelector,
 };
 use feynkit_graph::{DiagramId, EdgeId};
-use feynkit_model::Model;
+use feynkit_model::{Model, ParticleId};
+use linnet::half_edge::{HedgeGraph, generate::Stage};
 use pyo3::{
     FromPyObject, IntoPyObjectExt,
     exceptions::{PyIndexError, PyTypeError, PyValueError},
@@ -38,10 +38,14 @@ use crate::{
     progress::MarimoProgress,
     render_settings::PyDiagramStyle,
 };
-use symbolica::{
-    api::python::{ConvertibleToExpression, PythonExpression},
-    graph::Graph,
-};
+use symbolica::api::python::{ConvertibleToExpression, PythonExpression};
+
+/// A search state of diagram generation as handed to Python filters: edge fields, vertex
+/// signatures where decided, and the labels of the external legs.
+type FilterSnapshot = (
+    HedgeGraph<Option<ParticleId>, Option<usize>, Option<ExternalLabel>>,
+    Stage,
+);
 
 /// A model-independent way to identify an external particle.
 ///
@@ -972,13 +976,17 @@ impl PyProcess {
     ///     The display closes on completion, cancellation, or error.
     ///     Observe stage changes and coalesced counts on the calling Python thread.
     ///     Callback exceptions propagate and stop generation.
-    /// filter : Callable[[symbolica.community.graph.Graph, int], bool] or None, optional
-    ///     Prune partial topologies during enumeration. The first N vertices are
-    ///     complete. False rejects only this search branch. Edge data is the base
-    ///     particle PDG code; node data is 0 internally, -(index+1) for incoming
-    ///     legs and +(index+1) for outgoing legs. Mutating the snapshot does not
-    ///     change enumeration. Keep callbacks cheap: each snapshot is constructed
-    ///     using Symbolica's Python Graph API.
+    /// filter : Callable[[symbolica.community.graph.Graph, str], bool] or None, optional
+    ///     Prune the diagram search. The callback receives every search state with its
+    ///     stage: "topology" for untyped topologies, partial or complete, "fields" for
+    ///     partial field assignments of a complete topology, and "complete" for complete
+    ///     diagrams. False drops the state with everything that completes it, so the
+    ///     verdict must be hereditary within each stage. Edge data is the PDG code of the
+    ///     particle of the line, directed along its flow, or None before its field is
+    ///     assigned. External legs are dangling half-edges whose data is the pair
+    ///     (state, index), with index None for legs symmetrized within their state.
+    ///     Node data is None. Mutating the snapshot does not change enumeration. Keep
+    ///     callbacks cheap: each snapshot is a new Python graph.
     /// cancellation_token : CancellationToken or None, optional
     ///     Shared token for cancelling a running generation task. Token cancellation
     ///     returns an incomplete result; Python signal-handler exceptions, including
@@ -1031,7 +1039,7 @@ impl PyProcess {
         cancellation_token: Option<PyCancellationToken>,
         #[gen_stub(override_type(type_repr = "typing.Literal['auto'] | collections.abc.Callable[[GenerationProgress], None] | None", imports = ("collections.abc", "typing")))]
         progress: Option<Py<PyAny>>,
-        #[gen_stub(override_type(type_repr = "collections.abc.Callable[[symbolica.community.graph.Graph, int], bool] | None", imports = ("collections.abc", "symbolica.community.graph")))]
+        #[gen_stub(override_type(type_repr = "collections.abc.Callable[[symbolica.community.graph.Graph, str], bool] | None", imports = ("collections.abc", "symbolica.community.graph")))]
         filter: Option<Py<PyAny>>,
     ) -> PyResult<PyGenerationResult> {
         let generation_type = GenerationType::Amplitude;
@@ -1182,13 +1190,17 @@ impl PyProcess {
     ///     The display closes on completion, cancellation, or error.
     ///     Observe stage changes and coalesced counts on the calling Python thread.
     ///     Callback exceptions propagate and stop generation.
-    /// filter : Callable[[symbolica.community.graph.Graph, int], bool] or None, optional
-    ///     Prune partial topologies during enumeration. The first N vertices are
-    ///     complete. False rejects only this search branch. Edge data is the base
-    ///     particle PDG code; node data is 0 internally, -(index+1) for incoming
-    ///     legs and +(index+1) for outgoing legs. Mutating the snapshot does not
-    ///     change enumeration. Keep callbacks cheap: each snapshot is constructed
-    ///     using Symbolica's Python Graph API.
+    /// filter : Callable[[symbolica.community.graph.Graph, str], bool] or None, optional
+    ///     Prune the diagram search. The callback receives every search state with its
+    ///     stage: "topology" for untyped topologies, partial or complete, "fields" for
+    ///     partial field assignments of a complete topology, and "complete" for complete
+    ///     diagrams. False drops the state with everything that completes it, so the
+    ///     verdict must be hereditary within each stage. Edge data is the PDG code of the
+    ///     particle of the line, directed along its flow, or None before its field is
+    ///     assigned. External legs are dangling half-edges whose data is the pair
+    ///     (state, index), with index None for legs symmetrized within their state.
+    ///     Node data is None. Mutating the snapshot does not change enumeration. Keep
+    ///     callbacks cheap: each snapshot is a new Python graph.
     /// cancellation_token : CancellationToken or None, optional
     ///     Shared token for cancelling a running generation task. Token cancellation
     ///     returns an incomplete result; Python signal-handler exceptions, including
@@ -1243,7 +1255,7 @@ impl PyProcess {
         cancellation_token: Option<PyCancellationToken>,
         #[gen_stub(override_type(type_repr = "typing.Literal['auto'] | collections.abc.Callable[[GenerationProgress], None] | None", imports = ("collections.abc", "typing")))]
         progress: Option<Py<PyAny>>,
-        #[gen_stub(override_type(type_repr = "collections.abc.Callable[[symbolica.community.graph.Graph, int], bool] | None", imports = ("collections.abc", "symbolica.community.graph")))]
+        #[gen_stub(override_type(type_repr = "collections.abc.Callable[[symbolica.community.graph.Graph, str], bool] | None", imports = ("collections.abc", "symbolica.community.graph")))]
         filter: Option<Py<PyAny>>,
     ) -> PyResult<PyAmplitude> {
         let generation_type = GenerationType::Amplitude;
@@ -1401,13 +1413,17 @@ impl PyProcess {
     ///     The display closes on completion, cancellation, or error.
     ///     Observe stage changes and coalesced counts on the calling Python thread.
     ///     Callback exceptions propagate and stop generation.
-    /// filter : Callable[[symbolica.community.graph.Graph, int], bool] or None, optional
-    ///     Prune partial topologies during enumeration. The first N vertices are
-    ///     complete. False rejects only this search branch. Edge data is the base
-    ///     particle PDG code; node data is 0 internally, -(index+1) for incoming
-    ///     legs and +(index+1) for outgoing legs. Mutating the snapshot does not
-    ///     change enumeration. Keep callbacks cheap: each snapshot is constructed
-    ///     using Symbolica's Python Graph API.
+    /// filter : Callable[[symbolica.community.graph.Graph, str], bool] or None, optional
+    ///     Prune the diagram search. The callback receives every search state with its
+    ///     stage: "topology" for untyped topologies, partial or complete, "fields" for
+    ///     partial field assignments of a complete topology, and "complete" for complete
+    ///     diagrams. False drops the state with everything that completes it, so the
+    ///     verdict must be hereditary within each stage. Edge data is the PDG code of the
+    ///     particle of the line, directed along its flow, or None before its field is
+    ///     assigned. External legs are dangling half-edges whose data is the pair
+    ///     (state, index), with index None for legs symmetrized within their state.
+    ///     Node data is None. Mutating the snapshot does not change enumeration. Keep
+    ///     callbacks cheap: each snapshot is a new Python graph.
     /// cancellation_token : CancellationToken or None, optional
     ///     Shared token for cancelling a running generation task. Token cancellation
     ///     returns an incomplete result; Python signal-handler exceptions, including
@@ -1460,7 +1476,7 @@ impl PyProcess {
         cancellation_token: Option<PyCancellationToken>,
         #[gen_stub(override_type(type_repr = "typing.Literal['auto'] | collections.abc.Callable[[GenerationProgress], None] | None", imports = ("collections.abc", "typing")))]
         progress: Option<Py<PyAny>>,
-        #[gen_stub(override_type(type_repr = "collections.abc.Callable[[symbolica.community.graph.Graph, int], bool] | None", imports = ("collections.abc", "symbolica.community.graph")))]
+        #[gen_stub(override_type(type_repr = "collections.abc.Callable[[symbolica.community.graph.Graph, str], bool] | None", imports = ("collections.abc", "symbolica.community.graph")))]
         filter: Option<Py<PyAny>>,
     ) -> PyResult<PyGenerationResult> {
         let generation_type = GenerationType::CrossSection;
@@ -2170,7 +2186,7 @@ pub struct PyGenerationProgress {
 #[spenso_macros::track_usage(crate::record_usage)]
 #[pymethods]
 impl PyGenerationProgress {
-    /// Pipeline stage: topologies, topology_filters, interactions,
+    /// Pipeline stage: topologies (diagram enumeration),
     /// interaction_filters, numerators, selection, filter_zero_color, grouping_preparation,
     /// grouping_samples, grouping_comparison, grouping, complete or cancelled.
     ///
@@ -2866,8 +2882,6 @@ fn run_generation(
                     if let Some(display) = &display {
                         let title = match inner.stage {
                             "topologies" => "Enumerating topologies",
-                            "topology_filters" => "Filtering topologies",
-                            "interactions" => "Assigning interactions",
                             "interaction_filters" => "Filtering interactions",
                             "numerators" => "Constructing numerators",
                             "selection" => "Selecting diagrams",
@@ -2943,38 +2957,34 @@ fn run_generation(
     }
     let has_filter = filter.is_some();
     let pdgs: Vec<_> = model.particles().iter().map(|p| p.pdg_code).collect();
-    let apply_filter =
-        move |graph: &Graph<NodeColor, EdgeColor>, completed_vertices| -> PyResult<bool> {
-            Python::attach(|py| {
-                let mut snapshot = Graph::new();
-                for node in graph.nodes() {
-                    let label = node.data.external.as_ref().map_or(0, |external| {
-                        let index = external.index as i64 + 1;
-                        match external.state {
-                            feynkit_graph::ExternalState::Incoming => -index,
-                            feynkit_graph::ExternalState::Outgoing => index,
-                        }
-                    });
-                    snapshot.add_node(Atom::num(label));
-                }
-                for edge in graph.edges() {
-                    snapshot
-                        .add_edge(
-                            edge.vertices.0,
-                            edge.vertices.1,
-                            edge.directed,
-                            Atom::num(pdgs[edge.data.particle.index()]),
-                        )
-                        .map_err(pyo3::exceptions::PyValueError::new_err)?;
-                }
-                let snapshot = PyGraph::from_symbolica(py, &snapshot)?;
-                filter
-                    .as_ref()
-                    .unwrap()
-                    .call1(py, (snapshot, completed_vertices))?
-                    .extract(py)
-            })
-        };
+    let apply_filter = move |(graph, stage): &FilterSnapshot| -> PyResult<bool> {
+        Python::attach(|py| {
+            let snapshot = PyGraph::from_hedge_graph(
+                py,
+                graph,
+                |_| Ok(py.None()),
+                |field| field.map(|particle| pdgs[particle.index()]).into_py_any(py),
+                |label| {
+                    label
+                        .map(|label| match label {
+                            ExternalLabel::Exact { state, index } => (state.as_str(), Some(index)),
+                            ExternalLabel::WithinState(state) => (state.as_str(), None),
+                        })
+                        .into_py_any(py)
+                },
+            )?;
+            let stage = match stage {
+                Stage::Topology => "topology",
+                Stage::Fields => "fields",
+                Stage::Complete => "complete",
+            };
+            filter
+                .as_ref()
+                .unwrap()
+                .call1(py, (snapshot, stage))?
+                .extract(py)
+        })
+    };
     #[cfg(not(target_arch = "wasm32"))]
     let result = {
         let cancellation = CancellationToken::new();
@@ -2982,11 +2992,9 @@ fn run_generation(
         options = options.cancellation_check(move || check.is_cancelled());
         let (requests, receiver) = std::sync::mpsc::sync_channel(1);
         if has_filter {
-            options = options.filter(move |graph, completed_vertices| {
+            options = options.filter(move |view| {
                 let (reply, response) = std::sync::mpsc::sync_channel(1);
-                requests
-                    .send((graph.clone(), completed_vertices, reply))
-                    .is_ok()
+                requests.send(((view.graph(), view.stage()), reply)).is_ok()
                     && response.recv().unwrap_or(false)
             });
         }
@@ -3013,13 +3021,12 @@ fn run_generation(
                             cancellation.cancel();
                         }
                     }
-                    if let Ok((graph, completed_vertices, reply)) =
-                        receiver.recv_timeout(Duration::from_millis(25))
+                    if let Ok((snapshot, reply)) = receiver.recv_timeout(Duration::from_millis(25))
                     {
                         let accepted = if interruption.lock().unwrap().is_some() {
                             false
                         } else {
-                            match apply_filter(&graph, completed_vertices) {
+                            match apply_filter(&snapshot) {
                                 Ok(accepted) => accepted,
                                 Err(error) => {
                                     *interruption.lock().unwrap() = Some(error);
@@ -3051,15 +3058,16 @@ fn run_generation(
         });
         if has_filter {
             let error = interruption.clone();
-            options = options.filter(move |graph, completed_vertices| {
-                match apply_filter(graph, completed_vertices) {
-                    Ok(accepted) => accepted,
-                    Err(exception) => {
-                        *error.lock().unwrap() = Some(exception);
-                        false
-                    }
-                }
-            });
+            options =
+                options.filter(
+                    move |view| match apply_filter(&(view.graph(), view.stage())) {
+                        Ok(accepted) => accepted,
+                        Err(exception) => {
+                            *error.lock().unwrap() = Some(exception);
+                            false
+                        }
+                    },
+                );
         }
         py.detach(|| match generation_type {
             GenerationType::Amplitude => process.generate_diagrams(model.clone(), &options),
@@ -3187,8 +3195,8 @@ for via_model in (True, False):
         context.__exit__.assert_called_with(None, None, None)
         assert context.__exit__.call_count == context.__enter__.call_count
         titles = list(dict.fromkeys(call.args[-2] for call in indicator.update.call_args_list))
-        assert titles == ["Enumerating topologies", "Filtering topologies",
-            "Assigning interactions", "Filtering interactions", "Constructing numerators",
+        assert titles == ["Enumerating topologies", "Filtering interactions",
+            "Constructing numerators",
             "Selecting diagrams", "Preparing numerators for grouping",
             "Sampling numerators for grouping", "Comparing numerators",
             "Finalizing diagram groups", "Diagram generation complete"]
@@ -3342,7 +3350,7 @@ for generate in (fk.Process.generate_diagrams, fk.Process.generate_amplitude, fk
             let graph_module = PyModule::new(py, "symbolica.community.graph").unwrap();
             linnet_py::register(&graph_module).unwrap();
             locals
-                .set_item("node", graph_module.getattr("node").unwrap())
+                .set_item("Node", graph_module.getattr("Node").unwrap())
                 .unwrap();
             locals
                 .set_item(
@@ -3376,27 +3384,27 @@ for via_model in (True, False):
         assert p.total is None or p.completed <= p.total
         updates.append(p)
 
-    def keep(graph, completed_vertices):
+    def keep(graph, stage):
         assert threading.get_ident() == caller
         assert isinstance(graph, Graph)
-        assert 0 <= completed_vertices <= graph.n_nodes
-        assert all(edge.data == 1000 for edge in graph.edges())
-        topologies.append((graph, completed_vertices))
+        assert stage in ("topology", "fields", "complete")
+        assert all(edge.data in (None, 1000) for edge in graph.edges())
+        topologies.append((graph, stage))
         return True
 
     result = generate(progress=report, filter=keep)
     assert result.report.completed and len(result) == len(baseline)
-    assert topologies and any(n < g.n_nodes for g, n in topologies)
+    assert {"topology", "complete"} <= {stage for _, stage in topologies}
     assert updates[0].stage == "topologies"
     assert updates[-1].stage == "complete"
     assert updates[-1].completed == len(result)
-    stages = ["topologies", "topology_filters", "interactions", "interaction_filters", "numerators", "selection", "grouping_preparation", "grouping_samples", "grouping_comparison", "grouping", "complete"]
+    stages = ["topologies", "interaction_filters", "numerators", "selection", "grouping_preparation", "grouping_samples", "grouping_comparison", "grouping", "complete"]
     assert list(dict.fromkeys(p.stage for p in updates)) == stages
     for before, after in zip(updates, updates[1:]):
         if before.stage == after.stage:
             assert before.completed <= after.completed
     # Snapshots outlive enumeration and never mutate its internal graph.
-    topologies[0][0].add_node(node(data=42))
+    topologies[0][0].add_node(Node(data=42))
     assert len(generate()) == len(baseline)
 
     updates.clear()

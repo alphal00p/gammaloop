@@ -2248,9 +2248,7 @@ impl SpringChargeEnergy {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::half_edge::{
-        builder::HedgeGraphBuilder, involution::Flow, nodestore::DefaultNodeStore, NoData,
-    };
+    use crate::half_edge::{builder::HedgeGraphBuilder, involution::Flow};
     use rand::{rngs::SmallRng, SeedableRng};
 
     fn normalized_pull_scales(
@@ -2268,7 +2266,7 @@ mod tests {
         for &(node, flow) in external {
             builder.add_external_edge(nodes[node], PointConstraint::default(), false, flow);
         }
-        let graph: HedgeGraph<_, _, NoData, DefaultNodeStore<_>> = builder.build();
+        let graph: HedgeGraph<_, _> = builder.build();
         let state = graph.new_layout_state(
             vec![Point2::origin(); n].into(),
             vec![Point2::origin(); graph.n_edges()].into(),
@@ -2635,7 +2633,7 @@ mod tests {
                     }
                     builder.add_external_edge(nodes[owner], constraint, false, outgoing);
                 }
-                let graph: HedgeGraph<_, _, NoData, DefaultNodeStore<_>> = builder.build();
+                let graph: HedgeGraph<_, _> = builder.build();
                 let state = graph.new_layout_state(
                     vec![Point2::origin(); 3].into(),
                     vec![Point2::origin(); 8].into(),
@@ -2731,7 +2729,7 @@ mod tests {
         for &node in &nodes[1..] {
             builder.add_external_edge(node, shared, false, Flow::Source);
         }
-        let graph: HedgeGraph<_, _, NoData, DefaultNodeStore<_>> = builder.build();
+        let graph: HedgeGraph<_, _> = builder.build();
         let state = graph.new_layout_state(
             vec![Point2::origin(); 11].into(),
             vec![Point2::origin(); 21].into(),
@@ -2793,7 +2791,7 @@ mod tests {
         for _ in 0..2 {
             builder.add_external_edge(b, PointConstraint::default(), false, Flow::Source);
         }
-        let graph: HedgeGraph<_, _, NoData, DefaultNodeStore<_>> = builder.build();
+        let graph: HedgeGraph<_, _> = builder.build();
         let state = graph.new_layout_state(
             vec![Point2::origin(); 2].into(),
             vec![Point2::origin(); 6].into(),
@@ -2849,7 +2847,7 @@ mod tests {
         let a = builder.add_node(PointConstraint::default());
         let b = builder.add_node(PointConstraint::default());
         builder.add_edge(a, b, PointConstraint::default(), false);
-        let graph: HedgeGraph<_, _, NoData, DefaultNodeStore<_>> = builder.build();
+        let graph: HedgeGraph<_, _> = builder.build();
         let HedgePair::Paired { source, sink } = graph[&EdgeIndex(0)].1 else {
             panic!("expected paired edge");
         };
@@ -2879,7 +2877,7 @@ mod tests {
         let a = builder.add_node(PointConstraint::default());
         let b = builder.add_node(PointConstraint::default());
         builder.add_edge(a, b, PointConstraint::default(), false);
-        let graph: HedgeGraph<_, _, NoData, DefaultNodeStore<_>> = builder.build();
+        let graph: HedgeGraph<_, _> = builder.build();
         let HedgePair::Paired { source, sink } = graph[&EdgeIndex(0)].1 else {
             panic!("expected paired edge");
         };
@@ -2942,7 +2940,7 @@ mod tests {
             },
             false,
         );
-        let graph: HedgeGraph<_, _, NoData, DefaultNodeStore<_>> = builder.build();
+        let graph: HedgeGraph<_, _> = builder.build();
         let HedgePair::Paired { source, sink } = graph[&EdgeIndex(0)].1 else {
             panic!("expected paired edge");
         };
@@ -2982,7 +2980,7 @@ mod tests {
         let a = builder.add_node(PointConstraint::default());
         let b = builder.add_node(PointConstraint::default());
         builder.add_edge(a, b, PointConstraint::default(), false);
-        let graph: HedgeGraph<_, _, NoData, DefaultNodeStore<_>> = builder.build();
+        let graph: HedgeGraph<_, _> = builder.build();
         let HedgePair::Paired { source, sink } = graph[&EdgeIndex(0)].1 else {
             panic!("expected paired edge");
         };
@@ -3024,7 +3022,7 @@ mod tests {
         let c = builder.add_node(PointConstraint::default());
         builder.add_edge(a, a, PointConstraint::default(), false);
         builder.add_edge(b, c, PointConstraint::default(), false);
-        let graph: HedgeGraph<_, _, NoData, DefaultNodeStore<_>> = builder.build();
+        let graph: HedgeGraph<_, _> = builder.build();
         let mut state = graph.new_layout_state(
             vec![
                 Point2::new(-3.0, 0.0),
@@ -3058,7 +3056,7 @@ mod tests {
         let c = builder.add_node(PointConstraint::default());
         builder.add_edge(a, b, PointConstraint::default(), false);
         builder.add_edge(a, c, PointConstraint::default(), false);
-        let graph: HedgeGraph<_, _, NoData, DefaultNodeStore<_>> = builder.build();
+        let graph: HedgeGraph<_, _> = builder.build();
         let mut state = graph.new_layout_state(
             vec![
                 Point2::origin(),
@@ -3184,7 +3182,7 @@ mod tests {
                 let b = builder.add_node(fixed);
                 builder.add_external_edge(a, constraint, false, Flow::Source);
                 builder.add_external_edge(b, constraint, false, Flow::Source);
-                let graph: HedgeGraph<_, _, NoData, DefaultNodeStore<_>> = builder.build();
+                let graph: HedgeGraph<_, _> = builder.build();
                 let mut state = graph.new_layout_state(
                     vec![point(-1.0, -2.0), point(-1.0, 2.0)].into(),
                     vec![point(1.0, 2.0), point(1.0, -2.0)].into(),
@@ -3251,7 +3249,7 @@ mod tests {
         builder.add_external_edge(c, y_group, false, Flow::Source);
         builder.add_external_edge(c, y_group, false, Flow::Source);
         builder.add_external_edge(inactive, rail, false, Flow::Source);
-        let graph: HedgeGraph<_, _, NoData, DefaultNodeStore<_>> = builder.build();
+        let graph: HedgeGraph<_, _> = builder.build();
         let mut selected = graph.empty_subgraph::<SuBitGraph>();
         for (pair, edge, _) in graph.iter_edges() {
             if edge != EdgeIndex(4) {
@@ -3324,7 +3322,7 @@ mod tests {
             });
             builder.add_external_edge(a, constraint, false, Flow::Source);
             builder.add_external_edge(a, constraint, false, Flow::Source);
-            let graph: HedgeGraph<_, _, NoData, DefaultNodeStore<_>> = builder.build();
+            let graph: HedgeGraph<_, _> = builder.build();
             let mut state = graph.new_layout_state(
                 vec![Point2::origin()].into(),
                 vec![Point2::new(1.0, -2.0), Point2::new(1.0, 2.0)].into(),
@@ -3351,7 +3349,7 @@ mod tests {
             builder.add_edge(a, b, PointConstraint::default(), false);
             builder.add_external_edge(a, PointConstraint::default(), false, Flow::Source);
             builder.add_external_edge(b, PointConstraint::default(), false, Flow::Sink);
-            let mut graph: HedgeGraph<_, _, NoData, DefaultNodeStore<_>> = builder.build();
+            let mut graph: HedgeGraph<_, _> = builder.build();
             if let Some(split) = split {
                 let HedgePair::Paired { source, sink } = graph[&EdgeIndex(0)].1 else {
                     panic!("expected paired edge");
@@ -3419,7 +3417,7 @@ mod tests {
             builder.add_edge(b, c, PointConstraint::default(), false);
             builder.add_external_edge(a, PointConstraint::default(), false, Flow::Source);
             builder.add_external_edge(c, PointConstraint::default(), false, second_flow);
-            let graph: HedgeGraph<_, _, NoData, DefaultNodeStore<_>> = builder.build();
+            let graph: HedgeGraph<_, _> = builder.build();
             let mut state = graph.new_layout_state(
                 vec![
                     Point2::new(-2.0, 0.0),
@@ -3469,7 +3467,7 @@ mod tests {
         let c = builder.add_node(PointConstraint::default());
         builder.add_edge(a, b, PointConstraint::default(), false);
         builder.add_edge(b, c, PointConstraint::default(), false);
-        let graph: HedgeGraph<_, _, NoData, DefaultNodeStore<_>> = builder.build();
+        let graph: HedgeGraph<_, _> = builder.build();
         let selected_pair = graph.iter_edges().next().unwrap().0;
         let mut selected = graph.empty_subgraph::<SuBitGraph>();
         selected.add(selected_pair);
@@ -3521,7 +3519,7 @@ mod tests {
         let a = builder.add_node(PointConstraint::default());
         let b = builder.add_node(PointConstraint::default());
         builder.add_edge(a, b, PointConstraint::default(), false);
-        let graph: HedgeGraph<_, _, NoData, DefaultNodeStore<_>> = builder.build();
+        let graph: HedgeGraph<_, _> = builder.build();
         let HedgePair::Paired { source, .. } = graph.iter_edges().next().unwrap().0 else {
             panic!("expected paired edge");
         };

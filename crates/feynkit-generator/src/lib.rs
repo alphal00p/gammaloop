@@ -10,8 +10,8 @@ mod process;
 use feynkit_graph::momentum_symbol;
 
 pub use generation::{
-    DiagramGroup, EdgeColor, ExternalNode, GenerationError, GenerationReport, GenerationResult,
-    GroupMember, NodeColor, UnresolvedCutContent, unresolved_cut_content,
+    DiagramGroup, ExternalLabel, ExternalNode, GenerationError, GenerationReport, GenerationResult,
+    GenerationView, GroupMember, UnresolvedCutContent, unresolved_cut_content,
 };
 pub use grouping::GroupingError;
 pub use options::{

@@ -188,12 +188,13 @@ impl PyGraph {
             );
         }
         Ok(Self::from_state(GraphState {
-            graph: PyHedgeGraph::build(builder, PyNodeStore::Vec),
+            graph: builder.build(),
             name: None,
             global_data: PyGlobalData::default(),
             codec: None,
             render_config: crate::typst::default_render_config(py)?,
             revision: 0,
+            element_epoch: 0,
         }))
     }
 }

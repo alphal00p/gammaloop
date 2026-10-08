@@ -9,12 +9,13 @@ from symbolica.community import graph as ln
 
 class RenderSourcesTests(unittest.TestCase):
     def test_default_graph_render_uses_native_impred(self):
-        left, right = ln.node("left"), ln.node("right")
-        graph = ln.build(
-            left,
-            right,
-            ln.edge(ln.source(left), "first", ln.sink(right)),
-            ln.edge(ln.source(left), "second", ln.sink(right)),
+        left, right = ln.Node("left"), ln.Node("right")
+        graph = ln.Graph(
+            nodes=[left, right],
+            edges=[
+                ln.Edge(source=left, sink=right, name="first"),
+                ln.Edge(source=left, sink=right, name="second"),
+            ],
         )
         explicit = ln.RenderSettings(
             layouts=ln.LayoutSettings(algorithm=ln.LayoutAlgorithm.Impred)
@@ -60,11 +61,9 @@ class RenderSourcesTests(unittest.TestCase):
             ):
                 ln.HalfEdgeDrawing(route_points=invalid)
 
-        left, right = ln.node("left"), ln.node("right")
-        graph = ln.build(
-            left,
-            right,
-            ln.edge(ln.source(left), "edge", ln.sink(right)),
+        left, right = ln.Node("left"), ln.Node("right")
+        graph = ln.Graph(
+            nodes=[left, right], edges=[ln.Edge(source=left, sink=right, name="edge")]
         )
         config = ln.RenderSettings(
             layouts=ln.LayoutSettings(algorithm=ln.LayoutAlgorithm.Force, steps=0),

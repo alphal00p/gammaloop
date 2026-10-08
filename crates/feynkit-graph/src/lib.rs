@@ -79,7 +79,6 @@ use serde::{Deserialize, Serialize};
 use spenso::structure::representation::{Minkowski, RepName};
 use symbolica::{
     atom::{Atom, AtomCore, UserData},
-    graph::Graph as CanonicalGraph,
     parser::{ParseSettings, Token},
     state::{State, Workspace},
     with_default_namespace,
@@ -143,7 +142,7 @@ pub enum ExternalState {
 }
 
 impl ExternalState {
-    fn as_str(self) -> &'static str {
+    pub fn as_str(self) -> &'static str {
         match self {
             Self::Incoming => "incoming",
             Self::Outgoing => "outgoing",
@@ -294,7 +293,6 @@ pub enum CanonicalCutSide {
 pub enum CanonicalDiagramVertex {
     Diagram {
         interaction: Option<VertexRuleId>,
-        external: Option<ExternalLeg>,
     },
     CutSide {
         side: CanonicalCutSide,
@@ -306,25 +304,18 @@ pub enum CanonicalDiagramVertex {
     },
 }
 
-/// Canonically labeled edge retained by [`CanonicalDiagramKey`].
+/// Edge color retained by [`CanonicalDiagramKey`]. Diagram edges keep their orientation and
+/// interaction slots in the canonical structure.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum CanonicalDiagramEdge {
     Diagram {
-        endpoints: EdgeEndpoints,
         particle: ParticleId,
         external: Option<ExternalLeg>,
         is_dummy: bool,
-        directed: bool,
-        source_slot: VertexSlot,
-        target_slot: VertexSlot,
     },
-    CutPair {
-        endpoints: EdgeEndpoints,
-    },
-    CutMembership {
-        endpoints: EdgeEndpoints,
-    },
+    CutPair,
+    CutMembership,
 }
 
 /// Deterministic colored-topology key for diagram grouping and parity checks.
@@ -333,21 +324,13 @@ pub enum CanonicalDiagramEdge {
 /// rather than graph colors and are intentionally excluded.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct CanonicalDiagramKey {
+    /// The canonically relabelled structure of Linnet's canonizer; its colors rank into the
+    /// sorted distinct keys below.
+    pub words: Vec<u32>,
     pub vertices: Vec<CanonicalDiagramVertex>,
     pub edges: Vec<CanonicalDiagramEdge>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-enum CanonicalEdgeColor {
-    Diagram {
-        particle: ParticleId,
-        external: Option<ExternalLeg>,
-        is_dummy: bool,
-        source_slot: VertexSlot,
-        target_slot: VertexSlot,
-    },
-    CutPair,
-    CutMembership,
+    /// Interaction slots of diagram half-edges; `None` on the auxiliary cut edges.
+    pub half_edges: Vec<Option<VertexSlot>>,
 }
 
 /// A spanning-forest-induced loop momentum basis.
@@ -494,10 +477,6 @@ pub enum DiagramError {
         actual: Vec<(i64, Option<bool>)>,
         expected: Vec<(i64, Option<bool>)>,
     },
-    #[error("external vertex {vertex} has degree {degree}, expected one")]
-    InvalidExternalDegree { vertex: usize, degree: usize },
-    #[error("edge {edge} connects two external vertices")]
-    ExternalToExternalEdge { edge: usize },
     #[error("vertex {vertex} uses endpoint slot {slot} more than once")]
     DuplicateVertexSlot { vertex: usize, slot: usize },
     #[error("vertex {vertex} endpoint slots are {actual:?}, expected {expected:?}")]
@@ -506,9 +485,7 @@ pub enum DiagramError {
         actual: Vec<usize>,
         expected: Vec<usize>,
     },
-    #[error("external vertex {vertex} must have unit numerator")]
-    ExternalVertexNumerator { vertex: usize },
-    #[error("edge {edge} incident to an external vertex must have unit numerator")]
+    #[error("generated external edge {edge} must have unit numerator")]
     ExternalEdgeNumerator { edge: usize },
     #[error("cross-section external connections require at least one finalized physical cut")]
     MissingCrossSectionCuts,
@@ -823,7 +800,7 @@ impl FeynmanDiagram {
 
     /// Build a deterministic key for the model-resolved colored topology.
     ///
-    /// Canonical labeling is delegated to Symbolica's graph implementation.
+    /// Canonical labeling is delegated to Linnet's half-edge canonizer.
     /// Particle/antiparticle edge representations are normalized so reversing
     /// a directed edge with [`Self::reverse_edge`] does not change the key.
     pub fn canonical_key(&self) -> Result<CanonicalDiagramKey, DiagramError> {
@@ -839,37 +816,33 @@ impl FeynmanDiagram {
         &self,
         normalize_particle_orientation: bool,
     ) -> Result<CanonicalDiagramKey, DiagramError> {
-        let mut graph = CanonicalGraph::new();
-        for (_, vertex) in self.vertices() {
-            graph.add_node(CanonicalDiagramVertex::Diagram {
-                interaction: vertex.interaction,
-                external: None,
-            });
-        }
+        // Cuts and threshold candidates become pairs of side vertices joined to the diagram
+        // vertices they contain; half-edge keys are the interaction slots of diagram edges.
+        let mut graph = HedgeGraphBuilder::new();
+        let vertices: Vec<NodeIndex> = self
+            .vertices()
+            .map(|(_, vertex)| {
+                graph.add_node(CanonicalDiagramVertex::Diagram {
+                    interaction: vertex.interaction,
+                })
+            })
+            .collect();
         let endpoints = self
             .edges()
             .map(|(edge, endpoints, _)| (edge, endpoints))
             .collect::<BTreeMap<_, _>>();
-        for cut in &self.cuts {
-            let left = graph.add_node(CanonicalDiagramVertex::CutSide {
-                side: CanonicalCutSide::Left,
-                coupling_orders: cut.left.coupling_orders.clone(),
-                loop_count: cut.left.loop_count,
-            });
-            let right = graph.add_node(CanonicalDiagramVertex::CutSide {
-                side: CanonicalCutSide::Right,
-                coupling_orders: cut.right.coupling_orders.clone(),
-                loop_count: cut.right.loop_count,
-            });
-            graph
-                .add_edge(left, right, false, CanonicalEdgeColor::CutPair)
-                .map_err(|error| DiagramError::Invariant {
-                    operation: "deriving the diagram ID",
-                    message: error.to_string(),
-                })?;
-            for (side, half_edges) in [(left, &cut.left.half_edges), (right, &cut.right.half_edges)]
-            {
-                let vertices = half_edges
+        let add_sides = |graph: &mut HedgeGraphBuilder<_, _, _>,
+                         [left, right]: [CanonicalDiagramVertex; 2],
+                         half_edges: [&[DiagramHalfEdge]; 2]| {
+            let sides = [graph.add_node(left), graph.add_node(right)];
+            graph.add_edge(
+                sides[0],
+                sides[1],
+                CanonicalDiagramEdge::CutPair,
+                Orientation::Undirected,
+            );
+            for (side, half_edges) in sides.into_iter().zip(half_edges) {
+                let members = half_edges
                     .iter()
                     .filter_map(|half_edge| {
                         endpoints.get(&half_edge.edge).and_then(|endpoints| {
@@ -880,50 +853,40 @@ impl FeynmanDiagram {
                         })
                     })
                     .collect::<BTreeSet<_>>();
-                for vertex in vertices {
-                    graph
-                        .add_edge(side, vertex.0, false, CanonicalEdgeColor::CutMembership)
-                        .map_err(|error| DiagramError::Invariant {
-                            operation: "encoding canonical cut membership",
-                            message: error.to_string(),
-                        })?;
+                for vertex in members {
+                    graph.add_edge(
+                        side,
+                        vertices[vertex.0],
+                        CanonicalDiagramEdge::CutMembership,
+                        Orientation::Undirected,
+                    );
                 }
             }
+        };
+        for cut in &self.cuts {
+            add_sides(
+                &mut graph,
+                [CanonicalCutSide::Left, CanonicalCutSide::Right].map(|side| {
+                    let summary = match side {
+                        CanonicalCutSide::Left => &cut.left,
+                        CanonicalCutSide::Right => &cut.right,
+                    };
+                    CanonicalDiagramVertex::CutSide {
+                        side,
+                        coupling_orders: summary.coupling_orders.clone(),
+                        loop_count: summary.loop_count,
+                    }
+                }),
+                [&cut.left.half_edges, &cut.right.half_edges],
+            );
         }
         for candidate in &self.topology_threshold_candidates {
-            let left = graph.add_node(CanonicalDiagramVertex::TopologyThresholdSide {
-                side: CanonicalCutSide::Left,
-            });
-            let right = graph.add_node(CanonicalDiagramVertex::TopologyThresholdSide {
-                side: CanonicalCutSide::Right,
-            });
-            graph
-                .add_edge(left, right, false, CanonicalEdgeColor::CutPair)
-                .map_err(|error| DiagramError::Invariant {
-                    operation: "deriving the diagram ID",
-                    message: error.to_string(),
-                })?;
-            for (side, half_edges) in [(left, &candidate.left), (right, &candidate.right)] {
-                let vertices = half_edges
-                    .iter()
-                    .filter_map(|half_edge| {
-                        endpoints.get(&half_edge.edge).and_then(|endpoints| {
-                            match half_edge.endpoint {
-                                DiagramEndpoint::Source => endpoints.source,
-                                DiagramEndpoint::Target => endpoints.target,
-                            }
-                        })
-                    })
-                    .collect::<BTreeSet<_>>();
-                for vertex in vertices {
-                    graph
-                        .add_edge(side, vertex.0, false, CanonicalEdgeColor::CutMembership)
-                        .map_err(|error| DiagramError::Invariant {
-                            operation: "encoding canonical topology-threshold membership",
-                            message: error.to_string(),
-                        })?;
-                }
-            }
+            add_sides(
+                &mut graph,
+                [CanonicalCutSide::Left, CanonicalCutSide::Right]
+                    .map(|side| CanonicalDiagramVertex::TopologyThresholdSide { side }),
+                [&candidate.left, &candidate.right],
+            );
         }
         for (edge_id, endpoints, edge) in self.edges() {
             let mut particle = edge.particle;
@@ -931,77 +894,58 @@ impl FeynmanDiagram {
             if let Some(leg) = &mut external {
                 leg.name.clear();
             }
-            let mut terminal = || {
-                graph.add_node(CanonicalDiagramVertex::Diagram {
-                    interaction: None,
-                    external: external.clone(),
-                })
-            };
-            let (mut source, mut target) = (
-                endpoints.source.map_or_else(&mut terminal, |v| v.0),
-                endpoints.target.map_or_else(&mut terminal, |v| v.0),
-            );
-            let (mut source_slot, mut target_slot) = (edge.source_slot, edge.target_slot);
+            let mut ends = [
+                (endpoints.source, edge.source_slot, Flow::Source),
+                (endpoints.target, edge.target_slot, Flow::Sink),
+            ];
             if normalize_particle_orientation {
                 let (resolved, base) = self.resolve_particle(edge_id, edge)?;
                 particle = base;
                 if edge.directed && resolved.is_antiparticle() {
-                    std::mem::swap(&mut source, &mut target);
-                    std::mem::swap(&mut source_slot, &mut target_slot);
+                    ends.reverse();
+                    ends[0].2 = Flow::Source;
+                    ends[1].2 = Flow::Sink;
                 }
             }
-            graph
-                .add_edge(
-                    source,
-                    target,
-                    edge.directed,
-                    CanonicalEdgeColor::Diagram {
-                        particle,
-                        external,
-                        is_dummy: edge.is_dummy,
-                        source_slot,
-                        target_slot,
-                    },
-                )
-                .map_err(|error| DiagramError::Invariant {
-                    operation: "canonicalizing the diagram",
-                    message: error.to_string(),
-                })?;
+            let color = CanonicalDiagramEdge::Diagram {
+                particle,
+                external,
+                is_dummy: edge.is_dummy,
+            };
+            let orientation = if edge.directed {
+                Orientation::Default
+            } else {
+                Orientation::Undirected
+            };
+            let end = |(vertex, slot, _): (Option<VertexId>, VertexSlot, Flow)| {
+                vertex.map(|vertex| vertices[vertex.0].add_data(Some(slot)))
+            };
+            match (end(ends[0]), end(ends[1])) {
+                (Some(source), Some(sink)) => graph.add_edge(source, sink, color, orientation),
+                (Some(hedge), None) => {
+                    graph.add_external_edge(hedge, color, orientation, ends[0].2)
+                }
+                (None, Some(hedge)) => {
+                    graph.add_external_edge(hedge, color, orientation, ends[1].2)
+                }
+                (None, None) => {
+                    return Err(DiagramError::Invariant {
+                        operation: "canonicalizing the diagram",
+                        message: format!("edge {} has no attached half-edge", edge_id.0),
+                    });
+                }
+            }
         }
-        let graph = graph.canonize().graph;
+        let graph: HedgeGraph<CanonicalDiagramEdge, CanonicalDiagramVertex, Option<VertexSlot>> =
+            graph.build();
+        let certificate = graph
+            .canonize_by(Clone::clone, Clone::clone, |slot| *slot)
+            .into_certificate();
         Ok(CanonicalDiagramKey {
-            vertices: graph.nodes().iter().map(|node| node.data.clone()).collect(),
-            edges: graph
-                .edges()
-                .iter()
-                .map(|edge| {
-                    let endpoints = EdgeEndpoints {
-                        source: Some(VertexId(edge.vertices.0)),
-                        target: Some(VertexId(edge.vertices.1)),
-                    };
-                    match &edge.data {
-                        CanonicalEdgeColor::Diagram {
-                            particle,
-                            external,
-                            is_dummy,
-                            source_slot,
-                            target_slot,
-                        } => CanonicalDiagramEdge::Diagram {
-                            endpoints,
-                            particle: *particle,
-                            external: external.clone(),
-                            is_dummy: *is_dummy,
-                            directed: edge.directed,
-                            source_slot: *source_slot,
-                            target_slot: *target_slot,
-                        },
-                        CanonicalEdgeColor::CutPair => CanonicalDiagramEdge::CutPair { endpoints },
-                        CanonicalEdgeColor::CutMembership => {
-                            CanonicalDiagramEdge::CutMembership { endpoints }
-                        }
-                    }
-                })
-                .collect(),
+            words: certificate.words().to_vec(),
+            vertices: certificate.node_keys().to_vec(),
+            edges: certificate.edge_keys().to_vec(),
+            half_edges: certificate.hedge_keys().to_vec(),
         })
     }
 
@@ -2616,7 +2560,8 @@ pub struct FeynmanDiagramBuilder {
     model: Arc<Model>,
     name: String,
     vertices: Vec<DiagramVertex>,
-    generation_externals: BTreeMap<VertexId, ExternalLeg>,
+    /// Generated external legs, by their provisional dangling edge.
+    generation_externals: BTreeMap<EdgeId, ExternalLeg>,
     edges: Vec<(EdgeEndpoints, DiagramEdge)>,
     half_edge_order: Option<Vec<DiagramHalfEdge>>,
     edge_orientations: Option<Vec<Orientation>>,
@@ -2713,32 +2658,28 @@ impl FeynmanDiagramBuilder {
         id
     }
 
-    /// Reserve a temporary Symbolica-generation endpoint, removed during finalization.
-    /// Public diagrams carry this metadata on the resulting external edge.
-    #[doc(hidden)]
+    /// Attach a generated external leg to `vertex` as a dangling edge whose end at `vertex`
+    /// has `flow` and `slot`.
+    ///
+    /// Finalization orders the generated legs by connection, sews the incoming and outgoing
+    /// copies of each cross-section initial state, and orients every leg along its process
+    /// flow (conjugating the particle of a reversed directed leg). Expression indices of the
+    /// leg refer to the provisional edge.
     pub fn add_generation_external(
         &mut self,
-        name: impl Into<String>,
-        index: usize,
-        state: ExternalState,
-        connection: usize,
-    ) -> VertexId {
-        let name = name.into();
-        let vertex = self.add_vertex(DiagramVertex {
-            name: name.clone(),
-            interaction: None,
-            numerator: Atom::one(),
-        });
-        self.generation_externals.insert(
-            vertex,
-            ExternalLeg {
-                name,
-                index,
-                state,
-                connection,
-            },
-        );
-        vertex
+        vertex: VertexId,
+        flow: Flow,
+        edge: DiagramEdge,
+        slot: VertexSlot,
+        leg: ExternalLeg,
+    ) -> Result<EdgeId, DiagramError> {
+        let (source, target, source_slot, target_slot) = match flow {
+            Flow::Source => (Some(vertex), None, slot, VertexSlot(0)),
+            Flow::Sink => (None, Some(vertex), VertexSlot(0), slot),
+        };
+        let id = self.add_edge_with_slots(source, target, edge, source_slot, target_slot)?;
+        self.generation_externals.insert(id, leg);
+        Ok(id)
     }
 
     pub fn add_edge(
@@ -3176,13 +3117,23 @@ mod tests {
         let particle = model.particle_id("phi").unwrap();
         let rule = model.vertex_rule_id("V_1").unwrap();
         let mut builder = FeynmanDiagram::builder(model, "nested-momentum-indices");
-        let external = builder.add_generation_external("in", 0, ExternalState::Incoming, 0);
         let vertex = builder.add_vertex(DiagramVertex::interaction("vertex", rule));
         builder
             .add_edge(vertex, vertex, DiagramEdge::new(particle, false))
             .unwrap();
         builder
-            .add_edge(external, vertex, DiagramEdge::new(particle, false))
+            .add_generation_external(
+                vertex,
+                Flow::Sink,
+                DiagramEdge::new(particle, false),
+                VertexSlot(2),
+                ExternalLeg {
+                    name: "in".into(),
+                    index: 0,
+                    state: ExternalState::Incoming,
+                    connection: 0,
+                },
+            )
             .unwrap();
         let numerator = Atom::parse(
             "gammalooprs::Q(0,spenso::mink(4,gammalooprs::edge(0,1)))\
@@ -3229,25 +3180,36 @@ mod tests {
             let particle = model.particle_id("phi").unwrap();
             let rule = model.vertex_rule_id("V_1").unwrap();
             let mut builder = FeynmanDiagram::builder(model, "signed-momentum-sum");
-            let incoming = builder.add_generation_external("in", 0, ExternalState::Incoming, 0);
-            let outgoing_1 = builder.add_generation_external("out1", 1, ExternalState::Outgoing, 1);
-            let outgoing_2 = builder.add_generation_external("out2", 2, ExternalState::Outgoing, 2);
             let vertex = builder.add_vertex(DiagramVertex::interaction("vertex", rule));
             // All edge IDs change; the incoming edge also reverses its flow.
-            builder
-                .add_edge(vertex, outgoing_2, DiagramEdge::new(particle, false))
-                .unwrap();
-            builder
-                .add_edge(vertex, incoming, DiagramEdge::new(particle, false))
-                .unwrap();
-            builder
-                .add_edge(vertex, outgoing_1, DiagramEdge::new(particle, false))
-                .unwrap();
+            for (slot, (name, index, state)) in [
+                ("out2", 2, ExternalState::Outgoing),
+                ("in", 0, ExternalState::Incoming),
+                ("out1", 1, ExternalState::Outgoing),
+            ]
+            .into_iter()
+            .enumerate()
+            {
+                builder
+                    .add_generation_external(
+                        vertex,
+                        Flow::Source,
+                        DiagramEdge::new(particle, false),
+                        VertexSlot(slot),
+                        ExternalLeg {
+                            name: name.into(),
+                            index,
+                            state,
+                            connection: index,
+                        },
+                    )
+                    .unwrap();
+            }
             let numerator = Atom::parse(
                 format!(
                     "-{coefficient}*gammalooprs::Q(1,spenso::mink(4,gammalooprs::hedge(2,1)))\
                      -gammalooprs::Q(0,spenso::mink(4,gammalooprs::edge(0,1)))\
-                     +gammalooprs::Q(2,spenso::mink(4,gammalooprs::vertex(3,1)))"
+                     +gammalooprs::Q(2,spenso::mink(4,gammalooprs::vertex(0,1)))"
                 ),
                 "feynkit_graph",
                 ParseSettings::default(),

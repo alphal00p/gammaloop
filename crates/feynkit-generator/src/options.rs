@@ -13,11 +13,10 @@ use feynkit_model::Model;
 use serde::{Deserialize, Serialize};
 use symbolica::{
     atom::{Atom, AtomCore},
-    graph::Graph,
     parser::ParseSettings,
 };
 
-use crate::{EdgeColor, NodeColor, ParticleSelector, SelectorError, VertexSelector};
+use crate::{GenerationView, ParticleSelector, SelectorError, VertexSelector};
 
 #[derive(
     Debug,
@@ -338,8 +337,7 @@ impl CancellationToken {
 
 type ProgressCallback =
     Arc<dyn Fn(GenerationProgress) -> GenerationControl + Send + Sync + 'static>;
-type TopologyFilter =
-    Arc<dyn Fn(&Graph<NodeColor, EdgeColor>, usize) -> bool + Send + Sync + 'static>;
+type GenerationFilterCallback = Arc<dyn Fn(&GenerationView<'_>) -> bool + Send + Sync + 'static>;
 type CancellationCheck = Arc<dyn Fn() -> bool + Send + Sync + 'static>;
 
 #[derive(Clone)]
@@ -370,7 +368,7 @@ pub struct GenerationOptions {
     pub(crate) cancellation: CancellationToken,
     pub(crate) cancellation_check: Option<CancellationCheck>,
     pub(crate) progress: Option<ProgressCallback>,
-    pub(crate) filter: Option<TopologyFilter>,
+    pub(crate) filter: Option<GenerationFilterCallback>,
 }
 
 /// Stable persistent portion of [`GenerationOptions`]. Callbacks and
@@ -918,11 +916,15 @@ impl GenerationOptions {
         self
     }
 
-    /// Prune partial topologies during enumeration. The first `completed_vertices`
-    /// nodes have all their incident edges assigned; the rest may still grow.
+    /// Prune the diagram search with `callback`, which sees every search state: partial and
+    /// complete untyped topologies, partial field assignments and complete diagrams (see
+    /// [`GenerationView::stage`]). Rejecting a state drops everything that completes it, so the
+    /// callback must be hereditary within each stage, as for
+    /// [`linnet::half_edge::generate::GraphGenerator::filter`]. Graphs reaching the callback
+    /// already satisfy the process filters decided at their stage.
     pub fn filter(
         mut self,
-        callback: impl Fn(&Graph<NodeColor, EdgeColor>, usize) -> bool + Send + Sync + 'static,
+        callback: impl Fn(&GenerationView<'_>) -> bool + Send + Sync + 'static,
     ) -> Self {
         self.filter = Some(Arc::new(callback));
         self
@@ -1074,7 +1076,7 @@ mod tests {
     #[test]
     fn runtime_callbacks_are_not_serialized() {
         let options = GenerationOptions::default()
-            .filter(|_, _| false)
+            .filter(|_| false)
             .progress(|_| super::GenerationControl::Cancel);
         let encoded = bincode::encode_to_vec(&options, bincode::config::standard()).unwrap();
         let (decoded, _): (GenerationOptions, usize) =
