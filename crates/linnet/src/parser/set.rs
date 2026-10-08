@@ -5,7 +5,7 @@ use figment;
 use figment::Figment;
 
 use crate::half_edge::{
-    nodestore::{DefaultNodeStore, NodeStorage, NodeStorageOps},
+    nodestore::{NodeForest, NodeStorage, NodeStorageOps},
     HedgeGraph,
 };
 
@@ -26,7 +26,7 @@ pub struct GraphSet<E, V, H, G, S: NodeStorage<NodeData = V>> {
 
 /// A collection of DOT graphs parsed from a file or string containing multiple graphs.
 pub type DotGraphSet =
-    GraphSet<DotEdgeData, DotVertexData, DotHedgeData, GlobalData, DefaultNodeStore<DotVertexData>>;
+    GraphSet<DotEdgeData, DotVertexData, DotHedgeData, GlobalData, NodeForest<DotVertexData>>;
 
 impl<S: NodeStorageOps<NodeData = DotVertexData>>
     GraphSet<DotEdgeData, DotVertexData, DotHedgeData, GlobalData, S>

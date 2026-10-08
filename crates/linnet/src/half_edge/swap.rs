@@ -162,13 +162,13 @@ mod test {
     use super::{partition_with, Swap};
     use crate::{
         dot,
-        half_edge::{nodestore::NodeStorageVec, NodeIndex, NodeVec},
-        parser::{DotGraph, DotVertexData},
+        half_edge::{NodeIndex, NodeVec},
+        parser::DotGraph,
     };
 
     #[test]
     fn swap() {
-        let graph: DotGraph<NodeStorageVec<DotVertexData>> = dot!(digraph {
+        let graph: DotGraph = dot!(digraph {
             edge [label = "test"]
             node [label = "test"]
             in [style=invis]

@@ -45,7 +45,6 @@ __all__ = [
     "Mark",
     "MathSymbol",
     "Node",
-    "NodeStore",
     "Orientation",
     "OrientedCut",
     "Anchor",
@@ -540,21 +539,12 @@ class Graph:
     def n_edges(self) -> builtins.int: ...
     @property
     def n_half_edges(self) -> builtins.int: ...
-    @property
-    def node_store(self) -> NodeStore:
-        r"""
-        Return the node-storage strategy used by this graph.
-        """
-    def __new__(cls, *, nodes: typing.Iterable[Node] | None = None, edges: typing.Iterable[Edge] | None = None, name: typing.Optional[builtins.str] = None, global_data: typing.Optional[GlobalData] = None, codec: typing.Optional[DotCodec] = None, render_config: RenderSettings | None = None, node_store: NodeStore = NodeStore.Vec) -> Graph:
+    def __new__(cls, *, nodes: typing.Iterable[Node] | None = None, edges: typing.Iterable[Edge] | None = None, name: typing.Optional[builtins.str] = None, global_data: typing.Optional[GlobalData] = None, codec: typing.Optional[DotCodec] = None, render_config: RenderSettings | None = None) -> Graph:
         r"""
         Build a graph once from reusable descriptions. Referenced Node descriptions
         are included automatically; named and indexed endpoints must resolve.
         """
     def __len__(self) -> builtins.int: ...
-    def to_node_store(self, node_store: NodeStore) -> Graph:
-        r"""
-        Copy this graph into another node-storage strategy.
-        """
     def node(self, key: builtins.int | builtins.str) -> NodeView: ...
     def edge(self, key: builtins.int | builtins.str) -> EdgeView: ...
     def half_edge(self, index: builtins.int) -> HalfEdgeView: ...
@@ -570,11 +560,11 @@ class Graph:
     def reverse_edge(self, key: builtins.int | builtins.str) -> None: ...
     def map(self, *, node: typing.Callable[[NodeView], typing.Any] | None = None, edge: typing.Callable[[EdgeView], typing.Any] | None = None, source: typing.Callable[[HalfEdgeView], typing.Any] | None = None, sink: typing.Callable[[HalfEdgeView], typing.Any] | None = None) -> Graph: ...
     @classmethod
-    def from_dot(cls, source: builtins.str, codec: DotCodec, *, node_store: NodeStore = NodeStore.Vec) -> Graph: ...
+    def from_dot(cls, source: builtins.str, codec: DotCodec) -> Graph: ...
     @classmethod
-    def from_dot_set(cls, source: builtins.str, codec: DotCodec, *, node_store: NodeStore = NodeStore.Vec) -> builtins.list[Graph]: ...
+    def from_dot_set(cls, source: builtins.str, codec: DotCodec) -> builtins.list[Graph]: ...
     @classmethod
-    def from_dot_file(cls, path: builtins.str | os.PathLike[builtins.str], codec: DotCodec, *, node_store: NodeStore = NodeStore.Vec) -> Graph: ...
+    def from_dot_file(cls, path: builtins.str | os.PathLike[builtins.str], codec: DotCodec) -> Graph: ...
     def to_dot(self, codec: typing.Optional[DotCodec] = None) -> builtins.str: ...
     def render(self, *, config: RenderSettings | None = None) -> DiagramRender:
         r"""
@@ -1435,20 +1425,6 @@ class Flow(enum.Enum):
     """
     Source = ...
     Sink = ...
-
-@typing.final
-class NodeStore(enum.Enum):
-    r"""
-    Storage strategy used for graph nodes.
-    """
-    Vec = ...
-    r"""
-    Dense node records with one incidence bitset per node.
-    """
-    Forest = ...
-    r"""
-    Identification-preserving forest node records.
-    """
 
 @typing.final
 class Orientation(enum.Enum):

@@ -48,27 +48,6 @@ impl<V> PPNode<V> {
         }
     }
 
-    pub fn forget<U>(&self) -> PPNode<U> {
-        PPNode {
-            parent: self.parent,
-            data: None,
-        }
-    }
-
-    pub fn shift(&mut self, root: RootId, nodes: TreeNodeId) {
-        match &mut self.parent {
-            ParentId::Node(n) => {
-                n.0 += nodes.0;
-            }
-            ParentId::PointingRoot(n) => {
-                n.0 += nodes.0;
-            }
-            ParentId::Root(r) => {
-                r.0 += root.0;
-            }
-        }
-    }
-
     pub fn dataless_child(parent: TreeNodeId) -> Self {
         PPNode {
             parent: ParentId::Node(parent),
@@ -254,11 +233,6 @@ impl<V> ForestNodeStore for ParentPointerStore<V> {
     type NodeData = V;
     type Store<T> = ParentPointerStore<T>;
 
-    fn set_root(&mut self, a: TreeNodeId, root: RootId) {
-        let rootx = self.root_node(a);
-        self.nodes[rootx.0].parent = ParentId::Root(root);
-    }
-
     fn validate(&self) -> Result<Vec<(RootId, TreeNodeId)>, super::ForestError> {
         let mut roots = vec![];
         let mut seen: SubSet<usize> = !SubSet::empty(self.n_nodes());
@@ -294,88 +268,10 @@ impl<V> ForestNodeStore for ParentPointerStore<V> {
         old
     }
 
-    fn forgetful_map<U>(&self) -> Self::Store<U> {
-        ParentPointerStore {
-            nodes: self
-                .nodes
-                .iter()
-                .map(|a| PPNode {
-                    parent: a.parent,
-                    data: None,
-                })
-                .collect(),
-        }
-    }
-
-    /// Moves the nodes from `at` on into a new store. A parent pointer crossing
-    /// `at` is redirected to the child's nearest ancestor on its own side. A tree
-    /// whose root lies on the other side gets a root on each side, with the same
-    /// [`RootId`].
-    fn split_off(&mut self, at: TreeNodeId) -> Self {
-        let crosses = |a: TreeNodeId, b: TreeNodeId| (a < at) != (b < at);
-        let mut split_roots = vec![];
-        for start in 0..self.nodes.len() {
-            let mut current = TreeNodeId(start);
-            while let ParentId::Node(parent) = self[&current] {
-                let mut ancestor = parent;
-                while crosses(current, ancestor) {
-                    match self[&ancestor] {
-                        // A root that was already split points to its
-                        // counterpart, which lies on the other side of it.
-                        ParentId::Node(next) | ParentId::PointingRoot(next) => ancestor = next,
-                        ParentId::Root(root) => {
-                            self.nodes[ancestor.0].parent = ParentId::PointingRoot(current);
-                            self.nodes[current.0].parent = ParentId::PointingRoot(ancestor);
-                            split_roots.push((root, ancestor, current));
-                            break;
-                        }
-                    }
-                }
-                if ancestor != parent && !crosses(current, ancestor) {
-                    self.reparent(ancestor, current);
-                }
-                current = parent;
-            }
-        }
-        for (root, a, b) in split_roots {
-            self.nodes[a.0].parent = ParentId::Root(root);
-            self.nodes[b.0].parent = ParentId::Root(root);
-        }
-
-        let mut split = self.nodes.split_off(at.0);
-        for node in &mut split {
-            if let ParentId::Node(parent) = &mut node.parent {
-                parent.0 -= at.0;
-            }
-        }
-        Self { nodes: split }
-    }
-
-    fn extend(&mut self, other: Self, shift_roots_by: RootId) {
-        let nodeshift = TreeNodeId(self.nodes.len());
-        self.nodes.extend(other.nodes.into_iter().map(|mut r| {
-            r.shift(shift_roots_by, nodeshift);
-            r
-        }));
-    }
-
     fn reparent(&mut self, parent: TreeNodeId, child: TreeNodeId) {
         self.nodes[child.0].parent = ParentId::Node(parent);
     }
 
-    fn swap(&mut self, a: TreeNodeId, b: TreeNodeId) {
-        for n in &mut self.nodes {
-            if let ParentId::Node(pp) = &mut n.parent {
-                if *pp == a {
-                    *pp = b;
-                } else if *pp == b {
-                    *pp = a;
-                }
-            }
-        }
-
-        self.nodes.swap(a.0, b.0);
-    }
     fn from_store(store: Self::Store<Self::NodeData>) -> Self {
         store
     }
@@ -390,12 +286,6 @@ impl<V> ForestNodeStore for ParentPointerStore<V> {
         node_id
     }
 
-    fn add_dataless_root(&mut self, root_id: RootId) -> TreeNodeId {
-        let node_id = TreeNodeId(self.nodes.len());
-        self.nodes.push(PPNode::dataless_root(root_id));
-        node_id
-    }
-
     fn iter_nodes(&self) -> impl Iterator<Item = (TreeNodeId, Option<&Self::NodeData>)> {
         self.nodes
             .iter()
@@ -406,12 +296,6 @@ impl<V> ForestNodeStore for ParentPointerStore<V> {
     fn add_child(&mut self, data: Self::NodeData, parent: TreeNodeId) -> TreeNodeId {
         let node_id = TreeNodeId(self.nodes.len());
         self.nodes.push(PPNode::child(data, parent));
-        node_id
-    }
-
-    fn add_dataless_child(&mut self, parent: TreeNodeId) -> TreeNodeId {
-        let node_id = TreeNodeId(self.nodes.len());
-        self.nodes.push(PPNode::dataless_child(parent));
         node_id
     }
 

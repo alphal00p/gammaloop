@@ -1,5 +1,3 @@
-use nodestore::NodeStorageVec;
-
 use super::*;
 use crate::half_edge::builder::HedgeGraphBuilder;
 
@@ -113,7 +111,7 @@ impl fmt::Display for TestGraph {
 }
 
 impl TestGraph {
-    fn build(&self) -> (HedgeGraph<(), (), (), NodeStorageVec<()>>, GraphProperties) {
+    fn build(&self) -> (HedgeGraph<(), (), ()>, GraphProperties) {
         let mut builder = HedgeGraphBuilder::new();
 
         match self {
@@ -576,7 +574,7 @@ struct GraphProperties {
 impl TestGraph {
     fn test_basic_properties(
         &self,
-        graph: &HedgeGraph<(), (), (), NodeStorageVec<()>>,
+        graph: &HedgeGraph<(), (), ()>,
         props: &GraphProperties,
     ) -> TestResult {
         if graph.n_nodes() != props.n_nodes {
@@ -606,7 +604,7 @@ impl TestGraph {
 
     fn test_cycle_properties(
         &self,
-        graph: &HedgeGraph<(), (), (), NodeStorageVec<()>>,
+        graph: &HedgeGraph<(), (), ()>,
         props: &GraphProperties,
     ) -> TestResult {
         let cyclomatic = graph.cyclotomatic_number(&graph.full_graph());
@@ -629,7 +627,7 @@ impl TestGraph {
 
     fn test_degree_distribution(
         &self,
-        graph: &HedgeGraph<(), (), (), NodeStorageVec<()>>,
+        graph: &HedgeGraph<(), (), ()>,
         props: &GraphProperties,
     ) -> TestResult {
         let mut min_degree = usize::MAX;
@@ -660,7 +658,7 @@ impl TestGraph {
         Ok(())
     }
 
-    fn verify_cycle(graph: &HedgeGraph<(), (), (), NodeStorageVec<()>>, cycle: &Cycle) -> bool {
+    fn verify_cycle(graph: &HedgeGraph<(), (), ()>, cycle: &Cycle) -> bool {
         let mut degree_map = std::collections::HashMap::new();
         for hedge in cycle.filter.included_iter() {
             let node = graph.node_id(hedge);
@@ -680,11 +678,11 @@ impl TestGraph {
     }
 }
 
-/// Graph algorithms give the same results on the ring node store, both on
-/// converted graphs and while identifications are pending.
+/// Graph algorithms give the same results while identifications are pending as
+/// after forgetting them: absorbed nodes are not part of the graph.
 #[test]
-fn algorithms_agree_on_the_node_forest() {
-    use crate::half_edge::{algorithms::DirectionBasis, nodestore::NodeForest, subgraph::Cycle};
+fn algorithms_ignore_pending_identifications() {
+    use crate::half_edge::{algorithms::DirectionBasis, subgraph::Cycle};
 
     type Results = (
         usize,
@@ -738,7 +736,7 @@ fn algorithms_agree_on_the_node_forest() {
         )
     }
 
-    let mut graphs: Vec<HedgeGraph<(), (), (), NodeStorageVec<()>>> = [
+    let mut graphs: Vec<HedgeGraph<(), (), ()>> = [
         TestGraph::Petersen,
         TestGraph::MoebiusLadder(4),
         TestGraph::Complete(5),
@@ -769,25 +767,18 @@ fn algorithms_agree_on_the_node_forest() {
     builder.add_external_edge(nodes[2], (), true, Flow::Source);
     graphs.push(builder.build());
 
-    for graph in graphs {
-        let ends = [NodeIndex(0), NodeIndex(graph.n_nodes() / 2)];
-        let mut ring: HedgeGraph<(), (), (), NodeForest<()>> =
-            graph.clone().into_node_store().unwrap();
-        assert_eq!(results(&ring, ends), results(&graph, ends));
-
-        // Pending identifications: survivors differ, so compare through half-edges.
-        let mut graph = graph;
+    for mut graph in graphs {
         let (a, b) = (graph.node_id(Hedge(0)), graph.node_id(graph.inv(Hedge(0))));
         graph.identify_nodes(&[a, b], ());
-        ring.identify_nodes(&[a, b], ());
-        let ends = [
-            graph.node_id(Hedge(0)),
-            graph.node_id(Hedge(graph.n_hedges() - 1)),
-        ];
-        let ring_ends = [
-            ring.node_id(Hedge(0)),
-            ring.node_id(Hedge(ring.n_hedges() - 1)),
-        ];
-        assert_eq!(results(&ring, ring_ends), results(&graph, ends));
+        let mut forgotten = graph.clone();
+        forgotten.forget_identification_history();
+        // Forgetting renumbers nodes, so compare through half-edges.
+        let ends = |graph: &HedgeGraph<(), (), ()>| {
+            [Hedge(0), Hedge(graph.n_hedges() - 1)].map(|hedge| graph.node_id(hedge))
+        };
+        assert_eq!(
+            results(&graph, ends(&graph)),
+            results(&forgotten, ends(&forgotten))
+        );
     }
 }

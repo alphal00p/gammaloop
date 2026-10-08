@@ -16,8 +16,7 @@ use rust_embed::RustEmbed;
 use walkdir::WalkDir;
 
 use crate::drawing::DrawingKind;
-use crate::graph::{PyEdge, PyGraph, PyHalfEdge, PyNode};
-use crate::native_graph::PyHedgeGraph;
+use crate::graph::{PyEdge, PyGraph, PyHalfEdge, PyHedgeGraph, PyNode};
 use crate::topology::PySubgraph;
 use crate::typst::{
     default_render_config, evaluate_selector, render_config_transport, typst_string,

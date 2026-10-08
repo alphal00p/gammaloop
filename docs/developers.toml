@@ -610,11 +610,13 @@ review_triggers = ["crates/linnet/src/lib.rs", "crates/linnet/src/half_edge.rs",
 # bounded cycle/tadpole enumeration.
 path = "crates/linnet/src/half_edge.rs"
 symbol = "linnet::half_edge::HedgeGraph"
-anchor = "pub struct HedgeGraph<E, V, H = NoData, S: NodeStorage<NodeData = V> = DefaultNodeStore<V>> {"
+anchor = "pub struct HedgeGraph<E, V, H = NoData, S: NodeStorage<NodeData = V> = NodeForest<V>> {"
 # No architecture impact: the 2026-08-21 APIDOC-002 review corrected the
 # public graph-invariant and DOT parsing documentation without changing behavior.
 # Reviewed 2026-09-17: Documented dense edge join ownership and preserved node/slot/flow invariants.
-digest = "93c8f6b2494a3745658b2e22a9d02644d1d4c33f"
+# Documentation-impact attestation 2026-10-08: the architecture note now
+# documents `NodeForest` as the only node store and the in-place `add_node`.
+digest = "8de07210edcfc5307122ac2eefd8c9861524ba14"
 
 [[section.note.scope]]
 path = "crates/linnet/src/half_edge/involution.rs"
@@ -642,7 +644,7 @@ digest = "05983dad9fdb3db00351c9e536a439ce48efd94b"
 # a semantics-preserving Clippy rewrite of empty graph-name formatting.
 path = "crates/linnet/src/parser/mod.rs"
 symbol = "linnet::parser::DotGraph"
-anchor = "pub struct DotGraph<N: NodeStorage<NodeData = DotVertexData> = DefaultNodeStore<DotVertexData>> {"
+anchor = "pub struct DotGraph<N: NodeStorage<NodeData = DotVertexData> = NodeForest<DotVertexData>> {"
 # No architecture impact: the 2026-08-21 APIDOC-002 review corrected the
 # documented DOT parser path, added a round trip, and qualified its macro link.
 # The 2026-08-26 serializer cleanup only omits empty attribute lists.
@@ -651,7 +653,9 @@ anchor = "pub struct DotGraph<N: NodeStorage<NodeData = DotVertexData> = Default
 # No-impact attestation 2026-09-14: fixed-size byte chunks replace the
 # deprecated iterator in label decoding; the even-length guard and parsing
 # behavior are unchanged.
-digest = "ad1cf0bfc2cdffcff10c69ccc87c0495c025eecc"
+# Documentation-impact attestation 2026-10-08: the DOT graph defaults to
+# `NodeForest`, the only node store the architecture note documents.
+digest = "1d464c2326a0d6828381ddbe18b6de1ab39d50ed"
 
 [[section.note]]
 id = "vakint-architecture"

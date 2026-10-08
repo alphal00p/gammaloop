@@ -6,7 +6,6 @@ mod dot;
 mod drawing;
 mod graph;
 mod mutations;
-mod native_graph;
 mod render;
 pub use snapshot::PyDiagramRender;
 mod scene;
@@ -313,7 +312,6 @@ pub fn canonical_stub() -> pyo3_stub_gen::Result<String> {
     // Stub generation runs without signature inference, so non-builtin Rust
     // values collapse to `...`. These closed enums have one API-wide default.
     for (type_name, default) in [
-        ("NodeStore", "NodeStore.Vec"),
         ("Orientation", "Orientation.Default"),
         ("DirectionBasis", "DirectionBasis.Underlying"),
     ] {

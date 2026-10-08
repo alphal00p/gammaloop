@@ -62,7 +62,7 @@ use linnet::{
                 PinnedLayoutNeighbor, PointConstraint, ShiftDirection, SpringChargeEnergy,
             },
         },
-        nodestore::{DefaultNodeStore, NodeStorageOps},
+        nodestore::{NodeForest, NodeStorageOps},
         subgraph::{SuBitGraph, SubSetLike},
         EdgeAccessors, HedgeGraph, NodeIndex, NodeVec,
     },
@@ -2590,7 +2590,7 @@ impl TypstGraph {
     pub fn layout_energy_state(
         &self,
     ) -> (
-        LayoutState<'_, TypstEdge, TypstNode, TypstHedge, DefaultNodeStore<TypstNode>>,
+        LayoutState<'_, TypstEdge, TypstNode, TypstHedge, NodeForest<TypstNode>>,
         SpringChargeEnergy,
     ) {
         let spring_params = ParamTuning::from(&self.layout_config.spring);
@@ -2946,10 +2946,10 @@ impl TypstGraph {
 
     fn force_session<'a>(
         &self,
-        mut state: LayoutState<'a, TypstEdge, TypstNode, TypstHedge, DefaultNodeStore<TypstNode>>,
+        mut state: LayoutState<'a, TypstEdge, TypstNode, TypstHedge, NodeForest<TypstNode>>,
         energy: &SpringChargeEnergy,
         selection: Option<(&NodeVec<bool>, &EdgeVec<bool>)>,
-    ) -> ForceLayoutSession<'a, TypstEdge, TypstNode, TypstHedge, DefaultNodeStore<TypstNode>> {
+    ) -> ForceLayoutSession<'a, TypstEdge, TypstNode, TypstHedge, NodeForest<TypstNode>> {
         let spring_length = energy.spring_length;
         for i in 0..self.n_nodes() {
             let index = NodeIndex(i);

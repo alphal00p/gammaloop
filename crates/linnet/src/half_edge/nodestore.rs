@@ -1,7 +1,3 @@
-#[cfg(feature = "nodestore-forest-parent-child")]
-use crate::tree::child_pointer::ParentChildStore;
-#[cfg(feature = "nodestore-forest-child-vec")]
-use crate::tree::child_vec::ChildVecStore;
 use crate::tree::{parent_pointer::ParentPointerStore, Forest};
 
 use super::{
@@ -62,20 +58,18 @@ pub trait NodeStorageOps: NodeStorage + Swap<Hedge> + Swap<NodeIndex> {
     /// Removes the selected half-edges and compacts the remaining node storage.
     fn delete<S: SubSetLike<Base = Self::Base>>(&mut self, subgraph: &S);
 
-    // fn add_node(&mut self, node_data: Self::NodeData) -> NodeIndex;
+    /// Appends a node without half-edges carrying `node_data` and returns its index;
+    /// no existing index changes.
+    fn add_node(&mut self, node_data: Self::NodeData) -> NodeIndex;
 
     /// Merges `nodes` into one surviving node carrying `node_data_merge` and returns it.
     ///
     /// No half-edge, edge or node index changes: the other nodes stay in place, with
     /// their data, as absorbed nodes (see [`Self::is_absorbed`]) until
-    /// [`Self::forget_identification_history`] compacts them away.
-    /// [`NodeStorageVec`] keeps the smallest index of `nodes`, and absorbed nodes
-    /// must not be passed again. Forest stores keep the node that currently holds
-    /// `nodes[0]` and merge every other requested node through the node that
-    /// absorbed it, so repeated and previously absorbed nodes are allowed;
-    /// [`NodeForest`] resolves them the same way but keeps the node with the
-    /// largest crown. While they retain history, these stores refuse to move
-    /// half-edges or renumber nodes (`delete`, `extract`, `extract_nodes`, swaps).
+    /// [`Self::forget_identification_history`] compacts them away. Repeated and
+    /// previously absorbed nodes resolve to the node that absorbed them. While it
+    /// retains history, the store refuses to move half-edges or renumber nodes
+    /// (`delete`, `extract`, `extract_nodes`, swaps).
     fn identify_nodes(&mut self, nodes: &[NodeIndex], node_data_merge: Self::NodeData)
         -> NodeIndex;
 
@@ -87,11 +81,8 @@ pub trait NodeStorageOps: NodeStorage + Swap<Hedge> + Swap<NodeIndex> {
     /// included, are kept. Live nodes may be renumbered.
     fn forget_identification_history(&mut self) -> NodeVec<Self::NodeData>;
 
-    /// Copies the topology into a parent-pointer forest while mapping borrowed node data.
-    ///
-    /// Forest stores and [`NodeForest`] keep their identification history.
-    /// [`NodeStorageVec`] does not record which node absorbed which, so its absorbed
-    /// nodes become empty roots.
+    /// Copies the topology into a parent-pointer forest, one tree per node, while
+    /// mapping borrowed node data; absorbed nodes become empty trees.
     fn to_forest<U, H>(
         &self,
         map_data: impl Fn(&Self::NodeData) -> U,
@@ -229,36 +220,11 @@ pub trait NodeStorage: Sized {
         Self: 'a;
 }
 
-mod forest;
 mod node_forest;
-mod vec;
 
+#[cfg(feature = "rkyv")]
+pub use node_forest::{ArchivedNodeForest, NodeForestResolver};
 pub use node_forest::{NodeForest, RingNeighborIter};
-pub use vec::BitVecNeighborIter;
-pub use vec::NodeStorageVec;
-
-#[cfg(all(
-    feature = "nodestore-forest-child-vec",
-    feature = "nodestore-forest-parent-child"
-))]
-compile_error!(
-    "Select only one forest nodestore feature: nodestore-forest-child-vec or nodestore-forest-parent-child."
-);
-
-#[cfg(feature = "nodestore-forest-child-vec")]
-pub type DefaultNodeStore<V> = Forest<V, ChildVecStore<()>>;
-
-#[cfg(all(
-    not(feature = "nodestore-forest-child-vec"),
-    feature = "nodestore-forest-parent-child"
-))]
-pub type DefaultNodeStore<V> = Forest<V, ParentChildStore<()>>;
-
-#[cfg(all(
-    not(feature = "nodestore-forest-child-vec"),
-    not(feature = "nodestore-forest-parent-child")
-))]
-pub type DefaultNodeStore<V> = NodeStorageVec<V>;
 
 #[cfg(test)]
 mod test;

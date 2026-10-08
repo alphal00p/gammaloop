@@ -188,7 +188,7 @@ impl PyGraph {
             );
         }
         Ok(Self::from_state(GraphState {
-            graph: PyHedgeGraph::build(builder, PyNodeStore::Vec),
+            graph: builder.build(),
             name: None,
             global_data: PyGlobalData::default(),
             codec: None,

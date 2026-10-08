@@ -3,7 +3,7 @@
 use std::{cell::RefCell, collections::BTreeSet};
 
 use linnet::half_edge::builder::HedgeGraphBuilder;
-use linnet::half_edge::involution::{EdgeData, Flow, Hedge};
+use linnet::half_edge::involution::{EdgeData, Flow, Hedge, Orientation};
 use linnet::half_edge::subgraph::{Inclusion, SuBitGraph, SubSetLike};
 use linnet::half_edge::NodeIndex;
 use pyo3::exceptions::{PyReferenceError, PyTypeError, PyValueError};
@@ -14,9 +14,8 @@ use crate::dot::{PyEdgeValue, PyNodeValue};
 use crate::drawing::copy_drawing;
 use crate::graph::{
     EdgeRecord, GraphState, IncrementalEdgeRecords, NodeRecord, PyEdge, PyEdgeSpec, PyFlow,
-    PyGraph, PyHalfEdge, PyNode, PyNodeSpec, PyOrientation,
+    PyGraph, PyHalfEdge, PyHedgeGraph, PyNode, PyNodeSpec, PyOrientation,
 };
-use crate::native_graph::PyHedgeGraph;
 use crate::topology::PySubgraph;
 
 impl PyGraph {
@@ -35,7 +34,7 @@ impl PyGraph {
         isolated_nodes: &BTreeSet<usize>,
     ) -> PyHedgeGraph {
         if isolated_nodes.is_empty() {
-            return PyHedgeGraph::empty(graph.node_store());
+            return HedgeGraphBuilder::new().build();
         }
         // Augmented subgraphs only store zero-crown nodes, so neither edge
         // mapping callback can be reached during this native node extraction.
@@ -52,12 +51,11 @@ impl PyGraph {
         subgraph: &SuBitGraph,
         isolated_nodes: &BTreeSet<usize>,
     ) -> PyResult<PyHedgeGraph> {
-        let node_store = graph.node_store();
         let isolated = Self::split_isolated_nodes(graph, isolated_nodes);
 
         let error = RefCell::new(None);
         let mut extracted = if subgraph.is_empty() {
-            PyHedgeGraph::empty(node_store)
+            HedgeGraphBuilder::new().build()
         } else {
             graph.extract(
                 subgraph,
@@ -349,7 +347,7 @@ impl PyGraph {
         let revision = slf.borrow(py).revision()?;
         let epoch = slf.borrow(py).element_epoch()?;
         let node = spec.snapshot(py)?;
-        let (index, node_store) = {
+        let index = {
             let graph = slf.borrow(py);
             let state = graph.state.borrow();
             let graph = &state.as_ref().expect("checked").graph;
@@ -363,21 +361,16 @@ impl PyGraph {
                     )));
                 }
             }
-            (graph.n_nodes(), graph.node_store())
+            graph.n_nodes()
         };
-        let mut builder = HedgeGraphBuilder::new();
-        builder.add_node(node);
-        let singleton = PyHedgeGraph::build(builder, node_store);
         // Complete Python allocation and validation before changing live storage.
         let result = Py::new(py, PyNode::new(slf.clone_ref(py), index, epoch))?;
         slf.borrow(py).check_revision(revision)?;
         let graph = slf.borrow(py);
         let mut state = graph.state.borrow_mut();
         let state = state.as_mut().expect("checked");
-        state
-            .graph
-            .append_disconnected_mut(singleton)
-            .map_err(|error| PyValueError::new_err(error.to_string()))?;
+        let added = state.graph.add_node(node);
+        debug_assert_eq!(added.0, index);
         state.revision = revision + 1;
         Ok(result)
     }
@@ -420,15 +413,15 @@ impl PyGraph {
         match (source, sink) {
             (Some(source), Some(sink)) => state
                 .graph
-                .add_pair(source, sink, edge, orientation.into())
+                .add_pair_mut(source, sink, edge, Orientation::from(orientation))
                 .map(|_| ()),
             (Some(source), None) => state
                 .graph
-                .add_dangling_edge(source, edge, Flow::Source, orientation.into())
+                .add_dangling_edge_mut(source, edge, Flow::Source, Orientation::from(orientation))
                 .map(|_| ()),
             (None, Some(sink)) => state
                 .graph
-                .add_dangling_edge(sink, edge, Flow::Sink, orientation.into())
+                .add_dangling_edge_mut(sink, edge, Flow::Sink, Orientation::from(orientation))
                 .map(|_| ()),
             (None, None) => unreachable!("validated edge has an endpoint"),
         }
@@ -524,12 +517,12 @@ impl PyGraph {
             .as_ref()
             .expect("checked")
             .copy(py)?;
-        candidate.graph.connect_identities(
-            Hedge(source),
-            Hedge(sink),
-            Flow::Source,
-            EdgeData::new(edge, orientation.into()),
-        );
+        let edge = RefCell::new(Some(EdgeData::new(edge, orientation.into())));
+        candidate
+            .graph
+            .connect_identities(Hedge(source), Hedge(sink), |_, _, _, _| {
+                (Flow::Source, edge.take().expect("merge is called once"))
+            });
         let index = candidate.graph[&Hedge(source)].0;
         Self::validate_names(&candidate.graph)?;
         let result = Py::new(
@@ -574,7 +567,7 @@ impl PyGraph {
                 .as_ref()
                 .ok_or_else(|| PyReferenceError::new_err("graph has been cleared"))?;
             return Ok(PyGraph::from_state(
-                state.derived(py, PyHedgeGraph::empty(state.graph.node_store()))?,
+                state.derived(py, HedgeGraphBuilder::new().build())?,
             ));
         }
         let mut candidate = slf
@@ -650,54 +643,17 @@ impl PyGraph {
             .ok_or_else(|| PyReferenceError::new_err("graph has been cleared"))?
             .copy(py)?;
         Self::split_isolated_nodes(&mut candidate.graph, &isolated_nodes);
-        if filter.is_empty() {
-            let mut builder = HedgeGraphBuilder::new();
-            builder.add_node(replacement);
-            candidate
-                .graph
-                .append_disconnected_mut(PyHedgeGraph::build(builder, candidate.graph.node_store()))
-                .map_err(|error| PyValueError::new_err(error.to_string()))?;
-            Self::validate_names(&candidate.graph)?;
-            slf.borrow(py).check_revision(revision)?;
-            candidate.revision = revision + 1;
-            candidate.element_epoch += 1;
-            *slf.borrow(py).state.borrow_mut() = Some(candidate);
-            return Ok(());
-        }
-        // Move unrelated empty-crown nodes aside because node stores differ in
-        // how contraction compaction treats them. Restore the replacement when
-        // the contracted island has no boundary hairs.
-        let unrelated_isolated = candidate
-            .graph
-            .iter_nodes()
-            .filter_map(|(node, mut crown, _)| crown.next().is_none().then_some(node.0))
-            .collect::<BTreeSet<_>>();
-        let mut preserved = Self::split_isolated_nodes(&mut candidate.graph, &unrelated_isolated);
-        let involved = candidate
-            .graph
+        // Contraction keeps the replacement only on a half-edge that leaves the
+        // island; a closed island is deleted and the replacement added instead.
+        let graph = &mut candidate.graph;
+        let closed = graph
             .iter_nodes_of(&filter)
-            .map(|(node, _, _)| node)
-            .collect::<Vec<NodeIndex>>();
-        let has_boundary = involved.iter().any(|node| {
-            candidate
-                .graph
-                .iter_crown(*node)
-                .any(|hedge| !filter.includes(&hedge))
-        });
-        let replacement_backup = (!has_boundary).then(|| replacement.copy(py)).transpose()?;
-        candidate.graph.contract_subgraph(&filter, replacement);
-        if let Some(node) = replacement_backup {
-            let mut builder = HedgeGraphBuilder::new();
-            builder.add_node(node);
-            preserved
-                .append_disconnected_mut(PyHedgeGraph::build(builder, candidate.graph.node_store()))
-                .map_err(|error| PyValueError::new_err(error.to_string()))?;
-        }
-        if preserved.n_nodes() != 0 {
-            candidate
-                .graph
-                .append_disconnected_mut(preserved)
-                .map_err(|error| PyValueError::new_err(error.to_string()))?;
+            .all(|(_, mut crown, _)| crown.all(|hedge| filter.includes(&hedge)));
+        if closed {
+            graph.delete_hedges(&filter);
+            graph.add_node(replacement);
+        } else {
+            graph.contract_subgraph(&filter, replacement);
         }
         Self::validate_names(&candidate.graph)?;
         slf.borrow(py).check_revision(revision)?;

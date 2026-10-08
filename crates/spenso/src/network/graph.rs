@@ -9,7 +9,7 @@ use std::{
 use bincode::{Decode, Encode};
 use linnet::{
     half_edge::{
-        HedgeGraph, HedgeGraphError, NoData, NodeIndex,
+        HedgeGraph, HedgeGraphError, NodeIndex,
         builder::HedgeGraphBuilder,
         involution::{EdgeData, Flow, Hedge},
         nodestore::NodeStorageOps,
@@ -18,7 +18,7 @@ use linnet::{
         tree::SimpleTraversalTree,
     },
     permutation::Permutation,
-    tree::{Forest, child_pointer::ParentChildStore, child_vec::ChildVecStore},
+    tree::{child_pointer::ParentChildStore, child_vec::ChildVecStore},
 };
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -68,9 +68,7 @@ pub struct NetworkGraph<K, FK = i8, Aind = AbstractIndex> {
 pub(super) type NetworkGraphBuilder<K, FK, Aind> =
     HedgeGraphBuilder<NetworkEdge<Aind>, NetworkNode<K, FK, Aind>>;
 
-pub type NetworkNodeStore<K, FK, Aind> = Forest<NetworkNode<K, FK, Aind>, ParentChildStore<()>>;
-pub type NetworkHedgeGraph<K, FK, Aind> =
-    HedgeGraph<NetworkEdge<Aind>, NetworkNode<K, FK, Aind>, NoData, NetworkNodeStore<K, FK, Aind>>;
+pub type NetworkHedgeGraph<K, FK, Aind> = HedgeGraph<NetworkEdge<Aind>, NetworkNode<K, FK, Aind>>;
 
 pub type ReadyNetworkOp<K, FK = i8, Aind = AbstractIndex> = (
     NetworkGraph<K, FK, Aind>,
@@ -1447,22 +1445,30 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
         self.cache_expr_tree_roots_ignoring(&hidden)
     }
 
+    /// Caches the expression tree in the node anchors and returns how many
+    /// changed: each node the tree visits is anchored at the half-edge leading to
+    /// its parent, and the head node at the head.
     pub fn cache_expr_tree_roots_ignoring<S>(&mut self, hidden: &S) -> usize
     where
         S: SubSetLike<Base = SuBitGraph>,
     {
-        let new_roots = {
-            let tt = self.expr_tree_ignoring(hidden);
-            // Each visited node supplies one independent crown root. Discovery
-            // order therefore needs no child-vector copy of the traversal forest.
-            tt.node_order()
-                .into_iter()
-                .map(|node| tt.root_hedge(node).into())
-                .collect::<Vec<_>>()
-        };
-
-        // Release the traversal forest before converting the graph's node store.
-        self.graph.node_store.reroot_many(new_roots)
+        let tt = self.expr_tree_ignoring(hidden);
+        let head = self.head();
+        let head_node = self.graph.node_id(head);
+        let mut changed = 0;
+        // Each visited node has one independent anchor, so any order will do.
+        for node in tt.node_order() {
+            let anchor = if node == head_node {
+                head
+            } else {
+                tt.root_hedge(node)
+            };
+            if self.graph.node_store.anchor(node) != Some(anchor) {
+                self.graph.node_store.set_anchor(node, Some(anchor));
+                changed += 1;
+            }
+        }
+        changed
     }
 
     pub fn cached_expr_children(&self, node: NodeIndex) -> Vec<NodeIndex> {
@@ -1500,8 +1506,7 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
                     return None;
                 }
 
-                (self.graph.node_store.root_hedge_for_node(other_node) == other)
-                    .then_some(other_node)
+                (self.graph.node_store.anchor(other_node) == Some(other)).then_some(other_node)
             })
             .collect::<Vec<_>>();
 
@@ -3465,6 +3470,31 @@ pub mod test {
 
     use super::{NetworkGraph, NetworkNode, NetworkOp};
 
+    impl NetworkGraph<i8> {
+        /// The oracle for the cached expression tree: anchors the nodes in
+        /// preorder of the traversal, the head node at the head.
+        fn anchor_in_preorder(&mut self, hidden: &SuBitGraph) {
+            let tree = self.expr_tree_ignoring(hidden).cast::<ChildVecStore<()>>();
+            let head = self.head();
+            let root = self.graph.node_id(head);
+            let anchors: Vec<_> = (tree.iter_preorder_tree_nodes(&self.graph, root))
+                .map(|node| {
+                    (
+                        node,
+                        if node == root {
+                            head
+                        } else {
+                            tree.root_hedge(node)
+                        },
+                    )
+                })
+                .collect();
+            for (node, anchor) in anchors {
+                self.graph.node_store.set_anchor(node, Some(anchor));
+            }
+        }
+    }
+
     #[test]
     fn batch_product_preserves_sequential_join_endpoints_and_layouts() {
         use super::{NMul, NetworkEdge};
@@ -4248,15 +4278,7 @@ pub mod test {
             }
             for _ in 0..2 {
                 let mut oracle = graph.clone();
-                let roots = {
-                    let tree = oracle
-                        .expr_tree_ignoring(&hidden)
-                        .cast::<ChildVecStore<()>>();
-                    tree.iter_preorder_tree_nodes(&oracle.graph, root)
-                        .map(|node| tree.root_hedge(node).into())
-                        .collect::<Vec<_>>()
-                };
-                oracle.graph.node_store.reroot_many(roots);
+                oracle.anchor_in_preorder(&hidden);
                 graph.cache_expr_tree_roots_ignoring(&hidden);
                 assert_eq!(
                     graph
@@ -4474,16 +4496,7 @@ pub mod test {
             }
             for _ in 0..2 {
                 let mut preorder_oracle = graph.clone();
-                let old_roots = {
-                    let tree = preorder_oracle
-                        .expr_tree_ignoring(&hidden)
-                        .cast::<ChildVecStore<()>>();
-                    let root = preorder_oracle.graph.node_id(preorder_oracle.head());
-                    tree.iter_preorder_tree_nodes(&preorder_oracle.graph, root)
-                        .map(|node| tree.root_hedge(node).into())
-                        .collect::<Vec<_>>()
-                };
-                preorder_oracle.graph.node_store.reroot_many(old_roots);
+                preorder_oracle.anchor_in_preorder(&hidden);
                 graph.cache_expr_tree_roots_ignoring(&hidden);
                 assert_eq!(
                     graph

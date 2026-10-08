@@ -191,7 +191,7 @@ fn threeloop() {
     builder.add_edge(c, d, (), false);
     builder.add_edge(d, a, (), false);
 
-    let graph: HedgeGraph<(), (), NoData, NodeStorageVec<()>> = builder.build();
+    let graph: HedgeGraph<(), (), NoData> = builder.build();
 
     insta::assert_snapshot!("three_loop_dot", graph.base_dot());
     #[cfg(feature = "serde")]
@@ -235,7 +235,7 @@ fn hairythreeloop() {
 
     let n_h: Hedge = builder.involution.len();
     assert_eq!(n_h, Hedge(15));
-    let graph: HedgeGraph<(), (), NoData, NodeStorageVec<()>> = builder.build();
+    let graph: HedgeGraph<(), (), NoData> = builder.build();
 
     insta::assert_snapshot!("hairy_three_loop_dot", graph.base_dot());
 
@@ -788,12 +788,9 @@ fn join() {
         *c.iter_edges_of(&c.full_filter()).next().unwrap().2.data
     );
 }
+use crate::{dot, half_edge::swap::Swap, parser::DotGraph};
 use dot_parser::ast::CompassPt;
 use insta::assert_snapshot;
-use nodestore::NodeStorageVec;
-
-use crate::tree::{child_vec::ChildVecStore, Forest};
-use crate::{dot, half_edge::swap::Swap, parser::DotGraph};
 
 use super::*;
 
@@ -820,9 +817,7 @@ fn double_triangle() {
 }
 
 #[test]
-fn bounded_all_cycles_are_subgraph_capable_and_backend_neutral() {
-    type ForestStore = Forest<(), ChildVecStore<()>>;
-
+fn bounded_all_cycles_are_subgraph_capable() {
     let mut builder = HedgeGraphBuilder::new();
     let a = builder.add_node(());
     let b = builder.add_node(());
@@ -834,14 +829,13 @@ fn bounded_all_cycles_are_subgraph_capable_and_backend_neutral() {
     builder.add_edge(d, a, (), false);
     builder.add_edge(b, d, (), false);
 
-    let graph: HedgeGraph<(), (), NoData, NodeStorageVec<()>> = builder.build();
+    let graph: HedgeGraph<(), (), NoData> = builder.build();
     let mut triangle = graph.empty_subgraph::<SuBitGraph>();
     for edge in [1, 2, 4] {
         triangle.add(graph.hedge_pair(Hedge(2 * edge)));
     }
 
-    let triangle_cycles = graph.all_cycles_of(&triangle, 1).unwrap();
-    assert_eq!(triangle_cycles.len(), 1);
+    assert_eq!(graph.all_cycles_of(&triangle, 1).unwrap().len(), 1);
     assert!(matches!(
         graph.all_cycles(1),
         Err(CycleEnumerationError::RankLimitExceeded {
@@ -852,10 +846,6 @@ fn bounded_all_cycles_are_subgraph_capable_and_backend_neutral() {
     let cycles = graph.all_cycles(2).unwrap();
     assert_eq!(cycles.len(), 3);
     assert!(cycles.windows(2).all(|pair| pair[0] <= pair[1]));
-
-    let graph: HedgeGraph<_, _, _, ForestStore> = graph.into_node_store().unwrap();
-    assert_eq!(graph.all_cycles_of(&triangle, 1).unwrap(), triangle_cycles);
-    assert_eq!(graph.all_cycles(2).unwrap(), cycles);
 }
 
 #[test]
@@ -865,7 +855,7 @@ fn all_cycles_rejects_unrepresentable_cycle_rank() {
     for _ in 0..usize::BITS {
         builder.add_edge(node, node, (), false);
     }
-    let graph: HedgeGraph<(), (), NoData, NodeStorageVec<()>> = builder.build();
+    let graph: HedgeGraph<(), (), NoData> = builder.build();
 
     assert!(matches!(
         graph.all_cycles(usize::MAX),
@@ -877,9 +867,7 @@ fn all_cycles_rejects_unrepresentable_cycle_rank() {
 }
 
 #[test]
-fn tadpoles_validate_terminals_and_are_backend_neutral() {
-    type ForestStore = Forest<(), ChildVecStore<()>>;
-
+fn tadpoles_validate_terminals() {
     let mut builder = HedgeGraphBuilder::new();
     let terminal = builder.add_node(());
     let a = builder.add_node(());
@@ -897,7 +885,7 @@ fn tadpoles_validate_terminals_and_are_backend_neutral() {
     builder.add_edge(e, f, (), false);
     builder.add_edge(f, d, (), false);
 
-    let graph: HedgeGraph<(), (), NoData, NodeStorageVec<()>> = builder.build();
+    let graph: HedgeGraph<(), (), NoData> = builder.build();
     let invalid = NodeIndex(graph.n_nodes());
     assert_eq!(graph.tadpoles(&[]), Err(TadpoleError::EmptyTerminals));
     assert_eq!(
@@ -919,25 +907,6 @@ fn tadpoles_validate_terminals_and_are_backend_neutral() {
     assert_eq!(tadpoles.len(), 2);
     assert!(tadpoles.windows(2).all(|pair| pair[0] <= pair[1]));
 
-    let graph: HedgeGraph<_, _, _, ForestStore> = graph.into_node_store().unwrap();
-    assert_eq!(graph.tadpoles(&[]), Err(TadpoleError::EmptyTerminals));
-    assert_eq!(
-        graph.tadpoles(&[terminal, invalid]),
-        Err(TadpoleError::InvalidTerminal {
-            terminal: invalid,
-            n_nodes: graph.n_nodes(),
-        })
-    );
-    assert_eq!(
-        graph.tadpoles(&[terminal, terminal]),
-        Err(TadpoleError::DuplicateTerminal(terminal))
-    );
-    assert_eq!(
-        graph.tadpoles(&[isolated]),
-        Err(TadpoleError::TerminalWithoutIncidentHalfEdge(isolated))
-    );
-    assert_eq!(graph.tadpoles(&[terminal]).unwrap(), tadpoles);
-
     let mut builder = HedgeGraphBuilder::new();
     let bridge_terminal = builder.add_node(());
     let left_terminal = builder.add_node(());
@@ -955,26 +924,32 @@ fn tadpoles_validate_terminals_and_are_backend_neutral() {
     builder.add_edge(d, e, (), false);
     builder.add_edge(e, c, (), false);
 
-    let graph: HedgeGraph<(), (), NoData, NodeStorageVec<()>> = builder.build();
+    let mut graph: HedgeGraph<(), (), NoData> = builder.build();
     let mut expected = graph.empty_subgraph::<SuBitGraph>();
     for (pair, _, _) in graph.iter_edges().skip(3) {
         expected.add(pair);
     }
     let terminals = [bridge_terminal, left_terminal, right_terminal];
-    assert_eq!(graph.tadpoles(&terminals).unwrap(), vec![expected.clone()]);
-
-    let mut graph: HedgeGraph<_, _, _, ForestStore> = graph.into_node_store().unwrap();
     assert_eq!(graph.tadpoles(&terminals).unwrap(), vec![expected]);
 
+    // An absorbed node has no half-edges, and pending history changes nothing
+    // for the survivor.
     let canonical = graph.identify_nodes(&[left_terminal, right_terminal], ());
-    assert_eq!(
-        graph.tadpoles(&[right_terminal]).unwrap(),
-        graph.tadpoles(&[canonical]).unwrap()
-    );
-    assert_eq!(
-        graph.tadpoles(&[canonical, right_terminal]),
-        Err(TadpoleError::DuplicateTerminal(right_terminal))
-    );
+    let absorbed = if canonical == left_terminal {
+        right_terminal
+    } else {
+        left_terminal
+    };
+    for terminals in [vec![absorbed], vec![canonical, absorbed]] {
+        assert_eq!(
+            graph.tadpoles(&terminals),
+            Err(TadpoleError::TerminalWithoutIncidentHalfEdge(absorbed))
+        );
+    }
+    let tadpoles = graph.tadpoles(&[canonical]).unwrap();
+    let hedge = graph.iter_crown(canonical).next().unwrap();
+    graph.forget_identification_history();
+    assert_eq!(graph.tadpoles(&[graph.node_id(hedge)]).unwrap(), tadpoles);
 }
 
 #[test]

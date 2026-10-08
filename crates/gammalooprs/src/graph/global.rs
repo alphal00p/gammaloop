@@ -224,7 +224,7 @@ impl ParseGraph {
 #[cfg(test)]
 mod tests {
     use linnet::{
-        half_edge::nodestore::NodeStorageVec,
+        half_edge::nodestore::NodeForest,
         parser::{DotGraph, DotVertexData},
     };
     use symbolica::{atom::Atom, parser::ParseSettings};
@@ -279,7 +279,7 @@ mod tests {
                 let g: Graph = g;
                 // g.to_dot_graph_with_settings().dot()
                 let serialized = g.dot_serialize(&DotExportSettings::default());
-                let parsed: DotGraph<NodeStorageVec<DotVertexData>> =
+                let parsed: DotGraph<NodeForest<DotVertexData>> =
                     DotGraph::from_string(serialized).unwrap();
 
                 assert_eq!(

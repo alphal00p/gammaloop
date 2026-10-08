@@ -25,13 +25,6 @@ pub struct CVNode<V> {
     pub children: Vec<TreeNodeId>,
 }
 impl<V> CVNode<V> {
-    pub fn shift(&mut self, root: RootId, nodes: TreeNodeId) {
-        self.parent_pointer.shift(root, nodes);
-        for c in &mut self.children {
-            c.0 += nodes.0;
-        }
-    }
-
     pub fn debug_display(
         &self,
         writer: &mut impl std::fmt::Write,
@@ -42,13 +35,6 @@ impl<V> CVNode<V> {
             write!(writer, "{child},").unwrap();
         }
         self.parent_pointer.debug_display(writer, draw_data);
-    }
-
-    pub fn forget<U>(&self) -> CVNode<U> {
-        CVNode {
-            parent_pointer: self.parent_pointer.forget(),
-            children: self.children.clone(),
-        }
     }
 }
 
@@ -238,17 +224,6 @@ impl<V> ForestNodeStore for ChildVecStore<V> {
         Ok(roots)
     }
 
-    fn set_root(&mut self, a: TreeNodeId, root: RootId) {
-        let rootx = self.root_node(a);
-        self.nodes[rootx.0].parent_pointer.parent = ParentId::Root(root);
-    }
-
-    fn forgetful_map<U>(&self) -> Self::Store<U> {
-        ChildVecStore {
-            nodes: self.nodes.iter().map(CVNode::forget).collect(),
-        }
-    }
-
     fn n_nodes(&self) -> usize {
         self.nodes.len()
     }
@@ -259,23 +234,6 @@ impl<V> ForestNodeStore for ChildVecStore<V> {
         old
     }
 
-    fn split_off(&mut self, at: TreeNodeId) -> Self {
-        // Splitting only rewrites parent pointers; children follow from them.
-        let mut parents = ParentPointerStore::from(ChildVecStore {
-            nodes: std::mem::take(&mut self.nodes),
-        });
-        let split = parents.split_off(at);
-        *self = parents.into();
-        split.into()
-    }
-
-    fn extend(&mut self, other: Self, shift_roots_by: RootId) {
-        let nodeshift = TreeNodeId(self.nodes.len());
-        self.nodes.extend(other.nodes.into_iter().map(|mut r| {
-            r.shift(shift_roots_by, nodeshift);
-            r
-        }));
-    }
     fn reparent(&mut self, parent: TreeNodeId, child: TreeNodeId) {
         // First remove child pointer of old parent:
         let old_parent = self.parent(child);
@@ -293,114 +251,6 @@ impl<V> ForestNodeStore for ChildVecStore<V> {
         }
         self.nodes[child.0].parent_pointer.parent = ParentId::Node(parent);
         self.nodes[parent.0].children.push(child);
-    }
-
-    fn swap(&mut self, a: TreeNodeId, b: TreeNodeId) {
-        // println!("Swapping {a} <-> {b}");
-        if a == b {
-            return;
-        }
-
-        // println!("{}", self.debug_draw(|_| None));
-        // println!("swapping {a} <-> {b}");
-        // Before modifying the parent pointers of the children, we save them.
-        let parent_a = self.parent(a);
-        let parent_b = self.parent(b);
-
-        // Now modify the parent pointers of the children.
-        {
-            let (bef, after) = self.nodes.split_at_mut(a.0);
-            let (anode, after) = after.split_first_mut().unwrap();
-
-            for c in &anode.children {
-                if *c <= a {
-                    if let Some(child) = bef.get_mut(c.0) {
-                        // println!("{}", b);
-                        if let ParentId::Node(pp) = &mut child.parent_pointer.parent {
-                            if *pp == a {
-                                *pp = b;
-                            }
-                        }
-                    }
-                } else if let Some(child) = after.get_mut(c.0 - (a.0 + 1)) {
-                    if let ParentId::Node(pp) = &mut child.parent_pointer.parent {
-                        if *pp == a {
-                            *pp = b;
-                        }
-                    }
-                }
-            }
-        }
-        {
-            let (bef, after) = self.nodes.split_at_mut(b.0);
-            let (bnode, after) = after.split_first_mut().unwrap();
-
-            for c in &bnode.children {
-                if *c <= b {
-                    if let Some(child) = bef.get_mut(c.0) {
-                        if let ParentId::Node(pp) = &mut child.parent_pointer.parent {
-                            if *pp == b {
-                                *pp = a;
-                            }
-                        }
-                    }
-                } else if let Some(child) = after.get_mut(c.0 - b.0 - 1) {
-                    if let ParentId::Node(pp) = &mut child.parent_pointer.parent {
-                        if *pp == b {
-                            *pp = a;
-                        }
-                    }
-                }
-            }
-        }
-
-        // println!("SS");
-
-        //Now we modify the child pointers of the parents. Here a swap is dangerous as we could have that parent(a) = parent(b)
-        if parent_b == parent_a {
-            let dummya = TreeNodeId(self.n_nodes());
-            let dummyb = TreeNodeId(self.n_nodes() + 1);
-            if let ParentId::Node(parent_a) = parent_a {
-                for c in &mut self.nodes[parent_a.0].children {
-                    if *c == a {
-                        *c = dummya;
-                    } else if *c == b {
-                        *c = dummyb
-                    }
-                }
-                for c in &mut self.nodes[parent_a.0].children {
-                    if *c == dummya {
-                        *c = b;
-                    } else if *c == dummyb {
-                        *c = a;
-                    }
-                }
-            }
-        } else {
-            // it is safe to swap directly
-            if let ParentId::Node(parent_b) = parent_b {
-                for c in &mut self.nodes[parent_b.0].children {
-                    if *c == b {
-                        *c = a;
-                        break;
-                    }
-                }
-            }
-
-            if let ParentId::Node(parent_a) = parent_a {
-                for c in &mut self.nodes[parent_a.0].children {
-                    if *c == a {
-                        *c = b;
-                        break;
-                    }
-                }
-            }
-        }
-
-        // println!("SSSS");
-        self.nodes.swap(a.0, b.0);
-        #[cfg(test)]
-        self.panicing_validate();
     }
 
     fn to_store(self) -> Self::Store<Self::NodeData> {
@@ -427,30 +277,10 @@ impl<V> ForestNodeStore for ChildVecStore<V> {
         node_id
     }
 
-    fn add_dataless_root(&mut self, root_id: RootId) -> TreeNodeId {
-        let node_id = TreeNodeId(self.nodes.len());
-        self.nodes.push(CVNode {
-            parent_pointer: PPNode::dataless_root(root_id),
-            children: Vec::new(),
-        });
-        node_id
-    }
-
     fn add_child(&mut self, data: Self::NodeData, parent: TreeNodeId) -> TreeNodeId {
         let node_id = TreeNodeId(self.nodes.len());
         self.nodes.push(CVNode {
             parent_pointer: PPNode::child(data, parent),
-            children: Vec::new(),
-        });
-        // Add this child to its parent's list.
-        self.nodes[parent.0].children.push(node_id);
-        node_id
-    }
-
-    fn add_dataless_child(&mut self, parent: TreeNodeId) -> TreeNodeId {
-        let node_id = TreeNodeId(self.nodes.len());
-        self.nodes.push(CVNode {
-            parent_pointer: PPNode::dataless_child(parent),
             children: Vec::new(),
         });
         // Add this child to its parent's list.
@@ -520,98 +350,8 @@ impl<V> ForestNodeStorePreorder for ChildVecStore<V> {
         // Use the generic PreorderIter helper
         PreorderIter::new(self, start)
     }
-
-    fn flatten_branches(&mut self, nodes: impl IntoIterator<Item = TreeNodeId>) {
-        // Lift branches directly below a root first. Nodes nested in them are
-        // then one hop from the root, so locating the remaining branches does
-        // not walk deep hierarchies.
-        let (mut direct, mut nested) = (Vec::new(), Vec::new());
-        for node in nodes {
-            match self.parent(node) {
-                ParentId::Node(root) if !matches!(self.parent(root), ParentId::Node(_)) => {
-                    direct.push((root, node))
-                }
-                ParentId::Node(_) => nested.push(node),
-                _ => {}
-            }
-        }
-        if direct.is_empty() && nested.is_empty() {
-            return;
-        }
-        let mut selected = SubSet::empty(self.n_nodes());
-        self.lift_branches(direct, &mut selected);
-        let nested = nested.into_iter().filter_map(|node| self.branch(node));
-        self.lift_branches(nested.collect(), &mut selected);
-    }
 }
 
-impl<V> ChildVecStore<V> {
-    /// Move the descendants of each `(root, branch)` directly after the branch
-    /// among the root's children, in preorder. `selected` must be empty and is
-    /// left empty.
-    fn lift_branches(
-        &mut self,
-        mut branches: Vec<(TreeNodeId, TreeNodeId)>,
-        selected: &mut SubSet<TreeNodeId>,
-    ) {
-        branches.retain(|&(_, branch)| {
-            let lift = !self.nodes[branch.0].children.is_empty() && !selected.includes(&branch);
-            if lift {
-                selected.add(branch);
-            }
-            lift
-        });
-        branches.sort_unstable_by_key(|&(root, _)| root);
-        let mut stack = Vec::new();
-        for group in branches.chunk_by(|a, b| a.0 == b.0) {
-            let root = group[0].0;
-            let mut children = std::mem::take(&mut self.nodes[root.0].children);
-            // Reparenting appends, so branches attached since the last
-            // flattening form a suffix of the root's children. Rebuild only
-            // that suffix, moving each branch's descendants after it in preorder.
-            let mut pending = group.len();
-            let mut start = children.len();
-            while pending > 0 {
-                start -= 1;
-                pending -= usize::from(selected.includes(&children[start]));
-            }
-            for child in children.split_off(start) {
-                children.push(child);
-                if !selected.includes(&child) {
-                    continue;
-                }
-                selected.sub(child);
-                self.append_descendants(root, child, &mut children, &mut stack);
-            }
-            self.nodes[root.0].children = children;
-        }
-    }
-
-    /// Push the descendants of `branch` onto `out` in preorder, making each a
-    /// direct child of `root`. `stack` must be empty and is left empty.
-    fn append_descendants(
-        &mut self,
-        root: TreeNodeId,
-        branch: TreeNodeId,
-        out: &mut Vec<TreeNodeId>,
-        stack: &mut Vec<(TreeNodeId, usize)>,
-    ) {
-        // Index the child vectors instead of taking them, so their
-        // allocations are kept for reuse rather than freed.
-        stack.push((branch, 0));
-        while let Some((node, next)) = stack.last_mut() {
-            let Some(&descendant) = self.nodes[node.0].children.get(*next) else {
-                self.nodes[node.0].children.clear();
-                stack.pop();
-                continue;
-            };
-            *next += 1;
-            self.nodes[descendant.0].parent_pointer.parent = ParentId::Node(root);
-            out.push(descendant);
-            stack.push((descendant, 0));
-        }
-    }
-}
 impl<V> ForestNodeStoreBfs for ChildVecStore<V> {
     fn iter_bfs(&self, start: TreeNodeId) -> impl Iterator<Item = TreeNodeId> + '_ {
         // Use the generic BfsIter helper
@@ -731,12 +471,4 @@ impl<V> From<ChildVecStore<V>> for ParentChildStore<V> {
 
         ParentChildStore { nodes }
     }
-}
-
-#[cfg(test)]
-mod test {
-    // use super::*;
-
-    #[test]
-    fn swap() {}
 }

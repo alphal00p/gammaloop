@@ -145,101 +145,41 @@ HedgeGraph(
       ]),
     ),
   ),
-  node_store: NodeStorageVec(
-    node_data: NodeVec([
+  node_store: NodeForest(
+    label: [
+      0,
+      1,
+      1,
+      0,
+      0,
+      1,
+      0,
+      1,
+      1,
+      1,
+      2,
+      2,
+      3,
+      3,
+      0,
+    ],
+    anchor: [
+      None,
+      None,
+      None,
+      None,
+    ],
+    absorbed_into: [
+      None,
+      None,
+      None,
+      None,
+    ],
+    data: [
       (),
       (),
       (),
       (),
-    ]),
-    hedge_data: HedgeVec([
-      NodeIndex(0),
-      NodeIndex(1),
-      NodeIndex(1),
-      NodeIndex(0),
-      NodeIndex(0),
-      NodeIndex(1),
-      NodeIndex(0),
-      NodeIndex(1),
-      NodeIndex(1),
-      NodeIndex(1),
-      NodeIndex(2),
-      NodeIndex(2),
-      NodeIndex(3),
-      NodeIndex(3),
-      NodeIndex(0),
-    ]),
-    nodes: NodeVec([
-      SubSet(
-        set: BitSeq(
-          order: "bitvec::order::Lsb0",
-          head: BitIdx(
-            width: 64,
-            index: 0,
-          ),
-          bits: 15,
-          data: [
-            16473,
-          ],
-        ),
-        id: PhantomData,
-      ),
-      SubSet(
-        set: BitSeq(
-          order: "bitvec::order::Lsb0",
-          head: BitIdx(
-            width: 64,
-            index: 0,
-          ),
-          bits: 15,
-          data: [
-            934,
-          ],
-        ),
-        id: PhantomData,
-      ),
-      SubSet(
-        set: BitSeq(
-          order: "bitvec::order::Lsb0",
-          head: BitIdx(
-            width: 64,
-            index: 0,
-          ),
-          bits: 15,
-          data: [
-            3072,
-          ],
-        ),
-        id: PhantomData,
-      ),
-      SubSet(
-        set: BitSeq(
-          order: "bitvec::order::Lsb0",
-          head: BitIdx(
-            width: 64,
-            index: 0,
-          ),
-          bits: 15,
-          data: [
-            12288,
-          ],
-        ),
-        id: PhantomData,
-      ),
-    ]),
-    absorbed: SubSet(
-      set: BitSeq(
-        order: "bitvec::order::Lsb0",
-        head: BitIdx(
-          width: 64,
-          index: 0,
-        ),
-        bits: 4,
-        data: [
-          0,
-        ],
-      ),
-      id: PhantomData,
-    ),
+    ],
   ),
 )

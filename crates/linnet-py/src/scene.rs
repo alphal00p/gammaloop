@@ -2,7 +2,6 @@
 use crate::{
     dot::PyGlobalData,
     graph::{EdgeRecord, GraphState, HalfEdgeRecord, NodeRecord, PyGraph},
-    native_graph::{PyHedgeGraph, PyNodeStore},
     PyDiagramRender, PyRenderSettings,
 };
 use linnest::svg::{Dash, Pattern, Scene, Stroke};
@@ -246,7 +245,7 @@ impl PyDiagramRender {
         let graph = Py::new(
             py,
             PyGraph::from_state(GraphState {
-                graph: PyHedgeGraph::build(builder, PyNodeStore::Vec),
+                graph: builder.build(),
                 name: scene.graph.name.clone(),
                 global_data: PyGlobalData::default(),
                 codec: None,

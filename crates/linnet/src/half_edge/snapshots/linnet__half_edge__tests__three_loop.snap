@@ -109,98 +109,38 @@ HedgeGraph(
       ]),
     ),
   ),
-  node_store: NodeStorageVec(
-    node_data: NodeVec([
+  node_store: NodeForest(
+    label: [
+      0,
+      1,
+      1,
+      0,
+      0,
+      1,
+      1,
+      2,
+      2,
+      3,
+      3,
+      0,
+    ],
+    anchor: [
+      None,
+      None,
+      None,
+      None,
+    ],
+    absorbed_into: [
+      None,
+      None,
+      None,
+      None,
+    ],
+    data: [
       (),
       (),
       (),
       (),
-    ]),
-    hedge_data: HedgeVec([
-      NodeIndex(0),
-      NodeIndex(1),
-      NodeIndex(1),
-      NodeIndex(0),
-      NodeIndex(0),
-      NodeIndex(1),
-      NodeIndex(1),
-      NodeIndex(2),
-      NodeIndex(2),
-      NodeIndex(3),
-      NodeIndex(3),
-      NodeIndex(0),
-    ]),
-    nodes: NodeVec([
-      SubSet(
-        set: BitSeq(
-          order: "bitvec::order::Lsb0",
-          head: BitIdx(
-            width: 64,
-            index: 0,
-          ),
-          bits: 12,
-          data: [
-            2073,
-          ],
-        ),
-        id: PhantomData,
-      ),
-      SubSet(
-        set: BitSeq(
-          order: "bitvec::order::Lsb0",
-          head: BitIdx(
-            width: 64,
-            index: 0,
-          ),
-          bits: 12,
-          data: [
-            102,
-          ],
-        ),
-        id: PhantomData,
-      ),
-      SubSet(
-        set: BitSeq(
-          order: "bitvec::order::Lsb0",
-          head: BitIdx(
-            width: 64,
-            index: 0,
-          ),
-          bits: 12,
-          data: [
-            384,
-          ],
-        ),
-        id: PhantomData,
-      ),
-      SubSet(
-        set: BitSeq(
-          order: "bitvec::order::Lsb0",
-          head: BitIdx(
-            width: 64,
-            index: 0,
-          ),
-          bits: 12,
-          data: [
-            1536,
-          ],
-        ),
-        id: PhantomData,
-      ),
-    ]),
-    absorbed: SubSet(
-      set: BitSeq(
-        order: "bitvec::order::Lsb0",
-        head: BitIdx(
-          width: 64,
-          index: 0,
-        ),
-        bits: 4,
-        data: [
-          0,
-        ],
-      ),
-      id: PhantomData,
-    ),
+    ],
   ),
 )

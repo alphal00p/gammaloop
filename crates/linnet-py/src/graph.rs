@@ -7,7 +7,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use linnet::half_edge::builder::{HedgeData, HedgeGraphBuilder};
 use linnet::half_edge::involution::{EdgeIndex, Flow, Hedge, HedgePair, Orientation};
 use linnet::half_edge::swap::Swap;
-use linnet::half_edge::NodeIndex;
+use linnet::half_edge::{EdgeAccessors, HedgeGraph, NodeIndex};
 use linnet::permutation::Permutation;
 use pyo3::class::gc::{PyTraverseError, PyVisit};
 use pyo3::exceptions::{PyIndexError, PyKeyError, PyReferenceError, PyTypeError, PyValueError};
@@ -19,7 +19,6 @@ use crate::drawing::{
     copy_drawing, drawing_dict, PyEdgeDrawing, PyHalfEdgeDrawing, PyNodeDrawing, EDGE_FIELDS,
     HEDGE_FIELDS, NODE_FIELDS,
 };
-use crate::native_graph::{PyHedgeGraph, PyNodeStore};
 use crate::topology::{PyCutPartition, PyCycle, PyDirectionBasis, PySubgraph, PyTraversalTree};
 
 static SPEC_ID: AtomicU64 = AtomicU64::new(0);
@@ -464,6 +463,9 @@ pub(crate) struct EdgeRecord {
     pub(crate) drawing: Py<PyDict>,
 }
 
+/// The Linnet graph behind a Python graph.
+pub(crate) type PyHedgeGraph = HedgeGraph<EdgeRecord, NodeRecord, HalfEdgeRecord>;
+
 pub(crate) struct IncrementalEdgeRecords {
     pub(crate) source: Option<HedgeData<HalfEdgeRecord>>,
     pub(crate) sink: Option<HedgeData<HalfEdgeRecord>>,
@@ -493,7 +495,11 @@ pub(crate) struct GraphState {
 
 impl GraphState {
     pub(crate) fn copy_graph(&self, py: Python<'_>) -> PyResult<PyHedgeGraph> {
-        self.graph.copy(py)
+        self.graph.map_data_ref_result(
+            |_, _, node| node.copy(py),
+            |_, _, _, edge| edge.map_result(|edge| edge.copy(py)),
+            |(_, half_edge)| half_edge.copy(py),
+        )
     }
 
     pub(crate) fn copy(&self, py: Python<'_>) -> PyResult<Self> {
@@ -1171,8 +1177,7 @@ impl PyGraph {
     /// Build a graph once from reusable descriptions. Referenced Node descriptions
     /// are included automatically; named and indexed endpoints must resolve.
     #[new]
-    #[pyo3(signature = (*, nodes=None, edges=None, name=None, global_data=None, codec=None, render_config=None, node_store=PyNodeStore::Vec))]
-    #[allow(clippy::too_many_arguments)]
+    #[pyo3(signature = (*, nodes=None, edges=None, name=None, global_data=None, codec=None, render_config=None))]
     fn new(
         py: Python<'_>,
         #[gen_stub(override_type(type_repr = "typing.Iterable[Node] | None", imports=("typing")))]
@@ -1185,7 +1190,6 @@ impl PyGraph {
         #[gen_stub(override_type(type_repr = "RenderSettings | None"))] render_config: Option<
             Py<PyAny>,
         >,
-        node_store: PyNodeStore,
     ) -> PyResult<Self> {
         let nodes = nodes
             .map(|items| {
@@ -1205,16 +1209,7 @@ impl PyGraph {
             })
             .transpose()?
             .unwrap_or_default();
-        Self::from_specs(
-            py,
-            nodes,
-            edges,
-            name,
-            global_data,
-            codec,
-            render_config,
-            node_store,
-        )
+        Self::from_specs(py, nodes, edges, name, global_data, codec, render_config)
     }
 
     #[getter]
@@ -1312,32 +1307,6 @@ impl PyGraph {
             .ok_or_else(|| PyReferenceError::new_err("graph has been cleared"))?
             .graph
             .n_hedges())
-    }
-
-    /// Return the node-storage strategy used by this graph.
-    #[getter]
-    fn node_store(&self) -> PyResult<PyNodeStore> {
-        Ok(self
-            .state
-            .borrow()
-            .as_ref()
-            .ok_or_else(|| PyReferenceError::new_err("graph has been cleared"))?
-            .graph
-            .node_store())
-    }
-
-    /// Copy this graph into another node-storage strategy.
-    #[pyo3(signature = (node_store))]
-    fn to_node_store(&self, py: Python<'_>, node_store: PyNodeStore) -> PyResult<Self> {
-        let state = self.state.borrow();
-        let state = state
-            .as_ref()
-            .ok_or_else(|| PyReferenceError::new_err("graph has been cleared"))?;
-        let graph = state
-            .copy_graph(py)?
-            .into_node_store(node_store)
-            .map_err(|error| PyValueError::new_err(error.to_string()))?;
-        Ok(Self::from_state(state.derived(py, graph)?))
     }
 
     #[pyo3(signature = (key))]
@@ -1570,43 +1539,37 @@ impl PyGraph {
     }
 
     #[classmethod]
-    #[pyo3(signature = (source, codec, *, node_store=PyNodeStore::Vec))]
     fn from_dot(
         _cls: &Bound<'_, PyType>,
         py: Python<'_>,
         source: &str,
         codec: Py<PyDotCodec>,
-        node_store: PyNodeStore,
     ) -> PyResult<Self> {
-        dot::decode_dot(py, source, codec, node_store)
+        dot::decode_dot(py, source, codec)
     }
 
     #[classmethod]
-    #[pyo3(signature = (source, codec, *, node_store=PyNodeStore::Vec))]
     fn from_dot_set(
         _cls: &Bound<'_, PyType>,
         py: Python<'_>,
         source: &str,
         codec: Py<PyDotCodec>,
-        node_store: PyNodeStore,
     ) -> PyResult<Vec<Self>> {
-        dot::decode_dot_set(py, source, codec, node_store)
+        dot::decode_dot_set(py, source, codec)
     }
 
     #[classmethod]
-    #[pyo3(signature = (path, codec, *, node_store=PyNodeStore::Vec))]
     fn from_dot_file(
         _cls: &Bound<'_, PyType>,
         py: Python<'_>,
         #[gen_stub(override_type(type_repr="builtins.str | os.PathLike[builtins.str]", imports=("builtins", "os")))]
         path: PathBuf,
         codec: Py<PyDotCodec>,
-        node_store: PyNodeStore,
     ) -> PyResult<Self> {
         let source = std::fs::read_to_string(&path).map_err(|error| {
             PyValueError::new_err(format!("failed to read {}: {error}", path.display()))
         })?;
-        dot::decode_dot(py, &source, codec, node_store)
+        dot::decode_dot(py, &source, codec)
     }
 
     #[pyo3(signature = (codec=None))]
@@ -2162,11 +2125,10 @@ impl PyGraph {
             .as_ref()
             .ok_or_else(|| PyReferenceError::new_err("graph has been cleared"))?;
         Ok(format!(
-            "Graph(nodes={}, edges={}, half_edges={}, node_store={:?})",
+            "Graph(nodes={}, edges={}, half_edges={})",
             state.graph.n_nodes(),
             state.graph.n_edges(),
             state.graph.n_hedges(),
-            state.graph.node_store(),
         ))
     }
 
@@ -2328,7 +2290,6 @@ impl PyEdgeSpec {
 }
 
 impl PyGraph {
-    #[allow(clippy::too_many_arguments)]
     fn from_specs(
         py: Python<'_>,
         mut nodes: Vec<Py<PyNodeSpec>>,
@@ -2337,7 +2298,6 @@ impl PyGraph {
         global_data: Option<PyGlobalData>,
         codec: Option<Py<PyDotCodec>>,
         render_config: Option<Py<PyAny>>,
-        node_store: PyNodeStore,
     ) -> PyResult<Self> {
         let mut tokens = BTreeSet::new();
         for node in &nodes {
@@ -2433,7 +2393,7 @@ impl PyGraph {
         }
 
         Ok(Self::from_state(GraphState {
-            graph: PyHedgeGraph::build(builder, node_store),
+            graph: builder.build(),
             name,
             global_data: global_data.unwrap_or_default(),
             codec,
@@ -2494,7 +2454,6 @@ pyo3_stub_gen::inventory::submit! {
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<PyFlow>()?;
     module.add_class::<PyOrientation>()?;
-    module.add_class::<PyNodeStore>()?;
     module.add_class::<PyNodeSpec>()?;
     module.add_class::<PyHalfEdgeSpec>()?;
     module.add_class::<PyEdgeSpec>()?;

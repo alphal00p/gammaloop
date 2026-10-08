@@ -383,7 +383,7 @@ impl<V> NodeForest<V> {
     }
 
     /// Each half-edge's node slot: the labels of the canonical image.
-    fn nodes(&self) -> impl Iterator<Item = u32> + '_ {
+    fn nodes(&self) -> impl ExactSizeIterator<Item = u32> + '_ {
         self.label
             .iter()
             .map(|&class| self.classes[class as usize].slot)
@@ -576,6 +576,37 @@ impl<V> NodeForest<V> {
     /// Whether node `i` is live, for each node: part of the canonical image.
     fn live_mask(&self) -> impl Iterator<Item = bool> + '_ {
         self.crowns.iter().map(Crown::is_live)
+    }
+
+    /// Rebuilds a store from its canonical parts, the input of every
+    /// deserializer: each half-edge's node, and each node's anchor and merge
+    /// target, [`NONE`] for none. Rejects inconsistent parts.
+    #[cfg(any(feature = "serde", feature = "rkyv"))]
+    fn from_parts(
+        label: Vec<u32>,
+        anchor: Vec<u32>,
+        absorbed_into: Vec<u32>,
+        data: Vec<V>,
+    ) -> Result<Self, String> {
+        let n_nodes = data.len();
+        if anchor.len() != n_nodes || absorbed_into.len() != n_nodes {
+            return Err("one anchor and state per node expected".to_owned());
+        }
+        if label.iter().any(|&node| node as usize >= n_nodes) {
+            return Err("half-edge labelled with a missing node".to_owned());
+        }
+        let mut store = NodeForest::from_labels(label, NodeVec(data));
+        for (crown, (anchor, absorbed_into)) in store
+            .crowns
+            .iter_mut()
+            .zip(anchor.into_iter().zip(absorbed_into))
+        {
+            crown.anchor = anchor;
+            crown.absorbed_into = absorbed_into;
+        }
+        store.n_absorbed = store.count_absorbed();
+        store.check_nodes().map_err(|error| error.to_string())?;
+        Ok(store)
     }
 }
 
@@ -830,6 +861,18 @@ impl<V> NodeStorageOps for NodeForest<V> {
         !self.crowns[node.0].is_live()
     }
 
+    /// Appends a live node with an empty crown. It takes the first free class,
+    /// which the class table keeps at the new slot.
+    fn add_node(&mut self, node_data: Self::NodeData) -> NodeIndex {
+        let node = index_u32(self.crowns.len());
+        if self.classes.len() == node as usize {
+            self.classes.push(ClassEntry::identity(node));
+        }
+        self.crowns.push(Crown::EMPTY);
+        self.data.push(node_data);
+        NodeIndex(node as usize)
+    }
+
     /// Fills the absorbed slots from the tail with [`partition_with`], moving node
     /// records and classes but no half-edge labels, and returns the absorbed
     /// payloads. The absorbed nodes' classes become free.
@@ -851,8 +894,7 @@ impl<V> NodeStorageOps for NodeForest<V> {
     }
 
     /// Each crown becomes a tree rooted at its smallest half-edge with the other
-    /// half-edges as children; absorbed nodes become empty roots recording the
-    /// node they were merged into.
+    /// half-edges as children; absorbed nodes become empty roots.
     fn to_forest<U, H>(
         &self,
         map_data: impl Fn(&Self::NodeData) -> U,
@@ -879,21 +921,12 @@ impl<V> NodeStorageOps for NodeForest<V> {
                 data: map_data(data),
             });
         }
-        let merged_into = if self.n_absorbed == 0 {
-            Vec::new()
-        } else {
-            self.crowns
-                .iter()
-                .map(|crown| (!crown.is_live()).then_some(RootId(crown.absorbed_into as usize)))
-                .collect()
-        };
         Forest {
             nodes: nodes
                 .into_iter()
                 .map(|node| node.expect("crowns partition the half-edges"))
                 .collect(),
             roots,
-            merged_into,
         }
     }
 
@@ -1234,8 +1267,7 @@ impl Compaction {
 
 #[cfg(feature = "serde")]
 mod serialization {
-    use super::{Crown, NodeForest, NodeStorageOps, NONE};
-    use crate::half_edge::NodeVec;
+    use super::{NodeForest, NONE};
 
     /// The canonical parts of a [`NodeForest`]; rings are rebuilt on input.
     #[derive(serde::Deserialize)]
@@ -1279,36 +1311,17 @@ mod serialization {
             (self.nodes().collect(), anchor, absorbed_into)
         }
 
-        /// Rebuilds a store from its parts, rejecting inconsistent ones.
-        pub(super) fn from_parts(parts: Parts<V>) -> Result<Self, String> {
-            let Parts {
-                label,
-                anchor,
-                absorbed_into,
-                data,
-            } = parts;
-            let n_nodes = data.len();
-            if anchor.len() != n_nodes || absorbed_into.len() != n_nodes {
-                return Err("one anchor and state per node expected".to_owned());
-            }
-            if label.iter().any(|&node| node as usize >= n_nodes) {
-                return Err("half-edge labelled with a missing node".to_owned());
-            }
-            let mut store = NodeForest::from_labels(label, NodeVec(data));
-            for (crown, (anchor, absorbed_into)) in store
-                .crowns
-                .iter_mut()
-                .zip(anchor.into_iter().zip(absorbed_into))
-            {
-                *crown = Crown {
-                    anchor: stored(anchor)?,
-                    absorbed_into: stored(absorbed_into)?,
-                    ..*crown
-                };
-            }
-            store.n_absorbed = store.count_absorbed();
-            store.check_nodes().map_err(|error| error.to_string())?;
-            Ok(store)
+        /// Rebuilds a store from its stored parts, rejecting inconsistent ones.
+        pub(super) fn from_stored(parts: Parts<V>) -> Result<Self, String> {
+            let indices = |indices: Vec<Option<u32>>| -> Result<Vec<u32>, String> {
+                indices.into_iter().map(stored).collect()
+            };
+            NodeForest::from_parts(
+                parts.label,
+                indices(parts.anchor)?,
+                indices(parts.absorbed_into)?,
+                parts.data,
+            )
         }
     }
 
@@ -1327,7 +1340,7 @@ mod serialization {
 
     impl<'de, V: serde::Deserialize<'de>> serde::Deserialize<'de> for NodeForest<V> {
         fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-            NodeForest::from_parts(Parts::deserialize(deserializer)?)
+            NodeForest::from_stored(Parts::deserialize(deserializer)?)
                 .map_err(serde::de::Error::custom)
         }
     }
@@ -1355,7 +1368,7 @@ mod binary {
     }
 
     fn rebuild<V>(parts: Parts<V>) -> Result<NodeForest<V>, DecodeError> {
-        NodeForest::from_parts(parts).map_err(DecodeError::OtherString)
+        NodeForest::from_stored(parts).map_err(DecodeError::OtherString)
     }
 
     impl<Context, V: Decode<Context>> Decode<Context> for NodeForest<V> {
@@ -1383,6 +1396,188 @@ mod binary {
     }
 }
 
+#[cfg(feature = "rkyv")]
+mod archive {
+    use std::{error::Error, ptr::addr_of};
+
+    use rkyv::{
+        bytecheck::{CheckBytes, StructCheckError},
+        out_field,
+        ser::{ScratchSpace, Serializer},
+        validation::ArchiveContext,
+        vec::{ArchivedVec, VecResolver},
+        Archive, Archived, Deserialize, Fallible, Serialize,
+    };
+
+    use super::NodeForest;
+    use crate::half_edge::{involution::Hedge, NodeIndex};
+
+    /// The archived canonical image of a [`NodeForest`]: each half-edge's node,
+    /// each node's anchor and merge target (`u32::MAX` for none) and the payloads.
+    /// Validation and deserialization rebuild the rings, so validation rejects
+    /// archives that do not describe a consistent store.
+    #[repr(C)]
+    pub struct ArchivedNodeForest<V: Archive> {
+        label: ArchivedVec<u32>,
+        anchor: ArchivedVec<u32>,
+        absorbed_into: ArchivedVec<u32>,
+        data: ArchivedVec<Archived<V>>,
+    }
+
+    impl<V: Archive> ArchivedNodeForest<V> {
+        /// The node of `hedge`.
+        pub fn node_id(&self, hedge: Hedge) -> NodeIndex {
+            NodeIndex(self.label[hedge.0] as usize)
+        }
+
+        /// Each node's payload, absorbed nodes included.
+        pub fn node_data(&self) -> &[Archived<V>] {
+            &self.data
+        }
+
+        fn to_store<W>(&self, data: Vec<W>) -> Result<NodeForest<W>, String> {
+            NodeForest::from_parts(
+                self.label.to_vec(),
+                self.anchor.to_vec(),
+                self.absorbed_into.to_vec(),
+                data,
+            )
+        }
+    }
+
+    pub struct NodeForestResolver {
+        label: VecResolver,
+        anchor: VecResolver,
+        absorbed_into: VecResolver,
+        data: VecResolver,
+    }
+
+    impl<V: Archive> Archive for NodeForest<V> {
+        type Archived = ArchivedNodeForest<V>;
+        type Resolver = NodeForestResolver;
+
+        unsafe fn resolve(&self, pos: usize, resolver: Self::Resolver, out: *mut Self::Archived) {
+            let n_nodes = self.crowns.len();
+            let (fp, fo) = out_field!(out.label);
+            ArchivedVec::resolve_from_len(self.label.len(), pos + fp, resolver.label, fo);
+            let (fp, fo) = out_field!(out.anchor);
+            ArchivedVec::resolve_from_len(n_nodes, pos + fp, resolver.anchor, fo);
+            let (fp, fo) = out_field!(out.absorbed_into);
+            ArchivedVec::resolve_from_len(n_nodes, pos + fp, resolver.absorbed_into, fo);
+            let (fp, fo) = out_field!(out.data);
+            ArchivedVec::resolve_from_len(n_nodes, pos + fp, resolver.data, fo);
+        }
+    }
+
+    impl<V: Serialize<S>, S: ScratchSpace + Serializer + ?Sized> Serialize<S> for NodeForest<V> {
+        fn serialize(&self, serializer: &mut S) -> Result<Self::Resolver, S::Error> {
+            let (anchor, absorbed_into) = (
+                self.crowns.iter().map(|crown| crown.anchor),
+                self.crowns.iter().map(|crown| crown.absorbed_into),
+            );
+            Ok(NodeForestResolver {
+                label: ArchivedVec::serialize_from_iter::<u32, _, _, _>(self.nodes(), serializer)?,
+                anchor: ArchivedVec::serialize_from_iter::<u32, _, _, _>(anchor, serializer)?,
+                absorbed_into: ArchivedVec::serialize_from_iter::<u32, _, _, _>(
+                    absorbed_into,
+                    serializer,
+                )?,
+                data: ArchivedVec::serialize_from_slice(&self.data.0, serializer)?,
+            })
+        }
+    }
+
+    impl<V: Archive, D: Fallible + ?Sized> Deserialize<NodeForest<V>, D> for ArchivedNodeForest<V>
+    where
+        Archived<V>: Deserialize<V, D>,
+    {
+        /// # Panics
+        ///
+        /// If the archive was not validated and is inconsistent.
+        fn deserialize(&self, deserializer: &mut D) -> Result<NodeForest<V>, D::Error> {
+            let data = (self.data.iter())
+                .map(|data| data.deserialize(deserializer))
+                .collect::<Result<_, _>>()?;
+            Ok(self
+                .to_store(data)
+                .expect("validated archives hold consistent node forests"))
+        }
+    }
+
+    #[derive(Debug, thiserror::Error)]
+    #[error("{0}")]
+    struct Inconsistent(String);
+
+    impl<V: Archive, C: ArchiveContext + ?Sized> CheckBytes<C> for ArchivedNodeForest<V>
+    where
+        Archived<V>: CheckBytes<C>,
+        C::Error: Error,
+    {
+        type Error = StructCheckError;
+
+        unsafe fn check_bytes<'a>(
+            value: *const Self,
+            context: &mut C,
+        ) -> Result<&'a Self, Self::Error> {
+            fn field<E: Error + 'static>(
+                field_name: &'static str,
+            ) -> impl FnOnce(E) -> StructCheckError {
+                move |error| StructCheckError {
+                    field_name,
+                    inner: Box::new(error),
+                }
+            }
+            ArchivedVec::check_bytes(addr_of!((*value).label), context).map_err(field("label"))?;
+            ArchivedVec::check_bytes(addr_of!((*value).anchor), context)
+                .map_err(field("anchor"))?;
+            ArchivedVec::check_bytes(addr_of!((*value).absorbed_into), context)
+                .map_err(field("absorbed_into"))?;
+            ArchivedVec::check_bytes(addr_of!((*value).data), context).map_err(field("data"))?;
+            let value = &*value;
+            value
+                .to_store(vec![(); value.data.len()])
+                .map_err(|error| field("label")(Inconsistent(error)))?;
+            Ok(value)
+        }
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::super::tests::{crowns, store};
+        use super::*;
+        use crate::half_edge::nodestore::NodeStorageOps;
+
+        #[test]
+        fn rkyv_round_trips_and_rejects_inconsistent_archives() {
+            let mut store = store(&[&[1, 3], &[0, 4], &[2], &[]]);
+            store.set_anchor(NodeIndex(1), Some(Hedge(4)));
+            store.identify_nodes(&[NodeIndex(1), NodeIndex(2)], 10);
+            let mut bytes = rkyv::to_bytes::<_, 256>(&store).unwrap();
+            let archived = rkyv::check_archived_root::<NodeForest<usize>>(&bytes).unwrap();
+            for hedge in (0..5).map(Hedge) {
+                assert_eq!(archived.node_id(hedge), store.node_id_ref(hedge));
+            }
+            let data: Vec<_> = archived.node_data().iter().map(|&d| d as usize).collect();
+            assert_eq!(data, [0, 10, 2, 3]);
+            let label = archived.label.as_ptr() as usize - bytes.as_ptr() as usize;
+
+            let back: NodeForest<usize> = rkyv::from_bytes(&bytes).unwrap();
+            assert_eq!(back, store);
+            assert_eq!(crowns(&back), crowns(&store));
+            assert_eq!(back.anchor(NodeIndex(1)), Some(Hedge(4)));
+            assert!(back.is_absorbed(NodeIndex(2)));
+
+            // Half-edge 0 labelled with a missing node passes the byte checks
+            // but not the store's.
+            bytes[label..label + 4].copy_from_slice(&7u32.to_ne_bytes());
+            assert!(rkyv::check_archived_root::<NodeForest<usize>>(&bytes).is_err());
+        }
+    }
+}
+
+#[cfg(feature = "rkyv")]
+pub use archive::{ArchivedNodeForest, NodeForestResolver};
+
 #[cfg(test)]
 mod tests {
     use std::{
@@ -1391,12 +1586,10 @@ mod tests {
     };
 
     use super::*;
-    use crate::half_edge::{
-        nodestore::NodeStorageVec, subgraph::ModifySubSet, swap::Swap, NodeVec,
-    };
+    use crate::half_edge::{subgraph::ModifySubSet, swap::Swap, NodeVec};
 
     /// A store whose node `i` has payload `i` and the half-edges `parts[i]`.
-    fn store(parts: &[&[usize]]) -> NodeForest<usize> {
+    pub(super) fn store(parts: &[&[usize]]) -> NodeForest<usize> {
         let n_hedges = parts.iter().flat_map(|part| part.iter()).count();
         NodeForest::build(
             parts
@@ -1417,7 +1610,7 @@ mod tests {
             .collect()
     }
 
-    fn crowns<V>(store: &NodeForest<V>) -> Vec<Vec<usize>> {
+    pub(super) fn crowns<V>(store: &NodeForest<V>) -> Vec<Vec<usize>> {
         (0..store.node_bound())
             .map(|node| crown(store, node))
             .collect()
@@ -1711,6 +1904,29 @@ mod tests {
         store.check_nodes().unwrap();
     }
 
+    /// Appended nodes take the free classes left by forgetting first, then mint
+    /// new ones, and accept half-edges like any other node.
+    #[test]
+    fn added_nodes_take_free_classes_first() {
+        let mut store = store(&[&[0], &[1], &[2]]);
+        store.identify_nodes(&[NodeIndex(0), NodeIndex(1), NodeIndex(2)], 10);
+        store.forget_identification_history();
+        assert_eq!(store.classes.len(), 3);
+        let added: Vec<_> = (20..24).map(|data| store.add_node(data)).collect();
+        assert_eq!(added, (1..5).map(NodeIndex).collect::<Vec<_>>());
+        assert_eq!(store.classes.len(), 5);
+        store.check_nodes().unwrap();
+        store.add_dangling_edge_mut(added[1]).unwrap();
+        store.add_dangling_edge_mut(added[3]).unwrap();
+        assert_eq!(
+            crowns(&store),
+            [vec![0, 1, 2], vec![], vec![3], vec![], vec![4]]
+        );
+        let data: Vec<_> = store.iter().map(|(_, d)| *d).collect();
+        assert_eq!(data, [10, 20, 21, 22, 23]);
+        store.check_nodes().unwrap();
+    }
+
     #[test]
     fn appending_shifts_pending_identifications() {
         let mut first = store(&[&[0], &[1]]);
@@ -1736,45 +1952,28 @@ mod tests {
     }
 
     /// Removal orders nodes as `[untouched | split | inside]` with the shared
-    /// kernel, like the bitset store, and keeps isolated nodes.
+    /// tail-fill kernel, moves the selected half-edges behind the others with the
+    /// edge store's swaps and keeps isolated nodes.
     #[test]
-    fn removal_renumbers_like_the_bitset_store() {
+    fn removal_renumbers_with_the_shared_kernel() {
         let parts: &[&[usize]] = &[&[0, 7], &[1, 2], &[], &[3, 8], &[4, 5], &[6], &[9]];
-        let vec: NodeStorageVec<usize> = NodeStorageVec::build(
-            parts
-                .iter()
-                .enumerate()
-                .map(|(data, hedges)| HedgeNodeBuilder {
-                    data,
-                    hedges: hedges.iter().copied().map(Hedge).collect(),
-                }),
-            10,
-        );
         let selection = subgraph(10, &[1, 2, 4, 8, 9]);
-        let payload_order = |data: &mut dyn Iterator<Item = usize>| data.collect::<Vec<_>>();
-        let (mut deleted, mut expected) = (store(parts), vec.clone());
+        let payloads =
+            |store: &NodeForest<usize>| store.iter().map(|(_, d)| *d).collect::<Vec<_>>();
+        let mut deleted = store(parts);
         deleted.delete(&selection);
-        expected.delete(&selection);
         deleted.check_nodes().unwrap();
-        assert_eq!(
-            payload_order(&mut deleted.iter().map(|(_, d)| *d)),
-            payload_order(&mut expected.iter().map(|(_, d)| *d))
-        );
-        for hedge in 0..5 {
-            let hedge = Hedge(hedge);
-            assert_eq!(deleted.node_id_ref(hedge), expected.node_id_ref(hedge));
-        }
+        assert_eq!(payloads(&deleted), [0, 5, 2, 3, 4]);
+        let nodes: Vec<_> = (0..5)
+            .map(|hedge| deleted.node_id_ref(Hedge(hedge)).0)
+            .collect();
+        assert_eq!(nodes, [0, 0, 1, 3, 4]);
 
-        let (mut remaining, mut expected) = (store(parts), vec);
+        let mut remaining = store(parts);
         let extracted = remaining.extract(&selection, |d| d + 100, |d| d);
-        expected.extract(&selection, |d| d + 100, |d| d);
-        assert_eq!(
-            payload_order(&mut remaining.iter().map(|(_, d)| *d)),
-            payload_order(&mut expected.iter().map(|(_, d)| *d))
-        );
+        assert_eq!(payloads(&remaining), payloads(&deleted));
         // Split copies come first, then the nodes wholly inside.
-        let data: Vec<_> = extracted.iter().map(|(_, d)| *d).collect();
-        assert_eq!(data, [100 + 3, 104, 1, 6]);
+        assert_eq!(payloads(&extracted), [100 + 3, 104, 1, 6]);
         assert_eq!(crowns(&extracted), [vec![3], vec![0], vec![1, 2], vec![4]]);
         extracted.check_nodes().unwrap();
         remaining.check_nodes().unwrap();
@@ -1798,9 +1997,10 @@ mod tests {
         extracted.check_nodes().unwrap();
     }
 
-    /// Hedge swaps keep crowns ascending and agree with the bitset store.
+    /// Hedge swaps keep crowns ascending and exchange the two half-edges' nodes;
+    /// node swaps exchange two nodes' crowns.
     #[test]
-    fn hedge_swaps_match_the_bitset_store() {
+    fn hedge_swaps_exchange_nodes_and_keep_crowns_ascending() {
         let parts: &[&[usize]] = &[
             &[0, 5, 9, 13],
             &[1, 2, 14],
@@ -1809,43 +2009,39 @@ mod tests {
             &[11, 12],
         ];
         let mut ring = store(parts);
-        let mut vec: NodeStorageVec<usize> = NodeStorageVec::build(
-            parts
-                .iter()
-                .enumerate()
-                .map(|(data, hedges)| HedgeNodeBuilder {
-                    data,
-                    hedges: hedges.iter().copied().map(Hedge).collect(),
-                }),
-            15,
-        );
+        // The node of each half-edge.
+        let mut model = vec![0; 15];
+        for (node, hedges) in parts.iter().enumerate() {
+            for &hedge in *hedges {
+                model[hedge] = node;
+            }
+        }
+        let expected = |model: &[usize], node: usize| -> Vec<usize> {
+            (0..15).filter(|&hedge| model[hedge] == node).collect()
+        };
         let mut state = 0x2545_f491_4f6c_dd1d_u64;
         for _ in 0..200 {
             state ^= state << 13;
             state ^= state >> 7;
             state ^= state << 17;
-            let (a, b) = (
-                Hedge(state as usize % 15),
-                Hedge((state >> 32) as usize % 15),
-            );
-            Swap::<Hedge>::swap(&mut ring, a, b);
-            Swap::<Hedge>::swap(&mut vec, a, b);
+            let (a, b) = (state as usize % 15, (state >> 32) as usize % 15);
+            Swap::<Hedge>::swap(&mut ring, Hedge(a), Hedge(b));
+            model.swap(a, b);
             ring.check_nodes().unwrap();
             for node in 0..5 {
-                let expected: Vec<_> = vec
-                    .get_neighbor_iterator(NodeIndex(node))
-                    .map(|h| h.0)
-                    .collect();
-                assert_eq!(crown(&ring, node), expected);
+                assert_eq!(crown(&ring, node), expected(&model, node));
             }
         }
         Swap::<NodeIndex>::swap(&mut ring, NodeIndex(0), NodeIndex(4));
-        Swap::<NodeIndex>::swap(&mut vec, NodeIndex(0), NodeIndex(4));
-        for hedge in 0..15 {
-            assert_eq!(
-                ring.node_id_ref(Hedge(hedge)),
-                vec.node_id_ref(Hedge(hedge))
-            );
+        for node in &mut model {
+            *node = match *node {
+                0 => 4,
+                4 => 0,
+                node => node,
+            };
+        }
+        for (hedge, &node) in model.iter().enumerate() {
+            assert_eq!(ring.node_id_ref(Hedge(hedge)).0, node);
         }
         ring.check_nodes().unwrap();
     }
@@ -1898,7 +2094,6 @@ mod tests {
         forest.validate_structure().unwrap();
         assert_eq!(forest.roots[0].root_id, TreeNodeId(0));
         assert!(forest.roots[1].root_id.is_empty() && forest.roots[3].root_id.is_empty());
-        assert_eq!(forest.merged_into, [None, Some(RootId(0)), None, None]);
         for hedge in 0..4 {
             let node = forest.root(TreeNodeId(hedge));
             assert_eq!(NodeIndex(node.0), store.node_id_ref(Hedge(hedge)));

@@ -178,8 +178,8 @@ endpoints also accept live `NodeView` values from that graph. A named `Node` des
 to an existing node; an anonymous description requires the live view returned by `add_node`.
 
 Insertion updates the native graph directly and preserves all pre-existing element views and
-live drawing objects. It does not copy the complete graph. Batch construction still avoids
-repeated storage maintenance; the cost of insertion depends on the chosen node store. Failed
+live drawing objects. It does not copy the complete graph: each insertion appends to the node
+store in amortized constant time, and batch construction only saves the per-call overhead. Failed
 validation leaves topology and existing views unchanged. Each successful insertion advances the
 topology revision, invalidating older `Subgraph`, `Cycle`, `OrientedCut`, `CutPartition`, and
 `TraversalTree` results because their masks and relationships describe the earlier graph.
@@ -200,12 +200,8 @@ edge records are replaced by the supplied value, name, and orientation. Use
 `delete(graph.subgraph(...))` for removal; there are no duplicate `remove_node` or `remove_edge`
 aliases.
 
-The long-lived topology is Linnet's native `HedgeGraph`; it is not a separate Python adjacency
-model. `NodeStore.Vec` is the default dense node store, while `NodeStore.Forest` selects the
-identification-preserving forest store. Pass `node_store=` to `Graph` or a DOT importer,
-inspect `graph.node_store`, and use `graph.to_node_store(...)` for an explicit non-mutating
-conversion. Derived graphs preserve their input backend; append and join use the left graph's
-backend.
+The long-lived topology is Linnet's native `HedgeGraph` with its single node store, the node
+forest; it is not a separate Python adjacency model.
 
 A `Subgraph` is a graph-bound, revision-checked native half-edge selection, augmented only with
 explicit zero-crown node IDs so isolated nodes remain first-class members. Construct one from named

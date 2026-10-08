@@ -2,9 +2,10 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use dot_parser::ast::CompassPt;
 use linnet::half_edge::involution::{EdgeIndex, Flow, Hedge, HedgePair};
-use linnet::half_edge::nodestore::NodeStorageVec;
 use linnet::half_edge::{HedgeGraph, NodeIndex};
-use linnet::parser::{DotEdgeData, DotGraph, DotHedgeData, DotVertexData, GlobalData};
+use linnet::parser::{
+    set::DotGraphSet, DotEdgeData, DotGraph, DotHedgeData, DotVertexData, GlobalData,
+};
 use pyo3::class::gc::{PyTraverseError, PyVisit};
 use pyo3::exceptions::{PyReferenceError, PyTypeError, PyValueError};
 use pyo3::prelude::*;
@@ -16,7 +17,6 @@ use crate::drawing::{
     HEDGE_FIELDS, NODE_FIELDS,
 };
 use crate::graph::{EdgeRecord, GraphState, HalfEdgeRecord, NodeRecord, PyGraph};
-use crate::native_graph::{PyHedgeGraph, PyNodeStore};
 
 /// DOT graph metadata kept separate from arbitrary Python element data.
 #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
@@ -981,22 +981,9 @@ fn snapshot_value<T: DetachedValue>(py: Python<'_>, value: &Bound<'_, PyAny>) ->
     T::clone_detached(py, value)
 }
 
-type RawGraph = HedgeGraph<DotEdgeData, DotVertexData, DotHedgeData, NodeStorageVec<DotVertexData>>;
-type RawDotGraph = DotGraph<NodeStorageVec<DotVertexData>>;
-type RawDotGraphSet = linnet::parser::set::GraphSet<
-    DotEdgeData,
-    DotVertexData,
-    DotHedgeData,
-    GlobalData,
-    NodeStorageVec<DotVertexData>,
->;
+type RawGraph = HedgeGraph<DotEdgeData, DotVertexData, DotHedgeData>;
 
-fn decode_parsed(
-    py: Python<'_>,
-    mut parsed: RawDotGraph,
-    codec: Py<PyDotCodec>,
-    node_store: PyNodeStore,
-) -> PyResult<PyGraph> {
+fn decode_parsed(py: Python<'_>, mut parsed: DotGraph, codec: Py<PyDotCodec>) -> PyResult<PyGraph> {
     let parsed_name =
         (!parsed.global_data.name.is_empty()).then(|| parsed.global_data.name.clone());
     let graph_name = if let Some(encoded) = parsed.global_data.statements.remove(GLOBAL_METADATA) {
@@ -1089,9 +1076,6 @@ fn decode_parsed(
         |_, _, _, index, edge| edge.map(|_| edges[index.0].take().expect("decoded edge")),
         |hedge, _| half_edges[hedge.0].take().expect("decoded half-edge"),
     );
-    let graph = PyHedgeGraph::Vec(graph)
-        .into_node_store(node_store)
-        .map_err(|error| PyValueError::new_err(error.to_string()))?;
     let global_data = PyGlobalData {
         inner: parsed.global_data,
     };
@@ -1107,28 +1091,22 @@ fn decode_parsed(
     }))
 }
 
-pub(crate) fn decode_dot(
-    py: Python<'_>,
-    source: &str,
-    codec: Py<PyDotCodec>,
-    node_store: PyNodeStore,
-) -> PyResult<PyGraph> {
-    let parsed = RawDotGraph::from_string(source)
-        .map_err(|error| PyValueError::new_err(error.to_string()))?;
-    decode_parsed(py, parsed, codec, node_store)
+pub(crate) fn decode_dot(py: Python<'_>, source: &str, codec: Py<PyDotCodec>) -> PyResult<PyGraph> {
+    let parsed =
+        DotGraph::from_string(source).map_err(|error| PyValueError::new_err(error.to_string()))?;
+    decode_parsed(py, parsed, codec)
 }
 
 pub(crate) fn decode_dot_set(
     py: Python<'_>,
     source: &str,
     codec: Py<PyDotCodec>,
-    node_store: PyNodeStore,
 ) -> PyResult<Vec<PyGraph>> {
-    let parsed = RawDotGraphSet::from_string(source)
+    let parsed = DotGraphSet::from_string(source)
         .map_err(|error| PyValueError::new_err(error.to_string()))?;
     parsed
         .into_iter()
-        .map(|graph| decode_parsed(py, graph, codec.clone_ref(py), node_store))
+        .map(|graph| decode_parsed(py, graph, codec.clone_ref(py)))
         .collect()
 }
 
@@ -1153,12 +1131,6 @@ pub(crate) fn encode_graph(
             state.name.clone(),
             state.global_data.clone(),
         )
-    };
-    let topology = topology
-        .into_node_store(PyNodeStore::Vec)
-        .map_err(|error| PyValueError::new_err(error.to_string()))?;
-    let PyHedgeGraph::Vec(topology) = topology else {
-        unreachable!("requested Vec node storage")
     };
     let codec = codec.borrow(py);
     let mut raw_nodes = Vec::with_capacity(topology.n_nodes());

@@ -66,13 +66,10 @@ serde_json = { workspace = true }
 similar-asserts = "1.7.0"
 
 [features]
-default = ["native", "nodestore-vec", "serde"]
+default = ["native", "serde"]
 bincode = ["dep:bincode", "serde"]
 drawing = ["dep:cgmath", "cgmath/serde", "dep:clarabel", "dep:twofloat"]
 energy_trace = []
-nodestore-forest-child-vec = []
-nodestore-forest-parent-child = []
-nodestore-vec = []
 rkyv = ["dep:rkyv"]
 serde = ["bitvec/serde", "dep:serde"]
 symbolica = ["dep:symbolica", "dep:symbolica-utils"]

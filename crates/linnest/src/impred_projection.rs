@@ -53,7 +53,7 @@ fn id_keys(value: &Value, name: &str) -> Result<BTreeMap<usize, String>> {
 
 fn position_path(kind: &str, index: usize) -> String {
     if kind == "node" {
-        format!("/graph/node_store/node_data/{index}")
+        format!("/graph/node_store/data/{index}")
     } else {
         format!("/graph/edge_store/data/{index}/0")
     }

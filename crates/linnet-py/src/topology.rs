@@ -5,7 +5,8 @@ use std::collections::BTreeSet;
 use linnet::half_edge::algorithms::DirectionBasis;
 use linnet::half_edge::involution::{EdgeIndex, Hedge};
 use linnet::half_edge::subgraph::{
-    cut::OrientedCut, cycle::Cycle, Inclusion, ModifySubSet, SuBitGraph, SubSetLike, SubSetOps,
+    cut::OrientedCut, cycle::Cycle, Inclusion, ModifySubSet, SuBitGraph, SubGraphOps, SubSetLike,
+    SubSetOps,
 };
 use linnet::half_edge::tree::SimpleTraversalTree;
 use linnet::half_edge::NodeIndex;
@@ -14,8 +15,7 @@ use pyo3::exceptions::{PyIndexError, PyReferenceError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::PyAny;
 
-use crate::graph::{PyEdge, PyGraph, PyHalfEdge, PyNode, PyOrientation};
-use crate::native_graph::PyHedgeGraph;
+use crate::graph::{PyEdge, PyGraph, PyHalfEdge, PyHedgeGraph, PyNode, PyOrientation};
 
 /// Selects which notion of edge direction a directed algorithm follows.
 #[cfg_attr(
@@ -305,11 +305,9 @@ impl PySubgraph {
     fn complement(&self, py: Python<'_>) -> PyResult<Self> {
         let graph = self.owner(py)?.borrow();
         let state = graph.state.borrow();
-        let filter = state
-            .as_ref()
-            .expect("checked")
-            .graph
-            .complement(&self.subgraph);
+        let filter = self
+            .subgraph
+            .complement(&state.as_ref().expect("checked").graph);
         let isolated_nodes = isolated_node_indices(&state.as_ref().expect("checked").graph)
             .difference(&self.isolated_nodes)
             .copied()
@@ -905,11 +903,8 @@ impl PyTraversalTree {
         }
         let graph = self.owner(py)?.borrow();
         let state = graph.state.borrow();
-        state
-            .as_ref()
-            .expect("checked")
-            .graph
-            .traversal_parent(&self.tree, NodeIndex(node))
+        self.tree
+            .node_parent(NodeIndex(node), &state.as_ref().expect("checked").graph)
             .map(|parent| self.node_view(py, parent.0))
             .transpose()
     }
@@ -933,7 +928,7 @@ impl PyTraversalTree {
                 .node_order()
                 .into_iter()
                 .filter(|candidate| {
-                    graph.traversal_parent(&self.tree, *candidate) == Some(NodeIndex(node))
+                    self.tree.node_parent(*candidate, graph) == Some(NodeIndex(node))
                 })
                 .collect::<Vec<_>>()
         };
@@ -957,11 +952,11 @@ impl PyTraversalTree {
         let ancestors = {
             let graph = self.owner(py)?.borrow();
             let state = graph.state.borrow();
-            state
-                .as_ref()
-                .expect("checked")
-                .graph
-                .traversal_ancestors(&self.tree, NodeIndex(node))
+            let graph = &state.as_ref().expect("checked").graph;
+            self.tree
+                .ancestor_iter_node(NodeIndex(node), graph.as_ref())
+                .skip(1)
+                .collect::<Vec<_>>()
         };
         ancestors
             .into_iter()
@@ -1002,7 +997,7 @@ impl PyTraversalTree {
                     "both edge endpoints must be part of this traversal tree",
                 ));
             }
-            graph.traversal_cycle(&self.tree, hedge)
+            self.tree.get_cycle(hedge, graph)
         };
         Ok(cycle.map(|cycle| PyCycle {
             graph: Some(graph_object.clone_ref(py)),
@@ -1326,7 +1321,7 @@ impl PyGraph {
                 .as_ref()
                 .expect("checked")
                 .graph
-                .internal_boundary(&subgraph.subgraph)
+                .internal_crown(&subgraph.subgraph)
         };
         Ok(PySubgraph::new(slf.clone_ref(py), revision, boundary))
     }
@@ -1346,7 +1341,7 @@ impl PyGraph {
                 .as_ref()
                 .expect("checked")
                 .graph
-                .boundary(&subgraph.subgraph)
+                .full_crown(&subgraph.subgraph)
         };
         Ok(PySubgraph::new(slf.clone_ref(py), revision, boundary))
     }
@@ -1503,8 +1498,8 @@ impl PyGraph {
                 .as_ref()
                 .expect("checked")
                 .graph
-                .topological_order_of(&filter, direction.into())
-                .map_err(PyValueError::new_err)?
+                .topo_sort_kahn_of(&filter, direction.into())
+                .map_err(|error| PyValueError::new_err(error.to_string()))?
         };
         order.extend(directed);
         order
@@ -1533,7 +1528,7 @@ impl PyGraph {
             let reduced = state
                 .copy_graph(py)?
                 .transitive_reduction(direction.into())
-                .map_err(PyValueError::new_err)?;
+                .map_err(|error| PyValueError::new_err(error.to_string()))?;
             state.derived(py, reduced)?
         };
         Ok(PyGraph::from_state(candidate))
@@ -1664,7 +1659,7 @@ impl PyGraph {
                 .as_ref()
                 .expect("checked")
                 .graph
-                .all_bonds_of(&filter, minimum, maximum)
+                .all_bonds_of(&filter, &(minimum..=maximum))
         };
         // Isolated nodes have no edge boundary and therefore contribute no bond.
         drop(isolated_nodes);
@@ -1706,7 +1701,9 @@ impl PyGraph {
                 .as_ref()
                 .expect("checked")
                 .graph
-                .a_bond_of(&filter, minimum, maximum)
+                .a_bond_of(&filter, &|bond: &SuBitGraph| {
+                    (minimum..=maximum).contains(&bond.n_included())
+                })
         };
         Ok(bond.map(|bond| PySubgraph::new(slf.clone_ref(py), revision, bond)))
     }
@@ -1750,7 +1747,7 @@ impl PyGraph {
                 .expect("checked")
                 .graph
                 .all_cycles_of(&filter, rank)
-                .map_err(PyValueError::new_err)?
+                .map_err(|error| PyValueError::new_err(error.to_string()))?
         };
         Ok(cycles
             .into_iter()
@@ -1781,7 +1778,7 @@ impl PyGraph {
                 .expect("checked")
                 .graph
                 .tadpoles(&externals)
-                .map_err(PyValueError::new_err)?
+                .map_err(|error| PyValueError::new_err(error.to_string()))?
         };
         tadpoles.sort_by_key(|tadpole| {
             tadpole
@@ -1898,15 +1895,13 @@ impl PyGraph {
                         "an isolated traversal root has no includable half-edge",
                     ));
                 }
-                (graph.empty_traversal_tree(), Some(root.0))
+                (SimpleTraversalTree::empty(graph), Some(root.0))
             } else if depth_first {
-                graph
-                    .depth_first_traverse(&filter, &root, include)
+                SimpleTraversalTree::depth_first_traverse(graph, &filter, &root, include)
                     .map(|tree| (tree, None))
                     .map_err(|error| PyValueError::new_err(error.to_string()))?
             } else {
-                graph
-                    .breadth_first_traverse(&filter, &root, include)
+                SimpleTraversalTree::breadth_first_traverse(graph, &filter, &root, include)
                     .map(|tree| (tree, None))
                     .map_err(|error| PyValueError::new_err(error.to_string()))?
             }

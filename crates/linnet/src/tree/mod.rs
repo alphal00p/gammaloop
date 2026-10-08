@@ -31,11 +31,7 @@ use child_vec::ChildVecStore;
 use parent_pointer::{PPNode, ParentId, ParentPointerStore};
 use thiserror::Error;
 
-use crate::half_edge::{
-    involution::Hedge,
-    subgraph::{Inclusion, SuBitGraph, SubSetLike, SubSetOps},
-    NodeIndex,
-};
+use crate::half_edge::{involution::Hedge, NodeIndex};
 
 pub mod child_pointer;
 pub mod child_vec;
@@ -132,6 +128,12 @@ impl From<NodeIndex> for RootId {
     }
 }
 
+impl From<RootId> for NodeIndex {
+    fn from(value: RootId) -> Self {
+        NodeIndex(value.0)
+    }
+}
+
 impl From<usize> for RootId {
     fn from(i: usize) -> Self {
         RootId(i)
@@ -156,12 +158,6 @@ pub struct Forest<R, N> {
     pub(crate) nodes: N,
     /// Metadata for each root/tree in the forest.
     pub(crate) roots: Vec<RootData<R>>,
-    /// Identification history: entry `i` is the root that root `i` was identified
-    /// into, if any. Such a root is kept until the history is forgotten, with the
-    /// subtree it owned when it was identified, or none if it owned none or the
-    /// survivor took its whole tree. Empty while no history is retained, otherwise
-    /// one entry per root, so root records stay small and the check is O(1).
-    pub(crate) merged_into: Vec<Option<RootId>>,
 }
 
 impl<R, N> Index<&RootId> for Forest<R, N> {
@@ -254,44 +250,6 @@ impl<R, N: ForestNodeStoreAncestors> Forest<R, N> {
     }
 }
 
-impl<R, N: ForestNodeStore> Forest<R, N> {
-    pub fn root_node_for_root(&self, root_id: RootId) -> TreeNodeId {
-        self.roots[root_id.0].root_id
-    }
-
-    pub fn root_node_for_node(&self, node_id: NodeIndex) -> TreeNodeId {
-        self.root_node_for_root(node_id.into())
-    }
-
-    pub fn root_hedge_for_node(&self, node_id: NodeIndex) -> Hedge {
-        self.root_node_for_node(node_id).into()
-    }
-}
-
-impl<R, N> Forest<R, N>
-where
-    N: ForestNodeStore
-        + Default
-        + Into<ParentPointerStore<N::NodeData>>
-        + From<ParentPointerStore<N::NodeData>>,
-{
-    pub fn reroot_many(&mut self, new_roots: impl IntoIterator<Item = TreeNodeId>) -> usize {
-        let mut nodes: ParentPointerStore<N::NodeData> = std::mem::take(&mut self.nodes).into();
-        let mut changed = 0;
-
-        for new_root in new_roots {
-            let root_id = nodes.change_root(new_root);
-            if self.roots[root_id.0].root_id != new_root {
-                self.roots[root_id.0].root_id = new_root;
-                changed += 1;
-            }
-        }
-
-        self.nodes = nodes.into();
-        changed
-    }
-}
-
 pub struct NodeIdIter {
     pub(crate) range: Range<usize>,
     pub(crate) current: TreeNodeId,
@@ -344,7 +302,6 @@ impl<R, N: ForestNodeStore> Forest<R, N> {
                 })
                 .collect(),
             nodes: self.nodes,
-            merged_into: self.merged_into,
         }
     }
 
@@ -362,7 +319,6 @@ impl<R, N: ForestNodeStore> Forest<R, N> {
                 })
                 .collect(),
             nodes: self.nodes.clone(),
-            merged_into: self.merged_into.clone(),
         }
     }
 
@@ -375,7 +331,6 @@ impl<R, N: ForestNodeStore> Forest<R, N> {
         Forest {
             nodes: self.nodes.map(transform),
             roots: self.roots,
-            merged_into: self.merged_into,
         }
     }
 
@@ -389,7 +344,6 @@ impl<R, N: ForestNodeStore> Forest<R, N> {
         Forest {
             nodes: self.nodes.map_ref(transform),
             roots: self.roots.clone(),
-            merged_into: self.merged_into.clone(),
         }
     }
 }
@@ -411,9 +365,6 @@ impl<R, N> Forest<R, N> {
             data: tree_data,
             root_id: root_node_id,
         });
-        if self.has_identification_history() {
-            self.merged_into.push(None);
-        }
         (root_node_id, root_id)
     }
 
@@ -435,7 +386,6 @@ impl<R, N: Default> Forest<R, N> {
         Forest {
             nodes: N::default(),
             roots: Vec::new(),
-            merged_into: Vec::new(),
         }
     }
 }
@@ -445,8 +395,6 @@ impl<R, N: Default> Forest<R, N> {
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "bincode", derive(bincode::Encode, bincode::Decode))]
 pub enum ForestError {
-    #[error("Length mismatch")]
-    LengthMismatch,
     #[error("Parent pointers are cyclic")]
     CyclicPP,
     #[error("Child pointers are cyclic")]
@@ -455,16 +403,12 @@ pub enum ForestError {
     SelfLoopPP(TreeNodeId),
     #[error("Parent pointer of child of {0} is not correct")]
     WrongPP(TreeNodeId),
-    #[error("Does not partition: Sets overlap")]
-    DoesNotPartion,
     #[error("Does not partition: Sets do not cover the domain")]
     IncompletePartition,
     #[error("Invalid TreeNodeId: {0:?}")]
     InvalidNodeId(TreeNodeId),
     #[error("Invalid RootId: {0:?}")]
     InvalidRootId(RootId),
-    #[error("Mismatch roots len {expected}!={obtained}")]
-    MismatchRootsLen { expected: usize, obtained: usize },
     #[error("Root node pointer wrong for root {0}")]
     WrongRootPointer(RootId),
 }
@@ -476,38 +420,7 @@ impl<U, P: ForestNodeStore> Forest<U, P> {
         }
         self.nodes.root_node(nodeid)
     }
-    pub(crate) fn is_active_root(&self, root: RootId) -> bool {
-        !matches!(self.merged_into.get(root.0), Some(Some(_)))
-    }
-
-    /// Whether roots identified into others are still retained.
-    pub(crate) fn has_identification_history(&self) -> bool {
-        !self.merged_into.is_empty()
-    }
-
-    /// The active root that `root` was, possibly transitively, identified into.
-    pub(crate) fn active_root(&self, mut root: RootId) -> RootId {
-        while let Some(&Some(merged)) = self.merged_into.get(root.0) {
-            root = merged;
-        }
-        root
-    }
-
-    /// Records that `absorbed` was identified into `survivor`.
-    pub(crate) fn merge_into(&mut self, absorbed: RootId, survivor: RootId) {
-        if self.merged_into.is_empty() {
-            self.merged_into.resize(self.roots.len(), None);
-        }
-        self.merged_into[absorbed.0] = Some(survivor);
-    }
-
     pub fn validate_structure(&self) -> Result<(), ForestError> {
-        if self.has_identification_history() && self.merged_into.len() != self.roots.len() {
-            return Err(ForestError::MismatchRootsLen {
-                expected: self.roots.len(),
-                obtained: self.merged_into.len(),
-            });
-        }
         let roots = self.nodes.validate()?;
 
         for (rid, nid) in roots {
@@ -645,101 +558,6 @@ impl<U, P: ForestNodeStore> Forest<U, P> {
 
         output
     }
-    /// Exchanges the indices of two roots. Identification links to `a` or `b` are
-    /// not renamed, so only forests without identification history, or history
-    /// that is about to be dropped, may swap roots.
-    pub fn swap_roots(&mut self, a: RootId, b: RootId) {
-        if a == b {
-            return;
-        }
-
-        let roota = self.roots[a.0].root_id;
-        let roota_active = self.is_active_root(a);
-        let rootb = self.roots[b.0].root_id;
-        let rootb_active = self.is_active_root(b);
-
-        if roota_active && !roota.is_empty() {
-            self.nodes.set_root(roota, b);
-        }
-        if rootb_active && !rootb.is_empty() {
-            self.nodes.set_root(rootb, a);
-        }
-
-        self.roots.swap(a.0, b.0);
-        if self.has_identification_history() {
-            self.merged_into.swap(a.0, b.0);
-        }
-    }
-
-    pub fn from_bitvec_partition<I: IntoIterator<Item = (U, SuBitGraph)>>(
-        bitvec_part: I,
-    ) -> Result<Self, ForestError> {
-        Forest::<U, ParentPointerStore<P::NodeData>>::from_bitvec_partition_impl(bitvec_part).map(
-            |a| Forest {
-                nodes: P::from_pp(a.nodes),
-                roots: a.roots,
-                merged_into: a.merged_into,
-            },
-        )
-    }
-}
-
-/// Construction from BitVec partition (remains the same)
-impl<U, V> Forest<U, ParentPointerStore<V>> {
-    /// Creates a forest from a partition represented by a vector of (RootData, BitVec).
-    /// Each BitVec represents the set of node indices belonging to that tree/root.
-    /// Nodes within a set are linked arbitrarily (first encountered becomes root, others point to it).
-    /// Node data is set to `()`.
-    ///
-    /// Returns `Err(ForestError)` if the BitVecs have different lengths or overlap.
-    fn from_bitvec_partition_impl<I: IntoIterator<Item = (U, SuBitGraph)>>(
-        bitvec_part: I,
-    ) -> Result<Self, ForestError> {
-        let mut nodes = vec![];
-        let mut roots = vec![];
-        let mut cover: Option<SuBitGraph> = None;
-
-        for (d, set) in bitvec_part {
-            let len = set.size();
-            if let Some(c) = &mut cover {
-                if c.size() != len {
-                    return Err(ForestError::LengthMismatch);
-                }
-                if c.intersects(&set) {
-                    return Err(ForestError::DoesNotPartion);
-                }
-                c.union_with(&set);
-            } else {
-                cover = Some(SuBitGraph::empty(len));
-
-                nodes.resize_with(len, || None);
-                // nodes = vec![None; len];
-            }
-            let mut first = None;
-            for i in set.included_iter() {
-                if let Some(root) = first {
-                    nodes[i.0] = Some(PPNode::dataless_child(root))
-                } else {
-                    first = Some(i.into());
-                    nodes[i.0] = Some(PPNode::dataless_root(RootId(roots.len())));
-                }
-            }
-            roots.push(RootData {
-                root_id: first.unwrap_or(TreeNodeId::EMPTY),
-                data: d,
-            });
-        }
-        Ok(Forest {
-            nodes: nodes
-                .into_iter()
-                .collect::<Option<Vec<_>>>()
-                .unwrap()
-                .into_iter()
-                .collect(),
-            roots,
-            merged_into: Vec::new(),
-        })
-    }
 }
 
 // --- Core Traits ---
@@ -774,12 +592,6 @@ pub trait ForestNodeStore:
     }
 
     fn n_nodes(&self)->usize;
-    fn swap(&mut self,a:TreeNodeId,b:TreeNodeId);
-    fn set_root(&mut self,a:TreeNodeId,root:RootId);
-
-    fn from_pp(pp: ParentPointerStore<Self::NodeData>) -> Self {
-        Self::from_parents(pp.nodes)
-    }
 
     /// Construct storage directly from ordered parent records.
     fn from_parents(nodes: impl IntoIterator<Item = PPNode<Self::NodeData>>) -> Self {
@@ -789,19 +601,6 @@ pub trait ForestNodeStore:
 
 
 
-    fn split_off(&mut self,at:TreeNodeId)->Self;
-
-
-    /// Makes x's root the parent of y's root and returns it. Nodes that already
-    /// share a tree are left unchanged.
-    fn make_root_of(&mut self, x: TreeNodeId, y: TreeNodeId) -> TreeNodeId{
-        let rootx = self.root_node(x);
-        let rooty = self.root_node(y);
-        if rootx != rooty {
-            self.reparent(rootx, rooty);
-        }
-        rootx
-    }
 
     /// Makes `parent` the parent of `child`, which must not be an ancestor of `parent`.
     fn reparent(&mut self,parent:TreeNodeId,child:TreeNodeId);
@@ -827,19 +626,6 @@ pub trait ForestNodeStore:
         }
     }
 
-    /// The root of `nodeid` and the ancestor of `nodeid` directly below it,
-    /// or `None` for a root.
-    fn branch(&self, nodeid: TreeNodeId) -> Option<(TreeNodeId, TreeNodeId)> {
-        let ParentId::Node(mut root) = self.parent(nodeid) else {
-            return None;
-        };
-        let mut branch = nodeid;
-        while let ParentId::Node(parent) = self.parent(root) {
-            (branch, root) = (root, parent);
-        }
-        Some((root, branch))
-    }
-
     fn iter_nodes(&self) -> impl Iterator<Item = (TreeNodeId, Option<&Self::NodeData>)>;
     fn iter_node_id(&self) -> NodeIdIter {
         NodeIdIter {
@@ -849,21 +635,16 @@ pub trait ForestNodeStore:
     }
     /// Adds a new root node.
     fn add_root(&mut self, data: Self::NodeData, root_id: RootId) -> TreeNodeId;
-    fn add_dataless_root(&mut self, root_id: RootId) -> TreeNodeId;
 
     /// Adds a new child node as the *last* child of the parent.
     fn add_child(&mut self, data: Self::NodeData, parent: TreeNodeId) -> TreeNodeId;
 
 
     fn set_node_data(&mut self,data:Self::NodeData,node_id:TreeNodeId)->Option<Self::NodeData>;
-    /// Adds a new child node as the *last* child of the parent.
-    fn add_dataless_child(&mut self, parent: TreeNodeId) -> TreeNodeId;
 
     fn map<F, U>(self, transform: F) -> Self::Store<U> where F: FnMut(Self::NodeData) -> U;
     fn map_ref<F, U>(&self, transform: F) -> Self::Store<U> where F: FnMut(&Self::NodeData) -> U;
-    fn forgetful_map<U>(&self)->Self::Store<U>;
 
-    fn extend(&mut self,other:Self,shift_roots_by:RootId);
 }
 
 /// Trait extension for `ForestNodeStore` providing downward traversal capabilities.
@@ -890,12 +671,6 @@ pub trait ForestNodeStorePreorder: ForestNodeStore {
         Self: 'a;
     /// Returns a pre-order DFS iterator starting from `start`.
     fn iter_preorder(&self, start: TreeNodeId) -> Self::Iterator<'_>;
-
-    /// For each of `nodes`, make every node of its [branch](ForestNodeStore::branch)
-    /// a direct child of the root, preserving preorder, node IDs and payloads.
-    /// Roots and other branches are unchanged. This deliberately discards the
-    /// branch hierarchy; once a branch is flat, only the walk up remains.
-    fn flatten_branches(&mut self, nodes: impl IntoIterator<Item = TreeNodeId>);
 }
 
 /// Trait for stores supporting breadth-first traversal.
@@ -936,7 +711,6 @@ impl<P, V> Forest<V, P> {
         Forest {
             nodes: self.nodes.into(),
             roots: self.roots,
-            merged_into: self.merged_into,
         }
     }
 }
@@ -946,7 +720,6 @@ impl<R, V> From<Forest<R, ParentPointerStore<V>>> for Forest<R, ParentChildStore
         Forest {
             nodes: forest.nodes.into(),
             roots: forest.roots,
-            merged_into: forest.merged_into,
         }
     }
 }
@@ -956,7 +729,6 @@ impl<R, V> From<Forest<R, ParentChildStore<V>>> for Forest<R, ParentPointerStore
         Forest {
             nodes: forest.nodes.into(),
             roots: forest.roots,
-            merged_into: forest.merged_into,
         }
     }
 }
@@ -966,7 +738,6 @@ impl<R, V> From<Forest<R, ChildVecStore<V>>> for Forest<R, ParentChildStore<V>> 
         Forest {
             nodes: forest.nodes.into(),
             roots: forest.roots,
-            merged_into: forest.merged_into,
         }
     }
 }
@@ -976,7 +747,6 @@ impl<R, V> From<Forest<R, ParentChildStore<V>>> for Forest<R, ChildVecStore<V>> 
         Forest {
             nodes: forest.nodes.into(),
             roots: forest.roots,
-            merged_into: forest.merged_into,
         }
     }
 }
@@ -986,7 +756,6 @@ impl<R, V> From<Forest<R, ChildVecStore<V>>> for Forest<R, ParentPointerStore<V>
         Forest {
             nodes: forest.nodes.into(),
             roots: forest.roots,
-            merged_into: forest.merged_into,
         }
     }
 }
@@ -996,127 +765,6 @@ impl<R, V> From<Forest<R, ParentPointerStore<V>>> for Forest<R, ChildVecStore<V>
         Forest {
             nodes: forest.nodes.into(),
             roots: forest.roots,
-            merged_into: forest.merged_into,
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    /// Every forest on five nodes in which each node is a root or a child of an
-    /// earlier node, in ascending and in shuffled node order.
-    fn small_forests() -> impl Iterator<Item = ParentPointerStore<usize>> {
-        (0..120).flat_map(|forest_code| {
-            let mut code = forest_code;
-            let mut forest = ParentPointerStore::default();
-            for id in 0..5 {
-                let parent = code % (id + 1);
-                code /= id + 1;
-                if parent == id {
-                    forest.add_root(id, RootId(id));
-                } else {
-                    forest.add_child(id, TreeNodeId(parent));
-                }
-            }
-            let mut shuffled = forest.clone();
-            shuffled.swap(TreeNodeId(0), TreeNodeId(4));
-            shuffled.swap(TreeNodeId(1), TreeNodeId(3));
-            [forest, shuffled]
-        })
-    }
-
-    fn split<N: ForestNodeStore<NodeData = usize> + From<ParentPointerStore<usize>>>(
-        forest: &ParentPointerStore<usize>,
-        at: usize,
-    ) -> [ParentPointerStore<usize>; 2]
-    where
-        ParentPointerStore<usize>: From<N>,
-    {
-        let mut left = N::from(forest.clone());
-        let right = left.split_off(TreeNodeId(at));
-        left.validate().unwrap();
-        right.validate().unwrap();
-        [left.into(), right.into()]
-    }
-
-    #[test]
-    fn split_off_keeps_tree_membership_on_both_sides_for_every_store() {
-        for forest in small_forests() {
-            for at in 0..=forest.n_nodes() {
-                let [left, right] = split::<ParentPointerStore<usize>>(&forest, at);
-                assert_eq!(left.n_nodes(), at);
-                assert_eq!(right.n_nodes(), forest.n_nodes() - at);
-                let side = |x: usize| if x < at { (&left, x) } else { (&right, x - at) };
-                for x in 0..forest.n_nodes() {
-                    let (store, local) = side(x);
-                    assert_eq!(store[TreeNodeId(local)], forest[TreeNodeId(x)]);
-                    assert_eq!(store.root(TreeNodeId(local)), forest.root(TreeNodeId(x)));
-                    for y in 0..forest.n_nodes() {
-                        if (x < at) == (y < at) {
-                            let same_tree = |s: &ParentPointerStore<usize>, a, b| {
-                                s.root_node(TreeNodeId(a)) == s.root_node(TreeNodeId(b))
-                            };
-                            assert_eq!(
-                                same_tree(store, local, side(y).1),
-                                same_tree(&forest, x, y),
-                                "{forest:?} split at {at}"
-                            );
-                        }
-                    }
-                }
-                assert_eq!(
-                    split::<ChildVecStore<usize>>(&forest, at),
-                    [left.clone(), right.clone()]
-                );
-                assert_eq!(split::<ParentChildStore<usize>>(&forest, at), [left, right]);
-            }
-        }
-    }
-
-    #[test]
-    fn identification_links_follow_added_and_swapped_roots() {
-        let mut forest: Forest<usize, ParentPointerStore<()>> = Forest::new();
-        for data in 0..3 {
-            forest.add_root((), data);
-        }
-        assert!(!forest.has_identification_history());
-        let (survivor, absorbed) = (forest[&RootId(0)], forest[&RootId(1)]);
-        forest.nodes.make_root_of(survivor, absorbed);
-        forest.merge_into(RootId(1), RootId(0));
-        let (_, added) = forest.add_root((), 3);
-        forest.validate_structure().unwrap();
-        assert!(forest.is_active_root(added));
-        assert_eq!(forest.active_root(RootId(1)), RootId(0));
-        forest.swap_roots(RootId(1), added);
-        forest.validate_structure().unwrap();
-        assert!(forest.is_active_root(RootId(1)));
-        assert!(!forest.is_active_root(added));
-    }
-
-    #[test]
-    fn making_a_root_of_its_own_tree_changes_nothing() {
-        fn check<N: ForestNodeStore<NodeData = usize> + From<ParentPointerStore<usize>>>()
-        where
-            ParentPointerStore<usize>: From<N>,
-        {
-            for forest in small_forests() {
-                for x in (0..5).map(TreeNodeId) {
-                    for y in (0..5).map(TreeNodeId) {
-                        if forest.root_node(x) != forest.root_node(y) {
-                            continue;
-                        }
-                        let mut store = N::from(forest.clone());
-                        assert_eq!(store.make_root_of(x, y), forest.root_node(x));
-                        store.validate().unwrap();
-                        assert_eq!(ParentPointerStore::from(store), forest);
-                    }
-                }
-            }
-        }
-        check::<ParentPointerStore<usize>>();
-        check::<ChildVecStore<usize>>();
-        check::<ParentChildStore<usize>>();
     }
 }

@@ -1179,7 +1179,6 @@ mod tests {
     use linnet::half_edge::HedgeGraph;
     use linnet::half_edge::builder::HedgeGraphBuilder;
     use linnet::half_edge::involution::{EdgeIndex, Flow, Orientation};
-    use linnet::half_edge::nodestore::NodeStorageVec;
     use linnet::half_edge::subgraph::{SuBitGraph, SubSetLike};
     use symbolica::atom::{Atom, AtomCore};
     use symbolica::parse;
@@ -1564,10 +1563,9 @@ mod tests {
                 Flow::Source,
             );
 
-            let double_triangle: HedgeGraph<(), (), ()> =
-                hedge_graph_builder.build::<NodeStorageVec<()>>();
-            let node_0 = double_triangle.iter_crown(nodes[0]).into();
-            let node_3 = double_triangle.iter_crown(nodes[3]).into();
+            let double_triangle: HedgeGraph<(), (), ()> = hedge_graph_builder.build();
+            let node_0 = double_triangle.combine_to_single_hedgenode(&[nodes[0]]);
+            let node_3 = double_triangle.combine_to_single_hedgenode(&[nodes[3]]);
 
             let cuts = double_triangle.all_cuts(node_0, node_3);
 
@@ -1650,11 +1648,10 @@ mod tests {
                 Flow::Sink,
             );
 
-            let box_graph: HedgeGraph<(), (), ()> =
-                hedge_graph_builder.build::<NodeStorageVec<()>>();
+            let box_graph: HedgeGraph<(), (), ()> = hedge_graph_builder.build();
 
-            let node_0 = box_graph.iter_crown(nodes[0]).into();
-            let node_2 = box_graph.iter_crown(nodes[2]).into();
+            let node_0 = box_graph.combine_to_single_hedgenode(&[nodes[0]]);
+            let node_2 = box_graph.combine_to_single_hedgenode(&[nodes[2]]);
 
             let cuts = box_graph.all_cuts(node_0, node_2);
             assert_eq!(cuts.len(), 4);

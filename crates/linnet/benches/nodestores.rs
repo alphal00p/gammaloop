@@ -4,19 +4,14 @@ use std::hint::black_box;
 use criterion::{criterion_group, criterion_main, BatchSize, BenchmarkId, Criterion};
 use linnet::{
     half_edge::{
-        builder::HedgeGraphBuilder,
-        involution::Hedge,
-        nodestore::{NodeForest, NodeStorageOps},
-        swap::Swap,
-        HedgeGraph, NoData, NodeIndex,
+        builder::HedgeGraphBuilder, involution::Hedge, swap::Swap, HedgeGraph, NoData, NodeIndex,
     },
     permutation::Permutation,
-    tree::{child_pointer::ParentChildStore, child_vec::ChildVecStore, Forest},
 };
 
-type Graph<S> = HedgeGraph<usize, usize, NoData, S>;
+type Graph = HedgeGraph<usize, usize, NoData>;
 
-fn build<S: NodeStorageOps<NodeData = usize>>(nodes: usize, matching: bool) -> Graph<S> {
+fn build(nodes: usize, matching: bool) -> Graph {
     let mut builder = HedgeGraphBuilder::new();
     for node in 0..nodes {
         builder.add_node(node);
@@ -32,7 +27,7 @@ fn build<S: NodeStorageOps<NodeData = usize>>(nodes: usize, matching: bool) -> G
     builder.build()
 }
 
-fn dfs<S: NodeStorageOps<NodeData = usize>>(graph: &Graph<S>) -> usize {
+fn dfs(graph: &Graph) -> usize {
     let mut seen = vec![false; graph.n_nodes()];
     let mut stack = vec![NodeIndex(0)];
     seen[0] = true;
@@ -50,7 +45,7 @@ fn dfs<S: NodeStorageOps<NodeData = usize>>(graph: &Graph<S>) -> usize {
     count
 }
 
-fn append<S: NodeStorageOps<NodeData = usize>>(mut graph: Graph<S>) -> Graph<S> {
+fn append(mut graph: Graph) -> Graph {
     let n = graph.n_nodes();
     for i in 0..32 {
         graph = graph
@@ -62,7 +57,7 @@ fn append<S: NodeStorageOps<NodeData = usize>>(mut graph: Graph<S>) -> Graph<S> 
 }
 
 /// A square grid, with one half-edge per node to follow it through merges.
-fn grid<S: NodeStorageOps<NodeData = usize>>(side: usize) -> (Graph<S>, Vec<Hedge>) {
+fn grid(side: usize) -> (Graph, Vec<Hedge>) {
     let mut builder = HedgeGraphBuilder::new();
     for node in 0..side * side {
         builder.add_node(node);
@@ -75,7 +70,7 @@ fn grid<S: NodeStorageOps<NodeData = usize>>(side: usize) -> (Graph<S>, Vec<Hedg
             builder.add_edge(NodeIndex(node), NodeIndex(node + side), 1, false);
         }
     }
-    let graph: Graph<S> = builder.build();
+    let graph: Graph = builder.build();
     let representatives = (0..side * side)
         .map(|node| graph.iter_crown(NodeIndex(node)).next().unwrap())
         .collect();
@@ -84,11 +79,7 @@ fn grid<S: NodeStorageOps<NodeData = usize>>(side: usize) -> (Graph<S>, Vec<Hedg
 
 /// Merge every node into the first one, discarding history after each batch,
 /// as batched tensor-network contraction does.
-fn hub_merge<S: NodeStorageOps<NodeData = usize>>(
-    graph: &mut Graph<S>,
-    representatives: &[Hedge],
-    batch: usize,
-) {
+fn hub_merge(graph: &mut Graph, representatives: &[Hedge], batch: usize) {
     for (merged, &hedge) in representatives[1..].iter().enumerate() {
         let hub = graph.node_id(representatives[0]);
         graph.identify_nodes(&[hub, graph.node_id(hedge)], merged);
@@ -112,13 +103,13 @@ fn shuffle(n: usize) -> Permutation {
     Permutation::from_map(map)
 }
 
-fn bench_store<S: NodeStorageOps<NodeData = usize> + Clone>(c: &mut Criterion, name: &str) {
+fn bench_store(c: &mut Criterion, name: &str) {
     let mut group = c.benchmark_group(name);
     for n in [12, 1000, 10000] {
-        let graph: Graph<S> = build(n, true);
+        let graph: Graph = build(n, true);
         assert_eq!(dfs(&graph), n);
         group.bench_with_input(BenchmarkId::new("build", n), &n, |b, &n| {
-            b.iter(|| build::<S>(black_box(n), true));
+            b.iter(|| build(black_box(n), true));
         });
         group.bench_function(BenchmarkId::new("dfs", n), |b| {
             b.iter(|| dfs(black_box(&graph)));
@@ -161,7 +152,7 @@ fn bench_store<S: NodeStorageOps<NodeData = usize> + Clone>(c: &mut Criterion, n
         }
     }
     for depth in [2, 8, 32] {
-        let mut history: Graph<S> = build(128 * depth, false);
+        let mut history: Graph = build(128 * depth, false);
         for group in 0..128 {
             let mut previous = NodeIndex(group);
             for layer in 1..depth {
@@ -189,7 +180,7 @@ fn bench_store<S: NodeStorageOps<NodeData = usize> + Clone>(c: &mut Criterion, n
     }
     // 960 and 9,800 half-edges, forgetting after every 64 merges or only once.
     for side in [16, 50] {
-        let (graph, representatives) = grid::<S>(side);
+        let (graph, representatives) = grid(side);
         let mut merged = graph.clone();
         hub_merge(&mut merged, &representatives, 64);
         merged.check().unwrap();
@@ -226,9 +217,7 @@ fn bench_store<S: NodeStorageOps<NodeData = usize> + Clone>(c: &mut Criterion, n
 }
 
 fn nodestores(c: &mut Criterion) {
-    bench_store::<Forest<usize, ParentChildStore<()>>>(c, "parent_child");
-    bench_store::<Forest<usize, ChildVecStore<()>>>(c, "child_vec");
-    bench_store::<NodeForest<usize>>(c, "node_forest");
+    bench_store(c, "node_forest");
 }
 
 criterion_group!(benches, nodestores);

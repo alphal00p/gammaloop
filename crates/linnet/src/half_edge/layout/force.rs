@@ -993,9 +993,8 @@ mod tests {
             simulatedanneale::Energy,
             spring::{ParamTuning, ShiftDirection},
         },
-        nodestore::DefaultNodeStore,
         subgraph::{ModifySubSet, SuBitGraph},
-        HedgeGraph, NoData,
+        HedgeGraph,
     };
 
     type LayoutForces = (
@@ -1028,7 +1027,7 @@ mod tests {
         let mut builder = HedgeGraphBuilder::<PointConstraint, PointConstraint>::new();
         let node = builder.add_node(PointConstraint::default());
         builder.add_external_edge(node, PointConstraint::default(), false, Flow::Source);
-        let graph: HedgeGraph<_, _, NoData, DefaultNodeStore<_>> = builder.build();
+        let graph: HedgeGraph<_, _> = builder.build();
         let mut state = graph.new_layout_state(
             vec![Point2::new(-1.0, 0.0)].into(),
             vec![Point2::new(2.0, 0.0)].into(),
@@ -1096,7 +1095,7 @@ mod tests {
         builder.add_edge(a, a, PointConstraint::default(), false);
         builder.add_external_edge(a, PointConstraint::default(), false, Flow::Sink);
         builder.add_external_edge(b, PointConstraint::default(), false, Flow::Source);
-        let graph: HedgeGraph<_, _, NoData, DefaultNodeStore<_>> = builder.build();
+        let graph: HedgeGraph<_, _> = builder.build();
         let mut state = graph.new_layout_state(
             vec![Point2::new(-2.0, 0.5), Point2::new(3.0, -0.4)].into(),
             vec![
@@ -1226,7 +1225,7 @@ mod tests {
         let mut builder = HedgeGraphBuilder::<PointConstraint, PointConstraint>::new();
         let node = builder.add_node(PointConstraint::default());
         builder.add_external_edge(node, PointConstraint::default(), false, Flow::Source);
-        let graph: HedgeGraph<_, _, NoData, DefaultNodeStore<_>> = builder.build();
+        let graph: HedgeGraph<_, _> = builder.build();
         let mut state = graph.new_layout_state(
             vec![Point2::origin()].into(),
             vec![Point2::new(6.0, 0.0)].into(),
@@ -1286,7 +1285,7 @@ mod tests {
         let a = builder.add_node(PointConstraint::default());
         let b = builder.add_node(PointConstraint::default());
         builder.add_edge(a, b, rail, false);
-        let graph: HedgeGraph<_, _, NoData, DefaultNodeStore<_>> = builder.build();
+        let graph: HedgeGraph<_, _> = builder.build();
         let mut state = graph.new_layout_state(
             vec![Point2::new(-2.0, 0.0), Point2::new(2.0, 0.0)].into(),
             vec![Point2::new(0.0, 0.3)].into(),
@@ -1362,7 +1361,7 @@ mod tests {
         let b = builder.add_node(fixed);
         builder.add_external_edge(a, rail, false, Flow::Source);
         builder.add_external_edge(b, rail, false, Flow::Source);
-        let graph: HedgeGraph<_, _, NoData, DefaultNodeStore<_>> = builder.build();
+        let graph: HedgeGraph<_, _> = builder.build();
         let mut state = graph.new_layout_state(
             vec![Point2::new(-1.0, -2.0), Point2::new(-1.0, 2.0)].into(),
             vec![Point2::new(1.0, 2.0), Point2::new(1.0, -2.0)].into(),
@@ -1457,7 +1456,7 @@ mod tests {
         for _ in 0..3 {
             builder.add_external_edge(b, PointConstraint::default(), false, Flow::Source);
         }
-        let graph: HedgeGraph<_, _, NoData, DefaultNodeStore<_>> = builder.build();
+        let graph: HedgeGraph<_, _> = builder.build();
         let original = graph.new_layout_state(
             vec![Point2::new(-1.0, -2.0), Point2::new(3.0, 2.0)].into(),
             vec![
@@ -1612,7 +1611,7 @@ mod tests {
                 Flow::Source,
             );
         }
-        let graph: HedgeGraph<_, _, NoData, DefaultNodeStore<_>> = builder.build();
+        let graph: HedgeGraph<_, _> = builder.build();
         let state = graph.new_layout_state(
             vec![
                 Point2::new(0.0, 0.0),
@@ -1708,7 +1707,7 @@ mod tests {
                     false,
                     last_flow,
                 );
-                let graph: HedgeGraph<_, _, NoData, DefaultNodeStore<_>> = builder.build();
+                let graph: HedgeGraph<_, _> = builder.build();
                 let state = graph.new_layout_state(
                     (0..=length)
                         .map(|i| Point2::new(i as f64, 0.0))
@@ -1795,7 +1794,7 @@ mod tests {
         for _ in 0..3 {
             builder.add_external_edge(b, free, false, Flow::Source);
         }
-        let graph: HedgeGraph<_, _, NoData, DefaultNodeStore<_>> = builder.build();
+        let graph: HedgeGraph<_, _> = builder.build();
         let state = graph.new_layout_state(
             vec![Point2::new(-1.0, -2.0), Point2::new(3.0, 2.0)].into(),
             vec![
@@ -1873,7 +1872,7 @@ mod tests {
             let b = builder.add_node(PointConstraint::default());
             builder.add_external_edge(a, PointConstraint::default(), false, flow);
             builder.add_external_edge(b, PointConstraint::default(), false, flow);
-            let graph: HedgeGraph<_, _, NoData, DefaultNodeStore<_>> = builder.build();
+            let graph: HedgeGraph<_, _> = builder.build();
             let energy = SpringChargeEnergy {
                 k_spring: 0.0,
                 external_pull: 5.0,
@@ -2012,7 +2011,7 @@ mod tests {
         builder.add_edge(a, b, PointConstraint::default(), false);
         builder.add_external_edge(a, PointConstraint::default(), false, Flow::Sink);
         builder.add_external_edge(b, PointConstraint::default(), false, Flow::Source);
-        let graph: HedgeGraph<_, _, NoData, DefaultNodeStore<_>> = builder.build();
+        let graph: HedgeGraph<_, _> = builder.build();
         let state = graph.new_layout_state(
             vec![Point2::new(-1.0, -0.5), Point2::new(1.0, 0.5)].into(),
             vec![
@@ -2138,7 +2137,7 @@ mod tests {
         let b = builder.add_node(PointConstraint::default());
         builder.add_external_edge(a, PointConstraint::default(), false, Flow::Source);
         builder.add_external_edge(b, PointConstraint::default(), false, Flow::Sink);
-        let graph: HedgeGraph<_, _, NoData, DefaultNodeStore<_>> = builder.build();
+        let graph: HedgeGraph<_, _> = builder.build();
         let energy = SpringChargeEnergy {
             k_spring: 0.0,
             ..SpringChargeEnergy::from_graph(
@@ -2215,7 +2214,7 @@ mod tests {
         let a = builder.add_node(PointConstraint::default());
         let b = builder.add_node(PointConstraint::default());
         builder.add_edge(a, b, PointConstraint::default(), false);
-        let graph: HedgeGraph<_, _, NoData, DefaultNodeStore<_>> = builder.build();
+        let graph: HedgeGraph<_, _> = builder.build();
         let HedgePair::Paired { source, sink } = graph.iter_edges().next().unwrap().0 else {
             panic!("expected paired edge");
         };
@@ -2297,7 +2296,7 @@ mod tests {
         let node = builder.add_node(fixed);
         builder.add_external_edge(node, fixed, false, Flow::Sink);
         builder.add_external_edge(node, PointConstraint::default(), false, Flow::Source);
-        let graph: HedgeGraph<_, _, NoData, DefaultNodeStore<_>> = builder.build();
+        let graph: HedgeGraph<_, _> = builder.build();
         let mut state = graph.new_layout_state(
             vec![Point2::new(20.0, 30.0)].into(),
             vec![Point2::new(25.0, 35.0), Point2::new(15.0, 32.0)].into(),
@@ -2349,7 +2348,7 @@ mod tests {
         builder.add_edge(a, b, PointConstraint::default(), false);
         builder.add_external_edge(a, PointConstraint::default(), false, Flow::Source);
         builder.add_external_edge(b, PointConstraint::default(), false, Flow::Sink);
-        let graph: HedgeGraph<_, _, NoData, DefaultNodeStore<_>> = builder.build();
+        let graph: HedgeGraph<_, _> = builder.build();
         let mut state = graph.new_layout_state(
             vec![Point2::origin(), Point2::new(3.0, 4.0)].into(),
             vec![
@@ -2465,7 +2464,7 @@ mod tests {
         builder.add_edge(a, b, PointConstraint::default(), false);
         builder.add_external_edge(a, PointConstraint::default(), false, Flow::Source);
         builder.add_external_edge(b, PointConstraint::default(), false, Flow::Sink);
-        let graph: HedgeGraph<_, _, NoData, DefaultNodeStore<_>> = builder.build();
+        let graph: HedgeGraph<_, _> = builder.build();
         let mut state = graph.new_layout_state(
             vec![Point2::origin(), Point2::new(3.0, 4.0)].into(),
             vec![
@@ -2535,7 +2534,7 @@ mod tests {
             let node = builder.add_node(fixed);
             builder.add_external_edge(node, fixed, false, Flow::Source);
         }
-        let graph: HedgeGraph<_, _, NoData, DefaultNodeStore<_>> = builder.build();
+        let graph: HedgeGraph<_, _> = builder.build();
         let mut state = graph.new_layout_state(
             vec![Point2::origin(); 3].into(),
             vec![Point2::origin(); 3].into(),
@@ -2616,7 +2615,7 @@ mod tests {
             let node = builder.add_node(fixed);
             builder.add_external_edge(node, fixed, false, Flow::Source);
         }
-        let graph: HedgeGraph<_, _, NoData, DefaultNodeStore<_>> = builder.build();
+        let graph: HedgeGraph<_, _> = builder.build();
         let energy = SpringChargeEnergy {
             spring_length: 1.0,
             k_spring: 0.0,
@@ -2671,7 +2670,7 @@ mod tests {
         let mut builder = HedgeGraphBuilder::<PointConstraint, PointConstraint>::new();
         let node = builder.add_node(PointConstraint::default());
         builder.add_external_edge(node, PointConstraint::default(), false, Flow::Source);
-        let graph: HedgeGraph<_, _, NoData, DefaultNodeStore<_>> = builder.build();
+        let graph: HedgeGraph<_, _> = builder.build();
         let mut state = graph.new_layout_state(
             vec![Point2::origin()].into(),
             vec![Point2::new(3.0, 0.0)].into(),
@@ -2768,7 +2767,7 @@ mod tests {
     fn depth_schedule_uses_total_budget_without_early_stop_or_cooling_restart() {
         let mut builder = HedgeGraphBuilder::<PointConstraint, PointConstraint>::new();
         let node = builder.add_node(PointConstraint::default());
-        let graph: HedgeGraph<_, _, NoData, DefaultNodeStore<_>> = builder.build();
+        let graph: HedgeGraph<_, _> = builder.build();
         let energy = SpringChargeEnergy {
             spring_length: 1.0,
             k_spring: 0.0,
@@ -2880,7 +2879,7 @@ mod tests {
             false,
             Flow::Source,
         );
-        let graph: HedgeGraph<_, _, NoData, DefaultNodeStore<_>> = builder.build();
+        let graph: HedgeGraph<_, _> = builder.build();
         let energy = SpringChargeEnergy::from_graph(
             1,
             1.0,
@@ -2972,7 +2971,7 @@ mod tests {
         let a = builder.add_node(grouped_node);
         let b = builder.add_node(fixed);
         builder.add_edge(a, b, grouped_edge, false);
-        let graph: HedgeGraph<_, _, NoData, DefaultNodeStore<_>> = builder.build();
+        let graph: HedgeGraph<_, _> = builder.build();
 
         assert!(can_shift_directly(&grouped_node, reference));
         assert!(!can_shift_directly(
