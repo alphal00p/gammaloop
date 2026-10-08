@@ -7,10 +7,13 @@
 //! and new fragments are processed in position order, so refinement is equivariant. Hash sums
 //! may collide; that only weakens refinement, because leaves are compared by exact certificates.
 //!
-//! Only nodes are individualized. A leaf is a partition whose non-singleton cells consist of
+//! Only nodes are individualized, those of a target cell chosen like nauty's `bestcell` (see
+//! [`Search::target_cell`]). A leaf is a partition whose non-singleton cells consist of
 //! isolated nodes; its certificate lists, per node in leaf order, the degree and the sorted
 //! `(colour, opposite node, opposite colour)` triples of its hedges. Twin hedges (automorphisms
 //! fixing every node) and permutations of isolated nodes are handled analytically.
+
+use std::cmp::Reverse;
 
 use super::{
     flat::{Flat, NONE},
@@ -86,11 +89,16 @@ pub(crate) struct Search {
     queue: Vec<u32>,
     in_queue: Vec<bool>,
     key: Vec<u64>,
+    /// `node_stamp[v] == stamp` marks the nodes touched by the current splitter.
     node_stamp: Vec<u32>,
-    cell_stamp: Vec<u32>,
     stamp: u32,
-    touched_nodes: Vec<u32>,
+    /// Per cell start, a count during one pass; zero between passes.
+    cell_count: Vec<u32>,
     touched_cells: Vec<u32>,
+    /// Keys and touched nodes of the cell being split.
+    sorted: Vec<(u64, u32)>,
+    /// Starts of the cells the target cell is chosen from.
+    candidates: Vec<u32>,
     path: Vec<u32>,
     path_invariants: Vec<u64>,
     first: Leaf,
@@ -140,9 +148,9 @@ impl Search {
         self.key.resize(n, 0);
         self.node_stamp.clear();
         self.node_stamp.resize(n, 0);
-        self.cell_stamp.clear();
-        self.cell_stamp.resize(n, 0);
         self.stamp = 0;
+        self.cell_count.clear();
+        self.cell_count.resize(n, 0);
         self.canonical_index.resize(n, 0);
         if self.parts.is_empty() {
             self.parts.push(Part::default());
@@ -223,91 +231,112 @@ impl Search {
         }
     }
 
-    fn next_stamp(&mut self) -> u32 {
-        if self.stamp == u32::MAX {
-            self.node_stamp.fill(0);
-            self.cell_stamp.fill(0);
-            self.stamp = 0;
-        }
-        self.stamp += 1;
-        self.stamp
-    }
-
     /// Refine `parts[level]` with the queued splitters; returns an invariant trace.
+    ///
+    /// Only the cells a splitter touches are visited, and only their touched nodes are sorted:
+    /// the untouched nodes of a cell keep their order and become its first fragment.
     fn refine(&mut self, level: usize, seed: u64) -> u64 {
+        let Search {
+            nbr_off,
+            nbr,
+            nbr_weight,
+            parts,
+            queue,
+            in_queue,
+            key,
+            node_stamp,
+            stamp,
+            cell_count,
+            touched_cells,
+            sorted,
+            ..
+        } = self;
+        let Part {
+            lab,
+            cell_of,
+            cell_end,
+        } = &mut parts[level];
+        // slices keep their bounds in registers across the stores below
+        let (lab, cell_of, cell_end) = (&mut lab[..], &mut cell_of[..], &mut cell_end[..]);
+        let (key, node_stamp, cell_count) =
+            (&mut key[..], &mut node_stamp[..], &mut cell_count[..]);
         let mut trace = mix(seed);
         let mut qi = 0;
-        while qi < self.queue.len() {
-            let w = self.queue[qi] as usize;
+        while let Some(&w) = queue.get(qi) {
+            let w = w as usize;
             qi += 1;
-            self.in_queue[w] = false;
-            let st = self.next_stamp();
-            let Search {
-                nbr_off,
-                nbr,
-                nbr_weight,
-                parts,
-                queue,
-                in_queue,
-                key,
-                node_stamp,
-                cell_stamp,
-                touched_nodes,
-                touched_cells,
-                ..
-            } = self;
-            let p = &mut parts[level];
-            touched_nodes.clear();
-            for &u in &p.lab[w..p.cell_end[w] as usize] {
-                let u = u as usize;
-                for k in nbr_off[u] as usize..nbr_off[u + 1] as usize {
-                    let v = nbr[k] as usize;
-                    if node_stamp[v] != st {
-                        node_stamp[v] = st;
-                        key[v] = 0;
-                        touched_nodes.push(v as u32);
-                    }
-                    key[v] = key[v].wrapping_add(nbr_weight[k]);
-                }
+            in_queue[w] = false;
+            if *stamp == u32::MAX {
+                node_stamp.fill(0);
+                *stamp = 0;
             }
+            *stamp += 1;
+            let st = *stamp;
             touched_cells.clear();
-            for &v in touched_nodes.iter() {
-                let c = p.cell_of[v as usize] as usize;
-                if p.cell_end[c] as usize - c > 1 && cell_stamp[c] != st {
-                    cell_stamp[c] = st;
-                    touched_cells.push(c as u32);
+            for &u in &lab[w..cell_end[w] as usize] {
+                let range = nbr_off[u as usize] as usize..nbr_off[u as usize + 1] as usize;
+                for (&v, &weight) in nbr[range.clone()].iter().zip(&nbr_weight[range]) {
+                    let v = v as usize;
+                    if node_stamp[v] == st {
+                        key[v] = key[v].wrapping_add(weight);
+                        continue;
+                    }
+                    node_stamp[v] = st;
+                    key[v] = weight;
+                    let c = cell_of[v] as usize;
+                    if cell_end[c] as usize - c > 1 {
+                        if cell_count[c] == 0 {
+                            touched_cells.push(c as u32);
+                        }
+                        cell_count[c] += 1;
+                    }
                 }
             }
             touched_cells.sort_unstable();
-            let key_of = |v: u32| {
-                if node_stamp[v as usize] == st {
-                    key[v as usize]
-                } else {
-                    0
-                }
-            };
             for &c in touched_cells.iter() {
                 let c = c as usize;
-                let e = p.cell_end[c] as usize;
-                let cell = &mut p.lab[c..e];
-                let k0 = key_of(cell[0]);
-                if cell[1..].iter().all(|&v| key_of(v) == k0) {
-                    continue;
-                }
-                cell.sort_unstable_by_key(|&v| key_of(v));
-                let mut largest = (0, c);
-                let mut fs = c;
-                for q in c + 1..=e {
-                    if q < e && key_of(p.lab[q]) == key_of(p.lab[q - 1]) {
+                let e = cell_end[c] as usize;
+                let cell = &mut lab[c..e];
+                let untouched = cell.len() - std::mem::take(&mut cell_count[c]) as usize;
+                sorted.clear();
+                if untouched == 0 {
+                    let k0 = key[cell[0] as usize];
+                    if cell.iter().all(|&v| key[v as usize] == k0) {
                         continue;
                     }
-                    p.cell_end[fs] = q as u32;
-                    for &v in &p.lab[fs..q] {
-                        p.cell_of[v as usize] = fs as u32;
+                    sorted.extend(cell.iter().map(|&v| (key[v as usize], v)));
+                } else {
+                    let mut q = 0;
+                    for i in 0..cell.len() {
+                        let v = cell[i];
+                        if node_stamp[v as usize] == st {
+                            sorted.push((key[v as usize], v));
+                        } else {
+                            cell[q] = v;
+                            q += 1;
+                        }
                     }
-                    trace = mix(trace ^ pair(c as u32, fs as u32) ^ key_of(p.lab[fs]));
-                    if q - fs > largest.0 {
-                        largest = (q - fs, fs);
+                }
+                sorted.sort_unstable_by_key(|&(k, _)| k);
+                for (slot, &(_, v)) in cell[untouched..].iter_mut().zip(sorted.iter()) {
+                    *slot = v;
+                }
+                // fragments: the untouched nodes, then the touched ones by key
+                let mut largest = (0, c);
+                let mut fs = c;
+                let untouched_run = (untouched > 0).then_some((untouched, 0));
+                let runs = sorted
+                    .chunk_by(|a, b| a.0 == b.0)
+                    .map(|r| (r.len(), r[0].0));
+                for (len, k) in untouched_run.into_iter().chain(runs) {
+                    let q = fs + len;
+                    cell_end[fs] = q as u32;
+                    for &v in &lab[fs..q] {
+                        cell_of[v as usize] = fs as u32;
+                    }
+                    trace = mix(trace ^ pair(c as u32, fs as u32) ^ k);
+                    if len > largest.0 {
+                        largest = (len, fs);
                     }
                     fs = q;
                 }
@@ -325,26 +354,93 @@ impl Search {
                         in_queue[fs] = true;
                         queue.push(fs as u32);
                     }
-                    fs = p.cell_end[fs] as usize;
+                    fs = cell_end[fs] as usize;
                 }
             }
         }
-        self.queue.clear();
+        queue.clear();
         trace
     }
 
-    /// First non-singleton cell that does not consist of isolated nodes.
-    fn target_cell(&self, g: &Flat, level: usize) -> Option<(usize, usize)> {
-        let p = &self.parts[level];
+    /// How many cells [`Self::target_cell`] scores. Scoring walks the edges of every candidate;
+    /// scoring all non-singleton cells made each search node cost `O(n + m)` and deep searches
+    /// through many small cells (twin pairs, unions of paths) up to 2.7 times slower at the
+    /// same node count. Four keep the node counts of scoring all cells on projective planes and
+    /// Latin squares.
+    const CANDIDATES: usize = 4;
+
+    /// The cell whose nodes the search individualizes. Among the first [`Self::CANDIDATES`]
+    /// non-singleton cells that do not consist of isolated nodes, it is joined non-uniformly to
+    /// the most other non-singleton cells, like nauty's `bestcell`, so leaves are reached sooner
+    /// and differ earlier than under the first such cell. Ties go to the smallest cell, which has
+    /// the fewest children, then to the first.
+    ///
+    /// A cell `d` counts as non-uniformly joined to `c` when the edge ends between them number
+    /// neither zero nor `|c| |d|`; in an equitable partition, individualizing a node of `c` then
+    /// splits `d`. Edge colours and multiplicities are not looked at, so a uniform count can
+    /// hide such a split on coloured or multigraphs; telling those apart doubles the scan and
+    /// cost up to 2% on Feynman graphs without saving search nodes.
+    ///
+    /// The choice is an isomorphism invariant of the partition, as the canonical form requires:
+    /// an isomorphism maps each cell to the cell at the same position of the image partition,
+    /// and the candidates and their scores depend only on cell positions, cell sizes and the
+    /// number of edge ends between whole cells, so isomorphic graphs pick cells at the same
+    /// position and their search trees stay isomorphic. Counting over whole cells rather than at
+    /// one node, as nauty does, keeps this true when a hash collision in [`Self::refine`] leaves
+    /// the partition short of equitable.
+    fn target_cell(&mut self, g: &Flat, level: usize) -> Option<(usize, usize)> {
+        let Search {
+            n,
+            nbr_off,
+            nbr,
+            parts,
+            cell_count,
+            candidates,
+            touched_cells,
+            ..
+        } = self;
+        let p = &parts[level];
+        let size = |c: usize| p.cell_end[c] as usize - c;
+        candidates.clear();
         let mut s = 0;
-        while s < self.n {
-            let e = p.cell_end[s] as usize;
-            if e - s > 1 && !g.hedges_of(p.lab[s] as usize).is_empty() {
-                return Some((s, e));
+        while s < *n && candidates.len() < Self::CANDIDATES {
+            if size(s) > 1 && !g.hedges_of(p.lab[s] as usize).is_empty() {
+                candidates.push(s as u32);
             }
-            s = e;
+            s = p.cell_end[s] as usize;
         }
-        None
+        let target = match candidates[..] {
+            [] => return None,
+            [c] => c as usize,
+            _ => candidates
+                .iter()
+                .map(|&c| c as usize)
+                .max_by_key(|&c| {
+                    // edge ends from `c` into every other non-singleton cell
+                    touched_cells.clear();
+                    for &u in &p.lab[c..p.cell_end[c] as usize] {
+                        let range = nbr_off[u as usize] as usize..nbr_off[u as usize + 1] as usize;
+                        for &w in &nbr[range] {
+                            let d = p.cell_of[w as usize] as usize;
+                            if d != c && size(d) > 1 {
+                                if cell_count[d] == 0 {
+                                    touched_cells.push(d as u32);
+                                }
+                                cell_count[d] += 1;
+                            }
+                        }
+                    }
+                    let mut joined = 0;
+                    for &d in touched_cells.iter() {
+                        let d = d as usize;
+                        let ends = std::mem::take(&mut cell_count[d]) as usize;
+                        joined += usize::from(ends < size(c) * size(d));
+                    }
+                    (joined, Reverse(size(c)), Reverse(c))
+                })
+                .expect("several candidates"),
+        };
+        Some((target, p.cell_end[target] as usize))
     }
 
     /// `parts[level + 1]` = `parts[level]` with node `v` individualized; returns the seed of the

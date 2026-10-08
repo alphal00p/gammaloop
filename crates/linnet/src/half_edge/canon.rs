@@ -15,8 +15,9 @@
 //! Graphica's convention for the equivalent plain graph.
 //!
 //! The algorithm is individualization-refinement on the node partition (equitable refinement by
-//! edge-end colours, first-path and best-leaf search, trace and orbit pruning). Hedge orders are
-//! derived at leaves and symmetries fixing every node (twin hedges) are written down directly.
+//! edge-end colours, target cells chosen like nauty's `bestcell`, first-path and best-leaf
+//! search, trace and orbit pruning). Hedge orders are derived at leaves and symmetries fixing
+//! every node (twin hedges) are written down directly.
 //!
 //! ```
 //! use linnet::half_edge::{
