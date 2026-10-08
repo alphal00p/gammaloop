@@ -351,6 +351,20 @@ Details appear beside the graph in wide outputs and below it in narrow outputs. 
 preserves the selection and pinned details, whose text stays at its original size.
 Embedding applications can read the SVG element's `linnetSelection` property or listen for
 `linnet-selection-change`; its event detail contains sorted `nodes`, `edges`, and `half_edges` arrays.
+For custom overlays, `svg.linnetShade({nodes, edges, half_edges})` returns an SVG group
+in the drawing's coordinates. Append it inside `.linnet-viewport` and style its color
+and group opacity. It reuses native half-edge paths, compositing overlapping
+half-edges and vertices once; it does not change the interactive selection.
+The optional second argument controls `width` (edge-band width, default 8),
+`padding` (beyond each node, default 2), and `outline` (boundary thickness,
+default 0), in drawing coordinates. For example,
+`svg.linnetShade({nodes: [0, 1], edges: [2]}, {width: 20, padding: 5, outline: 1.6, fillOpacity: 0.09})`
+draws a filled circling with an opaque boundary around the union. `fillOpacity`
+controls its interior independently of the boundary. Multiple groups can carry
+different colors and padding for nested regions, as in the CFF explorer.
+Native momentum arrows retain their edge inspection identity in
+`[data-linnet-momentum]` groups, so specialized displays can reuse their curves
+and arrowheads without duplicating the renderer.
 Use the Python selection API explicitly when applying graph algorithms to those IDs.
 
 A `Subgraph` also renders directly as the final expression of a notebook cell:

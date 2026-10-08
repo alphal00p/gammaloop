@@ -563,6 +563,7 @@ impl SpensoNet {
                 pattern: None,
                 flow: tree.then_some(orientation != "reversed"),
                 momentum: false,
+                momentum_offset: EdgeDrawing::DEFAULT_MOMENTUM_OFFSET,
                 label,
                 details,
             });

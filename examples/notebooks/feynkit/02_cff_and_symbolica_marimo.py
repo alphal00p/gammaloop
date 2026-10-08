@@ -35,7 +35,7 @@ def _(mo):
     mo.md(r"""
     # Cross-Free Families and Symbolica
 
-    FeynKit turns a loop diagram into a typed Cross-Free Family (CFF): accepted
+    FeynKit turns a loop diagram into a typed CFF representation: accepted
     acyclic orientations, their denominator products, and the energy or hybrid
     surfaces referenced by those products. The final expression lives in the
     same Symbolica kernel as the rest of the package.
@@ -112,7 +112,7 @@ def _(mo):
 
     The diagram owns this conversion. For large graphs, set
     `max_orientations` as an explicit combinatorial guard. The returned
-    `hepkit.CrossFreeFamily` displays its orientation and family explorer automatically.
+    `hepkit.CffRepresentation` displays its orientation and family explorer automatically.
     Click an arrowhead to reverse the displayed energy flow, choose a family
     preview, then Shift-click surface factors to compare their graph regions.
     These selections inspect the result; they do not restrict the full sum.
@@ -122,7 +122,7 @@ def _(mo):
 
 @app.cell
 def _(diagram):
-    cff = diagram.cross_free_family(max_orientations=10_000)
+    cff = diagram.integrate_energy(method="cff", max_orientations=10_000)
     cff
     return (cff,)
 
@@ -133,8 +133,8 @@ def _(mo):
     ## Inspect surfaces and denominator products
 
     Energy surfaces contain positive on-shell energies and an external shift.
-    Hybrid (H) surfaces may also contain negative energies. Special
-    unit/infinite surfaces have no Symbolica symbol.
+    H surfaces contain mixed energy signs. The signed coefficients refer to
+    physical diagram edge IDs.
     """)
     return
 
@@ -143,11 +143,14 @@ def _(mo):
 def _(cff, mo, table):
     _surface_rows = [
         {
-            "symbol": surface.symbol_name,
+            "symbol": str(surface.symbol),
             "kind": surface.kind,
-            "positive energies": surface.positive_energies,
-            "negative energies": surface.negative_energies,
-            "external shift": surface.external_shift,
+            "energy coefficients": {
+                edge: str(c) for edge, c in surface.energy_coefficients.items()
+            },
+            "external shift": {
+                edge: str(c) for edge, c in surface.external_shift.items()
+            },
             "vertices": surface.vertices,
         }
         for surface in cff.surfaces
@@ -163,10 +166,10 @@ def _(cff, mo, table):
         {
             "product": index,
             "surfaces": " × ".join(
-                surface.symbol_name or surface.kind for surface in product
+                str(factor.surface.symbol) for factor in family.factors
             ),
         }
-        for index, product in enumerate(_orientation.denominator_products())
+        for index, family in enumerate(_orientation.families)
     ]
     mo.vstack(
         [
@@ -192,9 +195,10 @@ def _(mo):
     mo.md(r"""
     ## Continue symbolically
 
-    `to_expression()` maps CFF surface IDs to names such as `feynkit::E0` and
-    `feynkit::H0`. Their typed definitions remain available in `cff.surfaces`,
-    so symbolic algebra and physics metadata stay connected.
+    `to_expression()` includes contour and on-shell factors and expands surfaces
+    into symbolic `OSE(edge)` and external energies. Use `expand_surfaces=False`
+    to retain surface placeholders. Typed definitions stay in `cff.surfaces`,
+    and routed square roots are available through `cff.on_shell_energies`.
     """)
     return
 
@@ -220,7 +224,7 @@ def _(mo):
     mo.md(r"""
     ## Advanced controls
 
-    Use `diagram.cross_free_family(fixed_orientations={edge_id: reversed},
+    Use `diagram.integrate_energy(method="cff", fixed_orientations={edge_id: reversed},
     contracted_edges=[...], initial_state_edges=[...])` for constrained
     constructions. Here `False` keeps an edge's stored direction and `True`
     reverses it. Apply constraints only after inspecting the diagram's edge

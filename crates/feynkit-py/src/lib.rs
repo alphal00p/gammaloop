@@ -3,12 +3,14 @@
 mod amplitude;
 mod cff;
 mod display;
+mod energy;
 mod error;
 mod generation;
 mod graph;
 mod graph_interop;
 mod integrals;
 mod kinematics;
+mod ltd;
 mod model;
 mod progress;
 mod render_settings;
@@ -23,9 +25,10 @@ use symbolica::api::python::{Citation, SymbolicaCommunityModule};
 
 pub use amplitude::{PyAmplitude, PyAmplitudeLeg, PySquaredAmplitude};
 pub use cff::{
-    PyCffGenerator, PyCffOrientation, PyCffReport, PyCffSurface, PyCffSurfaceGroup,
-    PyCrossFreeFamily, PyCutPropagator,
+    PyCffOrientation, PyCffReport, PyCffRepresentation, PyCffSurfaceGroup, PyCrossFreeFamily,
+    PyCutPropagator,
 };
+pub use energy::{PyEnergySurface, PyOnShellEnergy, PySurfaceFactor};
 pub use generation::{
     PyCancellationToken, PyDiagramGroup, PyGenerationProgress, PyGenerationReport,
     PyGenerationResult, PyGroupMember, PyNumeratorGrouping, PyParticleSelector, PyProcess,
@@ -40,6 +43,7 @@ pub use kinematics::{
     PyAxis, PyBoost, PyClusteringResult, PyFourMomentum, PyHelicity, PyJet, PyJetAlgorithm,
     PyJetDefinition, PyKinematics, PyRotation, PyThreeMomentum,
 };
+pub use ltd::{PyLtdReport, PyLtdRepresentation, PyLtdResidue, PySurfacePair};
 pub use model::{
     PyCoupling, PyEvaluatedValues, PyEvaluationRequest, PyFormFactor, PyLorentzStructure, PyModel,
     PyModelExpression, PyModelFunction, PyParameter, PyParameterCard, PyParameterNature,
@@ -55,6 +59,22 @@ pub use wavefunction::PyWavefunction;
 mod symbols;
 
 pub struct FeynkitModule;
+
+#[cfg(feature = "python_stubgen")]
+impl FeynkitModule {
+    /// Render overloads in the form recognized by notebook language servers.
+    pub fn stub_source(module: &pyo3_stub_gen::generate::Module) -> String {
+        // Jedi only collects adjacent overloads with the bare decorator name;
+        // `@typing.overload` silently exposes just the last CFF/LTD signature.
+        module
+            .to_string()
+            .replace(
+                "import typing\n",
+                "import typing\nfrom typing import overload\n",
+            )
+            .replace("@typing.overload\n", "@overload\n")
+    }
+}
 
 impl SymbolicaCommunityModule for FeynkitModule {
     fn get_citations() -> Vec<Citation> {
@@ -178,6 +198,14 @@ pub fn initialize_feynkit(module: &Bound<'_, PyModule>) -> PyResult<()> {
     generation::register(module)?;
     kinematics::register(module)?;
     cff::register(module)?;
+    module.add_class::<PyLtdRepresentation>()?;
+    module.add_class::<PyLtdResidue>()?;
+    module.add_class::<PyLtdReport>()?;
+    module.add_class::<PySurfacePair>()?;
+    module.add_class::<PyEnergySurface>()?;
+    module.add_class::<PyOnShellEnergy>()?;
+    module.add_class::<PySurfaceFactor>()?;
+
     tensor::register(module)?;
     integrals::register(module)?;
     #[cfg(feature = "ufo")]
@@ -450,8 +478,8 @@ assert not missing, f"native classes missing from the generated stub: {missing}"
                 "Process",
                 "FeynmanDiagram",
                 "TensorReducer",
-                "CffGenerator",
-                "CrossFreeFamily",
+                "CffRepresentation",
+                "LtdRepresentation",
                 "FourMomentum",
                 "JetDefinition",
                 "Helicity",
@@ -564,7 +592,7 @@ routed = bases[0].route(
 )
 assert set(routed) == {edge.id for edge in json_diagram.edges}
 
-cff = json_diagram.cross_free_family()
+cff = json_diagram.integrate_energy(method="cff")
 assert len(cff) > 0
 expression = cff.to_expression()
 assert "Cross-free family" in cff._repr_html_()
@@ -722,7 +750,7 @@ assert not amplitude.generate_diagrams(cancellation_token=token, **kwargs).repor
 diagram = amplitude.with_filters(vertex_allow=["V_3_SCALAR_000"]).generate_diagrams(loops=1, max_vertices=3).diagrams[0]
 assert_feynkit_error(
     fk.CffError,
-    lambda: fk.CffGenerator(max_orientations=0).generate(diagram),
+    lambda: diagram.integrate_energy(method="cff", max_orientations=0),
 )
 
 assert "_gammaloop" not in sys.modules

@@ -29,8 +29,8 @@ Symbolica, the notebook runtime, and this example's data.
 
 == What to explore
 
-Displaying `diagram.cross_free_family()` returns the interactive display of
-`symbolica.community.hepkit.CrossFreeFamily`. The compact view starts with the
+Displaying `diagram.integrate_energy(method="cff")` returns the interactive display of
+`symbolica.community.hepkit.CffRepresentation`. The compact view starts with the
 factored expression and selected surface definitions. Expand "Explore graph and
 families" to edit an orientation by clicking an arrowhead, choose a family
 preview, or compare surface regions on the native Linnet graph. Shift-click
@@ -39,11 +39,14 @@ denominator factors stay outside the family sum; the active family's path is
 highlighted in that expression. Selection only changes the display, never the
 underlying CFF result.
 
-The display's $C$ is shorthand for the denominator sum. Numerators, on-shell
-energy prefactors and the spatial integration measure stay separate. Use
-`to_expression()` to continue symbolically, or `to_expression(normalized=True)`
-to include the generated energy product and loop measure. The surface arena
-remains available alongside the expression.
+The display's $C$ includes the on-shell energy factors and contour convention
+shared with LTD. Numerators and the spatial integration measure stay separate.
+Use `to_expression()` to continue with a scalar `TensorExpression` and its
+mathematical notebook display. Orientations expose their `edge_signs` and
+`families`, and each family exposes its signed surface `factors`. Displaying
+an orientation shows its own family sum with fixed arrows; displaying a family
+shows just its contribution and circlings. Their graphs are expandable, and
+neither child display navigates to other orientations.
 
 == Run locally
 
@@ -58,3 +61,28 @@ just notebook feynkit/02_cff_and_symbolica_marimo /path/to/python
 Continue with #link("guides/showcases/numerical-integration/")[numerical integration with CFF and LTD], the #link("guides/showcases/")[other FeynKit showcases], or the
 #link("reference/python/feynkit-community/")[Python API reference].
 ]
+
+== Polynomial energy numerators
+
+The sole constructor also accepts an explicit polynomial numerator:
+
+```python
+from symbolica import S
+Q, cind = S("gammalooprs::Q", "spenso::cind")
+edge = diagram.internal_edges[0].id
+weighted = diagram.integrate_energy(method="cff", numerator=Q(edge, cind(0))**2)
+weighted.energy_degree_bounds
+weighted
+```
+
+Bounds are inferred in physical edge energies before momentum routing. This
+path uses the generalized native generator and currently requires a complete,
+unconstrained diagram. Express energy dependence through `Q(edge, cind(0))`;
+unevaluated energy-dependent functions and loop-basis energy coordinates are
+not supported. Spatial symbols may remain in polynomial coefficients.
+
+Each family exposes its signed `coefficient`, evaluated `numerator`,
+`energy_map`, and denominator `factors`. Their product, with denominator factors
+inverted, equals `family.to_expression()`. Generalized contributions can share
+the same geometric region and still have different numerator sampling maps.
+The display retains every contribution and writes repeated factors as powers.

@@ -198,7 +198,8 @@ fn render(
     match component {
         #[cfg(feature = "spenso")]
         "spynso3" => Ok(spynso3::SpensoModule::stub_source(module)),
-        "feynkit-community" => Ok(module.to_string().trim_end().to_owned()),
+        #[cfg(feature = "feynkit")]
+        "feynkit-community" => Ok(feynkit_py::FeynkitModule::stub_source(module)),
         #[cfg(feature = "linnet")]
         "linnet-graph" => Ok(linnet_py::canonical_stub()?),
         _ => Ok(module.to_string()),

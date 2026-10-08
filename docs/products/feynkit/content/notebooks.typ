@@ -116,7 +116,7 @@ Shift-, Ctrl-, or Meta-click toggles that element in the displayed selection; an
 click leaves the selection unchanged. Enter and Space provide the same inspection and selection
 actions for a focused element. Escape dismisses the details without clearing the selection.
 The original particle
-line styles, labels, and transparent background are preserved. Model, generation, and CFF
+line styles, labels, and transparent background are preserved. Model, generation, CFF and LTD
 objects also expose compact representations for inspection.
 
 For explicit Marimo embedding, use `mo.iframe(diagram.to_html())` so the interaction script
@@ -146,8 +146,11 @@ to import a canonical Linnet selection; foreign or stale selections raise an err
 For a standalone drawing of the excised topology, display `region.excise()`.
 
 `diagram.numerator_expression()` returns Spenso’s `TensorExpression`, retaining the tensor interface
-and index display hooks. `diagram.cross_free_family().to_expression()` returns a native Symbolica
-expression. Displaying those algebraic results is separate from rendering a graph. Use
+and index display hooks. `diagram.integrate_energy(method="cff")` returns `CffRepresentation`;
+`diagram.integrate_energy(method="ltd")` returns `LtdRepresentation`. Displaying either result
+opens its expression and graph explorer. Calling `to_expression()` instead
+returns a native Symbolica expression, with the normalization conventions
+documented in the #link("reference/interfaces/")[interface guide]. Use
 #product-link("spenso", page: "guides/python/", label: "Spenso's display tools") for tensor-aware
 algebra and #product-link("linnet", page: "guides/python-rendering/", label: "Linnet's rendering guide")
 for the underlying graph renderer.

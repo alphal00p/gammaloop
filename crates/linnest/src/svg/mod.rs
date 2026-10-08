@@ -72,9 +72,16 @@ pub struct EdgeDrawing {
     pub flow: Option<bool>,
     /// Momentum arrow beside the edge, carrying the label.
     pub momentum: bool,
+    /// Distance from the edge to its parallel momentum arrow, in drawing units.
+    pub momentum_offset: f64,
     pub label: Option<usize>,
     /// Inspection fields after the edge's own identity.
     pub details: Details,
+}
+
+impl EdgeDrawing {
+    /// Default clearance used by the shared physics renderer.
+    pub const DEFAULT_MOMENTUM_OFFSET: f64 = 0.35;
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -302,7 +309,11 @@ enum Element {
         path: BezPath,
         stroke: Stroke,
     },
-    Chevron([Point; 3]),
+    /// Momentum decorations retain their physical edge identity for overlays.
+    Momentum {
+        href: String,
+        path: BezPath,
+    },
     Triangle([Point; 3]),
     Label {
         page: usize,
@@ -438,12 +449,15 @@ impl Drawing {
                 // without a label to carry them.
                 let arrow = curves::layer(
                     &visible,
-                    labels::ARROW_OFFSET * side,
+                    drawing.momentum_offset * side,
                     Some(labels::ARROW_WINDOW),
                     0.0,
                 )?;
                 fixed_arrows.extend(labels::arrow_footprint(&arrow));
-                Self::paint_arrow(&arrow, &mut layers);
+                layers.push(Element::Momentum {
+                    href: hrefs.label.clone(),
+                    path: arrow,
+                });
             }
             let Some((page, metrics)) = label else {
                 continue;
@@ -457,8 +471,12 @@ impl Drawing {
             };
             match (&edge.source, &edge.sink) {
                 (Some(_), Some(_)) if drawing.momentum => {
-                    let (candidates, carriers) =
-                        labels::momentum_candidates(&visible, metrics, side)?;
+                    let (candidates, carriers) = labels::momentum_candidates(
+                        &visible,
+                        metrics,
+                        side,
+                        drawing.momentum_offset,
+                    )?;
                     placements.push(placement(candidates, Some(carriers)));
                     region_hrefs.push((edge.edge, hrefs.regions.clone()));
                 }
@@ -535,7 +553,6 @@ impl Drawing {
                     Some(labels::ARROW_WINDOW),
                     candidate.path_shift,
                 )?;
-                Self::paint_arrow(&arrow, &mut layers);
                 let regions = &region_hrefs
                     .iter()
                     .find(|(edge, _)| *edge == placement.edge)
@@ -548,6 +565,10 @@ impl Drawing {
                         href: regions[region].clone(),
                     }));
                 }
+                layers.push(Element::Momentum {
+                    href: placement.href.clone(),
+                    path: arrow,
+                });
             }
             layers.push(Element::Label {
                 page: placement.page,
@@ -845,16 +866,6 @@ impl Drawing {
         }
         Ok(())
     }
-
-    fn paint_arrow(arrow: &BezPath, layers: &mut Vec<Element>) {
-        layers.push(Element::Path {
-            path: arrow.clone(),
-            stroke: arrow_stroke(),
-        });
-        if let Some(points) = marks::CHEVRON.at_end(arrow) {
-            layers.push(Element::Chevron(points));
-        }
-    }
 }
 
 impl NodeDrawing {
@@ -994,6 +1005,7 @@ mod tests {
             pattern,
             flow,
             momentum,
+            momentum_offset: EdgeDrawing::DEFAULT_MOMENTUM_OFFSET,
             label: Some(0),
             details: [("particle", "x")].into_iter().collect(),
         };
@@ -1116,6 +1128,10 @@ mod tests {
         // One chevron per edge: searched internal arrows and fixed external ones.
         let chevron = r##"fill="none" stroke="#3d2645" stroke-width="1" stroke-linecap="round" stroke-linejoin="miter""##;
         assert_eq!(svg.matches(chevron).count(), 4);
+        assert_eq!(svg.matches("data-linnet-momentum").count(), 4);
+        for edge in 0..4 {
+            assert!(svg.contains(&format!("<a href=\"#linnet-edge-{edge}?")));
+        }
         // Edges without labels keep their arrows as fixed decorations.
         let mut unlabelled = bubble(true);
         for edge in &mut unlabelled.edges {
@@ -1123,6 +1139,34 @@ mod tests {
         }
         let svg = unlabelled.render(&typeset(&unlabelled)).unwrap();
         assert_eq!(svg.matches(chevron).count(), 4);
+    }
+
+    #[test]
+    fn momentum_clearance_moves_fixed_and_labelled_arrows_without_moving_edges() {
+        let mut scene = bubble(true);
+        let typeset = typeset(&scene);
+        let graph = TypstGraph::from_spec(scene.graph.clone()).unwrap();
+        let run = ImpredRun::seeded(graph, &Value::Object(scene.layout.clone())).unwrap();
+        let laid = Laid::new(&run).unwrap();
+        let before = Drawing::new(&scene, &typeset, &laid).unwrap();
+        for edge in &mut scene.edges {
+            edge.momentum_offset = 0.7;
+        }
+        let after = Drawing::new(&scene, &typeset, &laid).unwrap();
+        let mut arrows = 0;
+        for (before, after) in before.layers.iter().zip(&after.layers) {
+            match (before, after) {
+                (Element::Momentum { path: a, .. }, Element::Momentum { path: b, .. }) => {
+                    assert_ne!(a, b);
+                    arrows += 1;
+                }
+                (Element::Carrier { path: a, .. }, Element::Carrier { path: b, .. }) => {
+                    assert_eq!(a, b);
+                }
+                _ => {}
+            }
+        }
+        assert_eq!(arrows, 4);
     }
 
     #[test]

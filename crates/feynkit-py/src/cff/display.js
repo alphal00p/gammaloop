@@ -2,13 +2,16 @@
   for (const root of document.querySelectorAll(".feynkit-cff-result")) {
     if (root.dataset.ready) continue;
     root.dataset.ready = "true";
-    const data = JSON.parse(root.querySelector("[data-cff]").textContent);
+    const data = JSON.parse(
+      root.querySelector("[data-cff]").textContent,
+      (key, value) => key.endsWith("_html") ? root.expressionDisplay.math(value) : value,
+    );
     const state = {
       orientation: 0,
       family: 0,
-      surfaces: [...new Set(data.orientations[0]?.terms[0] || [])].slice(0, 2),
-      contours: false,
-      multiple: false,
+      surfaces: [...new Set(data.orientations[0]?.terms[0] || [])].slice(0, data.scope === "family" ? undefined : 2),
+      contours: true,
+      multiple: data.scope === "family",
       familyPage: 0,
       palette: {},
     };
@@ -18,9 +21,17 @@
       (count, o) => count + o.terms.length,
       0,
     );
+    const familyId = (index) => data.orientations[state.orientation].family_ids[index];
     root.querySelector("[data-metadata]").textContent =
-      `${data.loops} ${data.loops === 1 ? "loop" : "loops"} · ${data.orientations.length} orientations · ${data.familyCount.toLocaleString("en-US")} terms`;
+      (data.pole_order ? `Pole coefficient · order ${data.pole_order} · ` : "") +
+      (data.scope === "representation"
+        ? `${data.loops} ${data.loops === 1 ? "loop" : "loops"} · ${data.orientations.length} orientations · ${data.familyCount.toLocaleString("en-US")} terms`
+        : `Orientation ${data.orientations[0].id}` + (data.scope === "family" ? ` · family ${familyId(0)}` : ""));
     const explorer = root.querySelector("[data-explorer]");
+    root.querySelector("[data-navigation-help]").hidden = data.scope !== "representation";
+    root.querySelector("[data-scope-help]").textContent =
+      data.generalized ? "Includes the supplied numerator and on-shell factors; the spatial measure is separate." : "Includes the on-shell energy prefactor; numerators and the spatial measure are separate.";
+    if (data.scope === "family") explorer.querySelector("summary").textContent = "Explore graph";
     const internalEdges = data.edges.filter((edge) =>
       data.orientations.some((o) =>
         ["default", "reversed"].includes(o.directions[edge.id]),
@@ -63,62 +74,39 @@
     let serial = 0;
     const eta = (id) =>
       `${data.surfaces[id].kind === "h" ? "H" : "η"}<sub>${data.surfaces[id].index}</sub>`;
-    function factorFamilies(entries) {
-      const remaining = entries.map((entry) => ({
-          ...entry,
-          factors: [...entry.factors],
-        })),
-        factors = [];
-      // Extract the multiset intersection; each leaf retains its original family ID.
-      for (const id of entries[0].factors)
-        if (remaining.every((entry) => entry.factors.includes(id))) {
-          factors.push(id);
-          remaining.forEach((entry) =>
-            entry.factors.splice(entry.factors.indexOf(id), 1),
-          );
-        }
-      const node = {
-        factors,
-        families: entries.map((entry) => entry.family),
-        children: [],
-      };
-      if (entries.length === 1) return node;
-      const groups = new Map();
-      remaining.forEach((entry) => {
-        const key = entry.factors.length
-          ? `surface-${entry.factors[0]}`
-          : `family-${entry.family}`;
-        if (!groups.has(key)) groups.set(key, []);
-        groups.get(key).push(entry);
-      });
-      node.children = [...groups.values()].map(factorFamilies);
-      return node;
-    }
     const factorTrees = new Map();
     function factorTree(o) {
       if (!factorTrees.has(o.id))
         factorTrees.set(
           o.id,
-          factorFamilies(
-            o.terms.map((factors, family) => ({ factors, family })),
+          root.expressionDisplay.factorTerms(
+            o.terms.map((factors, id) => ({ factors: [...factors, ...o.contributions[id].energies.map(e => `energy-${e}`)], id })),
           ),
         );
       return factorTrees.get(o.id);
     }
     function factoredMath(node, term, selected, key = "root") {
-      const active = node.families.includes(state.family);
-      const factors = node.factors
-        .map((id, index) => {
+      const active = node.terms.includes(state.family);
+      const factors = root.expressionDisplay.powers(node.factors)
+        .map(([id, power], index) => {
+          const exponent = power > 1 ? `<sup data-power-label>${power}</sup>` : "";
+          if (typeof id === "string") return root.expressionDisplay.energyFactor(data.energy_html[id.slice(7)], id.slice(7), power);
           if (!active)
-            return `<span class="hs-factored-factor" data-factor-id="${id}" data-path-active="false">${eta(id)}<span class="hs-factor-spacer"></span></span>`;
-          return `<button type="button" class="hs-factored-factor" data-factor-id="${id}" data-path-active="true" data-surface="${id}" data-factor-key="${key}-${index}" style="--hs-color:${color(id, term)}" aria-label="Select ${data.surfaces[id].kind} surface ${data.surfaces[id].index} on family ${state.family + 1}" aria-pressed="${selected.includes(id)}">${eta(id)}<span class="hs-swatch"></span></button>`;
+            return `<span class="hs-factored-factor" data-factor-id="${id}" data-factor-power="${power}" data-path-active="false">${eta(id)}${exponent}<span class="hs-factor-spacer"></span></span>`;
+          return `<button type="button" class="hs-factored-factor" data-factor-id="${id}" data-factor-power="${power}" data-path-active="true" data-surface="${id}" data-factor-key="${key}-${index}" style="--hs-color:${color(id, term)}" aria-label="Select ${data.surfaces[id].kind} surface ${data.surfaces[id].index} on family ${familyId(state.family)}" aria-pressed="${selected.includes(id)}">${eta(id)}${exponent}<span class="hs-swatch"></span></button>`;
         })
         .join("");
+      const leaf = !node.children.length,
+        contribution = leaf ? data.orientations[state.orientation].contributions[node.terms[0]] : null,
+        coefficient = contribution?.coefficient || "1",
+        numerator = contribution?.numerator_html || "1",
+        value = `${coefficient === "1" ? "" : coefficient === "-1" ? "−" : coefficient.replaceAll("-", "−") + (numerator !== "1" ? " · " : "")}${numerator === "1" && coefficient !== "1" && coefficient !== "-1" ? "" : numerator}`;
+      const explanation = contribution ? Object.entries(contribution.energy_map).map(([edge, value]) => `q${edge}⁰ = ${value}`).join("; ") : "";
       const fraction = factors
-        ? `<span class="hs-factored-fraction" data-path-active="${active}" data-shared-families="${node.families.length}"><span>1</span><span class="hs-factored-denominator">${factors}</span></span>`
+        ? root.expressionDisplay.fraction(`<span class="hs-contribution-numerator">${value}</span>`, factors, `data-path-active="${active}" data-shared-families="${node.terms.length}"`)
         : "";
       if (!node.children.length)
-        return `<span class="hs-factor-leaf" data-family-leaf="${node.families[0]}">${fraction || "<span>1</span>"}<span class="hs-leaf-label" data-path-active="${active}">F${node.families[0] + 1}</span></span>`;
+        return `<span class="hs-factor-leaf" data-family-leaf="${node.terms[0]}" data-coefficient="${coefficient}" title="${explanation.replaceAll("&", "&amp;").replaceAll('"', "&quot;").replaceAll("<", "&lt;")}">${fraction || `<span class="hs-contribution-numerator">${value}</span>`}<span class="hs-leaf-label" data-path-active="${active}">F${familyId(node.terms[0])}</span></span>`;
       const branches = node.children
         .map(
           (child, index) =>
@@ -128,34 +116,7 @@
       const bracket = `<span class="hs-factored-bracket"><span class="hs-bracket-edge" aria-hidden="true"></span><span class="hs-factored-sum">${branches}</span><span class="hs-bracket-edge" aria-hidden="true"></span></span>`;
       return `<span class="hs-factor-node">${fraction}${fraction ? '<span aria-hidden="true">·</span>' : ""}${bracket}</span>`;
     }
-    function sumSequence(indices, label) {
-      const entries = [...new Set(indices)].sort((a, b) => a - b),
-        parts = [];
-      entries.forEach((index, j) => {
-        if (j) {
-          parts.push("<span>+</span>");
-          if (index > entries[j - 1] + 1)
-            parts.push("<span>⋯</span><span>+</span>");
-        }
-        parts.push(label(index));
-      });
-      return parts.join("");
-    }
-    const definition = (s) => {
-      const parts = [
-        ...s.e.map((e) => [1, `E<sup>os</sup><sub>${e}</sub>`]),
-        ...s.negative.map((e) => [-1, `E<sup>os</sup><sub>${e}</sub>`]),
-        ...s.q.map(([q, n]) => [n, `Q<sup>0</sup><sub>${q}</sub>`]),
-      ];
-      return (
-        parts
-          .map(
-            ([n, label], i) =>
-              `${n < 0 ? " − " : i ? " + " : ""}${Math.abs(n) === 1 ? "" : Math.abs(n)}${label}`,
-          )
-          .join("") || "0"
-      );
-    };
+    const definition = (s) => s.expression_html;
     const color = (id, term) => {
       const slot = paletteFor(term)[id];
       return slot <= 7
@@ -197,7 +158,12 @@
         d: anchor.querySelector("path").getAttribute("d"),
       }),
     );
-    native.querySelectorAll("a,:scope > path").forEach((el) => el.remove());
+    native
+      .querySelectorAll("a:not([data-linnet-carrier]),:scope > path")
+      .forEach((el) => el.remove());
+    native.querySelectorAll("[data-linnet-carrier]").forEach((el) => {
+      el.removeAttribute("data-linnet-kind");
+    });
     native.querySelectorAll("[fill]").forEach((el) => {
       if (!["none", "transparent"].includes(el.getAttribute("fill")))
         el.setAttribute("fill", "var(--hs-fg)");
@@ -253,9 +219,7 @@
         "aria-label",
         `Energy-flow orientation ${data.orientations[state.orientation].id}; ${selected.length} selected surfaces. Rings mark vertex membership.`,
       );
-      const underlay = element("g", { "data-shading": "" }),
-        bands = element("g", { "data-bands": "", "pointer-events": "none" });
-      svg.insertBefore(underlay, svg.firstChild);
+      const bands = element("g", { "data-bands": "", "pointer-events": "none" });
       const paths = [...svg.querySelectorAll("path[data-edge]")],
         nodes = [...svg.querySelectorAll("[data-linnet-node]")];
       if (mini)
@@ -280,35 +244,10 @@
         const halves = paths.filter((p) => Number(p.dataset.edge) === edge.id);
         const boundaryIds = displayed.filter(
           (id) =>
-            data.surfaces[id].e.includes(edge.id) ||
-            data.surfaces[id].negative.includes(edge.id),
+            data.surfaces[id].support.includes(edge.id),
         );
-        const interiorIds = mini
-          ? []
-          : displayed.filter(
-              (id) =>
-                data.surfaces[id].v.includes(edge.source) &&
-                data.surfaces[id].v.includes(edge.target),
-            );
         halves.forEach((path) => {
           const owner = Number(path.dataset.owner);
-          interiorIds.forEach((id, slot) =>
-            underlay.append(
-              element("path", {
-                d: offsetPath(
-                  path,
-                  (slot - (interiorIds.length - 1) / 2) * 3.5,
-                ),
-                fill: "none",
-                stroke: color(id, term),
-                "stroke-width": 3.2,
-                opacity: 0.16,
-                "stroke-linecap": "round",
-                "data-interior": edge.id,
-                "data-interior-surface": id,
-              }),
-            ),
-          );
           boundaryIds.forEach((id, slot) => {
             if (!data.surfaces[id].v.includes(owner)) return;
             bands.append(
@@ -370,90 +309,6 @@
             }
           });
         }
-      if (state.contours && !mini) {
-        // Give nested circlings distinct offsets, using the whole family so
-        // selecting or deselecting a surface does not move the other outlines.
-        const levels = new Map();
-        [...new Set(term)]
-          .sort(
-            (a, b) =>
-              data.surfaces[a].v.length - data.surfaces[b].v.length || a - b,
-          )
-          .forEach((id) => {
-            const members = data.surfaces[id].v;
-            const contained = [...levels].filter(([other]) =>
-              data.surfaces[other].v.every((vertex) =>
-                members.includes(vertex),
-              ),
-            );
-            levels.set(
-              id,
-              Math.max(0, ...contained.map(([, level]) => level + 1)),
-            );
-          });
-        displayed.forEach((id) => {
-          const members = data.surfaces[id].v,
-            inside = nodes.filter((node) =>
-              members.includes(Number(node.dataset.linnetNode)),
-            ),
-            padding = 4 + 3 * levels.get(id),
-            radius =
-              Math.max(
-                0,
-                ...inside.map((node) => Number(node.getAttribute("r"))),
-              ) + padding;
-          const filter = element("filter", {
-            id: prefix + "outline-" + id,
-            x: "-50%",
-            y: "-50%",
-            width: "200%",
-            height: "200%",
-          });
-          filter.innerHTML =
-            '<feMorphology in="SourceAlpha" operator="dilate" radius="0.8" result="outer"/><feComposite in="outer" in2="SourceAlpha" operator="out" result="boundary"/>';
-          filter.append(element("feFlood", { "flood-color": color(id, term) }));
-          filter.append(
-            element("feComposite", { in2: "boundary", operator: "in" }),
-          );
-          svg.append(filter);
-          const region = element("g", {
-            "data-outline-surface": id,
-            "data-outline-level": levels.get(id),
-            filter: `url(#${filter.id})`,
-            fill: color(id, term),
-            stroke: color(id, term),
-            "stroke-width": 2 * radius,
-            opacity: 0.8,
-            "pointer-events": "none",
-          });
-          inside.forEach((node) =>
-            region.append(
-              element("circle", {
-                cx: node.getAttribute("cx"),
-                cy: node.getAttribute("cy"),
-                r: radius,
-                stroke: "none",
-                "data-outline-vertex": node.dataset.linnetNode,
-              }),
-            ),
-          );
-          paths.forEach((path) => {
-            const edge = data.edges.find(
-              (edge) => edge.id === Number(path.dataset.edge),
-            );
-            if (members.includes(edge.source) && members.includes(edge.target))
-              region.append(
-                element("path", {
-                  d: path.getAttribute("d"),
-                  fill: "none",
-                  "stroke-linecap": "round",
-                  "data-outline-edge": edge.id,
-                }),
-              );
-          });
-          svg.insertBefore(region, svg.firstChild);
-        });
-      }
       const o = data.orientations[state.orientation];
       for (const edge of internalEdges) {
         const halves = paths.filter(
@@ -484,7 +339,7 @@
             "pointer-events": "none",
           }),
         );
-        if (!mini) {
+        if (!mini && data.scope === "representation") {
           arrow.classList.add("hs-arrowhead");
           arrow.dataset.flipEdge = edge.id;
           arrow.setAttribute("role", "button");
@@ -542,9 +397,60 @@
         script.textContent = navigation;
         host.append(script);
       }
+      const viewer = previous || svg;
+      // Nested circlings keep the same spacing when another surface is toggled.
+      // Linnet outlines the union of the native vertices and internal paths.
+      const levels = new Map();
+      [...new Set(term)]
+        .sort(
+          (a, b) =>
+            data.surfaces[a].v.length - data.surfaces[b].v.length || a - b,
+        )
+        .forEach((id) => {
+          const members = data.surfaces[id].v;
+          const contained = [...levels].filter(([other]) =>
+            data.surfaces[other].v.every((vertex) => members.includes(vertex)),
+          );
+          levels.set(id, Math.max(0, ...contained.map(([, level]) => level + 1)));
+        });
+      for (const id of displayed) {
+        if (!data.surfaces[id].v.length) continue;
+        const members = data.surfaces[id].v,
+          inside = nodes.filter((node) =>
+            members.includes(Number(node.dataset.linnetNode)),
+          ),
+          padding = 4 + 4 * levels.get(id),
+          radius =
+            Math.max(0, ...inside.map((node) => Number(node.getAttribute("r")))) +
+            padding;
+        const region = viewer.linnetShade(
+          {
+            nodes: members,
+            edges: data.edges
+              .filter(
+                (edge) =>
+                  members.includes(edge.source) && members.includes(edge.target),
+              )
+              .map((edge) => edge.id),
+          },
+          state.contours
+            ? { width: 2 * radius, padding, outline: 1.6, fillOpacity: 0.09 }
+            : {},
+        );
+        region.style.color = color(id, term);
+        region.dataset.shadingSurface = id;
+        if (state.contours) {
+          region.dataset.outlineSurface = id;
+          region.dataset.outlineLevel = levels.get(id);
+        }
+        content.prepend(region);
+      }
     }
     function renderInputs(product, o) {
-      product.querySelector(".hs-family-bar").hidden = !o.terms.length;
+      const singleFamily = data.scope === "family";
+      product.querySelector(".hs-family-bar").hidden = singleFamily || !o.terms.length;
+      product.querySelector("[data-family-previews]").hidden = singleFamily;
+      if (singleFamily) return;
       const start = state.familyPage * 3,
         end = Math.min(start + 3, o.terms.length);
       product.querySelector("[data-page-range]").textContent =
@@ -557,7 +463,7 @@
         .slice(start, end)
         .map(
           (term, j) =>
-            `<button type="button" class="hs-family-choice" data-choose-family="${start + j}" aria-label="Choose family ${start + j + 1}" aria-pressed="${state.family === start + j}"><span class="hs-family-label">F${start + j + 1}</span><div class="hs-mini" data-preview-family="${start + j}"></div></button>`,
+            `<button type="button" class="hs-family-choice" data-choose-family="${start + j}" aria-label="Choose family ${familyId(start + j)}" aria-pressed="${state.family === start + j}"><span class="hs-family-label">F${familyId(start + j)}</span><div class="hs-mini" data-preview-family="${start + j}"></div></button>`,
         )
         .join("");
       previews.querySelectorAll("[data-preview-family]").forEach((host) => {
@@ -584,26 +490,28 @@
           renderInputs(product, o);
           drawing(product.querySelector("[data-graph]"), term, selected);
         }
-        const neighbors = [
-          0,
-          state.orientation - 1,
-          state.orientation,
-          state.orientation + 1,
-          data.orientations.length - 1,
-        ].filter((index) => index >= 0 && index < data.orientations.length);
-        // Navigate retained orientations by position, but display their native IDs.
-        const sum = sumSequence(neighbors, (index) => {
-          const id = data.orientations[index].id;
-          return index === state.orientation
-            ? `<label class="hs-sum-current" data-total-orientation="${id}" title="Go to orientation ID · Enter to apply, Escape to cancel">C<sub><input type="text" inputmode="numeric" data-orientation-input aria-label="Orientation ID" value="${id}" style="width:${Math.max(2, String(id).length)}ch" /></sub></label>`
-            : `<button type="button" class="hs-sum-term" data-choose-orientation="${index}" data-total-orientation="${id}" aria-label="Show orientation ${id}">C<sub>${id}</sub></button>`;
-        });
-        product.querySelector("[data-total-sum]").innerHTML =
-          `<div class="hs-sum-math" role="group" aria-label="Orientation sum"><span>C =</span>${sum}</div>`;
+        product.querySelector("[data-total-sum]").hidden = data.scope !== "representation";
+        product.querySelector("[data-total-sum]").innerHTML = data.scope === "representation"
+          ? root.expressionDisplay.sum({
+            ids: data.orientations.map((o) => o.id),
+            current: state.orientation,
+            symbol: "C",
+            total: "C",
+            label: "Orientation",
+            onSelect(index) {
+              chooseOrientation(index);
+              render();
+            },
+            onInvalid() {
+              message = "Enter an orientation ID retained in this result.";
+              messageError = true;
+              render();
+            },
+          }) : "";
         const tree = o.terms.length ? factorTree(o) : null,
           shared = tree?.factors.length || 0;
         product.querySelector("[data-orientation-sum]").innerHTML =
-          `<div class="hs-sum-label">${o.terms.length} ${o.terms.length === 1 ? "family" : "families"}${o.terms.length > 1 && shared ? ` · ${shared} shared ${shared === 1 ? "factor" : "factors"}` : ""}</div><div class="hs-factored-equation" aria-label="Factored denominator expression for orientation ${o.id}, with family ${state.family + 1} highlighted"><span class="hs-factored-lhs">C<sub>${o.id}</sub> =</span>${tree ? factoredMath(tree, term, selected) : "0"}</div>`;
+          `<div class="hs-sum-label" ${data.scope === "family" ? "hidden" : ""}>${o.terms.length} ${o.terms.length === 1 ? "family" : "families"}${o.terms.length > 1 && shared ? ` · ${shared} shared ${shared === 1 ? "factor" : "factors"}` : ""}</div><div class="hs-factored-equation" aria-label="Factored denominator expression for orientation ${o.id}, with family ${familyId(state.family)} highlighted"><span class="hs-factored-lhs">${data.scope === "family" ? `F<sub>${o.id},${familyId(state.family)}</sub>` : `C<sub>${o.id}</sub>`} =</span>${data.generalized ? (data.normalization === "1" ? "" : `<span>${data.normalization_html}</span><span>·</span>`) : data.energy_edges.length ? root.expressionDisplay.fraction(data.energy_edges.length % 2 ? "−1" : "1", `<span class="hs-energy">∏<sub>e</sub> 2${data.energy_html.e}</span>`, `title="On-shell factors for edges ${data.energy_edges.join(", ")}"`) + "<span>·</span>" : ""}${tree ? factoredMath(tree, term, selected) : "0"}</div>`;
         product.querySelector("[data-contours]").checked = state.contours;
         product.querySelector("[data-multiple]").checked = state.multiple;
         product.querySelector("[data-selection-count]").textContent =
@@ -612,7 +520,7 @@
           ? selected
               .map((id) => {
                 const surface = data.surfaces[id];
-                return `<div class="hs-definition-row" style="--hs-color:${color(id, term)}" data-definition="${id}"><div class="hs-definition">${eta(id)} = ${definition(surface)}</div><div class="hs-sets">Inside {${surface.v.join(", ")}}</div></div>`;
+                return `<div class="hs-definition-row" style="--hs-color:${color(id, term)}" data-definition="${id}"><div class="hs-definition">${eta(id)} = ${definition(surface)}</div><div class="hs-sets">${surface.origin === "helper" ? "Algebraic helper · no graph region" : surface.numerator_only ? "Numerator factor" : surface.v.length ? `Inside {${surface.v.join(", ")}}` : "No graph region"}</div></div>`;
               })
               .join("")
           : '<span class="hs-muted">Select a surface to inspect its definition.</span>';
@@ -655,33 +563,6 @@
         event.target.dispatchEvent(new MouseEvent("click", { bubbles: true }));
         return;
       }
-      if (!event.target.matches("[data-orientation-input]")) return;
-      if (event.key === "Escape") {
-        event.preventDefault();
-        event.target.value = String(data.orientations[state.orientation].id);
-        event.target.blur();
-      } else if (event.key === "Enter") {
-        event.preventDefault();
-        const value = Number(event.target.value),
-          index = data.orientations.findIndex((o) => o.id === value);
-        if (
-          event.target.value.trim() === "" ||
-          !Number.isInteger(value) ||
-          index < 0
-        ) {
-          message = "Enter an orientation ID retained in this result.";
-          messageError = true;
-        } else chooseOrientation(index);
-        render();
-        const input = root.querySelector("[data-orientation-input]");
-        input.focus({ preventScroll: true });
-        input.select();
-      }
-    });
-    root.addEventListener("focusout", (event) => {
-      // Leaving an unsubmitted edit must not rerender and swallow a neighbor click.
-      if (event.target.matches("[data-orientation-input]"))
-        event.target.value = String(data.orientations[state.orientation].id);
     });
     root.addEventListener("change", (event) => {
       const product = event.target.closest(".feynkit-cff-result");
@@ -702,14 +583,11 @@
       const product = event.target.closest(".feynkit-cff-result");
       if (!product) return;
       const action = event.target.closest(
-        "[data-choose-orientation],[data-flip-edge],[data-choose-family],[data-page-step]",
+        "[data-flip-edge],[data-choose-family],[data-page-step]",
       );
       if (action) {
         let focusSelector = "";
-        if (action.hasAttribute("data-choose-orientation")) {
-          chooseOrientation(Number(action.dataset.chooseOrientation));
-          focusSelector = "[data-orientation-input]";
-        } else if (action.hasAttribute("data-flip-edge")) {
+        if (action.hasAttribute("data-flip-edge")) {
           const edge = Number(action.dataset.flipEdge),
             next = flipTarget(edge);
           if (next === undefined) {

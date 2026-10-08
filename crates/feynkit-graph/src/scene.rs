@@ -29,6 +29,8 @@ const EXTERNAL_SPACING: f64 = 10.0;
 pub struct SceneOptions {
     /// Momentum arrows beside every edge.
     pub momentum_arrows: bool,
+    /// Distance between the edge and its momentum arrow, in drawing units.
+    pub momentum_arrow_offset: f64,
     /// Momenta in labels; `None` follows the arrows.
     pub show_momentum: Option<bool>,
     pub show_particle: bool,
@@ -45,6 +47,7 @@ impl Default for SceneOptions {
     fn default() -> Self {
         Self {
             momentum_arrows: false,
+            momentum_arrow_offset: EdgeDrawing::DEFAULT_MOMENTUM_OFFSET,
             show_momentum: None,
             show_particle: true,
             show_edge_index: false,
@@ -319,6 +322,7 @@ impl FeynmanDiagram {
                     pattern: drawing.pattern,
                     flow: drawing.flow,
                     momentum: options.momentum_arrows,
+                    momentum_offset: options.momentum_arrow_offset,
                     label,
                     details,
                 },
@@ -471,6 +475,7 @@ impl SceneOptions {
                 None
             },
             momentum: self.momentum_arrows,
+            momentum_offset: self.momentum_arrow_offset,
             label: None,
             details: Details::default(),
         }
@@ -677,6 +682,7 @@ mod tests {
         let diagram = one_loop();
         let options = SceneOptions {
             momentum_arrows: true,
+            momentum_arrow_offset: 0.7,
             ..SceneOptions::default()
         };
         let mut selected = diagram.graph.empty_subgraph::<SuBitGraph>();
@@ -686,6 +692,7 @@ mod tests {
             .unwrap();
         // Momenta follow the arrows into the labels; both legs carry the same one.
         assert!(scene.edges.iter().all(|edge| edge.momentum));
+        assert!(scene.edges.iter().all(|edge| edge.momentum_offset == 0.7));
         assert_eq!(scene.pages.len(), 3);
         assert_eq!(scene.edges[0].label, scene.edges[3].label);
         let internal = &scene.pages[scene.edges[1].label.unwrap()];

@@ -320,6 +320,107 @@
       show(target);
     };
     const targetOf = event => event.target.closest && event.target.closest('[data-linnet-kind]');
+    /* Domain overlays and hover share the native structural half-edge paths.
+       One opacity layer composites shared vertices and adjoining halves once. */
+    let shadeSerial = 0;
+    svg.linnetShade = ({ nodes = [], edges = [], half_edges = [] },
+      { width = 8, padding = 2, outline = 0, fillOpacity = .12 } = {}) => {
+      /* Read current geometry: domain viewers can replace the drawing while
+         keeping this camera, and several regions may share the same carriers. */
+      const carriers = [...svg.querySelectorAll('[data-linnet-carrier]')];
+      const nodeShapes = new Map([...svg.querySelectorAll('[data-linnet-node]')]
+        .map(node => [Number(node.dataset.linnetNode), node]));
+      const included = { node: new Set(nodes), edge: new Set(edges), halfedge: new Set(half_edges) };
+      const group = svgElement('g');
+      group.classList.add('linnet-edge-highlight');
+      if (outline > 0) {
+        /* Outline the union, not each primitive: no seams where halves meet
+           vertices. A faint interior and opaque rim stay distinct when nested. */
+        const filter = svgElement('filter');
+        filter.id = `linnet-region-${Math.random().toString(36).slice(2)}-${shadeSerial++}`;
+        for (const [key, value] of Object.entries({x: '-50%', y: '-50%', width: '200%', height: '200%'}))
+          filter.setAttribute(key, value);
+        /* Construct nodes, not markup inside this embedded SVG script. */
+        const primitive = (tag, attrs, parent = filter) => {
+          const element = svgElement(tag);
+          for (const [key, value] of Object.entries(attrs)) element.setAttribute(key, value);
+          parent.append(element);
+          return element;
+        };
+        primitive('feMorphology', {in: 'SourceAlpha', operator: 'dilate', radius: outline, result: 'outer'});
+        primitive('feComposite', {in: 'outer', in2: 'SourceAlpha', operator: 'out', result: 'rim'});
+        primitive('feFlood', {'flood-color': 'currentColor'});
+        primitive('feComposite', {in2: 'rim', operator: 'in', result: 'border'});
+        const tint = primitive('feComponentTransfer', {in: 'SourceGraphic', result: 'tint'});
+        primitive('feFuncA', {type: 'linear', slope: fillOpacity}, tint);
+        const merge = primitive('feMerge', {});
+        for (const input of ['tint', 'border']) primitive('feMergeNode', {in: input}, merge);
+        const defs = svgElement('defs');
+        defs.append(filter);
+        group.append(defs);
+        group.setAttribute('filter', `url(#${filter.id})`);
+        group.style.opacity = '1';
+      }
+      const inverse = viewport.getCTM().inverse();
+      const place = (copy, original) => {
+        const transform = inverse.multiply(original.getCTM());
+        copy.setAttribute('transform', `matrix(${transform.a} ${transform.b} ${transform.c} ${transform.d} ${transform.e} ${transform.f})`);
+        group.append(copy);
+      };
+      /* Authored Typst drawings expose sampled hit regions rather than native
+         carriers. Preserve their painted geometry, including custom glyphs. */
+      if (svg.dataset.linnetRenderer !== 'native') {
+        for (const item of targets) {
+          const detail = JSON.parse(item.dataset.linnetDetail);
+          const node = item.dataset.linnetKind === 'node';
+          if (node ? !included.node.has(Number(item.dataset.linnetId))
+            : !included.edge.has(detail.edge) && !included.halfedge.has(detail['half-edge'])) continue;
+          for (const rect of item.querySelectorAll('rect')) {
+            const copy = rect.cloneNode(false);
+            copy.setAttribute('fill', 'currentColor');
+            copy.setAttribute('rx', Math.min(rect.width.baseVal.value, rect.height.baseVal.value) / 2);
+            place(copy, rect);
+          }
+        }
+        return group;
+      }
+      for (const carrier of carriers) {
+        const detail = JSON.parse(carrier.dataset.linnetDetail);
+        if (!included.edge.has(detail.edge) && !included.halfedge.has(detail['half-edge'])) continue;
+        const original = carrier.querySelector('path');
+        const path = svgElement('path');
+        let d = original.getAttribute('d');
+        const node = nodeShapes.get(detail.node);
+        if (node && included.node.has(detail.node)) {
+          /* Join selected vertices to their incident halves even when labels
+             reserved a larger vertex disc in the original drawing. */
+          const center = new DOMPoint(node.cx.baseVal.value, node.cy.baseVal.value)
+            .matrixTransform(original.getCTM().inverse().multiply(node.getCTM()));
+          d = detail.flow === 'source' ? `M${center.x} ${center.y} L${d.slice(1)}` : `${d} L${center.x} ${center.y}`;
+        }
+        path.setAttribute('d', d);
+        path.setAttribute('fill', 'none');
+        path.setAttribute('stroke', 'currentColor');
+        path.setAttribute('stroke-width', width);
+        /* Half-edge membership ends exactly at the cut, including narrow gaps. */
+        path.setAttribute('stroke-linecap', 'butt');
+        path.setAttribute('stroke-linejoin', 'round');
+        path.dataset.linnetShadeHalfedge = detail['half-edge'];
+        place(path, original);
+      }
+      for (const id of included.node) {
+        const node = nodeShapes.get(id);
+        if (!node) continue;
+        const copy = node.cloneNode(false);
+        copy.removeAttribute('data-linnet-node');
+        copy.setAttribute('r', node.r.baseVal.value + padding);
+        copy.setAttribute('fill', 'currentColor');
+        copy.setAttribute('stroke', 'none');
+        copy.dataset.linnetShadeNode = id;
+        place(copy, node);
+      }
+      return group;
+    };
     const highlightEdge = (target, active) => {
       const kind = target.dataset.linnetKind;
       if (kind === 'node') return;
@@ -327,24 +428,7 @@
       const key = `${kind}:${id}`;
       let group = edgeHighlights.get(key);
       if (!group) {
-        /* Composite the overlapping hit regions once, so selection adds a
-           smooth translucent halo instead of darkening each sampled box. */
-        group = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-        group.classList.add('linnet-edge-highlight');
-        const inverse = viewport.getCTM().inverse();
-        for (const item of targets) {
-          if (item.dataset.linnetKind === 'node') continue;
-          const detail = JSON.parse(item.dataset.linnetDetail);
-          if ((kind === 'edge' ? detail.edge : detail['half-edge']) !== id) continue;
-          for (const rect of item.querySelectorAll('rect')) {
-            const copy = rect.cloneNode(false);
-            const transform = inverse.multiply(rect.getCTM());
-            copy.setAttribute('transform', `matrix(${transform.a} ${transform.b} ${transform.c} ${transform.d} ${transform.e} ${transform.f})`);
-            copy.removeAttribute('fill');
-            copy.setAttribute('rx', Math.min(rect.width.baseVal.value, rect.height.baseVal.value) / 2);
-            group.append(copy);
-          }
-        }
+        group = svg.linnetShade(kind === 'edge' ? { edges: [id] } : { half_edges: [id] });
         viewport.append(group);
         edgeHighlights.set(key, group);
       }
@@ -404,8 +488,12 @@
       } else return;
       event.preventDefault();
     });
+    /* Domain controls also live inside the viewport. Cancel a drag's click
+       before it reaches their handlers, not just the built-in inspector. */
     svg.addEventListener('click', event => {
-      if (suppressClick) { suppressClick = false; event.stopPropagation(); return; }
+      if (suppressClick) { suppressClick = false; event.stopImmediatePropagation(); }
+    }, true);
+    svg.addEventListener('click', event => {
       const target = targetOf(event);
       if (target) { activate(target, event); highlightEdge(target, false); }
     });

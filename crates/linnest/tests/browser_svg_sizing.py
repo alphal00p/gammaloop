@@ -116,6 +116,7 @@ def main():
                 + "".join(
                     f'<div style="width:550px"><svg id="{name}" '
                     f'data-linnet-interactive viewBox="0 0 {width} {height}" '
+                    f'width="{width}pt" height="{height}pt" '
                     f'data-linnet-viewport-height="{fixed_height}">'
                     f'<rect width="{width}" height="{height}" fill="lightblue"/>'
                     '<circle cx="20" cy="20" r="5"/></svg></div>'
@@ -172,12 +173,138 @@ def main():
             viewport = wide.locator(".linnet-viewport")
             viewport.press("+")
             assert wide.locator("output").inner_text() == "105%"
+            assert viewport.evaluate("e=>getComputedStyle(e).outlineStyle") == "none"
+            assert (
+                wide.locator(".linnet-pan-surface").evaluate(
+                    "e=>getComputedStyle(e).strokeOpacity"
+                )
+                == "0.5"
+            )
             viewport.press("0")
             assert wide.locator("output").inner_text() == "100%"
             assert wide.evaluate(measure)["contained"]
             assert not errors, errors
             print(
                 "Consistent point scale, width fitting, fixed-height fitting, and zoom/reset passed"
+            )
+            # A domain overlay uses the same precise native half-edge geometry
+            # as hover, without changing selection or depending on camera zoom.
+            page.set_content("""
+                <svg id="native" data-linnet-interactive data-linnet-renderer="native"
+                     viewBox="0 0 140 80" width="140pt" height="80pt"
+                     data-linnet-viewport-height="180">
+                  <circle data-linnet-node="0" cx="10" cy="40" r="4"/>
+                  <circle data-linnet-node="1" cx="130" cy="40" r="4"/>
+                  <a data-linnet-carrier data-linnet-kind="halfedge" data-linnet-id="0"
+                     data-linnet-detail='{"edge":0,"half-edge":0,"node":0,"flow":"source"}'
+                     style="display:none"><path d="M14 40C30 10 50 40 70 40"/></a>
+                  <a data-linnet-carrier data-linnet-kind="halfedge" data-linnet-id="1"
+                     data-linnet-detail='{"edge":0,"half-edge":1,"node":1,"flow":"sink"}'
+                     style="display:none"><path d="M70 40C90 40 110 70 126 40"/></a>
+                </svg>
+                <svg id="authored" data-linnet-interactive viewBox="0 0 140 80" width="140pt"
+                     data-linnet-viewport-height="180">
+                  <g transform="translate(10 20)">
+                    <a data-linnet-kind="halfedge" data-linnet-id="3"
+                       data-linnet-detail='{"edge":2,"half-edge":3,"node":1,"flow":"source"}'>
+                      <rect x="20" y="10" width="8" height="8"/>
+                    </a>
+                  </g>
+                </svg>
+            """)
+            page.add_script_tag(content=(source / "interactive.js").read_text())
+            shade = """svg => {
+                const layer = svg.linnetShade({nodes: [0], half_edges: [0]});
+                svg.querySelector('.linnet-viewport').append(layer);
+                const path = layer.querySelector('path');
+                const matrix = path.transform.baseVal.consolidate().matrix;
+                const result = {
+                    curve: path.getAttribute('d'),
+                    cap: path.getAttribute('stroke-linecap'),
+                    start: [path.getPointAtLength(0).x, path.getPointAtLength(0).y],
+                    node: layer.querySelector('circle').dataset.linnetShadeNode,
+                    halves: [...layer.querySelectorAll('path')].map(p=>p.dataset.linnetShadeHalfedge),
+                    transform: [matrix.a, matrix.b, matrix.c, matrix.d, matrix.e, matrix.f],
+                    selection: svg.linnetSelection,
+                    edgeHalves: svg.linnetShade({edges: [0]}).querySelectorAll('path').length,
+                };
+                layer.remove();
+                return result;
+            }"""
+            native = page.locator("#native")
+            for key in ("0", "+", "ArrowRight"):
+                native.locator(".linnet-viewport").press(key)
+                result = native.evaluate(shade)
+                assert result["curve"].endswith(" L14 40C30 10 50 40 70 40"), result
+                assert result["cap"] == "butt", (
+                    "shade extended across its half-edge boundary"
+                )
+                assert all(
+                    abs(x - y) < 1e-6 for x, y in zip(result["start"], [10, 40])
+                ), result
+                assert result["halves"] == ["0"] and result["node"] == "0", result
+                assert result["edgeHalves"] == 2, result
+                assert all(
+                    abs(x - y) < 1e-8
+                    for x, y in zip(result["transform"], [1, 0, 0, 1, 0, 0])
+                ), result
+                assert result["selection"] == {
+                    "nodes": [],
+                    "edges": [],
+                    "half_edges": [],
+                }
+            # Circlings outline the union once, with an independently tinted
+            # interior. Layers are independent and do not modify selection.
+            regions = native.evaluate("""svg => {
+                const viewport=svg.querySelector('.linnet-viewport');
+                const regions=[4, 8].map(padding=>svg.linnetShade(
+                  {nodes:[0], half_edges:[0]},
+                  {width:20, padding, outline:1.6, fillOpacity:.09}));
+                viewport.append(...regions);
+                const result=regions.map(g=>({
+                  filter:g.querySelector('filter').id,
+                  outline:+g.querySelector('feMorphology').getAttribute('radius'),
+                  opacity:+g.style.opacity,
+                  tint:+g.querySelector('feFuncA').getAttribute('slope'),
+                  radius:+g.querySelector('circle').getAttribute('r'),
+                  width:+g.querySelector('path').getAttribute('stroke-width'),
+                  namespace:g.querySelector('feMorphology').namespaceURI,
+                }));
+                regions.forEach(g=>g.remove());
+                return result;
+            }""")
+            assert regions[0]["filter"] != regions[1]["filter"]
+            assert regions[1]["radius"] - regions[0]["radius"] == 4
+            for region in regions:
+                assert region["outline"] == 1.6 and region["opacity"] == 1
+                assert region["tint"] == 0.09 and region["width"] == 20
+                assert region["namespace"] == "http://www.w3.org/2000/svg"
+            native.locator('[data-linnet-kind="halfedge"]').first.dispatch_event(
+                "pointerover"
+            )
+            assert (
+                native.locator(
+                    '.linnet-edge-highlight [data-linnet-shade-halfedge="0"]'
+                ).count()
+                == 1
+            )
+            assert (
+                native.locator(
+                    '.linnet-edge-highlight [data-linnet-shade-halfedge="1"]'
+                ).count()
+                == 0
+            )
+            result = page.locator("#authored").evaluate("""svg => {
+                const layer = svg.linnetShade({half_edges: [3]});
+                svg.querySelector('.linnet-viewport').append(layer);
+                const rect = layer.querySelector('rect'), matrix = rect.transform.baseVal.consolidate().matrix;
+                return {count: layer.children.length, x: matrix.e, y: matrix.f};
+            }""")
+            assert result["count"] == 1, result
+            assert abs(result["x"] - 10) < 1e-8 and abs(result["y"] - 20) < 1e-8, result
+            assert not errors, errors
+            print(
+                "Native and authored half-edge shading, hover, and camera independence passed"
             )
         finally:
             browser.close()

@@ -32,9 +32,21 @@ restored = fk.FeynmanDiagram.from_json(model, diagram.to_json())
 assert restored.name == diagram.name
 print(diagram.to_dot())
 
-cff = diagram.cross_free_family()
+cff = diagram.integrate_energy(method="cff")
 print(cff.to_expression())
 ```
+
+For a loop diagram, `diagram.integrate_energy(method="cff")` and
+`diagram.integrate_energy(method="ltd")` construct the two energy representations,
+`CffRepresentation` and `LtdRepresentation`. Display either object to explore its
+terms, or call `to_expression()` for Symbolica algebra. They share one expression
+normalization; the #link("reference/interfaces/")[interface guide] documents the
+energy factors, contour convention and separate spatial measure. The
+#link("guides/showcases/numerical-integration/")[numerical showcase] compares
+both representations in the same convention.
+For method selection in shared code, use `diagram.integrate_energy(method="cff")`
+or `diagram.integrate_energy(method="ltd")`; literal overloads preserve the
+concrete return type in editors and type checkers.
 
 `model.process(incoming, outgoing)` binds external states and particle/vertex restrictions
 to the model. Use `particle_veto`, `vertex_allow`, and `vertex_veto` at construction, or

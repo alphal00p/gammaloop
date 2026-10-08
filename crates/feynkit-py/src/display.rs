@@ -9,6 +9,32 @@ use std::fmt::Write;
 
 use linnet_py::PyDiagramRender;
 
+/// Energy representations reuse Linnet's layout with their own orientation marks.
+pub(crate) fn energy_graph_svg(
+    py: Python<'_>,
+    diagram: &FeynmanDiagram,
+    style: &feynkit_graph::SceneOptions,
+) -> PyResult<String> {
+    let options = feynkit_graph::SceneOptions {
+        show_particle: false,
+        show_edge_index: true,
+        show_node_index: true,
+        split_initial_state: false,
+        show_momentum: Some(false),
+        ..style.clone()
+    };
+    let mut scene = diagram
+        .to_scene(None, &Default::default(), None, &options)
+        .map_err(crate::error::diagram)?;
+    scene.title = None;
+    // Particle-flow arrows would compete with the energy-routing annotations.
+    for edge in &mut scene.edges {
+        edge.flow = None;
+        edge.pattern = None;
+    }
+    PyDiagramRender::from_scene(py, scene, None)?.to_svg()
+}
+
 pub(crate) fn escape_html(value: &str) -> String {
     let mut escaped = String::with_capacity(value.len());
     for character in value.chars() {
@@ -173,7 +199,7 @@ pub(crate) fn process_svg(
 }
 
 /// Values are escaped text or fragments from Symbolica's native expression printer.
-pub(crate) fn model_record_html(kind: &str, name: &str, rows: &[(&str, String)]) -> String {
+pub(crate) fn record_html(kind: &str, name: &str, rows: &[(&str, String)]) -> String {
     let mut html = format!(
         r#"<style>.feynkit-record [data-spenso-math]{{display:inline-block;vertical-align:middle;padding:0;overflow:visible;}}</style><section class="feynkit-record" style="max-width:100%;overflow-x:auto;padding:.6rem 0;color:inherit"><div style="margin-bottom:.55rem"><strong>{}</strong><span style="margin-left:.6rem;opacity:.65">{}</span></div><table style="border-collapse:collapse;width:auto;max-width:100%"><tbody>"#,
         escape_html(name),
@@ -186,8 +212,8 @@ pub(crate) fn model_record_html(kind: &str, name: &str, rows: &[(&str, String)])
     html
 }
 
-/// Model formulas use Spenso's existing MathML/Typst printer without recooking indices.
-pub(crate) fn model_expression_html(
+/// Domain formulas use Spenso's existing MathML/Typst printer without recooking indices.
+pub(crate) fn expression_html(
     py: Python<'_>,
     expression: symbolica::api::python::PythonExpression,
 ) -> PyResult<String> {
