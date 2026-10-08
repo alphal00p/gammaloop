@@ -471,12 +471,11 @@ mod tests {
             algorithms::DirectionBasis,
             builder::HedgeGraphBuilder,
             involution::{Flow, HedgePair, Orientation},
-            nodestore::{NodeStorageOps, NodeStorageVec},
+            nodestore::NodeStorageOps,
             subgraph::{ModifySubSet, SuBitGraph, SubSetLike},
             HedgeGraph, NoData,
         },
-        parser::{DotGraph, DotVertexData},
-        tree::{child_vec::ChildVecStore, Forest},
+        parser::DotGraph,
     };
 
     #[test]
@@ -599,7 +598,7 @@ mod tests {
 
     #[test]
     fn test_empty_graph() {
-        let graph: DotGraph<NodeStorageVec<DotVertexData>> = DotGraph::from_string(
+        let graph: DotGraph = DotGraph::from_string(
             r#"
             digraph {
                 A
@@ -615,7 +614,7 @@ mod tests {
             .transitive_closure(DirectionBasis::Underlying)
             .unwrap();
 
-        let graph2: DotGraph<NodeStorageVec<DotVertexData>> = DotGraph::from_string(
+        let graph2: DotGraph = DotGraph::from_string(
             r#"
             digraph {
                 A
@@ -637,16 +636,14 @@ mod tests {
 
     #[test]
     fn test_single_node() {
-        let graph: DotGraph<NodeStorageVec<DotVertexData>> =
-            DotGraph::from_string("digraph { A }").unwrap();
+        let graph: DotGraph = DotGraph::from_string("digraph { A }").unwrap();
 
         let closure = graph
             .graph
             .transitive_closure(DirectionBasis::Underlying)
             .unwrap();
 
-        let graph2: DotGraph<NodeStorageVec<DotVertexData>> =
-            DotGraph::from_string("digraph { A }").unwrap();
+        let graph2: DotGraph = DotGraph::from_string("digraph { A }").unwrap();
         let reduction = graph2
             .graph
             .transitive_reduction(DirectionBasis::Underlying)
@@ -683,14 +680,12 @@ mod tests {
     }
 
     #[test]
-    fn direction_basis_controls_reachability_with_forest_storage() {
-        type ForestStore = Forest<(), ChildVecStore<()>>;
-
+    fn direction_basis_controls_reachability() {
         let mut builder = HedgeGraphBuilder::<(), ()>::new();
         let left = builder.add_node(());
         let right = builder.add_node(());
         builder.add_edge(left, right, (), Orientation::Reversed);
-        let graph: HedgeGraph<(), (), NoData, ForestStore> = builder.build();
+        let graph: HedgeGraph<(), (), NoData> = builder.build();
 
         assert!(graph.is_reachable(left, right, DirectionBasis::Underlying));
         assert!(!graph.is_reachable(right, left, DirectionBasis::Underlying));
@@ -705,7 +700,7 @@ mod tests {
         let target = builder.add_node(());
         let source = builder.add_node(());
         builder.add_edge(source, target, (), Orientation::Undirected);
-        let graph: HedgeGraph<(), (), NoData, ForestStore> = builder.build();
+        let graph: HedgeGraph<(), (), NoData> = builder.build();
 
         assert!(graph.is_reachable(source, target, DirectionBasis::Underlying));
         assert!(!graph.is_reachable(source, target, DirectionBasis::Superficial));
@@ -1248,7 +1243,7 @@ mod tests {
 
     #[test]
     fn test_transitive_closure_with_isolated_components() {
-        let original: DotGraph<NodeStorageVec<DotVertexData>> = DotGraph::from_string(
+        let original: DotGraph = DotGraph::from_string(
             r#"
             digraph {
                 // Component 1: Chain
@@ -1329,7 +1324,7 @@ mod tests {
 
     #[test]
     fn test_comprehensive_reachability() {
-        let graph: DotGraph<NodeStorageVec<DotVertexData>> = DotGraph::from_string(
+        let graph: DotGraph = DotGraph::from_string(
             r#"
             digraph {
                 // Create a graph with known reachability patterns

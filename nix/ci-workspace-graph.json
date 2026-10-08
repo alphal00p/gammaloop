@@ -253,7 +253,6 @@
       "linnet": [
         "bincode",
         "drawing",
-        "nodestore-vec",
         "serde",
         "symbolica"
       ],
@@ -351,9 +350,7 @@
       ]
     },
     "feynkit-model": {
-      "linnet": [
-        "nodestore-vec"
-      ]
+      "linnet": []
     },
     "feynkit-py": {
       "feynkit-amplitude": [],
@@ -481,7 +478,6 @@
     },
     "idenso": {
       "linnet": [
-        "nodestore-vec",
         "serde"
       ],
       "spenso": [
@@ -495,7 +491,6 @@
       "kurvst": [],
       "linnet": [
         "drawing",
-        "nodestore-vec",
         "rkyv",
         "serde"
       ]
@@ -510,7 +505,6 @@
         "svg"
       ],
       "linnet": [
-        "nodestore-vec",
         "serde"
       ],
       "typst-renderer": [
@@ -521,7 +515,6 @@
       "gammaloop-workspace-hack": [],
       "linnet": [
         "bincode",
-        "nodestore-vec",
         "serde"
       ],
       "spenso-macros": [],
@@ -1537,7 +1530,6 @@
       "linnet": [
         "bincode",
         "drawing",
-        "nodestore-vec",
         "serde",
         "symbolica"
       ],
@@ -1638,9 +1630,7 @@
       ]
     },
     "feynkit-model": {
-      "linnet": [
-        "nodestore-vec"
-      ]
+      "linnet": []
     },
     "feynkit-py": {
       "feynkit-amplitude": [],
@@ -1769,7 +1759,6 @@
     },
     "idenso": {
       "linnet": [
-        "nodestore-vec",
         "serde"
       ],
       "spenso": [
@@ -1783,7 +1772,6 @@
       "kurvst": [],
       "linnet": [
         "drawing",
-        "nodestore-vec",
         "rkyv",
         "serde"
       ]
@@ -1803,7 +1791,6 @@
         "svg"
       ],
       "linnet": [
-        "nodestore-vec",
         "serde"
       ],
       "typst-renderer": [
@@ -1814,7 +1801,6 @@
       "gammaloop-workspace-hack": [],
       "linnet": [
         "bincode",
-        "nodestore-vec",
         "serde"
       ],
       "spenso-macros": [],

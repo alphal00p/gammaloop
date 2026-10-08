@@ -250,22 +250,13 @@ fn replace_with_zero<Aind: AbsInd>(
             u8::try_from(position).expect("parsed slot position fits u8");
     }
     let index = network.store.tensors.len();
-    network.graph.identify_nodes_without_self_edges(
+    let node = network.graph.identify_nodes_without_self_edges(
         &nodes,
         NetworkNode::Leaf(NetworkLeaf::LocalTensor(index)),
     );
     // Identification intentionally preserves pre-existing self loops. A zero
     // replacement has already consumed those internal contractions, so remove
-    // their paired ports too. Recover its occurrence after node compaction.
-    let node = network
-        .graph
-        .graph
-        .iter_nodes()
-        .find_map(|(node, _, data)| {
-            matches!(data, NetworkNode::Leaf(NetworkLeaf::LocalTensor(found)) if *found == index)
-                .then_some(node)
-        })
-        .expect("the replacement occurrence survives graph compaction");
+    // their paired ports too.
     let mut internal: SuBitGraph = network.graph.graph.empty_subgraph();
     for hedge in network.graph.graph.iter_crown(node) {
         let other = network.graph.graph.inv(hedge);

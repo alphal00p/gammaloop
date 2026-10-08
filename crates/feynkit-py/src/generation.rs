@@ -3342,7 +3342,7 @@ for generate in (fk.Process.generate_diagrams, fk.Process.generate_amplitude, fk
             let graph_module = PyModule::new(py, "symbolica.community.graph").unwrap();
             linnet_py::register(&graph_module).unwrap();
             locals
-                .set_item("node", graph_module.getattr("node").unwrap())
+                .set_item("Node", graph_module.getattr("Node").unwrap())
                 .unwrap();
             locals
                 .set_item(
@@ -3396,7 +3396,7 @@ for via_model in (True, False):
         if before.stage == after.stage:
             assert before.completed <= after.completed
     # Snapshots outlive enumeration and never mutate its internal graph.
-    topologies[0][0].add_node(node(data=42))
+    topologies[0][0].add_node(Node(data=42))
     assert len(generate()) == len(baseline)
 
     updates.clear()

@@ -38,7 +38,7 @@ use linnet::{
     half_edge::{
         HedgeGraph,
         involution::{EdgeData, EdgeIndex, Flow, Hedge, HedgePair},
-        nodestore::NodeStorageVec,
+        nodestore::NodeForest,
         subgraph::{ModifySubSet, OrientedCut, SuBitGraph, SubSetOps},
         swap::Swap,
     },
@@ -986,7 +986,7 @@ impl Graph {
             DotVertexData,
             DotHedgeData,
             linnet::parser::GlobalData,
-            NodeStorageVec<DotVertexData>,
+            NodeForest<DotVertexData>,
         > = GraphSet::from_file(p.as_ref()).map_err(|a| match a {
             HedgeParseError::GraphFromFile(e) => match e.as_ref() {
                 dot_parser::ast::GraphFromFileError::FileError(e) => eyre!(e.to_string())
@@ -1021,7 +1021,7 @@ impl Graph {
             DotVertexData,
             DotHedgeData,
             linnet::parser::GlobalData,
-            NodeStorageVec<DotVertexData>,
+            NodeForest<DotVertexData>,
         > = GraphSet::from_string(s).map_err(|a| match a {
             HedgeParseError::GraphFromFile(e) => match e.as_ref() {
                 dot_parser::ast::GraphFromFileError::FileError(e) => {
@@ -1049,7 +1049,7 @@ impl Graph {
             DotVertexData,
             DotHedgeData,
             linnet::parser::GlobalData,
-            NodeStorageVec<DotVertexData>,
+            NodeForest<DotVertexData>,
         >,
         model: &Model,
     ) -> Result<Vec<Self>> {

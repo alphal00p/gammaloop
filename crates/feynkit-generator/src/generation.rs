@@ -4668,9 +4668,9 @@ impl ResolvedProcess {
                 graph.identify_nodes(&[*left, *right], color.clone());
             }
         }
-        // NodeStorageVec retains the crowns of nodes that were identified so
-        // callers can inspect the identification history. Cycle detection must
-        // run on the sewn quotient graph, without those historical crowns.
+        // The node store retains the nodes absorbed by identification so callers
+        // can inspect the history. Cycle detection must run on the sewn quotient
+        // graph, without those absorbed nodes.
         graph.forget_identification_history();
         let non_bridges = graph.non_bridges();
         graph.count_connected_components(&non_bridges) == connected_components_before

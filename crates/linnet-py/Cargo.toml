@@ -18,7 +18,7 @@ required-features = ["python_stubgen"]
 symbolica = { workspace = true, features = ["python_export"] }
 ciborium = "0.2.2"
 dot-parser = { workspace = true }
-linnet = { workspace = true, features = ["nodestore-vec", "serde"] }
+linnet = { workspace = true, features = ["serde"] }
 linnest = { workspace = true, features = ["svg"] }
 # Maturin follows path dependencies into sdists; render.rs embeds Kurvst's Typst assets.
 kurvst = { path = "../kurvst" }
@@ -39,6 +39,8 @@ walkdir = { workspace = true }
 
 [features]
 default = ["native"]
-native = ["symbolica/integer-gmp", "symbolica/float-mpfr"]
-wasm = ["symbolica/wasm"]
+# Symbolica expressions as canonization keys of their own kind.
+community = []
+native = ["community", "symbolica/integer-gmp", "symbolica/float-mpfr"]
+wasm = ["community", "symbolica/wasm"]
 python_stubgen = ["dep:pyo3-stub-gen", "symbolica/python_stubgen"]

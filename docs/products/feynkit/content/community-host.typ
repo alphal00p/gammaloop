@@ -83,12 +83,12 @@ cargo run --locked -p alphal00p-docs-python-exporter --features feynkit -- \
   feynkit-community docs/api/python/feynkit-community.pyi --check
 ```
 
-Export the shared rendering module with the same tool:
+Export the shared graph and rendering module with the same tool:
 
 // docs-example: syntax
 ```sh
-cargo run --locked -p alphal00p-docs-python-exporter --features render -- \
-  linnet-render docs/api/python/linnet-render.pyi
+cargo run --locked -p alphal00p-docs-python-exporter --features linnet -- \
+  linnet-graph docs/api/python/linnet-graph.pyi
 ```
 
 The public stub is generated from native signatures and docstrings. Its documentation audit

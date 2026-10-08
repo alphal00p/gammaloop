@@ -35,13 +35,13 @@ impl<E, V, H, N: NodeStorageOps<NodeData = V>> HedgeGraph<E, V, H, N> {
     }
 
     /// Returns a topological ordering in the selected direction basis.
-    /// Identification-history aliases that share incidence are processed once.
+    /// Nodes absorbed by a pending identification are skipped.
     pub fn topo_sort_kahn(&self, basis: DirectionBasis) -> Result<Vec<NodeIndex>, TopoError> {
         let full = self.full_filter();
-        let structural_nodes = self.iter_nodes_of(&full).map(|(node, _, _)| node).chain(
-            self.iter_nodes()
-                .filter_map(|(node, mut crown, _)| crown.next().is_none().then_some(node)),
-        );
+        let structural_nodes = self
+            .iter_nodes_of(&full)
+            .map(|(node, _, _)| node)
+            .chain(self.iter_isolated_nodes());
         self.topo_sort_kahn_nodes(&full, structural_nodes, basis)
     }
 
@@ -436,11 +436,6 @@ mod test {
 
     #[test]
     fn full_sort_canonicalizes_identification_history() {
-        use crate::{
-            half_edge::nodestore::NodeStorageVec,
-            tree::{child_vec::ChildVecStore, Forest},
-        };
-
         let mut builder = HedgeGraphBuilder::<(), ()>::new();
         let first = builder.add_node(());
         let historical = builder.add_node(());
@@ -448,22 +443,10 @@ mod test {
         let isolated = builder.add_node(());
         builder.add_edge(first, target, (), Orientation::Default);
         builder.add_edge(historical, target, (), Orientation::Default);
-        let mut vec_graph: HedgeGraph<_, _, _, NodeStorageVec<()>> = builder.clone().build();
-        let merged = vec_graph.identify_nodes(&[first, historical], ());
-
+        let mut graph: HedgeGraph<_, _> = builder.build();
+        let merged = graph.identify_nodes(&[first, historical], ());
         assert_eq!(
-            vec_graph
-                .topo_sort_kahn(DirectionBasis::Underlying)
-                .unwrap(),
-            vec![merged, isolated, target]
-        );
-
-        let mut forest_graph: HedgeGraph<_, _, _, Forest<(), ChildVecStore<()>>> = builder.build();
-        let merged = forest_graph.identify_nodes(&[first, historical], ());
-        assert_eq!(
-            forest_graph
-                .topo_sort_kahn(DirectionBasis::Underlying)
-                .unwrap(),
+            graph.topo_sort_kahn(DirectionBasis::Underlying).unwrap(),
             vec![merged, isolated, target]
         );
     }

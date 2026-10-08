@@ -31,11 +31,7 @@ use child_vec::ChildVecStore;
 use parent_pointer::{PPNode, ParentId, ParentPointerStore};
 use thiserror::Error;
 
-use crate::half_edge::{
-    involution::Hedge,
-    subgraph::{Inclusion, SuBitGraph, SubSetLike, SubSetOps},
-    NodeIndex,
-};
+use crate::half_edge::{involution::Hedge, NodeIndex};
 
 pub mod child_pointer;
 pub mod child_vec;
@@ -57,13 +53,8 @@ impl TreeNodeId {
     ///
     /// Use a 32-bit sentinel so the value is stable across the wasm/rkyv boundary.
     pub const EMPTY: Self = TreeNodeId(u32::MAX as usize);
-    pub(crate) const HISTORICAL_EMPTY: Self = TreeNodeId(u32::MAX as usize - 1);
 
     pub fn is_empty(self) -> bool {
-        matches!(self, Self::EMPTY | Self::HISTORICAL_EMPTY)
-    }
-
-    pub(crate) fn is_active_empty(self) -> bool {
         self == Self::EMPTY
     }
 }
@@ -72,8 +63,6 @@ impl Display for TreeNodeId {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         if *self == Self::EMPTY {
             write!(f, "Empty node")
-        } else if *self == Self::HISTORICAL_EMPTY {
-            write!(f, "Historical empty node")
         } else {
             write!(f, "Node ({})", self.0)
         }
@@ -136,6 +125,12 @@ impl Display for RootId {
 impl From<NodeIndex> for RootId {
     fn from(n: NodeIndex) -> Self {
         n.0.into()
+    }
+}
+
+impl From<RootId> for NodeIndex {
+    fn from(value: RootId) -> Self {
+        NodeIndex(value.0)
     }
 }
 
@@ -252,44 +247,6 @@ impl<R, N: ForestNodeStoreAncestors> Forest<R, N> {
     /// Returns an iterator that traverses upwards from `start_node` towards its root.
     pub fn iter_ancestors(&self, start_node: TreeNodeId) -> impl Iterator<Item = TreeNodeId> + '_ {
         self.nodes.iter_ancestors(start_node)
-    }
-}
-
-impl<R, N: ForestNodeStore> Forest<R, N> {
-    pub fn root_node_for_root(&self, root_id: RootId) -> TreeNodeId {
-        self.roots[root_id.0].root_id
-    }
-
-    pub fn root_node_for_node(&self, node_id: NodeIndex) -> TreeNodeId {
-        self.root_node_for_root(node_id.into())
-    }
-
-    pub fn root_hedge_for_node(&self, node_id: NodeIndex) -> Hedge {
-        self.root_node_for_node(node_id).into()
-    }
-}
-
-impl<R, N> Forest<R, N>
-where
-    N: ForestNodeStore
-        + Default
-        + Into<ParentPointerStore<N::NodeData>>
-        + From<ParentPointerStore<N::NodeData>>,
-{
-    pub fn reroot_many(&mut self, new_roots: impl IntoIterator<Item = TreeNodeId>) -> usize {
-        let mut nodes: ParentPointerStore<N::NodeData> = std::mem::take(&mut self.nodes).into();
-        let mut changed = 0;
-
-        for new_root in new_roots {
-            let root_id = nodes.change_root(new_root);
-            if self.roots[root_id.0].root_id != new_root {
-                self.roots[root_id.0].root_id = new_root;
-                changed += 1;
-            }
-        }
-
-        self.nodes = nodes.into();
-        changed
     }
 }
 
@@ -438,8 +395,6 @@ impl<R, N: Default> Forest<R, N> {
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "bincode", derive(bincode::Encode, bincode::Decode))]
 pub enum ForestError {
-    #[error("Length mismatch")]
-    LengthMismatch,
     #[error("Parent pointers are cyclic")]
     CyclicPP,
     #[error("Child pointers are cyclic")]
@@ -448,16 +403,12 @@ pub enum ForestError {
     SelfLoopPP(TreeNodeId),
     #[error("Parent pointer of child of {0} is not correct")]
     WrongPP(TreeNodeId),
-    #[error("Does not partition: Sets overlap")]
-    DoesNotPartion,
     #[error("Does not partition: Sets do not cover the domain")]
     IncompletePartition,
     #[error("Invalid TreeNodeId: {0:?}")]
     InvalidNodeId(TreeNodeId),
     #[error("Invalid RootId: {0:?}")]
     InvalidRootId(RootId),
-    #[error("Mismatch roots len {expected}!={obtained}")]
-    MismatchRootsLen { expected: usize, obtained: usize },
     #[error("Root node pointer wrong for root {0}")]
     WrongRootPointer(RootId),
 }
@@ -469,14 +420,6 @@ impl<U, P: ForestNodeStore> Forest<U, P> {
         }
         self.nodes.root_node(nodeid)
     }
-    pub(crate) fn is_active_root(&self, root: RootId) -> bool {
-        let root_id = self.roots[root.0].root_id;
-        if root_id.is_empty() {
-            return root_id.is_active_empty();
-        }
-        self.nodes.root_node(root_id) == root_id && self.nodes.root(root_id) == root
-    }
-
     pub fn validate_structure(&self) -> Result<(), ForestError> {
         let roots = self.nodes.validate()?;
 
@@ -615,93 +558,6 @@ impl<U, P: ForestNodeStore> Forest<U, P> {
 
         output
     }
-    pub fn swap_roots(&mut self, a: RootId, b: RootId) {
-        if a == b {
-            return;
-        }
-
-        let roota = self.roots[a.0].root_id;
-        let roota_active = self.is_active_root(a);
-        let rootb = self.roots[b.0].root_id;
-        let rootb_active = self.is_active_root(b);
-
-        if roota_active && !roota.is_empty() {
-            self.nodes.set_root(roota, b);
-        }
-        if rootb_active && !rootb.is_empty() {
-            self.nodes.set_root(rootb, a);
-        }
-
-        self.roots.swap(a.0, b.0);
-    }
-
-    pub fn from_bitvec_partition<I: IntoIterator<Item = (U, SuBitGraph)>>(
-        bitvec_part: I,
-    ) -> Result<Self, ForestError> {
-        Forest::<U, ParentPointerStore<P::NodeData>>::from_bitvec_partition_impl(bitvec_part).map(
-            |a| Forest {
-                nodes: P::from_pp(a.nodes),
-                roots: a.roots,
-            },
-        )
-    }
-}
-
-/// Construction from BitVec partition (remains the same)
-impl<U, V> Forest<U, ParentPointerStore<V>> {
-    /// Creates a forest from a partition represented by a vector of (RootData, BitVec).
-    /// Each BitVec represents the set of node indices belonging to that tree/root.
-    /// Nodes within a set are linked arbitrarily (first encountered becomes root, others point to it).
-    /// Node data is set to `()`.
-    ///
-    /// Returns `Err(ForestError)` if the BitVecs have different lengths or overlap.
-    fn from_bitvec_partition_impl<I: IntoIterator<Item = (U, SuBitGraph)>>(
-        bitvec_part: I,
-    ) -> Result<Self, ForestError> {
-        let mut nodes = vec![];
-        let mut roots = vec![];
-        let mut cover: Option<SuBitGraph> = None;
-
-        for (d, set) in bitvec_part {
-            let len = set.size();
-            if let Some(c) = &mut cover {
-                if c.size() != len {
-                    return Err(ForestError::LengthMismatch);
-                }
-                if c.intersects(&set) {
-                    return Err(ForestError::DoesNotPartion);
-                }
-                c.union_with(&set);
-            } else {
-                cover = Some(SuBitGraph::empty(len));
-
-                nodes.resize_with(len, || None);
-                // nodes = vec![None; len];
-            }
-            let mut first = None;
-            for i in set.included_iter() {
-                if let Some(root) = first {
-                    nodes[i.0] = Some(PPNode::dataless_child(root))
-                } else {
-                    first = Some(i.into());
-                    nodes[i.0] = Some(PPNode::dataless_root(RootId(roots.len())));
-                }
-            }
-            roots.push(RootData {
-                root_id: first.unwrap_or(TreeNodeId::EMPTY),
-                data: d,
-            });
-        }
-        Ok(Forest {
-            nodes: nodes
-                .into_iter()
-                .collect::<Option<Vec<_>>>()
-                .unwrap()
-                .into_iter()
-                .collect(),
-            roots,
-        })
-    }
 }
 
 // --- Core Traits ---
@@ -736,26 +592,17 @@ pub trait ForestNodeStore:
     }
 
     fn n_nodes(&self)->usize;
-    fn swap(&mut self,a:TreeNodeId,b:TreeNodeId);
-    fn set_root(&mut self,a:TreeNodeId,root:RootId);
 
-    fn from_pp(pp:ParentPointerStore<Self::NodeData>)->Self{
-        Self::from_store(Self::Store::<Self::NodeData>::from(pp))
+    /// Construct storage directly from ordered parent records.
+    fn from_parents(nodes: impl IntoIterator<Item = PPNode<Self::NodeData>>) -> Self {
+        let parents: ParentPointerStore<_> = nodes.into_iter().collect();
+        Self::from_store(Self::Store::<Self::NodeData>::from(parents))
     }
 
 
 
-    fn split_off(&mut self,at:TreeNodeId)->Self;
 
-
-    /// Makes x's root, the root of y's root.
-    fn make_root_of(&mut self, x: TreeNodeId, y: TreeNodeId) -> TreeNodeId{
-        let rootx = self.root_node(x);
-        let rooty = self.root_node(y);
-        self.reparent(rootx,rooty);
-        rootx
-    }
-
+    /// Makes `parent` the parent of `child`, which must not be an ancestor of `parent`.
     fn reparent(&mut self,parent:TreeNodeId,child:TreeNodeId);
 
     /// Finds the `RootId` by traversing upwards. Default implementation provided.
@@ -788,21 +635,16 @@ pub trait ForestNodeStore:
     }
     /// Adds a new root node.
     fn add_root(&mut self, data: Self::NodeData, root_id: RootId) -> TreeNodeId;
-    fn add_dataless_root(&mut self, root_id: RootId) -> TreeNodeId;
 
     /// Adds a new child node as the *last* child of the parent.
     fn add_child(&mut self, data: Self::NodeData, parent: TreeNodeId) -> TreeNodeId;
 
 
     fn set_node_data(&mut self,data:Self::NodeData,node_id:TreeNodeId)->Option<Self::NodeData>;
-    /// Adds a new child node as the *last* child of the parent.
-    fn add_dataless_child(&mut self, parent: TreeNodeId) -> TreeNodeId;
 
     fn map<F, U>(self, transform: F) -> Self::Store<U> where F: FnMut(Self::NodeData) -> U;
     fn map_ref<F, U>(&self, transform: F) -> Self::Store<U> where F: FnMut(&Self::NodeData) -> U;
-    fn forgetful_map<U>(&self)->Self::Store<U>;
 
-    fn extend(&mut self,other:Self,shift_roots_by:RootId);
 }
 
 /// Trait extension for `ForestNodeStore` providing downward traversal capabilities.

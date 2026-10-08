@@ -44,8 +44,8 @@ selectors and run the affected cell with its play button.
   its color, label, and pattern. Endpoint selectors place direction marks using source/sink flow.
 - Enable *Half-edge IDs* to see how the incoming request and outgoing publication differ from
   internal edges. The notebook reports the node, edge, and half-edge counts below the drawings.
-- Switch the node store and inspect the payload checks. Node, edge, and endpoint dataclass
-  instances remain attached by identity, including their shared runtime object.
+- Inspect the payload checks. Node, edge, and endpoint dataclass instances remain attached by
+  identity, including their shared runtime object.
 
 == Default layout and controls
 

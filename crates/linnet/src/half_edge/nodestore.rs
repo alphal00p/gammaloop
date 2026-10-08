@@ -1,7 +1,3 @@
-#[cfg(feature = "nodestore-forest-parent-child")]
-use crate::tree::child_pointer::ParentChildStore;
-#[cfg(feature = "nodestore-forest-child-vec")]
-use crate::tree::child_vec::ChildVecStore;
 use crate::tree::{parent_pointer::ParentPointerStore, Forest};
 
 use super::{
@@ -62,18 +58,31 @@ pub trait NodeStorageOps: NodeStorage + Swap<Hedge> + Swap<NodeIndex> {
     /// Removes the selected half-edges and compacts the remaining node storage.
     fn delete<S: SubSetLike<Base = Self::Base>>(&mut self, subgraph: &S);
 
-    // fn add_node(&mut self, node_data: Self::NodeData) -> NodeIndex;
+    /// Appends a node without half-edges carrying `node_data` and returns its index;
+    /// no existing index changes.
+    fn add_node(&mut self, node_data: Self::NodeData) -> NodeIndex;
 
-    /// Identifies nodes, essentially turning them into a single node
-    /// Invalidates all previous NodeIndex values if using VecNodeStore.
-    /// Does not invalidate if using Forest as NodeStore
+    /// Merges `nodes` into one surviving node carrying `node_data_merge` and returns it.
+    ///
+    /// No half-edge, edge or node index changes: the other nodes stay in place, with
+    /// their data, as absorbed nodes (see [`Self::is_absorbed`]) until
+    /// [`Self::forget_identification_history`] compacts them away. Repeated and
+    /// previously absorbed nodes resolve to the node that absorbed them. While it
+    /// retains history, the store refuses to move half-edges or renumber nodes
+    /// (`delete`, `extract`, `extract_nodes`, swaps).
     fn identify_nodes(&mut self, nodes: &[NodeIndex], node_data_merge: Self::NodeData)
         -> NodeIndex;
 
-    /// Drops inactive nodes retained by identification operations and returns their data.
+    /// Whether `node` was merged into another one by [`Self::identify_nodes`] and
+    /// awaits [`Self::forget_identification_history`].
+    fn is_absorbed(&self, node: NodeIndex) -> bool;
+
+    /// Drops the absorbed nodes and returns their data; live nodes, isolated ones
+    /// included, are kept. Live nodes may be renumbered.
     fn forget_identification_history(&mut self) -> NodeVec<Self::NodeData>;
 
-    /// Copies the topology into a parent-pointer forest while mapping borrowed node data.
+    /// Copies the topology into a parent-pointer forest, one tree per node, while
+    /// mapping borrowed node data; absorbed nodes become empty trees.
     fn to_forest<U, H>(
         &self,
         map_data: impl Fn(&Self::NodeData) -> U,
@@ -92,8 +101,22 @@ pub trait NodeStorageOps: NodeStorage + Swap<Hedge> + Swap<NodeIndex> {
         map_data: impl FnMut(ND) -> Self::NodeData,
     ) -> Self;
 
-    /// Appends an unpaired half-edge incident to `source`.
-    fn add_dangling_edge(self, source: NodeIndex) -> Result<Self, HedgeGraphError>;
+    /// Appends an unpaired half-edge incident to `source` without changing existing indices.
+    ///
+    /// Fails with [`HedgeGraphError::NoNode`] if `source` is not in the store and with
+    /// [`HedgeGraphError::InvalidNode`] if it was absorbed by an identification, in
+    /// both cases before changing the store. For a live source, insertion succeeds
+    /// and keeps the node ownership map current.
+    fn add_dangling_edge_mut(&mut self, source: NodeIndex) -> Result<(), HedgeGraphError>;
+
+    /// Consuming counterpart of [`Self::add_dangling_edge_mut`].
+    fn add_dangling_edge(mut self, source: NodeIndex) -> Result<Self, HedgeGraphError>
+    where
+        Self: Sized,
+    {
+        self.add_dangling_edge_mut(source)?;
+        Ok(self)
+    }
 
     /// Builds nodes from source and sink neighbor sets, assigning default data to each node.
     fn random(sources: &[Self::Neighbors], sinks: &[Self::Neighbors]) -> Self
@@ -197,34 +220,11 @@ pub trait NodeStorage: Sized {
         Self: 'a;
 }
 
-mod forest;
-mod vec;
+mod node_forest;
 
-pub use vec::BitVecNeighborIter;
-pub use vec::NodeStorageVec;
-
-#[cfg(all(
-    feature = "nodestore-forest-child-vec",
-    feature = "nodestore-forest-parent-child"
-))]
-compile_error!(
-    "Select only one forest nodestore feature: nodestore-forest-child-vec or nodestore-forest-parent-child."
-);
-
-#[cfg(feature = "nodestore-forest-child-vec")]
-pub type DefaultNodeStore<V> = Forest<V, ChildVecStore<()>>;
-
-#[cfg(all(
-    not(feature = "nodestore-forest-child-vec"),
-    feature = "nodestore-forest-parent-child"
-))]
-pub type DefaultNodeStore<V> = Forest<V, ParentChildStore<()>>;
-
-#[cfg(all(
-    not(feature = "nodestore-forest-child-vec"),
-    not(feature = "nodestore-forest-parent-child")
-))]
-pub type DefaultNodeStore<V> = NodeStorageVec<V>;
+#[cfg(feature = "rkyv")]
+pub use node_forest::{ArchivedNodeForest, NodeForestResolver};
+pub use node_forest::{NodeForest, RingNeighborIter};
 
 #[cfg(test)]
 mod test;

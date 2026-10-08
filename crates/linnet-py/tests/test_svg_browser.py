@@ -95,8 +95,10 @@ class SvgBrowserTests(unittest.TestCase):
     def test_neutral_palette_follows_media_and_explicit_theme(self):
         from playwright.sync_api import sync_playwright
 
-        left, right = lp.node("left"), lp.node("right")
-        graph = lp.build(left, right, lp.edge(lp.source(left), "p", lp.sink(right)))
+        left, right = lp.Node("left"), lp.Node("right")
+        graph = lp.Graph(
+            nodes=[left, right], edges=[lp.Edge(source=left, sink=right, name="p")]
+        )
         with sync_playwright() as playwright:
             for engine in (playwright.chromium, playwright.webkit):
                 with self.subTest(browser=engine.name):
@@ -140,8 +142,10 @@ class SvgBrowserTests(unittest.TestCase):
     def test_collection_viewport_keeps_hover_and_pinned_details_inside_graph(self):
         from playwright.sync_api import sync_playwright
 
-        left, right = lp.node("left"), lp.node("right")
-        graph = lp.build(left, right, lp.edge(lp.source(left), "p", lp.sink(right)))
+        left, right = lp.Node("left"), lp.Node("right")
+        graph = lp.Graph(
+            nodes=[left, right], edges=[lp.Edge(source=left, sink=right, name="p")]
+        )
         drawing = graph.to_svg().replace(
             'data-linnet-interactive="true"',
             'data-linnet-interactive="true" data-linnet-viewport-height="360"',
@@ -173,8 +177,10 @@ class SvgBrowserTests(unittest.TestCase):
     def test_preview_only_while_hovered_or_focused_unless_pinned(self):
         from playwright.sync_api import sync_playwright
 
-        left, right = lp.node("left"), lp.node("right")
-        graph = lp.build(left, right, lp.edge(lp.source(left), "p", lp.sink(right)))
+        left, right = lp.Node("left"), lp.Node("right")
+        graph = lp.Graph(
+            nodes=[left, right], edges=[lp.Edge(source=left, sink=right, name="p")]
+        )
         with sync_playwright() as playwright:
             for engine in (playwright.chromium, playwright.webkit):
                 with self.subTest(browser=engine.name):
@@ -212,8 +218,10 @@ class SvgBrowserTests(unittest.TestCase):
     def test_navigation_inspection_and_independent_views(self):
         from playwright.sync_api import sync_playwright
 
-        left, right = lp.node("left"), lp.node("right")
-        graph = lp.build(left, right, lp.edge(lp.source(left), "p", lp.sink(right)))
+        left, right = lp.Node("left"), lp.Node("right")
+        graph = lp.Graph(
+            nodes=[left, right], edges=[lp.Edge(source=left, sink=right, name="p")]
+        )
         drawing = graph.to_svg()
         document = (
             '<!doctype html><meta charset="utf-8">'

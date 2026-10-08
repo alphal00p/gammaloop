@@ -77,13 +77,10 @@ harness = false
 required-features = ["symbolica"]
 
 [features]
-default = ["native", "nodestore-vec", "serde"]
+default = ["native", "serde"]
 bincode = ["dep:bincode", "serde"]
 drawing = ["dep:cgmath", "cgmath/serde", "dep:clarabel", "dep:twofloat"]
 energy_trace = []
-nodestore-forest-child-vec = []
-nodestore-forest-parent-child = []
-nodestore-vec = []
 rayon = ["dep:rayon"]
 rkyv = ["dep:rkyv"]
 serde = ["bitvec/serde", "dep:serde"]
@@ -96,3 +93,7 @@ native = [
 ]
 wasm = ["symbolica?/wasm", "symbolica-utils?/wasm"]
 # layout = ["dep:argmin"]
+
+[[bench]]
+name = "nodestores"
+harness = false

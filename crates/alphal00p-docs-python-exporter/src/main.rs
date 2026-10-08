@@ -554,8 +554,18 @@ def validate(runtime_module, stub_source):
         for declaration in [
             "_NativeValue: typing.TypeAlias = (",
             "def __new__(cls, *, encode_node: typing.Callable[[NodeValue], DotVertexData]",
-            "def build(*items: _GraphItem, name: _OptionalString = None",
-            "def map(self, *, node: typing.Callable[[Node], typing.Any] | None = None",
+            "class Node:",
+            "class Edge:",
+            "class HalfEdge:",
+            "class NodeView:",
+            "class EdgeView:",
+            "class HalfEdgeView:",
+            "def __new__(cls, *, nodes: typing.Iterable[Node] | None = None, edges: typing.Iterable[Edge] | None = None",
+            "def __new__(cls, source: _EdgeEndpoint = None, sink: _EdgeEndpoint = None",
+            "def __new__(cls, node: _EndpointTarget, *, data: typing.Any = None",
+            "def add_node(self, node: _NodeInput = None",
+            "def add_edge(self, source: _EdgeInput = None, sink: _EdgeEndpoint = None",
+            "def map(self, *, node: typing.Callable[[NodeView], typing.Any] | None = None",
             "def render(self, *, config: RenderSettings | None = None)",
             "node_outset: _AutoNumber = ...",
             "_Padding: typing.TypeAlias = builtins.int | builtins.float | _NativeArray | _NativeDict | Insets",
@@ -563,7 +573,19 @@ def validate(runtime_module, stub_source):
         ] {
             assert!(canonical.contains(declaration), "missing `{declaration}`");
         }
-        for legacy_or_broad in ["**kwargs: typing.Any", "**drawing", "slf:"] {
+        for legacy_or_broad in [
+            "**kwargs: typing.Any",
+            "**drawing",
+            "slf:",
+            "class NodeSpec:",
+            "class EdgeSpec:",
+            "class HalfEdgeSpec:",
+            "\ndef build(",
+            "\ndef node(",
+            "\ndef edge(",
+            "\ndef source(",
+            "\ndef sink(",
+        ] {
             assert!(
                 !canonical.contains(legacy_or_broad),
                 "unexpected `{legacy_or_broad}`"

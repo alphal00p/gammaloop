@@ -775,16 +775,10 @@ impl SimpleTraversalTree {
 /// stored or manipulated independently of the original, more complex graph from
 /// which it was derived. The graph it owns might store simplified data (e.g., `()` for
 /// edge data, `bool` for node data indicating inclusion).
-///
-/// # Type Parameters
-///
-/// - `P`: The type of [`ForestNodeStore`] used by the underlying `Forest` within the
-///   owned `HedgeGraph`. `P` must also implement `Clone` and [`ForestNodeStorePreorder`].
-pub struct OwnedTraversalTree<P: ForestNodeStore<NodeData = ()> + Clone + ForestNodeStorePreorder> {
+pub struct OwnedTraversalTree {
     /// The graph representation owned by this traversal tree.
     /// Edge data is `()`, and node data is `bool` (likely indicating tree membership or similar).
-    /// The node storage of this graph is a `Forest<bool, P>`.
-    pub graph: HedgeGraph<(), bool, (), Forest<bool, P>>,
+    pub graph: HedgeGraph<(), bool, ()>,
     /// An [`InternalSubGraph`] representing the edges that form this traversal tree
     /// within the context of its owned `graph`.
     pub tree_subgraph: InternalSubGraph,

@@ -20,25 +20,25 @@ class SvgInteractionTests(unittest.TestCase):
         self.unsafe_edge = (
             'particle </script><script id="injected-edge">x</script> & "y"'
         )
-        left = lp.node(self.unsafe_node, label="left")
-        right = lp.node("right", label="right")
-        self.graph = lp.build(
-            left,
-            right,
-            lp.node("isolated"),
-            lp.edge(
-                lp.source(left),
-                "propagator",
-                lp.sink(right),
-                label="p",
-                style={
-                    "stroke": lp.Stroke(
-                        paint=lp.Color("#356a9a"), thickness=lp.Length.pt(0.8)
-                    )
-                },
-                extensions={"particle": self.unsafe_edge},
-            ),
-            lp.edge(lp.source(right), "outgoing"),
+        left = lp.Node(self.unsafe_node, label="left")
+        right = lp.Node("right", label="right")
+        self.graph = lp.Graph(
+            nodes=[left, right, lp.Node("isolated")],
+            edges=[
+                lp.Edge(
+                    source=left,
+                    sink=right,
+                    name="propagator",
+                    label="p",
+                    style={
+                        "stroke": lp.Stroke(
+                            paint=lp.Color("#356a9a"), thickness=lp.Length.pt(0.8)
+                        )
+                    },
+                    extensions={"particle": self.unsafe_edge},
+                ),
+                lp.Edge(source=right, name="outgoing"),
+            ],
             render_config=lp.RenderSettings(
                 layouts=lp.LayoutSettings(seed=19, steps=20, label_steps=10)
             ),
@@ -100,17 +100,16 @@ class SvgInteractionTests(unittest.TestCase):
     def test_dangling_and_self_loop_half_edges_keep_native_identity(self):
         for shape in ("incoming", "outgoing", "self_loop"):
             with self.subTest(shape=shape):
-                vertex = lp.node("v")
-                endpoints = (
-                    (lp.sink(vertex),)
-                    if shape == "incoming"
-                    else (lp.source(vertex),)
-                    if shape == "outgoing"
-                    else (lp.source(vertex), lp.sink(vertex))
-                )
-                graph = lp.build(
-                    vertex,
-                    lp.edge(endpoints[0], shape, *endpoints[1:]),
+                vertex = lp.Node("v")
+                graph = lp.Graph(
+                    nodes=[vertex],
+                    edges=[
+                        lp.Edge(
+                            source=None if shape == "incoming" else vertex,
+                            sink=None if shape == "outgoing" else vertex,
+                            name=shape,
+                        )
+                    ],
                 )
                 root = ET.fromstring(graph.to_svg())
                 targets = root.findall(".//*[@data-linnet-kind='halfedge']")

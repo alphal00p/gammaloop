@@ -11,7 +11,7 @@ use indexmap::IndexSet;
 
 use crate::half_edge::builder::HedgeGraphBuilder;
 use crate::half_edge::involution::{EdgeIndex, Flow};
-use crate::half_edge::nodestore::{NodeStorageOps, NodeStorageVec};
+use crate::half_edge::nodestore::{NodeForest, NodeStorageOps};
 use crate::half_edge::subgraph::SubSetLike;
 use crate::half_edge::{HedgeGraph, NoData, NodeIndex, NodeVec};
 
@@ -20,7 +20,7 @@ use crate::half_edge::{HedgeGraph, NoData, NodeIndex, NodeVec};
 /// The wrapper keeps the structural graph and the `source_nodes` mapping together across
 /// structure-preserving transformations such as [`UnfoldedTraceGraph::map`]. It also provides
 /// traversal helpers that are meaningful only for trace-unfolded graphs.
-pub struct UnfoldedTraceGraph<G, V, N: NodeStorageOps<NodeData = V> = NodeStorageVec<V>> {
+pub struct UnfoldedTraceGraph<G, V, N: NodeStorageOps<NodeData = V> = NodeForest<V>> {
     graph: HedgeGraph<EdgeIndex, V, NoData, N>,
     source_nodes: NodeVec<NodeIndex>,
     source_ty: PhantomData<fn() -> G>,
@@ -127,11 +127,11 @@ pub trait Key<K> {
 /// ```
 /// use linnet::half_edge::{
 ///     HedgeGraph, NoData, algorithms::trace_unfold::{HiddenData, Independence, TraceUnfold},
-///     builder::HedgeGraphBuilder, involution::EdgeIndex, nodestore::DefaultNodeStore,
+///     builder::HedgeGraphBuilder, involution::EdgeIndex, nodestore::NodeForest,
 /// };
 ///
 /// struct ExampleGraph {
-///     graph: HedgeGraph<String, &'static str, NoData, DefaultNodeStore<&'static str>>,
+///     graph: HedgeGraph<String, &'static str, NoData, NodeForest<&'static str>>,
 /// }
 ///
 /// impl Independence<HiddenData<String, EdgeIndex>> for ExampleGraph {
@@ -148,7 +148,7 @@ pub trait Key<K> {
 ///     type EdgeData = String;
 ///     type HedgeData = NoData;
 ///     type NodeData = &'static str;
-///     type NodeStorage = DefaultNodeStore<&'static str>;
+///     type NodeStorage = NodeForest<&'static str>;
 ///
 ///     fn graph(
 ///         &self,
@@ -173,9 +173,9 @@ pub trait Key<K> {
 /// builder.add_edge(b, ab, "A".to_string(), true);
 ///
 /// let graph = ExampleGraph {
-///     graph: builder.build::<DefaultNodeStore<&'static str>>(),
+///     graph: builder.build::<NodeForest<&'static str>>(),
 /// };
-/// let unfolded = graph.trace_unfold::<DefaultNodeStore<usize>>(empty);
+/// let unfolded = graph.trace_unfold::<NodeForest<usize>>(empty);
 /// let labels: Vec<_> = unfolded.iter_nodes().map(|(_, _, key)| key.to_string()).collect();
 ///
 /// assert_eq!(unfolded.n_nodes(), 4);
@@ -213,11 +213,11 @@ where
     /// ```
     /// use linnet::half_edge::{
     ///     HedgeGraph, NoData, algorithms::trace_unfold::{HiddenData, Independence, TraceUnfold},
-    ///     builder::HedgeGraphBuilder, involution::EdgeIndex, nodestore::DefaultNodeStore,
+    ///     builder::HedgeGraphBuilder, involution::EdgeIndex, nodestore::NodeForest,
     /// };
     ///
     /// struct FactoringGraph {
-    ///     graph: HedgeGraph<String, &'static str, NoData, DefaultNodeStore<&'static str>>,
+    ///     graph: HedgeGraph<String, &'static str, NoData, NodeForest<&'static str>>,
     /// }
     ///
     /// impl Independence<HiddenData<String, EdgeIndex>> for FactoringGraph {
@@ -234,7 +234,7 @@ where
     ///     type EdgeData = String;
     ///     type HedgeData = NoData;
     ///     type NodeData = &'static str;
-    ///     type NodeStorage = DefaultNodeStore<&'static str>;
+    ///     type NodeStorage = NodeForest<&'static str>;
     ///
     ///     fn graph(
     ///         &self,
@@ -276,9 +276,9 @@ where
     /// builder.add_edge(empty, ab, "AB".to_string(), true);
     ///
     /// let graph = FactoringGraph {
-    ///     graph: builder.build::<DefaultNodeStore<&'static str>>(),
+    ///     graph: builder.build::<NodeForest<&'static str>>(),
     /// };
-    /// let unfolded = graph.trace_unfold::<DefaultNodeStore<usize>>(empty);
+    /// let unfolded = graph.trace_unfold::<NodeForest<usize>>(empty);
     /// let labels: Vec<_> = unfolded.iter_nodes().map(|(_, _, key)| key.to_string()).collect();
     ///
     /// assert_eq!(unfolded.n_nodes(), 3);
@@ -1401,7 +1401,7 @@ mod tests {
         dot,
         half_edge::{
             algorithms::DirectionBasis, builder::HedgeGraphBuilder, involution::HedgePair,
-            nodestore::DefaultNodeStore, NoData,
+            nodestore::NodeForest, NoData,
         },
         parser::{DotEdgeData, DotGraph, DotHedgeData, DotVertexData},
     };
@@ -1421,7 +1421,7 @@ mod tests {
     }
 
     struct FrontierGraph {
-        graph: HedgeGraph<&'static str, &'static str, NoData, DefaultNodeStore<&'static str>>,
+        graph: HedgeGraph<&'static str, &'static str, NoData, NodeForest<&'static str>>,
         extra_independent_pairs: &'static [(&'static str, &'static str)],
     }
 
@@ -1444,7 +1444,7 @@ mod tests {
     impl TraceUnfold<&'static str> for FrontierGraph {
         type EdgeData = &'static str;
         type NodeData = &'static str;
-        type NodeStorage = DefaultNodeStore<&'static str>;
+        type NodeStorage = NodeForest<&'static str>;
         type HedgeData = NoData;
 
         fn graph(
@@ -1775,7 +1775,7 @@ mod tests {
         }
         "#);
 
-        let g = g.trace_unfold::<DefaultNodeStore<usize>>(NodeIndex(0));
+        let g = g.trace_unfold::<NodeForest<usize>>(NodeIndex(0));
         let mut output = String::new();
         g.dot_impl_fmt(
             &mut output,
@@ -1852,11 +1852,11 @@ mod tests {
         builder.add_edge(bd, abd, "A", true);
 
         let graph = FrontierGraph {
-            graph: builder.build::<DefaultNodeStore<&'static str>>(),
+            graph: builder.build::<NodeForest<&'static str>>(),
             extra_independent_pairs: &[("A", "B"), ("B", "A"), ("A", "D"), ("D", "A")],
         };
         println!("{}", graph.graph.dot_display(&graph.graph.full_filter()));
-        let unfolded = graph.trace_unfold::<DefaultNodeStore<usize>>(empty);
+        let unfolded = graph.trace_unfold::<NodeForest<usize>>(empty);
         let unfolded = unfolded.map(|_, _, key| key);
         println!(
             "{}",
@@ -1911,11 +1911,11 @@ mod tests {
         builder.add_edge(bd, abd, "A", true);
 
         let graph = FrontierGraph {
-            graph: builder.build::<DefaultNodeStore<&'static str>>(),
+            graph: builder.build::<NodeForest<&'static str>>(),
             extra_independent_pairs: &[("A", "B"), ("B", "A")],
         };
         println!("{}", graph.graph.dot_label(&graph.graph.full_filter()));
-        let unfolded = graph.trace_unfold::<DefaultNodeStore<usize>>(empty);
+        let unfolded = graph.trace_unfold::<NodeForest<usize>>(empty);
         println!(
             "{}",
             unfolded.graph.dot_label(&unfolded.graph.full_filter())
@@ -1968,7 +1968,7 @@ mod tests {
         builder.add_edge(bu, target, "F", true);
 
         let graph = FrontierGraph {
-            graph: builder.build::<DefaultNodeStore<&'static str>>(),
+            graph: builder.build::<NodeForest<&'static str>>(),
             extra_independent_pairs: &[
                 ("A", "B"),
                 ("B", "A"),
@@ -1980,7 +1980,7 @@ mod tests {
                 ("U", "F"),
             ],
         };
-        let unfolded = graph.trace_unfold::<DefaultNodeStore<usize>>(empty);
+        let unfolded = graph.trace_unfold::<NodeForest<usize>>(empty);
         let actual = unfolded
             .iter_nodes()
             .map(|(node, _, key)| {

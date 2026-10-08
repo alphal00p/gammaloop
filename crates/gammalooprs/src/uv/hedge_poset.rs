@@ -30,7 +30,7 @@ use linnet::half_edge::{
         trace_unfold::{HiddenData, Independence, TraceKey, TraceUnfold, UnfoldedTraceGraph},
     },
     involution::{EdgeIndex, Flow, HedgePair},
-    nodestore::{NodeStorageOps, NodeStorageVec},
+    nodestore::{NodeForest, NodeStorageOps},
     subgraph::{Inclusion, InternalSubGraph, ModifySubSet, SuBitGraph, SubSetLike, SubSetOps},
 };
 use spenso::shadowing::TensorCollectFilter;
@@ -90,7 +90,7 @@ impl TraceUnfold<SuBitGraph> for Wood {
     type EdgeData = SuBitGraph;
     type HedgeData = NoData;
     type NodeData = Spinney;
-    type NodeStorage = NodeStorageVec<Spinney>;
+    type NodeStorage = NodeForest<Spinney>;
 
     fn graph(
         &self,
@@ -317,7 +317,7 @@ impl Wood {
     }
 
     fn unfold_with_cached_node_label_atoms(self, cache_node_label_atoms: bool) -> Forests {
-        let unfolded = self.trace_unfold::<NodeStorageVec<_>>(self.root);
+        let unfolded = self.trace_unfold::<NodeForest<_>>(self.root);
         let graph = unfolded.map(|_, _, key| OperationNode { key });
 
         let mut cuts: Vec<(SuBitGraph, CutSet)> = Vec::new();
@@ -409,7 +409,7 @@ impl ComputeStore {
 }
 
 pub struct Forests {
-    pub graph: UnfoldedTraceGraph<Wood, OperationNode, NodeStorageVec<OperationNode>>,
+    pub graph: UnfoldedTraceGraph<Wood, OperationNode, NodeForest<OperationNode>>,
     pub root: NodeIndex,
     /// Wood subgraph that has compatible
     cuts: Vec<(SuBitGraph, CutSet)>,

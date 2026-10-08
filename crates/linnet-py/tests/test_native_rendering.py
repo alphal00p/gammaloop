@@ -11,14 +11,18 @@ from symbolica.community import graph
 
 class NativeRenderingTests(unittest.TestCase):
     def setUp(self):
-        self.graph = graph.build(
-            graph.node("a", label=graph.TextLabel("left")),
-            graph.node("b", label=graph.MathSymbol("p", subscript=1)),
-            graph.node("isolated"),
-            graph.edge(graph.source("a"), "ab", graph.sink("b")),
-            graph.edge(graph.source("a"), "parallel", graph.sink("b")),
-            graph.edge(graph.source("b"), "loop", graph.sink("b")),
-            graph.edge(graph.source("a"), "open"),
+        self.graph = graph.Graph(
+            nodes=[
+                graph.Node("a", label=graph.TextLabel("left")),
+                graph.Node("b", label=graph.MathSymbol("p", subscript=1)),
+                graph.Node("isolated"),
+            ],
+            edges=[
+                graph.Edge(source="a", sink="b", name="ab"),
+                graph.Edge(source="a", sink="b", name="parallel"),
+                graph.Edge(source="b", sink="b", name="loop"),
+                graph.Edge(source="a", name="open"),
+            ],
         )
 
     def assert_native(self, result):
@@ -79,7 +83,7 @@ class NativeRenderingTests(unittest.TestCase):
         self.assertIn("#246813", svg)
         config.drawing = graph.DrawOptions(node_fill=graph.Color("#abcdef"))
         self.graph.node("a").drawing.label = graph.TextLabel("changed")
-        self.graph.add_node(graph.node("later"))
+        self.graph.add_node(graph.Node("later"))
         self.assertEqual(result.to_svg(), svg)
         self.assertEqual(calls, [0, 1, 2])
         with TemporaryDirectory() as directory:

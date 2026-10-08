@@ -66,7 +66,7 @@ use crate::{
     half_edge::{
         builder::HedgeGraphBuilder,
         involution::{EdgeIndex, Hedge},
-        nodestore::{DefaultNodeStore, NodeStorage, NodeStorageOps},
+        nodestore::{NodeForest, NodeStorage, NodeStorageOps},
         subgraph::{ModifySubSet, SubGraphLike, SubSetLike},
         swap::Swap,
         GVEdgeAttrs, HedgeGraph, NodeIndex,
@@ -194,7 +194,7 @@ pub use hedge::DotHedgeData;
     derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
 )]
 #[cfg_attr(feature = "rkyv", archive(check_bytes))]
-pub struct DotGraph<N: NodeStorage<NodeData = DotVertexData> = DefaultNodeStore<DotVertexData>> {
+pub struct DotGraph<N: NodeStorage<NodeData = DotVertexData> = NodeForest<DotVertexData>> {
     /// Graph-level DOT metadata, including its name, payload, and attribute defaults.
     pub global_data: GlobalData,
     /// Parsed half-edge topology together with its DOT edge, vertex, and half-edge data.
@@ -724,7 +724,7 @@ impl<E, V, H, N: NodeStorageOps<NodeData = V>> HedgeGraph<E, V, H, N> {
 pub mod test {
 
     use crate::{
-        half_edge::{nodestore::NodeStorageVec, subgraph::SuBitGraph},
+        half_edge::{nodestore::NodeForest, subgraph::SuBitGraph},
         parser::{DotGraph, DotParseError, DotVertexData, ExplicitIdKind, HedgeParseError},
     };
 
@@ -948,7 +948,7 @@ pub mod test {
 
     #[test]
     fn graph_sets_return_semantic_errors() {
-        let parsed = GraphSet::<_, _, _, _, NodeStorageVec<DotVertexData>>::from_string(
+        let parsed = GraphSet::<_, _, _, _, NodeForest<DotVertexData>>::from_string(
             "digraph valid { a -> b; } digraph invalid { a -> b [dir=sideways]; }",
         );
         let error = parsed.unwrap_err();
@@ -1104,7 +1104,7 @@ pub mod test {
             }
             "#;
 
-        let set = GraphSet::<_, _, _, _, NodeStorageVec<DotVertexData>>::from_string(s).unwrap();
+        let set = GraphSet::<_, _, _, _, NodeForest<DotVertexData>>::from_string(s).unwrap();
         assert_eq!(set.set.len(), 2);
 
         for g in set {

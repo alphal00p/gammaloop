@@ -430,49 +430,28 @@ impl<T> SmartEdgeVec<T> {
     }
 
     pub(crate) fn add_dangling_edge(
-        self,
+        &mut self,
         data: T,
         flow: Flow,
         orientation: impl Into<Orientation>,
-    ) -> (Self, Hedge) {
-        let mut involution = self.involution;
-        let o = orientation.into();
-
-        let mut edge_data = self.data;
-        let edge_index = edge_data.len();
-        let hedge = involution.add_identity(edge_index, o, flow);
-        edge_data.push((data, HedgePair::Unpaired { hedge, flow }));
-
-        (
-            SmartEdgeVec {
-                data: edge_data,
-                involution,
-            },
-            hedge,
-        )
+    ) -> Hedge {
+        let edge_index = self.data.len();
+        let hedge = self
+            .involution
+            .add_identity(edge_index, orientation.into(), flow);
+        self.data.push((data, HedgePair::Unpaired { hedge, flow }));
+        hedge
     }
 
     pub(crate) fn add_paired(
-        self,
+        &mut self,
         data: T,
         orientation: impl Into<Orientation>,
-    ) -> (Self, Hedge, Hedge) {
-        let mut involution = self.involution;
-        let o = orientation.into();
-
-        let mut edge_data = self.data;
-        let edge_index = edge_data.len();
-        let (source, sink) = involution.add_pair(edge_index, o);
-        edge_data.push((data, HedgePair::Paired { source, sink }));
-
-        (
-            SmartEdgeVec {
-                data: edge_data,
-                involution,
-            },
-            source,
-            sink,
-        )
+    ) -> (Hedge, Hedge) {
+        let edge_index = self.data.len();
+        let (source, sink) = self.involution.add_pair(edge_index, orientation.into());
+        self.data.push((data, HedgePair::Paired { source, sink }));
+        (source, sink)
     }
 
     /// The first two arguments of the merge function correspond to the source hedge, and the second two to the sink hedge.
@@ -646,24 +625,7 @@ impl<T> SmartEdgeVec<T> {
     }
 
     pub fn delete<S: SubSetLike>(&mut self, graph: &S) {
-        let mut left = Hedge(0);
-        let mut extracted = self.involution.len();
-
-        while left < extracted {
-            if !graph.includes(&left) {
-                //left is in the right place
-                left.0 += 1;
-            } else {
-                //left needs to be swapped
-                extracted.0 -= 1;
-                if !graph.includes(&extracted) {
-                    // println!("{extracted}<=>{left}");
-                    //only with an extracted that is in the wrong spot
-                    self.swap(left, extracted);
-                    left.0 += 1;
-                }
-            }
-        }
+        let left = <Self as Swap<Hedge>>::partition(self, |h| !graph.includes(h));
 
         for i in 0..(left.0) {
             if self.inv(Hedge(i)) >= left {
@@ -688,29 +650,9 @@ impl<T> SmartEdgeVec<T> {
 
         // The self involution is good and valid, but we now need to split the data carrying vec.
 
-        let mut split_at = EdgeIndex(0);
-
-        let mut extracted: EdgeIndex = self.len();
-
-        while split_at < extracted {
-            if self.data[split_at].1.any_hedge() < left {
-                //left is in the right place
-                split_at.0 += 1;
-            } else {
-                //left needs to be swapped
-                extracted.0 -= 1;
-                if self.data[extracted].1.any_hedge() < left {
-                    // println!("{extracted}<=>{split_at}");
-                    //only with an extracted that is in the wrong spot
-                    self.swap(split_at, extracted);
-                    // println!("{}", self.involution.display());
-
-                    split_at.0 += 1;
-                }
-            }
-        }
-
-        // println!("{}", self.involution.display());
+        let split_at = <Self as Swap<EdgeIndex>>::partition_from(self, EdgeIndex(0), |s, e| {
+            s.data[e].1.any_hedge() < left
+        });
 
         let _ = self.involution.inv.split_off(left);
         let _ = self.data.split_off(split_at);

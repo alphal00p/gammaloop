@@ -27,14 +27,14 @@ __all__ = [
     "DotVertexData",
     "DrawOptions",
     "DrawingSelectors",
+    "Edge",
     "EdgeSignature",
-    "EdgeSpec",
     "Flow",
     "Fraction",
     "GlobalData",
     "Graph",
     "GraphStyleOptions",
-    "HalfEdgeSpec",
+    "HalfEdge",
     "INHERIT",
     "Inherit",
     "Insets",
@@ -44,19 +44,18 @@ __all__ = [
     "Length",
     "Mark",
     "MathSymbol",
-    "NodeSpec",
-    "NodeStore",
+    "Node",
     "Orientation",
     "OrientedCut",
     "Anchor",
     "Compass",
     "DanglingTangent",
     "DashPattern",
-    "Edge",
+    "EdgeView",
     "EdgeDrawing",
     "EdgeLengthResolution",
     "EdgeValue",
-    "HalfEdge",
+    "HalfEdgeView",
     "HalfEdgeDrawing",
     "HalfEdgeValue",
     "LabelLayout",
@@ -67,7 +66,7 @@ __all__ = [
     "MarkOrientation",
     "MarkPosition",
     "MarkSymbol",
-    "Node",
+    "NodeView",
     "NodeDrawing",
     "NodeValue",
     "Pattern",
@@ -89,16 +88,9 @@ __all__ = [
     "TypstCall",
     "TypstModule",
     "TypstRef",
-    "build",
-    "edge",
-    "node",
-    "sink",
-    "source",
 ]
 
-_RealLabel: typing.TypeAlias = Float | int | float | str | decimal.Decimal
-_ExpressionLabel: typing.TypeAlias = Expression | ComplexFloat | _RealLabel | complex | tuple[_RealLabel, _RealLabel] | None
-_LabelKey: typing.TypeAlias = typing.Callable[[typing.Any], _ExpressionLabel] | None
+_LabelKey: typing.TypeAlias = typing.Callable[[typing.Any], typing.Hashable] | None
 
 class _TypstValueRef(typing.Protocol): ...
 class _TypstContentRef(typing.Protocol): ...
@@ -179,10 +171,15 @@ _AnchorValue: typing.TypeAlias = Anchor | Auto | None | Inherit
 _Radius: typing.TypeAlias = builtins.int | builtins.float | builtins.list[builtins.int | builtins.float] | builtins.tuple[builtins.int | builtins.float, ...] | _ValueExpression | Inherit
 _Padding: typing.TypeAlias = builtins.int | builtins.float | _NativeArray | _NativeDict | Insets | _ValueExpression | Inherit
 _OptionalString: typing.TypeAlias = builtins.str | None
-_OptionalHalfEdgeSpec: typing.TypeAlias = HalfEdgeSpec | None
-_EndpointTarget: typing.TypeAlias = NodeSpec | Node | builtins.int | builtins.str
-_HalfEdgeTarget: typing.TypeAlias = HalfEdge | builtins.int
-_GraphItem: typing.TypeAlias = NodeSpec | EdgeSpec
+_EndpointTarget: typing.TypeAlias = Node | NodeView | builtins.int | builtins.str
+_EdgeEndpoint: typing.TypeAlias = HalfEdge | _EndpointTarget | None
+_NodeInput: typing.TypeAlias = Node | builtins.str | None
+_EdgeInput: typing.TypeAlias = Edge | _EdgeEndpoint
+_OptionalOrientation: typing.TypeAlias = Orientation | None
+_OptionalNodeDrawing: typing.TypeAlias = NodeDrawing | None
+_OptionalEdgeDrawing: typing.TypeAlias = EdgeDrawing | None
+_OptionalHalfEdgeDrawing: typing.TypeAlias = HalfEdgeDrawing | None
+_HalfEdgeTarget: typing.TypeAlias = HalfEdgeView | builtins.int
 _OptionalGlobalData: typing.TypeAlias = GlobalData | None
 _OptionalDotCodec: typing.TypeAlias = DotCodec | None
 _OptionalRenderSettings: typing.TypeAlias = RenderSettings | None
@@ -213,9 +210,9 @@ _DrawingPoints: typing.TypeAlias = typing.Sequence[builtins.list[_DrawingCoordin
 _DrawingString: typing.TypeAlias = builtins.str | _ValueExpression | None | Inherit
 _DrawingAngle: typing.TypeAlias = builtins.int | builtins.float | Angle | _ValueExpression | None | Inherit
 _DrawingDecoration: typing.TypeAlias = Pattern | _StyleLayers | None | Inherit
-_NodeDrawingSelector: typing.TypeAlias = typing.Callable[[Node], NodeDrawing | None] | None | Inherit
-_EdgeDrawingSelector: typing.TypeAlias = typing.Callable[[Edge], EdgeDrawing | None] | None | Inherit
-_HalfEdgeDrawingSelector: typing.TypeAlias = typing.Callable[[HalfEdge], HalfEdgeDrawing | None] | None | Inherit
+_NodeDrawingSelector: typing.TypeAlias = typing.Callable[[NodeView], NodeDrawing | None] | None | Inherit
+_EdgeDrawingSelector: typing.TypeAlias = typing.Callable[[EdgeView], EdgeDrawing | None] | None | Inherit
+_HalfEdgeDrawingSelector: typing.TypeAlias = typing.Callable[[HalfEdgeView], HalfEdgeDrawing | None] | None | Inherit
 _HedgeSelection: typing.TypeAlias = builtins.list[builtins.bool] | builtins.tuple[builtins.bool, ...]
 _SubgraphExpression: typing.TypeAlias = _ValueExpression | _FunctionExpression
 _SubgraphSelection: typing.TypeAlias = _HedgeSelection | _SubgraphExpression
@@ -301,7 +298,7 @@ class CutPartition:
     @property
     def target_side(self) -> Subgraph: ...
     @property
-    def edges(self) -> builtins.list[Edge]: ...
+    def edges(self) -> builtins.list[EdgeView]: ...
     def __repr__(self) -> builtins.str: ...
 
 @typing.final
@@ -438,6 +435,27 @@ class DrawingSelectors:
     def __new__(cls, *, node: _NodeDrawingSelector = ..., edge: _EdgeDrawingSelector = ..., source: _HalfEdgeDrawingSelector = ..., sink: _HalfEdgeDrawingSelector = ...) -> DrawingSelectors: ...
 
 @typing.final
+class Edge:
+    r"""
+    A reusable edge description accepted by `Graph` and `Graph.add_edge()`.
+    """
+    @property
+    def source(self) -> typing.Optional[HalfEdge]: ...
+    @property
+    def sink(self) -> typing.Optional[HalfEdge]: ...
+    @property
+    def name(self) -> typing.Optional[builtins.str]: ...
+    @property
+    def data(self) -> typing.Any: ...
+    @data.setter
+    def data(self, value: typing.Any) -> None: ...
+    @property
+    def drawing(self) -> EdgeDrawing: ...
+    @property
+    def orientation(self) -> Orientation: ...
+    def __new__(cls, source: _EdgeEndpoint = None, sink: _EdgeEndpoint = None, *, name: _OptionalString = None, data: typing.Any = None, orientation: Orientation = Orientation.Default, drawing: _OptionalEdgeDrawing = None, label: _OptionalStaticContent = ..., placement: _PlacementValue = ..., label_position: _DrawingPoint = ..., label_offset: _OptionalNumber = ..., label_angle: _DrawingAngle = ..., bend: _DrawingAngle = ..., routing: _RoutingValue = ..., minimum_length: _OptionalInteger = ..., same_rank: _OptionalBoolean = ..., style: _OptionalStyleLayers = ..., label_style: _OptionalStyle = ..., decoration: _DrawingDecoration = ..., extensions: _NativeDict = ...) -> Edge: ...
+
+@typing.final
 class EdgeSignature:
     r"""
     A labeled port used in graph generation signatures.
@@ -452,22 +470,6 @@ class EdgeSignature:
         A labeled outgoing (True), incoming (False), or undirected (None) port.
         """
     def flip(self) -> EdgeSignature: ...
-
-@typing.final
-class EdgeSpec:
-    r"""
-    A reusable declarative edge description accepted by `build()` and `Graph.add_edge()`.
-    """
-    @property
-    def name(self) -> typing.Optional[builtins.str]: ...
-    @property
-    def data(self) -> typing.Any: ...
-    @data.setter
-    def data(self, value: typing.Any) -> None: ...
-    @property
-    def drawing(self) -> EdgeDrawing: ...
-    @property
-    def orientation(self) -> Orientation: ...
 
 @typing.final
 class Fraction:
@@ -516,7 +518,7 @@ class Graph:
     --------
     ```python
     from symbolica.community import graph as linnet
-    graph = linnet.build(linnet.node("source"), linnet.node("sink"))
+    graph = linnet.Graph(nodes=[linnet.Node("source"), linnet.Node("sink")])
     ```
     """
     @property
@@ -535,23 +537,18 @@ class Graph:
     def n_edges(self) -> builtins.int: ...
     @property
     def n_half_edges(self) -> builtins.int: ...
-    @property
-    def node_store(self) -> NodeStore:
+    def __new__(cls, *, nodes: typing.Iterable[Node] | None = None, edges: typing.Iterable[Edge] | None = None, name: typing.Optional[builtins.str] = None, global_data: typing.Optional[GlobalData] = None, codec: typing.Optional[DotCodec] = None, render_config: RenderSettings | None = None) -> Graph:
         r"""
-        Return the node-storage strategy used by this graph.
+        Build a graph once from reusable descriptions. Referenced Node descriptions
+        are included automatically; named and indexed endpoints must resolve.
         """
-    def __new__(cls, *, name: typing.Optional[builtins.str] = None, global_data: typing.Optional[GlobalData] = None, codec: typing.Optional[DotCodec] = None, render_config: RenderSettings | None = None, node_store: NodeStore = NodeStore.Vec) -> Graph: ...
     def __len__(self) -> builtins.int: ...
-    def to_node_store(self, node_store: NodeStore) -> Graph:
-        r"""
-        Copy this graph into another node-storage strategy.
-        """
-    def node(self, key: builtins.int | builtins.str) -> Node: ...
-    def edge(self, key: builtins.int | builtins.str) -> Edge: ...
-    def half_edge(self, index: builtins.int) -> HalfEdge: ...
-    def nodes(self) -> builtins.list[Node]: ...
-    def edges(self) -> builtins.list[Edge]: ...
-    def half_edges(self) -> builtins.list[HalfEdge]: ...
+    def node(self, key: builtins.int | builtins.str) -> NodeView: ...
+    def edge(self, key: builtins.int | builtins.str) -> EdgeView: ...
+    def half_edge(self, index: builtins.int) -> HalfEdgeView: ...
+    def nodes(self) -> builtins.list[NodeView]: ...
+    def edges(self) -> builtins.list[EdgeView]: ...
+    def half_edges(self) -> builtins.list[HalfEdgeView]: ...
     def reorder_nodes(self, order: typing.Sequence[builtins.int]) -> None: ...
     def reorder_edges(self, order: typing.Sequence[builtins.int]) -> None: ...
     def set_orientation(self, key: builtins.int | builtins.str, orientation: Orientation) -> None:
@@ -559,13 +556,13 @@ class Graph:
         Change an edge's direction and invalidate existing graph-element views.
         """
     def reverse_edge(self, key: builtins.int | builtins.str) -> None: ...
-    def map(self, *, node: typing.Callable[[Node], typing.Any] | None = None, edge: typing.Callable[[Edge], typing.Any] | None = None, source: typing.Callable[[HalfEdge], typing.Any] | None = None, sink: typing.Callable[[HalfEdge], typing.Any] | None = None) -> Graph: ...
+    def map(self, *, node: typing.Callable[[NodeView], typing.Any] | None = None, edge: typing.Callable[[EdgeView], typing.Any] | None = None, source: typing.Callable[[HalfEdgeView], typing.Any] | None = None, sink: typing.Callable[[HalfEdgeView], typing.Any] | None = None) -> Graph: ...
     @classmethod
-    def from_dot(cls, source: builtins.str, codec: DotCodec, *, node_store: NodeStore = NodeStore.Vec) -> Graph: ...
+    def from_dot(cls, source: builtins.str, codec: DotCodec) -> Graph: ...
     @classmethod
-    def from_dot_set(cls, source: builtins.str, codec: DotCodec, *, node_store: NodeStore = NodeStore.Vec) -> builtins.list[Graph]: ...
+    def from_dot_set(cls, source: builtins.str, codec: DotCodec) -> builtins.list[Graph]: ...
     @classmethod
-    def from_dot_file(cls, path: builtins.str | os.PathLike[builtins.str], codec: DotCodec, *, node_store: NodeStore = NodeStore.Vec) -> Graph: ...
+    def from_dot_file(cls, path: builtins.str | os.PathLike[builtins.str], codec: DotCodec) -> Graph: ...
     def to_dot(self, codec: typing.Optional[DotCodec] = None) -> builtins.str: ...
     def render(self, *, config: RenderSettings | None = None) -> DiagramRender:
         r"""
@@ -580,10 +577,10 @@ class Graph:
     def full_subgraph(self) -> Subgraph: ...
     def empty_subgraph(self) -> Subgraph: ...
     def subgraph(self, *, nodes: typing.Sequence[builtins.int | builtins.str] = ..., edges: typing.Sequence[builtins.int | builtins.str] = ..., half_edges: typing.Sequence[builtins.int] = ...) -> Subgraph: ...
-    def filter(self, *, node: typing.Callable[[Node], builtins.bool] | None = None, edge: typing.Callable[[Edge], builtins.bool] | None = None, half_edge: typing.Callable[[HalfEdge], builtins.bool] | None = None) -> Subgraph: ...
-    def nodes_of(self, subgraph: Subgraph) -> builtins.list[Node]: ...
-    def edges_of(self, subgraph: Subgraph) -> builtins.list[Edge]: ...
-    def half_edges_of(self, subgraph: Subgraph) -> builtins.list[HalfEdge]: ...
+    def filter(self, *, node: typing.Callable[[NodeView], builtins.bool] | None = None, edge: typing.Callable[[EdgeView], builtins.bool] | None = None, half_edge: typing.Callable[[HalfEdgeView], builtins.bool] | None = None) -> Subgraph: ...
+    def nodes_of(self, subgraph: Subgraph) -> builtins.list[NodeView]: ...
+    def edges_of(self, subgraph: Subgraph) -> builtins.list[EdgeView]: ...
+    def half_edges_of(self, subgraph: Subgraph) -> builtins.list[HalfEdgeView]: ...
     def internal_boundary(self, subgraph: Subgraph) -> Subgraph:
         r"""
         Return selected half-edges that lie on the selection's internal boundary.
@@ -600,13 +597,13 @@ class Graph:
     def count_connected_components(self, subgraph: typing.Optional[Subgraph] = None) -> builtins.int: ...
     def is_connected(self, subgraph: typing.Optional[Subgraph] = None) -> builtins.bool: ...
     def cyclomatic_number(self, subgraph: typing.Optional[Subgraph] = None) -> builtins.int: ...
-    def is_reachable(self, source: Node | builtins.int | builtins.str, target: Node | builtins.int | builtins.str, *, subgraph: typing.Optional[Subgraph] = None, direction: DirectionBasis = DirectionBasis.Underlying) -> builtins.bool:
+    def is_reachable(self, source: NodeView | builtins.int | builtins.str, target: NodeView | builtins.int | builtins.str, *, subgraph: typing.Optional[Subgraph] = None, direction: DirectionBasis = DirectionBasis.Underlying) -> builtins.bool:
         r"""
         Test directed reachability within an optional structural selection.
 
         Both endpoints must belong to the selected subgraph; otherwise this raises `ValueError`.
         """
-    def topological_order(self, *, subgraph: typing.Optional[Subgraph] = None, direction: DirectionBasis = DirectionBasis.Underlying) -> builtins.list[Node]:
+    def topological_order(self, *, subgraph: typing.Optional[Subgraph] = None, direction: DirectionBasis = DirectionBasis.Underlying) -> builtins.list[NodeView]:
         r"""
         Return a deterministic topological order for the selected directed graph.
 
@@ -638,7 +635,7 @@ class Graph:
         `max_results` bounds all non-empty combinations of a cycle basis, not only
         the combinations that ultimately form circuits.
         """
-    def tadpoles(self, externals: typing.Sequence[Node | builtins.int | builtins.str]) -> builtins.list[Subgraph]:
+    def tadpoles(self, externals: typing.Sequence[NodeView | builtins.int | builtins.str]) -> builtins.list[Subgraph]:
         r"""
         Enumerate tadpole components after identifying a non-empty terminal node set.
         """
@@ -646,19 +643,11 @@ class Graph:
         r"""
         Enumerate all native separating partitions between two disjoint, non-empty node groups.
         """
-    def add_node(self, spec: NodeSpec) -> Node:
-        r"""
-        Append one declarative node and return its fresh live view.
-        """
-    def add_edge(self, spec: EdgeSpec) -> Edge:
-        r"""
-        Append one declarative internal or dangling edge and return its fresh live view.
-        """
-    def split_edge(self, at: _HalfEdgeTarget, replacement: EdgeValue, *, name: typing.Optional[builtins.str] = None, orientation: Orientation = Orientation.Default) -> tuple[Edge, Edge]:
+    def split_edge(self, at: _HalfEdgeTarget, replacement: EdgeValue, *, name: typing.Optional[builtins.str] = None, orientation: Orientation = Orientation.Default) -> tuple[EdgeView, EdgeView]:
         r"""
         Split a paired edge at one half-edge, preserving the opposite edge value.
         """
-    def connect(self, source: _HalfEdgeTarget, sink: _HalfEdgeTarget, replacement: EdgeValue, *, name: typing.Optional[builtins.str] = None, orientation: Orientation = Orientation.Default) -> Edge:
+    def connect(self, source: _HalfEdgeTarget, sink: _HalfEdgeTarget, replacement: EdgeValue, *, name: typing.Optional[builtins.str] = None, orientation: Orientation = Orientation.Default) -> EdgeView:
         r"""
         Connect two dangling half-edges; the first becomes the source endpoint.
         """
@@ -686,25 +675,36 @@ class Graph:
         r"""
         Append another graph in place without matching dangling half-edges.
         """
-    def join(self, other: Graph, *, matching: typing.Callable[[HalfEdge, HalfEdge], builtins.bool], merge: typing.Callable[[HalfEdge, HalfEdge], tuple[Flow, Orientation, builtins.str | None, EdgeValue]]) -> Graph:
+    def join(self, other: Graph, *, matching: typing.Callable[[HalfEdgeView, HalfEdgeView], builtins.bool], merge: typing.Callable[[HalfEdgeView, HalfEdgeView], tuple[Flow, Orientation, builtins.str | None, EdgeValue]]) -> Graph:
         r"""
         Join dangling half-edges selected by Python callbacks.
         """
-    def join_mut(self, other: Graph, *, matching: typing.Callable[[HalfEdge, HalfEdge], builtins.bool], merge: typing.Callable[[HalfEdge, HalfEdge], tuple[Flow, Orientation, builtins.str | None, EdgeValue]]) -> None:
+    def join_mut(self, other: Graph, *, matching: typing.Callable[[HalfEdgeView, HalfEdgeView], builtins.bool], merge: typing.Callable[[HalfEdgeView, HalfEdgeView], tuple[Flow, Orientation, builtins.str | None, EdgeValue]]) -> None:
         r"""
         Join another graph in place while leaving the other graph unchanged.
         """
     def __repr__(self) -> builtins.str: ...
+    def add_node(self, node: _NodeInput = None, *, name: _OptionalString = None, data: typing.Any = None, drawing: _OptionalNodeDrawing = None, label: _OptionalStaticContent = ..., placement: _PlacementValue = ..., shift: _DrawingPoint = ..., rank: _OptionalInteger = ..., minimum_size: _OptionalNumber = ..., maximum_size: _OptionalNumber = ..., style: _OptionalStyle = ..., label_style: _OptionalStyle = ..., extensions: _NativeDict = ...) -> NodeView: ...
+    def add_edge(self, source: _EdgeInput = None, sink: _EdgeEndpoint = None, *, name: _OptionalString = None, data: typing.Any = None, orientation: _OptionalOrientation = None, drawing: _OptionalEdgeDrawing = None, label: _OptionalStaticContent = ..., placement: _PlacementValue = ..., label_position: _DrawingPoint = ..., label_offset: _OptionalNumber = ..., label_angle: _DrawingAngle = ..., bend: _DrawingAngle = ..., routing: _RoutingValue = ..., minimum_length: _OptionalInteger = ..., same_rank: _OptionalBoolean = ..., style: _OptionalStyleLayers = ..., label_style: _OptionalStyle = ..., decoration: _DrawingDecoration = ..., extensions: _NativeDict = ...) -> EdgeView: ...
     def __copy__(self) -> Graph: ...
     def canonize(self, *, node_key: _LabelKey = None, edge_key: _LabelKey = None, half_edge_key: _LabelKey = None) -> tuple[Graph, list[int], int, list[int]]:
         r"""
-        Canonical graph, old-to-new vertex map, automorphism-group size, and vertex orbit.
-        Keys receive element payloads; names and drawing metadata do not affect equivalence.
+        Canonical graph, old-to-new vertex map, automorphism-group size, and vertex orbits
+        indexed by canonical vertex, each mapped to the smallest canonical vertex of its orbit.
+        Keys are the element payloads, or what the key callbacks return for them; names and
+        drawing metadata do not affect equivalence. Keys must be hashable; keys of the same kind
+        compare by Python equality, Symbolica expressions structurally, and keys of different
+        kinds never compare equal. Distinct keys sort as None, numbers (`numbers.Real`), strings,
+        bytes, tuples and expressions, then other values by type name and repr, which must be
+        the same for equal keys and differ for distinct ones; the default repr is rejected.
+        The group counts permutations of identical dangling half-edges at a node, and swaps
+        the ends of an undirected edge only when they have equal half-edge keys.
         """
     def is_isomorphic(self, other: Graph, *, node_key: _LabelKey = None, edge_key: _LabelKey = None, half_edge_key: _LabelKey = None) -> builtins.bool: ...
     def canonize_edges(self, *, edge_key: _LabelKey = None, half_edge_key: _LabelKey = None) -> None:
         r"""
-        Sort edges canonically while fixing every vertex.
+        Sort edges by their endpoints and keys, ordered as in `canonize`, while fixing every
+        vertex.
         """
     @staticmethod
     def generate(external_edges: typing.Sequence[tuple[Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal], EdgeSignature]], vertex_signatures: typing.Sequence[typing.Sequence[EdgeSignature]], *, max_vertices: typing.Optional[builtins.int] = None, max_loops: typing.Optional[builtins.int] = None, max_bridges: typing.Optional[builtins.int] = None, allow_self_loops: typing.Optional[builtins.bool] = None, allow_zero_flow_edges: typing.Optional[builtins.bool] = None, filter_fn: typing.Callable[[Graph, int], bool] | None = None, progress_fn: typing.Callable[[Graph], bool] | None = None) -> list[tuple[Graph, int]]:
@@ -725,18 +725,19 @@ class GraphStyleOptions:
     def __new__(cls, *, scope: _Dictionary = ..., unit: _LengthValue = ..., node_label: _AutoOptionalContent = ..., node_label_style: _Style = ..., node_style: _OptionalStyle = ..., edge_label: _OptionalContent = ..., edge_label_style: _Style = ...) -> GraphStyleOptions: ...
 
 @typing.final
-class HalfEdgeSpec:
+class HalfEdge:
     r"""
-    A declarative edge endpoint produced by `source()` or `sink()`.
+    A reusable incidence description whose role is chosen by its edge endpoint.
     """
     @property
-    def flow(self) -> Flow: ...
+    def node(self) -> _EndpointTarget: ...
     @property
     def data(self) -> typing.Any: ...
     @data.setter
     def data(self, value: typing.Any) -> None: ...
     @property
     def drawing(self) -> HalfEdgeDrawing: ...
+    def __new__(cls, node: _EndpointTarget, *, data: typing.Any = None, drawing: _OptionalHalfEdgeDrawing = None, label: _OptionalStaticContent = ..., statement: _DrawingString = ..., port_label: _DrawingString = ..., compass: _CompassValue = ..., route_points: _DrawingPoints = ..., anchor: _AnchorValue = ..., routing: _RoutingValue = ..., style: _OptionalStyleLayers = ..., extensions: _NativeDict = ...) -> HalfEdge: ...
 
 @typing.final
 class Inherit:
@@ -884,9 +885,9 @@ class MathSymbol:
     def __repr__(self) -> builtins.str: ...
 
 @typing.final
-class NodeSpec:
+class Node:
     r"""
-    A reusable declarative node description accepted by `build()` and `Graph.add_node()`.
+    A reusable node description accepted by `Graph` and `Graph.add_node()`.
     """
     @property
     def name(self) -> typing.Optional[builtins.str]: ...
@@ -897,6 +898,7 @@ class NodeSpec:
     @property
     def drawing(self) -> NodeDrawing: ...
     def __repr__(self) -> builtins.str: ...
+    def __new__(cls, name: _OptionalString = None, *, data: typing.Any = None, drawing: _OptionalNodeDrawing = None, label: _OptionalStaticContent = ..., placement: _PlacementValue = ..., shift: _DrawingPoint = ..., rank: _OptionalInteger = ..., minimum_size: _OptionalNumber = ..., maximum_size: _OptionalNumber = ..., style: _OptionalStyle = ..., label_style: _OptionalStyle = ..., extensions: _NativeDict = ...) -> Node: ...
 
 @typing.final
 class OrientedCut:
@@ -908,12 +910,12 @@ class OrientedCut:
     @property
     def right(self) -> Subgraph: ...
     @property
-    def edges(self) -> builtins.list[Edge]:
+    def edges(self) -> builtins.list[EdgeView]:
         r"""
         Return the cut edges in stable graph order.
         """
     def side(self, left: builtins.bool) -> Subgraph: ...
-    def orientation(self, edge: Edge | builtins.int | builtins.str) -> Orientation:
+    def orientation(self, edge: EdgeView | builtins.int | builtins.str) -> Orientation:
         r"""
         Return one edge's orientation relative to this cut.
         """
@@ -924,7 +926,7 @@ class OrientedCut:
     def __repr__(self) -> builtins.str: ...
 
 @typing.final
-class Edge:
+class EdgeView:
     r"""
     A live edge view whose data and drawing metadata update its graph.
     """
@@ -941,9 +943,9 @@ class Edge:
     @property
     def orientation(self) -> Orientation: ...
     @property
-    def source(self) -> typing.Optional[HalfEdge]: ...
+    def source(self) -> typing.Optional[HalfEdgeView]: ...
     @property
-    def sink(self) -> typing.Optional[HalfEdge]: ...
+    def sink(self) -> typing.Optional[HalfEdgeView]: ...
     def __repr__(self) -> builtins.str: ...
 
 @typing.final
@@ -1020,7 +1022,7 @@ class EdgeValue:
     def __new__(cls, *, data: typing.Any = None, drawing: typing.Optional[EdgeDrawing] = None) -> EdgeValue: ...
 
 @typing.final
-class HalfEdge:
+class HalfEdgeView:
     r"""
     A live half-edge view whose data and drawing metadata update its graph.
     """
@@ -1035,11 +1037,11 @@ class HalfEdge:
     @property
     def drawing(self) -> HalfEdgeDrawing: ...
     @property
-    def node(self) -> Node: ...
+    def node(self) -> NodeView: ...
     @property
-    def edge(self) -> Edge: ...
+    def edge(self) -> EdgeView: ...
     @property
-    def pair(self) -> typing.Optional[HalfEdge]: ...
+    def pair(self) -> typing.Optional[HalfEdgeView]: ...
     def __repr__(self) -> builtins.str: ...
 
 @typing.final
@@ -1100,7 +1102,7 @@ class HalfEdgeValue:
     def __new__(cls, *, data: typing.Any = None, drawing: typing.Optional[HalfEdgeDrawing] = None) -> HalfEdgeValue: ...
 
 @typing.final
-class Node:
+class NodeView:
     r"""
     A live node view whose data and drawing metadata update its graph.
     """
@@ -1115,7 +1117,7 @@ class Node:
     @property
     def drawing(self) -> NodeDrawing: ...
     @property
-    def incidence(self) -> builtins.list[HalfEdge]: ...
+    def incidence(self) -> builtins.list[HalfEdgeView]: ...
     def __repr__(self) -> builtins.str: ...
 
 @typing.final
@@ -1287,7 +1289,7 @@ class Subgraph:
         Return the explicitly selected zero-crown node indices.
         """
     def includes_node(self, node: builtins.int) -> builtins.bool: ...
-    def to_half_edges(self) -> builtins.list[HalfEdge]: ...
+    def to_half_edges(self) -> builtins.list[HalfEdgeView]: ...
     def is_subset(self, other: Subgraph) -> builtins.bool: ...
     def is_superset(self, other: Subgraph) -> builtins.bool: ...
     def is_disjoint(self, other: Subgraph) -> builtins.bool: ...
@@ -1341,19 +1343,19 @@ class TraversalTree:
     @property
     def subgraph(self) -> Subgraph: ...
     @property
-    def nodes(self) -> builtins.list[Node]: ...
+    def nodes(self) -> builtins.list[NodeView]: ...
     @property
-    def half_edges(self) -> builtins.list[HalfEdge]: ...
+    def half_edges(self) -> builtins.list[HalfEdgeView]: ...
     def covers(self, subgraph: Subgraph) -> Subgraph: ...
-    def parent(self, node: Node | builtins.int | builtins.str) -> typing.Optional[Node]:
+    def parent(self, node: NodeView | builtins.int | builtins.str) -> typing.Optional[NodeView]:
         r"""
         Return the immediate parent, or `None` for the traversal root.
         """
-    def children(self, node: Node | builtins.int | builtins.str) -> builtins.list[Node]:
+    def children(self, node: NodeView | builtins.int | builtins.str) -> builtins.list[NodeView]:
         r"""
         Return the immediate children in traversal discovery order.
         """
-    def ancestors(self, node: Node | builtins.int | builtins.str) -> builtins.list[Node]:
+    def ancestors(self, node: NodeView | builtins.int | builtins.str) -> builtins.list[NodeView]:
         r"""
         Return strict ancestors from the immediate parent through the root.
         """
@@ -1430,20 +1432,6 @@ class Flow(enum.Enum):
     """
     Source = ...
     Sink = ...
-
-@typing.final
-class NodeStore(enum.Enum):
-    r"""
-    Storage strategy used for graph nodes.
-    """
-    Vec = ...
-    r"""
-    Dense node records with one incidence bitset per node.
-    """
-    Forest = ...
-    r"""
-    Identification-preserving forest node records.
-    """
 
 @typing.final
 class Orientation(enum.Enum):
@@ -1670,28 +1658,3 @@ class TextStyle(enum.Enum):
     Normal = ...
     Italic = ...
     Oblique = ...
-
-def build(*items: _GraphItem, name: _OptionalString = None, global_data: _OptionalGlobalData = None, codec: _OptionalDotCodec = None, render_config: _OptionalRenderSettings = None, node_store: NodeStore = NodeStore.Vec) -> Graph:
-    r"""
-    Build a graph from declarative node and edge specs.
-    """
-
-def edge(first: HalfEdgeSpec, name: _OptionalString = None, second: _OptionalHalfEdgeSpec = None, *, data: typing.Any = None, orientation: Orientation = Orientation.Default, label: _OptionalStaticContent = ..., placement: _PlacementValue = ..., label_position: _DrawingPoint = ..., label_offset: _OptionalNumber = ..., label_angle: _DrawingAngle = ..., bend: _DrawingAngle = ..., routing: _RoutingValue = ..., minimum_length: _OptionalInteger = ..., same_rank: _OptionalBoolean = ..., style: _OptionalStyleLayers = ..., label_style: _OptionalStyle = ..., decoration: _DrawingDecoration = ..., extensions: _NativeDict = ...) -> EdgeSpec:
-    r"""
-    Describe an edge from one or two endpoint specs.
-    """
-
-def node(name: _OptionalString = None, *, data: typing.Any = None, label: _OptionalStaticContent = ..., placement: _PlacementValue = ..., shift: _DrawingPoint = ..., rank: _OptionalInteger = ..., minimum_size: _OptionalNumber = ..., maximum_size: _OptionalNumber = ..., style: _OptionalStyle = ..., label_style: _OptionalStyle = ..., extensions: _NativeDict = ...) -> NodeSpec:
-    r"""
-    Describe a node while preserving its arbitrary Python data by identity.
-    """
-
-def sink(node: _EndpointTarget, *, data: typing.Any = None, label: _OptionalStaticContent = ..., statement: _DrawingString = ..., port_label: _DrawingString = ..., compass: _CompassValue = ..., anchor: _AnchorValue = ..., routing: _RoutingValue = ..., style: _OptionalStyleLayers = ..., extensions: _NativeDict = ...) -> HalfEdgeSpec:
-    r"""
-    Attach a sink endpoint. Build resolves specs, names, indices, and live-node keys; incremental insertion resolves current graph references.
-    """
-
-def source(node: _EndpointTarget, *, data: typing.Any = None, label: _OptionalStaticContent = ..., statement: _DrawingString = ..., port_label: _DrawingString = ..., compass: _CompassValue = ..., anchor: _AnchorValue = ..., routing: _RoutingValue = ..., style: _OptionalStyleLayers = ..., extensions: _NativeDict = ...) -> HalfEdgeSpec:
-    r"""
-    Attach a source endpoint. Build resolves specs, names, indices, and live-node keys; incremental insertion resolves current graph references.
-    """
