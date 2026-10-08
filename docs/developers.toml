@@ -610,13 +610,19 @@ review_triggers = ["crates/linnet/src/lib.rs", "crates/linnet/src/half_edge.rs",
 # bounded cycle/tadpole enumeration.
 path = "crates/linnet/src/half_edge.rs"
 symbol = "linnet::half_edge::HedgeGraph"
-anchor = "pub struct HedgeGraph<E, V, H = NoData, S: NodeStorage<NodeData = V> = NodeForest<V>> {"
+anchor = "pub struct HedgeGraph<E, V, H = NoData, N: Topology = NodeForest> {"
 # No architecture impact: the 2026-08-21 APIDOC-002 review corrected the
 # public graph-invariant and DOT parsing documentation without changing behavior.
 # Reviewed 2026-09-17: Documented dense edge join ownership and preserved node/slot/flow invariants.
 # Documentation-impact attestation 2026-10-08: the architecture note now
 # documents `NodeForest` as the only node store and the in-place `add_node`.
-digest = "8de07210edcfc5307122ac2eefd8c9861524ba14"
+# Documentation-impact attestation 2026-10-08: the architecture note now
+# documents the `Topology` contract, `NodeStore`, typed renumberings and
+# topology checkpoints.
+# Documentation-impact attestation 2026-10-08: the architecture note now
+# states that `compact` cannot fail on graphs, whose node stores hold no
+# checkpoint.
+digest = "73ed9c58231c0c46a9fdde2d77add3841e063c1c"
 
 [[section.note.scope]]
 path = "crates/linnet/src/half_edge/involution.rs"
@@ -634,7 +640,8 @@ digest = "cb55dd1e057261356f1f2fdce9808b2252fc55ae"
 path = "crates/linnet/src/half_edge/subgraph.rs"
 symbol = "linnet::half_edge::subgraph::SubGraphLike"
 anchor = "pub trait SubGraphLike: SubSetLike<Hedge> + Inclusion<HedgePair> {"
-digest = "05983dad9fdb3db00351c9e536a439ce48efd94b"
+# No architecture impact 2026-10-08: only the node-store trait import changed.
+digest = "200eced3144b23aee16203d9f921fb4e8de46875"
 
 [[section.note.scope]]
 # Documentation-impact attestation 2026-08-21: malformed DOT endpoint,
@@ -644,7 +651,7 @@ digest = "05983dad9fdb3db00351c9e536a439ce48efd94b"
 # a semantics-preserving Clippy rewrite of empty graph-name formatting.
 path = "crates/linnet/src/parser/mod.rs"
 symbol = "linnet::parser::DotGraph"
-anchor = "pub struct DotGraph<N: NodeStorage<NodeData = DotVertexData> = NodeForest<DotVertexData>> {"
+anchor = "pub struct DotGraph<N: Topology = NodeForest> {"
 # No architecture impact: the 2026-08-21 APIDOC-002 review corrected the
 # documented DOT parser path, added a round trip, and qualified its macro link.
 # The 2026-08-26 serializer cleanup only omits empty attribute lists.
@@ -655,7 +662,12 @@ anchor = "pub struct DotGraph<N: NodeStorage<NodeData = DotVertexData> = NodeFor
 # behavior are unchanged.
 # Documentation-impact attestation 2026-10-08: the DOT graph defaults to
 # `NodeForest`, the only node store the architecture note documents.
-digest = "1d464c2326a0d6828381ddbe18b6de1ab39d50ed"
+# Documentation-impact attestation 2026-10-08: DOT graphs default to the
+# `NodeForest` topology the architecture note documents; explicit-id
+# reordering goes through typed renumberings.
+# No-impact attestation 2026-10-08: a regression covers that pending
+# identifications are written as the identified graph.
+digest = "73b0b9dc9e4f4a792718feaec5e900c99637c4e2"
 
 [[section.note]]
 id = "vakint-architecture"
@@ -739,7 +751,9 @@ path = "crates/feynkit-cff/src/generation.rs"
 symbol = "feynkit_cff::CffGenerator::generate_into"
 anchor = "pub fn generate_into("
 # Reviewed 2026-09-23: Updated the note for the shared generalized recursion and distinct standalone/runtime surface representations.
-digest = "89000ab1668f83dfb3b32351e6dbed65e0d5c91e"
+# No architecture impact 2026-10-08: graph bounds name `Topology` instead of
+# the removed node-storage traits.
+digest = "c969c39fa2b53c96dca20da8666891953d0638ed"
 
 [[section.note.scope]]
 path = "crates/feynkit-cff/src/expression.rs"
@@ -751,7 +765,9 @@ digest = "22fbe168db1fc1e94241cd87507cd182e76f39a4"
 path = "crates/feynkit-cff/src/surface.rs"
 symbol = "feynkit_cff::SurfaceCache"
 anchor = "pub struct SurfaceCache {"
-digest = "e35249fe2ae3d1ed12cd9c5059e7a9f42f56eb51"
+# No architecture impact 2026-10-08: graph bounds name `Topology` instead of
+# the removed node-storage traits.
+digest = "d051c576cbaefe711ce1a5ece5c31f061b1ed8b8"
 
 [[section]]
 id = "proposals"

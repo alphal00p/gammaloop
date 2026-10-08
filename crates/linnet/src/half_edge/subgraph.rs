@@ -6,8 +6,7 @@ use indenter::CodeFormatter;
 use std::fmt::Write;
 
 use super::{
-    involution::HedgePair, nodestore::NodeStorageOps, GVEdgeAttrs, Hedge, HedgeGraph,
-    PowersetIterator,
+    involution::HedgePair, nodestore::Topology, GVEdgeAttrs, Hedge, HedgeGraph, PowersetIterator,
 };
 
 const BASE62_ALPHABET: &[u8; 62] =
@@ -175,10 +174,7 @@ pub trait PairwiseSubSetOps<ID = Hedge>: SubSetOps<ID, Self> + Sized {
 impl<ID, T> PairwiseSubSetOps<ID> for T where T: SubSetOps<ID, T> + Sized {}
 
 pub trait SubGraphOps {
-    fn complement<E, V, H, N: NodeStorageOps<NodeData = V>>(
-        &self,
-        graph: &HedgeGraph<E, V, H, N>,
-    ) -> Self;
+    fn complement<E, V, H, N: Topology>(&self, graph: &HedgeGraph<E, V, H, N>) -> Self;
 }
 
 /// A trait for checking inclusion or intersection relationships between a subgraph
@@ -233,7 +229,7 @@ pub trait BaseSubgraph:
     SubGraphLike + ModifySubSet<HedgePair> + ModifySubSet<Hedge> + SubSetOps<Hedge>
 {
     /// Selects all half-edges belonging to edges whose data satisfies `filter`.
-    fn from_filter<E, V, H, N: NodeStorageOps<NodeData = V>, F: FnMut(&E) -> bool>(
+    fn from_filter<E, V, H, N: Topology, F: FnMut(&E) -> bool>(
         graph: &HedgeGraph<E, V, H, N>,
         filter: F,
     ) -> Self;
@@ -267,7 +263,7 @@ pub trait SubGraphLike: SubSetLike<Hedge> + Inclusion<HedgePair> {
         E,
         V,
         H,
-        N: NodeStorageOps<NodeData = V>,
+        N: Topology,
         S: ModifySubSet<Hedge> + SubSetOps<Hedge> + SubSetLike<Hedge>,
     >(
         &self,
@@ -298,15 +294,12 @@ pub trait SubGraphLike: SubSetLike<Hedge> + Inclusion<HedgePair> {
     }
 
     /// Number of full edges included in the subgraph
-    fn nedges<E, V, H, N: NodeStorageOps<NodeData = V>>(
-        &self,
-        graph: &HedgeGraph<E, V, H, N>,
-    ) -> usize; //not counting unpaired hedges
+    fn nedges<E, V, H, N: Topology>(&self, graph: &HedgeGraph<E, V, H, N>) -> usize; //not counting unpaired hedges
 
     /// Writes a DOT rendering of this subgraph to a formatting sink.
     ///
     /// The attribute callbacks supply optional DOT attributes for half-edges, edges, and nodes.
-    fn dot_fmt<W: std::fmt::Write, E, V, H, N: NodeStorageOps<NodeData = V>, Str: AsRef<str>>(
+    fn dot_fmt<W: std::fmt::Write, E, V, H, N: Topology, Str: AsRef<str>>(
         &self,
         writer: &mut W,
         graph: &HedgeGraph<E, V, H, N>,
@@ -371,7 +364,7 @@ pub trait SubGraphLike: SubSetLike<Hedge> + Inclusion<HedgePair> {
     /// Writes a DOT rendering of this subgraph to an I/O sink.
     ///
     /// The attribute callbacks supply optional DOT attributes for half-edges, edges, and nodes.
-    fn dot_io<W: std::io::Write, E, V, H, N: NodeStorageOps<NodeData = V>, Str: AsRef<str>>(
+    fn dot_io<W: std::io::Write, E, V, H, N: Topology, Str: AsRef<str>>(
         &self,
         writer: &mut W,
         graph: &HedgeGraph<E, V, H, N>,

@@ -750,16 +750,14 @@ fn join() {
 
     let b: HedgeGraph<&'static str, &'static str> = ab.build();
 
-    let mut c = a
+    let c = a
         .clone()
         .join(b.clone(), |af, _, bf, _| af == -bf, |af, ad, _, _| (af, ad))
         .unwrap();
 
-    let n_len: NodeIndex = c.node_store.len();
-    assert_eq!(n_len, NodeIndex(4));
-    let n_h: Hedge = c.node_store.len();
-    assert_eq!(n_h, Hedge(12));
-    assert!(c.node_store.check_and_set_nodes().is_ok());
+    assert_eq!(c.node_store.node_bound(), 4);
+    assert_eq!(c.node_store.n_hedges(), 12);
+    c.node_store.check_nodes().unwrap();
 
     assert_snapshot!(c.dot_display(&c.full_filter()));
 
@@ -886,13 +884,13 @@ fn tadpoles_validate_terminals() {
     builder.add_edge(f, d, (), false);
 
     let graph: HedgeGraph<(), (), NoData> = builder.build();
-    let invalid = NodeIndex(graph.n_nodes());
+    let invalid = NodeIndex(graph.node_bound());
     assert_eq!(graph.tadpoles(&[]), Err(TadpoleError::EmptyTerminals));
     assert_eq!(
         graph.tadpoles(&[terminal, invalid]),
         Err(TadpoleError::InvalidTerminal {
             terminal: invalid,
-            n_nodes: graph.n_nodes(),
+            node_bound: graph.node_bound(),
         })
     );
     assert_eq!(
@@ -948,7 +946,7 @@ fn tadpoles_validate_terminals() {
     }
     let tadpoles = graph.tadpoles(&[canonical]).unwrap();
     let hedge = graph.iter_crown(canonical).next().unwrap();
-    graph.forget_identification_history();
+    graph.compact();
     assert_eq!(graph.tadpoles(&[graph.node_id(hedge)]).unwrap(), tadpoles);
 }
 
@@ -1683,13 +1681,17 @@ fn extracting_network() {
         graph.dot_of(&graph.compass_subgraph::<SuBitGraph>(Some(CompassPt::S)))
     );
 
-    let a = graph.clone().extract_nodes(
-        [1, 9, 20, 29, 38, 47, 56, 65, 74, 83, 84]
-            .into_iter()
-            .map(NodeIndex),
-        |a| a.map(Clone::clone),
-        |a| a,
-    );
+    let a = graph
+        .clone()
+        .extract_nodes(
+            [1, 9, 20, 29, 38, 47, 56, 65, 74, 83, 84]
+                .into_iter()
+                .map(NodeIndex),
+            |a| a.map(Clone::clone),
+            |a| a,
+        )
+        .unwrap()
+        .0;
 
     // let mut out = String::new();
     // a.dot_serialize_fmt(&mut out, (), &|a| a.clone(), &|a| a.clone(), &|a| a.clone())
@@ -1697,18 +1699,21 @@ fn extracting_network() {
     println!("{}", a.base_dot());
 
     let sub: SuBitGraph = graph.compass_subgraph::<SuBitGraph>(Some(CompassPt::S));
-    let node: NodeIndex = graph.len();
+    let node = graph.node_bound();
     println!("{node}");
-    let a = graph.extract(
-        &sub,
-        |a| a.map(Clone::clone),
-        |a| a,
-        |a| {
-            println!("{a}");
-            a.clone()
-        },
-        |a| a,
-    );
+    let a = graph
+        .extract(
+            &sub,
+            |a| a.map(Clone::clone),
+            |a| a,
+            |a| {
+                println!("{a}");
+                a.clone()
+            },
+            |a| a,
+        )
+        .unwrap()
+        .0;
 
     let mut out = String::new();
     a.dot_serialize_fmt(&mut out, (), &|a| a.clone(), &|a| a.clone(), &|a| a.clone())
@@ -1726,11 +1731,15 @@ fn extract_nodes() {
     })
     .unwrap();
 
-    let a = graph.clone().extract_nodes(
-        [1].into_iter().map(NodeIndex),
-        |a| a.map(Clone::clone),
-        |a| a,
-    );
+    let a = graph
+        .clone()
+        .extract_nodes(
+            [1].into_iter().map(NodeIndex),
+            |a| a.map(Clone::clone),
+            |a| a,
+        )
+        .unwrap()
+        .0;
 
     println!("{a:#?}");
 

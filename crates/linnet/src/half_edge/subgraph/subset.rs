@@ -16,7 +16,7 @@ use rkyv::{
 
 use crate::half_edge::{
     involution::{Flow, Hedge, HedgePair},
-    nodestore::{NodeStorage, NodeStorageOps},
+    nodestore::Topology,
     subgraph::{
         BaseSubgraph, Inclusion, ModifySubSet, SubGraphLike, SubGraphOps, SubSetIter, SubSetLike,
         SubSetOps, BASE62_ALPHABET,
@@ -407,7 +407,7 @@ impl ModifySubSet<HedgePair> for SuBitGraph {
 }
 
 impl BaseSubgraph for SuBitGraph {
-    fn from_filter<E, V, H, N: NodeStorageOps<NodeData = V>, F: FnMut(&E) -> bool>(
+    fn from_filter<E, V, H, N: Topology, F: FnMut(&E) -> bool>(
         graph: &HedgeGraph<E, V, H, N>,
         mut filter: F,
     ) -> Self {
@@ -446,10 +446,7 @@ impl SubGraphLike for SuBitGraph {
         hairs
     }
 
-    fn nedges<E, V, H, N: NodeStorageOps<NodeData = V>>(
-        &self,
-        graph: &HedgeGraph<E, V, H, N>,
-    ) -> usize {
+    fn nedges<E, V, H, N: Topology>(&self, graph: &HedgeGraph<E, V, H, N>) -> usize {
         let mut count = 0;
         for i in self.included_iter() {
             if i != graph.inv(i) && self.includes(&graph.inv(i)) {
@@ -630,10 +627,7 @@ impl<ID: IndexLike> SubSetOps<ID> for SubSet<ID> {
 }
 
 impl SubGraphOps for SuBitGraph {
-    fn complement<E, V, H, N: NodeStorage<NodeData = V>>(
-        &self,
-        _graph: &HedgeGraph<E, V, H, N>,
-    ) -> Self {
+    fn complement<E, V, H, N: Topology>(&self, _graph: &HedgeGraph<E, V, H, N>) -> Self {
         Self {
             set: !self.set.clone(),
             id: PhantomData,

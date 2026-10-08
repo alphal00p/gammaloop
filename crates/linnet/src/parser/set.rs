@@ -5,7 +5,7 @@ use figment;
 use figment::Figment;
 
 use crate::half_edge::{
-    nodestore::{NodeForest, NodeStorage, NodeStorageOps},
+    nodestore::{NodeForest, Topology},
     HedgeGraph,
 };
 
@@ -19,18 +19,15 @@ use super::{
     feature = "rkyv",
     derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
 )]
-pub struct GraphSet<E, V, H, G, S: NodeStorage<NodeData = V>> {
+pub struct GraphSet<E, V, H, G, S: Topology> {
     pub global_data: Vec<G>,
     pub set: Vec<HedgeGraph<E, V, H, S>>,
 }
 
 /// A collection of DOT graphs parsed from a file or string containing multiple graphs.
-pub type DotGraphSet =
-    GraphSet<DotEdgeData, DotVertexData, DotHedgeData, GlobalData, NodeForest<DotVertexData>>;
+pub type DotGraphSet = GraphSet<DotEdgeData, DotVertexData, DotHedgeData, GlobalData, NodeForest>;
 
-impl<S: NodeStorageOps<NodeData = DotVertexData>>
-    GraphSet<DotEdgeData, DotVertexData, DotHedgeData, GlobalData, S>
-{
+impl<S: Topology> GraphSet<DotEdgeData, DotVertexData, DotHedgeData, GlobalData, S> {
     #[allow(clippy::result_large_err, clippy::type_complexity)]
     pub fn from_file<'a, P>(p: P) -> Result<Self, HedgeParseError<'a, (), (), (), ()>>
     where
@@ -92,7 +89,7 @@ impl<S: NodeStorageOps<NodeData = DotVertexData>>
     }
 }
 
-impl<E, V, H, G, S: NodeStorage<NodeData = V>> GraphSet<E, V, H, G, S> {
+impl<E, V, H, G, S: Topology> GraphSet<E, V, H, G, S> {
     #[cfg(feature = "rkyv")]
     pub fn to_rkyv_bytes<const N: usize>(&self) -> Result<rkyv::AlignedVec, String>
     where
@@ -116,7 +113,7 @@ impl<E, V, H, G, S: NodeStorage<NodeData = V>> GraphSet<E, V, H, G, S> {
     }
 }
 
-impl<S: NodeStorageOps<NodeData = DotVertexData>> IntoIterator
+impl<S: Topology> IntoIterator
     for GraphSet<DotEdgeData, DotVertexData, DotHedgeData, GlobalData, S>
 {
     type Item = DotGraph<S>;

@@ -30,7 +30,7 @@ use linnet::half_edge::{
         trace_unfold::{HiddenData, Independence, TraceKey, TraceUnfold, UnfoldedTraceGraph},
     },
     involution::{EdgeIndex, Flow, HedgePair},
-    nodestore::{NodeForest, NodeStorageOps},
+    nodestore::NodeForest,
     subgraph::{Inclusion, InternalSubGraph, ModifySubSet, SuBitGraph, SubSetLike, SubSetOps},
 };
 use spenso::shadowing::TensorCollectFilter;
@@ -90,11 +90,11 @@ impl TraceUnfold<SuBitGraph> for Wood {
     type EdgeData = SuBitGraph;
     type HedgeData = NoData;
     type NodeData = Spinney;
-    type NodeStorage = NodeForest<Spinney>;
+    type NodeTopology = NodeForest;
 
     fn graph(
         &self,
-    ) -> &HedgeGraph<Self::EdgeData, Self::NodeData, Self::HedgeData, Self::NodeStorage> {
+    ) -> &HedgeGraph<Self::EdgeData, Self::NodeData, Self::HedgeData, Self::NodeTopology> {
         &self.graph
     }
 
@@ -227,11 +227,11 @@ impl Wood {
                 let HedgePair::Paired { source, sink } = pair else {
                     return e.map(|_| graph.as_ref().empty_subgraph());
                 };
-                let nsource = n.node_id_ref(source);
-                let nsink = n.node_id_ref(sink);
+                let nsource = n.node_id(source);
+                let nsink = n.node_id(sink);
 
-                let source_subgraph = &n.get_node_data(nsource).subgraph;
-                let sink_subgraph = &n.get_node_data(nsink).subgraph;
+                let source_subgraph = &n.get(nsource).subgraph;
+                let sink_subgraph = &n.get(nsink).subgraph;
                 let reduced_subgraph = sink_subgraph.subtract(source_subgraph).filter;
                 let hairy_source = graph.as_ref().full_crown(source_subgraph);
 
@@ -302,7 +302,9 @@ impl Wood {
             }
         }
 
-        poset.delete_hedges(&to_remove);
+        poset
+            .delete_hedges(&to_remove)
+            .expect("the poset has no pending identifications");
         let root = poset
             .iter_nodes()
             .find(|(_, _, s)| s.subgraph.is_empty())
@@ -317,7 +319,7 @@ impl Wood {
     }
 
     fn unfold_with_cached_node_label_atoms(self, cache_node_label_atoms: bool) -> Forests {
-        let unfolded = self.trace_unfold::<NodeForest<_>>(self.root);
+        let unfolded = self.trace_unfold::<NodeForest>(self.root);
         let graph = unfolded.map(|_, _, key| OperationNode { key });
 
         let mut cuts: Vec<(SuBitGraph, CutSet)> = Vec::new();
@@ -409,7 +411,7 @@ impl ComputeStore {
 }
 
 pub struct Forests {
-    pub graph: UnfoldedTraceGraph<Wood, OperationNode, NodeForest<OperationNode>>,
+    pub graph: UnfoldedTraceGraph<Wood, OperationNode, NodeForest>,
     pub root: NodeIndex,
     /// Wood subgraph that has compatible
     cuts: Vec<(SuBitGraph, CutSet)>,
@@ -1524,7 +1526,7 @@ impl Forests {
             sum.replace_multiple(&replacements)
                 .replace(GS.m_uv_expansion)
                 .with(GS.m_uv_vacuum),
-            self.graph.n_nodes(),
+            self.graph.n_live(),
         ))
     }
 
@@ -2168,7 +2170,7 @@ mod tests {
         println!("{}", f);
 
         insta::assert_snapshot!(
-            f.graph.n_nodes(),
+            f.graph.n_live(),
             @"8",
             // format!("Wood does not have correct number of spinneys: \n{}",f)
         );
@@ -2211,7 +2213,7 @@ mod tests {
         let f = f.unfold();
         println!("{}", f);
         insta::assert_snapshot!(
-            f.graph.n_nodes(),
+            f.graph.n_live(),
             @"8");
 
         let three_component_union = f
@@ -2270,7 +2272,7 @@ mod tests {
         println!("{}", dt.dot_serialize(&DotExportSettings::default()));
 
         insta::assert_snapshot!(
-            f.graph.n_nodes(),
+            f.graph.n_live(),
             @"5",
             // format!("Wood does not have correct number of spinneys: \n{}",f)
         );
@@ -2281,7 +2283,7 @@ mod tests {
         assert!(!structured_dot.contains("#T("));
         println!("{structured_dot}");
         insta::assert_snapshot!(
-            f.graph.n_nodes(),
+            f.graph.n_live(),
             @"8");
 
         Ok(())
@@ -2316,7 +2318,7 @@ mod tests {
         println!("{}", f);
 
         insta::assert_snapshot!(
-            f.graph.n_nodes(),
+            f.graph.n_live(),
             @"4",
             // format!("Wood does not have correct number of spinneys: \n{}",f)
         );
@@ -2335,7 +2337,7 @@ mod tests {
         let f = f.unfold();
         println!("{}", f);
         insta::assert_snapshot!(
-            f.graph.n_nodes(),
+            f.graph.n_live(),
             @"4");
 
         Ok(())
@@ -2378,7 +2380,7 @@ mod tests {
 
                 assert_eq!(
                     20,
-                    f.graph.n_nodes(),
+                    f.graph.n_live(),
                     "Wood does not have correct number of spinneys: \n{}",
                     f
                 );
@@ -2399,7 +2401,7 @@ mod tests {
                 println!("{}", f);
                 assert_eq!(
                     152,
-                    f.graph.n_nodes(),
+                    f.graph.n_live(),
                     "Forest unfolds into the wrong number of terms :\n{}",
                     f
                 );
@@ -2447,13 +2449,13 @@ mod tests {
         );
         println!("{}", f);
         insta::assert_snapshot!(
-        f.graph.n_nodes(),
+        f.graph.n_live(),
         @"2",
         );
         let f = f.unfold();
         println!("{}", f);
         insta::assert_snapshot!(
-        f.graph.n_nodes(),
+        f.graph.n_live(),
         @"2",
          );
 
@@ -2484,13 +2486,13 @@ mod tests {
         );
         println!("{}", f);
         insta::assert_snapshot!(
-        f.graph.n_nodes(),
+        f.graph.n_live(),
         @"5",
         );
         let f = f.unfold();
         println!("{}", f);
         insta::assert_snapshot!(
-        f.graph.n_nodes(),
+        f.graph.n_live(),
         @"8",
          );
 
@@ -2523,13 +2525,13 @@ mod tests {
         );
         println!("{}", f);
         insta::assert_snapshot!(
-        f.graph.n_nodes(),
+        f.graph.n_live(),
         @"3",
         );
         let f = f.unfold();
         println!("{}", f);
         insta::assert_snapshot!(
-        f.graph.n_nodes(),
+        f.graph.n_live(),
         @"4",
          );
 
@@ -2564,13 +2566,13 @@ mod tests {
         );
         println!("{}", f);
         insta::assert_snapshot!(
-        f.graph.n_nodes(),
+        f.graph.n_live(),
         @"3",
         );
         let f = f.unfold();
         println!("{}", f);
         insta::assert_snapshot!(
-        f.graph.n_nodes(),
+        f.graph.n_live(),
         @"4",
          );
 
@@ -3260,13 +3262,13 @@ mod tests {
         );
         println!("{}", f);
         insta::assert_snapshot!(
-        f.graph.n_nodes(),
+        f.graph.n_live(),
         @"12",
               );
         let f = f.unfold();
         println!("{}", f.dot_serialize());
         insta::assert_snapshot!(
-        f.graph.n_nodes(),
+        f.graph.n_live(),
         @"46");
         Ok(())
     }
@@ -3301,13 +3303,13 @@ mod tests {
         );
         println!("{}", f);
         insta::assert_snapshot!(
-        f.graph.n_nodes(),
+        f.graph.n_live(),
         @"14",
         );
         let f = f.unfold();
         println!("{}", f);
         insta::assert_snapshot!(
-        f.graph.n_nodes(),
+        f.graph.n_live(),
         @"80",
          );
 
@@ -3341,13 +3343,13 @@ mod tests {
         );
         println!("{}", f);
         insta::assert_snapshot!(
-        f.graph.n_nodes(),
+        f.graph.n_live(),
         @"12",
         );
         let f = f.unfold();
         println!("{}", f);
         insta::assert_snapshot!(
-        f.graph.n_nodes(),
+        f.graph.n_live(),
         @"60",
          );
 
@@ -3381,12 +3383,12 @@ mod tests {
         );
 
         insta::assert_snapshot!(
-            f.graph.n_nodes(),
+            f.graph.n_live(),
             @"64");
 
         let f = f.unfold_uncached();
         insta::assert_snapshot!(
-            f.graph.n_nodes(),
+            f.graph.n_live(),
             @"307");
 
         Ok(())
@@ -3425,7 +3427,7 @@ mod tests {
             println!("{}", f);
 
             insta::assert_snapshot!(
-                f.graph.n_nodes(),
+                f.graph.n_live(),
                 @"8",
                 // format!("Wood does not have correct number of spinneys: \n{}",f)
             );
@@ -3453,7 +3455,7 @@ mod tests {
 "###
             );
             insta::assert_snapshot!(
-                f.graph.n_nodes(),
+                f.graph.n_live(),
                 @"12");
 
             let f = Wood::new(
@@ -3507,7 +3509,7 @@ mod tests {
             println!("{}", f);
 
             insta::assert_snapshot!(
-                f.graph.n_nodes(),
+                f.graph.n_live(),
                 @"16",
                 // format!("Wood does not have correct number of spinneys: \n{}",f)
             );
@@ -3515,7 +3517,7 @@ mod tests {
             let f = f.unfold();
 
             insta::assert_snapshot!(
-                f.graph.n_nodes(),
+                f.graph.n_live(),
                 @"36");
 
             let f = Wood::new(

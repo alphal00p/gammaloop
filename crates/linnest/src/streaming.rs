@@ -12,8 +12,7 @@ use linnet::{
 
 use crate::{LayoutAlgo, TypstEdge, TypstGraph, TypstHedge, TypstNode, TypstPoint};
 
-type NativeForceSession<'a> =
-    ForceLayoutSession<'a, TypstEdge, TypstNode, TypstHedge, NodeForest<TypstNode>>;
+type NativeForceSession<'a> = ForceLayoutSession<'a, TypstEdge, TypstNode, TypstHedge, NodeForest>;
 
 self_cell::self_cell! {
     struct ForceLayoutCell {
@@ -169,7 +168,7 @@ impl ForceLayoutStream {
 
     pub fn node_names(&self) -> Vec<String> {
         let owner = self.cell.borrow_owner();
-        (0..owner.n_nodes())
+        (0..owner.node_bound())
             .map(|i| {
                 owner[NodeIndex(i)]
                     .name

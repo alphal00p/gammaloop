@@ -996,7 +996,7 @@ fn decode_parsed(py: Python<'_>, mut parsed: DotGraph, codec: Py<PyDotCodec>) ->
     };
     let codec_ref = codec.borrow(py);
     let mut node_names = BTreeSet::new();
-    let mut nodes = Vec::with_capacity(parsed.n_nodes());
+    let mut nodes = Vec::with_capacity(parsed.n_live());
     for (_, _, raw) in parsed.graph.iter_nodes() {
         let mut raw = raw.clone();
         let name = raw
@@ -1133,7 +1133,7 @@ pub(crate) fn encode_graph(
         )
     };
     let codec = codec.borrow(py);
-    let mut raw_nodes = Vec::with_capacity(topology.n_nodes());
+    let mut raw_nodes = Vec::with_capacity(topology.n_live());
     for (index, _, node) in topology.iter_nodes() {
         let value = PyNodeValue::snapshot(py, &node.data, &node.drawing)?;
         let mut raw = codec.encode_node(py, value, index.0, node.name.clone())?;

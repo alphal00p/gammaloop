@@ -4668,10 +4668,9 @@ impl ResolvedProcess {
                 graph.identify_nodes(&[*left, *right], color.clone());
             }
         }
-        // The node store retains the nodes absorbed by identification so callers
-        // can inspect the history. Cycle detection must run on the sewn quotient
-        // graph, without those absorbed nodes.
-        graph.forget_identification_history();
+        // Identification keeps the absorbed nodes until compaction; cycle
+        // detection runs on the compacted quotient graph.
+        graph.compact();
         let non_bridges = graph.non_bridges();
         graph.count_connected_components(&non_bridges) == connected_components_before
     }

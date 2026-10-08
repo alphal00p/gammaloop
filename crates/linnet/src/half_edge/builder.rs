@@ -3,7 +3,7 @@ use super::{
     involution::{
         EdgeData, Flow, Hedge, HedgePair, HedgeVec, Involution, InvolutionError, Orientation,
     },
-    nodestore::NodeStorageOps,
+    nodestore::{NodeStore, Topology},
     subgraph::{BaseSubgraph, ModifySubSet, SuBitGraph, SubSetLike},
     swap::Swap,
     HedgeGraph, NoData, NodeIndex,
@@ -70,7 +70,7 @@ impl<H> HedgeData<H> {
 /// A temporary structure used during the construction of a [`HedgeGraph`].
 ///
 /// It holds the data for a node and a list of half-edges that are incident to it
-/// before the full graph topology (e.g., specific `NodeStorage` format) is finalized.
+/// before the full graph topology (e.g., a specific [`Topology`]) is finalized.
 pub struct HedgeNodeBuilder<V> {
     /// The data associated with the node being built.
     pub(crate) data: V,
@@ -110,6 +110,7 @@ impl<V> HedgeNodeBuilder<V> {
 /// ```rust,ignore
 /// use linnet::half_edge::builder::HedgeGraphBuilder;
 /// use linnet::half_edge::involution::{Flow, Orientation};
+/// use linnet::half_edge::HedgeGraph;
 ///
 /// let mut builder = HedgeGraphBuilder::<&str, &str>::new();
 ///
@@ -120,8 +121,7 @@ impl<V> HedgeNodeBuilder<V> {
 /// builder.add_edge(node0, node1, "Edge_01_Data", Orientation::Default);
 /// builder.add_external_edge(node2, "External_Edge_Data", Orientation::Undirected, Flow::Source);
 ///
-/// // Assuming a NodeStorage type MyNodeStore is defined and implements NodeStorageOps
-/// // let graph: HedgeGraph<&str, &str, MyNodeStore> = builder.build();
+/// let graph: HedgeGraph<&str, &str> = builder.build();
 /// ```
 pub struct HedgeGraphBuilder<E, V, H = NoData> {
     hedge_data: HedgeVec<H>,
@@ -191,18 +191,18 @@ impl<E, V, H> HedgeGraphBuilder<E, V, H> {
         (self, mapping)
     }
 
-    pub fn build<N: NodeStorageOps<NodeData = V>>(self) -> HedgeGraph<E, V, H, N> {
+    pub fn build<N: Topology>(self) -> HedgeGraph<E, V, H, N> {
         self.into()
     }
 
-    pub fn build_with_map<V2, N: NodeStorageOps<NodeData = V2>>(
+    pub fn build_with_map<V2, N: Topology>(
         self,
         map: impl FnMut(V) -> V2,
     ) -> HedgeGraph<E, V2, H, N> {
         let len: Hedge = self.involution.len();
 
         HedgeGraph {
-            node_store: N::build_with_mapping(self.nodes, len.0, map),
+            node_store: NodeStore::build_with_mapping(self.nodes, len.0, map),
             edge_store: SmartEdgeVec::new(self.involution),
             hedge_data: self.hedge_data,
         }
@@ -270,14 +270,12 @@ impl<E, V, H> Default for HedgeGraphBuilder<E, V, H> {
     }
 }
 
-impl<E, V, H, N: NodeStorageOps<NodeData = V>> From<HedgeGraphBuilder<E, V, H>>
-    for HedgeGraph<E, V, H, N>
-{
+impl<E, V, H, N: Topology> From<HedgeGraphBuilder<E, V, H>> for HedgeGraph<E, V, H, N> {
     fn from(builder: HedgeGraphBuilder<E, V, H>) -> Self {
         let len: Hedge = builder.involution.len();
 
         HedgeGraph {
-            node_store: N::build(builder.nodes, len.0),
+            node_store: NodeStore::build(builder.nodes, len.0),
             edge_store: SmartEdgeVec::new(builder.involution),
             hedge_data: builder.hedge_data,
         }

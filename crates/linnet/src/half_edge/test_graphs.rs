@@ -577,10 +577,10 @@ impl TestGraph {
         graph: &HedgeGraph<(), (), ()>,
         props: &GraphProperties,
     ) -> TestResult {
-        if graph.n_nodes() != props.n_nodes {
+        if graph.n_live() != props.n_nodes {
             return Err(TestError::WrongNodeCount {
                 expected: props.n_nodes,
-                found: graph.n_nodes(),
+                found: graph.n_live(),
             });
         }
 
@@ -633,8 +633,8 @@ impl TestGraph {
         let mut min_degree = usize::MAX;
         let mut max_degree = 0;
 
-        for i in 0..graph.n_nodes() {
-            let degree = graph.iter_crown(NodeIndex(i)).count();
+        for node in graph.iter_node_ids() {
+            let degree = graph.iter_crown(node).count();
             min_degree = min_degree.min(degree);
             max_degree = max_degree.max(degree);
         }
@@ -679,7 +679,7 @@ impl TestGraph {
 }
 
 /// Graph algorithms give the same results while identifications are pending as
-/// after forgetting them: absorbed nodes are not part of the graph.
+/// after compacting them: absorbed nodes are not part of the graph.
 #[test]
 fn algorithms_ignore_pending_identifications() {
     use crate::half_edge::{algorithms::DirectionBasis, subgraph::Cycle};
@@ -697,20 +697,14 @@ fn algorithms_ignore_pending_identifications() {
         Option<Vec<SuBitGraph>>,
     );
 
-    fn results<N: NodeStorageOps<NodeData = (), Base = SuBitGraph>>(
-        graph: &HedgeGraph<(), (), (), N>,
-        nodes: [NodeIndex; 2],
-    ) -> Results
-    where
-        for<'a> N::OpStorage<&'a ()>: Clone,
-    {
+    fn results<N: Topology>(graph: &HedgeGraph<(), (), (), N>, nodes: [NodeIndex; 2]) -> Results {
         let full = graph.full_filter();
         let sorted = |mut subgraphs: Vec<SuBitGraph>| {
             subgraphs.sort();
             subgraphs
         };
         let rank = graph.cyclotomatic_number(&full);
-        let cuts = (graph.n_nodes() <= 10).then(|| {
+        let cuts = (graph.n_live() <= 10).then(|| {
             let [source, target] = nodes.map(|node| graph.combine_to_single_hedgenode(&[node]));
             sorted(
                 graph
@@ -771,8 +765,8 @@ fn algorithms_ignore_pending_identifications() {
         let (a, b) = (graph.node_id(Hedge(0)), graph.node_id(graph.inv(Hedge(0))));
         graph.identify_nodes(&[a, b], ());
         let mut forgotten = graph.clone();
-        forgotten.forget_identification_history();
-        // Forgetting renumbers nodes, so compare through half-edges.
+        forgotten.compact();
+        // Compacting renumbers nodes, so compare through half-edges.
         let ends = |graph: &HedgeGraph<(), (), ()>| {
             [Hedge(0), Hedge(graph.n_hedges() - 1)].map(|hedge| graph.node_id(hedge))
         };

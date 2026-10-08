@@ -483,9 +483,9 @@ mod tests {
         );
         let actual = actual.graph.graph;
         let expected = expected.graph.graph;
-        assert_eq!(actual.n_nodes(), expected.n_nodes());
+        assert_eq!(actual.node_bound(), expected.node_bound());
         assert_eq!(actual.n_hedges(), expected.n_hedges());
-        for i in 0..actual.n_nodes() {
+        for i in 0..actual.node_bound() {
             assert_eq!(actual[NodeIndex(i)], expected[NodeIndex(i)]);
             assert_eq!(
                 actual.iter_crown(NodeIndex(i)).collect::<Vec<_>>(),

@@ -158,7 +158,7 @@ fn apply_selectors(
     override_drawing: bool,
 ) -> PyResult<()> {
     let graph_ref = graph.borrow(py);
-    let (revision, element_epoch, node_count, edge_count, half_edge_count, half_edge_roles) = {
+    let (revision, element_epoch, node_bound, edge_count, half_edge_count, half_edge_roles) = {
         let state = graph_ref.state.borrow();
         let state = state
             .as_ref()
@@ -166,7 +166,7 @@ fn apply_selectors(
         (
             state.revision,
             state.element_epoch,
-            state.graph.n_nodes(),
+            state.graph.node_bound(),
             state.graph.n_edges(),
             state.graph.n_hedges(),
             (0..state.graph.n_hedges())
@@ -184,7 +184,7 @@ fn apply_selectors(
         py,
         selectors.node.as_ref(),
         &nodes,
-        (0..node_count).map(|index| {
+        (0..node_bound).map(|index| {
             Ok(Py::new(py, PyNode::new(graph.clone_ref(py), index, element_epoch))?.into_any())
         }),
         DrawingKind::Node,

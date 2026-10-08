@@ -2,12 +2,12 @@
 use std::collections::{BTreeSet, HashMap, HashSet};
 
 use crate::half_edge::{
-    involution::Flow, nodestore::NodeStorageOps, subgraph::SubSetLike, HedgeGraph, NodeIndex,
+    involution::Flow, nodestore::Topology, subgraph::SubSetLike, HedgeGraph, NodeIndex,
 };
 
 use super::DirectionBasis;
 
-impl<E, V, H, N: NodeStorageOps<NodeData = V>> HedgeGraph<E, V, H, N> {
+impl<E, V, H, N: Topology> HedgeGraph<E, V, H, N> {
     /// Strongly connected components in reverse topological order: an edge
     /// from one component to another points to an earlier returned component.
     /// Nodes within each component are sorted. Among available sink components,

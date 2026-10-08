@@ -671,10 +671,10 @@ impl FeynmanDiagram {
     ) -> Result<Self, DiagramError> {
         self.validation.take();
         for (vertex, numerator) in vertices {
-            if vertex.0 >= self.graph.n_nodes() {
+            if vertex.0 >= self.graph.node_bound() {
                 return Err(DiagramError::UnknownVertex {
                     vertex: vertex.0,
-                    vertices: self.graph.n_nodes(),
+                    vertices: self.graph.node_bound(),
                 });
             }
             self.graph[NodeIndex(vertex.0)].numerator = numerator;
@@ -793,7 +793,7 @@ impl FeynmanDiagram {
 
     pub fn vertex(&self, id: impl Into<Option<VertexId>>) -> Option<&DiagramVertex> {
         id.into()
-            .and_then(|id| (id.0 < self.graph.n_nodes()).then(|| &self.graph[NodeIndex(id.0)]))
+            .and_then(|id| (id.0 < self.graph.node_bound()).then(|| &self.graph[NodeIndex(id.0)]))
     }
 
     /// Transform vertex and edge metadata without changing the diagram
@@ -1346,7 +1346,7 @@ impl FeynmanDiagram {
     }
 
     fn vertex_half_edges(&self) -> Vec<Vec<DiagramHalfEdge>> {
-        let mut result = vec![Vec::new(); self.graph.n_nodes()];
+        let mut result = vec![Vec::new(); self.graph.node_bound()];
         for half_edge in self.half_edges() {
             let hedge = self.half_edge_id(half_edge).expect("existing half-edge");
             result[self.graph.node_id(hedge).0].push(half_edge);
@@ -1670,11 +1670,11 @@ impl FeynmanDiagram {
         &self,
         fragment_numerator: Option<&Atom>,
     ) -> Result<(), DiagramError> {
-        let mut degrees = vec![0_usize; self.graph.n_nodes()];
+        let mut degrees = vec![0_usize; self.graph.node_bound()];
         let mut external_indices = BTreeSet::new();
         let mut external_connections = BTreeSet::new();
         let mut paired_external_edges = BTreeSet::new();
-        let mut vertex_slots = vec![BTreeSet::new(); self.graph.n_nodes()];
+        let mut vertex_slots = vec![BTreeSet::new(); self.graph.node_bound()];
         let vertex_half_edges = self.vertex_half_edges();
         for (edge_id, endpoints, edge) in self.edges() {
             self.resolve_particle(edge_id, edge)?;

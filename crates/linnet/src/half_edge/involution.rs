@@ -14,11 +14,8 @@ use thiserror::Error;
 #[cfg(feature = "rkyv")]
 use super::subgraph::Inclusion;
 use super::{
-    builder::HedgeData,
-    nodestore::{NodeStorage, NodeStorageOps},
-    subgraph::SubSetLike,
-    swap::Swap,
-    GVEdgeAttrs, HedgeGraph, NodeIndex,
+    builder::HedgeData, nodestore::Topology, subgraph::SubSetLike, swap::Swap, GVEdgeAttrs,
+    HedgeGraph, NodeIndex,
 };
 
 define_indexed_vec!(
@@ -291,7 +288,7 @@ impl<H> HedgePairWithData<H> {
 }
 impl<H> HedgePairWithData<&H> {
     #[allow(clippy::too_many_arguments)]
-    pub fn dot_fmt<W: std::fmt::Write, E, V, N: NodeStorageOps<NodeData = V>>(
+    pub fn dot_fmt<W: std::fmt::Write, E, V, N: Topology>(
         &self,
         writer: &mut W,
         graph: &HedgeGraph<E, V, H, N>,
@@ -365,7 +362,7 @@ impl<H> HedgePairWithData<&H> {
     }
 
     #[allow(clippy::too_many_arguments)]
-    pub fn dot_io<W: std::io::Write, E, V, N: NodeStorageOps<NodeData = V>>(
+    pub fn dot_io<W: std::io::Write, E, V, N: Topology>(
         &self,
         writer: &mut W,
         graph: &HedgeGraph<E, V, H, N>,
@@ -513,7 +510,7 @@ impl Display for HedgePair {
 }
 
 impl HedgePair {
-    pub fn add_data_of<'a, S: SubSetLike, V, E, H, N: NodeStorage<NodeData = V>>(
+    pub fn add_data_of<'a, S: SubSetLike, V, E, H, N: Topology>(
         self,
         graph: &'a HedgeGraph<E, V, H, N>,
         subgraph: &S,
@@ -547,7 +544,7 @@ impl HedgePair {
         }
     }
 
-    pub fn add_data<V, E, H, N: NodeStorage<NodeData = V>>(
+    pub fn add_data<V, E, H, N: Topology>(
         self,
         graph: &HedgeGraph<E, V, H, N>,
     ) -> HedgePairWithData<&H> {

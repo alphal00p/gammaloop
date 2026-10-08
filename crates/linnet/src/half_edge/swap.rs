@@ -2,12 +2,7 @@ use std::ops::{AddAssign, SubAssign};
 
 use crate::permutation::Permutation;
 
-use super::{
-    hedgevec::SmartEdgeVec,
-    involution::{EdgeIndex, Hedge},
-    nodestore::NodeStorageOps,
-    HedgeGraph, NodeIndex,
-};
+use super::{hedgevec::SmartEdgeVec, involution::EdgeIndex, nodestore::Topology, HedgeGraph};
 
 #[allow(clippy::len_without_is_empty)]
 pub trait Swap<Id> {
@@ -54,7 +49,7 @@ pub trait Swap<Id> {
     }
 }
 
-/// The two-pointer compaction behind every delete, extract and forget.
+/// The two-pointer compaction behind every delete, extract, compaction and partition.
 ///
 /// Partitions `start..end` of `ctx` so that the positions accepted by `keep` come
 /// first and returns the split point. `left` scans up over kept positions; at a
@@ -92,32 +87,7 @@ where
     }
     left
 }
-impl<E, V, H, N: NodeStorageOps<NodeData = V>> Swap<Hedge> for HedgeGraph<E, V, H, N> {
-    fn len(&self) -> Hedge {
-        self.hedge_data.len()
-    }
-
-    // type Item = H;
-
-    // fn filter(&self, id: &Hedge, filter: &impl Fn(&Hedge, &Self::Item) -> bool) -> bool {
-    //     filter(id, &self[*id])
-    // }
-
-    fn is_zero_length(&self) -> bool {
-        self.hedge_data.is_zero_length()
-    }
-
-    fn swap(&mut self, i: Hedge, j: Hedge) {
-        // println!("Swapping {i:?} with {j:?}");
-        self.hedge_data.swap(i, j);
-        // println!("nodeswap");
-        self.node_store.swap(i, j);
-        // println!("edgeswap");
-        self.edge_store.swap(i, j);
-    }
-}
-
-impl<E, V, H, N: NodeStorageOps<NodeData = V>> Swap<EdgeIndex> for HedgeGraph<E, V, H, N> {
+impl<E, V, H, N: Topology> Swap<EdgeIndex> for HedgeGraph<E, V, H, N> {
     // type Item = (E, HedgePair);
 
     // fn filter(&self, id: &EdgeIndex, filter: &impl Fn(&EdgeIndex, &Self::Item) -> bool) -> bool {
@@ -134,26 +104,6 @@ impl<E, V, H, N: NodeStorageOps<NodeData = V>> Swap<EdgeIndex> for HedgeGraph<E,
 
     fn len(&self) -> EdgeIndex {
         self.edge_store.len()
-    }
-}
-
-impl<E, V, H, N: NodeStorageOps<NodeData = V>> Swap<NodeIndex> for HedgeGraph<E, V, H, N> {
-    fn swap(&mut self, i: NodeIndex, j: NodeIndex) {
-        self.node_store.swap(i, j);
-    }
-
-    // type Item = <N as Swap<NodeIndex>>::Item;
-
-    // fn filter(&self, id: &NodeIndex, filter: &impl Fn(&NodeIndex, &Self::Item) -> bool) -> bool {
-    //     <N as Swap<NodeIndex>>::filter(&self.node_store, id, filter)
-    // }
-
-    fn is_zero_length(&self) -> bool {
-        <N as Swap<NodeIndex>>::is_zero_length(&self.node_store)
-    }
-
-    fn len(&self) -> NodeIndex {
-        self.node_store.len()
     }
 }
 

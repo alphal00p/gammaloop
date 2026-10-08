@@ -210,7 +210,7 @@ impl PySubgraph {
         let graph = self.owner(py)?.borrow();
         let state = graph.state.borrow();
         let graph = &state.as_ref().expect("checked").graph;
-        if node >= graph.n_nodes() {
+        if node >= graph.node_bound() {
             return Err(PyIndexError::new_err("node index out of range"));
         }
         Ok(self.isolated_nodes.contains(&node)

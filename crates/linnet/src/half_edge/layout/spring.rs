@@ -9,7 +9,7 @@ use crate::{
     half_edge::{
         involution::{EdgeIndex, EdgeVec, Flow, Hedge, HedgePair, HedgeVec},
         layout::simulatedanneale::{Energy, Neighbor},
-        nodestore::NodeStorageOps,
+        nodestore::Topology,
         subgraph::{subset::SubSet, Inclusion, ModifySubSet, SuBitGraph, SubSetLike},
         swap::Swap,
         HedgeGraph, NodeIndex, NodeVec,
@@ -143,7 +143,7 @@ impl Default for ExternalPullTopology {
     }
 }
 
-pub struct LayoutState<'a, E, V, H, N: NodeStorageOps<NodeData = V>> {
+pub struct LayoutState<'a, E, V, H, N: Topology> {
     pub graph: &'a HedgeGraph<E, V, H, N>,
     pub ext: SuBitGraph,
     active_subgraph: Option<SuBitGraph>,
@@ -172,7 +172,7 @@ pub struct LayoutState<'a, E, V, H, N: NodeStorageOps<NodeData = V>> {
     pub incremental: bool,
 }
 
-impl<E, V, H, N: NodeStorageOps<NodeData = V>> HedgeGraph<E, V, H, N> {
+impl<E, V, H, N: Topology> HedgeGraph<E, V, H, N> {
     pub fn new_layout_state(
         &self,
         vertex_points: NodeVec<Point2<f64>>,
@@ -212,7 +212,7 @@ impl<E, V, H, N: NodeStorageOps<NodeData = V>> HedgeGraph<E, V, H, N> {
     }
 }
 
-impl<'a, E, V, H, N: NodeStorageOps<NodeData = V>> Clone for LayoutState<'a, E, V, H, N> {
+impl<'a, E, V, H, N: Topology> Clone for LayoutState<'a, E, V, H, N> {
     fn clone(&self) -> Self {
         LayoutState {
             graph: self.graph,
@@ -236,7 +236,7 @@ impl<'a, E, V, H, N: NodeStorageOps<NodeData = V>> Clone for LayoutState<'a, E, 
     }
 }
 
-impl<'a, E, V, H, N: NodeStorageOps<NodeData = V>> LayoutState<'a, E, V, H, N> {
+impl<'a, E, V, H, N: Topology> LayoutState<'a, E, V, H, N> {
     pub fn with_active_subgraph(mut self, active_subgraph: SuBitGraph) -> Self
     where
         E: HasPointConstraint,
@@ -685,9 +685,7 @@ impl<'a, E, V, H, N: NodeStorageOps<NodeData = V>> LayoutState<'a, E, V, H, N> {
 
 pub struct LayoutNeighbor;
 
-impl<'a, E, V, H, N: NodeStorageOps<NodeData = V> + Clone> Neighbor<LayoutState<'a, E, V, H, N>>
-    for LayoutNeighbor
-{
+impl<'a, E, V, H, N: Topology + Clone> Neighbor<LayoutState<'a, E, V, H, N>> for LayoutNeighbor {
     fn propose(
         &self,
         s: &LayoutState<'a, E, V, H, N>,
@@ -795,7 +793,7 @@ impl<'a, E, V, H, N> Neighbor<LayoutState<'a, E, V, H, N>> for PinnedLayoutNeigh
 where
     E: HasPointConstraint,
     V: HasPointConstraint,
-    N: NodeStorageOps<NodeData = V> + Clone,
+    N: Topology + Clone,
 {
     fn prepare(&self, state: &mut LayoutState<'a, E, V, H, N>) {
         state.synchronize_grouped_coordinates();
@@ -927,7 +925,7 @@ pub(crate) fn apply_route_point_shift<'a, E, V, H, N>(
 ) -> bool
 where
     E: HasPointConstraint,
-    N: NodeStorageOps<NodeData = V>,
+    N: Topology,
 {
     let constraints = state.graph[state.graph[&hedge]].point_constraint();
     if matches!(constraints.x, Constraint::Fixed) {
@@ -939,7 +937,7 @@ where
     state.shift_route_point(hedge, index, shift)
 }
 
-pub(crate) fn apply_vertex_shift<'a, E, V, H, N: NodeStorageOps<NodeData = V> + Clone>(
+pub(crate) fn apply_vertex_shift<'a, E, V, H, N: Topology + Clone>(
     state: &mut LayoutState<'a, E, V, H, N>,
     idx: NodeIndex,
     shift: Vector2<f64>,
@@ -952,7 +950,7 @@ pub(crate) fn apply_vertex_shift<'a, E, V, H, N: NodeStorageOps<NodeData = V> + 
     true
 }
 
-pub(crate) fn apply_edge_shift<'a, E, V, H, N: NodeStorageOps<NodeData = V> + Clone>(
+pub(crate) fn apply_edge_shift<'a, E, V, H, N: Topology + Clone>(
     state: &mut LayoutState<'a, E, V, H, N>,
     idx: EdgeIndex,
     shift: Vector2<f64>,
@@ -975,7 +973,7 @@ impl<'a, E, V, H, N> LayoutState<'a, E, V, H, N>
 where
     E: HasPointConstraint,
     V: HasPointConstraint,
-    N: NodeStorageOps<NodeData = V> + Clone,
+    N: Topology + Clone,
 {
     fn group_members(
         &self,
@@ -1275,7 +1273,7 @@ pub(crate) fn apply_vertex_shift_with_groups<'a, E, V, H, N>(
 where
     E: HasPointConstraint,
     V: HasPointConstraint,
-    N: NodeStorageOps<NodeData = V> + Clone,
+    N: Topology + Clone,
 {
     state.shift_constrained(LayoutPointIndex::Node(idx), shift)
 }
@@ -1288,7 +1286,7 @@ pub(crate) fn apply_edge_shift_with_groups<'a, E, V, H, N>(
 where
     E: HasPointConstraint,
     V: HasPointConstraint,
-    N: NodeStorageOps<NodeData = V> + Clone,
+    N: Topology + Clone,
 {
     state.shift_constrained(LayoutPointIndex::Edge(idx), shift)
 }
@@ -1313,9 +1311,7 @@ pub struct SpringChargeEnergy {
     pub eps: f64,              // softened distance (≈ eps*L)
 }
 
-impl<'a, E, V, H, N: NodeStorageOps<NodeData = V> + Clone> Energy<LayoutState<'a, E, V, H, N>>
-    for SpringChargeEnergy
-{
+impl<'a, E, V, H, N: Topology + Clone> Energy<LayoutState<'a, E, V, H, N>> for SpringChargeEnergy {
     fn energy(
         &self,
         prev: Option<(&LayoutState<'a, E, V, H, N>, f64)>,
@@ -1692,7 +1688,7 @@ impl SpringChargeEnergy {
 
     fn dangling_centroid_energy<'a, E, V, H, N>(&self, state: &LayoutState<'a, E, V, H, N>) -> f64
     where
-        N: NodeStorageOps<NodeData = V> + Clone,
+        N: Topology + Clone,
     {
         let active_nodes = state.active_nodes().collect::<Vec<_>>();
         if (self.dangling_centroid_charge == 0.0 && self.external_pull == 0.0)
@@ -1748,7 +1744,7 @@ impl SpringChargeEnergy {
         edge: EdgeIndex,
     ) -> Vec<(Point2<f64>, Point2<f64>, Option<NodeIndex>)>
     where
-        N: NodeStorageOps<NodeData = V> + Clone,
+        N: Topology + Clone,
     {
         let hedges = s.edge_route_hedges(edge);
         // An unrouted self-loop's out-and-back span does not describe its drawn loop.
@@ -1777,7 +1773,7 @@ impl SpringChargeEnergy {
         base: f64,
     ) -> f64
     where
-        N: NodeStorageOps<NodeData = V> + Clone,
+        N: Topology + Clone,
     {
         let base = base * s.edge_spring_length_scales[edge];
         let (_, pair) = &s.graph[&edge];
@@ -1819,7 +1815,7 @@ impl SpringChargeEnergy {
         ej: EdgeIndex,
     ) -> bool
     where
-        N: NodeStorageOps<NodeData = V> + Clone,
+        N: Topology + Clone,
     {
         let seg_i = Self::edge_segments(s, ei);
         if seg_i.is_empty() {
@@ -1844,7 +1840,7 @@ impl SpringChargeEnergy {
 
     fn total_energy<'a, E, V, H, N>(&self, s: &LayoutState<'a, E, V, H, N>) -> f64
     where
-        N: NodeStorageOps<NodeData = V> + Clone,
+        N: Topology + Clone,
     {
         #[cfg(feature = "energy_trace")]
         let total_start = std::time::Instant::now();
@@ -2009,7 +2005,7 @@ impl SpringChargeEnergy {
         edge_changes: &SubSet<EdgeIndex>,
     ) -> f64
     where
-        N: NodeStorageOps<NodeData = V> + Clone,
+        N: Topology + Clone,
     {
         #[cfg(feature = "energy_trace")]
         let total_start = std::time::Instant::now();

@@ -450,7 +450,7 @@ fn assert_native_runtime_parity(diagram: &feynkit_graph::FeynmanDiagram) {
 
     let runtime = Graph::from_feynkit(diagram, None, true).unwrap();
     let source = diagram.underlying();
-    assert_eq!(runtime.underlying.n_nodes(), source.n_nodes());
+    assert_eq!(runtime.underlying.n_live(), source.n_live());
     assert_eq!(runtime.underlying.n_edges(), source.n_edges());
     assert_eq!(runtime.underlying.n_hedges(), source.n_hedges());
     for (pair, edge, data) in source.iter_edges() {

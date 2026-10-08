@@ -250,7 +250,7 @@ fn main() -> Result<()> {
         [
             ("status", "done".to_owned()),
             ("elapsed", format_duration(network_parse_elapsed)),
-            ("nodes", net.graph.n_nodes().to_string()),
+            ("nodes", net.graph.n_live().to_string()),
             ("edges", net.graph.graph.n_edges().to_string()),
             ("tensors", net.store.tensors.len().to_string()),
         ],
@@ -263,7 +263,7 @@ fn main() -> Result<()> {
         "",
         format!(
             "nodes={} edges={} tensors={}",
-            net.graph.n_nodes(),
+            net.graph.n_live(),
             net.graph.graph.n_edges(),
             net.store.tensors.len()
         ),
@@ -983,7 +983,7 @@ fn run_symbolic_then_concrete(
         [
             ("status", "done".to_owned()),
             ("elapsed", format_duration(symbolic_parse_elapsed)),
-            ("nodes", symbolic_net.graph.n_nodes().to_string()),
+            ("nodes", symbolic_net.graph.n_live().to_string()),
             ("edges", symbolic_net.graph.graph.n_edges().to_string()),
             ("tensors", symbolic_net.store.tensors.len().to_string()),
             (
@@ -1000,7 +1000,7 @@ fn run_symbolic_then_concrete(
         "",
         format!(
             "nodes={} edges={} tensors={} strict_filter={:?}",
-            symbolic_net.graph.n_nodes(),
+            symbolic_net.graph.n_live(),
             symbolic_net.graph.graph.n_edges(),
             symbolic_net.store.tensors.len(),
             config.symbolic_strict_filter
@@ -1284,7 +1284,7 @@ fn run_symbolic_then_concrete(
         [
             ("status", "done".to_owned()),
             ("elapsed", format_duration(concrete_parse_elapsed)),
-            ("nodes", concrete_net.graph.n_nodes().to_string()),
+            ("nodes", concrete_net.graph.n_live().to_string()),
             ("edges", concrete_net.graph.graph.n_edges().to_string()),
             ("tensors", concrete_net.store.tensors.len().to_string()),
         ],
@@ -1297,7 +1297,7 @@ fn run_symbolic_then_concrete(
         "",
         format!(
             "nodes={} edges={} tensors={}",
-            concrete_net.graph.n_nodes(),
+            concrete_net.graph.n_live(),
             concrete_net.graph.graph.n_edges(),
             concrete_net.store.tensors.len()
         ),
@@ -1516,7 +1516,7 @@ fn run_symbolic_net(config: &Config, selected: &Atom, summary: &mut SummaryTable
         [
             ("status", "done".to_owned()),
             ("elapsed", format_duration(network_parse_elapsed)),
-            ("nodes", net.graph.n_nodes().to_string()),
+            ("nodes", net.graph.n_live().to_string()),
             ("edges", net.graph.graph.n_edges().to_string()),
             ("tensors", net.store.tensors.len().to_string()),
             (
@@ -1533,7 +1533,7 @@ fn run_symbolic_net(config: &Config, selected: &Atom, summary: &mut SummaryTable
         "",
         format!(
             "nodes={} edges={} tensors={} strict_filter={:?}",
-            net.graph.n_nodes(),
+            net.graph.n_live(),
             net.graph.graph.n_edges(),
             net.store.tensors.len(),
             config.symbolic_strict_filter

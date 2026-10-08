@@ -39,6 +39,7 @@ use linnet::{
         HedgeGraph,
         involution::{EdgeData, EdgeIndex, Flow, Hedge, HedgePair},
         nodestore::NodeForest,
+        remap::HedgeRemap,
         subgraph::{ModifySubSet, OrientedCut, SuBitGraph, SubSetOps},
         swap::Swap,
     },
@@ -276,7 +277,7 @@ impl CutProcessingResult {
         let perh = Permutation::from_mappings(h_perm, graph.n_hedges()).unwrap();
 
         debug!("Before: {}", graph.dot(&self.initial_hedges));
-        <HedgeGraph<_, _, _> as Swap<Hedge>>::permute(graph, &perh);
+        graph.permute_hedges(&HedgeRemap::from_permutation(&perh))?;
         let trans = perh.transpositions();
 
         for (i, j) in trans.into_iter().rev() {
@@ -986,7 +987,7 @@ impl Graph {
             DotVertexData,
             DotHedgeData,
             linnet::parser::GlobalData,
-            NodeForest<DotVertexData>,
+            NodeForest,
         > = GraphSet::from_file(p.as_ref()).map_err(|a| match a {
             HedgeParseError::GraphFromFile(e) => match e.as_ref() {
                 dot_parser::ast::GraphFromFileError::FileError(e) => eyre!(e.to_string())
@@ -1021,7 +1022,7 @@ impl Graph {
             DotVertexData,
             DotHedgeData,
             linnet::parser::GlobalData,
-            NodeForest<DotVertexData>,
+            NodeForest,
         > = GraphSet::from_string(s).map_err(|a| match a {
             HedgeParseError::GraphFromFile(e) => match e.as_ref() {
                 dot_parser::ast::GraphFromFileError::FileError(e) => {
@@ -1049,7 +1050,7 @@ impl Graph {
             DotVertexData,
             DotHedgeData,
             linnet::parser::GlobalData,
-            NodeForest<DotVertexData>,
+            NodeForest,
         >,
         model: &Model,
     ) -> Result<Vec<Self>> {

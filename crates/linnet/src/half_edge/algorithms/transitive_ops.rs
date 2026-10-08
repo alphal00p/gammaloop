@@ -30,7 +30,7 @@ use std::collections::{HashMap, HashSet, VecDeque};
 use crate::half_edge::{
     builder::HedgeGraphBuilder,
     involution::Flow,
-    nodestore::NodeStorageOps,
+    nodestore::Topology,
     subgraph::{ModifySubSet, SuBitGraph, SubSetLike},
     HedgeGraph, NoData, NodeIndex,
 };
@@ -57,7 +57,7 @@ pub enum TransitiveError {
     GraphStructure,
 }
 
-impl<V, S: NodeStorageOps<NodeData = V, Base = SuBitGraph>> HedgeGraph<NoData, V, NoData, S> {
+impl<V, S: Topology> HedgeGraph<NoData, V, NoData, S> {
     pub fn poset<I: IntoIterator<Item = V>>(nodes: I) -> Self
     where
         V: PartialOrd,
@@ -123,9 +123,7 @@ impl<V, S: NodeStorageOps<NodeData = V, Base = SuBitGraph>> HedgeGraph<NoData, V
     }
 }
 
-impl<E, V, H, N: NodeStorageOps<NodeData = V, Base = crate::half_edge::subgraph::SuBitGraph>>
-    HedgeGraph<E, V, H, N>
-{
+impl<E, V, H, N: Topology> HedgeGraph<E, V, H, N> {
     /// Computes the transitive closure of the directed acyclic graph.
     ///
     /// The transitive closure adds an edge (u, v) for every pair of nodes u, v
@@ -322,7 +320,7 @@ impl<E, V, H, N: NodeStorageOps<NodeData = V, Base = crate::half_edge::subgraph:
         }
 
         // Build a subgraph with all redundant edges to remove
-        let mut edges_to_remove: crate::half_edge::subgraph::SuBitGraph = self.empty_subgraph();
+        let mut edges_to_remove: SuBitGraph = self.empty_subgraph();
         for hedge in redundant_hedges {
             // CRITICAL: Add both half-edges of the pair to completely remove the edge
             // In HedgeGraph, each directed edge consists of two half-edges:
@@ -337,7 +335,8 @@ impl<E, V, H, N: NodeStorageOps<NodeData = V, Base = crate::half_edge::subgraph:
         }
 
         // Delete all redundant hedges at once
-        self.delete_hedges(&edges_to_remove);
+        self.delete_hedges(&edges_to_remove)
+            .map_err(|_| TransitiveError::GraphStructure)?;
 
         Ok(self)
     }
@@ -471,7 +470,6 @@ mod tests {
             algorithms::DirectionBasis,
             builder::HedgeGraphBuilder,
             involution::{Flow, HedgePair, Orientation},
-            nodestore::NodeStorageOps,
             subgraph::{ModifySubSet, SuBitGraph, SubSetLike},
             HedgeGraph, NoData,
         },
@@ -649,8 +647,8 @@ mod tests {
             .transitive_reduction(DirectionBasis::Underlying)
             .unwrap();
 
-        assert_eq!(closure.n_nodes(), 1);
-        assert_eq!(reduction.n_nodes(), 1);
+        assert_eq!(closure.n_live(), 1);
+        assert_eq!(reduction.n_live(), 1);
         assert_eq!(closure.n_edges(), 0);
         assert_eq!(reduction.n_edges(), 0);
     }
@@ -1359,7 +1357,7 @@ mod tests {
                 graph
                     .graph
                     .node_store
-                    .get_node_data(idx)
+                    .get(idx)
                     .name
                     .as_ref()
                     .map(|id| (id.clone(), idx))
@@ -1423,7 +1421,7 @@ mod tests {
         // println!("{}", hasse.clone().transitive_closure(DirectionBasis::Underlying).unwrap().base_dot());
 
         // Should have 4 nodes
-        assert_eq!(hasse.n_nodes(), 4);
+        assert_eq!(hasse.n_live(), 4);
 
         // Should have 4 edges in the Hasse diagram (covering relations only)
         assert_eq!(hasse.n_edges(), 3);

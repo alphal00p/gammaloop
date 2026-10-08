@@ -4,9 +4,7 @@ use std::ops::{Range, RangeFrom, RangeInclusive, RangeTo, RangeToInclusive};
 
 use crate::half_edge::involution::Flow;
 use crate::half_edge::subgraph::{SuBitGraph, SubGraphLike, SubGraphOps};
-use crate::half_edge::{
-    hedgevec::Accessors, involution::HedgePair, Hedge, HedgeGraph, NodeStorageOps,
-};
+use crate::half_edge::{hedgevec::Accessors, involution::HedgePair, Hedge, HedgeGraph, Topology};
 
 use super::{node::HedgeNode, Inclusion, ModifySubSet, SubSetIter, SubSetLike, SubSetOps};
 
@@ -198,10 +196,7 @@ impl Inclusion<RangeInclusive<Hedge>> for InternalSubGraph {
 }
 
 impl SubGraphLike for InternalSubGraph {
-    fn nedges<E, V, H, N: NodeStorageOps<NodeData = V>>(
-        &self,
-        _graph: &HedgeGraph<E, V, H, N>,
-    ) -> usize {
+    fn nedges<E, V, H, N: Topology>(&self, _graph: &HedgeGraph<E, V, H, N>) -> usize {
         self.n_included() / 2
     }
 }
@@ -294,10 +289,7 @@ impl SubSetOps<Hedge> for InternalSubGraph {
 }
 
 impl SubGraphOps for InternalSubGraph {
-    fn complement<E, V, H, N: NodeStorageOps<NodeData = V>>(
-        &self,
-        graph: &HedgeGraph<E, V, H, N>,
-    ) -> Self {
+    fn complement<E, V, H, N: Topology>(&self, graph: &HedgeGraph<E, V, H, N>) -> Self {
         InternalSubGraph {
             filter: (!self.filter.clone()).intersection(&!graph.external_filter::<SuBitGraph>()),
             loopcount: None,
@@ -306,7 +298,7 @@ impl SubGraphOps for InternalSubGraph {
 }
 
 impl InternalSubGraph {
-    fn valid_filter<E, V, H, N: NodeStorageOps<NodeData = V>>(
+    fn valid_filter<E, V, H, N: Topology>(
         filter: &SuBitGraph,
         graph: &HedgeGraph<E, V, H, N>,
     ) -> bool {
@@ -318,18 +310,14 @@ impl InternalSubGraph {
         true
     }
 
-    pub fn add_edge<E, V, H, N: NodeStorageOps<NodeData = V>>(
-        &mut self,
-        hedge: Hedge,
-        graph: &HedgeGraph<E, V, H, N>,
-    ) {
+    pub fn add_edge<E, V, H, N: Topology>(&mut self, hedge: Hedge, graph: &HedgeGraph<E, V, H, N>) {
         if !graph.edge_store.pair(hedge).is_unpaired() {
             self.filter.add(hedge);
             self.filter.add(graph.inv(hedge));
         }
     }
 
-    pub fn remove_edge<E, V, H, N: NodeStorageOps<NodeData = V>>(
+    pub fn remove_edge<E, V, H, N: Topology>(
         &mut self,
         hedge: Hedge,
         graph: &HedgeGraph<E, V, H, N>,
@@ -340,7 +328,7 @@ impl InternalSubGraph {
         }
     }
 
-    pub fn try_new<E, V, H, N: NodeStorageOps<NodeData = V>>(
+    pub fn try_new<E, V, H, N: Topology>(
         filter: SuBitGraph,
         graph: &HedgeGraph<E, V, H, N>,
     ) -> Option<Self> {
@@ -357,7 +345,7 @@ impl InternalSubGraph {
         })
     }
 
-    pub fn cleaned_filter_optimist<E, V, H, N: NodeStorageOps<NodeData = V>>(
+    pub fn cleaned_filter_optimist<E, V, H, N: Topology>(
         mut filter: SuBitGraph,
         graph: &HedgeGraph<E, V, H, N>,
     ) -> Self {
@@ -381,7 +369,7 @@ impl InternalSubGraph {
         }
     }
 
-    pub fn cleaned_filter_pessimist<E, V, H, N: NodeStorageOps<NodeData = V>>(
+    pub fn cleaned_filter_pessimist<E, V, H, N: Topology>(
         mut filter: SuBitGraph,
         graph: &HedgeGraph<E, V, H, N>,
     ) -> Self {
@@ -403,24 +391,18 @@ impl InternalSubGraph {
         }
     }
 
-    pub fn valid<E, V, H, N: NodeStorageOps<NodeData = V>>(
-        &self,
-        graph: &HedgeGraph<E, V, H, N>,
-    ) -> bool {
+    pub fn valid<E, V, H, N: Topology>(&self, graph: &HedgeGraph<E, V, H, N>) -> bool {
         Self::valid_filter(&self.filter, graph)
     }
 
-    pub fn to_hairy_subgraph<E, V, H, N: NodeStorageOps<NodeData = V>>(
+    pub fn to_hairy_subgraph<E, V, H, N: Topology>(
         &self,
         graph: &HedgeGraph<E, V, H, N>,
     ) -> HedgeNode {
         graph.nesting_node_from_subgraph(self.clone())
     }
 
-    pub fn set_loopcount<E, V, H, N: NodeStorageOps<NodeData = V>>(
-        &mut self,
-        graph: &HedgeGraph<E, V, H, N>,
-    ) {
+    pub fn set_loopcount<E, V, H, N: Topology>(&mut self, graph: &HedgeGraph<E, V, H, N>) {
         self.loopcount = Some(graph.cyclotomatic_number(self));
     }
 }

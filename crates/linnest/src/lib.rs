@@ -62,7 +62,7 @@ use linnet::{
                 PinnedLayoutNeighbor, PointConstraint, ShiftDirection, SpringChargeEnergy,
             },
         },
-        nodestore::{NodeForest, NodeStorageOps},
+        nodestore::{NodeForest, NodeStore, Topology},
         subgraph::{SuBitGraph, SubSetLike},
         EdgeAccessors, HedgeGraph, NodeIndex, NodeVec,
     },
@@ -467,9 +467,9 @@ impl Default for TypstEdge {
 }
 
 impl TypstEdge {
-    fn parse<N: NodeStorageOps>(
+    fn parse<N: Topology, V>(
         _inv: &Involution,
-        node_store: &N,
+        node_store: &NodeStore<N, V>,
         p: HedgePair,
         eid: EdgeIndex,
         data: EdgeData<DotEdgeData>,
@@ -495,21 +495,21 @@ impl TypstEdge {
             let mut to = None;
             match p {
                 HedgePair::Split { source, sink, .. } | HedgePair::Paired { source, sink } => {
-                    from = Some((node_store.node_id_ref(source), source));
-                    to = Some((node_store.node_id_ref(sink), sink));
+                    from = Some((node_store.node_id(source), source));
+                    to = Some((node_store.node_id(sink), sink));
                 }
                 HedgePair::Unpaired {
                     hedge,
                     flow: Flow::Source,
                 } => {
-                    from = Some((node_store.node_id_ref(hedge), hedge));
+                    from = Some((node_store.node_id(hedge), hedge));
                 }
 
                 HedgePair::Unpaired {
                     hedge,
                     flow: Flow::Sink,
                 } => {
-                    to = Some((node_store.node_id_ref(hedge), hedge));
+                    to = Some((node_store.node_id(hedge), hedge));
                 }
             }
 
@@ -2407,11 +2407,9 @@ impl TypstGraph {
             self.validate_isolated_subgraph_groups(subgraph.unwrap())?;
         }
         let selected_items = isolated.then(|| self.selected_layout_items(subgraph.unwrap()));
-        let node_count = selected_items
-            .as_ref()
-            .map_or(self.n_nodes(), |(nodes, _)| {
-                nodes.iter().filter(|(_, selected)| **selected).count()
-            });
+        let node_count = selected_items.as_ref().map_or(self.n_live(), |(nodes, _)| {
+            nodes.iter().filter(|(_, selected)| **selected).count()
+        });
         let spring_params = ParamTuning::from(&self.layout_config.spring);
         let (tree_cfg, energy) = self.tree_init_cfg(&spring_params, node_count);
         if !iterative {
@@ -2545,7 +2543,7 @@ impl TypstGraph {
         if !(0.0..=1.0).contains(&self.layout_config.flattening_end) {
             return Err("flattening-end must be a finite fraction between 0 and 1".to_string());
         }
-        for (kind, index, statements) in (0..self.n_nodes())
+        for (kind, index, statements) in (0..self.node_bound())
             .map(|i| ("node", i, &self[NodeIndex(i)].statements))
             .chain((0..self.n_edges()).map(|i| ("edge", i, &self[EdgeIndex(i)].statements)))
         {
@@ -2590,11 +2588,11 @@ impl TypstGraph {
     pub fn layout_energy_state(
         &self,
     ) -> (
-        LayoutState<'_, TypstEdge, TypstNode, TypstHedge, NodeForest<TypstNode>>,
+        LayoutState<'_, TypstEdge, TypstNode, TypstHedge, NodeForest>,
         SpringChargeEnergy,
     ) {
         let spring_params = ParamTuning::from(&self.layout_config.spring);
-        let (tree_cfg, energy) = self.tree_init_cfg(&spring_params, self.n_nodes());
+        let (tree_cfg, energy) = self.tree_init_cfg(&spring_params, self.n_live());
         let (mut pos_n, mut pos_e) = self.initial_solver_positions(tree_cfg);
         self.apply_initial_grouped_constraints(&mut pos_n, &mut pos_e);
         let mut state = self.graph.new_layout_state(
@@ -2946,12 +2944,12 @@ impl TypstGraph {
 
     fn force_session<'a>(
         &self,
-        mut state: LayoutState<'a, TypstEdge, TypstNode, TypstHedge, NodeForest<TypstNode>>,
+        mut state: LayoutState<'a, TypstEdge, TypstNode, TypstHedge, NodeForest>,
         energy: &SpringChargeEnergy,
         selection: Option<(&NodeVec<bool>, &EdgeVec<bool>)>,
-    ) -> ForceLayoutSession<'a, TypstEdge, TypstNode, TypstHedge, NodeForest<TypstNode>> {
+    ) -> ForceLayoutSession<'a, TypstEdge, TypstNode, TypstHedge, NodeForest> {
         let spring_length = energy.spring_length;
-        for i in 0..self.n_nodes() {
+        for i in 0..self.node_bound() {
             let index = NodeIndex(i);
             let statements = &self[index].statements;
             state.vertex_depths[index] = dot_statement_value(statements, "pos-z")
@@ -3128,7 +3126,7 @@ impl TypstGraph {
                 };
 
                 if label_charge != 0.0 {
-                    for n in 0..self.n_nodes() {
+                    for n in 0..self.node_bound() {
                         let ni = NodeIndex(n);
                         if selection.is_some_and(|(nodes, _)| !nodes[ni]) {
                             continue;
@@ -3961,7 +3959,7 @@ impl TypstGraph {
                 .layout_roots
                 .iter()
                 .copied()
-                .filter(|&root| root < self.n_nodes())
+                .filter(|&root| root < self.node_bound())
                 .map(NodeIndex)
                 .collect(),
             rank_same: self.rank_same_node_groups(),
@@ -4048,7 +4046,7 @@ impl TypstGraph {
             .iter()
             .filter_map(|label| SuBitGraph::from_base62(label, self.n_hedges()))
             .map(|subgraph| {
-                let mut seen = vec![false; self.n_nodes()];
+                let mut seen = vec![false; self.node_bound()];
                 let mut nodes = Vec::new();
                 for hedge in subgraph.included_iter() {
                     let node = self.node_id(hedge);
@@ -4410,7 +4408,7 @@ impl TypstGraph {
     }
 
     fn layout_order_positions(&self, ordered_nodes: &[NodeIndex]) -> Vec<usize> {
-        let mut order = vec![usize::MAX; self.n_nodes()];
+        let mut order = vec![usize::MAX; self.node_bound()];
         for (position, node) in ordered_nodes.iter().enumerate() {
             order[node.0] = position;
         }

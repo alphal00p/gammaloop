@@ -14,7 +14,7 @@ use derive_more::{From, Into};
 use eyre::eyre;
 use linnet::half_edge::HedgeGraph;
 use linnet::half_edge::involution::{EdgeIndex, EdgeVec, Orientation};
-use linnet::half_edge::nodestore::NodeStorageOps;
+use linnet::half_edge::nodestore::Topology;
 use linnet::half_edge::subgraph::subset::SubSet;
 use linnet::half_edge::subgraph::{
     Inclusion, InternalSubGraph, ModifySubSet, SuBitGraph, SubSetLike, SubSetOps,
@@ -138,7 +138,7 @@ impl SubspaceData {
                 .all(|idx| !self.lmb_indices.contains(idx))
     }
 
-    fn cleaned_filter_pessimist<E, V, H, N: NodeStorageOps<NodeData = V>>(
+    fn cleaned_filter_pessimist<E, V, H, N: Topology>(
         mut filter: SuBitGraph,
         graph: &HedgeGraph<E, V, H, N>,
     ) -> InternalSubGraph {

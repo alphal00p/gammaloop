@@ -4,7 +4,7 @@ use feynkit_graph::FeynmanDiagram;
 use linnet::half_edge::{
     HedgeGraph, NodeIndex,
     involution::{EdgeIndex, Flow, HedgePair, Orientation},
-    nodestore::NodeStorageOps,
+    nodestore::Topology,
     subgraph::SubGraphLike,
 };
 use serde::{Deserialize, Serialize};
@@ -280,7 +280,7 @@ pub trait HedgeGraphCffExt {
 
 impl<E, V, H, N> HedgeGraphCffExt for HedgeGraph<E, V, H, N>
 where
-    N: NodeStorageOps<NodeData = V>,
+    N: Topology,
 {
     fn build_cff_from_subgraph<S: SubGraphLike>(
         &self,
@@ -375,7 +375,7 @@ impl HedgeSubgraphCffInput {
         mut edge_role: F,
     ) -> Result<Self, CffError>
     where
-        N: NodeStorageOps<NodeData = V>,
+        N: Topology,
         S: SubGraphLike,
         F: FnMut(EdgeId) -> HedgeEdgeRole,
     {

@@ -3,7 +3,7 @@
 use linnet::half_edge::{
     HedgeGraph,
     involution::{EdgeIndex, HedgePair},
-    nodestore::NodeStorageOps,
+    nodestore::Topology,
     subgraph::{Inclusion, ModifySubSet, SuBitGraph, SubSetOps},
 };
 
@@ -24,7 +24,7 @@ pub trait InitialStateTreeExt {
     ) -> (SuBitGraph, Vec<EdgeIndex>);
 }
 
-impl<E, V, H, N: NodeStorageOps<NodeData = V>> InitialStateTreeExt for HedgeGraph<E, V, H, N> {
+impl<E, V, H, N: Topology> InitialStateTreeExt for HedgeGraph<E, V, H, N> {
     fn initial_state_tree(
         &self,
         initial_state: &SuBitGraph,

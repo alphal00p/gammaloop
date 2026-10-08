@@ -6,6 +6,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 use linnet::half_edge::builder::{HedgeData, HedgeGraphBuilder};
 use linnet::half_edge::involution::{EdgeIndex, Flow, Hedge, HedgePair, Orientation};
+use linnet::half_edge::remap::{HedgeRemap, NodeRemap};
 use linnet::half_edge::swap::Swap;
 use linnet::half_edge::{EdgeAccessors, HedgeGraph, NodeIndex};
 use linnet::permutation::Permutation;
@@ -20,6 +21,10 @@ use crate::drawing::{
     HEDGE_FIELDS, NODE_FIELDS,
 };
 use crate::topology::{PyCutPartition, PyCycle, PyDirectionBasis, PySubgraph, PyTraversalTree};
+
+/// Python graphs compact every identification and never open topology
+/// checkpoints, so renumbering them cannot fail.
+pub(crate) const SETTLED: &str = "Python graphs keep no pending identifications";
 
 static SPEC_ID: AtomicU64 = AtomicU64::new(0);
 
@@ -600,7 +605,7 @@ impl PyGraph {
             .as_ref()
             .ok_or_else(|| PyReferenceError::new_err("graph has been cleared"))?;
         if let Some(index) = index {
-            return (index < state.graph.n_nodes())
+            return (index < state.graph.node_bound())
                 .then_some(index)
                 .ok_or_else(|| PyIndexError::new_err("node index out of range"));
         }
@@ -1279,7 +1284,7 @@ impl PyGraph {
             .as_ref()
             .ok_or_else(|| PyReferenceError::new_err("graph has been cleared"))?
             .graph
-            .n_nodes())
+            .n_live())
     }
 
     #[getter]
@@ -1361,7 +1366,7 @@ impl PyGraph {
             .as_ref()
             .expect("checked")
             .graph
-            .n_nodes();
+            .node_bound();
         drop(graph);
         (0..len)
             .map(|index| Py::new(py, PyNode::new(slf.clone_ref(py), index, epoch)))
@@ -1407,8 +1412,10 @@ impl PyGraph {
         let state = state
             .as_mut()
             .ok_or_else(|| PyReferenceError::new_err("graph has been cleared"))?;
-        let order = checked_order(order, state.graph.n_nodes(), "node")?;
-        <PyHedgeGraph as Swap<NodeIndex>>::permute(&mut state.graph, &Permutation::from_inv(order));
+        let order = checked_order(order, state.graph.node_bound(), "node")?;
+        (state.graph)
+            .permute_nodes(&NodeRemap::from_permutation(&Permutation::from_inv(order)))
+            .expect(SETTLED);
         state.revision += 1;
         state.element_epoch += 1;
         Ok(())
@@ -1430,10 +1437,11 @@ impl PyGraph {
             })
             .flatten()
             .collect();
-        <PyHedgeGraph as Swap<Hedge>>::permute(
-            &mut state.graph,
-            &Permutation::from_inv(hedge_order),
-        );
+        (state.graph)
+            .permute_hedges(&HedgeRemap::from_permutation(&Permutation::from_inv(
+                hedge_order,
+            )))
+            .expect(SETTLED);
         <PyHedgeGraph as Swap<EdgeIndex>>::permute(&mut state.graph, &Permutation::from_inv(order));
         state.revision += 1;
         state.element_epoch += 1;
@@ -1503,7 +1511,7 @@ impl PyGraph {
             (state.revision, state.element_epoch, state.copy(py)?)
         };
 
-        for index in 0..mapped.graph.n_nodes() {
+        for index in 0..mapped.graph.node_bound() {
             if let Some(callback) = &node {
                 mapped.graph[NodeIndex(index)].data =
                     callback.call1(py, (view_for(py, &slf, epoch, ViewIndex::Node(index))?,))?;
@@ -2126,7 +2134,7 @@ impl PyGraph {
             .ok_or_else(|| PyReferenceError::new_err("graph has been cleared"))?;
         Ok(format!(
             "Graph(nodes={}, edges={}, half_edges={})",
-            state.graph.n_nodes(),
+            state.graph.n_live(),
             state.graph.n_edges(),
             state.graph.n_hedges(),
         ))

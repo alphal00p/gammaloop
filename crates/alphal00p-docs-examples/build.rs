@@ -699,8 +699,8 @@ fn rust_example_mode(component: &str, item: &str, language: &str) -> Result<Rust
                     | "Inclusion"
                     | "BaseSubgraph"
                     | "SubGraphLike"
-                    | "NodeStorage"
-                    | "NodeStorageOps"
+                    | "Topology"
+                    | "Checkpoint"
             ) | (
                 "spenso",
                 "TensorStructure"

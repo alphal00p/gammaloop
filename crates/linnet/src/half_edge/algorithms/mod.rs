@@ -21,7 +21,7 @@
 
 use super::{
     involution::{Flow, Hedge},
-    nodestore::NodeStorageOps,
+    nodestore::Topology,
     HedgeGraph,
 };
 
@@ -40,7 +40,7 @@ pub enum DirectionBasis {
 }
 
 impl DirectionBasis {
-    pub(super) fn flow<E, V, H, N: NodeStorageOps<NodeData = V>>(
+    pub(super) fn flow<E, V, H, N: Topology>(
         self,
         graph: &HedgeGraph<E, V, H, N>,
         hedge: Hedge,

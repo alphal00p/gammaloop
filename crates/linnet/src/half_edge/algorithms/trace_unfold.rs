@@ -11,7 +11,7 @@ use indexmap::IndexSet;
 
 use crate::half_edge::builder::HedgeGraphBuilder;
 use crate::half_edge::involution::{EdgeIndex, Flow};
-use crate::half_edge::nodestore::{NodeForest, NodeStorageOps};
+use crate::half_edge::nodestore::{NodeForest, Topology};
 use crate::half_edge::subgraph::SubSetLike;
 use crate::half_edge::{HedgeGraph, NoData, NodeIndex, NodeVec};
 
@@ -20,13 +20,13 @@ use crate::half_edge::{HedgeGraph, NoData, NodeIndex, NodeVec};
 /// The wrapper keeps the structural graph and the `source_nodes` mapping together across
 /// structure-preserving transformations such as [`UnfoldedTraceGraph::map`]. It also provides
 /// traversal helpers that are meaningful only for trace-unfolded graphs.
-pub struct UnfoldedTraceGraph<G, V, N: NodeStorageOps<NodeData = V> = NodeForest<V>> {
+pub struct UnfoldedTraceGraph<G, V, N: Topology = NodeForest> {
     graph: HedgeGraph<EdgeIndex, V, NoData, N>,
     source_nodes: NodeVec<NodeIndex>,
     source_ty: PhantomData<fn() -> G>,
 }
 
-impl<G, V, N: NodeStorageOps<NodeData = V>> UnfoldedTraceGraph<G, V, N> {
+impl<G, V, N: Topology> UnfoldedTraceGraph<G, V, N> {
     /// Creates a wrapper from an already-built unfolded graph and its source-node mapping.
     pub fn new(
         graph: HedgeGraph<EdgeIndex, V, NoData, N>,
@@ -43,7 +43,7 @@ impl<G, V, N: NodeStorageOps<NodeData = V>> UnfoldedTraceGraph<G, V, N> {
     pub fn map<V2>(
         self,
         f: impl FnMut(&crate::half_edge::involution::Involution, NodeIndex, V) -> V2,
-    ) -> UnfoldedTraceGraph<G, V2, N::OpStorage<V2>> {
+    ) -> UnfoldedTraceGraph<G, V2, N> {
         UnfoldedTraceGraph {
             graph: self.graph.map(f, |_, _, _, _, e| e, |_, h| h),
             source_nodes: self.source_nodes,
@@ -80,15 +80,13 @@ impl<G, V, N: NodeStorageOps<NodeData = V>> UnfoldedTraceGraph<G, V, N> {
     }
 }
 
-impl<G, V, N: NodeStorageOps<NodeData = V>> AsRef<HedgeGraph<EdgeIndex, V, NoData, N>>
-    for UnfoldedTraceGraph<G, V, N>
-{
+impl<G, V, N: Topology> AsRef<HedgeGraph<EdgeIndex, V, NoData, N>> for UnfoldedTraceGraph<G, V, N> {
     fn as_ref(&self) -> &HedgeGraph<EdgeIndex, V, NoData, N> {
         &self.graph
     }
 }
 
-impl<G, V, N: NodeStorageOps<NodeData = V>> Deref for UnfoldedTraceGraph<G, V, N> {
+impl<G, V, N: Topology> Deref for UnfoldedTraceGraph<G, V, N> {
     type Target = HedgeGraph<EdgeIndex, V, NoData, N>;
 
     fn deref(&self) -> &Self::Target {
@@ -131,7 +129,7 @@ pub trait Key<K> {
 /// };
 ///
 /// struct ExampleGraph {
-///     graph: HedgeGraph<String, &'static str, NoData, NodeForest<&'static str>>,
+///     graph: HedgeGraph<String, &'static str, NoData, NodeForest>,
 /// }
 ///
 /// impl Independence<HiddenData<String, EdgeIndex>> for ExampleGraph {
@@ -148,11 +146,11 @@ pub trait Key<K> {
 ///     type EdgeData = String;
 ///     type HedgeData = NoData;
 ///     type NodeData = &'static str;
-///     type NodeStorage = NodeForest<&'static str>;
+///     type NodeTopology = NodeForest;
 ///
 ///     fn graph(
 ///         &self,
-///     ) -> &HedgeGraph<Self::EdgeData, Self::NodeData, Self::HedgeData, Self::NodeStorage> {
+///     ) -> &HedgeGraph<Self::EdgeData, Self::NodeData, Self::HedgeData, Self::NodeTopology> {
 ///         &self.graph
 ///     }
 ///
@@ -173,12 +171,12 @@ pub trait Key<K> {
 /// builder.add_edge(b, ab, "A".to_string(), true);
 ///
 /// let graph = ExampleGraph {
-///     graph: builder.build::<NodeForest<&'static str>>(),
+///     graph: builder.build::<NodeForest>(),
 /// };
-/// let unfolded = graph.trace_unfold::<NodeForest<usize>>(empty);
+/// let unfolded = graph.trace_unfold::<NodeForest>(empty);
 /// let labels: Vec<_> = unfolded.iter_nodes().map(|(_, _, key)| key.to_string()).collect();
 ///
-/// assert_eq!(unfolded.n_nodes(), 4);
+/// assert_eq!(unfolded.n_live(), 4);
 /// assert!(labels.iter().any(|label| label == "∅"));
 /// assert!(labels.iter().any(|label| label == "{A}"));
 /// assert!(labels.iter().any(|label| label == "{B}"));
@@ -190,12 +188,12 @@ where
 {
     type EdgeData: Ord + Hash;
     type NodeData;
-    type NodeStorage: NodeStorageOps<NodeData = Self::NodeData>;
+    type NodeTopology: Topology;
     type HedgeData;
 
     fn graph(
         &self,
-    ) -> &HedgeGraph<Self::EdgeData, Self::NodeData, Self::HedgeData, Self::NodeStorage>;
+    ) -> &HedgeGraph<Self::EdgeData, Self::NodeData, Self::HedgeData, Self::NodeTopology>;
 
     fn key(&self, e: EdgeIndex) -> Key;
 
@@ -217,7 +215,7 @@ where
     /// };
     ///
     /// struct FactoringGraph {
-    ///     graph: HedgeGraph<String, &'static str, NoData, NodeForest<&'static str>>,
+    ///     graph: HedgeGraph<String, &'static str, NoData, NodeForest>,
     /// }
     ///
     /// impl Independence<HiddenData<String, EdgeIndex>> for FactoringGraph {
@@ -234,11 +232,11 @@ where
     ///     type EdgeData = String;
     ///     type HedgeData = NoData;
     ///     type NodeData = &'static str;
-    ///     type NodeStorage = NodeForest<&'static str>;
+    ///     type NodeTopology = NodeForest;
     ///
     ///     fn graph(
     ///         &self,
-    ///     ) -> &HedgeGraph<Self::EdgeData, Self::NodeData, Self::HedgeData, Self::NodeStorage> {
+    ///     ) -> &HedgeGraph<Self::EdgeData, Self::NodeData, Self::HedgeData, Self::NodeTopology> {
     ///         &self.graph
     ///     }
     ///
@@ -276,12 +274,12 @@ where
     /// builder.add_edge(empty, ab, "AB".to_string(), true);
     ///
     /// let graph = FactoringGraph {
-    ///     graph: builder.build::<NodeForest<&'static str>>(),
+    ///     graph: builder.build::<NodeForest>(),
     /// };
-    /// let unfolded = graph.trace_unfold::<NodeForest<usize>>(empty);
+    /// let unfolded = graph.trace_unfold::<NodeForest>(empty);
     /// let labels: Vec<_> = unfolded.iter_nodes().map(|(_, _, key)| key.to_string()).collect();
     ///
-    /// assert_eq!(unfolded.n_nodes(), 3);
+    /// assert_eq!(unfolded.n_live(), 3);
     /// assert!(labels.iter().any(|label| label == "∅"));
     /// assert!(labels.iter().any(|label| label == "{AB}"));
     /// assert!(labels.iter().any(|label| label == "{A,B}"));
@@ -306,12 +304,11 @@ where
     }
 
     #[allow(clippy::type_complexity)]
-    fn trace_unfold_of<M: NodeStorageOps<NodeData = usize>, S: SubSetLike>(
+    fn trace_unfold_of<M: Topology, S: SubSetLike>(
         &self,
         subgraph: &S,
         start: NodeIndex,
-    ) -> UnfoldedTraceGraph<Self, TraceKey<Key, EdgeIndex>, M::OpStorage<TraceKey<Key, EdgeIndex>>>
-    {
+    ) -> UnfoldedTraceGraph<Self, TraceKey<Key, EdgeIndex>, M> {
         // `traces` is the canonical dedup table. Each unfolded node is identified by the pair
         // `(source_graph_node, canonical_trace_key)`, so paths that differ only by commuting
         // independent operations collapse to the same unfolded node.
@@ -443,11 +440,10 @@ where
     }
 
     #[allow(clippy::type_complexity)]
-    fn trace_unfold<M: NodeStorageOps<NodeData = usize>>(
+    fn trace_unfold<M: Topology>(
         &self,
         start: NodeIndex,
-    ) -> UnfoldedTraceGraph<Self, TraceKey<Key, EdgeIndex>, M::OpStorage<TraceKey<Key, EdgeIndex>>>
-    {
+    ) -> UnfoldedTraceGraph<Self, TraceKey<Key, EdgeIndex>, M> {
         self.trace_unfold_of::<M, _>(&self.graph().full_filter(), start)
     }
 }
@@ -531,7 +527,7 @@ fn collect_factor_branch_joins_from<Key: Ord>(
     }
 }
 
-impl<G, V, N: NodeStorageOps<NodeData = V>> UnfoldedTraceGraph<G, V, N> {
+impl<G, V, N: Topology> UnfoldedTraceGraph<G, V, N> {
     /// Returns all unfolded parents of `node` together with the source-graph edge realized by
     /// that branch.
     pub fn parents(&self, node: NodeIndex) -> impl Iterator<Item = (NodeIndex, EdgeIndex)> + '_ {
@@ -694,7 +690,7 @@ impl<G, V, N: NodeStorageOps<NodeData = V>> UnfoldedTraceGraph<G, V, N> {
     }
 }
 
-impl<G, V, N: NodeStorageOps<NodeData = V>> UnfoldedTraceGraph<G, V, N> {
+impl<G, V, N: Topology> UnfoldedTraceGraph<G, V, N> {
     /// Returns the closest reusable prefix node for the contribution of `target` at `node`.
     ///
     /// The traversal is specific to trace-unfolded graphs:
@@ -783,20 +779,20 @@ impl<G, V, N: NodeStorageOps<NodeData = V>> UnfoldedTraceGraph<G, V, N> {
     }
 }
 
-impl<E: Ord + Hash, H, V, N: NodeStorageOps<NodeData = V>, K: Eq + Hash + Clone + Ord>
-    TraceUnfold<K> for HedgeGraph<E, V, H, N>
+impl<E: Ord + Hash, H, V, N: Topology, K: Eq + Hash + Clone + Ord> TraceUnfold<K>
+    for HedgeGraph<E, V, H, N>
 where
     Self: Independence<HiddenData<K, EdgeIndex>>,
     Self: Key<K>,
 {
     type EdgeData = E;
     type NodeData = V;
-    type NodeStorage = N;
+    type NodeTopology = N;
     type HedgeData = H;
 
     fn graph(
         &self,
-    ) -> &HedgeGraph<Self::EdgeData, Self::NodeData, Self::HedgeData, Self::NodeStorage> {
+    ) -> &HedgeGraph<Self::EdgeData, Self::NodeData, Self::HedgeData, Self::NodeTopology> {
         self
     }
 
@@ -1421,7 +1417,7 @@ mod tests {
     }
 
     struct FrontierGraph {
-        graph: HedgeGraph<&'static str, &'static str, NoData, NodeForest<&'static str>>,
+        graph: HedgeGraph<&'static str, &'static str, NoData, NodeForest>,
         extra_independent_pairs: &'static [(&'static str, &'static str)],
     }
 
@@ -1444,12 +1440,12 @@ mod tests {
     impl TraceUnfold<&'static str> for FrontierGraph {
         type EdgeData = &'static str;
         type NodeData = &'static str;
-        type NodeStorage = NodeForest<&'static str>;
+        type NodeTopology = NodeForest;
         type HedgeData = NoData;
 
         fn graph(
             &self,
-        ) -> &HedgeGraph<Self::EdgeData, Self::NodeData, Self::HedgeData, Self::NodeStorage>
+        ) -> &HedgeGraph<Self::EdgeData, Self::NodeData, Self::HedgeData, Self::NodeTopology>
         {
             &self.graph
         }
@@ -1775,7 +1771,7 @@ mod tests {
         }
         "#);
 
-        let g = g.trace_unfold::<NodeForest<usize>>(NodeIndex(0));
+        let g = g.trace_unfold::<NodeForest>(NodeIndex(0));
         let mut output = String::new();
         g.dot_impl_fmt(
             &mut output,
@@ -1852,11 +1848,11 @@ mod tests {
         builder.add_edge(bd, abd, "A", true);
 
         let graph = FrontierGraph {
-            graph: builder.build::<NodeForest<&'static str>>(),
+            graph: builder.build::<NodeForest>(),
             extra_independent_pairs: &[("A", "B"), ("B", "A"), ("A", "D"), ("D", "A")],
         };
         println!("{}", graph.graph.dot_display(&graph.graph.full_filter()));
-        let unfolded = graph.trace_unfold::<NodeForest<usize>>(empty);
+        let unfolded = graph.trace_unfold::<NodeForest>(empty);
         let unfolded = unfolded.map(|_, _, key| key);
         println!(
             "{}",
@@ -1911,11 +1907,11 @@ mod tests {
         builder.add_edge(bd, abd, "A", true);
 
         let graph = FrontierGraph {
-            graph: builder.build::<NodeForest<&'static str>>(),
+            graph: builder.build::<NodeForest>(),
             extra_independent_pairs: &[("A", "B"), ("B", "A")],
         };
         println!("{}", graph.graph.dot_label(&graph.graph.full_filter()));
-        let unfolded = graph.trace_unfold::<NodeForest<usize>>(empty);
+        let unfolded = graph.trace_unfold::<NodeForest>(empty);
         println!(
             "{}",
             unfolded.graph.dot_label(&unfolded.graph.full_filter())
@@ -1968,7 +1964,7 @@ mod tests {
         builder.add_edge(bu, target, "F", true);
 
         let graph = FrontierGraph {
-            graph: builder.build::<NodeForest<&'static str>>(),
+            graph: builder.build::<NodeForest>(),
             extra_independent_pairs: &[
                 ("A", "B"),
                 ("B", "A"),
@@ -1980,7 +1976,7 @@ mod tests {
                 ("U", "F"),
             ],
         };
-        let unfolded = graph.trace_unfold::<NodeForest<usize>>(empty);
+        let unfolded = graph.trace_unfold::<NodeForest>(empty);
         let actual = unfolded
             .iter_nodes()
             .map(|(node, _, key)| {

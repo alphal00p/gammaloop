@@ -5,7 +5,7 @@ use std::{
 
 use crate::half_edge::{
     involution::{Hedge, HedgePair},
-    nodestore::NodeStorageOps,
+    nodestore::Topology,
     subgraph::{SuBitGraph, SubGraphLike},
     HedgeGraph,
 };
@@ -155,10 +155,7 @@ impl<T> DoubleEndedIterator for EmptyIter<T> {
 }
 
 impl SubGraphLike for Empty {
-    fn nedges<E, V, H, N: NodeStorageOps<NodeData = V>>(
-        &self,
-        _graph: &HedgeGraph<E, V, H, N>,
-    ) -> usize {
+    fn nedges<E, V, H, N: Topology>(&self, _graph: &HedgeGraph<E, V, H, N>) -> usize {
         self.n_included() / 2
     }
 }

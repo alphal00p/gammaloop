@@ -219,7 +219,7 @@ fn parse_chain_opaque_structure_matches_expanded_graph() {
         .unwrap();
 
     assert_eq!(parsed.state, NetworkState::SelfDualTensor);
-    assert_eq!(parsed.graph.n_nodes(), 1);
+    assert_eq!(parsed.graph.n_live(), 1);
     assert_eq!(parsed.graph.dangling_indices().len(), 2);
     let expanded = expr
         .parse_to_atom_net::<AbstractIndex>(&ParseSettings::default())
@@ -398,7 +398,7 @@ fn parse_trace_opaque_structure_matches_expanded_graph() {
         .unwrap();
 
     assert_eq!(parsed.state, NetworkState::SelfDualTensor);
-    assert_eq!(parsed.graph.n_nodes(), 1);
+    assert_eq!(parsed.graph.n_live(), 1);
     assert_eq!(parsed.graph.dangling_indices().len(), 3);
     let expanded = expr
         .parse_to_atom_net::<AbstractIndex>(&ParseSettings::default())
@@ -537,7 +537,7 @@ fn parse_slot_metric_as_tensor() {
         .unwrap();
 
     assert_eq!(parsed.state, NetworkState::SelfDualTensor);
-    assert_eq!(parsed.graph.n_nodes(), 1);
+    assert_eq!(parsed.graph.n_live(), 1);
     assert_eq!(parsed.graph.dangling_indices().len(), 2);
 }
 
@@ -681,7 +681,7 @@ fn inner_product_schoonschip_can_be_disabled() {
 
     assert!(parsed.state.is_scalar());
     assert!(parsed.graph.dangling_indices().is_empty());
-    assert_eq!(parsed.graph.n_nodes(), 1);
+    assert_eq!(parsed.graph.n_live(), 1);
 }
 
 #[test]
@@ -715,7 +715,7 @@ fn parse_schoonschipped_higher_rank_tensor_keeps_open_slots() {
         .unwrap();
 
     assert_eq!(parsed.state, NetworkState::SelfDualTensor);
-    assert!(parsed.graph.n_nodes() > 1);
+    assert!(parsed.graph.n_live() > 1);
     assert_eq!(parsed.graph.dangling_indices().len(), 2);
 }
 
@@ -734,7 +734,7 @@ fn schoonschip_only_expands_compact_vectors() {
         .unwrap();
 
     assert_eq!(parsed.state, NetworkState::SelfDualTensor);
-    assert!(parsed.graph.n_nodes() > 1);
+    assert!(parsed.graph.n_live() > 1);
     assert_eq!(parsed.graph.dangling_indices().len(), 2);
 }
 
@@ -749,7 +749,7 @@ fn representation_valued_scalar_metadata_is_not_a_compact_vector() {
         .unwrap();
 
     assert_eq!(parsed.state, NetworkState::SelfDualTensor);
-    assert_eq!(parsed.graph.n_nodes(), 1);
+    assert_eq!(parsed.graph.n_live(), 1);
     assert_eq!(parsed.graph.dangling_indices().len(), 1);
 }
 
@@ -1125,7 +1125,7 @@ fn precontracted_scalar_sources_keep_factorization_and_normalizer_calls() {
         assert_eq!(parsed.state, NetworkState::PureScalar);
         assert_eq!(parsed.store.scalar, vec![source]);
         assert!(parsed.store.tensors.is_empty());
-        assert_eq!(parsed.graph.n_nodes(), 1);
+        assert_eq!(parsed.graph.n_live(), 1);
         assert_eq!(CALLS.load(Ordering::SeqCst), 0);
     }
 }

@@ -2378,7 +2378,7 @@ impl PyFeynmanDiagram {
     }
 
     fn check_node(&self, node: usize) -> PyResult<NodeIndex> {
-        if node >= self.inner.underlying().n_nodes() {
+        if node >= self.inner.underlying().node_bound() {
             return Err(PyIndexError::new_err("vertex ID out of range"));
         }
         Ok(NodeIndex(node))

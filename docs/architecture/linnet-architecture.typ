@@ -11,8 +11,8 @@ This note covers the `linnet` Rust crate. `clinnet` is a separate command-line r
 == Boundaries
 
 Linnet is an in-process, generic graph library. Its main boundary is
-`HedgeGraph<E, V, H, S>` in `crates/linnet/src/half_edge.rs`: callers choose edge data `E`, node
-data `V`, per-half-edge data `H`, and a `NodeStorage` implementation `S`. The crate is divided
+`HedgeGraph<E, V, H, N>` in `crates/linnet/src/half_edge.rs`: callers choose edge data `E`, node
+data `V`, per-half-edge data `H`, and a `Topology` implementation `N`. The crate is divided
 into four layers:
 
 - `half_edge`: topology, typed indexes, graph mutation, subgraph views, traversal, cuts, cycles,
@@ -35,7 +35,8 @@ a supported graph-rendering pipeline; the implemented layout code is the feature
 
 - `hedge_data: HedgeVec<H>` has exactly one payload per half-edge;
 - `edge_store: SmartEdgeVec<E>` owns edge payloads and an `Involution<EdgeIndex>`;
-- `node_store: S` owns node payloads and maps each node to its incident half-edges.
+- `node_store: NodeStore<N, V>` pairs the topology `N`, which maps each node to its incident
+  half-edges, with one payload per node slot.
 
 `Hedge`, `EdgeIndex`, and `NodeIndex` are distinct typed wrappers around compact indexes. They
 are locations inside one graph, not durable identities. Operations that compact, extract, or
@@ -57,12 +58,27 @@ edge-pair inclusion semantics, so an edge crossing a subset boundary becomes a s
 than silently disappearing. Concrete forms such as `SuBitGraph`, `InternalSubGraph`,
 `HedgeNode`, `Cycle`, and `OrientedCut` add the invariants needed by particular algorithms.
 
-Nodes live in `NodeForest`, the only node store. Each node's crown is a ring of its half-edges
-that ascends from the smallest one in every state, so crown order never depends on history.
-Identification never renumbers: absorbed nodes keep their slot and payload until
-`forget_identification_history` compacts them away, so earlier `NodeIndex` values stay valid
-until then. `node_bound()` counts every slot and is the size for dense side tables; `n_live()`
-counts the nodes that were not absorbed.
+The `Topology` trait is the node contract: crowns, identification, compaction, partitions and
+permutations, with numbering fixed by the shared tail-fill kernel so implementations agree
+exactly. `NodeForest` is the topology in use: each node's crown is a ring of its half-edges that
+ascends from the smallest one in every state, so crown order never depends on history. A
+test-only reference topology states the same contract naively, numbering by the tail-fill rule
+written out rather than by the kernel, and a differential test runs random edits on both.
+`NodeStore` owns everything that does not depend on the topology: payloads, mapping, iteration,
+building and the contract check.
+
+Identification never renumbers: absorbed nodes keep their slot and payload until `compact`
+drops them, so earlier `NodeIndex` values stay valid until then. `node_bound()` counts every
+slot and is the size for dense side tables; `n_live()` counts the nodes that were not absorbed,
+and node iteration yields only those. Every operation that renumbers reports a typed `Remap`:
+`compact` maps absorbed nodes to their survivor, `delete_hedges`, `extract`, `extract_nodes` and
+`contract_subgraph` report where the remaining half-edges and nodes went, and `permute_hedges`
+and `permute_nodes` take bijections. Callers follow indices through these remaps instead of
+mirroring the kernel. Partitions and permutations require compacted identifications, and
+a `NodeForest` on its own can open nested checkpoints that roll back node additions,
+attachments, anchors and identifications; its renumberings refuse while one is open. A
+`NodeStore` lends its topology only by shared reference, so it never holds a checkpoint and its
+`compact` cannot fail.
 
 == Construction and data flow
 
@@ -72,9 +88,9 @@ Programmatic construction follows one path:
 HedgeGraphBuilder
   -> add nodes
   -> add paired or dangling edges to an Involution<E>
-  -> build NodeStorage from each node's incident half-edges
+  -> build the NodeStore topology from each half-edge's node
   -> SmartEdgeVec::new separates edge payloads from the involution
-  -> HedgeGraph<E, V, H, S>
+  -> HedgeGraph<E, V, H, N>
 ```
 
 Mutation methods update all three stores. Adding an edge extends half-edge data, edge storage,
@@ -82,10 +98,10 @@ and node incidence; `add_node` appends an empty-crown node in place. Neither ren
 nodes, edges or half-edges. Extraction and deletion partition the same half-edge set in each store.
 Complete-node extraction also moves explicitly selected empty-crown nodes, which have no
 half-edge representation in that partition.
-Joining extends the stores and then revalidates node incidence; sewing converts matched identity
-half-edges into pairs. `HedgeGraph::check` verifies involutivity and that every `EdgeIndex` points
-to the same `HedgePair` recorded by `SmartEdgeVec`. Node-store operations provide the additional
-partition and incidence checks.
+Joining appends the stores; sewing converts matched identity half-edges into pairs.
+`HedgeGraph::check` verifies involutivity and that every `EdgeIndex` points to the same
+`HedgePair` recorded by `SmartEdgeVec`. `NodeStore::check_nodes` checks the topology contract and
+one payload per node slot.
 
 Algorithms consume the graph together with an explicit subgraph when boundary behavior matters.
 Traversal and cycle/cut routines operate on those views. Directed algorithms take a

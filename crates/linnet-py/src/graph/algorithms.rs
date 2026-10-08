@@ -79,7 +79,7 @@ impl Encoding {
         half_edge_key: Option<&Py<PyAny>>,
     ) -> PyResult<Self> {
         let mut graph = Graph::new();
-        let mut nodes = vec![0; state.graph.n_nodes()];
+        let mut nodes = vec![0; state.graph.node_bound()];
         let mut edges = vec![0; state.graph.n_edges()];
         let mut hedges = vec![0; state.graph.n_hedges()];
         for (index, _, node) in state.graph.iter_nodes() {

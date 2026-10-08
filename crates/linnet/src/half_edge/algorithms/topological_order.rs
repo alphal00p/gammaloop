@@ -1,7 +1,7 @@
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
 use crate::half_edge::{
-    involution::Flow, nodestore::NodeStorageOps, subgraph::SubSetLike, HedgeGraph, NodeIndex,
+    involution::Flow, nodestore::Topology, subgraph::SubSetLike, HedgeGraph, NodeIndex,
 };
 use thiserror::Error;
 
@@ -17,7 +17,7 @@ pub enum TopoError {
     },
 }
 
-impl<E, V, H, N: NodeStorageOps<NodeData = V>> HedgeGraph<E, V, H, N> {
+impl<E, V, H, N: Topology> HedgeGraph<E, V, H, N> {
     /// Returns a topological ordering of the nodes touched by `subgraph`.
     ///
     /// An internal edge contributes only when both half-edges are selected.
