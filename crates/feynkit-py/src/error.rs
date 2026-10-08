@@ -58,7 +58,7 @@ define_exception!(
     CffError,
     FeynkitError,
     pyo3_stub_gen::TypeInfo::unqualified("FeynkitError"),
-    "Failure while constructing a Cross-Free Family representation.\n\nExamples\n--------\n>>> from symbolica import S, E\n>>> from symbolica.community import hepkit as hep\n>>> model = hep.Model.phi4()\n>>> process = model.process([\"phi\", \"phi\"], [\"phi\", \"phi\"])\n>>> result = process.generate_diagrams(loops=1)\n>>> diagram = result.diagrams[0]\n>>> try:\n...     diagram.build_cff(contracted_edges=[999999])\n... except hep.CffError as error:\n...     message = str(error)"
+    "Failure while constructing a Cross-Free Family representation.\n\nExamples\n--------\n>>> from symbolica import S, E\n>>> from symbolica.community import hepkit as hep\n>>> model = hep.Model.phi4()\n>>> process = model.process([\"phi\", \"phi\"], [\"phi\", \"phi\"])\n>>> result = process.generate_diagrams(loops=1)\n>>> diagram = result.diagrams[0]\n>>> try:\n...     diagram.cross_free_family(contracted_edges=[999999])\n... except hep.CffError as error:\n...     message = str(error)"
 );
 define_exception!(
     KinematicsError,

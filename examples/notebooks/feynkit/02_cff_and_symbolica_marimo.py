@@ -7,6 +7,8 @@
 # ]
 # ///
 
+# ruff: noqa: B018, PLR1711 -- marimo uses final expressions and explicit cell returns.
+
 import marimo
 
 __generated_with = "0.24.0"
@@ -43,8 +45,8 @@ def _(mo):
 
 @app.cell
 def _():
-    from symbolica.community.hepkit import Model
     from symbolica import S
+    from symbolica.community.hepkit import Model
 
     model = Model.phi3()
     return (Model, S, model)
@@ -109,26 +111,19 @@ def _(mo):
     ## Generate the CFF
 
     The diagram owns this conversion. For large graphs, set
-    `max_orientations` as an explicit combinatorial guard.
+    `max_orientations` as an explicit combinatorial guard. The returned
+    `hepkit.CrossFreeFamily` displays its orientation and family explorer automatically.
+    Click an arrowhead to reverse the displayed energy flow, choose a family
+    preview, then Shift-click surface factors to compare their graph regions.
+    These selections inspect the result; they do not restrict the full sum.
     """)
     return
 
 
 @app.cell
-def _(diagram, mo, table):
-    cff = diagram.build_cff(max_orientations=10_000)
-    _report = cff.report
-
-    table(
-        [
-            {
-                "candidate orientations": _report.candidate_orientations,
-                "acyclic orientations": _report.acyclic_orientations,
-                "unfolded terms": _report.unfolded_terms,
-                "interned surfaces": _report.interned_surfaces,
-            }
-        ]
-    )
+def _(diagram):
+    cff = diagram.cross_free_family(max_orientations=10_000)
+    cff
     return (cff,)
 
 
@@ -225,7 +220,7 @@ def _(mo):
     mo.md(r"""
     ## Advanced controls
 
-    Use `diagram.build_cff(fixed_orientations={edge_id: reversed},
+    Use `diagram.cross_free_family(fixed_orientations={edge_id: reversed},
     contracted_edges=[...], initial_state_edges=[...])` for constrained
     constructions. Here `False` keeps an edge's stored direction and `True`
     reverses it. Apply constraints only after inspecting the diagram's edge

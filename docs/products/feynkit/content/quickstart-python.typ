@@ -32,7 +32,7 @@ restored = fk.FeynmanDiagram.from_json(model, diagram.to_json())
 assert restored.name == diagram.name
 print(diagram.to_dot())
 
-cff = diagram.build_cff()
+cff = diagram.cross_free_family()
 print(cff.to_expression())
 ```
 

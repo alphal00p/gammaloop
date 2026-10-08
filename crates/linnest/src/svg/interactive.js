@@ -181,7 +181,7 @@
     const layout = () => {
       const width = Math.max(1, svg.getBoundingClientRect().width);
       layoutWidth = width;
-      const wide = width >= 600;
+      const wide = width >= 600 && targets.length > 0;
       const fixedHeight = Number(svg.dataset.linnetViewportHeight) || 0;
       const overlay = fixedHeight > 0;
       const panelWidth = overlay ? Math.min(300, width) : wide ? 260 : width;
@@ -405,7 +405,7 @@
       event.preventDefault();
     });
     svg.addEventListener('click', event => {
-      if (suppressClick) { suppressClick = false; return; }
+      if (suppressClick) { suppressClick = false; event.stopPropagation(); return; }
       const target = targetOf(event);
       if (target) { activate(target, event); highlightEdge(target, false); }
     });

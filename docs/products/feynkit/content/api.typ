@@ -50,7 +50,7 @@ amplitude, CFF, kinematics, and tensor-reduction failures distinguishable.
 
 == CFF coefficients and generalized cuts
 
-`diagram.subgraph(selection).build_cff()` constructs the selected region's CFF;
+`diagram.subgraph(selection).cross_free_family()` constructs the selected region's CFF;
 `CffGenerator.generate` accepts the diagram or its `Subgraph` view.
 `result.to_expression()` returns the same
 canonical surface placeholders used by GammaLoop. Set `expand_surfaces=True`

@@ -461,7 +461,7 @@ class CffError(FeynkitError):
     >>> result = process.generate_diagrams(loops=1)
     >>> diagram = result.diagrams[0]
     >>> try:
-    ...     diagram.build_cff(contracted_edges=[999999])
+    ...     diagram.cross_free_family(contracted_edges=[999999])
     ... except hep.CffError as error:
     ...     message = str(error)
     """
@@ -560,7 +560,7 @@ class CffGenerator:
         edge : int
             Diagram edge ID to classify as initial state.
         """
-    def generate(self, diagram: FeynmanDiagram) -> CffResult:
+    def generate(self, diagram: FeynmanDiagram) -> CrossFreeFamily:
         r"""
         Generate a Cross-Free Family representation for a diagram.
 
@@ -594,7 +594,7 @@ class CffOrientation:
     >>> process = model.process(["phi", "phi"], ["phi", "phi"])
     >>> result = process.generate_diagrams(loops=1)
     >>> diagram = result.diagrams[0]
-    >>> result = diagram.build_cff()
+    >>> result = diagram.cross_free_family()
     >>> orientation = result.orientations[0]
     >>> products = [[surface.symbol_name for surface in product]
     ...             for product in orientation.denominator_products()]
@@ -651,7 +651,7 @@ class CffReport:
     >>> process = model.process(["phi", "phi"], ["phi", "phi"])
     >>> result = process.generate_diagrams(loops=1)
     >>> diagram = result.diagrams[0]
-    >>> result = diagram.build_cff()
+    >>> result = diagram.cross_free_family()
     >>> report = result.report
     >>> assert report.candidate_orientations >= report.acyclic_orientations
     """
@@ -740,251 +740,12 @@ class CffReport:
         """
 
 @typing.final
-class CffResult:
-    r"""
-    The Cross-Free Family representation of a Feynman diagram.
-
-    A result bundles the energy-flow orientations, their denominator surfaces,
-    generation statistics, and conversion to a native Symbolica expression.
-
-    Examples
-    --------
-    >>> from symbolica import S, E
-    >>> from symbolica.community import hepkit as hep
-    >>> model = hep.Model.phi4()
-    >>> process = model.process(["phi", "phi"], ["phi", "phi"])
-    >>> result = process.generate_diagrams(loops=1)
-    >>> diagram = result.diagrams[0]
-    >>> result = diagram.build_cff()
-    >>> expression = result.to_expression()
-    >>> assert result.report.acyclic_orientations == len(result.orientations)
-    """
-    @property
-    def report(self) -> CffReport:
-        r"""
-        Return generation statistics for this CFF result.
-
-        Examples
-        --------
-        Using the setup in the ``CffResult`` class example:
-
-        >>> assert result.report.acyclic_orientations == len(result.orientations)
-        """
-    @property
-    def orientations(self) -> builtins.list[CffOrientation]:
-        r"""
-        Return the acyclic energy-flow orientations in this result.
-
-        Examples
-        --------
-        Using the setup in the ``CffResult`` class example:
-
-        >>> products = [item.denominator_products() for item in result.orientations]
-        """
-    @property
-    def surfaces(self) -> builtins.list[CffSurface]:
-        r"""
-        Return all unique energy and H surfaces in this result.
-
-        Examples
-        --------
-        Using the setup in the ``CffResult`` class example:
-
-        >>> energies = [result.surface_expression(surface) for surface in result.surfaces]
-        """
-    def to_expression(self, *, expand_surfaces: builtins.bool = False, normalized: builtins.bool = False) -> Expression:
-        r"""
-        Convert to the canonical eta/H denominator expression.
-
-        ``expand_surfaces`` substitutes on-shell/external energies. ``normalized``
-        additionally includes the -1/(2 E) factors and GammaLoop loop measure;
-        it implies ``expand_surfaces``. Numerators and global weights stay separate.
-
-        Examples
-        --------
-        Using the setup in the ``CffResult`` class example:
-
-        >>> result.to_expression(normalized=True)
-
-        Parameters
-        ----------
-        expand_surfaces : bool
-            Substitute canonical on-shell and external energies.
-        normalized : bool
-            Include the energy products and spatial loop measure.
-        """
-    def surface_expression(self, surface: CffSurface) -> Expression:
-        r"""
-        Expand one surface belonging to this result into canonical energy symbols.
-
-        Examples
-        --------
-        Using the setup in the ``CffResult`` class example:
-
-        >>> result.surface_expression(result.surfaces[0])
-
-        Parameters
-        ----------
-        surface : CffSurface
-            A surface obtained from this result.
-        """
-    def raised_surface_groups(self, edge_representatives: typing.Optional[typing.Mapping[builtins.int, builtins.int]] = None) -> builtins.list[CffSurfaceGroup]:
-        r"""
-        Group equivalent energy surfaces after identifying raised propagator edges.
-        ``edge_representatives`` maps repeated edges to their canonical edge.
-
-        Examples
-        --------
-        Using the setup in the ``CffResult`` class example:
-
-        >>> groups = result.raised_surface_groups({3: 2})
-        >>> [group.max_order for group in groups]
-
-        Parameters
-        ----------
-        edge_representatives : dict[int, int], optional
-            Repeated propagator edge IDs mapped to their canonical representative.
-        """
-    def pole_coefficients(self, group: CffSurfaceGroup) -> builtins.list[CffResult]:
-        r"""
-        Return coefficients of each inverse surface power, indexed from order one.
-        These are pole coefficients, before analytic residue derivatives.
-
-        Examples
-        --------
-        Using the setup in the ``CffResult`` class example:
-
-        >>> coefficients = result.pole_coefficients(result.raised_surface_groups()[0])
-        >>> [coefficient.to_expression() for coefficient in coefficients]
-
-        Parameters
-        ----------
-        group : CffSurfaceGroup
-            A raised-surface group belonging to this result.
-        """
-    def residue(self, group: CffSurfaceGroup, *, variable: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal], root: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal], surface: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal], coefficient: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal], normalized: builtins.bool = False, replacements: typing.Optional[typing.Sequence[tuple[Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal], Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal]]]] = None) -> Expression:
-        r"""
-        Evaluate all pole-order contributions to a residue in an explicit variable.
-        ``surface`` must be the group's energy surface expressed in that variable;
-        ``coefficient`` is the complete remaining coefficient, including any factors
-        whose derivatives must act. The supplied root is assumed to be a simple zero.
-
-        Examples
-        --------
-        Using the setup in ``CffResult``, illustrate a simple pole locally
-        parameterized by ``surface=t`` with constant remaining coefficient:
-
-        >>> t = S("t")
-        >>> group = result.raised_surface_groups()[0]
-        >>> residue = result.residue(group, variable=t, root=E("0"), surface=t, coefficient=E("1"))
-
-        Parameters
-        ----------
-        group : CffSurfaceGroup
-            A raised-surface group belonging to this result.
-        variable : Expression
-            Independent integration variable.
-        root : Expression
-            Simple zero of the surface, independent of variable.
-        surface : Expression
-            Energy surface expressed in the integration variable.
-        coefficient : Expression
-            Complete remaining coefficient to differentiate.
-        normalized : bool
-            Include the generated CFF normalization in the coefficient.
-        replacements : list[tuple[Expression, Expression]], optional
-            Route all energy dependence to the integration variable before differentiating.
-        Evaluate all pole-order contributions to a residue in an explicit variable.
-        ``surface`` must be the group's energy surface expressed in that variable;
-        ``coefficient`` is the complete remaining coefficient, including any factors
-        whose derivatives must act. The supplied root is assumed to be a simple zero.
-
-        Examples
-        --------
-        Using the setup in ``CffResult``, illustrate a simple pole locally
-        parameterized by ``surface=t`` with constant remaining coefficient:
-
-        >>> t = S("t")
-        >>> group = result.raised_surface_groups()[0]
-        >>> residue = result.residue(group, variable=t, root=E("0"), surface=t, coefficient=E("1"))
-
-        Parameters
-        ----------
-        group : CffSurfaceGroup
-            A raised-surface group belonging to this result.
-        variable : Expression
-            Independent integration variable.
-        root : Expression
-            Simple zero of the surface, independent of variable.
-        surface : Expression
-            Energy surface expressed in the integration variable.
-        coefficient : Expression
-            Complete remaining coefficient to differentiate.
-        normalized : bool
-            Include the generated CFF normalization in the coefficient.
-        replacements : list[tuple[Expression, Expression]], optional
-            Route all energy dependence to the integration variable before differentiating.
-        """
-    def __len__(self) -> builtins.int:
-        r"""
-        Return the number of unfolded denominator terms.
-
-        Examples
-        --------
-        Using the setup in the ``CffResult`` class example:
-
-        >>> denominator_term_count = len(result)
-        """
-    def __repr__(self) -> builtins.str:
-        r"""
-        Return a concise summary of the CFF expression and its surfaces.
-
-        Examples
-        --------
-        Using the setup in the ``CffResult`` class example:
-
-        >>> print(result)
-        """
-    def _repr_html_(self) -> builtins.str:
-        r"""
-        Render the CFF report and its native Symbolica expression as HTML.
-
-        The expression fragment comes from ``Expression._repr_html_`` so its
-        Symbolica formatting is preserved in notebook output.
-
-        Examples
-        --------
-        Using the setup in the ``CffResult`` class example:
-
-        >>> from IPython.display import display
-        >>> display(result)
-        """
-    def _repr_pretty_(self, pretty: typing.Any, cycle: builtins.bool) -> None:
-        r"""
-        Write a summary with Symbolica's native expression formatting.
-
-        Examples
-        --------
-        Using the setup in the ``CffResult`` class example:
-
-        >>> from IPython.lib.pretty import pretty
-        >>> text = pretty(result)
-
-        Parameters
-        ----------
-        pretty : object
-            The IPython pretty-printer object.
-        cycle : bool
-            Whether this object is part of a recursive formatting cycle.
-        """
-
-@typing.final
 class CffSurface:
     r"""
     A denominator surface appearing in a Cross-Free Family representation.
 
     Surfaces identify the combinations of on-shell energies that can occur in
-    loop-energy denominators.  They are obtained from a ``CffResult`` rather
+    loop-energy denominators.  They are obtained from a ``CrossFreeFamily`` rather
     than constructed directly.
 
     Examples
@@ -995,7 +756,7 @@ class CffSurface:
     >>> process = model.process(["phi", "phi"], ["phi", "phi"])
     >>> result = process.generate_diagrams(loops=1)
     >>> diagram = result.diagrams[0]
-    >>> result = diagram.build_cff()
+    >>> result = diagram.cross_free_family()
     >>> surface = result.surfaces[0]
     >>> energy_combination = result.surface_expression(surface)
     """
@@ -1108,7 +869,7 @@ class CffSurfaceGroup:
     >>> process = model.process(["phi", "phi"], ["phi", "phi"])
     >>> result = process.generate_diagrams(loops=1)
     >>> diagram = result.diagrams[0]
-    >>> result = diagram.build_cff()
+    >>> result = diagram.cross_free_family()
     >>> group = result.raised_surface_groups()[0]
     >>> coefficients = result.pole_coefficients(group)
     """
@@ -1361,6 +1122,259 @@ class Coupling:
             IPython pretty printer receiving the text.
         cycle : bool
             Whether the object occurs recursively in the current display.
+        """
+
+@typing.final
+class CrossFreeFamily:
+    r"""
+    The Cross-Free Family representation of a Feynman diagram.
+
+    A result bundles the energy-flow orientations, their denominator surfaces,
+    generation statistics, and conversion to a native Symbolica expression.
+
+    Examples
+    --------
+    >>> from symbolica import S, E
+    >>> from symbolica.community import hepkit as hep
+    >>> model = hep.Model.phi4()
+    >>> process = model.process(["phi", "phi"], ["phi", "phi"])
+    >>> result = process.generate_diagrams(loops=1)
+    >>> diagram = result.diagrams[0]
+    >>> result = diagram.cross_free_family()
+    >>> expression = result.to_expression()
+    >>> assert result.report.acyclic_orientations == len(result.orientations)
+    """
+    @property
+    def report(self) -> CffReport:
+        r"""
+        Return generation statistics for this CFF result.
+
+        Examples
+        --------
+        Using the setup in the ``CrossFreeFamily`` class example:
+
+        >>> assert result.report.acyclic_orientations == len(result.orientations)
+        """
+    @property
+    def orientations(self) -> builtins.list[CffOrientation]:
+        r"""
+        Return the acyclic energy-flow orientations in this result.
+
+        Examples
+        --------
+        Using the setup in the ``CrossFreeFamily`` class example:
+
+        >>> products = [item.denominator_products() for item in result.orientations]
+        """
+    @property
+    def surfaces(self) -> builtins.list[CffSurface]:
+        r"""
+        Return all unique energy and H surfaces in this result.
+
+        Examples
+        --------
+        Using the setup in the ``CrossFreeFamily`` class example:
+
+        >>> energies = [result.surface_expression(surface) for surface in result.surfaces]
+        """
+    def to_expression(self, *, expand_surfaces: builtins.bool = False, normalized: builtins.bool = False) -> Expression:
+        r"""
+        Convert to the canonical eta/H denominator expression.
+
+        ``expand_surfaces`` substitutes on-shell/external energies. ``normalized``
+        additionally includes the -1/(2 E) factors and GammaLoop loop measure;
+        it implies ``expand_surfaces``. Numerators and global weights stay separate.
+
+        Examples
+        --------
+        Using the setup in the ``CrossFreeFamily`` class example:
+
+        >>> result.to_expression(normalized=True)
+
+        Parameters
+        ----------
+        expand_surfaces : bool
+            Substitute canonical on-shell and external energies.
+        normalized : bool
+            Include the energy products and spatial loop measure.
+        """
+    def surface_expression(self, surface: CffSurface) -> Expression:
+        r"""
+        Expand one surface belonging to this result into canonical energy symbols.
+
+        Examples
+        --------
+        Using the setup in the ``CrossFreeFamily`` class example:
+
+        >>> result.surface_expression(result.surfaces[0])
+
+        Parameters
+        ----------
+        surface : CffSurface
+            A surface obtained from this result.
+        """
+    def raised_surface_groups(self, edge_representatives: typing.Optional[typing.Mapping[builtins.int, builtins.int]] = None) -> builtins.list[CffSurfaceGroup]:
+        r"""
+        Group equivalent energy surfaces after identifying raised propagator edges.
+        ``edge_representatives`` maps repeated edges to their canonical edge.
+
+        Examples
+        --------
+        Using the setup in the ``CrossFreeFamily`` class example:
+
+        >>> groups = result.raised_surface_groups({3: 2})
+        >>> [group.max_order for group in groups]
+
+        Parameters
+        ----------
+        edge_representatives : dict[int, int], optional
+            Repeated propagator edge IDs mapped to their canonical representative.
+        """
+    def pole_coefficients(self, group: CffSurfaceGroup) -> builtins.list[CrossFreeFamily]:
+        r"""
+        Return coefficients of each inverse surface power, indexed from order one.
+        These are pole coefficients, before analytic residue derivatives.
+
+        Examples
+        --------
+        Using the setup in the ``CrossFreeFamily`` class example:
+
+        >>> coefficients = result.pole_coefficients(result.raised_surface_groups()[0])
+        >>> [coefficient.to_expression() for coefficient in coefficients]
+
+        Parameters
+        ----------
+        group : CffSurfaceGroup
+            A raised-surface group belonging to this result.
+        """
+    def residue(self, group: CffSurfaceGroup, *, variable: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal], root: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal], surface: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal], coefficient: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal], normalized: builtins.bool = False, replacements: typing.Optional[typing.Sequence[tuple[Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal], Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal]]]] = None) -> Expression:
+        r"""
+        Evaluate all pole-order contributions to a residue in an explicit variable.
+        ``surface`` must be the group's energy surface expressed in that variable;
+        ``coefficient`` is the complete remaining coefficient, including any factors
+        whose derivatives must act. The supplied root is assumed to be a simple zero.
+
+        Examples
+        --------
+        Using the setup in ``CrossFreeFamily``, illustrate a simple pole locally
+        parameterized by ``surface=t`` with constant remaining coefficient:
+
+        >>> t = S("t")
+        >>> group = result.raised_surface_groups()[0]
+        >>> residue = result.residue(group, variable=t, root=E("0"), surface=t, coefficient=E("1"))
+
+        Parameters
+        ----------
+        group : CffSurfaceGroup
+            A raised-surface group belonging to this result.
+        variable : Expression
+            Independent integration variable.
+        root : Expression
+            Simple zero of the surface, independent of variable.
+        surface : Expression
+            Energy surface expressed in the integration variable.
+        coefficient : Expression
+            Complete remaining coefficient to differentiate.
+        normalized : bool
+            Include the generated CFF normalization in the coefficient.
+        replacements : list[tuple[Expression, Expression]], optional
+            Route all energy dependence to the integration variable before differentiating.
+        Evaluate all pole-order contributions to a residue in an explicit variable.
+        ``surface`` must be the group's energy surface expressed in that variable;
+        ``coefficient`` is the complete remaining coefficient, including any factors
+        whose derivatives must act. The supplied root is assumed to be a simple zero.
+
+        Examples
+        --------
+        Using the setup in ``CrossFreeFamily``, illustrate a simple pole locally
+        parameterized by ``surface=t`` with constant remaining coefficient:
+
+        >>> t = S("t")
+        >>> group = result.raised_surface_groups()[0]
+        >>> residue = result.residue(group, variable=t, root=E("0"), surface=t, coefficient=E("1"))
+
+        Parameters
+        ----------
+        group : CffSurfaceGroup
+            A raised-surface group belonging to this result.
+        variable : Expression
+            Independent integration variable.
+        root : Expression
+            Simple zero of the surface, independent of variable.
+        surface : Expression
+            Energy surface expressed in the integration variable.
+        coefficient : Expression
+            Complete remaining coefficient to differentiate.
+        normalized : bool
+            Include the generated CFF normalization in the coefficient.
+        replacements : list[tuple[Expression, Expression]], optional
+            Route all energy dependence to the integration variable before differentiating.
+        """
+    def __len__(self) -> builtins.int:
+        r"""
+        Return the number of unfolded denominator terms.
+
+        Examples
+        --------
+        Using the setup in the ``CrossFreeFamily`` class example:
+
+        >>> denominator_term_count = len(result)
+        """
+    def __repr__(self) -> builtins.str:
+        r"""
+        Return a concise summary of the CFF expression and its surfaces.
+
+        Examples
+        --------
+        Using the setup in the ``CrossFreeFamily`` class example:
+
+        >>> print(result)
+        """
+    def _repr_html_(self) -> builtins.str:
+        r"""
+        Explore orientations, factored families and surface regions on the native graph.
+
+        Arrowhead clicks select another retained orientation; they never change the result.
+        Shift-click surface factors to inspect several circlings together. The displayed
+        denominator sum excludes numerators, energy prefactors and the spatial measure.
+
+        Examples
+        --------
+        Using the setup in the ``CrossFreeFamily`` class example:
+
+        >>> from IPython.display import display
+        >>> display(result)
+        """
+    def _display_(self) -> typing.Any:
+        r"""
+        Return Marimo's interactive presentation in a script-enabled iframe.
+
+        Marimo uses this hook automatically when displaying the result.
+        Other notebook frontends use ``_repr_html_`` without requiring Marimo.
+
+        Examples
+        --------
+        Using the setup in the ``CrossFreeFamily`` class example:
+
+        >>> presentation = result._display_()
+        """
+    def _repr_pretty_(self, pretty: typing.Any, cycle: builtins.bool) -> None:
+        r"""
+        Write a summary with Symbolica's native expression formatting.
+
+        Examples
+        --------
+        Using the setup in the ``CrossFreeFamily`` class example:
+
+        >>> from IPython.lib.pretty import pretty
+        >>> text = pretty(result)
+
+        Parameters
+        ----------
+        pretty : object
+            The IPython pretty-printer object.
+        cycle : bool
+            Whether this object is part of a recursive formatting cycle.
         """
 
 @typing.final
@@ -3450,7 +3464,7 @@ class FeynmanDiagram:
 
         >>> diagram.validate()
         """
-    def build_cff(self, *, max_orientations: typing.Optional[builtins.int] = None, fixed_orientations: typing.Optional[typing.Mapping[builtins.int, builtins.bool]] = None, contracted_edges: typing.Optional[typing.Sequence[builtins.int]] = None, initial_state_edges: typing.Optional[typing.Sequence[builtins.int]] = None) -> CffResult:
+    def cross_free_family(self, *, max_orientations: typing.Optional[builtins.int] = None, fixed_orientations: typing.Optional[typing.Mapping[builtins.int, builtins.bool]] = None, contracted_edges: typing.Optional[typing.Sequence[builtins.int]] = None, initial_state_edges: typing.Optional[typing.Sequence[builtins.int]] = None) -> CrossFreeFamily:
         r"""
         Build the diagram's Cross-Free Family representation.
 
@@ -3464,7 +3478,7 @@ class FeynmanDiagram:
 
         Construct and display the causal denominators of a one-loop diagram:
 
-        >>> cff = diagram.build_cff(max_orientations=10_000)
+        >>> cff = diagram.cross_free_family(max_orientations=10_000)
         >>> cff.to_expression()  # native Symbolica display in a notebook
 
         Parameters

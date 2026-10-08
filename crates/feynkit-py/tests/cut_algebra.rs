@@ -58,8 +58,8 @@ except fk.CffError:
     pass
 else:
     raise AssertionError('dependent on-shell energy accepted')
-result = diagram.build_cff()
-other = diagram.build_cff()
+result = diagram.cross_free_family()
+other = diagram.cross_free_family()
 surface = result.surfaces[0]
 assert result.to_expression() != result.to_expression(expand_surfaces=True)
 assert result.to_expression(normalized=True) != result.to_expression(expand_surfaces=True)

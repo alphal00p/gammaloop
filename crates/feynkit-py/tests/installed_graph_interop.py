@@ -5,14 +5,13 @@ The public API is provided by ``symbolica.community.hepkit``.
 
 import gc
 import json
-import xml.etree.ElementTree as ET
 import weakref
+import xml.etree.ElementTree as ET
 from pathlib import Path
 
 from symbolica.community import graph as linnet
-from symbolica.community.tensor import TensorExpression
-
 from symbolica.community import hepkit as fk
+from symbolica.community.tensor import TensorExpression
 
 model = fk.Model(Path(__file__).parent / "fixtures/scalars_2p_3p.json")
 diagrams = (
@@ -85,7 +84,10 @@ assert len(full.connected_components()) == 1
 assert full.momentum_basis().loop_edges
 assert full.loop_momentum_bases(limit=1)
 assert len(diagram.loop_momentum_basis.momentum_replacements()) == len(diagram.edges)
-assert full.build_cff().to_expression() == diagram.build_cff().to_expression()
+assert (
+    full.cross_free_family().to_expression()
+    == diagram.cross_free_family().to_expression()
+)
 
 cycles, covered = internal.cycle_basis()
 assert len(cycles) == diagram.loop_count

@@ -146,7 +146,7 @@ to import a canonical Linnet selection; foreign or stale selections raise an err
 For a standalone drawing of the excised topology, display `region.excise()`.
 
 `diagram.numerator_expression()` returns Spenso’s `TensorExpression`, retaining the tensor interface
-and index display hooks. `diagram.build_cff().to_expression()` returns a native Symbolica
+and index display hooks. `diagram.cross_free_family().to_expression()` returns a native Symbolica
 expression. Displaying those algebraic results is separate from rendering a graph. Use
 #product-link("spenso", page: "guides/python/", label: "Spenso's display tools") for tensor-aware
 algebra and #product-link("linnet", page: "guides/python-rendering/", label: "Linnet's rendering guide")

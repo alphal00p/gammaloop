@@ -5,9 +5,8 @@ import inspect
 from pathlib import Path
 
 from symbolica.community import graph as linnet
-from symbolica.community.tensor import TensorExpression
-
 from symbolica.community import hepkit as fk
+from symbolica.community.tensor import TensorExpression
 
 model = fk.Model(Path(__file__).parent / "fixtures/scalars_2p_3p.json")
 diagram = next(
@@ -131,7 +130,7 @@ for name in (
     "superficial_degree_of_divergence",
     "uv_expansion",
     "uv_counterterm",
-    "build_cff",
+    "cross_free_family",
     "tensor_reduce",
     "reduce_tensor_numerator",
     "connected_components",
