@@ -903,9 +903,11 @@ name = "clinnet"
 version = "0.1.8"
 dependencies = [
  "blake3",
+ "ciborium",
  "clap",
  "eyre",
  "indicatif",
+ "kurvst",
  "parking_lot",
  "pathdiff",
  "rayon",

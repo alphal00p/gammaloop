@@ -187,7 +187,7 @@ These observations motivate numeric preparation rather than merely replacing
 the painter. P0 must record host, toolchain, cache state, timing boundaries, and
 paired baseline comparisons before using these figures as performance gates.
 
-== Delivery phases: P0 baseline captured, P1–P7 NOT IMPLEMENTED
+== Delivery phases: P0 baseline captured, P1 implemented, P2–P7 NOT IMPLEMENTED
 
 Each phase is its own change after the reconciled feynkit base, with corpus
 timings recorded. S/M/L are planning sizes, not completion indicators.
@@ -206,7 +206,7 @@ now recorded in `tests/drawing-bench/`. The captured three-round baseline is
 15.010 s on M4 Pro / Typst 0.15.1, with 24/24 reference PNGs byte-identical
 to the supplied snapshot at 150 ppi. Source, package, host, and raw timing
 identities accompany the images. Numerical tolerances for future arrow/label
-changes still require explicit review; no arrowhead implementation is claimed.
+changes still require explicit review; renderer migration is not claimed.
 
 === P1 — L: shared geometry engine, no renderer migration
 
@@ -217,6 +217,14 @@ No user-visible renderer migration yet. Compare straight shapes and end
 distances with tiptoe; test bend/shorten including short last segments,
 painted-footprint coverage, shaft/back contact, zero-length paths, and near-end
 placement.
+
+P1 now provides the shared native/Wasm engine and strict data-only Typst
+constructors for thirteen shapes and composites. Its 93 native tests and
+native/Wasm parity checks pass. The approved parity tolerance is
+`1e-12 * max(1, abs(actual), abs(expected))` for geometry coordinates and
+lengths only; structure, styles, indices, and other data remain exact.
+Candidate results remain independent, while selected results share one
+authoritative painted shaft per carrier. No renderer has migrated yet.
 
 === P2 — M: native and Python
 

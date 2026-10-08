@@ -105,6 +105,68 @@
   - fitting Kurbo offset/parallel paths,
   - converting returned path geometry to CeTZ drawing commands.
 
+  == Mark specifications
+
+  `kurvst.mark` provides named-only `triangle`, `straight`, `stealth`, `round`,
+  `tikz`, `barb`, `hooks`, `bar`, `bracket`, `circle`, `square`, `diamond`,
+  and `rays` constructors, plus positional `combine`. They return plain dictionaries tagged
+  `kind: "kurvst-mark"`; they do not draw anything. Shape vocabulary and
+  parameter definitions follow MIT-licensed tiptoe 0.4. No renderer migration
+  is implied by this data API.
+
+  Dimensions `length` and `width` accept fixed lengths, ratios of line thickness,
+  or mixed values such as `3pt + 450%`. `inset` and `shorten` are ratios;
+  `shorten: 100%` is supported. `arc` and `phase` are angles, `rev` is boolean,
+  `n` is a positive integer, `align` is `"center"` or `"end"`, and `fit` is
+  `"chord"` (the engine default) or `"bend"`. Constructors omit defaults so the
+  shared engine owns geometry. Deliberate differences from tiptoe 0.4 are
+  geometry-consistent reversed triangle/stealth contact and rejection of the
+  unused `tikz.arc` option. Normal stealth shortening remains
+  `length - inset * length`; the reversed auto-filled half-length shortcut is
+  replaced by contact derived from the actual geometry.
+
+  Available shape fields:
+  - triangle, stealth, round: length, width, inset, fill, stroke, rev;
+  - straight: length, width, stroke, rev;
+  - tikz: width, stroke (deliberately no arc);
+  - barb, hooks: width, arc, stroke, rev;
+  - bar: width, stroke, align;
+  - bracket: length, width, stroke, rev;
+  - circle, square, diamond: length, width, fill, stroke, align;
+  - rays: length, n, phase, stroke, align.
+
+  Each shape also accepts fit and shorten. `combine(mark.bar(), 2pt, mark.bar(),
+  fit: "bend")` accepts positional
+  nested mark dictionaries and fixed/ratio/mixed gaps, with one fit and shorten
+  on the composite; children must not set either. CeTZ symbol, scale, anchor,
+  and shorten-to options are rejected rather than silently ignored.
+
+  Explicit auto width, rays phase, and bracket length are omitted so Rust applies
+  defaults. Fill and stroke accept paint, none, auto, or booleans, not content,
+  callbacks, or arbitrary dictionaries. Mark stroke thickness must remain auto:
+  set line thickness on the line, not independently on the mark.
+
+  `kurvst.mark.prepare(spec)` returns
+  CBOR-safe engine data: it removes kind, converts dimensions to
+  `(points: ..., ratio: ...)`, ratios to fractions, and angles to radians.
+  Composite parts become recursive specs or `(gap: (points: ..., ratio: ...))`.
+  Context belongs to each batch template, not to preparation. It has positive
+  units-per-pt and finite nonnegative line-thickness in drawing units; Rust
+  resolves sizes as `points * units_per_pt + ratio * line_thickness`.
+  Head stroke objects are paint-only: explicit thickness, cap, join, dash, and
+  miter-limit modifiers are rejected rather than silently discarded.
+
+  `kurvst.mark.geometry(templates, carriers, placements, mode: "candidates")`
+  runs one native batch. Each template has `mark` and `context` fields; carriers
+  are Kurvst paths, and placements refer to template/carrier indices with
+  start/end/ratio/distance stations, signed shifts, and forward/backward direction.
+  Candidate mode returns independent candidate geometry. In `"selected"` mode,
+  paint the returned head-only `marks` plus one shared `shafts` entry per carrier,
+  rather than repainting an independent shaft beneath each selected head.
+  Paint becomes boolean enabled flags (`none` disables); auto is omitted so
+  shared defaults apply. Actual paint remains in the original dictionary for
+  the caller's drawing style, never in the numeric payload.
+
   == Choose an import path
 
   Kurvst is currently a bundled source package, not a Typst Universe package. A
