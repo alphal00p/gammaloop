@@ -1,5 +1,4 @@
 use std::collections::BTreeMap;
-use std::env;
 use std::ffi::OsStr;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -55,6 +54,7 @@ struct EmbeddedKurvstPackage;
 
 #[derive(RustEmbed)]
 #[folder = "$CARGO_MANIFEST_DIR/vendor/typst-packages"]
+#[include = "preview/**"]
 struct EmbeddedTypstPackages;
 
 fn element_drawing<'py>(
@@ -470,9 +470,6 @@ fn write_embedded_assets<E: RustEmbed>(root: &Path) -> PyResult<()> {
                 ))
             })?;
         }
-        if target.exists() {
-            fs::remove_file(&target).map_err(|error| PyRuntimeError::new_err(error.to_string()))?;
-        }
         fs::write(&target, contents.data.as_ref()).map_err(|error| {
             PyRuntimeError::new_err(format!(
                 "failed to stage render asset {}: {error}",
@@ -490,45 +487,6 @@ fn canonicalize(path: &Path, description: &str) -> PyResult<PathBuf> {
             path.display()
         ))
     })
-}
-
-fn copy_directory(source: &Path, target: &Path, description: &str) -> PyResult<()> {
-    fs::create_dir_all(target).map_err(|error| {
-        PyRuntimeError::new_err(format!(
-            "failed to create staged {description} {}: {error}",
-            target.display()
-        ))
-    })?;
-    for entry in WalkDir::new(source)
-        .follow_links(true)
-        .into_iter()
-        .filter_entry(|entry| !entry.path().starts_with(target))
-    {
-        let entry = entry.map_err(|error| PyRuntimeError::new_err(error.to_string()))?;
-        let relative = entry.path().strip_prefix(source).map_err(|error| {
-            PyRuntimeError::new_err(format!(
-                "failed to stage {description} {}: {error}",
-                entry.path().display()
-            ))
-        })?;
-        let destination = target.join(relative);
-        if entry.file_type().is_dir() {
-            fs::create_dir_all(&destination).map_err(|error| {
-                PyRuntimeError::new_err(format!(
-                    "failed to create staged {description} {}: {error}",
-                    destination.display()
-                ))
-            })?;
-        } else if entry.file_type().is_file() {
-            fs::copy(entry.path(), &destination).map_err(|error| {
-                PyRuntimeError::new_err(format!(
-                    "failed to stage {description} {}: {error}",
-                    entry.path().display()
-                ))
-            })?;
-        }
-    }
-    Ok(())
 }
 
 fn collect_user_sources(
@@ -673,39 +631,24 @@ pub struct PreparedRender {
     _build_dir: tempfile::TempDir,
     files: BTreeMap<String, Vec<u8>>,
     root: PathBuf,
-    package_store: PathBuf,
+    /// Package directories in lookup order: the bundled MiTeX and oxifmt, then
+    /// the Typst CLI's local package path and cache, which supply CeTZ.
+    packages: Vec<PathBuf>,
 }
 
 impl PreparedRender {
     /// Prepare a virtual Typst project with bundled Linnest, Kurvst, and packages.
     /// Sources must include `main.typ` before compilation; binary assets are staged on disk.
+    /// Other packages, CeTZ among them, resolve in the local Typst package
+    /// directories without being copied or downloaded.
     pub fn from_sources(sources: BTreeMap<String, Vec<u8>>) -> PyResult<Self> {
         let build_dir =
             tempfile::tempdir().map_err(|error| PyRuntimeError::new_err(error.to_string()))?;
         let build_root = canonicalize(build_dir.path(), "render directory")?;
-        fs::create_dir_all(build_root.join(TYPST_PACKAGES_DIR))
-            .map_err(|error| PyRuntimeError::new_err(error.to_string()))?;
-        let package_store = canonicalize(
-            &build_root.join(TYPST_PACKAGES_DIR),
-            "bundled Typst package store",
-        )?;
-        for (variable, description) in [
-            ("TYPST_PACKAGE_CACHE_PATH", "Typst package cache"),
-            ("TYPST_PACKAGE_PATH", "Typst package path"),
-        ] {
-            if let Some(path) = env::var_os(variable) {
-                let path = Path::new(&path);
-                if variable == "TYPST_PACKAGE_CACHE_PATH" && !path.exists() {
-                    continue;
-                }
-                let path = canonicalize(path, description)?;
-                copy_directory(&path, &package_store, description)?;
-            }
-        }
-
-        // Bundled packages include required patches; user caches may add packages,
-        // but cannot replace these compiler inputs with an incompatible release.
-        write_embedded_assets::<EmbeddedTypstPackages>(&package_store)?;
+        let bundled = build_root.join(TYPST_PACKAGES_DIR);
+        write_embedded_assets::<EmbeddedTypstPackages>(&bundled)?;
+        let mut packages = vec![bundled];
+        packages.extend(typst_renderer::Document::local_package_dirs());
         let mut files = BTreeMap::new();
         insert_embedded_assets::<EmbeddedLinnestPackage>(
             &mut files,
@@ -724,7 +667,7 @@ impl PreparedRender {
             _build_dir: build_dir,
             files,
             root: build_root,
-            package_store,
+            packages,
         })
     }
 
@@ -836,7 +779,7 @@ impl PreparedRender {
 
     /// Compile with the embedded Rust compiler and offline package store.
     pub fn compile(&self, format: &str) -> PyResult<Vec<Vec<u8>>> {
-        typst_renderer::Document::new(&self.root, &self.package_store, &self.files)
+        typst_renderer::Document::new(&self.root, &self.packages, &self.files)
             .compile(format)
             .map_err(PyRuntimeError::new_err)
     }
@@ -1028,12 +971,18 @@ mod tests {
     }
 
     #[test]
-    fn extracts_typst_packages_for_offline_rendering() {
+    fn bundled_packages_precede_the_local_package_directories() {
         let prepared = PreparedRender::from_sources(BTreeMap::new()).unwrap();
-        assert!(prepared
-            .package_store
-            .join("preview/cetz/0.5.1/typst.toml")
-            .is_file());
+        let (bundled, local) = prepared.packages.split_first().unwrap();
+        for package in ["preview/mitex/0.2.6", "preview/oxifmt/1.0.0"] {
+            assert!(
+                bundled.join(package).join("typst.toml").is_file(),
+                "{package}"
+            );
+        }
+        // CeTZ is never bundled; it resolves in the local Typst package directories.
+        assert!(!bundled.join("preview/cetz").exists());
+        assert_eq!(local, typst_renderer::Document::local_package_dirs());
     }
 
     #[test]

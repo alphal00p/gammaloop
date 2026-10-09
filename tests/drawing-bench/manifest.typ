@@ -1,11 +1,16 @@
 = Immutable fixture manifest
 
-Archive: `fixtures.tar` (USTAR, sorted groups: cases, references, licenses;
-regular files only, mode 0644, uid/gid/mtime zero, empty owner names).
-SHA256: `8f5cf9c5ba70d466f69b800882552aa0b41171efd96cd8fe73b05fb585a99e1f`.
-The archive contains only 24 inputs, two supplied SVG hash lists and four
-license files, not frozen sources or packages. `run.py --dry-run` performs
-deterministic extraction and writes readable per-file hashes to metadata.
+Archive: `fixtures.tar` (USTAR, sorted groups: cases, references; regular
+files only, mode 0644, uid/gid/mtime zero, empty owner names).
+SHA256: `324fe89dfb3950960b48455f4d02cee228e91883ccd55b1fb08b5f31af6adea6`.
+The archive contains only 24 inputs and two supplied SVG hash lists, not frozen
+sources or packages. `run.py --dry-run` performs deterministic extraction and
+writes readable per-file hashes to metadata. The supplied archive (SHA256
+`8f5cf9c5ba70d466f69b800882552aa0b41171efd96cd8fe73b05fb585a99e1f`, recorded
+in the reference metadata) also held four license files under `tree/`: copies
+of the Linnest/Kurvst licenses, Linnest's clarabel notice and the notice of the
+since removed ec-layout plugin, none of whose code it contains. Its other 26
+members are byte-identical to this archive's.
 
 Reconciled baseline archive: `references.tar` (USTAR, regular files only,
 mode 0644, uid/gid/mtime zero). SHA256:

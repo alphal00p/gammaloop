@@ -514,6 +514,8 @@
       "crates/kurvst/typst/tests/mark-contract.typ"
       "crates/kurvst/typst/tests/mark-geometry.typ"
       "crates/linnest/typst/examples/map-style.typ"
+      "crates/linnest/typst/tests/collision-lines.typ"
+      "crates/linnest/typst/tests/identity-targets.typ"
       "tests/resources/graphs/epemttbar.dot"
     ];
     # Unit and integration tests embed these graph fixtures and snapshots with include_str!.
@@ -560,7 +562,10 @@
     "alphal00p-docs-catalogs" = [
       "docs/api/python"
     ];
-    clinnet = ["docs/assets/typst/portal-graphs/edge-style.typ"];
+    clinnet = [
+      "docs/assets/typst/portal-graphs/edge-style.typ"
+      "docs/assets/typst/theme.typ"
+    ];
     "gammaloop-api" = [
       "tests/resources/graphs/scalar_bubble.dot"
     ];
@@ -2506,9 +2511,17 @@
       '';
     });
 
-  nextestPackageGroups = map (target: target // lib.optionalAttrs (target.name == "docs") {
-    runtimeTools = [docsTypst nextestPython pkgs.git pkgs.jujutsu];
-  }) ci.groups;
+  nextestPackageGroups = map (target:
+    target
+    // lib.optionalAttrs (target.name == "docs") {
+      runtimeTools = [docsTypst nextestPython pkgs.git pkgs.jujutsu];
+    }
+    // lib.optionalAttrs (target.name == "clinnet") {
+      # Clinnet's Typst behaviour and native/Wasm mark parity tests skip without
+      # Typst. This executable carries stock CeTZ 0.5.2 and makes them required.
+      runtimeTools = [docsTypst];
+      runtimeEnv.TYPST_TEST_EXECUTABLE = "${docsTypst}/bin/typst";
+    }) ci.groups;
 
   sortedUnique = list: lib.sort (left: right: left < right) (lib.unique list);
 
@@ -2699,7 +2712,7 @@
     checkedNextestPackageGroups);
 
   nextestCheckFor = target:
-    pkgs.runCommand "gammaloop-nextest-${target.name}" {
+    pkgs.runCommand "gammaloop-nextest-${target.name}" ({
       nativeBuildInputs = [
         ciToolchain
         pkgs.cargo-nextest
@@ -2717,7 +2730,7 @@
       RUST_BACKTRACE = "1";
       RUST_LIB_BACKTRACE = "1";
       SYMBOLICA_LICENSE = builtins.getEnv "SYMBOLICA_LICENSE";
-    } (''
+    } // (target.runtimeEnv or {})) (''
       if [ -z "''${SYMBOLICA_LICENSE:-}" ]; then
         echo "Missing SYMBOLICA_LICENSE environment variable" >&2
         exit 1

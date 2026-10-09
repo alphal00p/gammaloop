@@ -15,8 +15,8 @@ same convention.
 The notebook needs Typst's language evaluator, text shaping, math layout,
 SVG exporter/importer, and HTML/MathML exporter. Native graph drawing lays out
 and draws lines directly in Rust without a Typst plugin; Typst figures and
-templates load the CeTZ, Linnest, Kurvst, and MiTeX packages, which call
-plugins. The compiler library does not expose upstream feature flags for
+templates load the Linnest, Kurvst, MiTeX, and (from the local Typst package
+directories) CeTZ packages, which call plugins. The compiler library does not expose upstream feature flags for
 several large document-only components, so this patch introduces opt-in
 features with empty defaults:
 

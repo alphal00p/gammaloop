@@ -1,6 +1,6 @@
 // Internal Kurvst implementation. Public users should import `lib.typ`.
 
-#import "@preview/cetz:0.5.1" as cetz
+#import "@preview/cetz:0.5.2" as cetz
 
 // Capture only the operations used below, not the complete CeTZ module.
 #let _cetz-bezier = cetz.draw.bezier
@@ -192,6 +192,7 @@
 }
 
 #let _path-value(path) = {
+  if type(path) == bytes { path = cbor(path) }
   if type(path) == dictionary and path.keys().contains("path") {
     path.path
   } else {

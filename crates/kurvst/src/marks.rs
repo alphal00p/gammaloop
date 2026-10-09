@@ -300,7 +300,9 @@ impl<'de> Deserialize<'de> for MarkSpec {
 
 /// Stations refer to the caller's visible carrier, before mark fitting.
 /// Ratios are dimensionless; distances and signed placement shifts are in
-/// drawing units. Numeric stations always use chord fit, even at an endpoint.
+/// drawing units. Numeric stations locate the painted longitudinal center and
+/// always use chord fit, even at an endpoint. Start and End locate the template
+/// origin/contact and retain the requested endpoint fit.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "lowercase", deny_unknown_fields)]
 pub enum MarkStation {
@@ -388,6 +390,7 @@ pub struct MarkShaftOutput {
 pub struct MarkDrawable {
     pub path: CurvePathOutput,
     pub outline: CurvePathOutput,
+    pub outline_bounds: Vec<MarkBounds>,
     pub fill: bool,
     pub stroke: bool,
     pub join: String,
@@ -414,10 +417,69 @@ pub struct MarkGeometryOutput {
     pub shaft_outline: CurvePathOutput,
     pub shaft_style: MarkStrokeStyle,
     pub footprint: CurvePathOutput,
+    pub footprint_bounds: Vec<MarkBounds>,
+}
+
+/// Ordered conservative control hulls, one per nonempty subpath.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
+pub struct MarkBounds {
+    pub left: f64,
+    pub right: f64,
+    pub bottom: f64,
+    pub top: f64,
+}
+
+impl CurvePathOutput {
+    /// Match the wire element traversal: moves flush a region; endpoints precede
+    /// controls. Strict comparisons retain the first equal coordinate (including
+    /// signed zero), as Typst's min/max do. Close elements have no coordinates.
+    fn control_hull_bounds(&self) -> Vec<MarkBounds> {
+        let mut regions = Vec::new();
+        let mut current: Option<MarkBounds> = None;
+        for element in self.path.elements() {
+            if matches!(element, PathEl::MoveTo(_))
+                && let Some(bounds) = current.take()
+            {
+                regions.push(bounds);
+            }
+            let points: &[Point] = match element {
+                PathEl::MoveTo(point) | PathEl::LineTo(point) => std::slice::from_ref(point),
+                PathEl::QuadTo(control, end) => &[*end, *control],
+                PathEl::CurveTo(first, second, end) => &[*end, *first, *second],
+                PathEl::ClosePath => &[],
+            };
+            for point in points {
+                if let Some(bounds) = &mut current {
+                    if point.x < bounds.left {
+                        bounds.left = point.x;
+                    }
+                    if point.x > bounds.right {
+                        bounds.right = point.x;
+                    }
+                    if point.y < bounds.bottom {
+                        bounds.bottom = point.y;
+                    }
+                    if point.y > bounds.top {
+                        bounds.top = point.y;
+                    }
+                } else {
+                    current = Some(MarkBounds {
+                        left: point.x,
+                        right: point.x,
+                        bottom: point.y,
+                        top: point.y,
+                    });
+                }
+            }
+        }
+        regions.extend(current);
+        regions
+    }
 }
 
 pub struct PreparedMark {
     paths: Vec<MarkDrawable>,
+    longitudinal_center: f64,
     end: f64,
     fit: MarkFit,
     shorten: f64,
@@ -508,7 +570,16 @@ impl PreparedCarrier {
             return Err("carrier coordinates must be finite".into());
         }
         if path.subpaths().count() > 1 {
-            return Err("mark carriers must have one connected subpath".into());
+            let mut subpaths = path.subpaths();
+            let first = BezPath::from_vec(subpaths.next().unwrap().to_vec());
+            let start = match subpaths.next().unwrap()[0] {
+                PathEl::MoveTo(point) => point,
+                _ => unreachable!("a subpath starts with a move"),
+            };
+            let end = first.segments().last().map(|segment| segment.end());
+            return Err(format!(
+                "mark carriers must have one connected subpath; next start {start:?}, previous end {end:?}"
+            ));
         }
         let trimmer = PathTrimmer::new(path.segments(), 1e-6);
         let length = trimmer.length();
@@ -633,6 +704,9 @@ impl MarkSpec {
         if self.n.is_some_and(|value| value == 0 || value > 4096) {
             return Err("rays.n must be in 1..=4096".into());
         }
+        if shape == "combine" && self.parts.as_deref().unwrap_or_default().is_empty() {
+            return Err("combine.parts must be nonempty".into());
+        }
         if self.parts.as_deref().unwrap_or_default().iter().any(|part| {
             matches!(part,MarkPart::Mark(child) if child.fit.is_some() || child.shorten.is_some())
         }) {
@@ -681,6 +755,7 @@ impl MarkSpec {
                 }
             }
             return Ok(PreparedMark {
+                longitudinal_center: PreparedMark::longitudinal_center(&paths),
                 paths,
                 end: cursor,
                 fit: self.fit.unwrap_or_default(),
@@ -972,21 +1047,25 @@ impl MarkSpec {
                 .copied(),
             );
         }
+        let outline = CurvePathOutput { path: outline };
+        let paths = vec![MarkDrawable {
+            path: CurvePathOutput { path },
+            outline_bounds: outline.control_hull_bounds(),
+            outline,
+            fill,
+            stroke,
+            join: if join == Join::Round {
+                "round"
+            } else {
+                "miter"
+            }
+            .into(),
+            cap: if cap == Cap::Round { "round" } else { "butt" }.into(),
+            miter_limit: 7.0,
+        }];
         Ok(PreparedMark {
-            paths: vec![MarkDrawable {
-                path: CurvePathOutput { path },
-                outline: CurvePathOutput { path: outline },
-                fill,
-                stroke,
-                join: if join == Join::Round {
-                    "round"
-                } else {
-                    "miter"
-                }
-                .into(),
-                cap: if cap == Cap::Round { "round" } else { "butt" }.into(),
-                miter_limit: 7.0,
-            }],
+            longitudinal_center: PreparedMark::longitudinal_center(&paths),
+            paths,
             end,
             fit: self.fit.unwrap_or_default(),
             shorten: self.shorten.unwrap_or(1.0),
@@ -997,6 +1076,15 @@ impl MarkSpec {
 }
 
 impl PreparedMark {
+    fn longitudinal_center(paths: &[MarkDrawable]) -> f64 {
+        paths
+            .iter()
+            .filter(|drawable| !drawable.outline.path.is_empty())
+            .map(|drawable| drawable.outline.path.bounding_box())
+            .reduce(|a, b| a.union(b))
+            .map_or(0.0, |bounds| (bounds.x0 + bounds.x1) / 2.0)
+    }
+
     fn arc(path: &mut BezPath, center: Point, radius: f64, start: f64, sweep: f64) {
         let count = (sweep.abs() / FRAC_PI_2).ceil().max(1.0) as usize;
         let delta = sweep / count as f64;
@@ -1025,7 +1113,11 @@ impl MarkGeometrySpec {
         let carriers = self
             .carriers
             .into_iter()
-            .map(|carrier| PreparedCarrier::new(carrier.path))
+            .enumerate()
+            .map(|(index, carrier)| {
+                PreparedCarrier::new(carrier.path)
+                    .map_err(|error| format!("mark carrier {index}: {error}"))
+            })
             .collect::<Result<Vec<_>, _>>()?;
         let mut results = Vec::with_capacity(self.placements.len());
         let mut groups = std::collections::BTreeMap::<usize, SelectedShaft>::new();
@@ -1164,12 +1256,21 @@ impl PreparedMark {
         if !station.is_finite() || !placement.shift.is_finite() {
             return Err("placement station and shift must be finite".into());
         }
-        let station = (station + placement.shift).clamp(0.0, length);
         let sign = if placement.direction == MarkDirection::Backward {
             -1.0
         } else {
             1.0
         };
+        let endpoint = matches!(placement.station, MarkStation::Start | MarkStation::End);
+        // Convert a painted-center station to the local origin before inward
+        // clamping and fitting. User shifts remain signed carrier distances,
+        // independent of the mark's direction.
+        let center_offset = if endpoint {
+            0.0
+        } else {
+            -sign * template.longitudinal_center
+        };
+        let station = (station + center_offset + placement.shift).clamp(0.0, length);
         let origin = carrier.point(station)?;
         let (contact, back_at) = carrier.chord_contact(station, template.end, sign)?;
         let tangent = carrier
@@ -1177,7 +1278,6 @@ impl PreparedMark {
             .frame(station)?
             .map(|frame| Vec2::new(frame.tangent.x, frame.tangent.y) * sign)
             .unwrap_or(Vec2::new(sign, 0.0));
-        let endpoint = matches!(placement.station, MarkStation::Start | MarkStation::End);
         let bend = endpoint && template.fit == MarkFit::Bend;
         if bend
             && carrier
@@ -1212,6 +1312,7 @@ impl PreparedMark {
         for path in &mut paths {
             path.path.path.apply_affine(transform);
             path.outline.path.apply_affine(transform);
+            path.outline_bounds = path.outline.control_hull_bounds();
         }
         let retraction = template.end * template.shorten;
         if !retraction.is_finite() {
@@ -1287,6 +1388,7 @@ impl PreparedMark {
                 .map(|segment| segment.end())
                 .unwrap_or(carrier.point(length - window.end_outset)?)
         };
+        let footprint = CurvePathOutput { path: footprint };
         Ok(FittedMark {
             shaft_edit,
             geometry: MarkGeometryOutput {
@@ -1302,10 +1404,96 @@ impl PreparedMark {
                     path: shaft_outline,
                 },
                 shaft_style: self.shaft_style,
-                footprint: CurvePathOutput { path: footprint },
+                footprint_bounds: footprint.control_hull_bounds(),
+                footprint,
             },
         })
     }
+}
+
+/// Borrowed transport view: only path-valued fields become native-path CBOR
+/// byte strings. Metadata keeps the native DTO's names, order, and values.
+struct MarkPacket<'a, T>(&'a T);
+
+struct NativePathPacket<'a>(&'a CurvePathOutput);
+
+impl Serialize for NativePathPacket<'_> {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        let mut bytes = Vec::new();
+        ciborium::ser::into_writer(self.0, &mut bytes).map_err(serde::ser::Error::custom)?;
+        serializer.serialize_bytes(&bytes)
+    }
+}
+
+// Keep the owning native path serializer authoritative, without constructing
+// and rewriting a second coordinate tree for the batch.
+macro_rules! packet_fields {
+    ($serializer:ident, $($key:literal => $value:expr),+ $(,)?) => {{
+        use serde::ser::SerializeStruct;
+        let mut output = $serializer.serialize_struct("MarkPacket", [$($key),+].len())?;
+        $(output.serialize_field($key, &$value)?;)+
+        output.end()
+    }};
+}
+
+impl Serialize for MarkPacket<'_, MarkGeometryBatchOutput> {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        let marks: Vec<_> = self.0.marks.iter().map(MarkPacket).collect();
+        let shafts: Vec<_> = self.0.shafts.iter().map(MarkPacket).collect();
+        packet_fields!(serializer, "marks" => marks, "shafts" => shafts)
+    }
+}
+
+impl Serialize for MarkPacket<'_, MarkGeometryOutput> {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        let mark = self.0;
+        let paths: Vec<_> = mark.paths.iter().map(MarkPacket).collect();
+        packet_fields!(serializer,
+            "template" => mark.template, "carrier" => mark.carrier, "end" => mark.end,
+            "paths" => paths, "tip" => mark.tip, "back" => mark.back,
+            "shaft-contact" => mark.shaft_contact,
+            "shaft" => NativePathPacket(&mark.shaft),
+            "shaft-outline" => NativePathPacket(&mark.shaft_outline),
+            "shaft-style" => mark.shaft_style,
+            "footprint" => NativePathPacket(&mark.footprint),
+            "footprint-bounds" => mark.footprint_bounds,
+        )
+    }
+}
+
+impl Serialize for MarkPacket<'_, MarkShaftOutput> {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        let shaft = self.0;
+        packet_fields!(serializer,
+            "carrier" => shaft.carrier, "shaft" => NativePathPacket(&shaft.shaft),
+            "shaft-outline" => NativePathPacket(&shaft.shaft_outline),
+            "shaft-style" => shaft.shaft_style,
+            "footprint" => NativePathPacket(&shaft.footprint),
+        )
+    }
+}
+
+impl Serialize for MarkPacket<'_, MarkDrawable> {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        let path = self.0;
+        packet_fields!(serializer,
+            "path" => NativePathPacket(&path.path), "outline" => NativePathPacket(&path.outline),
+            "outline-bounds" => path.outline_bounds,
+            "fill" => path.fill, "stroke" => path.stroke,
+            "join" => path.join, "cap" => path.cap, "miter-limit" => path.miter_limit,
+        )
+    }
+}
+
+/// Packed companion to `mark_geometry_bytes`; runs the same fitter once.
+pub fn mark_geometry_packed_bytes(arg: &[u8]) -> Result<Vec<u8>, String> {
+    let spec: MarkGeometrySpec =
+        ciborium::de::from_reader(arg).map_err(|e| format!("invalid mark geometry CBOR: {e}"))?;
+    let output = spec.geometry()?;
+    let mut bytes = Vec::new();
+    ciborium::ser::into_writer(&MarkPacket(&output), &mut bytes)
+        .map_err(|e| format!("mark geometry serialization failed: {e}"))?;
+    Ok(bytes)
 }
 
 pub fn mark_geometry_bytes(arg: &[u8]) -> Result<Vec<u8>, String> {
@@ -1338,6 +1526,12 @@ mod tests {
     };
 
     fn mark(shape: &str) -> MarkSpec {
+        if shape == "combine" {
+            let mut spec = mark("bar");
+            spec.shape = shape.into();
+            spec.parts = Some(vec![MarkPart::Mark(Box::new(mark("bar")))]);
+            return spec;
+        }
         let mut bytes = Vec::new();
         ciborium::ser::into_writer(
             &Value::Map(vec![(
@@ -1399,6 +1593,248 @@ mod tests {
         let mut bytes = Vec::new();
         ciborium::ser::into_writer(value, &mut bytes).unwrap();
         bytes
+    }
+
+    // Independent oracle for the former Typst traversal, using serialized wire
+    // elements rather than the owning method's PathEl representation.
+    fn wire_bounds(path: &CurvePathOutput) -> Vec<MarkBounds> {
+        let value: Value = ciborium::de::from_reader(wire(path).as_slice()).unwrap();
+        let Value::Map(path) = value else { panic!() };
+        let Value::Map(path) = &path[0].1 else {
+            panic!()
+        };
+        let Value::Array(elements) = &path[0].1 else {
+            panic!()
+        };
+        let mut regions = vec![Vec::<Point>::new()];
+        for element in elements {
+            let Value::Map(fields) = element else {
+                panic!()
+            };
+            let field = |name: &str| {
+                fields
+                    .iter()
+                    .find_map(|(key, value)| (key == &Value::Text(name.into())).then_some(value))
+            };
+            if field("kind") == Some(&Value::Text("move".into())) {
+                regions.push(Vec::new());
+            }
+            for key in ["start", "end", "control", "control-start", "control-end"] {
+                if let Some(Value::Array(point)) = field(key) {
+                    let coordinate = |value: &Value| match value {
+                        Value::Float(value) => *value,
+                        Value::Integer(value) => i128::from(*value) as f64,
+                        _ => panic!(),
+                    };
+                    regions
+                        .last_mut()
+                        .unwrap()
+                        .push(Point::new(coordinate(&point[0]), coordinate(&point[1])));
+                }
+            }
+        }
+        regions
+            .into_iter()
+            .filter(|points| !points.is_empty())
+            .map(|points| {
+                let extremum = |x: bool, minimum: bool| {
+                    points
+                        .iter()
+                        .map(|point| if x { point.x } else { point.y })
+                        .reduce(|a, b| {
+                            if if minimum { b < a } else { b > a } {
+                                b
+                            } else {
+                                a
+                            }
+                        })
+                        .unwrap()
+                };
+                MarkBounds {
+                    left: extremum(true, true),
+                    right: extremum(true, false),
+                    bottom: extremum(false, true),
+                    top: extremum(false, false),
+                }
+            })
+            .collect()
+    }
+
+    #[test]
+    fn packed_transport_preserves_native_paths_and_metadata_exactly() {
+        fn unpack(value: &mut Value, packets: &mut usize) {
+            match value {
+                Value::Map(fields) => {
+                    for (key, value) in fields {
+                        if matches!(
+                            key.as_text(),
+                            Some("path" | "outline" | "shaft" | "shaft-outline" | "footprint")
+                        ) {
+                            let Value::Bytes(bytes) = value else {
+                                panic!("path-valued field is not an opaque byte string: {key:?}");
+                            };
+                            let path: CurvePathOutput =
+                                ciborium::de::from_reader(bytes.as_slice()).unwrap();
+                            assert_eq!(wire(&path), *bytes);
+                            *value = ciborium::de::from_reader(bytes.as_slice()).unwrap();
+                            *packets += 1;
+                        } else {
+                            unpack(value, packets);
+                        }
+                    }
+                }
+                Value::Array(values) => {
+                    for value in values {
+                        unpack(value, packets);
+                    }
+                }
+                _ => {}
+            }
+        }
+        let mut composite = mark("combine");
+        composite.parts = Some(vec![
+            MarkPart::Mark(Box::new(mark("triangle"))),
+            MarkPart::Gap(MarkGap {
+                gap: MarkSize {
+                    points: -2.0,
+                    ratio: 0.25,
+                },
+            }),
+            MarkPart::Mark(Box::new(mark("circle"))),
+        ]);
+        for spec in SHAPES.into_iter().map(mark).chain([composite]) {
+            for hidden in [false, true] {
+                let mut spec = spec.clone();
+                if hidden && spec.shape != "combine" {
+                    if matches!(
+                        spec.shape.as_str(),
+                        "triangle" | "stealth" | "round" | "circle" | "square" | "diamond"
+                    ) {
+                        spec.fill = Some(false);
+                    }
+                    spec.stroke = Some(false);
+                }
+                for carrier in [
+                    curve(),
+                    line(Point::new(100.0, -20.0), Point::new(-30.0, 40.0)),
+                    line(Point::new(-0.0, 0.0), Point::new(0.0, -0.0)),
+                    BezPath::new(),
+                ] {
+                    for mode in [MarkGeometryMode::Candidates, MarkGeometryMode::Selected] {
+                        let mut request = batch(spec.clone(), carrier.clone());
+                        request.mode = mode;
+                        request.placements[0].direction = MarkDirection::Backward;
+                        let native = mark_geometry_bytes(&wire(&request)).unwrap();
+                        let packed = mark_geometry_packed_bytes(&wire(&request)).unwrap();
+                        let mut unpacked: Value =
+                            ciborium::de::from_reader(packed.as_slice()).unwrap();
+                        let mut packets = 0;
+                        unpack(&mut unpacked, &mut packets);
+                        assert!(packets >= 3);
+                        assert_eq!(wire(&unpacked), native);
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn control_hulls_match_wire_traversal_for_catalogue_transforms_and_modes() {
+        let mut nested = mark("combine");
+        nested.parts = Some(vec![
+            MarkPart::Mark(Box::new(mark("circle"))),
+            MarkPart::Gap(MarkGap {
+                gap: MarkSize {
+                    points: -3.0,
+                    ratio: 0.25,
+                },
+            }),
+            MarkPart::Mark(Box::new(mark("combine"))),
+        ]);
+        let mut reversed = mark("triangle");
+        reversed.rev = Some(true);
+        reversed.stroke = Some(true);
+        let specs = SHAPES.into_iter().map(mark).chain([nested, reversed]);
+        for spec in specs {
+            for carrier in [
+                curve(),
+                line(Point::new(100.0, -20.0), Point::new(-30.0, 40.0)),
+                line(Point::new(-0.0, 0.0), Point::new(0.0, -0.0)),
+                BezPath::new(),
+            ] {
+                for direction in [MarkDirection::Forward, MarkDirection::Backward] {
+                    for mode in [MarkGeometryMode::Candidates, MarkGeometryMode::Selected] {
+                        let mut request = batch(spec.clone(), carrier.clone());
+                        request.mode = mode;
+                        request.placements[0].direction = direction;
+                        request.placements[0].shift = -3.0;
+                        let output = request.geometry().unwrap();
+                        for mark in output.marks {
+                            assert_eq!(
+                                wire(&mark.footprint_bounds),
+                                wire(&wire_bounds(&mark.footprint))
+                            );
+                            for drawable in mark.paths {
+                                assert_eq!(
+                                    wire(&drawable.outline_bounds),
+                                    wire(&wire_bounds(&drawable.outline))
+                                );
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn control_hulls_preserve_region_order_controls_degeneracy_and_signed_zeros() {
+        let path = CurvePathOutput {
+            path: BezPath::from_vec(vec![
+                PathEl::MoveTo(Point::new(-0.0, 0.0)),
+                PathEl::LineTo(Point::new(0.0, -0.0)),
+                PathEl::ClosePath,
+                PathEl::MoveTo(Point::new(10.0, 20.0)),
+                PathEl::QuadTo(Point::new(-40.0, 80.0), Point::new(30.0, -60.0)),
+                PathEl::CurveTo(
+                    Point::new(-100.0, 200.0),
+                    Point::new(300.0, -400.0),
+                    Point::ZERO,
+                ),
+                PathEl::MoveTo(Point::new(7.0, 8.0)),
+            ]),
+        };
+        let bounds = path.control_hull_bounds();
+        assert_eq!(wire(&bounds), wire(&wire_bounds(&path)));
+        assert_eq!(bounds.len(), 3);
+        assert_eq!(bounds[0].left.to_bits(), (-0.0_f64).to_bits());
+        assert_eq!(bounds[0].right.to_bits(), (-0.0_f64).to_bits());
+        assert_eq!(bounds[0].bottom.to_bits(), 0.0_f64.to_bits());
+        assert_eq!(
+            bounds[1],
+            MarkBounds {
+                left: -100.0,
+                right: 300.0,
+                bottom: -400.0,
+                top: 200.0
+            }
+        );
+        assert_eq!(
+            bounds[2],
+            MarkBounds {
+                left: 7.0,
+                right: 7.0,
+                bottom: 8.0,
+                top: 8.0
+            }
+        );
+        assert!(
+            CurvePathOutput {
+                path: BezPath::new()
+            }
+            .control_hull_bounds()
+            .is_empty()
+        );
     }
 
     #[test]
@@ -1787,11 +2223,134 @@ mod tests {
         request.placements[0].station = MarkStation::Ratio { value: 0.5 };
         request.placements[0].shift = -5.0;
         let ratio = request.clone().geometry().unwrap();
-        close(ratio.marks[0].tip.x, 55.0);
+        let head = &ratio.marks[0];
+        close((head.tip.x + head.back.x) / 2.0, 55.0);
+        close(head.tip.x - head.back.x, head.end);
         request.placements[0].station = MarkStation::Distance { value: 50.0 };
         assert_eq!(wire(&ratio), wire(&request.clone().geometry().unwrap()));
         request.placements[0].shift = 1000.0;
         close(request.geometry().unwrap().marks[0].tip.x, 110.0);
+    }
+
+    #[test]
+    fn numeric_stations_center_painted_catalogue_and_composites_in_both_directions() {
+        let mut specs: Vec<_> = SHAPES.into_iter().map(mark).collect();
+        let mut composite = mark("combine");
+        composite.parts = Some(vec![
+            MarkPart::Mark(Box::new(mark("circle"))),
+            MarkPart::Gap(MarkGap {
+                gap: MarkSize {
+                    points: 2.0,
+                    ratio: 0.5,
+                },
+            }),
+            MarkPart::Mark(Box::new(mark("triangle"))),
+        ]);
+        specs.push(composite);
+        for mut spec in specs {
+            let supports_rev = matches!(
+                spec.shape.as_str(),
+                "triangle" | "straight" | "stealth" | "round" | "barb" | "hooks" | "bracket"
+            );
+            for rev in [false, true].into_iter().filter(|rev| !rev || supports_rev) {
+                if supports_rev {
+                    spec.rev = Some(rev);
+                }
+                for direction in [MarkDirection::Forward, MarkDirection::Backward] {
+                    for reversed_carrier in [false, true] {
+                        let (start, end) = if reversed_carrier {
+                            (110.0, 10.0)
+                        } else {
+                            (10.0, 110.0)
+                        };
+                        let mut request = batch(
+                            spec.clone(),
+                            line(Point::new(start, 0.0), Point::new(end, 0.0)),
+                        );
+                        request.mode = MarkGeometryMode::Selected;
+                        request.templates[0].context.line_thickness = 3.0;
+                        let placement = &mut request.placements[0];
+                        placement.station = MarkStation::Ratio { value: 0.5 };
+                        placement.direction = direction;
+                        placement.shift = -4.0;
+                        let ratio = request.clone().geometry().unwrap();
+                        let head = &ratio.marks[0];
+                        let bounds = head.footprint.path.bounding_box();
+                        let expected_center = if reversed_carrier { 64.0 } else { 56.0 };
+                        assert!(
+                            ((bounds.x0 + bounds.x1) / 2.0 - expected_center).abs() < 1e-12,
+                            "{} rev={rev} direction={direction:?}",
+                            spec.shape
+                        );
+                        close((head.tip.x - head.back.x).abs(), head.end.abs());
+                        assert_eq!(ratio.shafts[0].shaft.path, request.carriers[0].path);
+                        request.placements[0].station = MarkStation::Distance { value: 50.0 };
+                        assert_eq!(wire(&ratio), wire(&request.geometry().unwrap()));
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn cubicized_straight_carriers_preserve_numeric_painted_centers() {
+        for shape in SHAPES.into_iter().chain(["combine"]) {
+            for direction in [MarkDirection::Forward, MarkDirection::Backward] {
+                for (start, end, ratio, shift, expected) in
+                    [(0.0, 3.0, 0.5, -0.07, 1.43), (5.0, 10.0, 0.2, 0.0, 6.0)]
+                {
+                    let mut path = BezPath::new();
+                    path.move_to((start, 0.0));
+                    // Typst's line carrier is represented by a cubic with
+                    // nonuniform parameter speed, not a native Line segment.
+                    path.curve_to((start, 0.0), (end, 0.0), (end, 0.0));
+                    let mut request = batch(mark(shape), path.clone());
+                    request.mode = MarkGeometryMode::Selected;
+                    request.templates[0].context = MarkContext {
+                        units_per_pt: 2.54 / 72.0,
+                        line_thickness: 0.8 * 2.54 / 72.0,
+                        ..CONTEXT
+                    };
+                    request.placements[0].station = MarkStation::Ratio { value: ratio };
+                    request.placements[0].shift = shift;
+                    request.placements[0].direction = direction;
+                    let result = request.geometry().unwrap();
+                    let bounds = result.marks[0].footprint.path.bounding_box();
+                    assert!(
+                        ((bounds.x0 + bounds.x1) / 2.0 - expected).abs() < 1e-12,
+                        "{shape} {direction:?}"
+                    );
+                    assert_eq!(result.shafts[0].shaft.path, path);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn numeric_endpoint_stations_keep_chord_fit_and_clamp_origin_without_resizing() {
+        for value in [0.0, 1.0] {
+            let mut request = batch(mark("triangle"), curve());
+            request.placements[0].station = MarkStation::Ratio { value };
+            request.templates[0].mark.fit = Some(MarkFit::Bend);
+            let bend = request.clone().geometry().unwrap();
+            request.templates[0].mark.fit = Some(MarkFit::Chord);
+            assert_eq!(wire(&bend), wire(&request.geometry().unwrap()));
+        }
+        for direction in [MarkDirection::Forward, MarkDirection::Backward] {
+            let mut request = batch(mark("triangle"), line(Point::ZERO, Point::new(2.0, 0.0)));
+            request.placements[0].station = MarkStation::Ratio { value: 0.5 };
+            request.placements[0].direction = direction;
+            let head = request.geometry().unwrap().marks.remove(0);
+            let (tip, back) = if direction == MarkDirection::Forward {
+                (2.0, -13.0)
+            } else {
+                (0.0, 15.0)
+            };
+            close(head.tip.x, tip);
+            close(head.back.x, back);
+            close(head.end, 15.0);
+            assert!(head.shaft_contact.x >= 0.0 && head.shaft_contact.x <= 2.0);
+        }
     }
 
     #[test]
@@ -1967,7 +2526,9 @@ mod tests {
         request.placements[0].station = MarkStation::Ratio { value: 0.5 };
         let result = request.geometry().unwrap().marks;
         close(result[0].end, -5.0);
-        close(result[0].back.x, 55.0);
+        close(result[0].back.x - result[0].tip.x, 5.0);
+        let bounds = result[0].paths[0].outline.path.bounding_box();
+        close((bounds.x0 + bounds.x1) / 2.0, 50.0);
         spec.parts.as_mut().unwrap().push(MarkPart::Gap(MarkGap {
             gap: MarkSize {
                 points: f64::INFINITY,
@@ -2189,6 +2750,15 @@ mod tests {
         close(start.tip.x, 95.0);
         close(start.back.x, 110.0);
         close(start.shaft_contact.x, 100.0);
+    }
+
+    #[test]
+    fn composites_require_nonempty_parts_at_the_shared_boundary() {
+        let mut spec = mark("bar");
+        spec.shape = "combine".into();
+        assert!(spec.prepare(CONTEXT).err().unwrap().contains("nonempty"));
+        spec.parts = Some(Vec::new());
+        assert!(spec.prepare(CONTEXT).err().unwrap().contains("nonempty"));
     }
 
     #[test]

@@ -22,6 +22,7 @@ typst = "=0.15.1"
 typst-library = { version = "=0.15.1", path = "../../vendor/typst-library" }
 typst-kit = { version = "=0.15.1", default-features = false }
 comemo = "0.5"
+dirs = { workspace = true }
 typst-html = "=0.15.1"
 typst-layout = "=0.15.1"
 typst-pdf = { version = "=0.15.1", optional = true }

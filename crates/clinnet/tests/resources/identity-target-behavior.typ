@@ -1,7 +1,8 @@
-#import "@preview/cetz:0.5.1" as cetz
+#import "@preview/cetz:0.5.2" as cetz
+#import "crates/linnest/typst/src/impl/identity-targets.typ" as identity-targets
 
-// Batching must retain every link rectangle and the context changes of ordinary
-// floating content, including inherited styles and coordinate resolvers.
+// Identity targets retain fixed-size link rectangles and coordinate resolver
+// context; styled annotation content remains the ordinary CeTZ owner's job.
 #cetz.canvas({
   cetz.draw.get-ctx(ctx => {
     // A line strip normalizes exactly like a general path, including repeated
@@ -25,30 +26,33 @@
   })
 })
 
-#assert("content-many" in cetz.draw, message: "the bundled CeTZ must expose content-many")
-#if "content-many" in cetz.draw {
+#{
   cetz.canvas({
     cetz.draw.get-ctx(ctx => {
       let check(local, targets, ..style) = {
         let expected = cetz.process.many(local, targets.map(target => {
-          cetz.draw.floating(cetz.draw.content(target.position, target.body, ..style))
+          cetz.draw.floating(cetz.draw.content(target.position, target.body,
+            tags: (cetz.drawable.TAG.no-bounds,), ..style))
         }).flatten(), compute-bounds: false)
-        let actual = cetz.draw.content-many(local, targets, tags: (cetz.drawable.TAG.no-bounds,), ..style)
+        let actual = identity-targets.draw(local, targets)
         // Geometry can contain NaNs, so compare its encoded representation.
         assert.eq(cbor.encode(actual.ctx.prev), cbor.encode(expected.ctx.prev))
-        assert.eq(actual.drawables.len(), expected.drawables.len())
-        for (a, b) in actual.drawables.zip(expected.drawables) {
-          assert.eq(a.keys(), b.keys())
-          for key in a.keys() {
-            if key in ("pos", "width", "height", "segments") {
-              assert.eq(cbor.encode(a.at(key)), cbor.encode(b.at(key)), message: "batched content " + key)
-            } else {
-              assert.eq(a.at(key), b.at(key), message: "batched content " + key)
-            }
-          }
+        // Ordinary content also emits an empty frame; identity targets paint
+        // only the fixed-size linked content, not that annotation decoration.
+        let content = expected.drawables.filter(drawable => drawable.type == "content")
+        assert.eq(actual.drawables.len(), content.len())
+        for (a, b, target) in actual.drawables.zip(content, targets) {
+          assert.eq(cbor.encode(a.pos), cbor.encode(b.pos), message: "identity content center")
+          assert.eq(a.width, target.body.body.width.length / local.length,
+            message: "identity width is the authored physical width, not measured text")
+          assert.eq(a.height, target.body.body.height.length / local.length,
+            message: "identity height is the authored physical height, not measured text")
+          assert.eq(a.body, target.body, message: "identity preserves each independent link")
+          assert.eq(a.segments, (), message: "identity targets have no annotation frame geometry")
+          assert.eq(a.tags, (cetz.drawable.TAG.no-bounds,))
         }
       }
-      let body = box(width: 8pt, height: 8pt)
+      let body = link("https://example.com/identity", box(width: 8pt, height: 8pt))
       let coords = ((0, 0), (-0.0, 0.0), (1.25, -4e-8), (9007199254740995, -9007199254740995))
       for transform in (
         cetz.matrix.ident(4),
@@ -59,15 +63,10 @@
       ) {
         let local = ctx
         local.transform = transform
-        for target-body in (body, [], box(width: 0pt, height: 0pt), [text]) {
+        for target-body in (body, link("https://example.com/empty", box(width: 0pt, height: 0pt))) {
           let targets = coords.map(position => (position: position, body: target-body))
-          for padding in (0, -100, (left: 0.5, top: 2, bottom: -0.1, right: 0.15)) {
-            check(local, targets, padding: padding)
-          }
+          check(local, targets, padding: 0)
         }
-      }
-      for angle in (35deg, -90deg) {
-        check(ctx, coords.map(position => (position: position, body: body)), angle: angle, padding: 0.1)
       }
       for position in ((1cm, -2cm), (1, 2, 3), (x: 1.25, y: -2.5), (30deg, 2), (rel: (0.2, 0.4)), ()) {
         check(ctx, ((position: position, body: body), (position: (1, -1), body: body)), padding: 0)

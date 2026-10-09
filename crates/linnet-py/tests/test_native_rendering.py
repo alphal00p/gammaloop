@@ -91,6 +91,16 @@ class NativeRenderingTests(unittest.TestCase):
                 path = result.save(Path(directory) / f"native.{suffix}")
                 self.assertGreater(path.stat().st_size, 0)
 
+    def test_graph_edge_style_is_the_native_edge_default(self):
+        settings = graph.RenderSettings(
+            style=graph.GraphStyleOptions(
+                edge_style={"stroke": graph.Stroke(paint=graph.Color("#13579b"))}
+            )
+        )
+        result = self.graph.render(config=settings)
+        self.assert_native(result)
+        self.assertIn("#13579b", result.to_svg())
+
     def test_advanced_requests_keep_full_typst_rendering(self):
         advanced = graph.RenderSettings(
             layouts=graph.LayoutSettings(impred_steps=1).then(impred_steps=1),

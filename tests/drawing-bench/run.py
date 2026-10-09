@@ -15,20 +15,25 @@ import subprocess
 import sys
 import tarfile
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[1]
-ARCHIVE_SHA256 = "8f5cf9c5ba70d466f69b800882552aa0b41171efd96cd8fe73b05fb585a99e1f"
+ARCHIVE_SHA256 = "324fe89dfb3950960b48455f4d02cee228e91883ccd55b1fb08b5f31af6adea6"
+# Stock Typst Universe releases the drawing sources import.
+PACKAGES = ("preview/cetz/0.5.2", "preview/mitex/0.2.6", "preview/oxifmt/1.0.0")
 
 
 def sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def source_revision() -> str:
-    """Name the checked-out commit; source_hashes record working-copy edits."""
+def source_revision() -> str | None:
+    """Name the checked-out commit; source_hashes record working-copy edits.
+
+    An exported tree outside any checkout has no commit to name.
+    """
     if (REPO / ".jj").is_dir():
         command = [
             "jj",
@@ -40,8 +45,10 @@ def source_revision() -> str:
             "-T",
             "commit_id",
         ]
-    else:
+    elif (REPO / ".git").exists():
         command = ["git", "rev-parse", "HEAD"]
+    else:
+        return None
     return subprocess.check_output(command, cwd=REPO, text=True).strip()
 
 
@@ -70,9 +77,9 @@ def extract(destination: Path) -> None:
             target.write_bytes(data.read())
 
 
-def build_root(variant: str, build: Path, fixtures: Path) -> Path:
-    """Use identical current sources for both variants; never apply old overlays."""
-    root = build / variant
+def build_root(build: Path, fixtures: Path) -> Path:
+    """Assemble the current drawing sources; never apply old overlays."""
+    root = build / "current"
     root.mkdir(parents=True)
     for name in ("linnest", "kurvst"):
         source = REPO / "crates" / name / "typst"
@@ -114,22 +121,18 @@ def compile_case(
     if ppi:
         command += ["--ppi", str(ppi)]
     command += [str(root / "cases" / f"{case}.typ"), str(output)]
-    # TYPST_FONT_PATHS could otherwise add non-embedded fonts.
+    # TYPST_FONT_PATHS could otherwise add non-embedded fonts, and the package
+    # cache could supply different copies of the checked packages.
     env = os.environ.copy()
     env.pop("TYPST_FONT_PATHS", None)
+    env.pop("TYPST_PACKAGE_CACHE_PATH", None)
     start = time.perf_counter()
     result = subprocess.run(
         command, capture_output=True, text=True, env=env, check=False
     )
     elapsed = (time.perf_counter() - start) * 1000
     if result.returncode:
-        hint = (
-            "\ncurrent-stock uses current sources without an overlay; "
-            "vendored-only calls require P7 migration."
-            if root.name == "current-stock"
-            else ""
-        )
-        sys.exit(f"{root.name}/{case} failed:\n{result.stderr}{hint}")
+        sys.exit(f"{case} failed:\n{result.stderr}")
     return elapsed
 
 
@@ -137,12 +140,13 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--typst", default=os.environ.get("TYPST", "typst"))
     parser.add_argument(
-        "--variants",
-        nargs="+",
-        choices=["current", "current-stock"],
-        default=["current"],
+        "--package-path",
+        type=Path,
+        default=os.environ.get("TYPST_PACKAGE_CACHE_PATH"),
+        help="Typst package directory with stock "
+        + ", ".join(PACKAGES)
+        + " (default: TYPST_PACKAGE_CACHE_PATH, as the dev shell sets it)",
     )
-    parser.add_argument("--stock-package-path", type=Path)
     parser.add_argument("--rounds", type=int, default=3)
     parser.add_argument("--cases", nargs="+", default=[])
     parser.add_argument("--png", type=int, metavar="PPI")
@@ -155,12 +159,14 @@ def main() -> None:
         parser.error("--rounds must be at least 3")
     if args.png is not None and args.png <= 0:
         parser.error("--png must be positive")
-    if len(set(args.variants)) != len(args.variants):
-        parser.error("variants must be unique")
-    if "current-stock" in args.variants and args.stock_package_path is None:
+    if args.package_path is None:
         parser.error(
-            "current-stock requires --stock-package-path (no historical overlay)"
+            "--package-path is required when TYPST_PACKAGE_CACHE_PATH is unset"
         )
+    packages = args.package_path.resolve()
+    for relative in PACKAGES:
+        if not (packages / relative / "typst.toml").is_file():
+            parser.error(f"missing package {relative} in {packages}")
     out = args.out.resolve()
     if not out.is_relative_to(REPO / "target/drawing-bench"):
         parser.error("--out must be inside target/drawing-bench")
@@ -172,17 +178,6 @@ def main() -> None:
     if executable is None:
         parser.error(f"Typst executable not found: {args.typst}")
     version = subprocess.check_output([executable, "--version"], text=True).strip()
-    packages = {"current": REPO / "crates/linnet-py/vendor/typst-packages"}
-    if args.stock_package_path:
-        packages["current-stock"] = args.stock_package_path.resolve()
-    for variant in args.variants:
-        for relative in (
-            "preview/cetz/0.5.1",
-            "preview/mitex/0.2.6",
-            "preview/oxifmt/1.0.0",
-        ):
-            if not (packages[variant] / relative / "typst.toml").is_file():
-                parser.error(f"{variant}: missing package {relative}")
     out.mkdir(parents=True)
     fixtures = out / "fixtures"
     extract(fixtures)
@@ -194,9 +189,9 @@ def main() -> None:
     ]
     if not cases:
         parser.error("No cases match --cases")
-    roots = {v: build_root(v, out / "build", fixtures) for v in args.variants}
+    root = build_root(out / "build", fixtures)
     metadata = {
-        "timestamp_utc": datetime.now(timezone.utc).isoformat(),
+        "timestamp_utc": datetime.now(UTC).isoformat(),
         "source_revision": source_revision(),
         "source_identity": "CURRENT repository, including working-tree sources",
         "harness_sha256": sha256(HERE / "run.py"),
@@ -208,17 +203,18 @@ def main() -> None:
         "machine": platform.machine(),
         "python": platform.python_version(),
         "rounds": args.rounds,
-        "samples": len(cases) * len(args.variants) * args.rounds,
-        "warmup": "one untimed first-case compile per variant",
+        "samples": len(cases) * args.rounds,
+        "warmup": "one untimed first-case compile",
         "fonts": "embedded only; ignore-system-fonts; TYPST_FONT_PATHS removed",
         "timing": "perf_counter wall ms, process launch through exit; SVG export included",
-        "order": "round, sorted case, variant in requested order",
-        "variants": args.variants,
+        "order": "round, sorted case",
         "fixture_archive_sha256": ARCHIVE_SHA256,
         "case_groups": {case: case.rsplit("-", 1)[0] for case in cases},
-        "source_hashes": {v: inventory(roots[v]) for v in args.variants},
-        "package_paths": {v: str(packages[v]) for v in args.variants},
-        "package_hashes": {v: inventory(packages[v]) for v in args.variants},
+        "source_hashes": inventory(root),
+        "package_path": str(packages),
+        "package_hashes": {
+            relative: inventory(packages / relative) for relative in PACKAGES
+        },
         "policy": (
             "bounded arrow/label differences + explicit image review; "
             "links and hit coverage required"
@@ -230,70 +226,36 @@ def main() -> None:
     if args.dry_run:
         print(f"Prepared {len(cases)} cases: {out}")
         return
-    for variant in args.variants:
-        (out / variant).mkdir()
-        compile_case(
-            executable,
-            roots[variant],
-            packages[variant],
-            cases[0],
-            out / variant / f"{cases[0]}.svg",
-        )
-    times: dict[tuple[str, str], list[float]] = {}
+    renders = out / "current"
+    renders.mkdir()
+    compile_case(executable, root, packages, cases[0], renders / f"{cases[0]}.svg")
+    times: dict[str, list[float]] = {}
     with (out / "timings.csv").open("w", newline="") as handle:
         writer = csv.writer(handle)
-        writer.writerow(["variant", "case", "round", "ms"])
+        writer.writerow(["case", "round", "ms"])
         for round_index in range(args.rounds):
             for case in cases:
-                for variant in args.variants:
-                    ms = compile_case(
-                        executable,
-                        roots[variant],
-                        packages[variant],
-                        case,
-                        out / variant / f"{case}.svg",
-                    )
-                    times.setdefault((variant, case), []).append(ms)
-                    writer.writerow([variant, case, round_index + 1, f"{ms:.6f}"])
-                    handle.flush()
-    report = ["case," + ",".join(f"{v}_ms" for v in args.variants) + ",last/first"]
-    totals = dict.fromkeys(args.variants, 0.0)
-    for case in cases:
-        medians = [statistics.median(times[v, case]) for v in args.variants]
-        for variant, median in zip(args.variants, medians):
-            totals[variant] += median
-        report.append(
-            case
-            + ","
-            + ",".join(f"{m:.6f}" for m in medians)
-            + f",{medians[-1] / medians[0]:.6f}"
-        )
-    report.append(
-        "TOTAL_MS,"
-        + ",".join(f"{totals[v]:.6f}" for v in args.variants)
-        + f",{totals[args.variants[-1]] / totals[args.variants[0]]:.6f}"
-    )
+                ms = compile_case(
+                    executable, root, packages, case, renders / f"{case}.svg"
+                )
+                times.setdefault(case, []).append(ms)
+                writer.writerow([case, round_index + 1, f"{ms:.6f}"])
+                handle.flush()
+    medians = {case: statistics.median(times[case]) for case in cases}
+    report = ["case,median_ms"]
+    report += [f"{case},{median:.6f}" for case, median in medians.items()]
+    report.append(f"TOTAL_MS,{sum(medians.values()):.6f}")
     (out / "medians.csv").write_text("\n".join(report) + "\n")
     print("\n".join(report))
-    metadata["svg_hashes"] = {
-        v: {case: sha256(out / v / f"{case}.svg") for case in cases}
-        for v in args.variants
-    }
+    metadata["svg_hashes"] = {case: sha256(renders / f"{case}.svg") for case in cases}
     if args.png:
-        for variant in args.variants:
-            for case in cases:
-                compile_case(
-                    executable,
-                    roots[variant],
-                    packages[variant],
-                    case,
-                    out / variant / f"{case}.png",
-                    args.png,
-                )
+        for case in cases:
+            compile_case(
+                executable, root, packages, case, renders / f"{case}.png", args.png
+            )
         metadata["png_ppi"] = args.png
         metadata["png_hashes"] = {
-            v: {case: sha256(out / v / f"{case}.png") for case in cases}
-            for v in args.variants
+            case: sha256(renders / f"{case}.png") for case in cases
         }
     (out / "metadata.json").write_text(json.dumps(metadata, indent=2) + "\n")
 

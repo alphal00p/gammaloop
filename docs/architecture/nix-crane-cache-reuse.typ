@@ -1472,10 +1472,10 @@ they still validate the content being published.
 The terminal documentation derivation tests Python `linnet` in a virtual
 environment based on a Nix-composed Python that includes `typst-py`
 0.15.0. System site packages keep that wheel dependency available to
-the offline installer. The `linnet` extension embeds its pinned CeTZ and oxifmt
-package trees and passes the staged copy to its in-process compiler, so
-its graph renderer never requires a network fetch or the documentation
-package cache. The terminal Python environment uses the same pinned docs
+the offline installer. The `linnet` extension embeds its pinned MiTeX and
+oxifmt package trees and reads stock CeTZ from the documentation package
+cache, which `TYPST_PACKAGE_CACHE_PATH` names; its in-process compiler never
+fetches packages. The terminal Python environment uses the same pinned docs
 package set to satisfy Python `linnet`'s exact `typst==0.15.0` dependency. Both
 Cargo and uv dependency resolution run offline; a mismatched Python package
 must fail locally instead of attempting a download inside the Nix sandbox.

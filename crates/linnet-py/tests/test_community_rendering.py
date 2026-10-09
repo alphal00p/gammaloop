@@ -1,10 +1,10 @@
 """All Community graph owners honor the same advanced rendering settings."""
 
 import json
-from pathlib import Path
-from tempfile import TemporaryDirectory
 import unittest
 import xml.etree.ElementTree as ET
+from pathlib import Path
+from tempfile import TemporaryDirectory
 
 # HepKit diagrams and tensor networks exist only in the Symbolica Community
 # wheel. FeynKit's Rust tests run this file without the suite's support module.
@@ -16,6 +16,41 @@ from symbolica.community import graph, hepkit, tensor
 
 
 class CommunityRenderingTests(unittest.TestCase):
+    def test_diagrams_paint_configured_flow_and_momentum_marks(self):
+        diagram = (
+            hepkit.Model.qed()
+            .process(["e-", "e+"], ["a", "a"])
+            .generate_diagrams(loops=0, progress=None)
+            .diagrams[0]
+        )
+        flow = graph.Mark("stealth", length="0.3cm", fill=graph.Color("#1a2b3c"))
+        momentum = graph.Mark.combine(
+            graph.Mark("bar", stroke=graph.Color("#4d5e6f")),
+            "1pt",
+            graph.Mark("triangle", fill=graph.Color("#7a8b9c")),
+        )
+        # `Mark` values and their public dictionaries configure the heads of
+        # native scenes and of scenes whose other settings need Typst.
+        for flow_arrow, momentum_arrow in (
+            (flow, momentum),
+            (flow.to_dict(), momentum.to_dict()),
+        ):
+            style = graph.GraphStyleOptions(
+                edge_style={
+                    "flow-arrow": flow_arrow,
+                    "momentum-arrow": momentum_arrow,
+                }
+            )
+            for route, layouts in (
+                ("native", graph.INHERIT),
+                ("typst", graph.LayoutSettings(impred_steps=1).then(impred_steps=1)),
+            ):
+                with self.subTest(route=route, data=type(flow_arrow).__name__):
+                    settings = graph.RenderSettings(style=style, layouts=layouts)
+                    svg = diagram.render(config=settings, momenta=True).to_svg()
+                    for paint in ("#1a2b3c", "#4d5e6f", "#7a8b9c"):
+                        self.assertIn(paint, svg)
+
     def test_advanced_styles_and_snapshots_across_owners(self):
         diagram = (
             hepkit.Model.phi3()

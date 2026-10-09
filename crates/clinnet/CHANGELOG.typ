@@ -21,6 +21,11 @@ and this project adheres to #link("https://semver.org/spec/v2.0.0.html")[Semanti
 
 - The bundled Kurvst package rejects unknown fields in path elements and unknown
   `resolve-length` methods.
+- The bundled Linnest package draws with stock CeTZ 0.5.2 from Typst Universe instead of
+  CeTZ 0.5.1 with local patches, and its templates and generated entrypoints import
+  `@preview/cetz:0.5.2`. Arrowheads, label footprints and hit areas come from the shared
+  Kurvst mark engine: style layers take `kurvst.mark` data under `mark`, and CeTZ mark
+  dictionaries such as `(end: ">")` are rejected.
 
 === Removed
 

@@ -65,7 +65,6 @@ __all__ = [
     "MarkDirection",
     "MarkOrientation",
     "MarkPosition",
-    "MarkSymbol",
     "NodeView",
     "NodeDrawing",
     "NodeValue",
@@ -129,7 +128,6 @@ _NativeValue: typing.TypeAlias = (
     | StrokeJoin
     | TextStyle
     | DashPattern
-    | MarkSymbol
     | MarkPosition
     | MarkOrientation
     | MarkDirection
@@ -190,8 +188,13 @@ _OptionalStrokeCap: typing.TypeAlias = StrokeCap | None | Inherit
 _OptionalStrokeJoin: typing.TypeAlias = StrokeJoin | None | Inherit
 _OptionalDashValue: typing.TypeAlias = _DashValue | None
 _OptionalStrokeValue: typing.TypeAlias = _StrokeValue | None
-_MarkAnchor: typing.TypeAlias = Anchor | Inherit
-_MarkShorten: typing.TypeAlias = _LengthValue | None | Auto
+_MarkSize: typing.TypeAlias = builtins.str | Length | Ratio | RelativeLength
+_MarkPaint: typing.TypeAlias = Color | builtins.str | builtins.bool | None | Auto
+_AutoMarkSize: typing.TypeAlias = _MarkSize | Auto
+_MarkRatio: typing.TypeAlias = builtins.str | Ratio
+_MarkStroke: typing.TypeAlias = _MarkPaint | Stroke
+_MarkPhase: typing.TypeAlias = Angle | Auto
+_MarkPart: typing.TypeAlias = Mark | _NativeDict | _MarkSize
 _TextStyleValue: typing.TypeAlias = TextStyle | Inherit
 _AutoOptionalStaticContent: typing.TypeAlias = _StaticContent | None | Auto
 _OptionalStaticContent: typing.TypeAlias = _StaticContent | None
@@ -853,7 +856,7 @@ class GraphStyleOptions:
     Options applied by `linnest.graph.style` before layout measurement.
     """
     def __repr__(self) -> builtins.str: ...
-    def __new__(cls, *, scope: _Dictionary = ..., unit: _LengthValue = ..., node_label: _AutoOptionalContent = ..., node_label_style: _Style = ..., node_style: _OptionalStyle = ..., edge_label: _OptionalContent = ..., edge_label_style: _Style = ...) -> GraphStyleOptions: ...
+    def __new__(cls, *, scope: _Dictionary = ..., unit: _LengthValue = ..., node_label: _AutoOptionalContent = ..., node_label_style: _Style = ..., node_style: _OptionalStyle = ..., edge_style: _OptionalStyleLayers = ..., edge_label: _OptionalContent = ..., edge_label_style: _Style = ...) -> GraphStyleOptions: ...
 
 @typing.final
 class HalfEdge:
@@ -998,14 +1001,14 @@ class Length:
 @typing.final
 class Mark:
     r"""
-    Typed CeTZ mark configuration.
+    Data-only Kurvst mark shared by native SVG and Typst drawing.
+    Shape defaults and fitting belong to the shared geometry engine.
     """
-    @staticmethod
-    def barbed() -> Mark: ...
-    @staticmethod
-    def straight() -> Mark: ...
     def __repr__(self) -> builtins.str: ...
-    def __new__(cls, *, start: _NativeValue = ..., end: _NativeValue = ..., fill: _OptionalPaint = ..., stroke: _OptionalStrokeValue = ..., scale: _Number = ..., anchor: _MarkAnchor = ..., shorten_to: _MarkShorten = ...) -> Mark: ...
+    def __new__(cls, name: typing.Literal["triangle", "straight", "stealth", "round", "tikz", "barb", "hooks", "bar", "bracket", "circle", "square", "diamond", "rays"], *, length: _AutoMarkSize = ..., width: _AutoMarkSize = ..., inset: _MarkRatio = ..., fill: _MarkPaint = ..., stroke: _MarkStroke = ..., rev: bool = ..., align: typing.Literal["center", "end"] = ..., arc: Angle = ..., n: int = ..., phase: _MarkPhase = ..., fit: typing.Literal["chord", "bend"] = ..., shorten: _MarkRatio = ...) -> Mark: ...
+    @staticmethod
+    def combine(*parts: _MarkPart, fit: typing.Literal["chord", "bend"] = ..., shorten: _MarkRatio = ...) -> Mark: ...
+    def to_dict(self) -> dict[str, typing.Any]: ...
 
 @typing.final
 class MathSymbol:
@@ -1727,14 +1730,6 @@ class MarkPosition(enum.Enum):
     End = ...
     Center = ...
     CenterIfDangling = ...
-
-@typing.final
-class MarkSymbol(enum.Enum):
-    r"""
-    Built-in arrowhead symbol used by CeTZ edge marks.
-    """
-    Barbed = ...
-    Straight = ...
 
 @typing.final
 class Pattern(enum.Enum):

@@ -1,5 +1,5 @@
 // Domain scene primitives shared by advanced graph rendering.
-#import "@preview/cetz:0.5.1" as cetz
+#import "@preview/cetz:0.5.2" as cetz
 
 #let hatch = tiling(size: (4pt, 4pt), line(start: (0pt, 4pt), end: (4pt, 0pt), stroke: 0.4pt + gray))
 
@@ -26,7 +26,8 @@
     offset: 0.35, length: 1.4, ratio: 0.5, resolve-length: "min",
     stroke: (paint: rgb("#333333"), thickness: 1pt, cap: "round"),
     pattern: none,
-    mark: if half == marked-half { (end: (symbol: "straight", scale: 0.8)) } else { none },
+    // The scene's configured (or the native default) momentum head.
+    mark: if half == marked-half { edge.scene-momentum-mark } else { none },
     mark-position: 1, mark-orientation: "path",
   )
   (

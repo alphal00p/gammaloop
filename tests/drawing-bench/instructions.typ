@@ -1,49 +1,46 @@
 = Drawing benchmark P0
 
-Python 3.10+ and Typst 0.15.x are required. This harness adapts the supplied
-`run.py`: fresh processes, one untimed warmup per variant, case-by-case
-interleaving and at least three rounds. It does not implement a fuel/prototype
-harness; none exists in the supplied bundle.
+Python 3.11+ and Typst 0.15.x are required. This harness adapts the supplied
+`run.py`: fresh processes, one untimed warmup, case-by-case order and at least
+three rounds. It does not implement a fuel/prototype harness; none exists in
+the supplied bundle.
 
 ```sh
 python3 tests/drawing-bench/run.py --dry-run --out target/drawing-bench/setup
 python3 tests/drawing-bench/run.py --rounds 3 --png 150
 python3 tests/drawing-bench/run.py --cases higgs-sunset-particles --out target/drawing-bench/single
-python3 tests/drawing-bench/run.py --variants current current-stock --stock-package-path /path/to/stock-packages --out target/drawing-bench/paired
+python3 tests/drawing-bench/run.py --package-path /path/to/typst/packages --out target/drawing-bench/stock
 ```
 
 Output directories must be new and under `target/drawing-bench`. No references
 are updated. The deterministic archive is SHA256-verified before safe extraction;
 all 24 fixtures remain byte-for-byte unchanged. A dry run assembles the same
-current sources and metadata without compiling. Inspect extracted cases and
-licenses in the output's `fixtures/` directory.
+current sources and metadata without compiling. Inspect extracted cases in the
+output's `fixtures/` directory.
 
-== Current versus historical
+== Current sources and stock packages
 
-Normal runs copy CURRENT `crates/linnest/typst/src`,
-`crates/kurvst/typst/src`, their checked-in WASM and
-`assets/embedded/drawing/templates`. They reuse the repository package path
-`crates/linnet-py/vendor/typst-packages`; no renderer tree or CeTZ is duplicated
-in this benchmark. Ensure these WASM assets match your source build before
-measuring; their hashes are recorded rather than implicitly rebuilding them.
+Runs copy the CURRENT `crates/linnest/typst/src`, `crates/kurvst/typst/src`,
+their checked-in WASM and `assets/embedded/drawing/templates`. Ensure these
+WASM assets match your source build before measuring; their hashes are
+recorded rather than implicitly rebuilding them.
 
-`current-stock` changes only the package path. Supply upstream CeTZ 0.5.1,
-MiTeX 0.2.6 and oxifmt 1.0.0 there. Until P7 removes vendored-only calls,
-compilation may fail explicitly with a Typst diagnostic. Never substitute the
-old scalar overlay to make this mode succeed: its old optimize arguments are
-incompatible with consolidated core, and it would measure the wrong sources.
-After migration this same mode needs no overlay or second rendering pipeline.
-
-The original external bundle may be measured separately with its own `run.py`,
-and named HISTORICAL/FROZEN snapshot, never CURRENT. This harness neither
-invokes nor depends on it.
+Packages come from `--package-path`, a Typst package directory with stock
+CeTZ 0.5.2, MiTeX 0.2.6 and oxifmt 1.0.0 from Typst Universe, the only packages
+the sources import. It defaults to `TYPST_PACKAGE_CACHE_PATH`, which the
+development shell points at its pinned package set. The harness checks the
+three packages before compiling and removes `TYPST_PACKAGE_CACHE_PATH` from the
+compile environment. No CeTZ fork or overlay is part of this benchmark. The original external bundle may be measured separately with its
+own `run.py`, and named HISTORICAL/FROZEN snapshot, never CURRENT.
 
 == Captured reconciled baseline
 
 `references.tar` contains the 24 current-source PNGs at 150 ppi, all 72 raw
 timing samples, case medians, source/package/environment metadata, and the
 paired comparison with the supplied snapshot. SHA256:
-`633b5b736b31d9f1378cf9b4108c3785a036e0d874558b90b469297b3be3142c`.
+`633b5b736b31d9f1378cf9b4108c3785a036e0d874558b90b469297b3be3142c`. These
+references are the P0 renders with the formerly vendored, patched CeTZ 0.5.1;
+stock CeTZ renders are compared against them by image review.
 
 The sum of three-round case medians is 15.010 s on the recorded M4 Pro host
 with Typst 0.15.1. All 24 PNGs are byte-identical to that host's supplied
@@ -58,18 +55,20 @@ tar -xf tests/drawing-bench/references.tar -C target/drawing-bench/reference-ima
 == Measurement and review
 
 `timings.csv` stores every measured sample in execution order, in milliseconds;
-`medians.csv` reports each case's median, sum of medians and last/first ratio.
-The first requested variant is the paired baseline. Keep diagram pairs
-(momenta and particles/notebook) together when reporting grouped regressions.
-PNG export is optional and untimed. Wall time includes process startup,
-compilation, SVG export, file output and process exit; assembly and hash
-inventory are outside the timing boundary. Warmups exclude the initial cold
-disk reads, not subsequent process startup.
+`medians.csv` reports each case's median and their sum. Compare revisions by
+running the harness from each checkout on the same host, interleaved, and keep
+diagram pairs (momenta and particles/notebook) together when reporting grouped
+regressions. PNG export is optional and untimed. Wall time includes process
+startup, compilation, SVG export, file output and process exit; assembly and
+hash inventory are outside the timing boundary. Warmups exclude the initial
+cold disk reads, not subsequent process startup.
 
 `metadata.json` records the checked-out commit (from jj in a jj workspace,
-otherwise from Git), actual assembled source/package/fixture identities, executable hash/version, host/OS, sample count, order, fonts and
-output hashes. Working-tree changes are represented by source hashes, not
-assumed to match HEAD. System fonts are ignored and `TYPST_FONT_PATHS` removed.
+otherwise from Git; `null` for a tree outside any checkout), actual assembled
+source/package/fixture identities,
+executable hash/version, host/OS, sample count, order, fonts and output hashes.
+Working-tree changes are represented by source hashes, not assumed to match
+HEAD. System fonts are ignored and `TYPST_FONT_PATHS` removed.
 
 Hashes identify artifacts, not approval. Historical Linux SVG references are
 retained unchanged, not treated as pixel-identity acceptance tests.
@@ -95,12 +94,65 @@ host-specific frozen references, not new Mac measurements or current-source
 claims. The separately captured reconciled PNGs are stored in `references.tar`.
 
 Reproduced on 2026-10-09 on itphlies (AMD EPYC 9754, Linux, Typst 0.15.1)
-from the consolidated Kurvst sources and the vendored packages: all 24 PNGs
-at 150 ppi are byte-identical to `references.tar`. The three-round sum of case
-medians was 27.2 s at a shared-host load average near 58; it is not comparable
-with the M4 Pro figure and is recorded only as context for paired runs on this
-host.
+from the consolidated Kurvst sources and the then vendored packages: all 24
+PNGs at 150 ppi are byte-identical to `references.tar`. The three-round sum of
+case medians was 27.2 s at a shared-host load average near 58; it is not
+comparable with the M4 Pro figure and is recorded only as context for paired
+runs on this host.
 
-Linnest/Kurvst licenses and Linnest's ec-layout/clarabel notices are preserved
-inside the archive under their original `tree/crates/...` paths. Existing
-repository packages retain their own CeTZ LGPL-3.0, MiTeX and oxifmt licenses.
+The supplied archive also held copies of the Linnest/Kurvst licenses,
+Linnest's clarabel notice and the notice of the since removed ec-layout plugin
+under `tree/`. The archive contains none of that code, so they are not retained
+(see the manifest). Stock packages carry their own CeTZ LGPL-3.0, MiTeX and
+oxifmt licenses.
+
+== Focused native Python acceptance
+
+`native.py` is independent of `run.py`, the Typst corpus and package selection.
+Install the Symbolica Community host wheel (`examples/notebooks/symbolica-host`),
+which provides `symbolica.community.graph` and `symbolica.community.hepkit`, into
+a dedicated environment on Python 3.10+, and run the script with that
+environment's interpreter. Keep any user license in the process environment,
+never in artifacts. Pause other benchmarks and CPU-heavy builds before
+measuring.
+
+```sh
+python tests/drawing-bench/native.py
+# A repeat requires a new output directory:
+python tests/drawing-bench/native.py --out target/drawing-bench/native-acceptance-repeat
+```
+
+The fixed scalar cube-minus-edge DOT avoids diagram generation. The checked-in
+`crates/feynkit-py/tests/fixtures/scalars_2p_3p.json` model must validate its
+four loops, eleven internal edges, eight cubic interaction vertices and two
+external edges. Rendering uses `RenderSettings(layouts=LayoutSettings(impred_steps=100))`
+and `DiagramStyle` with momentum arrows on, particle and momentum labels off
+and no title. This has empty label pages and uses the native `Scene::render`
+branch, not Typst typesetting.
+
+Ten untimed warmups precede twenty-one `perf_counter_ns` samples. Only the
+installed Python `diagram.render(config=..., style=...).to_svg()` call is timed;
+imports, model loading, validation, SVG parsing, hashing and writes are
+excluded. The reported median is compared with an absolute upper target of
+100 ms. This is not a nonregression certificate; compare installed wheels of
+both revisions on the same host for that.
+
+Each new directory under `target/drawing-bench/native-acceptance` (or the
+explicit `--out`) retains input DOT/configuration, arrows-on/off SVGs, all
+sample SVGs and `metadata.json`: raw nanosecond samples, median,
+host/toolchain, loaded module paths/hashes, fixture/source hashes and revision.
+Installed binary hashes identify the actual extension; the harness does not
+assume it was built from current dirty sources. Preserve its build log
+alongside the run to establish that relationship.
+
+Untimed XML checks require a finite positive viewbox, thirteen nondegenerate
+painted momentum-head paths (the default open stroked V, not a filled
+triangle), no corresponding heads with arrows off, and stable
+node/edge/half-edge identities. Interactive links require parseable details
+and positive hit rectangles; any remaining fragment links must resolve. These
+checks are not visual approval of overlaps, clipping, shaft contacts or
+hit-area coverage; review the SVGs separately. Exit status is 0 for a validated
+median <= 100 ms, 1 for an exceeded target, and 2 for a blocked
+import/render/assertion. A blocked run records no invented median. Exception
+text and environment values are deliberately not serialized because license
+errors may contain private data.

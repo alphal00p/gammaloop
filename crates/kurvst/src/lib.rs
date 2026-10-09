@@ -11,7 +11,7 @@ pub use curve_api::{
     curve_region_samples_bytes, curve_stroke_outline_bytes, curve_trim_path_bytes,
     curve_trim_paths_bytes,
 };
-pub use marks::mark_geometry_bytes;
+pub use marks::{mark_geometry_bytes, mark_geometry_packed_bytes};
 
 #[cfg(all(target_arch = "wasm32", feature = "typst-plugin"))]
 use wasm_minimal_protocol::*;
@@ -101,4 +101,10 @@ pub fn curve_region_samples(arg: &[u8]) -> Result<Vec<u8>, String> {
 #[wasm_func]
 pub fn mark_geometry(arg: &[u8]) -> Result<Vec<u8>, String> {
     mark_geometry_bytes(arg)
+}
+
+#[cfg(all(target_arch = "wasm32", feature = "typst-plugin"))]
+#[wasm_func]
+pub fn mark_geometry_packed(arg: &[u8]) -> Result<Vec<u8>, String> {
+    mark_geometry_packed_bytes(arg)
 }

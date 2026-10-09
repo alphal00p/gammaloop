@@ -1,11 +1,11 @@
-//! Offline Typst compilation with embedded fonts and an explicit package store.
+//! Offline Typst compilation with embedded fonts and explicit package directories.
 //! The same compiler runs natively and inside Pyodide; it never imports Python
 //! packages, invokes a subprocess, or downloads Typst packages.
 
 use std::{
     collections::{BTreeMap, HashMap},
-    fs,
-    path::Path,
+    env, fs,
+    path::{Path, PathBuf},
     sync::{LazyLock, Mutex},
 };
 
@@ -15,9 +15,9 @@ use typst::utils::LazyHash;
 use typst_kit::fonts::FontStore;
 use typst_library::{
     Feature, Library, World, WorldExt,
-    diag::{FileError, FileResult, SourceDiagnostic},
+    diag::{FileError, FileResult, PackageError, SourceDiagnostic},
     foundations::{
-        Bytes, Datetime, Duration, NativeElement, Recipe, Selector, Styles, Transformation,
+        Bytes, Datetime, Duration, NativeElement, Recipe, Selector, Styles, Transformation, Value,
     },
     math::EquationElem,
     text::{Font, FontBook, FontFamily, FontList, TextElem},
@@ -49,23 +49,58 @@ static FONTS: LazyLock<FontStore> = LazyLock::new(|| {
 });
 
 /// One immutable render project. Authored sources override files staged on disk;
-/// package imports resolve exclusively within the supplied package directory.
+/// package imports resolve in the first supplied package directory that holds
+/// them, each laid out as `namespace/name/version`.
 pub struct Document<'a> {
     root: &'a Path,
-    packages: &'a Path,
+    packages: &'a [PathBuf],
     files: &'a BTreeMap<String, Vec<u8>>,
     sources: Mutex<HashMap<FileId, Source>>,
     library: LazyHash<Library>,
 }
 
 impl<'a> Document<'a> {
+    /// Resolve a named Typst color to its exact SVG hexadecimal paint.
+    pub fn named_color_css(name: &str) -> Result<String, String> {
+        static LIBRARY: LazyLock<Library> = LazyLock::new(|| Library::builder().build());
+        match LIBRARY
+            .global
+            .scope()
+            .get(name)
+            .map(|binding| binding.read())
+        {
+            Some(Value::Color(color)) => Ok(color.to_hex().to_string()),
+            _ => Err(format!(
+                "unknown Typst color {name:?}; use an RGB or hexadecimal paint"
+            )),
+        }
+    }
+
     /// Compile a virtual document without any package store or plugin assets.
     pub fn compile_sources(
         files: &BTreeMap<String, Vec<u8>>,
         format: &str,
     ) -> Result<Vec<Vec<u8>>, String> {
         let root = tempfile::tempdir().map_err(|e| e.to_string())?;
-        Document::new(root.path(), root.path(), files).compile(format)
+        Document::new(root.path(), &[], files).compile(format)
+    }
+
+    /// The package directories of the Typst CLI, in its lookup order: the
+    /// package path (`TYPST_PACKAGE_PATH`, else `<data dir>/typst/packages`),
+    /// then the package cache (`TYPST_PACKAGE_CACHE_PATH`, else
+    /// `<cache dir>/typst/packages`). Unlike the CLI, nothing is downloaded.
+    pub fn local_package_dirs() -> Vec<PathBuf> {
+        [
+            ("TYPST_PACKAGE_PATH", dirs::data_dir()),
+            ("TYPST_PACKAGE_CACHE_PATH", dirs::cache_dir()),
+        ]
+        .into_iter()
+        .filter_map(|(variable, default)| {
+            env::var_os(variable)
+                .map(PathBuf::from)
+                .or_else(|| default.map(|directory| directory.join("typst/packages")))
+        })
+        .collect()
     }
 
     /// A self-contained Typst export of an already drawn SVG figure.
@@ -73,7 +108,11 @@ impl<'a> Document<'a> {
         format!("#set page(width: auto, height: auto, margin: 0pt)\n#image(bytes({svg:?}))")
     }
 
-    pub fn new(root: &'a Path, packages: &'a Path, files: &'a BTreeMap<String, Vec<u8>>) -> Self {
+    pub fn new(
+        root: &'a Path,
+        packages: &'a [PathBuf],
+        files: &'a BTreeMap<String, Vec<u8>>,
+    ) -> Self {
         Self {
             root,
             packages,
@@ -209,11 +248,32 @@ impl World for Document<'_> {
                 }
                 self.root.to_path_buf()
             }
-            VirtualRoot::Package(package) => self
-                .packages
-                .join(package.namespace.as_str())
-                .join(package.name.as_str())
-                .join(package.version.to_string()),
+            VirtualRoot::Package(package) => {
+                let relative = Path::new(package.namespace.as_str())
+                    .join(package.name.as_str())
+                    .join(package.version.to_string());
+                self.packages
+                    .iter()
+                    .map(|directory| directory.join(&relative))
+                    .find(|directory| directory.is_dir())
+                    .ok_or_else(|| {
+                        let searched = self
+                            .packages
+                            .iter()
+                            .map(|directory| directory.display().to_string())
+                            .collect::<Vec<_>>()
+                            .join(", ");
+                        FileError::Package(PackageError::Other(Some(
+                            format!(
+                                "{package} is not installed (searched: {searched}); \
+                                 compile once with the Typst CLI to cache it, or set \
+                                 TYPST_PACKAGE_PATH to a directory holding {}",
+                                relative.display()
+                            )
+                            .into(),
+                        )))
+                    })?
+            }
         };
         let path = id.vpath().realize(&root)?;
         fs::read(&path)
@@ -250,13 +310,76 @@ mod tests {
         }
         let root = tempfile::tempdir().unwrap();
         let files = BTreeMap::from([("main.typ".into(), source.as_bytes().to_vec())]);
-        let document = Document::new(root.path(), root.path(), &files);
+        let document = Document::new(root.path(), &[], &files);
         let paged = typst::compile::<PagedDocument>(&document).output.unwrap();
         let mut families = BTreeSet::new();
         for page in paged.pages() {
             collect(&page.frame, &mut families);
         }
         families
+    }
+
+    #[test]
+    fn packages_resolve_in_the_first_directory_that_holds_them() {
+        let stores = tempfile::tempdir().unwrap();
+        let directories: Vec<PathBuf> = ["first", "second"]
+            .into_iter()
+            .map(|name| stores.path().join(name))
+            .collect();
+        for (directory, packages) in directories
+            .iter()
+            .zip([&["shared"][..], &["shared", "later"]])
+        {
+            for package in packages {
+                let root = directory.join("preview").join(package).join("1.0.0");
+                fs::create_dir_all(&root).unwrap();
+                fs::write(
+                    root.join("typst.toml"),
+                    format!("[package]\nname = \"{package}\"\nversion = \"1.0.0\"\nentrypoint = \"lib.typ\"\n"),
+                )
+                .unwrap();
+                let marker = directory.file_name().unwrap().to_str().unwrap();
+                fs::write(
+                    root.join("lib.typ"),
+                    format!("#let marker = \"{marker}\"\n"),
+                )
+                .unwrap();
+            }
+        }
+        let files = BTreeMap::from([(
+            "main.typ".to_owned(),
+            b"#import \"@preview/shared:1.0.0\": marker as shared\n\
+              #import \"@preview/later:1.0.0\": marker as later\n\
+              #assert.eq(shared, \"first\")\n#assert.eq(later, \"second\")\n[ok]"
+                .to_vec(),
+        )]);
+        let root = tempfile::tempdir().unwrap();
+        assert!(
+            Document::new(root.path(), &directories, &files)
+                .compile("svg")
+                .is_ok()
+        );
+
+        // A package in no directory names itself, the directories and the remedy.
+        let error = Document::new(root.path(), &directories[..1], &files)
+            .compile("svg")
+            .unwrap_err();
+        for expected in [
+            "@preview/later:1.0.0 is not installed",
+            directories[0].to_str().unwrap(),
+            "TYPST_PACKAGE_PATH",
+        ] {
+            assert!(error.contains(expected), "{error}");
+        }
+    }
+
+    #[test]
+    fn named_color_svg_paints_use_typst_constants_not_css_names() {
+        assert_eq!(Document::named_color_css("red").unwrap(), "#ff4136");
+        assert_eq!(Document::named_color_css("blue").unwrap(), "#0074d9");
+        assert_eq!(Document::named_color_css("eastern").unwrap(), "#239dad");
+        assert!(Document::named_color_css("unknown-mark-color").is_err());
+        assert!(Document::named_color_css("rect").is_err());
     }
 
     #[test]
@@ -318,7 +441,7 @@ mod tests {
             "main.typ".to_owned(),
             b"#set page(width: auto, height: auto)\n$x^2 + 1$".to_vec(),
         )]);
-        let document = Document::new(root.path(), root.path(), &files);
+        let document = Document::new(root.path(), &[], &files);
         assert!(
             String::from_utf8(document.compile("svg").unwrap().remove(0))
                 .unwrap()

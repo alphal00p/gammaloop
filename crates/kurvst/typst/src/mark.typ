@@ -216,7 +216,11 @@
 /// Context may include `shaft-stroke` with cap, join, and miter-limit.
 /// Carriers are Kurvst paths; placements refer to template/carrier indices.
 /// Paint stays in the original specs and is matched through the returned indices.
-#let geometry(templates, carriers, placements, mode: "candidates") = {
+#let geometry(templates, carriers, placements, mode: "candidates", format: "native") = {
+  assert(
+    format in ("native", "cbor"),
+    message: "kurvst.mark.geometry: format must be native or cbor",
+  )
   assert(
     mode in ("candidates", "selected"),
     message: "kurvst.mark.geometry: mode must be candidates or selected",
@@ -258,10 +262,15 @@
     )
     (path: carrier.at("path", default: carrier))
   })
-  cbor(_plugin.mark_geometry(cbor.encode((
+  let request = cbor.encode((
     mode: mode,
     templates: templates,
     carriers: carriers,
     placements: placements,
-  ))))
+  ))
+  if format == "cbor" {
+    _plugin.mark_geometry_packed(request)
+  } else {
+    cbor(_plugin.mark_geometry(request))
+  }
 }

@@ -1,9 +1,10 @@
 #set page(width: auto, height: auto, margin: 0pt)
 
 #import "crates/linnest/typst/src/lib.typ": draw, graph, layout, layouts
+#import "crates/linnest/typst/src/curve.typ" as curve
 #import graph: *
 #import "map-style.typ" as feynman
-#import "@preview/cetz:0.5.1" as cetz
+#import "@preview/cetz:0.5.2" as cetz
 #import "curved-arrow-behavior.typ": curved-arrow-behavior
 #curved-arrow-behavior
 #import "weighted-cut-behavior.typ": weighted-cut-behavior
@@ -440,15 +441,8 @@
     length: 2,
     resolve-length: "length",
     shift: 1,
-    mark: (
-      end: (
-        symbol: ">",
-        fill: arrow-color,
-        stroke: arrow-color,
-        anchor: "center",
-        shorten-to: auto,
-      ),
-    ),
+    mark: curve.mark.stealth(length: 9pt, width: 6.75pt,
+      fill: arrow-color, stroke: arrow-color),
     mark-position: "end",
   ),
 )
@@ -469,15 +463,8 @@
       stroke: crossing-color + 0.8pt,
       crossing-under: <crossing-target>,
       crossing-gap: 1,
-      mark: (
-        end: (
-          symbol: ">",
-          fill: crossing-mark-color,
-          stroke: crossing-mark-color,
-          anchor: "center",
-          shorten-to: auto,
-        ),
-      ),
+      mark: curve.mark.stealth(length: 9pt, width: 6.75pt,
+        fill: crossing-mark-color, stroke: crossing-mark-color),
       mark-position: "end",
     ),
   )
@@ -494,15 +481,8 @@
       stroke: crossing-reference-color + 0.8pt,
       crossing-under: <crossing-target>,
       crossing-gap: 1,
-      mark: (
-        end: (
-          symbol: ">",
-          fill: crossing-reference-mark-color,
-          stroke: crossing-reference-mark-color,
-          anchor: "center",
-          shorten-to: auto,
-        ),
-      ),
+      mark: curve.mark.stealth(length: 9pt, width: 6.75pt,
+        fill: crossing-reference-mark-color, stroke: crossing-reference-mark-color),
       mark-position: "end",
     ),
   )

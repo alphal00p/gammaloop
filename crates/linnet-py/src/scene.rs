@@ -89,6 +89,7 @@ impl PyDiagramRender {
                     .map_err(PyRuntimeError::new_err)?;
             return Ok(Self::new(svg.clone(), format!("<figure>{svg}</figure>")));
         }
+        let marks = settings.scene_marks()?;
         let dir = tempfile::tempdir().map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
         let labels = dir.path().join("labels.typ");
         let settings = settings.with_scene_defaults(py, &scene, labels.clone())?;
@@ -163,6 +164,9 @@ impl PyDiagramRender {
             label(&drawing, edge.label)?;
             let extensions = PyDict::new(py);
             extensions.set_item("scene-momentum", edge.momentum)?;
+            if edge.momentum {
+                extensions.set_item("scene-momentum-mark", marks.momentum(py)?)?;
+            }
             drawing.set_item("extensions", &extensions)?;
             let style = PyDict::new(py);
             style.set_item("stroke", stroke(py, &edge.stroke)?)?;
@@ -190,9 +194,9 @@ impl PyDiagramRender {
                 }
             }
             if let Some(forward) = edge.flow {
-                let mark = PyDict::new(py);
-                mark.set_item(if forward { "end" } else { "start" }, ">")?;
-                style.set_item("mark", mark)?;
+                for (key, value) in marks.flow(py, forward)? {
+                    style.set_item(key, value)?;
+                }
             }
             drawing.set_item(
                 "style",

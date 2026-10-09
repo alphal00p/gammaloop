@@ -1,9 +1,9 @@
 = Kurvst Arrowhead Engine
 
 #quote(block: true)[
-*Status: Accepted design, recorded 2026-10-04; P0 captured, P1 implemented, P2–P7 NOT IMPLEMENTED.*
-This is a planned architecture note, not an executable API reference or a claim
-that renderer migration has landed. API examples below are proposed sketches.
+*Status: Accepted design, recorded 2026-10-04; P0–P7 implemented.*
+Linnest draws with stock CeTZ 0.5.2 and the shared Kurvst mark engine; no CeTZ
+is vendored. Performance and image acceptance remain open decisions.
 ]
 
 == Decision and delivery boundary
@@ -23,9 +23,9 @@ baseline against the consolidated base, then implement the phases below.
 
 == Mark catalogue and data contract
 
-`kurvst.mark` constructors produce data only. Python `linnet.Mark(name, ...)`
-mirrors the same names, fields, and defaults and serializes the same dictionary;
-there is no Python `kurvst` module. Names, parameters, and defaults follow
+`kurvst.mark` constructors produce data only. The Python `Mark(name, ...)` of
+`linnet_py` and `symbolica.community.graph` mirrors the same names, fields, and
+defaults and serializes the same dictionary; there is no Python `kurvst` module. Names, parameters, and defaults follow
 #link("https://typst.app/universe/package/tiptoe/0.4.0/")[tiptoe 0.4.0 (MIT)],
 with attribution retained in the fresh implementation.
 
@@ -108,10 +108,10 @@ geometry evaluation; numeric hitboxes and prepared content drawables avoid
 per-target painting work. Link target selection and semantics remain Linnest
 responsibilities, separate from the mark catalogue.
 
-== Proposed API and migration (not executable today)
+== API and migration
 
-These sketches describe the accepted interface direction. They do not establish
-currently available constructors or native configuration options.
+Mark constructors, the native Python configuration and the Typst renderer
+migration are implemented as sketched below.
 
 ```typst
 #import "../../crates/kurvst/typst/lib.typ": kurvst
@@ -129,23 +129,20 @@ currently available constructors or native configuration options.
 ```
 
 ```python
-import linnet
+from symbolica.community.graph import GraphStyleOptions, Mark, RenderSettings
 
-flow = linnet.Mark("triangle", length="0.21cm", width="0.1575cm")
-momentum = linnet.Mark("stealth", inset="25%", fit="bend")
-config = {
-    "style": {
-        "edge-style": {
-            "flow-arrow": flow,
-            "momentum-arrow": momentum,
-        }
-    }
-}
-diagram.render(config=config, momenta=True)
+flow = Mark("triangle", length="0.21cm", width="0.1575cm")
+momentum = Mark("stealth", inset="25%", fit="bend")
+settings = RenderSettings(
+    style=GraphStyleOptions(
+        edge_style={"flow-arrow": flow, "momentum-arrow": momentum}
+    )
+)
+diagram.render(config=settings, momenta=True)
 ```
 
 Native configuration gains `flow-arrow` and `momentum-arrow`. Reject CeTZ mark
-dictionaries with an error showing the replacement; remove `linnet.Mark` CeTZ
+dictionaries with an error showing the replacement; remove the Python `Mark` CeTZ
 fields `scale`, `anchor`, and `shorten_to`, with useful migration errors.
 Switch physics `fermion-arrow-mark` and `momentum-arrow-mark` together with
 documentation and examples. Preserve the notebook look using explicit existing
@@ -184,7 +181,7 @@ These observations motivate numeric preparation rather than merely replacing
 the painter. P0 must record host, toolchain, cache state, timing boundaries, and
 paired baseline comparisons before using these figures as performance gates.
 
-== Delivery phases: P0 baseline captured, P1 implemented, P2–P7 NOT IMPLEMENTED
+== Delivery phases and evidence
 
 Each phase is its own change after the consolidated base, with corpus
 timings recorded. S/M/L are planning sizes, not completion indicators.
@@ -217,12 +214,12 @@ painted-footprint coverage, shaft/back contact, zero-length paths, and near-end
 placement.
 
 P1 now provides the shared native/Wasm engine and strict data-only Typst
-constructors for thirteen shapes and composites. Its 93 native tests and
+constructors for thirteen shapes and composites. Its 110 native tests and
 native/Wasm parity checks pass. The approved parity tolerance is
 `1e-12 * max(1, abs(actual), abs(expected))` for geometry coordinates and
 lengths only; structure, styles, indices, and other data remain exact.
 Candidate results remain independent, while selected results share one
-authoritative painted shaft per carrier. No renderer has migrated yet.
+authoritative painted shaft per carrier.
 
 === P2 — M: native and Python
 
@@ -230,16 +227,52 @@ Replace hardcoded `linnest::svg::marks` with the engine, add native
 `flow-arrow` / `momentum-arrow` and the Python mirror. Preserve the default
 notebook look with explicit sizes.
 
+The native renderer uses one drawing-wide candidate call and one selected
+call, with deduplicated templates and one painted shaft per carrier. Linnest's
+SVG tests cover the call count, every catalogue shape and composites with both
+fits, independent leaf paints and hit areas, and painted candidate bounds.
+Native configuration reads `flow-arrow` and `momentum-arrow` from the graph
+edge style (`GraphStyleOptions.edge_style`); linnet-py turns `Mark` values and their public
+dictionaries into the numeric `MarkSpec` and its leaf paints on every native
+path, for ordinary graphs and domain scenes alike. It checks them, and
+dictionaries under the Typst `mark` key, when a style is configured, so a CeTZ
+dictionary or an invalid mark is an error before either renderer is chosen. A
+domain scene whose other settings need Typst draws the same configured heads
+there. Named paints resolve through
+Typst's own color constants, not CSS names. Painted head outlines count in the
+native label-overlap score, so label feedback moves labels off heads as well as
+shafts.
+
+The maintainer approved the shared engine's default appearance on 2026-10-09:
+retain the explicit physical sizes and inset stroke geometry rather than
+recreating legacy protruding miters. The isolated raw-paint comparison at
+150ppi changed 67/2814 pixels for the flow triangle and 74/2814 for momentum;
+maximum bounding-extent changes were 0.4272pt and 1.6512pt respectively.
+This approval does not waive corpus image review or native/Typst parity.
+
 === P3 — M: Typst painting
 
 Replace `mark.geometry` with engine geometry painted through CeTZ; accept only
 Kurvst marks. Migrate physics, manual, and map-style uses. Remove one of the
 three vendored-only calls.
 
+The Typst route consumes the shared candidate and selected batches. Physics
+templates, the map-style example, linnet-py's scene template and Python
+selectors use canonical mark data; CeTZ edge-mark dictionaries are rejected.
+All Clinnet tests, including the native/Wasm mark parity checks, pass with
+stock CeTZ 0.5.2 as the only package source. Named preparation
+anchors remain on the unshortened reference carrier; final painted heads
+contribute their engine outlines to conservative canvas bounds.
+
 === P4 — M: candidate footprints
 
 Replace `mark.footprints` and the slow paint fallback with shared candidate-batch
 engine footprints. This addresses the main 79% momentum penalty.
+
+Candidate templates and placement indices are collected drawing-wide before
+label search. Outlines determine collision boxes; retained sizing thickness
+cannot turn a shaft with no paint into an obstacle. This is implemented and
+covered by focused tests, not yet a corpus performance claim.
 
 === P5 — S: hit areas
 
@@ -247,17 +280,55 @@ Use numeric hitboxes and prepared content drawables instead of per-target CeTZ
 `content-many`. Address roughly 75% of the plain penalty and 16% of momentum's;
 keep link semantics separate from the catalogue.
 
+The authored fixed-size identity-target helper passes focused stock CeTZ checks,
+preserving both expected SVG links. A document whose own canvas uses stock CeTZ
+0.5.1 or 0.5.2 can embed Linnest edge halves, Kurvst paths and a full drawing
+with Kurvst heads; both produce the same SVG.
+
 === P6 — S: collision sampling
 
 Land the collision-sampling prototype JJ change `tvxztqnq` with one plugin batch.
 Its reported vendored-corpus improvement was 1.8%; collision accounts for
 roughly 2–14% of the stock penalty. These figures are not new measurements.
 
+The prototype revision was unavailable. The implementation instead reuses the
+existing Linnest `label_stroke_lines` owner, with strict numeric validation and
+one batched traversal of painted strokes. Twenty-three label-placement tests
+and a focused stock-CeTZ fixture pass. The drawing owner now gathers all
+painted strokes for one traversal; timing acceptance remains pending.
+
 === P7 — M: stock CeTZ and vendor removal
 
 Target *stock CeTZ 0.5.2* (the measurements above used 0.5.1). Delete vendor,
 patches, and `REBUILD`; migrate behavior fixtures and Nix packaging; rerun the
 corpus. Generic bounds/sample speedups may optionally be upstreamed.
+
+The patched 47-file package tree, five patches and rebuild recipe are deleted,
+and no CeTZ copy remains in the repository or the wheels. Nix selects stock
+CeTZ 0.5.2 for the documentation and the development shell. linnet-py's Typst
+route reads `@preview/cetz:0.5.2` from the local package path and cache, in the
+Typst CLI's order, and never downloads; a missing package is reported with the
+directories searched. Native rendering needs no Typst package.
+
+== Validation and remaining acceptance
+
+Measured on itphlies (AMD EPYC 9754, Linux, Typst 0.15.1) at a shared-host load
+average near 70. The 24-case corpus compiles with stock CeTZ 0.5.2 as the only
+package source. At 150 ppi, six PNGs equal P0 byte for byte and eighteen
+differ. Every momentum case redraws its momentum heads, and particle-flow
+heads are filled with the line paint instead of ink, with the engine's explicit
+sizes and inset stroke geometry. Label search places labels differently in
+some momentum cases: nonplanar K3,3 no longer overlaps two labels, the Higgs
+scattering figure is 8 px shorter, and in the six-leg Higgs theta figure one
+label now crosses a dotted edge. Image review remains required.
+
+Paired, interleaved fresh-process compiles over five rounds compare these
+sources with the P0 sources and the formerly vendored, patched CeTZ 0.5.1:
+stock CeTZ is 1.167 times slower in the median round (range 1.164–1.224), with
+sums of case medians of 32.6 s against 27.7 s. Momentum cases take 1.23–1.40
+times as long; particle and notebook cases 0.97–1.02 times. Performance
+acceptance is therefore still open; the M4 Pro ceilings above are not
+comparable on this host.
 
 == Acceptance and risks
 
@@ -283,5 +354,5 @@ and passing stock-CeTZ tests.
 - Licensing: fresh MIT geometry with tiptoe attribution, not copied LGPL
   CeTZ patch code.
 
-This note records acceptance of the design only. None of the P0–P7 acceptance
-checks, migration outcomes, or performance targets is claimed complete.
+P0–P7 are implemented. The performance targets and the image review above
+remain open acceptance decisions.

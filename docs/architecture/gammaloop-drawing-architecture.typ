@@ -36,9 +36,12 @@ rendering run has these steps:
    and delegates graph styling, layout, and drawing to Linnest's generic renderer.
 + `linnet-py` owns a separate in-process preparation boundary. It serializes only names, indices,
    incidence, flow, and orientation into a versioned `linnest-graph-spec` CBOR document; arbitrary
-   Python `.data` and DOT `GlobalData` never enter it. The wheel embeds Linnest, Kurvst, CeTZ 0.5.1,
-   oxifmt 1.0.0, and MiTeX 0.2.6, stages them with the graph spec, and invokes the embedded Rust Typst compiler. It has
-   no Clinnet library dependency and does not discover or launch a Typst executable.
+   Python `.data` and DOT `GlobalData` never enter it. The wheel embeds Linnest, Kurvst, oxifmt
+   1.0.0, and MiTeX 0.2.6, stages them with the graph spec, and invokes the embedded Rust Typst
+   compiler. Stock CeTZ 0.5.2 is not bundled: the Typst route reads it from the local Typst
+   package path and cache, as the Typst CLI does, without downloading. Native drawings need no
+   Typst package. It has no Clinnet library dependency and does not discover or launch a Typst
+   executable.
 + Both preparers invoke Typst with constant-sized process arguments. Their generated entrypoints
    statically import the selected template and each referenced user module once, materialize the
    native configuration dictionary, and call the template's mandatory `render(config)` export.

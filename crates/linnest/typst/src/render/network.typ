@@ -1,5 +1,5 @@
 #import "../lib.typ": draw, graph, layouts, subgraph
-#import "@preview/cetz:0.5.1" as cetz
+#import "@preview/cetz:0.5.2" as cetz
 #import "layout.typ" as shared
 
 
@@ -137,8 +137,9 @@
 }
 
 #let node-label(node) = {
-  let data = node.at("data", default: (:))
-  let math-source = data.at("label-typst", default: none)
+  // Records without DOT data carry `data: none`.
+  let data = node.at("data", default: none)
+  let math-source = if type(data) == dictionary { data.at("label-typst", default: none) }
   if math-source != none { return eval("$" + math-source + "$", mode: "markup") }
   let value = node-label-value(node)
   if value == none {
@@ -175,7 +176,8 @@
 }
 
 #let tree-edge-label(edge) = {
-  let math-source = edge.at("data", default: (:)).at("label-typst", default: none)
+  let data = edge.at("data", default: none)
+  let math-source = if type(data) == dictionary { data.at("label-typst", default: none) }
   let value = if math-source != none {
     eval("$" + math-source + "$", mode: "markup")
   } else { record-label-value(edge) }

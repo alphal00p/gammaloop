@@ -70,21 +70,6 @@
   }
 }
 
-#let _single-end-mark(mark, arrow-stroke) = {
-  if type(mark) == str {
-    mark = mark.trim("\"")
-    if mark == "none" { mark = none } else if mark == "auto" { mark = auto }
-  }
-  let base = (end: "straight", stroke: arrow-stroke, scale: 0.8)
-  if mark == auto { base } else if mark == none { none } else if (
-    type(mark) == dictionary
-  ) {
-    let clean = mark
-    if clean.keys().contains("start") { let _ = clean.remove("start") }
-    base + clean
-  } else { base + (end: mark) }
-}
-
 #let _momentum-arrow-layer(edge, options) = {
   let side = options.momentum-arrow-side
   let side = if side == auto { "auto" } else { str(side).trim("\"") }
@@ -146,7 +131,9 @@
     stroke: stroke,
     pattern: none,
     mark: if options.show-mark {
-      _single-end-mark(options.momentum-arrow-mark, stroke)
+      if options.momentum-arrow-mark == auto {
+        options.api.momentum-arrow-defaults.mark
+      } else { options.momentum-arrow-mark }
     } else { none },
     // A numeric end position uses Linnest's continuous paired-edge carrier,
     // keeping one arrowhead when a shift crosses the source/sink split.
@@ -221,6 +208,16 @@
       let value-text = value.trim("\"")
       assert(value-text in ("true", "false"), message: "momentum-label-slide must be true or false")
       value = value-text == "true"
+    }
+    // DOT data carries only the words; marks themselves are kurvst.mark values.
+    if key == "momentum-arrow-mark" and type(value) == str {
+      let value-text = value.trim("\"")
+      assert(
+        value-text in ("none", "auto"),
+        message: "momentum-arrow-mark data must be none or auto, not " + repr(value-text)
+          + "; set kurvst.mark values in the style",
+      )
+      value = if value-text == "none" { none } else { auto }
     }
     options.insert(key, value)
   }

@@ -2,7 +2,12 @@
 
 Native Linnet half-edge graphs for Python: builders, live graph views,
 subgraphs, DOT codecs, graph algorithms, layout streams, and rendering with an
-embedded Typst compiler. No separate Typst package or executable is required.
+embedded Typst compiler; no Typst executable is used. Native drawings, the
+default, need no Typst package. The full Typst route (templates, selectors,
+layout sequences) imports stock CeTZ 0.5.2 from the local Typst package path
+or cache: compile any document that imports `@preview/cetz:0.5.2` once with
+the Typst CLI, or set `TYPST_PACKAGE_PATH` to a directory holding
+`preview/cetz/0.5.2`.
 
 The same bindings ship in two distributions:
 
@@ -33,10 +38,12 @@ includes code translated from NetworkX (BSD-3-Clause,
 `licenses/networkx-LICENSE`), and Kurvst's mark geometry follows tiptoe (MIT,
 `licenses/tiptoe-LICENSE`). The wheel embeds Typst with the permissively
 licensed Libertinus Serif, STIX Two Math, and DejaVu Sans Mono fonts
-(`licenses/`), and the CeTZ, oxifmt, and MiTeX Typst packages, whose licenses
-and provenance are under `vendor/typst-packages/`. CeTZ's LGPL-3.0 builds on
-the GPL-3.0, whose text is `licenses/GPL-3.0`. The wheel's CycloneDX SBOM lists
-every compiled Rust crate with its license.
+(`licenses/`), and the oxifmt and MiTeX Typst packages, whose licenses and
+provenance are under `vendor/typst-packages/`. It does not include CeTZ
+(LGPL-3.0): native drawings need no Typst package, and the Typst route reads
+stock CeTZ 0.5.2 from the local Typst package path or cache. The wheel's
+CycloneDX SBOM lists the Rust crates of its dependency graph with their
+licenses.
 
 ## Development
 
@@ -53,6 +60,11 @@ maturin build --release --out dist
 python -m pip install dist/linnet_py-*.whl
 python -m unittest discover -s tests -p 'test_*.py'
 ```
+
+The Typst-route tests need stock CeTZ 0.5.2. The development shell provides it
+through `TYPST_PACKAGE_CACHE_PATH`; elsewhere run `scripts/fetch-stock-cetz.sh`
+from the repository root and point `TYPST_PACKAGE_PATH` at the absolute path of
+its `target/typst-packages`.
 
 The same suite runs against the Community wheel built from
 `examples/notebooks/symbolica-host`. It tests whichever module is installed;

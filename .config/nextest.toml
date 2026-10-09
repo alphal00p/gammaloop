@@ -51,6 +51,12 @@ filter = "test(bench) or test(benchmark)"
 filter = "test(/^gl20_multichannel_local_inspect_event_snapshot$/)"
 slow-timeout = { period = "5m", terminate-after = 2 }
 
+[[profile.default.overrides]]
+# The public Linnest fixture evaluates every curved-arrow and pattern assertion in
+# one Typst process, which takes over a minute on a loaded host.
+filter = "package(clinnet) & test(=public_linnest_layout_and_drawing_behavior_is_observable)"
+slow-timeout = { period = "5m", terminate-after = 2 }
+
 [profile.default.junit]
 # Default JUnit output location
 path = "target/nextest/default/junit.xml"

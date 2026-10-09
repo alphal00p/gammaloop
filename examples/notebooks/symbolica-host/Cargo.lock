@@ -5427,6 +5427,7 @@ name = "typst-renderer"
 version = "0.1.0"
 dependencies = [
  "comemo",
+ "dirs",
  "tempfile",
  "typst",
  "typst-html",

@@ -1,5 +1,5 @@
 //! Kurvst geometry with the arguments `draw.typ` passes.
-use kurbo::{BezPath, CubicBez, ParamCurve, ParamCurveArclen, Point, Vec2};
+use kurbo::{BezPath, CubicBez, ParamCurveArclen, Point};
 use kurvst::{
     CubicBezierSpec, CurvePoint, FittedCoilInput, HobbySplineSpec, ParallelPathSpec,
     PathFramesSpec, PathTrimmer, PatternInput, PatternPathSpec, RegionPart, RegionSamplesSpec,
@@ -30,7 +30,9 @@ pub(super) fn from_cubics(segments: &[CubicBez]) -> BezPath {
     let mut path = BezPath::new();
     let mut previous = None;
     for segment in segments {
-        if previous != Some(segment.p0) {
+        // Offset cubics can differ at shared knots by floating-point roundoff.
+        // Keep those knots connected without bridging genuinely separate parts.
+        if previous.is_none_or(|end: Point| end.distance(segment.p0) > 1e-9) {
             path.move_to(segment.p0);
         }
         path.curve_to(segment.p1, segment.p2, segment.p3);
@@ -103,7 +105,7 @@ pub(super) fn parallel(path: &BezPath, distance: f64) -> Result<BezPath, String>
         accuracy: ACCURACY,
     }
     .parallel()
-    .map(|output| output.path)
+    .map(|output| from_cubics(&cubics(&output.path)))
 }
 
 /// Kurvst's Typst `layers`: offset, then shifted windows of `length`/`ratio`
@@ -168,29 +170,6 @@ pub(super) fn frames(path: &BezPath, distances: Vec<f64>) -> Result<Vec<Frame>, 
             )
         })
         .collect())
-}
-
-/// Point and unit direction at an arc distance.
-pub(super) fn point_at(path: &BezPath, distance: f64) -> Option<(Point, Vec2)> {
-    let mut remaining = distance.max(0.0);
-    let segments: Vec<_> = path.segments().collect();
-    for (index, segment) in segments.iter().enumerate() {
-        let length = segment.arclen(ACCURACY);
-        if remaining <= length || index + 1 == segments.len() {
-            let t = segment.inv_arclen(remaining.min(length), ACCURACY);
-            let cubic = segment.to_cubic();
-            let tangent = cubic_tangent(&cubic, t);
-            let tangent = Vec2::new(tangent[0], tangent[1]);
-            let direction = if tangent.hypot() > 1e-12 {
-                tangent.normalize()
-            } else {
-                (cubic.p3 - cubic.p0).normalize()
-            };
-            return Some((segment.eval(t), direction));
-        }
-        remaining -= length;
-    }
-    None
 }
 
 /// A physics line decoration over a whole edge.
@@ -283,4 +262,46 @@ pub(super) fn cubic_tangent(segment: &CubicBez, t: f64) -> [f64; 2] {
     let cd = lerp(segment.p2, segment.p3);
     let (abc, bcd) = (lerp(ab, bc), lerp(bc, cd));
     [bcd.x - abc.x, bcd.y - abc.y]
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use kurbo::PathEl;
+
+    #[test]
+    fn windows_retain_connected_offset_join_below_cumulative_length_resolution() {
+        // Actual offset carrier from the nested-combine native SVG scene.
+        // Its middle cubic connects distinct endpoints, but its length is too
+        // small to advance the cumulative arc cursor after the first cubic.
+        let mut path = BezPath::new();
+        path.move_to((-2.3093354422559713, 0.45125171352077403));
+        path.curve_to(
+            (-1.7364145273475438, 1.0067548034067653),
+            (-0.9681573656345025, 1.3196773655325762),
+            (-0.16598397554102728, 1.319677365532576),
+        );
+        path.curve_to(
+            (-0.16598397554102728, 1.319677365532576),
+            (-0.16598397554102734, 1.319677365532576),
+            (-0.16598397554102734, 1.319677365532576),
+        );
+        path.curve_to(
+            (0.6361894145524469, 1.319677365532576),
+            (1.4044465762654879, 1.0067548034067655),
+            (1.9773674911739154, 0.4512517135207751),
+        );
+        let outset = 1.6707269964337421;
+        let window = windows(&path, &[(outset, outset)]).unwrap().remove(0);
+        assert_eq!(window.segments().count(), 3);
+        assert_eq!(
+            window
+                .elements()
+                .iter()
+                .filter(|el| matches!(el, PathEl::MoveTo(_)))
+                .count(),
+            1,
+        );
+        assert_eq!(window.elements()[2], path.elements()[2]);
+    }
 }
