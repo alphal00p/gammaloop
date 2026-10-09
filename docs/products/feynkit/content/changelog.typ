@@ -20,6 +20,13 @@ Python symbolic constants are now static methods: use `Symbols.dimension()`,
 follow this convention, as does the tensor module's `Nc()`. Deferring their construction lets
 callers set a license key after import.
 
+The default loop momentum basis of a cross-section diagram no longer lets a cut edge carry part
+of the beam momenta, such as `K + P1`: GammaLoop rescales loop momenta about the origin of this
+basis, which must lie inside every cut energy surface. Regenerated cross sections can therefore
+route differently from earlier exports, while saved states and DOT files keep their stored
+`lmb_id` and explicit loop-momentum-basis overrides still take precedence. Diagram ids, names,
+numerators and symmetry factors are unchanged.
+
 The current toolkit provides canonical model and graph ownership, deterministic generation,
 shared CFF arenas, native rank-20 vacuum tensor projection, and notebook diagram rendering.
 Use the #link("reference/interfaces/")[component references] to inspect the exact shipped surface.

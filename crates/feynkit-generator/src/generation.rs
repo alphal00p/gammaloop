@@ -4600,6 +4600,68 @@ mod tests {
         );
     }
 
+    /// Cross-section integrands rescale the loop momenta about the origin of the
+    /// default basis, which lies inside every cut energy surface only when no
+    /// cut edge carries a partial beam momentum such as `K + P1`.
+    #[test]
+    fn default_cross_section_routing_keeps_partial_beam_momenta_off_cut_edges() {
+        let model = standard_model();
+        let qcd = ["g", "t", "t~", "ghG", "ghG~"];
+        let qed = ["e-", "e+", "a"];
+        for (incoming, outgoing, selection, loops) in [
+            (["a", "a"], ["t", "t~"], &["a", "t", "t~"][..], 1),
+            (["Z", "Z"], ["t", "t~"], &["Z", "t", "t~", "H"][..], 1),
+            (["g", "g"], ["t", "t~"], &qcd[..], 1),
+            (["e-", "e-"], ["e-", "e-"], &qed[..], 1),
+            // Two loops add real-emission diagrams with several cuts.
+            (["e-", "e-"], ["e-", "e-"], &qed[..], 2),
+            (["e+", "e-"], ["a", "a"], &qed[..], 2),
+            (["a", "a"], ["t", "t~"], &["a", "t", "t~", "g"][..], 2),
+        ] {
+            let process = Process::new(incoming, outgoing)
+                .with_particle_filters(
+                    None,
+                    Some(selection.iter().map(|&name| name.into()).collect()),
+                    None,
+                    Vec::new(),
+                )
+                .unwrap();
+            for symmetrize in [false, true] {
+                let options = GenerationOptions::default()
+                    .with_loop_count(loops, loops)
+                    .unwrap()
+                    .threads(1)
+                    .symmetrize_initial(symmetrize)
+                    .symmetrize_final(symmetrize);
+                let result = process
+                    .generate_cross_section(model.clone(), &options)
+                    .unwrap();
+                assert!(!result.diagrams.is_empty(), "{incoming:?} > {outgoing:?}");
+                let several_cuts = result
+                    .diagrams
+                    .iter()
+                    .any(|diagram| diagram.cuts().len() > 1);
+                assert_eq!(several_cuts, loops > 1, "{incoming:?} > {outgoing:?}");
+                for diagram in &result.diagrams {
+                    for cut in diagram.cuts() {
+                        for half_edge in &cut.cut {
+                            let momentum =
+                                &diagram.loop_momentum_basis().edge_signatures[&half_edge.edge];
+                            let shift = &momentum.external;
+                            assert!(
+                                shift.iter().all(|sign| Some(sign) == shift.get(0)),
+                                "{incoming:?} > {outgoing:?} L{loops} {}: cut edge {} carries {}",
+                                diagram.name(),
+                                half_edge.edge.0,
+                                momentum.format_momentum(),
+                            );
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     #[test]
     fn finalizes_vector_projectors_and_leaves_scalar_states_trivial() {
         let generator = Generator::new(fermion_model());

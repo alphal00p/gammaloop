@@ -297,21 +297,21 @@ oracle! {
     fast xs_qed_eemm_scalar_L2: Row { diagrams: 26, topologies: 157, assignments: 714, inverse_symmetry: (26, 1), symmetry_factors: &[(1, 26)], content: 0xc7c61c59da4c4d71, numerators: 0x30199ed95f9efead, named: 0x7c26a4b34e3f02cd };
     fast xs_qed_eedd_L1: Row { diagrams: 1, topologies: 17, assignments: 34, inverse_symmetry: (1, 1), symmetry_factors: &[(1, 1)], content: 0xb467d6be7a12aefa, numerators: 0x52ae30868db3c38d, named: 0xdd30b2e206f30267 };
     fast xs_qed_eedd_L2: Row { diagrams: 28, topologies: 157, assignments: 714, inverse_symmetry: (28, 1), symmetry_factors: &[(1, 28)], content: 0x6ad9c202edc60059, numerators: 0x9c41ac8d6a4ba8a0, named: 0x33c78f42a6595910 };
-    fast xs_qed_eeaa_L2: Row { diagrams: 94, topologies: 157, assignments: 714, inverse_symmetry: (94, 1), symmetry_factors: &[(1, 94)], content: 0xff951834eb256543, numerators: 0xecb88282186d029c, named: 0xf9abb56eaadf0939 };
+    fast xs_qed_eeaa_L2: Row { diagrams: 94, topologies: 157, assignments: 714, inverse_symmetry: (94, 1), symmetry_factors: &[(1, 94)], content: 0x632909095d92e259, numerators: 0xecb88282186d029c, named: 0xf9abb56eaadf0939 };
     fast xs_qed_eeee_L1: Row { diagrams: 4, topologies: 17, assignments: 34, inverse_symmetry: (4, 1), symmetry_factors: &[(1, 4)], content: 0x29f20710d0fbfbd6, numerators: 0x099879207707ff29, named: 0x7044ad165b20a02d };
-    fast xs_qed_eeee_L2: Row { diagrams: 98, topologies: 157, assignments: 714, inverse_symmetry: (98, 1), symmetry_factors: &[(1, 98)], content: 0xc3a4a54e46a7fac6, numerators: 0xf23e55d60340c98f, named: 0xf986e520f619ff70 };
+    fast xs_qed_eeee_L2: Row { diagrams: 98, topologies: 157, assignments: 714, inverse_symmetry: (98, 1), symmetry_factors: &[(1, 98)], content: 0x84d794d7e60d51ac, numerators: 0xf23e55d60340c98f, named: 0xf986e520f619ff70 };
     fast xs_qed_eeee_1pi_L1: Row { diagrams: 1, topologies: 3, assignments: 4, inverse_symmetry: (1, 1), symmetry_factors: &[(1, 1)], content: 0x8686eb17d2b0f293, numerators: 0xd82920bd552e843e, named: 0xf5ac9fd01b9eabd7 };
-    fast xs_qed_eeee_1pi_L2: Row { diagrams: 22, topologies: 36, assignments: 116, inverse_symmetry: (22, 1), symmetry_factors: &[(1, 22)], content: 0x29c6c2001ae7a92d, numerators: 0x92ea3d0a49dec7f4, named: 0x0ed986d818d723c1 };
+    fast xs_qed_eeee_1pi_L2: Row { diagrams: 22, topologies: 36, assignments: 116, inverse_symmetry: (22, 1), symmetry_factors: &[(1, 22)], content: 0x66424d780b8aa80f, numerators: 0x92ea3d0a49dec7f4, named: 0x0ed986d818d723c1 };
     fast xs_sm_eemm_L1: Row { diagrams: 16, topologies: 17, assignments: 856, inverse_symmetry: (16, 1), symmetry_factors: &[(1, 16)], content: 0x9ad7451811ae86e7, numerators: 0x01b59b2f2dfb564d, named: 0x6aa241cf0ee01c70 };
-    fast xs_sm_eemm_L2: Row { diagrams: 2912, topologies: 230, assignments: 139394, inverse_symmetry: (2900, 1), symmetry_factors: &[(1, 2888), (2, 24)], content: 0x679588ffc2e58de6, numerators: 0xbd7fc115267a6235, named: 0x043c2dcd07241967 };
-    fast xs_sm_uudd_L1: Row { diagrams: 16, topologies: 17, assignments: 558, inverse_symmetry: (16, 1), symmetry_factors: &[(1, 16)], content: 0x2279ffba57ff4975, numerators: 0x7d74ed995684f1db, named: 0xb627b9d5aeb8cfe9 };
-    fast xs_qcd_gggg_L1: Row { diagrams: 10, topologies: 55, assignments: 314, inverse_symmetry: (8, 1), symmetry_factors: &[(1, 6), (2, 4)], content: 0x90d30fbacbf74572, numerators: 0xbde2aaa4f3b826c0, named: 0x17da1ea742d3ec86 };
-    fast xs_qcd_gggg_sym_L1: Row { diagrams: 10, topologies: 55, assignments: 314, inverse_symmetry: (4, 1), symmetry_factors: &[(2, 6), (4, 4)], content: 0x4670580d76632699, numerators: 0xbde2aaa4f3b826c0, named: 0xbb1684fcd423ed44 };
+    fast xs_sm_eemm_L2: Row { diagrams: 2912, topologies: 230, assignments: 139394, inverse_symmetry: (2900, 1), symmetry_factors: &[(1, 2888), (2, 24)], content: 0xa0b2d1d75cc290ea, numerators: 0xbd7fc115267a6235, named: 0x043c2dcd07241967 };
+    fast xs_sm_uudd_L1: Row { diagrams: 16, topologies: 17, assignments: 558, inverse_symmetry: (16, 1), symmetry_factors: &[(1, 16)], content: 0x6a0f6683f376c99d, numerators: 0x7d74ed995684f1db, named: 0xb627b9d5aeb8cfe9 };
+    fast xs_qcd_gggg_L1: Row { diagrams: 10, topologies: 55, assignments: 314, inverse_symmetry: (8, 1), symmetry_factors: &[(1, 6), (2, 4)], content: 0xf64ad313fb15b61e, numerators: 0xbde2aaa4f3b826c0, named: 0x17da1ea742d3ec86 };
+    fast xs_qcd_gggg_sym_L1: Row { diagrams: 10, topologies: 55, assignments: 314, inverse_symmetry: (4, 1), symmetry_factors: &[(2, 6), (4, 4)], content: 0xb7b93daa191de036, numerators: 0xbde2aaa4f3b826c0, named: 0xbb1684fcd423ed44 };
     failing xs_qcd_gggg_L2: THRESHOLD_CANDIDATE;
-    fast xs_qcd_gguu_L1: Row { diagrams: 9, topologies: 55, assignments: 314, inverse_symmetry: (9, 1), symmetry_factors: &[(1, 9)], content: 0xc5d8eee916d530ec, numerators: 0x9e713702e766065d, named: 0x967e2026a5942757 };
+    fast xs_qcd_gguu_L1: Row { diagrams: 9, topologies: 55, assignments: 314, inverse_symmetry: (9, 1), symmetry_factors: &[(1, 9)], content: 0xf55ef4afe4fbeee8, numerators: 0x9e713702e766065d, named: 0x967e2026a5942757 };
     failing xs_qcd_gguu_L2: THRESHOLD_CANDIDATE;
-    fast xs_qcd_gguu_sym_L1: Row { diagrams: 5, topologies: 55, assignments: 314, inverse_symmetry: (9, 2), symmetry_factors: &[(1, 4), (2, 1)], content: 0xfd97f90088f76e07, numerators: 0xa9e3dfa7c6a49ca8, named: 0x326170173160f176 };
-    fast xs_qcd_gguu_1pi_L1: Row { diagrams: 4, topologies: 12, assignments: 54, inverse_symmetry: (4, 1), symmetry_factors: &[(1, 4)], content: 0x8a3e13eb1316c2a5, numerators: 0x901412cc9fc683f1, named: 0x2dec9685df5b0e1c };
+    fast xs_qcd_gguu_sym_L1: Row { diagrams: 5, topologies: 55, assignments: 314, inverse_symmetry: (9, 2), symmetry_factors: &[(1, 4), (2, 1)], content: 0xaaea5535e56a1d82, numerators: 0xa9e3dfa7c6a49ca8, named: 0x326170173160f176 };
+    fast xs_qcd_gguu_1pi_L1: Row { diagrams: 4, topologies: 12, assignments: 54, inverse_symmetry: (4, 1), symmetry_factors: &[(1, 4)], content: 0x4ee6aab30b16f1c5, numerators: 0x901412cc9fc683f1, named: 0x2dec9685df5b0e1c };
 }
 
 #[test]

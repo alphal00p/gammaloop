@@ -63,6 +63,103 @@ fn scalar_bubble() -> Result<()> {
     Ok(())
 }
 
+/// Breit-Wheeler pair production a a > t t~ at sqrt(s) = 1 TeV with mt = 173 GeV
+/// and alpha = 1/132.507: sigma = 0.459677 pb. Without the flux factor the
+/// integrand returns sigma 2s in natural units. The loop momenta are rescaled
+/// about the origin of the generated basis, which lies outside the cut energy
+/// surface when the cut edges carry K + P1 and K - P0. Forcing that basis here
+/// gives 6.0(3.6)e-3 instead of 2.36e-3, with 17.5% unstable points. Stability
+/// checks stay in double precision, so such a basis fails within seconds instead
+/// of escalating its unstable points to arbitrary precision for many minutes.
+#[test]
+fn aa_ttx_born_cross_section_integration_matches_breit_wheeler() -> Result<()> {
+    const GEV_SQUARED_TO_PICOBARN: f64 = 0.389379304e9;
+    const BREIT_WHEELER_PICOBARN: f64 = 0.459677;
+    const E_CM: f64 = 1000.0;
+    let test_name = "aa_ttx_born_breit_wheeler";
+    let mut cli = get_test_cli(
+        None,
+        get_tests_workspace_path().join(test_name),
+        Some(test_name.to_string()),
+        true,
+    )?;
+    run_commands(
+        &mut cli,
+        &[
+            "import model sm-default",
+            "set global kv global.generation.evaluator.compile=false global.generation.evaluator.summed=false global.generation.evaluator.iterative_orientation_optimization=false global.generation.evaluator.store_atom=false global.generation.uv.subtract_uv=false global.generation.uv.generate_integrated=false global.generation.threshold_subtraction.enable_thresholds=false global.generation.tropical_subgraph_table.disable_tropical_generation=true",
+            "set model MT=173.0",
+            "set model WT=0.0",
+            "set model ymt=173.0",
+            "set model aEWM1=132.507",
+            r#"set default-runtime string '
+[general]
+evaluator_method = "SingleParametric"
+enable_cache = false
+generate_events = false
+disable_flux_factor = true
+
+[subtraction]
+disable_threshold_subtraction = true
+
+[[stability.levels]]
+precision = "Double"
+required_precision_for_re = 1e-5
+required_precision_for_im = 1e-5
+escalate_for_large_weight_threshold = 0.9
+
+[sampling]
+graphs = "summed"
+orientations = "summed"
+lmb_multichanneling = false
+coordinate_system = "spherical"
+mapping = "linear"
+b = 1.0
+
+[kinematics]
+e_cm = 1000.0
+
+[kinematics.externals]
+type = "constant"
+
+[kinematics.externals.data]
+momenta = [[500.0, 0.0, 0.0, 500.0], [500.0, 0.0, 0.0, -500.0]]
+helicities = ["summed_averaged", "summed_averaged"]
+
+[integrator]
+integrated_phase = "real"
+n_start = 50000
+n_increase = 50000
+n_max = 50000
+min_samples_for_update = 1000
+seed = 7331
+'"#,
+            "generate xs a a > t t~ | a t t~ g ghG ghG~ QED^2==4 [{{1}} QCD=0] --numerator-grouping no_grouping --symmetrize-initial-states false --symmetrize-final-states false -p aa_ttx -i LO",
+        ],
+    )?;
+
+    let integral = Integrate {
+        integrand_name: vec!["LO".to_string()],
+        ..default_integrate_for(test_name)
+    }
+    .run(&mut cli.state, &cli.cli_settings)?;
+    let integral = single_slot_integral(&integral);
+    let target = BREIT_WHEELER_PICOBARN / GEV_SQUARED_TO_PICOBARN * 2.0 * E_CM * E_CM;
+    // A basis origin outside a cut surface inflates the variance first.
+    assert!(
+        integral.error.re.0 < 0.03 * target,
+        "{integral:#} has a large error for target {target:e}"
+    );
+    assert!(
+        integral.is_compatible_with_target(Complex::new(F(target), F(0.0)), 3),
+        "{integral:#} is not compatible with target {target:e}"
+    );
+
+    clean_test(&cli.cli_settings.state.folder);
+
+    Ok(())
+}
+
 mod failing {
     use super::*;
 

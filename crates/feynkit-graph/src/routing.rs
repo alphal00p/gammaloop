@@ -7,6 +7,7 @@ use feynkit_kinematics::{MomentumSignature, SignOrZero, Signature};
 use itertools::Itertools;
 use linnet::half_edge::{
     HedgeGraph, HedgeGraphError, NoData,
+    builder::HedgeGraphBuilder,
     involution::{EdgeData, EdgeIndex, EdgeVec, Flow, Hedge, HedgePair, Orientation},
     subgraph::{
         Inclusion, InternalSubGraph, ModifySubSet, SuBitGraph, SubGraphLike, SubGraphOps,
@@ -15,6 +16,7 @@ use linnet::half_edge::{
     tree::SimpleTraversalTree,
 };
 use linnet::union_find::UnionFind;
+use std::collections::{BTreeMap, BTreeSet};
 use symbolica::{
     atom::{Atom, AtomOrView, FunctionBuilder, Symbol},
     id::Replacement,
@@ -1299,10 +1301,7 @@ impl crate::FeynmanDiagram {
     ) -> Result<crate::LoopMomentumBasis, crate::DiagramError> {
         let internal = self.internal_subgraph();
         let mut forest: SuBitGraph = self.graph.empty_subgraph();
-        let unique = requested
-            .iter()
-            .copied()
-            .collect::<std::collections::BTreeSet<_>>();
+        let unique = requested.iter().copied().collect::<BTreeSet<_>>();
         if unique.len() != requested.len() {
             return Err(crate::DiagramError::InvalidLoopMomentumBasis(
                 "tree edges contain duplicates".into(),
@@ -1322,17 +1321,13 @@ impl crate::FeynmanDiagram {
                 )));
             }
             let pair = self.graph[&EdgeIndex(edge.0)].1;
-            if !pair.is_paired() || !internal.includes(&pair) {
+            let Some([source, sink]) = self.joined_nodes(pair).filter(|_| internal.includes(&pair))
+            else {
                 return Err(crate::DiagramError::InvalidLoopMomentumBasis(format!(
                     "tree edge {} is not internal",
                     edge.0
                 )));
-            }
-            let HedgePair::Paired { source, sink } = pair else {
-                unreachable!("tree edges are paired");
             };
-            let source = Hedge(self.graph.node_id(source).0);
-            let sink = Hedge(self.graph.node_id(sink).0);
             if components.find(source) == components.find(sink) {
                 return Err(invalid_forest());
             }
@@ -1342,9 +1337,8 @@ impl crate::FeynmanDiagram {
         // An acyclic subset spans exactly when every internal edge joins nodes
         // already connected by the forest, including singleton components.
         for (pair, _, _) in self.graph.iter_edges_of(&internal) {
-            if let HedgePair::Paired { source, sink } = pair
-                && components.find(Hedge(self.graph.node_id(source).0))
-                    != components.find(Hedge(self.graph.node_id(sink).0))
+            if let Some([source, sink]) = self.joined_nodes(pair)
+                && components.find(source) != components.find(sink)
             {
                 return Err(invalid_forest());
             }
@@ -1361,9 +1355,139 @@ impl crate::FeynmanDiagram {
             .map(|basis| self.normalize_routing(basis))
             .map_err(|error| crate::DiagramError::InvalidLoopMomentumBasis(error.to_string()))
     }
+
+    /// The union-find keys of the two nodes joined by `pair`, or `None` when
+    /// `pair` is not a paired edge.
+    fn joined_nodes(&self, pair: HedgePair) -> Option<[Hedge; 2]> {
+        let HedgePair::Paired { source, sink } = pair else {
+            return None;
+        };
+        Some([source, sink].map(|hedge| Hedge(self.graph.node_id(hedge).0)))
+    }
+
+    /// The cut-aligned spanning forest of a diagram with physical cuts, with
+    /// the number of `cut_edges` on which it routes a partial beam momentum.
+    ///
+    /// The forest spans every uncut component, the vertices joined by internal
+    /// edges that cross no physical cut, with its earliest uncut edges and then
+    /// bridges these components with the earliest cut edges: Kruskal's
+    /// algorithm over the uncut edges followed by the cut edges, each in the
+    /// canonical `ordered` sequence. Removing a cut edge from this forest
+    /// separates whole uncut components. When the incoming attachments of all
+    /// beams lie in one uncut component, and their outgoing attachments in one,
+    /// every beam therefore enters and leaves on the same sides of each cut
+    /// edge of the forest, which carries no partial beam momentum.
+    ///
+    /// Otherwise several cuts separate the attachments of different beams, as
+    /// in some three-loop real-emission diagrams, and the bridges are searched:
+    /// every spanning tree of the quotient whose vertices are the uncut
+    /// components and whose edges are the cut edges is scored, fewest partial
+    /// beam momenta first and earliest canonical cut edges second. The search
+    /// is bounded by the number of those trees, at most `c` choose `b - 1` for
+    /// `c` cut edges between `b` uncut components, and visits no other spanning
+    /// forest of the diagram.
+    pub(crate) fn cut_aligned_loop_momentum_basis(
+        &self,
+        ordered: &[crate::EdgeId],
+        cut_edges: &BTreeSet<crate::EdgeId>,
+    ) -> Result<(usize, crate::LoopMomentumBasis), crate::DiagramError> {
+        let vertices = |edge: crate::EdgeId| {
+            let Some(vertices) = self.joined_nodes(self.graph[&EdgeIndex(edge.0)].1) else {
+                unreachable!("internal edges are paired");
+            };
+            vertices
+        };
+        let join = |components: &mut UnionFind<()>, edge: crate::EdgeId| {
+            let [source, sink] = vertices(edge).map(|vertex| components.find(vertex));
+            let joins = source != sink;
+            if joins {
+                components.union(source, sink, |(), ()| ());
+            }
+            joins
+        };
+        let score = |tree: &[crate::EdgeId]| {
+            self.basis_from_tree(tree)
+                .map(|basis| (basis.partial_beam_momenta(cut_edges), basis))
+        };
+
+        let (uncut, cut): (Vec<_>, Vec<_>) = ordered
+            .iter()
+            .copied()
+            .partition(|edge| !cut_edges.contains(edge));
+        let mut components = UnionFind::new(vec![(); self.graph.node_bound()]);
+        let uncut_forest = uncut
+            .into_iter()
+            .filter(|edge| join(&mut components, *edge))
+            .collect_vec();
+        let uncut_components = components.clone();
+        let kruskal = uncut_forest
+            .iter()
+            .copied()
+            .chain(
+                cut.iter()
+                    .copied()
+                    .filter(|edge| join(&mut components, *edge)),
+            )
+            .collect_vec();
+        let kruskal = score(&kruskal)?;
+        if kruskal.0 == 0 {
+            return Ok(kruskal);
+        }
+
+        // Quotient edges carry their position in the canonical cut-edge order.
+        let mut builder = HedgeGraphBuilder::<usize, ()>::new();
+        let mut nodes = BTreeMap::new();
+        for (position, edge) in cut.iter().enumerate() {
+            let [source, sink] = vertices(*edge).map(|vertex| {
+                *nodes
+                    .entry(uncut_components.find(vertex))
+                    .or_insert_with(|| builder.add_node(()))
+            });
+            builder.add_edge(source, sink, position, Orientation::Undirected);
+        }
+        let quotient: HedgeGraph<usize, ()> = builder.into();
+        let scored = quotient
+            .all_spanning_forests_of(&quotient.full_filter())
+            .into_iter()
+            .map(|bridges| {
+                let bridges = quotient
+                    .iter_edges_of(&bridges)
+                    .map(|(_, _, position)| *position.data)
+                    .sorted_unstable()
+                    .collect_vec();
+                let tree = uncut_forest
+                    .iter()
+                    .copied()
+                    .chain(bridges.iter().map(|position| cut[*position]))
+                    .collect_vec();
+                score(&tree).map(|(partial, basis)| ((partial, bridges), basis))
+            });
+        let ((partial, _), basis) = itertools::process_results(scored, |scored| {
+            scored.min_by(|(left, _), (right, _)| left.cmp(right))
+        })?
+        .ok_or_else(|| crate::DiagramError::Invariant {
+            operation: "searching cut-aligned bridges",
+            message: "the quotient by the uncut components has no spanning tree".into(),
+        })?;
+        Ok((partial, basis))
+    }
 }
 
 impl crate::LoopMomentumBasis {
+    /// Number of `cut_edges` routed with a partial beam momentum: an external
+    /// shift that is neither zero nor the total incoming momentum, in either
+    /// direction.
+    ///
+    /// The externals of a sewn cross-section graph are its incoming beams, so
+    /// a shift carries no partial beam momentum exactly when all its
+    /// coefficients agree.
+    pub(crate) fn partial_beam_momenta(&self, cut_edges: &BTreeSet<crate::EdgeId>) -> usize {
+        cut_edges
+            .iter()
+            .filter(|edge| !self.edge_signatures[edge].external.iter().all_equal())
+            .count()
+    }
+
     /// Replace every edge momentum by the same loop and external coordinates
     /// used by numerical routing, retaining any tensor indices on that momentum.
     pub fn momentum_replacements(&self) -> Vec<Replacement> {
@@ -1453,7 +1577,6 @@ impl crate::DiagramEdge {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use linnet::half_edge::builder::HedgeGraphBuilder;
 
     fn bubble() -> HedgeGraph<(), ()> {
         let mut builder = HedgeGraphBuilder::new();

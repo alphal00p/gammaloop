@@ -701,6 +701,14 @@ impl FeynmanDiagram {
         &self.cuts
     }
 
+    /// Internal edges crossed by any physical cut.
+    pub(crate) fn cut_edges(&self) -> BTreeSet<EdgeId> {
+        self.cuts
+            .iter()
+            .flat_map(|cut| cut.cut.iter().map(|half_edge| half_edge.edge))
+            .collect()
+    }
+
     /// Physical final-state particles in the stored order of a finalized cut.
     ///
     /// The native left side contains the incoming endpoint of each sewn initial
@@ -1432,9 +1440,7 @@ impl FeynmanDiagram {
     }
 
     /// Select a spanning-forest routing by its ordered independent edges.
-    pub fn with_loop_momentum_edges(mut self, requested: &[EdgeId]) -> Result<Self, DiagramError> {
-        self.validation.take();
-        self.routing_validation.take();
+    pub fn with_loop_momentum_edges(self, requested: &[EdgeId]) -> Result<Self, DiagramError> {
         let requested_set: BTreeSet<_> = requested.iter().copied().collect();
         let internal = self.internal_subgraph();
         let tree_edges = self
@@ -1444,11 +1450,10 @@ impl FeynmanDiagram {
                 (!requested_set.contains(&EdgeId(edge.0))).then_some(EdgeId(edge.0))
             })
             .collect::<Vec<_>>();
-        self.loop_momentum_basis = self
+        let basis = self
             .basis_from_tree(&tree_edges)?
             .with_loop_edge_order(requested)?;
-        let _ = self.routing_validation.set(());
-        Ok(self)
+        Ok(self.with_routing(basis))
     }
 
     /// Select a spanning-forest routing by its ordered tree edges.
@@ -1456,25 +1461,61 @@ impl FeynmanDiagram {
     /// The requested edges are validated and materialized directly. This is
     /// useful when a generator already chose a deterministic spanning forest:
     /// it does not enumerate the other spanning forests of the diagram.
-    pub fn with_loop_momentum_tree_edges(
-        mut self,
-        requested: &[EdgeId],
-    ) -> Result<Self, DiagramError> {
-        self.validation.take();
-        self.routing_validation.take();
-        self.loop_momentum_basis = self.basis_from_tree(requested)?;
-        let _ = self.routing_validation.set(());
-        Ok(self)
+    pub fn with_loop_momentum_tree_edges(self, requested: &[EdgeId]) -> Result<Self, DiagramError> {
+        let basis = self.basis_from_tree(requested)?;
+        Ok(self.with_routing(basis))
     }
 
-    /// Select the first spanning-forest routing in the canonical topology
-    /// order historically used by GammaLoop's `sorted_g` graphs.
+    /// Store a routing materialized from one of this diagram's spanning forests.
+    fn with_routing(mut self, basis: LoopMomentumBasis) -> Self {
+        self.validation.take();
+        self.loop_momentum_basis = basis;
+        let _ = self.routing_validation.set(());
+        self
+    }
+
+    /// Select the default routing: the first depth-first spanning forest in the
+    /// canonical topology order historically used by GammaLoop's `sorted_g`
+    /// graphs, unless a physical cut edge would carry a partial beam momentum.
     ///
     /// Stable FeynKit edge IDs remain the momentum labels. Only the ordering
     /// used to choose the default tree is changed, so the coordinate convention
     /// is fixed before downstream transport.
+    ///
+    /// Cross-section integrands rescale the loop momenta about the origin of
+    /// this basis, which must lie inside the energy surface of every physical
+    /// cut. At that origin a cut edge carries only its external shift. A shift
+    /// of zero or of the total incoming momentum has no spatial part in the
+    /// centre-of-mass frame, so the cut energies there add up to the final-state
+    /// masses, below the collision energy. A partial beam momentum such as
+    /// `K + P1` can instead put the origin outside the cut surface: with the
+    /// cut edges at `K + P1` and `K - P0` it does so whenever the beams carry
+    /// more spatial momentum than the final state. Diagrams with physical cuts
+    /// therefore keep the depth-first forest only if none of their cut edges
+    /// carries a partial beam momentum, and otherwise take the forest of
+    /// `cut_aligned_loop_momentum_basis` when it has strictly fewer such edges;
+    /// a tie keeps the depth-first forest. Amplitudes and vacuum graphs have no
+    /// cuts, and a single beam has no partial momentum, so these and decays
+    /// keep the depth-first forest.
     pub fn with_canonical_loop_momentum_basis(self) -> Result<Self, DiagramError> {
-        let mut ordered_internal_edges = self
+        let ordered = self.canonical_internal_edge_order()?;
+        let depth_first = self.basis_from_tree(&self.first_depth_first_forest(&ordered)?)?;
+        let cut_edges = self.cut_edges();
+        let partial = depth_first.partial_beam_momenta(&cut_edges);
+        let basis = if partial == 0 {
+            depth_first
+        } else {
+            match self.cut_aligned_loop_momentum_basis(&ordered, &cut_edges)? {
+                (aligned_partial, aligned) if aligned_partial < partial => aligned,
+                _ => depth_first,
+            }
+        };
+        Ok(self.with_routing(basis))
+    }
+
+    /// Internal edges in the canonical topology order of the default routing.
+    fn canonical_internal_edge_order(&self) -> Result<Vec<EdgeId>, DiagramError> {
+        let mut ordered = self
             .edges()
             .filter(|(_, _, edge)| edge.external.is_none() && !edge.is_dummy)
             .map(|(edge_id, endpoints, edge)| {
@@ -1482,39 +1523,21 @@ impl FeynmanDiagram {
                     .map(|key| (key, edge_id))
             })
             .collect::<Result<Vec<_>, DiagramError>>()?;
-        ordered_internal_edges.sort_by_key(|(key, _)| *key);
-        let ordered_internal_edges = ordered_internal_edges
-            .into_iter()
-            .map(|(_, edge)| edge)
-            .collect::<Vec<_>>();
-        self.with_first_loop_momentum_basis_in_edge_order(&ordered_internal_edges)
+        ordered.sort_by_key(|(key, _)| *key);
+        Ok(ordered.into_iter().map(|(_, edge)| edge).collect())
     }
 
-    /// Select the first depth-first basis for an explicit internal-edge order.
+    /// Tree edges of the first depth-first spanning forest for the `ordered`
+    /// internal edges.
     ///
-    /// Paired cross-section connections root the traversal at the attachment
-    /// retained as hedge zero by legacy sewing (the outgoing side), in
-    /// connection order. One-sided amplitude connections use their only
-    /// attachment. No other spanning forests are enumerated. Generators can
-    /// therefore reproduce a pre-existing half-edge insertion convention
-    /// without moving topology or routing ownership into a downstream runtime.
-    pub fn with_first_loop_momentum_basis_in_edge_order(
-        self,
-        ordered: &[EdgeId],
-    ) -> Result<Self, DiagramError> {
-        let internal = self
-            .graph
-            .iter_edges_of(&self.internal_subgraph())
-            .map(|(_, edge, _)| EdgeId(edge.0))
-            .collect::<BTreeSet<_>>();
-        let ordered_set = ordered.iter().copied().collect::<BTreeSet<_>>();
-        if ordered.len() != ordered_set.len() || ordered_set != internal {
-            return Err(DiagramError::InvalidLoopMomentumBasis(format!(
-                "ordered internal edges {ordered:?} do not match the diagram topology"
-            )));
-        }
+    /// Each connected component is traversed from the attachment of its first
+    /// external connection: the target of a sewn cross-section connection,
+    /// which is the incoming-side attachment of that beam, or the only
+    /// attachment of a one-sided amplitude connection. No other spanning
+    /// forests are enumerated.
+    fn first_depth_first_forest(&self, ordered: &[EdgeId]) -> Result<Vec<EdgeId>, DiagramError> {
         if ordered.is_empty() {
-            return self.with_loop_momentum_tree_edges(&[]);
+            return Ok(Vec::new());
         }
 
         let mut builder = HedgeGraphBuilder::<EdgeId, ()>::new();
@@ -1550,7 +1573,7 @@ impl FeynmanDiagram {
         let full = ordered_graph.full_filter();
         let roots = external_attachments
             .values()
-            .filter_map(|(incoming, outgoing)| (*outgoing).or(*incoming))
+            .filter_map(|(source, target)| (*target).or(*source))
             .collect::<Vec<_>>();
         let mut remaining = full.clone();
         let mut forest: SuBitGraph = ordered_graph.empty_subgraph();
@@ -1584,11 +1607,10 @@ impl FeynmanDiagram {
             forest.union_with(&tree.tree_subgraph);
             remaining.subtract_with(&tree.covers(&full));
         }
-        let tree_edges = ordered_graph
+        Ok(ordered_graph
             .iter_edges_of(&forest)
             .map(|(_, _, edge)| *edge.data)
-            .collect::<Vec<_>>();
-        self.with_loop_momentum_tree_edges(&tree_edges)
+            .collect())
     }
 
     pub fn to_json(&self) -> Result<String, DiagramError> {
@@ -4255,6 +4277,167 @@ mod tests {
             assert!(diagram.basis_from_tree(&[EdgeId(edges)]).is_err());
             let edge = expected.keys().next().unwrap()[0];
             assert!(diagram.basis_from_tree(&[edge, edge]).is_err());
+        }
+    }
+
+    /// The internal edge from the vertex named `source` to the one named `target`.
+    fn internal_edge(diagram: &FeynmanDiagram, source: &str, target: &str) -> EdgeId {
+        let vertex = |name| {
+            diagram
+                .vertices()
+                .find(|(_, vertex)| vertex.name == name)
+                .unwrap()
+                .0
+        };
+        let ends = (Some(vertex(source)), Some(vertex(target)));
+        diagram
+            .edges()
+            .find(|(_, endpoints, edge)| {
+                edge.external.is_none() && (endpoints.source, endpoints.target) == ends
+            })
+            .unwrap()
+            .0
+    }
+
+    #[test]
+    fn canonical_routing_keeps_partial_beam_momenta_off_cut_edges() {
+        // Forward scattering through a t-channel exchange: beam i enters at ai
+        // and leaves at bi, and a0 -> b0, a1 -> b1 form the cut.
+        let dot = r#"digraph forward_box {
+            graph [final_state="phi,phi"];
+            ext [style=invis];
+            ext -> a0 [particle="phi", is_cut=0];
+            ext -> a1 [particle="phi", is_cut=1];
+            b0 -> ext [particle="phi", is_cut=0];
+            b1 -> ext [particle="phi", is_cut=1];
+            a0 -> a1 [particle="phi"];
+            a0 -> b0 [particle="phi"];
+            a1 -> b1 [particle="phi"];
+            b0 -> b1 [particle="phi"];
+        }"#;
+        let diagram = FeynmanDiagram::from_dot(scalar_model(), dot).unwrap();
+        let edge = |source, target| internal_edge(&diagram, source, target);
+        let cut = diagram.cut_edges();
+        assert_eq!(cut, BTreeSet::from([edge("a0", "b0"), edge("a1", "b1")]));
+
+        // The depth-first tree leaves a0 -> a1 as the loop edge, so the cut
+        // edges carry K - P0 and K + P1.
+        let ordered = diagram.canonical_internal_edge_order().unwrap();
+        let depth_first = diagram
+            .basis_from_tree(&diagram.first_depth_first_forest(&ordered).unwrap())
+            .unwrap();
+        assert_eq!(depth_first.loop_edges, [edge("a0", "a1")]);
+        assert_eq!(depth_first.partial_beam_momenta(&cut), 2);
+
+        let routed = diagram
+            .clone()
+            .with_canonical_loop_momentum_basis()
+            .unwrap();
+        routed.validate().unwrap();
+        let basis = routed.loop_momentum_basis();
+        assert_eq!(basis.partial_beam_momenta(&cut), 0);
+        assert_eq!(basis.loop_edges, [edge("a1", "b1")]);
+        // The remaining cut edge carries the total incoming momentum.
+        assert!(
+            basis.edge_signatures[&edge("a0", "b0")]
+                .external
+                .iter()
+                .all(|sign| !sign.is_zero())
+        );
+    }
+
+    /// Two loops whose three-particle cuts {i0, i1, m0 | m1, f0, f1} and
+    /// {i0, i1, m1 | m0, f0, f1} cut every edge except f0 -> f1, so each beam
+    /// enters its own uncut component. Beam k enters at vertex `{incoming}k`
+    /// and leaves at `{outgoing}k`; these names fix the canonical edge order.
+    fn crossed_cuts(incoming: &str, outgoing: &str) -> FeynmanDiagram {
+        let dot = format!(
+            r#"digraph crossed_cuts {{
+            graph [final_state="phi,phi,phi"];
+            ext [style=invis];
+            ext -> {incoming}0 [particle="phi", is_cut=0];
+            ext -> {incoming}1 [particle="phi", is_cut=1];
+            {outgoing}0 -> ext [particle="phi", is_cut=0];
+            {outgoing}1 -> ext [particle="phi", is_cut=1];
+            {incoming}0 -> m0 [particle="phi"];
+            {incoming}1 -> m0 [particle="phi"];
+            {incoming}0 -> m1 [particle="phi"];
+            {incoming}1 -> m1 [particle="phi"];
+            m0 -> {outgoing}0 [particle="phi"];
+            m1 -> {outgoing}1 [particle="phi"];
+            {outgoing}0 -> {outgoing}1 [particle="phi"];
+        }}"#
+        );
+        let diagram = FeynmanDiagram::from_dot(scalar_model(), &dot).unwrap();
+        assert_eq!(diagram.cuts().len(), 2);
+        assert_eq!(diagram.cut_edges().len(), 6);
+        diagram
+    }
+
+    #[test]
+    fn cut_aligned_routing_searches_bridges_when_beams_enter_separate_components() {
+        let diagram = crossed_cuts("a", "b");
+        let edge = |source, target| internal_edge(&diagram, source, target);
+        let cut = diagram.cut_edges();
+
+        // In this order Kruskal's bridges form the path a0 m0 b m1 a1, on which
+        // every cut edge separates the two beams.
+        let ordered = [
+            ("b0", "b1"),
+            ("a0", "m0"),
+            ("m0", "b0"),
+            ("m1", "b1"),
+            ("a1", "m1"),
+            ("a0", "m1"),
+            ("a1", "m0"),
+        ]
+        .map(|(source, target)| edge(source, target));
+        let kruskal = diagram.basis_from_tree(&ordered[..5]).unwrap();
+        assert_eq!(kruskal.partial_beam_momenta(&cut), 4);
+
+        // The search joins both beams at m0 with the earliest such bridges.
+        let (partial, basis) = diagram
+            .cut_aligned_loop_momentum_basis(&ordered, &cut)
+            .unwrap();
+        assert_eq!(partial, 2);
+        assert_eq!(basis.partial_beam_momenta(&cut), 2);
+        assert_eq!(
+            BTreeSet::from_iter(basis.loop_edges),
+            BTreeSet::from([edge("a0", "m1"), edge("a1", "m1")])
+        );
+    }
+
+    #[test]
+    fn canonical_routing_replaces_the_depth_first_forest_only_with_fewer_partial_beam_momenta() {
+        // Naming the beam vertices a/b orders the edges so that the depth-first
+        // forest routes 4 partial beam momenta and the cut-aligned one 2;
+        // naming them i/f gives both forests 2 on different loop edges.
+        for (incoming, outgoing, depth_first_partial, routed_by_search) in
+            [("a", "b", 4, true), ("i", "f", 2, false)]
+        {
+            let diagram = crossed_cuts(incoming, outgoing);
+            let cut = diagram.cut_edges();
+            let ordered = diagram.canonical_internal_edge_order().unwrap();
+            let depth_first = diagram
+                .basis_from_tree(&diagram.first_depth_first_forest(&ordered).unwrap())
+                .unwrap();
+            let (aligned_partial, aligned) = diagram
+                .cut_aligned_loop_momentum_basis(&ordered, &cut)
+                .unwrap();
+            assert_eq!(depth_first.partial_beam_momenta(&cut), depth_first_partial);
+            assert_eq!(aligned_partial, 2);
+            assert_ne!(
+                BTreeSet::from_iter(&depth_first.loop_edges),
+                BTreeSet::from_iter(&aligned.loop_edges)
+            );
+
+            let routed = diagram.with_canonical_loop_momentum_basis().unwrap();
+            let expected = if routed_by_search {
+                &aligned
+            } else {
+                &depth_first
+            };
+            assert_eq!(routed.loop_momentum_basis().loop_edges, expected.loop_edges);
         }
     }
 
