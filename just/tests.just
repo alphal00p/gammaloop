@@ -229,7 +229,7 @@ _test-ci TEST_NAME="" NEXTEST_FILTERSET="":
     cmd=(
         cargo nextest run
         --cargo-profile {{ ci_cargo_profile }}
-        --profile ci_gammaloop
+        --profile "${NEXTEST_PROFILE:-ci_gammaloop}"
         --locked
         --no-fail-fast
     )

@@ -218,12 +218,18 @@ jobs:
         if: startsWith(matrix.os, 'macos-')
         run: just --unstable test-ci-mac
 
+      - name: Run full self-energy acceptance
+        if: success() || failure()
+        env:
+          NEXTEST_PROFILE: ci
+        run: just --unstable _test-ci "" 'test(=se1l_uv)'
+
       - name: Upload nextest JUnit
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: nextest-junit-${{ matrix.os }}
-          path: target/nextest/ci_gammaloop/junit.xml
+          path: target/nextest/*/junit.xml
           if-no-files-found: ignore
           retention-days: 7
 

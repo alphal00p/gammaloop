@@ -140,10 +140,17 @@ path = "junit.xml"
 
 [profile.ci_gammaloop]
 inherits = "ci"
-default-filter = "not test(/(^|::)(slow|failing)::/) and not (binary(/pysecdec/) or test(=test_integrate_1l_decorated_indices_pysecdec))"
+# The fixed-statistics self-energy acceptance runs in the main-only full CI step.
+default-filter = "not test(/(^|::)(slow|failing)::/) and not test(=se1l_uv) and not (binary(/pysecdec/) or test(=test_integrate_1l_decorated_indices_pysecdec))"
 
 [profile.ci_gammaloop.junit]
 path = "junit.xml"
+
+# Keep every local/NixCI test within the four-minute budget. Place this first
+# so the longer legacy timeout overrides cannot relax the cap.
+[[profile.ci_gammaloop.overrides]]
+filter = "all()"
+slow-timeout = { period = "120s", terminate-after = 2, on-timeout = "fail" }
 
 [[profile.ci_gammaloop.overrides]]
 # Vakint tests can end up running restricted Symbolica instances in nix-ci,

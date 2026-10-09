@@ -1,5 +1,6 @@
 use std::{
     borrow::Cow,
+    collections::HashMap,
     fmt::Display,
     ops::{Deref, Range},
 };
@@ -1339,29 +1340,41 @@ impl<T: FloatLike> ParamBuilder<T> {
 
     /// Refresh model-dependent parameter slots while preserving the builder's graph layout.
     pub fn update_model_values(&mut self, model: &Model) {
-        for (value_index, values) in self.values.iter_mut().enumerate() {
-            let multiplicative_offset = value_index + 1;
-            let mut pos = self.pairs.model_parameters.value_range.start * multiplicative_offset;
-            let _value_index = multiplicative_offset - 1;
-            for cpl in model.couplings.values().filter(|c| c.value.is_some()) {
-                if let Some(value) = cpl.value {
-                    values[pos] = value.map(F::from_f64);
-                    pos += multiplicative_offset;
-                }
+        // Importing symbols can change model iteration order. The evaluator
+        // still expects the parameter order recorded in this builder.
+        let model_values: HashMap<Atom, Complex<F<T>>> = model
+            .couplings
+            .values()
+            .filter_map(|coupling| {
+                coupling
+                    .value
+                    .map(|value| (coupling.name.into(), value.map(F::from_f64)))
+            })
+            .chain(model.parameters.values().filter_map(|parameter| {
+                parameter.value.map(|value| {
+                    (
+                        parameter.name.into(),
+                        Complex::new(F::from_ff64(value.re), F::from_ff64(value.im)),
+                    )
+                })
+            }))
+            .collect();
+        for (param, position) in self
+            .pairs
+            .model_parameters
+            .params
+            .iter()
+            .zip_eq(self.pairs.model_parameters.value_range.clone())
+        {
+            let value = model_values.get(param).unwrap_or_else(|| {
+                panic!(
+                    "Model parameter {param} has no value in model {}",
+                    model.name
+                )
+            });
+            for (value_index, values) in self.values.iter_mut().enumerate() {
+                values[position * (value_index + 1)] = value.clone();
             }
-            for param in model.parameters.values().filter(|p| p.value.is_some()) {
-                if let Some(value) = param.value {
-                    let value =
-                        Complex::new(F::<T>::from_ff64(value.re), F::<T>::from_ff64(value.im));
-                    values[pos] = value.clone();
-                    pos += multiplicative_offset;
-                }
-            }
-
-            debug_assert_eq!(
-                pos,
-                self.pairs.model_parameters.value_range.end * multiplicative_offset
-            );
         }
     }
 
@@ -1734,6 +1747,91 @@ mod tests {
         momentum::sample::{BareMomentumSample, LoopMomenta},
         utils::{ArbPrec, SamplingFloat},
     };
+
+    #[test]
+    fn model_values_follow_saved_names_in_all_derivative_buffers() {
+        use crate::model::{
+            Coupling, CouplingName, Parameter, ParameterName, ParameterNature, ParameterType,
+            UFOSymbol,
+        };
+
+        test_initialise().unwrap();
+        let mass = UFOSymbol::from("slot_order_mass");
+        let coupling = UFOSymbol::from("slot_order_coupling");
+        let zero = UFOSymbol::zero();
+        let mut model = Model::default();
+        for (name, value) in [(mass, 17.0), (zero, 0.0)] {
+            model.parameters.insert(
+                ParameterName(name),
+                Parameter {
+                    name,
+                    lhablock: None,
+                    lhacode: None,
+                    nature: ParameterNature::External,
+                    parameter_type: ParameterType::Real,
+                    value: Some(Complex::new_re(F(value))),
+                    expression: None,
+                },
+            );
+        }
+        model.couplings.insert(
+            CouplingName(coupling),
+            Coupling {
+                name: coupling,
+                expression: Atom::num(1),
+                orders: Default::default(),
+                value: Some(Complex::new(2.0, 3.0)),
+            },
+        );
+
+        let mut builder = ParamBuilder::<f64>::new_empty();
+        builder.pairs.model_parameters = ParamValuePairs {
+            value_range: 2..5,
+            params: vec![mass.into(), zero.into(), coupling.into()],
+        };
+        assert_ne!(
+            builder.pairs.model_parameters.params,
+            model.generate_params()
+        );
+        let sentinel = Complex::new(F(-123.0), F(456.0));
+        builder.values = vec![vec![sentinel; 7]];
+        builder.initialize_duals(3);
+        for values in &mut builder.values {
+            values.fill(sentinel);
+        }
+
+        for (mass_value, coupling_value) in [
+            (17.0, Complex::new(2.0, 3.0)),
+            (29.0, Complex::new(5.0, -7.0)),
+        ] {
+            model
+                .parameters
+                .get_mut(&ParameterName(mass))
+                .unwrap()
+                .value = Some(Complex::new_re(F(mass_value)));
+            model
+                .couplings
+                .get_mut(&CouplingName(coupling))
+                .unwrap()
+                .value = Some(coupling_value);
+            builder.update_model_values(&model);
+            for (buffer_index, values) in builder.values.iter().enumerate() {
+                let stride = buffer_index + 1;
+                for (position, value) in values.iter().enumerate() {
+                    let expected = if position == 2 * stride {
+                        Complex::new_re(F(mass_value))
+                    } else if position == 3 * stride {
+                        Complex::new_re(F(0.0))
+                    } else if position == 4 * stride {
+                        coupling_value.map(F)
+                    } else {
+                        sentinel
+                    };
+                    assert_eq!(*value, expected, "buffer {buffer_index}, slot {position}");
+                }
+            }
+        }
+    }
 
     #[test]
     fn initialize_duals_extends_value_buffers_by_requested_size() {

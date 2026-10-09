@@ -169,3 +169,161 @@ default_channel_selection = ["auto:lmb"]
         "metadata display changed the saved state"
     );
 }
+
+#[test]
+fn saved_gl15_amplitude_preserves_model_parameters_in_a_fresh_process() {
+    let temp = tempdir().unwrap();
+    let state = temp.path().join("state");
+    let before = temp.path().join("before.json");
+    let after = temp.path().join("after.json");
+    let binary = std::env::var_os("NEXTEST_BIN_EXE_gammaloop")
+        .unwrap_or_else(|| env!("CARGO_BIN_EXE_gammaloop").into());
+    let mut history = RunHistory::default();
+    history.cli_settings.global = toml::from_str(
+        r#"
+[n_cores]
+feyngen = 1
+generate = 1
+compile = 1
+integrate = 1
+[generation.evaluator]
+compile = false
+store_atom = false
+iterative_orientation_optimization = false
+summed = false
+summed_function_map = true
+[generation.threshold_subtraction]
+enable_thresholds = true
+check_esurface_at_generation = true
+"#,
+    )
+    .unwrap();
+    history.default_runtime_settings = toml::from_str(
+        r#"
+[general]
+evaluator_method = "SingleParametric"
+enable_cache = false
+generate_events = true
+store_additional_weights_in_event = true
+[kinematics.externals]
+type = "constant"
+[kinematics.externals.data]
+momenta = [
+    [500.0, 0.0, 0.0, 500.0],
+    [500.0, 0.0, 0.0, -500.0],
+    [438.5555662246945, 155.3322001835378, 348.0160396513587, -177.3773615718412],
+    [356.3696374921922, -16.802389008511, -318.7291102436005, 97.48719163688098],
+    "dependent",
+]
+helicities = [1, 1, 0, 0, 0]
+[sampling]
+graphs = "monte_carlo"
+orientations = "monte_carlo"
+sampling_multichanneling = true
+sampling_channels = "monte_carlo"
+[stability]
+rotation_axis = []
+"#,
+    )
+    .unwrap();
+    history.commands = [
+        "import model sm-default".to_owned(),
+        r#"generate amp g g > h h h / u d c s b QED==3 [{1}]
+            --only-diagrams --numerator-grouping only_detect_zeroes
+            --select-graphs GL15 --loop-momentum-bases GL15=8
+            --global-prefactor-projector 'gammalooprs::ϵ(0,spenso::mink(4,gammalooprs::hedge(0)))
+                * gammalooprs::ϵ(1,spenso::mink(4,gammalooprs::hedge(1)))
+                * (1/8)*spenso::g(spenso::coad(8,gammalooprs::hedge(0)),spenso::coad(8,gammalooprs::hedge(1)))'
+            -p gg_hhh -i 1L"#
+            .to_owned(),
+        "generate".to_owned(),
+        "set model MT=173.0".to_owned(),
+        "set model WT=0.0".to_owned(),
+        "set model ymt=173.0".to_owned(),
+        format!(
+            "inspect -p gg_hhh -i 1L -x 0.23 0.41 0.67 -d 0 0 0 --json-output '{}'",
+            before.display()
+        ),
+    ]
+    .iter()
+    .map(|command| CommandHistory::from_raw_string(command).unwrap())
+    .collect();
+    let card = temp.path().join("generate.toml");
+    fs::write(&card, toml::to_string_pretty(&history).unwrap()).unwrap();
+
+    let generated = Command::new(&binary)
+        .current_dir(temp.path())
+        .env("GL_DISPLAY_FILTER", "off")
+        .env("GL_LOGFILE_FILTER", "off")
+        .env("RAYON_NUM_THREADS", "1")
+        .arg("-s")
+        .arg(&state)
+        .arg(&card)
+        .args(["quit", "-o"])
+        .output()
+        .unwrap();
+    assert!(
+        generated.status.success(),
+        "generation and in-memory inspection failed:\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&generated.stdout),
+        String::from_utf8_lossy(&generated.stderr)
+    );
+    // A new process has a new Symbolica registry. Model values must follow
+    // their saved parameter names rather than the new registry's map order.
+    let loaded = Command::new(&binary)
+        .current_dir(temp.path())
+        .env("GL_DISPLAY_FILTER", "off")
+        .env("GL_LOGFILE_FILTER", "off")
+        .env("RAYON_NUM_THREADS", "1")
+        .arg("--read-only-state")
+        .arg("-s")
+        .arg(&state)
+        .args([
+            "inspect",
+            "-p",
+            "gg_hhh",
+            "-i",
+            "1L",
+            "-x",
+            "0.23",
+            "0.41",
+            "0.67",
+            "-d",
+            "0",
+            "0",
+            "0",
+            "--json-output",
+        ])
+        .arg(&after)
+        .output()
+        .unwrap();
+    assert!(
+        loaded.status.success(),
+        "fresh-process inspection failed:\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&loaded.stdout),
+        String::from_utf8_lossy(&loaded.stderr)
+    );
+    let [reference, reloaded] = [before, after].map(|path| {
+        let output: serde_json::Value = serde_json::from_slice(&fs::read(path).unwrap()).unwrap();
+        let evaluation = &output["evaluation"];
+        (
+            evaluation["integrand_result"]["re"].as_f64().unwrap(),
+            evaluation["integrand_result"]["im"].as_f64().unwrap(),
+            evaluation["parameterization_jacobian"].as_f64().unwrap(),
+            evaluation["integrator_weight"].as_f64().unwrap(),
+        )
+    });
+    for value in [reference, reloaded] {
+        assert!(
+            [value.0, value.1, value.2, value.3]
+                .iter()
+                .all(|component| component.is_finite())
+                && value.0.hypot(value.1) > 0.0,
+            "saved-state comparison requires finite, nonzero amplitudes: {value:?}"
+        );
+    }
+    assert_eq!(
+        reloaded, reference,
+        "model parameters changed the GL15 amplitude after a fresh-process reload"
+    );
+}
