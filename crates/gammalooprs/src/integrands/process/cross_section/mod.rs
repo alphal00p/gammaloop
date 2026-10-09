@@ -1,7 +1,10 @@
 use crate::{
     DependentMomentaConstructor, GammaLoopContext, GammaLoopContextContainer,
     cff::{
-        CutCFFIndex, esurface::Esurface, expression::OrientationID, orientations::GraphOrientation,
+        CutCFFIndex,
+        esurface::{Esurface, EsurfaceExistenceStatus, esurface_value_is_strictly_inside},
+        expression::OrientationID,
+        orientations::GraphOrientation,
         surface::HybridSurfaceID,
     },
     graph::{
@@ -22,7 +25,7 @@ use crate::{
     model::{Model, ParticleIdGammaLoopExt},
     momentum::{
         Energy, FourMomentum, Rotation, RotationMethod, ThreeMomentum,
-        sample::{ExternalIndex, LoopMomenta, MomentumSample, Subspace},
+        sample::{ExternalFourMomenta, ExternalIndex, LoopMomenta, MomentumSample, Subspace},
     },
     observables::{AdditionalWeightKey, EventProcessingRuntime, GenericEvent, GenericEventGroup},
     processes::{
@@ -42,7 +45,7 @@ use crate::{
         },
     },
     utils::{
-        F, FloatLike, Length, h, h_dual,
+        ESURFACE_SHIFT_THRESHOLD, F, FloatLike, h, h_dual,
         hyperdual_utils::{
             DualOrNot, extract_t_derivatives, extract_t_derivatives_complex, new_constant,
             shape_from_cut_cff_index, simple_n_deriv_shape,
@@ -1313,6 +1316,95 @@ impl CrossSectionGraphTerm {
 
         Ok(new_event)
     }
+
+    /// The origin of the generated loop momentum basis. `evaluate` rescales every
+    /// sample as k -> t k about it: the Newton function of each cut energy surface
+    /// takes it as its centre, while `rescaled_loop_momenta`, the hyper-dual
+    /// rescaling and `get_radius_guess` assume it.
+    fn basis_origin<T: FloatLike>(&self, zero: &F<T>) -> LoopMomenta<F<T>> {
+        let origin = ThreeMomentum {
+            px: zero.clone(),
+            py: zero.clone(),
+            pz: zero.clone(),
+        };
+        LoopMomenta::from_iter(vec![
+            origin;
+            self.graph.loop_momentum_basis.loop_edges.len()
+        ])
+    }
+
+    /// `evaluate` solves each cut energy surface along the ray from the basis
+    /// origin through the sampled loop momenta. Every such ray crosses the convex
+    /// surface exactly once only if the origin lies strictly inside it; otherwise
+    /// rays miss the surface or cross it twice, and the rescaling no longer covers
+    /// the cut phase space once. At the origin each cut edge carries only its
+    /// external shift. In the incoming centre-of-mass frame the origin therefore
+    /// lies inside every open cut surface unless the basis routes part of the beam
+    /// momenta through a cut edge; a closed cut surface, or incoming momenta
+    /// outside their centre-of-mass frame, can put it outside whatever the basis.
+    fn check_basis_origin_inside_cut_surfaces(
+        &self,
+        model: &Model,
+        settings: &RuntimeSettings,
+        externals: &ExternalFourMomenta<F<f64>>,
+    ) -> Result<()> {
+        let lmb = &self.graph.loop_momentum_basis;
+        let masses = self.graph.get_real_mass_vector::<f64>(model);
+        let origin = self.basis_origin(&F(0.0));
+        let e_cm = F(settings.kinematics.e_cm);
+        for (cut_group_id, cut_group) in self.cut_group_data.cut_groups.iter_enumerated() {
+            if !self.counterterm.cut_group_is_active(cut_group_id) {
+                continue;
+            }
+            let esurface = &self.cut_esurface[cut_group.cuts[0]];
+            let value = esurface.compute_from_momenta(lmb, &masses, &origin, externals);
+            if esurface_value_is_strictly_inside(&value, &e_cm) {
+                continue;
+            }
+
+            // A cross section's externals are its incoming momenta, and every cut carries their sum.
+            let mut incoming = FourMomentum::from_args(F(0.0), F(0.0), F(0.0), F(0.0));
+            for momentum in externals {
+                incoming += momentum;
+            }
+            let incoming_three_momentum = incoming.spatial.norm();
+            let remedy = if esurface.existence_status(
+                externals,
+                lmb,
+                &masses,
+                &e_cm,
+                &F(settings.subtraction.esurface_existence_threshold),
+            ) != EsurfaceExistenceStatus::Existing
+            {
+                let cut_mass = esurface
+                    .energies
+                    .iter()
+                    .fold(F(0.0), |sum, edge| sum + masses[*edge]);
+                format!(
+                    "The cut is kinematically closed or pinched at these kinematics: its masses add up to {cut_mass:e} against an incoming invariant mass of {:e}, so no loop momentum basis puts the origin inside it",
+                    incoming.norm(),
+                )
+            } else if incoming_three_momentum > F(ESURFACE_SHIFT_THRESHOLD) * e_cm {
+                format!(
+                    "The incoming momenta add up to a three-momentum of magnitude {incoming_three_momentum:e}: give them in their centre-of-mass frame, where a basis whose cut edges carry no partial beam momentum puts the origin inside every open cut surface"
+                )
+            } else {
+                format!(
+                    "Choose a loop momentum basis whose cut edges carry no partial beam momentum, with `generate ... --loop-momentum-bases {}=<loop edge ids>` or the `lmb_id`s of an imported DOT graph",
+                    self.graph.name,
+                )
+            };
+            let incoming_energy = -esurface.compute_shift_part_from_momenta(externals, lmb);
+            return Err(eyre!(
+                "The loop momenta of graph {} are rescaled about the origin of its loop momentum basis, which lies on or outside the energy surface of cut group {}: there the cut energies add up to {:e}, not below the incoming energy {:e}. {remedy}",
+                self.graph.name,
+                cut_group_id.0,
+                value + incoming_energy,
+                incoming_energy,
+            ));
+        }
+        Ok(())
+    }
 }
 
 impl GraphTerm for CrossSectionGraphTerm {
@@ -1473,7 +1565,7 @@ impl GraphTerm for CrossSectionGraphTerm {
 
         self.param_builder = self.graph.param_builder.clone();
 
-        Ok(())
+        self.check_basis_origin_inside_cut_surfaces(model, settings, &externals)
     }
 
     fn evaluate<T: FloatLike>(
@@ -1485,14 +1577,7 @@ impl GraphTerm for CrossSectionGraphTerm {
             momentum_sample.orientations(&self.orientation_filter, &self.orientations);
 
         // let mut all_cut_result = Complex::new_re(momentum_sample.zero());
-        let center = LoopMomenta::from_iter(vec![
-            ThreeMomentum {
-                px: momentum_sample.zero(),
-                py: momentum_sample.zero(),
-                pz: momentum_sample.zero(),
-            };
-            momentum_sample.loop_moms().len()
-        ]);
+        let center = self.basis_origin(&momentum_sample.zero());
         let masses = self.graph.get_real_mass_vector(context.model);
         let hel = context.settings.kinematics.externals.get_helicities();
         let mut cut_results: TiVec<CutGroupId, Vec<Complex<F<T>>>> =
@@ -1947,33 +2032,30 @@ impl GraphTerm for CrossSectionGraphTerm {
                 2 => {
                     let mom_1 = &(momentum_sample.external_moms()[ExternalIndex::from(0)]);
                     let mom_2 = &(momentum_sample.external_moms()[ExternalIndex::from(1)]);
-                    let mass_factor = self
+                    // `masses` holds zero for massless (`EdgeMass::Zero`) beams.
+                    let mass_squared_product = self
                         .graph
-                        .initial_state_cut
-                        .iter_edges(&self.graph)
-                        .map(|(_, e)| {
-                            e.data
-                                .mass
-                                .value(context.model, &self.param_builder)
-                                .unwrap()
-                        })
-                        .fold(Complex::new_re(momentum_sample.one()), |acc, mass| {
-                            acc * &mass * &mass
-                        })
-                        .re;
+                        .get_edges_in_initial_state_cut()
+                        .into_iter()
+                        .fold(momentum_sample.one(), |acc, edge| {
+                            acc * &masses[edge] * &masses[edge]
+                        });
 
                     let f = feynkit_kinematics::InitialStateFlux::Scattering {
                         momentum_dot: mom_1.dot(mom_2),
-                        mass_squared_product: mass_factor,
+                        mass_squared_product,
                     }
                     .denominator(|value| value.sqrt());
 
                     momentum_sample.one() / f
                         * barn_conversion_factor(resolved_integral_unit, momentum_sample.one())
                 }
-                _ => unimplemented!(
-                    "Flux factor for more than 3 or more incoming particles not implemented yet"
-                ),
+                incoming => {
+                    return Err(eyre!(
+                        "The flux factor for {incoming} incoming particles is not implemented; set general.disable_flux_factor to evaluate graph {} without it",
+                        self.graph.name
+                    ));
+                }
             }
         };
 

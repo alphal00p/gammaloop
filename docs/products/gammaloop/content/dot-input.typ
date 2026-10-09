@@ -213,6 +213,13 @@ edge ID or an external momentum slot. The remaining edge momenta are expressed t
 chosen basis and external flows. Exports show these expressions in `lmb_rep`; they are generated
 routing information, not a replacement for the `lmb_id` input.
 
+A cross section rescales its loop momenta about the origin of this basis, where each cut edge
+carries only its external momentum. The cut energies there must add up to less than the incoming
+energy for every cut: a basis whose cut edges carry part of the beam momenta, such as `K + P1`,
+can violate this, and GammaLoop then refuses the integrand before evaluating it. A kinematically
+closed cut, or incoming momenta outside their centre-of-mass frame, can violate it whatever the
+basis; the refusal names which cause applies.
+
 Load a DOT file after importing its model:
 // docs-example: syntax
 

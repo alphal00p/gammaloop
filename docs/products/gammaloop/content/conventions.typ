@@ -56,7 +56,9 @@ and the implemented two-incoming-particle factor is
 
 $ F_"2 in" = 1 / (4 sqrt((p_1 · p_2)^2 - m_1^2 m_2^2)). $
 
-Zero or three-or-more incoming particles are not implemented by this default path. Reporting
+The masses are the beams' model values, with $m = 0$ for a massless beam such as a photon or a
+gluon. Zero or three-or-more incoming particles are not implemented by this default path: their
+evaluation fails with an error that names `general.disable_flux_factor`. Reporting
 units resolve to `pb`, `fb`, `ab`, `mb`, or `none`; `auto` selects picobarns for more than one
 incoming particle and no conversion otherwise. The fixed factor
 $3.89379372171859 times 10^8$ relative to picobarns is applied only by the two-incoming-particle

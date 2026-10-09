@@ -7,42 +7,120 @@ use gammalooprs::{
 };
 use std::f64::consts::PI;
 
+/// Beams of a scalar contact process in their centre-of-mass frame, and the
+/// final-state particle they produce.
+#[derive(Clone, Copy, Debug)]
+enum ScalarBeams {
+    /// A unit-mass `scalar_2` decaying at rest.
+    Decay,
+    /// Two identical massless `scalar_0` beams.
+    MasslessPair,
+    /// A massless `scalar_0` against a unit-mass `scalar_2`. The beams are
+    /// distinct, so no beam exchange enters the cross section.
+    MasslessMassive,
+    /// A `scalar_1` of mass 0.6 against a `scalar_2` of mass 1.5, producing
+    /// massless `scalar_0`s. Distinct masses other than one pin the m1^2 m2^2
+    /// term of the flux.
+    MassiveDistinct,
+}
+
+impl ScalarBeams {
+    /// Each beam's particle, mass, energy and momentum along the z axis.
+    fn beams(self) -> &'static [(&'static str, f64, f64, f64)] {
+        match self {
+            Self::Decay => &[("scalar_2", 1.0, 1.0, 0.0)],
+            Self::MasslessPair => &[("scalar_0", 0.0, 1.0, 1.0), ("scalar_0", 0.0, 1.0, -1.0)],
+            Self::MasslessMassive => &[
+                ("scalar_0", 0.0, 0.75, 0.75),
+                ("scalar_2", 1.0, 1.25, -0.75),
+            ],
+            Self::MassiveDistinct => &[("scalar_1", 0.6, 1.0, 0.8), ("scalar_2", 1.5, 1.7, -0.8)],
+        }
+    }
+
+    /// The final-state particle, a `scalar_0` when `scalar_1` is a beam.
+    fn final_particle(self) -> &'static str {
+        match self {
+            Self::MassiveDistinct => "scalar_0",
+            Self::Decay | Self::MasslessPair | Self::MasslessMassive => "scalar_1",
+        }
+    }
+
+    fn e_cm(self) -> f64 {
+        self.beams().iter().map(|(_, _, energy, _)| energy).sum()
+    }
+
+    /// The decay flux 2M or the scattering flux 4 sqrt((p1.p2)^2 - m1^2 m2^2).
+    fn flux(self) -> f64 {
+        match self.beams() {
+            [(_, mass, ..)] => 2.0 * mass,
+            [(_, m1, e1, z1), (_, m2, e2, z2)] => {
+                4.0 * ((e1 * e2 - z1 * z2).powi(2) - (m1 * m2).powi(2)).sqrt()
+            }
+            _ => unreachable!("scalar contact processes have one or two beams"),
+        }
+    }
+
+    /// The contact vertex joining the beams to `multiplicity` final particles.
+    fn vertex(self, multiplicity: usize) -> String {
+        let legs = multiplicity + self.beams().len();
+        let finals = self
+            .final_particle()
+            .trim_start_matches("scalar_")
+            .repeat(multiplicity);
+        match self {
+            Self::Decay => format!("V_{legs}_SCALAR_{finals}2"),
+            Self::MasslessPair => format!("V_{legs}_SCALAR_00{finals}"),
+            Self::MasslessMassive => format!("V_{legs}_SCALAR_0{finals}2"),
+            Self::MassiveDistinct => format!("V_{legs}_SCALAR_{finals}12"),
+        }
+    }
+}
+
 fn scalar_contact_cli(
     multiplicity: usize,
-    incoming: usize,
+    beams: ScalarBeams,
     final_mass: f64,
 ) -> Result<gammaloop_integration_tests::CLIState> {
     // Nextest processes do not share #[serial] locks, so isolate their state directories.
     let name = format!(
-        "scalar_born_phase_{}_n{multiplicity}_{incoming}_{final_mass}",
+        "scalar_born_phase_{}_n{multiplicity}_{beams:?}_{final_mass}",
         std::process::id()
     );
     let root = get_tests_workspace_path().join(&name);
     clean_test(&root);
     let mut cli = get_test_cli(None, root, Some(name), true)?;
-    let (initial, vertex_suffix, e_cm, external_momenta, helicities) = if incoming == 1 {
-        (
-            "scalar_2",
-            format!("{}2", "1".repeat(multiplicity)),
-            1.0,
-            "[[1.0,0.0,0.0,0.0]]",
-            "[0]",
-        )
-    } else {
-        assert_eq!(incoming, 2);
-        (
-            "scalar_0 scalar_0",
-            format!("00{}", "1".repeat(multiplicity)),
-            2.0,
-            "[[1.0,0.0,0.0,1.0],[1.0,0.0,0.0,-1.0]]",
-            "[0,0]",
-        )
-    };
+    let initial = beams
+        .beams()
+        .iter()
+        .map(|(particle, ..)| particle)
+        .join(" ");
+    let e_cm = beams.e_cm();
+    let external_momenta = format!(
+        "[{}]",
+        beams
+            .beams()
+            .iter()
+            .map(|(_, _, energy, pz)| format!("[{energy:?},0.0,0.0,{pz:?}]"))
+            .join(",")
+    );
+    let helicities = format!("[{}]", vec!["0"; beams.beams().len()].join(","));
+    let final_particle = beams.final_particle();
+    // scalar_0's mass is the model's ZERO; every other scalar takes its mass here.
+    assert!(final_particle != "scalar_0" || final_mass == 0.0);
+    let masses = beams
+        .beams()
+        .iter()
+        .map(|&(particle, mass, ..)| (particle, mass))
+        .chain([(final_particle, final_mass)])
+        .filter(|(particle, _)| *particle != "scalar_0")
+        .map(|(particle, mass)| format!("mass_{particle}={mass:?}"))
+        .join(" ");
     run_commands(
         &mut cli,
         &[
             "import model scalars-default.json",
-            &format!("set model mass_scalar_1={final_mass} mass_scalar_2=1.0 lam=1.0"),
+            &format!("set model {masses} lam=1.0"),
             "set global kv global.generation.evaluator.compile=false global.generation.evaluator.summed=false global.generation.evaluator.iterative_orientation_optimization=false global.generation.uv.subtract_uv=false global.generation.uv.generate_integrated=false global.generation.threshold_subtraction.enable_thresholds=false",
             &format!(
                 r#"set default-runtime string '
@@ -80,10 +158,10 @@ target_relative_accuracy = 0.025
 '"#
             ),
             &format!(
-                "generate xs {initial} > {} [{{{{{}}}}}] --allowed-vertex-interactions V_{}_SCALAR_{vertex_suffix} -p born -i LO",
-                vec!["scalar_1"; multiplicity].join(" "),
+                "generate xs {initial} > {} [{{{{{}}}}}] --allowed-vertex-interactions {} -p born -i LO",
+                vec![final_particle; multiplicity].join(" "),
                 multiplicity - 1,
-                multiplicity + incoming,
+                beams.vertex(multiplicity),
             ),
         ],
     )?;
@@ -110,7 +188,7 @@ target_relative_accuracy = 0.025
 fn check_scalar_contact_point(
     cli: &mut gammaloop_integration_tests::CLIState,
     multiplicity: usize,
-    incoming: usize,
+    beams: ScalarBeams,
     final_mass: f64,
     seed: usize,
 ) -> Result<()> {
@@ -138,12 +216,8 @@ fn check_scalar_contact_point(
             let shift = signature
                 .external
                 .iter()
-                .zip(if incoming == 1 {
-                    vec![0.0]
-                } else {
-                    vec![1.0, -1.0]
-                })
-                .map(|(sign, pz)| *sign as i8 as f64 * pz)
+                .zip(beams.beams())
+                .map(|(sign, (.., pz))| *sign as i8 as f64 * pz)
                 .sum::<f64>();
             assert_eq!(shift, 0.0);
             (0..3)
@@ -159,7 +233,7 @@ fn check_scalar_contact_point(
                 .sum()
         })
         .collect();
-    let e_cm: f64 = if incoming == 1 { 1.0 } else { 2.0 };
+    let e_cm = beams.e_cm();
     let energy_sum = |t: f64| {
         squared_momenta
             .iter()
@@ -192,17 +266,12 @@ fn check_scalar_contact_point(
     // numerator, or a fitted phase. The normalized h integrates to one on t>0.
     let h = 2.0 / PI.sqrt() * (2.0 - t * t - 1.0 / (t * t)).exp();
     let symmetry = (1..=multiplicity).product::<usize>() as f64;
-    let flux = if incoming == 1 {
-        2.0 * e_cm
-    } else {
-        2.0 * e_cm * e_cm
-    };
     let expected = (2.0 * PI) * t.powi(3 * (multiplicity as i32 - 1)) * h
         / (eta_derivative
             * energies.iter().map(|energy| 2.0 * energy).product::<f64>()
             * (2.0 * PI).powi(3 * (multiplicity as i32 - 1))
             * symmetry
-            * flux);
+            * beams.flux());
     assert!(expected.is_finite() && expected > 0.0);
     let (_, actual) = Inspect {
         process: Some(ProcessRef::Unqualified("born".to_string())),
@@ -229,22 +298,98 @@ fn check_scalar_contact_point(
 #[serial]
 fn scalar_born_phases_match_phase_space_at_one_through_five_loops() -> Result<()> {
     for multiplicity in 2..=6 {
-        let mut cli = scalar_contact_cli(multiplicity, 1, 0.0)?;
+        let mut cli = scalar_contact_cli(multiplicity, ScalarBeams::Decay, 0.0)?;
         for seed in 0..3 {
-            check_scalar_contact_point(&mut cli, multiplicity, 1, 0.0, seed)?;
+            check_scalar_contact_point(&mut cli, multiplicity, ScalarBeams::Decay, 0.0, seed)?;
         }
         clean_test(&cli.cli_settings.state.folder);
     }
-    for (incoming, final_mass) in [(1, 0.15), (2, 0.0)] {
-        let mut cli = scalar_contact_cli(2, incoming, final_mass)?;
-        check_scalar_contact_point(&mut cli, 2, incoming, final_mass, 1)?;
+    for (beams, final_mass) in [(ScalarBeams::Decay, 0.15), (ScalarBeams::MasslessPair, 0.0)] {
+        let mut cli = scalar_contact_cli(2, beams, final_mass)?;
+        check_scalar_contact_point(&mut cli, 2, beams, final_mass, 1)?;
         clean_test(&cli.cli_settings.state.folder);
     }
     Ok(())
 }
 
-fn integrate_scalar_contact(multiplicity: usize, incoming: usize, final_mass: f64) -> Result<()> {
-    let e_cm: f64 = if incoming == 1 { 1.0 } else { 2.0 };
+#[test]
+#[serial]
+fn scalar_born_scattering_flux_matches_phase_space() -> Result<()> {
+    // scalar_0's mass is the model's ZERO, which has no numerical mass value.
+    // MassiveDistinct's beam masses 0.6 and 1.5 give m1^2 m2^2 = 0.81. The
+    // beams are distinct, so beam-exchange symmetrization cannot enter.
+    for (beams, final_mass) in [
+        (ScalarBeams::MasslessMassive, 0.0),
+        (ScalarBeams::MasslessMassive, 0.15),
+        (ScalarBeams::MassiveDistinct, 0.0),
+    ] {
+        let mut cli = scalar_contact_cli(2, beams, final_mass)?;
+        for seed in 0..3 {
+            check_scalar_contact_point(&mut cli, 2, beams, final_mass, seed)?;
+        }
+        clean_test(&cli.cli_settings.state.folder);
+    }
+    Ok(())
+}
+
+/// Warm-up refuses a basis origin on or outside a cut surface. Where no basis
+/// can help, the refusal names the cause instead of suggesting another basis.
+#[test]
+#[serial]
+fn scalar_born_refusals_name_closed_cuts_and_boosted_beams() -> Result<()> {
+    let refusal = |cli: &mut gammaloop_integration_tests::CLIState| {
+        let Err(error) = (Inspect {
+            process: Some(ProcessRef::Unqualified("born".to_string())),
+            integrand_name: Some("LO".to_string()),
+            point: vec![0.11, -0.07, 0.09],
+            momentum_space: true,
+            graph_id: Some(0),
+            ..Default::default()
+        })
+        .run(&mut cli.state) else {
+            panic!("inspecting with the basis origin outside the cut surface succeeded");
+        };
+        error.chain().map(ToString::to_string).join("\n")
+    };
+
+    // Two scalar_1s of mass 0.6 are heavier than the decaying unit-mass scalar_2.
+    let mut cli = scalar_contact_cli(2, ScalarBeams::Decay, 0.6)?;
+    let message = refusal(&mut cli);
+    assert!(
+        message.contains("kinematically closed or pinched")
+            && !message.contains("--loop-momentum-bases"),
+        "{message}"
+    );
+    clean_test(&cli.cli_settings.state.folder);
+
+    // The decay stays open in flight, with |p| = 2.4 and E = 2.6. The cut edge
+    // that carries the whole momentum has energy sqrt(2.4^2 + 0.3^2) = 2.42 at
+    // the origin, so the cut energies there add up to 2.72.
+    let mut cli = scalar_contact_cli(2, ScalarBeams::Decay, 0.3)?;
+    run_commands(
+        &mut cli,
+        &[r#"set process string '
+[kinematics]
+e_cm = 2.6
+[kinematics.externals.data]
+momenta = [[2.6,0.0,0.0,2.4]]
+'"#],
+    )?;
+    let message = refusal(&mut cli);
+    assert!(
+        message.contains("centre-of-mass frame") && !message.contains("--loop-momentum-bases"),
+        "{message}"
+    );
+    clean_test(&cli.cli_settings.state.folder);
+    Ok(())
+}
+
+fn integrate_scalar_contact(
+    multiplicity: usize,
+    beams: ScalarBeams,
+    final_mass: f64,
+) -> Result<()> {
+    let e_cm = beams.e_cm();
     let factorial = |n: usize| (1..=n).product::<usize>() as f64;
     // Lorentz-invariant n-body phase space, including identical final scalars
     // and physical decay/scattering flux. The coupling is fixed to lambda=1.
@@ -258,13 +403,8 @@ fn integrate_scalar_contact(multiplicity: usize, incoming: usize, final_mass: f6
         assert_eq!(multiplicity, 2);
         (1.0 - 4.0 * final_mass * final_mass / (e_cm * e_cm)).sqrt() / (8.0 * PI)
     };
-    let flux = if incoming == 1 {
-        2.0 * e_cm
-    } else {
-        2.0 * e_cm * e_cm
-    };
-    let expected = phase_space / (factorial(multiplicity) * flux);
-    let mut cli = scalar_contact_cli(multiplicity, incoming, final_mass)?;
+    let expected = phase_space / (factorial(multiplicity) * beams.flux());
+    let mut cli = scalar_contact_cli(multiplicity, beams, final_mass)?;
     let output = Integrate {
         process: vec![ProcessRef::Unqualified("born".to_string())],
         integrand_name: vec!["LO".to_string()],
@@ -299,7 +439,7 @@ macro_rules! scalar_born_mc_test {
         #[test]
         #[serial]
         fn $name() -> Result<()> {
-            integrate_scalar_contact($multiplicity, 1, 0.0)
+            integrate_scalar_contact($multiplicity, ScalarBeams::Decay, 0.0)
         }
     };
 }
@@ -313,8 +453,8 @@ scalar_born_mc_test!(scalar_born_six_body_mc_matches_phase_space, 6);
 #[test]
 #[serial]
 fn scalar_born_massive_decay_and_scattering_mc_match_phase_space() -> Result<()> {
-    integrate_scalar_contact(2, 1, 0.15)?;
-    integrate_scalar_contact(2, 2, 0.0)
+    integrate_scalar_contact(2, ScalarBeams::Decay, 0.15)?;
+    integrate_scalar_contact(2, ScalarBeams::MasslessPair, 0.0)
 }
 
 #[test]
@@ -335,7 +475,7 @@ fn scalar_born_exchange_tree_matches_squared_amplitude() -> Result<()> {
         b->d[id=3,particle=scalar_0];
         a->b[id=4,particle=scalar_1]; d->c[id=5,particle=scalar_1];
     }"#;
-    let mut cli = scalar_contact_cli(3, 1, 0.0)?;
+    let mut cli = scalar_contact_cli(3, ScalarBeams::Decay, 0.0)?;
     run_commands(
         &mut cli,
         &[

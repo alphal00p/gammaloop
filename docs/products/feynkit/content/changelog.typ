@@ -25,7 +25,15 @@ of the beam momenta, such as `K + P1`: GammaLoop rescales loop momenta about the
 basis, which must lie inside every cut energy surface. Regenerated cross sections can therefore
 route differently from earlier exports, while saved states and DOT files keep their stored
 `lmb_id` and explicit loop-momentum-basis overrides still take precedence. Diagram ids, names,
-numerators and symmetry factors are unchanged.
+numerators and symmetry factors are unchanged. GammaLoop refuses an integrand whose basis origin
+lies on or outside a cut energy surface at the run's kinematics, whichever way the basis was
+chosen, instead of losing or doubling sample points. The refusal also covers a cut that is
+kinematically closed at those kinematics, which used to return meaningless values, and incoming
+momenta given outside their centre-of-mass frame; its message names the cause.
+
+Cross sections with massless beams, such as photons or gluons, no longer panic at their first
+evaluation when the flux factor is on: the flux uses $m = 0$ for them. With the flux on, zero or
+more than two incoming particles now return an error naming `general.disable_flux_factor`.
 
 Cross sections with identical beams, such as $g g$, $gamma gamma$ or $e^- e^-$, no longer come
 out divided by the beam permutations. The CLI and Python defaults symmetrized cross-section final

@@ -64,19 +64,14 @@ fn scalar_bubble() -> Result<()> {
 }
 
 /// Breit-Wheeler pair production a a > t t~ at sqrt(s) = 1 TeV with mt = 173 GeV
-/// and alpha = 1/132.507: sigma = 0.459677 pb. Without the flux factor the
-/// integrand returns sigma 2s in natural units. The loop momenta are rescaled
-/// about the origin of the generated basis, which lies outside the cut energy
-/// surface when the cut edges carry K + P1 and K - P0. Forcing that basis here
-/// gives 6.0(3.6)e-3 instead of 2.36e-3, with 17.5% unstable points. Stability
-/// checks stay in double precision, so such a basis fails within seconds instead
-/// of escalating its unstable points to arbitrary precision for many minutes.
-#[test]
-fn aa_ttx_born_cross_section_integration_matches_breit_wheeler() -> Result<()> {
-    const GEV_SQUARED_TO_PICOBARN: f64 = 0.389379304e9;
-    const BREIT_WHEELER_PICOBARN: f64 = 0.459677;
-    const E_CM: f64 = 1000.0;
-    let test_name = "aa_ttx_born_breit_wheeler";
+/// and alpha = 1/132.507, generated with the extra `generate xs` options
+/// `generation_options`. Stability checks stay in double precision, so a basis
+/// that covers the cut phase space badly fails within seconds instead of
+/// escalating its unstable points to arbitrary precision for many minutes.
+fn aa_ttx_born_cli(
+    test_name: &str,
+    generation_options: &str,
+) -> Result<gammaloop_integration_tests::CLIState> {
     let mut cli = get_test_cli(
         None,
         get_tests_workspace_path().join(test_name),
@@ -134,9 +129,23 @@ n_max = 50000
 min_samples_for_update = 1000
 seed = 7331
 '"#,
-            "generate xs a a > t t~ | a t t~ g ghG ghG~ QED^2==4 [{{1}} QCD=0] --numerator-grouping no_grouping --symmetrize-initial-states false --symmetrize-final-states false -p aa_ttx -i LO",
+            &format!(
+                "generate xs a a > t t~ | a t t~ g ghG ghG~ QED^2==4 [{{{{1}}}} QCD=0] --numerator-grouping no_grouping --symmetrize-initial-states false --symmetrize-final-states false {generation_options} -p aa_ttx -i LO"
+            ),
         ],
     )?;
+    Ok(cli)
+}
+
+/// The Breit-Wheeler cross section is sigma = 0.459677 pb. Without the flux
+/// factor the integrand returns sigma 2s in natural units.
+#[test]
+fn aa_ttx_born_cross_section_integration_matches_breit_wheeler() -> Result<()> {
+    const GEV_SQUARED_TO_PICOBARN: f64 = 0.389379304e9;
+    const BREIT_WHEELER_PICOBARN: f64 = 0.459677;
+    const E_CM: f64 = 1000.0;
+    let test_name = "aa_ttx_born_breit_wheeler";
+    let mut cli = aa_ttx_born_cli(test_name, "")?;
 
     let integral = Integrate {
         integrand_name: vec!["LO".to_string()],
@@ -145,7 +154,7 @@ seed = 7331
     .run(&mut cli.state, &cli.cli_settings)?;
     let integral = single_slot_integral(&integral);
     let target = BREIT_WHEELER_PICOBARN / GEV_SQUARED_TO_PICOBARN * 2.0 * E_CM * E_CM;
-    // A basis origin outside a cut surface inflates the variance first.
+    // A badly covered cut phase space inflates the variance first.
     assert!(
         integral.error.re.0 < 0.03 * target,
         "{integral:#} has a large error for target {target:e}"
@@ -153,6 +162,37 @@ seed = 7331
     assert!(
         integral.is_compatible_with_target(Complex::new(F(target), F(0.0)), 3),
         "{integral:#} is not compatible with target {target:e}"
+    );
+
+    clean_test(&cli.cli_settings.state.folder);
+
+    Ok(())
+}
+
+/// The loop momenta are rescaled about the origin of the generated basis. With
+/// the cut edges at K + P1 and K - P0 the cut energies there add up to
+/// 2 sqrt(500^2 + 173^2) GeV, 58.2 GeV above sqrt(s), so the origin lies outside
+/// every cut surface. Integrating with that basis used to give 6.0(3.6)e-3
+/// instead of 2.36e-3, with 17.5% unstable points; warm-up now rejects it.
+#[test]
+fn aa_ttx_born_rejects_a_basis_whose_origin_lies_outside_a_cut_surface() -> Result<()> {
+    let test_name = "aa_ttx_born_origin_outside_cut";
+    let mut cli = aa_ttx_born_cli(test_name, "--loop-momentum-bases GL0=2 GL1=3 GL2=2 GL3=3")?;
+
+    let Err(error) = (Integrate {
+        integrand_name: vec!["LO".to_string()],
+        ..default_integrate_for(test_name)
+    })
+    .run(&mut cli.state, &cli.cli_settings) else {
+        panic!("integrating with the rescaling centre outside the cut surfaces succeeded");
+    };
+    assert!(
+        error.chain().any(|cause| {
+            let cause = cause.to_string();
+            cause.contains("lies on or outside the energy surface of cut group")
+                && cause.contains("--loop-momentum-bases GL")
+        }),
+        "unexpected error: {error:?}"
     );
 
     clean_test(&cli.cli_settings.state.folder);
