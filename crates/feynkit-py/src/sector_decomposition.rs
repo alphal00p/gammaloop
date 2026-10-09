@@ -16,11 +16,15 @@ fn forward(input: Bound<'_, PyAny>, kwargs: Option<&Bound<'_, PyDict>>) -> PyRes
     let py = input.py();
     let backend = py.import(MODULE).map_err(|error| {
         let missing = error.is_instance_of::<PyModuleNotFoundError>(py)
-            && error.value(py).getattr("name").ok().and_then(|name| name.extract::<String>().ok())
+            && error
+                .value(py)
+                .getattr("name")
+                .ok()
+                .and_then(|name| name.extract::<String>().ok())
                 .is_some_and(|name| name == MODULE || MODULE.starts_with(&(name + ".")));
         if missing {
             let unavailable = PyImportError::new_err(
-                "Sector decomposition requires a community wheel built with experimental-fastsecdec",
+                "Sector decomposition requires a community wheel with the FastSecDec backend",
             );
             unavailable.set_cause(py, Some(error));
             unavailable
@@ -56,7 +60,7 @@ impl PyFeynmanDiagram {
     /// ----------
     /// kwargs : keyword arguments
     ///     Arguments of ``sector_decomposition.sector_decompose`` after its input.
-    #[pyo3(signature = (**kwargs), text_signature = "($self, *, regulator, kinematics=None, dimension=None, powers=None, numerator=None, scalar_values=None, auxiliary_momenta=None, measure_multiplier=None, max_order=0, coefficient_expansion='physical', observer=None, progress='auto')")]
+    #[pyo3(signature = (**kwargs), text_signature = "($self, *, regulator, kinematics=None, dimension=None, powers=None, numerator=None, scalar_values=None, auxiliary_momenta=None, measure_multiplier=None, runtime_parameters=None, model_parameters='runtime', max_order=0, coefficient_expansion='full_expression', mode='symbolic', subtraction='taylor', contour=False, observer=None, progress='auto')")]
     fn sector_decompose(
         slf: PyRef<'_, Self>,
         kwargs: Option<&Bound<'_, PyDict>>,
@@ -87,7 +91,7 @@ impl PyIntegralFamily {
     /// ----------
     /// kwargs : keyword arguments
     ///     Arguments of ``sector_decomposition.sector_decompose`` after its input.
-    #[pyo3(signature = (**kwargs), text_signature = "($self, *, regulator, kinematics=None, dimension=None, powers=None, numerator=None, scalar_values=None, auxiliary_momenta=None, measure_multiplier=None, max_order=0, coefficient_expansion='physical', observer=None, progress='auto')")]
+    #[pyo3(signature = (**kwargs), text_signature = "($self, *, regulator, kinematics=None, dimension=None, powers=None, numerator=None, scalar_values=None, auxiliary_momenta=None, measure_multiplier=None, runtime_parameters=None, model_parameters='runtime', max_order=0, coefficient_expansion='full_expression', mode='symbolic', subtraction='taylor', contour=False, observer=None, progress='auto')")]
     fn sector_decompose(
         slf: PyRef<'_, Self>,
         kwargs: Option<&Bound<'_, PyDict>>,
@@ -116,7 +120,10 @@ pyo3_stub_gen::inventory::submit! {
                 scalar_values: typing.Optional[typing.Dict[symbolica.Expression, symbolica.Expression]] = None,
                 auxiliary_momenta: typing.Optional[typing.Sequence[symbolica.Expression]] = None,
                 measure_multiplier: typing.Optional[symbolica.Expression] = None,
-                max_order: int = 0, coefficient_expansion: str = "physical",
+                runtime_parameters: typing.Optional[typing.List[symbolica.Expression]] = None,
+                model_parameters: str = "runtime",
+                max_order: int = 0, coefficient_expansion: str = "full_expression",
+                mode: str = "symbolic", subtraction: str = "taylor", contour: bool = False,
                 observer: typing.Optional[typing.Callable[[symbolica.community.hepkit.sector_decomposition.GenerationSnapshot], typing.Optional[bool]]] = None,
                 progress: typing.Union[typing.Literal["auto"], typing.Callable[[symbolica.community.hepkit.sector_decomposition.GenerationSnapshot], typing.Optional[bool]], None] = "auto",
             ) -> symbolica.community.hepkit.sector_decomposition.GeneratedIntegral:
@@ -147,10 +154,20 @@ pyo3_stub_gen::inventory::submit! {
                     Additional external vector heads, such as polarizations.
                 measure_multiplier : Expression or None
                     Explicit multiplicative measure convention, applied once.
+                runtime_parameters : list[Expression] or None
+                    Scalar inputs retained for binding after generation.
+                model_parameters : str
+                    Retain model parameters at runtime or substitute their supplied values.
                 max_order : int
                     Largest signed epsilon power retained.
                 coefficient_expansion : str
                     Native physical or package coefficient convention.
+                mode : str
+                    Symbolic or numerical-dual coefficient construction.
+                subtraction : str
+                    Native Taylor or IBP endpoint subtraction.
+                contour : bool
+                    Generate optional contour-deformation capability for later binding.
                 observer : callable or None
                     Native generation events; False cancels at an event boundary.
                 progress : "auto", callable or None
@@ -179,7 +196,10 @@ pyo3_stub_gen::inventory::submit! {
                 scalar_values: typing.Optional[typing.Dict[symbolica.Expression, symbolica.Expression]] = None,
                 auxiliary_momenta: typing.Optional[typing.Sequence[symbolica.Expression]] = None,
                 measure_multiplier: typing.Optional[symbolica.Expression] = None,
-                max_order: int = 0, coefficient_expansion: str = "physical",
+                runtime_parameters: typing.Optional[typing.List[symbolica.Expression]] = None,
+                model_parameters: str = "runtime",
+                max_order: int = 0, coefficient_expansion: str = "full_expression",
+                mode: str = "symbolic", subtraction: str = "taylor", contour: bool = False,
                 observer: typing.Optional[typing.Callable[[symbolica.community.hepkit.sector_decomposition.GenerationSnapshot], typing.Optional[bool]]] = None,
                 progress: typing.Union[typing.Literal["auto"], typing.Callable[[symbolica.community.hepkit.sector_decomposition.GenerationSnapshot], typing.Optional[bool]], None] = "auto",
             ) -> symbolica.community.hepkit.sector_decomposition.GeneratedIntegral:
@@ -210,10 +230,20 @@ pyo3_stub_gen::inventory::submit! {
                     Additional external vector heads, such as polarizations.
                 measure_multiplier : Expression or None
                     Explicit multiplicative measure convention, applied once.
+                runtime_parameters : list[Expression] or None
+                    Scalar inputs retained for binding after generation.
+                model_parameters : str
+                    Retain model parameters at runtime or substitute their supplied values.
                 max_order : int
                     Largest signed epsilon power retained.
                 coefficient_expansion : str
                     Native physical or package coefficient convention.
+                mode : str
+                    Symbolic or numerical-dual coefficient construction.
+                subtraction : str
+                    Native Taylor or IBP endpoint subtraction.
+                contour : bool
+                    Generate optional contour-deformation capability for later binding.
                 observer : callable or None
                     Native generation events; False cancels at an event boundary.
                 progress : "auto", callable or None
@@ -263,9 +293,17 @@ import types
 
 absent = object()
 previous = sys.modules.get(backend_name, absent)
+# The native owner unit test must not require an installed community wheel.
+created_parents = []
+for name in ('symbolica', 'symbolica.community', 'symbolica.community.hepkit'):
+    if name not in sys.modules:
+        parent = types.ModuleType(name)
+        parent.__path__ = []
+        sys.modules[name] = parent
+        created_parents.append(name)
 backend = types.ModuleType(backend_name)
 calls = []
-answer, regulator, observer, powers, progress = (object() for _ in range(5))
+answer, regulator, observer, powers, progress, runtime_parameters = (object() for _ in range(6))
 def capture(input, **kwargs):
     calls.append((input, kwargs))
     return answer
@@ -273,14 +311,19 @@ backend.sector_decompose = capture
 sys.modules[backend_name] = backend
 try:
     for input in (diagram, family):
-        assert input.sector_decompose(regulator=regulator, powers=powers, observer=observer, progress=progress) is answer
+        assert input.sector_decompose(regulator=regulator, powers=powers, observer=observer, progress=progress, runtime_parameters=runtime_parameters, model_parameters="runtime", mode="numerical_dual", subtraction="ibp", contour=True) is answer
         actual, kwargs = calls.pop()
         assert actual is input
-        assert kwargs == dict(regulator=regulator, powers=powers, observer=observer, progress=progress)
+        assert kwargs == dict(regulator=regulator, powers=powers, observer=observer, progress=progress, runtime_parameters=runtime_parameters, model_parameters="runtime", mode="numerical_dual", subtraction="ibp", contour=True)
         signature = inspect.signature(input.sector_decompose)
         assert signature.parameters['regulator'].kind == inspect.Parameter.KEYWORD_ONLY
         assert signature.parameters['max_order'].default == 0
-        assert signature.parameters['coefficient_expansion'].default == 'physical'
+        assert signature.parameters['coefficient_expansion'].default == 'full_expression'
+        assert signature.parameters['runtime_parameters'].default is None
+        assert signature.parameters['model_parameters'].default == 'runtime'
+        assert signature.parameters['mode'].default == 'symbolic'
+        assert signature.parameters['subtraction'].default == 'taylor'
+        assert signature.parameters['contour'].default is False
         assert signature.parameters['progress'].default == 'auto'
     failure = ValueError('backend input or observer failure')
     def fail(*args, **kwargs):
@@ -297,7 +340,7 @@ try:
     try:
         family.sector_decompose(regulator=regulator)
     except ImportError as caught:
-        assert 'experimental-fastsecdec' in str(caught)
+        assert 'FastSecDec backend' in str(caught)
         assert isinstance(caught.__cause__, ModuleNotFoundError)
     else:
         raise AssertionError('missing optional backend was accepted')
@@ -306,6 +349,8 @@ finally:
         del sys.modules[backend_name]
     else:
         sys.modules[backend_name] = previous
+    for name in reversed(created_parents):
+        del sys.modules[name]
 "#).unwrap();
             py.run(&script, Some(&locals), Some(&locals)).unwrap();
         });
