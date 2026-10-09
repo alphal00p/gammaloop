@@ -70,21 +70,6 @@
   }
 }
 
-#let _single-end-mark(mark, arrow-stroke) = {
-  if type(mark) == str {
-    mark = mark.trim("\"")
-    if mark == "none" { mark = none } else if mark == "auto" { mark = auto }
-  }
-  let base = (end: "straight", stroke: arrow-stroke, scale: 1.1)
-  if mark == auto { base } else if mark == none { none } else if (
-    type(mark) == dictionary
-  ) {
-    let clean = mark
-    if clean.keys().contains("start") { let _ = clean.remove("start") }
-    base + clean
-  } else { base + (end: mark) }
-}
-
 #let _momentum-arrow-layer(edge, options) = {
   let side = options.momentum-arrow-side
   let side = if side == auto { "auto" } else { str(side).trim("\"") }
@@ -145,7 +130,9 @@
         stroke: stroke,
         pattern: none,
         mark: if options.show-mark {
-          _single-end-mark(options.momentum-arrow-mark, stroke)
+          if options.momentum-arrow-mark == auto {
+            options.api.momentum-arrow-defaults.mark
+          } else { options.momentum-arrow-mark }
         } else { none },
         // A numeric end position uses Linnest's continuous paired-edge carrier,
         // keeping one arrowhead when a shift crosses the source/sink split.

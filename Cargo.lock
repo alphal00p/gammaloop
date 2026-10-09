@@ -1977,6 +1977,7 @@ dependencies = [
  "feynkit-ufo",
  "linnest",
  "linnet",
+ "linnet-py",
  "pyo3",
  "pyo3-stub-gen",
  "pyo3-stub-gen-derive",
@@ -3765,6 +3766,7 @@ version = "0.1.0"
 dependencies = [
  "ciborium",
  "dot-parser",
+ "flate2",
  "kurvst",
  "linnest",
  "linnet",
@@ -3776,6 +3778,7 @@ dependencies = [
  "rust-embed",
  "serde",
  "serde_json",
+ "tar",
  "tempfile",
  "typst-renderer",
  "walkdir",

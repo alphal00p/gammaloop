@@ -1889,19 +1889,8 @@ impl PyInsets {
     }
 }
 
-const MARK_FIELDS: &[FieldSpec] = &[
-    FieldSpec::new("start", "start", ValueRule::Any).none(),
-    FieldSpec::new("end", "end", ValueRule::Any).none(),
-    FieldSpec::new("fill", "fill", ValueRule::Paint).none(),
-    FieldSpec::new("stroke", "stroke", ValueRule::Stroke).none(),
-    FieldSpec::new("scale", "scale", ValueRule::NonNegativeNumber),
-    FieldSpec::new("anchor", "anchor", ValueRule::Enum(EnumKind::Anchor)),
-    FieldSpec::new("shorten_to", "shorten-to", ValueRule::Length)
-        .none()
-        .auto(),
-];
-
-/// Typed CeTZ mark configuration.
+/// Data-only Kurvst mark shared by native SVG and Typst drawing.
+/// Shape defaults and fitting belong to the shared geometry engine.
 #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(module = "linnet", from_py_object, frozen, name = "Mark")]
 #[derive(Clone, Debug, PartialEq)]
@@ -1915,43 +1904,543 @@ struct PyMark {
 impl PyMark {
     #[new]
     #[pyo3(
-        signature = (**kwargs),
-        text_signature = "(*, start=..., end=..., fill=..., stroke=..., scale=..., anchor=..., shorten_to=...)"
+        signature = (name=None, **kwargs),
+        text_signature = "(name, *, length=..., width=..., inset=..., fill=..., stroke=..., rev=..., align=..., arc=..., n=..., phase=..., fit=..., shorten=...)"
     )]
     #[gen_stub(skip)]
-    fn new(kwargs: Option<&Bound<'_, PyDict>>) -> PyResult<Self> {
-        let values = parse_options(kwargs, MARK_FIELDS)?;
-        if values
-            .values()
-            .all(|value| matches!(value, NativeValue::Inherit))
-        {
-            return Err(PyValueError::new_err("Mark needs at least one option"));
-        }
+    fn new(name: Option<&str>, kwargs: Option<&Bound<'_, PyDict>>) -> PyResult<Self> {
+        let name = name.ok_or_else(|| PyTypeError::new_err(
+            "Mark requires a shape name first; replace CeTZ symbol/scale/anchor/shorten_to options with Mark(\"triangle\", length=..., width=...)",
+        ))?;
+        let values = Self::normalize(Self::options(name, kwargs)?, 0)?;
+        Self::validate(&values)?;
         Ok(Self { values })
     }
 
     #[staticmethod]
-    fn barbed() -> Self {
-        Self {
-            values: BTreeMap::from([(
-                "end".to_owned(),
-                NativeValue::Enum(PyMarkSymbol::Barbed.into()),
-            )]),
+    #[pyo3(signature = (*parts, **kwargs))]
+    #[gen_stub(skip)]
+    fn combine(parts: &Bound<'_, PyTuple>, kwargs: Option<&Bound<'_, PyDict>>) -> PyResult<Self> {
+        let mut values = Self::options("combine", kwargs)?;
+        if values.contains_key("parts") {
+            return Err(PyTypeError::new_err(
+                "Mark.combine parts must be positional",
+            ));
         }
+        let children = parts
+            .iter()
+            .map(|part| native_from_py(&part, 0))
+            .collect::<PyResult<Vec<_>>>()?;
+        values.insert("parts".into(), NativeValue::Array(children));
+        let values = Self::normalize(values, 0)?;
+        Self::validate(&values)?;
+        Ok(Self { values })
     }
 
+    /// Normalize public mark data using this extension's typed values.
     #[staticmethod]
-    fn straight() -> Self {
-        Self {
-            values: BTreeMap::from([(
-                "end".to_owned(),
-                NativeValue::Enum(PyMarkSymbol::Straight.into()),
-            )]),
-        }
+    #[gen_stub(skip)]
+    fn from_dict(data: &Bound<'_, PyDict>) -> PyResult<Self> {
+        Self::from_data(data.as_any())
+    }
+
+    /// Return pure JSON data: numeric MarkSpec and CSS paints in leaf order.
+    #[gen_stub(skip)]
+    fn to_native(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        let payload = self.native_json()?;
+        Ok(py
+            .import("json")?
+            .call_method1("loads", (payload.to_string(),))?
+            .unbind())
+    }
+
+    /// Return the same public data dictionary as `kurvst.mark` constructors.
+    #[gen_stub(skip)]
+    fn to_dict(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        native_to_py(
+            py,
+            &Self::public_data(&NativeValue::Mark(self.values.clone())),
+        )
     }
 
     fn __repr__(&self) -> String {
         options_repr("Mark", &[&self.values])
+    }
+}
+
+impl PyMark {
+    fn from_data(value: &Bound<'_, PyAny>) -> PyResult<Self> {
+        let value = native_from_py(value, 0)?;
+        let values = match value {
+            NativeValue::Mark(values) | NativeValue::Dict(values) if matches!(values.get("kind"), Some(NativeValue::String(kind)) if kind == "kurvst-mark") => {
+                values
+            }
+            _ => {
+                return Err(PyValueError::new_err(
+                    "replace CeTZ mark dictionaries with linnet.Mark(\"triangle\", length=..., width=...)",
+                ));
+            }
+        };
+        let values = Self::normalize(values, 0)?;
+        Self::validate(&values)?;
+        Ok(Self { values })
+    }
+
+    fn native_json(&self) -> PyResult<serde_json::Value> {
+        let mut paints = Vec::new();
+        Self::paints(&self.values, &mut paints)?;
+        Ok(serde_json::json!({"mark": Self::numeric(&self.values)?, "paints": paints}))
+    }
+
+    fn options(
+        name: &str,
+        kwargs: Option<&Bound<'_, PyDict>>,
+    ) -> PyResult<BTreeMap<String, NativeValue>> {
+        let mut values = BTreeMap::from([
+            ("kind".into(), NativeValue::String("kurvst-mark".into())),
+            ("shape".into(), NativeValue::String(name.into())),
+        ]);
+        if let Some(kwargs) = kwargs {
+            for (key, value) in kwargs.iter() {
+                let key = key.extract::<String>()?;
+                if matches!(key.as_str(), "kind" | "shape") {
+                    return Err(PyTypeError::new_err(
+                        "Mark kind and shape are determined by the first name argument",
+                    ));
+                }
+                values.insert(key, native_from_py(&value, 0)?);
+            }
+        }
+        Ok(values)
+    }
+
+    /// One public-data boundary for constructors and the native JSON adapter.
+    /// This translates units and paint only; the shared schema owns fields.
+    fn normalize(
+        values: BTreeMap<String, NativeValue>,
+        depth: usize,
+    ) -> PyResult<BTreeMap<String, NativeValue>> {
+        if depth > MAX_NATIVE_DEPTH {
+            return Err(PyValueError::new_err(
+                "Mark nesting exceeds the native value depth limit",
+            ));
+        }
+        if !matches!(values.get("kind"), Some(NativeValue::String(kind)) if kind == "kurvst-mark") {
+            return Err(PyValueError::new_err(
+                "replace CeTZ mark dictionaries with linnet.Mark constructors",
+            ));
+        }
+        let Some(NativeValue::String(name)) = values.get("shape") else {
+            return Err(PyTypeError::new_err("Mark shape must be a string"));
+        };
+        let name = name.clone();
+        let mut out = BTreeMap::new();
+        for (key, value) in values {
+            if matches!(
+                key.as_str(),
+                "start" | "end" | "symbol" | "scale" | "anchor" | "shorten_to" | "shorten-to"
+            ) {
+                return Err(PyValueError::new_err(format!(
+                    "CeTZ Mark option {key:?} is no longer supported; use Mark(\"triangle\", length=..., width=..., fit=\"chord\", shorten=\"100%\")"
+                )));
+            }
+            let value = match key.as_str() {
+                "length" | "width" | "inset" | "shorten" => Self::dimension(value)?,
+                "fill" | "stroke" => Self::paint(value, &key)?,
+                "parts" => {
+                    let NativeValue::Array(parts) = value else {
+                        return Err(PyTypeError::new_err("Mark parts must be an array"));
+                    };
+                    let parts = parts
+                        .into_iter()
+                        .map(|part| match part {
+                            NativeValue::Mark(values) | NativeValue::Dict(values) => {
+                                Ok(NativeValue::Mark(Self::normalize(values, depth + 1)?))
+                            }
+                            _ => Self::dimension(part),
+                        })
+                        .collect::<PyResult<Vec<_>>>()?;
+                    NativeValue::Array(parts)
+                }
+                _ => value,
+            };
+            // AUTO requests an omitted per-shape default. Probe the shared
+            // schema first so an inapplicable automatic field still rejects.
+            if matches!(value, NativeValue::Auto)
+                && (matches!(key.as_str(), "fill" | "stroke" | "width")
+                    || (key == "phase" && name == "rays")
+                    || (key == "length" && name == "bracket"))
+            {
+                let probe = match key.as_str() {
+                    "width" | "length" => serde_json::json!({"points": 0.0, "ratio": 0.0}),
+                    "phase" => serde_json::json!(0.0),
+                    _ => serde_json::json!(true),
+                };
+                let mut spec = serde_json::json!({"shape": name});
+                spec[key.as_str()] = probe;
+                serde_json::from_value::<kurvst::marks::MarkSpec>(spec)
+                    .map_err(|e| PyValueError::new_err(format!("invalid Kurvst Mark: {e}")))?;
+                continue;
+            }
+            out.insert(key, value);
+        }
+        Ok(out)
+    }
+
+    fn paint(value: NativeValue, key: &str) -> PyResult<NativeValue> {
+        match value {
+            NativeValue::Stroke(fields) if key == "stroke" => {
+                if fields.iter().any(|(key, value)| {
+                    key != "paint" && !matches!(value, NativeValue::Inherit | NativeValue::Auto)
+                }) {
+                    return Err(PyValueError::new_err(
+                        "Mark stroke is paint-only; set thickness on the line, and let the shape own cap/join/dash/miter geometry",
+                    ));
+                }
+                Self::paint(
+                    fields
+                        .get("paint")
+                        .filter(|value| !matches!(value, NativeValue::Inherit))
+                        .cloned()
+                        .unwrap_or(NativeValue::Auto),
+                    key,
+                )
+            }
+            NativeValue::String(paint) => Ok(NativeValue::Color(PyColor::new(&paint)?.value)),
+            NativeValue::Color(_)
+            | NativeValue::Bool(_)
+            | NativeValue::None
+            | NativeValue::Auto => Ok(value),
+            _ => Err(PyTypeError::new_err(format!(
+                "Mark {key} must be paint, boolean, None, or AUTO"
+            ))),
+        }
+    }
+
+    fn public_data(value: &NativeValue) -> NativeValue {
+        match value {
+            NativeValue::Mark(values) | NativeValue::Dict(values) => NativeValue::Dict(
+                values
+                    .iter()
+                    .map(|(key, value)| (key.clone(), Self::public_data(value)))
+                    .collect(),
+            ),
+            NativeValue::Array(values) => {
+                NativeValue::Array(values.iter().map(Self::public_data).collect())
+            }
+            _ => value.clone(),
+        }
+    }
+
+    fn dimension(value: NativeValue) -> PyResult<NativeValue> {
+        if let NativeValue::String(source) = value {
+            let mut points = 0.0;
+            let mut ratio = 0.0;
+            let mut has_points = false;
+            let mut has_ratio = false;
+            // This is a unit-expression parser, never executable Typst source.
+            let mut start = 0;
+            let boundaries = source
+                .char_indices()
+                .filter(|(i, c)| *c == '+' && *i > 0 && !source[..*i].ends_with(['e', 'E']))
+                .map(|(i, _)| i)
+                .chain(std::iter::once(source.len()));
+            for end in boundaries {
+                let term = source[start..end].trim();
+                start = end + 1;
+                let unit = ["pt", "mm", "cm", "in", "em", "%"]
+                    .into_iter()
+                    .find(|unit| term.ends_with(unit))
+                    .ok_or_else(|| {
+                        PyValueError::new_err("mark sizes need units, e.g. '3pt + 450%'")
+                    })?;
+                let split = term.len() - unit.len();
+                let number = finite(
+                    term[..split].trim().parse::<f64>().map_err(|_| {
+                        PyValueError::new_err(format!("invalid mark size {source:?}"))
+                    })?,
+                    "mark size",
+                )?;
+                if unit == "%" {
+                    ratio += number;
+                    has_ratio = true;
+                } else {
+                    points += Self::points(number, &LengthUnit::parse(unit)?)?;
+                    has_points = true;
+                }
+            }
+            Ok(match (has_points, has_ratio) {
+                (true, false) => NativeValue::Length(points, LengthUnit::Pt),
+                (false, true) => NativeValue::Ratio(ratio),
+                _ => NativeValue::RelativeLength {
+                    ratio: Some(ratio),
+                    length: Some((points, LengthUnit::Pt)),
+                },
+            })
+        } else {
+            Ok(value)
+        }
+    }
+
+    fn points(value: f64, unit: &LengthUnit) -> PyResult<f64> {
+        let scale = match unit {
+            LengthUnit::Pt => 1.0,
+            LengthUnit::Mm => 72.0 / 25.4,
+            LengthUnit::Cm => 72.0 / 2.54,
+            LengthUnit::In => 72.0,
+            LengthUnit::Em => {
+                return Err(PyValueError::new_err(
+                    "mark sizes require physical units; replace em with pt, mm, cm, or in",
+                ));
+            }
+        };
+        finite(value * scale, "mark size")
+    }
+
+    fn size(value: &NativeValue) -> PyResult<serde_json::Value> {
+        let (points, ratio) = match value {
+            NativeValue::Length(value, unit) => (Self::points(*value, unit)?, 0.0),
+            NativeValue::Ratio(value) => (0.0, value / 100.0),
+            NativeValue::RelativeLength { ratio, length } => (
+                length
+                    .as_ref()
+                    .map(|(v, u)| Self::points(*v, u))
+                    .transpose()?
+                    .unwrap_or(0.0),
+                ratio.unwrap_or(0.0) / 100.0,
+            ),
+            _ => {
+                return Err(PyTypeError::new_err(
+                    "mark size must be a unit string, Length, Ratio, or RelativeLength",
+                ));
+            }
+        };
+        Ok(serde_json::json!({"points": points, "ratio": ratio}))
+    }
+
+    fn numeric(values: &BTreeMap<String, NativeValue>) -> PyResult<serde_json::Value> {
+        let mut out = serde_json::Map::new();
+        for (key, value) in values {
+            let value = match key.as_str() {
+                "kind" => {
+                    if !matches!(value, NativeValue::String(kind) if kind == "kurvst-mark") {
+                        return Err(PyValueError::new_err("Mark kind must be kurvst-mark"));
+                    }
+                    continue;
+                }
+                "length" | "width" => Self::size(value)?,
+                "inset" | "shorten" => match value {
+                    NativeValue::Ratio(ratio) => serde_json::json!(ratio / 100.0),
+                    _ => {
+                        return Err(PyTypeError::new_err(format!(
+                            "Mark {key} must be a Ratio or percent string"
+                        )));
+                    }
+                },
+                "arc" | "phase" => match value {
+                    NativeValue::Angle(value, unit) => serde_json::json!(if unit == "deg" {
+                        value.to_radians()
+                    } else {
+                        *value
+                    }),
+                    _ => return Err(PyTypeError::new_err(format!("Mark {key} must be an Angle"))),
+                },
+                "fill" | "stroke" => match Self::paint(value.clone(), key)? {
+                    NativeValue::None => serde_json::json!(false),
+                    NativeValue::Bool(value) => serde_json::json!(value),
+                    NativeValue::Color(_) => serde_json::json!(true),
+                    _ => {
+                        return Err(PyTypeError::new_err(format!(
+                            "Mark {key} must be paint, boolean, None, or AUTO"
+                        )));
+                    }
+                },
+                "parts" => {
+                    let NativeValue::Array(parts) = value else {
+                        return Err(PyTypeError::new_err("Mark parts must be an array"));
+                    };
+                    let parts = parts
+                        .iter()
+                        .map(|part| match part {
+                            NativeValue::Mark(values) | NativeValue::Dict(values) => {
+                                Self::numeric(values)
+                            }
+                            _ => Ok(serde_json::json!({"gap": Self::size(part)?})),
+                        })
+                        .collect::<PyResult<Vec<_>>>()?;
+                    serde_json::json!(parts)
+                }
+                _ => match value {
+                    NativeValue::String(value) => serde_json::json!(value),
+                    NativeValue::Bool(value) => serde_json::json!(value),
+                    NativeValue::Int(value) => serde_json::json!(value),
+                    _ => return Err(PyTypeError::new_err(format!("invalid Mark option {key:?}"))),
+                },
+            };
+            out.insert(key.clone(), value);
+        }
+        Ok(serde_json::Value::Object(out))
+    }
+
+    fn validate(values: &BTreeMap<String, NativeValue>) -> PyResult<()> {
+        // Data constructors have no drawing context. In particular, mixed
+        // signed sizes must resolve against the real line thickness, not a
+        // placeholder context here.
+        let _: kurvst::marks::MarkSpec = serde_json::from_value(Self::numeric(values)?)
+            .map_err(|e| PyValueError::new_err(format!("invalid Kurvst Mark: {e}")))?;
+        Ok(())
+    }
+
+    fn css_paint(value: &NativeValue) -> PyResult<Option<String>> {
+        match value {
+            NativeValue::Color(ColorValue::Hex(paint)) => Ok(Some(paint.clone())),
+            NativeValue::Color(ColorValue::Named(paint)) => {
+                typst_renderer::Document::named_color_css(paint)
+                    .map(Some)
+                    .map_err(PyValueError::new_err)
+            }
+            NativeValue::Color(ColorValue::Rgba(r, g, b, alpha)) => Ok(Some(alpha.map_or_else(
+                || format!("#{r:02x}{g:02x}{b:02x}"),
+                |a| format!("#{r:02x}{g:02x}{b:02x}{a:02x}"),
+            ))),
+            NativeValue::Bool(_) | NativeValue::None | NativeValue::Auto | NativeValue::Inherit => {
+                Ok(None)
+            }
+            _ => Err(PyValueError::new_err(
+                "native Mark paint must be a CSS color; use Color.rgb or a hexadecimal color",
+            )),
+        }
+    }
+
+    fn paints(
+        values: &BTreeMap<String, NativeValue>,
+        out: &mut Vec<serde_json::Value>,
+    ) -> PyResult<()> {
+        if let Some(NativeValue::Array(parts)) = values.get("parts") {
+            for part in parts {
+                if let NativeValue::Mark(values) | NativeValue::Dict(values) = part {
+                    Self::paints(values, out)?;
+                }
+            }
+        } else {
+            let mut paint = serde_json::Map::new();
+            for key in ["fill", "stroke"] {
+                if let Some(value) = values.get(key).map(Self::css_paint).transpose()?.flatten() {
+                    paint.insert(key.into(), serde_json::json!(value));
+                }
+            }
+            out.push(serde_json::Value::Object(paint));
+        }
+        Ok(())
+    }
+}
+
+/// Normalize public mark data for native SVG without losing paint. The
+/// drawing adapter stores `mark` as its flow/momentum-arrow specification
+/// and `paints` as the corresponding flow/momentum-arrow-paints array.
+/// Paint entries follow the engine's flattened leaf drawable order.
+pub fn native_mark_json(value: &Bound<'_, PyAny>) -> PyResult<serde_json::Value> {
+    PyMark::from_data(value)?.native_json()
+}
+
+#[cfg(test)]
+mod mark_tests {
+    use super::*;
+
+    #[test]
+    fn native_mark_adapter_retains_numeric_dimensions_and_independent_paints() {
+        Python::initialize();
+        Python::attach(|py| -> PyResult<()> {
+            let module = PyModule::new(py, "linnet")?;
+            crate::linnet_py(&module)?;
+            let locals = PyDict::new(py);
+            locals.set_item("lp", module)?;
+            let cases = [
+                (
+                    c"lp.Mark('triangle', length='0.21cm', width='0.1575cm')",
+                    serde_json::json!({
+                        "mark": {
+                            "shape": "triangle",
+                            "length": {"points": 0.21 * (72.0 / 2.54), "ratio": 0.0},
+                            "width": {"points": 0.1575 * (72.0 / 2.54), "ratio": 0.0}
+                        },
+                        "paints": [{}]
+                    }),
+                ),
+                (
+                    c"lp.Mark('stealth', length='3pt + 450%', inset='40%', fill=lp.Color('red'), stroke=lp.Stroke(paint=lp.Color.rgb(1, 2, 3, 4)))",
+                    serde_json::json!({
+                        "mark": {
+                            "shape": "stealth",
+                            "length": {"points": 3.0, "ratio": 4.5},
+                            "inset": 0.4, "fill": true, "stroke": true
+                        },
+                        "paints": [{"fill": "#ff4136", "stroke": "#01020304"}]
+                    }),
+                ),
+                (
+                    c"lp.Mark.combine(lp.Mark.combine(lp.Mark('bar', stroke=lp.Color('blue')), '2pt', lp.Mark('bar')), '50%', lp.Mark('triangle', fill=lp.Color('red')), fit='bend', shorten='80%')",
+                    serde_json::json!({
+                        "mark": {
+                            "shape": "combine", "fit": "bend", "shorten": 0.8,
+                            "parts": [
+                                {"shape": "combine", "parts": [
+                                    {"shape": "bar", "stroke": true},
+                                    {"gap": {"points": 2.0, "ratio": 0.0}},
+                                    {"shape": "bar"}
+                                ]},
+                                {"gap": {"points": 0.0, "ratio": 0.5}},
+                                {"shape": "triangle", "fill": true}
+                            ]
+                        },
+                        "paints": [{"stroke": "#0074d9"}, {}, {"fill": "#ff4136"}]
+                    }),
+                ),
+            ];
+            for (source, expected) in cases {
+                let mark = py.eval(source, None, Some(&locals))?;
+                assert_eq!(native_mark_json(&mark)?, expected);
+                let native = mark.call_method0("to_native")?;
+                let json = py
+                    .import("json")?
+                    .call_method1("dumps", (&native,))?
+                    .extract::<String>()?;
+                assert_eq!(
+                    serde_json::from_str::<serde_json::Value>(&json).unwrap(),
+                    expected
+                );
+                let data = mark.call_method0("to_dict")?;
+                let before = data.repr()?.to_string();
+                let restored = locals
+                    .get_item("lp")?
+                    .unwrap()
+                    .getattr("Mark")?
+                    .call_method1("from_dict", (&data,))?;
+                assert_eq!(native_mark_json(&restored)?, expected);
+                assert_eq!(data.repr()?.to_string(), before);
+                assert_eq!(
+                    native_mark_json(&mark.call_method0("to_dict")?)?,
+                    expected
+                );
+            }
+            let public = py.eval(
+                c"{'kind': 'kurvst-mark', 'shape': 'stealth', 'length': '3pt + 450%', 'inset': '40%', 'fill': 'red', 'stroke': lp.Stroke(paint=lp.Color('blue'))}",
+                None,
+                Some(&locals),
+            )?;
+            assert_eq!(
+                native_mark_json(&public)?,
+                serde_json::json!({
+                    "mark": {"shape": "stealth", "length": {"points": 3.0, "ratio": 4.5},
+                             "inset": 0.4, "fill": true, "stroke": true},
+                    "paints": [{"fill": "#ff4136", "stroke": "#0074d9"}]
+                })
+            );
+            let old = py.eval(c"{'end': 'straight', 'scale': 0.8}", None, Some(&locals))?;
+            assert!(native_mark_json(&old).is_err());
+            Ok(())
+        })
+        .unwrap();
     }
 }
 
@@ -3389,8 +3878,16 @@ pyo3_stub_gen::inventory::submit! {
 #[cfg(feature = "python_stubgen")]
 pyo3_stub_gen::inventory::submit! {
     pyo3_stub_gen::derive::gen_methods_from_python! { r#"
+        import typing
+
         class PyMark:
-            def __new__(cls, *, start: _NativeValue = ..., end: _NativeValue = ..., fill: _OptionalPaint = ..., stroke: _OptionalStrokeValue = ..., scale: _Number = ..., anchor: _MarkAnchor = ..., shorten_to: _MarkShorten = ...) -> Mark: ...
+            def __new__(cls, name: typing.Literal["triangle", "straight", "stealth", "round", "tikz", "barb", "hooks", "bar", "bracket", "circle", "square", "diamond", "rays"], *, length: _AutoMarkSize = ..., width: _AutoMarkSize = ..., inset: _MarkRatio = ..., fill: _MarkPaint = ..., stroke: _MarkStroke = ..., rev: bool = ..., align: typing.Literal["center", "end"] = ..., arc: Angle = ..., n: int = ..., phase: _MarkPhase = ..., fit: typing.Literal["chord", "bend"] = ..., shorten: _MarkRatio = ...) -> Mark: ...
+            @staticmethod
+            def combine(*parts: _MarkPart, fit: typing.Literal["chord", "bend"] = ..., shorten: _MarkRatio = ...) -> Mark: ...
+            @staticmethod
+            def from_dict(data: dict[str, typing.Any]) -> Mark: ...
+            def to_native(self) -> dict[str, typing.Any]: ...
+            def to_dict(self) -> dict[str, typing.Any]: ...
     "# }
 }
 
@@ -3795,10 +4292,10 @@ impl NativeValue {
                 }
             }
             Self::Mark(values) => {
-                validate_option_values(values, MARK_FIELDS, "Mark", depth)?;
-                if values.values().all(|value| matches!(value, Self::Inherit)) {
-                    return Err(PyValueError::new_err("Mark needs at least one option"));
+                for value in values.values() {
+                    value.validate(depth + 1)?;
                 }
+                PyMark::validate(values)?;
             }
             Self::Color(ColorValue::Named(value) | ColorValue::Hex(value)) => {
                 PyColor::new(value)?;

@@ -96,6 +96,7 @@
       "feynkit-ufo",
       "linnest",
       "linnet",
+      "linnet-py",
       "spenso-macros",
       "spynso3",
       "typst-renderer"
@@ -362,6 +363,7 @@
         "svg"
       ],
       "linnet": [],
+      "linnet-py": [],
       "spenso-macros": [],
       "spynso3": [],
       "typst-renderer": []
@@ -754,6 +756,7 @@
       "kurvst",
       "linnest",
       "linnet",
+      "linnet-py",
       "spenso",
       "spenso-hep-lib",
       "spenso-macros",
@@ -1043,6 +1046,7 @@
       "kurvst",
       "linnest",
       "linnet",
+      "linnet-py",
       "spenso",
       "spenso-hep-lib",
       "spenso-macros",
@@ -1360,6 +1364,7 @@
       "feynkit-ufo",
       "linnest",
       "linnet",
+      "linnet-py",
       "spenso-macros",
       "spynso3",
       "typst-renderer"
@@ -1633,6 +1638,7 @@
         "svg"
       ],
       "linnet": [],
+      "linnet-py": [],
       "spenso-macros": [],
       "spynso3": [],
       "typst-renderer": []

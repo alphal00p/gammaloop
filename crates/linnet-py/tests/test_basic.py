@@ -1970,7 +1970,7 @@ class TestDotCodec(unittest.TestCase):
             "stroke": lp.Stroke(paint=lp.Color("red"), thickness=lp.Length.pt(0.7))
         }
         graph.edge("propagator").drawing.decoration = {
-            "marks": [lp.Mark.barbed()],
+            "marks": [lp.Mark("stealth")],
             "padding": lp.Insets(all=lp.Length.mm(1)),
         }
         graph.edge("propagator").source.drawing.statement = "source statement"
@@ -2281,9 +2281,9 @@ class TestTypedTypstSurface(unittest.TestCase):
         )
         insets = lp.Insets(x=length, y=lp.Length.em(0.5))
         mark = lp.Mark(
-            end=lp.MarkSymbol.Barbed,
+            "stealth",
             fill=lp.Color("red"),
-            anchor=lp.Anchor.Center,
+            length="3pt + 450%",
         )
         label = lp.TextLabel(
             'literal "#(not code)"',
@@ -2849,7 +2849,7 @@ class TestTypedTypstSurface(unittest.TestCase):
                 "length": 5,
                 "ratio": 0.5,
                 "stroke": stroke,
-                "mark": lp.Mark.barbed(),
+                "mark": lp.Mark("stealth"),
             },
             "annotations": {
                 "node-indices": True,
@@ -3243,8 +3243,24 @@ class TestTypedTypstSurface(unittest.TestCase):
 
 class TestRendering(unittest.TestCase):
     def test_prepare_preserves_bundled_packages_over_external_stores(self):
-        cetz = Path("preview/cetz/0.5.1")
+        import tarfile
+
+        cetz = Path("preview/cetz/0.5.2")
         assets = ("src/lib.typ", "cetz-core/cetz_core.wasm")
+        archive = (
+            Path(__file__).resolve().parents[1]
+            / "vendor/typst-packages/archives/cetz-0.5.2.tar.gz"
+        )
+        with tarfile.open(archive) as release:
+            expected = {
+                f"stock-{index}": release.extractfile(asset).read()
+                for index, asset in enumerate(assets)
+            }
+        assertions = "\n".join(
+            f'#assert.eq(read("/typst-packages/{cetz}/{asset}", encoding: none), '
+            f'read("/stock-{index}", encoding: none))'
+            for index, asset in enumerate(assets)
+        ).encode()
         with TemporaryDirectory(prefix="linnet bundled packages ") as directory:
             root = Path(directory)
             cache = root / "cache"
@@ -3254,12 +3270,12 @@ class TestRendering(unittest.TestCase):
                     target = store / cetz / asset
                     target.parent.mkdir(parents=True, exist_ok=True)
                     target.write_bytes(marker)
-                    if store == path:
-                        target.chmod(0o444)
+                    target.chmod(0o444)
                 for name in (f"{marker.decode()}-only", "shared"):
                     target = store / "preview" / name / "1.0.0" / "lib.typ"
                     target.parent.mkdir(parents=True, exist_ok=True)
                     target.write_text(f'#let marker = "{marker.decode()}"\n')
+                    target.chmod(0o444)
                     (target.parent / "typst.toml").write_text(
                         f'[package]\nname = "{name}"\nversion = "1.0.0"\n'
                         'entrypoint = "lib.typ"\n'
@@ -3275,6 +3291,7 @@ class TestRendering(unittest.TestCase):
                 prepared = graph.prepare_render()
                 packages = lp.PreparedRender.from_sources(
                     {
+                        **expected,
                         "main.typ": b"""
 #import "@preview/cache-only:1.0.0" as cached
 #import "@preview/path-only:1.0.0" as local
@@ -3284,6 +3301,7 @@ class TestRendering(unittest.TestCase):
 #assert.eq(shared.marker, "path")
 [ok]
 """
+                        + assertions,
                     }
                 )
             self.assertIn("<svg", prepared.to_svg())

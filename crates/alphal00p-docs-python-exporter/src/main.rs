@@ -493,6 +493,9 @@ def validate(runtime_module, stub_source):
             "node_outset: _AutoNumber = ...",
             "_Padding: typing.TypeAlias = builtins.int | builtins.float | _NativeArray | _NativeDict | Insets",
             "def call(self, *args: _NativeValue, **kwargs: _NativeValue) -> TypstCall",
+            "length: _AutoMarkSize = ..., width: _AutoMarkSize = ...",
+            "stroke: _MarkStroke = ...",
+            "def combine(*parts: _MarkPart,",
         ] {
             assert!(canonical.contains(declaration), "missing `{declaration}`");
         }

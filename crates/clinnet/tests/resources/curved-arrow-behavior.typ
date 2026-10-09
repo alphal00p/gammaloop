@@ -1,9 +1,33 @@
 #import "crates/linnest/typst/src/curve.typ" as curve
 #import "crates/linnest/typst/src/lib.typ": draw, graph
 #import "crates/linnest/typst/src/impl/draw.typ" as drawing
-#import "@preview/cetz:0.5.1" as cetz
+#import "@preview/cetz:0.5.2" as cetz
 #import "map-style.typ" as feynman
 #import "annotation-placement-behavior.typ": attachment-distance, edge-intersection
+
+#let painted-mark-elements(elements) = (ctx => {
+  let batch = (templates: (), template-keys: (), carriers: (), placements: (), plans: ())
+  let registered = drawing._register-mark-elements(ctx, (elements,), batch)
+  let batch = registered.batch
+  let geometry = curve.mark.geometry(
+    batch.templates, batch.carriers, batch.placements, mode: "selected",
+  )
+  cetz.process.many(registered.ctx,
+    drawing._materialize-mark-groups(registered.elements, batch, geometry, selected: true).flatten(),
+    compute-bounds: false)
+},)
+
+#let candidate-group-bounds(ctx, groups) = {
+  let batch = (templates: (), template-keys: (), carriers: (), placements: (), plans: ())
+  let contexts = groups.map(_ => ctx)
+  let registered = drawing._register-mark-elements(ctx, groups, batch, group-contexts: contexts)
+  let batch = registered.batch
+  let geometry = curve.mark.geometry(
+    batch.templates, batch.carriers, batch.placements, mode: "candidates",
+  )
+  drawing._candidate-groups-bounds(ctx, registered.elements, batch, geometry,
+    group-contexts: contexts)
+}
 
 // Candidate geometry is opaque in production. Decode it only for these
 // per-candidate assertions, retaining the original packet for search tests.
@@ -11,6 +35,14 @@
   let placement = drawing._layer-label-element(..args)
   if type(placement) != dictionary or not placement.keys().contains("candidates") {
     return placement
+  }
+  // Footprints belong to the drawing owner after all candidate groups have
+  // been registered, not to _layer-label-element's label preparation.
+  let elements = drawing._annotation-candidate-elements(
+    placement.arrow-packets, placement.path-style,
+  )
+  placement.candidates.footprints = if elements.len() == 0 { none } else {
+    candidate-group-bounds(placement.ctx, elements)
   }
   let packet = placement.candidates
   let footprints = if type(packet.footprints) == bytes { cbor(packet.footprints) }
@@ -115,7 +147,12 @@
       }
     }
   }
-  lines
+  // Native stroke records are floating-point geometry, including unchanged
+  // straight vertices. Normalize representation only; retain exact CBOR
+  // comparisons of coordinates, signed zeros, radii and traversal order.
+  lines.map(line => (
+    start: line.start.map(float), end: line.end.map(float), radius: float(line.radius),
+  ))
 }
 
 #let scalar_label-attachment-offset(lines, corners, frame, outward, gap, initial) = {
@@ -267,74 +304,6 @@
     length += calc.max(0, high - low) * drawing._point-distance(line.start, line.end)
   }
   6 * length / calc.max(1e-9, calc.min(width, height))
-}
-
-// Fixed-sample CeTZ measurements retain scalar arithmetic, sample counts and
-// integer/float endpoint types; these are distinct from adaptive Kurvst lengths.
-#let scalar-cubic-arclen(s, e, c1, c2, samples: 20) = {
-  let d = 0
-  for i in range(1, samples + 1) {
-    let t0 = (i - 1) / samples
-    let t1 = i / samples
-    d += cetz.vector.dist(
-      cetz.path-util.bezier.cubic-point(s, e, c1, c2, t0),
-      cetz.path-util.bezier.cubic-point(s, e, c1, c2, t1))
-  }
-  return d
-}
-
-#let scalar-cubic-t-for-distance(s, e, c1, c2, d, samples: 20) = {
-  let travel-forwards(s, e, c1, c2, d) = {
-    let sum = 0
-    for n in range(1, samples + 1) {
-      let t0 = (n - 1) / samples
-      let t1 = n / samples
-
-      let segment-dist = cetz.vector.dist(cetz.path-util.bezier.cubic-point(s, e, c1, c2, t0),
-                                     cetz.path-util.bezier.cubic-point(s, e, c1, c2, t1))
-      if sum <= d and d <= sum + segment-dist {
-        let lambda = (d - sum) / segment-dist
-        return (1 - lambda) * t0 + lambda * t1
-      }
-      sum += segment-dist
-    }
-    return 1
-  }
-
-  if d == 0 {
-    return 0
-  }
-
-  if d > 0 {
-    return travel-forwards(s, e, c1, c2, d)
-  } else {
-    return 1 - travel-forwards(e, s, c2, c1, -d)
-  }
-}
-
-#let curves = (
-  ((0, 0), (2, 0), (0, 0), (2, 0)),
-  ((-0.0, 0.0), (0.0, -0.0), (-0.0, -0.0), (0.0, 0.0)),
-  ((0, 0), (1, 1), (4, -2), (-3, 3)),
-  ((0, 0, 0), (1, 1, 3), (4, -2, 7), (-3, 3, 2)),
-  ((0, 0), (1, 1, 3), (4, -2), (-3, 3, 2)),
-  ((0, 0, 0, 1), (1, 1, 3, 2), (4, -2, 7, 9), (-3, 3, 2, 0)),
-  ((1, 2), (1, 2), (1, 2), (1, 2)),
-  ((0.000001, -0.000002), (0.000003, 0.000004), (-0.000005, 0.000007), (0.000011, -0.000013)),
-)
-#for (s, e, c1, c2) in curves {
-  for samples in (0, 1, 2, 7, 20, 25, 37) {
-    let expected = scalar-cubic-arclen(s, e, c1, c2, samples: samples)
-    let actual = cetz.path-util.bezier.cubic-arclen(s, e, c1, c2, samples: samples)
-    assert.eq(cbor.encode(actual), cbor.encode(expected),
-      message: "sampled length: " + repr((s, e, c1, c2, samples, actual, expected)))
-    for d in (0, -0.0, -100, 100, 0.05, 0.1, 0.25, 0.5, 1, 2, 10, -0.05, -0.1, -0.25, -0.5, -1, -2, -10) {
-      let expected = scalar-cubic-t-for-distance(s, e, c1, c2, d, samples: samples)
-      let actual = cetz.path-util.bezier.cubic-t-for-distance(s, e, c1, c2, d, samples: samples)
-      assert.eq(cbor.encode(actual), cbor.encode(expected),
-        message: "sampled parameter: " + repr((s, e, c1, c2, samples, d, actual, expected)))
-    }
-  }
 }
 
 // Include this file, or import and render this value: canvas assertions need layout.
@@ -548,15 +517,6 @@
       )
       let curved = curve.from-cubic(segment)
       let straight = curve.from-cubic(curve.line-segment((0, 0), (2, 0)))
-      let head = (
-        anchor: "center",
-        fill: black,
-        stroke: black + 0.8pt,
-        length: 0.6,
-        width: 0.3,
-        inset: 0,
-        shorten-to: auto,
-      )
       let identity = cetz.matrix.ident(4)
       // Native flattening retains transformed coordinates, segment boundaries,
       // zero chords, the depth cap and the old left-to-right subdivision order.
@@ -816,453 +776,9 @@
           message: "closed multi-subpaths retain CeTZ primitive connector semantics")
         assert.eq(actual.ctx.prev, expected.ctx.prev)
       }
-      let cases = ()
-      let comparisons = ()
-
-      // Native physical sizes, reversal and named anchors survive transforms;
-      // boundary heads now move inward instead of extending beyond the carrier.
-      for transform in (
-        identity,
-        cetz.matrix.mul-mat(
-          cetz.matrix.transform-translate(3, 2, 0),
-          cetz.matrix.transform-rotate-z(37deg),
-        ),
-        cetz.matrix.transform-scale((-1.5, 0.6, 1)),
-        cetz.matrix.transform-shear-x(0.6),
-        cetz.matrix.transform-rotate-xyz(40deg, 30deg, 0deg),
-      ) {
-        for shape in (false, true) {
-          for path in (straight, curved) {
-            cases.push((path: path, transform: transform, shape: shape))
-          }
-        }
-      }
-      for entry in (
-        (scale: 1.5),
-        (length: 700%, width: 400%, stroke: black + 0.5pt),
-      ) {
-        cases.push((path: curved, ratio: 0.5, head: entry))
-      }
-      // Interior heads overlay the entire shaft, even at repeated controls.
-      // Exercise the full path, with a head spanning a cubic join, not a terminal half.
-      for path in (
-        curve.from-cubic(segment + (control-start: segment.start)),
-        curve.from-cubic(segment + (control-end: segment.end)),
-        curve.path(curved, curve.from-cubic(curve.line-segment(
-          (2, 0),
-          (2, 0.02),
-        ))),
-        curve.path(
-          curve.cubic((0, 0), (0, 0.5), (0.5, 1), (1, 1)),
-          curve.cubic((1, 1), (1.5, 1), (2, 0.5), (2, 0)),
-        ),
-      ) {
-        for ratio in (none, 0, 0.2, 0.5, 0.8, 1) {
-          for shift in (-0.1, 0.1) {
-            cases.push((path: path, ratio: ratio, shift: shift))
-          }
-        }
-      }
-      // A fully consumed shaft still has a compressed mark; only an empty path has none.
-      for length in (0, 1e-9, 1e-6, 0.01, 0.1) {
-        for ratio in (none, 0.5) {
-          cases.push((
-            path: curve.from-cubic(curve.line-segment((0, 0), (length, 0))),
-            ratio: ratio,
-          ))
-        }
-      }
-
-      // End heads and centered heads have two actual geometric contacts, not tangent alignment.
-      for (index, config) in cases.enumerate() {
-        let path = config.path
-        let head = head + config.at("head", default: (:))
-        let transform = config.at("transform", default: identity)
-        let shape = config.at("shape", default: false)
-        let ratio = config.at("ratio", default: none)
-        let shift = config.at("shift", default: 0)
-        let local = ctx + (transform: transform)
-        let space = ctx + (transform: if shape { identity } else { transform })
-        let carrier = curve
-          .to-cetz(path, mark: none)
-          .first()(space)
-          .drawables
-          .first()
-        if not shape {
-          carrier = cetz
-            .drawable
-            .apply-transform(cetz.matrix.transform-scale((1, 1, 0)), carrier)
-            .first()
-        }
-        let pieces = curve.segments(path)
-        let native = if pieces.len() == 1 {
-          let piece = pieces.first()
-          cetz
-            .draw
-            .bezier(
-              piece.start,
-              piece.end,
-              piece.control-start,
-              piece.control-end,
-              mark: none,
-            )
-            .first()(local)
-        } else { curve.to-cetz(path, mark: none).first()(local) }
-        let total = cetz.path-util.length(carrier.segments)
-        for root in ("start", "end") {
-          for symbol in (">", "<", "straight") {
-            for reverse in (false, true) {
-              for anchor in if ratio == none {
-                ("tip", "center", "base")
-              } else { ("center",) } {
-                let entry = (
-                  head + (symbol: symbol, reverse: reverse, anchor: anchor)
-                )
-                let mark = (transform-shape: shape)
-                mark.insert(root, entry)
-                let style = (
-                  name: "named",
-                  stroke: black + 0.8pt,
-                  mark: mark,
-                  mark-position: if ratio == none { "end" } else { ratio },
-                  mark-direction: if root == "start" { "backward" } else {
-                    "forward"
-                  },
-                  mark-shift: shift,
-                  accuracy: accuracy,
-                )
-                let processed = cetz
-                  .mark
-                  .process-style(
-                    ctx,
-                    cetz
-                      .styles
-                      .resolve(
-                        ctx.style,
-                        merge: drawing._draw-style(style),
-                        root: "bezier",
-                      )
-                      .mark,
-                    root,
-                    total,
-                  )
-                  .first()
-                let result = cetz.process.many(
-                  local,
-                  drawing
-                    ._derived-path-elements(path, style, auto, true, true)
-                    .elements
-                    .flatten(),
-                  compute-bounds: false,
-                )
-                let actual = result.drawables
-
-                let marks = actual.filter(item => (
-                  cetz.drawable.TAG.mark in item.tags
-                ))
-                let case = repr((index, root, symbol, reverse, anchor))
-                assert.eq(
-                  marks.len(),
-                  if total == 0 { 0 } else { 1 },
-                  message: case + ": head count",
-                )
-                if total == 0 { continue }
-                let (origin, _, commands) = marks.first().segments.first()
-                let tip = if symbol == "straight" {
-                  commands.first().last()
-                } else { origin }
-                let wings = if symbol == "straight" {
-                  (origin, commands.at(1).last())
-                } else { (commands.at(0).last(), commands.at(1).last()) }
-                let back = cetz.vector.lerp(..wings, 0.5)
-                let reversed = reverse != (symbol == "<")
-                let span = calc.min(processed.length, total)
-                let tip-at = (tip: 0, center: -span / 2, base: -span).at(anchor)
-                let back-at = tip-at + span
-                if reversed { (tip-at, back-at) = (back-at, tip-at) }
-                let at = if ratio == none { 0 } else {
-                  if root == "start" { ratio * total + shift } else {
-                    (1 - ratio) * total - shift
-                  }
-                }
-                let low = calc.min(tip-at, back-at) + at
-                let inward = calc.clamp(low, 0, total - span) - low
-                let stations = (tip-at, back-at).map(s => s + at + inward)
-                let contacts = stations.map(s => {
-                  cetz
-                    .path-util
-                    .point-at(
-                      carrier.segments,
-                      s,
-                      reverse: root == "end",
-                    )
-                    .point
-                })
-                let axis = cetz.vector.norm(cetz.vector.sub(
-                  contacts.last(),
-                  contacts.first(),
-                ))
-                let width = processed.width
-                if shape {
-                  let normal = (-axis.at(1), axis.at(0), 0)
-                  width *= cetz.vector.dist(
-                    cetz.matrix.mul4x4-vec3(transform, normal),
-                    cetz.matrix.mul4x4-vec3(transform, (0, 0, 0)),
-                  )
-                  contacts = contacts.map(p => cetz.matrix.mul4x4-vec3(
-                    transform,
-                    p,
-                  ))
-                }
-                for (actual, expected) in (tip, back).zip(contacts) {
-                  assert(
-                    cetz.vector.dist(actual, expected) < epsilon,
-                    message: case
-                      + ": actual tip/back contact "
-                      + repr((actual, expected)),
-                  )
-                }
-                assert(
-                  calc.abs(cetz.vector.dist(..wings) - width) < epsilon,
-                  message: case + ": width must not compress",
-                )
-                assert.eq(
-                  marks.first().stroke.thickness,
-                  processed.stroke.thickness,
-                  message: case + ": stroke size",
-                )
-                let shaft = actual.filter(item => (
-                  cetz.drawable.TAG.mark not in item.tags
-                ))
-                if ratio != none {
-                  comparisons.push((
-                    case + ": continuous interior shaft",
-                    shaft.map(d => d.segments),
-                    cetz
-                      .drawable
-                      .apply-transform(
-                        if shape { transform } else { identity },
-                        carrier,
-                      )
-                      .map(d => d.segments),
-                  ))
-                } else if total > processed.length {
-                  let contact = if symbol == "straight" or reversed {
-                    tip
-                  } else { back }
-                  let endpoint = if root == "start" {
-                    cetz.path-util.first-subpath-start(shaft.first().segments)
-                  } else {
-                    cetz.path-util.last-subpath-end(shaft.last().segments)
-                  }
-                  assert(
-                    cetz.vector.dist(endpoint, contact) < epsilon,
-                    message: case + ": painted shaft contact",
-                  )
-                }
-                // Named anchors continue to describe the unshortened carrier.
-                for anchor in (
-                  ("start", "end")
-                    + if pieces.len() == 1 { ("ctrl-0", "ctrl-1") } else { () }
-                ) {
-                  let point = (result.ctx.nodes.at("named").anchors)(anchor)
-                  let expected = (native.anchors)(anchor)
-                  assert(
-                    cetz.vector.dist(point, expected) < epsilon,
-                    message: case + ": named anchor",
-                  )
-                }
-              }
-            }
-          }
-        }
-      }
-
-      // Both ends can shorten the same cubic, or consume the entire short shaft.
-      for path in (
-        curved,
-        curve.from-cubic(curve.line-segment((0, 0), (0.1, 0))),
-      ) {
-        let style = (mark: (symbol: ">", ..head))
-        let actual = cetz
-          .process
-          .many(
-            ctx,
-            drawing
-              ._derived-path-elements(path, style, auto, true, true)
-              .elements
-              .flatten(),
-            compute-bounds: false,
-          )
-          .drawables
-        assert.eq(actual.len(), 3, message: "two heads retained")
-        if actual.first().segments.len() > 0 {
-          for (mark, endpoint) in actual
-            .slice(1)
-            .zip((
-              cetz.path-util.first-subpath-start(actual.first().segments),
-              cetz.path-util.last-subpath-end(actual.first().segments),
-            )) {
-            let commands = mark.segments.first().last()
-            assert(
-              cetz.vector.dist(endpoint, cetz.vector.lerp(
-                commands.at(0).last(),
-                commands.at(1).last(),
-                0.5,
-              ))
-                < epsilon,
-              message: "two-ended shaft contacts",
-            )
-          }
-        } else {
-          assert(
-            curve.length(path, accuracy: accuracy) < 2 * head.length,
-            message: "only overlapping heads consume the shaft",
-          )
-        }
-      }
-
-      // Mnemonics and custom overrides resolve before built-in contact handling.
-      let custom = ctx
-      custom.marks.marks.insert("straight", cetz.mark-shapes.marks.diamond)
-      custom.marks.mnemonics.insert("arrow-alias", "<")
-      for (local, symbol, target) in (
-        (custom, "straight", "diamond"),
-        (custom, "arrow-alias", "<"),
-      ) {
-        for reverse in (false, true) {
-          let variants = (symbol, target).map(symbol => {
-            let style = (
-              mark: (
-                end: head
-                  + (symbol: symbol, reverse: reverse, flip: true, slant: 30%),
-              ),
-              mark-position: "center",
-            )
-            cetz
-              .process
-              .many(
-                local,
-                drawing
-                  ._derived-path-elements(curved, style, auto, true, true)
-                  .elements
-                  .flatten(),
-                compute-bounds: false,
-              )
-              .drawables
-          })
-          assert.eq(..variants, message: "resolved symbol " + symbol)
-        }
-      }
-
-      // One prepared carrier must still resolve each caller's marks, inherited
-      // stroke, and transform, without retaining a previous caller's context.
-      let reusable = drawing._mark-carrier-elements(
-        curved,
-        (mark: (end: head + (symbol: "straight"))),
-        paint: true,
-      ).flatten()
-      let reference = cetz.process.many(ctx, reusable, compute-bounds: false).drawables
-      let styled = cetz.draw.set-style(stroke: red + 1.2pt).first()(ctx).ctx
-      let transformed = ctx + (transform: cetz.matrix.transform-scale((2, 0.5, 1)))
-      for local in (custom, styled, transformed) {
-        let actual = cetz.process.many(local, reusable, compute-bounds: false).drawables
-        assert.ne(actual, reference, message: "carrier resolves the current context")
-        assert.eq(
-          cetz.process.many(ctx, reusable, compute-bounds: false).drawables,
-          reference,
-          message: "carrier evaluation does not retain another context",
-        )
-      }
-
-      // Patterns and crossing gaps only change paint, never the single full-path mark.
-      for position in ("end", "center") {
-        for symbol in (">", "straight") {
-          let style = (
-            mark: (end: head + (symbol: symbol)),
-            mark-position: position,
-          )
-          let reference = cetz
-            .process
-            .many(
-              ctx,
-              drawing
-                ._derived-path-elements(curved, style, auto, true, true)
-                .elements
-                .flatten(),
-              compute-bounds: false,
-            )
-            .drawables
-            .filter(d => cetz.drawable.TAG.mark in d.tags)
-          for pattern in (none, "wave", "coil") {
-            let paint = style + (pattern: pattern, crossing-gap: 0.4)
-            let total = curve.length(curved, accuracy: accuracy)
-            for elements in (
-              drawing
-                ._derived-path-elements(curved, paint, auto, true, true)
-                .elements,
-              drawing._cut-path-elements(
-                curved,
-                paint,
-                (total / 2,),
-                mark-style: style,
-              ),
-            ) {
-              let marks = cetz
-                .process
-                .many(ctx, elements.flatten(), compute-bounds: false)
-                .drawables
-                .filter(d => cetz.drawable.TAG.mark in d.tags)
-              assert.eq(
-                marks,
-                reference,
-                message: repr((position, symbol, pattern))
-                  + ": undistorted carrier",
-              )
-            }
-          }
-        }
-      }
-
-      // Coordinate resolvers apply to the curve, never to the mark's private anchors.
-      let local = cetz
-        .draw
-        .register-coordinate-resolver((ctx, point) => {
-          if type(point) == array { point.map(value => value * 2) } else {
-            point
-          }
-        })
-        .first()(ctx)
-        .ctx
-      let style = (mark: (end: head + (symbol: ">")), mark-position: "center")
-      let resolved = cetz
-        .process
-        .many(
-          local,
-          drawing
-            ._derived-path-elements(straight, style, auto, true, true)
-            .elements
-            .flatten(),
-          compute-bounds: false,
-        )
-        .drawables
-      let doubled = curve.from-cubic(curve.line-segment((0, 0), (4, 0)))
-      let expected = cetz
-        .process
-        .many(
-          ctx,
-          drawing
-            ._derived-path-elements(doubled, style, auto, true, true)
-            .elements
-            .flatten(),
-          compute-bounds: false,
-        )
-        .drawables
-      comparisons.push((
-        "coordinate resolver",
-        resolved.map(d => d.segments),
-        expected.map(d => d.segments),
-      ))
+      // Engine mark contacts, paints, transforms, named anchors and coordinate
+      // resolvers are covered by kurvst-mark-drawing-behavior.typ. Keep this
+      // fixture focused on public labels and their collision/search behavior.
 
       // Endpoint clamps remain exact even below the arc-length accuracy.
       let label-accuracy = drawing._style-value((:), "accuracy")
@@ -1366,16 +882,14 @@
           .process
           .many(
             native,
-            drawing
+            painted-mark-elements(drawing
               ._derived-path-elements(
                 reference-path,
                 reference,
                 auto,
                 true,
                 true,
-              )
-              .elements
-              .flatten(),
+              )),
             compute-bounds: false,
           )
           .drawables
@@ -1455,10 +969,8 @@
                 .process
                 .many(
                   native,
-                  drawing
-                    ._derived-path-elements(arrow-path, arrow, auto, true, true)
-                    .elements
-                    .flatten(),
+                  painted-mark-elements(drawing
+                    ._derived-path-elements(arrow-path, arrow, auto, true, true)),
                   compute-bounds: false,
                 )
                 .drawables,
@@ -1678,7 +1190,7 @@
             assert(calc.abs(curve.length(arrow-path, accuracy: accuracy) - 1.2) < 8 * accuracy, message: "sliding does not shorten the momentum arrow")
             let arrow-paint = cetz.process.many(
               native,
-              drawing._derived-path-elements(arrow-path, arrow-style, auto, true, true).elements.flatten(),
+              painted-mark-elements(drawing._derived-path-elements(arrow-path, arrow-style, auto, true, true)),
               compute-bounds: false,
             ).drawables
             assert(arrow-paint.any(item => cetz.drawable.TAG.mark in item.tags), message: "every momentum placement retains its arrowhead")
@@ -1720,7 +1232,7 @@
         label-side: "left", label-gap: 1,
         label-path: (
           offset: 0.5, length: 1.4, ratio: 0.5, resolve-length: "min",
-          stroke: black + 0.4pt, mark: (end: "straight"), mark-position: 1,
+          stroke: black + 0.4pt, mark: curve.mark.straight(length: 0.2cm, width: 0.15cm), mark-position: 1,
         ),
       )
       let carrier = curve.line((0, 0), (8, 0))
@@ -1742,35 +1254,27 @@
       // arrow, and its actual marker remains part of the obstacle footprint.
       let fixed-paint = drawing._derived-path-elements(
         curve.line((4, -0.2), (4, 1.2)),
-        (stroke: black + 0.4pt, mark: (end: "straight"), mark-position: 1),
-        auto, true, true,
-      ).elements
-      let fixed-bounds = drawing._annotation-bounds(native, (fixed-paint,)).first()
-      assert(fixed-bounds.len() >= 2, message: "fixed arrows retain shaft and marker footprints")
-      let shifted-paint = (cetz.draw.translate((10, 0)), fixed-paint)
-      let grouped-bounds = drawing._annotation-bounds(native, (shifted-paint, fixed-paint, cetz.draw.hide(fixed-paint.flatten())))
-      assert.eq(grouped-bounds.at(1), fixed-bounds, message: "candidate groups do not inherit another arrow's transform")
-      assert.eq(grouped-bounds.at(2), (), message: "hidden candidate groups remain empty")
-      assert.eq(grouped-bounds.first(), drawing._annotation-bounds(native, (shifted-paint,)).first(),
-        message: "batched and individual candidate footprints agree")
-
-      // Prepared candidates share native placement while retaining the same
-      // independent contexts and actual custom marker geometry as rendering.
-      let prepared-fixed = drawing._derived-path(
-        curve.line((4, -0.2), (4, 1.2)),
-        (stroke: black + 0.4pt, mark: (end: "straight"), mark-position: 1),
+        (stroke: black + 0.4pt, mark: curve.mark.straight(length: 0.2cm, width: 0.15cm), mark-position: 1),
         auto, true, true,
       )
-      let prepared-shifted = prepared-fixed + (elements: (cetz.draw.translate((10, 0)), prepared-fixed.elements))
-      let prepared-empty = drawing._derived-path(curve.path(), (:), auto, true, true)
-      let custom-native = native
-      custom-native.marks.marks.insert("straight", cetz.mark-shapes.marks.diamond)
-      for local in (native, custom-native, native + (transform: cetz.matrix.transform-scale((-2, 0.5, 1)))) {
-        let actual = drawing._annotation-path-bounds(local, (prepared-shifted, prepared-fixed, prepared-empty))
-        let expected = drawing._annotation-bounds(local, (shifted-paint, fixed-paint, ()))
-        assert.eq(cbor.encode(actual), cbor.encode(expected),
-          message: "prepared candidate batches preserve custom marks, transforms and empty carriers")
-        assert.eq(actual.at(1), drawing._annotation-path-bounds(local, (prepared-fixed,)).first(),
+      let fixed-bounds = candidate-group-bounds(native, (fixed-paint,)).first()
+      assert(fixed-bounds.len() >= 2, message: "fixed arrows retain shaft and marker footprints")
+      let shifted-paint = (cetz.draw.translate((10, 0)), fixed-paint)
+      // Stock CeTZ groups consume finished callbacks, not pending mark data.
+      let hidden-paint = cetz.draw.hide(painted-mark-elements(fixed-paint))
+      let grouped-bounds = candidate-group-bounds(native, (shifted-paint, fixed-paint, hidden-paint))
+      assert.eq(grouped-bounds.at(1), fixed-bounds, message: "candidate groups do not inherit another arrow's transform")
+      assert.eq(grouped-bounds.at(2), (), message: "hidden candidate groups remain empty")
+      assert.eq(grouped-bounds.first(), candidate-group-bounds(native, (shifted-paint,)).first(),
+        message: "batched and individual candidate footprints agree")
+
+      // Batched candidate registration must not leak transforms or empty
+      // carrier state from an earlier candidate into a later one.
+      let empty-paint = drawing._derived-path-elements(curve.path(), (:), auto, true, true)
+      for local in (native, native + (transform: cetz.matrix.transform-scale((-2, 0.5, 1)))) {
+        let actual = candidate-group-bounds(local, (shifted-paint, fixed-paint, empty-paint))
+        assert.eq(actual.at(2), (), message: "empty carriers have no collision footprint")
+        assert.eq(actual.at(1), candidate-group-bounds(local, (fixed-paint,)).first(),
           message: "an earlier prepared candidate cannot alter a later candidate's geometry")
       }
 
@@ -1782,7 +1286,7 @@
         relax-inspected-labels((pair, fixed-pair), (), label-padding: 0).first().position,
         message: "fixed and pinned annotation arrows have identical collision clearance",
       )
-      assert.eq(drawing._annotation-bounds(native, (cetz.draw.hide(fixed-paint.flatten()),)).first(), (), message: "hidden arrow geometry is not an obstacle")
+      assert.eq(candidate-group-bounds(native, (hidden-paint,)).first(), (), message: "hidden arrow geometry is not an obstacle")
 
       let blocker-label = inspect-layer-label-element(
         native, carrier, (label: box(width: 2pt, height: 2pt, fill: black)), none, (eid: 1),
@@ -1888,14 +1392,6 @@
       assert.eq(offset-label.candidates.first().side, -1, message: "signed offsets choose the preferred automatic side")
       assert(offset-label.candidates.any(candidate => candidate.side == 1), message: "inferred sides remain free to flip")
 
-      // Compare drawable structure and points in CeTZ's resolved 3D coordinates.
-      for (case, actual, expected) in comparisons {
-        assert.eq(
-          actual,
-          expected,
-          message: case + ": unchanged shaft geometry",
-        )
-      }
       ()
     })
   })
@@ -1918,11 +1414,11 @@
         (label-only: true, label: box(width: 2pt, height: 2pt, fill: red),
           label-side: "left", label-gap: 1, label-style: (name: "moving-pair"),
           label-path: (offset: 0.5, length: 1.4, ratio: 0.5,
-            stroke: blue + 0.4pt, mark: (end: "straight"), mark-position: 1)),
+            stroke: blue + 0.4pt, mark: curve.mark.straight(length: 0.2cm, width: 0.15cm), mark-position: 1)),
       ) } else if mode in ("ordinary", "clear-ordinary") { (stroke: gray + 0.3pt) } else { (
         offset: 0.5, length: 1.4,
         stroke: if mode == "hidden" { none } else { black + 0.4pt },
-        mark: if mode == "arrow" { (end: "straight") } else { none },
+        mark: if mode == "arrow" { curve.mark.straight(length: 0.2cm, width: 0.15cm) } else { none },
       ) },
       draw-after: (g, bounds) => cetz.draw.get-ctx(ctx => {
         let label = (ctx.nodes.at("moving-pair").anchors)("center")
@@ -2021,8 +1517,8 @@
               local.resolve-coordinate = (typed-coordinate,)
             } else if variant == 2 { local.debug = true }
             else if variant == 3 {
-              local.style.line.mark = (end: ">",)
-              local.style.bezier.mark = (end: ">",)
+              local.style.line.stroke = red + 0.7pt
+              local.style.bezier.stroke = red + 0.7pt
             }
             let actual = curve.pattern-to-cetz(path, unit: unit, style: style,
               wavelength: 2.5, amplitude: 0.04, ..options)
@@ -2046,7 +1542,7 @@
     for unit in (-1, 1.75, 1pt, 9007199254740993) {
       let style = (pattern: "wave", pattern-wavelength: 2.5, pattern-amplitude: 0.04,
         pattern-samples-per-period: 4, unit: unit)
-      let actual = drawing._segments-elements(curve.segments(path), style, auto, true, true).elements
+      let actual = drawing._segments-elements(curve.segments(path), style, auto, true, true)
       let generated = curve.pattern(drawing._segments-path(curve.segments(path)), pattern: "wave", wavelength: 2.5, amplitude: 0.04, samples-per-period: 4)
       let expected = curve.to-cetz(generated, ..drawing._draw-style(style))
       let actual = cetz.process.many(ctx, actual.flatten())
@@ -2057,110 +1553,4 @@
     }
     ()
   })
-})
-
-// Native candidate footprints retain exact painted geometry.
-#cetz.canvas(length: 1pt, {
-  (ctx => {
-    let paths = (
-      curve.line((0, 0), (4, 0)),
-      curve.from-cubic((start: (0, 0), control-start: (1, 2), control-end: (3, -1), end: (4, 0))),
-      curve.path(curve.line((0, 0), (1, 1)), curve.line((3, 1), (5, 0))),
-      curve.path(curve.move-to((0, 0)), curve.line-to((1, 1)), curve.close(),
-        curve.move-to((3, 0)), curve.cubic-to((4, 1), (5, -2), (6, 0))),
-      curve.path(), curve.line((2, 2), (2, 2)),
-    )
-    let styles = (
-      (mark: (end: (symbol: "straight", length: 0.8, width: 0.4)), mark-position: 1),
-      (mark: (end: (symbol: ">", length: 0.8, width: 0.4)), mark-position: "center"),
-      (mark: (start: (symbol: "<", pos: 20%, offset: -5%), end: (symbol: "straight", pos: 35%, offset: 10%))),
-      (mark: (end: ((symbol: ">", sep: 0.15), (symbol: "straight", length: 75%, width: 50%)))),
-      (mark: (end: (symbol: "straight", reverse: true, flip: true, harpoon: true, slant: 30%)), mark-position: 0.6, mark-shift: -0.1),
-      (mark: (end: (symbol: ">", fill: red, stroke: none, length: 0.5, width: 0.2))),
-      (mark: (end: (symbol: ">", stroke: blue + 0.7pt), transform-shape: true)),
-      (mark: (end: (symbol: "straight", length: 0.8, width: 0.4)), unit: 2),
-    )
-    let transforms = (
-      cetz.matrix.ident(4),
-      cetz.matrix.transform-scale((-1.7, 0.6, 1)),
-      cetz.matrix.mul-mat(cetz.matrix.transform-translate(2, -3, 1), cetz.matrix.transform-shear-x(0.4)),
-      cetz.matrix.transform-rotate-xyz(35deg, 20deg, 0deg),
-      cetz.matrix.transform-scale((0, 0, 1)),
-    )
-    for (transform-index, transform) in transforms.enumerate() {
-      for (style-index, options) in styles.enumerate() {
-        let local = ctx + (transform: transform)
-        local.style.bezier.stroke = red + 0.5pt
-        let style = (stroke: black + 0.4pt) + options
-        if transform-index != 4 {
-          assert.ne(drawing._mark-carrier-footprint-spec(local, paths, style), none,
-            message: "ordinary matrix case must exercise the native footprint kernel")
-        }
-        let actual = drawing._annotation-candidate-bounds(local, paths, style)
-        let expected = drawing._annotation-path-bounds(local, paths.map(path => drawing._derived-path(path, style, auto, true, true)))
-        assert.eq(cbor.encode(actual), cbor.encode(expected), message: "native candidate footprints " + repr((transform-index, style-index)))
-      }
-    }
-    let empty-prefix = curve.path(curve.move-to((9, 9)), curve.move-to((0, 0)),
-      curve.line-to((1, 0)), curve.line-to((2, 1)))
-    let empty-style = (stroke: black + 0.4pt) + styles.first()
-    assert.eq(drawing._mark-carrier-footprint-spec(ctx, (empty-prefix,), empty-style), none)
-    assert.eq(cbor.encode(drawing._annotation-candidate-bounds(ctx, (empty-prefix,), empty-style)),
-      cbor.encode(drawing._annotation-path-bounds(ctx, (drawing._derived-path(empty-prefix, empty-style, auto, true, true),))))
-    (ctx: ctx)
-  },)
-})
-
-#let footprint-custom-mark(entry) = {
-  cetz.draw.anchor("tip", (0, 0))
-  cetz.draw.anchor("base", (entry.length, 0))
-  cetz.draw.line((0, 0), (entry.length, 0.3), stroke: entry.stroke)
-  cetz.draw.content((entry.length / 2, 0), [X], padding: 0)
-  cetz.draw.hide({ cetz.draw.line((-20, -20), (20, 20), stroke: red + 2pt) })
-}
-#cetz.canvas(length: 1pt, {
-  (ctx => {
-    let paths = (
-      curve.line((0, 0), (4, 0)),
-      curve.from-cubic((start: (0, 0), control-start: (1, 2), control-end: (3, -1), end: (4, 0))),
-      curve.path(curve.line((0, 0), (1, 1)), curve.line((3, 1), (5, 0))),
-    )
-    let custom = ctx
-    custom.marks.marks.insert("custom", footprint-custom-mark)
-    custom.marks.mnemonics.insert("my-arrow", "custom")
-    for transform in (
-      cetz.matrix.ident(4),
-      cetz.matrix.transform-scale((-1.7, 0.6, 1)),
-      cetz.matrix.mul-mat(cetz.matrix.transform-translate(2, -3, 1), cetz.matrix.transform-shear-x(0.4)),
-    ) {
-      for shape in (false, true) {
-        let local = custom + (transform: transform)
-        let style = (stroke: black + 0.4pt,
-          mark: (end: (symbol: "my-arrow", length: 0.8, width: 0.4, pos: 0.7), transform-shape: shape),
-          mark-position: 1)
-        assert.ne(drawing._mark-carrier-footprint-spec(local, paths, style), none)
-        let actual = drawing._annotation-candidate-bounds(local, paths, style)
-        let expected = drawing._annotation-path-bounds(local, paths.map(path => drawing._derived-path(path, style, auto, true, true)))
-        assert.eq(cbor.encode(actual), cbor.encode(expected), message: "custom content, hidden pieces and transforms")
-      }
-    }
-    let relative = (stroke: black + 0.4pt,
-      mark: (end: (symbol: "my-arrow", length: 0.8, width: 0.4, pos: 25%)))
-    assert.eq(drawing._mark-carrier-footprint-spec(custom, paths, relative), none)
-    assert.eq(cbor.encode(drawing._annotation-candidate-bounds(custom, paths, relative)),
-      cbor.encode(drawing._annotation-path-bounds(custom, paths.map(path => drawing._derived-path(path, relative, auto, true, true)))))
-    let unevaluated = ctx
-    unevaluated.marks.marks.insert("unevaluated", _ => panic("zero carriers must not evaluate custom marks"))
-    let zero-style = (stroke: black + 0.4pt, mark: (end: "unevaluated"))
-    let collapsed = unevaluated + (transform: cetz.matrix.transform-scale((0, 0, 1)))
-    assert.eq(drawing._mark-carrier-footprint-spec(collapsed, paths, zero-style), none)
-    assert.eq(cbor.encode(drawing._annotation-candidate-bounds(collapsed, paths, zero-style)),
-      cbor.encode(drawing._annotation-path-bounds(collapsed, paths.map(path => drawing._derived-path(path, zero-style, auto, true, true)))))
-    let zero-unit = zero-style + (unit: 0)
-    let multi = (paths.last(),)
-    assert.eq(drawing._mark-carrier-footprint-spec(unevaluated, multi, zero-unit), none)
-    assert.eq(cbor.encode(drawing._annotation-candidate-bounds(unevaluated, multi, zero-unit)),
-      cbor.encode(drawing._annotation-path-bounds(unevaluated, multi.map(path => drawing._derived-path(path, zero-unit, auto, true, true)))))
-    (ctx: ctx)
-  },)
 })

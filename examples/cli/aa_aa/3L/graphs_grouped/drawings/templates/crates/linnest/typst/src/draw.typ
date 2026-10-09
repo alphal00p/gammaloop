@@ -3,15 +3,24 @@
 // Keep the user-facing drawing functions and their documentation here. The
 // helper-heavy implementation lives in `impl/draw.typ`.
 
-#import "impl/draw.typ" as _impl
+// Keep wrapper captures limited to their implementation functions.
+#import "impl/draw.typ": (
+  _label-collision-padding as _impl-label-collision-padding,
+  _overlay-style as _impl-overlay-style,
+  draw as _impl-draw,
+  edge-halves as _impl-edge-halves,
+  to-cetz-edge-halves as _impl-to-cetz-edge-halves,
+)
 
-#let _overlay-style = _impl._overlay-style
+#let _overlay-style = _impl-overlay-style
 
 /// Split a laid-out graph edge into source and sink half-edge paths.
 ///
 /// The returned dictionary has `source`, `sink`, `curve`, and `split-gap`. The
-/// split point is the edge layout point, so a zero-gap pair joins smoothly
-/// there. `split-gap` reports the effective gap when a requested half-gap is
+/// path follows the source route points, edge layout point, and reversed sink
+/// route points. The split point is the edge layout point, so a zero-gap pair
+/// joins smoothly there. Repeated consecutive routed points are collapsed for
+/// drawing. `split-gap` reports the effective gap when a requested half-gap is
 /// longer than either half-edge.
 /// -> dictionary
 #let edge-halves(
@@ -30,7 +39,7 @@
   /// Arc-length accuracy used while trimming. -> float
   accuracy: 0.001,
 ) = {
-  _impl.edge-halves(
+  _impl-edge-halves(
     edge,
     nodes,
     (
@@ -71,7 +80,7 @@
   /// CeTZ style for the sink half edge. -> dictionary
   sink-style: (:),
 ) = {
-  _impl.to-cetz-edge-halves(
+  _impl-to-cetz-edge-halves(
     edge,
     nodes,
     (
@@ -168,7 +177,7 @@
 ///     pattern-wavelength: 0.55,
 ///     pattern-coil-longitudinal-scale: 1.6,
 ///   )
-///   stack(base, parallel-layer(edge, mark: (end: (symbol: "straight"), scale: 0.75)))
+///   stack(base, parallel-layer(edge, mark: curve.mark.straight(length: 0.15cm, width: 0.1125cm)))
 /// }
 /// #let g = graph.build({
 ///   graph.node(<a>, label: [a hi])
@@ -219,7 +228,7 @@
 /// )
 /// #let focused-source-style(edge) = (focused-base-style(edge), parallel-edge-style(edge))
 /// #let focused-sink-style(edge) = (focused-base-style(edge), parallel-edge-style(edge) + (
-///   mark: (end: ">"),
+///   mark: curve.mark.triangle(length: 0.15cm, width: 0.1125cm),
 /// ))
 /// #draw(layout(p, g-center: 0.004, label-steps: 0,), unit: 1.25, source-style: focused-source-style, sink-style: focused-sink-style)
 /// `,dir:ttb)
@@ -234,10 +243,7 @@
 /// },
 ///   name: "oriented marks",
 /// )
-/// #let arrow = (
-///   end: (symbol: ">", fill: black, anchor: "center", shorten-to: auto),
-///   scale: 0.75,
-/// )
+/// #let arrow = curve.mark.triangle(length: 0.15cm, width: 0.1125cm)
 /// #let oriented-arrow = (
 ///   stroke: black + 0.7pt,
 ///   mark: arrow,
@@ -251,14 +257,25 @@
 /// Typst label name and `crossing-gap` (default `0.55`) to the total arc length
 /// hidden around each proper centerline intersection. References are resolved
 /// independently of edge order. The current layer is split with Kurvst, so
-/// patterned phases continue across the hidden spans. A mark on the same layer
-/// is emitted once on its uncut carrier, so splitting the painted path neither
-/// removes nor duplicates it. Dangling layers and paired layers with one
+/// patterned phases continue across the hidden spans. A mark is emitted once:
+/// its station uses the concatenated visible arc length, and its fit applies
+/// to the connected visible fragment containing that station. Dangling layers
+/// and paired layers with one
 /// continuous source/sink paint style are supported. On a
 /// paired layer both half styles must specify the same target and gap. The cut
 /// layer cannot participate in a subgraph underlay. References to self,
 /// unknown, or invisible edges are errors.
 /// A valid pair with no proper interior intersection is left unchanged.
+///
+/// SVG inspection normally uses the drawn graph's IDs. Display transformations
+/// may also supply `title`, `summary`, and `properties` in `inspection` data.
+/// `summary` supplies the hover text; `title` names the click inspector and
+/// `properties` is an array of `(label, value)` string pairs shown as detail rows.
+/// These fields augment the standard topology and selection information.
+/// Display transformations can retain a source graph's identities with native `inspection` data:
+/// nodes accept `(node, edges)` and edges accept `(edge, source, sink,
+/// source-hedge, sink-hedge)`. These override inspection and selection only;
+/// layout, drawing callbacks, and subgraphs still use the drawn graph's IDs.
 /// -> content
 #let draw(
   /// Graph object with positions from `layout` or explicit graph API `pos` fields. -> dictionary
@@ -282,6 +299,27 @@
   /// Debug level. `1` enables CeTZ canvas debug; `2` also marks edge positions.
   /// -> bool | int
   debug: false,
+  /// Show the padded boxes used by label placement: dashed purple for
+  /// label–label clearance, cyan for label–obstacle clearance, and orange for
+  /// node/edge obstacles. Base pair padding is shared equally; label boxes also
+  /// include `label-collision-padding`. Ordinary painted edges penalize only
+  /// intersections with the unpadded text box; self-loop bends retain clearance
+  /// boxes. Green boxes show momentum shafts and arrowheads. Floating
+  /// overlays do not affect placement, canvas bounds, or interaction targets.
+  /// -> bool
+  debug-label-collisions: false,
+  /// Extra padding on every side of label collision boxes, in canvas units.
+  /// Adds to the base label–label and label–obstacle clearances; zero restores
+  /// those base boxes. Affects sliding/side choices, not the normal label gap
+  /// or the text–edge intersection test. Arrow and text slide together; coupled
+  /// moves help crowded annotations pass one another.
+  /// -> int | float
+  label-collision-padding: _impl-label-collision-padding.extra,
+  /// Clearance from a dangling endpoint to the nearest side of its automatic
+  /// label's text box, in canvas units, measured along the outward tangent.
+  /// Explicit label positions and path-attached labels keep their placement.
+  /// -> int | float
+  external-label-gap: 0.25,
   /// Show `h_i` beside every half-edge without an explicit endpoint label.
   /// -> bool
   show-half-edge-ids: false,
@@ -347,13 +385,13 @@
   edge-ratio: none,
   /// Resolve `edge-length` and `edge-ratio`. Accepted string
   /// values are `"min"`/`"shorter"`, `"max"`/`"longer"`, `"length"`/`"fixed"`,
-  /// `"ratio"`/`"relative"`, or `"none"`/`"full"`. A function receives
-  /// `(offset-path-length, length, ratio)`. -> string | function
+  /// `"ratio"`/`"relative"`, or `"none"`/`"full"`. A function receives one
+  /// dictionary with `base-length`, `length`, and `ratio`. `base-length` is the
+  /// offset path length; `length` and `ratio` are positive absolute lengths or
+  /// `none`. Unknown strings are rejected. -> string | function
   edge-resolve-length: "min",
   /// Arc-length accuracy for fitted parallel edge paths. -> float
   edge-accuracy: 0.001,
-  /// Let Kurbo optimize the fitted parallel path. -> bool
-  edge-optimize: true,
   /// Total arc-length gap centered on the source/sink split at the edge layout
   /// point. A per-layer `split-gap` overrides this value. -> int | float
   edge-split-gap: 0,
@@ -373,13 +411,15 @@
   /// retaining the paired-edge split point selected by `mark-orientation`.
   /// `mark-orientation: "edge"` makes a mark follow `edge.orientation` instead
   /// of raw path direction; reversed edges move the mark to the sink half and
-  /// flip it, while undirected edges suppress it. Heads span a chord between
-  /// two points on the full carrier: triangle and straight heads use their
-  /// geometric tip and back; other marks use their declared tip/base anchors.
-  /// Centered heads straddle the requested arc position, so their chord center
-  /// can lie off the curve. Near endpoints the interval moves inward; the head
-  /// fits the chord longitudinally while keeping its width. Interior marks
-  /// overlay the unshortened curve; end shafts meet the appropriate head contact.
+  /// point it backward, while undirected edges suppress it. `mark` accepts only
+  /// data-only `curve.mark` specifications, not CeTZ mark dictionaries.
+  /// Stations use the derived visible carrier after offsets, outsets and
+  /// crossing windows, before mark shortening. Interior heads straddle their
+  /// station on a chord. End heads default to `fit: "chord"`; `fit: "bend"`
+  /// retracts the endpoint along its tangent, retaining controls, by the mark's
+  /// end distance times `shorten` (default 100%). Short carriers retain full-size
+  /// heads and clamp the shaft contact independently. Patterned strokes follow
+  /// the resulting painted shaft. Composite marks fit once as a whole.
   /// `source-anchor` may be a CeTZ anchor name such as `"north"` or `"south"`
   /// to route this endpoint from a measured node-box anchor. By default,
   /// anchored paired edges use two smooth cubic halves through the edge layout
@@ -389,17 +429,55 @@
   /// then split source/sink styling at the edge point. `route: "direct"` keeps
   /// the same anchored cubic routing but suppresses the default edge-position
   /// Hobby route.
-  /// `route-points: "through"` also threads any layout-provided half-edge route
-  /// points through that same Hobby path.
+  /// Half-edge `route-points` are followed by default on ordinary, anchored,
+  /// and dangling edges using a Hobby spline. They are ordered from each node
+  /// toward the edge layout point. Set `route-points: "ignore"` on both halves
+  /// to suppress them. The source/sink style split remains at the edge point.
   /// `route: "straight-through"` draws the two straight force springs from
   /// source to edge position and from edge position to sink.
+  /// `pattern-natural-endpoints` defaults to `false`. For built-in coil strings
+  /// (`"coil"`, `"helix"`, `"spring"`) on complete continuous paths with both
+  /// endpoints anchored, `true` constructs a fitted `kurvst.coil` dictionary in
+  /// Typst and applies it once via ordinary `kurvst.pattern`: full-amplitude
+  /// inward endpoint phases and half-integer coil periods, with exact endpoints
+  /// and no taper, straight stubs, or connectors. This overrides `pattern-phase`,
+  /// bypasses `pattern-fit` integer fitting, and ignores `pattern-endpoint-slope`
+  /// (`endpoint-ramp: false`). Fitted dictionaries also work directly as
+  /// `pattern` without this flag; see the Kurvst manual's Path Patterns section
+  /// for the fitting formula and one-pass application settings.
+  /// The gluon preset in `examples/map-style.typ` enables this option. Setting
+  /// it to `false` restores the 75%-wavelength endpoint taper (capped at half
+  /// the path length), with a squared longitudinal envelope.
+  /// Without automatic fitting, `pattern-fit: true` adjusts the wavelength to the
+  /// nearest whole number of periods on a complete, unbroken edge.
+  /// `pattern-phase` is in radians; `calc.pi / 2` gives coils matching,
+  /// gently tapered endpoint phases without straight end sections.
+  /// `pattern-endpoint-slope` sets the taper's initial slope, from 0 to 3.
+  /// Zero (default) keeps tangential ends; positive values allow angled ends
+  /// without detaching them. The angle also depends on phase, amplitude, and
+  /// wavelength.
+  /// Partially anchored paths, including split-style halves and crossing-gap
+  /// fragments, keep the requested wavelength, taper only anchored endpoints,
+  /// and preserve phase continuity across hidden spans. Neither automatic coil
+  /// construction nor integer fitting applies.
   /// A finite layer can set `shift` to move along the logical edge, with
   /// positive values moving toward its end. `label` attaches content near the
   /// layer midpoint; `label-shift` (default `0`) moves its reference point by
   /// signed arc length on that derived path, clamped to the path's endpoints.
   /// Positive values move toward its end without moving or trimming the layer.
+  /// Automatic labels slide along the path and may switch sides to reduce
+  /// overlaps while preserving `label-gap`; `label-shift` sets their preferred
+  /// position. Set `label-slide: false` to keep that exact position and side.
+  /// Explicit anchors also stay fixed. `label-path` can attach a short path
+  /// (for example a momentum arrow) to a full-length invisible label carrier.
+  /// Its dictionary uses ordinary path style options: offset, length, ratio,
+  /// shift, stroke and mark. Arrow and label share the chosen arc displacement
+  /// and side; their configured relative shift is preserved. Automatic choices
+  /// keep the complete arrow inside the carrier. Disabling label sliding pins
+  /// both; hiding the label leaves the arrow at its configured position.
   /// `label-side` is `auto`, `"left"`, `"right"`, or a signed number; `auto`
-  /// follows the side selected by ordinary edge-label layout. If a label-side
+  /// prefers the layout's original side but can flip to avoid overlaps. Explicit
+  /// side choices stay fixed while the label slides. If a label-side
   /// offset has no layout direction yet, both offset and label follow the sign
   /// of `offset` (positive means left).
   /// With `label-style.anchor` omitted or set to `auto` (also `"auto"`), the
@@ -441,7 +519,9 @@
   edge-omega: 1.0,
   /// Optional style key for anchored source/sink routes. Set
   /// `anchor-control-distance` in `source-style` or `sink-style` to override
-  /// the automatic guide distance used by cubic anchored routes.
+  /// that endpoint's automatic guide distance in graph units. Per-edge endpoint
+  /// styles control each end independently; `auto` is resolved independently.
+  /// Set it in `edge-style` to supply a shared distance for both ends.
   /// -> auto | int | float
   /// Arc-length accuracy for trimming edge curves at node outsets. -> float
   edge-trim-accuracy: 0.001,
@@ -462,7 +542,7 @@
   /// Draw subgraph shading below the normal half-edge style. -> bool
   subgraph-edge-underlay: true,
 ) = {
-  _impl.draw(
+  _impl-draw(
     graph,
     (
       scope: scope,
@@ -470,6 +550,9 @@
       title: title,
       subgraph: subgraph,
       debug: debug,
+      debug-label-collisions: debug-label-collisions,
+      label-collision-padding: label-collision-padding,
+      external-label-gap: external-label-gap,
       show-half-edge-ids: show-half-edge-ids,
       node-radius: node-radius,
       node-min-radius: node-min-radius,
@@ -489,7 +572,6 @@
       edge-ratio: edge-ratio,
       edge-resolve-length: edge-resolve-length,
       edge-accuracy: edge-accuracy,
-      edge-optimize: edge-optimize,
       edge-split-gap: edge-split-gap,
       edge-dangling-tangent: edge-dangling-tangent,
       source-style: source-style,

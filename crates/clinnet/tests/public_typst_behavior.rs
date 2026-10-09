@@ -4,6 +4,14 @@ use std::process::Command;
 
 use clinnet::TypstRenderer;
 
+fn staged_map_style() -> String {
+    // Fixtures relocate the example beside the renderer's staged packages.
+    include_str!("../../linnest/typst/examples/map-style.typ").replace(
+        "\"../src/curve.typ\"",
+        "\"crates/linnest/typst/src/curve.typ\"",
+    )
+}
+
 fn svg_paths(svg: &str) -> Vec<(usize, &str)> {
     let mut paths = Vec::new();
     let mut cursor = 0;
@@ -137,6 +145,7 @@ fn stroke_spans(svg: &str, color: &str) -> Vec<(f64, f64)> {
     )
 }
 
+#[track_caller]
 fn assert_close(actual: f64, expected: f64, tolerance: f64) {
     assert!(
         (actual - expected).abs() <= tolerance,
@@ -189,6 +198,14 @@ fn public_linnest_layout_and_drawing_behavior_is_observable() {
             "layer-offset.typ",
             include_str!("../../kurvst/typst/tests/layer-offset.typ"),
         ),
+        (
+            "mark-contract.typ",
+            include_str!("../../kurvst/typst/tests/mark-contract.typ"),
+        ),
+        (
+            "mark-geometry.typ",
+            include_str!("../../kurvst/typst/tests/mark-geometry.typ"),
+        ),
     ] {
         fs::write(curve_tests.join(name), source).unwrap();
     }
@@ -196,12 +213,40 @@ fn public_linnest_layout_and_drawing_behavior_is_observable() {
     fs::write(
         &curve_wrapper,
         "#include \"crates/kurvst/typst/tests/pattern-split.typ\"\n\
-         #include \"crates/kurvst/typst/tests/layer-offset.typ\"\n",
+         #include \"crates/kurvst/typst/tests/layer-offset.typ\"\n\
+         #include \"crates/kurvst/typst/tests/mark-contract.typ\"\n\
+         #include \"crates/kurvst/typst/tests/mark-geometry.typ\"\n",
     )
     .unwrap();
     renderer
         .compile_template(&curve_wrapper, base.path().join("curve-behavior.pdf"), &[])
         .unwrap();
+    let linnest_tests = base
+        .path()
+        .join(".clinnet/templates/crates/linnest/typst/tests");
+    fs::create_dir_all(&linnest_tests).unwrap();
+    for (name, source) in [
+        (
+            "identity-targets.typ",
+            include_str!("../../linnest/typst/tests/identity-targets.typ"),
+        ),
+        (
+            "collision-lines.typ",
+            include_str!("../../linnest/typst/tests/collision-lines.typ"),
+        ),
+    ] {
+        let fixture = linnest_tests.join(name);
+        fs::write(&fixture, source).unwrap();
+        let wrapper = base.path().join(".clinnet/templates/linnest-behavior.typ");
+        fs::write(
+            &wrapper,
+            format!("#include \"crates/linnest/typst/tests/{name}\""),
+        )
+        .unwrap();
+        renderer
+            .compile_template(&wrapper, base.path().join(format!("{name}.pdf")), &[])
+            .unwrap();
+    }
     let pattern_fixture = base
         .path()
         .join(".clinnet/templates/pattern-endpoints-behavior.typ");
@@ -232,7 +277,7 @@ fn public_linnest_layout_and_drawing_behavior_is_observable() {
 
     fs::write(
         base.path().join(".clinnet/templates/map-style.typ"),
-        include_str!("../../linnest/typst/examples/map-style.typ"),
+        staged_map_style(),
     )
     .unwrap();
 
@@ -280,7 +325,8 @@ fn public_linnest_layout_and_drawing_behavior_is_observable() {
         assert_eq!(paths_with_attr(&no_ink_svg, "stroke", "#8732a8").len(), 2);
         assert_eq!(paths_with_attr(&no_ink_svg, "stroke", "#137c45").len(), 2);
         assert!(no_ink_svg.contains("#08a17b") && no_ink_svg.contains("#e98224"));
-        assert!(!paths_with_attr(&no_ink_svg, "stroke", "#ff0000").is_empty());
+        // Stock CeTZ debug bounds use Typst's red, not CSS red.
+        assert!(!paths_with_attr(&no_ink_svg, "stroke", "#ff4136").is_empty());
     }
 
     fs::write(
@@ -310,6 +356,22 @@ fn public_linnest_layout_and_drawing_behavior_is_observable() {
         include_str!("resources/annotation-placement-behavior.typ"),
     )
     .unwrap();
+
+    let mark_drawing_fixture = base
+        .path()
+        .join(".clinnet/templates/kurvst-mark-drawing-behavior.typ");
+    fs::write(
+        &mark_drawing_fixture,
+        include_str!("resources/kurvst-mark-drawing-behavior.typ"),
+    )
+    .unwrap();
+    renderer
+        .compile_template(
+            &mark_drawing_fixture,
+            base.path().join("kurvst-mark-drawing-behavior.pdf"),
+            &[],
+        )
+        .unwrap();
 
     let fixture = base
         .path()
@@ -382,12 +444,20 @@ fn public_linnest_layout_and_drawing_behavior_is_observable() {
     let shaft_span = shaft[0];
     let shaft_reference_span = shaft_reference[0];
     assert_close(shaft_span.0 - shaft_reference_span.0, 10.0, 1e-3);
-    assert_close(shaft_span.1, own_translation(arrow_head[0].1).0, 1e-3);
+    // A 9pt stealth with 40% inset stops at its painted notch, not at the
+    // first SVG polygon vertex (whose export translation is not an anchor).
+    assert_close(
+        shaft_span.1,
+        shaft_reference_span.1 + 10.0 - 9.0 * (1.0 - 0.4),
+        1e-3,
+    );
 
     let crossing = stroke_spans(&svg, "#dc2626");
     assert_eq!(crossing.len(), 2);
     let crossing_gap = crossing[1].0 - crossing[0].1;
-    let crossing_span = crossing[1].1 - crossing[0].0;
+    // The head shortens the final visible fragment, not the crossing gap.
+    // Derive the six-unit reference carrier from the independent one-unit shift.
+    let crossing_span = 6.0 * (shaft_span.0 - shaft_reference_span.0);
     assert_close(crossing_gap / crossing_span, 1.0 / 6.0, 5e-4);
     let gap_center = (crossing[0].1 + crossing[1].0) / 2.0;
     assert_close(
@@ -858,11 +928,9 @@ fn public_configurable_map_style_behavior_is_observable() {
     let base = tempfile::tempdir().unwrap();
     let renderer = TypstRenderer::new(base.path()).typst_executable(typst);
     renderer.stage_default_assets().unwrap();
+    let map_style = staged_map_style();
     for (name, content) in [
-        (
-            "map-style.typ",
-            include_str!("../../linnest/typst/examples/map-style.typ"),
-        ),
+        ("map-style.typ", map_style.as_str()),
         (
             "map-style-behavior.typ",
             include_str!("resources/map-style-behavior.typ"),
@@ -875,17 +943,11 @@ fn public_configurable_map_style_behavior_is_observable() {
     let output = base.path().join("map-style-case.svg");
     let mut default_svg = None;
     for (case, unit, radius, node_width, widths) in [
-        ("defaults", 13.5, 0.08, "0.5", ["0.2", "0.4", "0.5", "1"]),
-        ("reference", 13.5, 0.08, "0.5", ["0.2", "0.4", "0.5", "1"]),
-        ("scaled", 20.0, 0.3, "0.5", ["0.2", "0.4", "0.5", "1"]),
-        ("derived", 10.0, 0.3, "1.25", ["0.5", "1", "1.25", "2.5"]),
-        (
-            "overrides",
-            10.0,
-            0.3,
-            "1.75",
-            ["0.625", "0.875", "1.25", "3"],
-        ),
+        ("defaults", 13.5, 0.08, "0.5", ["0.4", "0.5", "1"]),
+        ("reference", 13.5, 0.08, "0.5", ["0.4", "0.5", "1"]),
+        ("scaled", 20.0, 0.3, "0.5", ["0.4", "0.5", "1"]),
+        ("derived", 10.0, 0.3, "1.25", ["1", "1.25", "2.5"]),
+        ("overrides", 10.0, 0.3, "1.75", ["0.875", "1.25", "3"]),
     ] {
         fs::write(
             &fixture,
@@ -969,7 +1031,7 @@ fn public_weighted_cut_rejects_invalid_selections_and_stale_topology() {
     renderer.stage_default_assets().unwrap();
     fs::write(
         base.path().join(".clinnet/templates/map-style.typ"),
-        include_str!("../../linnest/typst/examples/map-style.typ"),
+        staged_map_style(),
     )
     .unwrap();
     let fixture = base.path().join(".clinnet/templates/invalid-cut.typ");
@@ -977,8 +1039,9 @@ fn public_weighted_cut_rejects_invalid_selections_and_stale_topology() {
     let prelude = r#"
 #set page(width: auto, height: auto)
 #import "crates/linnest/typst/src/lib.typ": graph, subgraph, layout, draw
+#import "crates/linnest/typst/src/curve.typ" as curve
 #import graph: node, edge, source, sink
-#import "map-style.typ": momentum
+#import "map-style.typ": momentum, graph-style
 #let g = graph.build({
   node(<a>); node(<b>); node(<c>)
   edge(<e>, source(<a>), sink(<b>))
@@ -999,6 +1062,21 @@ fn public_weighted_cut_rejects_invalid_selections_and_stale_topology() {
     renderer.compile_template(&fixture, &output, &[]).unwrap();
 
     let mut cases = vec![
+        (
+            "removed-fermion-arrow-line-width".to_owned(),
+            "#let _ = graph-style(fermion-arrow-line-width: 0.625pt)".to_owned(),
+            "unexpected argument",
+        ),
+        (
+            "legacy-cetz-mark".to_owned(),
+            "#let _ = curve.mark.prepare((symbol: \">\", scale: 0.5))".to_owned(),
+            "replace CeTZ mark dictionaries",
+        ),
+        (
+            "legacy-head-thickness".to_owned(),
+            "#let _ = curve.mark.triangle(stroke: black + 0.2pt)".to_owned(),
+            "set line thickness on the line",
+        ),
         (
             "overlap".to_owned(),
             "#let _ = graph.cut(g, left: left, right: left)".to_owned(),

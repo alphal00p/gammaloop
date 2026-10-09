@@ -16,7 +16,7 @@ use typst_kit::fonts::FontStore;
 use typst_library::{
     Feature, Library, World, WorldExt,
     diag::{FileError, FileResult, SourceDiagnostic},
-    foundations::{Bytes, Datetime, Duration},
+    foundations::{Bytes, Datetime, Duration, Value},
     text::{Font, FontBook},
 };
 
@@ -56,6 +56,22 @@ pub struct Document<'a> {
 }
 
 impl<'a> Document<'a> {
+    /// Resolve a named Typst color to its exact SVG hexadecimal paint.
+    pub fn named_color_css(name: &str) -> Result<String, String> {
+        static LIBRARY: LazyLock<Library> = LazyLock::new(|| Library::builder().build());
+        match LIBRARY
+            .global
+            .scope()
+            .get(name)
+            .map(|binding| binding.read())
+        {
+            Some(Value::Color(color)) => Ok(color.to_hex().to_string()),
+            _ => Err(format!(
+                "unknown Typst color {name:?}; use an RGB or hexadecimal paint"
+            )),
+        }
+    }
+
     /// Compile a virtual document without any package store or plugin assets.
     pub fn compile_sources(
         files: &BTreeMap<String, Vec<u8>>,
@@ -231,6 +247,15 @@ impl World for Document<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn named_color_svg_paints_use_typst_constants_not_css_names() {
+        assert_eq!(Document::named_color_css("red").unwrap(), "#ff4136");
+        assert_eq!(Document::named_color_css("blue").unwrap(), "#0074d9");
+        assert_eq!(Document::named_color_css("eastern").unwrap(), "#239dad");
+        assert!(Document::named_color_css("unknown-mark-color").is_err());
+        assert!(Document::named_color_css("rect").is_err());
+    }
 
     #[test]
     fn embedded_fonts_match_default_math_and_text_variants() {

@@ -5,16 +5,15 @@ use std::fmt::Write as _;
 use kurbo::{BezPath, PathEl, Rect, Shape};
 use serde_json::Value;
 
-use super::{Dash, Element, Stroke, Target, Typeset, UNIT, labels::Bounds};
+use super::{labels::Bounds, Dash, Element, Stroke, Target, Typeset, UNIT};
 use crate::{TypstDotEdge, TypstDotEndpoint, TypstDotNode};
 
 /// Canvas padding in drawing units; margin (2mm) and title gutter (1em) in points.
 const PAD: f64 = 0.4;
 const MARGIN: f64 = 5.669291339;
 const GUTTER: f64 = 9.0;
-/// Arrowhead paint and the particle-flow triangle's outline width in points.
+/// Default arrowhead paint.
 pub(super) const INK: &str = "#3d2645";
-pub(super) const MARK_STROKE: f64 = 0.3;
 
 /// Ordered inspection fields shown by the interactive viewer.
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -209,12 +208,26 @@ pub(super) fn svg(typeset: &Typeset, layers: &[Element], targets: &[Target]) -> 
     let mut include = |rect: Rect| bounds = bounds.union(rect);
     for element in layers {
         match element {
-            Element::Path { path, .. } => include(path.bounding_box()),
-            Element::Chevron(points) | Element::Triangle(points) => {
-                for point in points {
-                    include(Rect::from_points(*point, *point));
+            Element::Path { path, stroke } if !path.is_empty() => include(
+                kurbo::stroke(
+                    path.elements().iter().copied(),
+                    &kurbo::Stroke::new(stroke.width / UNIT).with_caps(if stroke.round_cap {
+                        kurbo::Cap::Round
+                    } else {
+                        kurbo::Cap::Butt
+                    }),
+                    &kurbo::StrokeOpts::default(),
+                    1e-6,
+                )
+                .bounding_box(),
+            ),
+            Element::Path { .. } => {}
+            Element::Mark { drawable, .. } => {
+                if !drawable.outline.path.is_empty() {
+                    include(drawable.outline.path.bounding_box());
                 }
             }
+            Element::HitBox { bounds, .. } => include(Rect::from(*bounds)),
             Element::Label { bounds, .. } => include(Rect::from(*bounds)),
             Element::Node {
                 at: [x, y],
@@ -308,19 +321,9 @@ pub(super) fn svg(typeset: &Typeset, layers: &[Element], targets: &[Target]) -> 
         }
         attributes
     };
-    let polyline = |points: &[kurbo::Point; 3]| {
-        format!(
-            "M{} {}L{} {}L{} {}",
-            x(points[0].x),
-            y(points[0].y),
-            x(points[1].x),
-            y(points[1].y),
-            x(points[2].x),
-            y(points[2].y)
-        )
-    };
     for element in layers {
         match element {
+            Element::HitBox { .. } => {}
             Element::Path { path, stroke } => {
                 let _ = write!(
                     svg,
@@ -329,18 +332,31 @@ pub(super) fn svg(typeset: &Typeset, layers: &[Element], targets: &[Target]) -> 
                     path_data(path)
                 );
             }
-            Element::Chevron(points) => {
+            Element::Mark {
+                drawable,
+                paint,
+                width,
+            } => {
+                let fill = if drawable.fill {
+                    paint.fill.as_deref().unwrap_or(INK)
+                } else {
+                    "none"
+                };
+                let stroke = if drawable.stroke {
+                    paint.stroke.as_deref().unwrap_or(INK)
+                } else {
+                    "none"
+                };
                 let _ = write!(
                     svg,
-                    r#"<path fill="none" stroke="{INK}" stroke-width="1" stroke-linecap="round" stroke-linejoin="miter" d="{}"/>"#,
-                    polyline(points)
-                );
-            }
-            Element::Triangle(points) => {
-                let _ = write!(
-                    svg,
-                    r#"<path fill="{INK}" stroke="{INK}" stroke-width="{MARK_STROKE}" stroke-linejoin="miter" d="{}Z"/>"#,
-                    polyline(points)
+                    r#"<path fill="{}" stroke="{}" stroke-width="{}" stroke-linecap="{}" stroke-linejoin="{}" stroke-miterlimit="{}" d="{}"/>"#,
+                    xml_escape(fill),
+                    xml_escape(stroke),
+                    number(*width),
+                    drawable.cap,
+                    drawable.join,
+                    number(drawable.miter_limit),
+                    path_data(&drawable.path.path)
                 );
             }
             Element::Label {
@@ -388,6 +404,20 @@ pub(super) fn svg(typeset: &Typeset, layers: &[Element], targets: &[Target]) -> 
                     );
                 }
             }
+        }
+    }
+    // Put head hit areas above paint so the full authoritative footprint is
+    // clickable even where the mark's raw stroke is not itself an anchor.
+    for element in layers {
+        if let Element::HitBox { bounds: b, href } = element {
+            let _ = write!(
+                svg,
+                r#"<a href="{href}"><rect x="{}" y="{}" width="{}" height="{}" fill="transparent" stroke="none"/></a>"#,
+                x(b.left),
+                y(b.top),
+                number((b.right - b.left) * UNIT),
+                number((b.top - b.bottom) * UNIT)
+            );
         }
     }
     for Target { at, size, href } in targets {

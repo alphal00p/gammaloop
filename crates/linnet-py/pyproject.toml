@@ -7,7 +7,7 @@ license = "MIT"
 license-files = [
   "LICENSE",
   "vendor/typst-packages/PROVENANCE.typ",
-  "vendor/typst-packages/preview/cetz/0.5.1/LICENSE",
+  "vendor/typst-packages/archives/LICENSE.cetz",
   "vendor/typst-packages/preview/oxifmt/1.0.0/LICENSE*",
   "vendor/typst-packages/preview/mitex/0.2.6/LICENSE",
 ]

@@ -103,7 +103,7 @@ impl TypstModule {
         })
     }
 
-    /// Import a Typst package such as `@preview/cetz:0.5.1`.
+    /// Import a Typst package such as `@preview/cetz:0.5.2`.
     pub fn package(alias: impl Into<String>, package: impl Into<String>) -> Result<Self> {
         let alias = alias.into();
         let package = package.into();
@@ -894,7 +894,7 @@ mod tests {
         ]))
         .unwrap();
         let request = TypstRenderRequest::new("digraph example { a -> b }", config)
-            .module(TypstModule::package("cetz", "@preview/cetz:0.5.1").unwrap());
+            .module(TypstModule::package("cetz", "@preview/cetz:0.5.2").unwrap());
         let svg = TypstRenderer::new(&base)
             .typst_executable(&executable)
             .to_svg(&request)
@@ -902,7 +902,7 @@ mod tests {
         assert_eq!(svg, "<svg>rendered</svg>");
         let entrypoint = fs::read_to_string(captured).unwrap();
         assert!(entrypoint.contains("_clinnet_template.render(_clinnet_config)"));
-        assert!(entrypoint.contains("#import \"@preview/cetz:0.5.1\" as cetz"));
+        assert!(entrypoint.contains("#import \"@preview/cetz:0.5.2\" as cetz"));
         assert!(entrypoint.contains("data-path:"));
         assert!(entrypoint.len() > 100_000);
 
@@ -924,8 +924,8 @@ mod tests {
         assert!(TypstModule::new("style_0", "style.typ").is_ok());
         assert!(TypstModule::new("bad-alias", "style.typ").is_err());
         assert!(TypstModule::new("_clinnet_template", "style.typ").is_err());
-        assert!(TypstModule::package("cetz", "@preview/cetz:0.5.1").is_ok());
-        assert!(TypstModule::package("cetz", "cetz:0.5.1").is_err());
+        assert!(TypstModule::package("cetz", "@preview/cetz:0.5.2").is_ok());
+        assert!(TypstModule::package("cetz", "cetz:0.5.2").is_err());
         assert!(TypstModule::package("cetz", "@preview/cetz:\"bad\"").is_err());
     }
 

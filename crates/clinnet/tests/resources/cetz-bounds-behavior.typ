@@ -1,11 +1,7 @@
-#import "@preview/cetz:0.5.1" as cetz
+#import "@preview/cetz:0.5.2" as cetz
 
-// The public suite also runs against stock CeTZ. These extra assertions run
-// when the bundled package provides the optimized bounds implementation.
-#if "_bounds-aabb" in cetz.path-util [
-
-// The scalar extrema path remains the oracle for the batched reduction,
-// including zero-length segments, repeated roots and varying coordinate sizes.
+// Stock CeTZ owns public path bounds, including zero-length segments,
+// repeated roots and varying coordinate sizes.
 #let paths = (
   (((-0.0, 0.0, 0.0), false, ()),),
   (((0, 0), true, (("l", (0, 0)), ("l", (2, -3)), ("l", (0, 0)))),),
@@ -25,9 +21,15 @@
 #let aabb = cetz.path-util.bezier.aabb.aabb
 #for path in paths {
   let expected = aabb(cetz.path-util.bounds(path))
-  let actual = cetz.path-util._bounds-aabb(path)
-  assert(actual.finite)
-  assert.eq(cbor.encode(actual.bounds), cbor.encode(expected))
+  cetz.canvas({
+    cetz.draw.get-ctx(ctx => {
+      let actual = cetz.process.element(ctx, ctx => (
+        ctx: ctx, drawables: (cetz.drawable.path(path),),
+      )).bounds
+      assert.eq(cbor.encode(actual), cbor.encode(expected))
+      ()
+    })
+  })
 }
 
 // Aggregating per-path corners must retain the first occurrence of equal
@@ -35,7 +37,7 @@
 #for subset in (paths, paths.rev()) {
   let points = subset.map(cetz.path-util.bounds).join()
   let corners = subset.map(path => {
-    let bounds = cetz.path-util._bounds-aabb(path).bounds
+    let bounds = aabb(cetz.path-util.bounds(path))
     (bounds.low, bounds.high)
   }).join()
   assert.eq(cbor.encode(aabb(corners)), cbor.encode(aabb(points)))
@@ -47,7 +49,6 @@
     cetz.draw.get-ctx(ctx => {
       let nonfinite = (((calc.inf - calc.inf, 0, 0), false,
         (("l", (-3, -7, 2)),)),)
-      assert(not cetz.path-util._bounds-aabb(nonfinite).finite)
       let combined = paths.first() + nonfinite
       let actual = cetz.process.element(ctx, ctx => (
         ctx: ctx,
@@ -62,8 +63,6 @@
     cetz.draw.content((1, 1), [bounds], frame: "rect", fill: white)
   })
 }
-
-]
 
 // These no-ink paths still own bounds and named anchors. Only their final
 // painting can be omitted; content links and visible custom paint remain.

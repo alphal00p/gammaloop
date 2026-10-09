@@ -20,6 +20,7 @@ required-features = ["python_stubgen"]
 [dependencies]
 ciborium = "0.2.2"
 dot-parser = { workspace = true }
+flate2 = "1.1"
 linnet = { workspace = true, features = ["nodestore-vec", "serde"] }
 linnest = { workspace = true, features = ["svg"] }
 # Maturin follows path dependencies into sdists; render.rs embeds Kurvst's Typst assets.
@@ -32,6 +33,7 @@ roxmltree = "0.21.1"
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 tempfile = "3.8"
+tar = { version = "0.4", default-features = false }
 typst-renderer = { path = "../typst-renderer", features = ["full"] }
 walkdir = { workspace = true }
 

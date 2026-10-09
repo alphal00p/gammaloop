@@ -22,17 +22,18 @@ licenses in the output's `fixtures/` directory.
 
 Normal runs copy CURRENT `crates/linnest/typst/src`,
 `crates/kurvst/typst/src`, their checked-in WASM and
-`assets/embedded/drawing/templates`. They reuse the repository package path
-`crates/linnet-py/vendor/typst-packages`; no renderer tree or CeTZ is duplicated
-in this benchmark. Ensure these WASM assets match your source build before
+`assets/embedded/drawing/templates`. The harness stages the unmodified CeTZ
+0.5.2 archive bundled for offline Python rendering, plus MiTeX and oxifmt,
+in the run's private package directory. No editable CeTZ fork is maintained
+by this benchmark. Ensure these WASM assets match your source build before
 measuring; their hashes are recorded rather than implicitly rebuilding them.
 
-`current-stock` changes only the package path. Supply upstream CeTZ 0.5.1,
-MiTeX 0.2.6 and oxifmt 1.0.0 there. Until P7 removes vendored-only calls,
-compilation may fail explicitly with a Typst diagnostic. Never substitute the
+`current-stock` changes only the package path. Supply upstream CeTZ 0.5.2,
+MiTeX 0.2.6 and oxifmt 1.0.0 there. It is an independent stock distribution
+comparison; both variants use the same current renderer. Never substitute the
 old scalar overlay to make this mode succeed: its old optimize arguments are
 incompatible with consolidated core, and it would measure the wrong sources.
-After migration this same mode needs no overlay or second rendering pipeline.
+Neither variant uses an overlay or a second rendering pipeline.
 
 The original external bundle may be measured separately with its own `run.py`,
 and named HISTORICAL/FROZEN snapshot, never CURRENT. This harness neither
@@ -97,3 +98,130 @@ claims. The separately captured reconciled PNGs are stored in `references.tar`.
 Linnest/Kurvst licenses and Linnest's ec-layout/clarabel notices are preserved
 inside the archive under their original `tree/crates/...` paths. Existing
 repository packages retain their own CeTZ LGPL-3.0, MiTeX and oxifmt licenses.
+
+== Focused native Python acceptance
+
+`native.py` is independent of `run.py`, the Typst corpus, package selection,
+and P7 packaging. Use an installed community Symbolica host providing
+`symbolica.community.hepkit`, and the installed `linnet` extension, on Python
+3.10+. Keep any user license in the process environment, never in artifacts.
+Pause other benchmarks and CPU-heavy builds before measuring.
+
+```sh
+python3.13 tests/drawing-bench/native.py
+# A repeat requires a new output directory:
+python3.13 tests/drawing-bench/native.py --out target/drawing-bench/native-acceptance-repeat
+```
+
+The fixed scalar cube-minus-edge DOT avoids diagram generation. The checked-in
+`crates/feynkit-py/tests/fixtures/scalars_2p_3p.json` model must validate its
+four loops, eleven internal edges, eight cubic interaction vertices and two
+external edges. Render configuration is `layouts: {steps: 100}`, momentum
+arrows on, particle and momentum labels off, no title. This has empty label
+pages and uses the native `Scene::render` branch, not Typst typesetting.
+FeynKit currently accepts a JSON configuration dictionary, not a
+`linnet.RenderConfig` instance; the dictionary uses the equivalent layout
+and template options without changing either API.
+
+Ten untimed warmups precede twenty-one `perf_counter_ns` samples. Only the
+installed Python `diagram.render(config=...)` call is timed; imports, model
+loading, validation, SVG parsing, hashing and writes are excluded. The reported
+median is compared with an absolute upper target of 100 ms. This is not a
+nonregression certificate: no genuine old same-host Python baseline is
+available. Rust unit tests and labelled/Typst renders are not timing substitutes.
+
+Each new directory under `target/drawing-bench/native-acceptance` (or the
+explicit `--out`) retains input DOT/configuration, arrows-on/off SVGs, all
+sample SVGs and `metadata.json`: raw nanosecond samples, median, host/toolchain,
+loaded module paths/hashes, fixture/source hashes, revision and dirty-diff hash.
+Installed binary hashes identify the actual extension; the harness does not
+assume it was built from current dirty sources. Preserve its build log alongside
+the run to establish that relationship.
+
+Untimed XML checks require a finite positive viewbox, thirteen nondegenerate
+painted momentum-head paths (the default open stroked V, not a filled triangle),
+no corresponding heads with arrows off, and stable node/edge/half-edge identities.
+Interactive links require parseable details and positive hit rectangles; any
+remaining fragment links must resolve. These checks are not visual approval of
+overlaps, clipping, shaft contacts or hit-area coverage; review the SVGs separately.
+Exit status is 0 for a validated median <= 100 ms, 1 for an exceeded target,
+and 2 for a blocked import/render/assertion. A blocked run records no invented
+median. Exception text and environment values are deliberately not serialized
+because license errors may contain private data.
+
+=== Local host setup and execution evidence
+
+The existing canonical community host is
+`examples/notebooks/symbolica-host/pyproject.toml`; its Maturin manifest is
+`examples/notebooks/symbolica-host/Cargo.toml`. Build/install only into a
+workspace-local environment, for example:
+
+```sh
+python3.13 -m venv target/drawing-bench/native-host-build/venv
+CARGO_TARGET_DIR="$PWD/target/drawing-bench/native-host-build/cargo" \
+  maturin build --locked --release \
+  --manifest-path examples/notebooks/symbolica-host/Cargo.toml \
+  --interpreter "$PWD/target/drawing-bench/native-host-build/venv/bin/python" \
+  --out target/drawing-bench/native-host-build/wheels
+# Install the resulting host wheel and a matching linnet wheel into that venv,
+# then run native.py using its bin/python. Do not install globally.
+```
+
+Initially this macOS host's Python 3.13 had no installed Symbolica community host.
+The bounded offline locked build stopped because the host lockfile needed
+resolution after path-dependency changes. An authorized offline unlocked
+attempt then stopped before compilation: public dependency `jiff-static
+v0.2.35` is not cached. Offline resolution also downgraded existing dependencies,
+so the original lockfile was restored rather than retaining unrelated churn.
+Logs, exit statuses, original/resolved lockfiles and the resolution diff are
+under `target/drawing-bench/native-host-build`. No Python render performance
+acceptance or nonregression result is established by these setup attempts.
+
+A subsequent normal online build used a generated copy of the canonical host
+under `target/drawing-bench/native-host-build/host`, with path dependencies
+rebound to this workspace. Public downloads succeeded, including `jiff-static`.
+Its generated lockfile added 95 packages (and updated `rust-embed-utils` to
+match its newly resolved family); no checked-in lockfile was changed.
+The first release build reached the native dependency stack before its 150 s
+bound; a single resumed locked build reached FeynKit generation/CFF/tensor
+compilation before its 180 s bound. Both exited 124 without producing a host
+wheel. These timeouts were incomplete setup attempts, not evidence of an
+unavailable dependency.
+`build-online.log`, `build-online-resume.log` and their exit-status files retain
+the process evidence. The generated manifest, lock and partial Cargo cache can
+be reused with a suitably longer bounded build; do not treat them as an installed
+host or as benchmark results.
+
+The initial `python3.13 tests/drawing-bench/native.py` invocation on this host
+exited 2 at the first import (`linnet` was also not installed). Its
+`target/drawing-bench/native-acceptance/metadata.json` records `status: blocked`,
+without timing samples or a median. Ruff formatting/lint and Python syntax
+validation passed; isolated SVG-inspector checks exercised real open-V geometry,
+degenerate marks, empty hitboxes and unresolved fragments, not Python rendering.
+
+A final sufficiently long locked release invocation completed the real
+community host in 55.14 s, reusing the partial cache. A matching standalone
+Linnet Maturin release build completed in 4 min 14 s. Both wheels were installed
+with `--no-deps --no-index` exclusively into
+`target/drawing-bench/native-host-build/venv`. Their canonical sources were not
+modified; the host uses community Symbolica revision `942bd2c0` and the pinned
+Symbolica Typst plugin revision from its canonical manifest. Full build logs,
+exit statuses and source/manifest/lock identities are retained as
+`build-final.log`, `build-linnet.log` and `build-identity.json`.
+
+```sh
+target/drawing-bench/native-host-build/venv/bin/python tests/drawing-bench/native.py \
+  --out target/drawing-bench/native-acceptance-installed
+```
+
+That real installed invocation exited 2 before rendering/timing. Symbolica
+reported that the user license key format is outdated and must be renewed at
+`https://symbolica.io/license/`. No key or environment values are recorded.
+This is now the actual blocker: provide a valid renewed user license through
+the process environment and rerun with a fresh `--out` directory. Installed
+module paths/hashes are present in
+`target/drawing-bench/native-acceptance-installed/metadata.json`; its
+`status: blocked` and `error_type: RuntimeError` have no samples or median.
+No absolute 100 ms acceptance or Python nonregression claim is established.
+The build succeeds; fixed-DOT validation and native rendering still require
+the valid license. Parent Typst corpus timing remains independent.

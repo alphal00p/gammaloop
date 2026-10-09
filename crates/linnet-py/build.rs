@@ -8,6 +8,7 @@ fn main() {
         manifest.join("typst"),
         manifest.join("../linnest/typst"),
         manifest.join("../kurvst/typst"),
+        // Includes the pristine CeTZ archive and its distribution license.
         manifest.join("vendor/typst-packages"),
     ] {
         println!("cargo:rerun-if-changed={}", directory.display());

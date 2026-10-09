@@ -1,5 +1,7 @@
 # Compiled documents are binary artifacts; their Typst sources carry the text diff.
 *.pdf binary
 crates/linnet-py/vendor/typst-packages/** -whitespace
+# Generated bundles preserve upstream license bytes verbatim.
+**/LICENSE.ec-layout -whitespace
 # Unified diffs use a literal space for empty context lines.
 examples/reproducers/symbolica-expansion/patches/*.patch -whitespace

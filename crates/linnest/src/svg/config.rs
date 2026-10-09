@@ -102,11 +102,53 @@ impl Config {
                     }
                 }
                 "edge-style" => {
-                    for edge in &mut scene.edges {
-                        for (key, value) in fields {
-                            match key.as_str() {
-                                "stroke" => Self::stroke(&mut edge.stroke, value)?,
-                                _ => return Err(format!("unsupported edge style {key:?}")),
+                    for (key, value) in fields {
+                        match key.as_str() {
+                            "stroke" => {
+                                Self::stroke(&mut super::arrow_stroke(), value)?;
+                                for edge in &mut scene.edges {
+                                    Self::stroke(&mut edge.stroke, value)?;
+                                }
+                            }
+                            "flow-arrow" | "momentum-arrow" => {
+                                let mark = Self::mark(value)?;
+                                for edge in &mut scene.edges {
+                                    if key == "flow-arrow" {
+                                        edge.flow_arrow = mark.clone();
+                                    } else {
+                                        edge.momentum_arrow = mark.clone();
+                                    }
+                                }
+                            }
+                            "flow-arrow-paints" | "momentum-arrow-paints" => {
+                                let paints =
+                                    serde_json::from_value::<Vec<super::MarkPaint>>(value.clone())
+                                        .map_err(|e| format!("invalid mark paints: {e}"))?;
+                                for edge in &mut scene.edges {
+                                    if key == "flow-arrow-paints" {
+                                        edge.flow_arrow_paints = paints.clone();
+                                    } else {
+                                        edge.momentum_arrow_paints = paints.clone();
+                                    }
+                                }
+                            }
+                            _ => return Err(format!("unsupported edge style {key:?}")),
+                        }
+                    }
+                    for edge in &scene.edges {
+                        for (mark, paints, stroke) in [
+                            (&edge.flow_arrow, &edge.flow_arrow_paints, &edge.stroke),
+                            (
+                                &edge.momentum_arrow,
+                                &edge.momentum_arrow_paints,
+                                &super::arrow_stroke(),
+                            ),
+                        ] {
+                            let prepared = mark.prepare(super::marks::Batch::context(stroke))?;
+                            if !paints.is_empty() && paints.len() != prepared.paths().len() {
+                                return Err(
+                                    "mark paints must match the flattened mark path count".into()
+                                );
                             }
                         }
                     }
@@ -115,6 +157,12 @@ impl Config {
             }
         }
         Ok(())
+    }
+
+    fn mark(value: &Value) -> Result<kurvst::marks::MarkSpec, String> {
+        serde_json::from_value(value.clone()).map_err(|error| {
+            format!("invalid mark: {error}; replace CeTZ mark dictionaries with linnet.Mark(name, ...) normalized shape data")
+        })
     }
 
     fn stroke(stroke: &mut Stroke, value: &Value) -> Result<(), String> {

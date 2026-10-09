@@ -276,6 +276,70 @@ and `MathSymbol`, plus recursively validated arrays and string-keyed dictionarie
 layout, placement, routing, anchor, pattern, mark, and debug choices use their exported enums;
 the structured Python reference lists the choices for each option.
 
+==== Shared native SVG and Typst marks
+
+`Mark(name, ...)` is data for the shared Kurvst arrowhead engine, not a CeTZ
+configuration. Its catalogue and parameter definitions follow tiptoe 0.4.0
+(MIT, Mc-Zen); geometry, defaults, and curved-end fitting belong to Kurvst.
+Choose `triangle`, `straight`, `stealth`, `round`, `tikz`, `barb`, `hooks`,
+`bar`, `bracket`, `circle`, `square`, `diamond`, or `rays`. Fields are strict
+per shape: for example `tikz` accepts width and stroke, not arc.
+
+```python
+import linnet
+
+# Explicit physical sizes preserve the existing native notebook appearance.
+flow = linnet.Mark("triangle", length="0.21cm", width="0.1575cm")
+momentum = linnet.Mark("straight", length="0.16cm", width="0.12cm")
+heads = {"flow-arrow": flow, "momentum-arrow": momentum}
+cut = linnet.Mark.combine(
+    linnet.Mark("bar"), "2pt", linnet.Mark("bar"), fit="bend"
+)
+```
+
+Native drawing configuration accepts these values under
+`style["edge-style"]["flow-arrow"]` and `momentum-arrow`. Fixed lengths accept
+`pt`, `mm`, `cm`, and `in`; ratios are relative to line thickness, not carrier
+length. Mixed sizes such as `"3pt + 450%"` add the two components. Typed
+`Length`, `Ratio`, and `RelativeLength` are equivalent; font-relative `em`
+has no native mark context and is rejected. `inset` and `shorten` require
+ratios, while `arc` and `phase` require typed `Angle` values.
+
+`fit="chord"` is the default. Endpoint `fit="bend"` follows the tangent,
+with `shorten="100%"` by default; interior stations always use a chord.
+`Mark.combine` accepts nested marks and signed size gaps positionally and
+fits the composite once. Child marks must omit `fit` and `shorten`.
+`to_dict()` returns public data with `kind="kurvst-mark"` and `shape`, without
+materializing engine defaults. Fill and stroke are paint-only: use a color,
+boolean, `None`, or `AUTO`; a `Stroke` may set paint but not thickness, cap,
+join, dash, or miter limit. Set line thickness on the line itself.
+
+`Mark.from_dict(data)` normalizes the same public dictionary, including typed
+dimensions and colors, without changing the input. `Mark.to_native()` returns
+only JSON-compatible data: `{"mark": numeric_mark_spec, "paints": leaf_paints}`.
+The numeric specification omits `kind` and paint colors; lengths and gaps use
+`{"points": ..., "ratio": ...}`, ratios become fractions and angles radians, and paint
+flags stay in the shared mark schema. `paints` lists CSS `fill` and `stroke`
+colors in flattened leaf drawable order, including empty entries for leaves
+without explicit colors. Engine defaults and context-dependent fitting remain
+unresolved. Unlike `to_dict()`, this representation contains no extension-owned
+Python objects and can cross independently installed native extensions.
+Native configuration accepts public `Mark` objects or public mark dictionaries,
+not arbitrary objects with `to_dict`/`to_native` callbacks or callable values.
+
+The generic Typst route accepts the same `Mark` under the half-edge style's
+`mark` key. Its `mark-position`, `mark-orientation`, `mark-direction`, and
+`mark-shift` keys choose placement independently of shape data. Numeric stations
+center the painted head on the derived visible carrier, before shortening or
+bending. Both routes use one candidate batch and one selected-paint batch per
+drawing; selected shafts paint once.
+
+CeTZ fields `symbol`, `start`, `end`, `scale`, `anchor`, and `shorten_to` are
+rejected with migration guidance. Specify a named shape and physical sizes,
+then select its fit and shortening. Replace legacy edge-mark dictionaries
+such as `{"end": linnet.MarkSymbol.Straight}` with `Mark("straight", ...)`.
+There is no compatibility fallback in either renderer.
+
 `GraphStyleOptions`, `LayoutOptions`, and `DrawOptions` cover the corresponding generic Linnest
 surfaces. `DrawingSelectors` maps arbitrary Python data to detached typed drawing values at render
 time. Layout passes retain their order:
@@ -361,8 +425,10 @@ the only high-level rendering methods; there are no raw command-line inputs or s
 escape hatches. The Python distribution depends on `typst` 0.15.0 and compiles in-process without
 looking up or launching a Typst executable. Generated inputs and imported modules remain alive
 until compilation completes. The wheel has no Clinnet dependency and embeds the Linnest, Kurvst,
-CeTZ 0.5.1, and oxifmt 1.0.0 assets required by its default renderer, so that path does not depend
-on an installed Typst package cache or a network fetch.
+stock CeTZ 0.5.2, MiTeX 0.2.6, and oxifmt 1.0.0 assets required by its default renderer,
+so that path does not depend on an installed Typst package cache or a network fetch.
+CeTZ is distributed as its unmodified upstream archive, with its LGPL license and
+checksum; there are no local CeTZ core patches or rebuild instructions.
 
 For inspection tools, `prepare_render(config=None)` evaluates selectors once and returns a
 `PreparedRender`. Its `typst_source` property is the exact generated entrypoint subsequently used

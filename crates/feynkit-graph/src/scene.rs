@@ -315,6 +315,10 @@ impl FeynmanDiagram {
                     pattern: drawing.pattern,
                     flow: drawing.flow,
                     momentum: options.momentum_arrows,
+                    flow_arrow: drawing.flow_arrow,
+                    momentum_arrow: drawing.momentum_arrow,
+                    flow_arrow_paints: drawing.flow_arrow_paints,
+                    momentum_arrow_paints: drawing.momentum_arrow_paints,
                     label,
                     details,
                 },
@@ -547,6 +551,10 @@ impl SceneOptions {
                 None
             },
             momentum: self.momentum_arrows,
+            flow_arrow: EdgeDrawing::default_flow_arrow(),
+            momentum_arrow: EdgeDrawing::default_momentum_arrow(),
+            flow_arrow_paints: Vec::new(),
+            momentum_arrow_paints: Vec::new(),
             label: None,
             details: Details::default(),
         }

@@ -177,7 +177,7 @@
 ///     pattern-wavelength: 0.55,
 ///     pattern-coil-longitudinal-scale: 1.6,
 ///   )
-///   stack(base, parallel-layer(edge, mark: (end: (symbol: "straight"), scale: 0.75)))
+///   stack(base, parallel-layer(edge, mark: curve.mark.straight(length: 0.15cm, width: 0.1125cm)))
 /// }
 /// #let g = graph.build({
 ///   graph.node(<a>, label: [a hi])
@@ -228,7 +228,7 @@
 /// )
 /// #let focused-source-style(edge) = (focused-base-style(edge), parallel-edge-style(edge))
 /// #let focused-sink-style(edge) = (focused-base-style(edge), parallel-edge-style(edge) + (
-///   mark: (end: ">"),
+///   mark: curve.mark.triangle(length: 0.15cm, width: 0.1125cm),
 /// ))
 /// #draw(layout(p, g-center: 0.004, label-steps: 0,), unit: 1.25, source-style: focused-source-style, sink-style: focused-sink-style)
 /// `,dir:ttb)
@@ -243,10 +243,7 @@
 /// },
 ///   name: "oriented marks",
 /// )
-/// #let arrow = (
-///   end: (symbol: ">", fill: black, anchor: "center", shorten-to: auto),
-///   scale: 0.75,
-/// )
+/// #let arrow = curve.mark.triangle(length: 0.15cm, width: 0.1125cm)
 /// #let oriented-arrow = (
 ///   stroke: black + 0.7pt,
 ///   mark: arrow,
@@ -260,9 +257,10 @@
 /// Typst label name and `crossing-gap` (default `0.55`) to the total arc length
 /// hidden around each proper centerline intersection. References are resolved
 /// independently of edge order. The current layer is split with Kurvst, so
-/// patterned phases continue across the hidden spans. A mark on the same layer
-/// is emitted once on its uncut carrier, so splitting the painted path neither
-/// removes nor duplicates it. Dangling layers and paired layers with one
+/// patterned phases continue across the hidden spans. A mark is emitted once:
+/// its station uses the concatenated visible arc length, and its fit applies
+/// to the connected visible fragment containing that station. Dangling layers
+/// and paired layers with one
 /// continuous source/sink paint style are supported. On a
 /// paired layer both half styles must specify the same target and gap. The cut
 /// layer cannot participate in a subgraph underlay. References to self,
@@ -413,13 +411,15 @@
   /// retaining the paired-edge split point selected by `mark-orientation`.
   /// `mark-orientation: "edge"` makes a mark follow `edge.orientation` instead
   /// of raw path direction; reversed edges move the mark to the sink half and
-  /// flip it, while undirected edges suppress it. Heads span a chord between
-  /// two points on the full carrier: triangle and straight heads use their
-  /// geometric tip and back; other marks use their declared tip/base anchors.
-  /// Centered heads straddle the requested arc position, so their chord center
-  /// can lie off the curve. Near endpoints the interval moves inward; the head
-  /// fits the chord longitudinally while keeping its width. Interior marks
-  /// overlay the unshortened curve; end shafts meet the appropriate head contact.
+  /// point it backward, while undirected edges suppress it. `mark` accepts only
+  /// data-only `curve.mark` specifications, not CeTZ mark dictionaries.
+  /// Stations use the derived visible carrier after offsets, outsets and
+  /// crossing windows, before mark shortening. Interior heads straddle their
+  /// station on a chord. End heads default to `fit: "chord"`; `fit: "bend"`
+  /// retracts the endpoint along its tangent, retaining controls, by the mark's
+  /// end distance times `shorten` (default 100%). Short carriers retain full-size
+  /// heads and clamp the shaft contact independently. Patterned strokes follow
+  /// the resulting painted shaft. Composite marks fit once as a whole.
   /// `source-anchor` may be a CeTZ anchor name such as `"north"` or `"south"`
   /// to route this endpoint from a measured node-box anchor. By default,
   /// anchored paired edges use two smooth cubic halves through the edge layout

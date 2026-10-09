@@ -1842,12 +1842,18 @@ impl StrokeLinesSpec {
     /// Lines in drawable, subpath and command order, as the former Typst
     /// traversal emitted them; cubics use the same identity-transform flattening.
     fn lines(&self) -> Result<Vec<CollisionLine>, String> {
+        if !self.accuracy.is_finite() || self.accuracy <= 0.0 {
+            return Err("painted stroke accuracy must be finite and positive".to_owned());
+        }
         let identity = Transform(std::array::from_fn(|row| {
             std::array::from_fn(|column| if row == column { 1.0 } else { 0.0 })
         }));
         let xy = |vertex: &[f64]| Point(vertex[0], vertex[1]);
         let mut lines = Vec::new();
         for stroke in &self.strokes {
+            if !stroke.radius.is_finite() || stroke.radius < 0.0 {
+                return Err("painted stroke radius must be finite and nonnegative".to_owned());
+            }
             let mut push = |start: Point, end: Point| {
                 lines.push(CollisionLine {
                     start: [start.0, start.1],
@@ -1867,7 +1873,7 @@ impl StrokeLinesSpec {
                             start = end;
                         }
                     } else if kind == Some("c") {
-                        if command.len() < 4 {
+                        if command.len() != 4 {
                             return Err("painted cubics need two controls and an end".to_owned());
                         }
                         let segment = CubicSegment {
@@ -1880,6 +1886,8 @@ impl StrokeLinesSpec {
                             push(Point(a[0], a[1]), Point(b[0], b[1]));
                         }
                         start = Self::vertex(command.last().expect("checked length"))?;
+                    } else {
+                        return Err(format!("unsupported painted stroke command: {kind:?}"));
                     }
                 }
                 if *closed && start != origin {
@@ -2347,6 +2355,47 @@ mod tests {
     }
 
     #[test]
+    fn painted_strokes_byte_batch_preserves_gaps_widths_and_rejects_unknown_commands() {
+        let input = serde_json::json!({
+            "accuracy": 0.005,
+            "strokes": [
+                {"radius": 0.25, "segments": [
+                    [[0, 0, 0], false, [["l", [1, 0, 0]]]],
+                    [[2, 0, 0], false, [["l", [3, 0, 0]]]]
+                ]},
+                {"radius": 0.5, "segments": [
+                    [[4, 1], true, [["l", [5, 1]]]]
+                ]}
+            ]
+        });
+        let encode = |value: &serde_json::Value| crate::graph_api::encode_cbor(value).unwrap();
+        let bytes = stroke_lines_bytes(&encode(&input)).unwrap();
+        let lines: serde_json::Value = ciborium::de::from_reader(bytes.as_slice()).unwrap();
+        assert_eq!(
+            lines,
+            serde_json::json!([
+                {"start":[0.0,0.0],"end":[1.0,0.0],"radius":0.25},
+                {"start":[2.0,0.0],"end":[3.0,0.0],"radius":0.25},
+                {"start":[4.0,1.0],"end":[5.0,1.0],"radius":0.5},
+                {"start":[5.0,1.0],"end":[4.0,1.0],"radius":0.5}
+            ])
+        );
+        let mut invalid = input.clone();
+        invalid["strokes"][0]["segments"][0][2][0][0] = "x".into();
+        assert!(
+            stroke_lines_bytes(&encode(&invalid))
+                .unwrap_err()
+                .contains("unsupported")
+        );
+        invalid = input.clone();
+        invalid["accuracy"] = 0.into();
+        assert!(stroke_lines_bytes(&encode(&invalid)).is_err());
+        invalid = input;
+        invalid["strokes"][0]["radius"] = (-1).into();
+        assert!(stroke_lines_bytes(&encode(&invalid)).is_err());
+    }
+
+    #[test]
     fn painted_strokes_flatten_in_drawable_order_with_closures() {
         use ciborium::Value;
         let vertex = |x: f64, y: f64| {
@@ -2365,7 +2414,6 @@ mod tests {
                     true,
                     vec![
                         command("l", vec![vertex(1.0, 0.0), vertex(1.0, 1.0)]),
-                        command("x", vec![vertex(9.0, 9.0)]),
                         command(
                             "c",
                             vec![vertex(1.0, 2.0), vertex(0.0, 2.0), vertex(0.0, 1.0)],

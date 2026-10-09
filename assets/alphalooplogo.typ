@@ -2,7 +2,7 @@
 // typst compile --root . assets/alphalooplogo.typ assets/alphalooplogo-light.svg
 // typst compile --root . --input theme=dark assets/alphalooplogo.typ assets/alphalooplogo-dark.svg
 #import "../crates/kurvst/typst/src/lib.typ" as kurvst
-#import "@preview/cetz:0.5.1" as cetz
+#import "@preview/cetz:0.5.2" as cetz
 #import "../crates/kurvst/typst/examples/knot-logo.typ": (
   gap, l, o, solid, union, width,
 )

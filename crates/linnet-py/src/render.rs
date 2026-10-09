@@ -56,7 +56,79 @@ struct EmbeddedKurvstPackage;
 
 #[derive(RustEmbed)]
 #[folder = "$CARGO_MANIFEST_DIR/vendor/typst-packages"]
+#[include = "preview/**"]
 struct EmbeddedTypstPackages;
+
+impl EmbeddedTypstPackages {
+    const CETZ_ARCHIVE: &'static [u8] =
+        include_bytes!("../vendor/typst-packages/archives/cetz-0.5.2.tar.gz");
+    const CETZ_PACKAGE: &'static str = "preview/cetz/0.5.2";
+
+    /// Remove an owned staging entry without following a symlink to its target.
+    fn remove_staged_path(path: &Path) -> std::io::Result<()> {
+        match fs::symlink_metadata(path) {
+            Ok(metadata) if metadata.is_dir() => fs::remove_dir_all(path),
+            Ok(_) => fs::remove_file(path),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+            Err(error) => Err(error),
+        }
+    }
+
+    fn stage_cetz(package_store: &Path) -> std::io::Result<()> {
+        use std::io::{Error, ErrorKind};
+        use std::path::Component;
+
+        // Only this compile-time public release archive enters this traversal.
+        // Validate every entry before changing the private staged package.
+        let decoder = flate2::read::GzDecoder::new(Self::CETZ_ARCHIVE);
+        let mut archive = tar::Archive::new(decoder);
+        let mut assets = BTreeMap::new();
+        for entry in archive.entries()? {
+            let mut entry = entry?;
+            let path = entry.path()?.into_owned();
+            if path
+                .components()
+                .any(|part| !matches!(part, Component::Normal(_) | Component::CurDir))
+            {
+                return Err(Error::new(
+                    ErrorKind::InvalidData,
+                    "unsafe CeTZ archive path",
+                ));
+            }
+            let kind = entry.header().entry_type();
+            if kind.is_dir() {
+                continue;
+            }
+            if !kind.is_file() || path == Path::new(".") {
+                return Err(Error::new(
+                    ErrorKind::InvalidData,
+                    "unsupported CeTZ archive entry",
+                ));
+            }
+            let mut contents = Vec::new();
+            std::io::Read::read_to_end(&mut entry, &mut contents)?;
+            if assets.insert(path, contents).is_some() {
+                return Err(Error::new(
+                    ErrorKind::InvalidData,
+                    "duplicate CeTZ archive path",
+                ));
+            }
+        }
+        let root = package_store.join(Self::CETZ_PACKAGE);
+        // Remove copied files (including read-only files) rather than overwriting
+        // them. The package store is an owned temporary directory, not a cache.
+        Self::remove_staged_path(&root)?;
+        fs::create_dir_all(&root)?;
+        for (path, contents) in assets {
+            let target = root.join(path);
+            if let Some(parent) = target.parent() {
+                fs::create_dir_all(parent)?;
+            }
+            fs::write(target, contents)?;
+        }
+        Ok(())
+    }
+}
 
 fn element_drawing<'py>(
     py: Python<'py>,
@@ -440,7 +512,20 @@ fn write_project_asset(build_root: &Path, path: &str, contents: &[u8]) -> PyResu
 }
 
 fn write_embedded_assets<E: RustEmbed>(root: &Path) -> PyResult<()> {
+    let mut staged = std::collections::BTreeSet::new();
     for path in E::iter() {
+        // Bundled identities replace complete packages, not a mixture of
+        // embedded files and potentially incompatible external remnants.
+        let package: PathBuf = Path::new(path.as_ref()).components().take(3).collect();
+        if staged.insert(package.clone()) {
+            let destination = root.join(package);
+            EmbeddedTypstPackages::remove_staged_path(&destination).map_err(|error| {
+                PyRuntimeError::new_err(format!(
+                    "failed to replace bundled package {}: {error}",
+                    destination.display()
+                ))
+            })?;
+        }
         let target = root.join(path.as_ref());
         let contents = E::get(path.as_ref()).ok_or_else(|| {
             PyRuntimeError::new_err(format!("embedded render asset {path} is missing"))
@@ -450,15 +535,6 @@ fn write_embedded_assets<E: RustEmbed>(root: &Path) -> PyResult<()> {
                 PyRuntimeError::new_err(format!(
                     "failed to create render asset directory {}: {error}",
                     parent.display()
-                ))
-            })?;
-        }
-        // Cached packages may be read-only; replace only the staged copy.
-        if target.exists() {
-            fs::remove_file(&target).map_err(|error| {
-                PyRuntimeError::new_err(format!(
-                    "failed to replace staged render asset {}: {error}",
-                    target.display()
                 ))
             })?;
         }
@@ -501,6 +577,19 @@ fn copy_directory(source: &Path, target: &Path, description: &str) -> PyResult<(
             ))
         })?;
         let destination = target.join(relative);
+        // Overlay authority applies to entry types too. Replace only the
+        // private staged destination; neither external source store is changed.
+        if destination.exists()
+            && (entry.file_type().is_file()
+                || (entry.file_type().is_dir() && !destination.is_dir()))
+        {
+            EmbeddedTypstPackages::remove_staged_path(&destination).map_err(|error| {
+                PyRuntimeError::new_err(format!(
+                    "failed to replace staged {description} {}: {error}",
+                    destination.display()
+                ))
+            })?;
+        }
         if entry.file_type().is_dir() {
             fs::create_dir_all(&destination).map_err(|error| {
                 PyRuntimeError::new_err(format!(
@@ -691,6 +780,9 @@ impl PreparedRender {
         }
         // External stores add packages; bundled source and Wasm stay authoritative.
         write_embedded_assets::<EmbeddedTypstPackages>(&package_store)?;
+        EmbeddedTypstPackages::stage_cetz(&package_store).map_err(|error| {
+            PyRuntimeError::new_err(format!("failed to stage stock CeTZ: {error}"))
+        })?;
 
         let mut files = BTreeMap::new();
         insert_embedded_assets::<EmbeddedLinnestPackage>(
@@ -980,6 +1072,147 @@ mod tests {
     use super::*;
 
     #[test]
+    fn package_path_replaces_read_only_cached_copies_without_changing_sources() {
+        let directory = tempfile::tempdir().unwrap();
+        let store = directory.path().join("staged");
+        let relative = "preview/shared/1.0.0/lib.typ";
+        for (name, contents) in [("cache", b"cache".as_slice()), ("path", b"path")] {
+            let source = directory.path().join(name);
+            let asset = source.join(relative);
+            fs::create_dir_all(asset.parent().unwrap()).unwrap();
+            fs::write(&asset, contents).unwrap();
+            let mut permissions = fs::metadata(&asset).unwrap().permissions();
+            permissions.set_readonly(true);
+            fs::set_permissions(&asset, permissions).unwrap();
+            copy_directory(&source, &store, "test package store").unwrap();
+            assert_eq!(fs::read(&asset).unwrap(), contents);
+            assert!(fs::metadata(asset).unwrap().permissions().readonly());
+        }
+        assert_eq!(fs::read(store.join(relative)).unwrap(), b"path");
+    }
+
+    #[test]
+    fn package_overlays_replace_conflicting_entry_types_without_changing_sources() {
+        for cache_is_directory in [false, true] {
+            let directory = tempfile::tempdir().unwrap();
+            let relative = "preview/cetz/0.5.2/src/lib.typ";
+            let store = directory.path().join("staged");
+            for (name, is_directory) in
+                [("cache", cache_is_directory), ("path", !cache_is_directory)]
+            {
+                let source = directory.path().join(name);
+                let asset = source.join(relative);
+                let payload = if is_directory {
+                    fs::create_dir_all(&asset).unwrap();
+                    asset.join("contents")
+                } else {
+                    fs::create_dir_all(asset.parent().unwrap()).unwrap();
+                    asset.clone()
+                };
+                fs::write(&payload, name).unwrap();
+                copy_directory(&source, &store, "test package store").unwrap();
+                assert_eq!(fs::read(payload).unwrap(), name.as_bytes());
+                assert_eq!(asset.is_dir(), is_directory);
+            }
+            let staged = store.join(relative);
+            assert_eq!(staged.is_dir(), !cache_is_directory);
+            assert_eq!(
+                fs::read(if staged.is_dir() {
+                    staged.join("contents")
+                } else {
+                    staged
+                })
+                .unwrap(),
+                b"path"
+            );
+            EmbeddedTypstPackages::stage_cetz(&store).unwrap();
+            assert!(store.join(relative).is_file());
+        }
+    }
+
+    #[test]
+    fn bundled_packages_replace_invalid_roots_and_stale_external_entries() {
+        let directory = tempfile::tempdir().unwrap();
+        let stock = directory.path().join(EmbeddedTypstPackages::CETZ_PACKAGE);
+        fs::create_dir_all(stock.parent().unwrap()).unwrap();
+        fs::write(&stock, "external package root is a file").unwrap();
+        EmbeddedTypstPackages::stage_cetz(directory.path()).unwrap();
+        assert!(stock.join("typst.toml").is_file());
+
+        let oxifmt = directory.path().join("preview/oxifmt/1.0.0");
+        fs::create_dir_all(oxifmt.join("typst.toml")).unwrap();
+        fs::write(oxifmt.join("external-only"), "stale").unwrap();
+        write_embedded_assets::<EmbeddedTypstPackages>(directory.path()).unwrap();
+        assert!(oxifmt.join("typst.toml").is_file());
+        assert!(!oxifmt.join("external-only").exists());
+    }
+
+    #[test]
+    fn stock_cetz_archive_replaces_read_only_copies_with_exact_release_bytes() {
+        let directory = tempfile::tempdir().unwrap();
+        let store = directory.path();
+        let package = store.join(EmbeddedTypstPackages::CETZ_PACKAGE);
+        for asset in ["src/lib.typ", "cetz-core/cetz_core.wasm"] {
+            let target = package.join(asset);
+            fs::create_dir_all(target.parent().unwrap()).unwrap();
+            fs::write(&target, b"external override").unwrap();
+            let mut permissions = fs::metadata(&target).unwrap().permissions();
+            permissions.set_readonly(true);
+            fs::set_permissions(target, permissions).unwrap();
+        }
+        fs::write(package.join("external-only.typ"), b"stale fork asset").unwrap();
+        let unrelated = store.join("preview/unrelated/1.0.0/lib.typ");
+        fs::create_dir_all(unrelated.parent().unwrap()).unwrap();
+        fs::write(&unrelated, b"external package").unwrap();
+        EmbeddedTypstPackages::stage_cetz(store).unwrap();
+        EmbeddedTypstPackages::stage_cetz(store).unwrap();
+        assert!(!package.join("external-only.typ").exists());
+        assert_eq!(fs::read(unrelated).unwrap(), b"external package");
+
+        let decoder = flate2::read::GzDecoder::new(EmbeddedTypstPackages::CETZ_ARCHIVE);
+        let mut archive = tar::Archive::new(decoder);
+        let mut file_count = 0;
+        for entry in archive.entries().unwrap() {
+            let mut entry = entry.unwrap();
+            if !entry.header().entry_type().is_file() {
+                continue;
+            }
+            let path = entry.path().unwrap().into_owned();
+            let mut expected = Vec::new();
+            std::io::Read::read_to_end(&mut entry, &mut expected).unwrap();
+            assert_eq!(fs::read(package.join(&path)).unwrap(), expected, "{path:?}");
+            if path == Path::new("LICENSE") {
+                assert_eq!(
+                    expected,
+                    include_bytes!("../vendor/typst-packages/archives/LICENSE.cetz")
+                );
+            }
+            file_count += 1;
+        }
+        assert!(file_count > 40);
+        assert_eq!(
+            WalkDir::new(&package)
+                .into_iter()
+                .map(Result::unwrap)
+                .filter(|entry| entry.file_type().is_file())
+                .count(),
+            file_count
+        );
+    }
+
+    #[test]
+    fn embedded_package_tree_excludes_distribution_notices_and_archives() {
+        let directory = tempfile::tempdir().unwrap();
+        write_embedded_assets::<EmbeddedTypstPackages>(directory.path()).unwrap();
+        for package in ["preview/oxifmt/1.0.0", "preview/mitex/0.2.6"] {
+            assert!(directory.path().join(package).join("typst.toml").is_file());
+        }
+        assert!(!directory.path().join("PROVENANCE.typ").exists());
+        assert!(!directory.path().join("archives").exists());
+        assert!(!directory.path().join("preview/cetz/0.5.1").exists());
+    }
+
+    #[test]
     fn compiled_graph_inspection_preserves_native_drawing() {
         Python::initialize();
         Python::attach(|py| -> PyResult<()> {
@@ -1034,7 +1267,7 @@ mod tests {
         assert!(
             prepared
                 .package_store
-                .join("preview/cetz/0.5.1/typst.toml")
+                .join("preview/cetz/0.5.2/typst.toml")
                 .is_file()
         );
     }

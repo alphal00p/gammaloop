@@ -1,8 +1,10 @@
 #import "../../../../assets/embedded/drawing/templates/physics-edge-style.typ": (
-  coil, dashed, dotted, fermion-arrow-mark, massive, massless, mi, sink-stroke,
+  coil, dashed, dotted, massive, massless, sink-stroke,
   source-stroke, style, wave, zigzag,
 )
 #import "../theme.typ": palette
+#import "../../../../crates/linnest/typst/src/curve.typ": mark
+#import "@preview/mitex:0.2.6": mi
 
 // The weights first used for website hero diagrams are now GammaLoop's shared
 // physics defaults. Website-specific colors still follow the light/dark theme.
@@ -14,27 +16,15 @@
 
 #let particle-flow = (
   fermion-arrow: true,
-  fermion-arrow-mark: fermion-arrow-mark
-    + (
-      end: fermion-arrow-mark.end
-        + (
-          fill: palette.ink,
-          stroke: palette.ink + 0.3pt,
-        ),
-    ),
+  fermion-arrow-mark: mark.triangle(
+    length: 0.21cm, width: 0.1575cm, fill: palette.ink, stroke: palette.ink,
+  ),
 )
 
 #let about-particle-flow = (
   fermion-arrow: true,
-  fermion-arrow-mark: (
-    end: (
-      symbol: ">",
-      fill: palette.ink,
-      stroke: palette.ink + 0.4pt,
-      anchor: "center",
-      shorten-to: auto,
-    ),
-    scale: 1.3,
+  fermion-arrow-mark: mark.triangle(
+    length: 0.26cm, width: 0.195cm, fill: palette.ink, stroke: palette.ink,
   ),
 )
 

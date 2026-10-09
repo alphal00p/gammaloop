@@ -1,6 +1,6 @@
 #import "@preview/tidy:0.4.3"
 #import "../src/lib.typ" as kurvst
-#import "@preview/cetz:0.5.1" as cetz
+#import "@preview/cetz:0.5.2" as cetz
 
 #set document(title: "kurvst Typst API")
 #set page(margin: 22mm)
@@ -111,8 +111,9 @@
   `tikz`, `barb`, `hooks`, `bar`, `bracket`, `circle`, `square`, `diamond`,
   and `rays` constructors, plus positional `combine`. They return plain dictionaries tagged
   `kind: "kurvst-mark"`; they do not draw anything. Shape vocabulary and
-  parameter definitions follow MIT-licensed tiptoe 0.4. No renderer migration
-  is implied by this data API.
+  parameter definitions follow MIT-licensed tiptoe 0.4. Linnest and the native
+  FeynKit renderer consume these specifications through the same geometry
+  engine; stock CeTZ only paints the Typst route's finished geometry.
 
   Dimensions `length` and `width` accept fixed lengths, ratios of line thickness,
   or mixed values such as `3pt + 450%`. `inset` and `shorten` are ratios;
@@ -160,9 +161,41 @@
   runs one native batch. Each template has `mark` and `context` fields; carriers
   are Kurvst paths, and placements refer to template/carrier indices with
   start/end/ratio/distance stations, signed shifts, and forward/backward direction.
+  Ratio and distance stations locate the painted longitudinal center: the
+  midpoint of the local head outline's longitudinal bounds, including enabled
+  stroke and all composite parts (not the shaft). They always use chord fit,
+  including ratio zero and one. Start and end instead locate the template
+  origin/contact and retain the requested endpoint fit, including bend.
+  The engine applies the direction-aware center offset and signed user shift
+  before clamping the origin inward to the visible carrier. A shift follows
+  carrier direction even for backward marks. Short carriers never rescale a
+  head; clamping may therefore prevent its painted center reaching the station.
+  Native and Typst callers use this same rule without caller-side centering.
   Candidate mode returns independent candidate geometry. In `"selected"` mode,
   paint the returned head-only `marks` plus one shared `shafts` entry per carrier,
   rather than repainting an independent shaft beneath each selected head.
+  The default `format: "native"` keeps the full native dictionaries unchanged.
+  `format: "cbor"` returns encoded bytes for a packed envelope: decode that
+  envelope once with `cbor(...)` to read indices, contacts, styles, and boxes.
+  Only path-valued fields (`path`, `outline`, `shaft`, `shaft-outline`, and
+  `footprint`) are independently encoded native-path CBOR byte strings.
+  Kurvst's path readers (`elements`, `points`, `segments`, `to-cetz-data`, and
+  `to-native`) accept these packets and decode only the path being consumed.
+  Bounds-only consumers need not materialize any coordinates. Neither format
+  changes fitting, candidate/selected semantics, or the number of batches.
+  The Rust/Wasm `mark_geometry_packed_bytes`/`mark_geometry_packed` companion
+  exports produce this packed envelope; `mark_geometry_bytes`/`mark_geometry`
+  retain the full native DTO. These are distinct representations, not aliases
+  or alternate geometry engines.
+  Each head path includes `outline-bounds`, and each mark includes
+  `footprint-bounds`: ordered conservative boxes with `left`, `right`, `bottom`,
+  and `top` coordinates, one per nonempty subpath. Moves start new regions;
+  endpoint and control coordinates contribute, including degenerate regions.
+  These are control hulls of the actual transformed geometry, not tight curve
+  extrema or transformed local rectangles. Region order and holes are retained.
+  Use head `outline-bounds` when shaft paint is absent, even if sizing thickness
+  is nonzero; otherwise use `footprint-bounds`. A separately filled or patterned
+  shaft still requires its own bounds. Selected footprints remain head-only.
   Paint becomes boolean enabled flags (`none` disables); auto is omitted so
   shared defaults apply. Actual paint remains in the original dictionary for
   the caller's drawing style, never in the numeric payload.
@@ -490,8 +523,13 @@
   `parallel` uses Kurbo's offset curve fitter to produce a path at a fixed
   normal distance from the source path. Positive distances follow the left normal
   of the path direction; negative distances follow the right normal.
+  Within each connected source subpath, differing fitted endpoints are joined
+  by straight bevel segments, including at sharp corners and the closing seam.
+  Fitted controls are not snapped; bevels need not stay at the fixed normal
+  distance. Explicit moves remain separate subpaths even when their coordinates
+  coincide. Closed subpaths retain closure unless trimming cuts them open.
   `start-outset` and `end-outset` trim the fitted path by arc length after the
-  offset is computed.
+  offset and bevels are computed, across all subpaths without counting move gaps.
 
   ```typ
   #let base = kurvst.from-cubic(segment)

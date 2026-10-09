@@ -1,5 +1,5 @@
 #import "../src/lib.typ": draw, graph, layouts, subgraph
-#import "@preview/cetz:0.5.1" as cetz
+#import "@preview/cetz:0.5.2" as cetz
 
 #set page(width: auto, height: auto)
 #set text(size: 5pt)

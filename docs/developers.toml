@@ -757,10 +757,10 @@ summary = "Possible changes that are deliberately kept separate from the impleme
 [[section.note]]
 id = "kurvst-arrowhead-engine"
 title = "Kurvst Arrowhead Engine"
-summary = "Accepted, unimplemented plan for shared native/Wasm mark geometry, batched footprints and hit areas, and migration to stock CeTZ."
+summary = "Shared native/Wasm marks, drawing-wide batching, and stock CeTZ 0.5.2 rendering; final performance and image acceptance pending."
 source = "docs/architecture/kurvst-arrowhead-engine.typ"
 kind = "Accepted design plan"
-status = "Accepted · P0 baseline captured; P1 implemented; P2–P7 not implemented"
+status = "Accepted · P0–P7 implemented; performance and image acceptance pending"
 lifecycle = "proposal"
 owner = "unassigned"
 reviewed_at = "2026-10-04"

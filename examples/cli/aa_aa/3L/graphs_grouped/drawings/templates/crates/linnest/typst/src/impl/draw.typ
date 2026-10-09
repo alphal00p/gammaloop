@@ -1,9 +1,12 @@
 // Internal drawing implementation. Public users should import `draw.typ`.
 
-#import "@preview/cetz:0.5.1" as cetz
+#import "@preview/cetz:0.5.2" as cetz
 #import "../curve.typ" as curve-api
 #import "../graph.typ" as graph-api
 #import "../subgraph.typ" as subgraph-api
+#import "identity-targets.typ" as identity-targets
+
+#let _plugin = plugin("../../linnest.wasm")
 
 #let _style-key = "linnest-style"
 
@@ -14,6 +17,7 @@
 #let _point-sub(a, b) = (_point-x(a) - _point-x(b), _point-y(a) - _point-y(b))
 #let _point-scale(p, factor) = (_point-x(p) * factor, _point-y(p) * factor)
 #let _point-lerp(a, b, t) = _point-add(a, _point-scale(_point-sub(b, a), t))
+#let _canvas-point(transform, point) = _point(cetz.matrix.mul4x4-vec3(transform, point))
 #let _point-length(p) = calc.sqrt(
   _point-x(p) * _point-x(p) + _point-y(p) * _point-y(p),
 )
@@ -24,6 +28,41 @@
   } else {
     endpoint.at("route-points", default: ()).map(_point)
   }
+}
+
+// Preserve the caller's span indexes while removing solver-collapsed knots
+// from the Hobby solve. Empty spans keep the half-edge split at its anchor.
+#let _routed-split-through(points, omega: 1.0, accuracy: 0.001) = {
+  let knots = ()
+  let indexes = ()
+  for point in points.map(_point) {
+    if knots.len() == 0 or _point-distance(knots.last(), point) > 2.220446049250313e-16 {
+      knots.push(point)
+    }
+    indexes.push(knots.len() - 1)
+  }
+  let split = if knots.len() < 2 {
+    (curve: curve-api.path(), parts: ())
+  } else {
+    curve-api.split-through(knots, omega: omega, accuracy: accuracy)
+  }
+  (
+    curve: split.curve,
+    parts: range(calc.max(0, points.len() - 1)).map(i => {
+      if indexes.at(i) == indexes.at(i + 1) { curve-api.path() }
+      else { split.parts.at(indexes.at(i)) }
+    }),
+  )
+}
+
+#let _trim-routed-path(path, start-outset: 0, end-outset: 0, accuracy: 0.001) = {
+  if curve-api.elements(path).len() == 0 or (start-outset == 0 and end-outset == 0) {
+    return path
+  }
+  if start-outset + end-outset >= curve-api.length(path, accuracy: accuracy) {
+    return curve-api.path()
+  }
+  curve-api.trim(path, start-outset: start-outset, end-outset: end-outset, accuracy: accuracy)
 }
 
 #let _statement-number(record, key, default: none) = {
@@ -54,48 +93,22 @@
 }
 
 #let _identity-target(pos, href, width: 8pt, height: 8pt) = {
-  cetz.draw.floating(cetz.draw.content(
-    _point(pos),
-    link(href, box(width: width, height: height)),
-    padding: 0,
-  ))
+  ((position: _point(pos), body: link(href, box(width: width, height: height))),)
+}
+
+#let _draw-identity-targets(ctx, targets) = {
+  identity-targets.draw(ctx, targets)
 }
 
 #let _edge-identity-targets(ctx, parts, hrefs) = {
   let targets = ()
-  let lengths = parts.map(part => curve-api.length(
-    curve-api.path(..part.segments.map(curve-api.from-cubic)),
-  ))
-  let total = lengths.sum()
-  let offset = 0
-  for (part, length) in parts.zip(lengths) {
-    if part.visible and length > 0 {
-      let path = curve-api.path(..part.segments.map(curve-api.from-cubic))
-      // Pick the endpoint half-edges in the outer quarters of arc length.
-      // Keep the two central quarters separately tagged for half-edge highlighting.
-      for quarter in range(4) {
-        let start = calc.max(0, total * quarter / 4 - offset)
-        let end = calc.min(length, total * (quarter + 1) / 4 - offset)
-        if start >= end { continue }
-        let region = curve-api.trim(path, start-outset: start, end-outset: length - end)
-        for segment in curve-api.segments(region) {
-          // The maximum control-polygon step bounds the cubic's derivative, so
-          // adjacent targets overlap even on highly nonuniform curves.
-          let speed = 3 * calc.max(
-            _point-distance(segment.start, segment.control-start),
-            _point-distance(segment.control-start, segment.control-end),
-            _point-distance(segment.control-end, segment.end),
-          )
-          let steps = calc.max(1, int(calc.ceil(speed * ctx.length / 4pt)))
-          for step in range(steps + 1) {
-            targets += _identity-target(
-              curve-api.cubic-point(segment, step / steps), hrefs.at(quarter),
-            )
-          }
-        }
-      }
-    }
-    offset += length
+  // Preserve arc-length quarters and the control-polygon sampling bound while
+  // batching path construction, trimming and de Casteljau evaluation.
+  for (region, points) in curve-api.region-samples(
+    parts, regions: 4, unit: ctx.length / 1pt, step: 4,
+  ) {
+    let body = link(hrefs.at(region), box(width: 8pt, height: 8pt))
+    targets += points.map(point => (position: point, body: body))
   }
   targets
 }
@@ -124,7 +137,6 @@
   resolve-length: "min",
   shift: 0,
   accuracy: 0.001,
-  optimize: true,
   offset-side: none,
   split-gap: 0,
 )
@@ -139,6 +151,8 @@
   label: none,
   label-style: (:),
   label-shift: 0,
+  label-slide: true,
+  label-path: none,
   label-gap: 0.15,
   label-side: auto,
 )
@@ -148,7 +162,7 @@
   sink-anchor: auto,
   anchor-control-distance: auto,
   route: "edge-pos",
-  route-points: "ignore",
+  route-points: "through",
   dangling-tangent: auto,
 )
 
@@ -163,16 +177,22 @@
   pattern: none,
   pattern-amplitude: 0.1,
   pattern-wavelength: 1.0,
+  pattern-fit: false,
   pattern-phase: 0,
   pattern-samples-per-period: 16,
   pattern-coil-longitudinal-scale: 1.25,
+  pattern-endpoint-slope: 0,
+  pattern-natural-endpoints: false,
   pattern-accuracy: 0.001,
 )
+
+#let _style-defaults = (_mark-defaults + _pattern-defaults + _edge-label-defaults
+  + _edge-routing-defaults + _edge-crossing-defaults + _edge-geometry-defaults)
 
 #let _without-keys(style, keys) = {
   let clean = style
   for key in keys {
-    if clean.keys().contains(key) {
+    if key in clean {
       let _ = clean.remove(key)
     }
   }
@@ -184,14 +204,7 @@
   _pattern-defaults.keys(),
 )
 
-#let _draw-style(style) = {
-  let clean = _without-pattern-style(style)
-  clean = _without-keys(clean, _edge-geometry-defaults.keys())
-  clean = _without-keys(clean, _edge-crossing-defaults.keys())
-  clean = _without-keys(clean, _edge-routing-defaults.keys())
-  clean = _without-keys(clean, _edge-label-defaults.keys())
-  _without-keys(clean, _mark-defaults.keys())
-}
+#let _draw-style(style) = _without-keys(style, _style-defaults.keys())
 
 #let _without-mark-style(style) = {
   let clean = style
@@ -201,53 +214,7 @@
   clean
 }
 
-#let _start-mark-entry(entry) = if type(entry) == dictionary {
-  entry
-} else {
-  (symbol: entry)
-}
-
-#let _backward-mark(mark) = if mark == none {
-  none
-} else if type(mark) == dictionary {
-  let clean = mark
-  let entry = none
-  if clean.keys().contains("end") {
-    entry = clean.end
-    let _ = clean.remove("end")
-  } else if clean.keys().contains("symbol") {
-    entry = clean.symbol
-    let _ = clean.remove("symbol")
-  } else if clean.keys().contains("start") {
-    entry = clean.start
-    let _ = clean.remove("start")
-  }
-  if entry == none {
-    mark
-  } else {
-    clean + (start: _start-mark-entry(entry))
-  }
-} else {
-  (start: _start-mark-entry(mark))
-}
-
-#let _style-value(style, key) = {
-  if _edge-geometry-defaults.keys().contains(key) {
-    style.at(key, default: _edge-geometry-defaults.at(key))
-  } else if _edge-crossing-defaults.keys().contains(key) {
-    style.at(key, default: _edge-crossing-defaults.at(key))
-  } else if _edge-routing-defaults.keys().contains(key) {
-    style.at(key, default: _edge-routing-defaults.at(key))
-  } else if _edge-label-defaults.keys().contains(key) {
-    style.at(key, default: _edge-label-defaults.at(key))
-  } else if _pattern-defaults.keys().contains(key) {
-    style.at(key, default: _pattern-defaults.at(key))
-  } else if _mark-defaults.keys().contains(key) {
-    style.at(key, default: _mark-defaults.at(key))
-  } else {
-    style.at(key, default: none)
-  }
-}
+#let _style-value(style, key) = style.at(key, default: _style-defaults.at(key, default: none))
 
 #let _edge-geometry(style) = _edge-geometry-defaults + style
 
@@ -501,7 +468,6 @@
       (
         style
           + (
-            mark: _backward-mark(style.mark),
             mark-direction: "backward",
           )
       )
@@ -540,11 +506,6 @@
   )
   same = (
     same
-      and _style-value(source-style, "optimize")
-        == _style-value(sink-style, "optimize")
-  )
-  same = (
-    same
       and _style-value(source-style, "offset-side")
         == _style-value(sink-style, "offset-side")
   )
@@ -572,6 +533,11 @@
   )
   same = (
     same
+      and _style-value(source-style, "pattern-fit")
+        == _style-value(sink-style, "pattern-fit")
+  )
+  same = (
+    same
       and _style-value(source-style, "pattern-phase")
         == _style-value(sink-style, "pattern-phase")
   )
@@ -584,6 +550,16 @@
     same
       and _style-value(source-style, "pattern-coil-longitudinal-scale")
         == _style-value(sink-style, "pattern-coil-longitudinal-scale")
+  )
+  same = (
+    same
+      and _style-value(source-style, "pattern-endpoint-slope")
+        == _style-value(sink-style, "pattern-endpoint-slope")
+  )
+  same = (
+    same
+      and _style-value(source-style, "pattern-natural-endpoints")
+        == _style-value(sink-style, "pattern-natural-endpoints")
   )
   same = (
     same
@@ -715,6 +691,7 @@
   label-pos,
   center-outset,
 ) = {
+  if curve-api.elements(path).len() == 0 { return path }
   let geometry = _edge-geometry(style)
   let side-point = if geometry.offset-side == "label" { label-pos } else {
     none
@@ -740,7 +717,6 @@
     end-outset: end-outset,
     side-point: if side-point == none { none } else { _point(side-point) },
     accuracy: geometry.accuracy,
-    optimize: geometry.optimize,
   )
 }
 
@@ -843,11 +819,8 @@
   calc.max(0.45, calc.min(4.0, 0.18 * dx + 0.3 * dy))
 }
 
-#let _anchor-control-distance(source-style, sink-style, start, route, end) = {
-  let value = _style-value(source-style, "anchor-control-distance")
-  if value == auto {
-    value = _style-value(sink-style, "anchor-control-distance")
-  }
+#let _anchor-control-distance(style, start, route, end) = {
+  let value = _style-value(style, "anchor-control-distance")
   if value == auto {
     _auto-anchor-control-distance(start, route, end)
   } else {
@@ -891,22 +864,24 @@
   route,
   sink-anchor,
   end,
-  amount,
+  source-amount,
+  sink-amount,
 ) = {
   let source-guide = _anchor-control-guide(
     source-anchor,
     start,
     _point-lerp(start, route, 1 / 3),
-    amount,
+    source-amount,
   )
   let sink-guide = _anchor-control-guide(
     sink-anchor,
     end,
     _point-lerp(end, route, 1 / 3),
-    amount,
+    sink-amount,
   )
   let route-direction = _point-sub(end, start)
   let route-direction-length = _point-length(route-direction)
+  // Share a middle handle to keep the two halves tangent-continuous.
   let route-handle = if route-direction-length == 0 {
     (0, 0)
   } else {
@@ -915,7 +890,7 @@
     )
     _point-scale(
       route-direction,
-      calc.min(amount, max-handle) / route-direction-length,
+      calc.min(source-amount, sink-amount, max-handle) / route-direction-length,
     )
   }
   let source-route-guide = _point-sub(route, route-handle)
@@ -948,7 +923,29 @@
   sink-outset,
   label-pos,
   accuracy,
+  pattern-curve: none,
 ) = {
+  let shared = _same-layer-geometry(source-style, sink-style)
+  let whole-path = if shared {
+    _path-layer(
+      if pattern-curve == none { curve } else { pattern-curve },
+      source-style,
+      source-outset,
+      sink-outset,
+      label-pos,
+      auto,
+    )
+  } else { none }
+  if (
+    shared
+      and _style-value(source-style, "offset-side") == "label"
+      and curve-api.elements(whole-path).len() > 0
+  ) {
+    // The label chooses one side of the full carrier, including both paint halves.
+    let resolved = (offset: whole-path.offset, offset-side: none)
+    source-style += resolved
+    sink-style += resolved
+  }
   let geometries = ()
   let split-gap = 0
   for (index, style) in (source-style, sink-style).enumerate() {
@@ -962,7 +959,10 @@
       label-pos,
       auto,
     ))
-    let lengths = paths.map(path => curve-api.length(path, accuracy: accuracy))
+    let lengths = ()
+    for path in paths {
+      lengths.push(curve-api.length(path, accuracy: accuracy))
+    }
     let half-length = lengths.at(index)
     let split-outset = calc.min(
       half-length,
@@ -989,25 +989,15 @@
       label-pos,
     ))
   }
-  let whole-geometry = if (
-    _same-layer-geometry(source-style, sink-style) and split-gap == 0
-  ) {
-    _geometry-path-segments(
-      curve,
-      source-style,
-      source-outset,
-      sink-outset,
-      label-pos,
-      auto,
-    )
-  } else {
+  let whole-geometry = if shared { curve-api.segments(whole-path) } else {
     none
   }
   (
     source: geometries.first(),
     sink: geometries.last(),
     curve: curve,
-    whole: whole-geometry,
+    whole: if split-gap == 0 { whole-geometry } else { none },
+    pattern-whole: whole-geometry,
     split-gap: split-gap,
   )
 }
@@ -1056,25 +1046,25 @@
       accuracy,
     )
   }
+  let source-amount = _anchor-control-distance(source-style, start, route, end)
+  let sink-amount = _anchor-control-distance(sink-style, start, route, end)
   if (
     route-mode != "direct"
       and route-points-mode == "through"
       and (source-route.len() > 0 or sink-route.len() > 0)
   ) {
-    let amount = _anchor-control-distance(
-      source-style,
-      sink-style,
-      start,
-      route,
-      end,
-    )
     let source-amount = _route-aware-anchor-amount(
       start,
-      amount,
+      source-amount,
       source-route,
       route,
     )
-    let sink-amount = _route-aware-anchor-amount(end, amount, sink-route, route)
+    let sink-amount = _route-aware-anchor-amount(
+      end,
+      sink-amount,
+      sink-route,
+      route,
+    )
     let source-guide = _anchor-control-guide(
       source-anchor,
       start,
@@ -1089,7 +1079,7 @@
     )
     let source-points = (start, source-guide, ..source-route, route)
     let sink-points = (..sink-route.rev(), sink-guide, end)
-    let split = curve-api.split-through(
+    let split = _routed-split-through(
       (..source-points, ..sink-points),
       omega: omega,
       accuracy: accuracy,
@@ -1110,20 +1100,14 @@
     )
   }
   if route-mode in ("direct", "edge-pos") {
-    let amount = _anchor-control-distance(
-      source-style,
-      sink-style,
-      start,
-      route,
-      end,
-    )
     let split = _anchored-cubic-route-split(
       start,
       source-anchor,
       route,
       sink-anchor,
       end,
-      amount,
+      source-amount,
+      sink-amount,
     )
     return _split-edge-geometry(
       split.source,
@@ -1137,24 +1121,17 @@
       accuracy,
     )
   } else if route-mode == "hobby-through" {
-    let amount = _anchor-control-distance(
-      source-style,
-      sink-style,
-      start,
-      route,
-      end,
-    )
     let source-guide = _anchor-control-guide(
       source-anchor,
       start,
       _point-lerp(start, route, 1 / 3),
-      amount,
+      source-amount,
     )
     let sink-guide = _anchor-control-guide(
       sink-anchor,
       end,
       _point-lerp(end, route, 1 / 3),
-      amount,
+      sink-amount,
     )
     let split = curve-api.split-through(
       (start, source-guide, route, sink-guide, end),
@@ -1175,20 +1152,13 @@
       accuracy,
     )
   }
-  let amount = _anchor-control-distance(
-    source-style,
-    sink-style,
-    start,
-    route,
-    end,
-  )
   let source-path = curve-api.hobby-spline(
-    _anchor-points(start, source-anchor, route, amount),
+    _anchor-points(start, source-anchor, route, source-amount),
     omega: omega,
     accuracy: accuracy,
   )
   let sink-path = curve-api.hobby-spline(
-    _anchor-points(end, sink-anchor, route, amount, reverse: true),
+    _anchor-points(end, sink-anchor, route, sink-amount, reverse: true),
     omega: omega,
     accuracy: accuracy,
   )
@@ -1206,6 +1176,7 @@
     sink-end-outset,
     label-pos,
     accuracy,
+    pattern-curve: curve-api.path(source-path, sink-path),
   )
   // The fallback halves contain anchor guides that are absent from `curve`.
   halves.whole = none
@@ -1221,21 +1192,44 @@
     panic("edge-halves currently requires a paired edge with source and sink")
   }
 
+  let carrier = _data-fields(edge).at("layout-carrier", default: none)
+  let source-route = _route-points(edge.source)
+  let sink-route = _route-points(edge.sink)
   let points = (
     _point(nodes.at(edge.source.node).pos),
+    ..source-route,
     _point(edge.pos),
+    ..sink-route.rev(),
     _point(nodes.at(edge.sink.node).pos),
   )
-  let split = curve-api.split-through(
-    points,
-    omega: omega,
-    start-outset: source-outset,
-    end-outset: sink-outset,
-    accuracy: accuracy,
-  )
+  let routed = carrier != none or source-route.len() > 0 or sink-route.len() > 0
+  let split = if carrier != none {
+    _routed-split-through(carrier, omega: omega, accuracy: accuracy)
+  } else if routed {
+    _routed-split-through(points, omega: omega, accuracy: accuracy)
+  } else {
+    curve-api.split-through(points,
+      omega: omega, start-outset: source-outset,
+      end-outset: sink-outset, accuracy: accuracy,
+    )
+  }
   let split-outset = calc.max(0, options.at("split-gap", default: 0)) / 2
-  let source = split.parts.at(0)
-  let sink = split.parts.at(1)
+  let boundary = source-route.len() + 1
+  let half-length = if carrier == none { 0 } else {
+    curve-api.length(split.curve, accuracy: accuracy) / 2
+  }
+  let source = if carrier != none {
+    curve-api.trim(split.curve, end-outset: half-length, accuracy: accuracy)
+  } else if source-route.len() == 0 { split.parts.at(0) }
+    else { curve-api.path(..split.parts.slice(0, boundary)) }
+  let sink = if carrier != none {
+    curve-api.trim(split.curve, start-outset: half-length, accuracy: accuracy)
+  } else if sink-route.len() == 0 { split.parts.at(boundary) }
+    else { curve-api.path(..split.parts.slice(boundary)) }
+  if routed {
+    source = _trim-routed-path(source, start-outset: source-outset, accuracy: accuracy)
+    sink = _trim-routed-path(sink, end-outset: sink-outset, accuracy: accuracy)
+  }
   let source-split-outset = 0
   let sink-split-outset = 0
   if split-outset > 0 {
@@ -1330,7 +1324,17 @@
       accuracy,
     )
   }
-  let base = edge-halves(edge, nodes, (
+  let routed-edge = if (
+    _style-value(source-style, "route-points") == "ignore"
+      and _style-value(sink-style, "route-points") == "ignore"
+  ) {
+    edge + (
+      data: _data-fields(edge) + (layout-carrier: none),
+      source: edge.source + (route-points: ()),
+      sink: edge.sink + (route-points: ()),
+    )
+  } else { edge }
+  let base = edge-halves(routed-edge, nodes, (
     omega: omega,
     source-outset: 0,
     sink-outset: 0,
@@ -1350,73 +1354,143 @@
   )
 }
 
-#let _pattern(segment, style, phase, anchor-start, anchor-end) = {
+
+// Pending marks are data, never CeTZ mark callbacks. The drawing owner resolves
+// all contexts and templates before making its two bounded engine requests.
+#let _mark-carrier-input(path, style, phase: auto, anchor-start: true, anchor-end: true) = {
+  let _ = curve-api.mark.prepare(style.mark)
+  (
+    kind: "linnest-mark-carrier", path: path, style: _positioned-mark-style(style),
+    phase: phase, anchor-start: anchor-start, anchor-end: anchor-end,
+  )
+}
+
+#let _pending-mark(element) = (
+  type(element) == dictionary
+    and element.at("kind", default: none) == "linnest-mark-carrier"
+)
+
+#let _mark-carrier-elements(path, style) = {
+  if style == none or not _has-mark(style) { return () }
+  (_mark-carrier-input(path, style),)
+}
+
+#let _segments-path(segments) = {
+  curve-api.path(..segments.map(curve-api.from-cubic))
+}
+
+#let _pattern-path(
+  path,
+  style,
+  phase: auto,
+  anchor-start: true,
+  anchor-end: true,
+  split-at: (),
+) = {
   let pattern-style = _pattern-style(style)
-  curve-api.pattern(
-    curve-api.from-cubic(segment),
-    pattern: pattern-style.pattern,
+  let length = curve-api.length(path, accuracy: pattern-style.pattern-accuracy)
+  let pattern = pattern-style.pattern
+  let wavelength = pattern-style.pattern-wavelength
+  let samples = pattern-style.pattern-samples-per-period
+  let phase = if phase == auto { pattern-style.pattern-phase } else { phase }
+  assert(wavelength > 0, message: "pattern-wavelength must be positive")
+  // Fit the physical endpoints before dividing the decorated path for painting.
+  let natural = (
+    pattern-style.pattern-natural-endpoints and anchor-start and anchor-end
+  )
+  if natural and length > 0 {
+    assert(
+      type(pattern) == str and pattern.trim() in ("coil", "helix", "spring"),
+      message: "pattern-natural-endpoints requires a built-in coil",
+    )
+    pattern = (
+      kind: "fitted-coil",
+      fit-length: length,
+      amplitude: pattern-style.pattern-amplitude,
+      wavelength: wavelength,
+      samples-per-period: calc.max(1, samples),
+      longitudinal-scale: pattern-style.pattern-coil-longitudinal-scale,
+    )
+    wavelength = length
+    samples = calc.max(1, samples)
+    phase = 0
+  } else if (
+    pattern-style.pattern-fit and anchor-start and anchor-end and length > 0
+  ) {
+    wavelength = length / calc.max(1, calc.round(length / wavelength))
+  }
+  let patterned = curve-api.pattern(
+    path,
+    pattern: pattern,
     amplitude: pattern-style.pattern-amplitude,
-    wavelength: pattern-style.pattern-wavelength,
-    phase: if phase == auto { pattern-style.pattern-phase } else { phase },
-    samples-per-period: pattern-style.pattern-samples-per-period,
+    wavelength: wavelength,
+    phase: phase,
+    samples-per-period: samples,
     coil-longitudinal-scale: pattern-style.pattern-coil-longitudinal-scale,
     anchor-start: anchor-start,
     anchor-end: anchor-end,
+    endpoint-slope: pattern-style.pattern-endpoint-slope,
     accuracy: pattern-style.pattern-accuracy,
+    split-at: split-at,
   )
-}
-
-#let _bezier-element(segment, style) = {
-  if _has-mark(style) {
-    return _mark-carrier-elements(
-      curve-api.from-cubic(segment),
-      style,
-      paint: true,
-    ).flatten()
-  }
-  cetz.draw.bezier(
-    _point(segment.start),
-    _point(segment.end),
-    _point(segment.control-start),
-    _point(segment.control-end),
-    .._draw-style(style),
-  )
+  patterned
 }
 
 #let _segments-elements(segments, style, phase, anchor-start, anchor-end) = {
-  if _style-value(style, "label-only") { return (elements: (), length: 0) }
+  if _style-value(style, "label-only") { return () }
   if _has-mark(style) {
-    return _derived-path-elements(
-      _segments-path(segments),
-      style,
-      phase,
-      anchor-start,
-      anchor-end,
-    )
+    let path = _segments-path(segments)
+    return (_mark-carrier-input(path, style, phase: phase,
+      anchor-start: anchor-start, anchor-end: anchor-end),)
   }
   let elements = ()
-  let length = 0
   if _has-pattern(style) {
-    let current-phase = if phase == auto {
-      _style-value(style, "pattern-phase")
-    } else { phase }
-    let wavelength = _style-value(style, "pattern-wavelength")
-    for (index, segment) in segments.enumerate() {
-      let piece = _pattern(
-        segment,
-        style,
-        current-phase,
-        anchor-start and index == 0,
-        anchor-end and index == segments.len() - 1,
+    let pattern-style = _pattern-style(style)
+    let path = _segments-path(segments)
+    let length = curve-api.length(path, accuracy: pattern-style.pattern-accuracy)
+    let pattern = pattern-style.pattern
+    let wavelength = pattern-style.pattern-wavelength
+    let samples = pattern-style.pattern-samples-per-period
+    let phase = if phase == auto { pattern-style.pattern-phase } else { phase }
+    assert(wavelength > 0, message: "pattern-wavelength must be positive")
+    // Fit only complete edges; split styles and crossing gaps retain phase continuity.
+    let natural = pattern-style.pattern-natural-endpoints and anchor-start and anchor-end
+    if natural and length > 0 {
+      assert(
+        type(pattern) == str and pattern.trim() in ("coil", "helix", "spring"),
+        message: "pattern-natural-endpoints requires a built-in coil",
       )
-      elements.push(curve-api.to-cetz(piece, .._draw-style(style)))
-      let piece-length = _segment-length(segment, _style-value(
-        style,
-        "pattern-accuracy",
-      ))
-      length = length + piece-length
-      current-phase = current-phase + 2 * calc.pi * piece-length / wavelength
+      pattern = (
+        kind: "fitted-coil",
+        fit-length: length,
+        amplitude: pattern-style.pattern-amplitude,
+        wavelength: wavelength,
+        samples-per-period: calc.max(1, samples),
+        longitudinal-scale: pattern-style.pattern-coil-longitudinal-scale,
+      )
+      wavelength = length
+      samples = calc.max(1, samples)
+      phase = 0
+    } else if pattern-style.pattern-fit and anchor-start and anchor-end and length > 0 {
+      wavelength = length / calc.max(1, calc.round(length / wavelength))
     }
+    let draw-style = _draw-style(style)
+    let unit = draw-style.remove("unit", default: 1)
+    let patterned = curve-api.pattern-to-cetz(
+      path,
+      pattern: pattern,
+      amplitude: pattern-style.pattern-amplitude,
+      wavelength: wavelength,
+      phase: phase,
+      samples-per-period: samples,
+      coil-longitudinal-scale: pattern-style.pattern-coil-longitudinal-scale,
+      anchor-start: anchor-start,
+      anchor-end: anchor-end,
+      endpoint-slope: pattern-style.pattern-endpoint-slope,
+      accuracy: pattern-style.pattern-accuracy,
+      unit: unit, style: draw-style,
+    )
+    elements.push(patterned)
   } else {
     for segment in segments {
       elements.push(curve-api.to-cetz(
@@ -1425,292 +1499,479 @@
       ))
     }
   }
-  (elements: elements, length: length)
+  elements
 }
 
-#let _segments-path(segments) = {
-  curve-api.path(..segments.map(curve-api.from-cubic))
+// Windows are distances on the carrier, not on the longer decorated curve.
+#let _path-window-elements(path, style, windows) = {
+  let windows = windows.filter(window => window.end > window.start)
+  if windows.len() == 0 { return () }
+  let parts = if _has-pattern(style) {
+    let boundaries = windows.map(window => (window.start, window.end)).flatten()
+    _pattern-path(path, style, split-at: boundaries).parts
+  } else { () }
+  let total = curve-api.length(path, accuracy: _style-value(style, "accuracy"))
+  let elements = ()
+  for (index, window) in windows.enumerate() {
+    if not _style-value(window.style, "label-only") {
+      let piece = if _has-pattern(style) { parts.at(2 * index + 1) } else {
+        curve-api.trim(
+          path,
+          start-outset: window.start,
+          end-outset: total - window.end,
+          accuracy: _style-value(style, "accuracy"),
+        )
+      }
+      elements.push(curve-api.to-cetz(piece, .._draw-style(_without-mark-style(
+        window.style,
+      ))))
+    }
+  }
+  elements
 }
 
-#let _mark-carrier-elements(path, style, paint: false) = {
-  if style == none or not _has-mark(style) { return () }
-  let segments = curve-api.segments(path)
-  if segments.len() == 0 { return () }
-  let style = _positioned-mark-style(style)
-  let plain-style = _draw-style(style) + (mark: none)
-  let element = if segments.len() == 1 {
-    _bezier-element(segments.first(), plain-style)
-  } else { curve-api.to-cetz(path, ..plain-style) }
-  (
-    (
-      ctx => {
-        let resolved = cetz.styles.resolve(
-          ctx.style,
-          merge: _draw-style(style),
-          root: "bezier",
-        )
-        if ctx.at("_perspective-projection", default: false) {
-          resolved.mark.transform-shape = true
-        }
-        let transform = ctx.transform
-        let plain = element.first()(ctx + (transform: cetz.matrix.ident(4)))
-        let carrier = plain.drawables.first()
-        // Match CeTZ's coordinate space so physical mark sizes survive canvas transforms.
-        let flat = not resolved.mark.transform-shape
-        if flat {
-          carrier = cetz
-            .drawable
-            .apply-transform(
-              cetz.matrix.mul-mat(
-                cetz.matrix.transform-scale((1, 1, 0)),
-                transform,
-              ),
-              carrier,
-            )
-            .first()
-        }
-        let total = cetz.path-util.length(carrier.segments)
-        let ratio = _mark-ratio(style)
-        let mark-ctx = ctx + (resolve-coordinate: ())
-        let marks = ()
-        let cuts = (none, none)
-        if total > 0 {
-          for (side, root) in ("start", "end").enumerate() {
-            let at = if ratio == none { 0 } else {
-              if side == 0 {
-                ratio * total + _style-value(style, "mark-shift")
-              } else {
-                (1 - ratio) * total - _style-value(style, "mark-shift")
-              }
-            }
-            for (index, entry) in cetz
-              .mark
-              .process-style(mark-ctx, resolved.mark, root, total)
-              .enumerate() {
-              if entry.symbol == none { continue }
-              if entry.pos != none { at = entry.pos }
-              at += entry.offset
-              let (shape, defaults) = cetz.mark-shapes.get-mark(
-                mark-ctx,
-                entry.symbol,
-              )
-              for flag in ("reverse", "flip", "harpoon") {
-                entry.at(flag) = (
-                  entry.at(flag) != defaults.at(flag, default: false)
-                )
-              }
-              entry.mark = none
-              let mark = cetz.mark._eval-mark-shape-and-anchors(
-                mark-ctx,
-                shape(entry),
-                entry,
-              )
-              let symbol = ctx.marks.mnemonics.at(
-                entry.symbol,
-                default: entry.symbol,
-              )
-              let builtin = symbol not in ctx.marks.marks
-              if builtin {
-                symbol = cetz
-                  .mark-shapes
-                  .mnemonics
-                  .at(symbol, default: (symbol, (:)))
-                  .first()
-              }
-              // Triangle/straight stroke anchors are not their geometric tip/back;
-              // in particular, straight's declared base is beside its tip.
-              if builtin and symbol in ("triangle", "straight") {
-                mark.tip = (0, 0, 0)
-                mark.base = (entry.length, 0, 0)
-                mark.center = cetz.vector.lerp(mark.tip, mark.base, 0.5)
-                mark.reverse-tip = mark.base
-                mark.reverse-base = mark.tip
-                mark.reverse-center = mark.center
-              }
-              // Let CeTZ resolve reversal, slant and anchors on a straight reference,
-              // then map both contacts to a chord of the full, unpatterned carrier.
-              let reference = cetz.drawable.line-strip((mark.tip, mark.base))
-              // Keep the contact pair even for a zero-length mark.
-              reference.segments = ((mark.tip, false, (("l", mark.base),)),)
-              mark.drawables.push(reference)
-              mark = cetz.mark.transform-mark(
-                entry,
-                mark,
-                (0, 0, 0),
-                (1, 0, 0),
-                reverse: entry.reverse,
-                slant: entry.slant,
-                flip: entry.flip,
-                harpoon: entry.harpoon,
-              )
-              let reference = mark.drawables.pop().segments.first()
-              let tip = reference.first()
-              let back = reference.last().last().last()
-              let axis = cetz.vector.sub(back, tip)
-              let length = cetz.vector.len(axis)
-              let compression = if length == 0 { 1 } else {
-                calc.min(1, total / length)
-              }
-              let direction = if axis.first() < 0 { -1 } else { 1 }
-              let stations = (tip, back).map(p => (
-                at
-                  + if length == 0 { 0 } else {
-                    cetz.vector.dot(p, axis) / length * direction * compression
-                  }
-              ))
-              let low = calc.min(..stations)
-              let span = calc.abs(stations.last() - stations.first())
-              let inward = calc.clamp(low, 0, calc.max(0, total - span)) - low
-              stations = stations.map(s => calc.clamp(s + inward, 0, total))
-              // Repeated controls need no special direction: only the two sampled points matter.
-              let contacts = stations.map(s => cetz.path-util.point-at(
-                carrier.segments,
-                if side == 1 { total - s } else { s },
-              ))
-              let chord = cetz.vector.sub(
-                contacts.last().point,
-                contacts.first().point,
-              )
-              let angle = if cetz.vector.len(chord) == 0 { 0deg } else {
-                calc.atan2(..chord.slice(0, 2))
-              }
-              let reference-angle = if length == 0 { 0deg } else {
-                calc.atan2(..axis.slice(0, 2))
-              }
-              let alignment = cetz.matrix.mul-mat(
-                cetz.matrix.transform-translate(..contacts.first().point),
-                cetz.matrix.transform-rotate-z(angle),
-                cetz.matrix.transform-scale((
-                  if length == 0 { 1 } else { cetz.vector.len(chord) / length },
-                  1,
-                  1,
-                )),
-                cetz.matrix.transform-rotate-z(-reference-angle),
-                cetz.matrix.transform-translate(..cetz.vector.scale(tip, -1)),
-              )
-              marks += cetz.drawable.apply-transform(alignment, mark.drawables)
-              // An interior mark overlays the propagator; shortening would leave a gap.
-              if (
-                ratio == none
-                  and entry.shorten-to != none
-                  and (entry.shorten-to == auto or index <= entry.shorten-to)
-              ) {
-                let contact = if builtin and symbol == "straight" { 0 } else {
-                  if stations.first() > stations.last() { 0 } else { 1 }
-                }
-                cuts.at(side) = contacts.at(contact)
-              }
-              at += length + entry.sep
-            }
-          }
-        }
-        let painted = carrier
-        // Split at the very same sampled parameters, keeping the shaft on its curve.
-        // CeTZ 0.5.1 shorten-to uses different cubic samples; snap-to cannot fix
-        // both contacts without changing the subcurve. The carrier is one joined path.
-        if paint and cuts != (none, none) {
-          let (origin, closed, commands) = carrier.segments.first()
-          let bezier = cetz.path-util.bezier
-          let bounds = cuts
-            .enumerate()
-            .map(((side, cut)) => {
-              if cut == none { return side * commands.len() }
-              let (kind, ..args) = commands.at(cut.segment-index)
-              let t = if kind == "l" {
-                cut.distance / cetz.vector.dist(cut.previous-point, args.last())
-              } else {
-                bezier.cubic-t-for-distance(
-                  cut.previous-point,
-                  args.last(),
-                  ..args.slice(0, 2),
-                  cut.distance,
-                  samples: cetz.path-util.number-of-samples(auto),
-                )
-              }
-              cut.segment-index + calc.clamp(t, 0, 1)
-            })
-          painted.segments = ()
-          if bounds.first() < bounds.last() {
-            let first = calc.floor(bounds.first())
-            let last = calc.ceil(bounds.last()) - 1
-            if first > 0 { origin = commands.at(first - 1).last() }
-            commands = commands.slice(first, last + 1)
-            let end = bounds.last() - last
-            // Both ends may be trimmed within this cubic; rescale the second split.
-            let start = (
-              (bounds.first() - first) / if first == last { end } else { 1 }
-            )
-            for (side, t) in (end, start).enumerate() {
-              let index = if side == 0 { commands.len() - 1 } else { 0 }
-              let previous = if index == 0 { origin } else {
-                commands.at(index - 1).last()
-              }
-              let (kind, ..args) = commands.at(index)
-              if kind == "c" {
-                let (s, e, c1, c2) = bezier
-                  .split(previous, args.last(), ..args.slice(0, 2), t)
-                  .at(side)
-                if side == 1 { origin = s }
-                args = (c1, c2, e)
-              } else if side == 0 {
-                args = (cetz.vector.lerp(previous, args.last(), t),)
-              } else { origin = cetz.vector.lerp(previous, args.last(), t) }
-              commands.at(index) = (kind, ..args)
-            }
-            painted.segments = ((origin, closed, commands),)
-          }
-        }
-        if not paint {
-          painted.stroke = none
-          painted.fill = none
-        }
-        let drawables = (
-          (painted,) + cetz.drawable.apply-tags(marks, cetz.drawable.TAG.mark)
-        )
-        if not flat {
-          drawables = cetz.drawable.apply-transform(transform, drawables)
-        }
-        (
-          ..plain,
-          ctx: plain.ctx + (transform: transform),
-          anchors: plain.anchors.with(transform: transform),
-          drawables: drawables,
-        )
+// Discontinuous visible windows are separate engine carriers. Resolve stations
+// over their visible arc lengths, then fit only the owning carrier. Hidden gaps
+// never contribute to a ratio or a shift, and cannot acquire a painted shaft.
+#let _marked-window-elements(path, style, windows, mark-style) = {
+  if mark-style == none { return _path-window-elements(path, style, windows) }
+  let windows = windows.filter(window => window.end > window.start
+    and not _style-value(window.style, "label-only"))
+  if windows.len() == 0 { return () }
+  let accuracy = _style-value(style, "accuracy")
+  let carrier-total = curve-api.length(path, accuracy: accuracy)
+  let visible-total = windows.fold(0, (all, window) => all + window.end - window.start)
+  let positioned = _positioned-mark-style(mark-style)
+  let ratio = _mark-ratio(positioned)
+  let backward = _mark-direction(positioned) == "backward"
+  let station = calc.clamp(
+    (if ratio == none { if backward { 0 } else { visible-total } } else { ratio * visible-total })
+      + _style-value(positioned, "mark-shift"),
+    0, visible-total,
+  )
+  let cursor = 0
+  let owner = none
+  let local = 0
+  for (index, window) in windows.enumerate() {
+    let length = window.end - window.start
+    if owner == none and station <= cursor + length {
+      owner = index
+      local = station - cursor
+    }
+    cursor += length
+  }
+  let elements = ()
+  for (index, window) in windows.enumerate() {
+    if index != owner {
+      elements += _path-window-elements(path, style, (window,))
+      continue
+    }
+    let length = window.end - window.start
+    let piece = curve-api.trim(path, start-outset: window.start,
+      end-outset: carrier-total - window.end, accuracy: accuracy)
+    let draw-style = window.style + (
+      mark: positioned.mark, mark-direction: _mark-direction(positioned),
+      mark-position: if ratio == none { "end" } else {
+        if length == 0 { 0.5 } else { local / length }
       },
-    ),
+      mark-shift: if ratio == none {
+        if backward { local } else { local - length }
+      } else { 0 },
+    )
+    let phase = auto
+    if _has-pattern(style) {
+      let wavelength = _style-value(style, "pattern-wavelength")
+      if _style-value(style, "pattern-fit") and carrier-total > 0 {
+        wavelength = carrier-total / calc.max(1, calc.round(carrier-total / wavelength))
+      }
+      draw-style += (pattern-wavelength: wavelength, pattern-fit: false)
+      phase = _style-value(style, "pattern-phase") + 2 * calc.pi * window.start / wavelength
+    }
+    elements.push(_mark-carrier-input(piece, draw-style, phase: phase,
+      anchor-start: window.start == 0, anchor-end: window.end == carrier-total))
+  }
+  elements
+}
+
+#let _half-paint-windows(halves, source-style, sink-style, total) = {
+  if halves.at("split-gap", default: 0) == 0 and _same-draw-path-style(
+    _without-mark-style(source-style), _without-mark-style(sink-style),
+  ) {
+    return ((start: 0, end: total, style: source-style),)
+  }
+  let accuracy = _style-value(source-style, "accuracy")
+  let source-end = calc.min(total, curve-api.length(
+    _segments-path(halves.source),
+    accuracy: accuracy,
+  ))
+  let sink-start = if halves.at("split-gap", default: 0) == 0 {
+    source-end
+  } else {
+    calc.max(
+      source-end,
+      total - curve-api.length(_segments-path(halves.sink), accuracy: accuracy),
+    )
+  }
+  (
+    (start: 0, end: source-end, style: source-style),
+    (start: sink-start, end: total, style: sink-style),
   )
 }
 
-#let _derived-path-elements(path, style, phase, anchor-start, anchor-end) = {
-  let segments = curve-api.segments(path)
-  if segments.len() == 0 {
-    return (elements: (), length: 0)
+// Keep paint out of CBOR. Composite paths retain the depth-first order of their
+// original child specs, while shape-owned caps/joins come only from the engine.
+#let _mark-paints(spec) = if spec.shape == "combine" {
+  spec.parts.filter(part => type(part) == dictionary).map(_mark-paints).flatten()
+} else { (spec,) }
+
+#let _mark-paint(spec, key, line-paint) = {
+  let paint = spec.at(key, default: auto)
+  if type(paint) == stroke { paint = paint.paint }
+  if paint in (auto, true) { line-paint }
+  else if paint in (none, false) { none }
+  else { paint }
+}
+
+#let _mark-visible-spec(spec, line-paint) = {
+  if spec.shape == "combine" {
+    spec.parts = spec.parts.map(part => if type(part) == dictionary {
+      _mark-visible-spec(part, line-paint)
+    } else { part })
+  } else if line-paint == none {
+    for key in ("fill", "stroke") {
+      if (key in curve-api.mark.fields.at(spec.shape)
+        and _mark-paint(spec, key, line-paint) == none) {
+        spec.insert(key, false)
+      }
+    }
   }
-  if _has-mark(style) {
-    if _has-pattern(style) {
-      let painted = _segments-elements(
-        segments,
-        _without-mark-style(style),
-        phase,
-        anchor-start,
-        anchor-end,
-      )
-      (
-        elements: painted.elements + _mark-carrier-elements(path, style),
-        length: painted.length,
-      )
+  spec
+}
+
+#let _map-path(path, map-point) = curve-api.from-elements(
+  curve-api.elements(path).map(element => {
+    for key in ("start", "end", "control", "control-start", "control-end") {
+      if key in element { element.at(key) = map-point(element.at(key)) }
+    }
+    element
+  }),
+)
+
+#let _prepare-pending-mark(ctx, packet, preparation: none) = {
+  let style = packet.style
+  let draw-style = _draw-style(_without-mark-style(style)) + (mark: none)
+  let segments = curve-api.segments(packet.path)
+  let root = if segments.len() == 1 { "bezier" } else { () }
+  // Reuse only geometry-independent work with identical immutable inputs.
+  // Coordinate hooks, transforms, and their context updates always run below.
+  let preparation-key = (ctx: ctx, style: draw-style, mark: style.mark, root: root)
+  let reuse = preparation != none and preparation.key == preparation-key
+  let resolved = if reuse { preparation.resolved } else {
+    cetz.styles.resolve(ctx.style, merge: draw-style, root: root)
+  }
+  let unit = draw-style.at("unit", default: 1)
+  let transform = ctx.transform
+  let scaled(point) = point.map(value => value * unit)
+  let after = ctx
+  let parts = ()
+  let hooks = ctx.at("resolve-coordinate", default: ())
+  let numeric = (type(hooks) != array or hooks.len() == 0) and type(unit) in (int, float)
+  // Numeric segment points with numeric units need only CeTZ's float/3D
+  // coercion. Hooks and physical units retain its full ordered resolver.
+  for segment in segments {
+    let (next, start, control-start, control-end, end) = if numeric {
+      (after, ..(
+        segment.start, segment.control-start, segment.control-end, segment.end,
+      ).map(point => (..scaled(_point(point)).map(float), 0.0)))
     } else {
-      (
-        elements: _mark-carrier-elements(path, style, paint: true),
-        length: curve-api.length(path, accuracy: _style-value(
-          style,
-          "accuracy",
-        )),
+      cetz.coordinate.resolve(
+        after, scaled(_point(segment.start)), scaled(_point(segment.control-start)),
+        scaled(_point(segment.control-end)), scaled(_point(segment.end)),
       )
     }
-  } else {
-    _segments-elements(segments, style, phase, anchor-start, anchor-end)
+    after = next
+    after.prev.pt = end
+    parts.push(curve-api.cubic(
+      _canvas-point(transform, start), _canvas-point(transform, control-start),
+      _canvas-point(transform, control-end), _canvas-point(transform, end)))
   }
+  if parts.len() == 0 {
+    let source = scaled(curve-api.points(packet.path).at(0, default: (0, 0)))
+    let (next, point) = if numeric {
+      let point = (..source.map(float), 0.0)
+      (after + (prev: after.prev + (pt: point)), point)
+    } else { cetz.coordinate.resolve(after, source) }
+    after = next
+    parts.push(curve-api.move-to(_canvas-point(transform, point)))
+  }
+  if draw-style.at("close", default: false) { parts.push(curve-api.close()) }
+  let carrier = curve-api.path(..parts)
+  // This is a paint/style template. The engine's authoritative shaft supplies
+  // its segments at materialization; candidate carriers need no CeTZ conversion.
+  let drawable = cetz.drawable.path((),
+    stroke: resolved.stroke, fill: resolved.fill,
+    fill-rule: resolved.at("fill-rule", default: "non-zero"))
+  let stroke = if reuse { preparation.stroke } else {
+    cetz.util.resolve-stroke(resolved.stroke)
+  }
+  let thickness = if reuse { preparation.thickness } else {
+    cetz.util.resolve-number(ctx, stroke.thickness)
+  }
+  let line-paint = if drawable.stroke == none { none } else { stroke.paint }
+  let ratio = _mark-ratio(style)
+  let direction = _mark-direction(style)
+  let station = if ratio != none {
+    (kind: "ratio", value: float(ratio))
+  } else if direction == "backward" {
+    (kind: "start")
+  } else { (kind: "end") }
+  let template = if reuse { preparation.template } else { (
+    mark: _mark-visible-spec(style.mark, line-paint),
+    "context": (
+      units-per-pt: float(cetz.util.resolve-number(ctx, 1pt)),
+      line-thickness: float(thickness),
+      shaft-stroke: (
+        cap: if stroke.cap == auto { "butt" } else { stroke.cap },
+        join: if stroke.join == auto { "miter" } else { stroke.join },
+        miter-limit: float(stroke.miter-limit),
+      ),
+    ),
+  ) }
+  let template-key = if reuse { preparation.template-key } else {
+    (mark: curve-api.mark.prepare(template.mark), "context": template.context)
+  }
+  let paints = if reuse { preparation.paints } else { _mark-paints(style.mark) }
+  let name = style.at("name", default: none)
+  if name != none {
+    // Named anchors describe the original, unshortened carrier and must be
+    // available to following custom elements before the mark batches run.
+    // Stock CeTZ only places the finished numeric path, with marks disabled.
+    let anchor-segments = curve-api.segments(carrier)
+    let anchor-path = if anchor-segments.len() == 1 {
+      let segment = anchor-segments.first()
+      cetz.draw.bezier(segment.start, segment.end,
+        segment.control-start, segment.control-end,
+        name: name, stroke: none, fill: none, mark: none)
+    } else {
+      curve-api.to-cetz(carrier, name: name, stroke: none, fill: none, mark: none)
+    }
+    let named = cetz.process.many(after + (
+      transform: cetz.matrix.ident(4), resolve-coordinate: (),
+    ), anchor-path, compute-bounds: false)
+    after.nodes.insert(name, named.ctx.nodes.at(name))
+    after.groups = named.ctx.groups
+  }
+  (
+    packet: packet, carrier: carrier, template: template,
+    template-key: template-key,
+    placement: (
+      station: station, direction: direction,
+      shift: float(_style-value(style, "mark-shift")),
+    ),
+    drawable: drawable, stroke: stroke, line-paint: line-paint,
+    paints: paints,
+    ctx: ctx, after-ctx: after,
+    preparation: (key: preparation-key, resolved: resolved, stroke: stroke,
+      thickness: thickness, template: template, template-key: template-key,
+      paints: paints),
+  )
+}
+
+#let _append-mark-plan(batch, plans) = {
+  // Own the growing arrays for the whole registration, rather than passing a
+  // shared batch through a value-taking function for every placement.
+  let templates = batch.templates
+  let template-keys = batch.template-keys
+  let carriers = batch.carriers
+  let placements = batch.placements
+  let all-plans = batch.plans
+  for plan in plans {
+    let template = template-keys.position(value => value == plan.template-key)
+    if template == none {
+      template = templates.len()
+      templates.push(plan.template)
+      template-keys.push(plan.template-key)
+    }
+    let carrier = carriers.len()
+    carriers.push(plan.carrier)
+    placements.push(plan.placement + (template: template, carrier: carrier))
+    all-plans.push(plan)
+  }
+  (templates: templates, template-keys: template-keys, carriers: carriers,
+    placements: placements, plans: all-plans)
+}
+
+// Finished canvas-space paths bypass CeTZ's mark fitting entirely. CeTZ only
+// paints the already resolved paths and retains the surrounding drawing state.
+#let _replay-context(ctx, before, after) = {
+  for key in before.keys() {
+    if key not in after and key in ctx { let _ = ctx.remove(key) }
+  }
+  for (key, value) in after {
+    if key not in before {
+      ctx.insert(key, value)
+    } else if value != before.at(key) {
+      ctx.insert(key, if (type(value) == dictionary
+        and type(before.at(key)) == dictionary
+        and type(ctx.at(key, default: none)) == dictionary) {
+        _replay-context(ctx.at(key), before.at(key), value)
+      } else { value })
+    }
+  }
+  ctx
+}
+
+#let _finished-mark-drawables(drawables, ctx, before: none, after: none) = (
+  ctx: if after == none { ctx } else { _replay-context(ctx, before, after) },
+  drawables: drawables,
+)
+
+// Resolve ordinary/custom elements once in their original order, then replay
+// their prepared results. Mark packets inherit exactly that evolving context.
+// Preserve top-level groups so layer slices keep their original boundaries.
+// During preparation, named marked paths expose their unshortened reference
+// carriers and anchors, not fitted heads. Head-dependent inspection belongs in
+// draw-after, which sees final painted geometry. Do not re-evaluate callbacks or
+// add another mark batch to feed fitted geometry back into carrier preparation.
+#let _register-mark-elements(ctx, elements, batch, group-contexts: none) = {
+  // An explicit context per group makes candidate isolation part of the same
+  // registration boundary. Within each group callbacks still evolve its state.
+  if group-contexts != none { assert.eq(group-contexts.len(), elements.len()) }
+  let output = ()
+  let plans = ()
+  let preparation = none
+  let first-index = batch.placements.len()
+  for (index, group) in elements.enumerate() {
+    if group-contexts != none { ctx = group-contexts.at(index) }
+    let prepared = ()
+    for element in if type(group) == array { group.flatten() } else { (group,) } {
+      if element == none { continue }
+      if _pending-mark(element) {
+        element.insert("batch-index", first-index + plans.len())
+        let plan = _prepare-pending-mark(ctx, element, preparation: preparation)
+        preparation = plan.preparation
+        let _ = plan.remove("preparation")
+        ctx = plan.after-ctx
+        plans.push(plan)
+        prepared.push(element)
+      } else {
+        let before = ctx
+        let result = cetz.process.many(ctx, (element,), compute-bounds: false)
+        ctx = result.ctx
+        prepared.push(_finished-mark-drawables.with(result.drawables,
+          before: before, after: result.ctx))
+      }
+    }
+    output.push(prepared)
+  }
+  (ctx: ctx, elements: output, batch: _append-mark-plan(batch, plans))
+}
+
+#let _painted-mark-shaft(plan, shaft) = {
+  if not _has-pattern(plan.packet.style) { return shaft }
+  let unit = cetz.util.resolve-number(plan.ctx,
+    _draw-style(plan.packet.style).at("unit", default: 1))
+  let transform = plan.ctx.transform
+  let (a, b, c, d) = (
+    transform.at(0).at(0) * unit, transform.at(0).at(1) * unit,
+    transform.at(1).at(0) * unit, transform.at(1).at(1) * unit,
+  )
+  let determinant = a * d - b * c
+  let norm = a * a + b * b + c * c + d * d
+  let local = _map-path(shaft, point => {
+    let x = point.at(0) - transform.at(0).at(3)
+    let y = point.at(1) - transform.at(1).at(3)
+    if determinant != 0 {
+      ((d * x - b * y) / determinant, (a * y - c * x) / determinant)
+    } else if norm > 0 {
+      // A collapsed planar projection has a rank-one pseudoinverse. Retain
+      // its visible component instead of requiring an invertible 4D matrix.
+      ((a * x + c * y) / norm, (b * x + d * y) / norm)
+    } else { (0, 0) }
+  })
+  let patterned = _pattern-path(local, plan.packet.style,
+    phase: plan.packet.phase, anchor-start: plan.packet.anchor-start,
+    anchor-end: plan.packet.anchor-end)
+  // The carrier already includes coordinate hooks. Do not resolve them a
+  // second time on the finished, bent pattern base.
+  _map-path(patterned, point => _point(cetz.matrix.mul4x4-vec3(
+    plan.ctx.transform, (.._point-scale(point, unit), 0),
+  )))
+}
+
+#let _paint-engine-mark(plan, geometry, shaft, paint-shaft: true) = {
+  let drawables = if not paint-shaft { () } else { (plan.drawable + (
+    segments: curve-api.to-cetz-data(_painted-mark-shaft(plan, shaft)),
+  ),) }
+  for (path, spec) in geometry.paths.zip(plan.paints) {
+    let stroke = if not path.stroke { none } else {
+      plan.stroke + (
+        paint: _mark-paint(spec, "stroke", plan.line-paint),
+        cap: path.cap, join: path.join, dash: none,
+        miter-limit: path.miter-limit,
+      )
+    }
+    if stroke != none and stroke.paint == none { stroke = none }
+    drawables.push(cetz.drawable.path(
+      curve-api.to-cetz-data(path.path),
+      fill: if path.fill { _mark-paint(spec, "fill", plan.line-paint) } else { none },
+      stroke: stroke, tags: (cetz.drawable.TAG.mark,),
+    ))
+    if curve-api.elements(path.outline).len() > 0 {
+      // Stock CeTZ bounds centerlines, not strokes. The engine outline supplies
+      // conservative painted bounds without repainting or re-stroking the head.
+      drawables.push(cetz.drawable.path(
+        curve-api.to-cetz-data(path.outline),
+        fill: none, stroke: none, tags: (cetz.drawable.TAG.hidden,),
+      ))
+    }
+  }
+  let after = plan.after-ctx
+  let name = plan.packet.style.at("name", default: none)
+  if name != none {
+    after.nodes.insert(name, after.nodes.at(name) + (drawables: drawables))
+  }
+  (_finished-mark-drawables.with(drawables, before: plan.ctx, after: after),)
+}
+
+#let _materialize-mark-groups(groups, batch, geometry, selected: false) = {
+  // Preserve registration indices until the painting boundary. Carrier
+  // suppression belongs to the whole selected batch, not individual groups.
+  let output = ()
+  let painted-carriers = ()
+  let shafts = (:)
+  if selected {
+    for shaft in geometry.shafts { shafts.insert(str(shaft.carrier), shaft.shaft) }
+  }
+  for group in groups {
+    let finished = ()
+    let flat = if type(group) == array { group.flatten() } else { (group,) }
+    for element in flat {
+      if _pending-mark(element) {
+        let index = if not selected { element.batch-index } else {
+          batch.plans.position(plan => plan.packet.batch-index == element.batch-index)
+        }
+        assert(index != none, message: "draw: pending mark was not registered in the drawing batch")
+        let mark = geometry.marks.at(index)
+        let shaft = if selected {
+          shafts.at(str(mark.carrier))
+        } else { mark.shaft }
+        finished += _paint-engine-mark(batch.plans.at(index), mark, shaft,
+          paint-shaft: not selected or mark.carrier not in painted-carriers)
+        if selected { painted-carriers.push(mark.carrier) }
+      } else { finished.push(element) }
+    }
+    output.push(finished)
+  }
+  output
+}
+
+// Marked paths stay data until the drawing-wide batches. Pattern generation is
+// deferred too: its base must be the selected authoritative shaft, not path.
+#let _derived-path-elements(path, style, phase, anchor-start, anchor-end) = {
+  let segments = curve-api.segments(path)
+  if segments.len() == 0 { return () }
+  _segments-elements(segments, style, phase, anchor-start, anchor-end)
 }
 
 #let _derived-segments-elements(
@@ -1721,7 +1982,7 @@
   anchor-end,
 ) = {
   if segments.len() == 0 {
-    (elements: (), length: 0)
+    ()
   } else {
     _derived-path-elements(
       _segments-path(segments),
@@ -1809,9 +2070,12 @@
   let side = _style-value(style, "label-side")
   if side == auto {
     if label-pos == none or label-origin == none {
-      1
+      if _style-value(style, "offset") < 0 { -1 } else { 1 }
     } else {
       let toward = _point-sub(_point(label-pos), _point(label-origin))
+      if _point-length(toward) <= 1e-9 {
+        return if _style-value(style, "offset") < 0 { -1 } else { 1 }
+      }
       let cross = (
         _point-x(frame.tangent) * _point-y(toward)
           - _point-y(frame.tangent) * _point-x(toward)
@@ -1839,84 +2103,384 @@
   _layer-label(style, data) != none
 ))
 
-#let _layer-label-element(ctx, path, style, label-pos, data, href) = {
-  let label = _layer-label(style, data)
-  if label == none {
-    return none
+// Collision footprints use actual rendered shafts and marks. Keep separate
+// pieces: the empty space between an arrow and its text is not occupied.
+// Each group starts from the same context; candidate arrows must not inherit
+// another candidate's styles, named anchors or coordinate state.
+#let _annotation-drawable-bounds(ctx, drawables) = {
+  let arrow-bounds = ()
+  for drawable in drawables {
+    if cetz.drawable.TAG.hidden in drawable.tags { continue }
+    let stroke = cetz.util.resolve-stroke(drawable.at("stroke", default: none))
+    let stroked = drawable.at("stroke", default: none) != none and stroke.paint != none
+    if drawable.type == "path" and not stroked and drawable.at("fill", default: none) == none { continue }
+    let radius = if not stroked { 0 } else {
+      cetz.util.resolve-number(ctx, stroke.thickness) / 2
+    }
+    let pieces = ()
+    if drawable.type == "path" {
+      if cetz.drawable.TAG.mark in drawable.tags {
+        pieces.push(cetz.path-util.bounds(drawable.segments))
+      } else {
+        for (start, _, commands) in drawable.segments {
+          for command in commands {
+            pieces.push(cetz.path-util.bounds(((start, false, (command,)),)))
+            start = command.last()
+          }
+        }
+      }
+    } else if drawable.type == "content" {
+      let (x, y, _) = drawable.pos
+      pieces.push(((x - drawable.width / 2, y - drawable.height / 2),
+        (x + drawable.width / 2, y + drawable.height / 2)))
+    }
+    for points in pieces {
+      if points.len() == 0 { continue }
+      let xs = ()
+      let ys = ()
+      for point in points { xs.push(point.at(0)); ys.push(point.at(1)) }
+      arrow-bounds.push((
+        left: calc.min(..xs) - radius,
+        right: calc.max(..xs) + radius,
+        bottom: calc.min(..ys) - radius,
+        top: calc.max(..ys) + radius,
+      ))
+    }
   }
-  label = link(href, label)
-  let edge = data.at("edge", default: none)
-  let label-origin = if edge == none { none } else {
-    edge.at("pos", default: none)
+  arrow-bounds
+}
+
+#let _annotation-bounds(ctx, groups) = {
+  groups.map(group => _annotation-drawable-bounds(ctx,
+    cetz.process.many(ctx, group.flatten(), compute-bounds: false).drawables))
+}
+
+// Engine outlines already include head and configured shaft stroke styles.
+// Control hulls conservatively bound each painted region without re-stroking,
+// sampling, trigonometry, or per-candidate geometry requests in Typst.
+#let _outline-box(points) = {
+  if points.len() == 0 { return () }
+  let xs = points.map(point => point.at(0))
+  let ys = points.map(point => point.at(1))
+  ((left: calc.min(..xs), right: calc.max(..xs),
+    bottom: calc.min(..ys), top: calc.max(..ys)),)
+}
+
+#let _engine-outline-bounds(path) = {
+  let boxes = ()
+  let points = ()
+  for element in curve-api.elements(path) {
+    if element.kind == "move" {
+      boxes += _outline-box(points)
+      points = ()
+    }
+    for key in ("start", "end", "control", "control-start", "control-end") {
+      if key in element { points.push(element.at(key)) }
+    }
   }
-  let frame = _path-mid-frame(
-    path, _style-value(style, "accuracy"), shift: _style-value(style, "label-shift"),
-  )
-  if frame == none {
-    return none
-  }
-  let tangent-length = _point-length(frame.tangent)
-  let normal = if tangent-length <= 1e-9 {
-    (0, 1)
+  boxes + _outline-box(points)
+}
+
+#let _engine-mark-bounds(plan, mark) = {
+  if not _has-pattern(plan.packet.style) {
+    let boxes = if plan.line-paint == none {
+      // Sizing thickness may remain nonzero even when the shaft has no paint.
+      mark.paths.map(path => path.outline-bounds).flatten()
+    } else { mark.footprint-bounds }
+    boxes + if plan.drawable.fill == none { () } else {
+      _engine-outline-bounds(mark.shaft)
+    }
   } else {
-    (
-      -_point-y(frame.tangent) / tangent-length,
-      _point-x(frame.tangent) / tangent-length,
-    )
+    let boxes = mark.paths.map(path => path.outline-bounds).flatten()
+    let shaft = _painted-mark-shaft(plan, mark.shaft)
+    if plan.line-paint != none {
+      let style = plan.template.context.shaft-stroke
+      boxes += _engine-outline-bounds(curve-api.outline(shaft,
+        width: plan.template.context.line-thickness,
+        cap: style.cap, join: style.join, miter-limit: style.miter-limit,
+      ))
+    }
+    if plan.drawable.fill != none { boxes += _engine-outline-bounds(shaft) }
+    boxes
   }
-  let normal = _point-scale(normal, _label-side(
-    style,
+}
+
+#let _annotation-candidate-elements(packets, style) = {
+  packets.fold((), (all, packet) => all + cbor(packet.layers).map(layer => {
+    let path = layer.path + (offset: packet.offset)
+    _derived-path-elements(path, style, auto, true, true)
+  }))
+}
+
+#let _candidate-groups-bounds(ctx, groups, batch, geometry, group-contexts: none) = {
+  // Pass the drawing-wide batch once, not across a value-taking function
+  // boundary for every owner. Each group starts from its independent context.
+  let output = ()
+  if group-contexts != none { assert.eq(group-contexts.len(), groups.len()) }
+  for (index, group) in groups.enumerate() {
+    let group-ctx = if group-contexts == none { ctx } else { group-contexts.at(index) }
+    let flat = group.flatten()
+    let ordinary = flat.filter(element => not _pending-mark(element))
+    let boxes = if ordinary.len() == 0 { () } else {
+      _annotation-bounds(group-ctx, (ordinary,)).first()
+    }
+    for element in flat.filter(_pending-mark) {
+      let index = element.batch-index
+      boxes += _engine-mark-bounds(batch.plans.at(index), geometry.marks.at(index))
+    }
+    output.push(boxes)
+  }
+  output
+}
+
+#let _selected-arrow-group(label, candidate) = {
+  let index = 0
+  for batch in label.candidates.batches {
+    if batch.path-index == candidate.path-index {
+      let at = batch.positions.position(at => at == candidate.at)
+      assert(at != none, message: "draw: selected label station was not enumerated")
+      return label.arrow-groups.at(index + at)
+    }
+    index += batch.positions.len()
+  }
+  panic("draw: selected label carrier was not enumerated")
+}
+
+// Flatten only the finite attachment geometry. Affine transformation happens
+// before the flatness test, so rotated text and scaled canvases use one metric.
+#let _label-path-lines(ctx, path, accuracy) = {
+  if path == none { return () }
+  cbor(_plugin.label_path_lines(cbor.encode((
+    segments: curve-api.segments(path),
+    transform: ctx.transform.map(row => row.map(float)),
+    accuracy: accuracy,
+  )))).fold((), (all, lines) => all + lines)
+}
+
+// Find actual clearance from a measured quad to the finite attachment path.
+// The arc frame is unchanged; only its outward normal offset is adjusted.
+#let _label-attachment-offset(lines, corners, frame, outward, gap, initial) = {
+  cbor(_plugin.label_attachment_offset(cbor.encode((
+    lines: lines, corners: corners.map(_point), frame: frame,
+    outward: _point(outward), gap: gap, initial: initial,
+  ))))
+}
+
+#let _layer-label-element(ctx, path, style, label-pos, data, href: none, fixed-position: none, endpoint-direction: none, placement: false) = {
+  let label = _layer-label(style, data)
+  if label == none { return none }
+  if href != none { label = link(href, label) }
+  let edge = data.at("edge", default: none)
+  let label-origin = if edge == none { none } else { edge.at("pos", default: none) }
+  let accuracy = _style-value(style, "accuracy")
+  let shift = _style-value(style, "label-shift")
+  let frame = if fixed-position != none {
+    (point: _point(fixed-position), tangent: (1, 0))
+  } else { _path-mid-frame(path, accuracy, shift: shift) }
+  if frame == none { return none }
+  let attached = _style-value(style, "label-path")
+  let side = _label-side(
+    if attached == none { style } else { style + (offset: _style-value(attached, "offset")) },
     frame,
-    label-pos,
+    if attached != none and _style-value(attached, "offset-side") != "label" { none } else { label-pos },
     label-origin,
-  ))
+  )
   let label-style = _style(_style-value(style, "label-style"), data)
   let gap = calc.max(0, _style-value(style, "label-gap"))
   // Explicit anchors are deliberate placement, not a request for box clearance.
-  if label-style.at("anchor", default: auto) not in (auto, "auto") {
-    return cetz.draw.content(
-      _point-add(frame.point, _point-scale(normal, gap)),
-      label,
-      padding: 0,
-      ..label-style,
-    )
-  }
-  label-style.anchor = "center"
-  let element = cetz.draw.content(
-    _point(frame.point),
-    label,
-    padding: 0,
-    ..label-style,
-  )
+  let clear-box = label-style.at("anchor", default: auto) in (auto, "auto")
+  if clear-box { label-style.anchor = "center" }
   // CeTZ owns text bounds, wrapping, padding and rotation; measure its actual box.
+  let element = cetz.draw.content((0, 0), label, padding: 0, ..label-style)
   let measured = element.first()(ctx)
-  let origin = cetz.matrix.mul4x4-vec3(ctx.transform, (
-    .._point(frame.point),
-    0,
-  ))
-  let outward = cetz.vector.sub(
-    cetz.matrix.mul4x4-vec3(ctx.transform, (
-      .._point-add(frame.point, normal),
-      0,
-    )),
-    origin,
+  let origin = cetz.matrix.mul4x4-vec3(ctx.transform, (0, 0, 0))
+  let corners = ()
+  for anchor in ("north-west", "north-east", "south-west", "south-east") {
+    corners.push(cetz.vector.sub((measured.anchors)(anchor), origin))
+  }
+  let total = if path == none { 0 } else { curve-api.length(path, accuracy: accuracy) }
+  let movable = placement and fixed-position == none and clear-box and _style-value(style, "label-slide") and total > accuracy
+  let sides = (side,)
+  if movable and _style-value(style, "label-side") == auto { sides.push(-side) }
+  // Momentum annotations share one full carrier. The short arrow is painted
+  // only after choosing the label position, with exactly the same arc shift.
+  let paths = sides.map(candidate-side => if attached == none { path } else {
+    _path-layer(path, attached + (
+      offset: calc.abs(_style-value(attached, "offset")) * candidate-side,
+      offset-side: none, length: none, ratio: none, resolve-length: "none", shift: 0,
+    ), 0, 0, none, auto)
+  })
+  let attachment = clear-box and fixed-position == none
+  let carrier-segments = if attachment and path != none { curve-api.segments(path) } else { () }
+  let path-options = paths.map(candidate-path => {
+    let total = if candidate-path == none { 0 } else { curve-api.length(candidate-path, accuracy: accuracy) }
+    let preferred = calc.clamp(total / 2 + shift, 0, total)
+    let low = 0
+    let high = total
+    if movable and attached != none {
+      let centered = _path-layer(candidate-path, attached + (offset: 0, offset-side: none, shift: 0), 0, 0, none, auto)
+      let half-length = curve-api.length(centered, accuracy: accuracy) / 2
+      let relative-shift = _style-value(attached, "shift") - shift
+      // Bound the shared displacement so neither end of the arrow is clamped
+      // independently of its label. Deliberate pinned placements still clamp.
+      low = calc.clamp(half-length - relative-shift, 0, total)
+      high = calc.clamp(total - half-length - relative-shift, low, total)
+      preferred = calc.clamp(preferred, low, high)
+    }
+    (
+      total: total, preferred: preferred, low: low, high: high,
+    )
+  })
+  let batches = ()
+  let packets = ()
+  let candidate-count = 0
+  let arrow-unit = if attached == none { 1 } else {
+    _draw-style(_positioned-mark-style(attached)).at("unit", default: 1)
+  }
+  for (path-index, options) in path-options.enumerate() {
+    let positions = (options.preferred,)
+    if movable {
+      // Stay inside the carrier; endpoints belong to the vertex labels.
+      positions += range(3, 30).map(i => calc.clamp(options.total * i / 32, options.low, options.high))
+        .dedup().filter(at => calc.abs(at - options.preferred) > accuracy)
+    }
+    let candidate-path = paths.at(path-index)
+    let candidate-side = sides.at(path-index)
+    // Native stages exchange geometry as bytes. Typst retains only candidate
+    // enumeration and style decisions until the selected records return.
+    let frames = if fixed-position != none {
+      ((point: frame.point.map(float), tangent: frame.tangent.map(float)),)
+    } else {
+      curve-api.frames(candidate-path,
+        positions.map(at => options.total / 2 + (at - options.total / 2)),
+        accuracy: accuracy, format: "cbor")
+    }
+    let arrows = if attached == none { none } else {
+      let geometry = _edge-geometry(attached)
+      let relative-shift = geometry.shift - shift
+      curve-api.layers(candidate-path,
+        positions.map(at => at - options.total / 2 + relative-shift),
+        offset: 0, length: geometry.length, ratio: geometry.ratio,
+        resolve-length: geometry.resolve-length,
+        accuracy: geometry.accuracy,
+        format: "cbor", unit: if type(arrow-unit) in (int, float) { arrow-unit } else { 1 },
+      )
+    }
+    let resolved = _plugin.label_candidates(cbor.encode((
+      frames: frames,
+      positions: positions.map(float), transform: ctx.transform.map(row => row.map(float)),
+      origin: origin.map(float), corners: corners.map(corner => corner.map(float)),
+      total: float(options.total), preferred: float(options.preferred),
+      accuracy: float(accuracy), side: float(candidate-side), preferred-side: float(side),
+      path-index: path-index,
+      path-shift: float(if attached == none { 0 } else { _style-value(attached, "shift") - shift }),
+      gap: float(gap), clear-box: clear-box, fixed: fixed-position != none,
+      endpoint-direction: if endpoint-direction == none { none } else { _point(endpoint-direction) },
+      attachment: if attachment {
+        (carrier: carrier-segments, paths: if arrows == none {
+          positions.map(_ => ())
+        } else { arrows.layers })
+      } else { none },
+    )))
+    batches.push((candidates: resolved, positions: positions,
+      side: candidate-side, path-index: path-index))
+    candidate-count += positions.len()
+    if arrows != none { packets.push(arrows) }
+  }
+  let candidates = (
+    batches: batches, count: candidate-count,
+    footprints: none,
+    interleave: attached == none and sides.len() == 2,
   )
-  let normal-squared = cetz.vector.dot(outward, outward)
-  if normal-squared <= 1e-18 { return element }
-  let nearest = (
-    calc.min(..("north-west", "north-east", "south-west", "south-east").map(
-      anchor => cetz.vector.dot(
-        cetz.vector.sub((measured.anchors)(anchor), origin),
-        outward,
-      ),
+  if placement {
+    (
+      label: label, style: label-style, candidates: candidates,
+      edge: data.at("eid", default: none), paths: paths, path-style: attached,
+      arrow-packets: packets, ctx: ctx,
+    )
+  } else {
+    let first = cbor(_plugin.label_first(cbor.encode(candidates)))
+    cetz.draw.content(first.position, label, padding: 0, ..label-style)
+  }
+}
+
+// Base pair padding is shared between the two boxes. Extra label padding
+// enlarges only label boxes; the collision overlay uses the same clearances.
+#let _label-collision-padding = (labels: 0.35, obstacles: 0.08, extra: 0.6)
+
+// Use the painted paths, including waves, coils and crossing gaps. Collision
+// scoring must not turn their empty surrounding space into an edge obstacle.
+// Native dash styles use the continuous stroke envelope, as for a solid edge.
+#let _edge-collision-lines(ctx, elements, painted: false) = {
+  let drawables = if painted { elements } else {
+    cetz.process.many(ctx, elements.flatten(), compute-bounds: false).drawables
+  }
+  let strokes = ()
+  for drawable in drawables {
+    if drawable.type != "path" or cetz.drawable.TAG.hidden in drawable.tags { continue }
+    if drawable.at("stroke", default: none) == none { continue }
+    let stroke = cetz.util.resolve-stroke(drawable.at("stroke", default: none))
+    if stroke.paint == none { continue }
+    let radius = cetz.util.resolve-number(ctx, stroke.thickness) / 2
+    strokes.push((radius: radius, segments: drawable.segments))
+  }
+  // Traversal and cubic flattening share the native annotation owner.
+  // Segments already include canvas transforms, patterns and crossing gaps.
+  cbor(_plugin.label_stroke_lines(cbor.encode((strokes: strokes, accuracy: 0.005))))
+}
+
+// Optimize arc length and automatic side choices with fixed normal clearance.
+// Joint proposals let annotations pass one another without requiring a single
+// temporarily worse move; a short joint descent settles remaining collisions.
+#let _relax-label-placements(placements, obstacles, label-padding: _label-collision-padding.extra, fixed-arrows: (), edge-lines: ()) = {
+  assert(label-padding >= 0, message: "label-collision-padding must be non-negative")
+  if placements.len() == 0 { return () }
+  let fixed = placements.all(label => (
+    if type(label.candidates) == dictionary { label.candidates.count }
+    else { label.candidates.len() }
+  ) == 1)
+  let coordinated = placements.any(label => (
+    type(label.candidates) == dictionary or label.candidates.any(candidate => (
+      candidate.keys().contains("arrow-bounds")
     ))
-      / normal-squared
-  )
-  let position = _point-add(frame.point, _point-scale(
-    normal,
-    gap - nearest,
   ))
-  cetz.draw.content(_point(position), label, padding: 0, ..label-style)
+  // Normal clearance handles ordinary carriers. Only actual text intersections,
+  // vertices and self-loop bends contribute static annotation penalties.
+  let obstacles = if coordinated { obstacles.filter(obstacle => (
+    obstacle.at("edge", default: none) == none or obstacle.at("self-loop", default: false)
+  )) } else { obstacles }
+  let geometry = cbor.encode((
+    placements: placements.map(label => (
+      edge: label.at("edge", default: none),
+      candidates: label.candidates,
+    )),
+    obstacles: obstacles, label-padding: label-padding,
+    fixed-arrows: fixed-arrows, coordinated: coordinated, edge-lines: edge-lines,
+    fixed: fixed,
+    obstacle-padding: _label-collision-padding.obstacles,
+  ))
+  let math = (
+    temperatures: if fixed { () } else { range(84).map(sweep => 0.15 * calc.pow(0.9, sweep)) },
+    exponentials: (), pair-padding: _label-collision-padding.labels,
+  )
+  let result = cbor(_plugin.label_search(geometry, cbor.encode(math)))
+  // Native exp is only a prediction. Its value only affects comparisons with
+  // RNG thresholds, so Typst can certify all decisions through their interval.
+  // A mismatch replays with exact host values, extending the verified prefix.
+  while result.missing.len() > 0 {
+    let verified = true
+    for check in result.missing {
+      let probability = calc.exp(check.argument)
+      math.exponentials.push((check.argument, probability))
+      // Negate the original comparison to certify every rejection.
+      verified = (verified
+        and (check.lower == none or check.lower < probability)
+        and (check.upper == none or not (check.upper < probability)))
+    }
+    if verified { break }
+    result = cbor(_plugin.label_search(geometry, cbor.encode(math)))
+  }
+  result.selected
 }
 
 #let _paired-layer-label-element(
@@ -1926,13 +2490,21 @@
   sink-style,
   label-pos,
   data,
-  href,
+  href: none,
+  placement: false,
 ) = {
   let source-label = _layer-label(source-style, data)
   let sink-label = _layer-label(sink-style, data)
   let style = if source-label != none { source-style } else { sink-style }
   if style == none {
     return none
+  }
+  if source-label != none and sink-label != none {
+    let source-path = _style-value(source-style, "label-path")
+    let sink-path = _style-value(sink-style, "label-path")
+    if source-path != none and sink-path != none and not _has-mark(source-path) and _has-mark(sink-path) {
+      style.label-path = source-path + (mark: sink-path.mark)
+    }
   }
   let segments = if source-label != none and sink-label != none {
     if halves.whole == none { halves.source + halves.sink } else {
@@ -1946,7 +2518,7 @@
   if segments.len() == 0 {
     none
   } else {
-    _layer-label-element(ctx, _segments-path(segments), style, label-pos, data, href)
+    _layer-label-element(ctx, _segments-path(segments), style, label-pos, data, href: href, placement: placement)
   }
 }
 
@@ -1978,42 +2550,40 @@
       auto,
       true,
       true,
-    ).elements
+    )
   }
-  if _same-pattern-geometry(source-style, sink-style) {
-    let source = _derived-segments-elements(
-      halves.source,
+  let pattern-whole = halves.at("pattern-whole", default: whole)
+  if (
+    pattern-whole != none and _same-pattern-geometry(source-style, sink-style)
+  ) {
+    let path = _segments-path(pattern-whole)
+    let total = curve-api.length(path, accuracy: _style-value(
       source-style,
-      auto,
-      true,
-      false,
-    )
+      "accuracy",
+    ))
+    let source-end = curve-api.length(_segments-path(halves.source),
+      accuracy: _style-value(source-style, "accuracy"))
+    let sink-start = total - curve-api.length(_segments-path(halves.sink),
+      accuracy: _style-value(sink-style, "accuracy"))
     let wavelength = _style-value(source-style, "pattern-wavelength")
-    let phase = _style-value(source-style, "pattern-phase")
-    let hidden-length = halves.at("split-gap", default: 0)
-    let sink-phase = (
-      phase + 2 * calc.pi * (source.length + hidden-length) / wavelength
-    )
-    let sink-elements = _derived-segments-elements(
-      halves.sink,
-      sink-style,
-      sink-phase,
-      false,
-      true,
-    ).elements
-    if _has-mark(source-style) and not _has-mark(sink-style) {
-      for element in sink-elements {
-        elements.push(element)
-      }
-      for element in source.elements {
-        elements.push(element)
-      }
-    } else {
-      for element in source.elements {
-        elements.push(element)
-      }
-      for element in sink-elements {
-        elements.push(element)
+    if _style-value(source-style, "pattern-fit") and total > 0 {
+      wavelength = total / calc.max(1, calc.round(total / wavelength))
+    }
+    // Different paints or heads retain separate half carriers. Pattern phase
+    // still starts on the complete carrier, but each fitted shaft is decorated
+    // only after selection. Do not silently drop the second half's mark.
+    for (segments, style, start, end, anchor-start, anchor-end) in (
+      (halves.source, source-style, 0, source-end, true, false),
+      (halves.sink, sink-style, sink-start, total, false, true),
+    ) {
+      if _has-mark(style) {
+        elements.push(_mark-carrier-input(_segments-path(segments),
+          style + (pattern-wavelength: wavelength, pattern-fit: false),
+          phase: _style-value(style, "pattern-phase") + 2 * calc.pi * start / wavelength,
+          anchor-start: anchor-start, anchor-end: anchor-end))
+      } else {
+        elements += _path-window-elements(path, source-style,
+          ((start: start, end: end, style: style),))
       }
     }
   } else {
@@ -2023,14 +2593,14 @@
       auto,
       true,
       true,
-    ).elements
+    )
     let sink-elements = _derived-segments-elements(
       halves.sink,
       sink-style,
       auto,
       true,
       true,
-    ).elements
+    )
     if _has-mark(source-style) and not _has-mark(sink-style) {
       for element in sink-elements {
         elements.push(element)
@@ -2058,7 +2628,7 @@
     true,
     true,
     label-pos,
-  ).elements
+  )
 }
 
 #let _bent-line-segment(start, end, bend) = {
@@ -2083,7 +2653,40 @@
   curve-api.segments(curve-api.quad(start, control, end)).first()
 }
 
-#let _dangling-path(start, end, bend, style, dangling-at-start: false) = {
+#let _dangling-path(
+  start, end, bend, style, dangling-at-start: false,
+  route-points: (), node-point: none, node-outset: 0, omega: 1.0, carrier: none,
+) = {
+  if (carrier != none or route-points.len() > 0) and _style-value(style, "route-points") != "ignore" {
+    let start = if not dangling-at-start and node-point != none { _point(node-point) } else { _point(start) }
+    let end = if dangling-at-start and node-point != none { _point(node-point) } else { _point(end) }
+    let route = if dangling-at-start { route-points.rev() } else { route-points }
+    // Explicit box anchors override only the carrier endpoint; interior knots
+    // still follow the accepted route. Automatic anchors resolve to node centers.
+    let points = if carrier == none { (start, ..route.map(_point), end) } else {
+      (start, ..carrier.slice(1, carrier.len() - 1), end)
+    }
+    let path = _routed-split-through(points, omega: omega).curve
+    let segments = curve-api.segments(path)
+    if segments.len() > 0 and _style-value(style, "dangling-tangent") != auto {
+      let index = if dangling-at-start { 0 } else { segments.len() - 1 }
+      let segment = segments.at(index)
+      // Keep the interior Hobby tangent while imposing the existing external
+      // endpoint tangent on its adjacent span only.
+      let endpoint = curve-api.segments(_dangling-path(
+        segment.start, segment.end, none, style, dangling-at-start: dangling-at-start,
+      )).first()
+      if dangling-at-start { segment.control-start = endpoint.control-start }
+      else { segment.control-end = endpoint.control-end }
+      segments.at(index) = segment
+      path = curve-api.path(..segments.map(curve-api.from-cubic))
+    }
+    return _trim-routed-path(path,
+      start-outset: if dangling-at-start { 0 } else { node-outset },
+      end-outset: if dangling-at-start { node-outset } else { 0 },
+    )
+  }
+
   let segment = _bent-line-segment(start, end, bend)
   let tangent = _style-value(style, "dangling-tangent")
   if tangent == auto {
@@ -2136,7 +2739,7 @@
 }
 
 #let _pattern-dangling(path, style, label-pos) = {
-  _path-elements(path, style, auto, true, true, label-pos).elements
+  _path-elements(path, style, auto, true, true, label-pos)
 }
 
 #let _crossing-target(crossing-paths, under, eid) = {
@@ -2182,75 +2785,38 @@
     .map(hit => hit.at("distance-a"))
 }
 
-#let _cut-path-elements(path, style, cuts, mark-style: none) = {
-  let paint-style = _without-mark-style(style)
-  let gap = calc.max(0, _style-value(style, "crossing-gap"))
-  if cuts.len() == 0 or gap == 0 {
-    let elements = _segments-elements(
-      curve-api.segments(path),
-      paint-style,
-      auto,
-      true,
-      true,
-    ).elements
-    if mark-style != none {
-      elements += _mark-carrier-elements(path, mark-style)
-    }
-    return elements
-  }
+#let _cut-path-elements(
+  path,
+  style,
+  cuts,
+  mark-style: none,
+  paint-windows: none,
+) = {
   let accuracy = _style-value(style, "accuracy")
   let total = curve-api.length(path, accuracy: accuracy)
+  let gap = calc.max(0, _style-value(style, "crossing-gap"))
+  let windows = if paint-windows == none {
+    ((start: 0, end: total, style: style),)
+  } else { paint-windows }
+  let visible = ()
   let cursor = 0
-  let elements = ()
-  for center in cuts {
-    let cut-start = calc.max(cursor, calc.min(total, center - gap / 2))
-    if cut-start > cursor {
-      let piece = curve-api.trim(
-        path,
-        start-outset: cursor,
-        end-outset: total - cut-start,
-        accuracy: accuracy,
-      )
-      let phase = if _has-pattern(style) {
-        (
-          float(_style-value(style, "pattern-phase"))
-            + 2 * calc.pi * cursor / _style-value(style, "pattern-wavelength")
-        )
-      } else {
-        auto
-      }
-      elements += _segments-elements(
-        curve-api.segments(piece),
-        paint-style,
-        phase,
-        cursor == 0,
-        false,
-      ).elements
+  if gap > 0 {
+    for center in cuts.sorted() {
+      let cut-start = _clamp(center - gap / 2, cursor, total)
+      if cut-start > cursor { visible.push((start: cursor, end: cut-start)) }
+      cursor = _clamp(center + gap / 2, cursor, total)
     }
-    cursor = calc.max(cursor, calc.min(total, center + gap / 2))
   }
-  if cursor < total {
-    let piece = curve-api.trim(path, start-outset: cursor, accuracy: accuracy)
-    let phase = if _has-pattern(style) {
-      (
-        float(_style-value(style, "pattern-phase"))
-          + 2 * calc.pi * cursor / _style-value(style, "pattern-wavelength")
-      )
-    } else {
-      auto
+  if cursor < total { visible.push((start: cursor, end: total)) }
+  let clipped = ()
+  for window in windows {
+    for interval in visible {
+      let start = calc.max(window.start, interval.start)
+      let end = calc.min(window.end, interval.end)
+      if end > start { clipped.push(window + (start: start, end: end)) }
     }
-    elements += _segments-elements(
-      curve-api.segments(piece),
-      paint-style,
-      phase,
-      false,
-      true,
-    ).elements
   }
-  if mark-style != none {
-    elements += _mark-carrier-elements(path, mark-style)
-  }
-  elements
+  _marked-window-elements(path, style, clipped, mark-style)
 }
 
 #let _node-outset(style, node-outset) = {
@@ -2559,6 +3125,11 @@
       edge.pos,
       edge.at("bend", default: none),
       source-geometry-style,
+      route-points: _route-points(source-half-edge),
+      carrier: _data-fields(edge).at("layout-carrier", default: none),
+      node-point: if source-anchor == auto { _node-pos(nodes.at(source-half-edge.node)) } else { none },
+      node-outset: if source-anchor == auto { node-outsets.at(source-half-edge.node) } else { 0 },
+      omega: edge-omega,
     )
     _path-layer(path, source-geometry-style, 0, 0, record.label-pos, auto)
   } else {
@@ -2581,6 +3152,11 @@
       edge.at("bend", default: none),
       sink-geometry-style,
       dangling-at-start: true,
+      route-points: _route-points(sink-half-edge),
+      carrier: _data-fields(edge).at("layout-carrier", default: none),
+      node-point: if sink-anchor == auto { _node-pos(nodes.at(sink-half-edge.node)) } else { none },
+      node-outset: if sink-anchor == auto { node-outsets.at(sink-half-edge.node) } else { 0 },
+      omega: edge-omega,
     )
     _path-layer(path, sink-geometry-style, 0, 0, record.label-pos, auto)
   }
@@ -2644,7 +3220,6 @@
   let edge-ratio = options.edge-ratio
   let edge-resolve-length = options.edge-resolve-length
   let edge-accuracy = options.edge-accuracy
-  let edge-optimize = options.edge-optimize
   let edge-split-gap = options.edge-split-gap
   let edge-dangling-tangent = options.edge-dangling-tangent
   let edge-label = options.edge-label
@@ -2687,6 +3262,11 @@
         let node-boxes = ()
         let node-targets = ()
         let edge-targets = ()
+        let label-placements = ()
+        let fixed-arrows = ()
+        let fixed-arrow-layers = ()
+        let edge-layers = ()
+        let label-obstacles = ()
         let debug-level = _debug-level(debug)
         let subgraph-records = _subgraph-records(
           graph,
@@ -2771,6 +3351,22 @@
             node: node,
           )
           node-boxes.push(box)
+          if not boundary {
+            let corners = ()
+            for sign in ((-1, -1), (-1, 1), (1, -1), (1, 1)) {
+              corners.push(cetz.matrix.mul4x4-vec3(ctx.transform, (
+                _point-x(pos) + sign.at(0) * node-width / 2,
+                _point-y(pos) + sign.at(1) * node-height / 2,
+                0,
+              )))
+            }
+            label-obstacles.push((
+              left: calc.min(..corners.map(p => p.at(0))),
+              right: calc.max(..corners.map(p => p.at(0))),
+              bottom: calc.min(..corners.map(p => p.at(1))),
+              top: calc.max(..corners.map(p => p.at(1))),
+            ))
+          }
           node-outsets.push(if boundary { 0 } else if draw-node == auto {
             _node-outset(node-style, node-outset)
           } else if node-outset == auto {
@@ -2808,6 +3404,8 @@
                   or (e.sink != none and e.sink.node == i)
               )).map(e => e.edge),
             )
+            // Display transformations may retain the source graph's inspection identities.
+            details += node-data.at("inspection", default: (:))
             let name = node-data.at("feynkit-name", default: node.name)
             if name != none {
               details.insert("name", str(name))
@@ -2817,7 +3415,7 @@
             }
             node-targets += _identity-target(
               pos,
-              _identity-href("node", i, details),
+              _identity-href("node", details.at("node", default: i), details),
               width: calc.max(10pt, node-width * ctx.length, label-size.width),
               height: calc.max(10pt, node-height * ctx.length, label-size.height),
             )
@@ -2832,7 +3430,6 @@
               ratio: edge-ratio,
               resolve-length: edge-resolve-length,
               accuracy: edge-accuracy,
-              optimize: edge-optimize,
               split-gap: edge-split-gap,
               dangling-tangent: edge-dangling-tangent,
             )
@@ -2861,26 +3458,28 @@
           )
           for side in ("source", "sink") {
             layers.at(side) = layers.at(side).map(layer => {
-              // With no label direction, both the offset and label use the
-              // signed offset instead of inferring sides from curve-fit noise.
+              // With no label direction, the signed offset sets the preferred
+              // label side. Keep automatic labels free to flip during placement.
               if (
                 _style-value(layer, "offset-side") == "label"
                   and _point-distance(record.label-pos, record.edge.pos) <= 1e-9
               ) {
                 layer.offset-side = none
-                if _style-value(layer, "label-side") == auto {
-                  let offset = layer.at("offset", default: geometry-style.offset)
-                  layer.label-side = if offset < 0 { "right" } else { "left" }
-                }
+                layer.offset = layer.at("offset", default: geometry-style.offset)
               }
               let label = _call(_style-value(layer, "label"), record.edge-data)
-              if label == auto {
+              layer = if label == auto {
                 layer + (
                   label: ordinary-label,
                   label-style: edge-label-draw-style
                     + _style(_style-value(layer, "label-style"), record.edge-data),
                 )
               } else { layer + (label: _as-content(label)) }
+              // A momentum arrow remains visible when its text is disabled.
+              let attached = _style-value(layer, "label-path")
+              if layer.label == none and attached != none {
+                layer + attached + (label: none, label-path: none, label-only: false)
+              } else { layer }
             })
           }
           let source-style-layers = layers.source
@@ -2928,7 +3527,9 @@
                 )
             )
         ))
-        let crossing-paths = if has-crossings {
+        let crossing-paths = if has-crossings or edge-records.any(record => (
+          record.ev-label != none and _statement-number(record.edge, "layout-label-gap") != none
+        )) {
           _crossing-path-index(
             edge-records,
             nodes,
@@ -2965,12 +3566,13 @@
               and sink-half-edge != none
               and source-half-edge.node == sink-half-edge.node
           )
+          let inspection = edge-data.at("inspection", default: (:))
           let details = (
             edge: edge.edge,
             source: if source-half-edge == none { none } else { source-half-edge.node },
             sink: if sink-half-edge == none { none } else { sink-half-edge.node },
             orientation: edge.orientation,
-          )
+          ) + inspection
           if edge.name != none {
             details.insert("name", str(edge.name))
           }
@@ -2980,7 +3582,7 @@
               details.insert(key, value)
             }
           }
-          let href = _identity-href("edge", edge.edge, details)
+          let href = _identity-href("edge", details.edge, details)
           let half-hrefs = ()
           let edge-hrefs = ()
           for (side, half-edge, pair) in (
@@ -2988,17 +3590,21 @@
             ("sink", sink-half-edge, source-half-edge),
           ) {
             let owner = if half-edge == none { pair } else { half-edge }
-            let half-details = details + ("half-edge": owner.hedge)
-            edge-hrefs.push(_identity-href("edge", edge.edge, half-details))
-            half-hrefs.push(_identity-href("halfedge", owner.hedge, half-details + (
+            let flow = if half-edge != none { side } else if side == "source" { "sink" } else { "source" }
+            let other = if flow == "source" { "sink" } else { "source" }
+            let hedge = inspection.at(flow + "-hedge", default: owner.hedge)
+            let half-details = details + ("half-edge": hedge)
+            edge-hrefs.push(_identity-href("edge", details.edge, half-details))
+            half-hrefs.push(_identity-href("halfedge", hedge, half-details + (
               node: owner.node,
-              flow: if half-edge != none { side } else if side == "source" { "sink" } else { "source" },
-              pair: if half-edge == none or pair == none { none } else { pair.hedge },
+              flow: flow,
+              pair: inspection.at(other + "-hedge", default: if half-edge == none or pair == none { none } else { pair.hedge }),
             )))
           }
           let hrefs = (half-hrefs.at(0), edge-hrefs.at(0), edge-hrefs.at(1), half-hrefs.at(1))
 
           for layer-index in range(0, layer-count) {
+            let layer-start = elements.len()
             let source-layer = _style-layer(source-style-layers, layer-index)
             let sink-layer = _style-layer(sink-style-layers, layer-index)
             let source-style-value = if source-layer == none {
@@ -3132,7 +3738,7 @@
                       auto,
                       true,
                       true,
-                    ).elements
+                    )
                   ) {
                     elements.push(element)
                   }
@@ -3155,7 +3761,7 @@
                       auto,
                       true,
                       true,
-                    ).elements
+                    )
                   ) {
                     elements.push(element)
                   }
@@ -3172,24 +3778,27 @@
                 } else {
                   _without-mark-style(sink-draw-style)
                 }
+                let carrier = halves.at("pattern-whole", default: halves.whole)
+                let same-geometry = if source-paint-style == none or sink-paint-style == none {
+                  false
+                } else if _has-pattern(source-paint-style) or _has-pattern(sink-paint-style) {
+                  _same-pattern-geometry(source-paint-style, sink-paint-style)
+                } else { _same-layer-geometry(source-paint-style, sink-paint-style) }
                 if (
                   source-draw-style == none
                     or sink-draw-style == none
                     or source-crossing-under != sink-crossing-under
                     or source-crossing-gap != sink-crossing-gap
-                    or halves.whole == none
-                    or not _same-draw-path-style(
-                      source-paint-style,
-                      sink-paint-style,
-                    )
+                    or carrier == none
+                    or not same-geometry
                 ) {
                   panic(
                     "draw: crossing-under on paired edge "
                       + str(edge-data.eid)
-                      + " requires one continuous source/sink style layer",
+                      + " requires continuous source/sink geometry with the same pattern",
                   )
                 }
-                let path = _segments-path(halves.whole)
+                let path = _segments-path(carrier)
                 let mark-style = if _has-mark(source-draw-style) {
                   source-draw-style
                 } else if _has-mark(sink-draw-style) {
@@ -3209,6 +3818,10 @@
                   source-paint-style,
                   cuts,
                   mark-style: mark-style,
+                  paint-windows: _half-paint-windows(halves,
+                    source-paint-style, sink-paint-style,
+                    curve-api.length(path, accuracy: _style-value(source-paint-style, "accuracy")),
+                  ),
                 ) {
                   elements.push(element)
                 }
@@ -3230,22 +3843,13 @@
                     )
                 ) {
                   let path = _segments-path(halves.whole)
-                  for element in (
-                    _segments-elements(
-                      halves.whole,
-                      source-paint-style,
-                      auto,
-                      true,
-                      true,
-                    ).elements
-                  ) {
-                    elements.push(element)
-                  }
                   let carrier-style = _paired-carrier-style(
                     path,
                     halves,
                     center-mark-style,
                   )
+                  // Same-style paired halves fit the complete visible carrier
+                  // once. The packet owns its authoritative shaft and pattern.
                   for element in _mark-carrier-elements(path, carrier-style) {
                     elements.push(element)
                   }
@@ -3266,7 +3870,7 @@
                     auto,
                     true,
                     true,
-                  ).elements
+                  )
                 ) {
                   elements.push(element)
                 }
@@ -3278,7 +3882,7 @@
                     auto,
                     true,
                     true,
-                  ).elements
+                  )
                 ) {
                   elements.push(element)
                 }
@@ -3290,10 +3894,11 @@
                 sink-draw-style,
                 label-pos,
                 edge-data,
-                href,
+                href: href,
+                placement: true,
               )
               if attached-label != none {
-                elements.push(attached-label)
+                label-placements.push(attached-label + (hrefs: hrefs))
               }
             } else if source-half-edge != none {
               let source-geometry-style = if source-style-value == none {
@@ -3321,6 +3926,11 @@
                 edge.pos,
                 bend,
                 source-geometry-style,
+                route-points: _route-points(source-half-edge),
+                carrier: _data-fields(edge).at("layout-carrier", default: none),
+                node-point: if source-anchor == auto { _node-pos(nodes.at(source-half-edge.node)) } else { none },
+                node-outset: if source-anchor == auto { node-outsets.at(source-half-edge.node) } else { 0 },
+                omega: edge-omega,
               )
               let visible-path = _path-layer(
                 dangling-path,
@@ -3392,10 +4002,11 @@
                   draw-style,
                   label-pos,
                   edge-data,
-                  href,
+                  href: href,
+                  placement: true,
                 )
                 if attached-label != none {
-                  elements.push(attached-label)
+                  label-placements.push(attached-label + (hrefs: hrefs))
                 }
                 if _has-visible-stroke(draw-style) or _has-mark(draw-style) {
                   edge-targets += _edge-identity-targets(
@@ -3427,6 +4038,11 @@
                 bend,
                 sink-geometry-style,
                 dangling-at-start: true,
+                route-points: _route-points(sink-half-edge),
+                carrier: _data-fields(edge).at("layout-carrier", default: none),
+                node-point: if sink-anchor == auto { _node-pos(nodes.at(sink-half-edge.node)) } else { none },
+                node-outset: if sink-anchor == auto { node-outsets.at(sink-half-edge.node) } else { 0 },
+                omega: edge-omega,
               )
               let visible-path = _path-layer(
                 dangling-path,
@@ -3496,10 +4112,11 @@
                   draw-style,
                   label-pos,
                   edge-data,
-                  href,
+                  href: href,
+                  placement: true,
                 )
                 if attached-label != none {
-                  elements.push(attached-label)
+                  label-placements.push(attached-label + (hrefs: hrefs))
                 }
                 if _has-visible-stroke(draw-style) or _has-mark(draw-style) {
                   edge-targets += _edge-identity-targets(
@@ -3508,21 +4125,78 @@
                 }
               }
             }
+            // An unlabelled bounded offset layer is a fixed decoration, such
+            // as an external momentum arrow whose text stays at the endpoint.
+            // Other painted paths participate only when they intersect text.
+            if (source-draw-style, sink-draw-style).any(style => (
+              style != none and not _style-value(style, "label-only")
+                and _layer-label(style, edge-data) == none
+                and _style-value(style, "offset") != 0
+                and (_style-value(style, "length") != none or _style-value(style, "ratio") != none)
+            )) {
+              fixed-arrow-layers.push((start: layer-start, end: elements.len(), ctx: ctx))
+            } else {
+              edge-layers.push((ctx: ctx, start: layer-start, end: elements.len()))
+            }
+          }
+
+          // Only self-loop bends repel annotations: a remote part of the loop
+          // can approach from another side. Ordinary carriers are handled by the
+          // fixed normal gap. Waves and coils occupy a band, not just a line.
+          let radius = 0.06 + calc.max(0, ..(source-style-layers + sink-style-layers).map(style => (
+            if _style-value(style, "pattern") == none { 0 } else {
+              calc.abs(_style-value(style, "pattern-amplitude"))
+            }
+          )))
+          let pad-x = radius * (calc.abs(ctx.transform.at(0).at(0)) + calc.abs(ctx.transform.at(0).at(1)))
+          let pad-y = radius * (calc.abs(ctx.transform.at(1).at(0)) + calc.abs(ctx.transform.at(1).at(1)))
+          if self-loop {
+            let obstacle-segments = (source-label-segments, sink-label-segments)
+              .filter(segments => segments != none).flatten()
+            label-obstacles += cbor(_plugin.label_obstacle_boxes(cbor.encode((
+              segments: obstacle-segments, transform: ctx.transform.map(row => row.map(float)),
+              pad-x: pad-x, pad-y: pad-y,
+            )))).map(box => (edge: edge.edge, self-loop: self-loop, ..box))
           }
 
           if ev-label != none {
-            elements.push(cetz.draw.content(
-              _point(label-pos),
-              ev-label,
-              padding: 0,
-              ..edge-label-draw-style,
+            let gap = _statement-number(edge, "layout-label-gap")
+            if gap != none {
+              // Carrier-following labels clear the painted band, and plain
+              // lines by at least their label gap.
+              gap = calc.max(gap, radius, ..(source-style-layers + sink-style-layers).map(
+                style => _style-value(style, "label-gap"),
+              ))
+            }
+            let carrier = crossing-paths.ids.at(str(edge.edge), default: none)
+            let follows-path = gap != none and carrier != none
+            let endpoint-direction = none
+            if edge.label-pos == none and (source-half-edge == none or sink-half-edge == none) {
+              // Follow the rendered endpoint tangent, including routed edges.
+              // The text-box measurement below supplies clearance at any angle.
+              let segments = if source-half-edge == none { sink-label-segments } else { source-label-segments }
+              if segments != none and segments.len() > 0 {
+                endpoint-direction = if source-half-edge == none {
+                  _point-scale(curve-api.cubic-tangent(segments.first(), 0), -1)
+                } else { curve-api.cubic-tangent(segments.last(), 1) }
+              }
+              if endpoint-direction == none or _point-length(endpoint-direction) <= 1e-9 {
+                let owner = if source-half-edge == none { sink-half-edge } else { source-half-edge }
+                endpoint-direction = _point-sub(edge.pos, _node-pos(nodes.at(owner.node)))
+              }
+              if _point-length(endpoint-direction) <= 1e-9 { endpoint-direction = (1, 0) }
+            }
+            label-placements.push(_layer-label-element(
+              ctx,
+              if follows-path { carrier.path } else { none },
+              (label: ev-label, label-style: edge-label-draw-style, label-gap: if endpoint-direction != none { options.external-label-gap } else if gap == none { 0 } else { gap }),
+              label-pos,
+              edge-data,
+              href: href,
+              placement: true,
+              fixed-position: if follows-path { none } else { label-pos },
+              endpoint-direction: endpoint-direction,
             ))
-            let size = measure(ev-label)
-            edge-targets += _identity-target(
-              label-pos, href,
-              width: calc.max(8pt, size.width),
-              height: calc.max(8pt, size.height),
-            )
           }
 
           for half-edge in (source-half-edge, sink-half-edge) {
@@ -3582,14 +4256,156 @@
           }
         }
 
+        label-placements = label-placements.filter(label => label != none)
+        // All finite carriers are ready now: offsets, node outsets, and visible
+        // windows precede stations and fits. Share templates and indices across
+        // the candidate and selected batches, never request geometry per edge.
+        let mark-batch = (
+          templates: (), template-keys: (), carriers: (), placements: (), plans: (),
+        )
+        let registered = _register-mark-elements(ctx, elements, mark-batch)
+        elements = registered.elements
+        mark-batch = registered.batch
+        let fixed-mark-count = mark-batch.placements.len()
+        let candidate-groups = ()
+        let candidate-contexts = ()
+        let candidate-ranges = ()
+        for (index, label) in label-placements.enumerate() {
+          let start = candidate-groups.len()
+          if label.path-style != none {
+            for group in _annotation-candidate-elements(label.arrow-packets, label.path-style) {
+              // Candidate contexts are independent; no candidate may inherit
+              // another candidate's styles, anchors, or coordinate state.
+              candidate-groups.push(group)
+              candidate-contexts.push(label.ctx)
+            }
+          }
+          candidate-ranges.push((start, candidate-groups.len()))
+        }
+        let prepared = _register-mark-elements(ctx, candidate-groups, mark-batch,
+          group-contexts: candidate-contexts)
+        mark-batch = prepared.batch
+        for (index, label) in label-placements.enumerate() {
+          let (start, end) = candidate-ranges.at(index)
+          label-placements.at(index) = label + (
+            arrow-groups: prepared.elements.slice(start, end),
+          )
+        }
+        let candidate-geometry = cbor(curve-api.mark.geometry(
+          mark-batch.templates, mark-batch.carriers, mark-batch.placements,
+          mode: "candidates", format: "cbor",
+        ))
+        let bounds-groups = prepared.elements
+        let bounds-contexts = candidate-contexts
+        for layer in fixed-arrow-layers {
+          bounds-groups.push(elements.slice(layer.start, layer.end))
+          bounds-contexts.push(layer.ctx)
+        }
+        let projected-bounds = _candidate-groups-bounds(
+          ctx, bounds-groups, mark-batch, candidate-geometry,
+          group-contexts: bounds-contexts)
+        for (index, label) in label-placements.enumerate() {
+          if label.path-style != none {
+            let (start, end) = candidate-ranges.at(index)
+            label.candidates.footprints = projected-bounds.slice(start, end)
+            label-placements.at(index) = label
+          }
+        }
+        for boxes in projected-bounds.slice(prepared.elements.len()) {
+          fixed-arrows += boxes
+        }
+        // Fixed labels return before collision scoring; avoid flattening painted
+        // curves unless an annotation can actually move. Keep each layer's
+        // original context and processing boundary when materializing its lines.
+        let edge-lines = ()
+        if label-placements.any(label => label.candidates.count > 1) {
+          let painted = ()
+          let finished = _materialize-mark-groups(elements, mark-batch, candidate-geometry)
+          for layer in edge-layers {
+            painted += cetz.process.many(layer.ctx,
+              finished.slice(layer.start, layer.end).flatten(), compute-bounds: false).drawables
+          }
+          edge-lines = _edge-collision-lines(ctx, painted, painted: true)
+        }
+        let label-padding = options.label-collision-padding
+        let relaxed = _relax-label-placements(label-placements, label-obstacles, label-padding: label-padding, fixed-arrows: fixed-arrows, edge-lines: edge-lines)
+        let selected-indices = range(fixed-mark-count)
+        for (label, candidate) in label-placements.zip(relaxed) {
+          if label.path-style != none {
+            let style = label.path-style + (offset: 0, offset-side: none, shift: candidate.path-shift)
+            let path = _path-layer(label.paths.at(candidate.path-index), style, 0, 0, none, auto)
+            let group = _selected-arrow-group(label, candidate)
+            elements += group
+            selected-indices += group.flatten().filter(_pending-mark).map(packet => packet.batch-index)
+            edge-targets += _edge-identity-targets(
+              ctx, ((segments: curve-api.segments(path), visible: true),), label.hrefs,
+            )
+          }
+          elements.push(cetz.draw.content(
+            candidate.position, label.label, padding: 0, ..label.style,
+          ))
+        }
+        // Unchosen candidate windows are not part of the final geometry request.
+        // Reindex only referenced carriers, retaining sharing between selected
+        // heads on the same carrier and the original packet indices in plans.
+        let selected-carriers = ()
+        let carrier-indices = (:)
+        let selected-placements = ()
+        for index in selected-indices {
+          let placement = mark-batch.placements.at(index)
+          let key = str(placement.carrier)
+          if key not in carrier-indices {
+            carrier-indices.insert(key, selected-carriers.len())
+            selected-carriers.push(mark-batch.carriers.at(placement.carrier))
+          }
+          placement.carrier = carrier-indices.at(key)
+          selected-placements.push(placement)
+        }
+        let selected-batch = mark-batch + (
+          carriers: selected-carriers, placements: selected-placements,
+          plans: selected-indices.map(index => mark-batch.plans.at(index)),
+        )
+        let selected-geometry = cbor(curve-api.mark.geometry(
+          selected-batch.templates, selected-batch.carriers, selected-batch.placements,
+          mode: "selected", format: "cbor",
+        ))
+        elements = _materialize-mark-groups(elements, selected-batch, selected-geometry, selected: true).flatten()
+
         for element in node-elements {
           elements.push(element)
         }
 
+        if options.debug-label-collisions {
+          // Bounds are already in canvas coordinates. Reset the transform only
+          // inside this floating overlay, so it cannot change graph bounds.
+          elements.push(cetz.draw.floating(cetz.draw.scope({
+            cetz.draw.set-transform(none)
+            for (boxes, padding, color, dashed) in (
+              (label-obstacles, _label-collision-padding.obstacles / 2, rgb("#f59e0b"), false),
+              (relaxed.map(candidate => candidate.bounds), _label-collision-padding.labels / 2 + label-padding, rgb("#a855f7"), true),
+              (relaxed.map(candidate => candidate.bounds), _label-collision-padding.obstacles / 2 + label-padding, rgb("#06b6d4"), false),
+              (relaxed.map(candidate => candidate.arrow-bounds).flatten() + fixed-arrows, _label-collision-padding.labels / 2, rgb("#22c55e"), true),
+            ) {
+              for box in boxes {
+                cetz.draw.rect(
+                  (box.left - padding, box.bottom - padding),
+                  (box.right + padding, box.top + padding),
+                  fill: color.transparentize(94%),
+                  stroke: (paint: color, thickness: 0.4pt, dash: if dashed { "dashed" } else { "solid" }),
+                )
+              }
+            }
+          })))
+        }
+
         // Measure the graph before overlays and reuse its processed drawables,
         // so custom drawing callbacks run once and named anchors remain available.
+        let drawable-elements = ()
+        for element in elements.flatten() {
+          if element != none { drawable-elements.push(element) }
+        }
         let rendered = cetz.process.many(
-          ctx, elements.flatten().filter(element => element != none),
+          ctx, drawable-elements,
           compute-bounds: type(options.draw-after) == function,
         )
         let overlay = options.draw-after
@@ -3608,9 +4424,7 @@
           compute-bounds: false,
         )
         // Nodes come last so incident edge targets cannot intercept node hits.
-        let targets = cetz.process.many(
-          after.ctx, edge-targets + node-targets, compute-bounds: false,
-        )
+        let targets = _draw-identity-targets(after.ctx, edge-targets + node-targets)
         (ctx: targets.ctx, drawables: rendered.drawables + after.drawables + targets.drawables)
       },
     ),

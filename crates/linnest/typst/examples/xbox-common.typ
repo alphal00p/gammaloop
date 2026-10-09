@@ -2,7 +2,7 @@
 #import graph: *
 #import "map-style.typ" as feynman
 #import feynman: momentum as mom
-#import "@preview/cetz:0.5.1" as cetz
+#import "@preview/cetz:0.5.2" as cetz
 
 #let math-font-size = 10pt
 

@@ -552,6 +552,10 @@ impl SpensoNet {
                 pattern: None,
                 flow: tree.then_some(orientation != "reversed"),
                 momentum: false,
+                flow_arrow: EdgeDrawing::default_flow_arrow(),
+                momentum_arrow: EdgeDrawing::default_momentum_arrow(),
+                flow_arrow_paints: Vec::new(),
+                momentum_arrow_paints: Vec::new(),
                 label,
                 details,
             });

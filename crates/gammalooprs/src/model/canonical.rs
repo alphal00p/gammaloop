@@ -711,7 +711,8 @@ impl ModelGammaLoopExt for Model {
         }
 
         let mut content = String::from(
-            r#"#import "physics-edge-style.typ": mi, palette, massive, massless, dashed, dotted, stroke-style, source-stroke, sink-stroke, fermion-flow, wave, coil, zigzag, default-edge, default-map, style as physics-style
+            r#"#import "@preview/mitex:0.2.6": mi
+#import "physics-edge-style.typ": palette, massive, massless, dashed, dotted, stroke-style, source-stroke, sink-stroke, fermion-flow, wave, coil, zigzag, default-edge, default-map, style as physics-style
 
 // Auto-generated particle styles from the canonical model. The reusable
 // drawing callbacks live in physics-edge-style.typ.

@@ -1583,7 +1583,9 @@ impl PatternPathSpec {
 }
 
 impl ParallelPathSpec {
-    /// The path offset by `distance` (positive to the left), then trimmed.
+    /// Offset each source subpath (positive to the left), then trim by arc length.
+    /// Differing fitted endpoints are joined by straight bevels, never snapped.
+    /// Explicit source moves remain boundaries, even at identical coordinates.
     pub fn parallel(self) -> Result<CurvePathOutput, String> {
         let distance = validate_finite(self.distance, "parallel path distance")?;
         let accuracy = validate_positive_accuracy(self.accuracy)?;
@@ -1598,14 +1600,66 @@ impl ParallelPathSpec {
             return Ok(CurvePathOutput { path: self.path });
         }
 
-        let offset_segments = self
-            .path
-            .segments()
-            .flat_map(|segment| offset_path_segment(segment, distance, accuracy))
-            .collect::<Vec<_>>();
-        let segments =
-            PathTrimmer::new(offset_segments, accuracy).trim(start_outset, end_outset)?;
-        curve_path_from_segments(segments)
+        let mut subpaths = Vec::new();
+        for elements in self.path.subpaths() {
+            let source = BezPath::from_vec(elements.to_vec());
+            let mut segments: Vec<PathSeg> = Vec::new();
+            for segment in source.segments() {
+                // A stationary segment has no offset normal and must not
+                // introduce a spurious detour between meaningful pieces.
+                if segment.arclen(accuracy) == 0.0 {
+                    continue;
+                }
+                for fitted in offset_path_segment(segment, distance, accuracy) {
+                    if let Some(previous) = segments.last()
+                        && previous.end() != fitted.start()
+                    {
+                        segments.push(PathSeg::Line(Line::new(previous.end(), fitted.start())));
+                    }
+                    segments.push(fitted);
+                }
+            }
+            let closed = elements.last() == Some(&PathEl::ClosePath);
+            if closed
+                && let (Some(first), Some(last)) = (segments.first(), segments.last())
+                && last.end() != first.start()
+            {
+                segments.push(PathSeg::Line(Line::new(last.end(), first.start())));
+            }
+            subpaths.push((source, closed, PathTrimmer::new(segments, accuracy)));
+        }
+
+        // Trim the joined offset, not the original carrier or independently
+        // fitted pieces. Moves consume no arc length and are never bridged.
+        let length = subpaths.iter().map(|(_, _, trim)| trim.length()).sum();
+        let (start, end) = fit_outsets_to_length(start_outset, end_outset, length);
+        let mut cursor = 0.0;
+        let mut path = BezPath::new();
+        for (source, closed, trimmer) in subpaths {
+            let subpath_length = trimmer.length();
+            let local_start = (start - cursor).max(0.0);
+            let local_end = (cursor + subpath_length - (length - end)).max(0.0);
+            cursor += subpath_length;
+            if subpath_length == 0.0 {
+                if start == 0.0 && end == 0.0 {
+                    path.extend(source.elements().iter().copied());
+                }
+                continue;
+            }
+            if local_start + local_end >= subpath_length {
+                continue;
+            }
+            let segments = trimmer.trim(local_start, local_end)?;
+            let fitted = BezPath::from_path_segments(segments.into_iter());
+            path.extend(fitted.elements().iter().copied());
+            if closed && local_start == 0.0 && local_end == 0.0 {
+                path.close_path();
+            }
+        }
+        if path.segments().next().is_none() {
+            return Err("path fitting produced no visible path".to_string());
+        }
+        Ok(CurvePathOutput { path })
     }
 }
 
@@ -1993,6 +2047,107 @@ impl PathTrimmer {
         self.measured_lengths().1
     }
 
+    /// A monotone, exactly collinear Bezier is a line geometrically, even when
+    /// its parameter speed is nonuniform. Solve its scalar polynomial rather
+    /// than introducing arc-inversion tolerance into straight-carrier points.
+    /// Keep the original segment so trims and frame tangents retain its controls.
+    fn parameter_at_distance(&self, segment: PathSeg, distance: f64) -> f64 {
+        let chord = segment.end() - segment.start();
+        let length = chord.hypot();
+        let controls = match segment {
+            PathSeg::Line(_) => return segment.inv_arclen(distance, self.accuracy),
+            PathSeg::Quad(quad) => [quad.p1, quad.p2],
+            PathSeg::Cubic(cubic) => [cubic.p1, cubic.p2],
+        };
+        let axis = if chord.x.abs() >= chord.y.abs() {
+            chord.x
+        } else {
+            chord.y
+        };
+        let coordinate = |point: Point| {
+            let offset = point - segment.start();
+            if chord.x.abs() >= chord.y.abs() {
+                offset.x / chord.x
+            } else {
+                offset.y / chord.y
+            }
+        };
+        // Exact collinearity is intentional: near-straight curves and
+        // collinear backtracking controls must retain ordinary arc inversion.
+        if length == 0.0
+            || !length.is_finite()
+            || !axis.is_normal()
+            || controls.iter().any(|point| {
+                let offset = *point - segment.start();
+                let left = offset.x * chord.y;
+                let right = offset.y * chord.x;
+                // Compare both products and their exact rounding residuals.
+                // A rounded-zero determinant alone can accept a narrow curve.
+                !left.is_finite()
+                    || !right.is_finite()
+                    || left.is_subnormal()
+                    || right.is_subnormal()
+                    || (left == 0.0 && offset.x != 0.0 && chord.y != 0.0)
+                    || (right == 0.0 && offset.y != 0.0 && chord.x != 0.0)
+                    || left != right
+                    || offset.x.mul_add(chord.y, -left) != offset.y.mul_add(chord.x, -right)
+            })
+        {
+            return segment.inv_arclen(distance, self.accuracy);
+        }
+        let [a, b] = controls.map(coordinate);
+        if !(0.0 <= a && a <= b && b <= 1.0)
+            || a.is_subnormal()
+            || b.is_subnormal()
+            || (a == 0.0 && controls[0] != segment.start())
+            || (b == 0.0 && controls[1] != segment.start())
+        {
+            return segment.inv_arclen(distance, self.accuracy);
+        }
+        let target = distance / length;
+        if !target.is_finite() {
+            return segment.inv_arclen(distance, self.accuracy);
+        }
+        let (c1, c2, c3) = match segment {
+            PathSeg::Quad(_) => (2.0 * a, 1.0 - 2.0 * a, 0.0),
+            PathSeg::Cubic(_) => (3.0 * a, 3.0 * (b - 2.0 * a), 1.0 + 3.0 * (a - b)),
+            PathSeg::Line(_) => unreachable!(),
+        };
+        let roots = kurbo::common::solve_cubic(-target, c1, c2, c3);
+        if roots.iter().any(|t| !t.is_finite()) {
+            return segment.inv_arclen(distance, self.accuracy);
+        }
+        let mut roots = roots.into_iter().filter(|t| (0.0..=1.0).contains(t));
+        if let Some(t) = roots.next()
+            && roots.next().is_none()
+            && (((c3 * t + c2) * t + c1) * t - target).abs() <= 32.0 * f64::EPSILON
+        {
+            return t;
+        }
+        segment.inv_arclen(distance, self.accuracy)
+    }
+
+    /// Only subdivide boundary pieces; untouched endpoints stay exact so
+    /// rounding at 0/1 cannot introduce new subpaths or change endpoint frames.
+    fn retained_segment(segment: PathSeg, start: f64, end: f64) -> PathSeg {
+        if start == 0.0 && end == 1.0 {
+            return segment;
+        }
+        let mut retained = segment.subsegment(start..end);
+        let (first, last) = match &mut retained {
+            PathSeg::Line(line) => (&mut line.p0, &mut line.p1),
+            PathSeg::Quad(quad) => (&mut quad.p0, &mut quad.p2),
+            PathSeg::Cubic(cubic) => (&mut cubic.p0, &mut cubic.p3),
+        };
+        if start == 0.0 {
+            *first = segment.start();
+        }
+        if end == 1.0 {
+            *last = segment.end();
+        }
+        retained
+    }
+
     /// Point and tangent at an arc distance, with the same endpoint arithmetic
     /// as batched frames. Empty carriers have no frame.
     pub fn frame(&self, distance: f64) -> Result<Option<PathFrame>, String> {
@@ -2027,13 +2182,13 @@ impl PathTrimmer {
                 if local_end <= 0.0 {
                     break;
                 }
-                let t = if length - local_end <= f64::EPSILON {
+                let t = if visible_end >= cursor || length - local_end <= f64::EPSILON {
                     1.0
                 } else {
-                    segment.inv_arclen(local_end, self.accuracy)
+                    self.parameter_at_distance(segment, local_end)
                 };
                 if t > 0.0 {
-                    last = Some(segment.subsegment(0.0..t));
+                    last = Some(Self::retained_segment(segment, 0.0, t));
                 }
                 if cursor >= visible_end {
                     break;
@@ -2088,7 +2243,7 @@ impl PathTrimmer {
             } else if station >= end {
                 1.0
             } else {
-                segment.inv_arclen(station - start, self.accuracy)
+                self.parameter_at_distance(segment, station - start)
             };
             let (a, b) = if forward { (at, 1.0) } else { (at, 0.0) };
             if let Some(t) =
@@ -2231,6 +2386,20 @@ impl PathTrimmer {
             let segment_end = cursor + segment_length;
             cursor = segment_end;
 
+            // A positive source span can be smaller than the cumulative
+            // cursor's resolution. Keep interior connectors verbatim: dropping
+            // one would disconnect its neighbours despite a connected input.
+            // Actual zero-length segments and trim-boundary connectors retain
+            // the ordinary empty-intersection behavior.
+            if segment_length > 0.0
+                && segment_end == segment_start
+                && visible_start < segment_start
+                && segment_end < visible_end
+            {
+                trimmed.push(segment);
+                continue;
+            }
+
             let keep_start = visible_start.max(segment_start);
             let keep_end = visible_end.min(segment_end);
             if keep_end <= keep_start {
@@ -2239,18 +2408,18 @@ impl PathTrimmer {
 
             let local_start = keep_start - segment_start;
             let local_end = keep_end - segment_start;
-            let t0 = if local_start <= f64::EPSILON {
+            let t0 = if keep_start == segment_start || local_start <= f64::EPSILON {
                 0.0
             } else {
-                segment.inv_arclen(local_start, self.accuracy)
+                self.parameter_at_distance(segment, local_start)
             };
-            let t1 = if segment_length - local_end <= f64::EPSILON {
+            let t1 = if keep_end == segment_end || segment_length - local_end <= f64::EPSILON {
                 1.0
             } else {
-                segment.inv_arclen(local_end, self.accuracy)
+                self.parameter_at_distance(segment, local_end)
             };
             if t1 > t0 {
-                trimmed.push(segment.subsegment(t0..t1));
+                trimmed.push(Self::retained_segment(segment, t0, t1));
             }
         }
 
@@ -2707,6 +2876,143 @@ mod tests {
 
     fn point(x: f64, y: f64) -> CurvePoint {
         CurvePoint { x, y }
+    }
+
+    #[test]
+    fn trims_preserve_positive_source_connectors_below_cumulative_resolution() {
+        let a = Point::new(1.0, 0.0);
+        let b = Point::new(f64::from_bits(1.0f64.to_bits() - 1), 0.0);
+        let first = PathSeg::Line(Line::new((-1.0, 0.0), a));
+        let connector = PathSeg::Cubic(CubicBez::new(a, a, b, b));
+        let zero = PathSeg::Cubic(CubicBez::new(b, b, b, b));
+        let last = PathSeg::Line(Line::new(b, (3.0, 0.0)));
+        let source = [first, connector, zero, last];
+        let trimmer = PathTrimmer::new(source, 1e-6);
+        let (lengths, total) = trimmer.measured_lengths();
+        assert!(lengths[1] > 0.0);
+        assert_eq!(lengths[0] + lengths[1], lengths[0]);
+        assert_eq!(lengths[2], 0.0);
+        assert_eq!(*total, 4.0);
+        assert_eq!(trimmer.trim(0.0, 0.0).unwrap(), source);
+
+        let interior = trimmer.trim(0.5, 0.5).unwrap();
+        assert_eq!(interior.len(), 3);
+        assert_eq!(interior[1], connector);
+        assert_eq!(interior[0].end(), interior[1].start());
+        assert_eq!(interior[1].end(), interior[2].start());
+        // Neither positive collapsed spans nor actual zeros belong to a
+        // window whose boundary lands at their cumulative station.
+        assert_eq!(trimmer.trim(0.0, 2.0).unwrap(), [first]);
+        assert_eq!(trimmer.trim(2.0, 0.0).unwrap(), [last]);
+        for distance in [1.5, 2.0, 2.5, 3.5] {
+            let prefix = trimmer.trim(0.0, trimmer.length() - distance).unwrap();
+            assert_eq!(
+                trimmer.frame(distance).unwrap().unwrap(),
+                CubicBezierSpec::drawable(*prefix.last().unwrap()).endpoint_frame(true),
+            );
+        }
+
+        // Without a source connector the exact endpoint gap is intentional,
+        // even if it is only one ULP. Trimming must not invent a join.
+        let disjoint = PathTrimmer::new([first, last], 1e-6);
+        let trimmed = disjoint.trim(0.5, 0.5).unwrap();
+        assert_eq!(trimmed.len(), 2);
+        assert_eq!(trimmed[0].end(), a);
+        assert_eq!(trimmed[1].start(), b);
+        let path = BezPath::from_path_segments(trimmed.into_iter());
+        assert_eq!(
+            path.elements()
+                .iter()
+                .filter(|el| matches!(el, PathEl::MoveTo(_)))
+                .count(),
+            2,
+        );
+    }
+
+    #[test]
+    fn straight_bezier_frames_and_trims_use_exact_distance_without_rewriting_controls() {
+        let segments = [
+            PathSeg::Cubic(CubicBez::new(
+                (0.0, 0.0),
+                (0.0, 0.0),
+                (3.0, 0.0),
+                (3.0, 0.0),
+            )),
+            PathSeg::Cubic(CubicBez::new(
+                (0.0, 0.0),
+                (0.1, 0.0),
+                (1.8, 0.0),
+                (3.0, 0.0),
+            )),
+            PathSeg::Quad(kurbo::QuadBez::new((0.0, 0.0), (0.2, 0.0), (3.0, 0.0))),
+        ];
+        for segment in segments {
+            let trimmer = PathTrimmer::new([segment], 1e-6);
+            assert_eq!(trimmer.segments, [segment]);
+            for distance in [0.21, 1.43, 1.57, 2.73] {
+                let frame = trimmer.frame(distance).unwrap().unwrap();
+                assert!((frame.point.x - distance).abs() < 1e-12);
+                assert_eq!(frame.point.y, 0.0);
+                let prefix = trimmer.trim(0.0, trimmer.length() - distance).unwrap();
+                let retained = *prefix.last().unwrap();
+                assert_eq!(
+                    frame,
+                    CubicBezierSpec::drawable(retained).endpoint_frame(true)
+                );
+                assert!(matches!(
+                    (segment, retained),
+                    (PathSeg::Cubic(_), PathSeg::Cubic(_)) | (PathSeg::Quad(_), PathSeg::Quad(_))
+                ));
+                let t = trimmer.parameter_at_distance(segment, distance);
+                let expected =
+                    CubicBezierSpec::drawable(segment.subsegment(0.0..t)).endpoint_frame(true);
+                assert_eq!(frame.tangent, expected.tangent);
+                assert!(frame.tangent.x > 0.0 && frame.tangent.y == 0.0);
+            }
+            for forward in [false, true] {
+                let (contact, distance) =
+                    trimmer.chord_contact(1.43, 0.2, forward).unwrap().unwrap();
+                assert!((contact.x - distance).abs() < 1e-12);
+                let frame = trimmer.frame(distance).unwrap().unwrap();
+                assert!((frame.point.x - contact.x).abs() < 1e-12);
+                assert!(((contact.x - 1.43).abs() - 0.2).abs() <= 1e-6);
+            }
+        }
+    }
+
+    #[test]
+    fn straight_parameter_fast_path_rejects_backtracking_collapsed_and_narrow_curves() {
+        let segments = [
+            CubicBez::new((0.0, 0.0), (4.0, 0.0), (-1.0, 0.0), (3.0, 0.0)),
+            CubicBez::new((0.0, 0.0), (1.0, 0.0), (-1.0, 0.0), (0.0, 0.0)),
+            CubicBez::new((0.0, 0.0), (0.1, 1e-12), (1.8, 0.0), (3.0, 0.0)),
+            // Its ordinary floating-point determinant rounds to zero, but
+            // the exact products differ: it must not be treated as a line.
+            CubicBez::new(
+                (0.0, 0.0),
+                (0.1, 0.018181818181818184),
+                (1.1, 0.2),
+                (1.1, 0.2),
+            ),
+            // Unsafe determinant products (underflow and overflow).
+            CubicBez::new(
+                (0.0, 0.0),
+                (1e-200, 1e-200),
+                (3e-200, 3e-200),
+                (3e-200, 3e-200),
+            ),
+            CubicBez::new((0.0, 0.0), (1e200, 1e200), (3e200, 3e200), (3e200, 3e200)),
+        ];
+        for cubic in segments {
+            let segment = PathSeg::Cubic(cubic);
+            let trimmer = PathTrimmer::new([segment], 1e-6);
+            let distance = trimmer.length() * 0.37;
+            assert_eq!(
+                trimmer.parameter_at_distance(segment, distance),
+                segment.inv_arclen(distance, 1e-6),
+                "{cubic:?}"
+            );
+        }
     }
 
     #[test]
@@ -3308,6 +3614,262 @@ mod tests {
         assert_point_close(points[0], point(1.0, 0.25));
         assert_point_close(*points.last().unwrap(), point(3.0, 0.25));
         assert!((path_length_value(&output.path, 1e-6) - 2.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn parallel_path_bevels_near_collinear_fitting_gaps_without_snapping() {
+        let mut path = BezPath::new();
+        path.move_to((0.0, 0.0));
+        path.curve_to((0.3, 0.0), (0.7, 0.0), (1.0, 0.0));
+        path.curve_to((1.3, 0.0), (1.7, 0.0001), (2.0, 0.0001));
+        let fitted: Vec<_> = path
+            .segments()
+            .flat_map(|segment| offset_path_segment(segment, -0.35, 0.001))
+            .collect();
+        let gap = fitted[0].end().distance(fitted[1].start());
+        assert!(gap > 1e-9 && gap < 0.001, "{gap}");
+        assert_eq!(
+            BezPath::from_path_segments(fitted.iter().copied())
+                .subpaths()
+                .count(),
+            2
+        );
+        for trim in [0.0, 0.1] {
+            let output = ParallelPathSpec {
+                path: path.clone(),
+                distance: -0.35,
+                start_outset: trim,
+                end_outset: trim,
+                accuracy: 0.001,
+            }
+            .parallel()
+            .unwrap();
+            assert_eq!(output.path.subpaths().count(), 1);
+            let segments: Vec<_> = output.path.segments().collect();
+            assert_eq!(segments.len(), 3);
+            assert_eq!(
+                segments[1],
+                PathSeg::Line(Line::new(fitted[0].end(), fitted[1].start()))
+            );
+            if trim == 0.0 {
+                assert_eq!(segments[0], fitted[0]);
+                assert_eq!(segments[2], fitted[1]);
+            }
+        }
+    }
+
+    #[test]
+    fn parallel_path_keeps_fitted_cubic_controls_at_bevel_join() {
+        let mut path = BezPath::new();
+        path.move_to((0.0, -1.0));
+        path.curve_to((0.3, -1.0), (0.7, 0.0), (1.0, 0.0));
+        path.curve_to((1.3, 0.0), (1.7, 0.0001), (2.0, 0.0001));
+        let fitted: Vec<_> = path
+            .segments()
+            .map(|segment| offset_path_segment(segment, -0.35, 0.001))
+            .collect();
+        assert!(
+            fitted[0]
+                .iter()
+                .any(|segment| matches!(segment, PathSeg::Cubic(_)))
+        );
+        let gap = fitted[0]
+            .last()
+            .unwrap()
+            .end()
+            .distance(fitted[1][0].start());
+        assert!(gap > 1e-9 && gap < 0.001, "{gap}");
+        for trim in [0.0, 0.1] {
+            let output = ParallelPathSpec {
+                path: path.clone(),
+                distance: -0.35,
+                start_outset: trim,
+                end_outset: trim,
+                accuracy: 0.001,
+            }
+            .parallel()
+            .unwrap();
+            assert_eq!(output.path.subpaths().count(), 1);
+            if trim == 0.0 {
+                let segments: Vec<_> = output.path.segments().collect();
+                assert_eq!(&segments[..fitted[0].len()], fitted[0]);
+                assert_eq!(&segments[fitted[0].len() + 1..], fitted[1]);
+            }
+        }
+    }
+
+    #[test]
+    fn parallel_path_preserves_explicit_moves_even_at_touching_endpoints() {
+        for next_start in [1.0, 5.0] {
+            for trim in [0.0, 0.25] {
+                let mut path = BezPath::new();
+                path.move_to((0.0, 0.0));
+                path.line_to((1.0, 0.0));
+                path.move_to((next_start, 0.0));
+                path.line_to((next_start + 1.0, 0.0));
+                let output = ParallelPathSpec {
+                    path,
+                    distance: 0.5,
+                    start_outset: trim,
+                    end_outset: trim,
+                    accuracy: 1e-6,
+                }
+                .parallel()
+                .unwrap();
+                assert_eq!(output.path.subpaths().count(), 2);
+                assert_eq!(output.path.segments().count(), 2);
+                assert!((path_length_value(&output.path, 1e-6) - (2.0 - 2.0 * trim)).abs() < 1e-6);
+            }
+        }
+    }
+
+    #[test]
+    fn parallel_path_bevels_sharp_corners_and_trims_joined_length() {
+        for distance in [-0.5, 0.5] {
+            let mut path = BezPath::new();
+            path.move_to((0.0, 0.0));
+            path.line_to((2.0, 0.0));
+            path.line_to((2.0, 2.0));
+            for trim in [0.0, 0.25, 2.1] {
+                let output = ParallelPathSpec {
+                    path: path.clone(),
+                    distance,
+                    start_outset: trim,
+                    end_outset: trim,
+                    accuracy: 1e-6,
+                }
+                .parallel()
+                .unwrap();
+                assert_eq!(output.path.subpaths().count(), 1);
+                let length = 4.0 + distance.abs() * 2.0_f64.sqrt();
+                assert!(
+                    (path_length_value(&output.path, 1e-6) - (length - 2.0 * trim)).abs() < 1e-6
+                );
+                if trim == 0.0 {
+                    let segments: Vec<_> = output.path.segments().collect();
+                    assert_eq!(
+                        segments[1],
+                        PathSeg::Line(Line::new((2.0, distance), (2.0 - distance, 0.0)))
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn parallel_path_retains_meaningful_closure_only_without_trimming() {
+        let mut path = BezPath::new();
+        path.move_to((0.0, 0.0));
+        path.line_to((2.0, 0.0));
+        path.line_to((2.0, 2.0));
+        path.close_path();
+        for trim in [0.0, 0.1] {
+            let output = ParallelPathSpec {
+                path: path.clone(),
+                distance: -0.25,
+                start_outset: trim,
+                end_outset: 0.0,
+                accuracy: 1e-6,
+            }
+            .parallel()
+            .unwrap();
+            assert_eq!(
+                output.path.subpaths().count(),
+                1,
+                "trim={trim}: {:?}",
+                output.path
+            );
+            assert_eq!(
+                output.path.elements().last() == Some(&PathEl::ClosePath),
+                trim == 0.0
+            );
+            if trim == 0.0 {
+                let segments: Vec<_> = output.path.segments().collect();
+                assert_eq!(
+                    segments.first().unwrap().start(),
+                    segments.last().unwrap().end()
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn parallel_path_floating_joins_keep_moves_closure_and_exact_prefix_frames() {
+        let mut path = BezPath::new();
+        let origin = Point::new(-0.21169587343232443, 0.39154203702426227);
+        path.move_to(origin);
+        path.line_to((1.823223304703363, 2.176776695296637));
+        path.line_to((-0.17677669529663687, 0.17677669529663687));
+        path.close_path();
+        // Even a move to the closed subpath's exact start is a boundary.
+        path.move_to(origin);
+        path.line_to((1.823223304703363, 2.176776695296637));
+        for trim in [0.0, 0.1] {
+            let output = ParallelPathSpec {
+                path: path.clone(),
+                distance: -0.35,
+                start_outset: trim,
+                end_outset: trim,
+                accuracy: 0.001,
+            }
+            .parallel()
+            .unwrap();
+            assert_eq!(output.path.subpaths().count(), 2);
+            assert_eq!(
+                output
+                    .path
+                    .elements()
+                    .iter()
+                    .filter(|el| matches!(el, PathEl::MoveTo(_)))
+                    .count(),
+                2
+            );
+            assert_eq!(
+                output
+                    .path
+                    .elements()
+                    .iter()
+                    .filter(|el| matches!(el, PathEl::ClosePath))
+                    .count(),
+                usize::from(trim == 0.0)
+            );
+            for elements in output.path.subpaths() {
+                let subpath = BezPath::from_vec(elements.to_vec());
+                let trimmer = PathTrimmer::new(subpath.segments(), 0.001);
+                let mut cursor = 0.0;
+                for segment in subpath.segments() {
+                    let length = segment.arclen(0.001);
+                    for station in [cursor + length * 0.5, cursor + length] {
+                        let prefix = trimmer.trim(0.0, trimmer.length() - station).unwrap();
+                        assert_eq!(
+                            trimmer.frame(station).unwrap().unwrap(),
+                            CubicBezierSpec::drawable(*prefix.last().unwrap()).endpoint_frame(true)
+                        );
+                    }
+                    cursor += length;
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn parallel_path_handles_empty_and_stationary_paths() {
+        let empty = BezPath::new();
+        let mut stationary = BezPath::new();
+        stationary.move_to((1.0, 2.0));
+        stationary.line_to((1.0, 2.0));
+        for path in [empty, stationary] {
+            let output = ParallelPathSpec {
+                path: path.clone(),
+                distance: -0.35,
+                start_outset: 0.1,
+                end_outset: 0.1,
+                accuracy: 0.001,
+            }
+            .parallel()
+            .unwrap();
+            assert_eq!(output.path, path);
+        }
     }
 
     #[test]

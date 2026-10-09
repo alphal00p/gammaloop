@@ -61,22 +61,17 @@
   stroke-style(c: c.lighten(lighten), thickness: thickness, dash: dash)
 }
 
-/// CeTZ marker used for fermion particle-flow arrows on the main edge.
+/// Data-only Kurvst mark for particle flow; paint and thickness follow the line.
+/// These explicit physics sizes are portable public mark data, not shape geometry.
 /// -> dictionary
 #let fermion-arrow-mark = (
-  end: (
-    symbol: ">",
-    fill: palette.ink,
-    stroke: palette.ink + 0.3pt,
-    anchor: "center",
-    shorten-to: auto,
-  ),
-  scale: 1.05,
+  kind: "kurvst-mark", shape: "triangle", length: 0.21cm, width: 0.1575cm,
 )
 
 /// Mark an edge-map entry as a fermion so the main edge receives one
 /// particle-flow arrow that follows `edge.orientation`. This is separate from
 /// optional momentum arrows.
+/// Override `fermion-arrow-mark` with a canonical Kurvst mark or `none` to disable it.
 /// -> dictionary
 #let fermion-flow = (
   fermion-arrow: true,
@@ -170,13 +165,14 @@
 #let _momentum-arrow-stroke = (paint: palette.ink, thickness: 1pt, cap: "round")
 
 /// Default style for source-to-sink momentum arrow layers.
+/// Override `momentum-arrow-mark` with a canonical Kurvst mark or `none` to disable it.
 /// -> dictionary
 #let momentum-arrow-defaults = (
   offset: 0.35,
   length: 1.0,
   ratio: none,
   stroke: _momentum-arrow-stroke,
-  mark: (end: "straight", scale: 1.1),
+  mark: (kind: "kurvst-mark", shape: "straight", length: 0.16cm, width: 0.12cm),
 )
 
 /// Return an edge's particle name, stripping the quotes often present in DOT

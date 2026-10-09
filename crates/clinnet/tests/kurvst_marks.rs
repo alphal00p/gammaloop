@@ -55,6 +55,14 @@ fn mark_geometry_matches_native_through_the_typst_wasm_boundary() {
             {"kind": "move", "start": [0.0, 0.0]},
             {"kind": "cubic", "control-start": [5.0, 20.0],
              "control-end": [30.0, -20.0], "end": [40.0, 20.0]}
+        ]}},
+        {"path": {"elements": [
+            {"kind": "move", "start": [0.0, 0.0]},
+            {"kind": "line", "end": [100.0, 0.0]}
+        ]}},
+        {"path": {"elements": [
+            {"kind": "move", "start": [0.0, 0.0]},
+            {"kind": "line", "end": [2.0, 0.0]}
         ]}}
     ]);
     let candidate_placements: Vec<_> = (0..templates.len())
@@ -65,6 +73,31 @@ fn mark_geometry_matches_native_through_the_typst_wasm_boundary() {
             })
         })
         .collect();
+    // Exercise the shared painted-center rule across the complete catalogue
+    // and composite, both numeric station forms, both directions and shifts.
+    // The composite's distinct shaft context needs its own carrier.
+    let mut centered_placements = Vec::new();
+    for template in 0..templates.len() {
+        for direction in ["forward", "backward"] {
+            for station in [
+                json!({"kind": "ratio", "value": 0.5}),
+                json!({"kind": "distance", "value": 50.0}),
+            ] {
+                for shift in [-3.0, 3.0] {
+                    centered_placements.push(json!({
+                        "template": template, "carrier": if template == 13 { 2 } else { 0 },
+                        "station": station, "direction": direction, "shift": shift
+                    }));
+                }
+            }
+        }
+    }
+    for direction in ["forward", "backward"] {
+        centered_placements.push(json!({
+            "template": 0, "carrier": 3, "direction": direction,
+            "station": {"kind": "ratio", "value": 0.5}
+        }));
+    }
     for (mode, placements) in [
         ("candidates", json!(candidate_placements)),
         (
@@ -77,6 +110,7 @@ fn mark_geometry_matches_native_through_the_typst_wasm_boundary() {
                  "station": {"kind": "ratio", "value": 0.5}}
             ]),
         ),
+        ("selected", json!(centered_placements)),
     ] {
         let request = json!({
             "mode": mode,
@@ -105,7 +139,8 @@ fn mark_geometry_matches_native_through_the_typst_wasm_boundary() {
   if a == b { return none }
   let coordinate = (path.ends-with(".end") or path.contains(".elements[")
     or path.contains(".tip[") or path.contains(".back[")
-    or path.contains(".shaft-contact["))
+    or path.contains(".shaft-contact[") or path.contains(".outline-bounds[")
+    or path.contains(".footprint-bounds["))
   if coordinate and type(a) in (int, float) and type(b) in (int, float) {
     if calc.abs(a - b) <= 1e-12 * calc.max(1, calc.abs(a), calc.abs(b)) {
       return none

@@ -1,9 +1,10 @@
 = Kurvst Arrowhead Engine
 
 #quote(block: true)[
-*Status: Accepted design, recorded 2026-10-04; P0–P7 NOT IMPLEMENTED.*
-This is a planned architecture note, not an executable API reference or a claim
-that renderer migration has landed. API examples below are proposed sketches.
+*Status: Accepted design, recorded 2026-10-04; implementation in progress.*
+P0 and P1 are verified. P2–P7 are implemented with focused validation; final
+performance and image acceptance remain pending. This is not
+a claim that the complete stock-CeTZ renderer or performance targets are ready.
 ]
 
 == Decision and delivery boundary
@@ -20,9 +21,11 @@ The prerequisite consolidation was finalized by the parent, with 58 native
 tests reported green, as `uyrstsvl` /
 `da456712676c16db00da377b2447008dc28c73e7`. This separate documentation change
 is `rnzmqrrv`. These are provenance records, not checks reproduced for this note.
-Delivery order is: finish consolidation, rebase feynkit, then regenerate the P0
-corpus baseline against the reconciled base. This documentation task performs
-no rebase, implementation, CI change, or generated-asset update.
+Delivery order is consolidation, private reconciliation with feynkit, then
+regeneration of P0 against that base. Reconciliation is recorded as `lxptuzuk` /
+`cf565f42b9c36ee20ac171a84f80c8347c889de4`; the shared feynkit branch was not
+rewritten. The phase records below distinguish implementation evidence from
+remaining end-to-end acceptance.
 
 == Mark catalogue and data contract
 
@@ -111,7 +114,10 @@ geometry evaluation; numeric hitboxes and prepared content drawables avoid
 per-target painting work. Link target selection and semantics remain Linnest
 responsibilities, separate from the mark catalogue.
 
-== Proposed API and migration (not executable today)
+== API and migration
+
+Mark constructors and the native Python configuration are implemented. The
+Typst renderer migration below is still in progress.
 
 These sketches describe the accepted interface direction. They do not establish
 currently available constructors or native configuration options.
@@ -187,7 +193,7 @@ These observations motivate numeric preparation rather than merely replacing
 the painter. P0 must record host, toolchain, cache state, timing boundaries, and
 paired baseline comparisons before using these figures as performance gates.
 
-== Delivery phases: P0 baseline captured, P1 implemented, P2–P7 NOT IMPLEMENTED
+== Delivery phases and evidence
 
 Each phase is its own change after the reconciled feynkit base, with corpus
 timings recorded. S/M/L are planning sizes, not completion indicators.
@@ -219,12 +225,12 @@ painted-footprint coverage, shaft/back contact, zero-length paths, and near-end
 placement.
 
 P1 now provides the shared native/Wasm engine and strict data-only Typst
-constructors for thirteen shapes and composites. Its 93 native tests and
+constructors for thirteen shapes and composites. Its 110 native tests and
 native/Wasm parity checks pass. The approved parity tolerance is
 `1e-12 * max(1, abs(actual), abs(expected))` for geometry coordinates and
 lengths only; structure, styles, indices, and other data remain exact.
 Candidate results remain independent, while selected results share one
-authoritative painted shaft per carrier. No renderer has migrated yet.
+authoritative painted shaft per carrier.
 
 === P2 — M: native and Python
 
@@ -232,16 +238,43 @@ Replace hardcoded `linnest::svg::marks` with the engine, add native
 `flow-arrow` / `momentum-arrow` and the Python mirror. Preserve the default
 notebook look with explicit sizes.
 
+The native renderer now uses one drawing-wide candidate call and one selected
+call, with deduplicated templates and shared shafts. Fourteen focused SVG tests
+pass. A fresh CPython 3.13 ABI3 wheel passes all 100 API/mark/streaming tests, including
+actual Typst rendering of every shape and composites with both fits. Named paints
+resolve through Typst's own color constants, not CSS names. FeynKit and Spynso3
+caller checks and both mark-configuration integration tests pass. Native timing
+and full end-to-end acceptance remain pending.
+
+The maintainer approved the shared engine's default appearance on 2026-10-09:
+retain the explicit physical sizes and inset stroke geometry rather than
+recreating legacy protruding miters. The isolated raw-paint comparison at
+150ppi changed 67/2814 pixels for the flow triangle and 74/2814 for momentum;
+maximum bounding-extent changes were 0.4272pt and 1.6512pt respectively.
+This approval does not waive corpus image review or native/Typst parity.
+
 === P3 — M: Typst painting
 
 Replace `mark.geometry` with engine geometry painted through CeTZ; accept only
 Kurvst marks. Migrate physics, manual, and map-style uses. Remove one of the
 three vendored-only calls.
 
+The Typst route now consumes the shared candidate and selected batches.
+Physics templates, the map-style example and Python selectors use canonical
+mark data; CeTZ edge-mark dictionaries are rejected. All five Clinnet public
+behavior tests pass against the stock CeTZ 0.5.1 cache. Named preparation
+anchors remain on the unshortened reference carrier; final painted heads
+contribute their engine outlines to conservative canvas bounds.
+
 === P4 — M: candidate footprints
 
 Replace `mark.footprints` and the slow paint fallback with shared candidate-batch
 engine footprints. This addresses the main 79% momentum penalty.
+
+Candidate templates and placement indices are collected drawing-wide before
+label search. Outlines determine collision boxes; retained sizing thickness
+cannot turn a shaft with no paint into an obstacle. This is implemented and
+covered by focused tests, not yet a corpus performance claim.
 
 === P5 — S: hit areas
 
@@ -249,17 +282,80 @@ Use numeric hitboxes and prepared content drawables instead of per-target CeTZ
 `content-many`. Address roughly 75% of the plain penalty and 16% of momentum's;
 keep link semantics separate from the catalogue.
 
+The authored fixed-size identity-target helper passes focused stock CeTZ 0.5.1
+and 0.5.2 checks, preserving both expected SVG links. Integrated public
+rendering tests also pass; corpus acceptance remains pending.
+
 === P6 — S: collision sampling
 
 Land the collision-sampling prototype JJ change `tvxztqnq` with one plugin batch.
 Its reported vendored-corpus improvement was 1.8%; collision accounts for
 roughly 2–14% of the stock penalty. These figures are not new measurements.
 
+The prototype revision was unavailable. The implementation instead reuses the
+existing Linnest `label_stroke_lines` owner, with strict numeric validation and
+one batched traversal of painted strokes. Twenty-three label-placement tests
+and a focused stock-CeTZ fixture pass. The drawing owner now gathers all
+painted strokes for one traversal; timing acceptance remains pending.
+
 === P7 — M: stock CeTZ and vendor removal
 
 Target *stock CeTZ 0.5.2* (the measurements above used 0.5.1). Delete vendor,
 patches, and `REBUILD`; migrate behavior fixtures and Nix packaging; rerun the
 corpus. Generic bounds/sample speedups may optionally be upstreamed.
+
+The patched 47-file package tree, five patches and rebuild recipe are deleted.
+Nix selects stock CeTZ 0.5.2 directly. Offline Python rendering embeds one
+unmodified upstream release archive, with its LGPL license and SHA256
+`77cf8490114ae04c6e665a11efa691d284a0cadb9719771b5708c1197292f23f`;
+there is no editable CeTZ fork or runtime download. Bundled package identities
+replace complete staged packages, including conflicting file/directory entries,
+without changing external stores. Stock rendering tests pass.
+
+== Validation and remaining acceptance
+
+The first integrated corpus completed all 144 samples but regressed to 48.784s
+on stock CeTZ 0.5.1 against the same-host 15.010s P0 baseline. Profiles excluded
+stock painting: current and stock package variants differed by only 0.38%.
+Growing drawing-wide values crossed Typst function boundaries once per
+candidate, creating quadratic preparation and projection overhead.
+Registration, bounds projection and preview materialization are now bulk
+operations; the shared engine supplies ordered conservative bounds directly.
+Exact context/paint/geometry equality and unchanged PNGs cover these
+optimizations. The problem-case stock time fell from approximately 2.99s to
+0.982s before the final corpus rerun. This is improvement evidence, not a
+claim that the same-host no-regression gate is met.
+
+The first complete stock 0.5.2 corpus measured 18.127s, 20.76% slower than the
+same-host P0 baseline. It passes the separate 26.7s total ceiling, but fails the
+no-regression requirement and the 1.3s worst-case momentum ceiling. The 1.0s
+plain ceiling also fails on the largest diagram; that diagram already took
+1.077s at P0, so this is not a newly introduced plain-rendering slowdown.
+All 24 staged-archive/Nix-stock PNG pairs match exactly. Eighteen differ from
+P0, with unchanged dimensions and at most 1.52% changed pixels in the reviewed
+high-change cases. Image review remains required. Later parser and packed-path
+transport improvements and removal of unused painted-length metadata are now
+covered by a second complete 144-sample corpus: *17.456s*, or *16.29% slower*
+than P0. All 24 package-paired PNGs match, and all 24 outputs match the preceding
+corpus exactly. The worst momentum case takes 1.583s; the worst plain case
+takes 1.079s. Performance acceptance is therefore still open, despite passing
+the separate 26.7s total ceiling.
+
+`tests/drawing-bench/native.py` provides a real installed-Python, fixed
+four-loop native-render check, without generating a diagram population or
+including Typst label typesetting. After renewing the local license and
+preserving sub-resolution positive trim connectors, the real installed run
+passed: 10 warmups, 21 timed samples, median *12.186ms* against the 100ms
+absolute ceiling. All 28 catalogue/composite and fit combinations also render
+with their requested native paints. No genuine old same-host native timing
+baseline exists, so native non-regression is not independently established.
+Credentials are supplied only through the process environment.
+
+The installed-extension test exposed distinct Python type identities across
+the host and standalone Linnet binaries. `Mark.from_dict` / `to_native` now
+provide an explicit portable data boundary through the existing codec, rather
+than duck typing or exception-driven fallback. The actual separately loaded
+extension regression passes.
 
 == Acceptance and risks
 
