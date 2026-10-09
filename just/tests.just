@@ -285,3 +285,28 @@ test_one TEST_NAME:
 # Run integration tests with nocapture (shows output during test execution)
 test-verbose TEST_NAME:
     cargo nextest run {{ TEST_NAME }} --nocapture
+
+generation_oracle_filter := "binary(generation_oracle) or (package(feynkit-generator) and test(/^generation::/) and not test(/::failing::/)) or (package(linnet) and test(/^half_edge::generate::/)) or (package(feynkit-py) and test(=generation::tests::python_filters_prune_like_rust_filters))"
+
+# The fast tier runs every case of crates/feynkit-generator/tests/generation_oracle at 1, 8
+# and 32 threads, the search census of the small reference workloads, the generation unit tests
+# of feynkit-generator (without the known `failing::` ones) and of linnet, and the Python filter
+# path. It is a gate, not the package suites, which later phases run as well. Retries are off:
+# a nondeterministic difference between thread counts must fail, not pass as flaky.
+# Run the fast tier of the diagram-generation oracles
+generation-oracle *ARGS:
+    cargo nextest run --cargo-profile dev-optim --retries 0 -p linnet -p feynkit-generator -p feynkit-py -E '{{ generation_oracle_filter }}' {{ ARGS }}
+
+# The heavy tier adds the large profile cases (gg->gg L3, the photon, gluon and Yang-Mills
+# self-energies at five loops, ...) and the search census of the large reference workloads.
+# Together they need about 150 GB of memory and an hour on many cores;
+# FEYNKIT_ORACLE_THREADS=32 runs every case once instead of at 1, 8 and 32 threads.
+# Run the heavy tier of the diagram-generation oracles
+generation-oracle-heavy *ARGS:
+    cargo nextest run --cargo-profile dev-optim --profile local_test_all --retries 0 -p feynkit-generator --run-ignored only -E '{{ generation_oracle_filter }}' {{ ARGS }}
+
+# For example `just generation-ir measure --allocations --label <commit>`, then
+# `just generation-ir compare bin/generation_ir_baseline.json target/generation_ir/summary.json`.
+# Measure diagram-generation instructions per stage under callgrind (bin/generation_ir.py)
+generation-ir *ARGS:
+    python3 bin/generation_ir.py {{ ARGS }}

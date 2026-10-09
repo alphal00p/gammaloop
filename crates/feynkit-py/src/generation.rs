@@ -3703,4 +3703,85 @@ assert foreign_process.outgoing_alternatives[0][0].pdg == 1000
             py.run(&code, Some(&locals), Some(&locals)).unwrap();
         });
     }
+
+    /// The Python filter path (graph snapshots with PDG codes, answered on the calling thread)
+    /// prunes like the same predicate as a Rust filter: the same diagrams with the same names,
+    /// ids, symmetry and overall factors, in the same order at every thread count.
+    #[test]
+    fn python_filters_prune_like_rust_filters() {
+        use symbolica::atom::AtomCore;
+
+        let model = Arc::new(Model::qcd());
+        let ghosts: Vec<_> = model
+            .particles()
+            .iter()
+            .filter(|particle| particle.is_ghost())
+            .collect();
+        let ghost_ids: Vec<_> = ghosts
+            .iter()
+            .map(|particle| model.particle_id(&particle.name).unwrap())
+            .collect();
+        let process = Process::new(["g", "g"], ["g", "g"]);
+        let options = |threads| {
+            GenerationOptions::default()
+                .with_loop_count(1, 1)
+                .unwrap()
+                .threads(threads)
+        };
+        let summary = |result: &GenerationResult| {
+            result
+                .diagrams
+                .iter()
+                .map(|diagram| {
+                    (
+                        diagram.name().to_owned(),
+                        diagram.id(),
+                        diagram.symmetry_factor(),
+                        diagram.overall_factor().to_canonical_string(),
+                    )
+                })
+                .collect::<Vec<_>>()
+        };
+        Python::initialize();
+        Python::attach(|py| {
+            let locals = PyDict::new(py);
+            let pdgs: Vec<_> = ghosts.iter().map(|particle| particle.pdg_code).collect();
+            locals.set_item("GHOSTS", pdgs).unwrap();
+            let code = CString::new(
+                "def keep(graph, stage):\n    return all(edge.data not in GHOSTS for edge in graph.edges())\n",
+            )
+            .unwrap();
+            py.run(&code, Some(&locals), Some(&locals)).unwrap();
+            let keep: Py<PyAny> = locals.get_item("keep").unwrap().unwrap().unbind();
+            let mut sequential = None;
+            for threads in [1, 8, 32] {
+                let ghost_ids = ghost_ids.clone();
+                let rust = process
+                    .generate_diagrams(
+                        model.clone(),
+                        &options(threads).filter(move |view| {
+                            view.edges().all(|edge| {
+                                edge.stub.is_none_or(|stub| !ghost_ids.contains(stub.field))
+                            })
+                        }),
+                    )
+                    .unwrap();
+                let python = run_generation(
+                    py,
+                    model.clone(),
+                    process.clone(),
+                    GenerationType::Amplitude,
+                    options(threads),
+                    None,
+                    Some(keep.clone_ref(py)),
+                )
+                .unwrap()
+                .inner;
+                assert_eq!(summary(&python), summary(&rust), "{threads} threads");
+                let sequential = sequential.get_or_insert_with(|| summary(&rust));
+                assert_eq!(&summary(&rust), sequential, "{threads} threads");
+                assert_eq!(sequential.len(), 277);
+            }
+        });
+    }
 }

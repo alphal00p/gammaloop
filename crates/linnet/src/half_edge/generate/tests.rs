@@ -1,5 +1,5 @@
 use std::{
-    collections::HashSet,
+    collections::{BTreeMap, HashSet},
     sync::{
         atomic::{AtomicUsize, Ordering},
         Arc,
@@ -135,61 +135,313 @@ fn loop_count<F, L>(g: &HedgeGraph<F, usize, Option<L>>) -> usize {
     paired + 1 - g.n_live()
 }
 
+/// The |Aut| multiset: (automorphism count, number of graphs).
+type Histogram = &'static [(u128, usize)];
+
+/// `diagrams` are `count` graphs with the oracle's sum of `1/|Aut|` and |Aut| multiset, and each
+/// carries its canonizer's certificate and automorphism count.
+fn assert_oracle(
+    case: &str,
+    diagrams: &[Diagram<u8, u8>],
+    count: usize,
+    sum: Ratio,
+    histogram: &[(u128, usize)],
+) {
+    assert_eq!(diagrams.len(), count, "{case}");
+    assert_eq!(Ratio::sum(diagrams), sum, "{case}");
+    let mut found = BTreeMap::<u128, usize>::new();
+    for d in diagrams {
+        *found.entry(d.automorphism_count.unwrap()).or_default() += 1;
+    }
+    assert_eq!(found.into_iter().collect::<Vec<_>>(), histogram, "{case}");
+    check_canonical(diagrams);
+}
+
+// The oracles below are FeynGraph and Graphica, which agree on every count and |Aut| multiset
+// (Graphica alone for the phi^3 vacua at six and seven loops, where FeynGraph did not finish),
+// together with OEIS A005967 for the phi^3 vacuum counts and zero-dimensional field theory for
+// the scalar sums.
+
 #[test]
 fn phi3_vacuum_matches_oeis_and_zero_dimensional_sums() {
-    // OEIS A005967 and the zero-dimensional phi^3 free energy
-    for (loops, count, sum) in [
-        (2, 2, Ratio(5, 24)),
-        (3, 5, Ratio(5, 16)),
-        (4, 17, Ratio(1105, 1152)),
-        (5, 71, Ratio(565, 128)),
-    ] {
+    let cases: [(usize, usize, Ratio, Histogram); 6] = [
+        (2, 2, Ratio(5, 24), &[(8, 1), (12, 1)]),
+        (3, 5, Ratio(5, 16), &[(8, 1), (16, 2), (24, 1), (48, 1)]),
+        (
+            4,
+            17,
+            Ratio(1105, 1152),
+            &[
+                (8, 3),
+                (12, 1),
+                (16, 5),
+                (32, 4),
+                (48, 2),
+                (72, 1),
+                (128, 1),
+            ],
+        ),
+        (
+            5,
+            71,
+            Ratio(565, 128),
+            &[
+                (4, 4),
+                (8, 10),
+                (12, 1),
+                (16, 21),
+                (32, 17),
+                (48, 1),
+                (64, 11),
+                (96, 2),
+                (128, 2),
+                (256, 2),
+            ],
+        ),
+        (
+            6,
+            388,
+            Ratio(82825, 3072),
+            &[
+                (2, 6),
+                (4, 25),
+                (6, 2),
+                (8, 60),
+                (12, 1),
+                (16, 88),
+                (20, 2),
+                (32, 89),
+                (48, 5),
+                (64, 67),
+                (120, 1),
+                (128, 27),
+                (256, 6),
+                (320, 2),
+                (384, 2),
+                (512, 4),
+                (3072, 1),
+            ],
+        ),
+        (
+            7,
+            2592,
+            Ratio(19675, 96),
+            &[
+                (1, 5),
+                (2, 70),
+                (4, 219),
+                (8, 408),
+                (12, 4),
+                (16, 529),
+                (18, 1),
+                (24, 3),
+                (32, 524),
+                (36, 1),
+                (48, 6),
+                (64, 425),
+                (96, 6),
+                (128, 246),
+                (256, 103),
+                (384, 3),
+                (512, 22),
+                (768, 2),
+                (1024, 12),
+                (2048, 2),
+                (3072, 1),
+            ],
+        ),
+    ];
+    for (loops, count, sum, histogram) in cases {
         let diagrams = run(phi(&[3], &[]).loops(loops..=loops));
-        assert_eq!(diagrams.len(), count, "phi3 vacuum L{loops}");
-        assert_eq!(Ratio::sum(&diagrams), sum, "phi3 vacuum L{loops}");
-        check_canonical(&diagrams);
+        assert_oracle(
+            &format!("phi3 vacuum L{loops}"),
+            &diagrams,
+            count,
+            sum,
+            histogram,
+        );
     }
 }
 
 #[test]
 fn phi4_vacuum_and_phi34_two_point_match_zero_dimensional_sums() {
-    for (loops, count, sum) in [
-        (2, 1, Ratio(1, 8)),
-        (3, 2, Ratio(1, 12)),
-        (4, 4, Ratio(11, 96)),
-        (5, 10, Ratio(17, 72)),
-    ] {
+    let vacuum: [(usize, usize, Ratio, Histogram); 6] = [
+        (2, 1, Ratio(1, 8), &[(8, 1)]),
+        (3, 2, Ratio(1, 12), &[(16, 1), (48, 1)]),
+        (4, 4, Ratio(11, 96), &[(24, 1), (32, 1), (48, 2)]),
+        (
+            5,
+            10,
+            Ratio(17, 72),
+            &[(16, 1), (32, 3), (48, 2), (64, 1), (128, 2), (144, 1)],
+        ),
+        (
+            6,
+            28,
+            Ratio(619, 960),
+            &[
+                (16, 4),
+                (32, 6),
+                (48, 3),
+                (64, 4),
+                (96, 4),
+                (120, 1),
+                (128, 2),
+                (144, 1),
+                (288, 1),
+                (320, 2),
+            ],
+        ),
+        (
+            7,
+            97,
+            Ratio(709, 324),
+            &[
+                (8, 4),
+                (16, 7),
+                (24, 2),
+                (32, 13),
+                (48, 6),
+                (64, 23),
+                (96, 13),
+                (128, 9),
+                (144, 1),
+                (192, 6),
+                (256, 3),
+                (288, 3),
+                (384, 1),
+                (576, 2),
+                (768, 3),
+                (1296, 1),
+            ],
+        ),
+    ];
+    for (loops, count, sum, histogram) in vacuum {
         let diagrams = run(phi(&[4], &[]).loops(loops..=loops));
-        assert_eq!(diagrams.len(), count, "phi4 vacuum L{loops}");
-        assert_eq!(Ratio::sum(&diagrams), sum, "phi4 vacuum L{loops}");
+        assert_oracle(
+            &format!("phi4 vacuum L{loops}"),
+            &diagrams,
+            count,
+            sum,
+            histogram,
+        );
     }
-    for (loops, count, sum) in [
-        (1, 3, Ratio(3, 2)),
-        (2, 29, Ratio(25, 3)),
-        (3, 351, Ratio(1741, 24)),
-    ] {
+    let two_point: [(usize, usize, Ratio, Histogram); 5] = [
+        (1, 3, Ratio(3, 2), &[(2, 3)]),
+        (2, 29, Ratio(25, 3), &[(2, 6), (4, 19), (6, 2), (8, 2)]),
+        (
+            3,
+            351,
+            Ratio(1741, 24),
+            &[
+                (1, 2),
+                (2, 36),
+                (4, 125),
+                (6, 3),
+                (8, 141),
+                (12, 22),
+                (16, 21),
+                (48, 1),
+            ],
+        ),
+        (
+            4,
+            5076,
+            Ratio(80299, 96),
+            &[
+                (1, 40),
+                (2, 370),
+                (4, 1180),
+                (6, 13),
+                (8, 1719),
+                (12, 130),
+                (16, 1157),
+                (24, 216),
+                (32, 211),
+                (36, 5),
+                (48, 13),
+                (64, 5),
+                (72, 2),
+                (96, 13),
+                (128, 2),
+            ],
+        ),
+        (
+            5,
+            84749,
+            Ratio(6869123, 576),
+            &[
+                (1, 727),
+                (2, 5060),
+                (4, 15053),
+                (6, 145),
+                (8, 23639),
+                (12, 1092),
+                (16, 21069),
+                (24, 2619),
+                (32, 10408),
+                (36, 27),
+                (48, 2146),
+                (64, 2057),
+                (72, 115),
+                (96, 296),
+                (128, 108),
+                (144, 22),
+                (192, 130),
+                (256, 22),
+                (288, 7),
+                (384, 7),
+            ],
+        ),
+    ];
+    for (loops, count, sum, histogram) in two_point {
         let diagrams = run(phi(&[3, 4], &[1, 2]).loops(loops..=loops));
-        assert_eq!(diagrams.len(), count, "phi34 2-point L{loops}");
-        assert_eq!(Ratio::sum(&diagrams), sum, "phi34 2-point L{loops}");
-        check_canonical(&diagrams);
+        assert_oracle(
+            &format!("phi34 2-point L{loops}"),
+            &diagrams,
+            count,
+            sum,
+            histogram,
+        );
     }
 }
 
-/// Counts and sums verified against Graphica (and the QGRAF-validated FeynGraph tests).
+/// QED with one charged fermion, QCD with one quark flavour and ghosts (gg -> gg without
+/// zero-flow edges), and QCD with three quark flavours and no ghosts (the gluon self-energy at
+/// three loops is the QGRAF-validated count of FeynGraph's tests).
 #[test]
 fn typed_processes_match_graphica_counts() {
     let photons = || vec![(1, Stub::undirected(PHOTON)), (2, Stub::undirected(PHOTON))];
-    for (loops, count) in [(1, 1), (2, 3), (3, 20)] {
+    for (loops, count) in [(1, 1), (2, 3), (3, 20), (4, 189)] {
         let diagrams = run(qed(photons()).loops(loops..=loops).max_bridges(0));
-        assert_eq!(diagrams.len(), count, "QED photon self-energy L{loops}");
-        assert!(diagrams.iter().all(|d| d.automorphism_count == Some(1)));
-        check_canonical(&diagrams);
+        let case = format!("QED photon self-energy L{loops}");
+        assert_oracle(
+            &case,
+            &diagrams,
+            count,
+            Ratio(count as u128, 1),
+            &[(1, count)],
+        );
     }
-    for (loops, count, sum) in [(0, 4, Ratio(4, 1)), (1, 148, Ratio(237, 2))] {
+    let gg: [(usize, usize, Ratio, Histogram); 3] = [
+        (0, 4, Ratio(4, 1), &[(1, 4)]),
+        (1, 148, Ratio(237, 2), &[(1, 89), (2, 59)]),
+        (
+            2,
+            4276,
+            Ratio(36209, 12),
+            &[(1, 2036), (2, 1692), (4, 529), (6, 19)],
+        ),
+    ];
+    for (loops, count, sum, histogram) in gg {
         let diagrams = run(qcd(gluons(&[1, 2, 3, 4])).loops(loops..=loops));
-        assert_eq!(diagrams.len(), count, "gg -> gg L{loops}");
-        assert_eq!(Ratio::sum(&diagrams), sum, "gg -> gg L{loops}");
-        check_canonical(&diagrams);
+        assert_oracle(
+            &format!("gg -> gg L{loops}"),
+            &diagrams,
+            count,
+            sum,
+            histogram,
+        );
     }
     // three quark flavours
     let (g, flavours) = (Stub::undirected(GLUON), [4, 5, 6]);
@@ -198,14 +450,23 @@ fn typed_processes_match_graphica_counts() {
         let q = Stub::incoming(f);
         vec![q.clone().flipped(), q, g.clone()]
     }));
-    for (loops, count, sum) in [(1, 5, Ratio(4, 1)), (2, 30, Ratio(275, 12))] {
+    let self_energy: [(usize, usize, Ratio, Histogram); 3] = [
+        (1, 5, Ratio(4, 1), &[(1, 3), (2, 2)]),
+        (2, 30, Ratio(275, 12), &[(1, 18), (2, 8), (4, 3), (6, 1)]),
+        (
+            3,
+            479,
+            Ratio(1445, 4),
+            &[(1, 272), (2, 155), (4, 42), (6, 1), (8, 8), (12, 1)],
+        ),
+    ];
+    for (loops, count, sum, histogram) in self_energy {
         let generator = GraphGenerator::new(gluons(&[1, 2]), signatures.clone())
             .allow_self_loops(true)
             .loops(loops..=loops)
             .max_bridges(0);
-        let diagrams = run(generator);
-        assert_eq!(diagrams.len(), count, "QCD gluon self-energy L{loops}");
-        assert_eq!(Ratio::sum(&diagrams), sum, "QCD gluon self-energy L{loops}");
+        let case = format!("QCD gluon self-energy L{loops}");
+        assert_oracle(&case, &run(generator), count, sum, histogram);
     }
 }
 
@@ -890,7 +1151,7 @@ fn output_order_does_not_depend_on_threads() {
             |d: Vec<Diagram<u8, u8>>| d.into_iter().map(|d| d.certificate).collect::<Vec<_>>();
         let expected = order(run(sequential));
         let parallel = parallel.parallel(true);
-        for threads in [1, 2, 4] {
+        for threads in [1, 2, 4, 8, 32] {
             let pool = rayon::ThreadPoolBuilder::new()
                 .num_threads(threads)
                 .build()
