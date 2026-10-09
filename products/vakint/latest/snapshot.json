@@ -4,8 +4,8 @@
   "title": "Vakint",
   "channel": "latest",
   "snapshot_tag": null,
-  "git_commit": "40616e5051ff887e50bb959185ee99a18386fba3",
-  "git_timestamp": 1790787349,
+  "git_commit": "18fa197ba5d39172dff69e69e8acd9651bd30215",
+  "git_timestamp": 1791546007,
   "route": "/products/vakint/latest/",
   "components": [
     {
