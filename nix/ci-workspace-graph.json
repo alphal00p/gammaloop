@@ -323,6 +323,7 @@
       "feynkit-model": [],
       "idenso": [],
       "linnet": [
+        "rayon",
         "symbolica"
       ],
       "spenso": [
@@ -1606,6 +1607,7 @@
       "feynkit-model": [],
       "idenso": [],
       "linnet": [
+        "rayon",
         "symbolica"
       ],
       "spenso": [

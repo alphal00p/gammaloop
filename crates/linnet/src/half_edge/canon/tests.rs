@@ -4,10 +4,10 @@ use super::{ignore, Canonization};
 use crate::half_edge::{
     builder::HedgeGraphBuilder,
     involution::{Flow, Hedge, Orientation},
-    nodestore::NodeStorageOps,
+    remap::HedgeRemap,
     HedgeGraph, NodeIndex,
 };
-use crate::{half_edge::swap::Swap, permutation::Permutation};
+use crate::permutation::Permutation;
 
 /// Edge data, node data and half-edge data are all keys.
 type G = HedgeGraph<u8, u8, u8>;
@@ -185,7 +185,8 @@ impl Spec {
         let mut g = self.relabel(rng).build();
         let mut map: Vec<usize> = (0..g.n_hedges()).collect();
         map.shuffle(rng);
-        <G as Swap<Hedge>>::permute(&mut g, &Permutation::from_map(map));
+        g.permute_hedges(&HedgeRemap::from_permutation(&Permutation::from_map(map)))
+            .unwrap();
         g
     }
 
@@ -248,7 +249,7 @@ fn colour(g: &G, h: Hedge) -> Colour {
 type Relabelled = (Vec<u8>, Vec<(usize, Colour, usize)>);
 
 fn relabelled(g: &G, c: &Canonization<&u8, &u8, &u8>) -> Relabelled {
-    let mut nodes = vec![0; g.n_nodes()];
+    let mut nodes = vec![0; g.node_bound()];
     for (v, d) in g.node_store.iter() {
         nodes[c.canonical_node(v).0] = *d;
     }
@@ -320,7 +321,7 @@ fn count_isomorphisms(a: &G, b: &G, pin: Option<(Hedge, Hedge)>) -> u128 {
         }
         total
     }
-    if a.n_hedges() != b.n_hedges() || a.n_nodes() != b.n_nodes() {
+    if a.n_hedges() != b.n_hedges() || a.n_live() != b.n_live() {
         return 0;
     }
     let isolated = |g: &G| {
@@ -345,8 +346,8 @@ fn count_isomorphisms(a: &G, b: &G, pin: Option<(Hedge, Hedge)>) -> u128 {
         b,
         image: vec![0; a.n_hedges()],
         used: vec![false; b.n_hedges()],
-        node_map: vec![usize::MAX; a.n_nodes()],
-        node_used: vec![false; b.n_nodes()],
+        node_map: vec![usize::MAX; a.node_bound()],
+        node_used: vec![false; b.node_bound()],
         pin,
     };
     rec(&mut s, 0) * isolated_maps
@@ -442,7 +443,7 @@ fn schreier_sims_order(gens: &[Vec<usize>], n: usize) -> u128 {
 
 /// Generators are automorphisms and generate a group of the reported order.
 fn check_generators(g: &G, c: &Canonization<&u8, &u8, &u8>) {
-    let (nh, nn) = (g.n_hedges(), g.n_nodes());
+    let (nh, nn) = (g.n_hedges(), g.node_bound());
     let mut points = vec![];
     for gen in c.generators() {
         for h in (0..nh).map(Hedge) {
@@ -1180,7 +1181,9 @@ fn many_distinct_keys_use_the_dense_colour_table() {
     let mut map: Vec<usize> = (0..g.n_hedges()).collect();
     map.shuffle(&mut SmallRng::seed_from_u64(3));
     let mut relabelled = build(false);
-    <_ as Swap<Hedge>>::permute(&mut relabelled, &Permutation::from_map(map));
+    relabelled
+        .permute_hedges(&HedgeRemap::from_permutation(&Permutation::from_map(map)))
+        .unwrap();
     assert_eq!(relabelled.canonize().certificate(), c.certificate());
     assert_ne!(swapped.canonize().certificate(), c.certificate());
 }

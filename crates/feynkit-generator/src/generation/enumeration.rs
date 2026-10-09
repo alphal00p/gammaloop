@@ -345,7 +345,7 @@ impl ProcessExternals {
             });
         }
         GeneratedGraph::new(
-            (0..graph.n_nodes()).map(|node| signatures.rules[graph[NodeIndex(node)]]),
+            (0..graph.node_bound()).map(|node| signatures.rules[graph[NodeIndex(node)]]),
             edges
                 .into_iter()
                 .map(|edge| edge.expect("every edge is placed")),

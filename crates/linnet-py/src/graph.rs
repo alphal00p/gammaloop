@@ -2358,49 +2358,6 @@ impl PyEdgeSpec {
 }
 
 impl PyGraph {
-    /// The Python graph of `graph`, its payloads converted to Python objects, with default
-    /// drawings and render configuration.
-    pub fn from_hedge_graph<E, V, H>(py: Python<'_>, graph: HedgeGraph<E, V, H>) -> PyResult<Self>
-    where
-        E: for<'py> IntoPyObject<'py>,
-        V: for<'py> IntoPyObject<'py>,
-        H: for<'py> IntoPyObject<'py>,
-    {
-        let graph = graph.map_result(
-            |_, _, data| {
-                Ok(NodeRecord {
-                    name: None,
-                    data: data.into_py_any(py)?,
-                    drawing: drawing_dict(py, NODE_FIELDS, None)?,
-                })
-            },
-            |_, _, _, _, edge| {
-                edge.map_result(|data| {
-                    Ok(EdgeRecord {
-                        name: None,
-                        data: data.into_py_any(py)?,
-                        drawing: drawing_dict(py, EDGE_FIELDS, None)?,
-                    })
-                })
-            },
-            |_, data| {
-                Ok::<_, PyErr>(HalfEdgeRecord {
-                    data: data.into_py_any(py)?,
-                    drawing: drawing_dict(py, HEDGE_FIELDS, None)?,
-                })
-            },
-        )?;
-        Ok(Self::from_state(GraphState {
-            graph,
-            name: None,
-            global_data: PyGlobalData::default(),
-            codec: None,
-            render_config: crate::typst::default_render_config(py)?,
-            revision: 0,
-            element_epoch: 0,
-        }))
-    }
-
     fn from_specs(
         py: Python<'_>,
         mut nodes: Vec<Py<PyNodeSpec>>,

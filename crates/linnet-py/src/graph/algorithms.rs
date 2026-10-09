@@ -183,7 +183,7 @@ impl PyGraph {
         let canonical = py.detach(|| ranked.canonize_by(|&v| v, |&e| e, |&h| h));
         let size = automorphism_order(canonical.automorphism_count())?;
         let position = |n: NodeIndex| canonical.canonical_node(n).0;
-        let n = state.graph.n_nodes();
+        let n = state.graph.node_bound();
         let vertex_map = (0..n).map(|v| position(NodeIndex(v))).collect::<Vec<_>>();
         let mut node_order = vec![0; n];
         for (old, &new) in vertex_map.iter().enumerate() {

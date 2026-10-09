@@ -52,7 +52,7 @@ use search::Search;
 
 use super::{
     involution::{EdgeIndex, EdgeVec, Hedge, HedgeVec},
-    nodestore::NodeStorageOps,
+    nodestore::Topology,
     HedgeGraph, NoData, NodeIndex, NodeVec,
 };
 use crate::permutation::Permutation;
@@ -579,7 +579,7 @@ impl Workspace {
     }
 }
 
-impl<E, V, H, N: NodeStorageOps<NodeData = V>> HedgeGraph<E, V, H, N> {
+impl<E, V, H, N: Topology> HedgeGraph<E, V, H, N> {
     /// Canonize the graph under the given node, edge and half-edge keys.
     ///
     /// Elements with equal keys are interchangeable; pass [`ignore`] to disregard a payload.
@@ -621,14 +621,14 @@ impl<E, V, H, N: NodeStorageOps<NodeData = V>> HedgeGraph<E, V, H, N> {
     }
 
     /// Whether `other` is isomorphic to this graph under the given keys.
-    pub fn is_isomorphic_by<'a, KV: Ord, KE: Ord, KH: Ord, N2: NodeStorageOps<NodeData = V>>(
+    pub fn is_isomorphic_by<'a, KV: Ord, KE: Ord, KH: Ord, N2: Topology>(
         &'a self,
         other: &'a HedgeGraph<E, V, H, N2>,
         mut node_key: impl FnMut(&'a V) -> KV,
         mut edge_key: impl FnMut(&'a E) -> KE,
         mut hedge_key: impl FnMut(&'a H) -> KH,
     ) -> bool {
-        self.n_nodes() == other.n_nodes()
+        self.n_live() == other.n_live()
             && self.n_hedges() == other.n_hedges()
             && self
                 .certificate_by(&mut node_key, &mut edge_key, &mut hedge_key)
@@ -639,14 +639,14 @@ impl<E, V, H, N: NodeStorageOps<NodeData = V>> HedgeGraph<E, V, H, N> {
     }
 
     /// An isomorphism from this graph to `other` under the given keys, if one exists.
-    pub fn isomorphism_by<'a, KV: Ord, KE: Ord, KH: Ord, N2: NodeStorageOps<NodeData = V>>(
+    pub fn isomorphism_by<'a, KV: Ord, KE: Ord, KH: Ord, N2: Topology>(
         &'a self,
         other: &'a HedgeGraph<E, V, H, N2>,
         mut node_key: impl FnMut(&'a V) -> KV,
         mut edge_key: impl FnMut(&'a E) -> KE,
         mut hedge_key: impl FnMut(&'a H) -> KH,
     ) -> Option<Isomorphism> {
-        if self.n_nodes() != other.n_nodes()
+        if self.n_live() != other.n_live()
             || self.n_hedges() != other.n_hedges()
             || self.n_edges() != other.n_edges()
         {

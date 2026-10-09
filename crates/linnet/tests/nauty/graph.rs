@@ -55,7 +55,7 @@ impl Graph {
             .filter(|&h| g.inv(h) > h)
             .map(|h| (g.node_id(h).0, g.node_id(g.inv(h)).0))
             .collect();
-        Graph::undirected(g.n_nodes(), edges)
+        Graph::undirected(g.node_bound(), edges)
     }
 
     pub fn with_colours(mut self, colours: Vec<u32>) -> Self {

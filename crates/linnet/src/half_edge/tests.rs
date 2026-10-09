@@ -1754,7 +1754,7 @@ fn extract_nodes() {
 /// multi-edges and isolated nodes, and on subgraphs holding only one half of an edge.
 #[test]
 fn connectivity_counts_match_depth_first_traversal() {
-    fn dfs_is_connected<N: NodeStorageOps<NodeData = ()>>(
+    fn dfs_is_connected<N: Topology>(
         graph: &HedgeGraph<(), (), NoData, N>,
         subgraph: &SuBitGraph,
     ) -> bool {
@@ -1771,7 +1771,7 @@ fn connectivity_counts_match_depth_first_traversal() {
         })
     }
 
-    fn check<N: NodeStorageOps<NodeData = ()>>(graph: &HedgeGraph<(), (), NoData, N>, seed: u64) {
+    fn check<N: Topology>(graph: &HedgeGraph<(), (), NoData, N>, seed: u64) {
         let mut rng = SmallRng::seed_from_u64(seed);
         for _ in 0..20 {
             let mut subgraph: SuBitGraph = graph.empty_subgraph();
@@ -1826,7 +1826,7 @@ fn connectivity_counts_match_depth_first_traversal() {
                 builder.add_edge(source, sink, (), false);
             }
         }
-        let mut graph: HedgeGraph<(), (), NoData, NodeForest<()>> = builder.build();
+        let mut graph: HedgeGraph<(), (), NoData, NodeForest> = builder.build();
         for h in 0..graph.n_hedges() {
             if !graph.is_dangling(Hedge(h)) && rng.gen_bool(0.1) {
                 graph

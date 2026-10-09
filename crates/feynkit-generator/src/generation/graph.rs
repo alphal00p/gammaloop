@@ -119,7 +119,7 @@ impl GeneratedGraph {
     }
 
     pub(crate) fn n_vertices(&self) -> usize {
-        self.graph.n_nodes()
+        self.graph.node_bound()
     }
 
     pub(crate) fn n_edges(&self) -> usize {

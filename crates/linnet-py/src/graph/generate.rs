@@ -138,11 +138,10 @@ impl Objects {
     {
         PyGraph::from_hedge_graph(
             py,
-            graph.map_data_ref(
-                |_, _, node| node.clone(),
-                |_, _, _, edge| edge.map(|data| field(data).map(|f| self.get(py, f))),
-                |_, label| label.map(|l| self.get(py, l)),
-            ),
+            graph,
+            |node| node.clone().into_py_any(py),
+            |edge| field(edge).map(|f| self.get(py, f)).into_py_any(py),
+            |label| label.map(|l| self.get(py, l)).into_py_any(py),
         )
     }
 }

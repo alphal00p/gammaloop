@@ -8,7 +8,7 @@
 
 use crate::half_edge::{
     involution::{Flow, InvolutiveMapping, Orientation},
-    nodestore::NodeStorageOps,
+    nodestore::Topology,
     HedgeGraph,
 };
 
@@ -91,7 +91,7 @@ impl Flat {
         mut hedge_key: impl FnMut(&'a H) -> KH,
     ) -> KeyTables<KV, KE, KH>
     where
-        N: NodeStorageOps<NodeData = V>,
+        N: Topology,
     {
         let keys = KeyTables {
             nodes: rank(

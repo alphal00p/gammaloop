@@ -132,7 +132,7 @@ fn loop_count<F, L>(g: &HedgeGraph<F, usize, Option<L>>) -> usize {
         .iter_edges()
         .filter(|(pair, ..)| matches!(pair, HedgePair::Paired { .. }))
         .count();
-    paired + 1 - g.n_nodes()
+    paired + 1 - g.n_live()
 }
 
 #[test]
@@ -315,7 +315,7 @@ fn many_distinct_legs_stream() {
     assert_eq!(topologies.load(Ordering::Relaxed), 3);
     assert!(first
         .iter()
-        .all(|d| d.graph.n_nodes() == 38 && d.automorphism_count == Some(1)));
+        .all(|d| d.graph.n_live() == 38 && d.automorphism_count == Some(1)));
     check_canonical(&first);
 }
 
@@ -350,7 +350,7 @@ fn self_loop_bridge_and_vertex_limits() {
         (diagrams.len(), Ratio::sum(&diagrams)),
         (115, Ratio(339, 16))
     );
-    assert!(diagrams.iter().all(|d| d.graph.n_nodes() <= 4));
+    assert!(diagrams.iter().all(|d| d.graph.n_live() <= 4));
 }
 
 #[test]
@@ -381,7 +381,7 @@ fn trees_of_every_degree() {
     let diagrams = run(phi(&degrees, &[]).loops(0..=0).max_vertices(11));
     let mut counts = [0; 12];
     for d in &diagrams {
-        counts[d.graph.n_nodes()] += 1;
+        counts[d.graph.n_live()] += 1;
     }
     assert_eq!(counts, [0, 0, 1, 1, 2, 3, 6, 11, 23, 47, 106, 235]);
     check_canonical(&diagrams);
@@ -633,7 +633,7 @@ fn check_view(view: &View<'_>, n_legs: usize) {
     assert_eq!(legs + view.unplaced_legs(), n_legs);
     assert_eq!(edges.len() + 1, n + view.loops());
     let graph = view.graph();
-    assert_eq!((graph.n_nodes(), graph.n_edges()), (n, edges.len() + legs));
+    assert_eq!((graph.n_live(), graph.n_edges()), (n, edges.len() + legs));
     // the placed vertices are connected, pairs exactly when adjacent, the empty set never
     assert!(n == 0 || view.is_connected((0..n).collect()));
     assert!(!view.is_connected(VertexSet::default()));
@@ -865,7 +865,7 @@ fn one_leg_graphs_without_bridges_are_kept() {
         let diagrams = run(generator.loops(1..=2));
         let summary: Vec<_> = diagrams
             .iter()
-            .map(|d| (d.loops, d.graph.n_nodes(), d.automorphism_count))
+            .map(|d| (d.loops, d.graph.n_live(), d.automorphism_count))
             .collect();
         assert_eq!(summary, [(1, 1, Some(2)), (2, 3, Some(4))]);
     }
