@@ -185,8 +185,15 @@ contact terms; each surviving denominator sector generates its own
 contraction numerators, and distribution derivatives separately from rational
 coefficients, keeping physical distributions outside Laurent interpolation.
 Distribution derivatives are ordinary energy derivatives at fixed temperature,
-chemical potential, and orientation. Reducing an m-edge cyclic chain contributes
+chemical potential, and orientation. Reducing an m-edge cyclic chain with a common pole contributes
 `(-1)^(m-1)/(m-1)!` to the CFF coefficient and a distribution derivative of order `m-1`.
+Ordinary thermal contractions require a connected virtual complement. Sources
+and sinks take priority; a mixed vertex needs at least three virtual boundary
+edges, or one incoming and one outgoing virtual edge with external attachments
+on both sides. External multiplicity alone cannot make a vertex eligible.
+Detachable chains with unequal poles use divided-difference contractions,
+leaving coincident-pole child cycles to the derivative reduction. An orientation
+with no admissible contraction or chain reduction fails generation explicitly.
 These weights survive serialization, variant fusion, source-edge remapping, and
 products of disconnected components. Initial-state cuts remain external energy
 aliases and never acquire thermal distribution factors. GammaLoop's graph and

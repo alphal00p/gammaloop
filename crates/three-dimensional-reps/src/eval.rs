@@ -4202,6 +4202,171 @@ mod thermal_reference_tests {
     }
 
     #[test]
+    fn thermal_self_energy_insertion_is_finite_with_two_and_four_external_legs() {
+        for external_leg_count in [2, 4] {
+            let external_count = external_leg_count - 1;
+            let parsed = ParsedGraph {
+                // The two serial lines carry k, while the insertion carries
+                // l and k-l. The other bubble line carries k-p.
+                internal_edges: [
+                    (0, 1, vec![1, 0]),
+                    (1, 2, vec![0, 1]),
+                    (1, 2, vec![1, -1]),
+                    (2, 3, vec![1, 0]),
+                    (3, 0, vec![1, 0]),
+                ]
+                .into_iter()
+                .enumerate()
+                .map(
+                    |(edge_id, (tail, head, loop_signature))| ParsedGraphInternalEdge {
+                        edge_id,
+                        tail,
+                        head,
+                        label: format!("q{edge_id}"),
+                        mass_key: Some("m".to_string()),
+                        signature: MomentumSignature {
+                            loop_signature,
+                            external_signature: (0..external_count)
+                                .map(|external_id| -i32::from(edge_id == 4 && external_id < 2))
+                                .collect(),
+                        },
+                        had_pow: false,
+                    },
+                )
+                .collect(),
+                // With four legs, p1+p2 enters vertex 0 and p3 and
+                // -(p1+p2+p3) enter vertex 3. No external leg is zero.
+                external_edges: (0..external_leg_count)
+                    .map(|external_id| {
+                        let outgoing = external_id == external_count;
+                        let node = if external_id < external_leg_count / 2 {
+                            0
+                        } else {
+                            3
+                        };
+                        ParsedGraphExternalEdge {
+                            edge_id: 10_000_000 + external_id,
+                            source: outgoing.then_some(node),
+                            destination: (!outgoing).then_some(node),
+                            label: format!("p{external_id}"),
+                            external_coefficients: (0..external_count)
+                                .map(|index| {
+                                    if outgoing {
+                                        -1
+                                    } else {
+                                        i32::from(index == external_id)
+                                    }
+                                })
+                                .collect(),
+                        }
+                    })
+                    .collect(),
+                initial_state_cut_edges: Vec::new(),
+                loop_names: vec!["k".to_string(), "l".to_string()],
+                external_names: (0..external_count)
+                    .map(|index| format!("p{index}"))
+                    .collect(),
+                node_name_to_internal: (0..4).map(|node| (format!("v{node}"), node)).collect(),
+            };
+            let generated = generate_3d_expression(
+                &parsed,
+                &Generate3DExpressionOptions {
+                    medium_mode: MediumMode::ThermodynamicEquilibrium,
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+            let expression = &generated.expression;
+            assert_eq!(expression.orientations.len(), 32);
+            for external_energy in [0.0, 0.17] {
+                let input = EvaluationInput {
+                    external_momenta: if external_leg_count == 2 {
+                        vec![[external_energy, 0.4, -0.2, 0.6]]
+                    } else {
+                        vec![
+                            [external_energy / 3.0, 0.1, -0.3, 0.2],
+                            [2.0 * external_energy / 3.0, 0.3, 0.1, 0.4],
+                            [0.2, -0.1, 0.2, -0.4],
+                        ]
+                    },
+                    loop_spatial_momenta: vec![[1.1, -0.7, 0.9], [-0.3, 0.8, 0.4]],
+                    masses: vec![0.5; 5],
+                    uniform_scale: None,
+                };
+                let evaluator = ExpressionEvaluator::new(&parsed, expression, &input);
+                let distribution = |edge: usize, sign, order| {
+                    let coth = 1.0 / (evaluator.internal_energies[edge] / 2.0).tanh();
+                    bose_distribution_derivative(coth, sign, order)
+                };
+                let mut result = 0.0;
+                for (orientation_id, orientation) in expression.orientations.iter().enumerate() {
+                    assert!(
+                        !orientation.variants.is_empty(),
+                        "{external_leg_count} external legs: dropped orientation {orientation_id}"
+                    );
+                    for variant in &orientation.variants {
+                        let thermal = variant
+                            .thermal_weight
+                            .numerators
+                            .iter()
+                            .map(|numerator| {
+                                let product = |sign| {
+                                    numerator
+                                        .positive_energies
+                                        .iter()
+                                        .map(|edge| distribution(edge.0, sign, 0))
+                                        .chain(
+                                            numerator
+                                                .negative_energies
+                                                .iter()
+                                                .map(|edge| distribution(edge.0, -sign, 0)),
+                                        )
+                                        .product::<f64>()
+                                };
+                                product(1) - product(-1)
+                            })
+                            .chain(variant.thermal_weight.distributions.iter().map(|factor| {
+                                distribution(factor.edge_id.0, factor.sign, factor.derivative_order)
+                            }))
+                            .product::<f64>();
+                        let energy_product = variant
+                            .half_edges
+                            .iter()
+                            .map(|edge| 2.0 * evaluator.internal_energies[edge.0])
+                            .product::<f64>();
+                        let value = variant.prefactor.to_f64()
+                            * thermal
+                            * evaluator.tree_sum(&variant.denominator).unwrap()
+                            / energy_product;
+                        assert!(
+                            value.is_finite(),
+                            "{external_leg_count} external legs, p0={external_energy}: nonfinite orientation {orientation_id}"
+                        );
+                        result += value;
+                    }
+                }
+                result *= generated.core_global_prefactor_sign.factor() as f64;
+                assert!(result.is_finite() && result != 0.0);
+                if external_energy == 0.0 {
+                    // Independent beta=1 bosonic Matsubara sum:
+                    // sum_(n,m) [(wn²+A²)² (wm²+C²)
+                    //             ((wn-wm)²+D²) (wn²+B²)]^-1.
+                    // Sum m analytically, with c=coth(C/2), d=coth(D/2):
+                    // [(c+d)(C+D)/(wn²+(C+D)²)
+                    //  +(d-c)(C-D)/(wn²+(C-D)²)]/(4CD).
+                    // The remaining sum at 60 decimal digits agrees beyond
+                    // 25 digits between |n| <= 1000 and |n| <= 10000.
+                    let expected = 0.022_786_301_951_074_275;
+                    assert!(
+                        (result - expected).abs() < 5.0e-12 * expected,
+                        "{external_leg_count} external legs: {result:.17e} != {expected:.17e}"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
     fn thermal_scalar_bose_references() {
         // The ring and bugblatter references were cross-checked by evaluating
         // their factorized CFF expressions at 50 and 80 decimal digits from exact

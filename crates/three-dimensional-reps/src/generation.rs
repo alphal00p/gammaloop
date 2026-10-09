@@ -397,6 +397,14 @@ pub enum GenerationError {
     CutStructure(#[from] crate::cut_structure::CutStructureError),
     #[error("could not find a nonsingular loop-energy basis")]
     SingularBasis,
+    #[error(
+        "no admissible CFF vertex in {medium_mode:?} for orientation {edge_signs:?}; remaining vertex sets: {vertices:?}"
+    )]
+    NoAdmissibleCffVertex {
+        medium_mode: crate::MediumMode,
+        edge_signs: Vec<i32>,
+        vertices: Vec<Vec<usize>>,
+    },
     #[error("loop-energy solve produced non-integral coefficients")]
     NonIntegralEnergyMap,
     #[error("momentum basis coefficient is outside the supported integer coordinate range")]
@@ -1586,7 +1594,7 @@ fn generate_pure_cff_expression_from_parsed_with_duplicate_excess(
                 -1
             };
         }
-        let surface_chains = enumerate_cff_surface_chains(parsed, &signs, medium_mode);
+        let surface_chains = enumerate_cff_surface_chains(parsed, &signs, medium_mode)?;
         if surface_chains.is_empty() {
             continue;
         }
