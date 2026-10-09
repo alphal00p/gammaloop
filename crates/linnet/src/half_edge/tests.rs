@@ -930,8 +930,8 @@ fn tadpoles_validate_terminals() {
     let terminals = [bridge_terminal, left_terminal, right_terminal];
     assert_eq!(graph.tadpoles(&terminals).unwrap(), vec![expected]);
 
-    // An absorbed node has no half-edges, and pending history changes nothing
-    // for the survivor.
+    // A node absorbed by a pending identification is no terminal, and pending
+    // history changes nothing for the survivor: the compacted copy agrees.
     let canonical = graph.identify_nodes(&[left_terminal, right_terminal], ());
     let absorbed = if canonical == left_terminal {
         right_terminal
@@ -941,13 +941,17 @@ fn tadpoles_validate_terminals() {
     for terminals in [vec![absorbed], vec![canonical, absorbed]] {
         assert_eq!(
             graph.tadpoles(&terminals),
-            Err(TadpoleError::TerminalWithoutIncidentHalfEdge(absorbed))
+            Err(TadpoleError::AbsorbedTerminal(absorbed))
         );
     }
-    let tadpoles = graph.tadpoles(&[canonical]).unwrap();
-    let hedge = graph.iter_crown(canonical).next().unwrap();
-    graph.compact();
-    assert_eq!(graph.tadpoles(&[graph.node_id(hedge)]).unwrap(), tadpoles);
+    let mut compacted = graph.clone();
+    let remap = compacted.compact();
+    for terminals in [vec![canonical], vec![bridge_terminal, canonical]] {
+        let moved: Vec<_> = (terminals.iter())
+            .map(|&node| remap.get(node).unwrap())
+            .collect();
+        assert_eq!(graph.tadpoles(&terminals), compacted.tadpoles(&moved));
+    }
 }
 
 #[test]

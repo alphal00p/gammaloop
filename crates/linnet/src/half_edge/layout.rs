@@ -108,4 +108,79 @@ impl<E, V, H> HedgeGraph<E, V, H> {
 }
 
 #[cfg(test)]
-pub mod test {}
+pub(crate) mod test {
+    use cgmath::Point2;
+
+    use super::spring::{LayoutState, PointConstraint};
+    use crate::half_edge::{
+        builder::HedgeGraphBuilder,
+        involution::{EdgeVec, Flow},
+        nodestore::NodeForest,
+        remap::NodeRemap,
+        HedgeGraph, NoData, NodeIndex, NodeVec,
+    };
+
+    type Graph = HedgeGraph<PointConstraint, PointConstraint>;
+
+    /// A five-node ring with two external legs whose nodes 1 and 3 are
+    /// identified, as is and compacted. Node 3 is absorbed and the compaction
+    /// moves node 4 into its slot, so the live nodes keep their order: layouts
+    /// that break ties or draw random numbers in node order lay out both alike.
+    pub(crate) struct PendingIdentification {
+        pub(crate) graph: Graph,
+        pub(crate) compacted: Graph,
+        pub(crate) remap: NodeRemap,
+        pub(crate) absorbed: NodeIndex,
+    }
+
+    impl PendingIdentification {
+        pub(crate) fn new() -> Self {
+            let mut builder = HedgeGraphBuilder::new();
+            let nodes: Vec<_> = (0..5)
+                .map(|_| builder.add_node(PointConstraint::default()))
+                .collect();
+            for (i, &node) in nodes.iter().enumerate() {
+                let next = nodes[(i + 1) % nodes.len()];
+                builder.add_edge(node, next, PointConstraint::default(), false);
+            }
+            builder.add_external_edge(nodes[0], PointConstraint::default(), false, Flow::Sink);
+            builder.add_external_edge(nodes[2], PointConstraint::default(), false, Flow::Source);
+            let mut graph: Graph = builder.build();
+            let survivor = graph.identify_nodes(&[nodes[1], nodes[3]], PointConstraint::default());
+            assert_eq!(survivor, nodes[1], "ties keep the first requested node");
+            let mut compacted = graph.clone();
+            let remap = compacted.compact();
+            PendingIdentification {
+                graph,
+                compacted,
+                remap,
+                absorbed: nodes[3],
+            }
+        }
+
+        /// The values of the live nodes, moved to their compacted slots.
+        pub(crate) fn compact<T: Clone>(&self, values: &NodeVec<T>) -> NodeVec<T> {
+            let mut values = values.clone();
+            self.remap.apply(&mut values.0);
+            values
+        }
+
+        /// Layout states of both graphs from the same distinct points; the
+        /// absorbed node has a point of its own, which must not take part.
+        pub(crate) fn states(
+            &self,
+        ) -> [LayoutState<'_, PointConstraint, PointConstraint, NoData, NodeForest>; 2] {
+            let point = |t: f64| Point2::new(2.0 * t.cos() + 0.1 * t, 1.5 * t.sin());
+            let nodes: NodeVec<_> = (0..self.graph.node_bound())
+                .map(|i| point(i as f64))
+                .collect();
+            let edges: EdgeVec<_> = (0..self.graph.n_edges())
+                .map(|i| point(0.7 * i as f64 + 0.3))
+                .collect();
+            [
+                (self.graph).new_layout_state(nodes.clone(), edges.clone(), 0.5, 0.0, false),
+                (self.compacted).new_layout_state(self.compact(&nodes), edges, 0.5, 0.0, false),
+            ]
+        }
+    }
+}

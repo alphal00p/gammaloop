@@ -3,7 +3,6 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use linnet::half_edge::{
-    NodeIndex,
     involution::{Flow, HedgePair},
     subgraph::{Inclusion, SuBitGraph, SubSetLike},
 };
@@ -50,19 +49,10 @@ impl FeynmanDiagram {
             .nodes(subgraph)
             .into_iter()
             .collect::<BTreeSet<_>>();
-        for &VertexId(vertex) in isolated_vertices {
-            // Nodes absorbed by a pending identification are no vertices.
-            if vertex >= self.graph.node_bound()
-                || !self.graph.node_store.is_live(NodeIndex(vertex))
-            {
-                return Err(DiagramError::UnknownVertex {
-                    vertex,
-                    vertices: self.graph.node_bound(),
-                });
-            }
-            let node = NodeIndex(vertex);
+        for &vertex in isolated_vertices {
+            let node = self.vertex_node(vertex)?;
             if self.graph.iter_crown(node).next().is_some() {
-                return Err(error(format!("vertex {vertex} is not isolated")));
+                return Err(error(format!("vertex {} is not isolated", vertex.0)));
             }
             retained.insert(node);
         }
@@ -286,6 +276,7 @@ mod tests {
 
     use feynkit_model::Model;
     use linnet::half_edge::{
+        NodeIndex,
         involution::{EdgeIndex, Hedge},
         subgraph::{BaseSubgraph, ModifySubSet},
     };

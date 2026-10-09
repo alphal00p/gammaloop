@@ -548,12 +548,15 @@ impl<'a, E, V, H, N: Topology> LayoutState<'a, E, V, H, N> {
             .is_none_or(|active| active.includes(&hedge))
     }
 
+    /// Whether `node` is laid out: it is live and, with an active subgraph, incident to it.
+    /// Nodes absorbed by pending identifications keep their points untouched.
     pub(super) fn node_is_active(&self, node: NodeIndex) -> bool {
-        self.active_subgraph.as_ref().is_none_or(|active| {
-            self.graph
-                .iter_crown(node)
-                .any(|hedge| active.includes(&hedge))
-        })
+        self.graph.node_store.is_live(node)
+            && self.active_subgraph.as_ref().is_none_or(|active| {
+                self.graph
+                    .iter_crown(node)
+                    .any(|hedge| active.includes(&hedge))
+            })
     }
 
     pub(super) fn edge_is_active(&self, edge: EdgeIndex) -> bool {
@@ -1852,19 +1855,11 @@ impl SpringChargeEnergy {
 
         #[cfg(feature = "energy_trace")]
         let vv_start = std::time::Instant::now();
-        for i in 0..n {
-            let ni = NodeIndex(i);
-            if !s.node_is_active(ni) {
-                continue;
-            }
+        let active_nodes = s.active_nodes().collect::<Vec<_>>();
+        for (i, &ni) in active_nodes.iter().enumerate() {
             let np = s.vertex_points[ni];
-            for j in (i + 1)..n {
-                let nj = NodeIndex(j);
-                if !s.node_is_active(nj) {
-                    continue;
-                }
-                let vj = s.vertex_points[nj];
-                energy += self.vv_term(np.distance(vj));
+            for &nj in &active_nodes[i + 1..] {
+                energy += self.vv_term(np.distance(s.vertex_points[nj]));
             }
         }
         #[cfg(feature = "energy_trace")]
@@ -2026,10 +2021,8 @@ impl SpringChargeEnergy {
             let next_np = next.vertex_points[ni];
             for j in (i + 1)..n {
                 let nj = NodeIndex(j);
-                if !next.node_is_active(nj) {
-                    continue;
-                }
-                if !(node_changed || node_changes.includes(&nj)) {
+                // Most pairs moved neither node: test that before activity.
+                if !(node_changed || node_changes.includes(&nj)) || !next.node_is_active(nj) {
                     continue;
                 }
                 let prev_vj = prev.vertex_points[nj];
@@ -2244,7 +2237,9 @@ impl SpringChargeEnergy {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::half_edge::{builder::HedgeGraphBuilder, involution::Flow};
+    use crate::half_edge::{
+        builder::HedgeGraphBuilder, involution::Flow, layout::test::PendingIdentification,
+    };
     use rand::{rngs::SmallRng, SeedableRng};
 
     fn normalized_pull_scales(
@@ -3590,5 +3585,42 @@ mod tests {
         assert_eq!(large.crossing_penalty / small.crossing_penalty, 4.0);
         assert_eq!(large.eps / small.eps, 2.0);
         assert_eq!(large.c_center, small.c_center);
+    }
+
+    /// Nodes absorbed by pending identifications are no layout points: they
+    /// add no energy and annealing moves only live nodes, like in the
+    /// compacted copy.
+    #[test]
+    fn spring_layout_skips_nodes_absorbed_by_pending_identifications() {
+        let fixture = PendingIdentification::new();
+        let energy = SpringChargeEnergy::from_graph(
+            fixture.graph.n_live(),
+            4.0,
+            4.0,
+            ParamTuning::default(),
+        );
+        let [mut pending, mut compacted] = fixture.states();
+        let absorbed = fixture.absorbed;
+        let initial = pending.vertex_points[absorbed];
+        assert!(!pending.active_nodes().any(|node| node == absorbed));
+        assert_eq!(
+            energy.energy(None, &pending),
+            energy.energy(None, &compacted)
+        );
+        let mut rngs = [SmallRng::seed_from_u64(5), SmallRng::seed_from_u64(5)];
+        for _ in 0..64 {
+            pending = LayoutNeighbor.propose(&pending, &mut rngs[0], 0.3, 1.0);
+            compacted = LayoutNeighbor.propose(&compacted, &mut rngs[1], 0.3, 1.0);
+        }
+        assert_eq!(pending.vertex_points[absorbed], initial);
+        assert_eq!(
+            fixture.compact(&pending.vertex_points),
+            compacted.vertex_points
+        );
+        assert_eq!(pending.edge_points, compacted.edge_points);
+        assert_eq!(
+            energy.energy(None, &pending),
+            energy.energy(None, &compacted)
+        );
     }
 }

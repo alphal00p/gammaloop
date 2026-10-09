@@ -648,13 +648,8 @@ impl FeynmanDiagram {
     ) -> Result<Self, DiagramError> {
         self.validation.take();
         for (vertex, numerator) in vertices {
-            if vertex.0 >= self.graph.node_bound() {
-                return Err(DiagramError::UnknownVertex {
-                    vertex: vertex.0,
-                    vertices: self.graph.node_bound(),
-                });
-            }
-            self.graph[NodeIndex(vertex.0)].numerator = numerator;
+            let node = self.vertex_node(vertex)?;
+            self.graph[node].numerator = numerator;
         }
         for (edge, numerator) in edges {
             if edge.0 >= self.graph.n_edges() {
@@ -769,8 +764,22 @@ impl FeynmanDiagram {
     }
 
     pub fn vertex(&self, id: impl Into<Option<VertexId>>) -> Option<&DiagramVertex> {
-        id.into()
-            .and_then(|id| (id.0 < self.graph.node_bound()).then(|| &self.graph[NodeIndex(id.0)]))
+        let node = self.vertex_node(id.into()?).ok()?;
+        Some(&self.graph[node])
+    }
+
+    /// Resolve a stable vertex id to its native Linnet node. Nodes absorbed by
+    /// a pending identification are no vertices.
+    fn vertex_node(&self, vertex: VertexId) -> Result<NodeIndex, DiagramError> {
+        let node = NodeIndex(vertex.0);
+        if vertex.0 < self.graph.node_bound() && self.graph.node_store.is_live(node) {
+            Ok(node)
+        } else {
+            Err(DiagramError::UnknownVertex {
+                vertex: vertex.0,
+                vertices: self.graph.node_bound(),
+            })
+        }
     }
 
     /// Transform vertex and edge metadata without changing the diagram
@@ -3806,6 +3815,52 @@ mod tests {
         ));
         updated.validate().unwrap();
         original.validate().unwrap();
+    }
+
+    /// Nodes absorbed by a pending identification are no vertices: vertex ids
+    /// name the live nodes, which the compacted copy renumbers.
+    #[test]
+    fn vertex_ids_name_live_nodes_only() {
+        let model = scalar_model();
+        let rule = model.vertex_rule_id("V_1").unwrap();
+        let particle = model.particle_id("phi").unwrap();
+        let mut builder = FeynmanDiagram::builder(Arc::clone(&model), "triangle");
+        let vertices = ["v0", "v1", "v2"]
+            .map(|name| builder.add_vertex(DiagramVertex::interaction(name, rule)));
+        for (index, &vertex) in vertices.iter().enumerate() {
+            let leg = external_edge(particle, "p", index, ExternalState::Incoming);
+            builder.add_edge(None, vertex, leg).unwrap();
+            let next = vertices[(index + 1) % vertices.len()];
+            builder
+                .add_edge(vertex, next, DiagramEdge::new(particle, false))
+                .unwrap();
+        }
+        let mut pending = builder.build().unwrap();
+        let merged = pending.graph[NodeIndex(0)].clone();
+        // Ties keep the first node, so `v1` is absorbed and `v2` fills its slot.
+        pending
+            .graph
+            .identify_nodes(&[NodeIndex(0), NodeIndex(1)], merged);
+        let mut compacted = pending.clone();
+        let remap = compacted.graph.compact();
+
+        let name = |diagram: &FeynmanDiagram, vertex| {
+            diagram.vertex(VertexId(vertex)).map(|v| v.name.clone())
+        };
+        assert_eq!(name(&pending, 1), None);
+        assert_eq!(name(&compacted, 1).as_deref(), Some("v2"));
+        for live in [0, 2] {
+            let moved = remap.get(NodeIndex(live)).unwrap().0;
+            assert_eq!(name(&pending, live), name(&compacted, moved));
+        }
+        assert_eq!(pending.vertices().count(), compacted.vertices().count());
+        assert!(matches!(
+            pending.with_numerator_fragments([(VertexId(1), Atom::num(2))], []),
+            Err(DiagramError::UnknownVertex {
+                vertex: 1,
+                vertices: 3
+            })
+        ));
     }
 
     #[test]

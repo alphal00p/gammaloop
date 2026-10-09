@@ -2006,9 +2006,10 @@ impl<E, V, H, N: Topology> HedgeGraph<E, V, H, N> {
 
     /// Finds tadpole components relative to a non-empty set of terminal nodes.
     ///
-    /// The terminals must resolve to distinct structural nodes, be valid node
-    /// indices, and have at least one incident half-edge. Results are sorted by
-    /// their structural bitsets.
+    /// The terminals must be distinct live nodes, each with at least one
+    /// incident half-edge: a node absorbed by a pending identification is no
+    /// terminal, its representative is. Results are sorted by their structural
+    /// bitsets.
     pub fn tadpoles(&self, externals: &[NodeIndex]) -> Result<Vec<SuBitGraph>, TadpoleError> {
         if externals.is_empty() {
             return Err(TadpoleError::EmptyTerminals);
@@ -2023,22 +2024,21 @@ impl<E, V, H, N: Topology> HedgeGraph<E, V, H, N> {
         }
 
         let mut seen_terminals = BTreeSet::new();
-        let mut terminals = Vec::with_capacity(externals.len());
         for &terminal in externals {
-            let hedge = self
-                .iter_crown(terminal)
-                .next()
-                .ok_or(TadpoleError::TerminalWithoutIncidentHalfEdge(terminal))?;
-            let canonical = self.node_id(hedge);
-            if !seen_terminals.insert(canonical) {
+            if !self.node_store.is_live(terminal) {
+                return Err(TadpoleError::AbsorbedTerminal(terminal));
+            }
+            if self.iter_crown(terminal).next().is_none() {
+                return Err(TadpoleError::TerminalWithoutIncidentHalfEdge(terminal));
+            }
+            if !seen_terminals.insert(terminal) {
                 return Err(TadpoleError::DuplicateTerminal(terminal));
             }
-            terminals.push(canonical);
         }
 
         let mut identified: HedgeGraph<(), (), (), N> = self.just_structure();
 
-        let n = identified.identify_nodes(&terminals, ());
+        let n = identified.identify_nodes(externals, ());
         let mut terminal_edges: SuBitGraph = identified.empty_subgraph();
         for hedge in identified.iter_crown(n) {
             terminal_edges.add(hedge);
@@ -3276,6 +3276,10 @@ pub enum TadpoleError {
         /// The graph's node bound.
         node_bound: usize,
     },
+    /// A terminal node was absorbed by a pending identification, like
+    /// [`HedgeGraphError::InvalidNode`]; its representative is the live node.
+    #[error("terminal {0} was absorbed by a pending identification")]
+    AbsorbedTerminal(NodeIndex),
     /// A terminal resolves to a structural node already represented in the set.
     #[error("terminal {0} resolves to a structural node that appears more than once")]
     DuplicateTerminal(NodeIndex),
