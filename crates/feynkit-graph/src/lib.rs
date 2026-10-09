@@ -59,7 +59,7 @@ use std::{
     collections::{BTreeMap, BTreeSet},
     fmt::{self, Write},
     str::FromStr,
-    sync::{Arc, OnceLock},
+    sync::{Arc, LazyLock, OnceLock},
 };
 
 pub use feynkit_kinematics::MomentumSignature;
@@ -84,6 +84,9 @@ use symbolica::{
     with_default_namespace,
 };
 use thiserror::Error;
+
+/// One, built once for comparisons with unset numerator fragments.
+static ONE: LazyLock<Atom> = LazyLock::new(Atom::one);
 
 /// Stable vertex identifier in a [`FeynmanDiagram`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
@@ -631,12 +634,18 @@ impl FeynmanDiagram {
     }
 
     fn fragment_numerator(graph: &HedgeGraph<DiagramEdge, DiagramVertex>) -> Atom {
-        Atom::mul_many(
+        let fragments = || {
             graph
                 .iter_edges()
                 .map(|(_, _, edge)| &edge.data.numerator)
-                .chain(graph.iter_nodes().map(|(_, _, vertex)| &vertex.numerator)),
-        )
+                .chain(graph.iter_nodes().map(|(_, _, vertex)| &vertex.numerator))
+        };
+        // Generated fragments are unset until numerator construction.
+        if fragments().all(|fragment| *fragment == *ONE) {
+            Atom::one()
+        } else {
+            Atom::mul_many(fragments())
+        }
     }
 
     /// Replace local numerator fragments in the finalized index frame and
@@ -2664,7 +2673,8 @@ impl FeynmanDiagramBuilder {
     /// Finalization orders the generated legs by connection, sews the incoming and outgoing
     /// copies of each cross-section initial state, and orients every leg along its process
     /// flow (conjugating the particle of a reversed directed leg). Expression indices of the
-    /// leg refer to the provisional edge.
+    /// leg refer to the provisional edge. Every other edge of a diagram with generated legs
+    /// must be attached at both ends and carry no leg.
     pub fn add_generation_external(
         &mut self,
         vertex: VertexId,
@@ -2746,7 +2756,7 @@ mod tests {
     use super::*;
     use std::sync::Arc;
 
-    fn scalar_model() -> Arc<Model> {
+    pub(crate) fn scalar_model() -> Arc<Model> {
         Arc::new(Model::from_json(
             r#"{
                 "name":"phi3","restriction":null,"orders":[],
