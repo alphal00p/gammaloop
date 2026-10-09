@@ -19,8 +19,8 @@ The interop tests require `TYMBOLICA_CHECKOUT` to point to
 `57b7455b37c30f4f87353c0073e49f5225e937ab`, the exact Symbolica Typst plugin revision pinned
 by the nested Rust workspace. The check uses Nix to rebuild its combined algebra and integration engine
 in a temporary copy. GammaLoop, Tydenso and the Typst plugin must all resolve
-Symbolica and Numerica `3.0.1` from crates.io, so their Atom payload formats
-agree; Graphica remains at crates.io `3.0.0`.
+Symbolica, Numerica and Graphica `3.0.1` from the Symbolica `community` branch
+commit locked in the root `Cargo.lock`, so their Atom payload formats agree.
 It preserves the checkout and reuses compiled dependencies in
 `target/tymbolica` at the repository root. The Rust payload dependency comes
 from the same pinned Git revision.
