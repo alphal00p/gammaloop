@@ -9,7 +9,7 @@ use std::{
 use proptest::prelude::*;
 
 use super::{Diagram, GenerationError, GraphGenerator, GraphView, Stage, Stub, VertexSet};
-use crate::half_edge::{canon::Certificate, involution::HedgePair, HedgeGraph};
+use crate::half_edge::{canon::CanonicalForm, involution::HedgePair, HedgeGraph};
 
 /// Field codes of the test models.
 const PHI: u8 = 0;
@@ -115,15 +115,15 @@ fn gluons(labels: &[u8]) -> Vec<(u8, Stub<u8>)> {
         .collect()
 }
 
-/// The certificate and count stored with each graph are those of canonizing it, and
-/// certificates are pairwise distinct.
+/// The canonical form and count stored with each graph are those of canonizing it, and
+/// canonical forms are pairwise distinct.
 fn check_canonical(diagrams: &[Diagram<u8, u8>]) {
     let mut seen = HashSet::new();
     for d in diagrams {
         let canon = d.graph.canonize_by(|&s| s, |&f| f, |&h| h);
         assert_eq!(canon.automorphism_count(), d.automorphism_count);
-        assert_eq!(*canon.certificate(), d.certificate);
-        assert!(seen.insert(d.certificate.clone()), "duplicate graph");
+        assert_eq!(*canon.canonical_form(), d.canonical_form);
+        assert!(seen.insert(d.canonical_form.clone()), "duplicate graph");
     }
 }
 
@@ -139,7 +139,7 @@ fn loop_count<F, L>(g: &HedgeGraph<F, usize, Option<L>>) -> usize {
 type Histogram = &'static [(u128, usize)];
 
 /// `diagrams` are `count` graphs with the oracle's sum of `1/|Aut|` and |Aut| multiset, and each
-/// carries its canonizer's certificate and automorphism count.
+/// carries its canonizer's canonical form and automorphism count.
 fn assert_oracle(
     case: &str,
     diagrams: &[Diagram<u8, u8>],
@@ -689,13 +689,13 @@ fn filter_keeps_exactly_the_accepted_graphs() {
         .loops(4..=4)
         .filter(|view| (0..view.n_vertices()).all(|v| view.self_loops(v) == 0)));
     let disallowed = run(phi(&[3], &[1, 2]).allow_self_loops(false).loops(4..=4));
-    let set = |d: &[Diagram<u8, u8>]| certificates(d).into_iter().collect::<HashSet<_>>();
+    let set = |d: &[Diagram<u8, u8>]| canonical_forms(d).into_iter().collect::<HashSet<_>>();
     assert_eq!(set(&complete), set(&disallowed));
     assert_eq!(set(&pruned), set(&disallowed));
 }
 
-fn certificates(diagrams: &[Diagram<u8, u8>]) -> Vec<Certificate<usize, u8, Option<u8>>> {
-    diagrams.iter().map(|d| d.certificate.clone()).collect()
+fn canonical_forms(diagrams: &[Diagram<u8, u8>]) -> Vec<CanonicalForm<usize, u8, Option<u8>>> {
+    diagrams.iter().map(|d| d.canonical_form.clone()).collect()
 }
 
 type View<'a> = GraphView<'a, u8, u8>;
@@ -775,9 +775,9 @@ fn assert_prunes_like_post_filter(
     });
     let checked = run(generator().filter(filter.clone()).check_heredity(true));
     let parallel = run(generator().filter(filter).parallel(true));
-    assert_eq!(certificates(&pruned), certificates(&post_filtered));
-    assert_eq!(certificates(&checked), certificates(&post_filtered));
-    assert_eq!(certificates(&parallel), certificates(&post_filtered));
+    assert_eq!(canonical_forms(&pruned), canonical_forms(&post_filtered));
+    assert_eq!(canonical_forms(&checked), canonical_forms(&post_filtered));
+    assert_eq!(canonical_forms(&parallel), canonical_forms(&post_filtered));
     (pruned_states, states)
 }
 
@@ -811,8 +811,8 @@ fn hereditary_filters_prune_to_the_post_filtered_graphs() {
         .filter(|d| d.graph.iter_edges().all(|(_, _, f)| *f.data != GHOST))
         .collect::<Vec<_>>();
     assert_eq!(
-        certificates(&run(gggg().filter(without_field(GHOST)))),
-        certificates(&ghostless)
+        canonical_forms(&run(gggg().filter(without_field(GHOST)))),
+        canonical_forms(&ghostless)
     );
     // stages 1 and 2
     let (pruned, all) = assert_prunes_like_post_filter(ee_qq(2), qcd_order_at_most(0));
@@ -974,7 +974,7 @@ fn views_describe_the_search_states() {
         );
         assert!(stages.contains(&(Stage::Topology, true)));
         let unfiltered = run(qcd(externals).loops(1..=1));
-        assert_eq!(certificates(&filtered), certificates(&unfiltered));
+        assert_eq!(canonical_forms(&filtered), canonical_forms(&unfiltered));
         check_canonical(&filtered);
     }
 }
@@ -1006,8 +1006,8 @@ fn views_of_complete_graphs_match_the_emitted_graphs() {
     });
     let diagrams = run(generator);
     assert_eq!(
-        certificates(&diagrams),
-        certificates(&run(qed(legs).loops(1..=1)))
+        canonical_forms(&diagrams),
+        canonical_forms(&run(qed(legs).loops(1..=1)))
     );
     check_canonical(&diagrams);
 }
@@ -1148,7 +1148,7 @@ fn output_order_does_not_depend_on_threads() {
     };
     for (sequential, parallel) in generators().into_iter().zip(generators()) {
         let order =
-            |d: Vec<Diagram<u8, u8>>| d.into_iter().map(|d| d.certificate).collect::<Vec<_>>();
+            |d: Vec<Diagram<u8, u8>>| d.into_iter().map(|d| d.canonical_form).collect::<Vec<_>>();
         let expected = order(run(sequential));
         let parallel = parallel.parallel(true);
         for threads in [1, 2, 4, 8, 32] {
@@ -1192,12 +1192,12 @@ mod graphica {
     use super::*;
     use crate::half_edge::{
         builder::HedgeGraphBuilder,
-        canon::Certificate,
+        canon::CanonicalForm,
         involution::{Flow, Orientation},
     };
 
     type Plain = Graph<u8, u8>;
-    type Key = Certificate<usize, u8, Option<u8>>;
+    type Key = CanonicalForm<usize, u8, Option<u8>>;
 
     /// A case for both generators: externals as Graphica sees them (stub at the external node,
     /// node data the label) and the vertex signatures.
@@ -1224,14 +1224,14 @@ mod graphica {
         }
 
         fn native(&self) -> HashMap<Key, u128> {
-            Self::certified(self.generator())
+            Self::forms(self.generator())
         }
 
-        fn certified(generator: GraphGenerator<u8, u8>) -> HashMap<Key, u128> {
+        fn forms(generator: GraphGenerator<u8, u8>) -> HashMap<Key, u128> {
             generator
                 .iter()
                 .unwrap()
-                .map(|d| (d.certificate, d.automorphism_count.unwrap()))
+                .map(|d| (d.canonical_form, d.automorphism_count.unwrap()))
                 .collect()
         }
 
@@ -1274,8 +1274,8 @@ mod graphica {
                 .filter(|(g, _)| g.num_loops() == self.loops)
                 .filter_map(|(g, aut)| {
                     let graph = self.to_linnet(&g);
-                    let (certificate, _) = graph.certificate_by(|&s| s, |&f| f, |&h| h);
-                    keep(&graph).then(|| (certificate, aut.to_string().parse().unwrap()))
+                    let form = graph.canonical_form_by(|&s| s, |&f| f, |&h| h);
+                    keep(&graph).then(|| (form, aut.to_string().parse().unwrap()))
                 })
                 .collect()
         }
@@ -1503,11 +1503,11 @@ mod graphica {
                 max_bridges: None,
                 zero_flow_edges: false,
             };
-            let native = Case::certified(case.generator().filter(without_field(GHOST)));
+            let native = Case::forms(case.generator().filter(without_field(GHOST)));
             let graphica = case.graphica(|g| g.iter_edges().all(|(_, _, f)| *f.data != GHOST));
             assert!(!native.is_empty() && native.len() < case.native().len());
             assert_eq!(native, graphica);
-            let native = Case::certified(case.generator().filter(without_rule(2)));
+            let native = Case::forms(case.generator().filter(without_rule(2)));
             let graphica = case.graphica(|g| g.iter_nodes().all(|(_, _, &rule)| rule != 2));
             assert!(!native.is_empty() && native.len() < case.native().len());
             assert_eq!(native, graphica);

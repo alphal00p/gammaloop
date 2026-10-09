@@ -136,14 +136,19 @@ paths.
 
 `HedgeGraph::canonize_by` takes one key function each for node, edge, and half-edge payloads
 (`canon::ignore` disregards one) and returns a `Canonization`: canonical half-edge, node, and edge
-labels, a `Certificate` that is equal exactly for isomorphic graphs, automorphism generators as
+labels, a `CanonicalForm` that is equal exactly for isomorphic graphs, automorphism generators as
 half-edge permutations with their node permutations, orbits, and the exact automorphism count.
+`canonical_form_by` (and `canonical_form`, with every payload as its key) computes the canonical
+form alone, without labels, generators or count. A canonical form holds words that encode the
+canonically relabelled structure, with colours that rank into the sorted distinct node, edge and
+half-edge keys, and those key tables; `into_parts` moves them out. Canonical forms are comparable
+only between graphs canonized by the same version of Linnet.
 Symmetry is half-edge symmetry: an automorphism permutes half-edges compatibly with the
 involution, so `m` interchangeable parallel edges or dangling legs contribute `m!` and an
 undirected self-loop with indistinguishable ends contributes `2`. Undirected edges ignore their
 stored source/sink roles, while directed edges and legs keep their physical direction, including
 `Reversed` orientations. `is_isomorphic_by` and `isomorphism_by` compare two graphs through their
-certificates.
+canonical forms.
 
 == Feynman-graph generation
 
@@ -163,7 +168,7 @@ and fails when a rejected state completes to an accepted graph. Only paired edge
 internal bridges, where Graphica counts the leg as a zero-flow bridge and drops them.
 
 Each output carries the `HedgeGraph` (fields on edges, signature indices on nodes), its loop
-order, the exact automorphism count and the canonizer's certificate under the keys
+order, the exact automorphism count and the canonizer's canonical form under the keys
 `(signature, field, Option<label>)`, so a graph from elsewhere can be matched against generated
 ones by canonizing it with the same keys. Signatures with identical stubs are distinct vertex rules.
 

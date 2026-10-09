@@ -349,7 +349,7 @@ impl FeynmanDiagramBuilder {
         let mut thresholds = std::mem::take(&mut diagram.topology_threshold_candidates);
         thresholds.sort_by_cached_key(|candidate| diagram.cut_order_key(&candidate.cut));
         diagram.topology_threshold_candidates = thresholds;
-        diagram.id = DiagramId::from_key(diagram.model.fingerprint(), &diagram.structural_key()?)?;
+        diagram.id = diagram.structural_id()?;
         Ok(diagram)
     }
 }

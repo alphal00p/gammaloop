@@ -1523,8 +1523,8 @@ impl Generator {
             generated
         };
         let mut completed = !options.cancellation_requested();
-        // The certificate order is canonical, hence reproducible, and it fixes the names.
-        generated.sort_by(|left, right| left.certificate.cmp(&right.certificate));
+        // The order of the canonical forms is reproducible, and it fixes the names.
+        generated.sort_by(|left, right| left.canonical_form.cmp(&right.canonical_form));
         let topology_count = topologies.load(Ordering::Relaxed);
         let interaction_assignment_count = generated.len();
 
@@ -3225,7 +3225,7 @@ impl ResolvedProcess {
             let positions: Vec<usize> = (0..graph.n_vertices())
                 .map(|vertex| canonical.canonical_node(NodeIndex(vertex)).0)
                 .collect();
-            candidates.push((canonical.into_certificate(), swapped, positions));
+            candidates.push((canonical.into_canonical_form(), swapped, positions));
         }
         let (_, left_right_swapped, positions) = candidates
             .into_iter()

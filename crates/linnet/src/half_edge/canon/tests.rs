@@ -485,7 +485,7 @@ fn check_generators(g: &G, c: &Canonization<&u8, &u8, &u8>) {
 }
 
 /// Full check of one graph: |Aut| against brute force (and `expected`), generators, orbit
-/// sizes by orbit-stabilizer, and invariance of the certificate and relabelled graph under
+/// sizes by orbit-stabilizer, and invariance of the canonical form and relabelled graph under
 /// random relabellings, with valid isomorphisms between the copies.
 fn check(spec: &Spec, expected: Option<u128>, rng: &mut SmallRng) {
     let g = spec.build();
@@ -510,7 +510,7 @@ fn check(spec: &Spec, expected: Option<u128>, rng: &mut SmallRng) {
     for _ in 0..6 {
         let g2 = spec.relabelled_graph(rng);
         let c2 = g2.canonize();
-        assert_eq!(c2.certificate(), c.certificate(), "{spec:?}");
+        assert_eq!(c2.canonical_form(), c.canonical_form(), "{spec:?}");
         assert_eq!(c2.automorphism_count(), c.automorphism_count());
         assert_eq!(relabelled(&g2, &c2), form, "{spec:?}");
         let iso = g
@@ -744,20 +744,16 @@ fn leg_directions_distinguish() {
         unreachable!()
     };
     (*orientation, *flow) = (Orientation::Reversed, Flow::Sink);
-    let cert = |s: &Spec| {
-        s.build()
-            .canonize_by(ignore, ignore, ignore)
-            .into_certificate()
-    };
+    let form = |s: &Spec| s.build().canonical_form_by(ignore, ignore, ignore);
     // an undirected leg ignores its stored flow; a directed leg keeps its physical direction
-    assert_eq!(cert(&out), cert(&incoming));
-    assert_ne!(cert(&out), cert(&directed));
-    assert_eq!(cert(&directed), cert(&reversed));
+    assert_eq!(form(&out), form(&incoming));
+    assert_ne!(form(&out), form(&directed));
+    assert_eq!(form(&directed), form(&reversed));
 }
 
 #[test]
-fn certificate_records_isolated_nodes() {
-    let cert = |nodes: Vec<u8>| {
+fn canonical_form_records_isolated_nodes() {
+    let form = |nodes: Vec<u8>| {
         Spec {
             nodes,
             elements: vec![],
@@ -765,11 +761,22 @@ fn certificate_records_isolated_nodes() {
         .undirected(0, 0, 0, 0)
         .build()
         .canonize_by(|&v| v, ignore, ignore)
-        .into_certificate()
+        .into_canonical_form()
     };
-    assert_ne!(cert(vec![0]), cert(vec![0, 0]));
-    assert_ne!(cert(vec![0, 0, 1]), cert(vec![0, 1, 1]));
-    assert_eq!(cert(vec![0, 1, 0]), cert(vec![0, 0, 1]));
+    assert_ne!(form(vec![0]), form(vec![0, 0]));
+    assert_ne!(form(vec![0, 0, 1]), form(vec![0, 1, 1]));
+    assert_eq!(form(vec![0, 1, 0]), form(vec![0, 0, 1]));
+}
+
+#[test]
+fn canonical_form_parts_are_its_words_and_key_tables() {
+    let g = Spec::new(2).undirected(0, 1, 1, 2).leg(0, 3).build();
+    let form = g.canonical_form();
+    let (words, nodes, edges, hedges) = form.clone().into_parts();
+    assert_eq!(words, form.words());
+    assert_eq!(nodes, form.node_keys());
+    assert_eq!(edges, form.edge_keys());
+    assert_eq!(hedges, form.hedge_keys());
 }
 
 #[test]
@@ -829,7 +836,7 @@ fn symmetric_graphs() {
             let g2 = spec.relabelled_graph(&mut rng);
             let c2 = g2.canonize();
             assert_eq!(relabelled(&g2, &c2), form);
-            assert_eq!(c2.certificate(), c.certificate());
+            assert_eq!(c2.canonical_form(), c.canonical_form());
         }
     }
 }
@@ -844,22 +851,27 @@ fn random_coloured_multigraphs_match_brute_force() {
 }
 
 #[test]
-fn certificates_separate_exactly_the_isomorphism_classes() {
+fn canonical_forms_separate_exactly_the_isomorphism_classes() {
     let mut rng = SmallRng::seed_from_u64(0xC1A55);
     // few nodes and many edges make non-isomorphic graphs with equal local data common
     let specs: Vec<Spec> = (0..400)
         .map(|i| Spec::random(&mut rng, 2 + i % 2, 3 + i % 2, 1))
         .collect();
     let graphs: Vec<G> = specs.iter().map(Spec::build).collect();
-    let certs: Vec<_> = graphs
+    let forms: Vec<_> = graphs
         .iter()
-        .map(|g| g.canonize().into_certificate())
+        .map(|g| {
+            // the form alone is the form of the full canonization
+            let form = g.canonical_form();
+            assert_eq!(form, *g.canonize().canonical_form());
+            form
+        })
         .collect();
     for i in 0..graphs.len() {
         for j in 0..i {
             let isomorphic = count_isomorphisms(&graphs[i], &graphs[j], None) > 0;
             assert_eq!(
-                certs[i] == certs[j],
+                forms[i] == forms[j],
                 isomorphic,
                 "{:?} vs {:?}",
                 specs[i],
@@ -1084,7 +1096,7 @@ mod graphica {
         let mut rng = SmallRng::seed_from_u64(0x6A9);
         for (name, graphs) in sets() {
             assert!(!graphs.is_empty(), "{name}");
-            let mut certificates = std::collections::HashSet::new();
+            let mut forms = std::collections::HashSet::new();
             for g in &graphs {
                 let l = to_linnet(g);
                 let c = l.canonize_by(|&v| v, |&e| e, |&h| h);
@@ -1102,21 +1114,17 @@ mod graphica {
                     .canonize_by(ignore, |&e| e, |&h| h)
                     .automorphism_count();
                 assert_eq!(sym_count, Some(aut(&sym)), "{name} symmetrized");
-                let certificate = c.into_certificate();
+                let form = c.into_canonical_form();
                 for _ in 0..2 {
                     let p = to_linnet(&permute(g, &mut rng));
-                    assert_eq!(
-                        p.canonize_by(|&v| v, |&e| e, |&h| h).into_certificate(),
-                        certificate,
-                        "{name}"
-                    );
+                    assert_eq!(p.canonical_form_by(|&v| v, |&e| e, |&h| h), form, "{name}");
                 }
-                certificates.insert(certificate);
+                forms.insert(form);
             }
             assert_eq!(
-                certificates.len(),
+                forms.len(),
                 graphs.len(),
-                "{name}: distinct graphs, distinct certificates"
+                "{name}: distinct graphs, distinct canonical forms"
             );
         }
     }
@@ -1184,6 +1192,6 @@ fn many_distinct_keys_use_the_dense_colour_table() {
     relabelled
         .permute_hedges(&HedgeRemap::from_permutation(&Permutation::from_map(map)))
         .unwrap();
-    assert_eq!(relabelled.canonize().certificate(), c.certificate());
-    assert_ne!(swapped.canonize().certificate(), c.certificate());
+    assert_eq!(relabelled.canonical_form(), *c.canonical_form());
+    assert_ne!(swapped.canonical_form(), *c.canonical_form());
 }

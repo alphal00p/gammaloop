@@ -2,24 +2,21 @@
 //!
 //! A [`Census`] records what one generation run produced, in output order. [`Census::diff`]
 //! compares two runs and names the first difference, coarse to fine as in the discrepancy
-//! triage: report counts, the diagram set (by canonical certificate), symmetry factors (|Aut|),
-//! overall factors with their signs, the finalized frames (with routing and cuts), numerators,
-//! diagram ids, numerator groups, names and finally the output order. [`Summary`] condenses a
-//! census into the numbers the oracle table records.
+//! triage: report counts, the diagram set (by canonical form), symmetry factors (|Aut|), overall
+//! factors with their signs, the finalized frames (with routing and cuts), numerators, diagram
+//! ids, numerator groups, names and finally the output order. [`Summary`] condenses a census into
+//! the numbers the oracle table records.
 //!
 //! Digests are FNV-1a hashes of fixed byte encodings (std's hashers may change between Rust
-//! releases, which would invalidate the recorded rows). They leave out the [`DiagramId`]s. An id
-//! hashes the model fingerprint with the diagram's structural key, which keeps particle
-//! orientations as they are. The fingerprint hashes the printed model definition, whose term order
-//! follows Symbolica's symbol registration order, so the ids of one diagram differ between
-//! processes that register symbols in different orders (for instance after other models were parsed
-//! in the same process). The certificate digest instead hashes `canonical_key()`, which normalizes
-//! particle orientations and identifies the isomorphism class, and the frame digest covers
-//! everything the structural key is computed from. Ids are compared only between the runs of one
-//! process, so the rows do not guard a change of how an id is hashed or of the fingerprint.
+//! releases, which would invalidate the recorded rows). The key digest hashes `canonical_key()`,
+//! which normalizes particle orientations and identifies the isomorphism class, and the frame
+//! digest covers everything the structural canonical form behind a [`DiagramId`] is computed
+//! from. Ids hash that form with the names of the model's particles and rules only, so they do
+//! not depend on the process (its symbol registration order or thread count) and the rows record
+//! a digest of them too.
 
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, BTreeSet},
     fmt::{self, Write as _},
 };
 
@@ -34,7 +31,7 @@ use symbolica::{
 /// One diagram of a run.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Entry {
-    /// Digest of the canonical key, the certificate of the diagram's isomorphism class.
+    /// Digest of the canonical key, the canonical form of the diagram's isomorphism class.
     pub key: u64,
     pub id: DiagramId,
     pub name: String,
@@ -117,13 +114,15 @@ pub struct Summary {
     pub inverse_symmetry: Rational,
     /// Multiset of |Aut|: (symmetry factor, number of diagrams).
     pub symmetry_factors: Vec<(u64, usize)>,
-    /// Order- and name-independent digest of certificates, symmetry and overall factors and
+    /// Order- and name-independent digest of canonical forms, symmetry and overall factors and
     /// frames.
     pub content: u64,
-    /// Order-independent digest of the numerators by certificate.
+    /// Order-independent digest of the numerators by canonical form.
     pub numerators: u64,
-    /// Digest of names and certificates in output order and of the numerator groups.
+    /// Digest of names and canonical forms in output order and of the numerator groups.
     pub named: u64,
+    /// Order-independent digest of the diagram ids.
+    pub ids: u64,
 }
 
 impl fmt::Display for Summary {
@@ -139,7 +138,7 @@ impl fmt::Display for Summary {
             f,
             "Row {{ diagrams: {}, topologies: {}, assignments: {}, inverse_symmetry: ({}, {}), \
              symmetry_factors: &[{histogram}], content: 0x{:016x}, numerators: 0x{:016x}, \
-             named: 0x{:016x} }}",
+             named: 0x{:016x}, ids: 0x{:016x} }}",
             self.diagrams,
             self.topologies,
             self.assignments,
@@ -147,7 +146,8 @@ impl fmt::Display for Summary {
             self.inverse_symmetry.denominator(),
             self.content,
             self.numerators,
-            self.named
+            self.named,
+            self.ids
         )
     }
 }
@@ -220,7 +220,11 @@ impl Census {
 
     fn by_key(&self) -> BTreeMap<u64, &Entry> {
         let by_key: BTreeMap<_, _> = self.diagrams.iter().map(|d| (d.key, d)).collect();
-        assert_eq!(by_key.len(), self.diagrams.len(), "duplicate certificates");
+        assert_eq!(
+            by_key.len(),
+            self.diagrams.len(),
+            "duplicate canonical forms"
+        );
         by_key
     }
 
@@ -262,6 +266,13 @@ impl Census {
                 named = member.iter().fold(named, |named, text| named.text(text));
             }
         }
+        let ids: Vec<_> = self
+            .diagrams
+            .iter()
+            .map(|d| Digest::new().bytes(&d.id.0.to_le_bytes()).0)
+            .collect();
+        let distinct: BTreeSet<_> = self.diagrams.iter().map(|d| d.id).collect();
+        assert_eq!(distinct.len(), self.diagrams.len(), "duplicate diagram ids");
         Summary {
             diagrams: self.diagrams.len(),
             topologies: self.report.topology_count,
@@ -271,6 +282,7 @@ impl Census {
             content: Digest::multiset(content.collect()),
             numerators: Digest::multiset(numerators.collect()),
             named: named.0,
+            ids: Digest::multiset(ids),
         }
     }
 
@@ -375,8 +387,8 @@ impl Census {
         for d in &self.diagrams {
             writeln!(
                 out,
-                "{} key={:016x} S={} frame={:016x} numerator={:016x} factor={}",
-                d.name, d.key, d.symmetry_factor, d.frame, d.numerator, d.overall_factor
+                "{} key={:016x} id={} S={} frame={:016x} numerator={:016x} factor={}",
+                d.name, d.key, d.id, d.symmetry_factor, d.frame, d.numerator, d.overall_factor
             )
             .unwrap();
         }

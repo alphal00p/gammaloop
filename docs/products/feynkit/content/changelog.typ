@@ -24,6 +24,11 @@ The current toolkit provides canonical model and graph ownership, deterministic 
 shared CFF arenas, native rank-20 vacuum tensor projection, and notebook diagram rendering.
 Use the #link("reference/interfaces/")[component references] to inspect the exact shipped surface.
 
+Diagram ids hash a diagram's structural canonical form, with the names of the model's particles
+and vertex rules: they no longer depend on model parameters, on the process that generated the
+diagram or on its thread count, and they differ from the ids of earlier revisions. Select diagrams
+again by the ids of the current revision.
+
 GammaLoop states written before the unified FeynKit model/graph format require regeneration;
 that application-level state version is separate from FeynKit crate versions. See
 #source-link("docs/architecture/architecture-current.typ", label: "the persistence contract")

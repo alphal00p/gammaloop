@@ -17,7 +17,7 @@ use std::{
 
 use super::{
     formats::read_graphs,
-    graph::{Cert, Graph},
+    graph::{Form, Graph},
     runs::fixture,
 };
 
@@ -53,11 +53,11 @@ fn pipeline(dir: &PathBuf, command: &str, input: &str) -> (String, String) {
     )
 }
 
-/// How often each certificate occurs.
-fn census(graphs: &[Graph]) -> HashMap<Cert, usize> {
+/// How often each canonical form occurs.
+fn census(graphs: &[Graph]) -> HashMap<Form, usize> {
     let mut census = HashMap::new();
     for g in graphs {
-        *census.entry(g.certificate()).or_insert(0) += 1;
+        *census.entry(g.canonical_form()).or_insert(0) += 1;
     }
     census
 }

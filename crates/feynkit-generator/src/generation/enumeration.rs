@@ -241,11 +241,11 @@ impl ProcessExternals {
     }
 
     /// The number of sewn-pair permutations that fix the isomorphism class of `diagram`, or
-    /// `None` when one maps it to a smaller certificate.
+    /// `None` when one maps it to a smaller canonical form.
     ///
     /// The generator labels sewn pairs exactly, so a class of diagrams related by permuting
     /// interchangeable pairs is generated once per member. The member with the smallest
-    /// certificate represents the class, and its automorphism count is multiplied by the
+    /// canonical form represents the class, and its automorphism count is multiplied by the
     /// returned stabilizer order to give the automorphisms of the sewn graph.
     pub(crate) fn sewn_pair_stabilizer(
         &self,
@@ -253,15 +253,12 @@ impl ProcessExternals {
     ) -> Option<u128> {
         let mut stabilizer = 1;
         for permutation in &self.sewn_pair_permutations {
-            let image = diagram
-                .graph
-                .canonize_by(
-                    |&rule| rule,
-                    |field| *field,
-                    |label| label.map(|label| permutation.get(&label).copied().unwrap_or(label)),
-                )
-                .into_certificate();
-            match image.cmp(&diagram.certificate) {
+            let image = diagram.graph.canonical_form_by(
+                |&rule| rule,
+                |field| *field,
+                |label| label.map(|label| permutation.get(&label).copied().unwrap_or(label)),
+            );
+            match image.cmp(&diagram.canonical_form) {
                 Ordering::Less => return None,
                 Ordering::Equal => stabilizer += 1,
                 Ordering::Greater => {}

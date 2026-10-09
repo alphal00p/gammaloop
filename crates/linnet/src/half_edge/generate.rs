@@ -2,7 +2,7 @@
 //!
 //! [`GraphGenerator`] enumerates the connected graphs built from vertex signatures (multisets of
 //! typed stubs) and a set of external legs, one per isomorphism class, each with its exact
-//! automorphism count and the certificate of the native canonizer.
+//! automorphism count and the canonical form of the native canonizer.
 //!
 //! A stub is a field with a direction relative to its vertex: undirected (self-conjugate
 //! fields), incoming or outgoing (fermions, ghosts, any charged field). Two stubs pair into an
@@ -14,7 +14,7 @@
 //! Output graphs are `HedgeGraph<F, usize, Option<L>>`: edges and legs carry their field, nodes
 //! the index of their signature, leg half-edges `Some(label)` and paired half-edges `None`.
 //! Directed edges point from the outgoing to the incoming stub; legs keep the direction of their
-//! stub. The certificate and automorphism count are those of
+//! stub. The canonical form and automorphism count are those of
 //! `graph.canonize_by(|&s| s, |f| f.clone(), |h| h.clone())`, so symmetry factors follow the
 //! canonizer's half-edge convention: `m!` for `m` interchangeable parallel edges or legs and `2`
 //! for an undirected self-loop. Signatures with identical stubs are distinct vertex rules and give
@@ -108,7 +108,7 @@ pub use view::{Bridge, EdgeView, GraphView, Stage, VertexSet};
 use view::{Prune, Pruner, State};
 
 use super::{
-    canon::{Certificate, KeyTables, RawHedge, Role},
+    canon::{CanonicalForm, KeyTables, RawHedge, Role},
     involution::Flow,
     HedgeGraph,
 };
@@ -170,9 +170,9 @@ pub struct Diagram<F, L> {
     /// Order of the half-edge automorphism group (the symmetry factor); `None` if it exceeds
     /// `u128`.
     pub automorphism_count: Option<u128>,
-    /// Equal for isomorphic graphs: the certificate of
+    /// Equal for isomorphic graphs: the canonical form of
     /// `graph.canonize_by(|&s| s, |f| f.clone(), |h| h.clone())`.
-    pub certificate: Certificate<usize, F, Option<L>>,
+    pub canonical_form: CanonicalForm<usize, F, Option<L>>,
 }
 
 /// Counts passed to the progress callback.
@@ -520,23 +520,24 @@ impl<F: Clone + Ord, L: Clone + Ord> Compiled<F, L> {
             );
         }
         let graph = view.take_complete_graph();
-        let (certificate, automorphism_count) = self.certify(&d, raw);
+        let (canonical_form, automorphism_count) = self.certify(&d, raw);
         Some(Diagram {
             graph,
             loops,
             automorphism_count,
-            certificate,
+            canonical_form,
         })
     }
 
-    /// The certificate of the materialized graph under `canonize_by(|&s| s, F::clone,
-    /// Option::clone)`, from the decoration directly: node keys are signatures, edge keys fields
-    /// and half-edge keys `None` for paired hedges and the label for legs.
+    /// The canonical form and automorphism count of the materialized graph under
+    /// `canonize_by(|&s| s, F::clone, Option::clone)`, from the decoration directly: node keys
+    /// are signatures, edge keys fields and half-edge keys `None` for paired hedges and the label
+    /// for legs.
     fn certify(
         &self,
         d: &Decoration<'_>,
         raw: &mut RawDiagram,
-    ) -> (Certificate<usize, F, Option<L>>, Option<u128>) {
+    ) -> (CanonicalForm<usize, F, Option<L>>, Option<u128>) {
         let t = d.topology;
         let model = &self.model;
         raw.rules.clear();
@@ -636,7 +637,7 @@ impl<F: Clone + Ord, L: Clone + Ord> Compiled<F, L> {
                 .chain(self.labels.iter().cloned().map(Some))
                 .collect(),
         };
-        Certificate::of_hedges(&raw.colours, &raw.hedges, n_edges as usize, keys)
+        CanonicalForm::of_hedges(&raw.colours, &raw.hedges, n_edges as usize, keys)
     }
 }
 

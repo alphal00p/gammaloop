@@ -1,5 +1,5 @@
 //! Graphs as nauty sees them, their half-edge form, and the checks every translated run shares:
-//! valid generators of a group of the reported order, and certificates that do not depend on
+//! valid generators of a group of the reported order, and canonical forms that do not depend on
 //! the labelling.
 //!
 //! nauty's simple graphs become undirected paired edges, digraphs directed edges `from -> to`,
@@ -11,7 +11,7 @@ use std::collections::BTreeMap;
 
 use linnet::half_edge::{
     builder::HedgeGraphBuilder,
-    canon::{ignore, Canonization, Certificate},
+    canon::{ignore, CanonicalForm, Canonization},
     involution::{Hedge, Orientation},
     HedgeGraph, NoData, NodeIndex,
 };
@@ -19,7 +19,7 @@ use rand::{rngs::SmallRng, seq::SliceRandom, Rng};
 
 pub type Linnet = HedgeGraph<(), u32>;
 pub type Canon = Canonization<u32, NoData, NoData>;
-pub type Cert = Certificate<u32, NoData, NoData>;
+pub type Form = CanonicalForm<u32, NoData, NoData>;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Graph {
@@ -82,8 +82,9 @@ impl Graph {
         self.hedge_graph().canonize_by(|&c| c, ignore, ignore)
     }
 
-    pub fn certificate(&self) -> Cert {
-        self.canonize().into_certificate()
+    /// The canonical form alone; the checks compare it with the form of the full canonization.
+    pub fn canonical_form(&self) -> Form {
+        self.hedge_graph().canonical_form_by(|&c| c, ignore, ignore)
     }
 
     /// The edges as a sorted multiset, ends sorted for undirected graphs.
@@ -286,18 +287,22 @@ impl Graph {
             order,
             node_orbits: partition((0..n).map(|v| node_orbits[NodeIndex(v)].0)),
             edge_orbits: edge_roots.len(),
-            certificate: c.into_certificate(),
+            canonical_form: c.into_canonical_form(),
         }
     }
 
-    /// The certificate is unchanged by `copies` random relabellings, and the isomorphisms Linnet
+    /// The canonical form is unchanged by `copies` random relabellings, and the isomorphisms Linnet
     /// returns map the edges of `self` onto those of the copy.
-    pub fn check_invariance(&self, certificate: &Cert, copies: usize, rng: &mut SmallRng) {
+    pub fn check_invariance(&self, canonical_form: &Form, copies: usize, rng: &mut SmallRng) {
         let g = self.hedge_graph();
         for _ in 0..copies {
             let copy = self.shuffled(rng);
             let h = copy.hedge_graph();
-            assert_eq!(&copy.certificate(), certificate, "relabelled {self:?}");
+            assert_eq!(
+                &copy.canonical_form(),
+                canonical_form,
+                "relabelled {self:?}"
+            );
             let iso = g
                 .isomorphism_by(&h, |&c| c, ignore, ignore)
                 .expect("isomorphic");
@@ -319,7 +324,7 @@ pub struct Symmetry {
     /// Node orbits, each sorted, ordered by smallest element.
     pub node_orbits: Vec<Vec<usize>>,
     pub edge_orbits: usize,
-    pub certificate: Cert,
+    pub canonical_form: Form,
 }
 
 /// The classes of `0..n` under a map to class representatives, each sorted, ordered by

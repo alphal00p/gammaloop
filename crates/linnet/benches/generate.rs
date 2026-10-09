@@ -1,6 +1,6 @@
 //! Native generation against Graphica generate on whole Feynman-graph sets. Both produce one graph
 //! per isomorphism class with its symmetry factor; the native side also materializes every graph
-//! as a `HedgeGraph` and computes its certificate. Graphica returns all loop orders up to the
+//! as a `HedgeGraph` and computes its canonical form. Graphica returns all loop orders up to the
 //! bound, so its set is filtered to the requested order like the native one.
 use std::{hint::black_box, time::Duration};
 

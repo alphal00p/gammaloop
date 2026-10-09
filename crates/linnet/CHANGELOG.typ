@@ -7,6 +7,14 @@ and this project adheres to #link("https://semver.org/spec/v2.0.0.html")[Semanti
 
 == Unreleased
 
+=== Added
+
+- Canonical forms: `HedgeGraph::canonical_form_by` and `canonical_form` compute the
+  `CanonicalForm` of a graph (equal exactly for isomorphic graphs under the same keys) without
+  labelling maps, automorphism generators or count. `Canonization::canonical_form` returns the
+  same form and generated `Diagram`s carry theirs in `canonical_form`;
+  `CanonicalForm::into_parts` moves out its words and key tables.
+
 == #link("https://github.com/alphal00p/linnet/compare/linnet-v0.16.1...linnet-v0.17.0")[0.17.0] - 2026-01-28
 
 === Other

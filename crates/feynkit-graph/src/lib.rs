@@ -7,6 +7,7 @@
 
 #![forbid(unsafe_code)]
 
+mod canonical_form;
 mod compact_dot;
 mod display;
 pub mod expressions;
@@ -104,23 +105,21 @@ pub struct EdgeId(pub usize);
 pub struct VertexSlot(pub usize);
 
 /// Stable content-derived identifier for a finalized diagram topology.
+///
+/// The id hashes the diagram's structural canonical form: the canonical form of its colored
+/// topology with particle orientations as stored (the [`CanonicalDiagramKey`] layout, without
+/// the normalization of [`FeynmanDiagram::canonical_key`]). It is the first 128 bits of the
+/// BLAKE3 hash of a prefix-free encoding of the form's words and key tables, in which particles
+/// and vertex rules appear as their model index and name. Distinct forms are encoded by distinct
+/// bytes, so structurally distinct diagrams get distinct ids barring a BLAKE3 collision.
+///
+/// Ids depend on nothing but the form and those model names: not on the model's parameters, on
+/// numerators or names, on the order in which Symbolica registered its symbols, or on the number
+/// of generation threads. Canonical forms, and therefore ids, are comparable only between
+/// diagrams canonized by the same version of Linnet.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct DiagramId(pub u128);
-
-impl DiagramId {
-    fn from_key(model: ModelFingerprint, key: &CanonicalDiagramKey) -> Result<Self, DiagramError> {
-        let bytes = serde_json::to_vec(&(model, key))?;
-        fn fnv(bytes: &[u8], offset: u64) -> u64 {
-            bytes.iter().fold(offset, |hash, byte| {
-                (hash ^ u64::from(*byte)).wrapping_mul(0x0000_0100_0000_01b3)
-            })
-        }
-        let high = fnv(&bytes, 0xcbf2_9ce4_8422_2325);
-        let low = fnv(&bytes, 0x8422_2325_cbf2_9ce4);
-        Ok(Self((u128::from(high) << 64) | u128::from(low)))
-    }
-}
 
 impl fmt::Display for DiagramId {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -803,159 +802,8 @@ impl FeynmanDiagram {
             },
             |_, data| data,
         );
-        diagram.id = DiagramId::from_key(diagram.model.fingerprint(), &diagram.structural_key()?)?;
+        diagram.id = diagram.structural_id()?;
         Ok(diagram)
-    }
-
-    /// Build a deterministic key for the model-resolved colored topology.
-    ///
-    /// Canonical labeling is delegated to Linnet's half-edge canonizer.
-    /// Particle/antiparticle edge representations are normalized so reversing
-    /// a directed edge with [`Self::reverse_edge`] does not change the key.
-    pub fn canonical_key(&self) -> Result<CanonicalDiagramKey, DiagramError> {
-        self.validate()?;
-        self.canonical_key_impl(true)
-    }
-
-    fn structural_key(&self) -> Result<CanonicalDiagramKey, DiagramError> {
-        self.canonical_key_impl(false)
-    }
-
-    fn canonical_key_impl(
-        &self,
-        normalize_particle_orientation: bool,
-    ) -> Result<CanonicalDiagramKey, DiagramError> {
-        // Cuts and threshold candidates become pairs of side vertices joined to the diagram
-        // vertices they contain; half-edge keys are the interaction slots of diagram edges.
-        let mut graph = HedgeGraphBuilder::new();
-        let vertices: Vec<NodeIndex> = self
-            .vertices()
-            .map(|(_, vertex)| {
-                graph.add_node(CanonicalDiagramVertex::Diagram {
-                    interaction: vertex.interaction,
-                })
-            })
-            .collect();
-        let endpoints = self
-            .edges()
-            .map(|(edge, endpoints, _)| (edge, endpoints))
-            .collect::<BTreeMap<_, _>>();
-        let add_sides = |graph: &mut HedgeGraphBuilder<_, _, _>,
-                         [left, right]: [CanonicalDiagramVertex; 2],
-                         half_edges: [&[DiagramHalfEdge]; 2]| {
-            let sides = [graph.add_node(left), graph.add_node(right)];
-            graph.add_edge(
-                sides[0],
-                sides[1],
-                CanonicalDiagramEdge::CutPair,
-                Orientation::Undirected,
-            );
-            for (side, half_edges) in sides.into_iter().zip(half_edges) {
-                let members = half_edges
-                    .iter()
-                    .filter_map(|half_edge| {
-                        endpoints.get(&half_edge.edge).and_then(|endpoints| {
-                            match half_edge.endpoint {
-                                DiagramEndpoint::Source => endpoints.source,
-                                DiagramEndpoint::Target => endpoints.target,
-                            }
-                        })
-                    })
-                    .collect::<BTreeSet<_>>();
-                for vertex in members {
-                    graph.add_edge(
-                        side,
-                        vertices[vertex.0],
-                        CanonicalDiagramEdge::CutMembership,
-                        Orientation::Undirected,
-                    );
-                }
-            }
-        };
-        for cut in &self.cuts {
-            add_sides(
-                &mut graph,
-                [CanonicalCutSide::Left, CanonicalCutSide::Right].map(|side| {
-                    let summary = match side {
-                        CanonicalCutSide::Left => &cut.left,
-                        CanonicalCutSide::Right => &cut.right,
-                    };
-                    CanonicalDiagramVertex::CutSide {
-                        side,
-                        coupling_orders: summary.coupling_orders.clone(),
-                        loop_count: summary.loop_count,
-                    }
-                }),
-                [&cut.left.half_edges, &cut.right.half_edges],
-            );
-        }
-        for candidate in &self.topology_threshold_candidates {
-            add_sides(
-                &mut graph,
-                [CanonicalCutSide::Left, CanonicalCutSide::Right]
-                    .map(|side| CanonicalDiagramVertex::TopologyThresholdSide { side }),
-                [&candidate.left, &candidate.right],
-            );
-        }
-        for (edge_id, endpoints, edge) in self.edges() {
-            let mut particle = edge.particle;
-            let mut external = edge.external.clone();
-            if let Some(leg) = &mut external {
-                leg.name.clear();
-            }
-            let mut ends = [
-                (endpoints.source, edge.source_slot, Flow::Source),
-                (endpoints.target, edge.target_slot, Flow::Sink),
-            ];
-            if normalize_particle_orientation {
-                let (resolved, base) = self.resolve_particle(edge_id, edge)?;
-                particle = base;
-                if edge.directed && resolved.is_antiparticle() {
-                    ends.reverse();
-                    ends[0].2 = Flow::Source;
-                    ends[1].2 = Flow::Sink;
-                }
-            }
-            let color = CanonicalDiagramEdge::Diagram {
-                particle,
-                external,
-                is_dummy: edge.is_dummy,
-            };
-            let orientation = if edge.directed {
-                Orientation::Default
-            } else {
-                Orientation::Undirected
-            };
-            let end = |(vertex, slot, _): (Option<VertexId>, VertexSlot, Flow)| {
-                vertex.map(|vertex| vertices[vertex.0].add_data(Some(slot)))
-            };
-            match (end(ends[0]), end(ends[1])) {
-                (Some(source), Some(sink)) => graph.add_edge(source, sink, color, orientation),
-                (Some(hedge), None) => {
-                    graph.add_external_edge(hedge, color, orientation, ends[0].2)
-                }
-                (None, Some(hedge)) => {
-                    graph.add_external_edge(hedge, color, orientation, ends[1].2)
-                }
-                (None, None) => {
-                    return Err(DiagramError::Invariant {
-                        operation: "canonicalizing the diagram",
-                        message: format!("edge {} has no attached half-edge", edge_id.0),
-                    });
-                }
-            }
-        }
-        let graph: HedgeGraph<CanonicalDiagramEdge, CanonicalDiagramVertex, Option<VertexSlot>> =
-            graph.build();
-        let certificate = graph
-            .canonize_by(Clone::clone, Clone::clone, |slot| *slot)
-            .into_certificate();
-        Ok(CanonicalDiagramKey {
-            words: certificate.words().to_vec(),
-            vertices: certificate.node_keys().to_vec(),
-            edges: certificate.edge_keys().to_vec(),
-            half_edges: certificate.hedge_keys().to_vec(),
-        })
     }
 
     /// Reverse a directed edge while preserving its physical particle flow.
@@ -1151,7 +999,7 @@ impl FeynmanDiagram {
         self.cuts = cuts;
         self.validation.take();
         self.validate()?;
-        self.id = DiagramId::from_key(self.model.fingerprint(), &self.structural_key()?)?;
+        self.id = self.structural_id()?;
         Ok(self)
     }
 
@@ -1184,7 +1032,7 @@ impl FeynmanDiagram {
         self.topology_threshold_candidates = candidates;
         self.validation.take();
         self.validate()?;
-        self.id = DiagramId::from_key(self.model.fingerprint(), &self.structural_key()?)?;
+        self.id = self.structural_id()?;
         Ok(self)
     }
 
@@ -2911,10 +2759,15 @@ mod tests {
         edge
     }
 
-    fn one_loop() -> FeynmanDiagram {
-        let model = scalar_model();
-        let rule = model.vertex_rule_id("V_1").unwrap();
-        let particle = model.particle_id("phi").unwrap();
+    pub(crate) fn one_loop() -> FeynmanDiagram {
+        one_loop_in(scalar_model())
+    }
+
+    /// The scalar bubble of [`one_loop`] in `model`, a variant of the scalar model: its first
+    /// vertex rule and particle.
+    pub(crate) fn one_loop_in(model: Arc<Model>) -> FeynmanDiagram {
+        let rule = model.vertex_rule_id_at(0).unwrap();
+        let particle = model.particle_id_at(0).unwrap();
         let mut builder = FeynmanDiagram::builder(Arc::clone(&model), "bubble");
         let left = builder.add_vertex(DiagramVertex::interaction("v0", rule));
         let right = builder.add_vertex(DiagramVertex::interaction("v1", rule));
@@ -2941,7 +2794,7 @@ mod tests {
         builder.build().unwrap()
     }
 
-    fn one_loop_reordered() -> FeynmanDiagram {
+    pub(crate) fn one_loop_reordered() -> FeynmanDiagram {
         let model = scalar_model();
         let rule = model.vertex_rule_id("V_1").unwrap();
         let particle = model.particle_id("phi").unwrap();
@@ -3034,7 +2887,7 @@ mod tests {
             .unwrap()
     }
 
-    fn cut_scalar_bubble() -> FeynmanDiagram {
+    pub(crate) fn cut_scalar_bubble() -> FeynmanDiagram {
         let model = scalar_model();
         let rule = model.vertex_rule_id("V_1").unwrap();
         let particle = model.particle_id("phi").unwrap();
@@ -3083,7 +2936,7 @@ mod tests {
         diagram
     }
 
-    fn fermion_model() -> Arc<Model> {
+    pub(crate) fn fermion_model() -> Arc<Model> {
         Arc::new(Model::from_json(
             r#"{
                 "name":"fermion","restriction":null,"orders":[],
@@ -3107,7 +2960,7 @@ mod tests {
         .unwrap())
     }
 
-    fn directed_fermion_line() -> FeynmanDiagram {
+    pub(crate) fn directed_fermion_line() -> FeynmanDiagram {
         let model = fermion_model();
         let anti_rule = model.vertex_rule_id("V_af").unwrap();
         let particle_rule = model.vertex_rule_id("V_f").unwrap();
@@ -4161,20 +4014,19 @@ mod tests {
         let diagram = one_loop();
         diagram.validate().unwrap();
 
-        let unknown_particle = diagram
-            .map_data(
-                |_, vertex| vertex.clone(),
-                |id, _, edge| {
-                    let mut edge = edge.clone();
-                    if id == EdgeId(0) {
-                        edge.particle = ParticleId::from_index(usize::MAX);
-                    }
-                    edge
-                },
-            )
-            .unwrap();
+        // The diagram id names the particle, so the unknown particle fails before validation.
+        let unknown_particle = diagram.map_data(
+            |_, vertex| vertex.clone(),
+            |id, _, edge| {
+                let mut edge = edge.clone();
+                if id == EdgeId(0) {
+                    edge.particle = ParticleId::from_index(usize::MAX);
+                }
+                edge
+            },
+        );
         assert!(matches!(
-            unknown_particle.validate(),
+            unknown_particle,
             Err(DiagramError::Model(ModelError::NotFound {
                 kind: feynkit_model::EntityKind::Particle,
                 ..

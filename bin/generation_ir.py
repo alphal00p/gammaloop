@@ -6,8 +6,8 @@ under valgrind and attributes their instructions (callgrind Ir) to the generatio
 stages. Each workload runs in two modes:
 
   generation  cancelled at the first progress report after enumeration: stage-1
-              topologies, stage-2 dressing, graph materialization and certificates,
-              and feynkit's certificate sort, exactly as feynkit runs them;
+              topologies, stage-2 dressing, graph materialization and canonical
+              forms, and feynkit's canonical-form sort, exactly as feynkit runs them;
   full        the whole pipeline, adding interaction filters, numerators and
               grouping.
 
@@ -100,12 +100,12 @@ STAGES = [
     ),
     (
         "certify",
-        "  certificates",
+        "  canonical forms",
         r"^<linnet::half_edge::canon::Workspace>::certify::<",
     ),
     (
         "sort",
-        "certificate sort",
+        "canonical-form sort",
         rf"^<\[{LINNET[1:]}::Diagram<.*>\]>::sort_by::<{FEYNKIT}::Generator>::generate",
     ),
     (

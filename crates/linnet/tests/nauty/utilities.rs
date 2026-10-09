@@ -1,12 +1,12 @@
 //! The utility pipelines of `runalltests` whose outputs are isomorphism-class data: canonical
 //! forms, iso-rejected families and their counts. Each test reads the run's answer file (or the
 //! oracle-recorded inputs of its pipeline, see the fixture README) and checks that Linnet's
-//! certificates separate exactly nauty's classes, with nauty's group sizes and orbits.
+//! canonical forms separate exactly nauty's classes, with nauty's group sizes and orbits.
 //!
 //! Families that nauty iso-rejects per base graph (orientations, colourings, multiplicities) are
 //! rebuilt by brute force: every labelled variant of a base is canonized, and each class must be
 //! hit exactly `|Aut(base)| / |Aut(variant)|` times. That orbit-stabilizer count holds only if
-//! certificates are complete invariants and automorphism counts are exact.
+//! canonical forms are complete invariants and automorphism counts are exact.
 
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
@@ -15,7 +15,7 @@ use rand::{rngs::SmallRng, seq::SliceRandom, SeedableRng};
 
 use super::{
     formats::read_graphs,
-    graph::{Cert, Graph},
+    graph::{Form, Graph},
     runs::{fixture, full_size},
 };
 
@@ -31,14 +31,14 @@ fn classify(
     base_order: u128,
     stabiliser: impl Fn(&Graph, u128) -> u128,
 ) -> usize {
-    let mut classes: HashMap<Cert, (u128, u128)> = HashMap::new();
+    let mut classes: HashMap<Form, (u128, u128)> = HashMap::new();
     for variant in variants {
         let canon = variant.canonize();
         let stabiliser = stabiliser(&variant, canon.automorphism_count().unwrap());
         assert_eq!(base_order % stabiliser, 0, "{variant:?}");
         let orbit = base_order / stabiliser;
         let (hits, expected) = classes
-            .entry(canon.into_certificate())
+            .entry(canon.into_canonical_form())
             .or_insert((0, orbit));
         assert_eq!(
             *expected, orbit,
@@ -69,19 +69,19 @@ fn orientations(base: &Graph) -> impl Iterator<Item = Graph> + '_ {
     })
 }
 
-fn distinct(certs: impl IntoIterator<Item = Cert>) -> usize {
-    certs.into_iter().collect::<BTreeSet<_>>().len()
+fn distinct(forms: impl IntoIterator<Item = Form>) -> usize {
+    forms.into_iter().collect::<BTreeSet<_>>().len()
 }
 
 /// Runs 63-65, `geng -cd1f 10 | labelg -q[S|t]`: the 3389 connected 4-cycle-free graphs on 10
 /// vertices canonically labelled by dense nauty, sparse nauty and Traces. Line `i` of the three
-/// answers is one class, all classes differ, and certificates ignore the labelling.
+/// answers is one class, all classes differ, and canonical forms ignore the labelling.
 #[test]
 fn labelg_canonical_labellings() {
     let files = ["nautestb1.ans", "nautestb2.ans", "nautestb3.ans"].map(|f| {
         read_graphs(&fixture(f))
             .iter()
-            .map(Graph::certificate)
+            .map(Graph::canonical_form)
             .collect::<Vec<_>>()
     });
     assert_eq!(files[0].len(), 3389);
@@ -89,8 +89,8 @@ fn labelg_canonical_labellings() {
     assert_eq!(files[0], files[2]);
     assert_eq!(distinct(files[0].clone()), 3389);
     let mut rng = rng();
-    for (g, cert) in read_graphs(&fixture("nautestb1.ans")).iter().zip(&files[0]) {
-        g.check_invariance(cert, 1, &mut rng);
+    for (g, form) in read_graphs(&fixture("nautestb1.ans")).iter().zip(&files[0]) {
+        g.check_invariance(form, 1, &mut rng);
     }
 }
 
@@ -105,12 +105,12 @@ fn gentourng_tournaments() {
         .map(|t| {
             assert!(t.directed && t.n == 8 && t.edges.len() == 28);
             let symmetry = t.symmetry();
-            t.check_invariance(&symmetry.certificate, 2, &mut rng());
+            t.check_invariance(&symmetry.canonical_form, 2, &mut rng());
             symmetry.order
         })
         .collect();
     assert_eq!(orders, [1, 1, 1, 1, 1, 3, 1, 3, 3, 3, 1, 3, 3, 1]);
-    assert_eq!(distinct(tournaments.iter().map(Graph::certificate)), 14);
+    assert_eq!(distinct(tournaments.iter().map(Graph::canonical_form)), 14);
     let sizes: &[(usize, usize, u128)] = if full_size() {
         &[(6, 56, 720), (7, 456, 5040)]
     } else {
@@ -218,7 +218,7 @@ fn gentreeg_orbit_table() {
     let trees = free_trees(18);
     assert_eq!(trees.len(), 123867);
     let full = full_size();
-    let mut certs = BTreeSet::new();
+    let mut forms = BTreeSet::new();
     let mut table = BTreeMap::new();
     for (i, tree) in trees.iter().enumerate() {
         let radius_six = tree.radius_diameter().0 == 6;
@@ -235,10 +235,10 @@ fn gentreeg_orbit_table() {
                 assert_eq!(symmetry.node_orbits.len(), roots.len());
             }
         }
-        certs.insert(canon.into_certificate());
+        forms.insert(canon.into_canonical_form());
     }
     let classes = if full { 123867 } else { 12869 };
-    assert_eq!(certs.len(), classes);
+    assert_eq!(forms.len(), classes);
     assert_eq!(table, expected);
 }
 
@@ -256,7 +256,7 @@ fn generated_trees_match_the_free_tree_enumeration() {
         .loops(0..=0)
         .max_vertices(n)
         .allow_zero_flow_edges(true);
-    let mut generated: BTreeMap<usize, BTreeSet<Cert>> = BTreeMap::new();
+    let mut generated: BTreeMap<usize, BTreeSet<Form>> = BTreeMap::new();
     for diagram in generator.iter().unwrap() {
         let tree = Graph::of_hedge_graph(&diagram.graph);
         let symmetry = tree.symmetry();
@@ -264,10 +264,10 @@ fn generated_trees_match_the_free_tree_enumeration() {
         assert!(generated
             .entry(tree.n)
             .or_default()
-            .insert(symmetry.certificate));
+            .insert(symmetry.canonical_form));
     }
     for (k, count) in counts.iter().enumerate().take(n + 1).skip(2) {
-        let trees: BTreeSet<Cert> = free_trees(k).iter().map(Graph::certificate).collect();
+        let trees: BTreeSet<Form> = free_trees(k).iter().map(Graph::canonical_form).collect();
         assert_eq!(trees.len(), *count);
         assert_eq!(generated[&k], trees, "trees on {k} vertices");
     }
@@ -323,18 +323,18 @@ fn genposetg_posets() {
     assert_eq!(posets.len(), 16999);
     let mut rng = rng();
     let mut labelled = 0;
-    let mut certs = BTreeSet::new();
+    let mut forms = BTreeSet::new();
     for (i, poset) in posets.iter().enumerate() {
         assert!(poset.directed && poset.n == 8);
         let canon = poset.canonize();
         labelled += 40320 / canon.automorphism_count().unwrap();
-        let cert = canon.into_certificate();
+        let form = canon.into_canonical_form();
         if i % 16 == 0 {
-            poset.check_invariance(&cert, 1, &mut rng);
+            poset.check_invariance(&form, 1, &mut rng);
         }
-        certs.insert(cert);
+        forms.insert(form);
     }
-    assert_eq!(certs.len(), 16999);
+    assert_eq!(forms.len(), 16999);
     assert_eq!(labelled, 431723379);
 }
 
@@ -362,7 +362,7 @@ fn genspecialg_graphs() {
             ),
             (order, orbits, edge_orbits)
         );
-        g.check_invariance(&symmetry.certificate, 3, &mut rng);
+        g.check_invariance(&symmetry.canonical_form, 3, &mut rng);
     }
     let cycle = Graph::undirected(12, (0..12).map(|i| (i, (i + 1) % 12)).collect());
     let bipartite = Graph::undirected(
@@ -381,7 +381,7 @@ fn genspecialg_graphs() {
         .iter()
         .zip(&graphs)
     {
-        assert_eq!(built.certificate(), g.certificate());
+        assert_eq!(built.canonical_form(), g.canonical_form());
     }
 }
 
@@ -416,7 +416,7 @@ fn genspecialg_digraphs() {
             (symmetry.order, symmetry.node_orbits.len()),
             (order, orbits)
         );
-        g.check_invariance(&symmetry.certificate, 1, &mut rng());
+        g.check_invariance(&symmetry.canonical_form, 1, &mut rng());
     }
     let cycle = Graph::directed(12, (0..12).map(|i| (i, (i + 1) % 12)).collect());
     let bipartite = Graph::directed(
@@ -440,7 +440,7 @@ fn genspecialg_digraphs() {
         .iter()
         .zip(&graphs)
     {
-        assert_eq!(built.certificate(), g.certificate());
+        assert_eq!(built.canonical_form(), g.canonical_form());
     }
 }
 
@@ -499,11 +499,11 @@ fn assembleg_disjoint_unions() {
                     }
                 }
                 union.colours = vec![0; union.n];
-                built.insert(union.certificate());
+                built.insert(union.canonical_form());
             }
         }
     }
-    let read: BTreeSet<Cert> = unions.iter().map(Graph::certificate).collect();
+    let read: BTreeSet<Form> = unions.iter().map(Graph::canonical_form).collect();
     assert_eq!(read.len(), 19);
     assert_eq!(built, read);
 }
@@ -520,7 +520,7 @@ fn genquarticg_quartic_graphs() {
         orders,
         [4, 8, 12, 18, 8, 4, 32, 12, 16, 18, 2, 2, 2, 72, 8, 16]
     );
-    let read: BTreeSet<Cert> = quartic.iter().map(Graph::certificate).collect();
+    let read: BTreeSet<Form> = quartic.iter().map(Graph::canonical_form).collect();
     assert_eq!(read.len(), 16);
     let generator = GraphGenerator::<u8, u8>::new([], [vec![Stub::undirected(0u8); 4]])
         .loops(10..=10)
@@ -547,7 +547,7 @@ fn genquarticg_quartic_graphs() {
         let symmetry = g.symmetry();
         assert_eq!(diagram.automorphism_count, Some(symmetry.order));
         generated_orders.push(symmetry.order);
-        assert!(generated.insert(symmetry.certificate));
+        assert!(generated.insert(symmetry.canonical_form));
     }
     assert_eq!(generated, read);
     orders.sort_unstable();
@@ -577,7 +577,7 @@ fn gengl_two_regular_graphs() {
         let lengths: Vec<usize> = g.components().iter().map(Vec::len).collect();
         let symmetry = g.symmetry();
         assert_eq!(symmetry.order, formula(&lengths));
-        read.insert(symmetry.certificate);
+        read.insert(symmetry.canonical_form);
     }
     fn partitions(rest: usize, smallest: usize, parts: &mut Vec<usize>, out: &mut Vec<Vec<usize>>) {
         if rest == 0 {
@@ -591,7 +591,7 @@ fn gengl_two_regular_graphs() {
     }
     let mut all = vec![];
     partitions(33, 3, &mut vec![], &mut all);
-    let built: BTreeSet<Cert> = all
+    let built: BTreeSet<Form> = all
         .iter()
         .map(|lengths| {
             let mut edges = vec![];
@@ -600,7 +600,7 @@ fn gengl_two_regular_graphs() {
                 edges.extend((0..k).map(|i| (start + i, start + (i + 1) % k)));
                 start += k;
             }
-            Graph::undirected(33, edges).certificate()
+            Graph::undirected(33, edges).canonical_form()
         })
         .collect();
     assert_eq!(built.len(), 556);
@@ -615,23 +615,23 @@ fn genktreeg_complements() {
     let graphs = read_graphs(&fixture("nautestq.ans"));
     assert_eq!(graphs.len(), 1505);
     let mut rng = rng();
-    let certs: Vec<Cert> = graphs
+    let forms: Vec<Form> = graphs
         .iter()
         .map(|g| {
-            let cert = g.certificate();
-            g.check_invariance(&cert, 1, &mut rng);
-            cert
+            let form = g.canonical_form();
+            g.check_invariance(&form, 1, &mut rng);
+            form
         })
         .collect();
-    assert_eq!(distinct(certs), 1505);
+    assert_eq!(distinct(forms), 1505);
     let trees: Vec<Graph> = graphs.iter().map(Graph::complement).collect();
     assert!(trees.iter().all(|t| t.edges.len() == 27));
-    assert_eq!(distinct(trees.iter().map(Graph::certificate)), 1505);
+    assert_eq!(distinct(trees.iter().map(Graph::canonical_form)), 1505);
 }
 
 /// Run 82, `geng -q -D4 9 | ranlabg -q | shortg -q`: the 15471 graphs on 9 vertices with maximum
 /// degree 4 survive random relabelling and isomorph rejection. Here two random relabellings of
-/// each are shuffled in, and grouping by certificate recovers each class with its copies.
+/// each are shuffled in, and grouping by canonical form recovers each class with its copies.
 #[test]
 fn shortg_random_relabellings() {
     let graphs = read_graphs(&fixture("nautests.ans"));
@@ -649,9 +649,9 @@ fn shortg_random_relabellings() {
         })
         .collect();
     copies.shuffle(&mut rng);
-    let mut classes: HashMap<Cert, Vec<usize>> = HashMap::new();
+    let mut classes: HashMap<Form, Vec<usize>> = HashMap::new();
     for (i, g) in &copies {
-        classes.entry(g.certificate()).or_default().push(*i);
+        classes.entry(g.canonical_form()).or_default().push(*i);
     }
     assert_eq!(classes.len(), 15471);
     assert!(classes
@@ -742,7 +742,7 @@ fn distgraphg_distance_three_graphs() {
     assert!(answer.contains("5 graphs read from stdin, 5 unique"));
     let named = read_graphs(&fixture("distgraphg-bases.s6"));
     let expected: [(u128, usize); 5] = [(2, 30), (54, 1), (4, 16), (120, 4), (2, 10)];
-    let mut certs = BTreeSet::new();
+    let mut forms = BTreeSet::new();
     for (g, &(order, orbits)) in named.iter().zip(&expected) {
         let distances = g.distances();
         let d3 = Graph::undirected(
@@ -759,7 +759,7 @@ fn distgraphg_distance_three_graphs() {
                 (order, orbits)
             );
         }
-        certs.insert(d3.certificate());
+        forms.insert(d3.canonical_form());
     }
-    assert_eq!(certs.len(), 5);
+    assert_eq!(forms.len(), 5);
 }

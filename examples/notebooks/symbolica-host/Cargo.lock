@@ -1380,6 +1380,7 @@ dependencies = [
 name = "feynkit-graph"
 version = "0.1.0"
 dependencies = [
+ "blake3",
  "feynkit-kinematics",
  "feynkit-model",
  "itertools 0.14.0",

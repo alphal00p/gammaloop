@@ -19,7 +19,7 @@ use rand::{rngs::SmallRng, SeedableRng};
 
 use super::{
     formats::parse_graph,
-    graph::{group_order, Cert, Graph, Symmetry},
+    graph::{group_order, Form, Graph, Symmetry},
     runs::{fixture, Run},
 };
 
@@ -128,8 +128,8 @@ enum Observed {
         labelorg: usize,
         labelled: bool,
     },
-    /// `z`: the canonical graph of the last `x`, here its certificate.
-    Hash(Cert),
+    /// `z`: the canonical graph of the last `x`, here its canonical form.
+    Hash(Form),
 }
 
 /// The algorithm-independent records of a transcript, labels as printed.
@@ -319,7 +319,8 @@ impl Session {
                 }
                 b'z' => {
                     let last = self.last.as_ref().expect("x before z");
-                    self.observed.push(Observed::Hash(last.certificate.clone()));
+                    self.observed
+                        .push(Observed::Hash(last.canonical_form.clone()));
                 }
                 b'j' => {
                     let perm = self.rng.permutation(n);
@@ -400,7 +401,7 @@ impl Session {
             }
         }
         let symmetry = graph.symmetry();
-        graph.check_invariance(&symmetry.certificate, 2, &mut self.check_rng);
+        graph.check_invariance(&symmetry.canonical_form, 2, &mut self.check_rng);
         self.last = Some(symmetry.clone());
         self.observed.push(Observed::Group {
             symmetry,
@@ -650,7 +651,7 @@ fn check(run: &Run, mode: Mode, observed: &[Observed], expected: &[Expected]) {
                     assert_eq!(sizes(orbits), sizes(&printed), "{context}");
                 }
             }
-            (Observed::Hash(cert), Expected::Hash(hash)) => hashes.push((cert, hash)),
+            (Observed::Hash(form), Expected::Hash(hash)) => hashes.push((form, hash)),
             (o, e) => panic!("{context}: Linnet observed {o:?} where nauty printed {e:?}"),
         }
     }

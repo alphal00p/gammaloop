@@ -26,7 +26,7 @@ use idenso::{
 use linnet::half_edge::{
     HedgeGraph, NoData, NodeIndex,
     builder::HedgeGraphBuilder,
-    canon::{Certificate, ignore},
+    canon::{CanonicalForm, ignore},
     involution::{Flow, Orientation},
 };
 use spenso::{
@@ -319,7 +319,7 @@ enum TopologyEdge {
     },
 }
 
-type TopologyKey = Certificate<NoData, TopologyEdge, NoData>;
+type TopologyKey = CanonicalForm<NoData, TopologyEdge, NoData>;
 
 struct PreparedNumerator {
     exact: Atom,
@@ -1641,7 +1641,7 @@ fn topology_key_variant(
             .into_iter()
             .map(|node| canonical.canonical_node(node).0)
             .collect(),
-        key: canonical.into_certificate(),
+        key: canonical.into_canonical_form(),
         left_right_swapped,
     })
 }
