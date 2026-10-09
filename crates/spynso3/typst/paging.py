@@ -80,41 +80,51 @@ def compile_page(payload):
             html = path.read_text()
     import re
 
-    # Group only binary additions at the row's own level. Internal products,
-    # fractions and scripted labels retain native MathML layout.
+    # Wrap only a standalone outer sum. Flex layout inside a MathML product,
+    # fraction or fence breaks its native geometry and can overlap neighbours.
+    # Nested sums remain available through the native subexpression controls.
     def wrap(match):
         root = ET.fromstring(match.group())
-        for row in list(root.iter()):
-            if row.tag not in ("math", "mrow"):
-                continue
-            children = list(row)
-            signs = [
-                i
-                for i, child in enumerate(children)
-                if i and child.tag == "mo" and child.text in ("+", "−", "-")
+        row = root
+        while True:
+            content = [
+                child
+                for child in row
+                if child.tag not in ("annotation", "annotation-xml")
             ]
-            if len(signs) < 8:
-                continue
-            # A row containing literal fences is not a bare additive sequence.
-            if any(
-                c.tag == "mo" and c.text in ("(", ")", "[", "]", "|") for c in children
+            if len(content) != 1 or content[0].tag not in (
+                "mrow",
+                "mstyle",
+                "semantics",
             ):
-                continue
-            groups = []
-            group = ET.Element("mrow")
-            for i, child in enumerate(children):
-                if i in signs:
-                    groups.append(group)
-                    group = ET.Element("mrow")
-                    child.set("form", "infix")
-                group.append(child)
-            groups.append(group)
-            row[:] = groups
-            row.set("data-spenso-sum", "")
-            row.set(
-                "style",
-                "display:inline-flex;flex-wrap:wrap;align-items:baseline;max-width:min(650px,80vw);row-gap:.5em",
-            )
+                break
+            row = content[0]
+        children = list(row)
+        signs = [
+            i
+            for i, child in enumerate(children)
+            if i and child.tag == "mo" and child.text in ("+", "−", "-")
+        ]
+        if len(signs) < 8 or any(
+            child.tag == "mo" and child.text in ("(", ")", "[", "]", "|")
+            for child in children
+        ):
+            return ET.tostring(root, encoding="unicode")
+        groups = []
+        group = ET.Element("mrow", {"style": "flex:0 0 auto"})
+        for i, child in enumerate(children):
+            if i in signs:
+                groups.append(group)
+                group = ET.Element("mrow", {"style": "flex:0 0 auto"})
+                child.set("form", "infix")
+            group.append(child)
+        groups.append(group)
+        row[:] = groups
+        row.set("data-spenso-sum", "")
+        row.set(
+            "style",
+            "display:inline-flex;flex-wrap:wrap;align-items:baseline;max-width:min(650px,80vw);row-gap:.5em",
+        )
         return ET.tostring(root, encoding="unicode")
 
     html = re.sub(r"<math\b.*?</math>", wrap, html, flags=re.DOTALL)

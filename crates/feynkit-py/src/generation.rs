@@ -2461,8 +2461,19 @@ impl PyGenerationReport {
 )]
 #[derive(Clone)]
 pub struct PyGroupMember {
-    inner: GroupMember,
+    // Box is required for alignment: the source ID contains a u128 requiring
+    // 16-byte alignment, but CPython's wasm32 object allocator guarantees only 8.
+    // Rust allocates the boxed payload with the required alignment; do not inline it.
+    inner: Box<GroupMember>,
 }
+
+#[cfg(target_arch = "wasm32")]
+const _: () = {
+    assert!(std::mem::align_of::<PyGroupMember>() <= 8);
+    assert!(
+        std::mem::align_of::<<PyGroupMember as pyo3::impl_::pyclass::PyClassImpl>::Layout>() <= 8
+    );
+};
 
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
 #[spenso_macros::track_usage(crate::record_usage)]
@@ -2612,7 +2623,9 @@ impl PyDiagramGroup {
             .members
             .iter()
             .cloned()
-            .map(|inner| PyGroupMember { inner })
+            .map(|inner| PyGroupMember {
+                inner: Box::new(inner),
+            })
             .collect()
     }
 }
@@ -3142,6 +3155,15 @@ mod tests {
     use super::*;
 
     #[test]
+    fn group_member_wrapper_fits_wasm_allocator_alignment() {
+        assert!(std::mem::align_of::<PyGroupMember>() <= 8);
+        assert!(
+            std::mem::align_of::<<PyGroupMember as pyo3::impl_::pyclass::PyClassImpl>::Layout>()
+                <= 8
+        );
+    }
+
+    #[test]
     fn automatic_progress_tracks_marimo_lifecycle() {
         Python::initialize();
         Python::attach(|py| {
@@ -3459,24 +3481,24 @@ for via_model in (True, False):
             raise AssertionError("non-callable callback was accepted")
     assert len(generate()) == len(baseline)
 
-# Directed snapshot edges point from source to sink: an incoming electron (-1) flows into the
-# graph as an electron or out of it as a positron, an incoming positron (-2) the other way.
+# Directed snapshot edges carry the electron and point along its flow. External legs are the
+# dangling half-edges of their edges: the incoming electron flows into the graph, so its leg is
+# the sink, and the incoming positron is an electron flowing out, so its leg is the source.
 sm_model = fk.Model.from_json(SM_MODEL_JSON)
-directed = []
-def flows(graph, completed_vertices):
+legs = set()
+def flows(graph, stage):
     for edge in graph.edges():
         if edge.orientation == Orientation.Undirected:
             continue
-        assert edge.orientation == Orientation.Default and abs(edge.data) == 11
-        source, sink = edge.source.node.data, edge.sink.node.data
-        for leg, particle in ((-1, 11), (-2, -11)):
-            if leg in (source, sink):
-                assert (edge.data == particle) == (source == leg)
-                directed.append(edge.data)
+        assert edge.orientation == Orientation.Default and edge.data == 11
+        if edge.source is None:
+            legs.add(("sink", edge.sink.data))
+        elif edge.sink is None:
+            legs.add(("source", edge.source.data))
     return True
 annihilation = sm_model.process(["e-", "e+"], ["a", "a"], particle_selection=["e-", 22])
 assert len(annihilation.generate_diagrams(progress=None, filter=flows)) == 2
-assert directed
+assert legs == {("sink", ("incoming", 0)), ("source", ("incoming", 1))}
 "#).unwrap();
             py.run(&code, Some(&locals), Some(&locals)).unwrap();
         });

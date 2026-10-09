@@ -2638,6 +2638,7 @@ dependencies = [
  "itertools 0.14.0",
  "paste",
  "rand 0.8.6",
+ "rayon",
  "rkyv",
  "serde",
  "serde_repr",

@@ -88,10 +88,17 @@ check: build check-wasm-features
     git -C "$tymbolica_checkout" archive "$tymbolica_revision" | tar -x -C "$check_dir/tymbolica"
     tymbolica_checkout="$check_dir/tymbolica"
     # Atom payloads require the same storage format in all three engines. Apply
-    # the community dependency only to this copy, preserving the plugin's Wasm features.
+    # the community dependencies only to this copy, preserving the plugin's Wasm
+    # features. Symbolica's own Numerica and Graphica patches do not reach this
+    # build root, so patch all three.
+    community='git = "https://github.com/symbolica-dev/symbolica", branch = "community"'
     sed -i \
-      "s|git = \"https://github.com/symbolica-dev/symbolica.git\", branch = \"main\"|git = \"https://github.com/symbolica-dev/symbolica\", branch = \"community\"|g" \
+      "s|^symbolica = { git = \"https://github.com/symbolica-dev/symbolica.git\", branch = \"main\" }\$|symbolica = { $community }\nnumerica = { $community }\ngraphica = { $community }|" \
       "$tymbolica_checkout/Cargo.toml"
+    if ! grep -qF "graphica = { $community }" "$tymbolica_checkout/Cargo.toml"; then
+      echo "the pinned Symbolica Typst plugin no longer patches Symbolica from its main branch" >&2
+      exit 1
+    fi
     # Rebuild the pinned combined algebra/integration engine without changing the checkout.
     # Its build script reads Cargo's target and feature settings; generated plugin
     # assets remain outside the Rust source inputs.
@@ -101,22 +108,20 @@ check: build check-wasm-features
       cd "$tymbolica_checkout"
       unset CARGO_TARGET_DIR
       # Upstream builds with --locked; match the workspace's engine revision first.
+      # --precise applies to the source already in the lock, so first switch the
+      # lock to the community source; pinning Symbolica then moves Numerica and
+      # Graphica from that source with it.
+      cargo update --package symbolica
       cargo update --package symbolica --precise "$symbolica_revision"
-      cargo update --package numerica --precise 3.0.1
-      cargo update --package graphica --precise 3.0.1
       nix run --no-write-lock-file "path:$PWD#build"
     )
+    symbolica_version="3.0.1"
+    expected="$(printf 'version = "%s"\nsource = "%s"\n' "$symbolica_version" "$symbolica_source")"
     for lock in ../Cargo.lock Cargo.lock "$tymbolica_checkout/Cargo.lock"; do
       for package in symbolica numerica graphica; do
-        source="registry+https://github.com/rust-lang/crates.io-index"
-        symbolica_version="3.0.1"
-        if [ "$package" = symbolica ]; then
-          source="$symbolica_source"
-        fi
-        expected="$(printf 'version = "%s"\nsource = "%s"\n' "$symbolica_version" "$source")"
-        resolved="$(sed -n "/^name = \"$package\"$/,/^\[\[package\]\]/p" "$lock" | grep -E '^(version|source) = ')"
+        resolved="$(sed -n "/^name = \"$package\"$/,/^\[\[package\]\]/p" "$lock" | grep -E '^(version|source) = ' || true)"
         if [ "$resolved" != "$expected" ]; then
-          echo "$lock must resolve exactly one $package at $symbolica_version from $source; found ${resolved:-none}" >&2
+          echo "$lock must resolve exactly one $package at $symbolica_version from $symbolica_source; found ${resolved:-none}" >&2
           exit 1
         fi
       done

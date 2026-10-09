@@ -217,19 +217,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bef38d45163c2f1dde094a7dfd33ccf595c92905c8f8f4fdc18d06fb1037718a"
 
 [[package]]
-name = "bitvec"
-version = "1.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ddcec3d12c579d40898fe0a9a358a803c23e9c52ca3c425707f81c9436211837"
-dependencies = [
- "funty",
- "radium",
- "serde",
- "tap",
- "wyz",
-]
-
-[[package]]
 name = "blake3"
 version = "1.8.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -656,12 +643,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "77ce24cb58228fbb8aa041425bb1050850ac19177686ea6e0f41a70416f56fdb"
 
 [[package]]
-name = "funty"
-version = "2.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e6d5a32815ae3f33302d95fdcb2ce17862f8c65363dcfd29360480ba1001fc9c"
-
-[[package]]
 name = "gat-lending-iterator"
 version = "0.1.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -703,8 +684,7 @@ dependencies = [
 [[package]]
 name = "graphica"
 version = "3.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "118912fe5e24df9c7f36c1211bdeb1a803013b312cc149bd1794b9a0e4ef9c78"
+source = "git+https://github.com/symbolica-dev/symbolica?branch=community#ed2374f1d880d52c3a7ca48cd7c22f4baad5c020"
 dependencies = [
  "ahash",
  "dyn-clone",
@@ -896,7 +876,6 @@ dependencies = [
  "ahash",
  "bincode",
  "bincode-trait-derive",
- "bitvec",
  "dot-parser",
  "duplicate 2.0.1",
  "figment",
@@ -1067,8 +1046,7 @@ dependencies = [
 [[package]]
 name = "numerica"
 version = "3.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "836accdb415b7667573bd12676e0b2eb4440e3f60b110038d96a9086f5651c15"
+source = "git+https://github.com/symbolica-dev/symbolica?branch=community#ed2374f1d880d52c3a7ca48cd7c22f4baad5c020"
 dependencies = [
  "ahash",
  "astro-float",
@@ -1258,12 +1236,6 @@ name = "r-efi"
 version = "5.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "69cdb34c158ceb288df11e18b4bd39de994f6657d83847bdffdbd7f346754b0f"
-
-[[package]]
-name = "radium"
-version = "0.7.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dc33ff2d4973d518d823d61aa239014831e521c75da58e3df4840d3f47749d09"
 
 [[package]]
 name = "rand"
@@ -1579,7 +1551,6 @@ dependencies = [
  "append-only-vec",
  "bincode",
  "bincode-trait-derive",
- "bitvec",
  "blake3",
  "ciborium",
  "colored",
@@ -1633,7 +1604,7 @@ checksum = "a2eb9349b6444b326872e140eb1cf5e7c522154d69e7a0ffb0fb81c06b37543f"
 [[package]]
 name = "symbolica"
 version = "3.0.1"
-source = "git+https://github.com/symbolica-dev/symbolica?branch=community#942bd2c0cd2ef16414d69c176fc9eff7b21c0ab2"
+source = "git+https://github.com/symbolica-dev/symbolica?branch=community#ed2374f1d880d52c3a7ca48cd7c22f4baad5c020"
 dependencies = [
  "ahash",
  "append-only-vec",
@@ -1740,12 +1711,6 @@ dependencies = [
  "quote",
  "syn 2.0.119",
 ]
-
-[[package]]
-name = "tap"
-version = "1.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "55937e1799185b12863d447f42597ed69d9928686b8d88a1df17376a097d8369"
 
 [[package]]
 name = "testing_table"
@@ -2027,15 +1992,6 @@ name = "wit-bindgen"
 version = "0.57.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1ebf944e87a7c253233ad6766e082e3cd714b5d03812acc24c318f549614536e"
-
-[[package]]
-name = "wyz"
-version = "0.5.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "05f360fc0b24296329c78fda852a1e9ae82de9cf7b27dae4b7f62f118f77b9ed"
-dependencies = [
- "tap",
-]
 
 [[package]]
 name = "xprec"

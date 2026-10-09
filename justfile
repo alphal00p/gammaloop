@@ -92,7 +92,8 @@ build-all:
 clean:
     cargo clean
 
-# Guard mutually exclusive Symbolica backends in Hakari's native-only graph.
+# Guard Hakari's native-only Symbolica backends and one Symbolica commit across the
+# root, Tydenso and symbolica-host locks.
 check-symbolica-feature-isolation:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -113,17 +114,16 @@ check-symbolica-feature-isolation:
       echo "the root lock must select one Symbolica revision from the official community branch" >&2
       exit 1
     fi
+    # Cargo ignores Symbolica's own patches to its Numerica and Graphica sub-crates,
+    # so every build root patches all three to the community branch and each lock pins
+    # them to the root's commit.
+    version="3.0.1"
+    expected="$(printf 'version = "%s"\nsource = "%s"\n' "$version" "$symbolica_source")"
     for lock in "$root/Cargo.lock" "$root/tydenso/Cargo.lock" "$root/examples/notebooks/symbolica-host/Cargo.lock"; do
       for package in symbolica numerica graphica; do
-        source="registry+https://github.com/rust-lang/crates.io-index"
-        version="3.0.1"
-        if [ "$package" = symbolica ]; then
-          source="$symbolica_source"
-        fi
-        expected="$(printf 'version = "%s"\nsource = "%s"\n' "$version" "$source")"
-        resolved="$(sed -n "/^name = \"$package\"$/,/^\[\[package\]\]/p" "$lock" | grep -E '^(version|source) = ')"
+        resolved="$(sed -n "/^name = \"$package\"$/,/^\[\[package\]\]/p" "$lock" | grep -E '^(version|source) = ' || true)"
         if [ "$resolved" != "$expected" ]; then
-          echo "$lock must resolve exactly one $package at $version from $source; found ${resolved:-none}" >&2
+          echo "$lock must resolve exactly one $package at $version from $symbolica_source; found ${resolved:-none}" >&2
           exit 1
         fi
       done

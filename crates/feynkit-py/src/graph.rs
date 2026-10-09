@@ -5,6 +5,7 @@ use std::{
     sync::Arc,
 };
 
+use feynkit_generator::FeynmanDiagramRulesExt;
 use feynkit_graph::expressions::{GraphExpressions, PropagatorSymbols};
 use feynkit_graph::{
     DiagramCut, DiagramCutSide, DiagramEdge, DiagramEndpoint, DiagramHalfEdge,
@@ -2990,6 +2991,36 @@ impl PyFeynmanDiagram {
             .map_err(error::diagram)
     }
 
+    /// Instantiate the model's vertex and propagator Feynman rules.
+    ///
+    /// Returns a new diagram whose local numerator fragments are built in the
+    /// existing half-edge frame. Momentum routing, graph weights, numerator
+    /// prefactors and the external-state projector are retained. Only the local
+    /// fragments come from the model: a compact DOT graph without ``projector``
+    /// and ``overall_factor`` attributes keeps both at 1, whereas a generated
+    /// diagram also carries its external-state projector and its sign and
+    /// symmetry factors.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community import hepkit as hep
+    /// >>> model = hep.Model.phi4()
+    /// >>> diagram = hep.FeynmanDiagram.from_dot(model, '''digraph sunrise {
+    /// ...     ext [style=invis];
+    /// ...     ext -> a [particle="phi"];
+    /// ...     a -> b [particle="phi"];
+    /// ...     a -> b [particle="phi"];
+    /// ...     a -> b [particle="phi"];
+    /// ...     b -> ext [particle="phi"];
+    /// ... }''').apply_feynman_rules()
+    /// >>> numerator = diagram.numerator_expression(in_lmb=True)
+    fn apply_feynman_rules(&self, py: Python<'_>) -> PyResult<Self> {
+        let diagram = Arc::clone(&self.inner);
+        py.detach(|| diagram.apply_feynman_rules())
+            .map(Into::into)
+            .map_err(error::generation)
+    }
+
     /// Parse a document containing multiple Feynman diagrams in DOT format.
     /// Graphs are returned in document order and validated against the model.
     ///
@@ -4785,6 +4816,52 @@ mod tests {
         pyo3::Python::initialize();
         pyo3::Python::attach(|py| {
             spynso3::expression::TensorExpression::from_atom_interface(py, atom, None).unwrap();
+        });
+    }
+
+    #[test]
+    fn apply_feynman_rules_returns_the_ruled_diagram() {
+        use feynkit_generator::FeynmanDiagramRulesExt;
+        use feynkit_graph::FeynmanDiagram;
+        use feynkit_model::Model;
+        use pyo3::{prelude::*, types::PyDict};
+
+        const SUNRISE: &str = r#"digraph sunrise {
+            ext [style=invis];
+            ext -> a [particle="phi"];
+            a -> b [particle="phi"];
+            a -> b [particle="phi"];
+            a -> b [particle="phi"];
+            b -> ext [particle="phi"];
+        }"#;
+        let expected = FeynmanDiagram::from_dot(Model::phi4(), SUNRISE)
+            .unwrap()
+            .apply_feynman_rules()
+            .unwrap()
+            .to_json()
+            .unwrap();
+        Python::initialize();
+        Python::attach(|py| {
+            let module = PyModule::new(py, "symbolica.community.hepkit").unwrap();
+            crate::initialize_feynkit(&module).unwrap();
+            let locals = PyDict::new(py);
+            locals.set_item("fk", &module).unwrap();
+            locals.set_item("SUNRISE", SUNRISE).unwrap();
+            locals.set_item("EXPECTED", expected).unwrap();
+            py.run(
+                c"
+diagram = fk.FeynmanDiagram.from_dot(fk.Model.phi4(), SUNRISE)
+imported = diagram.to_json()
+ruled = diagram.apply_feynman_rules()
+assert ruled.numerator != diagram.numerator
+assert ruled.to_json() == EXPECTED
+assert ruled.apply_feynman_rules().to_json() == EXPECTED
+assert diagram.to_json() == imported
+",
+                Some(&locals),
+                Some(&locals),
+            )
+            .unwrap();
         });
     }
 

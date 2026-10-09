@@ -24,21 +24,26 @@ PyO3, and the other community modules compatible with this checkout. The `ufo` f
 by default in the Python adapter; disable default features if the host intentionally omits UFO
 loading. The pure Rust facade has different defaults.
 
-Use the released Symbolica and Numerica 3.0.1 dependencies. The Typst atom
-payload still requires a Git revision selected in the consuming host's root
-manifest, so that choice applies to FeynKit and Spenso transitively:
+Take Symbolica, Numerica and Graphica from Symbolica's `community` branch and the
+Typst atom payload from a Git revision. The consuming host's root manifest selects
+these sources, so that choice applies to FeynKit and Spenso transitively:
 
 // docs-example: syntax
 ```toml
 [patch.crates-io]
+symbolica = { git = "https://github.com/symbolica-dev/symbolica", branch = "community" }
+numerica = { git = "https://github.com/symbolica-dev/symbolica", branch = "community" }
+graphica = { git = "https://github.com/symbolica-dev/symbolica", branch = "community" }
 symbolica-typst-plugin = { git = "https://github.com/symbolica-dev/symbolica-typst-plugin", rev = "57b7455b37c30f4f87353c0073e49f5225e937ab" }
 ```
 
 Only the top-level workspace's patches apply; dependency workspaces do not
-forward their patch tables. The standalone repository and the nested `tydenso/`
-WASM workspace therefore each keep their own defaults. To align native and WASM
-builds, select the same versions and payload revision in both build roots and
-rebuild both artifacts.
+forward their patch tables. Symbolica's own patches for its Numerica and
+Graphica sub-crates therefore do not apply either, so patch all three; the lock
+then records one commit for them. The standalone repository and the nested
+`tydenso/` WASM workspace each keep their own patches. To align native and WASM
+builds, lock the same Symbolica commit and payload revision in both build roots
+and rebuild both artifacts.
 Changing a Cargo patch does not update an already compiled Typst plugin or its
 bundled Typst renderer sources.
 
