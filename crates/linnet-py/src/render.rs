@@ -38,10 +38,9 @@ const SUBGRAPH_STYLE: &str = "subgraph.typ";
 #[include = "src/**/*.typ"]
 #[include = "typst.toml"]
 #[include = "linnest.wasm"]
-#[include = "ec-layout.wasm"]
 #[include = "LICENSE"]
-#[include = "LICENSE.ec-layout"]
 #[include = "LICENSE.clarabel"]
+#[include = "LICENSE.networkx"]
 struct EmbeddedLinnestPackage;
 
 #[derive(RustEmbed)]
@@ -1048,12 +1047,15 @@ mod tests {
                 .len()
                 > 0
         );
-        assert!(
-            fs::metadata(prepared.root.join("crates/linnest/typst/ec-layout.wasm"))
-                .unwrap()
-                .len()
-                > 0
-        );
+        // linnest.wasm compiles Clarabel and NetworkX-derived code.
+        for notice in ["LICENSE.clarabel", "LICENSE.networkx"] {
+            assert!(
+                prepared
+                    .files
+                    .contains_key(&format!("crates/linnest/typst/{notice}")),
+                "{notice}"
+            );
+        }
         assert!(prepared
             .files
             .contains_key("crates/kurvst/typst/src/lib.typ"));

@@ -7,14 +7,13 @@ description = "Offline in-process Typst compilation for notebook rendering"
 
 [features]
 default = []
-# Standalone document rendering retains export formats and font discovery.
+# Standalone document rendering retains every library feature and the export formats.
+# Either way, the fonts are the embedded set.
 full = [
     "typst-library/full",
     "typst-svg/pdf",
     "dep:typst-pdf",
     "dep:typst-render",
-    "typst-kit/embedded-fonts",
-    "typst-kit/scan-fonts",
 ]
 
 [dependencies]

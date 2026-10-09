@@ -256,7 +256,7 @@ struct Graph {
     require(valid_embedding(), "Invalid constrained embedding");
   }
 };
-// Implemented by the pinned OGDF primitive, shared by native and WASM callers.
+// Implemented by the pinned OGDF primitive in spqr.hpp.
 Json decompose(const Json &request);
 inline Json spqr(const Graph &g) {
   Json req = {{"nodes", g.nodes}, {"edges", Json::array()}};

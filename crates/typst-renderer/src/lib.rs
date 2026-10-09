@@ -10,30 +10,35 @@ use std::{
 };
 
 use typst::LibraryExt;
-use typst::syntax::{FileId, RootedPath, Source, VirtualPath, VirtualRoot};
+use typst::syntax::{FileId, RootedPath, Source, Span, VirtualPath, VirtualRoot};
 use typst::utils::LazyHash;
 use typst_kit::fonts::FontStore;
 use typst_library::{
     Feature, Library, World, WorldExt,
     diag::{FileError, FileResult, SourceDiagnostic},
-    foundations::{Bytes, Datetime, Duration},
-    text::{Font, FontBook},
+    foundations::{
+        Bytes, Datetime, Duration, NativeElement, Recipe, Selector, Styles, Transformation,
+    },
+    math::EquationElem,
+    text::{Font, FontBook, FontFamily, FontList, TextElem},
 };
 
+/// The only fonts: Libertinus Serif for text, STIX Two Math for equations and
+/// DejaVu Sans Mono for raw text. All are under permissive licenses.
 static FONTS: LazyLock<FontStore> = LazyLock::new(|| {
     let mut fonts = FontStore::new();
-    #[cfg(feature = "full")]
-    fonts.extend(typst_kit::fonts::embedded());
-    // Typst equations request weight 450 (Book), not the 400 Regular face.
-    #[cfg(not(feature = "full"))]
     for data in [
         include_bytes!("../fonts/LibertinusSerif-Regular.otf").as_slice(),
+        include_bytes!("../fonts/LibertinusSerif-Semibold.otf").as_slice(),
         include_bytes!("../fonts/LibertinusSerif-Bold.otf").as_slice(),
         include_bytes!("../fonts/LibertinusSerif-Italic.otf").as_slice(),
+        include_bytes!("../fonts/LibertinusSerif-SemiboldItalic.otf").as_slice(),
         include_bytes!("../fonts/LibertinusSerif-BoldItalic.otf").as_slice(),
-        include_bytes!("../fonts/NewCMMath-Book.otf").as_slice(),
-        include_bytes!("../fonts/NewCMMath-Bold.otf").as_slice(),
+        include_bytes!("../fonts/STIXTwoMath-Regular.otf").as_slice(),
         include_bytes!("../fonts/DejaVuSansMono.ttf").as_slice(),
+        include_bytes!("../fonts/DejaVuSansMono-Bold.ttf").as_slice(),
+        include_bytes!("../fonts/DejaVuSansMono-Oblique.ttf").as_slice(),
+        include_bytes!("../fonts/DejaVuSansMono-BoldOblique.ttf").as_slice(),
     ] {
         fonts.extend(Font::iter(Bytes::new(data)).map(|font| {
             let info = font.info().clone();
@@ -51,8 +56,6 @@ pub struct Document<'a> {
     files: &'a BTreeMap<String, Vec<u8>>,
     sources: Mutex<HashMap<FileId, Source>>,
     library: LazyHash<Library>,
-    #[cfg(feature = "full")]
-    fonts: Option<FontStore>,
 }
 
 impl<'a> Document<'a> {
@@ -71,28 +74,33 @@ impl<'a> Document<'a> {
     }
 
     pub fn new(root: &'a Path, packages: &'a Path, files: &'a BTreeMap<String, Vec<u8>>) -> Self {
-        #[cfg(feature = "full")]
-        let fonts = std::env::var_os("TYPST_FONT_PATHS").map(|paths| {
-            let mut fonts = FontStore::new();
-            for path in std::env::split_paths(&paths) {
-                fonts.extend(typst_kit::fonts::scan(&path));
-            }
-            fonts.extend(typst_kit::fonts::embedded());
-            fonts
-        });
         Self {
             root,
             packages,
             files,
             sources: Mutex::new(HashMap::new()),
-            #[cfg(feature = "full")]
-            fonts,
-            library: LazyHash::new(
-                Library::builder()
-                    .with_features([Feature::Html].into_iter().collect())
-                    .build(),
-            ),
+            library: LazyHash::new(Self::library()),
         }
+    }
+
+    /// The standard library with STIX Two Math as the equation font. Typst's
+    /// default, New Computer Modern Math, is not embedded; a font set lacking
+    /// it would make equations fall back to a text font and lose their layout.
+    fn library() -> Library {
+        let mut library = Library::builder()
+            .with_features([Feature::Html].into_iter().collect())
+            .build();
+        let mut math = Styles::new();
+        math.set(
+            TextElem::font,
+            FontList(vec![FontFamily::new("STIX Two Math")]),
+        );
+        library.styles.push(Recipe::new(
+            Some(Selector::Elem(EquationElem::ELEM, None)),
+            Transformation::Style(math),
+            Span::detached(),
+        ));
+        library
     }
 
     /// Compile HTML as one document or SVG as one document per page.
@@ -176,10 +184,6 @@ impl World for Document<'_> {
         &self.library
     }
     fn book(&self) -> &LazyHash<FontBook> {
-        #[cfg(feature = "full")]
-        if let Some(fonts) = &self.fonts {
-            return fonts.book();
-        }
         FONTS.book()
     }
     fn main(&self) -> FileId {
@@ -217,10 +221,6 @@ impl World for Document<'_> {
             .map_err(|error| FileError::from_io(error, &path))
     }
     fn font(&self, index: usize) -> Option<Font> {
-        #[cfg(feature = "full")]
-        if let Some(fonts) = &self.fonts {
-            return fonts.font(index);
-        }
         FONTS.font(index)
     }
     fn today(&self, _offset: Option<Duration>) -> Option<Datetime> {
@@ -231,24 +231,71 @@ impl World for Document<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::BTreeSet;
+    use typst_layout::PagedDocument;
+    use typst_library::layout::{Frame, FrameItem};
+
+    /// The families of all glyph runs in a compiled document.
+    fn font_families(source: &str) -> BTreeSet<String> {
+        fn collect(frame: &Frame, families: &mut BTreeSet<String>) {
+            for (_, item) in frame.items() {
+                match item {
+                    FrameItem::Group(group) => collect(&group.frame, families),
+                    FrameItem::Text(text) => {
+                        families.insert(text.font.info().family.clone());
+                    }
+                    _ => {}
+                }
+            }
+        }
+        let root = tempfile::tempdir().unwrap();
+        let files = BTreeMap::from([("main.typ".into(), source.as_bytes().to_vec())]);
+        let document = Document::new(root.path(), root.path(), &files);
+        let paged = typst::compile::<PagedDocument>(&document).output.unwrap();
+        let mut families = BTreeSet::new();
+        for page in paged.pages() {
+            collect(&page.frame, &mut families);
+        }
+        families
+    }
 
     #[test]
-    fn embedded_fonts_match_default_math_and_text_variants() {
+    fn embedded_fonts_cover_text_math_and_raw_variants() {
         use typst_library::text::{FontStretch, FontStyle, FontVariant, FontWeight};
         for (family, style, weight) in [
-            ("new computer modern math", FontStyle::Normal, 450),
-            ("new computer modern math", FontStyle::Normal, 700),
+            ("stix two math", FontStyle::Normal, 400),
             ("libertinus serif", FontStyle::Normal, 400),
+            ("libertinus serif", FontStyle::Normal, 600),
             ("libertinus serif", FontStyle::Normal, 700),
             ("libertinus serif", FontStyle::Italic, 400),
+            ("libertinus serif", FontStyle::Italic, 600),
             ("libertinus serif", FontStyle::Italic, 700),
             ("dejavu sans mono", FontStyle::Normal, 400),
+            ("dejavu sans mono", FontStyle::Normal, 700),
+            ("dejavu sans mono", FontStyle::Italic, 400),
+            ("dejavu sans mono", FontStyle::Italic, 700),
         ] {
             let variant =
                 FontVariant::new(style, FontWeight::from_number(weight), FontStretch::NORMAL);
             let index = FONTS.book().select(family, variant).unwrap();
             let font = FONTS.font(index).unwrap();
             assert_eq!(font.info().variant, variant, "{family}");
+        }
+    }
+
+    #[test]
+    fn typesets_text_equations_and_raw_text_in_their_own_fonts() {
+        for (source, family) in [
+            ("Text *bold* _italic_", "Libertinus Serif"),
+            ("$x + sum_(i=1)^n cal(L)_i$", "STIX Two Math"),
+            ("$ bold(x) = integral_0^1 f(t) dif t $", "STIX Two Math"),
+            ("`raw`", "DejaVu Sans Mono"),
+        ] {
+            assert_eq!(
+                font_families(source),
+                BTreeSet::from([family.to_owned()]),
+                "{source}"
+            );
         }
     }
 

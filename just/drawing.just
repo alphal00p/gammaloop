@@ -61,7 +61,6 @@ sync-drawing-assets:
         "$target/crates/linnest/typst" \
         "$target/crates/kurvst/typst"
       install_asset result/linnest.wasm "$target/crates/linnest/typst/linnest.wasm"
-      install_asset result/ec-layout.wasm "$target/crates/linnest/typst/ec-layout.wasm"
       install_asset result/kurvst.wasm "$target/crates/kurvst/typst/kurvst.wasm"
     }
 
@@ -75,7 +74,6 @@ sync-drawing-assets:
 
     install_asset result/kurvst.wasm crates/kurvst/typst/kurvst.wasm
     install_asset result/linnest.wasm crates/linnest/typst/linnest.wasm
-    install_asset result/ec-layout.wasm crates/linnest/typst/ec-layout.wasm
 
     if [ -d gammaloop_state/drawings/templates ]; then
       copy_package_sources gammaloop_state/drawings/templates
@@ -84,7 +82,6 @@ sync-drawing-assets:
 
     cmp result/kurvst.wasm crates/kurvst/typst/kurvst.wasm
     cmp result/linnest.wasm crates/linnest/typst/linnest.wasm
-    cmp result/ec-layout.wasm crates/linnest/typst/ec-layout.wasm
 
 # Sync drawing Typst templates and Cargo-built WASM bundles for non-Nix development.
 sync-drawing-assets-cargo:
@@ -97,7 +94,6 @@ sync-drawing-assets-cargo:
     wasm_target="wasm32-unknown-unknown"
     wasm_profile="release"
     wasm_dir="target/$wasm_target/$wasm_profile"
-    ec_wasm_dir="target/ec-planarity-native"
 
     install_asset() {
       local src="$1"
@@ -154,7 +150,6 @@ sync-drawing-assets-cargo:
         "$target/crates/linnest/typst" \
         "$target/crates/kurvst/typst"
       install_asset "$wasm_dir/linnest.wasm" "$target/crates/linnest/typst/linnest.wasm"
-      install_asset "$ec_wasm_dir/ec-layout.wasm" "$target/crates/linnest/typst/ec-layout.wasm"
       install_asset "$wasm_dir/kurvst.wasm" "$target/crates/kurvst/typst/kurvst.wasm"
     }
 
@@ -163,11 +158,9 @@ sync-drawing-assets-cargo:
     fi
 
     cargo build --release -p linnest -p kurvst --features linnest/typst-plugin,kurvst/typst-plugin --target "$wasm_target"
-    python3 crates/linnest/layout/native/build.py --wasm --output "$ec_wasm_dir"
 
     install_asset "$wasm_dir/kurvst.wasm" crates/kurvst/typst/kurvst.wasm
     install_asset "$wasm_dir/linnest.wasm" crates/linnest/typst/linnest.wasm
-    install_asset "$ec_wasm_dir/ec-layout.wasm" crates/linnest/typst/ec-layout.wasm
 
     if [ -d gammaloop_state/drawings/templates ]; then
       clean_old_flat_bundle gammaloop_state/drawings/templates
@@ -179,4 +172,3 @@ sync-drawing-assets-cargo:
 
     cmp "$wasm_dir/kurvst.wasm" crates/kurvst/typst/kurvst.wasm
     cmp "$wasm_dir/linnest.wasm" crates/linnest/typst/linnest.wasm
-    cmp "$ec_wasm_dir/ec-layout.wasm" crates/linnest/typst/ec-layout.wasm

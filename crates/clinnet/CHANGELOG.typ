@@ -7,6 +7,16 @@ and this project adheres to #link("https://semver.org/spec/v2.0.0.html")[Semanti
 
 == Unreleased
 
+=== Added
+
+- The bundled Linnest package carries `LICENSE.networkx`, the BSD-3-Clause notice of the
+  NetworkX code that its layout seed translates.
+
+=== Removed
+
+- The bundled Linnest package no longer carries the unused `ec-layout.wasm` plugin, which
+  linked the GPL-licensed OGDF. Layout seeds come from `linnest.wasm` as before.
+
 == #link("https://github.com/alphal00p/linnet/compare/clinnet-v0.1.7...clinnet-v0.1.8")[0.1.8] - 2025-12-04
 
 === Other
