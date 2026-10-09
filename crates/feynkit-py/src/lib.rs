@@ -66,6 +66,7 @@ impl SymbolicaCommunityModule for FeynkitModule {
         let mut citations = vec![
             Citation {
                 id: "https://github.com/alphal00p/gammaloop#feynkit".into(),
+                url: "https://github.com/alphal00p/gammaloop/tree/feynkit".into(),
                 reference: "FeynKit contributors. FeynKit (2026).".into(),
                 bibtex: r#"@software{feynkit,
   author = {{FeynKit contributors}},
@@ -79,6 +80,7 @@ impl SymbolicaCommunityModule for FeynkitModule {
             },
             Citation {
                 id: "arXiv:0903.5143".into(),
+                url: "https://arxiv.org/abs/0903.5143".into(),
                 reference: "Benoît Collins and Sho Matsumoto. On some properties of orthogonal Weingarten functions (2009).".into(),
                 bibtex: r#"@article{feynkit_0903.5143,
   author = {Benoît Collins and Sho Matsumoto},
@@ -93,6 +95,7 @@ impl SymbolicaCommunityModule for FeynkitModule {
             },
             Citation {
                 id: "arXiv:1701.04493".into(),
+                url: "https://arxiv.org/abs/1701.04493".into(),
                 reference: "Benoît Collins and Sho Matsumoto. Weingarten calculus via orthogonality relations: new applications (2017).".into(),
                 bibtex: r#"@article{feynkit_1701.04493,
   author = {Benoît Collins and Sho Matsumoto},
@@ -107,6 +110,7 @@ impl SymbolicaCommunityModule for FeynkitModule {
             },
             Citation {
                 id: "arXiv:1801.06084".into(),
+                url: "https://arxiv.org/abs/1801.06084".into(),
                 reference: "B. Ruijl and F. Herzog and T. Ueda and J. A. M. Vermaseren and A. Vogt. R*-operation and five-loop calculations (2018).".into(),
                 bibtex: r#"@article{feynkit_1801.06084,
   author = {B. Ruijl and F. Herzog and T. Ueda and J. A. M. Vermaseren and A. Vogt},
@@ -121,6 +125,7 @@ impl SymbolicaCommunityModule for FeynkitModule {
             },
             Citation {
                 id: "arXiv:2408.05137".into(),
+                url: "https://arxiv.org/abs/2408.05137".into(),
                 reference: "Jae Goode and Franz Herzog and Anthony Kennedy and Sam Teale and Jos Vermaseren. Tensor Reduction for Feynman Integrals with Lorentz and Spinor Indices (2024).".into(),
                 bibtex: r#"@article{feynkit_2408.05137,
   author = {Jae Goode and Franz Herzog and Anthony Kennedy and Sam Teale and Jos Vermaseren},
@@ -135,6 +140,7 @@ impl SymbolicaCommunityModule for FeynkitModule {
             },
             Citation {
                 id: "arXiv:2411.02233".into(),
+                url: "https://arxiv.org/abs/2411.02233".into(),
                 reference: "Jae Goode and Franz Herzog and Sam Teale. OPITeR: A program for tensor reduction of multi-loop Feynman Integrals (2024).".into(),
                 bibtex: r#"@article{feynkit_2411.02233,
   author = {Jae Goode and Franz Herzog and Sam Teale},

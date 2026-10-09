@@ -40,6 +40,7 @@ impl CitationUsage {
         // docs/products/vakint/content/evaluation.typ, "Methods and software to cite".
         let mut citations = vec![Citation {
             id: "https://github.com/alphal00p/vakint#vakint".into(),
+            url: "https://github.com/alphal00p/vakint".into(),
             reference: "Lucien Huber, Valentin Hirschi. Vakint (2026).".into(),
             bibtex: r#"@software{vakint,
   author = {Lucien Huber and Valentin Hirschi},
@@ -73,6 +74,7 @@ impl CitationSource {
             Self::Vakint => unreachable!("the package credit is emitted separately"),
             Self::Form => Citation {
                 id: "arXiv:1203.6543".into(),
+                url: "https://arxiv.org/abs/1203.6543".into(),
                 reference: "J. Kuipers and T. Ueda and J. A. M. Vermaseren and J. Vollinga. FORM version 4.0 (2012).".into(),
                 bibtex: r#"@article{vakint_form,
   author = {J. Kuipers and T. Ueda and J. A. M. Vermaseren and J. Vollinga},
@@ -87,6 +89,7 @@ impl CitationSource {
             },
             Self::Matad => Citation {
                 id: "arXiv:hep-ph/0009029".into(),
+                url: "https://arxiv.org/abs/hep-ph/0009029".into(),
                 reference: "M. Steinhauser. MATAD: a program package for the computation of MAssive TADpoles (2000).".into(),
                 bibtex: r#"@article{vakint_matad,
   author = {M. Steinhauser},
@@ -101,6 +104,7 @@ impl CitationSource {
             },
             Self::Fmft => Citation {
                 id: "arXiv:1707.01710".into(),
+                url: "https://arxiv.org/abs/1707.01710".into(),
                 reference: "Andrey Pikelner. FMFT: Fully Massive Four-loop Tadpoles (2017).".into(),
                 bibtex: r#"@article{vakint_fmft,
   author = {Andrey Pikelner},
@@ -115,6 +119,7 @@ impl CitationSource {
             },
             Self::PySecDec => Citation {
                 id: "arXiv:1703.09692".into(),
+                url: "https://arxiv.org/abs/1703.09692".into(),
                 reference: "S. Borowka and G. Heinrich and S. Jahn and S. P. Jones and M. Kerner and J. Schlenk and T. Zirke. pySecDec: a toolbox for the numerical evaluation of multi-scale integrals (2017).".into(),
                 bibtex: r#"@article{vakint_pysecdec,
   author = {S. Borowka and G. Heinrich and S. Jahn and S. P. Jones and M. Kerner and J. Schlenk and T. Zirke},
