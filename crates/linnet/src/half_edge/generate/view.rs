@@ -300,8 +300,9 @@ impl<'a, F, L> GraphView<'a, F, L> {
         if !d.rules.is_empty() {
             return Some(&d.rules[v..=v]);
         }
-        let model = &self.compiled.model;
-        d.stubs[v].is_full().then(|| model.rules(&d.stubs[v]))
+        // only the full states of the vertex automaton have rules
+        let rules = self.compiled.model.rules(d.states[v]);
+        (!rules.is_empty()).then_some(rules)
     }
 
     /// The bridges with a final side; a bridge of a complete topology is listed once per side.

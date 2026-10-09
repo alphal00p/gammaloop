@@ -181,9 +181,12 @@ previous labels, so many distinct legs cost few symmetric topologies instead of 
 labelled dead ends. Twin vertices (equal corollas and multiplicities to every other vertex) are
 exchanged by an automorphism, so rule-2 ties among twins and groups whose colour classes are twin
 classes need no node canonization. Each complete topology is then
-decorated with fields, orientations and vertex rules edge by edge, with partial vertices checked
-against the sub-multisets of the signatures, keeping one decoration per orbit of the topology's
-automorphism group. Typed canonical augmentation (signatures as the corollas) was measured as the
+decorated with fields, orientations and vertex rules edge by edge, keeping one decoration per orbit
+of the topology's automorphism group. A partial vertex is a state of an automaton over the
+sub-multisets of the signatures, so an edge tries only the fields both of its ends can still take,
+and forward checking drops a partial decoration before the filter sees it once an edge at the ends
+of the last decorated one has no field left; a topology with an edge that no field fits at its
+ends gets no decoration. Typed canonical augmentation (signatures as the corollas) was measured as the
 alternative and visits about four times as many partial objects on QED and QCD processes.
 
 #callout("Streaming, deterministic order and parallelism", [

@@ -27,20 +27,24 @@ Commands:
   compare OLD.json NEW.json
       Print new/old ratios of the total and of every stage, per workload and mode.
 
-Ir varies between runs of one binary: hash maps take random keys at run time (the
-ahash maps of linnet's stage-2 feasibility checks dominate), which moves the totals
-of dressing-heavy workloads by up to two percent (the photon self-energy at five
-loops) and the dressing stage by several percent. Totals and stages are therefore
-medians over the runs, with the totals of every run kept; compare medians of
-several runs of builds with the same toolchain and flags. The [min, max] of a
-baseline's runs is not a tolerance band: a run of the unchanged build can fall
-outside it, so gates judge the ratio of the medians. A stage is the inclusive cost of
-the functions its pattern matches, summed over every source file their inlined
-code comes from; calls between matched functions count once, and recursive calls
-of a function to itself are ignored. A stage whose functions are all inlined away
-is reported as missing, never as zero. Work run on a rayon pool is attributed on
-the worker thread, so the stages are not nested in `Generator::generate`; `total`
-is the whole program, including the model build.
+Ir varies between runs of one binary. glibc's malloc consolidates freed chunks at
+run-dependent times, which adds up to two percent outside every stage to many runs
+(SM ee->mumu at two loops took it in three of three runs, gg->ggg at two loops in
+one of three), so the median of three runs can move by one to two percent; and hash
+maps with random run-time keys move the stages that use them: in the checked-in
+baseline, linnet's stage-2 feasibility maps moved the dressing stage by several
+percent and dressing-heavy totals by up to two percent, while the vertex automaton
+that replaced them repeats to the instruction. Totals and stages are therefore
+medians over the runs, with the totals of every run kept; compare stages as well as
+totals, and medians of several runs of builds with the same toolchain and flags. The
+[min, max] of a baseline's runs is not a tolerance band: a run of the unchanged
+build can fall outside it, so gates judge the ratio of the medians. A stage is the
+inclusive cost of the functions its pattern matches, summed over every source file
+their inlined code comes from; calls between matched functions count once, and
+recursive calls of a function to itself are ignored. A stage whose functions are
+all inlined away is reported as missing, never as zero. Work run on a rayon pool is
+attributed on the worker thread, so the stages are not nested in
+`Generator::generate`; `total` is the whole program, including the model build.
 """
 
 import argparse

@@ -1439,7 +1439,7 @@ impl Search {
         for &degree in &model.degrees {
             let budget = t.budget - (degree as i32 - 2);
             for &(legs, n_legs) in &level.subsets {
-                if n_legs > degree as u32 || !model.legs_fit(degree, legs) {
+                if n_legs > degree as u32 || model.leg_state(degree, legs).is_none() {
                     continue;
                 }
                 let max_loops = if limits.self_loops {

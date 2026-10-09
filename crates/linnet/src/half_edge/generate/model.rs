@@ -1,17 +1,18 @@
-//! Dense form of the generation input: stub types, signature lookup tables, external-leg classes
-//! and edge labels.
+//! Dense form of the generation input: stub types, the vertex automaton, external-leg classes and
+//! edge labels.
 //!
 //! A stub type is `3 * field + direction` (undirected, incoming, outgoing), with fields ranked in
-//! their `Ord` order. The stubs at a vertex are a [`StubSet`]: the sorted multiset packed with the
-//! vertex degree into one `u128` key, looked up in two tables built from the signatures: every
-//! sub-multiset of a signature of degree `d` (partial vertices that can still be completed) and
-//! every full signature (the vertex rules with exactly these stubs).
+//! their `Ord` order. A partial vertex is a state of the [`Automaton`] built from the signatures:
+//! the multiset of the stubs placed at it so far, while some signature of its degree contains it.
+//! Adding a stub is a lookup in the state's transitions, and the edge labels whose stubs a state
+//! can still take are precomputed per state as bit masks, so the dressing search visits only the
+//! labels that fit both ends of an edge.
 //!
 //! External legs are packed by label class (interchangeable legs: equal label and stub) on complete
 //! topologies, and by slot class while the topology search places them, where distinct labels with
 //! a common stub can share an anonymous class.
 
-use ahash::{AHashMap, AHashSet};
+use ahash::AHashMap;
 
 use super::GenerationError;
 
@@ -24,20 +25,21 @@ pub(crate) const INCOMING: u8 = 1;
 pub(crate) const OUTGOING: u8 = 2;
 
 /// Sorted multiset of stub types at a vertex of known degree; byte `15` is the degree and bytes
-/// `0..len` the sorted types plus one, so the packed key is exact.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub(crate) struct StubSet {
+/// `0..len` the sorted types plus one, so the packed key is exact. It names the states of the
+/// [`Automaton`] while they are interned.
+#[derive(Clone, Copy, Debug)]
+struct StubSet {
     bytes: [u8; 16],
 }
 
 impl StubSet {
-    pub(crate) fn new(degree: u8) -> Self {
+    fn new(degree: u8) -> Self {
         let mut bytes = [0; 16];
         bytes[15] = degree;
         StubSet { bytes }
     }
 
-    pub(crate) fn insert(&mut self, stub: u8) {
+    fn insert(&mut self, stub: u8) {
         let b = stub + 1;
         let i = self.bytes[..15]
             .iter()
@@ -47,23 +49,303 @@ impl StubSet {
         self.bytes[i] = b;
     }
 
-    pub(crate) fn remove(&mut self, stub: u8) {
-        let i = self.bytes[..15]
-            .iter()
-            .position(|&x| x == stub + 1)
-            .expect("removed stub is present");
-        self.bytes.copy_within(i + 1..15, i);
-        self.bytes[14] = 0;
-    }
-
-    /// Holds as many stubs as its degree.
-    pub(crate) fn is_full(&self) -> bool {
-        let degree = self.bytes[15] as usize;
-        degree == 0 || self.bytes[degree - 1] != 0
-    }
-
-    pub(crate) fn key(&self) -> u128 {
+    fn key(&self) -> u128 {
         u128::from_le_bytes(self.bytes)
+    }
+}
+
+/// A state of the [`Automaton`]: a partial vertex.
+pub(crate) type VertexState = u32;
+
+/// No state: the stubs fit no signature.
+const NONE: VertexState = VertexState::MAX;
+
+/// No stub type: they are below `3 * MAX_FIELDS`.
+const EMPTY: u8 = u8::MAX;
+
+/// The partial vertices of every signature degree as the states of one automaton, a component per
+/// degree. A state is a multiset of stubs that some signature of its degree contains, and adding a
+/// stub leads to the state with that stub added while a signature of the degree still contains it.
+/// The roots are the empty multisets; the full states (as many stubs as their degree) are the
+/// signatures themselves, and their vertex rules are the indices of the equal signatures.
+///
+/// Most states take few of the stub types, so each state keeps its transitions in a small hash
+/// table of its own, keyed by stub type with linear probing, at most half full: memory grows with
+/// the transitions rather than with the states times the stub types.
+#[derive(Debug)]
+struct Automaton {
+    /// Per degree `0..=MAX_DEGREE`: its root, `NONE` without a signature of that degree.
+    roots: [VertexState; MAX_DEGREE + 1],
+    /// Per state: the first slot of its table and its size less one, a power of two less one.
+    tables: Vec<(u32, u32)>,
+    /// `(stub, target)`: a transition by `stub` to `target`, or `(EMPTY, NONE)`.
+    slots: Vec<(u8, VertexState)>,
+    /// The signatures equal to state `s` are `rules[starts[s]..starts[s + 1]]`, ascending.
+    starts: Vec<u32>,
+    rules: Vec<u32>,
+}
+
+/// A transition of the [`Automaton`]: `(state, stub, target)`.
+type Transition = (VertexState, u8, VertexState);
+
+impl Automaton {
+    /// The automaton of `signatures`, given as stub types below `stubs` and of degree
+    /// `1..=MAX_DEGREE`, with every transition once.
+    fn new(signatures: &[Vec<u8>], stubs: usize) -> (Self, Vec<Transition>) {
+        let width = stubs.div_ceil(64);
+        let mut ids: AHashMap<u128, VertexState> = AHashMap::new();
+        // per state, `width` words of a bit per stub type it takes, to list each transition once
+        let mut takes: Vec<u64> = vec![];
+        let mut transitions = vec![];
+        let mut roots = [NONE; MAX_DEGREE + 1];
+        let mut full = vec![];
+        // the sub-multisets of a signature, by index
+        let mut states = vec![];
+        for (i, signature) in signatures.iter().enumerate() {
+            let degree = signature.len() as u8;
+            let mut sorted = signature.clone();
+            sorted.sort_unstable();
+            // every sub-multiset: choose how many of each run of equal stubs to keep, `keep[r]` of
+            // run `r`, visited in the order of the index `sum keep[r] * stride[r]`
+            let runs: Vec<(u8, usize)> = sorted
+                .chunk_by(|a, b| a == b)
+                .map(|run| (run[0], run.len()))
+                .collect();
+            let stride: Vec<usize> = runs
+                .iter()
+                .scan(1, |n, &(_, len)| {
+                    let stride = *n;
+                    *n *= len + 1;
+                    Some(stride)
+                })
+                .collect();
+            let mut keep = vec![0usize; runs.len()];
+            states.clear();
+            loop {
+                let mut set = StubSet::new(degree);
+                for (&(stub, _), &k) in runs.iter().zip(&keep) {
+                    for _ in 0..k {
+                        set.insert(stub);
+                    }
+                }
+                let id = ids.len() as VertexState;
+                let state = *ids.entry(set.key()).or_insert(id);
+                if state == id {
+                    takes.resize(takes.len() + width, 0);
+                }
+                // the sub-multiset with one stub of run `r` fewer takes that stub to this one
+                for (r, &(stub, _)) in runs.iter().enumerate() {
+                    if keep[r] > 0 {
+                        let from = states[states.len() - stride[r]];
+                        let word = &mut takes[from as usize * width + stub as usize / 64];
+                        let bit = 1 << (stub % 64);
+                        if *word & bit == 0 {
+                            *word |= bit;
+                            transitions.push((from, stub, state));
+                        }
+                    }
+                }
+                states.push(state);
+                let Some(r) = (0..runs.len()).find(|&r| keep[r] < runs[r].1) else {
+                    full.push((state, i as u32));
+                    break;
+                };
+                keep[r] += 1;
+                keep[..r].fill(0);
+            }
+            roots[degree as usize] = states[0];
+        }
+        let n_states = ids.len();
+        // a table per state, of the least power of two that is at least twice its transitions, so
+        // a probe always ends at an empty slot
+        let mut tables = vec![(0, 0u32); n_states];
+        for &(state, ..) in &transitions {
+            tables[state as usize].1 += 2;
+        }
+        let mut n_slots = 0;
+        for (first, size) in &mut tables {
+            let len = size.next_power_of_two();
+            (*first, *size) = (n_slots, len - 1);
+            n_slots += len;
+        }
+        let mut slots = vec![(EMPTY, NONE); n_slots as usize];
+        for &(state, stub, target) in &transitions {
+            let (first, mask) = tables[state as usize];
+            let mut i = stub as u32 & mask;
+            while slots[(first + i) as usize].0 != EMPTY {
+                i = (i + 1) & mask;
+            }
+            slots[(first + i) as usize] = (stub, target);
+        }
+        // signatures are visited in order, so the rules of a state stay ascending
+        full.sort_by_key(|&(state, _)| state);
+        let mut starts = vec![0u32; n_states + 1];
+        for &(state, _) in &full {
+            starts[state as usize + 1] += 1;
+        }
+        for s in 0..n_states {
+            starts[s + 1] += starts[s];
+        }
+        let automaton = Automaton {
+            roots,
+            tables,
+            slots,
+            starts,
+            rules: full.into_iter().map(|(_, rule)| rule).collect(),
+        };
+        (automaton, transitions)
+    }
+
+    fn len(&self) -> usize {
+        self.starts.len() - 1
+    }
+
+    /// The empty vertex of this degree, if a signature has the degree.
+    fn root(&self, degree: u8) -> Option<VertexState> {
+        let root = self.roots[degree as usize];
+        (root != NONE).then_some(root)
+    }
+
+    /// The state with `stub` added, if a signature of its degree contains it.
+    #[inline(always)]
+    fn step(&self, state: VertexState, stub: u8) -> Option<VertexState> {
+        let (first, mask) = self.tables[state as usize];
+        let mut i = stub as u32 & mask;
+        loop {
+            match self.slots[(first + i) as usize] {
+                (key, target) if key == stub => return Some(target),
+                (EMPTY, _) => return None,
+                _ => i = (i + 1) & mask,
+            }
+        }
+    }
+
+    /// The signatures equal to `state`, ascending: empty unless the state is full.
+    fn rules(&self, state: VertexState) -> &[u32] {
+        let s = state as usize;
+        &self.rules[self.starts[s] as usize..self.starts[s + 1] as usize]
+    }
+
+    /// `label` fits an edge from a vertex in state `a` to a higher one in state `b`.
+    fn label_fits(&self, label: &Label, [a, b]: [VertexState; 2]) -> bool {
+        self.step(a, label.at_u).is_some() && self.step(b, label.at_v).is_some()
+    }
+
+    /// `label` fits a self-loop at a vertex in state `a`.
+    fn loop_fits(&self, label: &LoopLabel, a: VertexState) -> bool {
+        let [s, t] = label.stubs;
+        self.step(a, s).and_then(|a| self.step(a, t)).is_some()
+    }
+}
+
+/// The labels a state can take, a bit per label: paired labels by the stub they put at the lower
+/// vertex of their pair (`at_u`) and at the higher one (`at_v`), and self-loops by both stubs.
+#[derive(Clone, Copy, Debug, Default)]
+struct Masks {
+    at_u: u128,
+    at_v: u128,
+    loops: u128,
+}
+
+impl Masks {
+    /// The masks of every state of `vertices`, whose transitions are `transitions`, if the labels
+    /// fit into them; a state takes the labels of its transitions.
+    fn of(
+        vertices: &Automaton,
+        transitions: &[Transition],
+        labels: &[Label],
+        loop_labels: &[LoopLabel],
+    ) -> Option<Vec<Self>> {
+        let width = u128::BITS as usize;
+        if labels.len() > width || loop_labels.len() > width {
+            return None;
+        }
+        // per stub type (a byte): the labels putting it at either vertex, and the self-loops
+        // starting with it
+        let mut by_stub = vec![Masks::default(); 1 << u8::BITS];
+        for (l, label) in labels.iter().enumerate() {
+            by_stub[label.at_u as usize].at_u |= 1 << l;
+            by_stub[label.at_v as usize].at_v |= 1 << l;
+        }
+        for (l, label) in loop_labels.iter().enumerate() {
+            by_stub[label.stubs[0] as usize].loops |= 1 << l;
+        }
+        let mut masks = vec![Masks::default(); vertices.len()];
+        for &(state, stub, target) in transitions {
+            let labels = by_stub[stub as usize];
+            let mask = &mut masks[state as usize];
+            mask.at_u |= labels.at_u;
+            mask.at_v |= labels.at_v;
+            for l in Fitting::Mask(labels.loops) {
+                if vertices.step(target, loop_labels[l].stubs[1]).is_some() {
+                    mask.loops |= 1 << l;
+                }
+            }
+        }
+        Some(masks)
+    }
+}
+
+/// The labels from some label on that fit an edge, ascending: the set bits of the intersection of
+/// the masks of its ends, or, for models without masks, a scan of the labels.
+pub(crate) enum Fitting<'m> {
+    Mask(u128),
+    Scan(Scan<'m>),
+}
+
+/// The labels from `next` on whose stubs both ends of an edge can take.
+pub(crate) struct Scan<'m> {
+    model: &'m Model,
+    ends: [VertexState; 2],
+    self_loop: bool,
+    next: usize,
+}
+
+impl Iterator for Fitting<'_> {
+    type Item = usize;
+
+    #[inline(always)]
+    fn next(&mut self) -> Option<usize> {
+        match self {
+            Fitting::Mask(bits) => {
+                if *bits == 0 {
+                    return None;
+                }
+                let l = bits.trailing_zeros() as usize;
+                *bits &= *bits - 1;
+                Some(l)
+            }
+            Fitting::Scan(scan) => scan.next(),
+        }
+    }
+}
+
+impl Iterator for Scan<'_> {
+    type Item = usize;
+
+    fn next(&mut self) -> Option<usize> {
+        let Scan {
+            model,
+            ends,
+            self_loop,
+            next,
+        } = *self;
+        let vertices = &model.vertices;
+        let fits = |&l: &usize| {
+            if self_loop {
+                vertices.loop_fits(&model.loop_labels[l], ends[0])
+            } else {
+                vertices.label_fits(&model.labels[l], ends)
+            }
+        };
+        let end = if self_loop {
+            model.loop_labels.len()
+        } else {
+            model.labels.len()
+        };
+        let l = (next..end).find(fits);
+        self.next = l.map_or(end, |l| l + 1);
+        l
     }
 }
 
@@ -175,10 +457,12 @@ impl Legs {
 pub(crate) struct Model {
     /// Distinct signature degrees, ascending.
     pub(crate) degrees: Vec<u8>,
-    partial: AHashSet<u128>,
-    exact: AHashMap<u128, Vec<u32>>,
+    vertices: Automaton,
     pub(crate) labels: Vec<Label>,
     pub(crate) loop_labels: Vec<LoopLabel>,
+    /// Per state of `vertices`: the labels it can take. `None` with more than 128 labels or
+    /// self-loop labels, where [`Fitting`] scans the transitions instead.
+    masks: Option<Vec<Masks>>,
     /// The external legs by label class, as complete topologies carry them.
     pub(crate) legs: Legs,
     /// The external legs as the topology search places them: three or more label classes of
@@ -204,45 +488,21 @@ impl Model {
         if n_fields > MAX_FIELDS {
             return Err(GenerationError::TooManyFields);
         }
-        let mut partial = AHashSet::new();
-        let mut exact: AHashMap<u128, Vec<u32>> = AHashMap::new();
         let mut degrees = vec![];
         let mut present = vec![false; 3 * n_fields];
-        for (i, signature) in signatures.iter().enumerate() {
+        for signature in signatures {
             let degree = signature.len();
             if degree == 0 || degree > MAX_DEGREE {
                 return Err(GenerationError::UnsupportedDegree(degree));
             }
             degrees.push(degree as u8);
-            let mut sorted = signature.clone();
-            sorted.sort_unstable();
-            for &s in &sorted {
+            for &s in signature {
                 present[s as usize] = true;
-            }
-            // every sub-multiset: choose how many of each run of equal stubs to keep
-            let runs: Vec<(u8, usize)> = sorted
-                .chunk_by(|a, b| a == b)
-                .map(|run| (run[0], run.len()))
-                .collect();
-            let mut keep = vec![0usize; runs.len()];
-            loop {
-                let mut set = StubSet::new(degree as u8);
-                for (&(stub, _), &k) in runs.iter().zip(&keep) {
-                    for _ in 0..k {
-                        set.insert(stub);
-                    }
-                }
-                partial.insert(set.key());
-                let Some(r) = (0..runs.len()).find(|&r| keep[r] < runs[r].1) else {
-                    exact.entry(set.key()).or_default().push(i as u32);
-                    break;
-                };
-                keep[r] += 1;
-                keep[..r].fill(0);
             }
         }
         degrees.sort_unstable();
         degrees.dedup();
+        let (vertices, transitions) = Automaton::new(signatures, 3 * n_fields);
 
         let mut labels = vec![];
         let mut loop_labels = vec![];
@@ -287,7 +547,7 @@ impl Model {
                 });
             }
         }
-        let unique_rules = exact.values().all(|rules| rules.len() == 1);
+        let unique_rules = (0..vertices.len() as VertexState).all(|s| vertices.rules(s).len() <= 1);
         // slot classes in the order of their first label class
         let anonymous = |&(stub, mult): &(u8, u8)| {
             mult == 1 && legs.iter().filter(|&&other| other == (stub, 1)).count() > 2
@@ -318,8 +578,8 @@ impl Model {
         }
         Ok(Model {
             degrees,
-            partial,
-            exact,
+            masks: Masks::of(&vertices, &transitions, &labels, &loop_labels),
+            vertices,
             labels,
             loop_labels,
             legs: Legs::new(legs)?,
@@ -350,30 +610,74 @@ impl Model {
             .sum()
     }
 
-    /// The stubs fit into some signature of their degree.
-    pub(crate) fn feasible(&self, stubs: &StubSet) -> bool {
-        self.partial.contains(&stubs.key())
+    /// The signatures equal to the stubs of a vertex in `state`; empty until all its stubs are
+    /// placed.
+    pub(crate) fn rules(&self, state: VertexState) -> &[u32] {
+        self.vertices.rules(state)
     }
 
-    /// The signatures with exactly these stubs.
-    pub(crate) fn rules(&self, stubs: &StubSet) -> &[u32] {
-        self.exact.get(&stubs.key()).map_or(&[], Vec::as_slice)
-    }
-
-    /// The legs in `slots` (packed by slot class) fit at a vertex of this degree.
-    pub(crate) fn legs_fit(&self, degree: u8, slots: u64) -> bool {
-        slots == 0 || self.feasible(&self.leg_stubs(degree, slots))
-    }
-
-    /// The stubs of the legs in `slots` at a vertex of this degree.
-    pub(crate) fn leg_stubs(&self, degree: u8, slots: u64) -> StubSet {
-        let mut stubs = StubSet::new(degree);
-        for c in 0..self.slots.n_classes() {
-            for _ in 0..self.slots.count(slots, c) {
-                stubs.insert(self.slots.stub[c]);
+    /// The state of a vertex of this degree with the legs in `slots` (packed by slot class), if
+    /// a signature of the degree contains them.
+    pub(crate) fn leg_state(&self, degree: u8, slots: u64) -> Option<VertexState> {
+        let mut state = self.vertices.root(degree)?;
+        let (mut rest, mut c) = (slots, 0);
+        while rest != 0 {
+            let count = self.slots.count(rest, c);
+            for _ in 0..count {
+                state = self.vertices.step(state, self.slots.stub[c])?;
             }
+            rest -= count as u64 * self.slots.one(c);
+            c += 1;
         }
-        stubs
+        Some(state)
+    }
+
+    /// The paired labels from `from` on that fit an edge from a vertex in state `a` to a higher
+    /// one in state `b`.
+    #[inline(always)]
+    pub(crate) fn fitting(&self, [a, b]: [VertexState; 2], from: usize) -> Fitting<'_> {
+        match &self.masks {
+            Some(masks) => {
+                Fitting::Mask(masks[a as usize].at_u & masks[b as usize].at_v & at_least(from))
+            }
+            None => Fitting::Scan(self.scan([a, b], false, from)),
+        }
+    }
+
+    /// The self-loop labels from `from` on that fit a vertex in state `a`.
+    #[inline(always)]
+    pub(crate) fn fitting_loops(&self, a: VertexState, from: usize) -> Fitting<'_> {
+        match &self.masks {
+            Some(masks) => Fitting::Mask(masks[a as usize].loops & at_least(from)),
+            None => Fitting::Scan(self.scan([a, a], true, from)),
+        }
+    }
+
+    /// The labels from `from` on that fit, without masks.
+    fn scan(&self, ends: [VertexState; 2], self_loop: bool, from: usize) -> Scan<'_> {
+        Scan {
+            model: self,
+            ends,
+            self_loop,
+            next: from,
+        }
+    }
+
+    /// The states of the lower and the higher vertex of a pair after adding paired label `l`,
+    /// which fits them.
+    #[inline(always)]
+    pub(crate) fn add_label(&self, [a, b]: [VertexState; 2], l: usize) -> [VertexState; 2] {
+        let label = self.labels[l];
+        let step = |s, stub| self.vertices.step(s, stub).expect("the label fits");
+        [step(a, label.at_u), step(b, label.at_v)]
+    }
+
+    /// The state after adding self-loop label `l`, which fits it.
+    #[inline(always)]
+    pub(crate) fn add_loop(&self, a: VertexState, l: usize) -> VertexState {
+        let [s, t] = self.loop_labels[l].stubs;
+        let step = |s, stub| self.vertices.step(s, stub).expect("the label fits");
+        step(step(a, s), t)
     }
 
     /// Edges can take only one label and vertices one rule: a topology has one diagram.
@@ -382,9 +686,16 @@ impl Model {
     }
 }
 
+/// The mask of the labels from `from` on.
+fn at_least(from: usize) -> u128 {
+    u128::MAX.checked_shl(from as u32).unwrap_or(0)
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{Legs, StubSet};
+    use ahash::AHashMap;
+
+    use super::{Automaton, Direction, Legs, Model, StubSet, VertexState};
 
     #[test]
     fn stub_sets_are_sorted_multisets() {
@@ -397,12 +708,101 @@ mod tests {
             b.insert(s);
         }
         assert_eq!(a.key(), b.key());
-        assert!(a.is_full());
-        a.remove(5);
-        assert!(!a.is_full());
-        b.remove(5);
-        assert_eq!(a.key(), b.key());
         assert_ne!(a.key(), StubSet::new(3).key());
+    }
+
+    #[test]
+    fn automaton_states_are_the_sub_multisets_of_the_signatures() {
+        // stub types 0 = a (undirected), 4 = e in, 5 = e out: e e~ a, a a a, a a a a twice
+        let model =
+            Model::new(2, &[vec![4, 5, 0], vec![0; 3], vec![0; 4], vec![0; 4]], &[]).unwrap();
+        let v = &model.vertices;
+        // degree 3: {}, {a}, {e}, {e~}, {a e}, {a e~}, {e e~}, {a e e~}, {a a}, {a a a};
+        // degree 4: {}, {a}, {a a}, {a a a}, {a a a a}
+        assert_eq!(v.len(), 15);
+        let walk = |degree, stubs: &[u8]| {
+            stubs
+                .iter()
+                .try_fold(v.root(degree).unwrap(), |s, &stub| v.step(s, stub))
+        };
+        // states are multisets: the order of the stubs does not matter
+        assert_eq!(walk(3, &[4, 0, 5]), walk(3, &[5, 4, 0]));
+        assert_eq!(walk(3, &[0, 4]).map(|s| v.rules(s)), Some(&[][..]));
+        assert_eq!(walk(3, &[0, 5, 4]).map(|s| v.rules(s)), Some(&[0][..]));
+        assert_eq!(walk(3, &[0, 0, 0]).map(|s| v.rules(s)), Some(&[1][..]));
+        assert_eq!(walk(4, &[0; 4]).map(|s| v.rules(s)), Some(&[2, 3][..]));
+        assert_eq!(walk(3, &[0, 0, 4]), None);
+        assert_eq!(walk(3, &[4, 4]), None);
+        assert_eq!(walk(4, &[4]), None);
+        assert_eq!(v.root(5), None);
+        assert!(!model.unique_rules);
+    }
+
+    #[test]
+    fn state_tables_hold_exactly_the_transitions() {
+        // 65 charged fields with a photon: 198 stub types, of which each state takes few
+        let signatures: Vec<Vec<u8>> = (1..=65).map(|f| vec![3 * f + 1, 3 * f + 2, 0]).collect();
+        let (v, transitions) = Automaton::new(&signatures, 198);
+        let listed: AHashMap<_, _> = transitions
+            .iter()
+            .map(|&(state, stub, target)| ((state, stub), target))
+            .collect();
+        assert_eq!(listed.len(), transitions.len());
+        for s in 0..v.len() as VertexState {
+            for stub in 0..198 {
+                assert_eq!(v.step(s, stub), listed.get(&(s, stub)).copied());
+            }
+        }
+        // fewer than four slots per transition and one per state without any, far fewer than a
+        // slot per state and stub type
+        assert!(v.slots.len() < 4 * transitions.len() + v.len());
+        assert!(4 * transitions.len() + v.len() < v.len() * 198 / 10);
+    }
+
+    #[test]
+    fn masks_select_the_labels_that_the_transitions_admit() {
+        // QCD-like: g g g, g g g g, q~ q g, c~ c g with q = field 1, c = field 2
+        let signatures = [vec![0; 3], vec![0; 4], vec![4, 5, 0], vec![7, 8, 0]];
+        let model = Model::new(3, &signatures, &[(0, 2)]).unwrap();
+        assert!(model.masks.is_some());
+        let scan = |ends, self_loop, from| model.scan(ends, self_loop, from).collect::<Vec<_>>();
+        let n = model.vertices.len() as VertexState;
+        let mut fitting = 0;
+        for a in 0..n {
+            for from in 0..=model.loop_labels.len() {
+                let loops: Vec<_> = model.fitting_loops(a, from).collect();
+                assert_eq!(loops, scan([a, a], true, from));
+            }
+            for b in 0..n {
+                for from in 0..=model.labels.len() {
+                    let labels: Vec<_> = model.fitting([a, b], from).collect();
+                    assert_eq!(labels, scan([a, b], false, from));
+                    fitting += labels.len();
+                }
+            }
+        }
+        assert!(fitting > 0);
+    }
+
+    #[test]
+    fn many_labels_scan_the_transitions() {
+        // 65 charged fields with a photon: 131 paired labels
+        let signatures: Vec<Vec<u8>> = (1..=65).map(|f| vec![3 * f + 1, 3 * f + 2, 0]).collect();
+        let model = Model::new(66, &signatures, &[(0, 2)]).unwrap();
+        assert_eq!(model.labels.len(), 131);
+        assert!(model.masks.is_none());
+        let photon = model.leg_state(3, model.slots.one(0)).unwrap();
+        // from a vertex with a photon and an incoming fermion of field 65 to a vertex with a
+        // photon, only that fermion fits, flowing out of the first vertex
+        let e = model.vertices.step(photon, 3 * 65 + 1).unwrap();
+        let fits: Vec<_> = model.fitting([e, photon], 0).collect();
+        assert_eq!(fits.len(), 1);
+        let label = model.labels[fits[0]];
+        assert_eq!((label.field, label.direction), (65, Direction::Forward));
+        assert_eq!(model.fitting([e, photon], fits[0] + 1).count(), 0);
+        let [full, partial] = model.add_label([e, photon], fits[0]);
+        assert_eq!(model.rules(full), &[64]);
+        assert!(model.rules(partial).is_empty());
     }
 
     #[test]

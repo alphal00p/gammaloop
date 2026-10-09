@@ -18,6 +18,8 @@ const ELECTRON: u8 = 2;
 const GLUON: u8 = 3;
 const QUARK: u8 = 4;
 const GHOST: u8 = 7;
+/// A second scalar.
+const CHI: u8 = 8;
 
 /// Exact sum of `1 / |Aut|`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -671,6 +673,84 @@ fn identical_signatures_are_distinct_vertex_rules() {
         .flat_map(|d| d.graph.iter_nodes().map(|(_, _, &r)| r))
         .collect();
     assert_eq!(rules, HashSet::from([0, 1]));
+}
+
+#[test]
+fn models_with_more_labels_than_a_mask_holds() {
+    // 65 charged fermions and the photon give 131 edge labels, more than the label masks hold, so
+    // the dressing scans the labels; up to two loops every one-particle-irreducible photon
+    // self-energy has one fermion loop, so each graph of one flavour comes in 65 flavours
+    let photon = Stub::undirected(0u8);
+    let self_energies = |flavours: u8| {
+        let signatures = (1..=flavours)
+            .map(|f| vec![Stub::incoming(f), Stub::outgoing(f), photon.clone()])
+            .collect::<Vec<_>>();
+        let legs = [(1u8, photon.clone()), (2, photon.clone())];
+        run(GraphGenerator::new(legs, signatures)
+            .loops(1..=2)
+            .max_bridges(0))
+    };
+    let one = self_energies(1);
+    let many = self_energies(65);
+    assert_eq!(one.len(), 4);
+    assert_eq!(many.len(), 65 * one.len());
+    let Ratio(p, q) = Ratio::sum(&one);
+    assert_eq!(Ratio::sum(&many), Ratio::new(65 * p, q));
+    check_canonical(&many);
+}
+
+/// The graphs of `generator` and the number of partial field assignments its search shows the
+/// filter, less the number of edges of the graphs: zero when it shows each graph's prefixes once
+/// and nothing else.
+fn dead_field_assignments(generator: GraphGenerator<u8, u8>) -> (Vec<Diagram<u8, u8>>, isize) {
+    let fields = Arc::new(AtomicUsize::new(0));
+    let seen = fields.clone();
+    let diagrams = run(generator.filter(move |view| {
+        if view.stage() == Stage::Fields {
+            seen.fetch_add(1, Ordering::Relaxed);
+        }
+        true
+    }));
+    let edges: usize = diagrams
+        .iter()
+        .map(|d| {
+            d.graph
+                .iter_edges()
+                .filter(|(pair, ..)| matches!(pair, HedgePair::Paired { .. }))
+                .count()
+        })
+        .sum();
+    let dead = fields.load(Ordering::Relaxed) as isize - edges as isize;
+    (diagrams, dead)
+}
+
+#[test]
+fn forward_checking_leaves_no_dead_field_assignments_on_gluon_trees() {
+    // a quark or ghost line in a tree would have to end at a leg, so with gluon legs every
+    // topology has only its all-gluon labelling; forward checking drops each quark and ghost
+    // before the filter sees it, so the filter sees just the prefixes of the emitted labellings
+    let (diagrams, dead) = dead_field_assignments(qcd(gluons(&[1, 2, 3, 4, 5, 6])).loops(0..=0));
+    assert_eq!(diagrams.len(), 220);
+    assert_eq!(dead, 0);
+}
+
+#[test]
+fn topologies_with_an_edge_no_field_fits_get_no_field_assignment() {
+    // phi^3 and an unrelated chi^4: no field fits an edge from a cubic to a quartic vertex, so the
+    // vacuum topologies with both degrees are dropped before their first field, even where the
+    // first bundle is far from such an edge; the others have one labelling each
+    let signatures = [
+        vec![Stub::undirected(PHI); 3],
+        vec![Stub::undirected(CHI); 4],
+    ];
+    let both = GraphGenerator::<u8, u8>::new([], signatures)
+        .allow_self_loops(true)
+        .allow_zero_flow_edges(true)
+        .loops(2..=4);
+    let (diagrams, dead) = dead_field_assignments(both);
+    let pure = |degree| run(phi(&[degree], &[]).loops(2..=4)).len();
+    assert_eq!(diagrams.len(), pure(3) + pure(4));
+    assert_eq!(dead, 0);
 }
 
 #[test]

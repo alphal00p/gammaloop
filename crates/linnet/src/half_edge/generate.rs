@@ -306,8 +306,11 @@ where
     /// pendant vertices that complete a topology at once, then the labels of anonymous legs one at
     /// a time (see [`Stage::Topology`]). Stage 2 assigns fields to the edges of an accepted
     /// complete topology ([`Stage::Fields`]) up to each complete graph ([`Stage::Complete`]), seen
-    /// before it is canonized. The output is the graphs whose complete topology and complete graph
-    /// `filter` accepts.
+    /// before it is canonized. Assignments that a single edge shows to have no completion are
+    /// dropped unseen: a topology with an edge that no field fits at its ends (given their legs
+    /// and degrees) gets no assignment, and an assignment that leaves an edge at the vertices of the
+    /// last assigned one without a fitting field is dropped. The output is the graphs whose
+    /// complete topology and complete graph `filter` accepts.
     ///
     /// A rejected state is dropped with everything that completes it, so `filter` must be
     /// hereditary within each stage: when it rejects a partial topology, it rejects every complete
