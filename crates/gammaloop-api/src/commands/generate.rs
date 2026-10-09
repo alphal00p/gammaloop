@@ -265,13 +265,21 @@ pub struct SpecArgs {
         alias = "symferm"
     )]
     pub allow_symmetrization_of_external_fermions_in_amplitudes: Option<bool>,
-    /// Identify graphs related by permutations of identical initial-state particles.
+    /// Identify graphs related by permutations of identical initial-state particles. A cross
+    /// section keeps one graph per exchange of its two identical beams, weighted by the number
+    /// of graphs it stands for; this assumes observables, selectors and beam helicities
+    /// symmetric under the exchange, and can raise the integration error at equal sample counts.
+    /// With left/right symmetrization the weights inherit its deviations and can differ from
+    /// its total too.
     #[arg(long = "symmetrize-initial-states")]
     pub symmetrize_initial_states: Option<bool>,
-    /// Identify graphs related by permutations of identical final-state particles.
+    /// Identify amplitude graphs related by permutations of identical final-state particles;
+    /// cross sections reject it, their identical final states being cut edges.
     #[arg(long = "symmetrize-final-states")]
     pub symmetrize_final_states: Option<bool>,
     /// Identify cross-section graphs under CP-based left/right exchange; requires CP symmetry.
+    /// From two loops on the physical cuts can depend on which side is searched, so the total
+    /// can differ from the unsymmetrized one.
     #[arg(long = "symmetrize-left-right-states")]
     pub symmetrize_left_right_states: Option<bool>,
 
@@ -1751,11 +1759,11 @@ fn feyngen_from_spec_args(
             let s_final = a.symmetrize_final_states.unwrap_or(sym_left_right);
             (s_init, s_final)
         }
-        GenerationType::CrossSection => {
-            let s_init = a.symmetrize_initial_states.unwrap_or(false);
-            let s_final = a.symmetrize_final_states.unwrap_or(true);
-            (s_init, s_final)
-        }
+        // FeynKit rejects an explicit final-state symmetrization of a cross section.
+        GenerationType::CrossSection => (
+            a.symmetrize_initial_states.unwrap_or(false),
+            a.symmetrize_final_states.unwrap_or(false),
+        ),
     };
     let allow_symferm = a
         .allow_symmetrization_of_external_fermions_in_amplitudes
@@ -2432,6 +2440,21 @@ mod tests {
                 option.unwrap_or(false)
             );
         }
+    }
+
+    #[test]
+    fn cross_sections_default_to_unsymmetrized_external_states() {
+        let model = load_generic_model("sm");
+        let options = parse_spec_with_model(
+            &base_args("e+ e- > d d~"),
+            GenerationType::CrossSection,
+            &model,
+        )
+        .unwrap()
+        .process_definition
+        .generation_options;
+        assert!(!options.symmetrizes_initial());
+        assert!(!options.symmetrizes_final());
     }
 
     #[test]

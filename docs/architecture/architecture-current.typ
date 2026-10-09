@@ -723,7 +723,8 @@ performance-heavy data.
 
 === Persistence Compatibility Contract
 <persistence-compatibility-contract>
-- State format is versioned with `state_manifest.toml` (`version = 7` currently).
+- State format is versioned with `state_manifest.toml` (`version = 9` currently).
+- Version 9 weights each identical-beam cross-section graph by its beam-exchange orbit. The layout is unchanged, but older symmetrized identical-beam states carry halved weights that nothing in them reveals, so every older state must be regenerated.
 - Version 8 binds canonical FeynKit model records to runtime graph identities.
   Version 7 stores exact CFF coefficients as native rationals. Version 6 removed obsolete deferred-integrand fields; version 5 added component-local generated-CFF ownership and prefactor metadata; version 4 added the typed global-prefactor sign. These changes affect positional bincode data, so older states must be regenerated rather than relabeled.
 - State loading and direct overwrite both require exactly the current manifest version; older states must be regenerated, and states from newer binaries require a newer GammaLoop binary.

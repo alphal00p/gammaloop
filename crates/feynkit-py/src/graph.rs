@@ -3073,13 +3073,18 @@ impl PyFeynmanDiagram {
         self.inner.id().to_string()
     }
 
-    /// Return the positive integer denominator of the graph symmetry factor.
+    /// Return the automorphism count of the graph, the denominator of its symmetry factor.
+    ///
+    /// The diagram's weight is ``overall_factor_expression(evaluate=True)``, which also
+    /// carries fermion signs and the number of graphs that symmetrization or grouping
+    /// identified with this one.
     ///
     /// Examples
     /// --------
     /// Using the setup in the ``FeynmanDiagram`` class example:
     ///
-    /// >>> graph_weight = 1 / diagram.symmetry_factor
+    /// >>> automorphisms = diagram.symmetry_factor
+    /// >>> weight = diagram.overall_factor_expression(evaluate=True)
     #[getter]
     fn symmetry_factor(&self) -> u64 {
         self.inner.symmetry_factor()

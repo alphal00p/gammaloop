@@ -4,9 +4,10 @@
 //! Names read `<model>_<process>_L<loops>`. The profile cases of the generation redesign keep
 //! their names; `phi*` cases have independent oracles (OEIS A005967 and zero-dimensional field
 //! theory), `xs_*` cases are cross sections with physical cuts, `ct_*` models duplicate vertex
-//! rules with identical field content, as split UFO vertices and counterterms do, and
+//! rules with identical field content, as split UFO vertices and counterterms do,
 //! `identical`, `sign` and `scalar` group numerators that are identical, equal up to a sign or
-//! proportional.
+//! proportional, `sym` symmetrizes identical external states and `lr` identifies cross-section
+//! mirror images.
 
 use std::collections::BTreeMap;
 
@@ -150,6 +151,20 @@ fn qed_at_most_two(_: &Model, options: GenerationOptions) -> GenerationOptions {
 
 fn symmetrized(_: &Model, options: GenerationOptions) -> GenerationOptions {
     options.symmetrize_initial(true).symmetrize_final(true)
+}
+
+/// The exchange of identical beams; cross sections reject final-state symmetrization.
+fn beam_exchange(_: &Model, options: GenerationOptions) -> GenerationOptions {
+    options.symmetrize_initial(true)
+}
+
+/// Cross-section forward graphs identified with their mirror images.
+fn left_right(_: &Model, options: GenerationOptions) -> GenerationOptions {
+    options.symmetrize_left_right(true)
+}
+
+fn beam_exchange_left_right(model: &Model, options: GenerationOptions) -> GenerationOptions {
+    left_right(model, beam_exchange(model, options))
 }
 
 fn identical_numerators(_: &Model, options: GenerationOptions) -> GenerationOptions {
@@ -623,6 +638,32 @@ pub const CASES: &[Case] = &[
     cross_section("xs_qed_eedd_L1", Model::qed, EE, DD, 1, plain),
     cross_section("xs_qed_eedd_L2", Model::qed, EE, DD, 2, plain),
     cross_section("xs_qed_eeaa_L2", Model::qed, EE, &["a", "a"], 2, plain),
+    // Identical beams under the beam exchange, the mirror identification and both.
+    cross_section("xs_qed_aaee_L2", Model::qed, &["a", "a"], EE, 2, plain),
+    cross_section(
+        "xs_qed_aaee_sym_L2",
+        Model::qed,
+        &["a", "a"],
+        EE,
+        2,
+        beam_exchange,
+    ),
+    cross_section(
+        "xs_qed_aaee_lr_L2",
+        Model::qed,
+        &["a", "a"],
+        EE,
+        2,
+        left_right,
+    ),
+    cross_section(
+        "xs_qed_aaee_sym_lr_L2",
+        Model::qed,
+        &["a", "a"],
+        EE,
+        2,
+        beam_exchange_left_right,
+    ),
     cross_section("xs_qed_eeee_L1", Model::qed, EE, EE, 1, plain),
     cross_section("xs_qed_eeee_L2", Model::qed, EE, EE, 2, plain),
     cross_section("xs_qed_eeee_1pi_L1", Model::qed, EE, EE, 1, loop_one_pi),
@@ -631,10 +672,10 @@ pub const CASES: &[Case] = &[
     cross_section("xs_sm_eemm_L2", Model::standard_model, EE, MUMU, 2, plain),
     cross_section("xs_sm_uudd_L1", Model::standard_model, UU, DD, 1, plain),
     cross_section("xs_qcd_gggg_L1", Model::qcd, GG, GG, 1, plain),
-    cross_section("xs_qcd_gggg_sym_L1", Model::qcd, GG, GG, 1, symmetrized),
+    cross_section("xs_qcd_gggg_sym_L1", Model::qcd, GG, GG, 1, beam_exchange),
     cross_section("xs_qcd_gggg_L2", Model::qcd, GG, GG, 2, plain),
     cross_section("xs_qcd_gguu_L1", Model::qcd, GG, UU, 1, plain),
     cross_section("xs_qcd_gguu_L2", Model::qcd, GG, UU, 2, plain),
-    cross_section("xs_qcd_gguu_sym_L1", Model::qcd, GG, UU, 1, symmetrized),
+    cross_section("xs_qcd_gguu_sym_L1", Model::qcd, GG, UU, 1, beam_exchange),
     cross_section("xs_qcd_gguu_1pi_L1", Model::qcd, GG, UU, 1, loop_one_pi),
 ];

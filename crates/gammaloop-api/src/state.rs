@@ -1597,7 +1597,9 @@ const INTEGRAND_GENERATION_SUMMARY_FILE: &str = "generation_summary.json";
 // metadata. Older states use a previous positional bincode layout and must be
 // regenerated rather than decoded as the new expression type.
 // Version 8 stores the canonical FeynKit model alongside runtime graph identities.
-const CURRENT_STATE_MANIFEST_VERSION: u32 = 8;
+// Version 9 weights identical-beam cross-section graphs by their beam-exchange orbit;
+// older symmetrized identical-beam states carry halved weights that nothing in them reveals.
+const CURRENT_STATE_MANIFEST_VERSION: u32 = 9;
 const GENERATION_THREAD_STACK_SIZE_BYTES: usize = 32 * 1024 * 1024;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

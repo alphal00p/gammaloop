@@ -40,16 +40,19 @@ Filter objects specify which subgraphs to reject. Python permits self-loops,
 rejects zero-flow edges, and follows GammaLoop's defaults for subgraph rejection: non-vacuum
 processes filter self-energies, tadpoles and zero-momentum snails. Vacuum processes leave
 those filters off and require one factorized loop topology. Cross sections default to one
-cut blob, no spectators, and symmetrized final states.
+cut blob, no spectators, and no bridge filter.
 
-The default `maximum_bridges=...` retains tree-level exchange channels and requires
-one-particle irreducibility for each diagram with loops. This decision uses the individual
-diagram's loop count, including when requesting a mixed range such as `loops=(0, 1)`.
-External legs do not count as bridges. An explicit integer, including `maximum_bridges=0`,
-limits bridges at every loop order; `maximum_bridges=None` disables the restriction.
-One-particle-reducible loop corrections are therefore opt-in when assembling a complete
-scattering amplitude. Rust exposes the same loop-only policy as
-`GenerationFilter::LoopOneParticleIrreducible`.
+For amplitudes, the default `maximum_bridges=...` retains tree-level exchange channels and
+requires one-particle irreducibility for each diagram with loops. This decision uses the
+individual diagram's loop count, including when requesting a mixed range such as
+`loops=(0, 1)`. External legs do not count as bridges. An explicit integer, including
+`maximum_bridges=0`, limits bridges at every loop order; `maximum_bridges=None` disables the
+restriction. One-particle-reducible loop corrections are therefore opt-in when assembling a
+complete scattering amplitude. Rust exposes the same loop-only policy as
+`GenerationFilter::LoopOneParticleIrreducible`. Cross sections leave it off by default: the
+filter acts on the unsewn forward graph, where every s-channel propagator is a bridge, so it
+would discard physical contributions such as $e^+ e^- -> mu^+ mu^-$. An explicit integer
+still applies to the forward graph.
 Numerator comparison is disabled by default; pass `NumeratorGrouping` explicitly to enable it. Diagrams still contain their vertex, propagator and aggregate
 numerators. As in the current GammaLoop `--only-diagrams` path, generation does not construct
 an evaluable integrand. Numerator validation first checks identical factored expressions;
@@ -92,6 +95,21 @@ cut metadata; phase-space integration is a later operation. Its loop order count
 the forward graph, so a two-particle tree cut requires one loop. `generate_amplitude` rejects
 empty or cancelled generation rather than presenting an incomplete coherent sum.
 Neither method changes the process; loop order and symmetrization belong to each call.
+
+Identical final-state particles of a cross section are cut edges, already counted by the graph
+automorphisms, so `generate_cross_section` has no `symmetrize_final`. With
+`symmetrize_initial=True` it keeps one forward graph for each exchange of two identical beams,
+and the overall factor of the kept graph counts the graphs it stands for, so the factors add
+up to the unsymmetrized total. `symmetrize_left_right=True` searches the physical cuts of each
+graph in one of its two mirror frames, and from two loops on the cuts can depend on the frame,
+so its total can differ from the unsymmetrized one; with both options the total inherits those
+deviations and can differ from the left/right total too. Evaluating only the kept graphs is
+exact after integration when observables and selectors are invariant under the beam exchange
+and the beam helicities are summed or equal; graphs that the exchange maps to themselves are
+exact in every event. Fewer graphs need not mean a cheaper result: each kept graph carries its
+orbit's weight on one side of the exchange, so the integration error can grow. For
+$Z Z -> e^+ e^-$ it was 19 times larger at equal sample counts. For amplitudes, both options
+make identical legs unlabelled, and the caller sums over their permutations.
 
 Here `model` must provide those particles. Allowed interactions and particle vetoes are
 process restrictions, validated at construction. `process.with_filters(...)` returns a copy

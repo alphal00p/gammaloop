@@ -902,12 +902,12 @@ impl PyProcess {
     ///     Exact order or inclusive range for this call, default zero. Cross sections count
     ///     loops in the sewn forward graph; two-particle tree cuts need loops=1.
     /// symmetrize_initial : bool, optional
-    ///     Identify graphs related by initial-state permutations; default False. In a cross
-    ///     section a permutation moves each sewn final-state copy with its incoming leg.
-    /// symmetrize_final : bool or None, optional
-    ///     Identify final-state permutations; None uses True for cross sections and False for amplitudes.
-    ///     The final state of a cross section is the sewn copies of the initial state, so either
-    ///     flag identifies the same permutations of identical sewn pairs, counted once.
+    ///     Identify graphs related by permutations of identical incoming particles; default
+    ///     False. Their legs become unlabelled: each diagram carries the inverse automorphism
+    ///     count of the unlabelled graph, and the caller sums over the leg permutations.
+    /// symmetrize_final : bool, optional
+    ///     Identify graphs related by permutations of identical outgoing particles in the
+    ///     same way; default False.
     /// symmetrize_left_right : bool, optional
     ///     Identify cross-section graphs related by exchanging amplitude sides.
     /// symmetrize_external_fermions : bool, optional
@@ -988,9 +988,9 @@ impl PyProcess {
     ///     particle of the line, directed along its flow, or None before its field is
     ///     assigned. External legs are dangling half-edges whose data is the pair
     ///     (state, index), with index None for amplitude legs symmetrized within their state.
-    ///     Cross-section legs keep their index; diagrams related by permuting identical
-    ///     sewn pairs are identified after the search, so verdicts should not depend on
-    ///     which identical pair carries which index. A "complete"-stage callback can add
+    ///     Cross-section legs keep their index; with ``symmetrize_initial``, diagrams related
+    ///     by exchanging identical beams are identified after the search, so verdicts should
+    ///     not depend on which beam carries which index. A "complete"-stage callback can add
     ///     vetoes to the built-in filters, for example a different self-energy definition.
     ///     Node data is None. Mutating the snapshot does not change enumeration. Keep
     ///     callbacks cheap: each snapshot is a new Python graph.
@@ -998,9 +998,9 @@ impl PyProcess {
     ///     Shared token for cancelling a running generation task. Token cancellation
     ///     returns an incomplete result; Python signal-handler exceptions, including
     ///     KeyboardInterrupt, stop generation and propagate to the caller.
-    #[pyo3(signature = (*, loops=OrderRangeInput::default(), symmetrize_initial=false, symmetrize_final=None, symmetrize_left_right=false, symmetrize_external_fermions=false, threads=None, max_vertices=None, allow_self_loops=true, allow_zero_flow_edges=false, graph_prefix=None, maximum_bridges=Some(Python::attach(|py| py.Ellipsis())), self_energy=Some(Python::attach(|py| py.Ellipsis())), tadpoles=Some(Python::attach(|py| py.Ellipsis())), zero_snails=Some(Python::attach(|py| py.Ellipsis())), coupling_orders=None, fermion_loop_count_range=None, factorized_loop_topologies_count_range=Some(Python::attach(|py| py.Ellipsis())), blob_range=Some(Python::attach(|py| py.Ellipsis())), spectator_range=Some(Python::attach(|py| py.Ellipsis())), perturbative_orders=None, sewn_tadpoles=None, cut_amplitude_coupling_orders=None, cut_amplitude_loop_count_range=None, select_diagrams=None, veto_diagrams=None, loop_momentum_bases=None, numerator_prefactor=None, projector=None, numerator_grouping=None, filter_zero_color=false, cancellation_token=None, progress=Some(Python::attach(|py| PyString::new(py, "auto").into_any().unbind())), filter=None))]
+    #[pyo3(signature = (*, loops=OrderRangeInput::default(), symmetrize_initial=false, symmetrize_final=false, symmetrize_left_right=false, symmetrize_external_fermions=false, threads=None, max_vertices=None, allow_self_loops=true, allow_zero_flow_edges=false, graph_prefix=None, maximum_bridges=Some(Python::attach(|py| py.Ellipsis())), self_energy=Some(Python::attach(|py| py.Ellipsis())), tadpoles=Some(Python::attach(|py| py.Ellipsis())), zero_snails=Some(Python::attach(|py| py.Ellipsis())), coupling_orders=None, fermion_loop_count_range=None, factorized_loop_topologies_count_range=Some(Python::attach(|py| py.Ellipsis())), blob_range=Some(Python::attach(|py| py.Ellipsis())), spectator_range=Some(Python::attach(|py| py.Ellipsis())), perturbative_orders=None, sewn_tadpoles=None, cut_amplitude_coupling_orders=None, cut_amplitude_loop_count_range=None, select_diagrams=None, veto_diagrams=None, loop_momentum_bases=None, numerator_prefactor=None, projector=None, numerator_grouping=None, filter_zero_color=false, cancellation_token=None, progress=Some(Python::attach(|py| PyString::new(py, "auto").into_any().unbind())), filter=None))]
     #[pyo3(
-        text_signature = "($self, *, loops=0, symmetrize_initial=False, symmetrize_final=None, symmetrize_left_right=False, symmetrize_external_fermions=False, threads=None, max_vertices=None, allow_self_loops=True, allow_zero_flow_edges=False, graph_prefix=None, maximum_bridges=..., self_energy=..., tadpoles=..., zero_snails=..., coupling_orders=None, fermion_loop_count_range=None, factorized_loop_topologies_count_range=..., blob_range=..., spectator_range=..., perturbative_orders=None, sewn_tadpoles=None, cut_amplitude_coupling_orders=None, cut_amplitude_loop_count_range=None, select_diagrams=None, veto_diagrams=None, loop_momentum_bases=None, numerator_prefactor=None, projector=None, numerator_grouping=None, filter_zero_color=False, cancellation_token=None, progress='auto', filter=None)"
+        text_signature = "($self, *, loops=0, symmetrize_initial=False, symmetrize_final=False, symmetrize_left_right=False, symmetrize_external_fermions=False, threads=None, max_vertices=None, allow_self_loops=True, allow_zero_flow_edges=False, graph_prefix=None, maximum_bridges=..., self_energy=..., tadpoles=..., zero_snails=..., coupling_orders=None, fermion_loop_count_range=None, factorized_loop_topologies_count_range=..., blob_range=..., spectator_range=..., perturbative_orders=None, sewn_tadpoles=None, cut_amplitude_coupling_orders=None, cut_amplitude_loop_count_range=None, select_diagrams=None, veto_diagrams=None, loop_momentum_bases=None, numerator_prefactor=None, projector=None, numerator_grouping=None, filter_zero_color=False, cancellation_token=None, progress='auto', filter=None)"
     )]
     #[allow(clippy::too_many_arguments)]
     fn generate_diagrams(
@@ -1008,7 +1008,7 @@ impl PyProcess {
         py: Python<'_>,
         loops: OrderRangeInput,
         symmetrize_initial: bool,
-        symmetrize_final: Option<bool>,
+        symmetrize_final: bool,
         symmetrize_left_right: bool,
         symmetrize_external_fermions: bool,
         threads: Option<usize>,
@@ -1123,12 +1123,12 @@ impl PyProcess {
     ///     Exact order or inclusive range for this call, default zero. Cross sections count
     ///     loops in the sewn forward graph; two-particle tree cuts need loops=1.
     /// symmetrize_initial : bool, optional
-    ///     Identify graphs related by initial-state permutations; default False. In a cross
-    ///     section a permutation moves each sewn final-state copy with its incoming leg.
-    /// symmetrize_final : bool or None, optional
-    ///     Identify final-state permutations; None uses True for cross sections and False for amplitudes.
-    ///     The final state of a cross section is the sewn copies of the initial state, so either
-    ///     flag identifies the same permutations of identical sewn pairs, counted once.
+    ///     Identify graphs related by permutations of identical incoming particles; default
+    ///     False. Their legs become unlabelled: each diagram carries the inverse automorphism
+    ///     count of the unlabelled graph, and the caller sums over the leg permutations.
+    /// symmetrize_final : bool, optional
+    ///     Identify graphs related by permutations of identical outgoing particles in the
+    ///     same way; default False.
     /// symmetrize_left_right : bool, optional
     ///     Identify cross-section graphs related by exchanging amplitude sides.
     /// symmetrize_external_fermions : bool, optional
@@ -1209,9 +1209,9 @@ impl PyProcess {
     ///     particle of the line, directed along its flow, or None before its field is
     ///     assigned. External legs are dangling half-edges whose data is the pair
     ///     (state, index), with index None for amplitude legs symmetrized within their state.
-    ///     Cross-section legs keep their index; diagrams related by permuting identical
-    ///     sewn pairs are identified after the search, so verdicts should not depend on
-    ///     which identical pair carries which index. A "complete"-stage callback can add
+    ///     Cross-section legs keep their index; with ``symmetrize_initial``, diagrams related
+    ///     by exchanging identical beams are identified after the search, so verdicts should
+    ///     not depend on which beam carries which index. A "complete"-stage callback can add
     ///     vetoes to the built-in filters, for example a different self-energy definition.
     ///     Node data is None. Mutating the snapshot does not change enumeration. Keep
     ///     callbacks cheap: each snapshot is a new Python graph.
@@ -1219,9 +1219,9 @@ impl PyProcess {
     ///     Shared token for cancelling a running generation task. Token cancellation
     ///     returns an incomplete result; Python signal-handler exceptions, including
     ///     KeyboardInterrupt, stop generation and propagate to the caller.
-    #[pyo3(signature = (*, dimension=None, real=None, loops=OrderRangeInput::default(), symmetrize_initial=false, symmetrize_final=None, symmetrize_left_right=false, symmetrize_external_fermions=false, threads=None, max_vertices=None, allow_self_loops=true, allow_zero_flow_edges=false, graph_prefix=None, maximum_bridges=Some(Python::attach(|py| py.Ellipsis())), self_energy=Some(Python::attach(|py| py.Ellipsis())), tadpoles=Some(Python::attach(|py| py.Ellipsis())), zero_snails=Some(Python::attach(|py| py.Ellipsis())), coupling_orders=None, fermion_loop_count_range=None, factorized_loop_topologies_count_range=Some(Python::attach(|py| py.Ellipsis())), blob_range=Some(Python::attach(|py| py.Ellipsis())), spectator_range=Some(Python::attach(|py| py.Ellipsis())), perturbative_orders=None, sewn_tadpoles=None, cut_amplitude_coupling_orders=None, cut_amplitude_loop_count_range=None, select_diagrams=None, veto_diagrams=None, loop_momentum_bases=None, numerator_prefactor=None, projector=None, numerator_grouping=None, filter_zero_color=false, cancellation_token=None, progress=Some(Python::attach(|py| PyString::new(py, "auto").into_any().unbind())), filter=None))]
+    #[pyo3(signature = (*, dimension=None, real=None, loops=OrderRangeInput::default(), symmetrize_initial=false, symmetrize_final=false, symmetrize_left_right=false, symmetrize_external_fermions=false, threads=None, max_vertices=None, allow_self_loops=true, allow_zero_flow_edges=false, graph_prefix=None, maximum_bridges=Some(Python::attach(|py| py.Ellipsis())), self_energy=Some(Python::attach(|py| py.Ellipsis())), tadpoles=Some(Python::attach(|py| py.Ellipsis())), zero_snails=Some(Python::attach(|py| py.Ellipsis())), coupling_orders=None, fermion_loop_count_range=None, factorized_loop_topologies_count_range=Some(Python::attach(|py| py.Ellipsis())), blob_range=Some(Python::attach(|py| py.Ellipsis())), spectator_range=Some(Python::attach(|py| py.Ellipsis())), perturbative_orders=None, sewn_tadpoles=None, cut_amplitude_coupling_orders=None, cut_amplitude_loop_count_range=None, select_diagrams=None, veto_diagrams=None, loop_momentum_bases=None, numerator_prefactor=None, projector=None, numerator_grouping=None, filter_zero_color=false, cancellation_token=None, progress=Some(Python::attach(|py| PyString::new(py, "auto").into_any().unbind())), filter=None))]
     #[pyo3(
-        text_signature = "($self, *, dimension=None, real=None, loops=0, symmetrize_initial=False, symmetrize_final=None, symmetrize_left_right=False, symmetrize_external_fermions=False, threads=None, max_vertices=None, allow_self_loops=True, allow_zero_flow_edges=False, graph_prefix=None, maximum_bridges=..., self_energy=..., tadpoles=..., zero_snails=..., coupling_orders=None, fermion_loop_count_range=None, factorized_loop_topologies_count_range=..., blob_range=..., spectator_range=..., perturbative_orders=None, sewn_tadpoles=None, cut_amplitude_coupling_orders=None, cut_amplitude_loop_count_range=None, select_diagrams=None, veto_diagrams=None, loop_momentum_bases=None, numerator_prefactor=None, projector=None, numerator_grouping=None, filter_zero_color=False, cancellation_token=None, progress='auto', filter=None)"
+        text_signature = "($self, *, dimension=None, real=None, loops=0, symmetrize_initial=False, symmetrize_final=False, symmetrize_left_right=False, symmetrize_external_fermions=False, threads=None, max_vertices=None, allow_self_loops=True, allow_zero_flow_edges=False, graph_prefix=None, maximum_bridges=..., self_energy=..., tadpoles=..., zero_snails=..., coupling_orders=None, fermion_loop_count_range=None, factorized_loop_topologies_count_range=..., blob_range=..., spectator_range=..., perturbative_orders=None, sewn_tadpoles=None, cut_amplitude_coupling_orders=None, cut_amplitude_loop_count_range=None, select_diagrams=None, veto_diagrams=None, loop_momentum_bases=None, numerator_prefactor=None, projector=None, numerator_grouping=None, filter_zero_color=False, cancellation_token=None, progress='auto', filter=None)"
     )]
     #[allow(clippy::too_many_arguments)]
     fn generate_amplitude(
@@ -1231,7 +1231,7 @@ impl PyProcess {
         real: Option<Vec<PythonExpression>>,
         loops: OrderRangeInput,
         symmetrize_initial: bool,
-        symmetrize_final: Option<bool>,
+        symmetrize_final: bool,
         symmetrize_left_right: bool,
         symmetrize_external_fermions: bool,
         threads: Option<usize>,
@@ -1353,14 +1353,27 @@ impl PyProcess {
     ///     Exact order or inclusive range for this call, default zero. Cross sections count
     ///     loops in the sewn forward graph; two-particle tree cuts need loops=1.
     /// symmetrize_initial : bool, optional
-    ///     Identify graphs related by initial-state permutations; default False. In a cross
-    ///     section a permutation moves each sewn final-state copy with its incoming leg.
-    /// symmetrize_final : bool or None, optional
-    ///     Identify final-state permutations; None uses True for cross sections and False for amplitudes.
-    ///     The final state of a cross section is the sewn copies of the initial state, so either
-    ///     flag identifies the same permutations of identical sewn pairs, counted once.
+    ///     Keep one forward graph for each exchange of two identical beams, each sewn copy
+    ///     moving with its incoming leg; default False. The overall factor of the kept graph
+    ///     counts the graphs it stands for, so the factors still add up to the exact total,
+    ///     unless symmetrize_left_right is also set: the total then inherits its deviations
+    ///     and can differ from the left/right total too. Evaluating the kept graph alone is
+    ///     exact after integration only if the exchange is a symmetry of everything else:
+    ///     observables and selectors invariant under the beam exchange (signed rapidities
+    ///     are not), beam helicities summed or equal (opposite fixed helicities only in a
+    ///     parity-invariant model with parity-even observables and selectors), and a
+    ///     polarization gauge that moves with the beams. Graphs that the exchange maps to
+    ///     themselves are exact unconditionally. The kept graph carries its
+    ///     orbit's weight on one side of the exchange, so the integration error can grow: for
+    ///     Z Z -> e+ e- it was 19 times larger at equal sample counts. Identical beams among
+    ///     more than two incoming particles raise an error. Identical final-state particles
+    ///     need no option: they are cut edges, already counted by the graph automorphisms.
     /// symmetrize_left_right : bool, optional
-    ///     Identify cross-section graphs related by exchanging amplitude sides.
+    ///     Identify cross-section graphs related by exchanging amplitude sides, which assumes
+    ///     CP symmetry. A graph and a distinct mirror image become one diagram whose overall
+    ///     factor counts both. The physical cuts are searched in one of the two frames; from
+    ///     two loops on they can depend on the frame, so the total can differ from the
+    ///     unsymmetrized one.
     /// symmetrize_external_fermions : bool, optional
     ///     Include amplitude fermions in enabled external-state symmetry classes.
     /// threads : int or None, optional
@@ -1374,9 +1387,9 @@ impl PyProcess {
     /// graph_prefix : str or None, optional
     ///     Prefix assigned to generated diagram names; None uses "D" (diagram).
     /// maximum_bridges : int, None, or Ellipsis, optional
-    ///     Omission or Ellipsis requires one-particle irreducibility only for diagrams
-    ///     with loops; tree exchanges are allowed, including in mixed loop ranges.
-    ///     An integer limits internal bridges at every loop order; None disables it.
+    ///     Omission or Ellipsis applies no bridge filter: it would act on the unsewn forward
+    ///     graph, where every s-channel propagator is a bridge. An integer limits the internal
+    ///     bridges of the forward graph at every loop order; None disables it.
     /// self_energy : SelfEnergyFilterOptions or None, optional
     ///     Reject self-energy subgraphs. Omission enables the default filter for
     ///     non-vacuum processes; explicit None disables it. Ellipsis selects automatic defaults.
@@ -1439,9 +1452,9 @@ impl PyProcess {
     ///     particle of the line, directed along its flow, or None before its field is
     ///     assigned. External legs are dangling half-edges whose data is the pair
     ///     (state, index), with index None for amplitude legs symmetrized within their state.
-    ///     Cross-section legs keep their index; diagrams related by permuting identical
-    ///     sewn pairs are identified after the search, so verdicts should not depend on
-    ///     which identical pair carries which index. A "complete"-stage callback can add
+    ///     Cross-section legs keep their index; with ``symmetrize_initial``, diagrams related
+    ///     by exchanging identical beams are identified after the search, so verdicts should
+    ///     not depend on which beam carries which index. A "complete"-stage callback can add
     ///     vetoes to the built-in filters, for example a different self-energy definition.
     ///     Node data is None. Mutating the snapshot does not change enumeration. Keep
     ///     callbacks cheap: each snapshot is a new Python graph.
@@ -1449,9 +1462,9 @@ impl PyProcess {
     ///     Shared token for cancelling a running generation task. Token cancellation
     ///     returns an incomplete result; Python signal-handler exceptions, including
     ///     KeyboardInterrupt, stop generation and propagate to the caller.
-    #[pyo3(signature = (*, loops=OrderRangeInput::default(), symmetrize_initial=false, symmetrize_final=None, symmetrize_left_right=false, symmetrize_external_fermions=false, threads=None, max_vertices=None, allow_self_loops=true, allow_zero_flow_edges=false, graph_prefix=None, maximum_bridges=Some(Python::attach(|py| py.Ellipsis())), self_energy=Some(Python::attach(|py| py.Ellipsis())), tadpoles=Some(Python::attach(|py| py.Ellipsis())), zero_snails=Some(Python::attach(|py| py.Ellipsis())), coupling_orders=None, fermion_loop_count_range=None, factorized_loop_topologies_count_range=Some(Python::attach(|py| py.Ellipsis())), blob_range=Some(Python::attach(|py| py.Ellipsis())), spectator_range=Some(Python::attach(|py| py.Ellipsis())), perturbative_orders=None, sewn_tadpoles=None, cut_amplitude_coupling_orders=None, cut_amplitude_loop_count_range=None, select_diagrams=None, veto_diagrams=None, loop_momentum_bases=None, numerator_prefactor=None, projector=None, numerator_grouping=None, filter_zero_color=false, cancellation_token=None, progress=Some(Python::attach(|py| PyString::new(py, "auto").into_any().unbind())), filter=None))]
+    #[pyo3(signature = (*, loops=OrderRangeInput::default(), symmetrize_initial=false, symmetrize_left_right=false, symmetrize_external_fermions=false, threads=None, max_vertices=None, allow_self_loops=true, allow_zero_flow_edges=false, graph_prefix=None, maximum_bridges=Some(Python::attach(|py| py.Ellipsis())), self_energy=Some(Python::attach(|py| py.Ellipsis())), tadpoles=Some(Python::attach(|py| py.Ellipsis())), zero_snails=Some(Python::attach(|py| py.Ellipsis())), coupling_orders=None, fermion_loop_count_range=None, factorized_loop_topologies_count_range=Some(Python::attach(|py| py.Ellipsis())), blob_range=Some(Python::attach(|py| py.Ellipsis())), spectator_range=Some(Python::attach(|py| py.Ellipsis())), perturbative_orders=None, sewn_tadpoles=None, cut_amplitude_coupling_orders=None, cut_amplitude_loop_count_range=None, select_diagrams=None, veto_diagrams=None, loop_momentum_bases=None, numerator_prefactor=None, projector=None, numerator_grouping=None, filter_zero_color=false, cancellation_token=None, progress=Some(Python::attach(|py| PyString::new(py, "auto").into_any().unbind())), filter=None))]
     #[pyo3(
-        text_signature = "($self, *, loops=0, symmetrize_initial=False, symmetrize_final=None, symmetrize_left_right=False, symmetrize_external_fermions=False, threads=None, max_vertices=None, allow_self_loops=True, allow_zero_flow_edges=False, graph_prefix=None, maximum_bridges=..., self_energy=..., tadpoles=..., zero_snails=..., coupling_orders=None, fermion_loop_count_range=None, factorized_loop_topologies_count_range=..., blob_range=..., spectator_range=..., perturbative_orders=None, sewn_tadpoles=None, cut_amplitude_coupling_orders=None, cut_amplitude_loop_count_range=None, select_diagrams=None, veto_diagrams=None, loop_momentum_bases=None, numerator_prefactor=None, projector=None, numerator_grouping=None, filter_zero_color=False, cancellation_token=None, progress='auto', filter=None)"
+        text_signature = "($self, *, loops=0, symmetrize_initial=False, symmetrize_left_right=False, symmetrize_external_fermions=False, threads=None, max_vertices=None, allow_self_loops=True, allow_zero_flow_edges=False, graph_prefix=None, maximum_bridges=..., self_energy=..., tadpoles=..., zero_snails=..., coupling_orders=None, fermion_loop_count_range=None, factorized_loop_topologies_count_range=..., blob_range=..., spectator_range=..., perturbative_orders=None, sewn_tadpoles=None, cut_amplitude_coupling_orders=None, cut_amplitude_loop_count_range=None, select_diagrams=None, veto_diagrams=None, loop_momentum_bases=None, numerator_prefactor=None, projector=None, numerator_grouping=None, filter_zero_color=False, cancellation_token=None, progress='auto', filter=None)"
     )]
     #[allow(clippy::too_many_arguments)]
     fn generate_cross_section(
@@ -1459,7 +1472,6 @@ impl PyProcess {
         py: Python<'_>,
         loops: OrderRangeInput,
         symmetrize_initial: bool,
-        symmetrize_final: Option<bool>,
         symmetrize_left_right: bool,
         symmetrize_external_fermions: bool,
         threads: Option<usize>,
@@ -1508,7 +1520,8 @@ impl PyProcess {
             generation_type,
             loops,
             symmetrize_initial,
-            symmetrize_final,
+            // symmetrize_final, which cross sections reject
+            false,
             symmetrize_left_right,
             symmetrize_external_fermions,
             threads,
@@ -1959,7 +1972,7 @@ impl GenerationSettings {
         generation_type: GenerationType,
         loops: OrderRangeInput,
         symmetrize_initial: bool,
-        symmetrize_final: Option<bool>,
+        symmetrize_final: bool,
         symmetrize_left_right: bool,
         symmetrize_external_fermions: bool,
         threads: Option<usize>,
@@ -2061,7 +2074,7 @@ impl GenerationSettings {
             .with_loop_count(loops.minimum, loops.maximum.unwrap())
             .map_err(error::process)?
             .symmetrize_initial(symmetrize_initial)
-            .symmetrize_final(symmetrize_final.unwrap_or(cross_section))
+            .symmetrize_final(symmetrize_final)
             .symmetrize_left_right(symmetrize_left_right)
             .symmetrize_external_fermions(symmetrize_external_fermions)
             .allow_self_loops(allow_self_loops)
@@ -2077,12 +2090,18 @@ impl GenerationSettings {
             inner = inner.graph_prefix(value);
         }
 
-        if let Some(value) = maximum_bridges {
-            let filter = if value.bind(py).is_instance_of::<PyEllipsis>() {
-                GenerationFilter::LoopOneParticleIrreducible
-            } else {
-                GenerationFilter::MaxNumberOfBridges(value.extract::<usize>(py)?)
-            };
+        // Loop-only irreducibility is an amplitude default. For a cross section it would act on
+        // the unsewn forward graph, where every s-channel propagator is a bridge.
+        let maximum_bridges = match maximum_bridges {
+            Some(value) if value.bind(py).is_instance_of::<PyEllipsis>() => {
+                (!cross_section).then_some(GenerationFilter::LoopOneParticleIrreducible)
+            }
+            value => value
+                .map(|value| value.extract::<usize>(py))
+                .transpose()?
+                .map(GenerationFilter::MaxNumberOfBridges),
+        };
+        if let Some(filter) = maximum_bridges {
             inner = inner.with_graph_filter(filter);
         }
         if let Some(value) = self_energy {
@@ -3368,11 +3387,23 @@ for via_model in (True, False):
         tadpoles=None, zero_snails=None, factorized_loop_topologies_count_range=(1, 1))
     assert [d.to_json() for d in vacuum.diagrams] == [d.to_json() for d in configured_vacuum.diagrams]
 
+# Cross sections apply no bridge filter by default: in the unsewn forward graph every
+# s-channel propagator is a bridge. An explicit limit still applies.
+def cross_section(**kwargs):
+    process = model.process([1000, 1000], [1000, 1000], vertex_allow=["V_3_SCALAR_000"])
+    return process.generate_cross_section(loops=1, max_vertices=4, **kwargs)
+forward = cross_section()
+unrestricted = cross_section(maximum_bridges=None)
+assert [d.to_json() for d in forward.diagrams] == [d.to_json() for d in unrestricted.diagrams]
+assert 0 < len(cross_section(maximum_bridges=0)) < len(forward)
+
 assert not hasattr(model.process([1000], [1000]), "symmetrizes_final")
+for generate in (fk.Process.generate_diagrams, fk.Process.generate_amplitude):
+    assert inspect.signature(generate).parameters["symmetrize_final"].default is False
+assert "symmetrize_final" not in inspect.signature(fk.Process.generate_cross_section).parameters
 for generate in (fk.Process.generate_diagrams, fk.Process.generate_amplitude, fk.Process.generate_cross_section):
     parameters = inspect.signature(generate).parameters
     assert parameters["loops"].default == 0
-    assert parameters["symmetrize_final"].default is None
     assert parameters["maximum_bridges"].default is Ellipsis
     assert parameters["allow_self_loops"].default is True
     assert parameters["numerator_grouping"].default is None

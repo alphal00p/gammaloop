@@ -260,12 +260,12 @@ mod tests {
     fn evaluates_factor_annotations_without_erasing_unknown_heads() {
         for namespace in ["gammalooprs", "feynkit_generator_factor"] {
             let factor = Atom::parse(
-                "InternalFermionLoopSign(-1)*CouplingsMultiplicity(2)/AutG(4) + NumeratorDependentGrouping(7,2,3) + unknown(5)",
+                "InternalFermionLoopSign(-1)*CouplingsMultiplicity(2)*NumeratorIndependentSymmetryGrouping(3)/AutG(4) + NumeratorDependentGrouping(7,2,3) + unknown(5)",
                 namespace,
                 symbolica::parser::ParseSettings::default(),
             ).unwrap();
             let expected = Atom::parse(
-                "11/2+unknown(5)",
+                "9/2+unknown(5)",
                 namespace,
                 symbolica::parser::ParseSettings::default(),
             )

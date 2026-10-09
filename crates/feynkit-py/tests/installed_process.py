@@ -52,6 +52,9 @@ assert {d.id for d in process.generate_diagrams(progress=None)} == {
     d.id for d in result
 }
 
+for method in (process.generate_diagrams, process.generate_amplitude):
+    assert inspect.signature(method).parameters["symmetrize_final"].default is False
+assert "symmetrize_final" not in inspect.signature(process.generate_cross_section).parameters
 for method in (
     process.generate_diagrams,
     process.generate_amplitude,
@@ -59,7 +62,6 @@ for method in (
 ):
     signature = inspect.signature(method)
     assert signature.parameters["loops"].default == 0
-    assert signature.parameters["symmetrize_final"].default is None
     assert (
         not {"particle_veto", "vertex_allow", "vertex_veto"}
         & signature.parameters.keys()

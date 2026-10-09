@@ -2633,13 +2633,18 @@ class FeynmanDiagram:
     @property
     def symmetry_factor(self) -> builtins.int:
         r"""
-        Return the positive integer denominator of the graph symmetry factor.
+        Return the automorphism count of the graph, the denominator of its symmetry factor.
+
+        The diagram's weight is ``overall_factor_expression(evaluate=True)``, which also
+        carries fermion signs and the number of graphs that symmetrization or grouping
+        identified with this one.
 
         Examples
         --------
         Using the setup in the ``FeynmanDiagram`` class example:
 
-        >>> graph_weight = 1 / diagram.symmetry_factor
+        >>> automorphisms = diagram.symmetry_factor
+        >>> weight = diagram.overall_factor_expression(evaluate=True)
         """
     @property
     def overall_factor(self) -> builtins.str:
@@ -8666,7 +8671,7 @@ class Process:
         vertex_veto : sequence[VertexRule | str] or None, optional
             Replace the excluded interaction rules.
         """
-    def generate_diagrams(self, *, loops: builtins.int | tuple[builtins.int, builtins.int] = 0, symmetrize_initial: builtins.bool = False, symmetrize_final: typing.Optional[builtins.bool] = None, symmetrize_left_right: builtins.bool = False, symmetrize_external_fermions: builtins.bool = False, threads: typing.Optional[builtins.int] = None, max_vertices: typing.Optional[builtins.int] = None, allow_self_loops: builtins.bool = True, allow_zero_flow_edges: builtins.bool = False, graph_prefix: typing.Optional[builtins.str] = None, maximum_bridges: int | None | types.EllipsisType = ..., self_energy: SelfEnergyFilterOptions | types.EllipsisType | None = ..., tadpoles: TadpoleFilterOptions | types.EllipsisType | None = ..., zero_snails: SnailFilterOptions | types.EllipsisType | None = ..., coupling_orders: typing.Optional[typing.Mapping[builtins.str, builtins.int | tuple[builtins.int, typing.Optional[builtins.int]]]] = None, fermion_loop_count_range: typing.Optional[tuple[builtins.int, builtins.int]] = None, factorized_loop_topologies_count_range: tuple[int, int] | types.EllipsisType | None = ..., blob_range: tuple[int, int] | types.EllipsisType | None = ..., spectator_range: tuple[int, int] | types.EllipsisType | None = ..., perturbative_orders: typing.Optional[typing.Mapping[builtins.str, builtins.int]] = None, sewn_tadpoles: typing.Optional[builtins.bool] = None, cut_amplitude_coupling_orders: typing.Optional[typing.Mapping[builtins.str, builtins.int | tuple[builtins.int, typing.Optional[builtins.int]]]] = None, cut_amplitude_loop_count_range: typing.Optional[tuple[builtins.int, builtins.int]] = None, select_diagrams: typing.Optional[typing.Sequence[FeynmanDiagram | builtins.str]] = None, veto_diagrams: typing.Optional[typing.Sequence[FeynmanDiagram | builtins.str]] = None, loop_momentum_bases: typing.Optional[typing.Sequence[tuple[FeynmanDiagram | builtins.str, typing.Sequence[builtins.int]]]] = None, numerator_prefactor: typing.Optional[Expression] = None, projector: typing.Optional[Expression] = None, numerator_grouping: typing.Optional[NumeratorGrouping] = None, filter_zero_color: builtins.bool = False, cancellation_token: typing.Optional[CancellationToken] = None, progress: typing.Literal['auto'] | collections.abc.Callable[[GenerationProgress], None] | None = 'auto', filter: collections.abc.Callable[[symbolica.community.graph.Graph, str], bool] | None = None) -> GenerationResult:
+    def generate_diagrams(self, *, loops: builtins.int | tuple[builtins.int, builtins.int] = 0, symmetrize_initial: builtins.bool = False, symmetrize_final: builtins.bool = False, symmetrize_left_right: builtins.bool = False, symmetrize_external_fermions: builtins.bool = False, threads: typing.Optional[builtins.int] = None, max_vertices: typing.Optional[builtins.int] = None, allow_self_loops: builtins.bool = True, allow_zero_flow_edges: builtins.bool = False, graph_prefix: typing.Optional[builtins.str] = None, maximum_bridges: int | None | types.EllipsisType = ..., self_energy: SelfEnergyFilterOptions | types.EllipsisType | None = ..., tadpoles: TadpoleFilterOptions | types.EllipsisType | None = ..., zero_snails: SnailFilterOptions | types.EllipsisType | None = ..., coupling_orders: typing.Optional[typing.Mapping[builtins.str, builtins.int | tuple[builtins.int, typing.Optional[builtins.int]]]] = None, fermion_loop_count_range: typing.Optional[tuple[builtins.int, builtins.int]] = None, factorized_loop_topologies_count_range: tuple[int, int] | types.EllipsisType | None = ..., blob_range: tuple[int, int] | types.EllipsisType | None = ..., spectator_range: tuple[int, int] | types.EllipsisType | None = ..., perturbative_orders: typing.Optional[typing.Mapping[builtins.str, builtins.int]] = None, sewn_tadpoles: typing.Optional[builtins.bool] = None, cut_amplitude_coupling_orders: typing.Optional[typing.Mapping[builtins.str, builtins.int | tuple[builtins.int, typing.Optional[builtins.int]]]] = None, cut_amplitude_loop_count_range: typing.Optional[tuple[builtins.int, builtins.int]] = None, select_diagrams: typing.Optional[typing.Sequence[FeynmanDiagram | builtins.str]] = None, veto_diagrams: typing.Optional[typing.Sequence[FeynmanDiagram | builtins.str]] = None, loop_momentum_bases: typing.Optional[typing.Sequence[tuple[FeynmanDiagram | builtins.str, typing.Sequence[builtins.int]]]] = None, numerator_prefactor: typing.Optional[Expression] = None, projector: typing.Optional[Expression] = None, numerator_grouping: typing.Optional[NumeratorGrouping] = None, filter_zero_color: builtins.bool = False, cancellation_token: typing.Optional[CancellationToken] = None, progress: typing.Literal['auto'] | collections.abc.Callable[[GenerationProgress], None] | None = 'auto', filter: collections.abc.Callable[[symbolica.community.graph.Graph, str], bool] | None = None) -> GenerationResult:
         r"""
         Generate and optionally group all diagrams matching a process.
 
@@ -8688,12 +8693,12 @@ class Process:
             Exact order or inclusive range for this call, default zero. Cross sections count
             loops in the sewn forward graph; two-particle tree cuts need loops=1.
         symmetrize_initial : bool, optional
-            Identify graphs related by initial-state permutations; default False. In a cross
-            section a permutation moves each sewn final-state copy with its incoming leg.
-        symmetrize_final : bool or None, optional
-            Identify final-state permutations; None uses True for cross sections and False for amplitudes.
-            The final state of a cross section is the sewn copies of the initial state, so either
-            flag identifies the same permutations of identical sewn pairs, counted once.
+            Identify graphs related by permutations of identical incoming particles; default
+            False. Their legs become unlabelled: each diagram carries the inverse automorphism
+            count of the unlabelled graph, and the caller sums over the leg permutations.
+        symmetrize_final : bool, optional
+            Identify graphs related by permutations of identical outgoing particles in the
+            same way; default False.
         symmetrize_left_right : bool, optional
             Identify cross-section graphs related by exchanging amplitude sides.
         symmetrize_external_fermions : bool, optional
@@ -8774,9 +8779,9 @@ class Process:
             particle of the line, directed along its flow, or None before its field is
             assigned. External legs are dangling half-edges whose data is the pair
             (state, index), with index None for amplitude legs symmetrized within their state.
-            Cross-section legs keep their index; diagrams related by permuting identical
-            sewn pairs are identified after the search, so verdicts should not depend on
-            which identical pair carries which index. A "complete"-stage callback can add
+            Cross-section legs keep their index; with ``symmetrize_initial``, diagrams related
+            by exchanging identical beams are identified after the search, so verdicts should
+            not depend on which beam carries which index. A "complete"-stage callback can add
             vetoes to the built-in filters, for example a different self-energy definition.
             Node data is None. Mutating the snapshot does not change enumeration. Keep
             callbacks cheap: each snapshot is a new Python graph.
@@ -8785,7 +8790,7 @@ class Process:
             returns an incomplete result; Python signal-handler exceptions, including
             KeyboardInterrupt, stop generation and propagate to the caller.
         """
-    def generate_amplitude(self, *, dimension: typing.Optional[Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal]] = None, real: typing.Optional[typing.Sequence[Expression]] = None, loops: builtins.int | tuple[builtins.int, builtins.int] = 0, symmetrize_initial: builtins.bool = False, symmetrize_final: typing.Optional[builtins.bool] = None, symmetrize_left_right: builtins.bool = False, symmetrize_external_fermions: builtins.bool = False, threads: typing.Optional[builtins.int] = None, max_vertices: typing.Optional[builtins.int] = None, allow_self_loops: builtins.bool = True, allow_zero_flow_edges: builtins.bool = False, graph_prefix: typing.Optional[builtins.str] = None, maximum_bridges: int | None | types.EllipsisType = ..., self_energy: SelfEnergyFilterOptions | types.EllipsisType | None = ..., tadpoles: TadpoleFilterOptions | types.EllipsisType | None = ..., zero_snails: SnailFilterOptions | types.EllipsisType | None = ..., coupling_orders: typing.Optional[typing.Mapping[builtins.str, builtins.int | tuple[builtins.int, typing.Optional[builtins.int]]]] = None, fermion_loop_count_range: typing.Optional[tuple[builtins.int, builtins.int]] = None, factorized_loop_topologies_count_range: tuple[int, int] | types.EllipsisType | None = ..., blob_range: tuple[int, int] | types.EllipsisType | None = ..., spectator_range: tuple[int, int] | types.EllipsisType | None = ..., perturbative_orders: typing.Optional[typing.Mapping[builtins.str, builtins.int]] = None, sewn_tadpoles: typing.Optional[builtins.bool] = None, cut_amplitude_coupling_orders: typing.Optional[typing.Mapping[builtins.str, builtins.int | tuple[builtins.int, typing.Optional[builtins.int]]]] = None, cut_amplitude_loop_count_range: typing.Optional[tuple[builtins.int, builtins.int]] = None, select_diagrams: typing.Optional[typing.Sequence[FeynmanDiagram | builtins.str]] = None, veto_diagrams: typing.Optional[typing.Sequence[FeynmanDiagram | builtins.str]] = None, loop_momentum_bases: typing.Optional[typing.Sequence[tuple[FeynmanDiagram | builtins.str, typing.Sequence[builtins.int]]]] = None, numerator_prefactor: typing.Optional[Expression] = None, projector: typing.Optional[Expression] = None, numerator_grouping: typing.Optional[NumeratorGrouping] = None, filter_zero_color: builtins.bool = False, cancellation_token: typing.Optional[CancellationToken] = None, progress: typing.Literal['auto'] | collections.abc.Callable[[GenerationProgress], None] | None = 'auto', filter: collections.abc.Callable[[symbolica.community.graph.Graph, str], bool] | None = None) -> Amplitude:
+    def generate_amplitude(self, *, dimension: typing.Optional[Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal]] = None, real: typing.Optional[typing.Sequence[Expression]] = None, loops: builtins.int | tuple[builtins.int, builtins.int] = 0, symmetrize_initial: builtins.bool = False, symmetrize_final: builtins.bool = False, symmetrize_left_right: builtins.bool = False, symmetrize_external_fermions: builtins.bool = False, threads: typing.Optional[builtins.int] = None, max_vertices: typing.Optional[builtins.int] = None, allow_self_loops: builtins.bool = True, allow_zero_flow_edges: builtins.bool = False, graph_prefix: typing.Optional[builtins.str] = None, maximum_bridges: int | None | types.EllipsisType = ..., self_energy: SelfEnergyFilterOptions | types.EllipsisType | None = ..., tadpoles: TadpoleFilterOptions | types.EllipsisType | None = ..., zero_snails: SnailFilterOptions | types.EllipsisType | None = ..., coupling_orders: typing.Optional[typing.Mapping[builtins.str, builtins.int | tuple[builtins.int, typing.Optional[builtins.int]]]] = None, fermion_loop_count_range: typing.Optional[tuple[builtins.int, builtins.int]] = None, factorized_loop_topologies_count_range: tuple[int, int] | types.EllipsisType | None = ..., blob_range: tuple[int, int] | types.EllipsisType | None = ..., spectator_range: tuple[int, int] | types.EllipsisType | None = ..., perturbative_orders: typing.Optional[typing.Mapping[builtins.str, builtins.int]] = None, sewn_tadpoles: typing.Optional[builtins.bool] = None, cut_amplitude_coupling_orders: typing.Optional[typing.Mapping[builtins.str, builtins.int | tuple[builtins.int, typing.Optional[builtins.int]]]] = None, cut_amplitude_loop_count_range: typing.Optional[tuple[builtins.int, builtins.int]] = None, select_diagrams: typing.Optional[typing.Sequence[FeynmanDiagram | builtins.str]] = None, veto_diagrams: typing.Optional[typing.Sequence[FeynmanDiagram | builtins.str]] = None, loop_momentum_bases: typing.Optional[typing.Sequence[tuple[FeynmanDiagram | builtins.str, typing.Sequence[builtins.int]]]] = None, numerator_prefactor: typing.Optional[Expression] = None, projector: typing.Optional[Expression] = None, numerator_grouping: typing.Optional[NumeratorGrouping] = None, filter_zero_color: builtins.bool = False, cancellation_token: typing.Optional[CancellationToken] = None, progress: typing.Literal['auto'] | collections.abc.Callable[[GenerationProgress], None] | None = 'auto', filter: collections.abc.Callable[[symbolica.community.graph.Graph, str], bool] | None = None) -> Amplitude:
         r"""
         Generate a coherent symbolic amplitude for this process.
         Cancelled or empty generation cannot produce an amplitude.
@@ -8812,12 +8817,12 @@ class Process:
             Exact order or inclusive range for this call, default zero. Cross sections count
             loops in the sewn forward graph; two-particle tree cuts need loops=1.
         symmetrize_initial : bool, optional
-            Identify graphs related by initial-state permutations; default False. In a cross
-            section a permutation moves each sewn final-state copy with its incoming leg.
-        symmetrize_final : bool or None, optional
-            Identify final-state permutations; None uses True for cross sections and False for amplitudes.
-            The final state of a cross section is the sewn copies of the initial state, so either
-            flag identifies the same permutations of identical sewn pairs, counted once.
+            Identify graphs related by permutations of identical incoming particles; default
+            False. Their legs become unlabelled: each diagram carries the inverse automorphism
+            count of the unlabelled graph, and the caller sums over the leg permutations.
+        symmetrize_final : bool, optional
+            Identify graphs related by permutations of identical outgoing particles in the
+            same way; default False.
         symmetrize_left_right : bool, optional
             Identify cross-section graphs related by exchanging amplitude sides.
         symmetrize_external_fermions : bool, optional
@@ -8898,9 +8903,9 @@ class Process:
             particle of the line, directed along its flow, or None before its field is
             assigned. External legs are dangling half-edges whose data is the pair
             (state, index), with index None for amplitude legs symmetrized within their state.
-            Cross-section legs keep their index; diagrams related by permuting identical
-            sewn pairs are identified after the search, so verdicts should not depend on
-            which identical pair carries which index. A "complete"-stage callback can add
+            Cross-section legs keep their index; with ``symmetrize_initial``, diagrams related
+            by exchanging identical beams are identified after the search, so verdicts should
+            not depend on which beam carries which index. A "complete"-stage callback can add
             vetoes to the built-in filters, for example a different self-energy definition.
             Node data is None. Mutating the snapshot does not change enumeration. Keep
             callbacks cheap: each snapshot is a new Python graph.
@@ -8909,7 +8914,7 @@ class Process:
             returns an incomplete result; Python signal-handler exceptions, including
             KeyboardInterrupt, stop generation and propagate to the caller.
         """
-    def generate_cross_section(self, *, loops: builtins.int | tuple[builtins.int, builtins.int] = 0, symmetrize_initial: builtins.bool = False, symmetrize_final: typing.Optional[builtins.bool] = None, symmetrize_left_right: builtins.bool = False, symmetrize_external_fermions: builtins.bool = False, threads: typing.Optional[builtins.int] = None, max_vertices: typing.Optional[builtins.int] = None, allow_self_loops: builtins.bool = True, allow_zero_flow_edges: builtins.bool = False, graph_prefix: typing.Optional[builtins.str] = None, maximum_bridges: int | None | types.EllipsisType = ..., self_energy: SelfEnergyFilterOptions | types.EllipsisType | None = ..., tadpoles: TadpoleFilterOptions | types.EllipsisType | None = ..., zero_snails: SnailFilterOptions | types.EllipsisType | None = ..., coupling_orders: typing.Optional[typing.Mapping[builtins.str, builtins.int | tuple[builtins.int, typing.Optional[builtins.int]]]] = None, fermion_loop_count_range: typing.Optional[tuple[builtins.int, builtins.int]] = None, factorized_loop_topologies_count_range: tuple[int, int] | types.EllipsisType | None = ..., blob_range: tuple[int, int] | types.EllipsisType | None = ..., spectator_range: tuple[int, int] | types.EllipsisType | None = ..., perturbative_orders: typing.Optional[typing.Mapping[builtins.str, builtins.int]] = None, sewn_tadpoles: typing.Optional[builtins.bool] = None, cut_amplitude_coupling_orders: typing.Optional[typing.Mapping[builtins.str, builtins.int | tuple[builtins.int, typing.Optional[builtins.int]]]] = None, cut_amplitude_loop_count_range: typing.Optional[tuple[builtins.int, builtins.int]] = None, select_diagrams: typing.Optional[typing.Sequence[FeynmanDiagram | builtins.str]] = None, veto_diagrams: typing.Optional[typing.Sequence[FeynmanDiagram | builtins.str]] = None, loop_momentum_bases: typing.Optional[typing.Sequence[tuple[FeynmanDiagram | builtins.str, typing.Sequence[builtins.int]]]] = None, numerator_prefactor: typing.Optional[Expression] = None, projector: typing.Optional[Expression] = None, numerator_grouping: typing.Optional[NumeratorGrouping] = None, filter_zero_color: builtins.bool = False, cancellation_token: typing.Optional[CancellationToken] = None, progress: typing.Literal['auto'] | collections.abc.Callable[[GenerationProgress], None] | None = 'auto', filter: collections.abc.Callable[[symbolica.community.graph.Graph, str], bool] | None = None) -> GenerationResult:
+    def generate_cross_section(self, *, loops: builtins.int | tuple[builtins.int, builtins.int] = 0, symmetrize_initial: builtins.bool = False, symmetrize_left_right: builtins.bool = False, symmetrize_external_fermions: builtins.bool = False, threads: typing.Optional[builtins.int] = None, max_vertices: typing.Optional[builtins.int] = None, allow_self_loops: builtins.bool = True, allow_zero_flow_edges: builtins.bool = False, graph_prefix: typing.Optional[builtins.str] = None, maximum_bridges: int | None | types.EllipsisType = ..., self_energy: SelfEnergyFilterOptions | types.EllipsisType | None = ..., tadpoles: TadpoleFilterOptions | types.EllipsisType | None = ..., zero_snails: SnailFilterOptions | types.EllipsisType | None = ..., coupling_orders: typing.Optional[typing.Mapping[builtins.str, builtins.int | tuple[builtins.int, typing.Optional[builtins.int]]]] = None, fermion_loop_count_range: typing.Optional[tuple[builtins.int, builtins.int]] = None, factorized_loop_topologies_count_range: tuple[int, int] | types.EllipsisType | None = ..., blob_range: tuple[int, int] | types.EllipsisType | None = ..., spectator_range: tuple[int, int] | types.EllipsisType | None = ..., perturbative_orders: typing.Optional[typing.Mapping[builtins.str, builtins.int]] = None, sewn_tadpoles: typing.Optional[builtins.bool] = None, cut_amplitude_coupling_orders: typing.Optional[typing.Mapping[builtins.str, builtins.int | tuple[builtins.int, typing.Optional[builtins.int]]]] = None, cut_amplitude_loop_count_range: typing.Optional[tuple[builtins.int, builtins.int]] = None, select_diagrams: typing.Optional[typing.Sequence[FeynmanDiagram | builtins.str]] = None, veto_diagrams: typing.Optional[typing.Sequence[FeynmanDiagram | builtins.str]] = None, loop_momentum_bases: typing.Optional[typing.Sequence[tuple[FeynmanDiagram | builtins.str, typing.Sequence[builtins.int]]]] = None, numerator_prefactor: typing.Optional[Expression] = None, projector: typing.Optional[Expression] = None, numerator_grouping: typing.Optional[NumeratorGrouping] = None, filter_zero_color: builtins.bool = False, cancellation_token: typing.Optional[CancellationToken] = None, progress: typing.Literal['auto'] | collections.abc.Callable[[GenerationProgress], None] | None = 'auto', filter: collections.abc.Callable[[symbolica.community.graph.Graph, str], bool] | None = None) -> GenerationResult:
         r"""
         Generate sewn forward diagrams and their physical final-state cuts.
         The result contains diagrams and cut metadata, before phase-space integration.
@@ -8937,14 +8942,27 @@ class Process:
             Exact order or inclusive range for this call, default zero. Cross sections count
             loops in the sewn forward graph; two-particle tree cuts need loops=1.
         symmetrize_initial : bool, optional
-            Identify graphs related by initial-state permutations; default False. In a cross
-            section a permutation moves each sewn final-state copy with its incoming leg.
-        symmetrize_final : bool or None, optional
-            Identify final-state permutations; None uses True for cross sections and False for amplitudes.
-            The final state of a cross section is the sewn copies of the initial state, so either
-            flag identifies the same permutations of identical sewn pairs, counted once.
+            Keep one forward graph for each exchange of two identical beams, each sewn copy
+            moving with its incoming leg; default False. The overall factor of the kept graph
+            counts the graphs it stands for, so the factors still add up to the exact total,
+            unless symmetrize_left_right is also set: the total then inherits its deviations
+            and can differ from the left/right total too. Evaluating the kept graph alone is
+            exact after integration only if the exchange is a symmetry of everything else:
+            observables and selectors invariant under the beam exchange (signed rapidities
+            are not), beam helicities summed or equal (opposite fixed helicities only in a
+            parity-invariant model with parity-even observables and selectors), and a
+            polarization gauge that moves with the beams. Graphs that the exchange maps to
+            themselves are exact unconditionally. The kept graph carries its
+            orbit's weight on one side of the exchange, so the integration error can grow: for
+            Z Z -> e+ e- it was 19 times larger at equal sample counts. Identical beams among
+            more than two incoming particles raise an error. Identical final-state particles
+            need no option: they are cut edges, already counted by the graph automorphisms.
         symmetrize_left_right : bool, optional
-            Identify cross-section graphs related by exchanging amplitude sides.
+            Identify cross-section graphs related by exchanging amplitude sides, which assumes
+            CP symmetry. A graph and a distinct mirror image become one diagram whose overall
+            factor counts both. The physical cuts are searched in one of the two frames; from
+            two loops on they can depend on the frame, so the total can differ from the
+            unsymmetrized one.
         symmetrize_external_fermions : bool, optional
             Include amplitude fermions in enabled external-state symmetry classes.
         threads : int or None, optional
@@ -8958,9 +8976,9 @@ class Process:
         graph_prefix : str or None, optional
             Prefix assigned to generated diagram names; None uses "D" (diagram).
         maximum_bridges : int, None, or Ellipsis, optional
-            Omission or Ellipsis requires one-particle irreducibility only for diagrams
-            with loops; tree exchanges are allowed, including in mixed loop ranges.
-            An integer limits internal bridges at every loop order; None disables it.
+            Omission or Ellipsis applies no bridge filter: it would act on the unsewn forward
+            graph, where every s-channel propagator is a bridge. An integer limits the internal
+            bridges of the forward graph at every loop order; None disables it.
         self_energy : SelfEnergyFilterOptions or None, optional
             Reject self-energy subgraphs. Omission enables the default filter for
             non-vacuum processes; explicit None disables it. Ellipsis selects automatic defaults.
@@ -9023,9 +9041,9 @@ class Process:
             particle of the line, directed along its flow, or None before its field is
             assigned. External legs are dangling half-edges whose data is the pair
             (state, index), with index None for amplitude legs symmetrized within their state.
-            Cross-section legs keep their index; diagrams related by permuting identical
-            sewn pairs are identified after the search, so verdicts should not depend on
-            which identical pair carries which index. A "complete"-stage callback can add
+            Cross-section legs keep their index; with ``symmetrize_initial``, diagrams related
+            by exchanging identical beams are identified after the search, so verdicts should
+            not depend on which beam carries which index. A "complete"-stage callback can add
             vetoes to the built-in filters, for example a different self-energy definition.
             Node data is None. Mutating the snapshot does not change enumeration. Keep
             callbacks cheap: each snapshot is a new Python graph.

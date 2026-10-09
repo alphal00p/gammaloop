@@ -24,7 +24,7 @@ use std::{
 };
 
 use feynkit_generator::{GenerationReport, GenerationResult};
-use feynkit_graph::{DiagramId, FeynmanDiagram};
+use feynkit_graph::{DiagramId, FeynmanDiagram, expressions::evaluate_overall_factor};
 use serde_json::Value;
 use symbolica::{
     atom::{Atom, AtomCore},
@@ -40,6 +40,9 @@ pub struct Entry {
     pub name: String,
     pub symmetry_factor: u64,
     pub overall_factor: String,
+    /// The overall factor with its bookkeeping heads evaluated: `1 / |Aut|` with the fermion
+    /// signs and the number of diagrams that symmetrization or grouping identified with this one.
+    pub weight: Rational,
     /// Digest of the diagram in its finalized frame: vertices, edges, slots, loop momentum
     /// basis, cuts and threshold candidates, without numerators.
     pub frame: u64,
@@ -115,6 +118,10 @@ pub struct Summary {
     pub assignments: usize,
     /// Sum of `1 / |Aut|`.
     pub inverse_symmetry: Rational,
+    /// Sum of the evaluated overall factors, the [`Entry::weight`]s. Without symmetrization or
+    /// grouping it is `inverse_symmetry` with the fermion signs; a wrong orbit or group weight
+    /// changes it.
+    pub weights: Rational,
     /// Multiset of |Aut|: (symmetry factor, number of diagrams).
     pub symmetry_factors: Vec<(u64, usize)>,
     /// Order- and name-independent digest of certificates, symmetry and overall factors and
@@ -138,13 +145,15 @@ impl fmt::Display for Summary {
         write!(
             f,
             "Row {{ diagrams: {}, topologies: {}, assignments: {}, inverse_symmetry: ({}, {}), \
-             symmetry_factors: &[{histogram}], content: 0x{:016x}, numerators: 0x{:016x}, \
-             named: 0x{:016x} }}",
+             weights: ({}, {}), symmetry_factors: &[{histogram}], content: 0x{:016x}, \
+             numerators: 0x{:016x}, named: 0x{:016x} }}",
             self.diagrams,
             self.topologies,
             self.assignments,
             self.inverse_symmetry.numerator(),
             self.inverse_symmetry.denominator(),
+            self.weights.numerator(),
+            self.weights.denominator(),
             self.content,
             self.numerators,
             self.named
@@ -179,12 +188,19 @@ impl Entry {
         for field in ["id", "model", "name", "symmetry_factor", "overall_factor"] {
             fields.remove(field);
         }
+        let weight = evaluate_overall_factor(diagram.overall_factor().as_view());
         Entry {
             key: Digest::new().json(&key).0,
             id: diagram.id(),
             name: diagram.name().to_owned(),
             symmetry_factor: diagram.symmetry_factor(),
             overall_factor: canonical(diagram.overall_factor()),
+            weight: Rational::try_from(&weight).unwrap_or_else(|_| {
+                panic!(
+                    "{}: overall factor {weight} is not a number",
+                    diagram.name()
+                )
+            }),
             frame: Digest::new().json(&serialized).0,
             numerator: numerator.0,
         }
@@ -235,9 +251,11 @@ impl Census {
 
     pub fn summary(&self) -> Summary {
         let mut inverse_symmetry = Rational::zero();
+        let mut weights = Rational::zero();
         let mut histogram = BTreeMap::<u64, usize>::new();
         for d in &self.diagrams {
             inverse_symmetry += Rational::from((1, d.symmetry_factor));
+            weights += &d.weight;
             *histogram.entry(d.symmetry_factor).or_default() += 1;
         }
         let content = self.diagrams.iter().map(|d| {
@@ -267,6 +285,7 @@ impl Census {
             topologies: self.report.topology_count,
             assignments: self.report.interaction_assignment_count,
             inverse_symmetry,
+            weights,
             symmetry_factors: histogram.into_iter().collect(),
             content: Digest::multiset(content.collect()),
             numerators: Digest::multiset(numerators.collect()),

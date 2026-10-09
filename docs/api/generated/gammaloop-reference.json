@@ -9391,7 +9391,7 @@
           "value_names": [
             "SYMMETRIZE_INITIAL_STATES"
           ],
-          "help": "Identify graphs related by permutations of identical initial-state particles",
+          "help": "Identify graphs related by permutations of identical initial-state particles. A cross section keeps one graph per exchange of its two identical beams, weighted by the number of graphs it stands for; this assumes observables, selectors and beam helicities symmetric under the exchange, and can raise the integration error at equal sample counts. With left/right symmetrization the weights inherit its deviations and can differ from its total too",
           "required": false,
           "positional": false,
           "index": null,
@@ -9424,7 +9424,7 @@
           "value_names": [
             "SYMMETRIZE_FINAL_STATES"
           ],
-          "help": "Identify graphs related by permutations of identical final-state particles",
+          "help": "Identify amplitude graphs related by permutations of identical final-state particles; cross sections reject it, their identical final states being cut edges",
           "required": false,
           "positional": false,
           "index": null,
@@ -9457,7 +9457,7 @@
           "value_names": [
             "SYMMETRIZE_LEFT_RIGHT_STATES"
           ],
-          "help": "Identify cross-section graphs under CP-based left/right exchange; requires CP symmetry",
+          "help": "Identify cross-section graphs under CP-based left/right exchange; requires CP symmetry. From two loops on the physical cuts can depend on which side is searched, so the total can differ from the unsymmetrized one",
           "required": false,
           "positional": false,
           "index": null,
@@ -10939,7 +10939,7 @@
           "value_names": [
             "SYMMETRIZE_INITIAL_STATES"
           ],
-          "help": "Identify graphs related by permutations of identical initial-state particles",
+          "help": "Identify graphs related by permutations of identical initial-state particles. A cross section keeps one graph per exchange of its two identical beams, weighted by the number of graphs it stands for; this assumes observables, selectors and beam helicities symmetric under the exchange, and can raise the integration error at equal sample counts. With left/right symmetrization the weights inherit its deviations and can differ from its total too",
           "required": false,
           "positional": false,
           "index": null,
@@ -10972,7 +10972,7 @@
           "value_names": [
             "SYMMETRIZE_FINAL_STATES"
           ],
-          "help": "Identify graphs related by permutations of identical final-state particles",
+          "help": "Identify amplitude graphs related by permutations of identical final-state particles; cross sections reject it, their identical final states being cut edges",
           "required": false,
           "positional": false,
           "index": null,
@@ -11005,7 +11005,7 @@
           "value_names": [
             "SYMMETRIZE_LEFT_RIGHT_STATES"
           ],
-          "help": "Identify cross-section graphs under CP-based left/right exchange; requires CP symmetry",
+          "help": "Identify cross-section graphs under CP-based left/right exchange; requires CP symmetry. From two loops on the physical cuts can depend on which side is searched, so the total can differ from the unsymmetrized one",
           "required": false,
           "positional": false,
           "index": null,

@@ -27,6 +27,19 @@ route differently from earlier exports, while saved states and DOT files keep th
 `lmb_id` and explicit loop-momentum-basis overrides still take precedence. Diagram ids, names,
 numerators and symmetry factors are unchanged.
 
+Cross sections with identical beams, such as $g g$, $gamma gamma$ or $e^- e^-$, no longer come
+out divided by the beam permutations. The CLI and Python defaults symmetrized cross-section final
+states, which kept one forward graph per beam exchange without counting the graphs it stood
+for. `symmetrize_final` now applies to amplitudes only: cross-section generation rejects it.
+GammaLoop state version 9 refuses every state saved before this change, so regenerate them.
+`symmetrize_initial` keeps one forward graph per exchange of two identical beams and multiplies
+its overall factor by the number of graphs it stands for, so without left/right symmetrization
+the factors add up to the unsymmetrized total; `symmetry_factor` is the automorphism count of
+the kept graph. Python's `generate_cross_section` no longer takes `symmetrize_final` and, like
+the CLI, applies no bridge filter by default. Left/right symmetrization merges a forward graph
+with an identical mirror representative into one diagram whose factor counts both, so every
+diagram id appears once.
+
 The current toolkit provides canonical model and graph ownership, deterministic generation,
 shared CFF arenas, native rank-20 vacuum tensor projection, and notebook diagram rendering.
 Use the #link("reference/interfaces/")[component references] to inspect the exact shipped surface.

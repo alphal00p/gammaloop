@@ -1,5 +1,7 @@
 //! The generated diagram before finalization.
 
+use std::hash::{Hash, Hasher};
+
 use feynkit_graph::ExternalState;
 use feynkit_model::{ParticleId, VertexRuleId};
 use linnet::half_edge::{
@@ -69,6 +71,14 @@ impl PartialEq for GeneratedGraph {
 }
 
 impl Eq for GeneratedGraph {}
+
+impl Hash for GeneratedGraph {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.n_vertices().hash(state);
+        self.vertices().for_each(|rule| rule.hash(state));
+        self.edges().for_each(|edge| edge.hash(state));
+    }
+}
 
 impl GeneratedGraph {
     /// Build a graph from its vertex rules and its edges, in identifier order.

@@ -548,7 +548,6 @@ fn generate_epemttbar(model: &Model) -> Result<Vec<(Target, FeynmanDiagram)>, Dy
     let process = Process::new(["e+", "e-"], ["t", "t~", "H", "g", "g"]);
     let options = GenerationOptions::default()
         .with_loop_count(4, 4)?
-        .symmetrize_final(true)
         .symmetrize_left_right(true)
         .threads(1)
         .max_vertices(10)

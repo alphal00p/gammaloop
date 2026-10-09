@@ -16,7 +16,10 @@ use symbolica::{
     parser::ParseSettings,
 };
 
-use crate::{GenerationView, ParticleSelector, SelectorError, VertexSelector};
+use crate::{
+    GenerationError, GenerationType, GenerationView, ParticleSelector, SelectorError,
+    VertexSelector,
+};
 
 #[derive(
     Debug,
@@ -559,16 +562,56 @@ impl GenerationOptions {
         Ok(self)
     }
 
+    /// Identify diagrams related by permutations of identical incoming particles.
+    ///
+    /// For an amplitude the identical incoming legs are unlabelled: each diagram carries the
+    /// inverse automorphism count of the unlabelled graph, and the caller sums over the leg
+    /// permutations.
+    ///
+    /// For a cross section this exchanges the two identical beams of a `2 -> X` process, each
+    /// sewn copy moving with its incoming leg. One forward graph of every exchange orbit is
+    /// kept, and its overall factor carries the orbit size as
+    /// `NumeratorIndependentSymmetryGrouping`, so the factors add up to the exact total.
+    /// With [`Self::symmetrize_left_right`] they need not: the total inherits the left/right
+    /// deviations and can also differ from the left/right total, because the orbit is counted
+    /// before the mirror frame decides which of its members have physical cuts.
+    /// Evaluating the representative alone is exact after integration only if the exchange
+    /// is a symmetry of everything else: observables and selectors invariant under the beam
+    /// exchange (signed rapidities are not), beam helicities summed or equal (opposite fixed
+    /// helicities only in a parity-invariant model with parity-even observables and
+    /// selectors), and a polarization gauge that moves with the beams. Graphs that the
+    /// exchange maps to themselves are exact unconditionally. Identical beams among more
+    /// than two incoming particles are an error, since no Lorentz transformation permutes
+    /// them.
+    ///
+    /// Fewer graphs need not make a target precision cheaper: the kept graph puts its orbit's
+    /// weight on one side of the exchange, so the integrand is less symmetric and the
+    /// integration error can grow. For `Z Z -> e+ e-` it was 19 times larger at
+    /// equal sample counts (3.3% against 0.17%).
     pub fn symmetrize_initial(mut self, enabled: bool) -> Self {
         self.symmetrize_initial = enabled;
         self
     }
 
+    /// Identify amplitude diagrams related by permutations of identical outgoing particles,
+    /// which become unlabelled legs as for [`Self::symmetrize_initial`].
+    ///
+    /// Cross sections reject this option: their final states are cut edges, whose
+    /// identical-particle factor the graph automorphisms already contain.
     pub fn symmetrize_final(mut self, enabled: bool) -> Self {
         self.symmetrize_final = enabled;
         self
     }
 
+    /// Identify every cross-section forward graph with its mirror image, which exchanges the
+    /// two amplitude sides of its cuts; this assumes CP symmetry. A graph and a distinct mirror
+    /// image become one diagram whose overall factor counts both through
+    /// `NumeratorIndependentSymmetryGrouping`. Amplitudes ignore this option.
+    ///
+    /// The cut search and the cut filters run in the canonical one of the two frames. From two
+    /// loops on their verdict can depend on the frame (a snail on an external leg can leave
+    /// one frame without a physical cut), and the unsymmetrized graphs need not come in mirror
+    /// pairs, so the total can differ from the unsymmetrized one.
     pub fn symmetrize_left_right(mut self, enabled: bool) -> Self {
         self.symmetrize_left_right = enabled;
         self
@@ -607,6 +650,18 @@ impl GenerationOptions {
 
     pub fn symmetrizes_external_fermions(&self) -> bool {
         self.symmetrize_external_fermions
+    }
+
+    /// Reject the options that a `generation_type` run does not accept: final-state
+    /// symmetrization of a cross section.
+    ///
+    /// Generation checks this, and loaders of saved definitions should too: their diagrams
+    /// were generated under these options.
+    pub fn validate_for(&self, generation_type: GenerationType) -> Result<(), GenerationError> {
+        if generation_type == GenerationType::CrossSection && self.symmetrize_final {
+            return Err(GenerationError::CrossSectionFinalStateSymmetrization);
+        }
+        Ok(())
     }
 
     fn from_persistent(persistent: GenerationOptionsPersistent) -> Result<Self, String> {
@@ -922,6 +977,10 @@ impl GenerationOptions {
     /// callback must be hereditary within each stage, as for
     /// [`linnet::half_edge::generate::GraphGenerator::filter`]. Graphs reaching the callback
     /// already satisfy the process filters decided at their stage.
+    ///
+    /// Cross-section legs keep their index. With [`Self::symmetrize_initial`] one forward graph
+    /// of every beam-exchange orbit is kept after the search and counts the others, so a
+    /// verdict must not depend on which beam carries which index.
     pub fn filter(
         mut self,
         callback: impl Fn(&GenerationView<'_>) -> bool + Send + Sync + 'static,

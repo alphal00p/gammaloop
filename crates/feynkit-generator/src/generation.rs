@@ -103,6 +103,14 @@ pub enum GenerationError {
         minimum: usize,
         maximum: usize,
     },
+    #[error(
+        "symmetrize_final does not apply to cross sections: identical final-state particles are cut edges, already counted by the graph automorphisms; remove the option"
+    )]
+    CrossSectionFinalStateSymmetrization,
+    #[error(
+        "symmetrize_initial exchanges the two identical beams of a 2 -> X cross section, but this process has {incoming} incoming particles with a repeated species, which no Lorentz transformation permutes"
+    )]
+    UnsupportedBeamSymmetrization { incoming: usize },
     #[error("generation thread count must be greater than zero, received {0}")]
     InvalidThreadCount(usize),
     #[error("numerator grouping requires at least one numerical sample")]
@@ -1474,17 +1482,17 @@ impl Generator {
                     if options.cancellation_requested() {
                         return Ok(None);
                     }
-                    // Diagrams related by permuting sewn pairs are kept once.
-                    let input = match externals.sewn_pair_stabilizer(diagram) {
+                    // Diagrams related by permuting sewn pairs are kept once, weighted by
+                    // their number.
+                    let input = match externals.sewn_pair_orbit(diagram) {
                         None => None,
-                        Some(stabilizer) => {
+                        Some(multiplicity) => {
                             let graph = externals.graph(diagram, &signatures);
                             let symmetry = diagram
                                 .automorphism_count
-                                .and_then(|count| count.checked_mul(stabilizer))
                                 .and_then(|count| u64::try_from(count).ok())
                                 .ok_or(GenerationError::SymmetryFactor)?;
-                            self.diagram_input(&resolved, graph, symmetry, options)?
+                            self.diagram_input(&resolved, graph, symmetry, multiplicity, options)?
                         }
                     };
                     let mut count = prepared_count.lock().unwrap();
@@ -1502,7 +1510,10 @@ impl Generator {
         let diagram_inputs = prepare()?;
         #[cfg(not(target_arch = "wasm32"))]
         let diagram_inputs = pool.install(prepare)?;
-        let diagram_inputs = diagram_inputs.into_iter().flatten().collect::<Vec<_>>();
+        let mut diagram_inputs = diagram_inputs.into_iter().flatten().collect::<Vec<_>>();
+        if resolved.identifies_mirror_images() {
+            diagram_inputs = DiagramInput::merge_identical(diagram_inputs);
+        }
         if options.cancellation_requested() {
             completed = false;
         }
@@ -1777,6 +1788,7 @@ impl Generator {
         resolved: &ResolvedProcess,
         graph: GeneratedGraph,
         symmetry: u64,
+        multiplicity: u64,
         options: &GenerationOptions,
     ) -> Result<Option<DiagramInput>, GenerationError> {
         let mut topology = ColoredTopology {
@@ -1840,6 +1852,7 @@ impl Generator {
                 ..normalized.signs
             },
             reversed_edges,
+            multiplicity,
         }))
     }
 
@@ -1856,6 +1869,7 @@ impl Generator {
             representative,
             signs,
             reversed_edges,
+            multiplicity,
         } = input;
         let identical = comparison == representative;
         let internal_reversals = comparison
@@ -1865,12 +1879,25 @@ impl Generator {
             .filter(|(_, edge)| !edge.is_external())
             .map(|(edge, _)| reversed_edges.contains(&EdgeId(edge)))
             .collect::<Vec<_>>();
-        let comparison =
-            self.to_diagram(name.clone(), generation_type, comparison, signs, options)?;
+        let comparison = self.to_diagram(
+            name.clone(),
+            generation_type,
+            comparison,
+            signs,
+            multiplicity,
+            options,
+        )?;
         let representative = if identical {
             comparison.clone()
         } else {
-            self.to_diagram(name, generation_type, representative, signs, options)?
+            self.to_diagram(
+                name,
+                generation_type,
+                representative,
+                signs,
+                multiplicity,
+                options,
+            )?
         };
         // Finalization orders external carriers before the internal edges, which keep the
         // canonical order. Transport the comparison-to-representative reversals into that
@@ -1896,6 +1923,7 @@ impl Generator {
         if options.threads == Some(0) {
             return Err(GenerationError::InvalidThreadCount(0));
         }
+        options.validate_for(generation_type)?;
         if matches!(
             &options.numerator_grouping,
             NumeratorGrouping::Identical(options)
@@ -2191,6 +2219,7 @@ impl Generator {
         generation_type: GenerationType,
         topology: ColoredTopology,
         fermion_signs: FermionSigns,
+        multiplicity: u64,
         options: &GenerationOptions,
     ) -> Result<FeynmanDiagram, GenerationError> {
         // The automorphism count of the rule-coloured graph is a denominator
@@ -2200,6 +2229,12 @@ impl Generator {
                 .call(topology.symmetry)
                 .pow(-1),
         ];
+        if multiplicity > 1 {
+            factors.push(
+                symbol!("feynkit_generator_factor::NumeratorIndependentSymmetryGrouping")
+                    .call(multiplicity),
+            );
+        }
         if fermion_signs.internal_loop_negative {
             factors.push(symbol!("feynkit_generator_factor::InternalFermionLoopSign").call(-1));
         }
@@ -2599,7 +2634,7 @@ fn vertex_rule_signature(
     Ok(signature)
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 struct ColoredTopology {
     graph: GeneratedGraph,
     symmetry: u64,
@@ -2615,6 +2650,41 @@ struct DiagramInput {
     representative: ColoredTopology,
     signs: FermionSigns,
     reversed_edges: BTreeSet<EdgeId>,
+    /// The number of exactly labelled generated diagrams the representative stands for.
+    multiplicity: u64,
+}
+
+impl DiagramInput {
+    /// Merge the inputs with equal representatives and fermion signs into the first of them,
+    /// adding up their multiplicities.
+    ///
+    /// Left/right symmetrization canonicalizes a sewn graph and its mirror image to the same
+    /// representative. Kept apart, they would be two diagrams with one [`DiagramId`].
+    fn merge_identical(inputs: Vec<Self>) -> Vec<Self> {
+        let mut firsts = HashMap::with_capacity(inputs.len());
+        let first = inputs
+            .iter()
+            .enumerate()
+            .map(|(index, input)| {
+                *firsts
+                    .entry((&input.representative, input.signs))
+                    .or_insert(index)
+            })
+            .collect::<Vec<_>>();
+        let mut multiplicity = vec![0; inputs.len()];
+        for (input, &first) in inputs.iter().zip(&first) {
+            multiplicity[first] += input.multiplicity;
+        }
+        inputs
+            .into_iter()
+            .enumerate()
+            .filter(|&(index, _)| first[index] == index)
+            .map(|(index, input)| Self {
+                multiplicity: multiplicity[index],
+                ..input
+            })
+            .collect()
+    }
 }
 
 struct DiagramPair {
@@ -2709,7 +2779,7 @@ fn transport_threshold_candidate_metadata(
         .collect()
 }
 
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]
 struct FermionSigns {
     internal_loop_negative: bool,
     include_external_ordering: bool,
@@ -2922,12 +2992,14 @@ impl ResolvedProcess {
     /// The external legs of the generated graphs: incoming legs first, then the outgoing legs
     /// (the incoming states again for a cross section).
     ///
-    /// The outgoing legs of a cross section are the sewn copies of the incoming states, so they
-    /// have no symmetry of their own: a permutation of identical initial states must move each
-    /// sewn copy with its incoming leg. Such a diagonal permutation is not a symmetry of
-    /// independent leg labels, so every cross-section leg is labelled exactly and the
-    /// interchangeable sewn pairs are identified after generation; see
-    /// [`ProcessExternals::sewn_pair_stabilizer`].
+    /// The outgoing legs of a cross section are the sewn copies of the incoming states, the
+    /// initial state of the conjugate amplitude, so only `symmetrize_initial` applies to them:
+    /// exchanging two identical beams must move each sewn copy with its incoming leg. Such a
+    /// diagonal permutation is not a symmetry of independent leg labels, so every cross-section
+    /// leg is labelled exactly and the interchangeable sewn pairs are identified after
+    /// generation; see [`ProcessExternals::sewn_pair_orbit`]. The exchange is a rotation of the
+    /// beams only in a `2 -> X` process, so identical beams among more incoming particles are
+    /// an error.
     fn externals(&self, model: &Model) -> Result<ProcessExternals, GenerationError> {
         let incoming = self
             .incoming
@@ -2945,9 +3017,7 @@ impl ResolvedProcess {
             .map(|(index, (particle, state))| self.external(model, particle, index, state))
             .collect::<Result<Vec<_>, _>>()?;
         let mut sewn_pairs = BTreeMap::<&str, Vec<_>>::new();
-        if self.generation_type == GenerationType::CrossSection
-            && (self.symmetrize_initial || self.symmetrize_final)
-        {
+        if self.generation_type == GenerationType::CrossSection && self.symmetrize_initial {
             for (index, particle) in self.incoming.iter().enumerate() {
                 sewn_pairs.entry(&particle.name).or_default().push([
                     ExternalLabel::Exact {
@@ -2961,10 +3031,16 @@ impl ResolvedProcess {
                 ]);
             }
         }
-        Ok(ProcessExternals::new(
-            externals,
-            sewn_pairs.into_values().filter(|pairs| pairs.len() > 1),
-        ))
+        let sewn_pairs = sewn_pairs
+            .into_values()
+            .filter(|pairs| pairs.len() > 1)
+            .collect::<Vec<_>>();
+        if !sewn_pairs.is_empty() && self.incoming.len() != 2 {
+            return Err(GenerationError::UnsupportedBeamSymmetrization {
+                incoming: self.incoming.len(),
+            });
+        }
+        Ok(ProcessExternals::new(externals, sewn_pairs))
     }
 
     fn external(
@@ -3004,6 +3080,12 @@ impl ResolvedProcess {
         ))
     }
 
+    /// Whether a sewn graph and its mirror image, which exchanges the amplitude sides, are
+    /// identified.
+    fn identifies_mirror_images(&self) -> bool {
+        self.generation_type == GenerationType::CrossSection && self.symmetrize_left_right
+    }
+
     /// Choose the reduced-skeleton representative before any numerator
     /// indices are instantiated.
     ///
@@ -3026,8 +3108,7 @@ impl ResolvedProcess {
             | NumeratorGrouping::UpToScalar(options) => Some(options),
             NumeratorGrouping::None => None,
         };
-        let include_left_right =
-            self.generation_type == GenerationType::CrossSection && self.symmetrize_left_right;
+        let include_left_right = self.identifies_mirror_images();
         let exact_internal_particles =
             grouping_options.is_some_and(|options| !options.differentiate_particle_masses_only);
 
@@ -3688,6 +3769,12 @@ impl ResolvedProcess {
                 left: summarize_side(&left)?,
                 right: summarize_side(&right)?,
             });
+        }
+        // The cuts arrive in no fixed order, which finalization fixes for every diagram. Merging
+        // mirror images compares inventories before that, so equal graphs need equal ones.
+        if self.identifies_mirror_images() {
+            inventory.physical.sort();
+            inventory.topology_threshold_candidates.sort();
         }
         Ok(inventory)
     }
@@ -4631,8 +4718,7 @@ mod tests {
                     .with_loop_count(loops, loops)
                     .unwrap()
                     .threads(1)
-                    .symmetrize_initial(symmetrize)
-                    .symmetrize_final(symmetrize);
+                    .symmetrize_initial(symmetrize);
                 let result = process
                     .generate_cross_section(model.clone(), &options)
                     .unwrap();
@@ -5397,8 +5483,8 @@ mod tests {
         assert!(!normalized.signs.antifermion_spin_sum_negative);
     }
 
-    #[test]
-    fn cp_symmetrization_groups_mirrored_real_scalar_forward_graphs() {
+    /// The `scalars_2p_3p` fixture with the quartic vertex `name` of `particles`.
+    fn scalars_with_quartic_vertex(name: &str, particles: [&str; 4]) -> Model {
         let model = Model::from_json(include_str!(
             "../../feynkit-model/tests/fixtures/scalars_2p_3p.json"
         ))
@@ -5414,11 +5500,16 @@ mod tests {
             .as_array_mut()
             .unwrap()
             .push(serde_json::json!({
-                "name":"V_4_SCALAR_0000", "particles":["scalar_0","scalar_0","scalar_0","scalar_0"],
+                "name":name, "particles":particles,
                 "color_structures":["1"], "lorentz_structures":["SCALAR_4_LORENTZ_STRUCTURE"],
                 "couplings":[["SCALAR_COUPLING"]]
             }));
-        let model: Model = serde_json::from_value(definition).unwrap();
+        serde_json::from_value(definition).unwrap()
+    }
+
+    #[test]
+    fn cp_symmetrization_groups_mirrored_real_scalar_forward_graphs() {
+        let model = scalars_with_quartic_vertex("V_4_SCALAR_0000", ["scalar_0"; 4]);
         let mut graphs = Vec::new();
         for mirrored in [false, true] {
             let mut graph = Graph::new();
@@ -5779,6 +5870,7 @@ mod tests {
                     internal_loop_negative: true,
                     ..FermionSigns::default()
                 },
+                1,
                 &GenerationOptions::default(),
             )
             .unwrap();
@@ -6559,6 +6651,7 @@ mod tests {
                     internal_loop_negative: loop_count % 2 == 1,
                     ..FermionSigns::default()
                 },
+                1,
                 &GenerationOptions::default(),
             )
             .unwrap();
@@ -6869,6 +6962,7 @@ mod tests {
                     include_antifermion_spin_sum: true,
                     antifermion_spin_sum_negative: false,
                 },
+                1,
                 &GenerationOptions::default(),
             )
             .unwrap();
@@ -7238,12 +7332,10 @@ mod tests {
         ));
     }
 
-    /// The symmetrized cross sections of `g g -> u u~` at one loop and the boxes among them as
-    /// `(sewn copies on adjacent vertices, symmetry factor)`.
-    fn gluon_fusion_boxes(
-        symmetrize_initial: bool,
-        symmetrize_final: bool,
-    ) -> (Vec<DiagramId>, f64, Vec<(bool, u64)>) {
+    /// The cross sections of `g g -> u u~` at one loop: their IDs, the sum of their evaluated
+    /// overall factors, and the boxes among them as
+    /// `(sewn copies on adjacent vertices, evaluated overall factor)`.
+    fn gluon_fusion_boxes(symmetrize_initial: bool) -> (Vec<DiagramId>, Atom, Vec<(bool, Atom)>) {
         let process = Process::new(["g", "g"], ["u", "u~"])
             .with_particle_filters(
                 Some(["d", "c", "s", "t"].into_iter().map(Into::into).collect()),
@@ -7256,8 +7348,7 @@ mod tests {
             .with_loop_count(1, 1)
             .unwrap()
             .threads(1)
-            .symmetrize_initial(symmetrize_initial)
-            .symmetrize_final(symmetrize_final);
+            .symmetrize_initial(symmetrize_initial);
         let result = Generator::new(Model::qcd())
             .generate(&process, &options, GenerationType::CrossSection)
             .unwrap();
@@ -7281,34 +7372,234 @@ mod tests {
                     .map(|ends| internal.contains(ends))
                     .collect::<Vec<_>>();
                 assert_eq!(adjacent[0], adjacent[1]);
-                boxes.push((adjacent[0], diagram.symmetry_factor()));
+                boxes.push((adjacent[0], evaluated_overall_factor(diagram)));
             }
         }
         boxes.sort();
-        let total = result
-            .diagrams
-            .iter()
-            .map(|diagram| 1.0 / diagram.symmetry_factor() as f64)
-            .sum();
         (
             result.diagrams.iter().map(FeynmanDiagram::id).collect(),
-            total,
+            Atom::add_many(result.diagrams.iter().map(evaluated_overall_factor)),
             boxes,
         )
     }
 
+    fn evaluated_overall_factor(diagram: &FeynmanDiagram) -> Atom {
+        feynkit_graph::expressions::evaluate_overall_factor(diagram.overall_factor().as_view())
+    }
+
     #[test]
     fn symmetrized_cross_sections_permute_sewn_pairs_together() {
-        let (_, exact_total, exact_boxes) = gluon_fusion_boxes(false, false);
+        let (exact_ids, exact_total, exact_boxes) = gluon_fusion_boxes(false);
+        assert_eq!(exact_ids.len(), 9);
+        assert_eq!(exact_total, Atom::num(-9));
         // the crossed and the planar sewing, each with both orientations of the quark loop
-        assert_eq!(exact_boxes, [(false, 1), (false, 1), (true, 1), (true, 1)]);
-        let symmetrized = gluon_fusion_boxes(true, true);
-        // exchanging both sewn pairs reverses the quark loop: one box of each sewing remains
-        assert_eq!(symmetrized.2, [(false, 1), (true, 1)]);
-        assert_eq!(symmetrized.1, exact_total / 2.0);
-        // the sewn copies follow their incoming legs, so either flag requests the same symmetry
-        assert_eq!(gluon_fusion_boxes(true, false), symmetrized);
-        assert_eq!(gluon_fusion_boxes(false, true), symmetrized);
+        let box_factor = |adjacent, factor| (adjacent, Atom::num(factor));
+        assert_eq!(
+            exact_boxes,
+            [
+                box_factor(false, -1),
+                box_factor(false, -1),
+                box_factor(true, -1),
+                box_factor(true, -1)
+            ]
+        );
+        let (ids, total, boxes) = gluon_fusion_boxes(true);
+        // exchanging both sewn pairs reverses the quark loop: one box of each sewing remains,
+        // standing for both orientations
+        assert_eq!(boxes, [box_factor(false, -2), box_factor(true, -2)]);
+        assert_eq!(ids.len(), 5);
+        assert_eq!(total, exact_total);
+    }
+
+    /// The sorted evaluated overall factors of a one-loop cross section, the tree-level cuts of
+    /// a `2 -> 2` process.
+    fn born_cross_section_factors(
+        model: &Model,
+        process: &Process,
+        symmetrize_initial: bool,
+    ) -> Result<Vec<Atom>, GenerationError> {
+        let options = GenerationOptions::default()
+            .with_loop_count(1, 1)
+            .unwrap()
+            .threads(1)
+            .symmetrize_initial(symmetrize_initial);
+        let mut factors = Generator::new(model.clone())
+            .generate(process, &options, GenerationType::CrossSection)?
+            .diagrams
+            .iter()
+            .map(evaluated_overall_factor)
+            .collect::<Vec<_>>();
+        factors.sort();
+        Ok(factors)
+    }
+
+    #[test]
+    fn beam_exchange_weights_each_kept_graph_by_its_orbit() {
+        let model = scalars_with_quartic_vertex(
+            "V_4_SCALAR_1122",
+            ["scalar_1", "scalar_1", "scalar_2", "scalar_2"],
+        );
+        let process = |incoming: [&str; 2], outgoing: [&str; 2], vertices: &[&str]| {
+            Process::new(incoming, outgoing)
+                .with_particle_filters(
+                    None,
+                    None,
+                    Some(vertices.iter().map(|&vertex| vertex.into()).collect()),
+                    vec![],
+                )
+                .unwrap()
+        };
+        let factors = |values: &[(i64, i64)]| {
+            values
+                .iter()
+                .map(|&value| Atom::num(value))
+                .collect::<Vec<_>>()
+        };
+        for (process, exact, symmetrized) in [
+            // The contact graph is its own beam exchange.
+            (
+                process(
+                    ["scalar_1", "scalar_1"],
+                    ["scalar_2", "scalar_2"],
+                    &["V_4_SCALAR_1122"],
+                ),
+                factors(&[(1, 2)]),
+                factors(&[(1, 2)]),
+            ),
+            // So are the squared t-channel and the t/u interference graph.
+            (
+                process(
+                    ["scalar_1", "scalar_1"],
+                    ["scalar_2", "scalar_2"],
+                    &["V_3_SCALAR_112"],
+                ),
+                factors(&[(1, 1), (1, 1)]),
+                factors(&[(1, 1), (1, 1)]),
+            ),
+            // Distinct final states: the exchange maps |M_t|^2 to |M_u|^2 and M_t M_u* to
+            // M_u M_t*, so one graph of each pair remains with weight two.
+            (
+                process(
+                    ["scalar_1", "scalar_1"],
+                    ["scalar_0", "scalar_2"],
+                    &["V_3_SCALAR_011", "V_3_SCALAR_112"],
+                ),
+                factors(&[(1, 1); 4]),
+                factors(&[(2, 1); 2]),
+            ),
+            // Distinct beams have no exchange.
+            (
+                process(
+                    ["scalar_1", "scalar_2"],
+                    ["scalar_1", "scalar_2"],
+                    &["V_4_SCALAR_1122"],
+                ),
+                factors(&[(1, 1)]),
+                factors(&[(1, 1)]),
+            ),
+        ] {
+            assert_eq!(
+                born_cross_section_factors(&model, &process, false).unwrap(),
+                exact
+            );
+            assert_eq!(
+                born_cross_section_factors(&model, &process, true).unwrap(),
+                symmetrized
+            );
+        }
+    }
+
+    #[test]
+    fn beam_exchange_keeps_fermion_signs_and_exact_totals() {
+        let factors = |values: &[i64]| {
+            values
+                .iter()
+                .map(|&value| Atom::num(value))
+                .collect::<Vec<_>>()
+        };
+        // Møller scattering through photon exchange: the squared and the interference graph,
+        // each its own beam exchange, with the relative Fermi sign.
+        let moller = Process::new(["e-", "e-"], ["e-", "e-"]);
+        for symmetrize_initial in [false, true] {
+            assert_eq!(
+                born_cross_section_factors(&Model::qed(), &moller, symmetrize_initial).unwrap(),
+                factors(&[-1, 1])
+            );
+        }
+        // a a -> t t~: |M_t|^2 and |M_u|^2 form one exchange orbit, M_t M_u* and M_u M_t* the
+        // other.
+        let photon_fusion = Process::new(["a", "a"], ["t", "t~"])
+            .with_particle_filters(None, Some(vec!["a".into(), "t".into()]), None, vec![])
+            .unwrap();
+        let model = Model::standard_model();
+        assert_eq!(
+            born_cross_section_factors(&model, &photon_fusion, false).unwrap(),
+            factors(&[-1, -1, -1, -1])
+        );
+        assert_eq!(
+            born_cross_section_factors(&model, &photon_fusion, true).unwrap(),
+            factors(&[-2, -2])
+        );
+    }
+
+    #[test]
+    fn cross_sections_reject_final_state_and_multi_beam_symmetrization() {
+        let model = Model::qed();
+        let options = GenerationOptions::default()
+            .with_loop_count(1, 1)
+            .unwrap()
+            .threads(1);
+        let generate = |process: Process, options: &GenerationOptions| {
+            Generator::new(model.clone()).generate(&process, options, GenerationType::CrossSection)
+        };
+        assert!(matches!(
+            generate(
+                Process::new(["e-", "e+"], ["mu-", "mu+"]),
+                &options.clone().symmetrize_final(true)
+            ),
+            Err(GenerationError::CrossSectionFinalStateSymmetrization)
+        ));
+        // Three identical beams, or two among three incoming particles, have no exchange that
+        // a Lorentz transformation realizes.
+        for incoming in [["a", "a", "a"], ["a", "a", "e-"]] {
+            assert!(matches!(
+                generate(
+                    Process::new(incoming, ["e-", "e+"]),
+                    &options.clone().symmetrize_initial(true)
+                ),
+                Err(GenerationError::UnsupportedBeamSymmetrization { incoming: 3 })
+            ));
+        }
+    }
+
+    #[test]
+    fn left_right_mirror_images_merge_into_one_diagram() {
+        let process = Process::new(["e-", "e+"], ["mu-", "mu+"]);
+        let generate = |left_right| {
+            Generator::new(Model::qed())
+                .generate(
+                    &process,
+                    &GenerationOptions::default()
+                        .with_loop_count(2, 2)
+                        .unwrap()
+                        .threads(1)
+                        .symmetrize_left_right(left_right),
+                    GenerationType::CrossSection,
+                )
+                .unwrap()
+                .diagrams
+        };
+        let (exact, symmetrized) = (generate(false), generate(true));
+        let ids = symmetrized
+            .iter()
+            .map(FeynmanDiagram::id)
+            .collect::<BTreeSet<_>>();
+        assert_eq!(ids.len(), symmetrized.len());
+        assert!(symmetrized.len() < exact.len());
+        assert_eq!(
+            Atom::add_many(symmetrized.iter().map(evaluated_overall_factor)),
+            Atom::add_many(exact.iter().map(evaluated_overall_factor))
+        );
     }
 
     #[test]
@@ -7393,9 +7684,7 @@ mod tests {
             classes(
                 cross_section,
                 GenerationType::CrossSection,
-                GenerationOptions::default()
-                    .symmetrize_initial(true)
-                    .symmetrize_final(true)
+                GenerationOptions::default().symmetrize_initial(true)
             ),
             vec![
                 ExternalLabel::Exact {
@@ -7501,6 +7790,7 @@ mod tests {
                     internal_loop_negative: true,
                     ..FermionSigns::default()
                 },
+                1,
                 &GenerationOptions::default(),
             )
             .unwrap();

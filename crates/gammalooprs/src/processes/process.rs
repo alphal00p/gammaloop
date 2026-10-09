@@ -248,6 +248,26 @@ impl Default for ProcessDefinition {
 }
 
 impl ProcessDefinition {
+    /// Decode the definition saved in the process folder `path`, refusing options that its
+    /// generation type no longer accepts, since the saved graphs were generated under them.
+    fn load(path: &Path, context: GammaLoopContextContainer) -> Result<Self> {
+        let binary = fs::read(path.join("def.bin"))
+            .with_context(|| format!("Error reading def.bin in {}", path.display()))?;
+        let (definition, _): (Self, _) =
+            bincode::decode_from_slice_with_context(&binary, bincode::config::standard(), context)
+                .context("Error decoding process definition")?;
+        definition
+            .generation_options
+            .validate_for(definition.generation_type)
+            .with_context(|| {
+                format!(
+                    "The process saved in {} was generated with options that are no longer accepted; regenerate it",
+                    path.display()
+                )
+            })?;
+        Ok(definition)
+    }
+
     pub(crate) fn covariant_cut_states(&self, model: &Model) -> Result<Vec<Vec<i64>>> {
         self.process.validate_covariant_cut_filters(
             model,
@@ -473,15 +493,7 @@ impl Process {
         path: impl AsRef<Path>,
         context: GammaLoopContextContainer,
     ) -> Result<Self> {
-        let binary = fs::read(path.as_ref().join("def.bin")).context(format!(
-            "Error reading def.bin in {}",
-            path.as_ref().display()
-        ))?;
-
-        let (definition, _) =
-            bincode::decode_from_slice_with_context(&binary, bincode::config::standard(), context)
-                .context("Error decoding process definition")?;
-
+        let definition = ProcessDefinition::load(path.as_ref(), context)?;
         let mut collection = ProcessCollection::new_amplitude();
         for path in saved_child_dirs(path.as_ref(), "amp.bin", "amplitude")? {
             debug!("loading amplitude at {}", path.display());
@@ -501,10 +513,7 @@ impl Process {
         path: impl AsRef<Path>,
         context: GammaLoopContextContainer,
     ) -> Result<Self> {
-        let binary = fs::read(path.as_ref().join("def.bin"))?;
-        let (definition, _) =
-            bincode::decode_from_slice_with_context(&binary, bincode::config::standard(), context)?;
-
+        let definition = ProcessDefinition::load(path.as_ref(), context)?;
         let mut collection = ProcessCollection::new_cross_section();
         for path in saved_child_dirs(path.as_ref(), "cs.bin", "cross section")? {
             debug!("loading cross section at {}", path.display());
@@ -1293,6 +1302,48 @@ mod tests {
         let dirs = super::saved_child_dirs(&temp, "cs.bin", "cross section").unwrap();
 
         assert_eq!(dirs, vec![saved_dir]);
+        fs::remove_dir_all(temp).unwrap();
+    }
+
+    /// Cross sections saved with final-state symmetrization divided identical-beam graphs by the
+    /// beam permutations, and generation now rejects the option: loading them must fail too.
+    #[test]
+    fn saved_cross_sections_with_final_state_symmetrization_are_rejected() {
+        use super::{Process, ProcessDefinition};
+        use feynkit_generator::GenerationOptions;
+
+        crate::initialisation::test_initialise().unwrap();
+        let model = load_generic_model("sm");
+        let mut symbols = Vec::new();
+        symbolica::state::State::export(&mut symbols).unwrap();
+        let state_map =
+            symbolica::state::State::import(&mut std::io::Cursor::new(symbols), None).unwrap();
+        let context = GammaLoopContextContainer {
+            model: &model,
+            state_map: &state_map,
+        };
+        let temp = fresh_temp_dir("final-state-symmetrized-definition");
+        let save = |generation_type| {
+            let definition = ProcessDefinition {
+                generation_type,
+                generation_options: GenerationOptions::default().symmetrize_final(true),
+                ..ProcessDefinition::default()
+            };
+            let binary = bincode::encode_to_vec(&definition, bincode::config::standard()).unwrap();
+            fs::write(temp.join("def.bin"), binary).unwrap();
+        };
+        save(GenerationType::Amplitude);
+        assert!(Process::load_amplitude(&temp, context).is_ok());
+        save(GenerationType::CrossSection);
+        let Err(error) = Process::load_cross_section(&temp, context) else {
+            panic!("a final-state symmetrized cross section loaded");
+        };
+        let error = format!("{error:?}");
+        assert!(error.contains("regenerate it"), "{error}");
+        assert!(
+            error.contains("symmetrize_final does not apply to cross sections"),
+            "{error}"
+        );
         fs::remove_dir_all(temp).unwrap();
     }
 

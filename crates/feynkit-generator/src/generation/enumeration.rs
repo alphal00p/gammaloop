@@ -240,17 +240,17 @@ impl ProcessExternals {
         }
     }
 
-    /// The number of sewn-pair permutations that fix the isomorphism class of `diagram`, or
-    /// `None` when one maps it to a smaller certificate.
+    /// The number of distinct diagrams that permuting interchangeable sewn pairs makes of
+    /// `diagram`, or `None` when one of them has a smaller certificate.
     ///
-    /// The generator labels sewn pairs exactly, so a class of diagrams related by permuting
-    /// interchangeable pairs is generated once per member. The member with the smallest
-    /// certificate represents the class, and its automorphism count is multiplied by the
-    /// returned stabilizer order to give the automorphisms of the sewn graph.
-    pub(crate) fn sewn_pair_stabilizer(
+    /// The generator labels sewn pairs exactly, so such an orbit of diagrams is generated once
+    /// per member. The member with the smallest certificate represents the orbit, and the orbit
+    /// size, the order of the permutation group over the order of the stabilizer of the
+    /// diagram's isomorphism class, is the multiplicity the representative stands for.
+    pub(crate) fn sewn_pair_orbit(
         &self,
         diagram: &Diagram<ParticleId, ExternalLabel>,
-    ) -> Option<u128> {
+    ) -> Option<u64> {
         let mut stabilizer = 1;
         for permutation in &self.sewn_pair_permutations {
             let image = diagram
@@ -267,7 +267,8 @@ impl ProcessExternals {
                 Ordering::Greater => {}
             }
         }
-        Some(stabilizer)
+        // The identity is the one permutation that `sewn_pair_permutations` leaves out.
+        Some((self.sewn_pair_permutations.len() as u64 + 1) / stabilizer)
     }
 
     pub(crate) fn legs(&self) -> impl Iterator<Item = (ExternalLabel, ParticleStub)> + '_ {
