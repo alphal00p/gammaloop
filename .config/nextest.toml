@@ -140,7 +140,8 @@ path = "junit.xml"
 
 [profile.ci_gammaloop]
 inherits = "ci"
-default-filter = "not test(/(^|::)(slow|failing)::/) and not (binary(/pysecdec/) or test(=test_integrate_1l_decorated_indices_pysecdec))"
+# The fixed-statistics self-energy acceptance runs in the main-only full CI step.
+default-filter = "not test(/(^|::)(slow|failing)::/) and not test(=se1l_uv) and not (binary(/pysecdec/) or test(=test_integrate_1l_decorated_indices_pysecdec))"
 
 [profile.ci_gammaloop.junit]
 path = "junit.xml"
