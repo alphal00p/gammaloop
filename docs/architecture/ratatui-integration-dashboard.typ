@@ -76,6 +76,10 @@ is printed, the controller synchronously suspends the dashboard and waits until 
 thread has restored the terminal. Shutdown follows the same acknowledged path. Drop handlers
 attempt cleanup as a final safeguard, and the event loop disables raw mode on exit.
 
+The streamed integration command catches worker panics, explicitly shuts down the renderer,
+and returns an error containing the panic message. This restores the terminal before the
+command reports the failure.
+
 `Ctrl-C` requests integration interruption; `x` requests aborting the current iteration. Other
 keys only mutate dashboard view state: tab and slot selection, discrete-row sorting, metric
 visibility, chart component/history/range, statistics scope, and help. View-state actions must

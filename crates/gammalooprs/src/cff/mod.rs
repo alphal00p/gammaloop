@@ -2742,6 +2742,7 @@ mod tests {
                 &param_builder,
                 &[],
                 None,
+                None,
                 &EvaluatorSettings::default(),
             )?;
             let input = <ArbPrec as GenericEvaluatorFloat>::get_parameters(

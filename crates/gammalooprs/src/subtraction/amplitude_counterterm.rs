@@ -553,6 +553,7 @@ impl AmplitudeCountertermAtom {
                 (!global_settings.generation.explicit_orientation_sum_only)
                     .then_some((orientations.as_slice().as_ref(), production_orientation_ids)),
                 dual_shape,
+                None,
                 &global_settings.generation.evaluator,
             )
             .unwrap();

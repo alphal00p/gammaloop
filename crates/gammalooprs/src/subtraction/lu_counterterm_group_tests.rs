@@ -766,6 +766,7 @@ fn shared_group_weights_preserve_foreign_cut_data_and_radial_derivatives() {
         std::slice::from_ref(&orientation),
         &[OrientationID(0)],
         shape_from_cut_cff_index(&index),
+        None,
         &evaluator_settings,
     )
     .unwrap();

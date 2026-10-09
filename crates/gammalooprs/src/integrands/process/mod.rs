@@ -89,6 +89,7 @@ pub use sampling::{
 };
 
 pub mod evaluators;
+pub(crate) mod fermi_surface;
 pub use evaluators::ActiveF64Backend;
 pub use evaluators::{GenericEvaluator, GenericEvaluatorFloat};
 

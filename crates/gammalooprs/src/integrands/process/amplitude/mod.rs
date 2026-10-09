@@ -21,7 +21,8 @@ use rayon::iter::{IntoParallelRefMutIterator, ParallelIterator};
 
 use spenso::algebra::complex::Complex;
 use symbolica::{
-    atom::AtomCore,
+    atom::{Atom, AtomCore},
+    domains::rational::Rational,
     evaluate::OptimizationSettings,
     numerical_integration::{Grid, Sample},
 };
@@ -51,6 +52,7 @@ use crate::{
             SamplingChannelCompileContext, SamplingChannelId, SamplingMapDefinition,
             SurfaceRadialMap,
             evaluators::{ActiveF64Backend, EvaluatorStack},
+            fermi_surface::FermiSurfaceDomain,
             graph_to_group_id_for_group_structure,
             threshold_multiplier::ThresholdMultiplierEvaluatorCollection,
         },
@@ -87,6 +89,7 @@ use crate::{
         ArbPrec, DEFAULT_ESURFACE_EXISTENCE_THRESHOLD, RuntimeCache, W_, compute_shift_part,
         serde_utils::SmartSerde, symbolica_ext::LOGPRINTOPTS,
     },
+    uv::uv_graph::UVE,
 };
 
 use super::{
@@ -157,6 +160,127 @@ pub(crate) fn amplitude_threshold_event_info<T: FloatLike>(
 
 /// Num(sigma_1,sigma_2,...)*(CFF_1 delta(edge(1),1) delta_(1,1,1,-1,1)+CFF_3 delta_(1,1,1,-1,1)+CFF_2 delta_(1,1,1,-1,1))
 impl AmplitudeGraphTerm {
+    fn validate_fermi_surface_parameters(
+        graph: &Graph,
+        edges: &[EdgeIndex],
+        domains: &[FermiSurfaceDomain],
+        model: &Model,
+        param_builder: &ParamBuilder,
+    ) -> Result<()> {
+        let resolve_mass = |edge: EdgeIndex| -> Result<f64> {
+            let mass = match graph[edge].mass_value::<f64>(model, param_builder) {
+                Some(mass) => mass,
+                None if graph[edge].mass_atom().is_zero() => Complex::new_re(F(0.0)),
+                None => {
+                    return Err(eyre!(
+                        "Fermi-surface localization for graph '{}' edge {} requires a resolved mass",
+                        graph.name,
+                        edge,
+                    ));
+                }
+            };
+            if mass.im.0 != 0.0 || !mass.re.0.is_finite() {
+                return Err(eyre!(
+                    "Fermi-surface localization for graph '{}' edge {} requires a finite real mass, got {}",
+                    graph.name,
+                    edge,
+                    mass,
+                ));
+            }
+            Ok(mass.re.0)
+        };
+        let mut active_parameters = std::collections::BTreeMap::new();
+        for edge in edges
+            .iter()
+            .chain(domains.iter().flat_map(|domain| &domain.active_edges))
+            .copied()
+            .unique()
+        {
+            let mass = resolve_mass(edge)?;
+            let chemical_potential = graph[edge]
+                .particle()
+                .and_then(|particle| particle.chemical_potential)
+                .and_then(|parameter| model.parameters.get(&parameter))
+                .and_then(|parameter| parameter.value)
+                .ok_or_else(|| {
+                    eyre!(
+                        "Fermi-surface localization for graph '{}' edge {} requires a resolved chemical potential",
+                        graph.name,
+                        edge,
+                    )
+                })?;
+            if chemical_potential.im.0 != 0.0 || !chemical_potential.re.0.is_finite() {
+                return Err(eyre!(
+                    "Fermi-surface localization for graph '{}' edge {} requires a finite real chemical potential, got {}",
+                    graph.name,
+                    edge,
+                    chemical_potential,
+                ));
+            }
+            let chemical_potential = chemical_potential.re.0;
+            if chemical_potential.abs() == mass.abs() {
+                return Err(eyre!(
+                    "Fermi-surface localization for graph '{}' edge {} requires a nondegenerate shell: |chemical potential| = |mass| = {}. This zero-radius threshold needs a separate distributional limit",
+                    graph.name,
+                    edge,
+                    mass.abs(),
+                ));
+            }
+            active_parameters.insert(edge, (mass, chemical_potential));
+        }
+        let soft_masses = domains
+            .iter()
+            .flat_map(|domain| domain.soft_bases.iter().flatten())
+            .copied()
+            .unique()
+            .map(|edge| Ok((edge, resolve_mass(edge)?)))
+            .collect::<Result<std::collections::BTreeMap<_, _>>>()?;
+        for domain in domains {
+            if !domain
+                .soft_bases
+                .iter()
+                .any(|basis| basis.iter().all(|edge| soft_masses[edge] == 0.0))
+                || domain.active_edges.iter().any(|edge| {
+                    let (mass, chemical_potential) = active_parameters[edge];
+                    chemical_potential.abs() < mass.abs()
+                })
+            {
+                continue;
+            }
+            // Convert each resolved binary64 value to its exact rational value.
+            // Rounding a nearly vanishing certificate must never certify a
+            // nontransverse shell/soft intersection as a supported geometry.
+            let replacements = domain
+                .active_edges
+                .iter()
+                .map(|edge| {
+                    let (mass, chemical_potential) = active_parameters[edge];
+                    let mass = Rational::try_from(mass).unwrap();
+                    let chemical_potential = Rational::try_from(chemical_potential).unwrap();
+                    (
+                        FermiSurfaceDomain::radius_squared(*edge),
+                        Atom::num(&chemical_potential * &chemical_potential - &mass * &mass),
+                    )
+                })
+                .collect::<std::collections::BTreeMap<_, _>>();
+            let certificate = domain.certificate.replace_map(|part, _, out| {
+                if let Some(value) = replacements.get(&part.to_owned()) {
+                    **out = value.clone();
+                }
+            });
+            let certified = Rational::try_from(certificate.as_view()).is_ok_and(|value| value > 0);
+            if !certified {
+                return Err(eyre!(
+                    "Fermi-surface localization for graph '{}' cannot certify a transverse intersection of active edges {:?} with soft momentum bases {:?}. This geometry requires a stronger transversality certificate or a separate distributional limit",
+                    graph.name,
+                    domain.active_edges,
+                    domain.soft_bases,
+                ));
+            }
+        }
+        Ok(())
+    }
+
     pub fn threshold_counterterm_metadata(&self) -> Option<&ThresholdCountertermMetadataRegistry> {
         self.threshold_counterterm.metadata_registry.as_ref()
     }
@@ -180,7 +304,7 @@ impl AmplitudeGraphTerm {
         graph: &AmplitudeGraph,
         own_group_position: GraphGroupPosition,
         esurface_map: TiVec<GroupEsurfaceId, TiVec<GraphGroupPosition, Option<RaisedEsurfaceId>>>,
-        _model: &Model,
+        model: &Model,
         settings: &GlobalSettings,
     ) -> Result<(Self, GraphGenerationStats)> {
         let started = std::time::Instant::now();
@@ -299,7 +423,15 @@ impl AmplitudeGraphTerm {
                 &production_orientation_ids,
             )),
             None,
+            Some(&graph.graph),
             &settings.generation.evaluator,
+        )?;
+        Self::validate_fermi_surface_parameters(
+            &graph.graph,
+            &original_integrand.fermi_surface_edges,
+            &original_integrand.fermi_surface_domains,
+            model,
+            &graph.graph.param_builder,
         )?;
         crate::debug_tags!(#generation, #profile, #compile, #graph, #summary;
             stage = "amplitude_graph_term_original_evaluator_done",
@@ -1137,6 +1269,14 @@ impl GraphTerm for AmplitudeGraphTerm {
                 .general
                 .numerator_sampling_scale)));
         self.graph.param_builder.update_model_values(model);
+
+        Self::validate_fermi_surface_parameters(
+            &self.graph,
+            &self.original_integrand.fermi_surface_edges,
+            &self.original_integrand.fermi_surface_domains,
+            model,
+            &self.graph.param_builder,
+        )?;
 
         self.param_builder = self.graph.param_builder.clone();
         self.multi_channeling_setup.warm_up_masses(settings, model);
@@ -3312,6 +3452,214 @@ mod sampling_tests {
         utils::load_generic_model,
     };
     use linnet::half_edge::involution::EdgeIndex;
+
+    #[test]
+    fn fermi_surface_domains_follow_resolved_model_parameters() -> Result<()> {
+        use crate::integrands::process::fermi_surface::FermiSurfaceLocalizer;
+        use crate::utils::GS;
+        use symbolica::atom::{AliasedAtom, Atom};
+
+        test_initialise()?;
+        let mut model = load_generic_model("sm");
+        let graph = Graph::from_string(
+            r#"digraph dotted_fermion_domain {
+                node [num=1]; edge [num=1];
+                A -> A [id=0, particle="d", mass=1];
+            }"#,
+            &model,
+        )?
+        .pop()
+        .unwrap();
+        let edge = EdgeIndex(0);
+        let chemical_potential = graph[edge].particle().unwrap().chemical_potential.unwrap();
+        let builder = ParamBuilder::new(
+            &graph,
+            &model,
+            &graph.loop_momentum_basis,
+            std::iter::empty::<Atom>(),
+        );
+        let localizer = FermiSurfaceLocalizer::new(&graph);
+        let distribution = |order: usize, temperature: usize| {
+            GS.thermal_distribution.call_args([
+                Atom::num(0),
+                Atom::num(order),
+                Atom::num(temperature),
+                Atom::num(1),
+                Atom::num(1),
+            ])
+        };
+        for source in [distribution(0, 0), distribution(2, 1)] {
+            let (_, edges, _) = localizer.localize(vec![AliasedAtom::from(source)], &builder)?;
+            assert!(edges.is_empty());
+        }
+        let (_, edges, _) =
+            localizer.localize(vec![AliasedAtom::from(distribution(2, 0))], &builder)?;
+        assert_eq!(edges, [edge]);
+        for (mu, accepted) in [
+            (Complex::new_re(F(2.0)), true),
+            (Complex::new_re(F(0.5)), true),
+            (Complex::new_re(F(1.0)), false),
+            (Complex::new_re(F(-1.0)), false),
+            (Complex::new(F(2.0), F(0.1)), false),
+        ] {
+            model.parameters.get_mut(&chemical_potential).unwrap().value = Some(mu);
+            let result = AmplitudeGraphTerm::validate_fermi_surface_parameters(
+                &graph,
+                &edges,
+                &[],
+                &model,
+                &builder,
+            );
+            assert_eq!(result.is_ok(), accepted, "mu={mu}: {result:?}");
+        }
+        model.parameters.get_mut(&chemical_potential).unwrap().value =
+            Some(Complex::new_re(F(1.0)));
+        AmplitudeGraphTerm::validate_fermi_surface_parameters(&graph, &[], &[], &model, &builder)?;
+        let massless = Graph::from_string(
+            r#"digraph massless_dotted_fermion_domain {
+                node [num=1]; edge [num=1];
+                A -> A [id=0, particle="d", mass=0];
+            }"#,
+            &model,
+        )?
+        .pop()
+        .unwrap();
+        model.parameters.get_mut(&chemical_potential).unwrap().value =
+            Some(Complex::new_re(F(0.0)));
+        let error = AmplitudeGraphTerm::validate_fermi_surface_parameters(
+            &massless,
+            &edges,
+            &[],
+            &model,
+            &massless.param_builder,
+        )
+        .unwrap_err();
+        assert!(error.to_string().contains("zero-radius threshold"));
+        Ok(())
+    }
+
+    #[test]
+    fn fermi_surface_domains_include_generated_contacts() -> Result<()> {
+        use crate::integrands::process::fermi_surface::FermiSurfaceLocalizer;
+        use crate::utils::GS;
+        use symbolica::atom::{AliasedAtom, Atom};
+
+        test_initialise()?;
+        let mut model = load_generic_model("sm");
+        let graph = Graph::from_string(
+            r#"digraph dotted_fermion_contact_domain {
+                node [num=1]; edge [num=1];
+                A -> B [id=0, particle="d", mass=1, lmb_id=0];
+                B -> A [id=1, particle="u", mass=1];
+                A -> B [id=2, particle="g", mass=0, lmb_id=1];
+            }"#,
+            &model,
+        )?
+        .pop()
+        .unwrap();
+        let q = EdgeIndex(0);
+        let r = EdgeIndex(1);
+        let builder = ParamBuilder::new(
+            &graph,
+            &model,
+            &graph.loop_momentum_basis,
+            std::iter::empty::<Atom>(),
+        );
+        let source = GS.thermal_distribution.call_args([0, 2, 0, 1, 1])
+            * GS.thermal_distribution.call_args([1, 0, 0, 1, 1]);
+        let (_, edges, _) = FermiSurfaceLocalizer::new(&graph)
+            .localize(vec![AliasedAtom::from(source)], &builder)?;
+        assert_eq!(
+            edges,
+            [q, r],
+            "the differentiated occupation creates a contact shell"
+        );
+        for (edge, mu) in [(q, 2.0), (r, 1.0)] {
+            let parameter = graph[edge].particle().unwrap().chemical_potential.unwrap();
+            model.parameters.get_mut(&parameter).unwrap().value = Some(Complex::new_re(F(mu)));
+        }
+        AmplitudeGraphTerm::validate_fermi_surface_parameters(&graph, &[q], &[], &model, &builder)?;
+        let error = AmplitudeGraphTerm::validate_fermi_surface_parameters(
+            &graph,
+            &edges,
+            &[],
+            &model,
+            &builder,
+        )
+        .unwrap_err();
+        assert!(error.to_string().contains(&format!("edge {r}")));
+        assert!(error.to_string().contains("zero-radius threshold"));
+        Ok(())
+    }
+
+    #[test]
+    fn fermi_surface_soft_certificates_use_exact_resolved_parameters() -> Result<()> {
+        test_initialise()?;
+        let mut model = load_generic_model("sm");
+        let graph = Graph::from_string(
+            r#"digraph soft_fermi_certificate {
+                node [num=1]; edge [num=1];
+                A -> B [id=0, particle="d", mass=0];
+                B -> A [id=1, particle="u", mass=0];
+                A -> B [id=2, particle="Z"];
+            }"#,
+            &model,
+        )?
+        .pop()
+        .unwrap();
+        let q = EdgeIndex(0);
+        let r = EdgeIndex(1);
+        let soft = EdgeIndex(2);
+        let mu_q = graph[q].particle().unwrap().chemical_potential.unwrap();
+        let mu_r = graph[r].particle().unwrap().chemical_potential.unwrap();
+        let soft_mass = graph[soft].particle().unwrap().mass;
+        let domain = FermiSurfaceDomain {
+            active_edges: vec![q, r],
+            soft_bases: vec![vec![soft]],
+            certificate: (FermiSurfaceDomain::radius_squared(q)
+                - FermiSurfaceDomain::radius_squared(r))
+            .pow(2),
+        };
+        let domains = [domain];
+        let validate = |model: &Model| {
+            AmplitudeGraphTerm::validate_fermi_surface_parameters(
+                &graph,
+                &[q, r],
+                &domains,
+                model,
+                &graph.param_builder,
+            )
+        };
+        for parameter in [mu_q, mu_r] {
+            model.parameters.get_mut(&parameter).unwrap().value = Some(Complex::new_re(F(2.0)));
+        }
+        model.parameters.get_mut(&soft_mass).unwrap().value = Some(Complex::new_re(F(1.0)));
+        validate(&model)?;
+        model.parameters.get_mut(&soft_mass).unwrap().value = Some(Complex::new_re(F(0.0)));
+        assert!(
+            validate(&model)
+                .unwrap_err()
+                .to_string()
+                .contains("cannot certify a transverse intersection")
+        );
+
+        model.parameters.get_mut(&mu_r).unwrap().value =
+            Some(Complex::new_re(F(f64::from_bits(2.0_f64.to_bits() + 1))));
+        validate(&model)?;
+        // Squaring these radii in binary64 would underflow to zero. The exact
+        // certificate still distinguishes two different resolved Fermi radii.
+        model.parameters.get_mut(&mu_q).unwrap().value = Some(Complex::new_re(F(1.0e-200)));
+        model.parameters.get_mut(&mu_r).unwrap().value = Some(Complex::new_re(F(2.0e-200)));
+        validate(&model)?;
+        model.parameters.get_mut(&soft_mass).unwrap().value = Some(Complex::new(F(0.0), F(0.1)));
+        assert!(
+            validate(&model)
+                .unwrap_err()
+                .to_string()
+                .contains("finite real mass")
+        );
+        Ok(())
+    }
 
     #[test]
     fn generated_triangle_joint_binds_without_prerequisites() -> Result<()> {

@@ -71,6 +71,7 @@ pub struct GenerationSettings {
     /// Sum all generated residue branches explicitly, removing runtime orientation selectors.
     #[serde(skip_serializing_if = "is_false")]
     pub explicit_orientation_sum_only: bool,
+    /// Thermal distributions and optional vacuum subtraction used during integrand generation.
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub medium: MediumSettings,
 }
@@ -950,8 +951,10 @@ impl Default for Parallelisation {
 #[trait_decode(trait = GammaLoopContext)]
 #[serde(default, deny_unknown_fields)]
 pub struct MediumSettings {
+    /// Select the vacuum contour or equilibrium distributions at finite or zero temperature.
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub mode: MediumMode,
+    /// Subtract the vacuum contribution from equilibrium integrands; requires a non-vacuum medium mode.
     #[serde(skip_serializing_if = "is_false")]
     pub vacuum_subtraction: bool,
 }

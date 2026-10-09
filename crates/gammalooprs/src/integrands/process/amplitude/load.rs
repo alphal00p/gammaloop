@@ -38,7 +38,7 @@ use crate::processes::{
     ThresholdCountertermMetadataRegistry, ThresholdCountertermOrigin, ThresholdCountertermSide,
 };
 
-pub const STANDALONE_EVALUATORS_VERSION: u32 = 10;
+pub const STANDALONE_EVALUATORS_VERSION: u32 = 11;
 pub const STANDALONE_MODE_RUST: u8 = 0;
 
 #[derive(
@@ -100,6 +100,33 @@ where
     #[allow(clippy::type_complexity)]
     pub fn load_impl(self, state_map: &StateMap) -> Result<LoadedStandaloneEvaluators> {
         let mut graph_terms = Vec::new();
+        let load_fermi_domains = |domains: Vec<StandaloneFermiSurfaceDomain<A>>| {
+            domains
+                .into_iter()
+                .map(|domain| {
+                    Ok(StandaloneFermiSurfaceDomain {
+                        active_edges: domain.active_edges,
+                        soft_bases: domain.soft_bases,
+                        certificate: ImportWithMap::import_with_map(
+                            &domain.certificate,
+                            state_map,
+                        )?,
+                        edge_parameters: domain
+                            .edge_parameters
+                            .into_iter()
+                            .map(|(edge, mass, mu)| {
+                                Ok((
+                                    edge,
+                                    ImportWithMap::import_with_map(&mass, state_map)?,
+                                    mu.map(|atom| ImportWithMap::import_with_map(&atom, state_map))
+                                        .transpose()?,
+                                ))
+                            })
+                            .collect::<Result<Vec<_>>>()?,
+                    })
+                })
+                .collect::<Result<Vec<_>>>()
+        };
 
         for graph in self.graph_terms {
             let graph_name = graph.graph_name.as_str();
@@ -169,6 +196,9 @@ where
             }
 
             let original_integrand = LoadedStandaloneEvaluatorStack {
+                fermi_surface_domains: load_fermi_domains(
+                    graph.original_integrand.fermi_surface_domains,
+                )?,
                 explicit_orientation_sum_only: graph
                     .original_integrand
                     .explicit_orientation_sum_only,
@@ -231,6 +261,9 @@ where
                             Ok((
                                 cut_cff_index,
                                 LoadedStandaloneEvaluatorStack {
+                                    fermi_surface_domains: load_fermi_domains(
+                                        ct.fermi_surface_domains,
+                                    )?,
                                     explicit_orientation_sum_only: ct.explicit_orientation_sum_only,
                                     production_orientation_ids: ct.production_orientation_ids,
                                     orientation_start: ct.start,
@@ -832,8 +865,28 @@ pub struct StandaloneIndexedEvaluatorStackArchive<A = Vec<u8>> {
     pub(crate) evaluator_stack: StandaloneEvaluatorStackArchive<A>,
 }
 
+/// Parameter-domain metadata for a raw localized evaluator.
+///
+/// Callers changing inputs must preserve finite real masses and chemical
+/// potentials, nonzero active radii, and the certified soft/Fermi geometry.
+/// If a soft basis is entirely massless and all active shells are present,
+/// `certificate` must be strictly positive after exact parameter substitution.
+/// Its `gammalooprs::fermi_radius_squared(edge)` markers denote µ_edge²−m_edge².
+/// An empty `soft_bases` list carries only the finite-real and nonzero-shell
+/// prerequisites; it does not require a soft-geometry certificate check.
+/// Raw standalone evaluation does not perform this domain check.
+#[derive(Clone, Encode, Decode, Serialize, Deserialize)]
+pub struct StandaloneFermiSurfaceDomain<A = Vec<u8>> {
+    pub active_edges: Vec<usize>,
+    pub soft_bases: Vec<Vec<usize>>,
+    pub certificate: A,
+    /// Each entry is (edge ID, mass expression, optional chemical potential).
+    pub edge_parameters: Vec<(usize, A, Option<A>)>,
+}
+
 #[derive(Clone, Encode, Decode, Serialize, Deserialize)]
 pub struct StandaloneEvaluatorStackArchive<A = Vec<u8>> {
+    pub(crate) fermi_surface_domains: Vec<StandaloneFermiSurfaceDomain<A>>,
     pub(crate) explicit_orientation_sum_only: bool,
     pub(crate) production_orientation_ids: Vec<usize>,
     pub(crate) single_parametric: StandaloneGenericEvaluatorArchive<A>,
@@ -1290,6 +1343,7 @@ pub struct LoadedStandaloneGraphTerm {
 
 #[allow(clippy::type_complexity)]
 pub struct LoadedStandaloneEvaluatorStack {
+    pub fermi_surface_domains: Vec<StandaloneFermiSurfaceDomain<Atom>>,
     pub(crate) explicit_orientation_sum_only: bool,
     pub(crate) production_orientation_ids: Vec<usize>,
     pub(crate) representative_input: Vec<Complex<f64>>,
@@ -2661,7 +2715,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn standalone_roundtrip_restores_non_dense_residue_map_keys() -> Result<()> {
+    fn standalone_roundtrip_restores_residue_maps_and_fermi_surface_domains() -> Result<()> {
         let residue_map_id = Atom::var(GS.residue_map_id);
         let selector = |id: i64, coefficient: i64| {
             Symbol::IF.call_args([
@@ -2677,6 +2731,10 @@ mod tests {
             additional_fn_map_entries: Vec::new(),
             dual_shape: None,
         };
+        let certificate =
+            crate::integrands::process::fermi_surface::FermiSurfaceDomain::radius_squared(
+                EdgeIndex(0),
+            );
         let archive = StandaloneEvaluatorArchive {
             version: STANDALONE_EVALUATORS_VERSION,
             numeric_target: StandaloneNumericTarget::Double,
@@ -2687,6 +2745,15 @@ mod tests {
                 param_builder_params: vec![print(&residue_map_id), print(&GS.sign(EdgeIndex(0)))],
                 fn_map_entries: Vec::new(),
                 original_integrand: StandaloneEvaluatorStackArchive {
+                    fermi_surface_domains: vec![StandaloneFermiSurfaceDomain {
+                        active_edges: vec![0],
+                        soft_bases: vec![vec![1]],
+                        certificate: print(&certificate),
+                        edge_parameters: vec![
+                            (0, print(&Atom::one()), Some(print(&Atom::num(2)))),
+                            (1, print(&Atom::Zero), None),
+                        ],
+                    }],
                     explicit_orientation_sum_only: false,
                     production_orientation_ids: vec![4, 9],
                     single_parametric: generic,
@@ -2718,21 +2785,35 @@ mod tests {
         let serialized = serde_json::to_vec(&archive)?;
         let roundtripped: StandaloneEvaluatorArchive<(), String> =
             serde_json::from_slice(&serialized)?;
-        let mut loaded = roundtripped.load()?;
-        let orientations = loaded.graph_terms[0].orientations.clone();
-        let stack = &mut loaded.graph_terms[0].original_integrand;
-
-        for (orientation_index, expected) in [(Some(0), 2.0), (Some(1), 3.0), (None, 5.0)] {
-            let result = stack.evaluate_with_backend(StandaloneEvaluationRequest {
-                backend: StandaloneBackend::Eager,
-                method: StandaloneMethod::SingleParametric,
-                orientations: &orientations,
-                orientation_index,
-                custom_input: None,
-                artifact_root: Path::new("."),
-                label: "standalone_residue_map_roundtrip",
-            })?;
-            assert_eq!(result, vec![Complex::new(expected, 0.0)]);
+        let binary = bincode::encode_to_vec(&archive, bincode::config::standard())?;
+        let (binary_roundtrip, _): (StandaloneEvaluatorArchive<(), String>, usize) =
+            bincode::decode_from_slice(&binary, bincode::config::standard())?;
+        for archive in [roundtripped, binary_roundtrip] {
+            let mut loaded = archive.load()?;
+            let orientations = loaded.graph_terms[0].orientations.clone();
+            let stack = &mut loaded.graph_terms[0].original_integrand;
+            let [domain] = stack.fermi_surface_domains.as_slice() else {
+                panic!("one Fermi-domain record must survive export and import");
+            };
+            assert_eq!(domain.active_edges, [0]);
+            assert_eq!(domain.soft_bases, [vec![1]]);
+            assert_eq!(domain.certificate, certificate);
+            assert_eq!(
+                domain.edge_parameters,
+                [(0, Atom::one(), Some(Atom::num(2))), (1, Atom::Zero, None),]
+            );
+            for (orientation_index, expected) in [(Some(0), 2.0), (Some(1), 3.0), (None, 5.0)] {
+                let result = stack.evaluate_with_backend(StandaloneEvaluationRequest {
+                    backend: StandaloneBackend::Eager,
+                    method: StandaloneMethod::SingleParametric,
+                    orientations: &orientations,
+                    orientation_index,
+                    custom_input: None,
+                    artifact_root: Path::new("."),
+                    label: "standalone_residue_map_roundtrip",
+                })?;
+                assert_eq!(result, vec![Complex::new(expected, 0.0)]);
+            }
         }
 
         Ok(())

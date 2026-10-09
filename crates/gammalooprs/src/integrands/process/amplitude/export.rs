@@ -1,5 +1,5 @@
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, BTreeSet},
     fs::{self},
     path::Path,
 };
@@ -16,6 +16,7 @@ use symbolica::{
 
 use crate::{
     cff::CutCFFIndex,
+    graph::Graph,
     integrands::process::{
         GenericEvaluator, GenericEvaluatorFloat, ProcessIntegrandImpl,
         amplitude::{
@@ -23,11 +24,13 @@ use crate::{
             load::{
                 STANDALONE_EVALUATORS_VERSION, StandaloneAmplitudeThresholdVariant,
                 StandaloneComplexInput, StandaloneCutCFFIndex, StandaloneEvaluatorArchive,
-                StandaloneEvaluatorStackArchive, StandaloneGenericEvaluatorArchive,
-                StandaloneGraphTermArchive, StandaloneIndexedEvaluatorStackArchive,
+                StandaloneEvaluatorStackArchive, StandaloneFermiSurfaceDomain,
+                StandaloneGenericEvaluatorArchive, StandaloneGraphTermArchive,
+                StandaloneIndexedEvaluatorStackArchive,
             },
         },
         cross_section::export::export_threshold_multiplier_collection,
+        fermi_surface::FermiSurfaceDomain,
     },
     momentum::ThreeMomentum,
     momentum::sample::{LoopMomenta, MomentumSample},
@@ -36,6 +39,7 @@ use crate::{
         StandaloneNumericTarget, ThresholdCountertermOrigin,
     },
     utils::{ArbPrec, F, FloatLike, f128},
+    uv::uv_graph::UVE,
 };
 
 const STANDALONE_DATA_FILE: &str = "standalone_evaluators";
@@ -92,12 +96,53 @@ fn export_generic_evaluator<T: ExportAtomTo>(
 
 fn export_evaluator_stack<T: ExportAtomTo>(
     evaluator_stack: &crate::integrands::process::evaluators::EvaluatorStack,
+    graph: &Graph,
     start: usize,
     residue_map_id_start: usize,
     mult_offset: usize,
     representative_input: Vec<StandaloneComplexInput>,
 ) -> Result<StandaloneEvaluatorStackArchive<T>> {
+    let shell_domain =
+        (!evaluator_stack.fermi_surface_edges.is_empty()).then(|| FermiSurfaceDomain {
+            active_edges: evaluator_stack.fermi_surface_edges.clone(),
+            soft_bases: Vec::new(),
+            certificate: Atom::one(),
+        });
     Ok(StandaloneEvaluatorStackArchive {
+        fermi_surface_domains: shell_domain
+            .iter()
+            .chain(&evaluator_stack.fermi_surface_domains)
+            .map(|domain| {
+                let edges = domain
+                    .active_edges
+                    .iter()
+                    .chain(domain.soft_bases.iter().flatten())
+                    .copied()
+                    .collect::<BTreeSet<_>>();
+                Ok(StandaloneFermiSurfaceDomain {
+                    active_edges: domain.active_edges.iter().map(|edge| edge.0).collect(),
+                    soft_bases: domain
+                        .soft_bases
+                        .iter()
+                        .map(|basis| basis.iter().map(|edge| edge.0).collect())
+                        .collect(),
+                    certificate: T::export_atom_to(&domain.certificate)?,
+                    edge_parameters: edges
+                        .into_iter()
+                        .map(|edge| {
+                            Ok((
+                                edge.0,
+                                T::export_atom_to(&graph[edge].mass_atom())?,
+                                graph[edge]
+                                    .chemical_potential_atom()
+                                    .map(|atom| T::export_atom_to(&atom))
+                                    .transpose()?,
+                            ))
+                        })
+                        .collect::<Result<Vec<_>>>()?,
+                })
+            })
+            .collect::<Result<Vec<_>>>()?,
         explicit_orientation_sum_only: evaluator_stack.explicit_orientation_sum_only,
         production_orientation_ids: evaluator_stack
             .production_orientation_ids()
@@ -140,6 +185,7 @@ fn export_evaluator_map<T: ExportAtomTo>(
         CutCFFIndex,
         crate::integrands::process::evaluators::EvaluatorStack,
     >,
+    graph: &Graph,
     start: usize,
     residue_map_id_start: usize,
     mult_offset: usize,
@@ -152,6 +198,7 @@ fn export_evaluator_map<T: ExportAtomTo>(
                 cut_cff_index: export_cut_cff_index(cut_cff_index),
                 evaluator_stack: export_evaluator_stack(
                     evaluator_stack,
+                    graph,
                     start,
                     residue_map_id_start,
                     mult_offset,
@@ -272,6 +319,7 @@ impl AmplitudeIntegrand {
 
                     let original_integrand = export_evaluator_stack(
                         &term.original_integrand,
+                        &term.graph,
                         orientation_start,
                         residue_map_id_start,
                         multiplicative_offset,
@@ -281,6 +329,7 @@ impl AmplitudeIntegrand {
                     let export_counterterm = |counterterm: &crate::subtraction::amplitude_counterterm::AmplitudeCountertermEvaluator| {
                         export_evaluator_map(
                             &counterterm.evaluator_stacks,
+                            &term.graph,
                             orientation_start,
                             residue_map_id_start,
                             multiplicative_offset,
@@ -518,7 +567,57 @@ impl AmplitudeIntegrand {
 
 #[cfg(test)]
 mod tests {
-    use super::{STANDALONE_EVALUATORS_VERSION, standalone_rust_script};
+    use super::*;
+
+    #[test]
+    fn standalone_export_preserves_fermi_shell_domain_without_soft_spectators() -> Result<()> {
+        use crate::{
+            initialisation::test_initialise, integrands::process::evaluators::EvaluatorStack,
+            processes::EvaluatorSettings, utils::load_generic_model,
+        };
+        use linnet::half_edge::involution::EdgeIndex;
+
+        test_initialise()?;
+        let model = load_generic_model("sm");
+        let graph = Graph::from_string(
+            r#"digraph one_loop_shell {
+                node [num=1]; A -> A [id=0, particle="d", mass=1, num=1];
+            }"#,
+            &model,
+        )?
+        .remove(0);
+        let mut evaluator = EvaluatorStack::new(
+            &[Atom::one()],
+            &graph.param_builder,
+            &[],
+            None,
+            &EvaluatorSettings {
+                store_atom: true,
+                iterative_orientation_optimization: false,
+                ..Default::default()
+            },
+        )?;
+        evaluator.fermi_surface_edges = vec![EdgeIndex(0)];
+        assert!(evaluator.fermi_surface_domains.is_empty());
+        let archive = export_evaluator_stack::<String>(&evaluator, &graph, 0, 0, 0, Vec::new())?;
+        let [domain] = archive.fermi_surface_domains.as_slice() else {
+            panic!("an ordinary Fermi shell must retain its parameter-domain contract");
+        };
+        assert_eq!(domain.active_edges, [0]);
+        assert!(domain.soft_bases.is_empty());
+        assert_eq!(domain.certificate, String::export_atom_to(&Atom::one())?);
+        assert_eq!(
+            domain.edge_parameters,
+            [(
+                0,
+                String::export_atom_to(&graph[EdgeIndex(0)].mass_atom())?,
+                Some(String::export_atom_to(
+                    &graph[EdgeIndex(0)].chemical_potential_atom().unwrap()
+                )?),
+            )]
+        );
+        Ok(())
+    }
 
     #[test]
     fn generated_standalone_loader_tracks_threshold_archive_version_and_fields() {
@@ -531,6 +630,8 @@ mod tests {
             "threshold_variants",
             "threshold_multipliers",
             "metadata_registry",
+            "fermi_surface_domains",
+            "edge_parameters",
         ] {
             assert!(script.contains(field), "standalone loader omits {field}");
         }

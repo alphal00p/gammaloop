@@ -53,6 +53,11 @@ The backends share analytic operations and result types. Scheduling,
 dependency lookup, caching, and disconnected-component composition
 belong to the orchestrator because their traversal models differ.
 
+Parametric generation receives the complete `GenerationSettings` so both backends retain
+the medium configuration. Thermal modes and vacuum subtraction require local subtraction
+after energy integration; requesting local counterterms from expanded four-dimensional
+integrands in either case is rejected.
+
 == Scheme and Computation Ownership
 <scheme-and-computation-ownership>
 The renormalization prescription belongs to the `Spinney`. A compute

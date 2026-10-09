@@ -27,7 +27,7 @@ use symbolica::{
     domains::rational::Fraction, evaluate::JITCompiledEvaluator, prelude::*, state::StateMap,
 };
 
-const STANDALONE_EVALUATORS_VERSION: u32 = 10;
+const STANDALONE_EVALUATORS_VERSION: u32 = 11;
 const ARB_PRECISION_BITS: u32 = 1000;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, Encode, Decode)]
@@ -90,8 +90,28 @@ struct StandaloneIndexedEvaluatorStackArchive<A = Vec<u8>> {
     evaluator_stack: StandaloneEvaluatorStackArchive<A>,
 }
 
+/// Parameter-domain metadata for a raw localized evaluator.
+///
+/// Callers changing inputs must preserve finite real masses and chemical
+/// potentials, nonzero active radii, and the certified soft/Fermi geometry.
+/// If a soft basis is entirely massless and all active shells are present,
+/// `certificate` must be strictly positive after exact parameter substitution.
+/// Its `gammalooprs::fermi_radius_squared(edge)` markers denote µ_edge²−m_edge².
+/// An empty `soft_bases` list carries only the finite-real and nonzero-shell
+/// prerequisites; it does not require a soft-geometry certificate check.
+/// Raw standalone evaluation does not perform this domain check.
+#[derive(Clone, Encode, Decode, Serialize, Deserialize)]
+struct StandaloneFermiSurfaceDomain<A = Vec<u8>> {
+    active_edges: Vec<usize>,
+    soft_bases: Vec<Vec<usize>>,
+    certificate: A,
+    /// Each entry is (edge ID, mass expression, optional chemical potential).
+    edge_parameters: Vec<(usize, A, Option<A>)>,
+}
+
 #[derive(Clone, Encode, Decode, Serialize, Deserialize)]
 struct StandaloneEvaluatorStackArchive<A = Vec<u8>> {
+    fermi_surface_domains: Vec<StandaloneFermiSurfaceDomain<A>>,
     explicit_orientation_sum_only: bool,
     production_orientation_ids: Vec<usize>,
     single_parametric: StandaloneGenericEvaluatorArchive<A>,

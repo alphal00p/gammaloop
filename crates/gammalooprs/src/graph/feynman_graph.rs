@@ -313,8 +313,8 @@ where
                     }
                     (None, 0) => Some((Atom::num(1) + thermal_sign) / Atom::num(2)),
                     (None, _) => Some(Atom::num(0)),
-                    // TODO: distribution derivatives with chemical potential not yet
-                    // supported at zero temperature
+                    // These distributions have no pointwise function body.
+                    // The scalar Fermi-surface pass localizes them instead.
                     _ => None,
                 }
             }

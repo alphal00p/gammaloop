@@ -1487,6 +1487,7 @@ mod tests {
             &param_builder,
             &[],
             None,
+            None,
             &EvaluatorSettings::default(),
         )?;
         let input = <ArbPrec as GenericEvaluatorFloat>::get_parameters(
@@ -1763,6 +1764,7 @@ mod tests {
                 &expressions,
                 &param_builder,
                 &[],
+                None,
                 None,
                 &EvaluatorSettings::default(),
             )?;
@@ -2501,6 +2503,7 @@ mod tests {
                                 &param_builder,
                                 &[],
                                 Some(simple_n_deriv_shape(1)),
+                                None,
                                 &EvaluatorSettings::default(),
                             )?;
                         let input = <ArbPrec as GenericEvaluatorFloat>::get_parameters(

@@ -722,6 +722,7 @@ mod tests {
                     &orientations,
                     &production_ids,
                     None,
+                    None,
                     &EvaluatorSettings::default(),
                 )?;
                 for compiled in [false, true] {
@@ -817,6 +818,7 @@ mod tests {
                 &[],
                 &orientations,
                 &production_ids,
+                None,
                 None,
                 &EvaluatorSettings::default(),
             )?;

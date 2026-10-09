@@ -1050,6 +1050,7 @@ impl LUCounterTermEvaluators {
                     (!settings.generation.explicit_orientation_sum_only)
                         .then_some((&orientations.raw, production_orientation_ids)),
                     dual_shape,
+                    None,
                     &settings.generation.evaluator,
                 )
                 .unwrap();

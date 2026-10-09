@@ -42,7 +42,9 @@ anchor = "load_state_manifest(&save_path)?"
 # ownership are documented in architecture-current.typ.
 # Reviewed 2026-09-25: sampling files now share process::sampling ownership;
 # only module/import paths changed, with numerical and persistence contracts unchanged.
-digest = "c2c7f88951d6467295977b12f17861b2e866a42e"
+# Reviewed 2026-10-08: state version 11 persists localized Fermi-surface support
+# metadata; the architecture documents model-refresh validation and regeneration.
+digest = "dccb2e259051d1fb252569e8f236f58781996f86"
 
 [[section.note.scope]]
 path = "crates/gammaloop-api/src/commands/integrate.rs"
@@ -54,7 +56,9 @@ anchor = "fn default_workspace_path(&self"
 # Reviewed 2026-09-23: Canonical sampling/native weighted results, selected loading, state v9, structured Python integration, and threshold event metadata are documented in architecture-current.typ.
 # No architecture impact 2026-09-23: corrected the JSON example code span;
 # command behavior and dashboard ownership are unchanged.
-digest = "da178138da46666acf41dc7a4abeebfab4bfec9c"
+# Reviewed 2026-10-08: streamed integration restores the renderer before
+# reporting caught panics, as documented in ratatui-integration-dashboard.typ.
+digest = "2f53bfb849a91b886ed5895d270df0341689370c"
 
 [[section.note.scope]]
 path = "crates/gammalooprs/src/integrands/evaluation.rs"
@@ -89,7 +93,9 @@ anchor = "pub fn warm_up(&mut self, model"
 # warm-up and numerical preparation retain their existing ownership.
 # Reviewed 2026-09-25: sampling files now share process::sampling ownership;
 # only module/import paths changed, with numerical and persistence contracts unchanged.
-digest = "175b2d6e4d117b737887425692af2a433ff748b5"
+# Reviewed 2026-10-08: the new scalar Fermi-surface localization module and
+# grouped contact differentiation are documented in architecture-current.typ.
+digest = "d28b985847e1d5c630a9bb160060af1af9c61325"
 
 [[section.note.scope]]
 path = "crates/gammalooprs/src/observables/events.rs"
@@ -172,7 +178,9 @@ anchor = "fn dashboard_event_loop(receiver"
 # Reviewed 2026-09-23: The dashboard documents signed/absolute view ownership, unchanged sampling/RNG behavior, and version-3 completed-iteration resume.
 # No architecture impact 2026-09-23: corrected the JSON example code span;
 # command behavior and dashboard ownership are unchanged.
-digest = "da178138da46666acf41dc7a4abeebfab4bfec9c"
+# Reviewed 2026-10-08: streamed integration restores the renderer before
+# reporting caught panics, as documented in ratatui-integration-dashboard.typ.
+digest = "2f53bfb849a91b886ed5895d270df0341689370c"
 
 [[section.note.scope]]
 path = "crates/gammalooprs/src/integrate/render_ratatui.rs"
@@ -214,7 +222,9 @@ anchor = "impl UVOrchestrator {"
 # Reviewed 2026-09-14: comparison propagates canonicalization errors;
 # backend selection, returned legacy result, and UV invariants are unchanged.
 # Reviewed 2026-09-17: Documented factorized numerator mapping, consumed measures, integrated mass ownership, and direct versus projected UV composition.
-digest = "584255e4a7b014c585988265f946c730605e861a"
+# Reviewed 2026-10-08: medium-aware generation settings and the thermal
+# local-3D requirement are documented in uv-renormalization.typ.
+digest = "a573be12ef39e2ca9b4b5c89cad0ce9cf5a596ca"
 
 [[section.note]]
 id = "spenso-parsing-flow"

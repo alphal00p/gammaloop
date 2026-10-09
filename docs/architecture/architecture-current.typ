@@ -224,6 +224,79 @@ model-free standalone eager evaluator rejects thermal expressions because it
 does not accept distribution inputs; production evaluation remains owned by
 GammaLoop.
 
+Zero-temperature fermion distribution derivatives are localized after tensor
+contraction and before scalar evaluator construction. The pass resolves scalar
+function dependencies without expanding numerator polynomials or telescoping
+thermal numerators. A thermal derivative of order $k$ denotes
+$delta^((k-1))(E-sigma mu)$; cyclic-chain signs and factorials remain in the
+original CFF coefficient.
+
+Higher derivatives are removed by distributional integration by parts with
+normal fields satisfying $V_i E_j=delta_(i j)$ for all active shells. For smooth
+coefficients these are the radial fields of an aligned loop-momentum basis,
+with divergence $1/E+E/abs(bold(q))^2$. A radial field that moves a massless
+spectator can differentiate an integrable Coulomb pole into a distribution;
+ordinary symbolic differentiation would omit its soft contact. The pass detects
+potentially singular energy powers and instead combines momentum charts that
+hold soft momenta fixed. In each chart, a Gram matrix of the active energy
+normals constrains their energies while allowing angular motion. Squared
+determinant weights cancel individual chart poles, and soft momentum factors
+suppress charts that move a vanishing spectator. On certified transverse soft
+strata, the resulting field preserves the soft ideal, so repeated integration
+by parts retains the original soft integrability.
+
+Smooth coefficient derivatives use the chain rule through opaque squared
+energies. Their complete directional rates are assembled within each momentum
+chart, exposing the soft energy factor before multiplication by an energy-pole
+derivative. This avoids subtracting artificial inverse-cubic poles to recover
+an integrable inverse-linear result in floating-point arithmetic. Active shell
+rates use the exact normal identities.
+
+Thermal derivatives are evaluated separately. A common auxiliary shift of both thermal signs
+computes their directional derivative in one pass, preserving the grouped
+difference of products and its exact empty-remainder cancellation. The thermal
+derivative generates an additional ordinary delta on an intersecting Fermi
+surface. Each integration-by-parts step lowers the total
+delta derivative order. A changed active support gets a new normal field;
+previously imposed shell energies remain fixed.
+
+Before evaluation, every soft stratum required by the normal flow must have an
+absence or transversality certificate. Independent restricted momentum routings provide a
+parameter-independent certificate. Otherwise, exact linear elimination of
+scalar products uses the active shell radii to establish an inconsistent soft
+intersection or a nonzero normal Gram determinant. Unresolved geometries are
+rejected as uncertified; this does not assert that their complete thermal
+expression is ill-defined. Certificates and their soft momentum bases are
+persisted and rechecked when model parameters change, using exact rational values of the resolved
+binary floating-point masses and chemical potentials to compute squared radii. A finite-temperature
+limiting treatment of uncertified soft/Fermi coincidences is not supplied.
+This pass does not add a finite-part prescription for thermal packets whose
+ordinary zero-temperature bulk is already nonintegrable.
+
+The final ordinary deltas use simultaneous radial localization in that basis.
+The normalized auxiliary profile $h(t)=1/(1+t)^2$ retains the original sampling
+dimension. For $r=abs(bold(q))$ and
+$k_F=sqrt((sigma mu)^2-m^2)$, each shell contributes the lifted density
+$(sigma mu) k_F^2/(r^2(r+k_F)^2)$. Complete localized coefficients are guarded
+by lazy conditionals, so absent shells do not evaluate negative square roots
+or inactive singular denominators. Model-dependent domain validation rejects
+nonreal parameters and degenerate zero-radius shells at generation and runtime
+model refresh. Such thresholds need a separate distributional limit; raw
+standalone inputs at a zero-radius shell produce a nonfinite value rather than
+silently replacing that limit by zero.
+
+The resulting expressions use the existing scalar evaluator backends. Standalone
+amplitude archives retain the certificates, soft bases, and mass/chemical-potential
+expressions. GammaLoop checks them on model refresh; raw standalone callers must
+honor this domain when supplying custom inputs. An unconditional shell record
+also retains the finite-real and nonzero-radius prerequisites when there are no
+soft spectators. Regression coverage uses analytic probes and low-loop
+manufactured dotted propagators, including moving, intersecting Fermi surfaces;
+the soft Coulomb regression detects omitted weak-derivative contacts.
+Finite-temperature comparisons test integrated distributions. External-leg
+convergence fixtures must have no active thresholds. Five-loop diagrams are
+not part of routine tests.
+
 The shared `LinearEnergyExpr` stores exact `Rational` coefficients for indexed internal/external energies, the uniform scale and the constant term; `CFFVariant::prefactor` is also `Rational`. Arithmetic and cut handling retain that type until symbolic output converts it with `Atom::num`. Native rational serde/bincode support owns coefficient persistence; old Atom coefficient encodings are not a compatibility contract.
 
 CFF capacities belong to independently sampled denominator occurrences. Physical sources use their EMR/source-edge identities; completed UV sources additionally accept typed canonical denominator classes, which are distinct from `EdgeIndex`. LMB coordinates certify routing and fixed affine carriers. They do not authorize redistributing a physical source's energy powers or combining contours.
@@ -870,7 +943,10 @@ performance-heavy data.
 
 === Persistence Compatibility Contract
 <persistence-compatibility-contract>
-- State format is versioned with `state_manifest.toml` (`version = 10` currently).
+- State format is versioned with `state_manifest.toml` (`version = 11` currently).
+- Version 11 persists localized Fermi-surface supports in evaluator stacks, including
+  contacts generated by distributional differentiation, for validation after model updates.
+  Version 10 and older states must be regenerated.
 - Version 10 records UFO symbol names and Linnet subgraph labels with custom print callbacks,
   including couplings removed from the saved model by restrictions. State loading restores
   those registrations before parsing the model or importing Symbolica's archive. Linnet's
@@ -879,7 +955,7 @@ performance-heavy data.
   expressions, so
   forward references retain the same callbacks. Symbolica cannot serialize the Rust
   callbacks themselves; version 9 and older states must be regenerated, not relabeled.
-- Version 9 combined Symbolica 3 evaluator/rational payloads with native sampling and threshold metadata. Standalone amplitude and cross-section payload versions are 10 and 13, respectively. Version 7 stored exact CFF coefficients as native rationals. Version 6 removed obsolete deferred-integrand fields; version 5 added component-local generated-CFF ownership and prefactor metadata; version 4 added the typed global-prefactor sign.
+- Version 9 combined Symbolica 3 evaluator/rational payloads with native sampling and threshold metadata. Standalone amplitude and cross-section payload versions are 11 and 13, respectively; amplitude version 11 includes Fermi-surface domain metadata. Version 7 stored exact CFF coefficients as native rationals. Version 6 removed obsolete deferred-integrand fields; version 5 added component-local generated-CFF ownership and prefactor metadata; version 4 added the typed global-prefactor sign.
 - State loading and direct overwrite both require exactly the current manifest version; older states must be regenerated, and states from newer binaries require a newer GammaLoop binary.
 - A missing manifest denotes an unmanifested folder rather than a legacy state and is never loaded as saved state.
 - Process settings history now uses `settings_history.toml`
