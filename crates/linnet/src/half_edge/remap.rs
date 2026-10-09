@@ -56,6 +56,18 @@ impl<I> Remap<I> {
     }
 }
 
+impl<I> Default for Remap<I> {
+    /// The table without indices.
+    fn default() -> Self {
+        Remap {
+            new: Vec::new(),
+            start: 0,
+            bound: 0,
+            id: PhantomData,
+        }
+    }
+}
+
 impl<I> PartialEq for Remap<I> {
     fn eq(&self, other: &Self) -> bool {
         self.bound == other.bound && self.resolved().eq(other.resolved())
@@ -127,15 +139,46 @@ impl<I: From<usize> + Into<usize>> Remap<I> {
         n: usize,
         is_live: impl Fn(&C, usize) -> bool,
         parent: impl Fn(&C, usize) -> usize,
-        mut swap: impl FnMut(&mut C, usize, usize),
+        swap: impl FnMut(&mut C, usize, usize),
     ) -> Self {
+        // Collected: filling an empty buffer like `set_compaction` does costs a
+        // node-forest compact 16-18% more instructions.
+        let mut remap = Self::checked((0..index_u32(n)).collect(), 0);
+        remap.compact(ctx, is_live, parent, swap);
+        remap
+    }
+
+    /// Makes this table the [`Self::compaction`] of `n` slots of `ctx`, reusing
+    /// its buffer.
+    pub(crate) fn set_compaction<C: ?Sized>(
+        &mut self,
+        ctx: &mut C,
+        n: usize,
+        is_live: impl Fn(&C, usize) -> bool,
+        parent: impl Fn(&C, usize) -> usize,
+        swap: impl FnMut(&mut C, usize, usize),
+    ) {
+        self.new.clear();
+        self.new.extend(0..index_u32(n));
+        self.start = 0;
+        self.compact(ctx, is_live, parent, swap);
+    }
+
+    /// [`Self::compaction`] of a table that keeps every slot in place.
+    fn compact<C: ?Sized>(
+        &mut self,
+        ctx: &mut C,
+        is_live: impl Fn(&C, usize) -> bool,
+        parent: impl Fn(&C, usize) -> usize,
+        mut swap: impl FnMut(&mut C, usize, usize),
+    ) {
         // Live slots hold their own index until the kernel moves them. Absorbed
         // slots hold their parent, flagged, read while their record is still
         // in place: holes just before the kernel fills them, and the absorbed
         // slots behind the live ones after it, where only these stay put.
-        let mut remap = Self::checked((0..index_u32(n)).collect(), 0);
+        let n = self.new.len();
         let live = partition_with(
-            &mut (&mut *ctx, &mut remap.new),
+            &mut (&mut *ctx, &mut self.new),
             0,
             n,
             |(ctx, _), slot| is_live(ctx, slot),
@@ -145,7 +188,7 @@ impl<I: From<usize> + Into<usize>> Remap<I> {
                 new[moved] = hole as u32;
             },
         );
-        remap.bound = live;
+        self.bound = live;
         // Each slot behind the live ones is absorbed, or moved and names the
         // absorbed hole it filled.
         let absorbed = |new: &[u32], slot: usize| match new[slot] & MERGED {
@@ -153,26 +196,25 @@ impl<I: From<usize> + Into<usize>> Remap<I> {
             _ => slot,
         };
         for slot in live..n {
-            if remap.new[slot] as usize == slot {
-                remap.new[slot] = MERGED | parent(ctx, slot) as u32;
+            if self.new[slot] as usize == slot {
+                self.new[slot] = MERGED | parent(ctx, slot) as u32;
             }
         }
         // Point every absorbed slot at the old index of its live root, then at
         // the root's new index; flagged entries hold old indices until then.
         for slot in live..n {
-            let slot = absorbed(&remap.new, slot);
-            let mut root = (remap.new[slot] & !MERGED) as usize;
-            while remap.new[root] & MERGED != 0 {
-                root = (remap.new[root] & !MERGED) as usize;
+            let slot = absorbed(&self.new, slot);
+            let mut root = (self.new[slot] & !MERGED) as usize;
+            while self.new[root] & MERGED != 0 {
+                root = (self.new[root] & !MERGED) as usize;
             }
-            remap.new[slot] = MERGED | root as u32;
+            self.new[slot] = MERGED | root as u32;
         }
         for slot in live..n {
-            let slot = absorbed(&remap.new, slot);
-            let root = (remap.new[slot] & !MERGED) as usize;
-            remap.new[slot] = MERGED | remap.new[root];
+            let slot = absorbed(&self.new, slot);
+            let root = (self.new[slot] & !MERGED) as usize;
+            self.new[slot] = MERGED | self.new[root];
         }
-        remap
     }
 
     /// The table sending each old index to its new index, if any, and whether

@@ -14,6 +14,10 @@
 //! and `2` for every undirected self-loop whose two ends are indistinguishable, matching
 //! Graphica's convention for the equivalent plain graph.
 //!
+//! Only live nodes take part: a graph with pending identifications canonizes exactly like its
+//! [compacted](HedgeGraph::compact) copy. Node lookups accept every node slot and resolve an
+//! absorbed node to its representative, as the [`NodeRemap`] of the compaction does.
+//!
 //! The algorithm is individualization-refinement on the node partition (equitable refinement by
 //! edge-end colours, target cells chosen like nauty's `bestcell`, first-path and best-leaf
 //! search, trace and orbit pruning). Hedge orders are derived at leaves and symmetries fixing
@@ -53,6 +57,7 @@ use search::Search;
 use super::{
     involution::{EdgeIndex, EdgeVec, Hedge, HedgeVec},
     nodestore::Topology,
+    remap::NodeRemap,
     HedgeGraph, NoData, NodeIndex, NodeVec,
 };
 use crate::permutation::Permutation;
@@ -66,12 +71,15 @@ pub fn ignore<T: ?Sized>(_: &T) -> NoData {
 /// [`HedgeGraph::canonize_by`].
 ///
 /// Applying [`Self::hedge_permutation`] and [`Self::node_permutation`] to isomorphic graphs gives
-/// identical relabelled graphs (same incidence, pairing, keys and physical orientations).
+/// identical relabelled graphs (same incidence, pairing, keys and physical orientations). Node
+/// permutations need compacted graphs: [`Self::node_permutation`] panics while identifications
+/// are pending.
 #[derive(Clone, Debug)]
 pub struct Canonization<KV, KE, KH> {
     certificate: Certificate<KV, KE, KH>,
     hedge_map: Vec<u32>,
-    node_map: Vec<u32>,
+    /// The canonical node of every node slot; absorbed slots merge into their representative's.
+    node_map: NodeRemap,
     edge_map: Vec<u32>,
     edge_of: Vec<u32>,
     generator_hedges: Vec<u32>,
@@ -136,6 +144,8 @@ impl<KV, KE, KH> Certificate<KV, KE, KH> {
 pub struct Automorphism<'a> {
     hedges: &'a [u32],
     nodes: &'a [u32],
+    /// Whether identifications are pending, so that absorbed nodes map like their representative.
+    pending: bool,
 }
 
 impl Automorphism<'_> {
@@ -143,6 +153,7 @@ impl Automorphism<'_> {
         Hedge(self.hedges[hedge.0] as usize)
     }
 
+    /// The image of `node`; an absorbed node maps like its representative.
     pub fn node(&self, node: NodeIndex) -> NodeIndex {
         NodeIndex(self.nodes[node.0] as usize)
     }
@@ -151,12 +162,17 @@ impl Automorphism<'_> {
         permutation(self.hedges)
     }
 
+    /// # Panics
+    ///
+    /// While identifications are pending, as absorbed nodes map like their representative.
     pub fn node_permutation(&self) -> Permutation {
+        assert_compacted(self.pending);
         permutation(self.nodes)
     }
 }
 
 /// An isomorphism between two graphs, as maps from the first graph's elements to the second's.
+/// An absorbed node maps like its representative.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Isomorphism {
     pub hedges: HedgeVec<Hedge>,
@@ -166,6 +182,17 @@ pub struct Isomorphism {
 
 fn permutation(map: &[u32]) -> Permutation {
     Permutation::from_map(map.iter().map(|&x| x as usize).collect())
+}
+
+/// # Panics
+///
+/// While identifications are `pending`: node maps are no permutations, as absorbed nodes map
+/// like their representative until [`HedgeGraph::compact`].
+fn assert_compacted(pending: bool) {
+    assert!(
+        !pending,
+        "absorbed nodes map like their representative: compact the graph for node permutations"
+    );
 }
 
 impl<KV, KE, KH> Canonization<KV, KE, KH> {
@@ -182,8 +209,28 @@ impl<KV, KE, KH> Canonization<KV, KE, KH> {
         Hedge(self.hedge_map[hedge.0] as usize)
     }
 
+    /// Position of `node` in the canonical labelling; an absorbed node shares its
+    /// representative's.
     pub fn canonical_node(&self, node: NodeIndex) -> NodeIndex {
-        NodeIndex(self.node_map[node.0] as usize)
+        (self.node_map.get(node)).expect("every node slot has a canonical node")
+    }
+
+    /// The canonical node of every node slot.
+    fn canonical_nodes(&self) -> impl Iterator<Item = usize> + '_ {
+        (0..self.node_map.old_bound()).map(|v| self.canonical_node(NodeIndex(v)).0)
+    }
+
+    /// The live node slot at each canonical node.
+    fn canonical_order(&self) -> Vec<u32> {
+        let mut order = (0..self.node_map.old_bound() as u32).collect();
+        self.node_map.apply(&mut order);
+        order
+    }
+
+    /// Whether identifications are pending, so that absorbed nodes share their representative's
+    /// entries.
+    fn pending(&self) -> bool {
+        self.node_map.new_bound() < self.node_map.old_bound()
     }
 
     /// Edges are ordered by their first canonical hedge.
@@ -196,8 +243,15 @@ impl<KV, KE, KH> Canonization<KV, KE, KH> {
         permutation(&self.hedge_map)
     }
 
+    /// Input node -> canonical node.
+    ///
+    /// # Panics
+    ///
+    /// While identifications are pending, as absorbed nodes share their representative's
+    /// canonical node.
     pub fn node_permutation(&self) -> Permutation {
-        permutation(&self.node_map)
+        assert_compacted(self.pending());
+        self.node_map.to_permutation()
     }
 
     pub fn edge_permutation(&self) -> Permutation {
@@ -212,12 +266,14 @@ impl<KV, KE, KH> Canonization<KV, KE, KH> {
     /// Generators of the automorphism group: twin swaps and self-loop flips first, then the
     /// automorphisms found by the search, then swaps of isolated nodes.
     pub fn generators(&self) -> impl ExactSizeIterator<Item = Automorphism<'_>> {
-        let (n_hedges, n_nodes) = (self.hedge_map.len(), self.node_map.len());
+        let (n_hedges, n_nodes) = (self.hedge_map.len(), self.node_map.old_bound());
         // hedges need nodes, so a graph without nodes has no generators
         let count = self.generator_nodes.len().checked_div(n_nodes).unwrap_or(0);
+        let pending = self.pending();
         (0..count).map(move |i| Automorphism {
             hedges: &self.generator_hedges[i * n_hedges..(i + 1) * n_hedges],
             nodes: &self.generator_nodes[i * n_nodes..(i + 1) * n_nodes],
+            pending,
         })
     }
 
@@ -233,15 +289,19 @@ impl<KV, KE, KH> Canonization<KV, KE, KH> {
             .collect()
     }
 
-    /// Node orbits, each node mapped to the smallest node of its orbit.
+    /// Node orbits, each node mapped to the smallest live node of its orbit; an absorbed node
+    /// shares its representative's orbit.
     pub fn node_orbits(&self) -> NodeVec<NodeIndex> {
+        let live = self.canonical_order();
         let mut orbits = Orbits::default();
-        orbits.reset(self.node_map.len());
+        orbits.reset(self.node_map.old_bound());
         for g in self.generators() {
-            orbits.join(g.nodes);
+            for &v in &live {
+                orbits.union(v, g.nodes[v as usize]);
+            }
         }
-        (0..self.node_map.len() as u32)
-            .map(|v| NodeIndex(orbits.find(v) as usize))
+        (self.canonical_nodes())
+            .map(|q| NodeIndex(orbits.find(live[q]) as usize))
             .collect()
     }
 
@@ -278,14 +338,14 @@ impl<KV, KE, KH> Canonization<KV, KE, KH> {
                 .map(move |&c| inverse[c as usize])
                 .collect::<Vec<_>>()
         };
+        let order = other.canonical_order();
         Some(Isomorphism {
             hedges: compose(&self.hedge_map, &other.hedge_map)
                 .into_iter()
                 .map(Hedge)
                 .collect(),
-            nodes: compose(&self.node_map, &other.node_map)
-                .into_iter()
-                .map(NodeIndex)
+            nodes: (self.canonical_nodes())
+                .map(|q| NodeIndex(order[q] as usize))
                 .collect(),
             edges: compose(&self.edge_map, &other.edge_map)
                 .into_iter()
@@ -521,6 +581,13 @@ impl Workspace {
                 group.push_swaps(&[], &[(w[0], w[1])]);
             }
         }
+        // the loaded nodes are the node slots unless the graph has absorbed nodes
+        let node_map = NodeRemap::bijection(node_map);
+        let (node_map, generator_nodes) = if g.slots.is_empty() {
+            (node_map, group.nodes.clone())
+        } else {
+            g.restate_by_slot(&node_map, group.nodes)
+        };
 
         Canonization {
             certificate: Certificate {
@@ -534,7 +601,7 @@ impl Workspace {
             edge_map,
             edge_of: g.edge_of.clone(),
             generator_hedges: group.hedges.clone(),
-            generator_nodes: group.nodes.clone(),
+            generator_nodes,
             automorphism_count: group.order,
         }
     }
