@@ -1,9 +1,8 @@
 use std::{collections::BTreeMap, fmt::Display};
 
-use dot_parser::{ast::AttrStmt, canonical::IDEq};
 use figment::Figment;
 
-use super::{dot_id, dot_value, strip_quotes};
+use super::{dot_id, dot_value, syntax::Attr};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -23,6 +22,28 @@ pub struct GlobalData {
 impl GlobalData {
     pub fn add_name(&mut self, name: String) {
         self.name = name;
+    }
+
+    /// Graph metadata from the flattened attribute statements of a DOT graph.
+    /// Later statements win; a `name` statement becomes the graph name.
+    pub(crate) fn from_statements<'a>(
+        statements: impl IntoIterator<Item = Attr<'a>>,
+        node_defaults: impl IntoIterator<Item = Attr<'a>>,
+        edge_defaults: impl IntoIterator<Item = Attr<'a>>,
+    ) -> Self {
+        fn owned<'a>(attrs: impl IntoIterator<Item = Attr<'a>>) -> BTreeMap<String, String> {
+            (attrs.into_iter())
+                .map(|(key, value)| (key.into_owned(), value.into_owned()))
+                .collect()
+        }
+        let mut statements = owned(statements);
+        GlobalData {
+            name: statements.remove("name").unwrap_or_default(),
+            payload: None,
+            statements,
+            edge_statements: owned(edge_defaults),
+            node_statements: owned(node_defaults),
+        }
     }
 
     #[cfg(feature = "serde")]
@@ -141,66 +162,5 @@ impl Display for GlobalData {
         }
 
         Ok(())
-    }
-}
-
-impl TryFrom<(Vec<AttrStmt<(String, String)>>, Vec<IDEq>)> for GlobalData {
-    type Error = ();
-
-    fn try_from(value: (Vec<AttrStmt<(String, String)>>, Vec<IDEq>)) -> Result<Self, Self::Error> {
-        let mut statements = BTreeMap::new();
-        let mut edge_statements = BTreeMap::new();
-        let mut node_statements = BTreeMap::new();
-
-        for attr_stmt in value.0 {
-            match attr_stmt {
-                AttrStmt::Graph(l) => {
-                    for l in l.elems {
-                        statements.extend(
-                            l.into_iter()
-                                .map(|(k, v)| (strip_quotes(&k), strip_quotes(&v))),
-                        );
-                    }
-                }
-                AttrStmt::Node(l) => {
-                    for l in l.elems {
-                        node_statements.extend(
-                            l.into_iter()
-                                .map(|(k, v)| (strip_quotes(&k), strip_quotes(&v))),
-                        );
-                    }
-                }
-                AttrStmt::Edge(l) => {
-                    for l in l.elems {
-                        edge_statements.extend(
-                            l.into_iter()
-                                .map(|(k, v)| (strip_quotes(&k), strip_quotes(&v))),
-                        );
-                    }
-                }
-            }
-        }
-
-        for e in value.1 {
-            statements.insert(strip_quotes(&e.lhs), strip_quotes(&e.rhs));
-        }
-
-        let mut name = String::new();
-        statements.retain(|k, v| {
-            if k.as_str() == "name" {
-                name.clone_from(v);
-                false
-            } else {
-                true
-            }
-        });
-
-        Ok(GlobalData {
-            name,
-            payload: None,
-            statements,
-            edge_statements,
-            node_statements,
-        })
     }
 }

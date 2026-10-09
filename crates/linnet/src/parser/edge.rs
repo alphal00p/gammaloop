@@ -1,4 +1,9 @@
-use std::{borrow::Borrow, collections::BTreeMap, fmt::Display, str::FromStr};
+use std::{
+    borrow::{Borrow, Cow},
+    collections::BTreeMap,
+    fmt::Display,
+    str::FromStr,
+};
 
 use itertools::Either;
 
@@ -8,8 +13,8 @@ use crate::half_edge::{
 };
 
 use super::{
-    dot_id, dot_value, strip_quotes, subgraph_free::Edge, DotHedgeData, DotParseError,
-    ExplicitIdKind, GlobalData, NodeIdOrDangling,
+    dot_id, dot_value, syntax::Edge, DotHedgeData, DotParseError, ExplicitIdKind, GlobalData,
+    NodeIdOrDangling,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -142,10 +147,12 @@ impl Default for DotEdgeData {
 }
 
 impl DotEdgeData {
+    /// The data, orientation, and endpoints of a flattened DOT edge; `map`
+    /// holds the graph's nodes by identifier.
     #[allow(clippy::type_complexity)]
-    pub fn from_parser(
-        edge: Edge,
-        map: &BTreeMap<String, NodeIdOrDangling>,
+    pub(crate) fn from_parser(
+        edge: Edge<'_>,
+        map: &BTreeMap<Cow<'_, str>, NodeIdOrDangling>,
         is_digraph: impl Into<Orientation>,
         global_data: &GlobalData,
     ) -> Result<
@@ -158,12 +165,10 @@ impl DotEdgeData {
         DotParseError,
     > {
         let mut orientation = is_digraph.into();
-        let mut source_data = DotHedgeData::from_parser(edge.source_port())?;
-        let mut sink_data = DotHedgeData::from_parser(edge.sink_port())?;
-        let local_statements = edge
-            .attr
-            .iter()
-            .map(|(key, value)| (strip_quotes(key), strip_quotes(value)))
+        let mut source_data = DotHedgeData::from_parser(edge.from.port.as_ref())?;
+        let mut sink_data = DotHedgeData::from_parser(edge.to.port.as_ref())?;
+        let local_statements = (edge.attrs.iter())
+            .map(|(key, value)| (key.to_string(), value.to_string()))
             .collect();
         let mut statements = global_data.edge_statements.clone();
         if let Some(value) = statements.remove("dir") {
@@ -174,28 +179,25 @@ impl DotEdgeData {
                 _ => return Err(DotParseError::InvalidEdgeDirection { value }),
             };
         }
-        for (key, value) in edge.attr {
-            let key = strip_quotes(&key);
-            let stripped_value = strip_quotes(&value);
-            match key.as_str() {
-                "dir" => match stripped_value.as_str() {
+        for (key, value) in edge.attrs {
+            let value = value.into_owned();
+            match key.as_ref() {
+                "dir" => match value.as_str() {
                     "forward" => orientation = Orientation::Default,
                     "back" => orientation = Orientation::Reversed,
                     "none" => orientation = Orientation::Undirected,
                     _ => {
-                        return Err(DotParseError::InvalidEdgeDirection {
-                            value: stripped_value,
-                        });
+                        return Err(DotParseError::InvalidEdgeDirection { value });
                     }
                 },
                 "source" => {
-                    source_data.statement = Some(stripped_value);
+                    source_data.statement = Some(value);
                 }
                 "sink" => {
-                    sink_data.statement = Some(stripped_value);
+                    sink_data.statement = Some(value);
                 }
                 _ => {
-                    statements.insert(key, stripped_value);
+                    statements.insert(key.into_owned(), value);
                 }
             }
         }

@@ -43,7 +43,7 @@ use linnet::{
         subgraph::{ModifySubSet, OrientedCut, SuBitGraph, SubSetOps},
         swap::Swap,
     },
-    parser::{DotEdgeData, DotGraph, DotHedgeData, DotVertexData, GraphSet, HedgeParseError},
+    parser::{DotEdgeData, DotGraph, DotHedgeData, DotVertexData, GraphSet},
     permutation::Permutation,
 };
 use spenso::{network::parsing::ParseSettings, structure::slot::IsAbstractSlot};
@@ -988,26 +988,13 @@ impl Graph {
             DotHedgeData,
             linnet::parser::GlobalData,
             NodeForest,
-        > = GraphSet::from_file(p.as_ref()).map_err(|a| match a {
-            HedgeParseError::GraphFromFile(e) => match e.as_ref() {
-                dot_parser::ast::GraphFromFileError::FileError(e) => eyre!(e.to_string())
-                    .with_note(|| {
-                        format!(
-                            "Tried to access the file at: {}",
-                            display_graph_source_path(p.as_ref()).display()
-                        )
-                    }),
-                dot_parser::ast::GraphFromFileError::ParseError(e) => {
-                    eyre!("Dot parsing error: {}", e)
-                }
-                dot_parser::ast::GraphFromFileError::PestParseError(e) => {
-                    eyre!(e.to_string())
-                }
-            },
-            HedgeParseError::ParseError(i) => color_eyre::Report::from(i),
-            _ => {
-                eyre!("Hedge parse error")
-            }
+        > = GraphSet::from_file(p.as_ref()).map_err(|error| {
+            eyre!("{error}").with_note(|| {
+                format!(
+                    "Tried to read the DOT file at: {}",
+                    display_graph_source_path(p.as_ref()).display()
+                )
+            })
         })?;
         Self::from_finalized_runtime_graph_set(hedge_graph_set, model)
     }
@@ -1023,23 +1010,7 @@ impl Graph {
             DotHedgeData,
             linnet::parser::GlobalData,
             NodeForest,
-        > = GraphSet::from_string(s).map_err(|a| match a {
-            HedgeParseError::GraphFromFile(e) => match e.as_ref() {
-                dot_parser::ast::GraphFromFileError::FileError(e) => {
-                    eyre!(e.to_string())
-                }
-                dot_parser::ast::GraphFromFileError::ParseError(e) => {
-                    eyre!("Dot parsing error: {}", e)
-                }
-                dot_parser::ast::GraphFromFileError::PestParseError(e) => {
-                    eyre!(e.to_string())
-                }
-            },
-            HedgeParseError::ParseError(i) => color_eyre::Report::from(i),
-            _ => {
-                eyre!("Hedge parse error")
-            }
-        })?;
+        > = GraphSet::from_string(s).map_err(|error| eyre!("{error}"))?;
 
         Self::from_finalized_runtime_graph_set(hedge_graph_set, model)
     }

@@ -3322,10 +3322,6 @@ pub enum HedgeGraphError {
     CheckpointOpen,
     #[error("Invalid hedge pair {0:?} not equal to {1:?} for edge {2}")]
     InvalidHedgePair(HedgePair, HedgePair, EdgeIndex),
-    // #[error("From file error: {0}")]
-    // FromFileError(#[from] GraphFromFileError),
-    // #[error("Parse error: {0}")]
-    // ParseError(#[from] PestError),
 }
 
 pub mod algorithms;

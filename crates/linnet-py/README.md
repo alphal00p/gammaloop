@@ -31,8 +31,7 @@ for construction, topology, algorithms, DOT, layout streaming, and rendering.
 Linnet, Linnest, and Kurvst are MIT-licensed (`LICENSE`). The wheel embeds
 Typst and its fonts (`licenses/`) and the CeTZ, oxifmt, and MiTeX Typst
 packages, whose licenses and provenance are under `vendor/typst-packages/`.
-The wheel's CycloneDX SBOM lists every compiled Rust crate with its license,
-including the GPL-2.0-or-later `dot-parser`.
+The wheel's CycloneDX SBOM lists every compiled Rust crate with its license.
 
 ## Development
 

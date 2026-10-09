@@ -786,8 +786,11 @@ fn join() {
         *c.iter_edges_of(&c.full_filter()).next().unwrap().2.data
     );
 }
-use crate::{dot, half_edge::swap::Swap, parser::DotGraph};
-use dot_parser::ast::CompassPt;
+use crate::{
+    dot,
+    half_edge::swap::Swap,
+    parser::{CompassPt, DotGraph},
+};
 use insta::assert_snapshot;
 
 use super::*;

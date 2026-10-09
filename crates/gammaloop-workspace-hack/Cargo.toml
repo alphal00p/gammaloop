@@ -24,7 +24,6 @@ clap_builder = { version = "4", default-features = false, features = ["color", "
 console = { version = "0.16" }
 criterion = { version = "0.5", features = ["html_reports"] }
 crossterm = { version = "0.28", features = ["serde"] }
-either = { version = "1", features = ["use_std"] }
 indexmap = { version = "2", features = ["serde"] }
 libc = { version = "0.2" }
 log = { version = "0.4", default-features = false, features = ["std"] }
@@ -65,7 +64,6 @@ clap_builder = { version = "4", default-features = false, features = ["color", "
 console = { version = "0.16" }
 criterion = { version = "0.5", features = ["html_reports"] }
 crossterm = { version = "0.28", features = ["serde"] }
-either = { version = "1", features = ["use_std"] }
 indexmap = { version = "2", features = ["serde"] }
 libc = { version = "0.2" }
 log = { version = "0.4", default-features = false, features = ["std"] }

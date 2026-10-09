@@ -122,8 +122,8 @@ DOT interchange follows a separate adapter path:
 
 ```text
 DOT text/file
-  -> dot-parser AST
-  -> SubGraphFreeGraph plus inherited attributes
+  -> parser::syntax: lexing and recursive descent, flattened in one pass
+  -> FlatGraph: attribute statements, nodes keyed by decoded identifier, single edges
   -> DotVertexData / DotEdgeData / DotHedgeData
   -> HedgeGraphBuilder
   -> explicit id permutations, when ids were supplied
@@ -133,7 +133,9 @@ DOT text/file
 Invisible endpoint nodes represent dangling edges. `dir` controls superficial orientation, while
 the endpoint side determines underlying flow. Serialization maps caller data into the DOT data
 types and writes through a caller-provided `fmt::Write` or `io::Write`; DOT parsing separately
-offers string- and file-based entry points. Malformed direction, endpoint, and explicit-ID data
+offers string- and file-based entry points. Invalid DOT is a `DotSyntaxError` with its line and
+column; the reader has no dependencies and limits subgraph nesting to 256 levels, because the
+Typst plugin parses user-supplied DOT. Malformed direction, endpoint, and explicit-ID data
 are reported as parser errors; they do not panic or publish a partially constructed graph.
 
 == Feature and persistence boundaries

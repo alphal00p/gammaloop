@@ -7,8 +7,7 @@ use crate::half_edge::{
 };
 
 use super::{
-    hedge::compass_pt_to_u8, set::DotGraphSet, DotEdgeData, DotGraph, DotHedgeData, DotVertexData,
-    GlobalData,
+    set::DotGraphSet, CompassPt, DotEdgeData, DotGraph, DotHedgeData, DotVertexData, GlobalData,
 };
 
 type ArchivedDotGraph = Archived<DotGraph>;
@@ -265,8 +264,8 @@ impl<'a> ArchivedDotGraphView<'a> {
         })
     }
 
-    pub fn compass_subgraph(&self, compass_pt: Option<dot_parser::ast::CompassPt>) -> SuBitGraph {
-        let target = compass_pt.map(compass_pt_to_u8);
+    pub fn compass_subgraph(&self, compass_pt: Option<CompassPt>) -> SuBitGraph {
+        let target = compass_pt.map(|compass| compass as u8);
         self.graph
             .hedge_data
             .0
@@ -338,7 +337,7 @@ impl<'a> ArchivedDotGraphView<'a> {
 
 #[cfg(test)]
 mod tests {
-    use dot_parser::ast::CompassPt;
+    use crate::parser::CompassPt;
 
     use super::{ArchivedDotGraph, DotGraph, DotGraphBytesSet, DotGraphSet};
     use crate::half_edge::{involution::ArchivedOrientation, subgraph::SubSetLike};

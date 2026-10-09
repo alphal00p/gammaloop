@@ -1,7 +1,8 @@
 use std::fmt::Display;
 
-use dot_parser::ast::{GraphFromFileError, PestError};
 use thiserror::Error;
+
+use super::DotSyntaxError;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ExplicitIdKind {
@@ -56,12 +57,14 @@ pub enum DotParseError {
 }
 
 #[derive(Debug, Error)]
-pub enum HedgeParseError<'a, E, V, H, G> {
+pub enum HedgeParseError<E, V, H, G> {
     DotVertexDataError(V),
 
-    GraphFromFile(Box<GraphFromFileError<'a>>),
+    /// The input is not valid DOT.
+    Syntax(DotSyntaxError),
 
-    ParseError(Box<PestError>),
+    /// The DOT file could not be read.
+    Io(std::io::Error),
 
     DotEdgeDataError(E),
 
@@ -72,11 +75,11 @@ pub enum HedgeParseError<'a, E, V, H, G> {
     DotParseError(#[source] DotParseError),
 }
 
-impl<'a> Display for HedgeParseError<'a, (), (), (), ()> {
+impl Display for HedgeParseError<(), (), (), ()> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            HedgeParseError::ParseError(a) => write!(f, "{a}")?,
-            HedgeParseError::GraphFromFile(a) => write!(f, "{a}")?,
+            HedgeParseError::Syntax(a) => write!(f, "{a}")?,
+            HedgeParseError::Io(a) => write!(f, "{a}")?,
             HedgeParseError::DotParseError(a) => write!(f, "{a}")?,
             _ => unreachable!(),
         }
@@ -84,37 +87,36 @@ impl<'a> Display for HedgeParseError<'a, (), (), (), ()> {
     }
 }
 
-impl<'a, E, V, H, G> From<DotParseError> for HedgeParseError<'a, E, V, H, G> {
+impl<E, V, H, G> From<DotParseError> for HedgeParseError<E, V, H, G> {
     fn from(error: DotParseError) -> Self {
         Self::DotParseError(error)
     }
 }
 
-impl<'a, E, V, H, G> From<GraphFromFileError<'a>> for HedgeParseError<'a, E, V, H, G> {
-    fn from(e: GraphFromFileError<'a>) -> Self {
-        HedgeParseError::GraphFromFile(Box::new(e))
+impl<E, V, H, G> From<DotSyntaxError> for HedgeParseError<E, V, H, G> {
+    fn from(error: DotSyntaxError) -> Self {
+        Self::Syntax(error)
     }
 }
 
-impl<E, V, H, G> From<PestError> for HedgeParseError<'_, E, V, H, G> {
-    fn from(e: PestError) -> Self {
-        HedgeParseError::ParseError(Box::new(e))
+impl<E, V, H, G> From<std::io::Error> for HedgeParseError<E, V, H, G> {
+    fn from(error: std::io::Error) -> Self {
+        Self::Io(error)
     }
 }
 
-pub trait MapGlobal<'a, E, V, H, D> {
-    #[allow(clippy::result_large_err)]
-    fn map_global<G>(self) -> Result<D, HedgeParseError<'a, E, V, H, G>>;
+pub trait MapGlobal<E, V, H, D> {
+    fn map_global<G>(self) -> Result<D, HedgeParseError<E, V, H, G>>;
 }
 
-impl<'a, E, V, H, D> MapGlobal<'a, E, V, H, D> for Result<D, HedgeParseError<'a, E, V, H, ()>> {
-    fn map_global<G>(self) -> Result<D, HedgeParseError<'a, E, V, H, G>> {
+impl<E, V, H, D> MapGlobal<E, V, H, D> for Result<D, HedgeParseError<E, V, H, ()>> {
+    fn map_global<G>(self) -> Result<D, HedgeParseError<E, V, H, G>> {
         self.map_err(|e| e.map_global())
     }
 }
 
-impl<'a, E, V, H> HedgeParseError<'a, E, V, H, ()> {
-    pub fn map_global<G>(self) -> HedgeParseError<'a, E, V, H, G> {
+impl<E, V, H> HedgeParseError<E, V, H, ()> {
+    pub fn map_global<G>(self) -> HedgeParseError<E, V, H, G> {
         match self {
             HedgeParseError::GraphDataFromStringError(_) => unreachable!(),
             HedgeParseError::DotEdgeDataError(a) => HedgeParseError::DotEdgeDataError(a),
@@ -122,38 +124,37 @@ impl<'a, E, V, H> HedgeParseError<'a, E, V, H, ()> {
             HedgeParseError::HedgeDataFromStringError(a) => {
                 HedgeParseError::HedgeDataFromStringError(a)
             }
-            HedgeParseError::GraphFromFile(a) => HedgeParseError::GraphFromFile(a),
-            HedgeParseError::ParseError(a) => HedgeParseError::ParseError(a),
+            HedgeParseError::Syntax(a) => HedgeParseError::Syntax(a),
+            HedgeParseError::Io(a) => HedgeParseError::Io(a),
             HedgeParseError::DotParseError(a) => HedgeParseError::DotParseError(a),
         }
     }
 }
 
-#[allow(clippy::result_large_err)]
-pub trait HedgeParseExt<'a, D> {
+pub trait HedgeParseExt<D> {
     type Error;
 
-    fn global<E, V, H>(self) -> Result<D, HedgeParseError<'a, E, V, H, Self::Error>>;
-    fn hedge<V, E, G>(self) -> Result<D, HedgeParseError<'a, V, E, Self::Error, G>>;
-    fn edge<V, H, G>(self) -> Result<D, HedgeParseError<'a, Self::Error, V, H, G>>;
-    fn vertex<E, H, G>(self) -> Result<D, HedgeParseError<'a, E, Self::Error, H, G>>;
+    fn global<E, V, H>(self) -> Result<D, HedgeParseError<E, V, H, Self::Error>>;
+    fn hedge<V, E, G>(self) -> Result<D, HedgeParseError<V, E, Self::Error, G>>;
+    fn edge<V, H, G>(self) -> Result<D, HedgeParseError<Self::Error, V, H, G>>;
+    fn vertex<E, H, G>(self) -> Result<D, HedgeParseError<E, Self::Error, H, G>>;
 }
 
-impl<'a, Err, D> HedgeParseExt<'a, D> for Result<D, Err> {
+impl<Err, D> HedgeParseExt<D> for Result<D, Err> {
     type Error = Err;
 
-    fn global<E, V, H>(self) -> Result<D, HedgeParseError<'a, E, V, H, Self::Error>> {
+    fn global<E, V, H>(self) -> Result<D, HedgeParseError<E, V, H, Self::Error>> {
         self.map_err(|e| HedgeParseError::GraphDataFromStringError(e))
     }
 
-    fn hedge<V, E, G>(self) -> Result<D, HedgeParseError<'a, V, E, Self::Error, G>> {
+    fn hedge<V, E, G>(self) -> Result<D, HedgeParseError<V, E, Self::Error, G>> {
         self.map_err(|e| HedgeParseError::HedgeDataFromStringError(e))
     }
 
-    fn edge<V, H, G>(self) -> Result<D, HedgeParseError<'a, Self::Error, V, H, G>> {
+    fn edge<V, H, G>(self) -> Result<D, HedgeParseError<Self::Error, V, H, G>> {
         self.map_err(|e| HedgeParseError::DotEdgeDataError(e))
     }
-    fn vertex<E, H, G>(self) -> Result<D, HedgeParseError<'a, E, Self::Error, H, G>> {
+    fn vertex<E, H, G>(self) -> Result<D, HedgeParseError<E, Self::Error, H, G>> {
         self.map_err(|e| HedgeParseError::DotVertexDataError(e))
     }
 }

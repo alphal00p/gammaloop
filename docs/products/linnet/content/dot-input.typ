@@ -65,9 +65,9 @@ also request that node index unless a node `id` attribute overrides it. Thus a o
 containing only `7;` is out of bounds; `7 [id=0];` explicitly assigns its sole node to index 0.
 Alphabetic identifiers such as `a` leave the index unspecified unless they have an `id`.
 
-Write numeric half-edge ports without quotes: `a:3` or `a:3:n`. Named ports and compass points
-such as `a:output:n` and `a:n` do not reserve half-edge indices. Currently, quoted numeric ports
-such as `a:"3"` also remain port labels rather than fixing an index.
+A numeric half-edge port is written `a:3` or `a:3:n`; quoting does not matter, so `a:"3"`
+requests half-edge 3 too. Named ports and compass points such as `a:output:n` and `a:n` do not
+reserve half-edge indices.
 
 #callout("Numeric ports are global", [
   `a:3` means half-edge 3 of the whole graph, not the fourth connection at node `a`.
@@ -85,17 +85,20 @@ in ascending order. It handles all three collections independently, so specifyin
 The order used to fill omitted indices comes from parsing the DOT endpoints, not simply from
 the order of lines in the file:
 
-- Nodes are traversed in lexicographic DOT identifier order.
+- Nodes are traversed in lexicographic order of their identifiers. Identifiers are compared
+  after decoding quotes and escapes, so `a` and `"a"` name the same node.
 - Edges are sorted by their source endpoint and then their target endpoint. An endpoint compares
-  its DOT identifier spelling first, then any port or compass information. Ports therefore
-  participate in sorting, even when they are not numeric indices. Equal endpoint pairs retain
-  their order in the flattened DOT input, so statement order still matters for parallel edges
-  with identical endpoints.
+  its decoded identifier first, then any port or compass information: named ports sort before
+  bare compass points, and compass points sort as `n`, `ne`, `e`, `se`, `s`, `sw`, `w`, `nw`,
+  `c`, `_`. Ports therefore participate in sorting, even when they are not numeric indices.
+  Equal endpoint pairs retain their order in the flattened DOT input, so statement order still
+  matters for parallel edges with identical endpoints.
 - Half-edges follow that edge traversal: an internal edge contributes its source half-edge
   before its sink half-edge; a dangling edge contributes only its real half-edge.
 
 Each collection skips its explicit reservations when assigning omitted indices. The sorting
-uses DOT spellings, not numeric magnitude, and happens before the explicit index permutations.
+compares identifiers as text, not by numeric magnitude, and happens before the explicit index
+permutations.
 
 For example, this input deliberately puts `b -> ext` before `a -> b`:
 
@@ -137,7 +140,34 @@ indices and inspect the resulting order.
 
 The same uniqueness rule applies when node or edge defaults supply `id` values. A subgraph does
 not start a new index space: all visible nodes, expanded edges, and half-edges belong to the
-containing graph. Parallel edges remain distinct records.
+containing graph. Parallel edges remain distinct records. In the flattened order, the statements
+inside an endpoint subgraph come first and then the edges to and from its nodes, as in Graphviz:
+`{a -> b} -> c` flattens to `a -> b`, `a -> c`, `b -> c`.
+
+Attribute statements such as `node [shape=box]` apply to the whole graph, wherever they appear,
+including inside subgraphs; `key=value` on its own sets a graph attribute like
+`graph [key=value]`. Repeated statements for one node merge their attributes; a later value
+replaces an earlier one with the same key, and `a [x=1]; a [y=2]` gives `a` both. Graph, node
+and edge defaults follow the same rule.
+
+== DOT syntax
+
+Linnet reads the #link("https://graphviz.org/doc/info/lang.html")[Graphviz DOT language]
+with its own reader, which reports a syntax error with its line and column. Keywords are
+case-insensitive, identifiers may contain non-ASCII characters, and `/* */` comments are
+ignored, as is the rest of a line from `//` or `#` outside a string. A number directly
+followed by letters, such as `18s`, reads as two identifiers, as in Graphviz; quote such values.
+String concatenation with `+` is not supported, and subgraphs nest at most 256 levels deep.
+
+Quoted strings decode `\"` to a quote and `\\` to one backslash, and drop a backslash followed
+by a line break. Other escapes, such as Graphviz's `\N` and `\l`, are kept as written. Unlike
+Graphviz, which keeps `\\` as two characters, this lets Linnet write every string, including
+one that ends in a backslash, and read it back unchanged. HTML strings such as `<<b>x</b>>` are
+kept as written, angle brackets included.
+
+A reader for one graph rejects any input after the graph; use a graph set to read a document
+holding several graphs. The DOT grammar has no `;` after a graph's closing brace, so neither
+reader accepts one.
 
 == Inspect and draw
 

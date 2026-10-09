@@ -1986,9 +1986,10 @@ class TestDotCodec(unittest.TestCase):
         self.assertEqual(decoded.node(0).data, value)
         self.assertEqual(decoded.global_data.statements[key], value)
 
-        unsupported = lp.Graph(nodes=[lp.Node("only", data="trailing\\")])
-        with self.assertRaisesRegex(ValueError, "cannot end in a backslash"):
-            unsupported.to_dot(codec)
+        trailing = lp.Graph(nodes=[lp.Node("only\\", data="trailing\\")])
+        decoded = lp.Graph.from_dot(trailing.to_dot(codec), codec)
+        self.assertEqual(decoded.node(0).name, "only\\")
+        self.assertEqual(decoded.node(0).data, "trailing\\")
 
     def test_import_rejects_duplicate_python_element_names(self):
         codec = lp.DotCodec.topology()

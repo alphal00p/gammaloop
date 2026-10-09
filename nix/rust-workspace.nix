@@ -40,7 +40,7 @@
   # Cargo path patches are dependencies, not workspace members. Preserve their
   # manifests and implementation in every filtered dependency/build context.
   localCargoPatchDirs = lib.filter (name: builtins.pathExists (workspaceRoot + "/vendor/${name}"))
-    ["clarabel" "dot-parser" "typst-library" "typst-svg"];
+    ["clarabel" "typst-library" "typst-svg"];
   localCargoPatchSources = lib.fileset.unions (
     map (name: workspaceRoot + "/vendor/${name}") localCargoPatchDirs
   );
@@ -567,8 +567,20 @@
       "tests/resources/graphs/uv_tests/rqft_a_3l_no_ghost.dot"
       "tests/resources/graphs/uv_tests/rqft_ghG_3l.dot"
     ];
-    # The nauty validation test reads nauty's driver script and answer files at runtime.
-    linnet = ["crates/linnet/tests/resources/nauty"];
+    # The nauty validation test reads nauty's driver script and answer files at
+    # runtime; the DOT corpus test reads only the DOT files below the other roots.
+    linnet =
+      ["crates/linnet/tests/resources/nauty"]
+      ++ map (root: {
+        inherit root;
+        extension = "dot";
+      }) [
+        "crates/gammalooprs/tests/fixtures"
+        "crates/linnest/examples"
+        "examples/cli"
+        "examples/notebooks/fixtures"
+        "tests/resources/graphs"
+      ];
     "gammaloop-integration-tests" = [
       "assets/plot_approach_result.py"
       "examples/api"
@@ -614,8 +626,17 @@
   workspacePackageExtraSourceRootsForSourcePackages = kind: sourcePackages:
     sortedUnique (lib.concatMap (sourcePackage: workspacePackageExtraSourceRoots.${kind}.${sourcePackage} or []) sourcePackages);
 
+  # An extra source root is a workspace-relative path, or `{ root; extension; }`
+  # for only the files below `root` with that extension. Production roots are
+  # plain paths, which the dummy-source restore below copies.
   workspacePackageExtraFilesetsForSourcePackages = kind: sourcePackages:
-    map (sourceRoot: workspaceRoot + "/${sourceRoot}") (workspacePackageExtraSourceRootsForSourcePackages kind sourcePackages);
+    lib.concatMap (sourcePackage:
+      map (sourceRoot:
+        if builtins.isAttrs sourceRoot
+        then lib.fileset.fileFilter (file: file.hasExt sourceRoot.extension) (workspaceRoot + "/${sourceRoot.root}")
+        else workspaceRoot + "/${sourceRoot}")
+      (workspacePackageExtraSourceRoots.${kind}.${sourcePackage} or []))
+    sourcePackages;
 
   workspacePackageExtraSourceRestoreInDummySrcScriptFor = sourcePackages:
     ''

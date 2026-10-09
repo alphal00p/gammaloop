@@ -927,6 +927,11 @@ fn external_code_lines(source: &str) -> Vec<String> {
             }
             raw_string_hashes = Some(hashes);
             index += delimiter_length;
+        } else if let Some(length) = external_char_literal_length(source, index) {
+            for byte in &mut code[index..index + length] {
+                *byte = b' ';
+            }
+            index += length;
         } else if source[index] == b'"' {
             code[index] = b' ';
             quoted_string = true;
@@ -954,6 +959,26 @@ fn external_raw_string_start(source: &[u8], index: usize) -> Option<(usize, usiz
         cursor += 1;
     }
     (source.get(cursor) == Some(&b'"')).then_some((cursor - index + 1, cursor - hash_start))
+}
+
+/// The length of the character or byte literal whose quote is at `index`, such
+/// as `'"'` or `'\''`, so that a quote inside it does not open a string. Returns
+/// `None` for a lifetime or a loop label.
+fn external_char_literal_length(source: &[u8], index: usize) -> Option<usize> {
+    if source.get(index) != Some(&b'\'') {
+        return None;
+    }
+    let body = index + 1;
+    let end = match *source.get(body)? {
+        // `\u{...}` runs to its closing brace; every other escape has two bytes.
+        b'\\' if source.get(body + 1) == Some(&b'u') => {
+            body + source[body..].iter().position(|&byte| byte == b'}')? + 1
+        }
+        b'\\' => body + 2,
+        b'\'' | b'\n' => return None,
+        first => body + (first.leading_ones() as usize).max(1),
+    };
+    (source.get(end) == Some(&b'\'')).then_some(end + 1 - index)
 }
 
 /// Capture a function or inherent method in a documentation descriptor.
@@ -1990,6 +2015,24 @@ pub fn derive_me(input: Tokens) -> Tokens { input }
         assert_eq!(
             external_proc_macro_source_line(source, function("derive_me"), "DeriveMe").unwrap(),
             expected_line("#[proc_macro_derive(DeriveMe, attributes(skip_me))]")
+        );
+    }
+
+    /// A quote in a character literal must not hide later declarations.
+    #[test]
+    fn external_source_line_skips_character_literals() {
+        let source = r#"
+fn quote<'a>(text: &'a str) -> bool {
+    'outer: loop {
+        break 'outer text.ends_with('"') || text.ends_with(b'\'' as char);
+    }
+}
+fn escaped() -> [char; 2] { ['\u{22}', '\"'] }
+pub struct AfterQuotes;
+"#;
+        assert_eq!(
+            external_source_line(source, "AfterQuotes", None, ExternalKind::Type).unwrap(),
+            8
         );
     }
 }

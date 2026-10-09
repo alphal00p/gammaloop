@@ -18,7 +18,7 @@
   _a typst interface to the `linnet` crate_
 
   `linnet` is a Rust crate that provides a graph data structure, graph algorithms,
-  several layout algorithms, and a DOT parser built on `dot_parser`.
+  several layout algorithms, and its own DOT reader and writer.
 
 
 

@@ -44,7 +44,6 @@ pub use graph_api::{
 pub use pin::PinConstraint;
 
 use cgmath::{EuclideanSpace, InnerSpace, Point2, Rad, Vector2, Zero};
-use dot_parser::ast::CompassPt;
 use figment::{providers::Serialized, Figment, Profile};
 use linnet::half_edge::swap::Swap;
 use linnet::{
@@ -66,7 +65,9 @@ use linnet::{
         subgraph::{SuBitGraph, SubSetLike},
         EdgeAccessors, HedgeGraph, NodeIndex, NodeVec,
     },
-    parser::{DotEdgeData, DotGraph, DotHedgeData, DotVertexData, GlobalData, HedgeParseError},
+    parser::{
+        CompassPt, DotEdgeData, DotGraph, DotHedgeData, DotVertexData, GlobalData, HedgeParseError,
+    },
 };
 
 use rand::rngs::SmallRng;
@@ -606,7 +607,7 @@ impl TypstHedge {
             compasspt: self
                 .compasspt
                 .as_deref()
-                .and_then(|value| parse_hedge_compass(value).ok())
+                .and_then(|value| parse_compass(value).ok())
                 .flatten(),
         }
     }
@@ -617,43 +618,22 @@ impl TypstHedge {
             id: data.id.map(|id| id.0),
             data: data.payload,
             port_label: data.port_label,
-            compasspt: data.compasspt.map(hedge_compass_to_string),
+            compasspt: data.compasspt.map(|compass| compass.to_string()),
             ..Default::default()
         }
     }
 }
 
-fn parse_hedge_compass(value: &str) -> Result<Option<CompassPt>, String> {
+/// Reads a compass point as Typst passes it: case-insensitive, with an empty
+/// string or `none` for no compass point.
+pub(crate) fn parse_compass(value: &str) -> Result<Option<CompassPt>, String> {
     match value.trim().to_ascii_lowercase().as_str() {
         "" | "none" => Ok(None),
-        "n" => Ok(Some(CompassPt::N)),
-        "ne" => Ok(Some(CompassPt::NE)),
-        "e" => Ok(Some(CompassPt::E)),
-        "se" => Ok(Some(CompassPt::SE)),
-        "s" => Ok(Some(CompassPt::S)),
-        "sw" => Ok(Some(CompassPt::SW)),
-        "w" => Ok(Some(CompassPt::W)),
-        "nw" => Ok(Some(CompassPt::NW)),
-        "c" => Ok(Some(CompassPt::C)),
-        "_" => Ok(Some(CompassPt::Underscore)),
-        other => Err(format!("Invalid compass point: {other}")),
+        compass => compass
+            .parse()
+            .map(Some)
+            .map_err(|_| format!("Invalid compass point: {compass}")),
     }
-}
-
-fn hedge_compass_to_string(compass: CompassPt) -> String {
-    match compass {
-        CompassPt::N => "n",
-        CompassPt::NE => "ne",
-        CompassPt::E => "e",
-        CompassPt::SE => "se",
-        CompassPt::S => "s",
-        CompassPt::SW => "sw",
-        CompassPt::W => "w",
-        CompassPt::NW => "nw",
-        CompassPt::C => "c",
-        CompassPt::Underscore => "_",
-    }
-    .to_string()
 }
 
 #[derive(
@@ -4912,7 +4892,7 @@ impl TypstGraph {
         self.positions_from_node_targets(cfg, targets)
     }
 
-    pub fn parse<'a>(dot_str: &str) -> Result<Self, HedgeParseError<'a, (), (), (), ()>> {
+    pub fn parse(dot_str: &str) -> Result<Self, HedgeParseError<(), (), (), ()>> {
         let dot = DotGraph::from_string(dot_str)?;
         Ok(TypstGraph::from_dot(dot, &default_figment()))
     }
