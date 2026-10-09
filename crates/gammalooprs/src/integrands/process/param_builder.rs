@@ -1388,7 +1388,7 @@ impl<T: FloatLike> ParamBuilder<T> {
         new.add_function(
             GS.heaviside,
             vec![symbol!("x")],
-            parse_lit!((1 + x / abs(x)) / 2),
+            parse_lit!((abs(x) + x) / (2 * abs(x))),
         )
         .unwrap();
 
