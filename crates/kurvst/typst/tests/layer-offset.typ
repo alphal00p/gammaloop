@@ -1,5 +1,18 @@
 #import "../src/lib.typ" as kurvst
 
+// Compile with --input contract=<case> to exercise expected-failure contracts.
+// These run before the native batch API is needed, including empty cases.
+#let contract = sys.inputs.at("contract", default: "")
+#if contract == "resolver-empty" {
+  kurvst.layers(kurvst.path(), (), resolve-length: "typo")
+} else if contract == "resolver-packet" {
+  kurvst.layers(kurvst.path(), (0,), format: "cbor", resolve-length: "typo")
+} else if contract == "optimize" {
+  kurvst.layers(kurvst.path(), (), optimize: false)
+} else if contract == "close-mode" {
+  kurvst.layers((path: (kind: "curve", elements: ((kind: "close", mode: "straight"),))), ())
+}
+
 #let base = kurvst.line((0, 0), (4, 0))
 #for (side, expected) in (((2, 1), 0.3), ((2, -1), -0.3)) {
   let layer = kurvst.layer(base, offset: 0.3, side-point: side, length: 2)
@@ -25,8 +38,8 @@
   assert.eq(kurvst.elements(empty), ())
 }
 
-// Retain the scalar orchestration as an independent oracle: delegating layer()
-// back to layers() would not check the batch's clamps, outsets, or cubics.
+// Compute expected scalar geometry independently, rather than checking only
+// layer(), which delegates to layers().
 #let shifts = (-100, -0.3, -0.0, 0, 0.2, 100)
 #for carrier in (
   kurvst.path(), kurvst.path(kurvst.move-to((2, 3))),
@@ -35,11 +48,14 @@
   kurvst.path(kurvst.move-to((0, 0)), kurvst.line-to((2, 1)), kurvst.close()),
   kurvst.path(kurvst.move-to((0, 0)), kurvst.line-to((2, 1)),
     kurvst.move-to((4, 1)), kurvst.quad-to((5, 3), (7, 0))),
+  kurvst.arc((0, 0), 2, 0deg, 180deg),
+  kurvst.outline(kurvst.line((0, 0), (2, 1)), width: 0.2),
 ) {
   for options in (
     (:), (length: 1.2), (ratio: 0.35),
     (length: 1.2, ratio: 0.5, resolve-length: "max"),
     (length: 1.2, ratio: 0.5, resolve-length: "none"),
+    (length: 1.2, ratio: 0.5, resolve-length: "full"),
     (length: 1.2, ratio: 0.5, resolve-length: args => (args.length + args.ratio) / 3),
     (start-outset: 0.2, end-outset: 0.3, length: 1.0),
     (start-outset: 20, end-outset: 30, ratio: 0.2),
@@ -63,7 +79,7 @@
         or segment.start != segment.end
     )))
     assert.eq(packet.nonzero, nonzero)
-    assert.eq(packet.all-single, footprints.all(path => path.single))
+    assert.eq(packet.all-single, footprints.len() > 0 and footprints.all(path => path.single))
     if packet.supported {
       assert.eq(packet.footprints, cbor.encode(footprints))
     } else {
@@ -84,6 +100,7 @@
       }
       assert.eq(cbor.encode(slice.path), cbor.encode(expected))
       assert.eq(cbor.encode(slice.segments), cbor.encode(kurvst.segments(expected)))
+      assert.eq(cbor.encode(kurvst.layer(carrier, shift: shift, ..options)), cbor.encode(slice.path))
     }
   }
 }
@@ -111,3 +128,24 @@
 #assert.eq(cbor(empty-batch.layers), ())
 #assert.eq(cbor(empty-batch.footprints), ())
 #assert(not empty-batch.all-single and not empty-batch.nonzero)
+
+// All resolver policies use the scalar contract; none/full ignore both limits.
+#for policy in ("none", "full") {
+  assert.eq(kurvst.layers(base, shifts, length: 0.1, ratio: 0.01, resolve-length: policy),
+    kurvst.layers(base, shifts))
+}
+#let straight = kurvst.line((0, 0), (4, 0))
+#let callback = args => {
+  assert.eq(args, (base-length: 4.0, length: 2, ratio: 1.0))
+  1
+}
+#assert.eq(kurvst.layers(straight, (0,), length: 2, ratio: 0.25, resolve-length: callback),
+  kurvst.layers(straight, (0,), length: 1))
+#for carrier in (kurvst.path(), straight) {
+  // The callback must still run for empty batches and empty carriers.
+  let _ = kurvst.layers(carrier, (), length: -2, ratio: -0.25, resolve-length: args => {
+    assert.eq(args.length, none)
+    assert.eq(args.ratio, none)
+    none
+  })
+}

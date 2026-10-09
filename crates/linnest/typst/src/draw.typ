@@ -387,13 +387,13 @@
   edge-ratio: none,
   /// Resolve `edge-length` and `edge-ratio`. Accepted string
   /// values are `"min"`/`"shorter"`, `"max"`/`"longer"`, `"length"`/`"fixed"`,
-  /// `"ratio"`/`"relative"`, or `"none"`/`"full"`. A function receives
-  /// `(offset-path-length, length, ratio)`. -> string | function
+  /// `"ratio"`/`"relative"`, or `"none"`/`"full"`. A function receives one
+  /// dictionary with `base-length`, `length`, and `ratio`. `base-length` is the
+  /// offset path length; `length` and `ratio` are positive absolute lengths or
+  /// `none`. Unknown strings are rejected. -> string | function
   edge-resolve-length: "min",
   /// Arc-length accuracy for fitted parallel edge paths. -> float
   edge-accuracy: 0.001,
-  /// Let Kurbo optimize the fitted parallel path. -> bool
-  edge-optimize: true,
   /// Total arc-length gap centered on the source/sink split at the edge layout
   /// point. A per-layer `split-gap` overrides this value. -> int | float
   edge-split-gap: 0,
@@ -572,7 +572,6 @@
       edge-ratio: edge-ratio,
       edge-resolve-length: edge-resolve-length,
       edge-accuracy: edge-accuracy,
-      edge-optimize: edge-optimize,
       edge-split-gap: edge-split-gap,
       edge-dangling-tangent: edge-dangling-tangent,
       source-style: source-style,

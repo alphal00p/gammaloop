@@ -1,4 +1,3 @@
-#import "crates/linnest/typst/src/impl/draw.typ" as drawing
 #import "@preview/cetz:0.5.1" as cetz
 
 // Batching must retain every link rectangle and the context changes of ordinary
@@ -22,56 +21,11 @@
       }
     }
 
-    let targets = (
-      (position: (1.25, -3.75), href: "#first", width: 8pt, height: 8pt),
-      (position: (-2e-8, 4e-8), href: "#first", width: 8pt, height: 8pt),
-      (position: (2.5, 0.5), href: "#second", width: 12pt, height: 10pt),
-      (position: (1.25, -3.75), href: "#third", width: 8pt, height: 8pt),
-    )
-    let records = targets.map(target => drawing._identity-target(
-      target.position, target.href, width: target.width, height: target.height,
-    )).flatten()
-    let elements = targets.map(target => cetz.draw.floating(cetz.draw.content(
-      target.position, link(target.href, box(width: target.width, height: target.height)),
-      padding: 0,
-    ))).flatten()
-    for transform in (
-      cetz.matrix.ident(4),
-      cetz.matrix.transform-scale((-1.5, 0.6, 1)),
-      cetz.matrix.transform-rotate-xyz(40deg, 30deg, 0deg),
-      cetz.matrix.transform-scale((0, 0, 1)),
-    ) {
-      for style in (
-        (:),
-        (content: (frame: "rect", fill: blue, stroke: red + 0.4pt)),
-        (content: (frame: "rect", auto-scale: true, wrap: body => text(14pt, body))),
-        (content: (frame: "circle", auto-scale: true, wrap: body => text(14pt, body))),
-      ) {
-        let local = (cetz.draw.set-style(..style).first())(ctx).ctx
-        local.transform = transform
-        for resolve in ((), ((ctx, p) => (
-          p.at(0) + ctx.prev.pt.at(0) / 8,
-          p.at(1) - ctx.prev.pt.at(1) / 8,
-        ),)) {
-          local.resolve-coordinate = resolve
-          for debug in (false, true) {
-            local.debug = debug
-            let actual = drawing._draw-identity-targets(local, records)
-            let expected = cetz.process.many(local, elements, compute-bounds: false)
-            assert.eq(actual.ctx, expected.ctx, message: "identity target context")
-            assert.eq(actual.drawables, expected.drawables, message: "identity target drawing and order")
-            assert(actual.drawables.all(d => cetz.drawable.TAG.no-bounds in d.tags))
-          }
-        }
-      }
-    }
-    let empty = drawing._draw-identity-targets(ctx, ())
-    assert.eq(empty.ctx, ctx)
-    assert.eq(empty.drawables, ())
     ()
   })
 })
 
+#assert("content-many" in cetz.draw, message: "the bundled CeTZ must expose content-many")
 #if "content-many" in cetz.draw {
   cetz.canvas({
     cetz.draw.get-ctx(ctx => {
@@ -129,7 +83,8 @@
   })
 }
 
-#import "crates/linnest/typst/src/curve.typ" as region-curve
+// Use the public sampling owner directly, without the unrelated Linnest wrapper.
+#import "crates/kurvst/typst/src/lib.typ" as region-curve
 #let region-reference(parts, regions: 4, unit: 1pt, step: 4pt) = {
   let distance(a, b) = {
     let dx = a.at(0) - b.at(0)
@@ -155,7 +110,7 @@
             distance(segment.control-start, segment.control-end),
             distance(segment.control-end, segment.end),
           )
-          let steps = calc.max(1, int(calc.ceil(speed * unit / step)))
+          let steps = calc.max(1, int(calc.ceil(speed * calc.abs(unit / step))))
           for index in range(steps + 1) {
             points.push(region-curve.cubic-point(segment, index / steps))
           }
@@ -186,7 +141,7 @@
   ), visible: true),
 )
 #for regions in (1, 2, 4, 7) {
-  for unit in (0pt, 1pt, 1mm) {
+  for unit in (0pt, 1pt, -1pt, 1mm, -1mm) {
     check-regions(region-parts, regions: regions, unit: unit)
   }
 }

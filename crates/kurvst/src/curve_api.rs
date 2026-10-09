@@ -1,6 +1,6 @@
 use kurbo::{
-    BezPath, CubicBez, Line, ParamCurve, ParamCurveArclen, ParamCurveDeriv, PathEl, PathSeg, Point,
-    Vec2, offset::offset_cubic,
+    BezPath, Cap, CubicBez, Join, Line, ParamCurve, ParamCurveArclen, ParamCurveDeriv, PathEl,
+    PathSeg, Point, Stroke, StrokeOpts, Vec2, offset::offset_cubic,
 };
 use serde::{
     Deserialize, Deserializer, Serialize, Serializer,
@@ -176,6 +176,7 @@ pub struct PatternPathSpec {
     pub anchor_end: bool,
     #[serde(default, deserialize_with = "deserialize_f64")]
     pub endpoint_slope: f64,
+    /// Arc distances along the base path at which to cut the already-fitted pattern.
     #[serde(default, deserialize_with = "deserialize_f64_vec")]
     pub split_at: Vec<f64>,
     #[serde(
@@ -187,6 +188,31 @@ pub struct PatternPathSpec {
 
 #[derive(Debug, Clone, Deserialize, PartialEq)]
 #[serde(rename_all = "kebab-case")]
+pub struct StrokeOutlineSpec {
+    #[serde(deserialize_with = "deserialize_bez_path")]
+    pub path: BezPath,
+    #[serde(deserialize_with = "deserialize_f64")]
+    pub width: f64,
+    #[serde(default = "default_stroke_join")]
+    pub join: String,
+    #[serde(
+        default = "default_stroke_miter_limit",
+        deserialize_with = "deserialize_f64"
+    )]
+    pub miter_limit: f64,
+    #[serde(default = "default_stroke_cap")]
+    pub start_cap: String,
+    #[serde(default = "default_stroke_cap")]
+    pub end_cap: String,
+    #[serde(
+        default = "default_arclen_accuracy",
+        deserialize_with = "deserialize_f64"
+    )]
+    pub accuracy: f64,
+}
+
+#[derive(Debug, Clone, Deserialize, PartialEq)]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub struct ParallelPathSpec {
     #[serde(deserialize_with = "deserialize_bez_path")]
     pub path: BezPath,
@@ -201,8 +227,6 @@ pub struct ParallelPathSpec {
         deserialize_with = "deserialize_f64"
     )]
     pub accuracy: f64,
-    #[serde(default = "default_parallel_optimize")]
-    pub optimize: bool,
 }
 
 #[derive(Debug, Clone, Deserialize, PartialEq)]
@@ -459,6 +483,7 @@ pub struct PatternPathOutput {
     )]
     pub path: BezPath,
     pub pattern: String,
+    /// `path` cut at sorted, clamped carrier distances, retaining empty intervals.
     pub parts: Vec<CurvePathOutput>,
 }
 
@@ -588,8 +613,16 @@ fn default_anchor_endpoint() -> bool {
     true
 }
 
-fn default_parallel_optimize() -> bool {
-    true
+fn default_stroke_join() -> String {
+    "miter".to_string()
+}
+
+fn default_stroke_cap() -> String {
+    "butt".to_string()
+}
+
+fn default_stroke_miter_limit() -> f64 {
+    4.0
 }
 
 fn encode_cbor<T: Serialize>(value: &T) -> Result<Vec<u8>, String> {
@@ -605,7 +638,7 @@ struct WirePath {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(tag = "kind", rename_all = "kebab-case")]
+#[serde(tag = "kind", rename_all = "kebab-case", deny_unknown_fields)]
 enum WirePathElement {
     Move {
         start: CurvePoint,
@@ -624,14 +657,8 @@ enum WirePathElement {
         control_end: CurvePoint,
         end: CurvePoint,
     },
-    Close {
-        #[serde(default = "default_close_mode")]
-        mode: String,
-    },
-}
-
-fn default_close_mode() -> String {
-    "straight".to_string()
+    // A struct variant makes Serde reject unsupported fields on close elements.
+    Close {},
 }
 
 impl From<&BezPath> for WirePath {
@@ -653,9 +680,7 @@ impl From<&BezPath> for WirePath {
                     control_end: control_end.into(),
                     end: end.into(),
                 },
-                PathEl::ClosePath => WirePathElement::Close {
-                    mode: default_close_mode(),
-                },
+                PathEl::ClosePath => WirePathElement::Close {},
             })
             .collect();
         Self { elements }
@@ -683,7 +708,7 @@ impl From<WirePath> for BezPath {
                         Point::from(end),
                     );
                 }
-                WirePathElement::Close { .. } => path.close_path(),
+                WirePathElement::Close {} => path.close_path(),
             }
         }
         path
@@ -1046,6 +1071,13 @@ pub fn curve_parallel_path_bytes(arg: &[u8]) -> Result<Vec<u8>, String> {
     let spec: ParallelPathSpec = ciborium::de::from_reader(arg)
         .map_err(|err| format!("Failed to deserialize parallel path spec: {err}"))?;
     let output = spec.parallel()?;
+    encode_cbor(&output)
+}
+
+pub fn curve_stroke_outline_bytes(arg: &[u8]) -> Result<Vec<u8>, String> {
+    let spec: StrokeOutlineSpec = ciborium::de::from_reader(arg)
+        .map_err(|err| format!("Failed to deserialize stroke outline spec: {err}"))?;
+    let output = stroke_outline(spec)?;
     encode_cbor(&output)
 }
 
@@ -1592,7 +1624,6 @@ impl ParallelPathSpec {
             return Ok(CurvePathOutput { path: self.path });
         }
 
-        let _optimize = self.optimize;
         let offset_segments = self
             .path
             .segments()
@@ -1601,6 +1632,43 @@ impl ParallelPathSpec {
         let segments =
             PathTrimmer::new(offset_segments, accuracy).trim(start_outset, end_outset)?;
         curve_path_from_segments(segments)
+    }
+}
+
+/// Expand a stroked path into a closed fill outline with joins and caps.
+///
+/// Open subpaths become one closed contour; closed subpaths become an outer and
+/// an inner contour of opposite winding, so fill the result with the non-zero rule.
+fn stroke_outline(spec: StrokeOutlineSpec) -> Result<CurvePathOutput, String> {
+    let width = validate_positive(spec.width, "stroke outline width")?;
+    let accuracy = validate_positive_accuracy(spec.accuracy)?;
+    let miter_limit = validate_positive(spec.miter_limit, "stroke outline miter limit")?;
+    let style = Stroke {
+        join: parse_stroke_join(&spec.join)?,
+        miter_limit,
+        start_cap: parse_stroke_cap(&spec.start_cap)?,
+        end_cap: parse_stroke_cap(&spec.end_cap)?,
+        ..Stroke::new(width)
+    };
+    let path = kurbo::stroke(spec.path, &style, &StrokeOpts::default(), accuracy);
+    Ok(CurvePathOutput { path })
+}
+
+fn parse_stroke_join(value: &str) -> Result<Join, String> {
+    match value.trim().to_ascii_lowercase().as_str() {
+        "miter" => Ok(Join::Miter),
+        "round" => Ok(Join::Round),
+        "bevel" => Ok(Join::Bevel),
+        other => Err(format!("Unsupported stroke join: {other}")),
+    }
+}
+
+fn parse_stroke_cap(value: &str) -> Result<Cap, String> {
+    match value.trim().to_ascii_lowercase().as_str() {
+        "butt" => Ok(Cap::Butt),
+        "square" => Ok(Cap::Square),
+        "round" => Ok(Cap::Round),
+        other => Err(format!("Unsupported stroke cap: {other}")),
     }
 }
 
@@ -2294,7 +2362,7 @@ impl RegionSamplesSpec {
                             * distance(segment.start, segment.control_start)
                                 .max(distance(segment.control_start, segment.control_end))
                                 .max(distance(segment.control_end, segment.end));
-                        let steps = (speed * self.unit / self.step).ceil().max(1.0);
+                        let steps = (speed * self.unit.abs() / self.step).ceil().max(1.0);
                         if !(steps.is_finite() && steps < usize::MAX as f64) {
                             return Err("Region sampling count is too large".into());
                         }
@@ -2550,6 +2618,33 @@ mod tests {
 
         let roundtrip = BezPath::from(wire);
         assert!(matches!(roundtrip.elements()[1], PathEl::QuadTo(_, _)));
+    }
+
+    #[test]
+    fn wire_close_is_straight_and_rejects_modes() {
+        let bytes = encode_cbor(&std::collections::BTreeMap::from([("kind", "close")])).unwrap();
+        let close: WirePathElement = ciborium::de::from_reader(&bytes[..]).unwrap();
+        assert_eq!(close, WirePathElement::Close {});
+
+        let mut path = BezPath::new();
+        path.move_to((0.0, 0.0));
+        path.line_to((3.0, 0.0));
+        path.line_to((3.0, 4.0));
+        path.close_path();
+        let wire = WirePath::from(&path);
+        assert_eq!(wire.elements.last(), Some(&WirePathElement::Close {}));
+        assert_eq!(BezPath::from(wire).elements(), path.elements());
+        assert!((path_length_value(&path, 1e-6) - 12.0).abs() < 1e-6);
+
+        for mode in ["straight", "smooth"] {
+            let bytes = encode_cbor(&std::collections::BTreeMap::from([
+                ("kind", "close"),
+                ("mode", mode),
+            ]))
+            .unwrap();
+            let result: Result<WirePathElement, _> = ciborium::de::from_reader(&bytes[..]);
+            assert!(result.is_err(), "close must reject mode {mode}");
+        }
     }
 
     #[test]
@@ -2926,7 +3021,6 @@ mod tests {
             start_outset: 0.0,
             end_outset: 0.0,
             accuracy: 1e-6,
-            optimize: true,
         }
         .parallel()
         .unwrap();
@@ -2946,7 +3040,6 @@ mod tests {
             start_outset: 0.0,
             end_outset: 0.0,
             accuracy: 1e-6,
-            optimize: false,
         }
         .parallel()
         .unwrap();
@@ -2964,7 +3057,6 @@ mod tests {
             start_outset: 1.0,
             end_outset: 1.0,
             accuracy: 1e-6,
-            optimize: false,
         }
         .parallel()
         .unwrap();
@@ -2973,6 +3065,143 @@ mod tests {
         assert_point_close(points[0], point(1.0, 0.25));
         assert_point_close(*points.last().unwrap(), point(3.0, 0.25));
         assert!((path_length_value(&output.path, 1e-6) - 2.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn parallel_path_rejects_removed_options() {
+        let path_bytes = encode_cbor(&WirePath::from(&straight_path(3.0))).unwrap();
+        let path: ciborium::Value = ciborium::de::from_reader(&path_bytes[..]).unwrap();
+        let mut input = std::collections::BTreeMap::from([("path", path)]);
+        assert!(curve_parallel_path_bytes(&encode_cbor(&input).unwrap()).is_ok());
+        input.insert("optimize", ciborium::Value::Bool(true));
+        let error = curve_parallel_path_bytes(&encode_cbor(&input).unwrap()).unwrap_err();
+        assert!(error.contains("unknown field `optimize`"), "{error}");
+    }
+
+    #[test]
+    fn pattern_split_at_cuts_one_patterned_path_into_joined_parts() {
+        let spec = |amplitude: f64, split_at: Vec<f64>| PatternPathSpec {
+            path: straight_path(3.0),
+            pattern: PatternInput::wave(16),
+            amplitude,
+            wavelength: 0.7,
+            phase: 0.0,
+            samples_per_period: 16,
+            coil_longitudinal_scale: default_coil_longitudinal_scale(),
+            anchor_start: true,
+            anchor_end: true,
+            endpoint_slope: 0.0,
+            accuracy: 1e-9,
+            split_at,
+        };
+
+        let whole = spec(0.2, Vec::new()).patterned().unwrap();
+        assert_eq!(whole.parts.len(), 1);
+        assert_eq!(whole.parts[0].path, whole.path);
+
+        // Cuts are sorted and clamped; repeated/end cuts retain empty part slots.
+        let split = spec(0.2, vec![2.1, 1.3, 1.3, 0.0, 3.0, 7.0])
+            .patterned()
+            .unwrap();
+        assert_eq!(split.parts.len(), 7);
+        assert_eq!(split.path, whole.path);
+        for index in [0, 2, 5, 6] {
+            assert!(split.parts[index].path.elements().is_empty());
+        }
+        let joined: Vec<_> = split
+            .parts
+            .iter()
+            .flat_map(|part| part.path.segments())
+            .collect();
+        for pair in joined.windows(2) {
+            assert_eq!(pair[0].end(), pair[1].start());
+        }
+        // Subdividing fitted segments changes commands, not the painted curve.
+        let joined = BezPath::from_path_segments(joined.into_iter());
+        let length = path_length_value(&whole.path, 1e-9);
+        assert!((path_length_value(&joined, 1e-9) - length).abs() < 1e-7);
+        let frames = [whole.path.clone(), joined].map(|path| {
+            PathFramesSpec {
+                path,
+                distances: (0..=32).map(|i| length * i as f64 / 32.0).collect(),
+                accuracy: 1e-9,
+            }
+            .frames()
+            .unwrap()
+        });
+        for (original, joined) in frames[0].iter().zip(&frames[1]) {
+            assert_point_close(
+                original.as_ref().unwrap().point,
+                joined.as_ref().unwrap().point,
+            );
+        }
+
+        // With zero amplitude the cut points sit exactly at the base distances.
+        let flat = spec(0.0, vec![1.3, 2.1]).patterned().unwrap();
+        let ends: Vec<_> = flat
+            .parts
+            .iter()
+            .map(|part| part.path.segments().last().unwrap().end())
+            .collect();
+        assert!((ends[0].x - 1.3).abs() < 1e-9 && ends[0].y.abs() < 1e-9);
+        assert!((ends[1].x - 2.1).abs() < 1e-9 && ends[1].y.abs() < 1e-9);
+    }
+
+    fn outline_spec(path: BezPath, width: f64, cap: &str) -> StrokeOutlineSpec {
+        StrokeOutlineSpec {
+            path,
+            width,
+            join: "miter".to_string(),
+            miter_limit: 4.0,
+            start_cap: cap.to_string(),
+            end_cap: cap.to_string(),
+            accuracy: 1e-6,
+        }
+    }
+
+    #[test]
+    fn stroke_outline_of_open_line_is_closed_rectangle() {
+        use kurbo::Shape;
+
+        let butt = stroke_outline(outline_spec(straight_path(3.0), 0.5, "butt")).unwrap();
+        let bbox = butt.path.bounding_box();
+        assert_close(bbox.x0, 0.0);
+        assert_close(bbox.x1, 3.0);
+        assert_close(bbox.y0, -0.25);
+        assert_close(bbox.y1, 0.25);
+        assert_close(butt.path.area().abs(), 1.5);
+        assert_eq!(butt.path.elements().last(), Some(&PathEl::ClosePath));
+
+        let square = stroke_outline(outline_spec(straight_path(3.0), 0.5, "square")).unwrap();
+        let bbox = square.path.bounding_box();
+        assert_close(bbox.x0, -0.25);
+        assert_close(bbox.x1, 3.25);
+    }
+
+    #[test]
+    fn stroke_outline_miters_sharp_corners() {
+        use kurbo::Shape;
+
+        let mut corner = BezPath::new();
+        corner.move_to((0.0, 2.0));
+        corner.line_to((0.0, 0.0));
+        corner.line_to((2.0, 0.0));
+        let output = stroke_outline(outline_spec(corner, 0.5, "butt")).unwrap();
+        let bbox = output.path.bounding_box();
+        assert_close(bbox.x0, -0.25);
+        assert_close(bbox.y0, -0.25);
+        assert_ne!(output.path.winding(Point::new(-0.2, -0.2)), 0);
+        assert_ne!(output.path.winding(Point::new(0.1, 1.0)), 0);
+        assert_eq!(output.path.winding(Point::new(1.0, 1.0)), 0);
+    }
+
+    #[test]
+    fn stroke_outline_rejects_unknown_styles() {
+        let mut spec = outline_spec(straight_path(1.0), 0.5, "butt");
+        spec.join = "sharp".to_string();
+        assert!(stroke_outline(spec).is_err());
+        assert!(stroke_outline(outline_spec(straight_path(1.0), 0.5, "flat")).is_err());
+        assert!(stroke_outline(outline_spec(straight_path(1.0), 0.0, "butt")).is_err());
     }
 
     fn straight_curve(length: f64) -> CubicBezierSpec {
@@ -3137,8 +3366,8 @@ mod tests {
             anchor_start: default_anchor_endpoint(),
             anchor_end: default_anchor_endpoint(),
             endpoint_slope: 0.0,
-            split_at: Vec::new(),
             accuracy: 1e-6,
+            split_at: Vec::new(),
         }
         .patterned()
         .unwrap();
@@ -3172,8 +3401,8 @@ mod tests {
             anchor_start: default_anchor_endpoint(),
             anchor_end: default_anchor_endpoint(),
             endpoint_slope: 0.0,
-            split_at: Vec::new(),
             accuracy: 1e-6,
+            split_at: Vec::new(),
         }
         .patterned()
         .unwrap();
@@ -3226,8 +3455,8 @@ mod tests {
             anchor_start: true,
             anchor_end: true,
             endpoint_slope: 0.0,
-            split_at: Vec::new(),
             accuracy: 1e-6,
+            split_at: Vec::new(),
         }
         .patterned()
         .unwrap();
@@ -3256,8 +3485,8 @@ mod tests {
             anchor_start: false,
             anchor_end: false,
             endpoint_slope: 0.0,
-            split_at: Vec::new(),
             accuracy: 1e-6,
+            split_at: Vec::new(),
         }
         .patterned()
         .unwrap();
@@ -3284,8 +3513,8 @@ mod tests {
             anchor_start: default_anchor_endpoint(),
             anchor_end: default_anchor_endpoint(),
             endpoint_slope: 0.0,
-            split_at: Vec::new(),
             accuracy: 1e-6,
+            split_at: Vec::new(),
         }
         .patterned()
         .unwrap();
@@ -3335,8 +3564,8 @@ mod tests {
             anchor_start: true,
             anchor_end: true,
             endpoint_slope: 0.0,
-            split_at: Vec::new(),
             accuracy: 1e-6,
+            split_at: Vec::new(),
         }
         .patterned()
         .unwrap();
@@ -3363,8 +3592,8 @@ mod tests {
             anchor_start: true,
             anchor_end: true,
             endpoint_slope: 0.0,
-            split_at: Vec::new(),
             accuracy: 1e-6,
+            split_at: Vec::new(),
         }
         .patterned()
         .unwrap();
@@ -3445,8 +3674,8 @@ mod tests {
                 anchor_start: true,
                 anchor_end: true,
                 endpoint_slope,
-                split_at: Vec::new(),
                 accuracy: 1e-6,
+                split_at: Vec::new(),
             }
             .patterned()
             .unwrap();
@@ -3489,8 +3718,8 @@ mod tests {
                 anchor_start,
                 anchor_end,
                 endpoint_slope: 0.0,
-                split_at: Vec::new(),
                 accuracy: 1e-6,
+                split_at: Vec::new(),
             };
             let expected = spec.clone().patterned().unwrap();
             for endpoint_slope in [1.0, 2.0, 3.0] {
@@ -3514,8 +3743,8 @@ mod tests {
                 anchor_start: true,
                 anchor_end: true,
                 endpoint_slope,
-                split_at: Vec::new(),
                 accuracy: 1e-6,
+                split_at: Vec::new(),
             }
             .patterned()
             .unwrap_err();
@@ -3547,7 +3776,6 @@ mod tests {
                 spec,
                 PatternPathSpec {
                     endpoint_slope,
-                    split_at: Vec::new(),
                     ..default.clone()
                 }
             );
@@ -3710,8 +3938,8 @@ mod tests {
                     anchor_start: true,
                     anchor_end: true,
                     endpoint_slope: 3.0,
-                    split_at: Vec::new(),
                     accuracy: 1e-9,
+                    split_at: Vec::new(),
                 }
                 .patterned()
                 .unwrap();
@@ -3769,8 +3997,8 @@ mod tests {
                 anchor_start: true,
                 anchor_end: true,
                 endpoint_slope: 3.0,
-                split_at: Vec::new(),
                 accuracy: 1e-9,
+                split_at: Vec::new(),
             };
             for (anchor_start, anchor_end) in
                 [(true, true), (false, false), (false, true), (true, false)]
@@ -3843,8 +4071,8 @@ mod tests {
                     anchor_start: true,
                     anchor_end: true,
                     endpoint_slope: 3.0,
-                    split_at: Vec::new(),
                     accuracy: 1e-9,
+                    split_at: Vec::new(),
                 }
                 .patterned()
                 .unwrap();
@@ -4009,6 +4237,22 @@ mod region_sampling_tests {
             assert!(
                 (adjacent[0].1.last().unwrap().x - adjacent[1].1.first().unwrap().x).abs() < 0.001
             );
+        }
+    }
+
+    #[test]
+    fn sampling_density_uses_scale_magnitude() {
+        let samples = [10.0, -10.0].map(|unit| {
+            let mut input = request(vec![part(0.0, 3.0, true)]);
+            input.regions = 1;
+            input.unit = unit;
+            input.step = 1.0;
+            input.samples().unwrap()
+        });
+        assert_eq!(samples[0], samples[1]);
+        assert_eq!(samples[0][0].1.len(), 31);
+        for adjacent in samples[0][0].1.windows(2) {
+            assert!((adjacent[1].x - adjacent[0].x).abs() * 10.0 <= 1.0 + 1e-12);
         }
     }
 

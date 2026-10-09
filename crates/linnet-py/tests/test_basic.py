@@ -2624,7 +2624,6 @@ class TestTypedTypstSurface(unittest.TestCase):
             edge_ratio=0.8,
             edge_resolve_length=lp.EdgeLengthResolution.Shorter,
             edge_accuracy=0.001,
-            edge_optimize=True,
             edge_split_gap=0.25,
             edge_dangling_tangent=lp.DanglingTangent.Horizontal,
             source_style=[{"stroke": stroke}],
@@ -2739,6 +2738,8 @@ class TestTypedTypstSurface(unittest.TestCase):
             lp.DrawOptions(node_outset=lp.Length.pt(1))
         with self.assertRaises(TypeError):
             lp.DrawOptions(show_half_edge_ids=1)
+        with self.assertRaises(TypeError):
+            lp.DrawOptions(edge_optimize=True)
         with self.assertRaises(TypeError):
             lp.DrawOptions(label_collision_padding=-0.1)
         for gap in (-0.1, True, "0.45", lp.Length.pt(1)):

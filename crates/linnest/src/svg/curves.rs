@@ -101,7 +101,6 @@ pub(super) fn parallel(path: &BezPath, distance: f64) -> Result<BezPath, String>
         start_outset: 0.0,
         end_outset: 0.0,
         accuracy: ACCURACY,
-        optimize: true,
     }
     .parallel()
     .map(|output| output.path)

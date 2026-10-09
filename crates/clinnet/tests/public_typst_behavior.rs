@@ -838,6 +838,151 @@ fn public_linnest_layout_and_drawing_behavior_is_observable() {
 }
 
 #[test]
+fn public_kurvst_contracts_are_enforced() {
+    let configured_typst = std::env::var_os("TYPST_TEST_EXECUTABLE").map(PathBuf::from);
+    let typst = configured_typst
+        .clone()
+        .unwrap_or_else(|| PathBuf::from("typst"));
+    match Command::new(&typst).arg("--version").output() {
+        Ok(version) if version.status.success() => {}
+        result if configured_typst.is_some() => {
+            panic!("configured Typst executable failed: {result:?}")
+        }
+        _ => return,
+    }
+    let base = tempfile::tempdir().unwrap();
+    let renderer = TypstRenderer::new(base.path()).typst_executable(typst);
+    renderer.check_version().unwrap();
+    renderer.stage_default_assets().unwrap();
+    let templates = base.path().join(".clinnet/templates");
+    let curve_tests = templates.join("crates/kurvst/typst/tests");
+    fs::create_dir_all(&curve_tests).unwrap();
+
+    // Each contract mode selects one call that the fixture must reject before
+    // invoking native code; the regular cases run when no mode is selected.
+    let output = base.path().join("kurvst-contract.pdf");
+    for (name, source, contracts) in [
+        (
+            "layer-offset.typ",
+            include_str!("../../kurvst/typst/tests/layer-offset.typ"),
+            &[
+                ("resolver-empty", "resolve-length: unsupported method"),
+                ("resolver-packet", "resolve-length: unsupported method"),
+                ("optimize", "unexpected argument: optimize"),
+                ("close-mode", "unknown field `mode`"),
+            ][..],
+        ),
+        (
+            "pattern-split.typ",
+            include_str!("../../kurvst/typst/tests/pattern-split.typ"),
+            &[
+                ("optimize", "unexpected argument: optimize"),
+                ("positional", "unexpected argument"),
+                ("resolver", "unexpected argument: resolve-length"),
+            ][..],
+        ),
+    ] {
+        let fixture = curve_tests.join(name);
+        for (mode, expected) in contracts {
+            fs::write(
+                &fixture,
+                source.replace("default: \"\"", &format!("default: \"{mode}\"")),
+            )
+            .unwrap();
+            let error = renderer
+                .compile_template(&fixture, &output, &[&templates])
+                .unwrap_err();
+            assert!(
+                error.to_string().contains(expected),
+                "{name} {mode}: expected {expected}, got {error}"
+            );
+        }
+    }
+
+    let fixture = templates.join("kurvst-public-contract.typ");
+    let output = base.path().join("kurvst-public-contract.svg");
+    fs::write(
+        &fixture,
+        include_str!("resources/kurvst-public-contract.typ"),
+    )
+    .unwrap();
+    // Validate the shared setup and installed Wasm before testing rejections.
+    renderer.compile_template(&fixture, &output, &[]).unwrap();
+
+    for (source, expected) in [
+        (
+            "#let _ = kurvst.parallel(kurvst.line((0, 0), (1, 0)), optimize: true)",
+            "unexpected argument: optimize",
+        ),
+        (
+            "#let _ = kurvst.layer(kurvst.line((0, 0), (1, 0)), optimize: false)",
+            "unexpected argument: optimize",
+        ),
+        (
+            "#let _ = kurvst.close(mode: \"smooth\")",
+            "unexpected argument: mode",
+        ),
+        (
+            "#let _ = kurvst.from-elements(((kind: \"close\", mode: \"smooth\"),))",
+            "close: mode is unsupported",
+        ),
+        (
+            "#let _ = kurvst.to-native((elements: ((kind: \"close\", mode: \"smooth\"),)))",
+            "close: mode is unsupported",
+        ),
+        (
+            "#let _ = kurvst.length((elements: ((kind: \"close\", mode: \"smooth\"),)))",
+            "unknown field `mode`",
+        ),
+        (
+            "#let _ = kurvst.from-elements(((kind: \"line\", end: (1, 0), extra: true),))",
+            "Unsupported fields in Kurvst line path element",
+        ),
+        (
+            "#let _ = kurvst.to-native((elements: ((kind: \"move\", start: (0, 0)), (kind: \"line\", end: (1, 0), extra: true))))",
+            "Unsupported fields in Kurvst line path element",
+        ),
+        (
+            "#let _ = kurvst.length((elements: ((kind: \"move\", start: (0, 0)), (kind: \"line\", end: (1, 0), extra: true))))",
+            "unknown field `extra`",
+        ),
+        (
+            "#let _ = kurvst.resolve-length(10, length: 3, ratio: 0.2, method: \"mn\")",
+            "resolve-length: unsupported method",
+        ),
+        (
+            "#let _ = kurvst.resolve-length(10, method: \"mn\")",
+            "resolve-length: unsupported method",
+        ),
+        (
+            "#let _ = kurvst.center-outset(10, resolve-length: \"mn\")",
+            "resolve-length: unsupported method",
+        ),
+        (
+            "#let _ = kurvst.layer(kurvst.line((0, 0), (1, 0)), resolve-length: \"mn\")",
+            "resolve-length: unsupported method",
+        ),
+        (
+            "#let _ = kurvst.layer(kurvst.from-elements(()), offset: 1, resolve-length: \"mn\")",
+            "resolve-length: unsupported method",
+        ),
+    ] {
+        fs::write(
+            &fixture,
+            format!("#import \"crates/kurvst/typst/src/lib.typ\" as kurvst\n{source}"),
+        )
+        .unwrap();
+        let error = renderer
+            .compile_template(&fixture, &output, &[])
+            .unwrap_err();
+        assert!(
+            error.to_string().contains(expected),
+            "{source}: expected {expected}, got {error}"
+        );
+    }
+}
+
+#[test]
 fn public_configurable_map_style_behavior_is_observable() {
     let configured_typst = std::env::var_os("TYPST_TEST_EXECUTABLE").map(PathBuf::from);
     let typst = configured_typst

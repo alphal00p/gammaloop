@@ -11,11 +11,21 @@ and this project adheres to #link("https://semver.org/spec/v2.0.0.html")[Semanti
 
 - The bundled Linnest package carries `LICENSE.networkx`, the BSD-3-Clause notice of the
   NetworkX code that its layout seed translates.
+- The bundled Kurvst package adds `arc` for circular arcs built from cubic segments and
+  `outline` for converting a stroked path into its filled outline.
+
+=== Changed
+
+- The bundled Kurvst package rejects unknown fields in path elements and unknown
+  `resolve-length` methods.
 
 === Removed
 
 - The bundled Linnest package no longer carries the unused `ec-layout.wasm` plugin, which
   linked the GPL-licensed OGDF. Layout seeds come from `linnest.wasm` as before.
+- The bundled Kurvst package drops the `optimize` option of its parallel and layer helpers and
+  the `mode` of `close`, which now always closes with a straight segment; Linnest's
+  `edge-optimize` draw option and style key are gone with it.
 
 == #link("https://github.com/alphal00p/linnet/compare/clinnet-v0.1.7...clinnet-v0.1.8")[0.1.8] - 2025-12-04
 

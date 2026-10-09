@@ -1,5 +1,15 @@
 #import "../src/lib.typ" as kurvst
 
+// Fast drawing must reject unused geometry options before invoking native code.
+#let contract = sys.inputs.at("contract", default: "")
+#if contract == "optimize" {
+  kurvst.pattern-to-cetz(kurvst.path(), optimize: false)
+} else if contract == "positional" {
+  kurvst.pattern-to-cetz(kurvst.path(), "ignored")
+} else if contract == "resolver" {
+  kurvst.pattern-to-cetz(kurvst.path(), resolve-length: "typo")
+}
+
 // Exercise the public Typst -> CBOR -> WASM boundary with both coil modes.
 #for base in (
   kurvst.path(kurvst.line((0, 0), (3, 0))),
