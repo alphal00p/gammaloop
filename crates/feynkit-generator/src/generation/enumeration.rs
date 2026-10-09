@@ -5,14 +5,18 @@
 //! its rule-coloured graph. External legs are labelled by [`ExternalLabel`]: legs with equal label
 //! and stub are interchangeable, which implements external-state symmetrization.
 //!
-//! The process filters run inside the search through the generator's filter, at the earliest
-//! stage where they are decided: bridges and special topologies on untyped topologies,
-//! coupling-order upper bounds on partial field assignments, and the remaining conditions on
-//! complete graphs.
+//! Coupling orders and the fermion-loop range are budgets of the generator: it bounds them on
+//! every partial field assignment, drops the assignments without a completion in range and checks
+//! them exactly on the vertex rules (see
+//! [`linnet::half_edge::generate::GraphGenerator::weight`]). The other process filters run inside
+//! the search through the generator's filter, after the budgets and at the earliest stage where
+//! they are decided: bridges and special topologies on untyped topologies, and the special
+//! topologies again with the masses of complete graphs.
 
 use std::{
     cmp::Ordering,
     collections::{BTreeMap, BTreeSet},
+    ops::Bound,
     sync::Arc,
 };
 
@@ -20,7 +24,7 @@ use feynkit_graph::ExternalState;
 use feynkit_model::{Model, Particle, ParticleId, VertexRuleId};
 use linnet::half_edge::{
     NodeIndex,
-    generate::{Diagram, GraphView, Stage, Stub},
+    generate::{Countable, Diagram, GraphGenerator, GraphView, Stage, Stub},
     involution::{Flow, HedgePair, Orientation},
 };
 
@@ -132,6 +136,69 @@ impl VertexSignatures {
             );
         }
         Ok(signatures)
+    }
+
+    /// The generator of a request: the legs of `externals`, these signatures, the loop orders and
+    /// structural limits of `options`, and its coupling orders and fermion-loop range as budgets;
+    /// `filter` prunes it after the budgets.
+    pub(crate) fn generator(
+        &self,
+        model: &Model,
+        externals: &ProcessExternals,
+        options: &GenerationOptions,
+        filter: impl Fn(&GenerationView<'_>) -> bool + Send + Sync + 'static,
+    ) -> Result<GraphGenerator<ParticleId, ExternalLabel>, GenerationError> {
+        let mut generator = GraphGenerator::new(externals.legs(), self.stubs.clone())
+            .loops(options.loop_count())
+            .allow_self_loops(options.allow_self_loops)
+            .allow_zero_flow_edges(options.allow_zero_flow_edges)
+            .filter(filter);
+        let bounds = CouplingBounds::new(options);
+        if !bounds.0.is_empty() {
+            let rule_orders = self
+                .rules
+                .iter()
+                .map(|rule| Ok(model.vertex_rule_by_id(*rule)?.coupling_orders(model)))
+                .collect::<Result<Vec<_>, GenerationError>>()?;
+            let bound = |order: usize| i32::try_from(order).unwrap_or(i32::MAX);
+            // a weight per bound: the bounds of one order must all hold
+            for (name, minimum, maximum) in &bounds.0 {
+                let orders = rule_orders
+                    .iter()
+                    .map(|orders| {
+                        i32::try_from(orders.get(name).copied().unwrap_or(0))
+                            .map_err(|_| GenerationError::ArithmeticOverflow("a coupling order"))
+                    })
+                    .collect::<Result<Vec<_>, _>>()?;
+                let maximum =
+                    maximum.map_or(Bound::Unbounded, |maximum| Bound::Included(bound(maximum)));
+                generator = generator.weight(orders, (Bound::Included(bound(*minimum)), maximum));
+            }
+        }
+        // fermion loops are the closed lines of the fermions; ghost loops do not count
+        let fermions = || {
+            (0..model.particles().len())
+                .map(ParticleId::from_index)
+                .filter(|&id| {
+                    model
+                        .particle_by_id(id)
+                        .is_ok_and(|particle| particle.is_fermion() && !particle.is_ghost())
+                })
+                .collect()
+        };
+        for filter in &options.graph_filters {
+            if let GenerationFilter::FermionLoopCountRange((minimum, maximum)) = filter {
+                let lines = Countable::ClosedLines(fermions());
+                generator = generator.count(lines, *minimum..=*maximum);
+            }
+        }
+        if let Some(maximum) = options.max_vertices {
+            generator = generator.max_vertices(maximum);
+        }
+        if let Some(maximum) = options.max_bridges(*options.loop_count().start()) {
+            generator = generator.max_bridges(maximum);
+        }
+        Ok(generator)
     }
 }
 
@@ -359,22 +426,13 @@ type UserFilter = dyn Fn(&GenerationView<'_>) -> bool + Send + Sync;
 pub(crate) struct Pruner {
     one_particle_irreducible_loops: bool,
     vetoes: SpecialTopologyVetoes,
-    coupling_bounds: Vec<(usize, Option<usize>)>,
-    /// The coupling orders of each signature, in the order of `coupling_bounds`.
-    signature_orders: Vec<Vec<usize>>,
-    fermion_loop_range: Option<(usize, usize)>,
-    /// Per particle index: massless, and a non-ghost fermion.
+    /// Per particle index: massless.
     massless: Vec<bool>,
-    fermion: Vec<bool>,
     user: Option<Arc<UserFilter>>,
 }
 
 impl Pruner {
-    pub(crate) fn new(
-        model: &Model,
-        options: &GenerationOptions,
-        signatures: &VertexSignatures,
-    ) -> Result<Self, GenerationError> {
+    pub(crate) fn new(model: &Model, options: &GenerationOptions) -> Self {
         let vetoes = SpecialTopologyVetoes {
             self_energy: options
                 .graph_filters
@@ -405,47 +463,16 @@ impl Pruner {
                     _ => None,
                 }),
         };
-        let bounds = CouplingBounds::new(options);
-        let signature_orders = signatures
-            .rules
-            .iter()
-            .map(|rule| {
-                let orders = model.vertex_rule_by_id(*rule)?.coupling_orders(model);
-                Ok(bounds
-                    .0
-                    .iter()
-                    .map(|(name, _, _)| orders.get(name).copied().unwrap_or(0))
-                    .collect())
-            })
-            .collect::<Result<_, GenerationError>>()?;
-        Ok(Self {
+        Self {
             one_particle_irreducible_loops: options
                 .graph_filters
                 .contains(&GenerationFilter::LoopOneParticleIrreducible),
             vetoes,
-            coupling_bounds: bounds
-                .0
-                .into_iter()
-                .map(|(_, minimum, maximum)| (minimum, maximum))
-                .collect(),
-            signature_orders,
-            fermion_loop_range: options
-                .graph_filters
-                .iter()
-                .find_map(|filter| match filter {
-                    GenerationFilter::FermionLoopCountRange(range) => Some(*range),
-                    _ => None,
-                }),
             massless: (0..model.particles().len())
                 .map(|index| model.particle_is_massless(ParticleId::from_index(index)))
                 .collect(),
-            fermion: model
-                .particles()
-                .iter()
-                .map(|particle| particle.is_fermion() && !particle.is_ghost())
-                .collect(),
             user: options.filter.clone(),
-        })
+        }
     }
 
     pub(crate) fn keeps(&self, view: &GenerationView<'_>) -> bool {
@@ -456,44 +483,10 @@ impl Pruner {
                     && !view.bridges().is_empty())
                     && !(view.is_topology_complete() && self.special_topology_vetoed(view))
             }
-            Stage::Fields => self.coupling_orders_allowed(view, false),
-            Stage::Complete => {
-                self.coupling_orders_allowed(view, true)
-                    && !self.special_topology_vetoed(view)
-                    && self.fermion_loop_range.is_none_or(|(minimum, maximum)| {
-                        self.closed_fermion_loops(view)
-                            .is_none_or(|loops| (minimum..=maximum).contains(&loops))
-                    })
-            }
+            Stage::Fields => true,
+            Stage::Complete => !self.special_topology_vetoed(view),
         };
         keeps && self.user.as_ref().is_none_or(|user| user(view))
-    }
-
-    /// Partial field assignments are bounded from below by the cheapest rule of every vertex
-    /// whose stubs are typed; complete graphs are checked exactly.
-    fn coupling_orders_allowed(&self, view: &GenerationView<'_>, complete: bool) -> bool {
-        if self.coupling_bounds.is_empty() {
-            return true;
-        }
-        let mut totals = vec![0; self.coupling_bounds.len()];
-        for vertex in 0..view.n_vertices() {
-            let Some(rules) = view.rules(vertex) else {
-                continue;
-            };
-            for (order, total) in totals.iter_mut().enumerate() {
-                *total += rules
-                    .iter()
-                    .map(|rule| self.signature_orders[*rule as usize][order])
-                    .min()
-                    .unwrap_or(0);
-            }
-        }
-        self.coupling_bounds
-            .iter()
-            .zip(totals)
-            .all(|((minimum, maximum), total)| {
-                maximum.is_none_or(|maximum| total <= maximum) && (!complete || total >= *minimum)
-            })
     }
 
     fn special_topology_vetoed(&self, view: &GenerationView<'_>) -> bool {
@@ -518,28 +511,6 @@ impl Pruner {
             );
         }
         graph
-    }
-
-    /// Closed fermion loops of a complete graph; `None` for branching fermion lines, which
-    /// diagram construction rejects.
-    fn closed_fermion_loops(&self, view: &GenerationView<'_>) -> Option<usize> {
-        let mut nodes = view.n_vertices();
-        let mut ends = vec![];
-        for vertex in 0..view.n_vertices() {
-            for (_, stub) in view.legs(vertex) {
-                if self.fermion[stub.field.index()] {
-                    ends.push((vertex, nodes));
-                    nodes += 1;
-                }
-            }
-        }
-        for edge in view.edges() {
-            let stub = edge.stub.expect("complete graphs are typed");
-            if self.fermion[stub.field.index()] {
-                ends.push((edge.vertices[0], edge.vertices[1]));
-            }
-        }
-        closed_loops(nodes, &ends).ok()
     }
 }
 

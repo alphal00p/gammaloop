@@ -16,14 +16,22 @@
 //! states. Before the first label, every edge needs a label that fits its ends with just their
 //! legs. The edges of a bundle share their ends and lower bound, so one of them is tested for all.
 //!
+//! The budgets of the request (see [`super::budget`]) bound their values on every partial
+//! labelling, one row of intervals per labelled edge, and a labelling whose intervals miss a range
+//! is dropped like one that fails forward checking; before the first label, the legs alone must
+//! admit the budgets.
+//!
 //! A complete labelling is kept if it is lexicographically minimal among its images under `H`; the
-//! vertex rules are then chosen as minimal tuples under the stabilizer of the labelling. The
-//! generator's filter sees every partial labelling that passes forward checking and prunes the
-//! labellings it rejects with all their extensions.
+//! vertex rules are then chosen as minimal tuples under the stabilizer of the labelling whose
+//! weights meet the budgets exactly. The weights are invariant under the stabilizer, so the
+//! minimal tuple of an orbit meets them if any tuple does. The generator's filter sees every
+//! partial labelling that passes forward checking and the budgets, and prunes the labellings it
+//! rejects with all their extensions.
 
 use std::cmp::Ordering;
 
 use super::{
+    budget::Lines,
     model::{Fitting, Model, VertexState},
     topology::{Group, Topology},
     view::{Prune, State},
@@ -75,6 +83,13 @@ pub(crate) struct Decorator {
     /// labelled.
     later: Vec<Edge>,
     later_at: Vec<usize>,
+    /// Per labelled prefix and budget bound: `tallies[e * width + b]` is the interval of the values
+    /// of bound `b` over the completions of the labelling of the first `e` edges.
+    tallies: Vec<[i64; 2]>,
+    /// Per edge: it is a bridge of the topology (for chord counts).
+    bridges: Vec<bool>,
+    /// Per line count: the lines of the labelled edges.
+    lines: Vec<Lines>,
     labels: Vec<u8>,
     group: Group,
     /// Per non-identity group element and bundle: the preimage bundle and whether the pair flips.
@@ -130,6 +145,10 @@ impl Decorator {
         }
         self.labels.clear();
         self.labels.resize(self.edges.len(), 0);
+        self.trail.resize(self.edges.len(), [0; 2]);
+        if !self.start_budgets(model, topology) {
+            return;
+        }
         if single {
             if self.single(model) {
                 self.phase = Phase::Single;
@@ -145,7 +164,6 @@ impl Decorator {
             return;
         }
         self.list_later();
-        self.trail.resize(self.edges.len(), [0; 2]);
         self.group.close(n, generators);
         self.lift();
         self.assigned = 0;
@@ -213,14 +231,21 @@ impl Decorator {
     }
 
     /// Label every edge with the only label and every vertex with its only rule; `false` if the
-    /// label does not fit an edge or a vertex has no rule.
+    /// label does not fit an edge, a vertex has no rule or the budgets reject the diagram.
     fn single(&mut self, model: &Model) -> bool {
         for e in 0..self.edges.len() {
             let edge = self.edges[e];
             let Some(l) = self.fitting(model, edge, 0).next() else {
                 return false;
             };
-            self.add(model, edge, l, self.ends(edge));
+            let before = self.ends(edge);
+            self.trail[e] = before;
+            self.add(model, edge, l, before);
+            self.labels[e] = l as u8;
+            if !self.within_budgets(model, e) {
+                return false;
+            }
+            self.follow_lines(model, e, false);
         }
         self.rules.clear();
         for &state in &self.states {
@@ -229,7 +254,149 @@ impl Decorator {
             };
             self.rules.push(rule);
         }
-        true
+        model.budgets.rules_admit(&self.rules)
+    }
+
+    /// Start the budget bounds from the legs: the first row of tallies, the bridges for chord
+    /// counts and the lines of the line counts. `false` if the budgets admit no labelling.
+    fn start_budgets(&mut self, model: &Model, t: &Topology) -> bool {
+        let budgets = &model.budgets;
+        // the decorator may come from a generation with other budgets
+        self.lines
+            .resize_with(budgets.n_line_counts(), Lines::default);
+        let width = budgets.len();
+        if width == 0 {
+            return true;
+        }
+        let n_edges = self.edges.len();
+        self.tallies.clear();
+        self.tallies.resize((n_edges + 1) * width, [0; 2]);
+        let mut chords = n_edges;
+        if budgets.counts_chords() {
+            self.bridges.clear();
+            self.bridges.resize(n_edges, false);
+            let (edges, bridges) = (&self.edges, &mut self.bridges);
+            t.bridges(|u, v| {
+                let (u, v) = (u.min(v) as u8, u.max(v) as u8);
+                // a bridge has no parallel edge
+                let e = edges.iter().position(|e| (e.u, e.v) == (u, v));
+                bridges[e.expect("a bridge is an edge")] = true;
+                chords -= 1;
+            });
+        }
+        let k = budgets.n_weights;
+        for w in 0..k {
+            self.tallies[w] = self.states.iter().fold([0; 2], |[low, high], &state| {
+                let [least, most] = model.weight(state, w);
+                [low + least as i64, high + most as i64]
+            });
+        }
+        let n_counts = budgets.n_edge_counts();
+        for c in 0..n_counts {
+            let eligible = if budgets.chords_only(c) {
+                chords
+            } else {
+                n_edges
+            };
+            self.tallies[k + c] = [0, eligible as i64];
+        }
+        for (j, lines) in self.lines.iter_mut().enumerate() {
+            let legs = |v: usize| {
+                (0..model.legs.n_classes())
+                    .filter(|&c| budgets.leg_lines(c) >> j & 1 == 1)
+                    .map(|c| model.legs.count(t.vertices[v].labelled, c))
+                    .sum()
+            };
+            lines.reset((0..t.n).map(legs));
+            self.tallies[k + n_counts + j] = Lines::interval(
+                lines.closed,
+                lines.branching,
+                n_edges == 0,
+                budgets.branching(j),
+            );
+        }
+        budgets.admit(&self.tallies[..width])
+    }
+
+    /// Whether the budgets admit the labelling up to edge `e`, just labelled.
+    #[inline(always)]
+    fn within_budgets(&mut self, model: &Model, e: usize) -> bool {
+        model.budgets.is_empty() || self.tally(model, e)
+    }
+
+    /// Whether budgets admit the labelling up to edge `e`, just labelled. Computes the bounds
+    /// after `e` (row `e + 1` of the tallies) from those before it: the weight bounds of the two
+    /// ends move with their states, an edge count counts the edge or no longer can, and the line
+    /// counts follow the lines; on the last edge the counts are exact. Kept out of the labelling
+    /// loop, which runs without budgets as fast as before.
+    #[inline(never)]
+    fn tally(&mut self, model: &Model, e: usize) -> bool {
+        let budgets = &model.budgets;
+        let width = budgets.len();
+        let edge = self.edges[e];
+        let (u, v) = (edge.u as usize, edge.v as usize);
+        let (before, after) = (self.trail[e], self.ends(edge));
+        let (done, rest) = self.tallies.split_at_mut((e + 1) * width);
+        let (row, next) = (&done[e * width..], &mut rest[..width]);
+        let k = budgets.n_weights;
+        for w in 0..k {
+            let shift = |[low, high]: [i64; 2], from, to| {
+                let ([a, b], [c, d]) = (model.weight(from, w), model.weight(to, w));
+                [low + (c - a) as i64, high + (d - b) as i64]
+            };
+            next[w] = shift(row[w], before[0], after[0]);
+            if u != v {
+                next[w] = shift(next[w], before[1], after[1]);
+            }
+        }
+        let counted = budgets.counted(self.labels[e] as usize, u == v);
+        let n_counts = budgets.n_edge_counts();
+        for c in 0..n_counts {
+            let [low, high] = row[k + c];
+            next[k + c] = if budgets.chords_only(c) && self.bridges[e] {
+                [low, high]
+            } else if counted >> c & 1 == 1 {
+                [low + 1, high]
+            } else {
+                [low, high - 1]
+            };
+        }
+        let complete = e + 1 == self.edges.len();
+        for (j, lines) in self.lines.iter().enumerate() {
+            let (closed, branching) = if counted >> (n_counts + j) & 1 == 1 {
+                lines.after(u, v)
+            } else {
+                (lines.closed, lines.branching)
+            };
+            next[k + n_counts + j] =
+                Lines::interval(closed, branching, complete, budgets.branching(j));
+        }
+        budgets.admit(next)
+    }
+
+    /// Add edge `e`, labelled and accepted, to the lines of the line counts that its label adds
+    /// to, or with `undo` remove it again, the last edge added.
+    #[inline(always)]
+    fn follow_lines(&mut self, model: &Model, e: usize, undo: bool) {
+        if !self.lines.is_empty() {
+            self.follow_lines_of(model, e, undo);
+        }
+    }
+
+    #[inline(never)]
+    fn follow_lines_of(&mut self, model: &Model, e: usize, undo: bool) {
+        let Edge { u, v, .. } = self.edges[e];
+        let budgets = &model.budgets;
+        let counted = budgets.counted(self.labels[e] as usize, u == v) >> budgets.n_edge_counts();
+        for (j, lines) in self.lines.iter_mut().enumerate() {
+            if counted >> j & 1 == 1 {
+                if undo {
+                    lines.undo(u as usize, v as usize);
+                } else {
+                    lines.add(u as usize, v as usize);
+                }
+            }
+        }
     }
 
     /// Edges by vertex, without bundle order.
@@ -378,13 +545,14 @@ impl Decorator {
                 };
                 self.assigned = e;
                 self.set_ends(self.edges[e], self.trail[e]);
+                self.follow_lines(model, e, true);
                 self.descending = self.place(model, e, self.labels[e] as usize + 1, keeps);
             }
         }
     }
 
     /// Give edge `e` the first label from `first` on that fits its ends, passes forward checking
-    /// and that `keeps`.
+    /// and the budgets, and that `keeps`.
     fn place(
         &mut self,
         model: &Model,
@@ -398,7 +566,8 @@ impl Decorator {
         for l in self.fitting(model, edge, first) {
             self.add(model, edge, l, before);
             self.labels[e] = l as u8;
-            if self.forward_check(model, e) && keeps(self, e) {
+            if self.forward_check(model, e) && self.within_budgets(model, e) && keeps(self, e) {
+                self.follow_lines(model, e, false);
                 self.assigned = e + 1;
                 return true;
             }
@@ -542,7 +711,7 @@ impl Decorator {
             self.rules.clear();
             self.rules
                 .extend((0..n).map(|v| model.rules(self.states[v])[self.choices[v]]));
-            if self.rules_minimal() {
+            if self.rules_minimal() && model.budgets.rules_admit(&self.rules) {
                 return true;
             }
         }

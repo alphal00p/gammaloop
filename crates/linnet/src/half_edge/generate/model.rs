@@ -14,7 +14,10 @@
 
 use ahash::AHashMap;
 
-use super::GenerationError;
+use super::{
+    budget::{Budgets, Request},
+    GenerationError,
+};
 
 /// Largest vertex degree: a [`StubSet`] holds 15 stubs and its degree.
 pub(crate) const MAX_DEGREE: usize = 15;
@@ -72,6 +75,10 @@ const EMPTY: u8 = u8::MAX;
 /// Most states take few of the stub types, so each state keeps its transitions in a small hash
 /// table of its own, keyed by stub type with linear probing, at most half full: memory grows with
 /// the transitions rather than with the states times the stub types.
+///
+/// Signatures may carry integer weights (coupling orders, counterterm orders, any tag); every state
+/// then carries, per weight, the least and the most weight of the signatures containing it, which
+/// bound the weight of every vertex completing it.
 #[derive(Debug)]
 struct Automaton {
     /// Per degree `0..=MAX_DEGREE`: its root, `NONE` without a signature of that degree.
@@ -83,6 +90,9 @@ struct Automaton {
     /// The signatures equal to state `s` are `rules[starts[s]..starts[s + 1]]`, ascending.
     starts: Vec<u32>,
     rules: Vec<u32>,
+    /// Per state and weight (`n_weights` per state): its least and most weight.
+    weights: Vec<[i32; 2]>,
+    n_weights: usize,
 }
 
 /// A transition of the [`Automaton`]: `(state, stub, target)`.
@@ -90,12 +100,19 @@ type Transition = (VertexState, u8, VertexState);
 
 impl Automaton {
     /// The automaton of `signatures`, given as stub types below `stubs` and of degree
-    /// `1..=MAX_DEGREE`, with every transition once.
-    fn new(signatures: &[Vec<u8>], stubs: usize) -> (Self, Vec<Transition>) {
+    /// `1..=MAX_DEGREE`, with every transition once. `weights` holds `n_weights` weights per
+    /// signature.
+    fn new(
+        signatures: &[Vec<u8>],
+        stubs: usize,
+        weights: &[i32],
+        n_weights: usize,
+    ) -> (Self, Vec<Transition>) {
         let width = stubs.div_ceil(64);
         let mut ids: AHashMap<u128, VertexState> = AHashMap::new();
         // per state, `width` words of a bit per stub type it takes, to list each transition once
         let mut takes: Vec<u64> = vec![];
+        let mut state_weights: Vec<[i32; 2]> = vec![];
         let mut transitions = vec![];
         let mut roots = [NONE; MAX_DEGREE + 1];
         let mut full = vec![];
@@ -132,6 +149,14 @@ impl Automaton {
                 let state = *ids.entry(set.key()).or_insert(id);
                 if state == id {
                     takes.resize(takes.len() + width, 0);
+                    state_weights.resize(state_weights.len() + n_weights, [i32::MAX, i32::MIN]);
+                }
+                let own = &weights[i * n_weights..(i + 1) * n_weights];
+                for (bounds, &w) in state_weights[state as usize * n_weights..]
+                    .iter_mut()
+                    .zip(own)
+                {
+                    *bounds = [bounds[0].min(w), bounds[1].max(w)];
                 }
                 // the sub-multiset with one stub of run `r` fewer takes that stub to this one
                 for (r, &(stub, _)) in runs.iter().enumerate() {
@@ -192,6 +217,8 @@ impl Automaton {
             slots,
             starts,
             rules: full.into_iter().map(|(_, rule)| rule).collect(),
+            weights: state_weights,
+            n_weights,
         };
         (automaton, transitions)
     }
@@ -224,6 +251,12 @@ impl Automaton {
     fn rules(&self, state: VertexState) -> &[u32] {
         let s = state as usize;
         &self.rules[self.starts[s] as usize..self.starts[s + 1] as usize]
+    }
+
+    /// The least and the most weight `k` of the signatures containing `state`.
+    #[inline(always)]
+    fn weight(&self, state: VertexState, k: usize) -> [i32; 2] {
+        self.weights[state as usize * self.n_weights + k]
     }
 
     /// `label` fits an edge from a vertex in state `a` to a higher one in state `b`.
@@ -476,6 +509,11 @@ pub(crate) struct Model {
     pub(crate) labelling: Vec<(usize, usize)>,
     /// Every vertex has at most one rule for its stubs.
     pub(crate) unique_rules: bool,
+    /// The budgets of the request.
+    pub(crate) budgets: Budgets,
+    /// Vertices can balance the charges and parities of the legs (see [`Model::balances`]);
+    /// otherwise no graph exists.
+    pub(crate) balanced: bool,
 }
 
 impl Model {
@@ -484,6 +522,7 @@ impl Model {
         n_fields: usize,
         signatures: &[Vec<u8>],
         legs: &[(u8, u8)],
+        request: &Request,
     ) -> Result<Self, GenerationError> {
         if n_fields > MAX_FIELDS {
             return Err(GenerationError::TooManyFields);
@@ -502,7 +541,9 @@ impl Model {
         }
         degrees.sort_unstable();
         degrees.dedup();
-        let (vertices, transitions) = Automaton::new(signatures, 3 * n_fields);
+        let weights = request.signature_weights(signatures.len());
+        let (vertices, transitions) =
+            Automaton::new(signatures, 3 * n_fields, &weights, request.weights.len());
 
         let mut labels = vec![];
         let mut loop_labels = vec![];
@@ -579,6 +620,8 @@ impl Model {
         Ok(Model {
             degrees,
             masks: Masks::of(&vertices, &transitions, &labels, &loop_labels),
+            budgets: Budgets::new(request, weights, signatures, &labels, &loop_labels, legs)?,
+            balanced: Self::balances(n_fields, signatures, legs),
             vertices,
             labels,
             loop_labels,
@@ -588,6 +631,67 @@ impl Model {
             labelling,
             unique_rules,
         })
+    }
+
+    /// Whether vertices can balance the legs. The two stubs of an edge are an incoming and an
+    /// outgoing stub of a charged field or two stubs of a self-conjugate one, so summed over the
+    /// vertices, the flow of every charged field (incoming less outgoing stubs) equals that of the
+    /// legs, and the stubs of every field have the parity of the legs'. The legs' flows must then
+    /// lie in the span of the signatures' flows, and their parities in the span of the signatures'
+    /// parities, checked modulo a large prime and modulo two: the legs carry none of the charges
+    /// and parities that all signatures conserve.
+    fn balances(n_fields: usize, signatures: &[Vec<u8>], legs: &[(u8, u8)]) -> bool {
+        // a column per charged field: those with a directed stub
+        let mut columns = vec![usize::MAX; n_fields];
+        let mut n_charged = 0;
+        let leg_stubs = legs.iter().map(|(stub, _)| stub);
+        for &stub in signatures.iter().flatten().chain(leg_stubs) {
+            let column = &mut columns[stub as usize / 3];
+            if stub % 3 != UNDIRECTED && *column == usize::MAX {
+                *column = n_charged;
+                n_charged += 1;
+            }
+        }
+        // the flows over the charged fields and the parities of all fields, a bit each
+        fn vectors(
+            stubs: impl Iterator<Item = (u8, u8)>,
+            columns: &[usize],
+            flows: &mut [i64],
+        ) -> u128 {
+            flows.fill(0);
+            let mut parities = 0;
+            for (stub, mult) in stubs {
+                parities ^= (mult as u128 & 1) << (stub / 3);
+                let column = columns[stub as usize / 3];
+                match stub % 3 {
+                    INCOMING => flows[column] += mult as i64,
+                    OUTGOING => flows[column] -= mult as i64,
+                    _ => {}
+                }
+            }
+            parities
+        }
+        let mut flows = vec![0; n_charged];
+        let mut signature_flows = vec![];
+        let mut parity_basis = [0u128; 128];
+        for signature in signatures {
+            let stubs = signature.iter().map(|&stub| (stub, 1));
+            let parities = reduce_bits(&parity_basis, vectors(stubs, &columns, &mut flows));
+            if parities != 0 {
+                parity_basis[127 - parities.leading_zeros() as usize] = parities;
+            }
+            if flows.iter().any(|&f| f != 0) {
+                signature_flows.push(flows.clone());
+            }
+        }
+        signature_flows.sort_unstable();
+        signature_flows.dedup();
+        let mut span = Span::new(n_charged);
+        for flows in &signature_flows {
+            span.insert(flows);
+        }
+        let parities = vectors(legs.iter().copied(), &columns, &mut flows);
+        span.contains(&flows) && reduce_bits(&parity_basis, parities) == 0
     }
 
     /// The legs of the labelled slot classes in `slots` (packed by slot class), packed by label
@@ -614,6 +718,12 @@ impl Model {
     /// placed.
     pub(crate) fn rules(&self, state: VertexState) -> &[u32] {
         self.vertices.rules(state)
+    }
+
+    /// The least and the most weight `k` of a vertex completing `state`.
+    #[inline(always)]
+    pub(crate) fn weight(&self, state: VertexState, k: usize) -> [i32; 2] {
+        self.vertices.weight(state, k)
     }
 
     /// The state of a vertex of this degree with the legs in `slots` (packed by slot class), if
@@ -691,11 +801,82 @@ fn at_least(from: usize) -> u128 {
     u128::MAX.checked_shl(from as u32).unwrap_or(0)
 }
 
+/// The prime modulus of [`Span`].
+const PRIME: u64 = (1 << 31) - 1;
+
+/// A basis of the span of some vectors modulo [`PRIME`] in row echelon form: per pivot column, the
+/// row that is zero before it and one at it.
+#[derive(Debug)]
+struct Span(Vec<Option<Vec<u64>>>);
+
+impl Span {
+    /// The span of no vector of length `n`.
+    fn new(n: usize) -> Self {
+        Span(vec![None; n])
+    }
+
+    /// `x` modulo [`PRIME`] less the rows that make it zero at every pivot: zero if `x` is in the
+    /// span.
+    fn reduced(&self, x: &[i64]) -> Vec<u64> {
+        let mut x: Vec<u64> = x
+            .iter()
+            .map(|&a| a.rem_euclid(PRIME as i64) as u64)
+            .collect();
+        // a row changes the columns from its pivot on only
+        for (pivot, row) in self.0.iter().enumerate() {
+            let Some(row) = row else { continue };
+            if x[pivot] != 0 {
+                let factor = PRIME - x[pivot];
+                for (a, &b) in x[pivot..].iter_mut().zip(&row[pivot..]) {
+                    *a = (*a + factor * b) % PRIME;
+                }
+            }
+        }
+        x
+    }
+
+    fn contains(&self, x: &[i64]) -> bool {
+        self.reduced(x).iter().all(|&a| a == 0)
+    }
+
+    fn insert(&mut self, x: &[i64]) {
+        let mut x = self.reduced(x);
+        let Some(pivot) = x.iter().position(|&a| a != 0) else {
+            return;
+        };
+        // the inverse by Fermat's little theorem
+        let (mut inverse, mut base, mut exponent) = (1, x[pivot], PRIME - 2);
+        while exponent > 0 {
+            if exponent & 1 == 1 {
+                inverse = inverse * base % PRIME;
+            }
+            base = base * base % PRIME;
+            exponent >>= 1;
+        }
+        x[pivot..]
+            .iter_mut()
+            .for_each(|a| *a = *a * inverse % PRIME);
+        self.0[pivot] = Some(x);
+    }
+}
+
+/// `x` reduced by a basis modulo two, stored by leading bit: zero if `x` is in the span.
+fn reduce_bits(basis: &[u128; 128], mut x: u128) -> u128 {
+    while x != 0 {
+        let top = basis[127 - x.leading_zeros() as usize];
+        if top == 0 {
+            break;
+        }
+        x ^= top;
+    }
+    x
+}
+
 #[cfg(test)]
 mod tests {
     use ahash::AHashMap;
 
-    use super::{Automaton, Direction, Legs, Model, StubSet, VertexState};
+    use super::{Automaton, Direction, Legs, Model, Request, StubSet, VertexState};
 
     #[test]
     fn stub_sets_are_sorted_multisets() {
@@ -714,8 +895,13 @@ mod tests {
     #[test]
     fn automaton_states_are_the_sub_multisets_of_the_signatures() {
         // stub types 0 = a (undirected), 4 = e in, 5 = e out: e e~ a, a a a, a a a a twice
-        let model =
-            Model::new(2, &[vec![4, 5, 0], vec![0; 3], vec![0; 4], vec![0; 4]], &[]).unwrap();
+        let model = Model::new(
+            2,
+            &[vec![4, 5, 0], vec![0; 3], vec![0; 4], vec![0; 4]],
+            &[],
+            &Request::default(),
+        )
+        .unwrap();
         let v = &model.vertices;
         // degree 3: {}, {a}, {e}, {e~}, {a e}, {a e~}, {e e~}, {a e e~}, {a a}, {a a a};
         // degree 4: {}, {a}, {a a}, {a a a}, {a a a a}
@@ -739,10 +925,64 @@ mod tests {
     }
 
     #[test]
+    fn states_bound_the_weights_of_the_signatures_containing_them() {
+        // e e~ a of order one, a a a of order zero, a a a a twice with orders zero and two
+        let request = Request {
+            weights: vec![(vec![1, 0, 0, 2], [0, 4])],
+            ..Request::default()
+        };
+        let signatures = [vec![4, 5, 0], vec![0; 3], vec![0; 4], vec![0; 4]];
+        let model = Model::new(2, &signatures, &[], &request).unwrap();
+        let walk = |degree, stubs: &[u8]| {
+            let v = &model.vertices;
+            let state = stubs
+                .iter()
+                .try_fold(v.root(degree).unwrap(), |s, &stub| v.step(s, stub));
+            model.weight(state.unwrap(), 0)
+        };
+        assert_eq!(walk(3, &[]), [0, 1]);
+        assert_eq!(walk(3, &[0]), [0, 1]);
+        assert_eq!(walk(3, &[4]), [1, 1]);
+        assert_eq!(walk(3, &[0, 0]), [0, 0]);
+        // a full state with two rules
+        assert_eq!(walk(4, &[0, 0, 0, 0]), [0, 2]);
+    }
+
+    #[test]
+    fn legs_carry_only_what_vertices_balance() {
+        // QED, e e~ a: stub types 0 = a, 4 = e in, 5 = e out
+        let qed = |legs: &[(u8, u8)]| {
+            Model::new(2, &[vec![4, 5, 0]], legs, &Request::default())
+                .unwrap()
+                .balanced
+        };
+        assert!(qed(&[(4, 1), (5, 1)]));
+        assert!(qed(&[(0, 1)]));
+        assert!(qed(&[]));
+        // the electron charge
+        assert!(!qed(&[(4, 2)]));
+        assert!(!qed(&[(4, 1), (0, 1)]));
+        // phi^3 and phi^2 chi^2 (stub types 0 = phi, 3 = chi): chi comes in pairs
+        let scalars = |legs: &[(u8, u8)]| {
+            Model::new(
+                2,
+                &[vec![0; 3], vec![3, 3, 0, 0]],
+                legs,
+                &Request::default(),
+            )
+            .unwrap()
+            .balanced
+        };
+        assert!(scalars(&[(3, 2)]));
+        assert!(scalars(&[(0, 1)]));
+        assert!(!scalars(&[(3, 1), (0, 1)]));
+    }
+
+    #[test]
     fn state_tables_hold_exactly_the_transitions() {
         // 65 charged fields with a photon: 198 stub types, of which each state takes few
         let signatures: Vec<Vec<u8>> = (1..=65).map(|f| vec![3 * f + 1, 3 * f + 2, 0]).collect();
-        let (v, transitions) = Automaton::new(&signatures, 198);
+        let (v, transitions) = Automaton::new(&signatures, 198, &[], 0);
         let listed: AHashMap<_, _> = transitions
             .iter()
             .map(|&(state, stub, target)| ((state, stub), target))
@@ -763,7 +1003,7 @@ mod tests {
     fn masks_select_the_labels_that_the_transitions_admit() {
         // QCD-like: g g g, g g g g, q~ q g, c~ c g with q = field 1, c = field 2
         let signatures = [vec![0; 3], vec![0; 4], vec![4, 5, 0], vec![7, 8, 0]];
-        let model = Model::new(3, &signatures, &[(0, 2)]).unwrap();
+        let model = Model::new(3, &signatures, &[(0, 2)], &Request::default()).unwrap();
         assert!(model.masks.is_some());
         let scan = |ends, self_loop, from| model.scan(ends, self_loop, from).collect::<Vec<_>>();
         let n = model.vertices.len() as VertexState;
@@ -788,7 +1028,7 @@ mod tests {
     fn many_labels_scan_the_transitions() {
         // 65 charged fields with a photon: 131 paired labels
         let signatures: Vec<Vec<u8>> = (1..=65).map(|f| vec![3 * f + 1, 3 * f + 2, 0]).collect();
-        let model = Model::new(66, &signatures, &[(0, 2)]).unwrap();
+        let model = Model::new(66, &signatures, &[(0, 2)], &Request::default()).unwrap();
         assert_eq!(model.labels.len(), 131);
         assert!(model.masks.is_none());
         let photon = model.leg_state(3, model.slots.one(0)).unwrap();

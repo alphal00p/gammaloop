@@ -155,7 +155,9 @@ both undirected, or one is outgoing and the other incoming. Legs are `(label, st
 become dangling half-edges keyed by their label; repeating a label makes those legs
 interchangeable. Settings cover a loop range, a vertex bound (legs are not vertices), a bridge
 limit (`0` for one-particle-irreducible graphs), self-loops and zero-flow bridges (a bridge with no
-leg on one side), a filter that prunes the search, and progress and abort callbacks. The filter
+leg on one side), budgets (sums of integer signature weights such as coupling and counterterm
+orders, and counts of vertices, propagators, chords and closed lines of some fields, each within a
+range), a filter that prunes the search, and progress and abort callbacks. The filter
 sees read-only views of the partial untyped topologies, the partial field assignments and the
 complete graphs; it must be hereditary (reject every completion of a state it rejects), so the
 output is exactly the complete graphs it accepts, and a validation mode searches without pruning
@@ -188,6 +190,22 @@ and forward checking drops a partial decoration before the filter sees it once a
 of the last decorated one has no field left; a topology with an edge that no field fits at its
 ends gets no decoration. Typed canonical augmentation (signatures as the corollas) was measured as the
 alternative and visits about four times as many partial objects on QED and QCD processes.
+
+Budgets prune the decorations in the same way. Every automaton state carries the least and the
+most weight of the signatures containing it, so the sums of these bounds over the vertices bound
+each weight of a partial decoration, and a decoration step changes them at its two ends only;
+propagator and chord counts are bounded by the edges counted and the edges still undecorated, and
+closed lines by the lines closed so far (a union-find over the decorated edges of their fields),
+unless a signature lets lines branch. A partial decoration whose bounds miss a range is dropped
+before the filter sees it, and the vertex rules are checked exactly; the weights are invariant
+under the stabilizer of a labelling, so keeping the orbit-minimal rule tuples that meet them is
+exact. Before any search, a loop order is skipped when no multiset of signatures has the degrees
+its Euler relation needs and weights within the ranges, and a request is empty when its legs
+carry a charge or a parity that no combination of vertices balances (the leg vector lies outside
+the span of the signatures' flows, modulo a large prime, or of their stub parities, modulo two).
+The emptiness test follows the reachable sums of degrees and weights rather than the vertex
+partitions themselves: on SMEFTsim with an NP budget the partitions number tens of thousands
+(2->3 at three loops: 46,697) while the sums stay a few thousand (2,533).
 
 #callout("Streaming, deterministic order and parallelism", [
   Both stages are resumable depth-first searches with explicit stacks, so the iterator streams:

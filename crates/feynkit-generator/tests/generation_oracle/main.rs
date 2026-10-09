@@ -278,6 +278,14 @@ oracle! {
     heavy sm_eemm_qcd0_L2: Row { diagrams: 69193, topologies: 160, assignments: 69193, inverse_symmetry: (412367, 6), symmetry_factors: &[(1, 68277), (2, 888), (4, 26), (6, 2)], content: 0xe342a202fff52526, numerators: 0x3a0eab7af9b8b1a9, named: 0x6541eaf01bd37b2c };
     fast sm_uudd_qed2_L1: Row { diagrams: 111, topologies: 17, assignments: 111, inverse_symmetry: (221, 2), symmetry_factors: &[(1, 110), (2, 1)], content: 0x422125ee75cb81f1, numerators: 0x0e06bd22fdc90a2f, named: 0xd4111bd0134ba6da };
     heavy sm_uudd_qed2_L2: Row { diagrams: 3286, topologies: 230, assignments: 3286, inverse_symmetry: (38519, 12), symmetry_factors: &[(1, 3136), (2, 146), (4, 3), (6, 1)], content: 0xa681cec8fde8b382, numerators: 0x815c7654c050793d, named: 0x77d595df84089ea6 };
+    fast sm_uudd_qcd2_qed2_L1: Row { diagrams: 93, topologies: 17, assignments: 93, inverse_symmetry: (93, 1), symmetry_factors: &[(1, 93)], content: 0x7b412ce40ab68cb6, numerators: 0xc13ed6023bd9fa73, named: 0x5e018172ab01e0b1 };
+    fast sm_uudd_qcd3_L1: Row { diagrams: 18, topologies: 17, assignments: 18, inverse_symmetry: (35, 2), symmetry_factors: &[(1, 17), (2, 1)], content: 0x17f0a12f131f0bca, numerators: 0xa3ec8b01207c1a45, named: 0x9bb9a2a0c329ba0a };
+    fast sm_eemm_qed4_L0to1: Row { diagrams: 428, topologies: 10, assignments: 428, inverse_symmetry: (853, 2), symmetry_factors: &[(1, 425), (2, 3)], content: 0x99843c92c72133b6, numerators: 0x26f3641db6659cf2, named: 0x6c75ac1959f5ae62 };
+    fast sm_eemm_floop0_L1: Row { diagrams: 317, topologies: 10, assignments: 317, inverse_symmetry: (631, 2), symmetry_factors: &[(1, 314), (2, 3)], content: 0xd23895671b6f9dff, numerators: 0x517870f1cae9a209, named: 0x3356010bf4da4ed4 };
+    fast qcd_gggg_floop1_L1: Row { diagrams: 222, topologies: 55, assignments: 222, inverse_symmetry: (222, 1), symmetry_factors: &[(1, 222)], content: 0xb72175978408ff0d, numerators: 0xc642d07c1f80bb4c, named: 0x6534436d74177ab8 };
+    fast qcd_gse_all_floop1_dfilter_L2: Row { diagrams: 55, topologies: 8, assignments: 55, inverse_symmetry: (95, 2), symmetry_factors: &[(1, 40), (2, 15)], content: 0x6a14158e96795e50, numerators: 0x4453dad44443bf23, named: 0x5195dd5fc4f7426d };
+    fast sm_eemm_floop1_tfilter_L1: Row { diagrams: 95, topologies: 10, assignments: 95, inverse_symmetry: (95, 1), symmetry_factors: &[(1, 95)], content: 0xdcd2cfd04f896b17, numerators: 0x5b9d199cf88e1fc2, named: 0x44a648610d18bb4e };
+    fast qed_ase_floop2_L3: Row { diagrams: 405, topologies: 10, assignments: 405, inverse_symmetry: (405, 1), symmetry_factors: &[(1, 405)], content: 0x184a252bac2dfc3a, numerators: 0xdc2e4020a7a0a27a, named: 0x385200bf743f5f22 };
     fast ew_eemm_L1: Row { diagrams: 428, topologies: 10, assignments: 428, inverse_symmetry: (853, 2), symmetry_factors: &[(1, 425), (2, 3)], content: 0xb56d549c918bbbc1, numerators: 0x2bc439d340929b34, named: 0x927d3722af5f0c1f };
     heavy ew_eemm_L2: Row { diagrams: 69193, topologies: 160, assignments: 69193, inverse_symmetry: (412367, 6), symmetry_factors: &[(1, 68277), (2, 888), (4, 26), (6, 2)], content: 0x270481b3cce8b479, numerators: 0x6292f42e7e2fb42d, named: 0x2e9a8998ddbd7da4 };
     fast ct_phi3_2pt_L1: Row { diagrams: 4, topologies: 1, assignments: 4, inverse_symmetry: (2, 1), symmetry_factors: &[(2, 4)], content: 0x792c2689f9b727df, numerators: 0x094dd49c998c2915, named: 0x59fed4ad1262d0a7 };
@@ -289,6 +297,10 @@ oracle! {
     fast ct_phi3_vac_L4: Row { diagrams: 505, topologies: 17, assignments: 505, inverse_symmetry: (1105, 18), symmetry_factors: &[(1, 1), (2, 17), (4, 76), (6, 1), (8, 161), (12, 6), (16, 153), (24, 1), (32, 70), (36, 1), (48, 6), (64, 6), (72, 2), (128, 4)], content: 0xdac00a3ffc146b39, numerators: 0x758195af180c3984, named: 0xb5fdaf4e73c26499 };
     fast ct_qcd_vac_L2: Row { diagrams: 68, topologies: 3, assignments: 68, inverse_symmetry: (1103, 24), symmetry_factors: &[(1, 29), (2, 32), (4, 1), (6, 1), (8, 3), (12, 2)], content: 0xf69da97cd4bfb079, numerators: 0x74cb264b3044f795, named: 0xaff30af9d3a7ec43 };
     fast ct_qcd_vac_L3: Row { diagrams: 1816, topologies: 12, assignments: 1816, inverse_symmetry: (6341, 6), symmetry_factors: &[(1, 549), (2, 826), (3, 16), (4, 293), (6, 34), (8, 74), (12, 4), (16, 13), (24, 2), (48, 5)], content: 0x78eccaa3c84acd2a, numerators: 0xca96a9c3deeb724f, named: 0x05091949be52c84a };
+    fast ctorder_qcd_gggg_L1: Row { diagrams: 544, topologies: 55, assignments: 544, inverse_symmetry: (492, 1), symmetry_factors: &[(1, 440), (2, 104)], content: 0xf8d9d872e3f3e2d5, numerators: 0x7c69f3b81e40b745, named: 0x0ede202674f4586c };
+    fast ctorder_qcd_uugg_L1: Row { diagrams: 268, topologies: 32, assignments: 268, inverse_symmetry: (251, 1), symmetry_factors: &[(1, 234), (2, 34)], content: 0x4c1ad774fc27e60a, numerators: 0x555d26de4a5d2b3e, named: 0x2583db73807dff5a };
+    fast ctorder_qcd_vac_L3: Row { diagrams: 1298, topologies: 12, assignments: 1298, inverse_symmetry: (18965, 24), symmetry_factors: &[(1, 431), (2, 601), (3, 14), (4, 177), (6, 30), (8, 33), (12, 3), (16, 5), (24, 1), (48, 3)], content: 0xbe06185c11dbafc3, numerators: 0x3490357e136ed1bd, named: 0x9597e7511ccd3bc1 };
+    fast ctorder_phi3_vac_L4: Row { diagrams: 117, topologies: 17, assignments: 117, inverse_symmetry: (5525, 384), symmetry_factors: &[(2, 5), (4, 17), (8, 37), (12, 1), (16, 38), (32, 17), (64, 1), (128, 1)], content: 0xcfc6a8d4648abdc1, numerators: 0x1ceef6c80c321a4f, named: 0x1b2ff95d6a806ba3 };
     fast xs_qed_eemm_L1: Row { diagrams: 1, topologies: 17, assignments: 34, inverse_symmetry: (1, 1), symmetry_factors: &[(1, 1)], content: 0x831ae534b022fd0f, numerators: 0xe134f67914689408, named: 0xf40bfdc791015105 };
     fast xs_qed_eemm_L2: Row { diagrams: 28, topologies: 157, assignments: 714, inverse_symmetry: (28, 1), symmetry_factors: &[(1, 28)], content: 0xf6aad76a05e6dd4f, numerators: 0x574b5a82fb6414f7, named: 0xe3328e6593163eb3 };
     failing xs_qed_eemm_L3: THRESHOLD_CANDIDATE;
@@ -396,6 +408,54 @@ fn counterterm_copies_weight_every_rule_choice() {
                 })
                 .count();
             expected += Rational::from((1 << k, diagram.symmetry_factor()));
+        }
+        let actual = census(counterterms, 1).summary().inverse_symmetry;
+        assert_eq!(actual, expected, "{}", counterterms.name);
+    }
+}
+
+/// Counterterm copies with their own `CT` order: the rule choices with `k` copies among the `m`
+/// vertices of a base diagram (automorphism group `A`) that can take one form orbits with `sum
+/// 1/|Stab| = C(m, k) / |A|` (Burnside on the `k`-subsets), so a range of the order keeps exactly
+/// the orbit-minimal choices with `k` in range, where the bound on partial assignments cannot tell
+/// a rule from its copy.
+#[test]
+fn counterterm_orders_select_rule_choices_by_count() {
+    for (base, counterterms, range) in [
+        ("qcd_gggg_L1", "ctorder_qcd_gggg_L1", 1..=1),
+        ("qcd_uugg_L1", "ctorder_qcd_uugg_L1", 1..=1),
+        ("qcd_vac_L3", "ctorder_qcd_vac_L3", 0..=1),
+        ("phi3_vac_L4", "ctorder_phi3_vac_L4", 2..=2),
+    ] {
+        let counterterms = Case::named(counterterms);
+        let duplicated: BTreeSet<_> = counterterms
+            .model()
+            .vertex_rules()
+            .iter()
+            .filter_map(|rule| rule.name.strip_suffix("_CT").map(str::to_owned))
+            .collect();
+        let case = Case::named(base);
+        let model = case.model();
+        let options = case.options(&model, 1);
+        let binomial = |m: u64, k: u64| (0..k).fold(1, |c, i| c * (m - i) / (i + 1));
+        let mut expected = Rational::zero();
+        for diagram in case
+            .generate_with(model.clone(), &options)
+            .unwrap()
+            .diagrams
+        {
+            let m = diagram
+                .vertices()
+                .filter(|(_, vertex)| {
+                    let rule = model
+                        .vertex_rule_by_id(vertex.interaction.unwrap())
+                        .unwrap();
+                    duplicated.contains(&rule.name)
+                })
+                .count() as u64;
+            for k in range.clone().filter(|&k| k <= m) {
+                expected += Rational::from((binomial(m, k), diagram.symmetry_factor()));
+            }
         }
         let actual = census(counterterms, 1).summary().inverse_symmetry;
         assert_eq!(actual, expected, "{}", counterterms.name);

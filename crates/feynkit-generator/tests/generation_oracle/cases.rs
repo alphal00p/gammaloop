@@ -14,7 +14,7 @@ use feynkit_generator::{
     GenerationError, GenerationFilter, GenerationOptions, GenerationResult, GenerationType,
     GraphGroupingOptions, NumeratorGrouping, ParticleSelector, Process,
 };
-use feynkit_model::Model;
+use feynkit_model::{Model, Particle};
 
 type Configure = fn(&Model, GenerationOptions) -> GenerationOptions;
 
@@ -148,6 +148,63 @@ fn qed_at_most_two(_: &Model, options: GenerationOptions) -> GenerationOptions {
     order_at_most(options, "QED", 2)
 }
 
+fn orders(
+    options: GenerationOptions,
+    required: &[(&str, usize, Option<usize>)],
+) -> GenerationOptions {
+    options.with_graph_filter(GenerationFilter::CouplingOrders(
+        required
+            .iter()
+            .map(|&(order, minimum, maximum)| (order.to_owned(), (minimum, maximum)))
+            .collect(),
+    ))
+}
+
+/// Mixed QCD and electroweak corrections: both orders exactly two.
+fn qcd2_qed2(_: &Model, options: GenerationOptions) -> GenerationOptions {
+    orders(options, &[("QCD", 2, Some(2)), ("QED", 2, Some(2))])
+}
+
+/// A lower bound only.
+fn qcd_at_least_three(_: &Model, options: GenerationOptions) -> GenerationOptions {
+    orders(options, &[("QCD", 3, None)])
+}
+
+fn one_counterterm(_: &Model, options: GenerationOptions) -> GenerationOptions {
+    orders(options, &[("CT", 1, Some(1))])
+}
+
+fn two_counterterms(model: &Model, options: GenerationOptions) -> GenerationOptions {
+    orders(tadpoles(model, options), &[("CT", 2, Some(2))])
+}
+
+fn at_most_one_counterterm(model: &Model, options: GenerationOptions) -> GenerationOptions {
+    order_at_most(tadpoles(model, options), "CT", 1)
+}
+
+fn fermion_loops(options: GenerationOptions, minimum: usize, maximum: usize) -> GenerationOptions {
+    options.with_graph_filter(GenerationFilter::FermionLoopCountRange((minimum, maximum)))
+}
+
+fn no_fermion_loops(_: &Model, options: GenerationOptions) -> GenerationOptions {
+    fermion_loops(options, 0, 0)
+}
+
+fn one_fermion_loop(_: &Model, options: GenerationOptions) -> GenerationOptions {
+    fermion_loops(options, 1, 1)
+}
+
+fn two_fermion_loops_one_pi(model: &Model, options: GenerationOptions) -> GenerationOptions {
+    fermion_loops(one_pi(model, options), 2, 2)
+}
+
+/// QED order four at tree level and one loop: trees have order two, so the tree level is proven
+/// empty and its topologies are not enumerated.
+fn qed4_up_to_one_loop(_: &Model, options: GenerationOptions) -> GenerationOptions {
+    let options = options.with_loop_count(0, 1).unwrap();
+    orders(options, &[("QED", 4, Some(4))])
+}
+
 fn symmetrized(_: &Model, options: GenerationOptions) -> GenerationOptions {
     options.symmetrize_initial(true).symmetrize_final(true)
 }
@@ -166,18 +223,53 @@ fn numerators_up_to_scalar(_: &Model, options: GenerationOptions) -> GenerationO
     ))
 }
 
-/// Ghost fields rejected in flight by a user filter, as the Python `filter` callback does.
-fn ghosts_filtered(model: &Model, options: GenerationOptions) -> GenerationOptions {
-    let ghosts: Vec<_> = model
+/// The `rejected` particles rejected in flight by a user filter, as the Python `filter` callback
+/// does.
+fn filtered(
+    model: &Model,
+    options: GenerationOptions,
+    rejected: impl Fn(&Particle) -> bool,
+) -> GenerationOptions {
+    let rejected: Vec<_> = model
         .particles()
         .iter()
-        .filter(|particle| particle.is_ghost())
+        .filter(|particle| rejected(particle))
         .map(|particle| model.particle_id(&particle.name).unwrap())
         .collect();
     options.filter(move |view| {
         view.edges()
-            .all(|edge| edge.stub.is_none_or(|stub| !ghosts.contains(stub.field)))
+            .all(|edge| edge.stub.is_none_or(|stub| !rejected.contains(stub.field)))
     })
+}
+
+fn ghosts_filtered(model: &Model, options: GenerationOptions) -> GenerationOptions {
+    filtered(model, options, Particle::is_ghost)
+}
+
+/// One fermion loop, with the quarks of PDG code `pdg` rejected in flight by a user filter: it
+/// rejects field assignments of the fermions that the fermion-loop budget follows.
+fn one_fermion_loop_without(
+    model: &Model,
+    options: GenerationOptions,
+    pdg: i64,
+) -> GenerationOptions {
+    filtered(model, fermion_loops(options, 1, 1), |particle| {
+        particle.pdg_code.abs() == pdg
+    })
+}
+
+fn one_fermion_loop_without_down_quarks(
+    model: &Model,
+    options: GenerationOptions,
+) -> GenerationOptions {
+    one_fermion_loop_without(model, options, 1)
+}
+
+fn one_fermion_loop_without_top_quarks(
+    model: &Model,
+    options: GenerationOptions,
+) -> GenerationOptions {
+    one_fermion_loop_without(model, options, 6)
 }
 
 /// Ghost fields removed by the process's particle veto.
@@ -220,11 +312,72 @@ fn ct_phi3() -> Model {
 
 /// QCD with counterterm copies of the three-gluon and the up-quark-gluon vertices.
 fn ct_qcd() -> Model {
-    with_counterterms(Model::qcd(), |particles| {
-        let mut particles = particles.to_vec();
-        particles.sort();
-        particles == ["g", "g", "g"] || particles == ["g", "u", "u~"]
-    })
+    with_counterterms(Model::qcd(), qcd_counterterm)
+}
+
+fn qcd_counterterm(particles: &[String]) -> bool {
+    let mut particles = particles.to_vec();
+    particles.sort();
+    particles == ["g", "g", "g"] || particles == ["g", "u", "u~"]
+}
+
+/// `model` with the counterterm copies of [`with_counterterms`], whose couplings carry one power
+/// of an extra `CT` order: a copy and its rule have the same fields but different orders.
+fn with_counterterm_order(model: Model, duplicate: impl Fn(&[String]) -> bool) -> Model {
+    let mut definition = serde_json::to_value(with_counterterms(model, duplicate)).unwrap();
+    let couplings = definition["couplings"].as_array().unwrap().clone();
+    let mut copies: Vec<serde_json::Value> = vec![];
+    for rule in definition["vertex_rules"].as_array_mut().unwrap() {
+        if !rule["name"].as_str().unwrap().ends_with("_CT") {
+            continue;
+        }
+        for entry in rule["couplings"]
+            .as_array_mut()
+            .unwrap()
+            .iter_mut()
+            .flat_map(|row| row.as_array_mut().unwrap())
+        {
+            let Some(name) = entry.as_str().map(str::to_owned) else {
+                continue;
+            };
+            let copy = format!("{name}_CT");
+            if !copies
+                .iter()
+                .any(|coupling| coupling["name"] == copy.as_str())
+            {
+                let mut coupling = couplings
+                    .iter()
+                    .find(|coupling| coupling["name"] == name.as_str())
+                    .unwrap()
+                    .clone();
+                coupling["name"] = copy.clone().into();
+                let orders = coupling["orders"].as_array_mut().unwrap();
+                orders.push(serde_json::json!(["CT", 1]));
+                copies.push(coupling);
+            }
+            *entry = copy.into();
+        }
+    }
+    definition["couplings"]
+        .as_array_mut()
+        .unwrap()
+        .extend(copies);
+    definition["orders"]
+        .as_array_mut()
+        .unwrap()
+        .push(serde_json::json!({"name": "CT", "expansion_order": 99, "hierarchy": 3}));
+    serde_json::from_value(definition).unwrap()
+}
+
+/// phi^3 whose counterterm copy carries a `CT` order.
+fn ct_order_phi3() -> Model {
+    with_counterterm_order(Model::phi3(), |_| true)
+}
+
+/// QCD whose counterterm copies of the three-gluon and the up-quark-gluon vertices carry a `CT`
+/// order.
+fn ct_order_qcd() -> Model {
+    with_counterterm_order(Model::qcd(), qcd_counterterm)
 }
 
 const EE: &[&str] = &["e-", "e+"];
@@ -579,6 +732,72 @@ pub const CASES: &[Case] = &[
         2,
         qed_at_most_two,
     ),
+    // Several orders, lower bounds, a tree level that the orders prove empty, fermion-loop ranges
+    // and a user filter rejecting fermions that the range counts.
+    amplitude(
+        "sm_uudd_qcd2_qed2_L1",
+        Model::standard_model,
+        UU,
+        DD,
+        1,
+        qcd2_qed2,
+    ),
+    amplitude(
+        "sm_uudd_qcd3_L1",
+        Model::standard_model,
+        UU,
+        DD,
+        1,
+        qcd_at_least_three,
+    ),
+    amplitude(
+        "sm_eemm_qed4_L0to1",
+        Model::standard_model,
+        EE,
+        MUMU,
+        1,
+        qed4_up_to_one_loop,
+    ),
+    amplitude(
+        "sm_eemm_floop0_L1",
+        Model::standard_model,
+        EE,
+        MUMU,
+        1,
+        no_fermion_loops,
+    ),
+    amplitude(
+        "qcd_gggg_floop1_L1",
+        Model::qcd,
+        GG,
+        GG,
+        1,
+        one_fermion_loop,
+    ),
+    amplitude(
+        "qcd_gse_all_floop1_dfilter_L2",
+        Model::qcd,
+        G,
+        G,
+        2,
+        one_fermion_loop_without_down_quarks,
+    ),
+    amplitude(
+        "sm_eemm_floop1_tfilter_L1",
+        Model::standard_model,
+        EE,
+        MUMU,
+        1,
+        one_fermion_loop_without_top_quarks,
+    ),
+    amplitude(
+        "qed_ase_floop2_L3",
+        Model::qed,
+        A,
+        A,
+        3,
+        two_fermion_loops_one_pi,
+    ),
     amplitude("ew_eemm_L1", Model::electroweak, EE, MUMU, 1, plain),
     amplitude("ew_eemm_L2", Model::electroweak, EE, MUMU, 2, plain),
     // Vertex rules with identical field content.
@@ -592,6 +811,39 @@ pub const CASES: &[Case] = &[
     amplitude("ct_phi3_vac_L4", ct_phi3, NONE, NONE, 4, tadpoles),
     amplitude("ct_qcd_vac_L2", ct_qcd, NONE, NONE, 2, tadpoles),
     amplitude("ct_qcd_vac_L3", ct_qcd, NONE, NONE, 3, tadpoles),
+    // Counterterm copies with their own order: the rule choice decides the order.
+    amplitude(
+        "ctorder_qcd_gggg_L1",
+        ct_order_qcd,
+        GG,
+        GG,
+        1,
+        one_counterterm,
+    ),
+    amplitude(
+        "ctorder_qcd_uugg_L1",
+        ct_order_qcd,
+        UU,
+        GG,
+        1,
+        one_counterterm,
+    ),
+    amplitude(
+        "ctorder_qcd_vac_L3",
+        ct_order_qcd,
+        NONE,
+        NONE,
+        3,
+        at_most_one_counterterm,
+    ),
+    amplitude(
+        "ctorder_phi3_vac_L4",
+        ct_order_phi3,
+        NONE,
+        NONE,
+        4,
+        two_counterterms,
+    ),
     // Cross sections.
     cross_section("xs_qed_eemm_L1", Model::qed, EE, MUMU, 1, plain),
     cross_section("xs_qed_eemm_L2", Model::qed, EE, MUMU, 2, plain),

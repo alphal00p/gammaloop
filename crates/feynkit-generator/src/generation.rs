@@ -24,7 +24,6 @@ use linnet::half_edge::{
     HedgeGraph, NodeIndex,
     builder::HedgeGraphBuilder,
     canon::ignore,
-    generate::GraphGenerator,
     involution::{Flow, Orientation},
     subgraph::{InternalSubGraph, SuBitGraph, SubSetLike},
 };
@@ -203,7 +202,10 @@ pub struct DiagramGroup {
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct GenerationReport {
-    /// Complete untyped topologies accepted during enumeration.
+    /// Complete untyped topologies accepted during enumeration. Loop orders that the coupling
+    /// orders rule out (no multiset of vertex rules has the degrees and orders they need), and
+    /// requests with external charges or parities that no vertex rule balances or with an empty
+    /// coupling-order or fermion-loop range, are not enumerated and add none.
     pub topology_count: usize,
     /// Enumerated diagrams: topologies with fields and vertex rules, before the cut and
     /// charge-conjugation filters that need their canonical frame.
@@ -1402,15 +1404,14 @@ impl Generator {
         let resolved = ResolvedProcess::new(&self.model, process, generation_type, options)?;
         let signatures = VertexSignatures::new(&self.model, options)?;
         let externals = resolved.externals(&self.model)?;
-        let pruner = Pruner::new(&self.model, options, &signatures)?;
+        let pruner = Pruner::new(&self.model, options);
 
         options.report_progress("topologies", 0, None);
         let topologies = Arc::new(AtomicUsize::new(0));
-        let mut generator = GraphGenerator::new(externals.legs(), signatures.stubs.clone())
-            .loops(options.loop_count())
-            .allow_self_loops(options.allow_self_loops)
-            .allow_zero_flow_edges(options.allow_zero_flow_edges)
-            .filter(move |view| pruner.keeps(view))
+        let generator = signatures
+            .generator(&self.model, &externals, options, move |view| {
+                pruner.keeps(view)
+            })?
             .progress({
                 let options = options.clone();
                 let topologies = Arc::clone(&topologies);
@@ -1424,12 +1425,6 @@ impl Generator {
                 let options = options.clone();
                 move || options.cancellation_requested()
             });
-        if let Some(maximum) = options.max_vertices {
-            generator = generator.max_vertices(maximum);
-        }
-        if let Some(maximum) = options.max_bridges(*options.loop_count().start()) {
-            generator = generator.max_bridges(maximum);
-        }
         #[cfg(not(target_arch = "wasm32"))]
         let generator = generator.parallel(true);
         let enumerate = || {

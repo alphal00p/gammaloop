@@ -8,7 +8,10 @@ use std::{
 
 use proptest::prelude::*;
 
-use super::{Diagram, GenerationError, GraphGenerator, GraphView, Stage, Stub, VertexSet};
+use super::{
+    Compiled, Countable, Diagram, EdgeView, GenerationError, GraphGenerator, GraphView, Stage,
+    Stub, VertexSet,
+};
 use crate::half_edge::{canon::Certificate, involution::HedgePair, HedgeGraph};
 
 /// Field codes of the test models.
@@ -1130,6 +1133,538 @@ proptest! {
         };
         assert_prunes_like_post_filter(generator, filter);
     }
+}
+
+/// A budget as the tests state it: a weight per signature or a count, with an inclusive range.
+#[derive(Clone, Debug)]
+enum Budget {
+    Weight(Vec<i32>, [i32; 2]),
+    Count(Countable<u8>, [usize; 2]),
+}
+
+/// The paired edges of a graph as `(node, node, field)` and its legs as `(node, field)`.
+type Edges = (Vec<(usize, usize, u8)>, Vec<(usize, u8)>);
+
+fn edges_and_legs(g: &HedgeGraph<u8, usize, Option<u8>>) -> Edges {
+    let (mut edges, mut legs) = (vec![], vec![]);
+    for (pair, _, data) in g.iter_edges() {
+        match pair {
+            HedgePair::Paired { source, sink } => {
+                edges.push((g.node_id(source).0, g.node_id(sink).0, *data.data))
+            }
+            HedgePair::Unpaired { hedge, .. } => legs.push((g.node_id(hedge).0, *data.data)),
+            HedgePair::Split { .. } => unreachable!("generated graphs have no split edges"),
+        }
+    }
+    (edges, legs)
+}
+
+/// Edge `i` is a bridge: its ends are disconnected without it.
+fn is_bridge(n: usize, edges: &[(usize, usize, u8)], i: usize) -> bool {
+    let (u, v, _) = edges[i];
+    let mut seen = vec![false; n];
+    let mut stack = vec![u];
+    seen[u] = true;
+    while let Some(x) = stack.pop() {
+        for (j, &(a, b, _)) in edges.iter().enumerate() {
+            for (p, q) in [(a, b), (b, a)] {
+                if j != i && p == x && !seen[q] {
+                    seen[q] = true;
+                    stack.push(q);
+                }
+            }
+        }
+    }
+    !seen[v]
+}
+
+/// The closed lines of `fields` as feynkit counts closed fermion loops: the components of their
+/// edges in which every vertex has two edge stubs of them and no leg of them; `None` if a vertex
+/// has three or more stubs of them, legs included.
+fn closed_lines(n: usize, (edges, legs): &Edges, fields: &[u8]) -> Option<usize> {
+    let (mut stubs, mut leg_stubs) = (vec![0; n], vec![0; n]);
+    let line: Vec<_> = edges.iter().filter(|e| fields.contains(&e.2)).collect();
+    for &&(u, v, _) in &line {
+        stubs[u] += 1;
+        stubs[v] += 1;
+    }
+    for &(v, f) in legs {
+        leg_stubs[v] += fields.contains(&f) as usize;
+    }
+    if (0..n).any(|v| stubs[v] + leg_stubs[v] > 2) {
+        return None;
+    }
+    let mut component: Vec<usize> = (0..n).collect();
+    let find = |c: &[usize], mut v: usize| {
+        while c[v] != v {
+            v = c[v];
+        }
+        v
+    };
+    for &&(u, v, _) in &line {
+        let (a, b) = (find(&component, u), find(&component, v));
+        component[a] = b;
+    }
+    let roots: HashSet<usize> = line.iter().map(|e| find(&component, e.0)).collect();
+    Some(
+        roots
+            .into_iter()
+            .filter(|&r| {
+                (0..n)
+                    .filter(|&v| find(&component, v) == r)
+                    .all(|v| stubs[v] == 2 && leg_stubs[v] == 0)
+            })
+            .count(),
+    )
+}
+
+impl Budget {
+    fn apply(&self, generator: GraphGenerator<u8, u8>) -> GraphGenerator<u8, u8> {
+        match self.clone() {
+            Budget::Weight(weights, [min, max]) => generator.weight(weights, min..=max),
+            Budget::Count(count, [min, max]) => generator.count(count, min..=max),
+        }
+    }
+
+    /// The emitted graph `d` meets the budget, computed on the graph alone.
+    fn admits(&self, d: &Diagram<u8, u8>) -> bool {
+        let g = &d.graph;
+        let n = g.node_bound();
+        let rules: Vec<usize> = g.iter_nodes().map(|(_, _, &rule)| rule).collect();
+        let lines = edges_and_legs(g);
+        let edges = &lines.0;
+        match self {
+            Budget::Weight(weights, [min, max]) => {
+                let sum: i32 = rules.iter().map(|&r| weights[r]).sum();
+                (*min..=*max).contains(&sum)
+            }
+            Budget::Count(count, [min, max]) => {
+                let value = match count {
+                    Countable::Vertices(signatures) => {
+                        rules.iter().filter(|r| signatures.contains(r)).count()
+                    }
+                    Countable::Propagators(fields) => {
+                        edges.iter().filter(|e| fields.contains(&e.2)).count()
+                    }
+                    Countable::Chords(fields) => (0..edges.len())
+                        .filter(|&i| fields.contains(&edges[i].2) && !is_bridge(n, edges, i))
+                        .count(),
+                    Countable::ClosedLines(fields) => match closed_lines(n, &lines, fields) {
+                        Some(closed) => closed,
+                        None => return true,
+                    },
+                };
+                (*min..=*max).contains(&value)
+            }
+        }
+    }
+}
+
+/// Budgets prune to the graphs of the unbudgeted run that meet them, in its order, sequentially
+/// and in parallel. Returns the states the filter sees with and without the budgets.
+fn assert_budgets_prune_like_post_filter(
+    generator: impl Fn() -> GraphGenerator<u8, u8>,
+    budgets: &[Budget],
+) -> (usize, usize) {
+    assert_filtered_budgets_prune_like_post_filter(generator, |_| true, budgets)
+}
+
+/// [`assert_budgets_prune_like_post_filter`] with a hereditary `filter` pruning both runs.
+fn assert_filtered_budgets_prune_like_post_filter(
+    generator: impl Fn() -> GraphGenerator<u8, u8>,
+    filter: impl Fn(&View<'_>) -> bool + Clone + Send + Sync + 'static,
+    budgets: &[Budget],
+) -> (usize, usize) {
+    let budgeted = || budgets.iter().fold(generator(), |g, b| b.apply(g));
+    let (pruned, pruned_states) = run_counting(budgeted(), filter.clone());
+    let (all, states) = run_counting(generator(), filter.clone());
+    let post: Vec<_> = all
+        .into_iter()
+        .filter(|d| budgets.iter().all(|b| b.admits(d)))
+        .collect();
+    assert_eq!(certificates(&pruned), certificates(&post), "{budgets:?}");
+    let parallel = run(budgeted().filter(filter).parallel(true));
+    assert_eq!(certificates(&parallel), certificates(&post), "{budgets:?}");
+    (pruned_states, states)
+}
+
+/// e+ e- -> q q~ in [`qcd_qed`] at `loops` loops, and its QCD and QED orders per signature.
+fn ee_qq(loops: usize) -> impl Fn() -> GraphGenerator<u8, u8> {
+    move || {
+        let (e, q) = (Stub::incoming(ELECTRON), Stub::incoming(QUARK));
+        let legs = vec![
+            (1, e.clone()),
+            (2, e.flipped()),
+            (3, q.clone()),
+            (4, q.flipped()),
+        ];
+        qcd_qed(legs, true).loops(loops..=loops)
+    }
+}
+const QCD_ORDER: [i32; 6] = [1, 1, 2, 1, 0, 0];
+const QED_ORDER: [i32; 6] = [0, 0, 0, 0, 1, 1];
+
+#[test]
+fn coupling_orders_prune_to_the_post_filtered_graphs() {
+    let order = |weights: [i32; 6], min, max| Budget::Weight(weights.to_vec(), [min, max]);
+    for range in [[0, 0], [0, 1], [2, 2], [2, i32::MAX], [1, 3], [3, 2]] {
+        let (pruned, all) = assert_budgets_prune_like_post_filter(
+            ee_qq(2),
+            &[order(QCD_ORDER, range[0], range[1])],
+        );
+        assert!(pruned < all, "{range:?}: {pruned} < {all}");
+    }
+    // both orders, which fix the loop order: QCD + QED = 2 L + 2 here
+    assert_budgets_prune_like_post_filter(
+        ee_qq(2),
+        &[order(QCD_ORDER, 2, 2), order(QED_ORDER, 4, 4)],
+    );
+    // signed weights: QCD less QED
+    let signed: Vec<i32> = (0..6).map(|s| QCD_ORDER[s] - QED_ORDER[s]).collect();
+    for range in [[-2, -2], [-1, 0], [0, 6]] {
+        assert_budgets_prune_like_post_filter(ee_qq(1), &[Budget::Weight(signed.clone(), range)]);
+    }
+}
+
+#[test]
+fn counts_prune_to_the_post_filtered_graphs() {
+    let gggg = || qcd(gluons(&[1, 2, 3, 4])).loops(1..=1);
+    let count = |count, min, max| Budget::Count(count, [min, max]);
+    let cases = [
+        count(Countable::Propagators(vec![GHOST]), 0, 0),
+        count(Countable::Propagators(vec![GHOST, QUARK]), 2, 3),
+        count(Countable::Chords(vec![GLUON]), 1, 2),
+        count(Countable::Chords(vec![GLUON]), 0, 0),
+        count(Countable::Vertices(vec![2]), 1, 1),
+        count(Countable::ClosedLines(vec![QUARK]), 1, 1),
+        count(Countable::ClosedLines(vec![QUARK, GHOST]), 0, 0),
+    ];
+    for budget in &cases {
+        let (pruned, all) =
+            assert_budgets_prune_like_post_filter(gggg, std::slice::from_ref(budget));
+        assert!(pruned < all, "{budget:?}: {pruned} < {all}");
+    }
+    // the electron line is open, the quark lines may close
+    for (min, max) in [(0, 0), (1, 1), (0, 1)] {
+        assert_budgets_prune_like_post_filter(
+            ee_qq(2),
+            &[count(
+                Countable::ClosedLines(vec![ELECTRON, QUARK]),
+                min,
+                max,
+            )],
+        );
+    }
+    // the contact graph of the gluon tree has no edge: its legs alone decide its counts
+    let tree = || qcd(gluons(&[1, 2, 3, 4])).loops(0..=0);
+    for budget in [
+        count(Countable::Propagators(vec![GLUON]), 1, 1),
+        count(Countable::ClosedLines(vec![QUARK]), 1, 1),
+        count(Countable::Vertices(vec![2]), 0, 0),
+    ] {
+        assert_budgets_prune_like_post_filter(tree, &[budget]);
+    }
+    // a conjunction of counts and orders
+    assert_budgets_prune_like_post_filter(
+        ee_qq(2),
+        &[
+            count(Countable::Chords(vec![PHOTON]), 0, 1),
+            Budget::Weight(QCD_ORDER.to_vec(), [0, 2]),
+            count(Countable::Propagators(vec![QUARK]), 2, 4),
+        ],
+    );
+}
+
+#[test]
+fn branching_lines_are_counted_on_complete_graphs() {
+    // a four-quark vertex lets quark lines branch: graphs using it are not constrained by the
+    // closed quark lines, the others are, and only complete graphs can tell them apart
+    let (g, q) = (Stub::undirected(GLUON), Stub::incoming(QUARK));
+    let generator = move || {
+        let signatures = [
+            vec![q.clone().flipped(), q.clone(), g.clone()],
+            vec![g.clone(); 3],
+            vec![
+                q.clone().flipped(),
+                q.clone(),
+                q.clone().flipped(),
+                q.clone(),
+            ],
+        ];
+        let legs = [
+            (1, q.clone()),
+            (2, q.clone().flipped()),
+            (3, g.clone()),
+            (4, g.clone()),
+        ];
+        GraphGenerator::new(legs, signatures).loops(2..=2)
+    };
+    for (min, max) in [(0, 0), (1, 1)] {
+        let budget = Budget::Count(Countable::ClosedLines(vec![QUARK]), [min, max]);
+        assert_budgets_prune_like_post_filter(generator.clone(), &[budget]);
+    }
+}
+
+#[test]
+fn lines_follow_only_the_field_assignments_the_filter_keeps() {
+    // the filters reject counted edges: the ghost edges of the quark and ghost lines, and the
+    // third quark edge
+    let few_quarks = |view: &View<'_>| {
+        let quark = |e: &EdgeView<'_, u8>| e.stub.as_ref().is_some_and(|s| *s.field == QUARK);
+        view.edges().filter(quark).count() <= 2
+    };
+    for (labels, loops) in [
+        (&[1, 2, 3, 4][..], 2),
+        (&[1, 1, 1, 1][..], 2),
+        (&[1, 2][..], 3),
+    ] {
+        let generator = move || qcd(gluons(labels)).loops(loops..=loops);
+        for range in [[0, 0], [1, 1], [2, 2], [0, 1]] {
+            let lines = |fields| [Budget::Count(Countable::ClosedLines(fields), range)];
+            let ghosts = lines(vec![QUARK, GHOST]);
+            assert_filtered_budgets_prune_like_post_filter(
+                generator,
+                without_field(GHOST),
+                &ghosts,
+            );
+            assert_filtered_budgets_prune_like_post_filter(
+                generator,
+                few_quarks,
+                &lines(vec![QUARK]),
+            );
+        }
+    }
+}
+
+#[test]
+fn single_diagram_models_meet_budgets() {
+    // phi^3 + phi^4 has one diagram per topology
+    let two_point = || phi(&[3, 4], &[1, 2]).loops(3..=3);
+    for budget in [
+        Budget::Count(Countable::Vertices(vec![1]), [1, 1]),
+        Budget::Weight(vec![1, 2], [5, 6]),
+        Budget::Count(Countable::Chords(vec![PHI]), [4, 5]),
+        Budget::Count(Countable::Propagators(vec![PHI]), [0, 4]),
+    ] {
+        assert_budgets_prune_like_post_filter(two_point, &[budget]);
+    }
+}
+
+proptest! {
+    #![proptest_config(ProptestConfig::with_cases(48))]
+
+    /// Random weights (of either sign) and counts prune to the post-filtered graphs on processes
+    /// of QCD with photons and electrons.
+    #[test]
+    fn budgets_match_post_filtering(
+        process in 0usize..5,
+        weights in proptest::collection::vec(
+            (proptest::collection::vec(-1i32..=2, 6), -2i32..5, 0i32..4), 0..3),
+        counts in proptest::collection::vec(
+            (0usize..4,
+             proptest::collection::vec(
+                prop_oneof![Just(GLUON), Just(QUARK), Just(GHOST), Just(PHOTON), Just(ELECTRON)],
+                1..3),
+             0usize..3, 0usize..3),
+            0..3),
+    ) {
+        let (g, q, e, a) = (
+            Stub::undirected(GLUON),
+            Stub::incoming(QUARK),
+            Stub::incoming(ELECTRON),
+            Stub::undirected(PHOTON),
+        );
+        let (legs, loops) = [
+            (vec![g.clone(), g.clone(), g.clone(), g.clone()], 1),
+            (vec![e.clone(), e.clone().flipped(), q.clone(), q.clone().flipped()], 2),
+            (vec![q.clone(), q.clone().flipped(), g.clone(), a.clone()], 1),
+            (vec![e.clone(), e.clone().flipped(), a.clone(), a.clone()], 2),
+            (vec![g.clone(), g], 2),
+        ][process].clone();
+        let generator = move || {
+            let legs = legs.iter().cloned().enumerate().map(|(i, s)| (i as u8, s)).collect();
+            qcd_qed(legs, true).loops(loops..=loops)
+        };
+        let mut budgets: Vec<Budget> = weights
+            .into_iter()
+            .map(|(w, min, width)| Budget::Weight(w, [min, min + width]))
+            .collect();
+        budgets.extend(counts.into_iter().map(|(kind, fields, min, width)| {
+            let count = match kind {
+                0 => Countable::Propagators(fields),
+                1 => Countable::Chords(fields),
+                2 => Countable::ClosedLines(fields),
+                _ => Countable::Vertices(fields.iter().map(|&f| f as usize % 6).collect()),
+            };
+            Budget::Count(count, [min, min + width])
+        }));
+        assert_budgets_prune_like_post_filter(generator, &budgets);
+    }
+}
+
+/// The states that the filter of `generator` sees, and the complete topologies it reports.
+fn searched(generator: GraphGenerator<u8, u8>) -> (usize, usize) {
+    let topologies = Arc::new(AtomicUsize::new(0));
+    let seen = topologies.clone();
+    let generator = generator.progress(move |progress| {
+        seen.store(progress.topologies, Ordering::Relaxed);
+        true
+    });
+    let (diagrams, states) = run_counting(generator, |_| true);
+    assert!(diagrams.is_empty());
+    (states, topologies.load(Ordering::Relaxed))
+}
+
+#[test]
+fn requests_proven_empty_are_not_searched() {
+    let e = Stub::incoming(ELECTRON);
+    // charge: two incoming electrons
+    let charge = qed(vec![(1, e.clone()), (2, e.clone())]).loops(0..=2);
+    assert_eq!(searched(charge), (0, 0));
+    // parity: one leg of a field that only quartic vertices carry
+    let parity = GraphGenerator::<u8, u8>::new(
+        [(1, Stub::undirected(CHI)), (2, Stub::undirected(PHI))],
+        [
+            vec![Stub::undirected(PHI); 3],
+            vec![
+                Stub::undirected(CHI),
+                Stub::undirected(CHI),
+                Stub::undirected(PHI),
+                Stub::undirected(PHI),
+            ],
+        ],
+    )
+    .loops(0..=2);
+    assert_eq!(searched(parity), (0, 0));
+    // weights: e+ e- -> e+ e- needs QED order 2 + 2 L
+    let legs = vec![
+        (1, e.clone()),
+        (2, e.clone().flipped()),
+        (3, e.clone()),
+        (4, e.flipped()),
+    ];
+    let order = qed(legs.clone()).loops(0..=1).weight([1], 3..=3);
+    assert_eq!(searched(order), (0, 0));
+    let vertices = qed(legs.clone())
+        .loops(1..=1)
+        .count(Countable::Vertices(vec![0]), ..4);
+    assert_eq!(searched(vertices), (0, 0));
+    // an empty range
+    let empty = qed(legs.clone())
+        .loops(0..=1)
+        .count(Countable::Propagators(vec![PHOTON]), 2..2);
+    assert_eq!(searched(empty), (0, 0));
+    // the loop orders that the weights admit are searched
+    assert_eq!(
+        certificates(&run(qed(legs.clone()).loops(0..=2).weight([1], 4..=4))),
+        certificates(&run(qed(legs).loops(1..=1)))
+    );
+}
+
+/// The graphs of `generator` with `filter`, the field assignments the filter sees and those it
+/// rejects.
+fn field_assignments(
+    generator: GraphGenerator<u8, u8>,
+    filter: impl Fn(&View<'_>) -> bool + Send + Sync + 'static,
+) -> (Vec<Diagram<u8, u8>>, usize, usize) {
+    let (seen, rejected) = (Arc::new(AtomicUsize::new(0)), Arc::new(AtomicUsize::new(0)));
+    let (s, r) = (seen.clone(), rejected.clone());
+    let diagrams = run(generator.filter(move |view| {
+        let keeps = filter(view);
+        if view.stage() == Stage::Fields {
+            s.fetch_add(1, Ordering::Relaxed);
+            r.fetch_add(!keeps as usize, Ordering::Relaxed);
+        }
+        keeps
+    }));
+    (
+        diagrams,
+        seen.load(Ordering::Relaxed),
+        rejected.load(Ordering::Relaxed),
+    )
+}
+
+#[test]
+fn budgets_prune_field_assignments_before_the_filter() {
+    // ee -> qq with QCD order at most `max`: the budget bounds each partial vertex by the signatures
+    // it can still become, so the filter that bounds the order by the vertices whose stubs are all
+    // assigned (and four-gluon vertices) never rejects what the budget shows it, and sees fewer
+    // assignments than when it prunes alone
+    for (loops, max) in [(1, 0), (2, 0), (2, 1), (2, 2)] {
+        let filter = qcd_order_at_most(max);
+        let budgeted = ee_qq(loops)().weight(QCD_ORDER, ..=max as i32);
+        let (diagrams, seen, rejected) = field_assignments(budgeted, filter.clone());
+        let (alone, seen_alone, _) = field_assignments(ee_qq(loops)(), filter);
+        assert_eq!(certificates(&diagrams), certificates(&alone));
+        assert_eq!(rejected, 0, "L{loops} QCD <= {max}");
+        assert!(
+            seen < seen_alone,
+            "L{loops} QCD <= {max}: {seen} < {seen_alone}"
+        );
+    }
+}
+
+#[test]
+fn budget_errors_and_limits() {
+    let wrong = qed(vec![]).loops(1..=1).weight([1, 2], ..);
+    assert_eq!(
+        wrong.iter().err(),
+        Some(GenerationError::Weights {
+            signatures: 1,
+            weights: 2
+        })
+    );
+    // at most 64 edge and line counts, not counting those that every graph meets
+    let e = Stub::incoming(ELECTRON);
+    let legs = vec![
+        (1, e.clone()),
+        (2, e.clone().flipped()),
+        (3, e.clone()),
+        (4, e.flipped()),
+    ];
+    let photons = |n, max| {
+        (0..n).fold(qed(legs.clone()).loops(1..=1), |g, _| {
+            g.count(Countable::Propagators(vec![PHOTON]), 0..=max)
+        })
+    };
+    assert_eq!(
+        photons(65, 9).iter().err(),
+        Some(GenerationError::TooManyCounts)
+    );
+    let plain = certificates(&run(photons(0, 0)));
+    assert_eq!(certificates(&run(photons(64, 9))), plain);
+    assert_eq!(certificates(&run(photons(65, usize::MAX))), plain);
+    // budgets that every graph meets are left out, the others kept
+    let budgets = |generator: GraphGenerator<u8, u8>| {
+        let request = Compiled::request(&generator, &[PHOTON, ELECTRON]).unwrap();
+        (
+            request.weights.len(),
+            request.edges.len(),
+            request.lines.len(),
+        )
+    };
+    let vacuous = qed(legs.clone())
+        .weight([1], 0..)
+        .weight([-1], ..=2)
+        .count(Countable::Vertices(vec![0]), ..)
+        .count(Countable::ClosedLines(vec![ELECTRON]), 0..);
+    assert_eq!(budgets(vacuous), (0, 0, 0));
+    let bounding = qed(legs)
+        .weight([1], 0..=9)
+        .weight([-1], 0..)
+        .count(Countable::Vertices(vec![0]), 1..)
+        .count(Countable::ClosedLines(vec![ELECTRON]), ..=1);
+    assert_eq!(budgets(bounding), (3, 0, 1));
+}
+
+#[test]
+fn budgets_do_not_outlive_their_generation() {
+    // decorators return to a pool of the thread and serve later generations
+    let gggg = || qcd(gluons(&[1, 2, 3, 4])).loops(1..=1);
+    let plain = certificates(&run(gggg()));
+    let lines = gggg().count(Countable::ClosedLines(vec![QUARK]), 1..=1);
+    assert!(run(lines).len() < plain.len());
+    assert_eq!(certificates(&run(gggg())), plain);
 }
 
 #[test]

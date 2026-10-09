@@ -7,6 +7,16 @@ and this project adheres to #link("https://semver.org/spec/v2.0.0.html")[Semanti
 
 == Unreleased
 
+=== Added
+
+- Generation budgets: `GraphGenerator::weight` bounds sums of integer signature weights (coupling
+  and counterterm orders) and `GraphGenerator::count` with `Countable` the vertices, propagators,
+  chords and closed lines of some fields. Field dressing prunes with bounds kept per automaton
+  state, the vertex rules are checked exactly, and loop orders that no vertex multiset meets and
+  requests whose legs carry a charge or parity that no vertex balances are not searched. Budgets
+  that every graph meets cost nothing. New `GenerationError::Weights` and
+  `GenerationError::TooManyCounts`.
+
 == #link("https://github.com/alphal00p/linnet/compare/linnet-v0.16.1...linnet-v0.17.0")[0.17.0] - 2026-01-28
 
 === Other

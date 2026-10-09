@@ -4338,7 +4338,10 @@ class GenerationReport:
     @property
     def topology_count(self) -> builtins.int:
         r"""
-        Return the number of distinct topologies considered during generation.
+        Return the number of complete untyped topologies enumerated during generation.
+        Loop orders that the coupling orders rule out, and requests with external
+        charges that no vertex balances or with an empty coupling-order or fermion-loop
+        range, are not enumerated and add none.
 
         Examples
         --------
@@ -8769,10 +8772,12 @@ class Process:
             Prune the diagram search. The callback receives every search state with its
             stage: "topology" for untyped topologies, partial or complete, "fields" for
             partial field assignments of a complete topology, and "complete" for complete
-            diagrams. False drops the state with everything that completes it, so the
-            verdict must be hereditary within each stage. Edge data is the PDG code of the
-            particle of the line, directed along its flow, or None before its field is
-            assigned. External legs are dangling half-edges whose data is the pair
+            diagrams. Partial field assignments whose bounds on the coupling orders or the
+            fermion loops already miss their ranges are dropped without a call. False drops
+            the state with everything that completes it, so the verdict must be hereditary
+            within each stage. Edge data is the PDG code of the particle of the line,
+            directed along its flow, or None before its field is assigned. External legs
+            are dangling half-edges whose data is the pair
             (state, index), with index None for amplitude legs symmetrized within their state.
             Cross-section legs keep their index; diagrams related by permuting identical
             sewn pairs are identified after the search, so verdicts should not depend on
@@ -8893,10 +8898,12 @@ class Process:
             Prune the diagram search. The callback receives every search state with its
             stage: "topology" for untyped topologies, partial or complete, "fields" for
             partial field assignments of a complete topology, and "complete" for complete
-            diagrams. False drops the state with everything that completes it, so the
-            verdict must be hereditary within each stage. Edge data is the PDG code of the
-            particle of the line, directed along its flow, or None before its field is
-            assigned. External legs are dangling half-edges whose data is the pair
+            diagrams. Partial field assignments whose bounds on the coupling orders or the
+            fermion loops already miss their ranges are dropped without a call. False drops
+            the state with everything that completes it, so the verdict must be hereditary
+            within each stage. Edge data is the PDG code of the particle of the line,
+            directed along its flow, or None before its field is assigned. External legs
+            are dangling half-edges whose data is the pair
             (state, index), with index None for amplitude legs symmetrized within their state.
             Cross-section legs keep their index; diagrams related by permuting identical
             sewn pairs are identified after the search, so verdicts should not depend on
@@ -9018,10 +9025,12 @@ class Process:
             Prune the diagram search. The callback receives every search state with its
             stage: "topology" for untyped topologies, partial or complete, "fields" for
             partial field assignments of a complete topology, and "complete" for complete
-            diagrams. False drops the state with everything that completes it, so the
-            verdict must be hereditary within each stage. Edge data is the PDG code of the
-            particle of the line, directed along its flow, or None before its field is
-            assigned. External legs are dangling half-edges whose data is the pair
+            diagrams. Partial field assignments whose bounds on the coupling orders or the
+            fermion loops already miss their ranges are dropped without a call. False drops
+            the state with everything that completes it, so the verdict must be hereditary
+            within each stage. Edge data is the PDG code of the particle of the line,
+            directed along its flow, or None before its field is assigned. External legs
+            are dangling half-edges whose data is the pair
             (state, index), with index None for amplitude legs symmetrized within their state.
             Cross-section legs keep their index; diagrams related by permuting identical
             sewn pairs are identified after the search, so verdicts should not depend on

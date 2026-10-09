@@ -45,6 +45,9 @@ recursive calls of a function to itself are ignored. A stage whose functions are
 all inlined away is reported as missing, never as zero. Work run on a rayon pool is
 attributed on the worker thread, so the stages are not nested in
 `Generator::generate`; `total` is the whole program, including the model build.
+The filter is called through linnet's `Prune::keeps` on search states and straight
+on complete graphs; the two stages add up to every filter call. Summaries written
+before the second stage existed report it as missing.
 """
 
 import argparse
@@ -69,6 +72,8 @@ PROFILE_CONFIG = [
 
 LINNET = r"<linnet::half_edge::generate"
 FEYNKIT = r"<feynkit_generator::generation"
+# linnet's filter call on partial topologies, complete topologies and partial field assignments
+FILTER = rf"^{LINNET}::view::Pruner<.*> as {LINNET[1:]}::view::Prune>::keeps$"
 # (key, description, pattern of the function names)
 STAGES = [
     (
@@ -92,11 +97,9 @@ STAGES = [
     ),
     ("dressing_start", "  stage 2: start", rf"^{LINNET}::decorate::Decorator>::start$"),
     ("dressing", "  stage 2: dressing", rf"^{LINNET}::decorate::Decorator>::next$"),
-    (
-        "filter",
-        "  filter (process filters)",
-        rf"^{LINNET}::view::Pruner<.*> as {LINNET[1:]}::view::Prune>::keeps$",
-    ),
+    ("filter", "  filter on search states", FILTER),
+    # the search calls the filter straight on complete graphs, see `filter_on_complete_graphs`
+    ("filter_complete", "  filter on complete graphs", None),
     (
         "materialize",
         "  HedgeGraph materialization",
@@ -173,6 +176,26 @@ def parse_callgrind(path):
     return total, self_cost, edges
 
 
+def filter_on_complete_graphs(functions, edges):
+    """The calls of the filter callback that do not go through `Prune::keeps`: the search calls
+    it straight on complete graphs. The callback is what `Prune::keeps` calls outside linnet and
+    the standard library."""
+    keeps = {f for f in functions if re.search(FILTER, f)}
+    library = re.compile(r"^<?(linnet|core|alloc|std)::|^__")
+    callbacks = {
+        callee
+        for caller, callee in edges
+        if caller in keeps and callee != caller and not library.search(callee)
+    }
+    if not callbacks:
+        return None
+    return sum(
+        cost
+        for (caller, callee), cost in edges.items()
+        if callee in callbacks and caller not in keeps | callbacks
+    )
+
+
 def stage_costs(path):
     total, self_cost, edges = parse_callgrind(path)
     inclusive = collections.Counter(self_cost)
@@ -180,8 +203,10 @@ def stage_costs(path):
         if caller != callee:
             inclusive[caller] += cost
     functions = set(self_cost) | {callee for _, callee in edges}
-    stages = {}
+    stages = {"filter_complete": filter_on_complete_graphs(functions, edges)}
     for key, _, pattern in STAGES:
+        if pattern is None:
+            continue
         regex = re.compile(pattern)
         matched = {f for f in functions if regex.search(f)}
         if not matched:

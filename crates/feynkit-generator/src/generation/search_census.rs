@@ -17,7 +17,7 @@ mod cases;
 
 use std::sync::{Arc, Mutex};
 
-use linnet::half_edge::generate::{GraphGenerator, Stage};
+use linnet::half_edge::generate::Stage;
 
 use super::{
     Generator, ResolvedProcess,
@@ -38,7 +38,8 @@ struct SearchCensus {
     useless_partial_topologies: usize,
     /// Kept partial field assignments (complete labellings included); dead ones lead to no
     /// complete labelling, useless ones (dead ones included) to no diagram. Assignments that
-    /// linnet's forward checking drops never reach the filter and are not counted.
+    /// linnet's forward checking or budgets (coupling orders, fermion loops) drop never reach the
+    /// filter and are not counted.
     dressings: usize,
     dead_dressings: usize,
     useless_dressings: usize,
@@ -222,24 +223,14 @@ impl SearchCensus {
         let signatures = VertexSignatures::new(model, &options)?;
         let externals = resolved.externals(model)?;
         assert!(!externals.vetoed(model, &options));
-        let pruner = Pruner::new(model, &options, &signatures)?;
+        let pruner = Pruner::new(model, &options);
         let tracker = Arc::new(Mutex::new(Tracker::default()));
         let recorder = Arc::clone(&tracker);
-        let mut search = GraphGenerator::new(externals.legs(), signatures.stubs.clone())
-            .loops(options.loop_count())
-            .allow_self_loops(options.allow_self_loops)
-            .allow_zero_flow_edges(options.allow_zero_flow_edges)
-            .filter(move |view| {
-                let kept = pruner.keeps(view);
-                recorder.lock().unwrap().record(view, kept);
-                kept
-            });
-        if let Some(maximum) = options.max_vertices {
-            search = search.max_vertices(maximum);
-        }
-        if let Some(maximum) = options.max_bridges(*options.loop_count().start()) {
-            search = search.max_bridges(maximum);
-        }
+        let search = signatures.generator(model, &externals, &options, move |view| {
+            let kept = pruner.keeps(view);
+            recorder.lock().unwrap().record(view, kept);
+            kept
+        })?;
         let diagrams = search.iter()?.count();
         drop(search);
         let census = Arc::into_inner(tracker)
@@ -325,11 +316,11 @@ fn standard_model_uu_to_dd_with_qed_order_two_at_two_loops() {
             partial_topologies: 1698,
             dead_partial_topologies: 1325,
             useless_partial_topologies: 1423,
-            dressings: 36422,
-            dead_dressings: 23720,
-            useless_dressings: 24702,
+            dressings: 14463,
+            dead_dressings: 1761,
+            useless_dressings: 2743,
             diagrams: 3286,
-            rejected: [0, 23260, 0],
+            rejected: [0, 0, 0],
         },
     );
 }

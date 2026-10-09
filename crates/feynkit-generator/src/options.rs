@@ -921,7 +921,9 @@ impl GenerationOptions {
     /// [`GenerationView::stage`]). Rejecting a state drops everything that completes it, so the
     /// callback must be hereditary within each stage, as for
     /// [`linnet::half_edge::generate::GraphGenerator::filter`]. Graphs reaching the callback
-    /// already satisfy the process filters decided at their stage.
+    /// already satisfy the process filters decided at their stage. Partial field assignments whose
+    /// bounds on the coupling orders or the closed fermion loops already miss their ranges do not
+    /// reach it; the bounds are not tight, so some assignments without a completion still do.
     pub fn filter(
         mut self,
         callback: impl Fn(&GenerationView<'_>) -> bool + Send + Sync + 'static,
