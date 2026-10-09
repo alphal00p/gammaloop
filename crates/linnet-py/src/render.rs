@@ -50,6 +50,7 @@ struct EmbeddedLinnestPackage;
 #[include = "typst.toml"]
 #[include = "kurvst.wasm"]
 #[include = "LICENSE"]
+#[include = "LICENSE.tiptoe"]
 struct EmbeddedKurvstPackage;
 
 #[derive(RustEmbed)]
@@ -1059,6 +1060,10 @@ mod tests {
         assert!(prepared
             .files
             .contains_key("crates/kurvst/typst/src/lib.typ"));
+        // kurvst.wasm compiles mark geometry derived from tiptoe.
+        assert!(prepared
+            .files
+            .contains_key("crates/kurvst/typst/LICENSE.tiptoe"));
         assert!(
             fs::metadata(prepared.root.join("crates/kurvst/typst/kurvst.wasm"))
                 .unwrap()

@@ -92,6 +92,7 @@
     (workspaceRoot + "/crates/linnest/src/svg/interactive.css")
     (workspaceRoot + "/crates/linnest/src/svg/interactive.js")
     (workspaceRoot + "/crates/kurvst/typst/kurvst.wasm")
+    (workspaceRoot + "/crates/kurvst/typst/LICENSE.tiptoe")
     (workspaceRoot + "/crates/kurvst/typst/src")
     (workspaceRoot + "/crates/kurvst/typst/typst.toml")
     (workspaceRoot + "/crates/linnest/typst/linnest.wasm")
@@ -172,6 +173,8 @@
       (workspaceRoot + "/crates/clinnet/templates/layout.typ")
       (workspaceRoot + "/crates/kurvst/typst/src")
       (workspaceRoot + "/crates/kurvst/typst/typst.toml")
+      (workspaceRoot + "/crates/kurvst/typst/LICENSE")
+      (workspaceRoot + "/crates/kurvst/typst/LICENSE.tiptoe")
       (workspaceRoot + "/crates/linnest/typst/src")
       (workspaceRoot + "/crates/linnest/typst/typst.toml")
       (workspaceRoot + "/crates/linnest/typst/LICENSE")
@@ -425,6 +428,7 @@
       "assets/embedded"
       "assets/models"
       "crates/kurvst/typst/kurvst.wasm"
+      "crates/kurvst/typst/LICENSE.tiptoe"
       "crates/kurvst/typst/src"
       "crates/kurvst/typst/typst.toml"
       "crates/linnest/typst/linnest.wasm"
@@ -442,6 +446,7 @@
     clinnet = [
       "crates/clinnet/templates"
       "crates/kurvst/typst/kurvst.wasm"
+      "crates/kurvst/typst/LICENSE.tiptoe"
       "crates/kurvst/typst/src"
       "crates/kurvst/typst/typst.toml"
       "crates/linnest/typst/linnest.wasm"
@@ -456,6 +461,7 @@
       "crates/linnet-py/typst"
       "crates/kurvst/typst/LICENSE"
       "crates/kurvst/typst/kurvst.wasm"
+      "crates/kurvst/typst/LICENSE.tiptoe"
       "crates/kurvst/typst/src"
       "crates/kurvst/typst/typst.toml"
       "crates/linnest/typst/linnest.wasm"
@@ -505,6 +511,8 @@
       "crates/clinnet/tests/resources"
       "crates/kurvst/typst/tests/pattern-split.typ"
       "crates/kurvst/typst/tests/layer-offset.typ"
+      "crates/kurvst/typst/tests/mark-contract.typ"
+      "crates/kurvst/typst/tests/mark-geometry.typ"
       "crates/linnest/typst/examples/map-style.typ"
       "tests/resources/graphs/epemttbar.dot"
     ];
@@ -1420,6 +1428,7 @@
     cp ${linnest-wasm}/templates/crates/linnest/typst/LICENSE* crates/linnest/typst/
     cp -R ${linnest-wasm}/templates/crates/kurvst/typst/src/. crates/kurvst/typst/src/
     cp ${linnest-wasm}/templates/crates/kurvst/typst/typst.toml crates/kurvst/typst/typst.toml
+    cp ${linnest-wasm}/templates/crates/kurvst/typst/LICENSE* crates/kurvst/typst/
     cp ${linnest-wasm}/templates/crates/kurvst/typst/kurvst.wasm crates/kurvst/typst/kurvst.wasm
   '';
 
@@ -2491,6 +2500,7 @@
         cp crates/linnest/typst/LICENSE* "$out/templates/crates/linnest/typst/"
         cp -R crates/kurvst/typst/src "$out/templates/crates/kurvst/typst/"
         cp crates/kurvst/typst/typst.toml "$out/templates/crates/kurvst/typst/typst.toml"
+        cp crates/kurvst/typst/LICENSE* "$out/templates/crates/kurvst/typst/"
         cp "$out/linnest.wasm" "$out/templates/crates/linnest/typst/linnest.wasm"
         cp "$out/kurvst.wasm" "$out/templates/crates/kurvst/typst/kurvst.wasm"
       '';

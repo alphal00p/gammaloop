@@ -30,7 +30,8 @@ for construction, topology, algorithms, DOT, layout streaming, and rendering.
 
 Linnet, Linnest, and Kurvst are MIT-licensed (`LICENSE`); Linnest's layout seed
 includes code translated from NetworkX (BSD-3-Clause,
-`licenses/networkx-LICENSE`). The wheel embeds Typst with the permissively
+`licenses/networkx-LICENSE`), and Kurvst's mark geometry follows tiptoe (MIT,
+`licenses/tiptoe-LICENSE`). The wheel embeds Typst with the permissively
 licensed Libertinus Serif, STIX Two Math, and DejaVu Sans Mono fonts
 (`licenses/`), and the CeTZ, oxifmt, and MiTeX Typst packages, whose licenses
 and provenance are under `vendor/typst-packages/`. CeTZ's LGPL-3.0 builds on

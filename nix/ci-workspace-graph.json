@@ -969,7 +969,9 @@
     ],
     "alphal00p-docs-python-exporter": [],
     "alphal00p-docs-schema": [],
-    "clinnet": [],
+    "clinnet": [
+      "kurvst"
+    ],
     "feynkit": [
       "feynkit-amplitude",
       "feynkit-cff",
@@ -1317,7 +1319,9 @@
       "vakint"
     ],
     "alphal00p-docs-schema": [],
-    "clinnet": [],
+    "clinnet": [
+      "kurvst"
+    ],
     "feynkit": [
       "feynkit-amplitude",
       "feynkit-cff",
@@ -1569,7 +1573,9 @@
       ]
     },
     "alphal00p-docs-schema": {},
-    "clinnet": {},
+    "clinnet": {
+      "kurvst": []
+    },
     "feynkit": {
       "feynkit-amplitude": [],
       "feynkit-cff": [],

@@ -13,6 +13,9 @@ and this project adheres to #link("https://semver.org/spec/v2.0.0.html")[Semanti
   NetworkX code that its layout seed translates.
 - The bundled Kurvst package adds `arc` for circular arcs built from cubic segments and
   `outline` for converting a stroked path into its filled outline.
+- The bundled Kurvst package adds `mark`: data-only constructors for thirteen arrowhead and
+  marker shapes plus `combine`, and one batched geometry call shared with native rendering.
+  The shapes follow tiptoe 0.4, whose MIT notice the package carries as `LICENSE.tiptoe`.
 
 === Changed
 

@@ -3,6 +3,8 @@
 // Keep path constructors, geometry helpers, and emitters here. The implementation
 // lives in `impl.typ`.
 
+#import "mark.typ" as mark
+
 // Capture each implementation directly rather than hashing the full module.
 #import "impl.typ": (
   append as _impl-append,

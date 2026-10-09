@@ -43,6 +43,7 @@ struct EmbeddedLinnestPackage;
 #[include = "src/**/*.typ"]
 #[include = "typst.toml"]
 #[include = "kurvst.wasm"]
+#[include = "LICENSE.tiptoe"]
 struct EmbeddedKurvstPackage;
 
 #[derive(Copy, Clone)]
@@ -923,6 +924,8 @@ mod tests {
             assert!(EmbeddedLinnestPackage::get(notice).is_some(), "{notice}");
         }
         assert!(EmbeddedKurvstPackage::get("src/impl.typ").is_some());
+        // kurvst.wasm compiles mark geometry derived from tiptoe.
+        assert!(EmbeddedKurvstPackage::get("LICENSE.tiptoe").is_some());
     }
 
     #[test]

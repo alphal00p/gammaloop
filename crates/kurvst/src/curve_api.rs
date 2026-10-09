@@ -1,6 +1,6 @@
 use kurbo::{
-    BezPath, Cap, CubicBez, Join, Line, ParamCurve, ParamCurveArclen, ParamCurveDeriv, PathEl,
-    PathSeg, Point, Stroke, StrokeOpts, Vec2, offset::offset_cubic,
+    BezPath, Cap, CubicBez, Join, Line, ParamCurve, ParamCurveArclen, ParamCurveDeriv,
+    ParamCurveExtrema, PathEl, PathSeg, Point, Stroke, StrokeOpts, Vec2, offset::offset_cubic,
 };
 use serde::{
     Deserialize, Deserializer, Serialize, Serializer,
@@ -729,7 +729,7 @@ where
     WirePath::deserialize(deserializer).map(Into::into)
 }
 
-fn deserialize_f64<'de, D>(deserializer: D) -> Result<f64, D::Error>
+pub(crate) fn deserialize_f64<'de, D>(deserializer: D) -> Result<f64, D::Error>
 where
     D: Deserializer<'de>,
 {
@@ -1167,36 +1167,10 @@ impl PathFramesSpec {
     /// Point and tangent at each arc distance, clamped onto the path.
     pub fn frames(self) -> Result<Vec<Option<PathFrame>>, String> {
         let accuracy = validate_positive_accuracy(self.accuracy)?;
-        let segments: Vec<_> = self.path.segments().collect();
-        let total: f64 = segments
-            .iter()
-            .map(|segment| segment.arclen(accuracy))
-            .sum();
-        let trimmer = PathTrimmer::new(segments.iter().copied(), accuracy);
+        let trimmer = PathTrimmer::new(self.path.segments(), accuracy);
         self.distances
             .into_iter()
-            .map(|distance| {
-                let Some(first) = segments.first() else {
-                    return Ok(None);
-                };
-                if distance.is_nan() {
-                    return Err("frame distance must not be NaN".to_owned());
-                }
-                let at = distance.clamp(0.0, total);
-                let (segment, at_end) = if at == 0.0 {
-                    (*first, false)
-                } else if at == total {
-                    (*segments.last().unwrap(), true)
-                } else if total <= accuracy {
-                    (*first, false)
-                } else {
-                    let prefix = trimmer.trim(0.0, total - at)?;
-                    (*prefix.last().unwrap_or(first), !prefix.is_empty())
-                };
-                Ok(Some(
-                    CubicBezierSpec::drawable(segment).endpoint_frame(at_end),
-                ))
-            })
+            .map(|distance| trimmer.frame(distance))
             .collect()
     }
 }
@@ -1654,7 +1628,7 @@ fn stroke_outline(spec: StrokeOutlineSpec) -> Result<CurvePathOutput, String> {
     Ok(CurvePathOutput { path })
 }
 
-fn parse_stroke_join(value: &str) -> Result<Join, String> {
+pub(crate) fn parse_stroke_join(value: &str) -> Result<Join, String> {
     match value.trim().to_ascii_lowercase().as_str() {
         "miter" => Ok(Join::Miter),
         "round" => Ok(Join::Round),
@@ -1663,7 +1637,7 @@ fn parse_stroke_join(value: &str) -> Result<Join, String> {
     }
 }
 
-fn parse_stroke_cap(value: &str) -> Result<Cap, String> {
+pub(crate) fn parse_stroke_cap(value: &str) -> Result<Cap, String> {
     match value.trim().to_ascii_lowercase().as_str() {
         "butt" => Ok(Cap::Butt),
         "square" => Ok(Cap::Square),
@@ -2002,11 +1976,8 @@ impl PathTrimmer {
         }
     }
 
-    pub fn trim(&self, start_outset: f64, end_outset: f64) -> Result<Vec<PathSeg>, String> {
-        if start_outset == 0.0 && end_outset == 0.0 {
-            return Ok(self.segments.clone());
-        }
-        let (lengths, length) = self.lengths.get_or_init(|| {
+    fn measured_lengths(&self) -> &(Vec<f64>, f64) {
+        self.lengths.get_or_init(|| {
             let lengths: Vec<_> = self
                 .segments
                 .iter()
@@ -2014,7 +1985,233 @@ impl PathTrimmer {
                 .collect();
             let length = lengths.iter().sum();
             (lengths, length)
-        });
+        })
+    }
+
+    /// Reuse the same lazy arc table for all placements and trim windows.
+    pub fn length(&self) -> f64 {
+        self.measured_lengths().1
+    }
+
+    /// Point and tangent at an arc distance, with the same endpoint arithmetic
+    /// as batched frames. Empty carriers have no frame.
+    pub fn frame(&self, distance: f64) -> Result<Option<PathFrame>, String> {
+        let Some(first) = self.segments.first() else {
+            return Ok(None);
+        };
+        if distance.is_nan() {
+            return Err("frame distance must not be NaN".to_owned());
+        }
+        let total = self.length();
+        let at = distance.clamp(0.0, total);
+        let (segment, at_end) = if at == 0.0 {
+            (*first, false)
+        } else if at == total {
+            (*self.segments.last().unwrap(), true)
+        } else if total <= self.accuracy {
+            (*first, false)
+        } else {
+            // Same retained prefix endpoint as trim(), without allocating all
+            // preceding segments for every candidate frame.
+            let (_, end_outset) = fit_outsets_to_length(0.0, total - at, total);
+            let visible_end = total - end_outset;
+            let (lengths, _) = self.measured_lengths();
+            let mut cursor = 0.0;
+            let mut last = None;
+            for (segment, length) in self.segments.iter().copied().zip(lengths.iter().copied()) {
+                if length == 0.0 {
+                    continue;
+                }
+                let local_end = (visible_end - cursor).min(length);
+                cursor += length;
+                if local_end <= 0.0 {
+                    break;
+                }
+                let t = if length - local_end <= f64::EPSILON {
+                    1.0
+                } else {
+                    segment.inv_arclen(local_end, self.accuracy)
+                };
+                if t > 0.0 {
+                    last = Some(segment.subsegment(0.0..t));
+                }
+                if cursor >= visible_end {
+                    break;
+                }
+            }
+            (last.unwrap_or(*first), last.is_some())
+        };
+        Ok(Some(
+            CubicBezierSpec::drawable(segment).endpoint_frame(at_end),
+        ))
+    }
+
+    /// First contact, in the requested traversal direction, with a circle
+    /// centered at the station. Bezier convex-hull bounds isolate roots,
+    /// including tangencies, before geometric refinement. None means that the
+    /// available carrier cannot fit this full-size chord.
+    pub fn chord_contact(
+        &self,
+        station: f64,
+        radius: f64,
+        forward: bool,
+    ) -> Result<Option<(CurvePoint, f64)>, String> {
+        let Some(origin) = self.frame(station)? else {
+            return Ok(None);
+        };
+        let origin: Point = origin.point.into();
+        if !radius.is_finite() || radius < 0.0 {
+            return Err("chord radius must be finite and nonnegative".into());
+        }
+        if radius == 0.0 {
+            return Ok(Some((origin.into(), station.clamp(0.0, self.length()))));
+        }
+        let station = station.clamp(0.0, self.length());
+        let (lengths, _) = self.measured_lengths();
+        let mut cursor = if forward { 0.0 } else { self.length() };
+        for ordinal in 0..self.segments.len() {
+            let index = if forward {
+                ordinal
+            } else {
+                self.segments.len() - 1 - ordinal
+            };
+            let length = lengths[index];
+            let start = if forward { cursor } else { cursor - length };
+            cursor = if forward { cursor + length } else { start };
+            let end = start + length;
+            if length == 0.0 || (forward && end < station) || (!forward && start > station) {
+                continue;
+            }
+            let segment = self.segments[index];
+            let at = if station <= start {
+                0.0
+            } else if station >= end {
+                1.0
+            } else {
+                segment.inv_arclen(station - start, self.accuracy)
+            };
+            let (a, b) = if forward { (at, 1.0) } else { (at, 0.0) };
+            if let Some(t) =
+                Self::circle_contact_parameter(segment, origin, radius, a, b, self.accuracy, 0)?
+            {
+                let point = segment.eval(t);
+                if (point.distance(origin) - radius).abs() > self.accuracy {
+                    return Err("chord contact refinement failed its distance check".into());
+                }
+                let distance = start
+                    + if t == 0.0 {
+                        0.0
+                    } else if t == 1.0 {
+                        length
+                    } else {
+                        segment.subsegment(0.0..t).arclen(self.accuracy)
+                    };
+                return Ok(Some((point.into(), distance)));
+            }
+        }
+        Ok(None)
+    }
+
+    fn circle_contact_parameter(
+        segment: PathSeg,
+        origin: Point,
+        radius: f64,
+        a: f64,
+        b: f64,
+        accuracy: f64,
+        depth: usize,
+    ) -> Result<Option<f64>, String> {
+        if let PathSeg::Line(line) = segment {
+            if line.p0.distance(origin).max(line.p1.distance(origin)) < radius {
+                return Ok(None);
+            }
+            let offset = line.p0 - origin;
+            let delta = line.p1 - line.p0;
+            // Collinear stations are the common straight-carrier case. Avoid
+            // quadratic cancellation and keep the original trim arithmetic.
+            if offset.cross(delta) == 0.0 {
+                let center = -offset.dot(delta) / delta.hypot2();
+                let step = radius / delta.hypot();
+                let root = [center - step, center + step]
+                    .into_iter()
+                    .filter(|t| *t >= a.min(b) && *t <= a.max(b))
+                    .min_by(|x, y| {
+                        if a <= b {
+                            x.total_cmp(y)
+                        } else {
+                            y.total_cmp(x)
+                        }
+                    });
+                return Ok(root);
+            }
+            let roots = kurbo::common::solve_quadratic(
+                offset.hypot2() - radius * radius,
+                2.0 * offset.dot(delta),
+                delta.hypot2(),
+            );
+            let root = roots
+                .into_iter()
+                .filter(|t| *t >= a.min(b) && *t <= a.max(b))
+                .min_by(|x, y| {
+                    if a <= b {
+                        x.total_cmp(y)
+                    } else {
+                        y.total_cmp(x)
+                    }
+                });
+            return Ok(root);
+        }
+        let piece = segment.subsegment(a..b).to_cubic();
+        let controls = [piece.p0, piece.p1, piece.p2, piece.p3];
+        let upper = controls
+            .into_iter()
+            .map(|point| point.distance(origin))
+            .fold(0.0, f64::max);
+        // The distance norm is convex; the control hull bounds all points on
+        // this interval. Tolerance here admits floating-point tangent contacts.
+        if upper < radius - radius * f64::EPSILON * 4.0 {
+            return Ok(None);
+        }
+        let bounds = PathSeg::Cubic(piece).bounding_box();
+        let nearest = Point::new(
+            origin.x.clamp(bounds.x0, bounds.x1),
+            origin.y.clamp(bounds.y0, bounds.y1),
+        );
+        if nearest.distance(origin) > radius + accuracy {
+            return Ok(None);
+        }
+        if bounds.width().hypot(bounds.height()) <= accuracy {
+            let values = [a, (a + b) / 2.0, b];
+            let best = values
+                .into_iter()
+                .min_by(|x, y| {
+                    (segment.eval(*x).distance(origin) - radius)
+                        .abs()
+                        .total_cmp(&(segment.eval(*y).distance(origin) - radius).abs())
+                })
+                .unwrap();
+            if (segment.eval(best).distance(origin) - radius).abs() <= accuracy {
+                return Ok(Some(best));
+            }
+            return Ok(None);
+        }
+        if depth >= 64 {
+            return Err("chord contact refinement did not converge".into());
+        }
+        let middle = (a + b) / 2.0;
+        if let Some(t) =
+            Self::circle_contact_parameter(segment, origin, radius, a, middle, accuracy, depth + 1)?
+        {
+            return Ok(Some(t));
+        }
+        Self::circle_contact_parameter(segment, origin, radius, middle, b, accuracy, depth + 1)
+    }
+
+    pub fn trim(&self, start_outset: f64, end_outset: f64) -> Result<Vec<PathSeg>, String> {
+        if start_outset == 0.0 && end_outset == 0.0 {
+            return Ok(self.segments.clone());
+        }
+        let (lengths, length) = self.measured_lengths();
         let length = *length;
         if length <= f64::EPSILON {
             return Ok(self.segments.clone());
@@ -2510,6 +2707,52 @@ mod tests {
 
     fn point(x: f64, y: f64) -> CurvePoint {
         CurvePoint { x, y }
+    }
+
+    #[test]
+    fn reusable_frames_preserve_prefix_trim_arithmetic_without_allocating_prefixes() {
+        let mut path = BezPath::new();
+        path.move_to((0.0, 0.0));
+        path.line_to((0.0, 0.0));
+        path.curve_to((0.0, 8.0), (12.0, 8.0), (12.0, 4.0));
+        path.line_to((12.0, 4.0));
+        path.quad_to((16.0, -8.0), (20.0, 0.0));
+        path.line_to((20.0, 0.0));
+        for scale in [1.0, 1e-12] {
+            let mut scaled = path.clone();
+            scaled.apply_affine(kurbo::Affine::scale(scale));
+            let segments: Vec<_> = scaled.segments().collect();
+            let trimmer = PathTrimmer::new(segments.iter().copied(), 1e-6);
+            let total = trimmer.length();
+            for fraction in [0.0, 1e-11, 0.23, 0.5, 0.9, 1.0] {
+                let at = total * fraction;
+                let (segment, at_end) = if at == 0.0 {
+                    (segments[0], false)
+                } else if at == total {
+                    (*segments.last().unwrap(), true)
+                } else if total <= 1e-6 {
+                    (segments[0], false)
+                } else {
+                    let prefix = trimmer.trim(0.0, total - at).unwrap();
+                    (*prefix.last().unwrap_or(&segments[0]), !prefix.is_empty())
+                };
+                let expected = CubicBezierSpec::drawable(segment).endpoint_frame(at_end);
+                assert_eq!(trimmer.frame(at).unwrap().unwrap(), expected);
+            }
+        }
+    }
+
+    #[test]
+    fn chord_refinement_cap_returns_an_error_not_an_unchecked_contact() {
+        let segment = PathSeg::Cubic(CubicBez::new(
+            (0.0, 0.0),
+            (0.0, 8.0),
+            (12.0, 8.0),
+            (12.0, 4.0),
+        ));
+        let result =
+            PathTrimmer::circle_contact_parameter(segment, Point::ZERO, 5.0, 0.0, 1.0, 1e-6, 64);
+        assert!(result.unwrap_err().contains("did not converge"));
     }
 
     fn assert_point_close(actual: CurvePoint, expected: CurvePoint) {
