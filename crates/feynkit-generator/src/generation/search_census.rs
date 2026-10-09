@@ -11,20 +11,16 @@
 //! The counts are deterministic. `FEYNKIT_ORACLE_RECORD=1` prints them instead of comparing
 //! them; heavy workloads run with `just generation-oracle-heavy`.
 
-#[path = "../../tests/generation_oracle/cases.rs"]
-#[allow(dead_code)]
-mod cases;
-
 use std::sync::{Arc, Mutex};
 
 use linnet::half_edge::generate::{GraphGenerator, Stage};
 
 use super::{
     Generator, ResolvedProcess,
+    cases::Case,
     enumeration::{GenerationView, Pruner, VertexSignatures},
 };
 use crate::{GenerationControl, GenerationError};
-use cases::Case;
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 struct SearchCensus {

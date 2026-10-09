@@ -11,7 +11,7 @@ use linnet::{
     permutation::Permutation,
 };
 use std::cell::LazyCell;
-use symbolica::atom::{AtomView, FunctionBuilder};
+use symbolica::atom::{AtomView, FunctionBuilder, Symbol};
 
 #[derive(Clone)]
 struct PendingEdge {
@@ -393,25 +393,39 @@ impl FeynmanDiagramBuilder {
                 (symbols::epsilonbar(), 5),
             ]
         });
-        let translate = |atom: &Atom| -> Result<Atom, DiagramError> {
-            if !generated {
-                return Ok(atom.clone());
+        let head_kind = |symbol: Symbol| {
+            translated_heads
+                .iter()
+                .find_map(|&(head, kind)| (head == symbol).then_some(kind))
+        };
+        let has_index_head = |atom: &Atom| {
+            let mut found = false;
+            atom.visitor(&mut |term| {
+                found = found
+                    || matches!(term, AtomView::Fun(function)
+                        if head_kind(function.get_symbol()).is_some());
+                !found
+            });
+            found
+        };
+        let translate = |atom: &mut Atom| -> Result<(), DiagramError> {
+            // Imported diagrams keep their frame, and atoms without an index
+            // head, such as unset fragments and the generated overall factor,
+            // have nothing to remap.
+            if !generated || !has_index_head(atom) {
+                return Ok(());
             }
             let mut failure = None;
-            let mut translated = atom.clone();
             // Remap indices inside momentum arguments before their carriers.
             // A bottom-up signed replacement can collapse -Q to Q and then
             // visit that new carrier again, applying the transport twice.
             for carriers in [false, true] {
-                translated = translated.replace_map(|term, _, out| {
+                *atom = atom.replace_map(|term, _, out| {
                     let AtomView::Fun(function) = term else {
                         return;
                     };
                     let symbol = function.get_symbol();
-                    let kind = translated_heads
-                        .iter()
-                        .find_map(|&(head, kind)| (head == symbol).then_some(kind));
-                    let Some(kind) = kind else {
+                    let Some(kind) = head_kind(symbol) else {
                         return;
                     };
                     if (kind >= 4) != carriers {
@@ -470,26 +484,26 @@ impl FeynmanDiagramBuilder {
                     message,
                 });
             }
-            Ok(translated)
+            Ok(())
         };
         graph = graph.map_data_ref_result(
             |_, _, vertex| {
                 let mut vertex = vertex.clone();
-                vertex.numerator = translate(&vertex.numerator)?;
+                translate(&mut vertex.numerator)?;
                 Ok::<_, DiagramError>(vertex)
             },
             |_, _, _, edge| {
-                let numerator = translate(&edge.data.numerator)?;
-                Ok(edge.map(|edge| {
-                    let mut edge = edge.clone();
-                    edge.numerator = numerator;
-                    edge
-                }))
+                let mut edge = edge.map(DiagramEdge::clone);
+                translate(&mut edge.data.numerator)?;
+                Ok(edge)
             },
             |(_, data)| Ok(*data),
         )?;
-        let numerator = match &self.numerator {
-            Some(numerator) => translate(numerator)?,
+        let numerator = match self.numerator {
+            Some(mut numerator) => {
+                translate(&mut numerator)?;
+                numerator
+            }
             None => FeynmanDiagram::fragment_numerator(&graph),
         };
         let mut diagram = FeynmanDiagram {
@@ -498,10 +512,10 @@ impl FeynmanDiagramBuilder {
             name: self.name,
             graph,
             symmetry_factor: self.symmetry_factor,
-            overall_factor: translate(&self.overall_factor)?,
+            overall_factor: self.overall_factor,
             numerator,
-            numerator_prefactor: translate(&self.numerator_prefactor)?,
-            projector: translate(&self.projector)?,
+            numerator_prefactor: self.numerator_prefactor,
+            projector: self.projector,
             loop_momentum_basis: LoopMomentumBasis {
                 tree_edges: vec![],
                 loop_edges: vec![],
@@ -514,6 +528,13 @@ impl FeynmanDiagramBuilder {
             validation: OnceLock::new(),
             routing_validation: OnceLock::new(),
         };
+        for atom in [
+            &mut diagram.overall_factor,
+            &mut diagram.numerator_prefactor,
+            &mut diagram.projector,
+        ] {
+            translate(atom)?;
+        }
         if generated {
             let mut incoming = BTreeSet::new();
             let mut outgoing = BTreeSet::new();

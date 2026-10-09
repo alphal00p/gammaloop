@@ -1,5 +1,6 @@
-//! Generation workloads shared by the oracle tests, the search census unit test and the
-//! `generation_workloads` example that the instruction gate (`bin/generation_ir.py`) runs.
+//! Generation workloads shared by the oracle tests, the search census and projector equivalence
+//! unit tests and the `generation_workloads` example that the instruction gate
+//! (`bin/generation_ir.py`) runs.
 //!
 //! Names read `<model>_<process>_L<loops>`. The profile cases of the generation redesign keep
 //! their names; `phi*` cases have independent oracles (OEIS A005967 and zero-dimensional field

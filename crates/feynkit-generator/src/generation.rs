@@ -1,5 +1,12 @@
+// The case table of the generation oracle tests, shared by the unit tests that run its workloads.
+#[cfg(test)]
+#[path = "../tests/generation_oracle/cases.rs"]
+#[allow(dead_code)]
+mod cases;
 mod enumeration;
 mod graph;
+#[cfg(test)]
+mod projector_equivalence;
 #[cfg(test)]
 mod search_census;
 mod special_topologies;
@@ -7,6 +14,7 @@ mod special_topologies;
 use std::{
     collections::{BTreeMap, BTreeSet, HashMap},
     fmt,
+    hash::Hash,
     sync::{
         Arc, Mutex, RwLock,
         atomic::{AtomicUsize, Ordering},
@@ -1328,6 +1336,64 @@ pub(crate) struct Generator {
 struct NumeratorCache {
     interactions: RwLock<HashMap<InteractionNumeratorKey, Atom>>,
     propagators: RwLock<HashMap<PropagatorNumeratorKey, Atom>>,
+    /// Automatic projectors by the finalized position of every external state. Finalization
+    /// numbers the external legs first, so all diagrams of an amplitude share one entry. A cross
+    /// section adds the sewn final-state copies after the internal edges, so its entries vary
+    /// with the internal edge count.
+    projectors: RwLock<HashMap<Vec<ExternalStatePosition>, Atom>>,
+}
+
+/// The atom cached under `key`, computed and stored on first use.
+fn memoised<K: Eq + Hash>(
+    cache: &RwLock<HashMap<K, Atom>>,
+    key: K,
+    compute: impl FnOnce(&K) -> Result<Atom, GenerationError>,
+) -> Result<Atom, GenerationError> {
+    if let Some(atom) = cache.read().unwrap().get(&key) {
+        return Ok(atom.clone());
+    }
+    let atom = compute(&key)?;
+    cache.write().unwrap().insert(key, atom.clone());
+    Ok(atom)
+}
+
+/// An external state at its position in a diagram: the edge that carries it and the half-edge
+/// where it attaches.
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+struct ExternalStatePosition {
+    external: ExternalNode,
+    edge: usize,
+    hedge: usize,
+}
+
+impl ExternalStatePosition {
+    /// The position of `external`, carried by the leg with `connection`, in a finalized diagram.
+    /// An incoming state attaches at the target of its edge and an outgoing one at the source.
+    /// `FeynmanDiagram::validate` requires this orientation of the unpaired legs. Finalization
+    /// sews a cross-section initial state with the amplitude-side sink as the target and the
+    /// conjugate-side source as the source, so the sewn edge carries both copies.
+    fn finalized(external: ExternalNode, connection: usize, diagram: &FeynmanDiagram) -> Self {
+        let (edge, _, _) = diagram
+            .edges()
+            .find(|(_, _, data)| {
+                data.external
+                    .as_ref()
+                    .is_some_and(|leg| leg.connection == connection)
+            })
+            .expect("finalized external leg");
+        let endpoint = match external.state {
+            ExternalState::Incoming => DiagramEndpoint::Target,
+            ExternalState::Outgoing => DiagramEndpoint::Source,
+        };
+        let hedge = diagram
+            .half_edge_id(DiagramHalfEdge { edge, endpoint })
+            .expect("finalized external endpoint");
+        Self {
+            external,
+            edge: edge.0,
+            hedge: hedge.0,
+        }
+    }
 }
 
 #[derive(PartialEq, Eq, Hash)]
@@ -2226,18 +2292,15 @@ impl Generator {
             .externals()
             .filter(|(_, external, _)| external.state == ExternalState::Incoming)
             .count();
-        let projector = match &options.projector {
-            Some(projector) => projector.clone(),
-            None => self.external_state_projector(graph)?,
-        };
         let mut builder = FeynmanDiagram::builder(Arc::clone(&self.model), name)
             .canonical_loop_momentum_basis()
             .symmetry_factor(topology.symmetry)
             .overall_factor(overall_factor)
             .numerator_prefactor(options.numerator_prefactor.clone())
-            .projector(projector)
             .cuts(topology.cut_partitions.clone())
             .topology_threshold_candidates(topology.topology_threshold_candidates.clone());
+        // Every external state with the connection of the leg that carries it.
+        let mut external_states = Vec::new();
         let mut endpoint_slots = BTreeMap::new();
         for (vertex, rule_id) in graph.vertices().enumerate() {
             let rule = self.model.vertex_rule_by_id(rule_id)?;
@@ -2283,6 +2346,7 @@ impl Generator {
                                 index: external.index,
                             })?,
                     };
+                    external_states.push((external, connection));
                     builder.add_generation_external(
                         feynkit_graph::VertexId(vertex),
                         flow,
@@ -2301,7 +2365,25 @@ impl Generator {
                 }
             }
         }
-        let diagram = builder.build()?;
+        let diagram = match &options.projector {
+            // A requested projector refers to the provisional frame and is finalized with the
+            // diagram.
+            Some(projector) => builder.projector(projector.clone()).build()?,
+            // The automatic one is built directly in the final frame.
+            None => {
+                let diagram = builder.build()?;
+                let positions = external_states
+                    .into_iter()
+                    .map(|(external, connection)| {
+                        ExternalStatePosition::finalized(external, connection, &diagram)
+                    })
+                    .collect();
+                let projector = memoised(&self.numerators.projectors, positions, |positions| {
+                    self.external_state_projector(positions)
+                })?;
+                diagram.with_projector(projector)
+            }
+        };
         self.construct_numerators(diagram)
     }
 
@@ -2376,21 +2458,20 @@ impl Generator {
         Ok(diagram.with_numerator_fragments(vertices, edges)?)
     }
 
-    fn external_state_projector(&self, graph: &GeneratedGraph) -> Result<Atom, GenerationError> {
+    /// The external-state projector: the spinor or polarization vector of every state, on the
+    /// edge that carries it and indexed at the half-edge where it attaches. Scalars contribute no
+    /// factor.
+    fn external_state_projector(
+        &self,
+        positions: &[ExternalStatePosition],
+    ) -> Result<Atom, GenerationError> {
         let mut projector = Atom::one();
-        for (edge_id, external, _) in graph.externals() {
-            // The half-edge at the attachment vertex.
-            let flow = if graph.edge(edge_id).source.external().is_some() {
-                Flow::Sink
-            } else {
-                Flow::Source
-            };
-            let hedge = edge_id
-                .checked_mul(2)
-                .and_then(|index| index.checked_add(usize::from(flow == Flow::Sink)))
-                .ok_or(GenerationError::ArithmeticOverflow(
-                    "an external half-edge identifier",
-                ))?;
+        for &ExternalStatePosition {
+            external,
+            edge,
+            hedge,
+        } in positions
+        {
             let index = feynkit_graph::symbols::hedge_index().call((hedge, 1_i64));
             let particle = self.model.particle_by_id(external.particle)?;
             let (head, index) = match particle.spin {
@@ -2413,7 +2494,7 @@ impl Generator {
                 _ => continue,
             };
             projector *= FunctionBuilder::new(head)
-                .add_arg(edge_id)
+                .add_arg(edge)
                 .add_arg(index)
                 .finish();
         }
@@ -2473,39 +2554,32 @@ impl Generator {
             owner: instantiation.owner,
             legs: instantiation.legs.to_vec(),
         };
-        if let Some(numerator) = self.numerators.interactions.read().unwrap().get(&key) {
-            return Ok(numerator.clone());
-        }
-        let rule = self.model.vertex_rule_by_id(rule_id)?;
-        let mut terms = Vec::new();
-        for (color_index, color) in rule.color_structures.iter().enumerate() {
-            for (lorentz_index, lorentz_name) in rule.lorentz_structures.iter().enumerate() {
-                if let Some(coupling) = rule
-                    .couplings
-                    .get(color_index)
-                    .and_then(|row| row.get(lorentz_index))
-                    .and_then(Option::as_ref)
-                {
-                    let coupling = self.model.coupling_by_id(*coupling)?;
-                    let coupling = Atom::var(symbol!(&format!("UFO::{}", coupling.name)));
-                    let lorentz = &self.model.lorentz_structure_by_id(*lorentz_name)?.structure;
-                    let color = instantiation.instantiate(color, NumeratorSector::Color)?;
-                    let lorentz = instantiation.instantiate(lorentz, NumeratorSector::Spin)?;
-                    terms.push(coupling * color * lorentz);
+        memoised(&self.numerators.interactions, key, |_| {
+            let rule = self.model.vertex_rule_by_id(rule_id)?;
+            let mut terms = Vec::new();
+            for (color_index, color) in rule.color_structures.iter().enumerate() {
+                for (lorentz_index, lorentz_name) in rule.lorentz_structures.iter().enumerate() {
+                    if let Some(coupling) = rule
+                        .couplings
+                        .get(color_index)
+                        .and_then(|row| row.get(lorentz_index))
+                        .and_then(Option::as_ref)
+                    {
+                        let coupling = self.model.coupling_by_id(*coupling)?;
+                        let coupling = Atom::var(symbol!(&format!("UFO::{}", coupling.name)));
+                        let lorentz = &self.model.lorentz_structure_by_id(*lorentz_name)?.structure;
+                        let color = instantiation.instantiate(color, NumeratorSector::Color)?;
+                        let lorentz = instantiation.instantiate(lorentz, NumeratorSector::Spin)?;
+                        terms.push(coupling * color * lorentz);
+                    }
                 }
             }
-        }
-        let numerator = if terms.is_empty() {
-            Atom::one()
-        } else {
-            Atom::add_many(terms)
-        };
-        self.numerators
-            .interactions
-            .write()
-            .unwrap()
-            .insert(key, numerator.clone());
-        Ok(numerator)
+            Ok(if terms.is_empty() {
+                Atom::one()
+            } else {
+                Atom::add_many(terms)
+            })
+        })
     }
 
     fn edge_numerator(
@@ -2519,38 +2593,31 @@ impl Generator {
             edge,
             hedges,
         };
-        if let Some(numerator) = self.numerators.propagators.read().unwrap().get(&key) {
-            return Ok(numerator.clone());
-        }
-        let particle = self.model.particle_by_id(particle_id)?;
-        let (propagator, reversed) = self.propagator_numerator(particle)?;
-        let flows = if reversed {
-            [Flow::Sink, Flow::Source]
-        } else {
-            [Flow::Source, Flow::Sink]
-        };
-        let legs = flows.map(|flow| NumeratorHalfEdge {
-            edge,
-            flow,
-            hedge: hedges[usize::from(flow == Flow::Sink)],
-            spin: particle.spin,
-            color: particle.color,
-        });
-        let instantiation = NumeratorInstantiation {
-            owner: NumeratorOwner::Edge(edge),
-            legs: &legs,
-        };
-        let spin = instantiation.instantiate(&propagator, NumeratorSector::Spin)?;
-        let numerator = match instantiation.edge_color_identity(particle.color)? {
-            None => spin,
-            Some(color) => spin * color,
-        };
-        self.numerators
-            .propagators
-            .write()
-            .unwrap()
-            .insert(key, numerator.clone());
-        Ok(numerator)
+        memoised(&self.numerators.propagators, key, |_| {
+            let particle = self.model.particle_by_id(particle_id)?;
+            let (propagator, reversed) = self.propagator_numerator(particle)?;
+            let flows = if reversed {
+                [Flow::Sink, Flow::Source]
+            } else {
+                [Flow::Source, Flow::Sink]
+            };
+            let legs = flows.map(|flow| NumeratorHalfEdge {
+                edge,
+                flow,
+                hedge: hedges[usize::from(flow == Flow::Sink)],
+                spin: particle.spin,
+                color: particle.color,
+            });
+            let instantiation = NumeratorInstantiation {
+                owner: NumeratorOwner::Edge(edge),
+                legs: &legs,
+            };
+            let spin = instantiation.instantiate(&propagator, NumeratorSector::Spin)?;
+            Ok(match instantiation.edge_color_identity(particle.color)? {
+                None => spin,
+                Some(color) => spin * color,
+            })
+        })
     }
 }
 
@@ -4602,58 +4669,37 @@ mod tests {
 
     #[test]
     fn finalizes_vector_projectors_and_leaves_scalar_states_trivial() {
-        let generator = Generator::new(fermion_model());
-        let mut vector_graph = Graph::new();
-        let incoming = vector_graph.add_node(ColoredNode::External(ExternalNode {
-            index: 0,
-            state: ExternalState::Incoming,
-            particle: particle(&generator.model, 22),
-        }));
-        let left = vector_graph.add_node(ColoredNode::Interaction(vertex(&generator.model, "V")));
-        let right = vector_graph.add_node(ColoredNode::Interaction(vertex(&generator.model, "V")));
-        let outgoing = vector_graph.add_node(ColoredNode::External(ExternalNode {
-            index: 1,
-            state: ExternalState::Outgoing,
-            particle: particle(&generator.model, 22),
-        }));
-        vector_graph
-            .add_edge(incoming, left, false, edge(&generator.model, 22))
+        let options = GenerationOptions::default()
+            .with_loop_count(1, 1)
+            .unwrap()
+            .threads(1);
+        let vectors = Generator::new(fermion_model())
+            .generate(&photon_process(), &options, GenerationType::Amplitude)
             .unwrap();
-        vector_graph
-            .add_edge(right, outgoing, false, edge(&generator.model, 22))
-            .unwrap();
-        let vector_projector = generator
-            .external_state_projector(&vector_graph.build())
-            .unwrap();
-        assert_eq!(
-            function_count(&vector_projector, feynkit_graph::symbols::epsilon()),
-            1
-        );
-        assert_eq!(
-            function_count(&vector_projector, feynkit_graph::symbols::epsilonbar()),
-            1
-        );
-        assert_eq!(
-            function_count(&vector_projector, feynkit_graph::symbols::hedge_index()),
-            2
-        );
+        assert!(!vectors.diagrams.is_empty());
+        for diagram in &vectors.diagrams {
+            for (head, count) in [
+                (feynkit_graph::symbols::epsilon(), 1),
+                (feynkit_graph::symbols::epsilonbar(), 1),
+                (feynkit_graph::symbols::hedge_index(), 2),
+            ] {
+                assert_eq!(function_count(diagram.projector(), head), count);
+            }
+        }
 
-        let mut scalar_graph = Graph::new();
-        let scalar = scalar_graph.add_node(ColoredNode::External(ExternalNode {
-            index: 0,
-            state: ExternalState::Incoming,
-            particle: particle(&generator.model, 25),
-        }));
-        let internal =
-            scalar_graph.add_node(ColoredNode::Interaction(vertex(&generator.model, "V")));
-        scalar_graph
-            .add_edge(scalar, internal, false, edge(&generator.model, 25))
+        let scalars = Generator::new(scalar_model())
+            .generate(
+                &Process::new(["phi"], ["phi"]),
+                &options,
+                GenerationType::Amplitude,
+            )
             .unwrap();
-        assert_eq!(
-            generator
-                .external_state_projector(&scalar_graph.build())
-                .unwrap(),
-            Atom::one()
+        assert!(!scalars.diagrams.is_empty());
+        assert!(
+            scalars
+                .diagrams
+                .iter()
+                .all(|diagram| diagram.projector() == &Atom::one())
         );
     }
 
