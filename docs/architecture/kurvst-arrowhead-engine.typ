@@ -1,7 +1,7 @@
 = Kurvst Arrowhead Engine
 
 #quote(block: true)[
-*Status: Accepted design, recorded 2026-10-04; P0–P7 NOT IMPLEMENTED.*
+*Status: Accepted design, recorded 2026-10-04; P0 captured, P1–P7 NOT IMPLEMENTED.*
 This is a planned architecture note, not an executable API reference or a claim
 that renderer migration has landed. API examples below are proposed sketches.
 ]
@@ -184,7 +184,7 @@ These observations motivate numeric preparation rather than merely replacing
 the painter. P0 must record host, toolchain, cache state, timing boundaries, and
 paired baseline comparisons before using these figures as performance gates.
 
-== Delivery phases: P0–P7 NOT IMPLEMENTED
+== Delivery phases: P0 baseline captured, P1–P7 NOT IMPLEMENTED
 
 Each phase is its own change after the consolidated base, with corpus
 timings recorded. S/M/L are planning sizes, not completion indicators.
@@ -197,6 +197,14 @@ for arrows and labels, *not blanket pixel identity*. Require cross-renderer
 outline agreement and correct link targets and hit areas. Record provenance
 (host, toolchain, cache, timing boundaries) and paired baseline comparison.
 Regenerate this baseline only after consolidation.
+
+The P0 harness, immutable input corpus, and reference images are recorded in
+`tests/drawing-bench/`. The captured three-round baseline is 15.010 s on M4 Pro
+/ Typst 0.15.1, with 24/24 reference PNGs byte-identical to the supplied
+snapshot at 150 ppi; the consolidated sources reproduce all 24 PNGs
+byte-for-byte on Linux. Source, package, host, and raw timing identities
+accompany the images. Numerical tolerances for future arrow/label changes
+still require explicit review; no arrowhead implementation is claimed.
 
 === P1 — L: shared geometry engine, no renderer migration
 
