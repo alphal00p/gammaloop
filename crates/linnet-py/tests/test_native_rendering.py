@@ -1,10 +1,12 @@
 """Ordinary graphs share the native SVG path used by domain drawings."""
 
 import json
+import os
 import unittest
 import xml.etree.ElementTree as ET
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from unittest.mock import patch
 
 from linnet_under_test import graph
 
@@ -100,6 +102,21 @@ class NativeRenderingTests(unittest.TestCase):
         result = self.graph.render(config=settings)
         self.assert_native(result)
         self.assertIn("#13579b", result.to_svg())
+
+    def test_native_renders_and_exports_stage_no_typst_project(self):
+        with TemporaryDirectory() as directory:
+            # Typst projects are staged in a temporary directory; without one,
+            # only the Typst route can fail.
+            missing = Path(directory) / "missing"
+            with patch.dict(os.environ, {"TMPDIR": str(missing)}):
+                for owner in (self.graph, self.graph.subgraph(edges=["ab"])):
+                    result = owner.render()
+                    self.assert_native(result)
+                    for suffix in ("svg", "html", "typ", "pdf", "png"):
+                        path = result.save(Path(directory) / f"native.{suffix}")
+                        self.assertGreater(path.stat().st_size, 0)
+                with self.assertRaises(RuntimeError):
+                    graph.DiagramRender.from_sources({"main.typ": b"[typst]"})
 
     def test_advanced_requests_keep_full_typst_rendering(self):
         advanced = graph.RenderSettings(

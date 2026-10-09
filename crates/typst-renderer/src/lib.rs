@@ -48,11 +48,11 @@ static FONTS: LazyLock<FontStore> = LazyLock::new(|| {
     fonts
 });
 
-/// One immutable render project. Authored sources override files staged on disk;
-/// package imports resolve in the first supplied package directory that holds
-/// them, each laid out as `namespace/name/version`.
+/// One immutable render project. Authored sources override files staged on disk,
+/// if the project has a directory; package imports resolve in the first supplied
+/// package directory that holds them, each laid out as `namespace/name/version`.
 pub struct Document<'a> {
-    root: &'a Path,
+    root: Option<&'a Path>,
     packages: &'a [PathBuf],
     files: &'a BTreeMap<String, Vec<u8>>,
     sources: Mutex<HashMap<FileId, Source>>,
@@ -76,13 +76,13 @@ impl<'a> Document<'a> {
         }
     }
 
-    /// Compile a virtual document without any package store or plugin assets.
+    /// Compile a virtual document from its sources alone, without a project
+    /// directory, package store or plugin assets; nothing touches the disk.
     pub fn compile_sources(
         files: &BTreeMap<String, Vec<u8>>,
         format: &str,
     ) -> Result<Vec<Vec<u8>>, String> {
-        let root = tempfile::tempdir().map_err(|e| e.to_string())?;
-        Document::new(root.path(), &[], files).compile(format)
+        Document::with_root(None, &[], files).compile(format)
     }
 
     /// The package directories of the Typst CLI, in its lookup order: the
@@ -110,6 +110,14 @@ impl<'a> Document<'a> {
 
     pub fn new(
         root: &'a Path,
+        packages: &'a [PathBuf],
+        files: &'a BTreeMap<String, Vec<u8>>,
+    ) -> Self {
+        Self::with_root(Some(root), packages, files)
+    }
+
+    fn with_root(
+        root: Option<&'a Path>,
         packages: &'a [PathBuf],
         files: &'a BTreeMap<String, Vec<u8>>,
     ) -> Self {
@@ -246,7 +254,10 @@ impl World for Document<'_> {
                 if let Some(bytes) = self.files.get(key) {
                     return Ok(Bytes::new(bytes.clone()));
                 }
-                self.root.to_path_buf()
+                let Some(root) = self.root else {
+                    return Err(FileError::NotFound(key.into()));
+                };
+                root.to_path_buf()
             }
             VirtualRoot::Package(package) => {
                 let relative = Path::new(package.namespace.as_str())
@@ -317,6 +328,13 @@ mod tests {
             collect(&page.frame, &mut families);
         }
         families
+    }
+
+    #[test]
+    fn virtual_documents_read_no_project_directory() {
+        let files = BTreeMap::from([("main.typ".to_owned(), b"#read(\"Cargo.toml\")".to_vec())]);
+        let error = Document::compile_sources(&files, "svg").unwrap_err();
+        assert!(error.contains("not found"), "{error}");
     }
 
     #[test]

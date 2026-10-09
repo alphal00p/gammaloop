@@ -62,14 +62,24 @@ impl PyDiagramRender {
             diagrams: Vec::new(),
         }
     }
+    /// Compile the snapshot's own pages: its project, or its native SVG pages,
+    /// which need no project, package or plugin.
+    fn compile(&self, format: &str) -> PyResult<Vec<Vec<u8>>> {
+        match &self.project {
+            Some(project) => project.compile(format),
+            None => typst_renderer::Document::compile_sources(
+                &BTreeMap::from([("main.typ".into(), self.to_linnest()?.into_bytes())]),
+                format,
+            )
+            .map_err(PyRuntimeError::new_err),
+        }
+    }
     pub(crate) fn pages(&self) -> PyResult<&Vec<String>> {
         if self.pages.get().is_none() {
             let pages = Python::attach(|py| self.project.as_ref().unwrap().svg_pages(py))?;
             let pages = pages
                 .iter()
-                .map(|svg| {
-                    linnest::svg::Scene::interactive_svg(svg).map_err(PyRuntimeError::new_err)
-                })
+                .map(|svg| PreparedRender::interactive_svg(svg))
                 .collect::<PyResult<Vec<_>>>()?;
             let _ = self.pages.set(pages);
         }
@@ -140,7 +150,7 @@ impl PyDiagramRender {
             .join("\n#pagebreak()\n"))
     }
     /// Export SVG, HTML, Typst, PDF, or PNG, selected by the filename suffix.
-    fn save(&self, py: Python<'_>, output: PathBuf) -> PyResult<PathBuf> {
+    fn save(&self, output: PathBuf) -> PyResult<PathBuf> {
         let extension = output.extension().and_then(|v| v.to_str()).unwrap_or("");
         let text = match extension {
             "svg" => Some(self.to_svg()?),
@@ -156,18 +166,19 @@ impl PyDiagramRender {
         if let Some(parent) = output.parent().filter(|path| !path.as_os_str().is_empty()) {
             std::fs::create_dir_all(parent).map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
         }
-        if let Some(text) = text {
-            std::fs::write(&output, text).map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
-            Ok(output)
-        } else if let Some(project) = &self.project {
-            project.render_to(py, output)
-        } else {
-            PreparedRender::from_sources(BTreeMap::from([(
-                "main.typ".into(),
-                self.to_linnest()?.into_bytes(),
-            )]))?
-            .render_to(py, output)
-        }
+        let contents = match text {
+            Some(text) => text.into_bytes(),
+            None => match self.compile(extension)?.as_slice() {
+                [page] => page.clone(),
+                _ => {
+                    return Err(PyValueError::new_err(
+                        "file output requires exactly one page",
+                    ));
+                }
+            },
+        };
+        std::fs::write(&output, contents).map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
+        Ok(output)
     }
     /// Export every SVG or PNG page to a directory and return the written paths.
     #[pyo3(signature = (directory, *, format="svg"))]
@@ -178,14 +189,7 @@ impl PyDiagramRender {
                 .iter()
                 .map(|page| page.as_bytes().to_vec())
                 .collect(),
-            "png" => match &self.project {
-                Some(project) => project.compile("png")?,
-                None => typst_renderer::Document::compile_sources(
-                    &BTreeMap::from([("main.typ".into(), self.to_linnest()?.into_bytes())]),
-                    "png",
-                )
-                .map_err(PyRuntimeError::new_err)?,
-            },
+            "png" => self.compile("png")?,
             _ => {
                 return Err(PyValueError::new_err(
                     "page format must be svg or png; save a PDF for a multipage document",

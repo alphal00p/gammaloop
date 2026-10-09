@@ -1,5 +1,4 @@
 use std::collections::BTreeMap;
-use std::ffi::OsStr;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -372,17 +371,26 @@ fn prepare(
     selection: Option<(Vec<bool>, Vec<usize>)>,
 ) -> PyResult<PreparedRender> {
     let mut prepared = PreparedRender::from_sources(BTreeMap::new())?;
-    let build_root = &prepared.root;
-    write_project_asset(build_root, TOPOLOGY, &topology)?;
-
-    let mut source =
+    write_project_asset(&prepared.root, TOPOLOGY, &topology)?;
+    let source =
         prepared.configuration_source(&transport, Some(DEFAULT_TEMPLATE), Some(TOPOLOGY))?;
-    let files = &mut prepared.files;
-    if let Some((hedges, nodes)) = selection {
-        files.insert(
+    if selection.is_some() {
+        prepared.files.insert(
             SUBGRAPH_STYLE.to_owned(),
             include_bytes!("../typst/subgraph.typ").to_vec(),
         );
+    }
+    prepared.files.insert(
+        ENTRYPOINT.to_owned(),
+        graph_entrypoint(source, selection.as_ref()).into_bytes(),
+    );
+    Ok(prepared)
+}
+
+/// Complete a graph render's configuration source with the template call, which
+/// focuses the selected half-edges and nodes of a subgraph render.
+fn graph_entrypoint(mut source: String, selection: Option<&(Vec<bool>, Vec<usize>)>) -> String {
+    if let Some((hedges, nodes)) = selection {
         let hedges = hedges
             .iter()
             .map(|value| format!("{value},"))
@@ -399,8 +407,7 @@ fn prepare(
     } else {
         source.push_str("\n#_linnet_template.render(_linnet_config)\n");
     }
-    files.insert(ENTRYPOINT.to_owned(), source.into_bytes());
-    Ok(prepared)
+    source
 }
 
 fn insert_embedded_assets<E: RustEmbed>(
@@ -727,46 +734,6 @@ impl PreparedRender {
         .map_err(|error| PyRuntimeError::new_err(error.to_string()))
     }
 
-    pub(crate) fn render_to(&self, py: Python<'_>, output: PathBuf) -> PyResult<PathBuf> {
-        let format = output_format(&output)?;
-        if let Some(parent) = output
-            .parent()
-            .filter(|parent| !parent.as_os_str().is_empty())
-        {
-            fs::create_dir_all(parent).map_err(|error| {
-                PyRuntimeError::new_err(format!(
-                    "failed to create output directory {}: {error}",
-                    parent.display()
-                ))
-            })?;
-        }
-        if format == "svg" {
-            fs::write(&output, self.svg(py)?)
-                .map_err(|error| PyRuntimeError::new_err(error.to_string()))?;
-        } else {
-            let pages = self.compile(format)?;
-            let [page] = pages.as_slice() else {
-                return Err(PyValueError::new_err(
-                    "file output requires exactly one page",
-                ));
-            };
-            fs::write(&output, page).map_err(|error| PyRuntimeError::new_err(error.to_string()))?;
-        }
-        Ok(output)
-    }
-
-    /// Compile the prepared project to a single SVG page.
-    pub fn svg(&self, py: Python<'_>) -> PyResult<String> {
-        let pages = self.svg_pages(py)?;
-        let [svg] = pages.as_slice() else {
-            return Err(PyRuntimeError::new_err(format!(
-                "Typst SVG render produced {} pages; expected exactly one",
-                pages.len()
-            )));
-        };
-        Self::interactive_svg(svg)
-    }
-
     /// Compile the prepared project to one SVG document per page.
     pub fn svg_pages(&self, _py: Python<'_>) -> PyResult<Vec<String>> {
         self.compile("svg")?
@@ -823,23 +790,6 @@ impl PreparedRender {
     }
 }
 
-fn output_format(output: &Path) -> PyResult<&'static str> {
-    match output
-        .extension()
-        .and_then(OsStr::to_str)
-        .map(str::to_ascii_lowercase)
-        .as_deref()
-    {
-        Some("pdf") => Ok("pdf"),
-        Some("svg") => Ok("svg"),
-        Some("png") => Ok("png"),
-        _ => Err(PyRuntimeError::new_err(format!(
-            "unsupported Typst output {}; expected a .pdf, .svg, or .png suffix",
-            output.display()
-        ))),
-    }
-}
-
 pub(crate) fn graph_to_svg(
     py: Python<'_>,
     graph: &Py<PyGraph>,
@@ -890,9 +840,11 @@ pub(crate) fn render_graph(
         .map_err(|error| PyRuntimeError::new_err(error.to_string()))?;
     if let Some(scene) = transport.native_scene(envelope.graph, selection.as_ref()) {
         let mut result = crate::PyDiagramRender::from_scene(py, scene, None)?;
-        // Keep inspecting the same snapshotted configuration even when Rust
-        // supplies geometry. File exports use the actual native SVG snapshot.
-        result.source = Some(prepare(topology, transport, selection)?.typst_source_value()?);
+        // Keep inspecting the same configuration even when Rust supplies the
+        // geometry. Native scenes use the default template and no modules, so the
+        // entrypoint needs no staged project; exports use the native SVG snapshot.
+        let source = entrypoint_source(&transport, Some(DEFAULT_TEMPLATE), &[], Some(TOPOLOGY))?;
+        result.source = Some(graph_entrypoint(source, selection.as_ref()));
         return Ok(result);
     }
     prepare(topology, transport, selection).map(crate::PyDiagramRender::prepared)
@@ -946,7 +898,7 @@ mod tests {
             assert_eq!(pages.len(), 1);
             case.call_method1(
                 "assert_native_drawing_unchanged",
-                (&pages[0], prepared.svg(py)?),
+                (&pages[0], PreparedRender::interactive_svg(&pages[0])?),
             )?;
             Ok(())
         })

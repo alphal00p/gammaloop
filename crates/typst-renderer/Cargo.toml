@@ -29,4 +29,5 @@ typst-pdf = { version = "=0.15.1", optional = true }
 typst-render = { version = "=0.15.1", optional = true }
 typst-svg = { version = "=0.15.1", path = "../../vendor/typst-svg" }
 
+[dev-dependencies]
 tempfile = "3.8"
