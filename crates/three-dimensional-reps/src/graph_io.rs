@@ -340,9 +340,11 @@ pub(crate) mod test_graphs {
 
     pub(crate) fn initial_state_cut_line_graph(external_sign: i32) -> ParsedGraph {
         ParsedGraph {
+            // A terminal loop contour and a fixed external alias share one
+            // vertex; the cut does not carry or constrain the loop momentum.
             internal_edges: vec![
-                internal(0, 0, 1, "p_in_cut", [0], [external_sign], "m_in"),
-                internal(1, 0, 1, "q0", [1], [0], "m_loop"),
+                internal(0, 0, 0, "p_in_cut", [0], [external_sign], "m_in"),
+                internal(1, 0, 0, "q0", [1], [0], "m_loop"),
             ],
             external_edges: Vec::new(),
             initial_state_cut_edges: vec![ParsedGraphInitialStateCutEdge {
@@ -352,7 +354,7 @@ pub(crate) mod test_graphs {
             }],
             loop_names: vec!["k1".to_string()],
             external_names: vec!["p_in".to_string()],
-            node_name_to_internal: node_map(2),
+            node_name_to_internal: node_map(1),
         }
     }
 

@@ -1555,7 +1555,7 @@ mod tests {
     }
 
     #[test]
-    fn cut_aware_vector_matroid_factorization_preserves_cut_surfaces() {
+    fn cut_aware_connected_graph_preserves_cut_surfaces() {
         let edge = |edge_id: usize,
                     tail: usize,
                     head: usize,
@@ -1575,10 +1575,9 @@ mod tests {
                 had_pow: false,
             }
         };
-        // The two bubbles share vertex 0, so the denominator graph is
-        // connected, while their loop-energy rows form two independent vector-
-        // matroid components. The initial-state cut is internal to the first
-        // bubble and supplies its external energy shift.
+        // The two bubbles share vertex 0 and have independent loop momenta.
+        // The initial-state cut belongs to the first bubble and supplies its
+        // external energy shift.
         let parsed = ParsedGraph {
             internal_edges: vec![
                 edge(0, 0, 1, [1, 0], 0, "m0"),
@@ -1651,7 +1650,7 @@ mod tests {
             .filter(|surface| !surface.expression.external_terms.is_empty())
             .map(|surface| surface.expression.clone())
             .collect::<Vec<_>>();
-        let factorized_cut_surfaces = cases[0]
+        let connected_cut_surfaces = cases[0]
             .expression
             .surfaces
             .linear_surface_cache
@@ -1663,10 +1662,10 @@ mod tests {
         assert!(
             expected_cut_surfaces
                 .iter()
-                .all(|surface| factorized_cut_surfaces.contains(surface))
+                .all(|surface| connected_cut_surfaces.contains(surface))
         );
         assert!(
-            factorized_cut_surfaces
+            connected_cut_surfaces
                 .iter()
                 .all(|surface| expected_cut_surfaces.contains(surface))
         );
@@ -2089,6 +2088,15 @@ mod tests {
             )
             .unwrap()
         };
+        // Compare denominator cancellation after restoring each source's
+        // signed contour; removing one occurrence changes its source parity.
+        let source_frame = |graph: &ParsedGraph, generated: &crate::GeneratedThreeDExpression| {
+            crate::CffGlobalPrefactorSign::from_exponent(
+                graph.denominator_internal_edge_ids().len(),
+            )
+            .product(generated.denominator_only_global_prefactor_sign)
+            .factor() as f64
+        };
 
         let mut diagnostics = Vec::new();
         let mut failures = Vec::new();
@@ -2184,21 +2192,14 @@ mod tests {
                         )
                         .unwrap()
                         .value;
-                        let source_frame = |index: usize| {
-                            generated[index].core_global_prefactor_sign.factor() as f64
-                                * if graphs[index].internal_edges.len().is_multiple_of(2) {
-                                    1.0
-                                } else {
-                                    -1.0
-                                }
-                        };
-                        let quintic = raw_quintic;
-                        let lower = raw_lower;
+                        let quintic = raw_quintic * source_frame(&graphs[0], &generated[0]);
+                        let lower =
+                            raw_lower * source_frame(&graphs[lower_index], &generated[lower_index]);
                         let scale = quintic.abs().max(lower.abs()).max(f64::MIN_POSITIVE);
                         let diagnostic = format!(
                             "{label} with {sampling_mode:?}, M={uniform_scale:?}, point {point}, reverse_last={reverse_last}: quintic={quintic:e}, lower={lower:e}, GammaLoop source frames=({}, {})",
-                            source_frame(0),
-                            source_frame(lower_index),
+                            source_frame(&graphs[0], &generated[0]),
+                            source_frame(&graphs[lower_index], &generated[lower_index]),
                         );
                         // The convergent odd-energy numerator integrates to zero.
                         // Check both routes against that independent zero oracle;
@@ -2247,7 +2248,8 @@ mod tests {
                         &inputs[0],
                     )
                     .unwrap()
-                    .value;
+                    .value
+                        * source_frame(&graphs[0], &distributed[0]);
                     let lower = evaluate_expression(
                         &graphs[1],
                         &distributed[1].expression,
@@ -2255,7 +2257,8 @@ mod tests {
                         &inputs[1],
                     )
                     .unwrap()
-                    .value;
+                    .value
+                        * source_frame(&graphs[1], &distributed[1]);
                     let scale = common.abs().max(lower.abs()).max(f64::MIN_POSITIVE);
                     let diagnostic = format!(
                         "distributed exact plan with {sampling_mode:?}, M={uniform_scale:?}, point {point}, reverse_last={reverse_last}: common={common:e}, lower={lower:e}, common numerator={common_numerator}, lower numerator={lower_numerator}"
@@ -2357,7 +2360,12 @@ mod tests {
                         &common_input,
                     )
                     .unwrap()
-                    .value;
+                    .value
+                        * crate::CffGlobalPrefactorSign::from_exponent(
+                            graphs[0].denominator_internal_edge_ids().len(),
+                        )
+                        .product(common.denominator_only_global_prefactor_sign)
+                        .factor() as f64;
                     let lower_input = EvaluationInput {
                         masses: vec![0.73; 5 - pinched_factors],
                         ..common_input.clone()
@@ -2369,7 +2377,14 @@ mod tests {
                         &lower_input,
                     )
                     .unwrap()
-                    .value;
+                    .value
+                        * crate::CffGlobalPrefactorSign::from_exponent(
+                            graphs[pinched_factors]
+                                .denominator_internal_edge_ids()
+                                .len(),
+                        )
+                        .product(lower.denominator_only_global_prefactor_sign)
+                        .factor() as f64;
                     let scale = common_value
                         .abs()
                         .max(lower_value.abs())
@@ -2509,7 +2524,12 @@ mod tests {
                     &sextic_input,
                 )
                 .unwrap()
-                .value;
+                .value
+                    * crate::CffGlobalPrefactorSign::from_exponent(
+                        sextic.denominator_internal_edge_ids().len(),
+                    )
+                    .product(split.denominator_only_global_prefactor_sign)
+                    .factor() as f64;
                 let coherent_value = evaluate_expression(
                     &sextic,
                     &coherent.expression,
@@ -2517,11 +2537,21 @@ mod tests {
                     &sextic_input,
                 )
                 .unwrap()
-                .value;
+                .value
+                    * crate::CffGlobalPrefactorSign::from_exponent(
+                        sextic.denominator_internal_edge_ids().len(),
+                    )
+                    .product(coherent.denominator_only_global_prefactor_sign)
+                    .factor() as f64;
                 let lower_value =
                     evaluate_expression(&quintic, &lower.expression, &retained, &quintic_input)
                         .unwrap()
-                        .value;
+                        .value
+                        * crate::CffGlobalPrefactorSign::from_exponent(
+                            quintic.denominator_internal_edge_ids().len(),
+                        )
+                        .product(lower.denominator_only_global_prefactor_sign)
+                        .factor() as f64;
                 for (label, candidate) in [
                     ("split denominator", split_value),
                     ("coherent denominator", coherent_value),
@@ -2567,7 +2597,7 @@ mod tests {
                     label: "c1".to_string(),
                     mass_key: Some("mc1".to_string()),
                     signature: MomentumSignature {
-                        loop_signature: vec![-1, 0],
+                        loop_signature: vec![1, 0],
                         external_signature: Vec::new(),
                     },
                     had_pow: false,
@@ -2668,7 +2698,12 @@ mod tests {
                         &inputs[0],
                     )
                     .unwrap()
-                    .value;
+                    .value
+                        * crate::CffGlobalPrefactorSign::from_exponent(
+                            graphs[0].denominator_internal_edge_ids().len(),
+                        )
+                        .product(generated[0].denominator_only_global_prefactor_sign)
+                        .factor() as f64;
                     let lower = evaluate_expression(
                         &graphs[1],
                         &generated[1].expression,
@@ -2676,7 +2711,12 @@ mod tests {
                         &inputs[1],
                     )
                     .unwrap()
-                    .value;
+                    .value
+                        * crate::CffGlobalPrefactorSign::from_exponent(
+                            graphs[1].denominator_internal_edge_ids().len(),
+                        )
+                        .product(generated[1].denominator_only_global_prefactor_sign)
+                        .factor() as f64;
                     let scale = common.abs().max(lower.abs()).max(f64::MIN_POSITIVE);
                     if !(common.is_finite()
                         && lower.is_finite()
@@ -2896,7 +2936,7 @@ mod tests {
     }
 
     #[test]
-    fn rank_projected_constant_contact_preserves_even_duplicate_parity() {
+    fn rank_projected_constant_contact_preserves_surviving_rank_frame() {
         // Extract the constant Euclidean quotient in z, C_z[z²/D_z]=1,
         // then integrate only the retained convergent denominator coordinates.
         // This does not assign a value to the divergent real-energy integral.
@@ -2978,12 +3018,11 @@ mod tests {
             external_names: Vec::new(),
             node_name_to_internal: BTreeMap::from([("n0".to_string(), 0), ("n1".to_string(), 1)]),
         };
-        let residual_expression =
-            generate_3d_expression_from_parsed(&residual, &Generate3DExpressionOptions::default())
-                .unwrap();
+        let residual_source =
+            generate_3d_expression(&residual, &Generate3DExpressionOptions::default()).unwrap();
         let residual_value = evaluate_expression(
             &residual,
-            &residual_expression,
+            &residual_source.expression,
             "1",
             &EvaluationInput {
                 external_momenta: Vec::new(),
@@ -2994,14 +3033,14 @@ mod tests {
         )
         .unwrap()
         .value;
-        let residual_source =
-            generate_3d_expression(&residual, &Generate3DExpressionOptions::default()).unwrap();
         let residual_frame = crate::CffGlobalPrefactorSign::from_exponent(
             residual.denominator_internal_edge_ids().len(),
         )
         .product(residual_source.core_global_prefactor_sign)
         .factor() as f64;
-        assert_eq!(residual_frame, -1.0);
+        // The retained rank-one contour has core frame +1; its two
+        // denominator occurrences contribute even source parity.
+        assert_eq!(residual_frame, 1.0);
         let projected_value = parent_frame * projected_value;
         let residual_value = residual_frame * residual_value;
         assert!((residual_value - 1.0 / (4.0 * 0.89_f64.powi(3))).abs() < 1.0e-13);
@@ -3298,55 +3337,49 @@ mod tests {
         let expected = s / (2.0 * eb * ec) * (simple_x + double_residue + simple_s);
         assert!(expected.abs() > 1.0e-8);
 
-        for context in [
-            crate::CffGenerationContext::Standalone,
-            crate::CffGenerationContext::EmbeddedCffFactor,
+        for bounds in [
+            Vec::new(),
+            vec![(0, 1), (1, 1), (2, 1), (3, 2), (4, 1)],
+            vec![(0, 1), (1, 1), (2, 1), (3, 1), (4, 2)],
+            vec![(0, 1), (1, 1), (2, 1), (3, 2), (4, 2)],
         ] {
-            for bounds in [
-                Vec::new(),
-                vec![(0, 1), (1, 1), (2, 1), (3, 2), (4, 1)],
-                vec![(0, 1), (1, 1), (2, 1), (3, 1), (4, 2)],
-                vec![(0, 1), (1, 1), (2, 1), (3, 2), (4, 2)],
-            ] {
-                let generated = generate_3d_expression(
-                    &parsed,
-                    &Generate3DExpressionOptions {
-                        cff_generation_context: context,
-                        energy_degree_bounds: Some(bounds.clone()),
-                        ..Default::default()
-                    },
-                )
-                .unwrap();
-                let source_conversion =
-                    generated
-                        .energy_factor_components
-                        .iter()
-                        .fold(1.0, |factor, component| {
-                            let frame = match component.ownership {
-                                crate::CffEnergyFactorOwnership::GlobalSourceProduct => {
-                                    component.core_global_prefactor_sign
-                                }
-                                crate::CffEnergyFactorOwnership::VariantLocal => {
-                                    component.denominator_only_global_prefactor_sign
-                                }
-                            };
-                            factor
-                                * crate::CffGlobalPrefactorSign::from_exponent(
-                                    component.internal_edge_ids.len(),
-                                )
-                                .product(frame)
-                                .factor() as f64
-                        });
-                let actual = source_conversion
-                    * evaluate_expression(&parsed, &generated.expression, "1", &input)
-                        .unwrap()
-                        .value;
-                let scale = actual.abs().max(expected.abs()).max(f64::MIN_POSITIVE);
-                assert!(
-                    (actual - expected).abs() <= 2.0e-12 * scale,
-                    "{context:?}, bounds={bounds:?}: actual={actual:.17e}, contour={expected:.17e}",
-                );
-            }
+            let generated = generate_3d_expression(
+                &parsed,
+                &Generate3DExpressionOptions {
+                    energy_degree_bounds: Some(bounds.clone()),
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+            let source_conversion =
+                generated
+                    .energy_factor_components
+                    .iter()
+                    .fold(1.0, |factor, component| {
+                        let frame = match component.ownership {
+                            crate::CffEnergyFactorOwnership::GlobalSourceProduct => {
+                                component.core_global_prefactor_sign
+                            }
+                            crate::CffEnergyFactorOwnership::VariantLocal => {
+                                component.denominator_only_global_prefactor_sign
+                            }
+                        };
+                        factor
+                            * crate::CffGlobalPrefactorSign::from_exponent(
+                                component.internal_edge_ids.len(),
+                            )
+                            .product(frame)
+                            .factor() as f64
+                    });
+            let actual = source_conversion
+                * evaluate_expression(&parsed, &generated.expression, "1", &input)
+                    .unwrap()
+                    .value;
+            let scale = actual.abs().max(expected.abs()).max(f64::MIN_POSITIVE);
+            assert!(
+                (actual - expected).abs() <= 2.0e-12 * scale,
+                "bounds={bounds:?}: actual={actual:.17e}, contour={expected:.17e}",
+            );
         }
     }
 
@@ -3861,7 +3894,9 @@ mod thermal_reference_tests {
     use crate::{
         Generate3DExpressionOptions, MediumMode, MomentumSignature, NumeratorSamplingScaleMode,
         generate_3d_expression,
-        graph_io::{ParsedGraphExternalEdge, ParsedGraphInternalEdge},
+        graph_io::{
+            ParsedGraphExternalEdge, ParsedGraphInitialStateCutEdge, ParsedGraphInternalEdge,
+        },
         surface::LinearSurfaceKind,
     };
 
@@ -4360,6 +4395,826 @@ mod thermal_reference_tests {
                     assert!(
                         (result - expected).abs() < 5.0e-12 * expected,
                         "{external_leg_count} external legs: {result:.17e} != {expected:.17e}"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn embedded_mixed_coordinate_terminal_keeps_ambient_below_poles() {
+        use linnet::half_edge::involution::{EdgeIndex, Orientation};
+
+        let parsed = ParsedGraph {
+            internal_edges: [vec![1, 1], vec![1, 0]]
+                .into_iter()
+                .enumerate()
+                .map(|(edge_id, loop_signature)| ParsedGraphInternalEdge {
+                    edge_id,
+                    tail: 0,
+                    head: 0,
+                    label: format!("q{edge_id}"),
+                    mass_key: Some(format!("m{edge_id}")),
+                    signature: MomentumSignature {
+                        loop_signature,
+                        external_signature: Vec::new(),
+                    },
+                    had_pow: false,
+                })
+                .collect(),
+            external_edges: Vec::new(),
+            initial_state_cut_edges: Vec::new(),
+            loop_names: vec!["k".to_string(), "l".to_string()],
+            external_names: Vec::new(),
+            node_name_to_internal: BTreeMap::from([("v0".to_string(), 0)]),
+        };
+        assert!(crate::validate_parsed_graph(&parsed).ok);
+        let generated = generate_3d_expression(
+            &parsed,
+            &Generate3DExpressionOptions {
+                cff_generation_context: crate::CffGenerationContext::EmbeddedCffFactor,
+                energy_degree_bounds: Some(vec![(0, 1), (1, 1)]),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        let input = EvaluationInput {
+            external_momenta: Vec::new(),
+            loop_spatial_momenta: vec![[0.21, -0.32, 0.17], [-0.27, 0.19, 0.41]],
+            masses: vec![0.73, 1.1],
+            uniform_scale: None,
+        };
+        let evaluator = ExpressionEvaluator::new(&parsed, &generated.expression, &input);
+        let [a, b] = [
+            evaluator.internal_energies[0],
+            evaluator.internal_energies[1],
+        ];
+        // q0=k+l, q1=k: the existing ordered ambient (Below, Below)
+        // residue prescription selects (q0,q1)=(+a,-b), with coefficient
+        // +1/(4ab). Independent Below choices in q coordinates select a
+        // different odd functional even though its scalar value agrees.
+        assert_eq!(generated.expression.orientations.len(), 1);
+        let orientation = &generated.expression.orientations[OrientationID(0)];
+        assert_eq!(
+            orientation.data.orientation[EdgeIndex(0)],
+            Orientation::Default
+        );
+        assert_eq!(
+            orientation.data.orientation[EdgeIndex(1)],
+            Orientation::Reversed
+        );
+        let source_frame = crate::CffGlobalPrefactorSign::from_exponent(2)
+            .product(generated.denominator_only_global_prefactor_sign)
+            .factor() as f64;
+        for (numerator, expected) in [
+            ("1", 1.0 / (4.0 * a * b)),
+            ("edges[0][0]", 1.0 / (4.0 * b)),
+            ("edges[1][0]", -1.0 / (4.0 * a)),
+            ("loops[0][0]", -1.0 / (4.0 * a)),
+            ("loops[1][0]", (a + b) / (4.0 * a * b)),
+            ("edges[0][0]*edges[1][0]", -0.25),
+        ] {
+            let actual = source_frame
+                * evaluator
+                    .evaluate(&NumeratorExpr::parse(numerator).unwrap())
+                    .unwrap()
+                    .value;
+            assert!(
+                (actual - expected).abs() <= 1.0e-12 * expected.abs(),
+                "{numerator}: ambient Below residue {actual:.17e} != {expected:.17e}"
+            );
+        }
+    }
+
+    #[test]
+    fn free_tadpoles_and_inherited_contacts_match_contour_oracles() {
+        use linnet::half_edge::involution::{EdgeIndex, Orientation};
+
+        for (name, edges, factors, cancelled) in [
+            (
+                "standalone_tadpole",
+                vec![(0, 0, 0, 0, 0.73)],
+                vec![vec![0]],
+                false,
+            ),
+            (
+                "shifted_standalone_tadpole",
+                vec![(0, 0, 0, 1, 0.73)],
+                vec![vec![0]],
+                false,
+            ),
+            (
+                "tadpole_at_first_bubble_vertex",
+                vec![(0, 0, 0, 0, 0.73), (0, 1, 1, 0, 0.9), (1, 0, 1, 0, 1.2)],
+                vec![vec![0], vec![1, 2]],
+                false,
+            ),
+            (
+                "tadpole_at_second_bubble_vertex",
+                vec![(1, 1, 0, 0, 0.73), (0, 1, 1, 0, 0.9), (1, 0, 1, 0, 1.2)],
+                vec![vec![0], vec![1, 2]],
+                false,
+            ),
+            (
+                "shifted_tadpole_at_second_bubble_vertex",
+                vec![(1, 1, 0, -1, 0.73), (0, 1, 1, 0, 0.9), (1, 0, 1, 0, 1.2)],
+                vec![vec![0], vec![1, 2]],
+                false,
+            ),
+            (
+                "inherited_bubble_contact",
+                vec![(0, 1, 0, 0, 0.73), (1, 0, 0, 1, 0.9)],
+                vec![vec![1]],
+                true,
+            ),
+            (
+                "cancelled_triangle_leaves_convergent_bubble",
+                vec![(0, 1, 0, 0, 0.73), (1, 2, 0, 1, 0.9), (2, 0, 0, -1, 1.2)],
+                vec![vec![1, 2]],
+                true,
+            ),
+        ] {
+            let inherited_contact = cancelled && factors[0].len() == 1;
+            let numerator_edge = usize::from(inherited_contact);
+            let node_count = edges
+                .iter()
+                .flat_map(|edge| [edge.0, edge.1])
+                .max()
+                .unwrap()
+                + 1;
+            let loop_count = edges.iter().map(|edge| edge.2).max().unwrap() + 1;
+            let has_external = edges.iter().any(|edge| edge.3 != 0);
+            let parsed = ParsedGraph {
+                internal_edges: edges
+                    .iter()
+                    .enumerate()
+                    .map(
+                        |(edge_id, &(tail, head, loop_id, shift, _))| ParsedGraphInternalEdge {
+                            edge_id,
+                            tail,
+                            head,
+                            label: format!("q{edge_id}"),
+                            mass_key: Some(format!("m{edge_id}")),
+                            signature: MomentumSignature {
+                                loop_signature: (0..loop_count)
+                                    .map(|index| i32::from(index == loop_id))
+                                    .collect(),
+                                external_signature: if has_external {
+                                    vec![shift]
+                                } else {
+                                    Vec::new()
+                                },
+                            },
+                            had_pow: false,
+                        },
+                    )
+                    .collect(),
+                external_edges: (0..node_count)
+                    .filter_map(|node| {
+                        let coefficient: i32 = edges
+                            .iter()
+                            .map(|edge| {
+                                edge.3 * (i32::from(edge.0 == node) - i32::from(edge.1 == node))
+                            })
+                            .sum();
+                        (coefficient != 0).then(|| ParsedGraphExternalEdge {
+                            edge_id: 10_000_000 + node,
+                            source: None,
+                            destination: Some(node),
+                            label: format!("p{node}"),
+                            external_coefficients: vec![coefficient],
+                        })
+                    })
+                    .collect(),
+                initial_state_cut_edges: Vec::new(),
+                loop_names: (0..loop_count).map(|index| format!("k{index}")).collect(),
+                external_names: if has_external {
+                    vec!["p".to_string()]
+                } else {
+                    Vec::new()
+                },
+                node_name_to_internal: (0..node_count)
+                    .map(|node| (format!("v{node}"), node))
+                    .collect(),
+            };
+            let validation = crate::validate_parsed_graph(&parsed);
+            assert!(validation.ok);
+            assert!(validation.vertex_external_balance_info.is_empty());
+            let input = EvaluationInput {
+                external_momenta: if has_external {
+                    vec![[0.37, 0.07, -0.11, 0.23]]
+                } else {
+                    Vec::new()
+                },
+                loop_spatial_momenta: [[0.21, -0.32, 0.17], [-0.27, 0.19, 0.41]][..loop_count]
+                    .to_vec(),
+                masses: edges.iter().map(|edge| edge.4).collect(),
+                uniform_scale: None,
+            };
+            for medium_mode in [
+                MediumMode::Vacuum,
+                MediumMode::ThermodynamicEquilibrium,
+                MediumMode::ZeroTemperatureEquilibrium,
+            ] {
+                for bounded in [false, true] {
+                    if cancelled && !bounded {
+                        continue;
+                    }
+                    let generated = generate_3d_expression(
+                        &parsed,
+                        &Generate3DExpressionOptions {
+                            medium_mode,
+                            energy_degree_bounds: bounded.then(|| {
+                                if inherited_contact {
+                                    vec![(0, 2), (1, 1)]
+                                } else {
+                                    vec![(0, if cancelled { 4 } else { 2 })]
+                                }
+                            }),
+                            ..Default::default()
+                        },
+                    )
+                    .unwrap();
+                    let expression = &generated.expression;
+                    let evaluator = ExpressionEvaluator::new(&parsed, expression, &input);
+                    let energies = &evaluator.internal_energies;
+                    let source_conversion =
+                        generated
+                            .energy_factor_components
+                            .iter()
+                            .fold(1.0, |factor, component| {
+                                let frame = match component.ownership {
+                                    crate::CffEnergyFactorOwnership::GlobalSourceProduct => {
+                                        component.core_global_prefactor_sign
+                                    }
+                                    crate::CffEnergyFactorOwnership::VariantLocal => {
+                                        component.denominator_only_global_prefactor_sign
+                                    }
+                                };
+                                factor
+                                    * crate::CffGlobalPrefactorSign::from_exponent(
+                                        component.internal_edge_ids.len(),
+                                    )
+                                    .product(frame)
+                                    .factor() as f64
+                            });
+                    for (fermion, mu, vacuum_limit) in [
+                        (false, 0.0, true),
+                        (false, 0.0, false),
+                        (false, 0.21, false),
+                        (false, -0.21, false),
+                        (true, 0.0, false),
+                        (true, 0.21, false),
+                        (true, -0.21, false),
+                        (true, 1.3, false),
+                        (true, -1.3, false),
+                        (true, 0.21, true),
+                        (true, -0.21, true),
+                    ] {
+                        if (medium_mode == MediumMode::Vacuum && !vacuum_limit)
+                            || (cancelled && !inherited_contact && (fermion || mu != 0.0))
+                        {
+                            continue;
+                        }
+                        let zero_temperature =
+                            vacuum_limit || medium_mode != MediumMode::ThermodynamicEquilibrium;
+                        // Only the free or inherited tadpole is charged. Its spectator
+                        // bubble is bosonic. At beta=1.4, h=1+2n_B or 1-2n_F.
+                        let hyperbolic = |edge: usize, orientation: i32| {
+                            let charged =
+                                (!cancelled || inherited_contact) && edge == numerator_edge;
+                            let shifted = energies[edge]
+                                - if charged {
+                                    f64::from(orientation) * mu
+                                } else {
+                                    0.0
+                                };
+                            if vacuum_limit {
+                                1.0
+                            } else if zero_temperature {
+                                shifted.signum()
+                            } else if charged && fermion {
+                                (0.7 * shifted).tanh()
+                            } else {
+                                1.0 / (0.7 * shifted).tanh()
+                            }
+                        };
+                        // A quadratic tadpole numerator includes the formal zero-edge
+                        // contact q0^2/D = 1 + E^2/D. Check constant and linear pole
+                        // moments under the conservative quadratic bound; the cancelled
+                        // triangle leaves a convergent bubble through degree two.
+                        let max_degree = if !bounded {
+                            0
+                        } else if cancelled && !inherited_contact {
+                            2
+                        } else {
+                            1
+                        };
+                        for (degree, loop_numerator) in
+                            itertools::iproduct!(0..=max_degree, [false, true])
+                        {
+                            if loop_numerator && (edges[numerator_edge].3 == 0 || degree == 0) {
+                                continue;
+                            }
+                            let moment = if loop_numerator {
+                                format!("loops[0][0]**{degree}")
+                            } else {
+                                format!("edges[{numerator_edge}][0]**{degree}")
+                            };
+                            let numerator = if cancelled {
+                                // D0 cancels exactly. A retained one-line contact follows
+                                // its parent's Below prescription; it is not a new free
+                                // tadpole. The retained triangle quotient converges.
+                                format!("(dot(edges[0],edges[0])-0.73**2)*({moment})")
+                            } else {
+                                moment
+                            };
+                            let numerator_expr = NumeratorExpr::parse(&numerator).unwrap();
+                            let mut actual = 0.0;
+                            for orientation in &expression.orientations {
+                                let distribution = |edge: usize, sign: i32, order| {
+                                    assert_eq!(
+                                        order, 0,
+                                        "{name}: distinct simple poles need no distribution derivatives"
+                                    );
+                                    let pole_sign =
+                                        match orientation.data.orientation[EdgeIndex(edge)] {
+                                            Orientation::Default => 1,
+                                            Orientation::Reversed => -1,
+                                            Orientation::Undirected => {
+                                                panic!("unoriented thermal pole")
+                                            }
+                                        };
+                                    (f64::from(sign) + hyperbolic(edge, pole_sign)) / 2.0
+                                };
+                                for variant in &orientation.variants {
+                                    let thermal = variant
+                                        .thermal_weight
+                                        .numerators
+                                        .iter()
+                                        .map(|numerator| {
+                                            let product = |sign| {
+                                                numerator
+                                                    .positive_energies
+                                                    .iter()
+                                                    .map(|edge| distribution(edge.0, sign, 0))
+                                                    .chain(
+                                                        numerator.negative_energies.iter().map(
+                                                            |edge| distribution(edge.0, -sign, 0),
+                                                        ),
+                                                    )
+                                                    .product::<f64>()
+                                            };
+                                            product(1) - product(-1)
+                                        })
+                                        .chain(variant.thermal_weight.distributions.iter().map(
+                                            |factor| {
+                                                distribution(
+                                                    factor.edge_id.0,
+                                                    factor.sign,
+                                                    factor.derivative_order,
+                                                )
+                                            },
+                                        ))
+                                        .product::<f64>();
+                                    let mut branch = expression.clone();
+                                    branch.orientations = vec![orientation.clone()].into();
+                                    branch.orientations[OrientationID(0)].variants =
+                                        vec![variant.clone()];
+                                    let term = thermal
+                                        * ExpressionEvaluator::new(&parsed, &branch, &input)
+                                            .evaluate(&numerator_expr)
+                                            .unwrap()
+                                            .value;
+                                    assert!(
+                                        term.is_finite(),
+                                        "{name}, {medium_mode:?}, numerator={numerator}"
+                                    );
+                                    actual += term;
+                                }
+                            }
+                            actual *= source_conversion;
+                            let expected = factors
+                                .iter()
+                                .enumerate()
+                                .map(|(factor, edge_ids)| {
+                                    let mut contour = 0.0;
+                                    for &edge in edge_ids {
+                                        for sign in [-1, 1] {
+                                            let pole = f64::from(sign) * energies[edge]
+                                                - f64::from(edges[edge].3) * 0.37;
+                                            let weight =
+                                                if edge_ids.len() == 1 && !inherited_contact {
+                                                    hyperbolic(edge, sign) / 2.0
+                                                } else if medium_mode == MediumMode::Vacuum {
+                                                    if sign == 1 { 1.0 } else { 0.0 }
+                                                } else {
+                                                    (f64::from(sign) + hyperbolic(edge, sign)) / 2.0
+                                                };
+                                            let other_denominators = edge_ids
+                                                .iter()
+                                                .filter(|&&other| other != edge)
+                                                .map(|&other| {
+                                                    (pole + f64::from(edges[other].3) * 0.37)
+                                                        .powi(2)
+                                                        - energies[other].powi(2)
+                                                })
+                                                .product::<f64>();
+                                            // q=k+shift: the loop pole is sE-shift,
+                                            // while the charged edge remains on shell at sE.
+                                            let numerator_energy = if loop_numerator {
+                                                pole
+                                            } else {
+                                                f64::from(sign) * energies[edge]
+                                                    + f64::from(
+                                                        edges[numerator_edge].3 - edges[edge].3,
+                                                    ) * 0.37
+                                            };
+                                            let moment = if factor == 0 {
+                                                numerator_energy.powi(degree)
+                                            } else {
+                                                1.0
+                                            };
+                                            contour -= weight * moment
+                                                / (2.0 * energies[edge] * other_denominators);
+                                        }
+                                    }
+                                    contour
+                                })
+                                .product::<f64>();
+                            // Zero odd moments need an absolute rounding allowance on
+                            // the same physical scale as the even tadpole moments.
+                            let scale = actual.abs().max(expected.abs()).max(1.0);
+                            assert!(
+                                (actual - expected).abs() <= 2.0e-11 * scale,
+                                "{name}, {medium_mode:?}, bounded={bounded}, fermion={fermion}, mu={mu}, vacuum_limit={vacuum_limit}, numerator={numerator}: actual={actual:.17e}, contour={expected:.17e}"
+                            );
+                            if inherited_contact && vacuum_limit && degree == 1 {
+                                // Literal inherited Below residue: -N(E1)/(2E1).
+                                // Free-tadpole averaging would erase the edge moment.
+                                let selected = if loop_numerator {
+                                    -(energies[1] - 0.37) / (2.0 * energies[1])
+                                } else {
+                                    -0.5
+                                };
+                                assert!(
+                                    (actual - selected).abs() <= 2.0e-11,
+                                    "{medium_mode:?}: inherited odd contact must retain its selected pole: {actual:.17e} != {selected:.17e}"
+                                );
+                            }
+                            if !cancelled && degree == 1 && mu == 0.0 {
+                                if loop_numerator {
+                                    assert!(
+                                        expected.abs() > 1.0e-4,
+                                        "the affine shift leaves a nonzero odd loop moment"
+                                    );
+                                } else {
+                                    assert_eq!(
+                                        expected, 0.0,
+                                        "symmetric odd edge-energy tadpole moment"
+                                    );
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn connected_scalar_graphs_match_independent_contour_products() {
+        for (name, edges, components, cut) in [
+            (
+                "triangle_bubble",
+                vec![
+                    (0, 1, 0, 0, 0.8),
+                    (1, 2, 0, 1, 1.1),
+                    (2, 0, 0, -1, 1.3),
+                    (0, 3, 1, 0, 0.9),
+                    (3, 0, 1, 1, 1.2),
+                ],
+                vec![vec![0, 1, 2], vec![3, 4]],
+                None,
+            ),
+            (
+                "tadpole_bubble",
+                vec![(0, 0, 0, 0, 0.73), (0, 1, 1, 0, 0.9), (1, 0, 1, 1, 1.2)],
+                vec![vec![0], vec![1, 2]],
+                None,
+            ),
+            (
+                "two_tadpoles",
+                vec![(0, 0, 0, 0, 0.73), (0, 0, 1, 0, 1.1)],
+                vec![vec![0], vec![1]],
+                None,
+            ),
+            (
+                "bubble_two_tadpoles",
+                vec![
+                    (0, 1, 0, 0, 0.9),
+                    (1, 0, 0, 1, 1.2),
+                    (0, 0, 1, 0, 0.73),
+                    (1, 1, 2, 0, 1.1),
+                ],
+                vec![vec![0, 1], vec![2], vec![3]],
+                None,
+            ),
+            (
+                "cut_bubble_with_uncut_shifted_bubble_at_first_vertex",
+                vec![
+                    (0, 1, 0, 0, 0.8),
+                    (1, 0, 0, 1, 1.1),
+                    (0, 2, 1, 0, 0.9),
+                    (2, 0, 1, 1, 1.2),
+                ],
+                vec![vec![0, 1], vec![2, 3]],
+                Some((0, 1)),
+            ),
+            (
+                "cut_bubble_with_uncut_shifted_bubble_at_second_vertex",
+                vec![
+                    (0, 1, 0, 0, 0.8),
+                    (1, 0, 0, 1, 1.1),
+                    (1, 2, 1, 0, 0.9),
+                    (2, 1, 1, 1, 1.2),
+                ],
+                vec![vec![0, 1], vec![2, 3]],
+                Some((0, 1)),
+            ),
+        ] {
+            for medium_mode in [MediumMode::Vacuum, MediumMode::ThermodynamicEquilibrium] {
+                for generic_spatial_momenta in [false, true] {
+                    let mut values = Vec::new();
+                    for (part, edge_ids) in std::iter::once((0..edges.len()).collect::<Vec<_>>())
+                        .chain(components.clone())
+                        .enumerate()
+                    {
+                        let nodes = edge_ids
+                            .iter()
+                            .flat_map(|&edge_id| [edges[edge_id].0, edges[edge_id].1])
+                            .collect::<std::collections::BTreeSet<_>>()
+                            .into_iter()
+                            .enumerate()
+                            .map(|(local, original)| (original, local))
+                            .collect::<BTreeMap<_, _>>();
+                        let loops = edge_ids
+                            .iter()
+                            .map(|&edge_id| edges[edge_id].2)
+                            .collect::<std::collections::BTreeSet<_>>()
+                            .into_iter()
+                            .collect::<Vec<_>>();
+                        let has_external = edge_ids.iter().any(|&edge_id| edges[edge_id].3 != 0);
+                        let local_cut = cut.filter(|(tail, head)| {
+                            nodes.contains_key(tail) && nodes.contains_key(head)
+                        });
+                        let mut parsed = ParsedGraph {
+                            internal_edges: edge_ids
+                                .iter()
+                                .enumerate()
+                                .map(|(edge_id, &original)| {
+                                    let (tail, head, loop_id, shift, _) = edges[original];
+                                    ParsedGraphInternalEdge {
+                                        edge_id,
+                                        tail: nodes[&tail],
+                                        head: nodes[&head],
+                                        label: format!("q{original}"),
+                                        mass_key: Some(format!("m{original}")),
+                                        signature: MomentumSignature {
+                                            loop_signature: loops
+                                                .iter()
+                                                .map(|&index| i32::from(index == loop_id))
+                                                .collect(),
+                                            external_signature: if has_external {
+                                                vec![shift]
+                                            } else {
+                                                Vec::new()
+                                            },
+                                        },
+                                        had_pow: false,
+                                    }
+                                })
+                                .collect(),
+                            // Supply the actual affine boundary of each graph.
+                            // The intact triangle+bubble has injections p,-2p,p
+                            // at vertices 1,2,3, with none at the articulation.
+                            external_edges: nodes
+                                .iter()
+                                .filter_map(|(&original, &node)| {
+                                    let mut coefficient: i32 = edge_ids
+                                        .iter()
+                                        .map(|&edge_id| {
+                                            let (tail, head, _, shift, _) = edges[edge_id];
+                                            (i32::from(tail == original)
+                                                - i32::from(head == original))
+                                                * shift
+                                        })
+                                        .sum();
+                                    if let Some((tail, head)) = local_cut {
+                                        coefficient += i32::from(tail == original)
+                                            - i32::from(head == original);
+                                    }
+                                    (coefficient != 0).then(|| ParsedGraphExternalEdge {
+                                        edge_id: 10_000_000 + node,
+                                        source: (coefficient < 0).then_some(node),
+                                        destination: (coefficient > 0).then_some(node),
+                                        label: format!("p{node}"),
+                                        external_coefficients: vec![coefficient],
+                                    })
+                                })
+                                .collect(),
+                            initial_state_cut_edges: Vec::new(),
+                            loop_names: loops.iter().map(|index| format!("k{index}")).collect(),
+                            external_names: if has_external {
+                                vec!["p".to_string()]
+                            } else {
+                                Vec::new()
+                            },
+                            node_name_to_internal: nodes
+                                .values()
+                                .map(|&node| (format!("v{node}"), node))
+                                .collect(),
+                        };
+                        if let Some((tail, head)) = local_cut {
+                            // The first bubble's cut replaces its ordinary
+                            // boundary legs; the second bubble still carries
+                            // the same p through its own external attachments.
+                            let edge_id = parsed.internal_edges.len();
+                            parsed.internal_edges.push(ParsedGraphInternalEdge {
+                                edge_id,
+                                tail: nodes[&tail],
+                                head: nodes[&head],
+                                label: "p_cut".to_string(),
+                                mass_key: None,
+                                signature: MomentumSignature {
+                                    loop_signature: vec![0; loops.len()],
+                                    external_signature: vec![1],
+                                },
+                                had_pow: false,
+                            });
+                            parsed
+                                .initial_state_cut_edges
+                                .push(ParsedGraphInitialStateCutEdge {
+                                    edge_id,
+                                    external_id: 0,
+                                    external_sign: 1,
+                                });
+                        }
+                        let validation = crate::validate_parsed_graph(&parsed);
+                        assert!(validation.ok);
+                        assert!(validation.vertex_external_balance_info.is_empty());
+                        let input = EvaluationInput {
+                            external_momenta: if has_external {
+                                vec![if generic_spatial_momenta {
+                                    [0.37, 0.07, -0.11, 0.23]
+                                } else {
+                                    [0.37, 0.0, 0.0, 0.0]
+                                }]
+                            } else {
+                                Vec::new()
+                            },
+                            loop_spatial_momenta: loops
+                                .iter()
+                                .map(|&loop_id| {
+                                    if generic_spatial_momenta {
+                                        [
+                                            [0.21, -0.32, 0.17],
+                                            [-0.27, 0.19, 0.41],
+                                            [0.13, 0.37, -0.29],
+                                        ][loop_id]
+                                    } else {
+                                        [0.0; 3]
+                                    }
+                                })
+                                .collect(),
+                            masses: edge_ids
+                                .iter()
+                                .map(|&edge_id| edges[edge_id].4)
+                                .chain(local_cut.map(|_| 0.0))
+                                .collect(),
+                            uniform_scale: None,
+                        };
+                        let generated = generate_3d_expression(
+                            &parsed,
+                            &Generate3DExpressionOptions {
+                                medium_mode,
+                                ..Default::default()
+                            },
+                        )
+                        .unwrap();
+                        let expression = &generated.expression;
+                        if medium_mode == MediumMode::ThermodynamicEquilibrium {
+                            assert_eq!(expression.orientations.len(), 1 << edge_ids.len());
+                        }
+                        let evaluator = ExpressionEvaluator::new(&parsed, expression, &input);
+                        let denominator_energies = &evaluator.internal_energies[..edge_ids.len()];
+                        let distribution = |edge: usize, sign, order| {
+                            let coth = 1.0 / (evaluator.internal_energies[edge] / 2.0).tanh();
+                            bose_distribution_derivative(coth, sign, order)
+                        };
+                        let mut value = 0.0;
+                        for (orientation_id, orientation) in
+                            expression.orientations.iter().enumerate()
+                        {
+                            assert!(!orientation.variants.is_empty());
+                            for variant in &orientation.variants {
+                                let thermal = variant
+                                    .thermal_weight
+                                    .numerators
+                                    .iter()
+                                    .map(|numerator| {
+                                        let product = |sign| {
+                                            numerator
+                                                .positive_energies
+                                                .iter()
+                                                .map(|edge| distribution(edge.0, sign, 0))
+                                                .chain(
+                                                    numerator
+                                                        .negative_energies
+                                                        .iter()
+                                                        .map(|edge| distribution(edge.0, -sign, 0)),
+                                                )
+                                                .product::<f64>()
+                                        };
+                                        product(1) - product(-1)
+                                    })
+                                    .chain(variant.thermal_weight.distributions.iter().map(
+                                        |factor| {
+                                            distribution(
+                                                factor.edge_id.0,
+                                                factor.sign,
+                                                factor.derivative_order,
+                                            )
+                                        },
+                                    ))
+                                    .product::<f64>();
+                                let term = variant.prefactor.to_f64()
+                                    * thermal
+                                    * evaluator.tree_sum(&variant.denominator).unwrap()
+                                    / variant
+                                        .half_edges
+                                        .iter()
+                                        .map(|edge| 2.0 * evaluator.internal_energies[edge.0])
+                                        .product::<f64>();
+                                assert!(
+                                    term.is_finite(),
+                                    "{name}, {medium_mode:?}, part {part}, orientation {orientation_id}"
+                                );
+                                value += term;
+                            }
+                        }
+                        value *= crate::CffGlobalPrefactorSign::from_exponent(edge_ids.len())
+                            .product(generated.core_global_prefactor_sign)
+                            .factor() as f64;
+                        if part != 0 {
+                            // Independent one-loop signed residue sum, including
+                            // both Bose-weighted poles in thermal mode. The
+                            // zero-spatial triangle+bubble retains the original
+                            // p0=.37, masses=(.8,1.1,1.3,.9,1.2) contour oracle.
+                            let mut expected = 0.0;
+                            for (edge, &energy) in denominator_energies.iter().enumerate() {
+                                let shift = f64::from(edges[edge_ids[edge]].3) * 0.37;
+                                for sign in [-1, 1] {
+                                    let weight = if denominator_energies.len() == 1 {
+                                        // A tadpole averages the two contour closures.
+                                        if medium_mode == MediumMode::Vacuum {
+                                            0.5
+                                        } else {
+                                            distribution(edge, 0, 0)
+                                        }
+                                    } else if medium_mode == MediumMode::Vacuum {
+                                        if sign == 1 { 1.0 } else { 0.0 }
+                                    } else {
+                                        distribution(edge, sign, 0)
+                                    };
+                                    let pole = f64::from(sign) * energy - shift;
+                                    let other_denominators = denominator_energies
+                                        .iter()
+                                        .enumerate()
+                                        .filter(|(other, _)| *other != edge)
+                                        .map(|(other, other_energy)| {
+                                            let other_shift =
+                                                f64::from(edges[edge_ids[other]].3) * 0.37;
+                                            (pole + other_shift).powi(2) - other_energy.powi(2)
+                                        })
+                                        .product::<f64>();
+                                    expected -= weight / (2.0 * energy * other_denominators);
+                                }
+                            }
+                            let scale = value.abs().max(expected.abs()).max(f64::MIN_POSITIVE);
+                            assert!(
+                                (value - expected).abs() <= 1.0e-10 * scale,
+                                "{name}, {medium_mode:?}, part {part}: generated={value:.17e}, residues={expected:.17e}"
+                            );
+                        }
+                        values.push(value);
+                    }
+                    let actual = values[0];
+                    let expected = values[1..].iter().product::<f64>();
+                    let scale = actual.abs().max(expected.abs()).max(f64::MIN_POSITIVE);
+                    assert!(
+                        actual.is_finite() && (actual - expected).abs() <= 1.0e-10 * scale,
+                        "{name}, {medium_mode:?}, generic_spatial_momenta={generic_spatial_momenta}: intact={actual:.17e}, product={expected:.17e}"
                     );
                 }
             }

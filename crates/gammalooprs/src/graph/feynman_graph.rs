@@ -483,9 +483,11 @@ where
             }
             MediumMode::ZeroTemperatureEquilibrium => {
                 match (chemical_potential, derivative_order) {
-                    (Some(_), 0) => {
-                        Some(thermal_sign.clone() * GS.heaviside(thermal_sign * shifted_ose))
-                    }
+                    // The contour offset may be zero for a symmetric terminal;
+                    // its physical orientation still fixes E - sigma*mu.
+                    (Some(_), 0) => Some(
+                        GS.heaviside(shifted_ose) + (thermal_sign - Atom::one()) / Atom::num(2),
+                    ),
                     (None, _) => Some(ThermalDistributionFactor::vacuum_atom(
                         derivative_order,
                         thermal_sign,
@@ -1379,7 +1381,7 @@ mod tests {
         ] {
             std::sync::Arc::make_mut(&mut particle.0).chemical_potential = chemical_potential;
             graph.underlying[edge].particle = particle.clone().into();
-            for thermal_sign in [-1, 1] {
+            for thermal_sign in [-1, 0, 1] {
                 for order in 0..=3 {
                     let vacuum = graph
                         .explicit_thermal_distribution_atom(
@@ -1392,11 +1394,11 @@ mod tests {
                         .unwrap();
                     assert_eq!(
                         vacuum,
-                        Atom::num(if order == 0 && thermal_sign == 1 {
-                            1
+                        if order == 0 {
+                            Atom::num(1 + thermal_sign) / Atom::num(2)
                         } else {
-                            0
-                        })
+                            Atom::Zero
+                        }
                     );
                     let zero_temperature = graph.explicit_thermal_distribution_atom(
                         edge,
@@ -1409,6 +1411,73 @@ mod tests {
                         assert_eq!(zero_temperature, Some(vacuum));
                     } else {
                         assert_eq!(zero_temperature.is_some(), order == 0);
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn symmetric_thermal_distributions_keep_the_chemical_potential_orientation() {
+        test_initialise().unwrap();
+        let graph: Graph = dot!(digraph symmetric_thermal {
+            node [num=1]
+            edge [num=1]
+            A -> A [particle="d"]
+            A -> A [particle="G+"]
+        })
+        .unwrap();
+        for edge in graph.iter_edge_ids() {
+            let mu = graph[edge].chemical_potential_atom().unwrap();
+            assert!(!mu.is_zero());
+            for orientation in [-1, 1] {
+                let shifted_energy = ose_atom_from_index(edge) - Atom::num(orientation) * &mu;
+                for limit in [
+                    MediumMode::ThermodynamicEquilibrium,
+                    MediumMode::ZeroTemperatureEquilibrium,
+                ] {
+                    let bodies = [-1, 0, 1].map(|contour| {
+                        graph
+                            .explicit_thermal_distribution_atom(
+                                edge,
+                                0,
+                                Atom::num(contour),
+                                Atom::num(orientation),
+                                limit,
+                            )
+                            .unwrap()
+                    });
+                    assert!(
+                        ((&bodies[0] + &bodies[2]) / Atom::num(2) - &bodies[1])
+                            .expand()
+                            .is_zero()
+                    );
+                    let expected = if limit.is_finite_temperature() {
+                        let argument =
+                            Atom::var(GS.inverse_temperature) * &shifted_energy / Atom::num(2);
+                        let distribution = if graph[edge].is_fermion() {
+                            tanh().call_args([argument])
+                        } else {
+                            coth().call_args([argument])
+                        };
+                        distribution / Atom::num(2)
+                    } else {
+                        GS.heaviside(&shifted_energy) - Atom::one() / Atom::num(2)
+                    };
+                    assert_eq!(bodies[1], expected);
+                    for order in 1..=3 {
+                        let derivatives = [-1, 0, 1].map(|contour| {
+                            graph.explicit_thermal_distribution_atom(
+                                edge,
+                                order,
+                                Atom::num(contour),
+                                Atom::num(orientation),
+                                limit,
+                            )
+                        });
+                        assert_eq!(derivatives[0], derivatives[1]);
+                        assert_eq!(derivatives[1], derivatives[2]);
+                        assert_eq!(derivatives[1].is_some(), limit.is_finite_temperature());
                     }
                 }
             }

@@ -52,6 +52,8 @@ impl MediumMode {
 )]
 pub struct ThermalDistributionFactor {
     pub edge_id: EdgeIndex,
+    /// Contour offset: ±1 selects a directed weight and 0 their symmetric average.
+    /// The physical pole orientation that shifts the chemical potential is separate.
     pub sign: i32,
     /// Ordinary energy derivative order at fixed temperature, chemical potential, and orientation.
     /// Cyclic-chain reduction signs and overall factors belong to the CFF coefficient.
@@ -382,8 +384,26 @@ mod tests {
                 Atom::Zero
             );
 
-            // A derivative or a negative-pole occupation has zero vacuum weight.
-            for (sign, derivative_order) in [(-1, 0), (1, 1), (-1, 2), (1, 3)] {
+            // A symmetric terminal contributes half of each directed vacuum weight.
+            let symmetric = ThermalWeight {
+                medium_mode,
+                distributions: vec![ThermalDistributionFactor {
+                    edge_id: EdgeIndex(2),
+                    sign: 0,
+                    derivative_order: 0,
+                }],
+                ..Default::default()
+            };
+            assert_eq!(
+                symmetric.to_atom().replace_multiple(&*VACUUM_SUBTRACTION),
+                function!(
+                    S.thermal_weight_wrapper,
+                    symmetric.distributions[0].to_atom(medium_mode.is_finite_temperature())
+                        - Atom::one() / Atom::num(2)
+                )
+            );
+            // A derivative or a negative contour offset has zero vacuum weight.
+            for (sign, derivative_order) in [(-1, 0), (1, 1), (0, 1), (-1, 2), (1, 3)] {
                 let mut weighted = product.clone();
                 weighted.distributions.push(ThermalDistributionFactor {
                     edge_id: EdgeIndex(3),
@@ -699,7 +719,7 @@ mod tests {
     }
 
     #[test]
-    fn thermal_tadpole_retains_both_orientation_weights() {
+    fn thermal_tadpole_keeps_symmetric_weights_and_distinct_physical_orientations() {
         let mut parsed = crate::graph_io::test_graphs::box_graph();
         parsed.internal_edges.truncate(1);
         parsed.internal_edges[0].head = 0;
@@ -724,38 +744,53 @@ mod tests {
             .unwrap()
             .expression;
             assert_eq!(expression.orientations.len(), 2);
-            let factors = expression
-                .orientations
-                .iter()
-                .flat_map(|orientation| &orientation.variants)
-                .flat_map(|variant| &variant.thermal_weight.distributions)
-                .copied()
-                .collect::<Vec<_>>();
-            assert_eq!(
-                factors,
-                vec![
-                    ThermalDistributionFactor {
-                        edge_id: EdgeIndex(0),
-                        sign: 1,
-                        derivative_order: 0
-                    },
-                    ThermalDistributionFactor {
-                        edge_id: EdgeIndex(0),
-                        sign: -1,
-                        derivative_order: 0
-                    },
-                ]
+            for orientation in &expression.orientations {
+                for variant in &orientation.variants {
+                    assert_eq!(
+                        variant.thermal_weight.distributions,
+                        [ThermalDistributionFactor {
+                            edge_id: EdgeIndex(0),
+                            sign: 0,
+                            derivative_order: 0
+                        }]
+                    );
+                }
+            }
+            assert_ne!(
+                expression.orientations[crate::OrientationID(0)].edge_energy_map,
+                expression.orientations[crate::OrientationID(1)].edge_energy_map
             );
+            let atom = expression.to_atom(AllOrientations);
+            for orientation in [-1, 1] {
+                let factor = function!(
+                    S.thermal_distribution,
+                    0,
+                    0,
+                    i64::from(medium_mode.is_finite_temperature()),
+                    0,
+                    orientation
+                );
+                assert_ne!(atom.replace(factor).with(Atom::Zero), atom);
+            }
         }
     }
 
     #[test]
     fn thermal_initial_state_cut_remains_external_to_distribution_weights() {
         let mut parsed = crate::graph_io::test_graphs::initial_state_cut_line_graph(1);
+        // Expand the terminal fixture into a conserved cut bubble:
+        // p and k leave vertex 0, while k+p returns along the second line.
+        parsed.internal_edges[0].head = 1;
+        parsed.internal_edges[1].head = 1;
+        parsed.node_name_to_internal.insert("n1".to_string(), 1);
         let mut second = parsed.internal_edges[1].clone();
         second.edge_id = 2;
         std::mem::swap(&mut second.tail, &mut second.head);
+        second.signature.external_signature = vec![1];
         parsed.internal_edges.push(second);
+        let validation = crate::validate_parsed_graph(&parsed);
+        assert!(validation.ok);
+        assert!(validation.vertex_external_balance_info.is_empty());
         let expression = generate_3d_expression(
             &parsed,
             &Generate3DExpressionOptions {

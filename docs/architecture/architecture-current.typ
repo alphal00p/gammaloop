@@ -191,26 +191,48 @@ Ordinary thermal contractions require a connected virtual complement. Sources
 and sinks take priority; a mixed vertex needs at least three virtual boundary
 edges, or one incoming and one outgoing virtual edge with external attachments
 on both sides. External multiplicity alone cannot make a vertex eligible.
-Detachable chains with unequal poles use divided-difference contractions,
-leaving coincident-pole child cycles to the derivative reduction. An orientation
-with no admissible contraction or chain reduction fails generation explicitly.
+Vacuum and thermal recursion prune tadpoles before selecting a vertex and
+retain the same contour prescription. Free tadpoles average the two closures:
+each vacuum orientation has weight one half, while each thermal pole has weight
+`1/2 + n_B(E - s mu)` for bosons or `1/2 - n_F(E - s mu)` for fermions.
+A contact instead inherits its parent's contour. If that contour selects pole
+`s0`, its vacuum weight is `(1 + s*s0)/2`; the thermal weight adds
+`n_B(E - s mu)` or subtracts `n_F(E - s mu)` from that same vacuum weight.
+The energy orientation `s` remains separate, preserving both the numerator
+evaluation at `s E` and the particle/antiparticle chemical potential. Ordinary
+thermal contraction numerators retain their signed distribution differences.
+Detachable chains with unequal poles use
+divided-difference contractions, leaving coincident-pole child cycles to the
+derivative reduction. An orientation with no admissible contraction or chain
+reduction fails generation explicitly.
 These weights survive serialization, variant fusion, source-edge remapping, and
 products of disconnected components. Initial-state cuts remain external energy
 aliases and never acquire thermal distribution factors. GammaLoop's graph and
 parameter layer expands the symbolic weights using particle statistics,
 chemical potentials, and inverse temperature; the shared generator does not
-own the physics model. Thermal terminal sectors retain their full distribution
-weights rather than applying the vacuum contour-closure normalization.
+own the physics model. At zero density, the zero-temperature tadpole weights
+reduce to the corresponding vacuum prescription; occupied fermionic states
+retain their finite-density contribution at zero temperature.
 
 The bounded and known-factor numerator builders share occurrence sampling and
 polynomial reduction across all medium modes. Every resulting scalar sector,
 including a contact, a terminal residue basis, or the zero-edge unit, goes
-through `LowerSectorCffBuilder`. That boundary owns duplicate parity, component
-factorization, terminal closure selection, and conversion into the immutable
-source convention. Thermal sectors discard inherited vacuum closure rows and
-retain both weighted poles. Variant lifting remaps thermal weights, energy IDs,
-surface IDs, and sign provenance together before attaching numerator factors;
-it applies no further medium-dependent normalization.
+through `LowerSectorCffBuilder`. Each connected denominator graph retains its
+original incidence throughout generation, including shared vertices and
+external attachments. Products are formed only for genuinely disconnected
+denominator graphs. Surface shifts use the complete affine flow across the
+virtual boundary, including coordinates shared by cut aliases and ordinary
+external legs. Contact sectors use the surviving denominator rank to
+solve their active energies and lift the result into the parent's coordinate
+namespace; this coordinate reduction does not split or reconstruct the graph.
+That boundary converts into the immutable source convention using the surviving
+denominator rank in every medium. The same scalar CFF constructor handles
+standalone and contact sectors. Ordered inherited contour rows, structural cuts,
+and embedded residue-basis context determine terminal pole preferences without
+splitting or projecting the graph. The occurrence-functional terminal
+normalization is retained separately from the contour preference.
+Variant lifting remaps thermal weights, energy IDs, surface IDs, and sign provenance before
+attaching numerator factors; it applies no further medium-dependent normalization.
 
 Medium modes use direct local 3D UV subtraction. Their local UV kernels take the
 vacuum limit while the surrounding observable retains its medium dependence;
@@ -383,7 +405,7 @@ Integrated finite UV terms retain their exact source-local EMR maps. Production 
 
 Final assembly uses one `Integrands` map of cut-indexed factorized expressions. UV markers and tensor replacements act on those expressions before the ordinary evaluator preprocessing; there is no parallel deferred-body state. Direct-3D sequential forest construction composes the same local and integrated replay operations used by disconnected forests. Integrated localization registers its source surfaces before either Taylor branch reads the graph, and its normalized localizing factor remains inert under subsequent Taylor operations. Evaluator preparation skips residue-selector parametrization when the selector symbol is absent, and skips orientation collection when neither theta nor IF occurs. Expressions with conditionals retain the existing guarded-branch rewrites so inactive residue-local inverses are never evaluated.
 
-The shared CFF core also returns its connected-loop and pure duplicate-denominator global sign as typed metadata. GammaLoop consumes that bridge exactly once for root, reduced, and exact production CFF sources, cancelling the shared-core-local uniform convention before the physical Minkowski measure `i^L/(2*pi)^(3L)` is applied. Integrated UV addbacks use the same convention, with additional Vakint normalization `1`. The NLO acceptance layer independently generates orientation-local direct 3D, explicit-sum direct 3D, and projected local 4D with local and integrated UV and threshold counterterms. It compares complete GL0/GL2 values at a common native- Arb point in all three routes; the fast Monte Carlo tests integrate explicit-sum 3D. DD acceptance checks the inclusive `(alpha_s/pi) * LO` correction, graphwise UV-mass and localization-scale independence, cancellation of total renormalization-scale dependence, opposite GL0/GL2 squared-scale logarithms, and the physical and projected EMR energy bounds. TT acceptance uses the fully-MSbar scheme, without on-shell counterterms.
+The shared CFF core also returns its connected-loop global sign as typed metadata. GammaLoop consumes that bridge exactly once for root, reduced, and exact production CFF sources, cancelling the shared-core-local uniform convention before the physical Minkowski measure `i^L/(2*pi)^(3L)` is applied. Integrated UV addbacks use the same convention, with additional Vakint normalization `1`. The NLO acceptance layer independently generates orientation-local direct 3D, explicit-sum direct 3D, and projected local 4D with local and integrated UV and threshold counterterms. It compares complete GL0/GL2 values at a common native- Arb point in all three routes; the fast Monte Carlo tests integrate explicit-sum 3D. DD acceptance checks the inclusive `(alpha_s/pi) * LO` correction, graphwise UV-mass and localization-scale independence, cancellation of total renormalization-scale dependence, opposite GL0/GL2 squared-scale logarithms, and the physical and projected EMR energy bounds. TT acceptance uses the fully-MSbar scheme, without on-shell counterterms.
 
 Direct-photon benchmarks use the off-shell spin projector `-g^(mu nu)` and no picobarn conversion. The inclusive lepton-process targets instead use the Eq. (7.1) normalization `2(4 pi alpha)/(3 Ecm^3)` and the conversion to picobarns; individual lepton-process graph components are not assigned the unconverted published photon targets. Acceptances require positive real LO and the signed real NLO correction, checking the imaginary component separately. Diagram contributions can have either real sign. Current validation results and measured timings belong in the accompanying test evidence and PR.
 

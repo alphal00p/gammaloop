@@ -239,10 +239,12 @@ impl CffGenerationGraph {
         Self::new(vertices)
     }
 
-    fn strip_thermal_distribution_factors(
+    fn strip_tadpoles_and_cyclic_chains(
         &mut self,
         parsed: &ParsedGraph,
-        signs: &[i32],
+        medium_mode: MediumMode,
+        edge_signs: &[i32],
+        preferred_tadpole_poles: &BTreeMap<usize, i32>,
     ) -> (Vec<ThermalDistributionFactor>, Rational) {
         let mut factors = Vec::new();
         let mut prefactor = Rational::one();
@@ -261,17 +263,26 @@ impl CffGenerationGraph {
                 })
                 .collect::<BTreeSet<_>>();
             let mut removed = self_edges.clone();
-            factors.extend(
-                self_edges
-                    .into_iter()
-                    .map(|edge_id| ThermalDistributionFactor {
+            for edge_id in self_edges {
+                // Free tadpoles average the two closures. A contact keeps the
+                // closure inherited from its parent, independently of the medium.
+                // The physical pole sign still controls its numerator and mu.
+                let contour_sign = preferred_tadpole_poles
+                    .get(&edge_id)
+                    .map_or(0, |pole| edge_signs[edge_id] * pole);
+                if medium_mode == MediumMode::Vacuum {
+                    prefactor *= Rational::new(1 + i64::from(contour_sign), 2);
+                } else {
+                    factors.push(ThermalDistributionFactor {
                         edge_id: EdgeIndex(edge_id),
-                        sign: signs[edge_id],
+                        sign: contour_sign,
                         derivative_order: 0,
-                    }),
-            );
+                    });
+                }
+            }
             self.remove_virtual_edges(&removed);
-            if self.has_directed_cycle()
+            if medium_mode != MediumMode::Vacuum
+                && self.has_directed_cycle()
                 && let Some(cycle) = self.vertices.iter().find_map(|vertex| {
                     self.detachable_cycle(
                         &|cycle| {
@@ -293,7 +304,7 @@ impl CffGenerationGraph {
                 // An m-edge cyclic chain with a common pole contributes
                 // (-1)^(m-1)/(m-1)! times the ordinary (m-1)th energy derivative.
                 // Unequal poles stay in the recursion as divided differences;
-                // self-loops keep factor 1.
+                // self-loops retain their contour prescription above.
                 let derivative_order = cycle.len() - 1;
                 let sign = if derivative_order.is_multiple_of(2) {
                     1
@@ -416,6 +427,7 @@ pub(crate) fn enumerate_cff_surface_chains(
     parsed: &ParsedGraph,
     edge_signs: &[i32],
     medium_mode: MediumMode,
+    preferred_tadpole_poles: &BTreeMap<usize, i32>,
 ) -> Result<Vec<CffSurfaceChain>> {
     let mut graph = build_base_graph_from_parsed(parsed);
     for (edge_id, sign) in edge_signs.iter().enumerate() {
@@ -427,7 +439,14 @@ pub(crate) fn enumerate_cff_surface_chains(
         return Ok(Vec::new());
     }
     let mut branches = Vec::new();
-    enumerate_cff_branches(graph, parsed, edge_signs, medium_mode, &mut branches)?;
+    enumerate_cff_branches(
+        graph,
+        parsed,
+        edge_signs,
+        medium_mode,
+        preferred_tadpole_poles,
+        &mut branches,
+    )?;
     Ok(branches)
 }
 
@@ -495,14 +514,19 @@ fn enumerate_cff_branches(
     parsed: &ParsedGraph,
     edge_signs: &[i32],
     medium_mode: MediumMode,
+    preferred_tadpole_poles: &BTreeMap<usize, i32>,
     branch_acc: &mut Vec<CffSurfaceChain>,
 ) -> Result<()> {
     let thermal = medium_mode != MediumMode::Vacuum;
-    let (distributions, reduction_prefactor) = if thermal {
-        graph.strip_thermal_distribution_factors(parsed, edge_signs)
-    } else {
-        (Vec::new(), Rational::one())
-    };
+    let (distributions, reduction_prefactor) = graph.strip_tadpoles_and_cyclic_chains(
+        parsed,
+        medium_mode,
+        edge_signs,
+        preferred_tadpole_poles,
+    );
+    if reduction_prefactor.is_zero() {
+        return Ok(());
+    }
     let weight = ThermalWeight {
         medium_mode,
         distributions,
@@ -524,9 +548,6 @@ fn enumerate_cff_branches(
     let vertex = graph
         .source_sink_greedy()
         .or_else(|| {
-            if !thermal {
-                return None;
-            }
             let external_vertices = graph
                 .vertices
                 .iter()
@@ -559,9 +580,6 @@ fn enumerate_cff_branches(
             })
         })
         .or_else(|| {
-            if !thermal {
-                return None;
-            }
             // A detachable cyclic chain with unequal poles is a divided
             // difference. Contract a mass transition away from its attachment;
             // common-pole child cycles then use the derivative reduction above.
@@ -612,21 +630,8 @@ fn enumerate_cff_branches(
                 .map(|vertex| vertex.nodes.iter().copied().collect())
                 .collect(),
         })?;
-    let (surface, surface_sign) = if thermal {
-        cff_surface_for_vertex_thermal(parsed, vertex)
-    } else {
-        (cff_surface_for_vertex(parsed, vertex), 1)
-    };
-    if !thermal && graph.vertices.len() == 2 {
-        branch_acc.push(CffSurfaceChain {
-            surfaces: vec![surface],
-            thermal_weight: weight,
-            prefactor: Rational::one(),
-        });
-        return Ok(());
-    }
+    let (surface, surface_sign) = cff_surface_for_vertex(parsed, vertex);
 
-    let mut emitted = false;
     for neighbour in graph.undirected_neighbours(&vertex.nodes) {
         let child = graph.contract_vertices(&vertex.nodes, &neighbour.nodes);
         if !thermal && child.has_directed_cycle() {
@@ -634,56 +639,46 @@ fn enumerate_cff_branches(
         }
         let mut branch_weight = weight.clone();
         let mut prefactor = reduction_prefactor.clone();
-        if thermal {
-            // Edges joining the contracted vertices carry the thermal numerator
-            // for that contraction, with outgoing minus incoming ordering.
-            let outgoing = vertex
-                .outgoing
-                .iter()
-                .filter(|edge| {
-                    edge.edge_type == EdgeType::Virtual && neighbour.incoming.contains(edge)
-                })
-                .map(|edge| EdgeIndex(edge.edge_id))
-                .collect();
-            let incoming = vertex
-                .incoming
-                .iter()
-                .filter(|edge| {
-                    edge.edge_type == EdgeType::Virtual && neighbour.outgoing.contains(edge)
-                })
-                .map(|edge| EdgeIndex(edge.edge_id))
-                .collect();
-            let (numerator, numerator_sign) =
-                ThermalNumerator::from_edge_lists_canonicalized(outgoing, incoming);
-            prefactor *= Rational::from(surface_sign * numerator_sign);
-            if !numerator.is_trivial() {
-                branch_weight.numerators.push(numerator);
-            }
+        // Edges joining the contracted vertices carry the thermal numerator
+        // for that contraction, with outgoing minus incoming ordering.
+        let outgoing = vertex
+            .outgoing
+            .iter()
+            .filter(|edge| edge.edge_type == EdgeType::Virtual && neighbour.incoming.contains(edge))
+            .map(|edge| EdgeIndex(edge.edge_id))
+            .collect();
+        let incoming = vertex
+            .incoming
+            .iter()
+            .filter(|edge| edge.edge_type == EdgeType::Virtual && neighbour.outgoing.contains(edge))
+            .map(|edge| EdgeIndex(edge.edge_id))
+            .collect();
+        let (numerator, numerator_sign) =
+            ThermalNumerator::from_edge_lists_canonicalized(outgoing, incoming);
+        prefactor *= Rational::from(surface_sign * numerator_sign);
+        if thermal && !numerator.is_trivial() {
+            branch_weight.numerators.push(numerator);
         }
         let mut sub = Vec::new();
-        enumerate_cff_branches(child, parsed, edge_signs, medium_mode, &mut sub)?;
+        enumerate_cff_branches(
+            child,
+            parsed,
+            edge_signs,
+            medium_mode,
+            preferred_tadpole_poles,
+            &mut sub,
+        )?;
         for mut chain in sub {
             chain.surfaces.insert(0, surface.clone());
             chain.thermal_weight = branch_weight.product(&chain.thermal_weight);
             chain.prefactor *= &prefactor;
             branch_acc.push(chain);
-            emitted = true;
         }
-    }
-    if !emitted && !thermal {
-        branch_acc.push(CffSurfaceChain {
-            surfaces: vec![surface],
-            thermal_weight: weight,
-            prefactor: Rational::one(),
-        });
     }
     Ok(())
 }
 
-fn cff_surface_for_vertex_thermal(
-    parsed: &ParsedGraph,
-    vertex: &CffVertex,
-) -> (LinearEnergyExpr, i32) {
+fn cff_surface_for_vertex(parsed: &ParsedGraph, vertex: &CffVertex) -> (LinearEnergyExpr, i32) {
     let virtual_ids = |edges: &[EdgeRef]| {
         edges
             .iter()
@@ -702,68 +697,11 @@ fn cff_surface_for_vertex_thermal(
     for edge in sides.negative_energies {
         expr = expr + LinearEnergyExpr::ose(edge, -1);
     }
-    let mut shift = boundary_external_shift_from_internal_labels(parsed, &vertex.nodes);
-    add_initial_state_cut_external_shift(parsed, vertex, &mut shift);
+    let shift = boundary_external_shift_from_internal_labels(parsed, &vertex.nodes);
     for (edge, coeff) in shift {
         expr = expr + LinearEnergyExpr::external(EdgeIndex(edge), -i64::from(sign * coeff));
     }
     (expr.canonical(), sign)
-}
-
-fn cff_surface_for_vertex(parsed: &ParsedGraph, vertex: &CffVertex) -> LinearEnergyExpr {
-    let mut expr = LinearEnergyExpr::zero();
-    for edge in vertex
-        .incoming
-        .iter()
-        .chain(vertex.outgoing.iter())
-        .filter(|edge| edge.edge_type == EdgeType::Virtual)
-    {
-        expr =
-            expr + LinearEnergyExpr::ose(linnet::half_edge::involution::EdgeIndex(edge.edge_id), 1);
-    }
-
-    let mut external_shift = boundary_external_shift_from_internal_labels(parsed, &vertex.nodes);
-    add_initial_state_cut_external_shift(parsed, vertex, &mut external_shift);
-    if vertex.vertex_type() == VertexType::Source {
-        for coeff in external_shift.values_mut() {
-            *coeff *= -1;
-        }
-    }
-    for (external_id, coeff) in external_shift {
-        expr = expr
-            + LinearEnergyExpr::external(
-                linnet::half_edge::involution::EdgeIndex(external_id),
-                i64::from(coeff),
-            );
-    }
-    expr.canonical()
-}
-
-fn add_initial_state_cut_external_shift(
-    parsed: &ParsedGraph,
-    vertex: &CffVertex,
-    external_shift: &mut BTreeMap<usize, i32>,
-) {
-    for (edge, incidence_sign) in vertex
-        .incoming
-        .iter()
-        .filter(|edge| edge.edge_type == EdgeType::InitialStateCut)
-        .map(|edge| (edge, -1))
-        .chain(
-            vertex
-                .outgoing
-                .iter()
-                .filter(|edge| edge.edge_type == EdgeType::InitialStateCut)
-                .map(|edge| (edge, 1)),
-        )
-    {
-        let Some(cut_edge) = parsed.initial_state_cut_edge(edge.edge_id) else {
-            continue;
-        };
-        *external_shift.entry(cut_edge.external_id).or_default() +=
-            -incidence_sign * cut_edge.external_sign;
-    }
-    external_shift.retain(|_, coeff| *coeff != 0);
 }
 
 fn boundary_external_shift_from_internal_labels(
@@ -771,11 +709,9 @@ fn boundary_external_shift_from_internal_labels(
     node_set: &BTreeSet<usize>,
 ) -> std::collections::BTreeMap<usize, i32> {
     let mut acc = std::collections::BTreeMap::<usize, i32>::new();
-    let initial_state_external_ids = parsed
-        .initial_state_cut_edges
-        .iter()
-        .map(|edge| edge.external_id)
-        .collect::<BTreeSet<_>>();
+    // Virtual routing already includes the flow from cut aliases and ordinary
+    // external legs. Keep their combined boundary shift even when the same
+    // external coordinate also labels a cut elsewhere in the connected graph.
     for edge in &parsed.internal_edges {
         if parsed.is_initial_state_cut_edge(edge.edge_id) {
             continue;
@@ -788,7 +724,7 @@ fn boundary_external_shift_from_internal_labels(
             continue;
         };
         for (external_id, coeff) in edge.signature.external_signature.iter().enumerate() {
-            if *coeff != 0 && !initial_state_external_ids.contains(&external_id) {
+            if *coeff != 0 {
                 *acc.entry(external_id).or_default() += sign * *coeff;
             }
         }
@@ -798,12 +734,230 @@ fn boundary_external_shift_from_internal_labels(
 }
 
 #[cfg(test)]
-mod thermal_tests {
+mod tests {
     use super::*;
     use symbolica::{
         atom::{Atom, AtomCore},
         parse,
     };
+
+    #[test]
+    fn tadpole_pruning_averages_both_poles_in_every_medium() {
+        let mut parsed = crate::graph_io::test_graphs::box_graph();
+        parsed.external_edges.clear();
+        parsed.external_names.clear();
+        parsed.loop_names = vec!["k".to_string(), "l".to_string()];
+        parsed.internal_edges.truncate(2);
+        for edge in &mut parsed.internal_edges {
+            edge.tail = 0;
+            edge.head = 0;
+            edge.signature.loop_signature = (0..2)
+                .map(|index| i32::from(index == edge.edge_id))
+                .collect();
+            edge.signature.external_signature.clear();
+        }
+        for medium in [
+            MediumMode::Vacuum,
+            MediumMode::ThermodynamicEquilibrium,
+            MediumMode::ZeroTemperatureEquilibrium,
+        ] {
+            for signs in [[1, 1], [1, -1], [-1, 1], [-1, -1]] {
+                let chains =
+                    enumerate_cff_surface_chains(&parsed, &signs, medium, &BTreeMap::new())
+                        .unwrap();
+                assert_eq!(chains.len(), 1);
+                let chain = &chains[0];
+                assert!(chain.surfaces.is_empty());
+                assert!(chain.thermal_weight.numerators.is_empty());
+                if medium == MediumMode::Vacuum {
+                    assert_eq!(chain.prefactor, Rational::new(1, 4));
+                    assert!(chain.thermal_weight.distributions.is_empty());
+                } else {
+                    assert_eq!(chain.prefactor, Rational::one());
+                    assert_eq!(
+                        chain.thermal_weight.distributions,
+                        (0..2)
+                            .map(|edge_id| ThermalDistributionFactor {
+                                edge_id: EdgeIndex(edge_id),
+                                sign: 0,
+                                derivative_order: 0,
+                            })
+                            .collect::<Vec<_>>()
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn attached_tadpole_weights_survive_vertex_contractions() {
+        for count in [2, 3] {
+            let mut cycle = crate::graph_io::test_graphs::box_graph();
+            cycle.external_edges.clear();
+            cycle.external_names.clear();
+            cycle.internal_edges.truncate(count);
+            cycle.internal_edges[count - 1].head = 0;
+            for edge in &mut cycle.internal_edges {
+                edge.signature.external_signature.clear();
+            }
+            let mut attached = cycle.clone();
+            attached.loop_names.push("tadpole".to_string());
+            for edge in &mut attached.internal_edges {
+                edge.signature.loop_signature.push(0);
+            }
+            let mut tadpole = attached.internal_edges[0].clone();
+            tadpole.edge_id = count;
+            tadpole.head = tadpole.tail;
+            tadpole.signature.loop_signature = vec![0, 1];
+            attached.internal_edges.push(tadpole);
+            let mut signs = vec![1; count];
+            signs[count - 1] = -1;
+
+            for medium in [
+                MediumMode::Vacuum,
+                MediumMode::ThermodynamicEquilibrium,
+                MediumMode::ZeroTemperatureEquilibrium,
+            ] {
+                let base =
+                    enumerate_cff_surface_chains(&cycle, &signs, medium, &BTreeMap::new()).unwrap();
+                assert!(!base.is_empty());
+                for sign in [-1, 1] {
+                    let mut attached_signs = signs.clone();
+                    attached_signs.push(sign);
+                    let chains = enumerate_cff_surface_chains(
+                        &attached,
+                        &attached_signs,
+                        medium,
+                        &BTreeMap::new(),
+                    )
+                    .unwrap();
+                    assert_eq!(chains.len(), base.len());
+                    for (chain, base) in chains.iter().zip(&base) {
+                        assert_eq!(chain.surfaces, base.surfaces);
+                        let mut expected_weight = base.thermal_weight.clone();
+                        let expected_prefactor = if medium == MediumMode::Vacuum {
+                            &base.prefactor * &Rational::new(1, 2)
+                        } else {
+                            expected_weight
+                                .distributions
+                                .push(ThermalDistributionFactor {
+                                    edge_id: EdgeIndex(count),
+                                    sign: 0,
+                                    derivative_order: 0,
+                                });
+                            expected_weight.canonicalize();
+                            base.prefactor.clone()
+                        };
+                        assert_eq!(chain.prefactor, expected_prefactor);
+                        assert_eq!(chain.thermal_weight, expected_weight);
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn acyclic_contractions_match_the_thermal_vacuum_projection() {
+        for tadpole_vertex in [None, Some(0), Some(2)] {
+            let mut parsed = crate::graph_io::test_graphs::box_graph();
+            if let Some(vertex) = tadpole_vertex {
+                parsed.loop_names.push("tadpole".to_string());
+                for edge in &mut parsed.internal_edges {
+                    edge.signature.loop_signature.push(0);
+                }
+                let mut tadpole = parsed.internal_edges[0].clone();
+                tadpole.edge_id = parsed.internal_edges.len();
+                tadpole.tail = vertex;
+                tadpole.head = vertex;
+                tadpole.signature.loop_signature = vec![0, 1];
+                parsed.internal_edges.push(tadpole);
+            }
+            for orientation in 0..1 << parsed.internal_edges.len() {
+                let signs = (0..parsed.internal_edges.len())
+                    .map(|edge| {
+                        if orientation & (1 << edge) == 0 {
+                            1
+                        } else {
+                            -1
+                        }
+                    })
+                    .collect::<Vec<_>>();
+                let mut graph = build_base_graph_from_parsed(&parsed);
+                for (edge, sign) in signs.iter().enumerate() {
+                    if *sign < 0 {
+                        graph.reverse_virtual_edge(edge);
+                    }
+                }
+                if graph.has_directed_cycle() {
+                    continue;
+                }
+                let vacuum = enumerate_cff_surface_chains(
+                    &parsed,
+                    &signs,
+                    MediumMode::Vacuum,
+                    &BTreeMap::new(),
+                )
+                .unwrap()
+                .into_iter()
+                .map(|chain| (chain.surfaces, Atom::num(chain.prefactor)))
+                .collect::<Vec<_>>();
+                assert!(!vacuum.is_empty());
+                assert!(vacuum.iter().all(|(surfaces, _)| surfaces.len() == 3));
+                for medium in [
+                    MediumMode::ThermodynamicEquilibrium,
+                    MediumMode::ZeroTemperatureEquilibrium,
+                ] {
+                    let finite = medium.is_finite_temperature();
+                    let projected =
+                        enumerate_cff_surface_chains(&parsed, &signs, medium, &BTreeMap::new())
+                            .unwrap()
+                            .into_iter()
+                            .filter_map(|chain| {
+                                let mut coefficient = Atom::num(chain.prefactor);
+                                for numerator in &chain.thermal_weight.numerators {
+                                    let mut body = numerator.to_atom(finite);
+                                    for edge in numerator
+                                        .positive_energies
+                                        .iter()
+                                        .chain(&numerator.negative_energies)
+                                    {
+                                        for sign in [-1, 1] {
+                                            body = body
+                                                .replace(
+                                                    ThermalDistributionFactor {
+                                                        edge_id: *edge,
+                                                        sign,
+                                                        derivative_order: 0,
+                                                    }
+                                                    .to_atom(finite),
+                                                )
+                                                .with(ThermalDistributionFactor::vacuum_atom(
+                                                    0,
+                                                    Atom::num(sign),
+                                                ));
+                                        }
+                                    }
+                                    coefficient *= body;
+                                }
+                                for factor in chain.thermal_weight.distributions {
+                                    coefficient *= ThermalDistributionFactor::vacuum_atom(
+                                        factor.derivative_order,
+                                        Atom::num(factor.sign),
+                                    );
+                                }
+                                (!coefficient.is_zero()).then_some((chain.surfaces, coefficient))
+                            })
+                            .collect::<Vec<_>>();
+                    // Compare every ordered surface chain and its exact weight,
+                    // including the terminal contraction and tadpole half-weight.
+                    assert_eq!(
+                        projected, vacuum,
+                        "{tadpole_vertex:?}, {signs:?}, {medium:?}"
+                    );
+                }
+            }
+        }
+    }
 
     #[test]
     fn thermal_surface_canonicalization_preserves_external_shift_sign() {
@@ -830,7 +984,7 @@ mod thermal_tests {
                     })
                     .collect(),
             };
-            let (surface, sign) = cff_surface_for_vertex_thermal(&parsed, &vertex);
+            let (surface, sign) = cff_surface_for_vertex(&parsed, &vertex);
             assert_eq!(sign, expected_sign);
             let expected = LinearEnergyExpr {
                 internal_terms: positive
@@ -1011,14 +1165,20 @@ mod thermal_tests {
                     edge
                 })
                 .collect();
-            let signs = vec![1; edges.len()];
             assert_eq!(
-                graph.strip_thermal_distribution_factors(&parsed, &signs).0,
+                graph
+                    .strip_tadpoles_and_cyclic_chains(
+                        &parsed,
+                        MediumMode::ThermodynamicEquilibrium,
+                        &[],
+                        &BTreeMap::new()
+                    )
+                    .0,
                 expected_factors
                     .into_iter()
                     .map(|(edge, derivative_order)| ThermalDistributionFactor {
                         edge_id: EdgeIndex(edge),
-                        sign: 1,
+                        sign: i32::from(derivative_order != 0),
                         derivative_order,
                     })
                     .collect::<Vec<_>>(),
@@ -1059,7 +1219,12 @@ mod thermal_tests {
             let fixed_point = graph.clone();
             assert!(
                 graph
-                    .strip_thermal_distribution_factors(&parsed, &signs)
+                    .strip_tadpoles_and_cyclic_chains(
+                        &parsed,
+                        MediumMode::ThermodynamicEquilibrium,
+                        &[],
+                        &BTreeMap::new()
+                    )
                     .0
                     .is_empty(),
                 "{name}"
@@ -1102,11 +1267,16 @@ mod thermal_tests {
         let parsed = crate::graph_io::test_graphs::box_graph();
         assert_eq!(
             graph
-                .strip_thermal_distribution_factors(&parsed, &[-1, 1, 1])
+                .strip_tadpoles_and_cyclic_chains(
+                    &parsed,
+                    MediumMode::ThermodynamicEquilibrium,
+                    &[],
+                    &BTreeMap::new()
+                )
                 .0,
             vec![ThermalDistributionFactor {
                 edge_id: EdgeIndex(0),
-                sign: -1,
+                sign: 0,
                 derivative_order: 0,
             }],
         );
@@ -1137,6 +1307,7 @@ mod thermal_tests {
                 &cycle,
                 &vec![1; count],
                 MediumMode::ThermodynamicEquilibrium,
+                &BTreeMap::new(),
             )
             .unwrap();
             assert_eq!(chains.len(), 1);
@@ -1146,7 +1317,7 @@ mod thermal_tests {
                 chains[0].thermal_weight.distributions,
                 vec![ThermalDistributionFactor {
                     edge_id: EdgeIndex(0),
-                    sign: 1,
+                    sign: i32::from(derivative_order != 0),
                     derivative_order,
                 }]
             );
@@ -1186,9 +1357,14 @@ mod thermal_tests {
                 }
                 let signs = vec![1; count];
                 assert!(
-                    enumerate_cff_surface_chains(&parsed, &signs, MediumMode::Vacuum)
-                        .unwrap()
-                        .is_empty()
+                    enumerate_cff_surface_chains(
+                        &parsed,
+                        &signs,
+                        MediumMode::Vacuum,
+                        &BTreeMap::new()
+                    )
+                    .unwrap()
+                    .is_empty()
                 );
                 let expected = if masses == [0, 0, 0] {
                     parse!("d2n0/2")
@@ -1213,7 +1389,9 @@ mod thermal_tests {
                     MediumMode::ZeroTemperatureEquilibrium,
                 ] {
                     let finite = mode.is_finite_temperature();
-                    let chains = enumerate_cff_surface_chains(&parsed, &signs, mode).unwrap();
+                    let chains =
+                        enumerate_cff_surface_chains(&parsed, &signs, mode, &BTreeMap::new())
+                            .unwrap();
                     assert!(!chains.is_empty(), "{masses:?}, {mode:?}");
                     let mut actual = chains.iter().fold(Atom::Zero, |sum, chain| {
                         let numerator = chain
@@ -1284,7 +1462,8 @@ mod thermal_tests {
                 edge.signature.external_signature = vec![0];
             }
             let mode = MediumMode::ThermodynamicEquilibrium;
-            let expected = enumerate_cff_surface_chains(&parsed, &[1; 2], mode).unwrap();
+            let expected =
+                enumerate_cff_surface_chains(&parsed, &[1; 2], mode, &BTreeMap::new()).unwrap();
             for node in 0..2 {
                 let mut cut = parsed.internal_edges[0].clone();
                 cut.edge_id = parsed.internal_edges.len();
@@ -1301,7 +1480,8 @@ mod thermal_tests {
                 );
                 parsed.internal_edges.push(cut);
             }
-            let actual = enumerate_cff_surface_chains(&parsed, &[1; 4], mode).unwrap();
+            let actual =
+                enumerate_cff_surface_chains(&parsed, &[1; 4], mode, &BTreeMap::new()).unwrap();
             assert_eq!(actual.len(), expected.len());
             for (actual, expected) in actual.iter().zip(expected) {
                 assert_eq!(actual.surfaces, expected.surfaces);
@@ -1340,8 +1520,12 @@ mod thermal_tests {
                 edge.signature.external_signature[0] = shift;
             }
             let mut graph = build_base_graph_from_parsed(&parsed);
-            let (distributions, prefactor) =
-                graph.strip_thermal_distribution_factors(&parsed, &[1; 4]);
+            let (distributions, prefactor) = graph.strip_tadpoles_and_cyclic_chains(
+                &parsed,
+                MediumMode::ThermodynamicEquilibrium,
+                &[],
+                &BTreeMap::new(),
+            );
             assert_eq!(
                 distributions,
                 expected_edges
@@ -1400,22 +1584,27 @@ mod thermal_tests {
                 MediumMode::ThermodynamicEquilibrium,
                 MediumMode::ZeroTemperatureEquilibrium,
             ] {
-                let mut actual = enumerate_cff_surface_chains(&parsed, &vec![1; edges.len()], mode)
-                    .unwrap()
-                    .into_iter()
-                    .map(|chain| {
-                        (
-                            chain.surfaces.len(),
-                            chain.prefactor,
-                            chain
-                                .thermal_weight
-                                .distributions
-                                .iter()
-                                .map(|factor| (factor.edge_id.0, factor.derivative_order))
-                                .collect::<Vec<_>>(),
-                        )
-                    })
-                    .collect::<Vec<_>>();
+                let mut actual = enumerate_cff_surface_chains(
+                    &parsed,
+                    &vec![1; edges.len()],
+                    mode,
+                    &BTreeMap::new(),
+                )
+                .unwrap()
+                .into_iter()
+                .map(|chain| {
+                    (
+                        chain.surfaces.len(),
+                        chain.prefactor,
+                        chain
+                            .thermal_weight
+                            .distributions
+                            .iter()
+                            .map(|factor| (factor.edge_id.0, factor.derivative_order))
+                            .collect::<Vec<_>>(),
+                    )
+                })
+                .collect::<Vec<_>>();
                 actual.sort();
                 assert_eq!(actual, expected, "{edges:?}, {mode:?}");
             }
@@ -1428,13 +1617,22 @@ mod thermal_tests {
         let mut graph = build_base_graph_from_parsed(&parsed);
         assert!(
             graph
-                .strip_thermal_distribution_factors(&parsed, &[1; 4])
+                .strip_tadpoles_and_cyclic_chains(
+                    &parsed,
+                    MediumMode::ThermodynamicEquilibrium,
+                    &[],
+                    &BTreeMap::new()
+                )
                 .0
                 .is_empty()
         );
-        let chains =
-            enumerate_cff_surface_chains(&parsed, &[1; 4], MediumMode::ThermodynamicEquilibrium)
-                .unwrap();
+        let chains = enumerate_cff_surface_chains(
+            &parsed,
+            &[1; 4],
+            MediumMode::ThermodynamicEquilibrium,
+            &BTreeMap::new(),
+        )
+        .unwrap();
         assert!(!chains.is_empty());
         assert!(chains.iter().all(|chain| !chain.surfaces.is_empty()));
     }
@@ -1447,7 +1645,7 @@ mod thermal_tests {
         // It must not silently become an empty orientation contribution.
         parsed.external_edges.clear();
         let mode = MediumMode::ThermodynamicEquilibrium;
-        let error = enumerate_cff_surface_chains(&parsed, &[1; 4], mode)
+        let error = enumerate_cff_surface_chains(&parsed, &[1; 4], mode, &BTreeMap::new())
             .err()
             .expect("unreducible orientation must fail generation");
         assert!(matches!(
@@ -1469,7 +1667,7 @@ mod thermal_tests {
             .insert("cut_only".to_string(), 2);
         parsed.internal_edges[0].tail = 2;
         assert!(matches!(
-            enumerate_cff_surface_chains(&parsed, &[1; 2], mode),
+            enumerate_cff_surface_chains(&parsed, &[1; 2], mode, &BTreeMap::new()),
             Err(GenerationError::NoAdmissibleCffVertex { .. })
         ));
     }

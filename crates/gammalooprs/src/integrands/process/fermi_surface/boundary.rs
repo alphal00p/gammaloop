@@ -176,7 +176,7 @@ mod tests {
         let variable = symbol!("fermi_boundary_nonlinear_x");
         let x = Atom::var(variable);
         let energies = BTreeMap::from([(EdgeIndex(1), x.clone().pow(2) + &x + Atom::num(7))]);
-        for sign in [-1, 1] {
+        for sign in [-1, 0, 1] {
             let term = ThermalBoundaryTerm::new(
                 &graph,
                 x.clone().pow(2),
@@ -350,7 +350,7 @@ mod tests {
             ThermalBoundaryTerm::new(
                 &graph,
                 Atom::num(1),
-                &[ThermalDistributionFactor { sign: 0, ..step }]
+                &[ThermalDistributionFactor { sign: 2, ..step }]
             )
             .is_err()
         );
@@ -373,7 +373,7 @@ mod tests {
             B -> A [id=1]
         })?;
         let variable = symbol!("fermi_boundary_coincident_x");
-        for sign in [-1, 1] {
+        for sign in [-1, 0, 1] {
             let error = ThermalBoundaryTerm::new(
                 &graph,
                 Atom::var(variable),

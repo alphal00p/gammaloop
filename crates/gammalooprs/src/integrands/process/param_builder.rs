@@ -2038,7 +2038,7 @@ mod tests {
     fn thermal_function_map_uses_explicit_orientation_for_all_derivatives() {
         test_initialise().unwrap();
         let model = load_generic_model("sm");
-        for particle in ["d", "g"] {
+        for particle in ["d", "G+", "g"] {
             let mut graph: Graph = format!(
                 r#"digraph thermal_cycle {{
                     node [num=1]; edge [num=1 particle="{particle}"];
@@ -2056,7 +2056,7 @@ mod tests {
                 .filter(|mu| !mu.is_zero())
             {
                 params.push(mu);
-                input.push(1.5);
+                input.push(if graph[edge].is_fermion() { 1.5 } else { 0.4 });
             }
             for limit in [
                 MediumMode::ThermodynamicEquilibrium,
@@ -2068,7 +2068,7 @@ mod tests {
                     _ => 0..=0,
                 };
                 for order in orders {
-                    for thermal_sign in [-1, 1] {
+                    for thermal_sign in [-1, 0, 1] {
                         for orientation_sign in [-1, 1] {
                             let expressions = [
                                 GS.thermal_distribution(
@@ -2101,6 +2101,26 @@ mod tests {
                                 (registered - explicit).abs() < 1e-13,
                                 "{particle}: {limit:?}, order {order}, thermal sign {thermal_sign}, orientation {orientation_sign}"
                             );
+                            if order == 0 {
+                                let shifted_energy = input[0]
+                                    - orientation_sign as f64
+                                        * input.get(2).copied().unwrap_or(0.0);
+                                let occupation = if limit.is_finite_temperature() {
+                                    let tanh = (input[1] * shifted_energy / 2.0).tanh();
+                                    if graph[edge].is_fermion() {
+                                        tanh
+                                    } else {
+                                        tanh.recip()
+                                    }
+                                } else {
+                                    shifted_energy.signum()
+                                };
+                                let expected = (thermal_sign as f64 + occupation) / 2.0;
+                                assert!(
+                                    (registered - expected).abs() < 1e-13,
+                                    "{particle}: {limit:?}, thermal sign {thermal_sign}, orientation {orientation_sign}: {registered} != {expected}"
+                                );
+                            }
                         }
                     }
                 }
