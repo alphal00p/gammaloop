@@ -237,11 +237,120 @@ fn analytic_backends_account_for_normalization_and_nested_coefficient_poles() {
 }
 
 #[test_log::test]
+fn matad_six_term_tadpoles_match_schwinger_gamma_integrals() {
+    use symbolica::domains::float::{RealLike, SingleFloat};
+
+    // In the FMFT/MATAD measure, at M^2=mu_R^2=1,
+    // T_n=(-1)^n*exp(gamma_E*eps)*Gamma(n-2+eps)/Gamma(n).
+    // Write log(exp(gamma_E*eps)*Gamma(1+eps)) independently,
+    // using zeta values rather than MATAD's Gamma/PolyGamma tables.
+    let gamma = vakint_parse!(
+        "exp(𝜋^2*ε^2/12
+            -1.202056903159594285399738161511449990765*ε^3/3
+            +𝜋^4*ε^4/360
+            -1.036927755143369926331365486457034168057*ε^5/5)"
+    )
+    .unwrap();
+    for project_onto_tensor_integrals in [true, false] {
+        for (terms, input, loops, first_power, reference) in [
+            (
+                6,
+                "topo(I1L(muvsq,4))",
+                1,
+                0,
+                &gamma * vakint_parse!("(1+ε)/6").unwrap(),
+            ),
+            (
+                6,
+                "topo(prop(1,edge(1,1),k(1),muvsq,1)*prop(2,edge(1,1),k(2),muvsq,3))",
+                2,
+                -1,
+                gamma.pow(2) * vakint_parse!("-1/(2*ε*(1-ε))").unwrap(),
+            ),
+            (
+                6,
+                "topo(prop(1,edge(1,1),k(1),muvsq,1)*prop(2,edge(1,1),k(2),muvsq,1))",
+                2,
+                -2,
+                gamma.pow(2) * vakint_parse!("1/(ε^2*(1-ε)^2)").unwrap(),
+            ),
+            (
+                6,
+                "topo(prop(1,edge(1,1),k(1),muvsq,1)*prop(2,edge(1,1),k(2),muvsq,1)*prop(3,edge(1,1),k(3),muvsq,1))",
+                3,
+                -3,
+                gamma.pow(3) * vakint_parse!("1/(ε^3*(1-ε)^3)").unwrap(),
+            ),
+            (
+                5,
+                "ε^-1*topo(I1L(muvsq,4))",
+                1,
+                -1,
+                &gamma * vakint_parse!("(1+ε)/(6*ε)").unwrap(),
+            ),
+            (
+                6,
+                "dot(k(1),k(2))^2*topo(prop(1,edge(1,1),k(1),muvsq,2)*prop(2,edge(1,1),k(2),muvsq,2))",
+                2,
+                -2,
+                // Angular averaging contributes 1/D, where D=4-2*eps.
+                // Each radial integral is T_1+T_2 at unit squared mass.
+                gamma.pow(2) * vakint_parse!("(2-ε)/(2*ε^2*(1-ε)^2)").unwrap(),
+            ),
+        ] {
+            let vakint = get_vakint(VakintSettings {
+                number_of_terms_in_epsilon_expansion: terms,
+                project_onto_tensor_integrals,
+                run_time_decimal_precision: N_DIGITS_ANLYTICAL_EVALUATION_FOR_TESTS,
+                integral_normalization_factor: LoopNormalizationFactor::FMFTandMATAD,
+                evaluation_order: EvaluationOrder::matad_only(None),
+                ..VakintSettings::default()
+            });
+            let input = vakint_parse!(input).unwrap();
+            let evaluated = vakint.evaluate(input.as_view()).unwrap();
+            let last_power = terms - loops - 1;
+            let reference = reference
+                .series(
+                    vakint::vakint_symbol!("ε"),
+                    Atom::Zero,
+                    Rational::from(last_power),
+                )
+                .unwrap()
+                .to_atom();
+            let parameters = vakint.params_from_f64(&HashMap::from_iter([
+                ("muvsq".into(), 1.0),
+                ("mursq".into(), 1.0),
+            ]));
+            let (actual, _) = vakint
+                .numerical_evaluation(evaluated.as_view(), &parameters, &HashMap::default(), None)
+                .unwrap();
+            let (expected, _) = vakint
+                .numerical_evaluation(reference.as_view(), &parameters, &HashMap::default(), None)
+                .unwrap();
+            for (power, value) in actual.get_epsilon_coefficients() {
+                assert!(value.is_zero() || (first_power..=last_power).contains(&power));
+            }
+            for power in first_power..=last_power {
+                let actual = actual.get_epsilon_coefficient(power);
+                let expected = expected.get_epsilon_coefficient(power);
+                assert!(
+                    (actual.re.to_f64() - expected.re.to_f64()).abs() < 1e-11
+                        && (actual.im.to_f64() - expected.im.to_f64()).abs() < 1e-11,
+                    "project={project_onto_tensor_integrals}, epsilon^{power}, {input}: {actual} versus {expected}"
+                );
+            }
+        }
+    }
+}
+
+#[test_log::test]
 fn analytic_backends_reject_unavailable_epsilon_depth() {
     for (normalization, coefficient, topology, terms) in [
-        ("1", "ε^-4", "topo(I1L(muvsq,1))", 2),
-        ("eps^-4", "1", "topo(I1L(muvsq,1))", 2),
+        ("1", "ε^-5", "topo(I1L(muvsq,1))", 2),
+        ("eps^-5", "1", "topo(I1L(muvsq,1))", 2),
         ("eps^(1-n_loops)", "1", "topo(I2L(muvsq,1,1,1))", 5),
+        ("1", "1", "topo(I1L(muvsq,4))", 7),
+        ("1", "1", "topo(I3L(muvsq,1,1,1,1,1,1))", 6),
     ] {
         let vakint = get_vakint(VakintSettings {
             number_of_terms_in_epsilon_expansion: terms,
@@ -254,6 +363,67 @@ fn analytic_backends_reject_unavailable_epsilon_depth() {
             vakint.evaluate_integral(input.as_view()),
             Err(vakint::VakintError::NoEvaluationMethodFound(_, _))
         ));
+    }
+}
+
+#[test_log::test]
+fn partly_massless_sunsets_match_independent_gamma_integrals() {
+    use symbolica::domains::float::RealLike;
+
+    let vakint = get_vakint(VakintSettings {
+        number_of_terms_in_epsilon_expansion: 4,
+        integral_normalization_factor: LoopNormalizationFactor::pySecDec,
+        evaluation_order: EvaluationOrder::matad_only(None),
+        ..VakintSettings::default()
+    });
+    let tadpole = vakint
+        .evaluate(
+            vakint_parse!("topo(prop(1,edge(1,1),k(1),muvsq,2))")
+                .unwrap()
+                .as_view(),
+        )
+        .unwrap();
+    // Independent Schwinger-parameter integration gives, at D=4-2*epsilon,
+    // I_MM0(2,2,1)/T_2^2 = -epsilon^2/[x(1-epsilon)(1+2*epsilon)],
+    // I_M00(3,1,1)/T_2^2 = -epsilon*Gamma(1-epsilon)*Gamma(1+2*epsilon)
+    //                       /[2*x*(1-epsilon)*Gamma(1+epsilon)].
+    // Here x=M^2; the common two-loop normalization cancels, and the minus
+    // is the Wick factor for five denominators. The second Gamma ratio is
+    // 1+pi^2*epsilon^2/3+O(epsilon^3), sufficient through O(epsilon).
+    let parameters = vakint.params_from_f64(&HashMap::from_iter([
+        ("muvsq".into(), 4.0),
+        ("mursq".into(), 3.0),
+    ]));
+    for (family, powers, ratio, first_power) in [
+        ("I2L_MM0", "2,2,1", "-ε^2/(muvsq*(1-ε)*(1+2*ε))", 0),
+        ("I2L_M00", "3,1,1", "-ε*(1+𝜋^2*ε^2/3)/(2*muvsq*(1-ε))", -1),
+    ] {
+        let input = vakint_parse!(format!("topo({family}(muvsq,{powers}))")).unwrap();
+        let actual = vakint.evaluate(input.as_view()).unwrap();
+        let reference = (tadpole.pow(2) * vakint_parse!(ratio).unwrap())
+            .series(vakint::vakint_symbol!("ε"), Atom::Zero, Rational::from(1))
+            .unwrap()
+            .to_atom();
+        let (actual, _) = vakint
+            .numerical_evaluation(actual.as_view(), &parameters, &HashMap::default(), None)
+            .unwrap();
+        let (reference, _) = vakint
+            .numerical_evaluation(reference.as_view(), &parameters, &HashMap::default(), None)
+            .unwrap();
+        for power in -2..=1 {
+            let actual = actual.get_epsilon_coefficient(power);
+            let expected = reference.get_epsilon_coefficient(power);
+            assert!(
+                (actual.re.to_f64() - expected.re.to_f64()).abs() < 1e-11,
+                "{family} differs at epsilon^{power}: {actual} versus {expected}"
+            );
+            assert!((actual.im.to_f64() - expected.im.to_f64()).abs() < 1e-11);
+            if power < first_power {
+                assert!(actual.re.to_f64().abs() < 1e-11 && actual.im.to_f64().abs() < 1e-11);
+            }
+        }
+        let leading = actual.get_epsilon_coefficient(first_power);
+        assert!(leading.re.to_f64().abs() + leading.im.to_f64().abs() > 1e-5);
     }
 }
 
