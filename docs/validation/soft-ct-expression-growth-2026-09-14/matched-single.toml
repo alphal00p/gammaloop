@@ -1,0 +1,91 @@
+commands = []
+
+[[command_blocks]]
+name = "generate"
+commands = [
+  "import model sm-default",
+  "remove processes",
+  "import graphs /common/dev/gammaloop/lcnbr/tests/resources/graphs/paper_figure_b1_double_triangle_soft_ir.dot -p paper_figure_b1_double_triangle_soft_ir -i paper_figure_b1_double_triangle_soft_ir",
+  "generate existing -p paper_figure_b1_double_triangle_soft_ir -i paper_figure_b1_double_triangle_soft_ir",
+]
+
+[[command_blocks]]
+name = "profile_uv"
+commands = [
+  "profile ultra-violet -p paper_figure_b1_double_triangle_soft_ir -i paper_figure_b1_double_triangle_soft_ir --min-scaling 8 --max-scaling 12 --n-points 25 --seed 1337 --per-orientation",
+]
+
+[default_runtime_settings.kinematics]
+e_cm = 300.0
+
+[default_runtime_settings.kinematics.externals]
+type = "constant"
+
+[default_runtime_settings.kinematics.externals.data]
+momenta = [[300.0, 0.0, 0.0, 0.0], "dependent"]
+helicities = [1, -1]
+
+[default_runtime_settings.general]
+m_uv = 20.0
+mu_r = 20.0
+evaluator_method = "SingleParametric"
+
+[cli_settings.global]
+logfile_directive = "off"
+# Keep the exact-expression payloads suppressed, but retain compact generation
+# checkpoints so a regression near Symbolica's atom-size ceiling identifies the
+# stage and component which grew unexpectedly.
+display_directive = "warn,gammalooprs[{summary}]=debug"
+
+# This exact three-loop paper fixture has one imported graph. The generation
+# pool parallelizes graphs, not the internal CFF/forest branches, so keep its
+# resource request honest and deterministic.
+[cli_settings.global.n_cores]
+generate = 1
+
+[cli_settings.global.generation.uv]
+final_integrand = "ThreeD"
+local_uv_cts_from_expanded_4d_integrands = false
+subtract_uv = true
+generate_integrated = false
+add_marker = false
+inner_products = true
+orchestrator = "hedge_poset"
+
+# The parent CFF has many valid orientations.  This deterministic nonzero
+# signature is enumerated and audited by the acceptance test before generation,
+# then used for both the complete soft wood and its matched bare control.
+[cli_settings.global.generation.orientation_pattern]
+pat = "(0,0,-,-,-,+,-,-,+,-)"
+
+[[cli_settings.global.generation.uv.renormalization_prescription.overrides]]
+prescription = "IR"
+
+[cli_settings.global.generation.uv.renormalization_prescription.overrides.ct_identifier]
+external_pdg_set = [-21, 21]
+internal_pdg_set = [1]
+
+# Both this photon self-energy and its massless-quark gluon bubble are
+# quadratically divergent.  The finite H-U child remainder is not closed under
+# a positive-degree ordinary-U parent, so the containing component must use H
+# as well; the logarithmic H/U acceptance case is the top-bubble vertex.
+[[cli_settings.global.generation.uv.renormalization_prescription.overrides]]
+prescription = "IR"
+
+[cli_settings.global.generation.uv.renormalization_prescription.overrides.ct_identifier]
+external_pdg_set = [-22, 22]
+internal_pdg_set = [1, 21]
+
+[cli_settings.global.generation.tropical_subgraph_table]
+panic_on_fail = false
+disable_tropical_generation = true
+
+[cli_settings.global.generation.threshold_subtraction]
+enable_thresholds = false
+
+[cli_settings.global.generation.evaluator]
+compile = false
+iterative_orientation_optimization = false
+
+[cli_settings.global.generation]
+explicit_orientation_sum_only = false

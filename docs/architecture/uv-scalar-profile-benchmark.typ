@@ -28,6 +28,10 @@ These tests passed in `dev-optim`; the investigation here was about where the sl
 
 Representative commands used:
 
+These commands record the historical `test_gammaloop` profile. For current
+runs, use `ci_gammaloop` with `--cargo-profile ci-optim`; each selected test
+has a four-minute execution limit.
+
 - `cargo nextest run --profile test_gammaloop --cargo-profile dev-optim -p gammalooprs -E 'test(=uv::tests::scalars_profile)' --retries 0`
 - `cargo nextest run --profile test_gammaloop --cargo-profile dev-optim -p gammalooprs -E 'test(=uv::tests::scalars_profile_new)' --retries 0`
 - `cargo nextest run --profile test_gammaloop --cargo-profile dev-optim -p gammalooprs -E 'test(=uv::tests::spinney_partial_cmp_is_equal_for_identical_subgraphs)' --retries 0`
@@ -97,7 +101,7 @@ Conclusion: the main cost is symbolic final-integrand construction and simplific
 
 For example:
 
-- `GAMMALOOP_DUMP_UV_COLOR_SIMPLIFY_INPUTS=<repo>/target/uv-color-simplify-inputs cargo nextest run --profile test_gammaloop --cargo-profile dev-optim -p gammalooprs -E 'test(=uv::tests::scalars_profile_new)' --retries 0`
+- `GAMMALOOP_DUMP_UV_COLOR_SIMPLIFY_INPUTS=<repo>/target/uv-color-simplify-inputs cargo nextest run --profile ci_gammaloop --cargo-profile ci-optim -p gammalooprs -E 'test(=uv::tests::scalars_profile_new)' --retries 0`
 
 For each final-integrand term, this writes:
 

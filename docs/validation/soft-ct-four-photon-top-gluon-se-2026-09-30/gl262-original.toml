@@ -1,0 +1,41 @@
+commands = []
+
+[[command_blocks]]
+name = "generate"
+commands = [
+  "import model sm-default",
+  "set model MT=173.0 WT=0.0 ymt=173.0 aS=0.118 aEWM1=137.036 Gf=1.166390e-05 MZ=91.188",
+  "import graphs examples/cli/aa_aa/3L/graphs/processes/amplitudes/aa_aa/3L/GL262.dot -p four_photon_top_self_energy -i GL262",
+  "generate existing -p four_photon_top_self_energy -i GL262",
+]
+
+[default_runtime_settings.kinematics]
+e_cm = 173.0
+[default_runtime_settings.kinematics.externals]
+type = "constant"
+[default_runtime_settings.kinematics.externals.data]
+momenta = [
+  [86.5, 0.0, 0.0, 86.5],
+  [86.5, 0.0, 0.0, -86.5],
+  [86.5, 0.0, -79.27855952273603, -34.6],
+  "dependent",
+]
+helicities = [1, 1, -1, -1]
+[default_runtime_settings.general]
+m_uv = 9.188
+mu_r = 91.188
+evaluator_method = "SingleParametric"
+enable_cache = false
+generate_events = false
+[default_runtime_settings.sampling]
+orientations = "summed"
+[default_runtime_settings.subtraction]
+disable_threshold_subtraction = true
+[default_runtime_settings.stability]
+escalate_if_exact_zero = false
+loop_momenta_norm_escalation_factor = -1.0
+rotation_axis = []
+levels = [{precision="Double",required_precision_for_re=1e-8,required_precision_for_im=1e-8,escalate_for_large_weight_threshold=-1.0}]
+[cli_settings.global]
+logfile_directive = "off"
+display_directive = "off"

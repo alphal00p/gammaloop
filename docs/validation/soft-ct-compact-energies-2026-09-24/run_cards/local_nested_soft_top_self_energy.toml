@@ -1,0 +1,58 @@
+commands = []
+
+[[command_blocks]]
+name = "generate"
+commands = [
+  "import model sm-default",
+  "remove processes",
+  "import graphs ./tests/resources/graphs/local_nested_soft_top_self_energy.dot -p local_nested_soft_top_self_energy -i local_nested_soft_top_self_energy",
+  "generate existing -p local_nested_soft_top_self_energy -i local_nested_soft_top_self_energy",
+]
+
+[[command_blocks]]
+name = "profile_uv"
+commands = [
+  "profile ultra-violet -p local_nested_soft_top_self_energy -i local_nested_soft_top_self_energy --min-scaling 8 --max-scaling 12 --n-points 25 --seed 1337 --per-orientation",
+]
+
+[default_runtime_settings.kinematics.externals]
+type = "constant"
+
+[default_runtime_settings.kinematics.externals.data]
+momenta = [
+  [180.08053753806934, 0.0, 0.0, 50.0],
+  "dependent",
+]
+helicities = [1, 1]
+
+[default_runtime_settings.general]
+evaluator_method = "SingleParametric"
+
+[cli_settings.global]
+logfile_directive = "off"
+display_directive = "info"
+
+[cli_settings.global.generation.uv]
+generate_integrated = false
+add_marker = false
+inner_products = true
+orchestrator = "hedge_poset"
+
+[[cli_settings.global.generation.uv.renormalization_prescription.overrides]]
+prescription = "IR"
+
+[cli_settings.global.generation.uv.renormalization_prescription.overrides.ct_identifier]
+external_pdg_set = [-6, 6]
+internal_pdg_set = [6, 21]
+
+[cli_settings.global.generation.tropical_subgraph_table]
+panic_on_fail = false
+disable_tropical_generation = true
+
+[cli_settings.global.generation.threshold_subtraction]
+enable_thresholds = false
+
+[cli_settings.global.generation.evaluator]
+# The runtime uses SingleParametric; do not build the unused all-orientation
+# iterative evaluator for this large nested local counterterm.
+iterative_orientation_optimization = false
