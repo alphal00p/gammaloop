@@ -41,7 +41,7 @@ use std::{
 };
 use string_template_plus::{Render, RenderOptions, Template};
 use symbolica::{
-    coefficient::CoefficientView,
+    coefficient::{Coefficient, CoefficientView},
     domains::float::{FloatLike, RealLike},
 };
 #[cfg(feature = "symbolica_community_module")]
@@ -883,7 +883,9 @@ impl Integral {
                 let momenta = get_individual_momenta(m.get(&vk_symbol!("q_")).unwrap().as_view())?;
 
                 let mass_symbol_string = if let Some(a) = m.get(&vk_symbol!("mUVsq_")) {
-                    if let Some(m3) = a
+                    if a.is_zero() {
+                        "0".to_string()
+                    } else if let Some(m3) = a
                         .pattern_match(
                             &vk_parse!("msq(mid_)").unwrap().to_pattern(),
                             Some(&Condition::from((
@@ -907,7 +909,7 @@ impl Integral {
                         )
                     } else {
                         return Err(VakintError::InvalidGenericExpression(format!(
-                            "Generic expression does not have masses formatted as msq(integer in [1,n_props]): {}",
+                            "Generic expression does not have masses formatted as zero or msq(integer in [1,n_props]): {}",
                             a
                         )));
                     }
@@ -1129,7 +1131,11 @@ impl Integral {
             canonical_expression,
             short_expression,
             short_expression_pattern: Some(short_expression_pattern.to_pattern()),
-            alphaloop_expression: Some(alphaloop_expression),
+            // AlphaLoop's uvprop representation has no mass slot. A partly
+            // massless topology must retain its mass labels in an analytic
+            // backend that supports them.
+            alphaloop_expression: (!graph.edges.values().any(|edge| edge.mass.is_zero()))
+                .then_some(alphaloop_expression),
             applicable_evaluation_methods,
             graph,
             unoriented_generic_pattern,
@@ -1784,14 +1790,47 @@ impl EvaluationMethod {
                     && topology.get_integral().n_loops <= 3
             }
             EvaluationMethod::MATAD(_) => {
-                topology
-                    .get_integral()
+                let integral = topology.get_integral();
+                integral
                     .applicable_evaluation_methods
                     .0
                     .iter()
                     .any(|m| matches!(m, EvaluationMethod::MATAD(_)))
-                    && topology.get_integral().n_loops <= 3
-                    && settings.number_of_terms_in_epsilon_expansion <= 5
+                    && integral.n_loops <= 3
+                    && (settings.number_of_terms_in_epsilon_expansion <= 5
+                        || (settings.number_of_terms_in_epsilon_expansion == 6 && {
+                            // Independent one-scale tadpoles reduce exactly to
+                            // rational coefficients times Gamma(1+eps)^L. The
+                            // existing Gamma series is known through eps^5;
+                            // their at-most-L poles permit degree 5-L. This
+                            // extra term does not extend any connected master
+                            // table, and MATAD's Oep check remains authoritative.
+                            let mass = integral.graph.edges.values().next().map(|e| &e.mass);
+                            let mut loops = HashSet::new();
+                            let independent = integral.graph.edges.values().all(|edge| {
+                                if edge.left_node_id != edge.right_node_id
+                                    || Some(&edge.mass) != mass
+                                {
+                                    return false;
+                                }
+                                let Ok(momenta) = get_individual_momenta(edge.momentum.as_view())
+                                else {
+                                    return false;
+                                };
+                                let [(symbol, (id, index))] = momenta.as_slice() else {
+                                    return false;
+                                };
+                                let momentum = function!(S.k, id);
+                                *symbol == S.k
+                                    && *index > 0
+                                    && (edge.momentum == momentum || edge.momentum == -momentum)
+                                    && loops.insert(*index)
+                            });
+                            independent
+                                && mass.is_some_and(|mass| !mass.is_zero())
+                                && !loops.is_empty()
+                                && loops.len() == integral.n_loops
+                        }))
             }
             EvaluationMethod::FMFT(_) => {
                 topology
@@ -3121,6 +3160,46 @@ impl fmt::Display for NumericalEvaluationResult {
 }
 
 impl NumericalEvaluationResult {
+    fn epsilon_coefficients(
+        input: AtomView,
+        epsilon_symbol: Symbol,
+    ) -> Result<Vec<(i64, Atom)>, VakintError> {
+        let epsilon = Atom::var(epsilon_symbol);
+        input
+            .coefficient_list::<i32>(&[&epsilon])
+            .into_iter()
+            .map(|(monomial, coefficient)| {
+                // Inspect the actual symbol, preserving its namespace and any
+                // custom printer. Reparsing its display name can change identity.
+                let power = if monomial.is_one() {
+                    Some(0)
+                } else if monomial == epsilon {
+                    Some(1)
+                } else if let AtomView::Pow(power) = monomial.as_view() {
+                    let (base, exponent) = power.get_base_exp();
+                    (base == epsilon.as_view())
+                        .then(|| i64::try_from(exponent).ok())
+                        .flatten()
+                } else {
+                    None
+                };
+                let power = power.ok_or_else(|| {
+                    VakintError::EvaluationError(format!(
+                        "Laurent monomial must be an integer power of {}: {}",
+                        epsilon.to_canonical_string(),
+                        monomial.to_canonical_string(),
+                    ))
+                })?;
+                if coefficient.contains_symbol(epsilon_symbol) {
+                    return Err(VakintError::EvaluationError(
+                        "Laurent coefficient still depends on epsilon".into(),
+                    ));
+                }
+                Ok((power, coefficient))
+            })
+            .collect()
+    }
+
     pub fn to_atom(&self, epsilon_symbol: Symbol) -> Atom {
         let mut res = Atom::Zero;
         for (exp, coeff) in self.get_epsilon_coefficients() {
@@ -3136,34 +3215,7 @@ impl NumericalEvaluationResult {
         epsilon_symbol: Symbol,
         settings: &VakintSettings,
     ) -> Result<Self, VakintError> {
-        let epsilon_coeffs = input.coefficient_list::<i8>(&[Atom::var(epsilon_symbol)]);
-
-        let epsilon_coeffs_vec = epsilon_coeffs
-            .iter()
-            .map(|(eps_atom, coeff)| {
-                if let Some(m) = eps_atom
-                    .pattern_match(
-                        &vk_parse!(format!("{}^n_", epsilon_symbol).as_str())
-                            .unwrap()
-                            .to_pattern(),
-                        Some(&Condition::from((vk_symbol!("n_"), number_condition()))),
-                        None,
-                    )
-                    .next()
-                {
-                    (
-                        get_integer_from_atom(m.get(&vk_symbol!("n_")).unwrap().as_view()).unwrap(),
-                        coeff,
-                    )
-                } else if *eps_atom == Atom::var(epsilon_symbol) {
-                    (1, coeff)
-                } else if *eps_atom == Atom::num(1) {
-                    (0, coeff)
-                } else {
-                    panic!("Epsilon atom should be of the form {}^n_", epsilon_symbol)
-                }
-            })
-            .collect::<Vec<_>>();
+        let epsilon_coeffs_vec = Self::epsilon_coefficients(input, epsilon_symbol)?;
 
         let binary_prec = settings.get_binary_precision();
         let empty_map: HashMap<Atom, Complex<Float>, RandomState> = HashMap::default();
@@ -3690,34 +3742,10 @@ Evaluated (n_loops=1, mu_r=1) :
         // Contract before extracting Laurent coefficients, keeping scalar
         // spectator factors opaque throughout the Lorentz contraction.
         let integral = Vakint::convert_to_dot_notation(settings, integral)?;
-        let epsilon_coeffs =
-            integral.coefficient_list::<i8>(&[Atom::var(vk_symbol!(&settings.epsilon_symbol))]);
-        let epsilon_coeffs_vec = epsilon_coeffs
-            .iter()
-            .map(|(eps_atom, coeff)| {
-                if let Some(m) = eps_atom
-                    .pattern_match(
-                        &vk_parse!(format!("{}^n_", settings.epsilon_symbol))
-                            .unwrap()
-                            .to_pattern(),
-                        Some(&Condition::from((vk_symbol!("n_"), number_condition()))),
-                        None,
-                    )
-                    .next()
-                {
-                    (
-                        get_integer_from_atom(m.get(&vk_symbol!("n_")).unwrap().as_view()).unwrap(),
-                        coeff,
-                    )
-                } else if *eps_atom == vk_parse!(&settings.epsilon_symbol).unwrap() {
-                    (1, coeff)
-                } else if *eps_atom == Atom::num(1) {
-                    (0, coeff)
-                } else {
-                    panic!("Epsilon atom should be of the form ε^n_")
-                }
-            })
-            .collect::<Vec<_>>();
+        let epsilon_coeffs_vec = NumericalEvaluationResult::epsilon_coefficients(
+            integral.as_view(),
+            vk_symbol!(&settings.epsilon_symbol),
+        )?;
 
         let binary_prec = settings.get_binary_precision();
 
@@ -4400,7 +4428,7 @@ Evaluated (n_loops=1, mu_r=1) :
                 None,
                 None,
             )
-            .next()
+            .find(|matched| !matched[&vk_symbol!("m_sq_")].is_zero())
         {
             match m.get(&vk_symbol!("m_sq_")).unwrap() {
                 Atom::Var(s) => (
@@ -4992,12 +5020,22 @@ Evaluated (n_loops=1, mu_r=1) :
         // algebra or symbol identities, and complex numbers need parentheses.
         match expression {
             AtomView::Num(number) => {
-                let literal = expression.to_canonical_string();
                 if number.get_coeff_view().is_real() {
-                    literal
-                } else {
-                    format!("({literal})")
+                    return expression.to_canonical_string();
                 }
+                // Serialize the two components explicitly. Display printing
+                // may omit a unit imaginary numerator, while backend adapters
+                // need an explicit numeric token for their imaginary unit.
+                let (real, imaginary) = match number.get_coeff_view().to_owned() {
+                    Coefficient::Complex(value) => (Atom::num(value.re), Atom::num(value.im)),
+                    Coefficient::Float(value) => (Atom::num(value.re), Atom::num(value.im)),
+                    _ => return format!("({})", expression.to_canonical_string()),
+                };
+                format!(
+                    "({}+({})*1𝑖)",
+                    real.to_canonical_string(),
+                    imaginary.to_canonical_string()
+                )
             }
             AtomView::Var(variable) => get_full_name(&variable.get_symbol()),
             AtomView::Fun(function) => format!(
@@ -5640,6 +5678,102 @@ mod tests {
     use symbolica::parse_lit;
 
     use super::*;
+
+    #[test]
+    fn numerical_laurent_results_preserve_epsilon_symbol_identity() {
+        let settings = VakintSettings {
+            epsilon_symbol: "numerical_result_test::ε".into(),
+            ..VakintSettings::default()
+        };
+        let symbol = vk_symbol!(&settings.epsilon_symbol);
+        let epsilon = Atom::var(symbol);
+        let input = epsilon.pow(-2) * (Atom::num(3) - Atom::i() * 5)
+            + Atom::num(7)
+            + &epsilon * 11
+            + epsilon.pow(2) * (Atom::num(-13) + Atom::i() * 17);
+        let expected = NumericalEvaluationResult::from_vec(
+            vec![
+                (-2, ("3".into(), "-5".into())),
+                (0, ("7".into(), "0".into())),
+                (1, ("11".into(), "0".into())),
+                (2, ("-13".into(), "17".into())),
+            ],
+            &settings,
+        );
+        let result =
+            NumericalEvaluationResult::from_atom(input.as_view(), symbol, &settings).unwrap();
+        assert_eq!(result.0, expected.0);
+        let round_trip = NumericalEvaluationResult::from_atom(
+            result.to_atom(symbol).as_view(),
+            symbol,
+            &settings,
+        )
+        .unwrap();
+        assert_eq!(round_trip.0, expected.0);
+        let evaluated = Vakint::full_numerical_evaluation_without_error(
+            &settings,
+            input.as_view(),
+            &HashMap::default(),
+            &HashMap::default(),
+            None,
+        )
+        .unwrap();
+        assert_eq!(evaluated.0, expected.0);
+        for invalid in [epsilon.sqrt(), epsilon.exp()] {
+            assert!(matches!(
+                NumericalEvaluationResult::from_atom(invalid.as_view(), symbol, &settings),
+                Err(VakintError::EvaluationError(_))
+            ));
+        }
+    }
+
+    #[test]
+    fn matad_six_terms_require_independent_one_scale_tadpoles() {
+        let _ = Vakint::new().unwrap();
+        let method = EvaluationMethod::MATAD(MATADOptions::default());
+        let mut settings = VakintSettings {
+            number_of_terms_in_epsilon_expansion: 6,
+            ..VakintSettings::default()
+        };
+        for (propagators, accepted) in [
+            ("prop(1,edge(1,1),k(1),msq(1),pow(1))", true),
+            (
+                "prop(1,edge(1,1),k(1),msq(1),pow(1))*prop(2,edge(1,1),k(2),msq(1),pow(2))",
+                true,
+            ),
+            (
+                "prop(1,edge(1,1),k(1),msq(1),pow(1))*prop(2,edge(1,1),k(2),msq(1),pow(2))*prop(3,edge(1,1),k(3),msq(1),pow(3))",
+                true,
+            ),
+            (
+                "prop(1,edge(1,1),k(1),msq(1),pow(1))*prop(2,edge(1,1),k(2),msq(2),pow(2))",
+                false,
+            ),
+            ("prop(1,edge(1,1),2*k(1),msq(1),pow(1))", false),
+            (
+                "prop(1,edge(1,2),k(1),msq(1),pow(1))*prop(2,edge(1,2),k(2),msq(1),pow(2))*prop(3,edge(2,1),k(1)+k(2),msq(1),pow(3))",
+                false,
+            ),
+        ] {
+            let canonical = vk_parse!(format!("topo({propagators})")).unwrap();
+            let topology: Topology = Integral::new(
+                propagators.matches("prop(").count(),
+                Some(canonical.clone()),
+                Some(function!(vk_symbol!("Certificate"), canonical)),
+                EvaluationOrder::matad_only(None),
+            )
+            .unwrap()
+            .into();
+            assert_eq!(
+                method.supports(&settings, &topology),
+                accepted,
+                "{propagators}"
+            );
+            settings.number_of_terms_in_epsilon_expansion = 7;
+            assert!(!method.supports(&settings, &topology), "{propagators}");
+            settings.number_of_terms_in_epsilon_expansion = 6;
+        }
+    }
 
     #[test]
     fn form_serialization_preserves_complex_precedence_and_symbol_identity() {

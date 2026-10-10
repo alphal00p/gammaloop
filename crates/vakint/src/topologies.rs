@@ -73,6 +73,26 @@ impl Topologies {
             )?
             .0,
         );
+        // MATAD already contains the one-scale MM0 and M00 sunset masters.
+        // Keep their massless lines explicit; AlphaLoop's uvprop omits masses.
+        for (name, second_mass) in [("I2L_MM0", "msq(1)"), ("I2L_M00", "0")] {
+            topologies.0.push(
+                Integral::new(
+                    3,
+                    Some(
+                        vk_parse!(format!(
+                            "topo(prop(1,edge(1,2),k(1),msq(1),pow(1))*\
+                              prop(2,edge(1,2),k(2),{second_mass},pow(2))*\
+                              prop(3,edge(2,1),k(1)+k(2),0,pow(3)))"
+                        ))
+                        .unwrap(),
+                    ),
+                    Some(vk_parse!(format!("{name}(msq(1),pow(1),pow(2),pow(3))")).unwrap()),
+                    EvaluationOrder::matad_only(None),
+                )?
+                .into(),
+            );
+        }
         // ==
         // Three-loop topologies
         // ==
