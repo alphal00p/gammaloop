@@ -399,10 +399,18 @@ fn assert_vector_sum_matches_rule(
         SymComplexF64::new(momentum.norm(), F(0.0)),
     );
 
-    let lib = vector_sum_test_library(&momentum, EdgeIndex(7), include_longitudinal);
+    let eid = EdgeIndex(7);
+    // The axial reference vector uses the scalar Q(eid, cind(0)) as well as
+    // the full momentum tensor. Give both representations the same physical
+    // time component; registering the tensor does not define this scalar.
+    constants.insert(
+        GS.emr_mom(eid, GS.cind(0)),
+        SymComplexF64::new(momentum.temporal.value, F(0.0)),
+    );
+    let lib = vector_sum_test_library(&momentum, eid, include_longitudinal);
     let lhs = evaluate_tensor_network(vector_sum_lhs_expr(include_longitudinal), &lib);
     let rhs = evaluate_tensor_network_with_constants(
-        vector_sum_rhs_expr(&particle, EdgeIndex(7), gauge, false),
+        vector_sum_rhs_expr(&particle, eid, gauge, false),
         &lib,
         &constants,
     );
@@ -732,36 +740,32 @@ fn vector_polarization_sum_massive_transverse() {
     );
 }
 
-mod failing {
-    use super::*;
+#[test]
+fn vector_polarization_sum_massless_z_axis() {
+    assert_vector_sum_matches_rule(
+        FourMomentum::from_args(F(4.0), F(0.0), F(0.0), F(4.0)),
+        UFOSymbol::zero(),
+        VectorPolarizationSumGauge::LightLikeAxial,
+        false,
+    );
+}
 
-    #[test]
-    fn vector_polarization_sum_massless_z_axis() {
-        assert_vector_sum_matches_rule(
-            FourMomentum::from_args(F(4.0), F(0.0), F(0.0), F(4.0)),
-            UFOSymbol::zero(),
-            VectorPolarizationSumGauge::LightLikeAxial,
-            false,
-        );
-    }
+#[test]
+fn vector_polarization_sum_massless_antiz_axis() {
+    assert_vector_sum_matches_rule(
+        FourMomentum::from_args(F(4.0), F(0.0), F(0.0), F(-4.0)),
+        UFOSymbol::zero(),
+        VectorPolarizationSumGauge::LightLikeAxial,
+        false,
+    );
+}
 
-    #[test]
-    fn vector_polarization_sum_massless_antiz_axis() {
-        assert_vector_sum_matches_rule(
-            FourMomentum::from_args(F(4.0), F(0.0), F(0.0), F(-4.0)),
-            UFOSymbol::zero(),
-            VectorPolarizationSumGauge::LightLikeAxial,
-            false,
-        );
-    }
-
-    #[test]
-    fn vector_polarization_sum_massless_transverse() {
-        assert_vector_sum_matches_rule(
-            FourMomentum::from_args(F(4.0), F(0.0), F(4.0), F(0.0)),
-            UFOSymbol::zero(),
-            VectorPolarizationSumGauge::LightLikeAxial,
-            false,
-        );
-    }
+#[test]
+fn vector_polarization_sum_massless_transverse() {
+    assert_vector_sum_matches_rule(
+        FourMomentum::from_args(F(4.0), F(0.0), F(4.0), F(0.0)),
+        UFOSymbol::zero(),
+        VectorPolarizationSumGauge::LightLikeAxial,
+        false,
+    );
 }

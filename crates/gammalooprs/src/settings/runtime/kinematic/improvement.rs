@@ -684,6 +684,7 @@ fn improve_ps_vh<T: FloatLike>(
 #[cfg(test)]
 mod tests {
     use eyre::Result;
+    use linnet::half_edge::involution::Hedge;
     use typed_index_collections::TiVec;
 
     use crate::{
@@ -877,7 +878,10 @@ mod tests {
 
         tracing::debug!("upcasted momenta f128: {:#?}", dependent_momenta_f128);
         let masses_f128 = graph.get_external_masses::<f128>(model);
-        let improve_ps_settings = super::PhaseSpaceImprovementSettings::default();
+        let improve_ps_settings = super::PhaseSpaceImprovementSettings {
+            mode: super::ImprovementMode::Mf,
+            ..Default::default()
+        };
 
         let improved_point = super::improve_ps(
             &dependent_momenta_f128,
@@ -962,45 +966,43 @@ mod tests {
         Ok(())
     }
 
-    mod failing {
-        use super::*;
+    #[test]
+    fn test_photon_box() {
+        test_initialise().unwrap();
 
-        #[test]
-        fn test_photon_box() {
-            test_initialise().unwrap();
+        let photon_box: Graph = dot!(
+            digraph photon_box {
+                ext [style=invis];
+                ext -> v1:0 [particle = "a", id=0];
+                ext -> v2:1 [particle = "a", id=1];
+                v3:2 -> ext [particle = "a", id=2];
+                v4:3 -> ext [particle = "a", id=3];
+                v1 -> v2 [particle = "t", id=4];
+                v2 -> v3 [particle = "t", id=5];
+                v3 -> v4 [particle = "t", id=6];
+                v4 -> v1 [particle = "t", id=7];
+            },
+            "sm"
+        )
+        .unwrap();
 
-            let photon_box: Graph = dot!(
-                digraph photon_box {
-                    ext [style=invis];
-                    ext -> v1:0 [particle = "a", id=0];
-                    ext -> v2:1 [particle = "a", id=1];
-                    v3:2 -> ext [particle = "a", id=2];
-                    v4:3 -> ext [particle = "a", id=3];
-                    v1 -> v2 [particle = "t", id=4];
-                    v2 -> v3 [particle = "t", id=5];
-                    v3 -> v4 [particle = "t", id=6];
-                    v4 -> v1 [particle = "t", id=7];
-                },
-                "sm"
-            )
-            .unwrap();
+        let sm = load_generic_model("sm");
+        let e_cm = F(500.0);
 
-            let sm = load_generic_model("sm");
-            let e_cm = F(500.0);
-
-            let photon_box_res = test_default_momenta_graph(&photon_box, &sm, &e_cm);
-            if let Some(err) = photon_box_res.err() {
-                panic!("Error in photon box test: {:?}", err);
-            }
+        let photon_box_res = test_default_momenta_graph(&photon_box, &sm, &e_cm);
+        if let Some(err) = photon_box_res.err() {
+            panic!("Error in photon box test: {:?}", err);
         }
+    }
 
-        #[test]
-        fn test_aa_tt() {
-            test_initialise().unwrap();
-            let sm = load_generic_model("sm");
-            let e_cm = F(600.0);
+    #[test]
+    fn test_aa_tt() {
+        test_initialise().unwrap();
+        let sm = load_generic_model("sm");
+        let e_cm = F(600.0);
 
-            let aa_tt: Graph = dot!(
+        let mut aa_tt = Graph::from_dot(
+            linnet::dot!(
                 digraph aa_tt {
                     ext [style=invis];
                     ext -> v1:0 [particle = "a", id=0];
@@ -1008,24 +1010,32 @@ mod tests {
                     v1:2 -> ext [particle = "t", id=2];
                     v2:3 -> ext [particle = "t~", id=3];
                     v2 -> v1 [particle = "t", id=4];
-                },
-                "sm"
+                }
             )
-            .unwrap();
+            .unwrap(),
+            &sm,
+        )
+        .unwrap();
+        // Contract the external color pair before applying the same scalar
+        // numerator validation used by normal graph import.
+        aa_tt.global_prefactor.num *=
+            aa_tt.underlying[Hedge(2)].color_kronekers(&aa_tt.underlying[Hedge(3)]);
+        aa_tt.validate_full_numerator_tensor_network().unwrap();
 
-            let aa_tt_res = test_default_momenta_graph(&aa_tt, &sm, &e_cm);
-            if let Some(err) = aa_tt_res.err() {
-                panic!("Error in aa_tt test: {:?}", err);
-            }
+        let aa_tt_res = test_default_momenta_graph(&aa_tt, &sm, &e_cm);
+        if let Some(err) = aa_tt_res.err() {
+            panic!("Error in aa_tt test: {:?}", err);
         }
+    }
 
-        #[test]
-        fn test_gt_gt() {
-            test_initialise().unwrap();
-            let sm = load_generic_model("sm");
-            let e_cm = F(700.0);
+    #[test]
+    fn test_gt_gt() {
+        test_initialise().unwrap();
+        let sm = load_generic_model("sm");
+        let e_cm = F(700.0);
 
-            let gt_gt: Graph = dot!(
+        let mut gt_gt = Graph::from_dot(
+            linnet::dot!(
                 digraph gt_gt {
                     ext [style=invis];
                     ext -> v1:0 [particle = "g", id=0];
@@ -1033,14 +1043,21 @@ mod tests {
                     v2:2 -> ext [particle = "g", id=2];
                     v2:3 -> ext [particle = "t", id=3];
                     v1 -> v2 [particle = "t", id=4];
-                }, "sm"
+                }
             )
-            .unwrap();
+            .unwrap(),
+            &sm,
+        )
+        .unwrap();
+        for (source, sink) in [(0, 2), (1, 3)] {
+            gt_gt.global_prefactor.num *=
+                gt_gt.underlying[Hedge(source)].color_kronekers(&gt_gt.underlying[Hedge(sink)]);
+        }
+        gt_gt.validate_full_numerator_tensor_network().unwrap();
 
-            let gt_gt_res = test_default_momenta_graph(&gt_gt, &sm, &e_cm);
-            if let Some(err) = gt_gt_res.err() {
-                panic!("Error in gt_gt test: {:?}", err);
-            }
+        let gt_gt_res = test_default_momenta_graph(&gt_gt, &sm, &e_cm);
+        if let Some(err) = gt_gt_res.err() {
+            panic!("Error in gt_gt test: {:?}", err);
         }
     }
 }
