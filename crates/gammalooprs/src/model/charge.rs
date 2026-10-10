@@ -43,10 +43,14 @@ impl<'de> Deserialize<'de> for SerializedCharge {
                 } else if let Some(integer) = number.as_u64() {
                     integer.into()
                 } else {
+                    // Older exports wrote fractions such as 2/3 as their nearest
+                    // binary64 value. Recover the simplest rational within that
+                    // rounding instead of keeping its binary expansion.
                     Rational::try_from(number.as_f64().ok_or_else(|| {
                         D::Error::custom("particle charge must be a finite number")
                     })?)
                     .map_err(D::Error::custom)?
+                    .round(&Rational::from((1, 1_i64 << (f64::MANTISSA_DIGITS - 1))))
                 }
             }
         };
@@ -64,6 +68,9 @@ mod tests {
             ("0", Rational::zero()),
             ("-1", Rational::from(-1)),
             ("0.5", Rational::from((1, 2))),
+            ("0.6666666666666666", Rational::from((2, 3))),
+            ("-0.3333333333333333", Rational::from((-1, 3))),
+            ("0.1", Rational::from((1, 10))),
             (r#""2/3""#, Rational::from((2, 3))),
             (r#""-4/3""#, Rational::from((-4, 3))),
         ] {
@@ -73,6 +80,10 @@ mod tests {
             let decoded: SerializedCharge = serde_json::from_str(&encoded).unwrap();
             assert_eq!(decoded.0, expected);
         }
+        assert_eq!(
+            serde_json::to_string(&SerializedCharge(Rational::from((2, 3)))).unwrap(),
+            r#""2/3""#
+        );
         for input in [r#""1/0""#, r#""Q""#, "null", "true"] {
             assert!(
                 serde_json::from_str::<SerializedCharge>(input).is_err(),
