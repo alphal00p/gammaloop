@@ -16,12 +16,12 @@ just tydenso::manual
 
 The interop tests require `TYMBOLICA_CHECKOUT` to point to
 [`symbolica-dev/symbolica-typst-plugin`](https://github.com/symbolica-dev/symbolica-typst-plugin) at Git HEAD
-`18e0491628f9eac5c788659cabfcdb7575f6986d`, the exact Symbolica Typst plugin revision pinned
-by the nested Rust workspace. The check uses Nix to rebuild its combined algebra and integration engine
-in a temporary copy. GammaLoop, Tydenso and the Typst plugin must all resolve
-Symbolica, Numerica and Graphica `3.0.0` from crates.io.
-It preserves the checkout and reuses compiled dependencies in
-`target/tymbolica` at the repository root. The Rust payload dependency comes
-from the same pinned Git revision.
+`b96c1f3ebd1c2563bf91079a0dd6dc5ec82191c0`, its Symbolica 3.0.1 release update.
+The check uses Nix to rebuild that engine in a temporary copy. GammaLoop,
+Tydenso and the engine resolve Symbolica and Numerica `3.0.1`, and Graphica
+`3.0.0`, from crates.io. The separate Rust payload library remains pinned to
+`7f869adc14dcf2758bab16aaa25e06eb10ffbfad`; it uses the same envelope implementation
+and backend format. The check preserves the checkout and reuses compiled
+dependencies in `target/tymbolica` at the repository root.
 
 Tydenso is licensed under the [MIT license](LICENSE) carried in this directory.

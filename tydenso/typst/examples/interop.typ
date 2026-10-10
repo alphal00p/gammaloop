@@ -28,12 +28,12 @@ The same native Atom payload can be inspected or transformed by Symbolica:
 #let cancelled = tensors.add(carried, F(b, a))
 
 // The other direction retains a namespace that is not visible in the glyph.
-#let mass = algebra.symbol("m", namespace: "model")
+#let mass = algebra.literal("m", namespace: "model")
 #let roundtrip = tensors.add(mass, 0)
 
 // Nested function heads exercise Symbolica's partial-import remapping in both
 // directions, not merely leaf symbols.
-#let nested = algebra.math($f(2*g(r-x))$)
+#let nested = algebra.parse($f(2*g(r-x))$)
 #let nested-roundtrip = algebra.expand(tensors.add(nested, 0))
 
 // Spinor representations make the same round trip.
@@ -59,7 +59,7 @@ The same native Atom payload can be inspected or transformed by Symbolica:
 #let custom-roundtrip = algebra.expand(custom)
 
 // Symbolica's Rubi integration returns the same Atom payload that Tydenso can print.
-#let x = algebra.math($x$)
+#let x = algebra.parse($x$)
 #let custom-primitive = calculus.integrate(tensors.atom(custom), x)
 
 #grid(

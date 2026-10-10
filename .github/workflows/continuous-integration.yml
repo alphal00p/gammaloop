@@ -75,7 +75,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: symbolica-dev/symbolica-typst-plugin
-          ref: 18e0491628f9eac5c788659cabfcdb7575f6986d
+          ref: b96c1f3ebd1c2563bf91079a0dd6dc5ec82191c0
           path: tymbolica-pinned
 
       - uses: NixOS/nix-installer-action@main
