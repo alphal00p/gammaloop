@@ -1927,7 +1927,3 @@ impl GetSingleAtom for PythonState {
         }
     }
 }
-
-impl PythonState {}
-// #[cfg(test)]
-// mod tests;

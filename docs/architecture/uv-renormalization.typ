@@ -86,6 +86,51 @@ The orchestrator validates scheme assignments before computation, while direct
 scheme controls are constructed explicitly in tests, without carrying a second
 symbolic counterterm through production recursion.
 
+== Nested soft-counterterm oracle
+<nested-soft-toy>
+The local-4D regression
+`production_nested_toy_forest_terms_match_the_explicit_derivation` checks each
+signed forest family before regrouping. The following scalar oracle makes the
+physical-mass and completed-child dependence explicit. Use Minkowski products,
+$V_ell = ell^2 - m^2$, $U_ell = ell^2 - M^2$, $r = k - p$,
+$K = k dot.op p$, and $P = p dot.op q$, with child degree one and parent degree
+two. Define
+
+$ A = frac(k_0 + m, V_k V_r), quad C = frac(p_0, V_p V_(p + q)), quad X = A C. $
+
+For $H = U + S - U S$, the child projections are
+
+$ U_(gamma, 1) A = frac(k_0 + m, U_k^2) + frac(2 k_0 K, U_k^3), $
+$ S_(gamma, 0) A = frac(k_0 + m, V_k^2), $
+$ U_(gamma, 1) S_(gamma, 0) A = frac(k_0 + m, U_k^2). $
+
+Thus the completed child is
+$hat(A) = H_gamma A = (k_0 + m) / V_k^2 + 2 k_0 K / U_k^3$.
+The soft part retains the physical mass $m$; $M$ enters through the UV part.
+Write
+
+$ A_0 = frac(k_0, U_k U_r), quad
+  g_0 = frac(k_0, U_k^2) + frac(2 k_0 K, U_k^3), $
+$ L_m = frac(1, V_p^2) - frac(2 P, V_p^3), quad
+  Q_U = frac(4 P^2, U_p^4) - frac(q^2, U_p^3). $
+
+Applying the parent to the bare and completed children gives the four families
+
+$ F_nothing = frac(p_0 A, V_p V_(p + q)), quad
+  F_gamma = -frac(p_0 hat(A), V_p V_(p + q)), $
+$ F_Gamma = -p_0 A L_m - p_0 A_0 Q_U, quad
+  F_(gamma; Gamma) = p_0 hat(A) L_m + p_0 g_0 Q_U. $
+
+Their sum is
+
+$ R = p_0 (A - hat(A)) (frac(1, V_p V_(p + q)) - L_m)
+    + p_0 (g_0 - A_0) Q_U. $
+
+The $g_0$ term is essential: the parent acts on the completed child, including
+its UV contribution. Holding the child fixed would miss this nested term.
+The test compares the four families independently and then checks their hard
+and soft scaling; the regrouped sum alone cannot certify forest ownership.
+
 == Signs and Integrated Projections
 <signs-and-integrated-projections>
 Each UV operation supplies its own subtraction sign. In particular, the

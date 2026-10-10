@@ -135,11 +135,11 @@ process high-water mark; the process-tree limit can overshoot between polls.
 
 )
 
-The measurement matrix
-links the wall/RSS outcomes with completed evaluator milestones. Per-case command
-receipts, resource samples, stdout, and compressed complete stage traces are in
-the same evidence directory. The cards, prescription overlays and bounded
-runner are preserved there as well.
+The measurement matrix links the wall/RSS outcomes with completed evaluator
+milestones. Original command receipts, resource samples and traces are not
+distributed; the obsolete campaign runners and duplicate cards have been
+removed. The #link("../../examples/cli/uv_scalar_growth/orientation_58_muv.toml")[scalar-growth example]
+retains a reusable ordinary-U input.
 
 Orientation 58 previously stopped at 60 seconds for both prescriptions, with
 6.810 GiB (U) and 11.439 GiB (H) observed high-water. Both now finish inside that
@@ -181,12 +181,11 @@ fits per state, with no missing-fit waiver. The 25 scaling points run from
 `1e8` through `1e12`, seed 1337, with `--selected-limits all --per-orientation`.
 The profiles take 18.046 and 59.945 seconds respectively, after generation.
 
-The numerical summary
-and command receipts
-record coverage and outcomes; complete profiles are retained compressed in the
-same evidence directory. These checks reload fresh states read-only and write
-reports outside those states. They do not regenerate evaluators, edit tests,
-or establish acceptance for the full-orientation or projected-4D cases.
+The coverage and outcomes above summarize the original profiles; the complete
+profiles and command receipts are not distributed. Those checks reloaded fresh
+states read-only and wrote reports outside those states. They did not regenerate
+evaluators, edit tests, or establish acceptance for the full-orientation or
+projected-4D cases.
 
 All benchmark and numerical-check processes have finished. The remaining
 limitations are full-graph generation within the stated bounds and the pending

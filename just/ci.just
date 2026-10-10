@@ -6,14 +6,6 @@ clippy-nix:
 fmt-check-nix:
     nix build .#checks.$(nix eval --impure --raw --expr 'builtins.currentSystem').gammaloop-fmt
 
-# Run security audit via Nix (same as CI)
-audit-nix:
-    nix build .#checks.$(nix eval --impure --raw --expr 'builtins.currentSystem').gammaloop-audit
-
-# Run license check via Nix (same as CI)
-deny-nix:
-    nix build .#checks.$(nix eval --impure --raw --expr 'builtins.currentSystem').gammaloop-deny
-
 # Build documentation via Nix (same as CI)
 doc-nix:
     nix build .#checks.$(nix eval --impure --raw --expr 'builtins.currentSystem').gammaloop-doc
@@ -111,6 +103,6 @@ ci-cache-base REVISION:
 ci-report MANIFEST OUTPUT_DIR:
     nix run .#ci-report -- {{quote(MANIFEST)}} {{quote(OUTPUT_DIR)}}
 
-# Build cargo dependencies via Nix (useful for caching) - uses release mode
+# Prepare the native CI dependency artifacts in the Nix store.
 build-deps-nix:
     nix build .#packages.$(nix eval --impure --raw --expr 'builtins.currentSystem').cargoArtifacts

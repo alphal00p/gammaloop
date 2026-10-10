@@ -58,10 +58,6 @@ python-source = "crates/gammaloop-api/python"
 [tool.mypy]
 disable_error_code = "no-redef"
 check_untyped_defs = true
-exclude = [
-  "python/gammaloop/data/templates/drawing/combine_pages.py",
-  "python/gammaloop/data/models/*",
-]
 
 [[tool.mypy.overrides]]
 module = "yaml.*"

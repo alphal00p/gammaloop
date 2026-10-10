@@ -601,9 +601,9 @@ UV: 24/24 (pass)],
 
 G is generation wall time; P is UV-profile wall time, both including process
 startup. Peak is generation RSS. “Stopped” is a limit, not a completed timing.
-UV counts accepted summed limits; orientation-level results, CPU time and stage
-timings are in the accompanying CSV/JSON. A profile may contain failed fits even
-when its process exits successfully.
+UV counts accepted summed limits; CPU time and stage timings are retained in
+`timings.csv`. Detailed orientation-level JSON results are not distributed.
+A profile may contain failed fits even when its process exits successfully.
 
 
 #pagebreak()
@@ -624,11 +624,10 @@ The jj change is `yllzpryx`; its build-time commit is
 hashes were checked against the build manifest after the campaign. The final
 change also contains the measurement artifacts and this report.
 
-The adjacent `soft-ct-compact-energies-2026-09-24/` directory contains the complete
-`timings.csv` and `timings.json`, compressed detailed results and memory traces,
-run cards, exact command plan, test verification and provenance. Raw states,
-profiles and process logs remain at
-`/tmp/soft-ct-compact-energies-2026-09-24/`; their checksums are recorded.
+The adjacent `soft-ct-compact-energies-2026-09-24/` directory retains
+`timings.csv`, the memory figure and run cards. Detailed JSON results, memory
+traces, command plans, raw states and logs are not distributed. The original
+campaign directory was `/tmp/soft-ct-compact-energies-2026-09-24/`.
 Timings were collected sequentially on shared host `itphlies` with eight Rayon
 threads and one generation worker. They are single observations, not a
 controlled speedup measurement against main or the alias implementation.

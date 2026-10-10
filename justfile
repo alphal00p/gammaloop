@@ -65,7 +65,7 @@ build-api-wheel: _sync-drawing-assets
     maturin build -m crates/gammaloop-api/Cargo.toml --features=ufo_support,python_api --profile=dev-optim
 
 # Build gammaloop Python API with UFO support and stable ABI (dev-optim profile)
-build-api-abi-weel: _sync-drawing-assets
+build-api-abi-wheel: _sync-drawing-assets
     maturin build -m crates/gammaloop-api/Cargo.toml --features=ufo_support,python_abi --profile=dev-optim
 
 # Build gammaloop Python API with UFO support and release profile
@@ -80,7 +80,7 @@ build-api-abi-release: _sync-drawing-assets
 build-api-release-wheel: _sync-drawing-assets
     maturin build -m crates/gammaloop-api/Cargo.toml --features=ufo_support,python_api --profile=release
 
-# Build gammaloop Python API weel with UFO support and stable ABI (release profile)
+# Build gammaloop Python API wheel with UFO support and stable ABI (release profile)
 build-api-abi-release-wheel: _sync-drawing-assets
     maturin build -m crates/gammaloop-api/Cargo.toml --features=ufo_support,python_abi --profile=release
 
@@ -318,8 +318,8 @@ clippy *lint_args:
 build-release-all:
     cargo build --workspace --release
 
-# Quick development cycle: build deps, then build in release
-dev-release: build-deps-nix build-release-all
+# Build in release mode using the local Cargo artifacts.
+dev-release: build-release-all
 
 # Run gammaloop
 run *ARGS:

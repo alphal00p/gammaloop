@@ -1,9 +1,11 @@
 # Guarding local test runs
 
-`just test_LU_scalar_xs` runs all 166 scalar LU cross-section cases in release
-mode with fail-fast, one Cargo worker, one test at a time and zero retries. A
-watchdog covers compilation and every test descendant with a 30 GB process-tree
-memory limit. Unrelated applications cannot trigger this limit.
+`just test_LU_scalar_xs` runs the scalar LU cross-section cases admitted to the
+fast lane, using the `ci-optim` Cargo profile and a four-minute timeout per test.
+It uses fail-fast, one Cargo worker, one test at a time and zero retries. Longer
+supported cases run in main's separate test shards. A watchdog covers compilation
+and every test descendant with a 30 GB process-tree memory limit. Unrelated
+applications cannot trigger this limit.
 
 To guard another command on macOS:
 

@@ -1,6 +1,6 @@
 # Run from the repository root; see README.md for the bounded command.
-# Ordinary UV (MUV) reproduces scalar growth on the current soft-CT branch.
-# This card does not establish whether the growth predates that branch.
+# Ordinary UV (MUV) input from the September 2026 scalar-growth investigation.
+# Historical measurements are not current performance expectations.
 commands = []
 
 [[command_blocks]]
