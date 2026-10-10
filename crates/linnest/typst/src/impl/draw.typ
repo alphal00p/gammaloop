@@ -100,6 +100,16 @@
   }
 }
 
+// Review tooling, such as the drawing benchmark, compiles with
+// `--input linnest-label-report=true` to record what every drawing's chosen
+// annotations really overlap, as `<linnest-label-report>` metadata.
+#let _label-report-enabled() = {
+  let input = sys.inputs.at("linnest-label-report", default: "false")
+  assert(input in ("true", "false"),
+    message: "the linnest-label-report input must be \"true\" or \"false\"")
+  input == "true"
+}
+
 #let _identity-href(kind, id, details) = {
   // SVG link attributes escape quotes but need JSON escapes for XML metacharacters.
   let details = json.encode(details).replace("&", "\\u0026").replace("<", "\\u003c").replace(">", "\\u003e")
@@ -2447,7 +2457,8 @@
 
 // Optimize arc length and automatic side choices with fixed normal clearance.
 // Joint proposals let annotations pass one another without requiring a single
-// temporarily worse move; a short joint descent settles remaining collisions.
+// temporarily worse move; a short joint descent settles remaining collisions,
+// then single-label moves settle each annotation against its final neighbours.
 #let _relax-label-placements(placements, obstacles, label-padding: _label-collision-padding.extra, fixed-arrows: (), edge-lines: ()) = {
   assert(label-padding >= 0, message: "label-collision-padding must be non-negative")
   if placements.len() == 0 { return () }
@@ -2497,6 +2508,45 @@
     result = cbor(_plugin.label_search(geometry, cbor.encode(math)))
   }
   result.selected
+}
+
+// `<linnest-label-report>` records of the chosen annotations, with what the
+// search scored them against: per label, the painted edges its text crosses
+// (summed length inside the box per edge), the labels whose text shares an
+// area with its text, and the nodes, self-loop bends and momentum arrows whose
+// boxes share an area with its text or its own arrows.
+#let _label-report-records(placements, chosen, edge-lines, line-edges, obstacles, fixed-arrows, fixed-arrow-edges) = {
+  let found = cbor(_plugin.label_overlaps(cbor.encode((
+    labels: chosen.map(candidate => (
+      bounds: candidate.bounds,
+      corners: candidate.at("corners", default: none),
+      arrow-bounds: candidate.at("arrow-bounds", default: ()),
+    )),
+    lines: edge-lines, obstacles: obstacles, fixed-arrows: fixed-arrows,
+  ))))
+  placements.zip(found).map(((label, found)) => {
+    let crossings = ()
+    for (line, length) in found.lines {
+      let edge = line-edges.at(line)
+      let index = crossings.position(crossing => crossing.edge == edge)
+      if index == none {
+        crossings.push((edge: edge, length: length))
+      } else {
+        crossings.at(index).length += length
+      }
+    }
+    (
+      edge: label.edge, movable: label.candidates.count > 1,
+      crossings: crossings, labels: found.labels,
+      obstacles: found.obstacles.map(index => {
+        let obstacle = obstacles.at(index)
+        if "node" in obstacle { (node: obstacle.node) } else { (self-loop: obstacle.edge) }
+      }).dedup(),
+      arrows: found.arrows.map(arrow => if "fixed" in arrow {
+        fixed-arrow-edges.at(arrow.fixed)
+      } else { placements.at(arrow.label).edge }).dedup(),
+    )
+  })
 }
 
 #let _paired-layer-label-element(
@@ -3250,6 +3300,7 @@
   let subgraph-edge-style = options.subgraph-edge-style
   let subgraph-edge-underlay = options.subgraph-edge-underlay
   let inspection-targets = _inspection-targets(options.inspection-targets)
+  let label-report = _label-report-enabled()
   let info = graph-api.info(graph)
   let graph-style = _graph-style(info)
   unit = if unit == auto { graph-style.at("unit", default: 1) } else { unit }
@@ -3378,6 +3429,7 @@
               )))
             }
             label-obstacles.push((
+              node: i,
               left: calc.min(..corners.map(p => p.at(0))),
               right: calc.max(..corners.map(p => p.at(0))),
               bottom: calc.min(..corners.map(p => p.at(1))),
@@ -4157,9 +4209,9 @@
                 and _style-value(style, "offset") != 0
                 and (_style-value(style, "length") != none or _style-value(style, "ratio") != none)
             )) {
-              fixed-arrow-layers.push((start: layer-start, end: elements.len(), ctx: ctx))
+              fixed-arrow-layers.push((start: layer-start, end: elements.len(), ctx: ctx, edge: edge-data.eid))
             } else {
-              edge-layers.push((ctx: ctx, start: layer-start, end: elements.len()))
+              edge-layers.push((ctx: ctx, start: layer-start, end: elements.len(), edge: edge-data.eid))
             }
           }
 
@@ -4334,24 +4386,41 @@
             label-placements.at(index) = label
           }
         }
-        for boxes in projected-bounds.slice(prepared.elements.len()) {
+        let fixed-arrow-edges = ()
+        for (layer, boxes) in fixed-arrow-layers.zip(projected-bounds.slice(prepared.elements.len())) {
           fixed-arrows += boxes
+          fixed-arrow-edges += boxes.map(_ => layer.edge)
         }
         // Fixed labels return before collision scoring; avoid flattening painted
-        // curves unless an annotation can actually move. Keep each layer's
-        // original context and processing boundary when materializing its lines.
+        // curves unless an annotation can actually move or a report needs them.
+        // Keep each layer's original context and processing boundary when
+        // materializing its lines.
         let edge-lines = ()
-        if label-placements.any(label => label.candidates.count > 1) {
-          let painted = ()
+        let line-edges = ()
+        if label-report or label-placements.any(label => label.candidates.count > 1) {
           let finished = _materialize-mark-groups(elements, mark-batch, candidate-geometry)
-          for layer in edge-layers {
-            painted += cetz.process.many(layer.ctx,
-              finished.slice(layer.start, layer.end).flatten(), compute-bounds: false).drawables
+          let painted = edge-layers.map(layer => cetz.process.many(layer.ctx,
+            finished.slice(layer.start, layer.end).flatten(), compute-bounds: false).drawables)
+          edge-lines = _edge-collision-lines(ctx, painted.flatten(), painted: true)
+          if label-report {
+            // Each layer flattens to the same lines, in order; record their edges.
+            for (layer, drawables) in edge-layers.zip(painted) {
+              line-edges += _edge-collision-lines(ctx, drawables, painted: true).map(_ => layer.edge)
+            }
           }
-          edge-lines = _edge-collision-lines(ctx, painted, painted: true)
         }
         let label-padding = options.label-collision-padding
         let relaxed = _relax-label-placements(label-placements, label-obstacles, label-padding: label-padding, fixed-arrows: fixed-arrows, edge-lines: edge-lines)
+        if label-report {
+          let labels = _label-report-records(
+            label-placements, relaxed, edge-lines, line-edges,
+            label-obstacles, fixed-arrows, fixed-arrow-edges,
+          )
+          // Floating keeps the invisible record out of the drawing's bounds.
+          elements.push(cetz.draw.floating(cetz.draw.content(
+            (0, 0), [#metadata((labels: labels)) <linnest-label-report>],
+          )))
+        }
         let selected-indices = range(fixed-mark-count)
         for (label, candidate) in label-placements.zip(relaxed) {
           if label.path-style != none {

@@ -27,6 +27,37 @@
 )), 6)
 #assert(edge-intersection(box, (line((-1, 1.02), (2, 1.02), radius: 0.03),)) > 0)
 #assert.eq(edge-intersection(box, (line((-1, 1.04), (2, 1.04), radius: 0.03),)), 0)
+// The label report clips painted lines exactly, as the search scores them: a
+// long dotted edge, in two pieces, crosses the texts between its sample points
+// (x = -0.5 and 1.5); crossings sum per painted edge. Only positive common
+// areas pair labels or meet nodes, self-loop bends and momentum arrows; a
+// label's own arrow meets them too, but never its own text.
+#let report = impl._label-report-records(
+  ((edge: 0, candidates: (count: 2)), (edge: 1, candidates: (count: 1)), (edge: 2, candidates: (count: 2))),
+  (box, candidate(0.5) + (arrow-bounds: ((left: 0.6, right: 1.4, bottom: -0.6, top: 0.1),)), candidate(1)),
+  (
+    line((-8.5, 0.25), (0.5, 0.25), radius: 0.05),
+    line((0.5, 0.25), (7.5, 0.25), radius: 0.05),
+    line((-1, 2), (3, 2)),
+  ),
+  (7, 7, 8),
+  (
+    (node: 3, left: -0.5, right: 0.1, bottom: 0.4, top: 0.6),
+    (node: 4, left: 2, right: 2.5, bottom: 0.4, top: 0.6),
+    (edge: 5, self-loop: true, left: 1.8, right: 2.2, bottom: 0.8, top: 1.2),
+    (edge: 5, self-loop: true, left: 1.9, right: 2.3, bottom: 0, top: 0.3),
+  ),
+  ((left: 0.7, right: 0.9, bottom: -0.9, top: -0.5), (left: 1, right: 1.2, bottom: -0.9, top: -0.55)),
+  (9, 9),
+)
+#assert.eq(report.map(label => (label.edge, label.movable)), ((0, true), (1, false), (2, true)))
+#for label in report {
+  assert.eq(label.crossings.map(crossing => crossing.edge), (7,))
+  assert(calc.abs(label.crossings.first().length - 1.1) < 1e-12)
+}
+#assert.eq(report.map(label => label.labels), ((1,), (0, 2), (1,)))
+#assert.eq(report.map(label => label.obstacles), (((node: 3),), (), ((self-loop: 5),)))
+#assert.eq(report.map(label => label.arrows), ((1,), (9,), (1,)))
 #let rotated = box + (
   corners: ((0, 1), (1, 2), (1, 0), (2, 1)),
   bounds: (left: 0, right: 2, bottom: 0, top: 2),

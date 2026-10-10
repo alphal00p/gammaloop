@@ -98,6 +98,15 @@ def build_root(build: Path, fixtures: Path) -> Path:
     return root
 
 
+def typst_env() -> dict[str, str]:
+    """TYPST_FONT_PATHS could otherwise add non-embedded fonts, and the package
+    cache could supply different copies of the checked packages."""
+    env = os.environ.copy()
+    env.pop("TYPST_FONT_PATHS", None)
+    env.pop("TYPST_PACKAGE_CACHE_PATH", None)
+    return env
+
+
 def compile_case(
     typst: str,
     root: Path,
@@ -124,19 +133,84 @@ def compile_case(
     for value in inputs:
         command += ["--input", value]
     command += [str(root / "cases" / f"{case}.typ"), str(output)]
-    # TYPST_FONT_PATHS could otherwise add non-embedded fonts, and the package
-    # cache could supply different copies of the checked packages.
-    env = os.environ.copy()
-    env.pop("TYPST_FONT_PATHS", None)
-    env.pop("TYPST_PACKAGE_CACHE_PATH", None)
     start = time.perf_counter()
     result = subprocess.run(
-        command, capture_output=True, text=True, env=env, check=False
+        command, capture_output=True, text=True, env=typst_env(), check=False
     )
     elapsed = (time.perf_counter() - start) * 1000
     if result.returncode:
         sys.exit(f"{case} failed:\n{result.stderr}")
     return elapsed
+
+
+def label_report(typst: str, root: Path, packages: Path, case: str) -> list:
+    """Each drawing's chosen labels and what they really meet: painted edges
+    (`crossings`, summed length per edge), other labels, and the nodes,
+    self-loop bends and momentum arrows whose boxes they overlap."""
+    command = [
+        typst,
+        "eval",
+        "query(<linnest-label-report>).map(record => record.value)",
+        "--in",
+        str(root / "cases" / f"{case}.typ"),
+        "--root",
+        str(root),
+        "--package-path",
+        str(packages),
+        "--ignore-system-fonts",
+        "--input",
+        "linnest-label-report=true",
+    ]
+    result = subprocess.run(
+        command, capture_output=True, text=True, env=typst_env(), check=False
+    )
+    if result.returncode:
+        sys.exit(f"{case} label report failed:\n{result.stderr}")
+    return json.loads(result.stdout)
+
+
+def obstacle_name(obstacle: dict) -> str:
+    """A node as `n<index>`, a self-loop bend as `e<edge>-loop`."""
+    if "node" in obstacle:
+        return f"n{obstacle['node']}"
+    return f"e{obstacle['self-loop']}-loop"
+
+
+def contacts(drawings: list) -> set[tuple[str, object, object]]:
+    """(kind, label edge, what it meets) of every drawing in a case: crossed
+    painted edges, obstacles and the edges of overlapped momentum arrows."""
+    return {
+        (kind, label["edge"], met)
+        for drawing in drawings
+        for label in drawing["labels"]
+        for kind, met in [
+            *(("crossing", crossing["edge"]) for crossing in label["crossings"]),
+            *(("obstacle", obstacle_name(item)) for item in label["obstacles"]),
+            *(("arrow", edge) for edge in label["arrows"]),
+        ]
+    }
+
+
+def label_summary(drawings: list) -> dict[str, object]:
+    labels = [label for drawing in drawings for label in drawing["labels"]]
+    return {
+        "labels": len(labels),
+        "crossing_labels": sum(1 for label in labels if label["crossings"]),
+        "label_pairs": sum(len(label["labels"]) for label in labels) // 2,
+        "crossings": " ".join(
+            f"e{label['edge']}>e{crossing['edge']}:{crossing['length']:.3f}"
+            for label in labels
+            for crossing in label["crossings"]
+        ),
+        "obstacles": " ".join(
+            f"e{label['edge']}>{obstacle_name(item)}"
+            for label in labels
+            for item in label["obstacles"]
+        ),
+        "arrows": " ".join(
+            f"e{label['edge']}>e{edge}" for label in labels for edge in label["arrows"]
+        ),
+    }
 
 
 def main() -> None:
@@ -161,9 +235,25 @@ def main() -> None:
         "(the corpus documents are static by default)",
     )
     parser.add_argument(
+        "--label-report",
+        action="store_true",
+        help="after timing, record which painted edges, labels, nodes and "
+        "momentum arrows every chosen label meets (label-report.csv/.json, untimed)",
+    )
+    parser.add_argument(
+        "--label-baseline",
+        type=Path,
+        metavar="LABEL_REPORT_JSON",
+        help="with --label-report, fail when a case gains a label meeting a "
+        "painted edge, another label, a node or a momentum arrow relative to this "
+        "earlier label-report.json",
+    )
+    parser.add_argument(
         "--out", type=Path, default=REPO / "target/drawing-bench/current"
     )
     args = parser.parse_args()
+    if args.label_baseline and not args.label_report:
+        parser.error("--label-baseline requires --label-report")
     if args.rounds < 3:
         parser.error("--rounds must be at least 3")
     if args.png is not None and args.png <= 0:
@@ -229,6 +319,7 @@ def main() -> None:
             "links and hit coverage reviewed in --inspection-targets renders"
         ),
         "inspection_targets": args.inspection_targets,
+        "label_report": args.label_report,
         "visual_review": "pending (not automated by this harness)",
         "dry_run": args.dry_run,
     }
@@ -282,7 +373,56 @@ def main() -> None:
         metadata["png_hashes"] = {
             case: sha256(renders / f"{case}.png") for case in cases
         }
+    if args.label_report:
+        reports = {
+            case: label_report(executable, root, packages, case) for case in cases
+        }
+        (out / "label-report.json").write_text(json.dumps(reports, indent=2) + "\n")
+        summaries = {case: label_summary(reports[case]) for case in cases}
+        with (out / "label-report.csv").open("w", newline="") as handle:
+            writer = csv.writer(handle)
+            fields = [
+                "labels",
+                "crossing_labels",
+                "label_pairs",
+                "crossings",
+                "obstacles",
+                "arrows",
+            ]
+            writer.writerow(["case", *fields])
+            for case, summary in summaries.items():
+                writer.writerow([case, *(summary[field] for field in fields)])
+        overlapping = {
+            case: summary
+            for case, summary in summaries.items()
+            if contacts(reports[case]) or summary["label_pairs"]
+        }
+        print(f"Label overlaps in {len(overlapping)} of {len(cases)} cases:")
+        for case, summary in overlapping.items():
+            print(
+                f"  {case}: crossings {summary['crossings'] or '-'}, "
+                f"obstacles {summary['obstacles'] or '-'}, "
+                f"arrows {summary['arrows'] or '-'}, "
+                f"{summary['label_pairs']} label pairs"
+            )
+    regressions = []
+    if args.label_baseline:
+        baseline = json.loads(args.label_baseline.read_text())
+        for case in cases:
+            before = baseline.get(case, [])
+            gained = contacts(reports[case]) - contacts(before)
+            pairs = (
+                summaries[case]["label_pairs"] - label_summary(before)["label_pairs"]
+            )
+            if gained or pairs > 0:
+                regressions.append(
+                    f"  {case}: new (kind, label edge, met) {sorted(gained, key=str)}, "
+                    f"{max(pairs, 0)} new label pairs"
+                )
+        metadata["label_baseline"] = str(args.label_baseline.resolve())
     (out / "metadata.json").write_text(json.dumps(metadata, indent=2) + "\n")
+    if regressions:
+        sys.exit("New label overlaps:\n" + "\n".join(regressions))
 
 
 if __name__ == "__main__":

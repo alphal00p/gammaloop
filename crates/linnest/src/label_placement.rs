@@ -46,10 +46,10 @@ impl Transform {
     }
 }
 
-#[derive(Clone, Copy, Deserialize)]
-struct Point(
-    #[serde(deserialize_with = "crate::deserialize_f64")] f64,
-    #[serde(deserialize_with = "crate::deserialize_f64")] f64,
+#[derive(Clone, Copy, Deserialize, Serialize)]
+pub(crate) struct Point(
+    #[serde(deserialize_with = "crate::deserialize_f64")] pub(crate) f64,
+    #[serde(deserialize_with = "crate::deserialize_f64")] pub(crate) f64,
 );
 
 impl Point {
@@ -526,16 +526,17 @@ impl CandidateAttachment {
     }
 }
 
+/// An axis-aligned box in canvas units, shared with the native renderer.
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
-struct Bounds {
+pub(crate) struct Bounds {
     #[serde(deserialize_with = "crate::deserialize_f64")]
-    left: f64,
+    pub(crate) left: f64,
     #[serde(deserialize_with = "crate::deserialize_f64")]
-    right: f64,
+    pub(crate) right: f64,
     #[serde(deserialize_with = "crate::deserialize_f64")]
-    bottom: f64,
+    pub(crate) bottom: f64,
     #[serde(deserialize_with = "crate::deserialize_f64")]
-    top: f64,
+    pub(crate) top: f64,
 }
 
 impl Bounds {
@@ -576,8 +577,10 @@ struct CollisionCandidate {
     arrow_bounds: Vec<Bounds>,
 }
 
-#[derive(Deserialize)]
-struct StrokeLine {
+/// A painted collision line: one straight piece of a flattened stroke, with
+/// the stroke's half width.
+#[derive(Deserialize, Serialize)]
+pub(crate) struct StrokeLine {
     start: Point,
     end: Point,
     #[serde(deserialize_with = "crate::deserialize_f64")]
@@ -687,62 +690,94 @@ impl LineGrid {
     }
 }
 
-impl CollisionCandidate {
-    fn edge_intersection(&self, lines: &[StrokeLine], grid: &LineGrid) -> Cost {
-        let Some(corners) = self.corners.filter(|_| !lines.is_empty()) else {
-            return Cost::Integer(0);
-        };
+/// A text box in its own frame. Corners are north-west, north-east, south-west
+/// and south-east, so the box spans `[0, 1]²` from the first one.
+struct TextFrame {
+    bounds: Bounds,
+    origin: Point,
+    x: Point,
+    y: Point,
+    determinant: f64,
+    width: f64,
+    height: f64,
+}
+
+impl TextFrame {
+    /// `None` for a degenerate box, which no painted line can meet.
+    fn new(bounds: Bounds, corners: [Point; 4]) -> Option<Self> {
         let origin = corners[0];
         let x = corners[1].sub(origin);
         let y = corners[2].sub(origin);
         let determinant = x.cross(y);
-        if determinant.abs() < 1e-12 {
-            return Cost::Integer(0);
+        (determinant.abs() >= 1e-12).then(|| Self {
+            bounds,
+            origin,
+            x,
+            y,
+            determinant,
+            width: x.length(),
+            height: y.length(),
+        })
+    }
+
+    /// The length of `line` inside the box, padded by its stroke radius, or
+    /// `None` when the stroke misses the box. A stroke touching it has length 0.
+    fn clip(&self, line: &StrokeLine) -> Option<f64> {
+        let bounds = self.bounds;
+        if line.start.0.max(line.end.0) + line.radius < bounds.left
+            || line.start.0.min(line.end.0) - line.radius > bounds.right
+            || line.start.1.max(line.end.1) + line.radius < bounds.bottom
+            || line.start.1.min(line.end.1) - line.radius > bounds.top
+        {
+            return None;
         }
-        let width = x.length();
-        let height = y.length();
         let local = |point: Point| {
-            let delta = point.sub(origin);
-            [delta.cross(y) / determinant, x.cross(delta) / determinant]
+            let delta = point.sub(self.origin);
+            [
+                delta.cross(self.y) / self.determinant,
+                self.x.cross(delta) / self.determinant,
+            ]
+        };
+        let a = local(line.start);
+        let b = local(line.end);
+        let mut low: f64 = 0.0;
+        let mut high: f64 = 1.0;
+        for axis in 0..2 {
+            // The inverse transform's row norm also handles sheared canvases.
+            let padding = line.radius * (if axis == 0 { self.height } else { self.width })
+                / self.determinant.abs();
+            let delta = b[axis] - a[axis];
+            if delta.abs() < 1e-12 {
+                if a[axis] < -padding || a[axis] > 1.0 + padding {
+                    return None;
+                }
+            } else {
+                let from = (-padding - a[axis]) / delta;
+                let to = (1.0 + padding - a[axis]) / delta;
+                low = low.max(from.min(to));
+                high = high.min(from.max(to));
+            }
+        }
+        (high >= low).then(|| (high - low) * line.start.distance(line.end))
+    }
+}
+
+impl CollisionCandidate {
+    fn edge_intersection(&self, lines: &[StrokeLine], grid: &LineGrid) -> Cost {
+        let Some(frame) = self
+            .corners
+            .filter(|_| !lines.is_empty())
+            .and_then(|corners| TextFrame::new(self.bounds, corners))
+        else {
+            return Cost::Integer(0);
         };
         let mut length = 0.0;
-        for line in grid
-            .near(self.bounds)
-            .into_iter()
-            .map(|index| &lines[index])
-        {
-            let bounds = self.bounds;
-            if line.start.0.max(line.end.0) + line.radius < bounds.left
-                || line.start.0.min(line.end.0) - line.radius > bounds.right
-                || line.start.1.max(line.end.1) + line.radius < bounds.bottom
-                || line.start.1.min(line.end.1) - line.radius > bounds.top
-            {
-                continue;
+        for index in grid.near(self.bounds) {
+            if let Some(inside) = frame.clip(&lines[index]) {
+                length += inside;
             }
-            let a = local(line.start);
-            let b = local(line.end);
-            let mut low: f64 = 0.0;
-            let mut high: f64 = 1.0;
-            for axis in 0..2 {
-                // The inverse transform's row norm also handles sheared canvases.
-                let padding =
-                    line.radius * (if axis == 0 { height } else { width }) / determinant.abs();
-                let delta = b[axis] - a[axis];
-                if delta.abs() < 1e-12 {
-                    if a[axis] < -padding || a[axis] > 1.0 + padding {
-                        high = -1.0;
-                        break;
-                    }
-                } else {
-                    let from = (-padding - a[axis]) / delta;
-                    let to = (1.0 + padding - a[axis]) / delta;
-                    low = low.max(from.min(to));
-                    high = high.min(from.max(to));
-                }
-            }
-            length += (high - low).max(0.0) * line.start.distance(line.end);
         }
-        Cost::Float(6.0 * length / width.min(height).max(1e-9))
+        Cost::Float(6.0 * length / frame.width.min(frame.height).max(1e-9))
     }
 }
 
@@ -1393,6 +1428,27 @@ impl CollisionGeometry {
                     }
                 }
             }
+            // Joint moves rank each partner without the other, so a label can
+            // end beside a cheaper spot. Settle labels one at a time against
+            // their final neighbours; every move lowers the total cost.
+            let mut moved = true;
+            while moved {
+                moved = false;
+                for i in 0..count {
+                    if self.boxes[i].len() <= 1 {
+                        continue;
+                    }
+                    let mut current = score(i, choices[i], &choices, None).float();
+                    for choice in 0..self.boxes[i].len() {
+                        let proposed = score(i, choice, &choices, None).float();
+                        if proposed < current - 1e-12 {
+                            choices[i] = choice;
+                            current = proposed;
+                            moved = true;
+                        }
+                    }
+                }
+            }
             best_choices = choices;
         }
         Ok(SearchResult {
@@ -1820,13 +1876,6 @@ struct PaintedStroke {
     segments: Vec<(ciborium::Value, bool, Vec<Vec<ciborium::Value>>)>,
 }
 
-#[derive(Serialize)]
-struct CollisionLine {
-    start: [f64; 2],
-    end: [f64; 2],
-    radius: f64,
-}
-
 impl StrokeLinesSpec {
     fn vertex(value: &ciborium::Value) -> Result<Vec<f64>, String> {
         let coordinates = value
@@ -1845,7 +1894,7 @@ impl StrokeLinesSpec {
 
     /// Lines in drawable, subpath and command order, as the former Typst
     /// traversal emitted them; cubics use the same identity-transform flattening.
-    fn lines(&self) -> Result<Vec<CollisionLine>, String> {
+    fn lines(&self) -> Result<Vec<StrokeLine>, String> {
         if !self.accuracy.is_finite() || self.accuracy <= 0.0 {
             return Err("painted stroke accuracy must be finite and positive".to_owned());
         }
@@ -1858,10 +1907,10 @@ impl StrokeLinesSpec {
             if !stroke.radius.is_finite() || stroke.radius < 0.0 {
                 return Err("painted stroke radius must be finite and nonnegative".to_owned());
             }
-            let mut push = |start: Point, end: Point| {
-                lines.push(CollisionLine {
-                    start: [start.0, start.1],
-                    end: [end.0, end.1],
+            let mut push = |start, end| {
+                lines.push(StrokeLine {
+                    start,
+                    end,
                     radius: stroke.radius,
                 })
             };
@@ -1907,6 +1956,137 @@ pub fn stroke_lines_bytes(arg: &[u8]) -> Result<Vec<u8>, String> {
     let spec: StrokeLinesSpec = ciborium::de::from_reader(arg)
         .map_err(|error| format!("Invalid painted stroke geometry: {error}"))?;
     crate::graph_api::encode_cbor(&spec.lines()?)
+}
+
+/// A chosen annotation: its text box, exact with `corners` and otherwise the
+/// axis-aligned `bounds`, and the boxes of the momentum arrows placed with it.
+#[derive(Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub(crate) struct PlacedLabel {
+    pub(crate) bounds: Bounds,
+    #[serde(default, deserialize_with = "Point::deserialize_quad")]
+    pub(crate) corners: Option<[Point; 4]>,
+    #[serde(default)]
+    pub(crate) arrow_bounds: Vec<Bounds>,
+}
+
+/// Chosen annotations and the drawing geometry the search scores them against.
+#[derive(Deserialize)]
+#[serde(rename_all = "kebab-case")]
+struct OverlapSpec {
+    labels: Vec<PlacedLabel>,
+    lines: Vec<StrokeLine>,
+    #[serde(default)]
+    obstacles: Vec<Bounds>,
+    #[serde(default)]
+    fixed_arrows: Vec<Bounds>,
+}
+
+/// A momentum arrow box: one of the drawing's fixed arrows, or one placed
+/// with another label.
+#[derive(Debug, PartialEq, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub(crate) enum ArrowBox {
+    Fixed(usize),
+    Label(usize),
+}
+
+/// What one chosen annotation really meets, without search clearances.
+#[derive(Serialize)]
+pub(crate) struct LabelOverlaps {
+    /// Painted lines reaching the text box, with the length inside it, as
+    /// scored by the search; strokes only touching the box have length 0.
+    pub(crate) lines: Vec<(usize, f64)>,
+    /// Other labels whose text box shares a positive area with this one.
+    pub(crate) labels: Vec<usize>,
+    /// Obstacles (node boxes, self-loop bends) sharing a positive area with
+    /// the text box or one of this label's arrow boxes.
+    pub(crate) obstacles: Vec<usize>,
+    /// Other momentum arrow boxes sharing a positive area with the text box or
+    /// one of this label's arrow boxes.
+    pub(crate) arrows: Vec<ArrowBox>,
+}
+
+/// What chosen annotations meet: painted lines, through the exact clipping the
+/// search scores, and other labels' text, obstacles and momentum arrows, whose
+/// boxes must share a positive area. Arrow and obstacle boxes are rectangles
+/// around their shapes, so a listed box overlap need not be visible. Shared by
+/// the native feedback score and the Typst `linnest-label-report`.
+pub(crate) fn label_overlaps(
+    labels: &[PlacedLabel],
+    lines: &[StrokeLine],
+    obstacles: &[Bounds],
+    fixed_arrows: &[Bounds],
+) -> Vec<LabelOverlaps> {
+    let grid = LineGrid::new(lines);
+    let shared = |a: Bounds, b: Bounds| a.overlap(b, 0.0) > 1e-9;
+    labels
+        .iter()
+        .enumerate()
+        .map(|(index, label)| {
+            let Bounds {
+                left,
+                right,
+                bottom,
+                top,
+            } = label.bounds;
+            let corners = label.corners.unwrap_or([
+                Point(left, top),
+                Point(right, top),
+                Point(left, bottom),
+                Point(right, bottom),
+            ]);
+            let crossed = TextFrame::new(label.bounds, corners).map_or_else(Vec::new, |frame| {
+                grid.near(label.bounds)
+                    .into_iter()
+                    .filter_map(|line| frame.clip(&lines[line]).map(|inside| (line, inside)))
+                    .collect()
+            });
+            let parts: Vec<_> = std::iter::once(label.bounds)
+                .chain(label.arrow_bounds.iter().copied())
+                .collect();
+            let reaches = |other: Bounds| parts.iter().any(|&part| shared(part, other));
+            let others = || {
+                labels
+                    .iter()
+                    .enumerate()
+                    .filter(move |&(other, _)| other != index)
+            };
+            LabelOverlaps {
+                lines: crossed,
+                labels: others()
+                    .filter(|(_, other)| shared(label.bounds, other.bounds))
+                    .map(|(other, _)| other)
+                    .collect(),
+                obstacles: (0..obstacles.len())
+                    .filter(|&obstacle| reaches(obstacles[obstacle]))
+                    .collect(),
+                arrows: (0..fixed_arrows.len())
+                    .filter(|&arrow| reaches(fixed_arrows[arrow]))
+                    .map(ArrowBox::Fixed)
+                    .chain(
+                        others()
+                            .filter(|(_, other)| {
+                                other.arrow_bounds.iter().any(|&arrow| reaches(arrow))
+                            })
+                            .map(|(other, _)| ArrowBox::Label(other)),
+                    )
+                    .collect(),
+            }
+        })
+        .collect()
+}
+
+/// [`label_overlaps`] over the `label_overlaps` plugin wire format.
+pub fn overlaps_bytes(arg: &[u8]) -> Result<Vec<u8>, String> {
+    let spec: OverlapSpec = ciborium::de::from_reader(arg)
+        .map_err(|error| format!("Invalid label overlap geometry: {error}"))?;
+    crate::graph_api::encode_cbor(&label_overlaps(
+        &spec.labels,
+        &spec.lines,
+        &spec.obstacles,
+        &spec.fixed_arrows,
+    ))
 }
 
 #[cfg(test)]
@@ -2432,7 +2612,10 @@ mod tests {
         let mut expected = vec![[[0.0, 0.0], [1.0, 0.0]], [[1.0, 0.0], [1.0, 1.0]]];
         expected.extend(cubic.lines(&identity, 0.005));
         expected.push([[0.0, 1.0], [0.0, 0.0]]);
-        let actual: Vec<_> = lines.iter().map(|line| [line.start, line.end]).collect();
+        let actual: Vec<_> = lines
+            .iter()
+            .map(|line| [line.start, line.end].map(|point| [point.0, point.1]))
+            .collect();
         assert_eq!(actual, expected);
         assert!(lines.iter().all(|line| line.radius == 0.25));
     }
@@ -2505,6 +2688,153 @@ mod tests {
         assert_eq!(
             spec.geometry(0.0).unwrap().costs[0][0],
             ciborium::Value::Float(2.0)
+        );
+    }
+
+    /// A dotted edge is dashed only when painted: its drawable keeps the whole
+    /// path, so the search and the overlap report treat it like a solid edge.
+    #[test]
+    fn labels_avoid_a_dotted_edge_crossing_their_preferred_side() {
+        use serde_json::json;
+        let encode = |value: serde_json::Value| crate::graph_api::encode_cbor(&value).unwrap();
+        let painted = |from: [f64; 2], to: [f64; 2]| json!({"radius": 0.05, "segments": [[[from[0], from[1], 0.0], false, [["l", [to[0], to[1], 0.0]]]]]});
+        // The labelled carrier, then a dotted edge passing above its middle.
+        let lines: serde_json::Value = ciborium::from_reader(
+            stroke_lines_bytes(&encode(json!({
+                "strokes": [painted([-3.0, 0.0], [3.0, 0.0]), painted([-0.5, 0.2], [0.5, 3.0])],
+                "accuracy": 0.005,
+            })))
+            .unwrap()
+            .as_slice(),
+        )
+        .unwrap();
+        let candidate = |bottom: f64, cost: f64| {
+            let (left, right, top) = (-0.6, 0.6, bottom + 0.6);
+            json!({
+                "bounds": {"left": left, "right": right, "bottom": bottom, "top": top},
+                "corners": [[left, top], [right, top], [left, bottom], [right, bottom]],
+                "cost": cost, "position": [0.0, bottom + 0.3],
+            })
+        };
+        let (above, below) = (candidate(0.3, 0.0), candidate(-0.9, 0.002));
+        let geometry = encode(json!({
+            "placements": [{"edge": 0, "candidates": [above.clone(), below.clone()]}],
+            "obstacles": [], "label-padding": 0.6, "obstacle-padding": 0.08,
+            "fixed-arrows": [], "coordinated": false, "edge-lines": lines, "fixed": false,
+        }));
+        let math = encode(json!({
+            "temperatures": (0..84).map(|sweep| 0.15 * 0.9f64.powi(sweep)).collect::<Vec<_>>(),
+            "exponentials": [], "pair-padding": 0.35,
+        }));
+        let result: serde_json::Value =
+            ciborium::from_reader(search_bytes(&geometry, &math).unwrap().as_slice()).unwrap();
+        assert_eq!(result["choices"], json!([1]));
+        assert_eq!(result["selected"][0]["position"], below["position"]);
+        let report: serde_json::Value = ciborium::from_reader(
+            overlaps_bytes(&encode(json!({"labels": [above, below], "lines": lines})))
+                .unwrap()
+                .as_slice(),
+        )
+        .unwrap();
+        // Only the dotted edge meets the preferred text; the chosen text is clear.
+        let hits = |label: usize| report[label]["lines"].as_array().unwrap().len();
+        assert_eq!((hits(0), hits(1)), (1, 0));
+        assert_eq!(report[0]["lines"][0][0], json!(1));
+    }
+
+    /// Lines are clipped exactly, as the search scores them: a long straight
+    /// edge counts even between sample points, and a stroke reaching the box
+    /// within its radius counts. Text, obstacle and arrow boxes meet only with
+    /// a positive common area; a label's own arrows meet obstacles and other
+    /// arrows, never its own text.
+    #[test]
+    fn overlaps_clip_painted_lines_exactly_and_share_box_areas() {
+        let bounds = |left, right, bottom, top| Bounds {
+            left,
+            right,
+            bottom,
+            top,
+        };
+        let text = |left, right, bottom, top| PlacedLabel {
+            bounds: bounds(left, right, bottom, top),
+            corners: None,
+            arrow_bounds: Vec::new(),
+        };
+        let line = |start: (f64, f64), end: (f64, f64), radius: f64| StrokeLine {
+            start: Point(start.0, start.1),
+            end: Point(end.0, end.1),
+            radius,
+        };
+        let mut diamond = text(10.0, 12.0, 0.0, 2.0);
+        diamond.corners = Some([
+            Point(10.0, 1.0),
+            Point(11.0, 2.0),
+            Point(11.0, 0.0),
+            Point(12.0, 1.0),
+        ]);
+        let mut arrowed = text(20.0, 21.0, 0.0, 1.0);
+        arrowed.arrow_bounds = vec![bounds(21.0, 23.0, 0.0, 0.5)];
+        let labels = [
+            text(0.0, 1.0, 0.0, 1.0),
+            text(0.5, 1.5, 0.5, 1.5),
+            text(1.5, 2.5, -1.0, 0.0),
+            diamond,
+            arrowed,
+            text(22.5, 23.5, 0.25, 1.25),
+        ];
+        let lines = [
+            // Samples every 2 units (x = ..., -0.5, 1.5, ...) skip the box.
+            line((-8.5, 0.25), (7.5, 0.25), 0.05),
+            line((0.0, 1.04), (0.2, 1.04), 0.05),
+            line((0.0, 1.06), (0.2, 1.06), 0.05),
+            // A zero-radius mark outline touching a corner.
+            line((2.5, 0.0), (3.0, -0.5), 0.0),
+            // Inside the diamond's bounds, outside the diamond.
+            line((10.05, 0.05), (10.2, 0.05), 0.0),
+            line((10.0, 1.0), (12.0, 1.0), 0.0),
+        ];
+        let obstacles = [
+            bounds(-1.0, 0.0, 0.0, 1.0),
+            bounds(0.9, 1.2, 0.9, 1.2),
+            bounds(22.0, 22.5, 0.25, 0.75),
+        ];
+        let fixed_arrows = [bounds(22.9, 24.0, -1.0, 0.1)];
+        let found = label_overlaps(&labels, &lines, &obstacles, &fixed_arrows);
+        let lines: Vec<Vec<usize>> = found
+            .iter()
+            .map(|found| found.lines.iter().map(|&(line, _)| line).collect())
+            .collect();
+        assert_eq!(
+            lines,
+            [vec![0, 1], vec![], vec![3], vec![5], vec![], vec![]]
+        );
+        let lengths: Vec<f64> = found
+            .iter()
+            .flat_map(|found| found.lines.iter().map(|&(_, length)| length))
+            .collect();
+        for (length, expected) in lengths.into_iter().zip([1.1, 0.2, 0.0, 2.0]) {
+            assert!((length - expected).abs() < 1e-12, "{length} != {expected}");
+        }
+        let labels: Vec<_> = found.iter().map(|found| found.labels.clone()).collect();
+        assert_eq!(labels, [vec![1], vec![0], vec![], vec![], vec![], vec![]]);
+        // Boxes that only touch, like the first obstacle and the last label's
+        // left side, do not meet.
+        let obstacles: Vec<_> = found.iter().map(|found| found.obstacles.clone()).collect();
+        assert_eq!(
+            obstacles,
+            [vec![1], vec![1], vec![], vec![], vec![2], vec![]]
+        );
+        let arrows: Vec<_> = found.iter().map(|found| &found.arrows[..]).collect();
+        assert_eq!(
+            arrows,
+            [
+                &[][..],
+                &[],
+                &[],
+                &[],
+                &[ArrowBox::Fixed(0)],
+                &[ArrowBox::Label(4)]
+            ]
         );
     }
 
@@ -2742,6 +3072,87 @@ mod tests {
             result.costs,
             [ciborium::Value::Float(0.0), ciborium::Value::Float(0.0)]
         );
+    }
+
+    /// The joint descent revisits only overlapping pairs. Annealing leaves
+    /// label 2 overlapping labels 0 and 1; moving labels 0 and 2 together
+    /// clears both overlaps and frees the cheaper spot below label 1, which no
+    /// longer overlaps anything. The search still ends where no single label
+    /// can lower the total cost, with label 1 on that spot.
+    #[test]
+    fn coordinated_search_ends_where_no_single_label_can_improve() {
+        let label = |candidates: &[(f64, f64, f64)]| CollisionLabel {
+            records: CandidateRecords::Expanded(Vec::new()),
+            candidates: candidates
+                .iter()
+                .map(|&(left, bottom, cost)| CollisionCandidate {
+                    corners: None,
+                    bounds: Bounds {
+                        left,
+                        right: left + 1.0,
+                        bottom,
+                        top: bottom + 1.0,
+                    },
+                    cost: ciborium::Value::Float(cost),
+                    arrow_bounds: Vec::new(),
+                })
+                .collect(),
+            edge: None,
+        };
+        let spec = CollisionSpec {
+            fixed: false,
+            edge_lines: Vec::new(),
+            placements: vec![
+                label(&[
+                    (2.5, 0.5, 0.2),
+                    (2.5, 0.0, 0.9),
+                    (2.0, 0.5, 1.0),
+                    (0.0, 0.0, 1.6),
+                    (1.5, 0.5, 0.1),
+                    (1.5, 0.5, 1.0),
+                ]),
+                label(&[
+                    (1.5, 0.5, 0.1),
+                    (1.5, 0.0, 0.0),
+                    (2.5, 0.5, 0.3),
+                    (2.0, 0.5, 0.4),
+                ]),
+                label(&[(2.0, 0.0, 0.5), (2.5, 1.0, 1.5)]),
+            ],
+            obstacles: Vec::new(),
+            label_padding: 0.0,
+            obstacle_padding: 0.0,
+            fixed_arrows: Vec::new(),
+            coordinated: true,
+        };
+        let geometry = spec.geometry(0.0).unwrap();
+        let math = SearchMath {
+            temperatures: (0..84).map(|sweep| 0.15 * 0.9_f64.powi(sweep)).collect(),
+            exponentials: Vec::new(),
+            pair_padding: 0.0,
+        };
+        let result = geometry.search(&math).unwrap();
+        assert_eq!(result.choices, [1, 1, 1]);
+        let costs: Vec<Vec<Cost>> = geometry
+            .costs
+            .iter()
+            .map(|costs| {
+                costs
+                    .iter()
+                    .map(|cost| Cost::from_value(cost).unwrap())
+                    .collect()
+            })
+            .collect();
+        let score = |i, choice| {
+            geometry
+                .local_cost(&costs, i, choice, &result.choices, None, 0.0)
+                .float()
+        };
+        for (i, &chosen) in result.choices.iter().enumerate() {
+            for choice in 0..geometry.boxes[i].len() {
+                assert!(score(i, choice) >= score(i, chosen), "label {i}: {choice}");
+            }
+        }
     }
 
     #[test]

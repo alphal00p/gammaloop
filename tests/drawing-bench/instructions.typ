@@ -11,6 +11,9 @@ python3 tests/drawing-bench/run.py --rounds 3 --png 150
 python3 tests/drawing-bench/run.py --cases higgs-sunset-particles --out target/drawing-bench/single
 python3 tests/drawing-bench/run.py --package-path /path/to/typst/packages --out target/drawing-bench/stock
 python3 tests/drawing-bench/run.py --inspection-targets --out target/drawing-bench/targets
+python3 tests/drawing-bench/run.py --label-report --out target/drawing-bench/labels
+python3 tests/drawing-bench/run.py --label-report \
+  --label-baseline target/drawing-bench/labels/label-report.json --out target/drawing-bench/labels-new
 ```
 
 Output directories must be new and under `target/drawing-bench`. No references
@@ -87,6 +90,25 @@ their renders carry no link targets. `--inspection-targets` compiles them with
 link targets and hit-area coverage in that SVG/browser output, since PNG equality
 alone cannot certify them. The targets are invisible, so both modes give the same
 PNGs. The harness always marks visual review pending.
+
+`--label-report` adds an automated, untimed label-overlap check after timing:
+it evaluates each case once more with `--input linnest-label-report=true` and
+queries Linnest's `<linnest-label-report>` metadata. The shared label placement
+computes it with the geometry its search scores: painted edge lines, stroke
+radius included, clipped exactly against each chosen label's text box; and
+other labels' text, nodes, self-loop bends and momentum arrows whose boxes
+share a positive area with the label's text or its own arrow. Arrow and node
+boxes are rectangles around their shapes, so a listed box overlap need not be
+visible. `label-report.json` keeps every drawing's records; `label-report.csv`
+lists per case the labels, those whose text meets a painted edge, overlapping
+label pairs, each crossing as `e<label edge>>e<crossed edge>:<length inside the
+box>`, each obstacle as `e<label edge>>n<node>` or `e<label edge>>e<edge>-loop`,
+and each momentum arrow as `e<label edge>>e<arrow edge>`. With
+`--label-baseline`, the run fails when a case gains a (label edge, crossed
+edge, obstacle or arrow edge) contact or an overlapping label pair relative to
+an earlier `label-report.json`. The report describes the chosen candidates only;
+whether a clear candidate existed needs Linnest's `debug-label-collisions`
+overlay or the placement's candidate costs.
 
 == Provenance
 

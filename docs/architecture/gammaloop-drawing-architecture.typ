@@ -85,6 +85,14 @@ route one SVG compile with that input serves both outputs, since a notebook disp
 `Scene::static_svg` removes the targets and the groups that held only them, leaving the document
 that compiling without the input produces. PDF and PNG exports compile without it.
 
+Label overlaps are measured by the placement code itself. The shared `label_placement` measure
+clips painted edge lines exactly against each chosen label's text box, as the search scores them,
+and lists the labels, nodes, self-loop bends and momentum arrows whose boxes share an area with
+the label. Native label feedback (`impred_labels`) scores its passes by the painted lines and
+labels it lists. On the Typst route the compile input `linnest-label-report=true` makes `draw`
+record the whole measure as `<linnest-label-report>` metadata, which the drawing benchmark's
+`--label-report` collects and compares with a baseline.
+
 The rendering contract has no evaluated-string mode. Generated particle styles are ordinary
 Typst dictionaries/functions in `edge-style.typ`, backed by
 #link("../../assets/embedded/drawing/templates/physics-edge-style.typ")[GammaLoop's

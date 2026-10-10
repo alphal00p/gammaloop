@@ -7,6 +7,8 @@ use kurbo::{BezPath, CubicBez, Point};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
 use super::{curves, marks, UNIT};
+pub(super) use crate::label_placement::Bounds;
+use crate::label_placement::{label_overlaps, PlacedLabel, Point as PlanePoint, StrokeLine};
 
 /// Clearance between an external label and its free endpoint.
 const EXTERNAL_GAP: f64 = 0.25;
@@ -14,28 +16,6 @@ const EXTERNAL_GAP: f64 = 0.25;
 pub(super) const ARROW_OFFSET: f64 = 0.35;
 pub(super) const ARROW_WINDOW: (f64, f64) = (1.4, 0.5);
 const MOMENTUM_GAP: f64 = 0.2;
-
-#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq)]
-pub(super) struct Bounds {
-    pub left: f64,
-    pub right: f64,
-    pub bottom: f64,
-    pub top: f64,
-}
-
-impl Bounds {
-    fn overlap(&self, other: &Self) -> f64 {
-        let width = self.right.min(other.right) - self.left.max(other.left);
-        let height = self.top.min(other.top) - self.bottom.max(other.bottom);
-        width.max(0.0) * height.max(0.0)
-    }
-
-    fn distance(&self, point: [f64; 2]) -> f64 {
-        let dx = (self.left - point[0]).max(0.0).max(point[0] - self.right);
-        let dy = (self.bottom - point[1]).max(0.0).max(point[1] - self.top);
-        dx.hypot(dy)
-    }
-}
 
 /// One typeset page: its size and SVG body in points. Label pages also carry
 /// the content measurements CeTZ uses (width, height, line baseline, line bounds).
@@ -489,13 +469,6 @@ pub(super) struct Stroke {
     pub path: BezPath,
 }
 
-#[derive(Deserialize, Clone, Copy)]
-pub(super) struct Line {
-    pub start: [f64; 2],
-    pub end: [f64; 2],
-    pub radius: f64,
-}
-
 #[derive(Serialize)]
 struct PaintedStroke {
     radius: f64,
@@ -574,7 +547,7 @@ struct SearchGeometry<'a> {
     label_padding: f64,
     fixed_arrows: &'a [Bounds],
     coordinated: bool,
-    edge_lines: &'a serde_json::Value,
+    edge_lines: &'a [StrokeLine],
     obstacle_padding: f64,
 }
 
@@ -602,7 +575,7 @@ struct SearchResult {
 /// The chosen candidate per placement and the painted collision lines.
 pub(super) struct Searched {
     pub choices: Vec<usize>,
-    pub lines: Vec<Line>,
+    pub lines: Vec<StrokeLine>,
 }
 
 /// `_relax-label-placements`: one annealing search over all labels, with its
@@ -617,17 +590,15 @@ pub(super) fn search(
         strokes: strokes.iter().map(PaintedStroke::from).collect(),
         accuracy: 0.005,
     };
-    let edge_lines: serde_json::Value =
+    let edge_lines: Vec<StrokeLine> =
         decode(&crate::label_placement::stroke_lines_bytes(&cbor(&spec)?)?)?;
-    let lines: Vec<Line> =
-        serde_json::from_value(edge_lines.clone()).map_err(|error| error.to_string())?;
     if placements
         .iter()
         .all(|placement| placement.candidates.len() == 1)
     {
         return Ok(Searched {
             choices: vec![0; placements.len()],
-            lines,
+            lines: edge_lines,
         });
     }
     let geometry = cbor(&SearchGeometry {
@@ -674,54 +645,112 @@ pub(super) fn search(
         if result.missing.is_empty() || verified {
             return Ok(Searched {
                 choices: result.choices,
-                lines,
+                lines: edge_lines,
             });
         }
     }
 }
 
 /// Real (unpadded) overlaps of the chosen movable labels with painted lines
-/// and other labels: (overlapping labels, line hits, overlapping label pairs).
-/// Painted mark outlines are exact boundaries with zero radius, so a line
-/// that reaches the label box counts as a hit.
+/// and other labels' text: (overlapping labels, line hits, overlapping label
+/// pairs). The shared placement clips each line exactly against the text box,
+/// stroke radius included, so a line merely touching it, such as a zero-radius
+/// mark outline, counts as a hit.
 pub(super) fn overlaps(
     placements: &[Placement],
-    chosen: &[Bounds],
-    lines: &[Line],
+    choices: &[usize],
+    lines: &[StrokeLine],
 ) -> (usize, usize, usize) {
+    let labels: Vec<_> = placements
+        .iter()
+        .zip(choices)
+        .map(|(placement, &choice)| {
+            let candidate = &placement.candidates[choice];
+            PlacedLabel {
+                bounds: candidate.bounds,
+                corners: <&[_; 4]>::try_from(candidate.corners.as_slice())
+                    .ok()
+                    .map(|corners| corners.map(|[x, y, _]| PlanePoint(x, y))),
+                arrow_bounds: Vec::new(),
+            }
+        })
+        .collect();
     let mut overlapping = 0;
     let mut hits = 0;
     let mut pairs = 0;
-    for (i, placement) in placements.iter().enumerate() {
+    for (placement, found) in placements
+        .iter()
+        .zip(label_overlaps(&labels, lines, &[], &[]))
+    {
         if placement.candidates.len() == 1 {
             continue;
         }
-        let bounds = &chosen[i];
-        let line_hits = lines
-            .iter()
-            .filter(|line| {
-                (0..=8)
-                    .map(|k| {
-                        let t = f64::from(k) / 8.0;
-                        bounds.distance([
-                            line.start[0] + (line.end[0] - line.start[0]) * t,
-                            line.start[1] + (line.end[1] - line.start[1]) * t,
-                        ])
-                    })
-                    .fold(f64::INFINITY, f64::min)
-                    <= line.radius
-            })
-            .count();
-        let label_hits = chosen
-            .iter()
-            .enumerate()
-            .filter(|(j, other)| *j != i && bounds.overlap(other) > 1e-9)
-            .count();
-        hits += line_hits;
-        pairs += label_hits;
-        if line_hits + label_hits > 0 {
+        hits += found.lines.len();
+        pairs += found.labels.len();
+        if !found.lines.is_empty() || !found.labels.is_empty() {
             overlapping += 1;
         }
     }
     (overlapping, hits, pairs / 2)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn straight(from: (f64, f64), to: (f64, f64)) -> BezPath {
+        let mut path = BezPath::new();
+        path.move_to(from);
+        path.line_to(to);
+        path
+    }
+
+    /// Dotted edges are dashed only when painted; their collision stroke is the
+    /// whole path. A narrow label prefers the side a long dotted edge crosses
+    /// between the 2-unit spacing of points sampled along it.
+    #[test]
+    fn labels_avoid_and_report_a_dotted_edge_crossing_their_preferred_side() {
+        let carrier = straight((-4.0, 0.0), (4.0, 0.0));
+        // 8.1pt wide text: 0.6 drawing units.
+        let candidates = carrier_candidates(&carrier, [8.1, 13.5, 10.0, 13.5], 0.15).unwrap();
+        // The preferred text lies above the carrier, strictly between the
+        // dotted edge's sample points x = -0.5 and x = 1.5.
+        let preferred = candidates[0].bounds;
+        assert!(preferred.left > -0.4 && preferred.right < 0.4 && preferred.bottom > 0.0);
+        let middle = (preferred.bottom + preferred.top) / 2.0;
+        let strokes = [
+            Stroke {
+                radius: 0.05,
+                path: carrier.clone(),
+            },
+            Stroke {
+                radius: 0.05,
+                path: straight((-8.5, middle), (7.5, middle)),
+            },
+        ];
+        let placements = [Placement {
+            edge: 0,
+            page: 0,
+            candidates,
+            href: String::new(),
+        }];
+        let searched = search(&placements, &[], &strokes, &[]).unwrap();
+        let chosen = &placements[0].candidates[searched.choices[0]];
+        assert!(chosen.bounds.top < 0.0, "the label takes the clear side");
+        assert_eq!(
+            overlaps(&placements, &searched.choices, &searched.lines),
+            (0, 0, 0)
+        );
+        // On its preferred side, the text crosses the dotted edge.
+        assert_eq!(overlaps(&placements, &[0], &searched.lines), (1, 1, 0));
+        // However short, a stroke reaching the chosen text is a hit: here a
+        // zero-radius cut across its corner, about 0.14 units inside.
+        let (right, top) = (chosen.bounds.right, chosen.bounds.top);
+        let cut = Stroke {
+            radius: 0.0,
+            path: straight((right - 0.2, top + 0.1), (right + 0.1, top - 0.2)),
+        };
+        let cut = search(&placements, &[], &[cut], &[]).unwrap().lines;
+        assert_eq!(overlaps(&placements, &searched.choices, &cut), (1, 1, 0));
+    }
 }

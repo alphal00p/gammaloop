@@ -10,8 +10,9 @@ pub mod svg;
 pub use label_placement::{
     attachment_offset_bytes as label_attachment_offset_bytes,
     candidates_bytes as label_candidates_bytes, first_bytes as label_first_bytes,
-    obstacle_boxes_bytes as label_obstacle_boxes_bytes, path_lines_bytes as label_path_lines_bytes,
-    search_bytes as label_search_bytes, stroke_lines_bytes as label_stroke_lines_bytes,
+    obstacle_boxes_bytes as label_obstacle_boxes_bytes, overlaps_bytes as label_overlaps_bytes,
+    path_lines_bytes as label_path_lines_bytes, search_bytes as label_search_bytes,
+    stroke_lines_bytes as label_stroke_lines_bytes,
 };
 mod pin;
 mod streaming;
@@ -125,6 +126,12 @@ pub fn label_first(arg: &[u8]) -> Result<Vec<u8>, String> {
 #[wasm_func]
 pub fn label_search(arg: &[u8], math: &[u8]) -> Result<Vec<u8>, String> {
     label_search_bytes(arg, math)
+}
+
+#[cfg(all(target_arch = "wasm32", feature = "typst-plugin"))]
+#[wasm_func]
+pub fn label_overlaps(arg: &[u8]) -> Result<Vec<u8>, String> {
+    label_overlaps_bytes(arg)
 }
 
 // Custom getrandom implementation for WASM

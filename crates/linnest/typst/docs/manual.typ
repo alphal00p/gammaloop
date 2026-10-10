@@ -598,6 +598,19 @@
   an SVG anchor, so `draw` emits them only with `inspection-targets: true`, or
   at the default `auto` when the document is compiled with
   `--input linnest-inspection-targets=true`.
+
+  Review tooling checks label placement with the compile input
+  `linnest-label-report` (`"true"` or `"false"`, default `"false"`). With
+  `--input linnest-label-report=true`, every drawing also records invisible
+  `<linnest-label-report>` metadata and paints nothing new. For each chosen
+  label it lists its `edge`, whether it was `movable`, the painted edges its
+  text box meets (`crossings`, each with the `length` of the edge's lines
+  inside the box, stroke width included), the indices of `labels` whose text
+  boxes share an area with it, and the nodes and self-loop bends
+  (`obstacles`) and momentum arrows (`arrows`, by edge) whose boxes share an
+  area with its text or its own arrow. Arrow and obstacle boxes are rectangles
+  around their shapes, so a listed box overlap need not be visible. Read the
+  records with `typst eval 'query(<linnest-label-report>)' --in file.typ`.
 ]
 
 #let domain-style-concepts = [

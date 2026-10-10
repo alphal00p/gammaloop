@@ -193,11 +193,11 @@ impl Scene {
         }
         // Keep the least-overlapping drawing; later passes may not improve it.
         // A rejected pass still supplies the next pass's pinned labels.
-        let mut best = drawing;
+        let mut best = (drawing.score(), drawing);
         let mut rejected = None;
         for _ in 0..FEEDBACK_PASSES {
-            let drawing = rejected.as_ref().unwrap_or(&best);
-            if drawing.overlaps.0 == 0 {
+            let (score, drawing) = rejected.as_ref().unwrap_or(&best);
+            if score.0 == 0 {
                 break;
             }
             // Pin each drawn movable internal label beside its carrier and let a
@@ -210,14 +210,15 @@ impl Scene {
                 ..run.config
             })?;
             let drawing = Drawing::new(self, typeset, &Laid::new(&run)?)?;
-            if drawing.score() < best.score() {
-                best = drawing;
+            let scored = (drawing.score(), drawing);
+            if scored.0 < best.0 {
+                best = scored;
                 rejected = None;
             } else {
-                rejected = Some(drawing);
+                rejected = Some(scored);
             }
         }
-        Ok(best)
+        Ok(best.1)
     }
 }
 
@@ -378,9 +379,8 @@ struct Drawing {
     layers: Vec<Element>,
     targets: Vec<Target>,
     placements: Vec<Placement>,
-    chosen: Vec<Bounds>,
-    /// Overlapping labels, line hits, label pairs.
-    overlaps: (usize, usize, usize),
+    /// The chosen candidates and the painted collision lines they were scored on.
+    searched: labels::Searched,
 }
 
 /// Stable placement indices shared by the two drawing-wide geometry batches.
@@ -394,16 +394,23 @@ struct EdgeGeometry {
 }
 
 impl Drawing {
-    /// Overlapping labels first, then label pairs, then line hits.
+    /// Label feedback's score, from the real overlaps of the chosen movable
+    /// labels: overlapping labels first, then label pairs, then line hits.
     fn score(&self) -> (usize, usize, usize) {
-        (self.overlaps.0, self.overlaps.2, self.overlaps.1)
+        let (overlapping, hits, pairs) = labels::overlaps(
+            &self.placements,
+            &self.searched.choices,
+            &self.searched.lines,
+        );
+        (overlapping, pairs, hits)
     }
 
     /// Each drawn movable internal label as a box pinned beside its carrier.
     fn pinned_labels(&self, run: &ImpredRun) -> Vec<Option<EdgeLabel>> {
         let mut labels = vec![None; run.layout.routes.len()];
-        for (placement, chosen) in self.placements.iter().zip(&self.chosen) {
+        for (placement, &choice) in self.placements.iter().zip(&self.searched.choices) {
             if placement.candidates.len() > 1 && run.layout.external[placement.edge].is_none() {
+                let chosen = placement.candidates[choice].bounds;
                 labels[placement.edge] = Some(EdgeLabel {
                     extents: [
                         (chosen.right - chosen.left) / 2.0,
@@ -659,7 +666,6 @@ impl Drawing {
                 }
             }
         }
-        let mut chosen = Vec::new();
         for (placement, &choice) in placements.iter().zip(&searched.choices) {
             let candidate = &placement.candidates[choice];
             if let Some(index) = candidate.arrow_mark {
@@ -690,7 +696,6 @@ impl Drawing {
                 bounds: candidate.bounds,
                 href: Some(placement.href.clone()),
             });
-            chosen.push(candidate.bounds);
         }
         for (node, drawing) in laid.nodes.iter().zip(&scene.nodes) {
             let at = laid.node(node.node);
@@ -727,13 +732,11 @@ impl Drawing {
                 href: href.into(),
             });
         }
-        let overlaps = labels::overlaps(&placements, &chosen, &searched.lines);
         Ok(Self {
             layers,
             targets,
             placements,
-            chosen,
-            overlaps,
+            searched,
         })
     }
 
@@ -1715,7 +1718,7 @@ mod tests {
                 |drawing: &Drawing| output::svg(typeset, &drawing.layers, Some(&drawing.targets));
             let (mut best, mut selected) = (drawing.score(), svg(&drawing));
             for _ in 0..FEEDBACK_PASSES {
-                if drawing.overlaps.0 == 0 {
+                if drawing.score().0 == 0 {
                     break;
                 }
                 run.layout.labels = drawing.pinned_labels(&run);

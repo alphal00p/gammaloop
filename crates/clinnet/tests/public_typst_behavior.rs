@@ -1256,6 +1256,96 @@ fn public_linnest_inspection_targets_are_an_output_property() {
 }
 
 #[test]
+fn public_linnest_label_report_lists_what_chosen_labels_meet() {
+    let configured_typst = std::env::var_os("TYPST_TEST_EXECUTABLE").map(PathBuf::from);
+    let typst = configured_typst
+        .clone()
+        .unwrap_or_else(|| PathBuf::from("typst"));
+    match Command::new(&typst).arg("--version").output() {
+        Ok(version) if version.status.success() => {}
+        result if configured_typst.is_some() => {
+            panic!("configured Typst executable failed: {result:?}")
+        }
+        _ => return,
+    }
+    let base = tempfile::tempdir().unwrap();
+    let renderer = TypstRenderer::new(base.path()).typst_executable(&typst);
+    renderer.check_version().unwrap();
+    renderer.stage_default_assets().unwrap();
+    let templates = base.path().join(".clinnet/templates");
+    let fixture = templates.join("label-report.typ");
+    // Edge 0 labels its source half and prefers the upper side, which the
+    // dotted edge 1 crosses along its whole length.
+    fs::write(
+        &fixture,
+        r#"#set page(width: auto, height: auto, margin: 0pt)
+#import "crates/linnest/typst/src/lib.typ": draw, graph
+#let g = graph.build({
+  graph.node(<a>, pos: graph.pos(x: -3, y: 0))
+  graph.node(<b>, pos: graph.pos(x: 3, y: 0))
+  graph.node(<c>, pos: graph.pos(x: -4, y: 0.45))
+  graph.node(<d>, pos: graph.pos(x: 4, y: 0.45))
+  graph.edge(graph.source(<a>), graph.sink(<b>), pos: graph.pos(x: 0, y: 0))
+  graph.edge(graph.source(<c>), graph.sink(<d>), pos: graph.pos(x: 0, y: 0.45))
+})
+#let dotted = edge => if edge.eid == 1 { (stroke: (thickness: 1pt, dash: "dotted")) } else { (:) }
+#let labelled(side, slide: true) = edge => dotted(edge) + if edge.eid == 0 {
+  (label: $p_1$, label-side: side, label-slide: slide)
+} else { (:) }
+#draw(g, source-style: labelled(auto), sink-style: dotted)
+#draw(g, source-style: labelled("left"), sink-style: dotted)
+#draw(g, source-style: labelled("left", slide: false), sink-style: dotted)
+"#,
+    )
+    .unwrap();
+    let report = |input: &str| {
+        Command::new(&typst)
+            .arg("eval")
+            .arg("query(<linnest-label-report>).map(record => record.value)")
+            .arg("--in")
+            .arg(&fixture)
+            .arg("--root")
+            .arg(&templates)
+            .arg("--input")
+            .arg(input)
+            .output()
+            .unwrap()
+    };
+    let output = report("linnest-label-report=true");
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let drawings: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    // The automatic label leaves the dotted edge; pinned to that side, the
+    // report names the edge its text crosses, also when no label can move.
+    let label = |drawing: usize| &drawings[drawing]["labels"][0];
+    assert_eq!(drawings.as_array().unwrap().len(), 3);
+    assert_eq!(label(0)["edge"], 0);
+    assert_eq!(label(0)["movable"], true);
+    assert_eq!(label(0)["crossings"], serde_json::json!([]));
+    for drawing in [1, 2] {
+        assert_eq!(label(drawing)["crossings"][0]["edge"], 1);
+        assert!(label(drawing)["crossings"][0]["length"].as_f64().unwrap() > 0.5);
+        for kind in ["labels", "obstacles", "arrows"] {
+            assert_eq!(label(drawing)[kind], serde_json::json!([]));
+        }
+    }
+    assert_eq!(label(2)["movable"], false);
+    // Documents record nothing unless asked, and reject other values.
+    let quiet = report("linnest-label-report=false");
+    assert!(quiet.status.success());
+    assert_eq!(
+        serde_json::from_slice::<serde_json::Value>(&quiet.stdout).unwrap(),
+        serde_json::json!([])
+    );
+    let invalid = report("linnest-label-report=yes");
+    assert!(!invalid.status.success());
+    assert!(String::from_utf8_lossy(&invalid.stderr).contains("must be \"true\" or \"false\""));
+}
+
+#[test]
 fn public_weighted_cut_rejects_invalid_selections_and_stale_topology() {
     let configured_typst = std::env::var_os("TYPST_TEST_EXECUTABLE").map(PathBuf::from);
     let typst = configured_typst

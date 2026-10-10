@@ -4,12 +4,16 @@
 #cetz.canvas({
   cetz.draw.line((0, 0), (1, 1))
   cetz.draw.get-ctx(ctx => {
-    let path(points, thickness: 2pt, tags: ()) = cetz.drawable.path(
+    let path(points, thickness: 2pt, dash: none, tags: ()) = cetz.drawable.path(
       ((points.first(), false, (("l", ..points.slice(1)),)),),
-      stroke: thickness, tags: tags,
+      stroke: if dash == none { thickness } else { (thickness: thickness, dash: dash) },
+      tags: tags,
     )
     let drawables = (
       path(((0, 0, 0), (1, 0, 0))),
+      // Dashes and dots are painted, not geometry: these remain whole lines.
+      path(((0, 2, 0), (1, 2, 0)), dash: "dotted"),
+      path(((0, 3, 0), (1, 3, 0)), dash: (0.1em, 0.45em)),
       path(((2, 0, 0), (3, 0, 0)), thickness: 4pt),
       path(((0, 1, 0), (1, 1, 0)), tags: (cetz.drawable.TAG.hidden,)),
       cetz.drawable.content((0, 0, 0), 1, 1, (), []),
@@ -18,6 +22,8 @@
     let actual = draw._edge-collision-lines(ctx, drawables, painted: true)
     assert.eq(actual, (
       (start: (0.0, 0.0), end: (1.0, 0.0), radius: 1pt / ctx.length),
+      (start: (0.0, 2.0), end: (1.0, 2.0), radius: 1pt / ctx.length),
+      (start: (0.0, 3.0), end: (1.0, 3.0), radius: 1pt / ctx.length),
       (start: (2.0, 0.0), end: (3.0, 0.0), radius: 2pt / ctx.length),
     ))
     let transformed = cetz.drawable.apply-transform(
