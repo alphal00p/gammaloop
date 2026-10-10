@@ -495,6 +495,8 @@ impl Localizer<'_> {
                     .collect::<std::result::Result<Vec<_>, _>>()
                     .map_err(|error| eyre!(error))?,
                 tags: vec![scope],
+                inlining: symbolica::evaluate::InliningPolicy::Always,
+                is_alias: false,
             });
             for (carrier, arguments) in rows {
                 let arguments = arguments

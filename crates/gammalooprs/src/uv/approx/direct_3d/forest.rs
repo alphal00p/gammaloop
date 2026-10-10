@@ -163,7 +163,7 @@ impl Direct3dCts {
                 *branch
                     .get_mut(&index)
                     .expect("all direct-root CutCFF indices were initialized") +=
-                    stored.expression * &production_prefactor;
+                    GS.retain_esurfaces(&stored.expression) * &production_prefactor;
             }
         }
         if branches.is_empty() {

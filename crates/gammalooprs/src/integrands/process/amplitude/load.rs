@@ -7,8 +7,11 @@
 //! rand = "0.9"
 //! serde_json = "1"
 //! serde = { version = "1.0", features = ["derive"] }
-//! symbolica = { version = "3.0", default-features = false, features = ["bincode", "float-mpfr", "integer-gmp", "native_code_generation", "serde"] }
-//! # Symbolica, Graphica, and Numerica use their published 3.0 releases.
+//! symbolica = { git = "https://github.com/symbolica-dev/symbolica", rev = "70375b9ef06411d8bac3e14d1f57382384547eef", default-features = false, features = ["bincode", "float-mpfr", "integer-gmp", "native_code_generation", "serde"] }
+//! # Match the generator's Symbolica workspace, including its numeric APIs.
+//! [patch.crates-io]
+//! numerica = { git = "https://github.com/symbolica-dev/symbolica", rev = "70375b9ef06411d8bac3e14d1f57382384547eef" }
+//! graphica = { git = "https://github.com/symbolica-dev/symbolica", rev = "70375b9ef06411d8bac3e14d1f57382384547eef" }
 //! ```
 
 #![allow(dead_code)]
@@ -25,6 +28,7 @@ use bincode_trait_derive::{Decode, Encode};
 use eyre::{Context, Result, eyre};
 use rand::Rng;
 use serde::{Deserialize, Serialize};
+use symbolica::evaluate::{FunctionRegistrationOptions, InliningPolicy};
 use symbolica::{
     domains::rational::Fraction, evaluate::JITCompiledEvaluator, prelude::*, state::StateMap,
 };
@@ -38,7 +42,8 @@ use crate::processes::{
     ThresholdCountertermMetadataRegistry, ThresholdCountertermOrigin, ThresholdCountertermSide,
 };
 
-pub const STANDALONE_EVALUATORS_VERSION: u32 = 10;
+// Reject archives predating the OnShellEnergy/Esurface naming split.
+pub const STANDALONE_EVALUATORS_VERSION: u32 = 12;
 pub const STANDALONE_MODE_RUST: u8 = 0;
 
 #[derive(
@@ -153,7 +158,7 @@ where
                 .original_integrand
                 .summed_function_map
                 .map(|payload| {
-                    let (_, rhs, _, _) =
+                    let (_, rhs, _, _, _, _) =
                         &parse_fn_map_entries(&payload.additional_fn_map_entries, state_map)?[0];
                     fnmap_integrand = Some(rhs.clone());
                     // parse_lit!(gammaloop::integrand(1,1,1,1,1,-1,1,-1,-1,-1,1,-1,-1))
@@ -853,8 +858,15 @@ pub struct StandaloneGenericEvaluatorArchive<A = Vec<u8>> {
     pub(crate) dual_shape: Option<Vec<Vec<usize>>>,
 }
 
-type SerializedFnMapEntry<A> = (A, A, Vec<A>, Vec<A>);
-type ParsedFnMapEntry = (Atom, Atom, Vec<Atom>, Vec<Indeterminate>);
+type SerializedFnMapEntry<A> = (A, A, Vec<A>, Vec<A>, InliningPolicy, bool);
+type ParsedFnMapEntry = (
+    Atom,
+    Atom,
+    Vec<Atom>,
+    Vec<Indeterminate>,
+    InliningPolicy,
+    bool,
+);
 type LoadedGenericEvaluator = (
     Vec<Atom>,
     Vec<Replacement>,
@@ -1088,7 +1100,7 @@ fn parse_fn_map_entries<A: ImportWithMap>(
 ) -> Result<Vec<ParsedFnMapEntry>> {
     entries
         .iter()
-        .map(|(lhs, rhs, tags, args)| {
+        .map(|(lhs, rhs, tags, args, inlining, is_alias)| {
             let lhs_atom = lhs.import_with_map(state_map)?;
             let rhs_atom = rhs.import_with_map(state_map)?;
             let tags = tags
@@ -1111,7 +1123,7 @@ fn parse_fn_map_entries<A: ImportWithMap>(
                 })
                 .collect::<Result<Vec<_>>>()?;
 
-            Ok((lhs_atom, rhs_atom, tags, args))
+            Ok((lhs_atom, rhs_atom, tags, args, *inlining, *is_alias))
         })
         .collect()
 }
@@ -1119,60 +1131,75 @@ fn parse_fn_map_entries<A: ImportWithMap>(
 fn apply_fn_map_entries(
     parsed_entries: Vec<ParsedFnMapEntry>,
 ) -> Result<(Vec<Replacement>, Vec<Replacement>, FunctionMap)> {
-    let mut all_replacements: Vec<Replacement> = vec![];
-    let mut fn_map: FunctionMap = FunctionMap::new();
-    let mut replacements: Vec<Replacement> = vec![];
+    let mut fn_map = FunctionMap::new();
+    let mut replacements = Vec::new();
+    let mut all_replacements = Vec::new();
     fn_map
         .add_aliases([(parse_lit!(gammalooprs::x), Atom::Zero)])
-        .map_err(|e| eyre!(e))?;
-    // Graph and evaluator archives can share definitions. Register exact
-    // duplicates once; different bodies still trigger Symbolica's conflict check.
+        .map_err(|error| eyre!(error))?;
+    // Graph and evaluator archives can share definitions. Policy and alias scope
+    // are part of their identity; conflicting definitions remain errors.
     let mut seen = HashSet::new();
-    for (lhs, rhs, tags, args) in parsed_entries
+    for (lhs, rhs, tags, args, inlining, is_alias) in parsed_entries
         .into_iter()
         .filter(|entry| seen.insert(entry.clone()))
     {
-        if let AtomView::Var(_) = lhs.as_view() {
-            if let Ok(t) = Complex::<Rational>::try_from(rhs.as_view()) {
-                fn_map
-                    .add_aliases([(lhs.clone(), Atom::num(t))])
-                    .map_err(|e| eyre!(e))?;
-
-                all_replacements.push(Replacement::new(lhs.to_pattern(), rhs.clone()));
-            } else {
-                replacements.push(Replacement::new(lhs.to_pattern(), rhs.clone()));
-            }
-        } else if let AtomView::Fun(f) = lhs.as_view() {
-            if tags.is_empty() {
-                let mut wildcards = Vec::new();
-                for (i, a) in args.iter().enumerate() {
-                    let atom: Atom = a.clone().into();
-                    wildcards.push(
-                        Replacement::new(atom.to_pattern(), Atom::var(symbol!(format!("x{i}_"))))
-                            .allow_new_wildcards_on_rhs(true),
-                    )
-                }
-
-                fn_map
-                    .add_function(f.get_symbol(), args, rhs.clone())
-                    .map_err(|e| eyre!(e))?;
-
-                all_replacements.push(Replacement::new(
-                    lhs.replace_multiple(&wildcards).to_pattern(),
-                    rhs.replace_multiple(&wildcards),
+        if is_alias {
+            if !args.is_empty() || inlining != InliningPolicy::Always {
+                return Err(eyre!(
+                    "Caller-scope aliases require no formal arguments and Always inlining"
                 ));
-            } else {
-                fn_map
-                    .add_tagged_function(f.get_symbol(), tags, args, rhs.clone())
-                    .map_err(|e| eyre!(e))?;
-                all_replacements.push(Replacement::new(lhs.to_pattern(), rhs.clone()));
             }
+            fn_map
+                .add_aliases([(lhs.clone(), rhs.clone())])
+                .map_err(|error| eyre!(error))?;
+            all_replacements.push(Replacement::new(lhs.to_pattern(), rhs));
+            continue;
+        }
+        let options = FunctionRegistrationOptions::new().inlining(inlining);
+        let name = match lhs.as_view() {
+            AtomView::Fun(function) => Some(function.get_symbol()),
+            AtomView::Var(variable) if tags.is_empty() => Some(variable.get_symbol()),
+            _ => None,
+        };
+        if let Some(name) = name {
+            fn_map
+                .add_tagged_function_with_options(
+                    name,
+                    tags.clone(),
+                    args.clone(),
+                    rhs.clone(),
+                    options,
+                )
+                .map_err(|error| eyre!(error))?;
+            if inlining == InliningPolicy::Never {
+                continue;
+            }
+            let wildcards = args
+                .iter()
+                .enumerate()
+                .map(|(index, arg)| {
+                    let atom = Atom::from(arg.clone());
+                    Replacement::new(atom.to_pattern(), Atom::var(symbol!(format!("x{index}_"))))
+                        .allow_new_wildcards_on_rhs(true)
+                })
+                .collect::<Vec<_>>();
+            let replacement = Replacement::new(
+                lhs.replace_multiple(&wildcards).to_pattern(),
+                rhs.replace_multiple(&wildcards),
+            );
+            all_replacements.push(replacement);
         } else {
-            all_replacements.push(Replacement::new(lhs.to_pattern(), rhs.clone()));
-            replacements.push(Replacement::new(lhs.to_pattern(), rhs.clone()));
+            if inlining == InliningPolicy::Never {
+                return Err(eyre!(
+                    "Non-inlined definitions require a symbol or function call"
+                ));
+            }
+            let replacement = Replacement::new(lhs.to_pattern(), rhs);
+            all_replacements.push(replacement.clone());
+            replacements.push(replacement);
         }
     }
-
     Ok((replacements, all_replacements, fn_map))
 }
 
@@ -1199,10 +1226,6 @@ fn build_evaluator<A: ImportWithMap>(
 
     let additional_reps = parse_fn_map_entries(&payload.additional_fn_map_entries, state_map)?;
     fn_map_entries.extend(additional_reps);
-
-    // for (a, _, _, _) in &fn_map_entries {
-    //     exprs.push(a.clone());
-    // }
 
     let result = vec![Complex::new(0.0, 0.); exprs.len()];
 
@@ -2658,6 +2681,79 @@ mod tests {
     use crate::utils::GS;
 
     use super::*;
+
+    #[test]
+    fn standalone_function_policy_roundtrip_preserves_shared_bodies_and_alias_scope() -> Result<()>
+    {
+        let x = symbolica::parse!("standalone_policy::x");
+        let global = symbolica::parse!("standalone_policy::global");
+        let alias = symbolica::parse!("standalone_policy::alias(0)");
+        let function = symbol!("standalone_policy::function");
+        let print = |atom: &Atom| {
+            atom.printer(symbolica::printer::PrintOptions::file())
+                .to_string()
+        };
+        for tags in [Vec::new(), vec![Atom::num(7)]] {
+            let call = |argument: Atom| {
+                FunctionBuilder::new(function)
+                    .add_args(&tags)
+                    .add_arg(argument)
+                    .finish()
+            };
+            for inlining in [InliningPolicy::Always, InliningPolicy::Never] {
+                let entries: Vec<SerializedFnMapEntry<String>> = vec![
+                    (
+                        print(&alias),
+                        print(&x.pow(2)),
+                        vec!["0".into()],
+                        vec![],
+                        InliningPolicy::Always,
+                        true,
+                    ),
+                    (
+                        print(&call(x.clone())),
+                        print(&(&alias + &global)),
+                        tags.iter().map(print).collect(),
+                        vec![print(&x)],
+                        inlining,
+                        false,
+                    ),
+                ];
+                let json = serde_json::to_vec(&entries)?;
+                let parsed: Vec<SerializedFnMapEntry<String>> = serde_json::from_slice(&json)?;
+                let bytes = bincode::encode_to_vec(&parsed, bincode::config::standard())?;
+                let (restored, consumed): (Vec<SerializedFnMapEntry<String>>, _) =
+                    bincode::decode_from_slice(&bytes, bincode::config::standard())?;
+                assert_eq!(consumed, bytes.len());
+                assert_eq!(restored, entries);
+                let mut parsed = parse_fn_map_entries(&restored, &StateMap::default())?;
+                parsed.extend(parsed.clone()); // Graph and evaluator metadata overlap.
+                let (replacements, all_replacements, fn_map) = apply_fn_map_entries(parsed)?;
+                let root = call(Atom::num(2)) + call(Atom::num(3));
+                assert_eq!(root.replace_multiple(&replacements), root);
+                if inlining == InliningPolicy::Never {
+                    assert_eq!(root.replace_multiple(&all_replacements), root);
+                }
+                let mut evaluator = root
+                    .replace_multiple(&replacements)
+                    .evaluator(&[global.clone(), x.clone()])
+                    .function_map(fn_map)
+                    .horner_iterations(1)
+                    .build()
+                    .map_err(|error| eyre!(error))?
+                    .map_coeff(&|c| Complex::new(c.re.to_f64(), c.im.to_f64()));
+                assert_eq!(
+                    evaluator.export_instructions().sub_evaluators.len(),
+                    usize::from(inlining == InliningPolicy::Never)
+                );
+                assert_eq!(
+                    evaluator.evaluate_single(&[Complex::new(10.0, 0.0), Complex::new(11.0, 0.0)]),
+                    Complex::new(33.0, 0.0)
+                );
+            }
+        }
+        Ok(())
+    }
 
     #[test]
     fn standalone_roundtrip_restores_non_dense_residue_map_keys() -> Result<()> {

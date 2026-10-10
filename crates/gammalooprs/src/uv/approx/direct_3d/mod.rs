@@ -1,4 +1,7 @@
 mod branches;
+#[cfg(test)]
+mod coefficient_tests;
+mod coefficients;
 mod forest;
 mod kernel;
 pub(crate) use kernel::LOCAL_3D_MASS_SCOPE;

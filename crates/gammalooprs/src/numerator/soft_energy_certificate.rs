@@ -63,7 +63,7 @@ impl SoftEnergyAlgebra {
         let mut calls = Vec::new();
         atom.visitor(&mut |view| {
             if let AtomView::Fun(call) = view
-                && call.get_symbol() == GS.energy_surface
+                && call.get_symbol() == GS.on_shell_energy
             {
                 if !calls.iter().any(|old: &Atom| old.as_view() == view) {
                     calls.push(view.to_owned());
@@ -125,14 +125,14 @@ impl SoftEnergyAlgebra {
                 sum + coefficient * parameter.pow(*power - valuation)
             });
             let base = Self::invariant(reduced.replace(lambda).with(0).as_view())?;
-            let base_energy = GS.energy_surface.call_args([Atom::Zero, base.clone()]);
+            let base_energy = GS.on_shell_energy.call_args([Atom::Zero, base.clone()]);
             ensure!(
                 self.invariants.contains_key(&base_energy) || self.invariants.len() < MAX_ENERGIES,
                 ScalarPoleFailure::Budget("physical energies")
             );
             self.invariants.insert(base_energy, base);
             let normalized =
-                parameter.pow(valuation / 2) * GS.energy_surface.call_args([Atom::Zero, reduced]);
+                parameter.pow(valuation / 2) * GS.on_shell_energy.call_args([Atom::Zero, reduced]);
             replacements.push(Replacement::new(call.to_pattern(), normalized));
         }
         Ok(atom.replace_multiple(&replacements))
@@ -180,7 +180,7 @@ impl SoftEnergyAlgebra {
         for mut polynomial in [witness.numerator_remainder, witness.denominator_remainder] {
             let mut energies = Vec::new();
             polynomial.visitor(&mut |part| {
-                if matches!(part, AtomView::Fun(call) if call.get_symbol() == GS.energy_surface) {
+                if matches!(part, AtomView::Fun(call) if call.get_symbol() == GS.on_shell_energy) {
                     if !energies.iter().any(|old: &Atom| old.as_view() == part) {
                         energies.push(part.to_owned());
                     }
@@ -230,7 +230,7 @@ impl SoftEnergyAlgebra {
         let mut scalar_leaves = Vec::new();
         Self::leaves(scalar.as_view(), &field, &mut scalar_leaves)?;
         let energies = scalar_leaves.iter().filter_map(|leaf| {
-            if matches!(leaf.as_view(), AtomView::Fun(call) if call.get_symbol() == GS.energy_surface) {
+            if matches!(leaf.as_view(), AtomView::Fun(call) if call.get_symbol() == GS.on_shell_energy) {
                 Some(leaf.clone())
             } else {
                 None
@@ -356,7 +356,7 @@ impl SoftEnergyAlgebra {
                 let mut leaves = Vec::new();
                 Self::leaves(atom, field, &mut leaves)?;
                 ensure!(
-                    !atom.contains_symbol(GS.energy_surface),
+                    !atom.contains_symbol(GS.on_shell_energy),
                     ScalarPoleFailure::Unsupported("nested energy invariant")
                 );
                 (1, 1)
@@ -421,7 +421,7 @@ impl SoftEnergyAlgebra {
                     && call.get_nargs() == 2
                     && (0..=3).any(|index| call.get(1) == GS.cind(index).as_view()));
                 let energy =
-                    matches!(atom, AtomView::Fun(call) if call.get_symbol() == GS.energy_surface);
+                    matches!(atom, AtomView::Fun(call) if call.get_symbol() == GS.on_shell_energy);
                 ensure!(
                     energy
                         || explicit_component
@@ -475,7 +475,7 @@ mod tests {
         let lambda = symbol!("soft_energy_certificate::lambda");
         let p = parse_lit!(x ^ 2 + y ^ 2 + m ^ 2);
         let mut algebra = SoftEnergyAlgebra::default();
-        let energy = algebra.normalize_energies(&function!(GS.energy_surface, 7, &p), lambda)?;
+        let energy = algebra.normalize_energies(&function!(GS.on_shell_energy, 7, &p), lambda)?;
         let EnergyZeroOutcome::Zero(witness) =
             algebra.scalar_zero(&((&energy * &energy - &p) / (&energy + 1)))?
         else {
@@ -497,12 +497,12 @@ mod tests {
         let p = parse_lit!(x ^ 2 + y ^ 2);
         let mut algebra = SoftEnergyAlgebra::default();
         let left =
-            algebra.normalize_energies(&function!(GS.energy_surface, 7, t.pow(2) * &p), lambda)?;
-        let right = algebra.normalize_energies(&function!(GS.energy_surface, 9, &p), lambda)?;
+            algebra.normalize_energies(&function!(GS.on_shell_energy, 7, t.pow(2) * &p), lambda)?;
+        let right = algebra.normalize_energies(&function!(GS.on_shell_energy, 9, &p), lambda)?;
         assert_eq!(left, &t * right);
         let hard = algebra.normalize_energies(
             &function!(
-                GS.energy_surface,
+                GS.on_shell_energy,
                 3,
                 (parse_lit!(x) + &t * parse_lit!(y)).pow(2) + 1
             ),
@@ -511,7 +511,7 @@ mod tests {
         let coefficients =
             super::super::exact_soft_jet::ExactSoftJet::new(lambda, 2).coefficients(&hard)?;
         assert_eq!(coefficients.keys().copied().collect::<Vec<_>>(), [0, 1, 2]);
-        let base = function!(GS.energy_surface, 0, parse_lit!(x ^ 2 + 1));
+        let base = function!(GS.on_shell_energy, 0, parse_lit!(x ^ 2 + 1));
         let expected = [
             base.clone(),
             parse_lit!(x * y) / &base,
@@ -556,7 +556,7 @@ mod tests {
         crate::initialisation::test_initialise()?;
         let q = GS.emr_vec(linnet::half_edge::involution::EdgeIndex(6), GS.cind(1));
         let invariant = q.pow(2) + 1;
-        let energy = function!(GS.energy_surface, 0, &invariant);
+        let energy = function!(GS.on_shell_energy, 0, &invariant);
         let algebra = SoftEnergyAlgebra::default();
         assert!(matches!(
             algebra.scalar_zero(&(energy.pow(2) - &invariant))?,
@@ -573,11 +573,11 @@ mod tests {
     fn energy_norm_certifies_generic_nonzero_but_not_a_dependent_root() -> Result<()> {
         crate::initialisation::test_initialise()?;
         let algebra = SoftEnergyAlgebra::default();
-        let first = function!(GS.energy_surface, 0, parse_lit!(x ^ 2 + y ^ 2));
-        let second = function!(GS.energy_surface, 0, parse_lit!(x ^ 2 + z ^ 2));
+        let first = function!(GS.on_shell_energy, 0, parse_lit!(x ^ 2 + y ^ 2));
+        let second = function!(GS.on_shell_energy, 0, parse_lit!(x ^ 2 + z ^ 2));
         assert!(algebra.scalar_nonzero(&(&first - &second))?);
         assert!(algebra.scalar_nonzero(&(Atom::one() / (&first + &second)))?);
-        let dependent = function!(GS.energy_surface, 0, parse_lit!(x ^ 2));
+        let dependent = function!(GS.on_shell_energy, 0, parse_lit!(x ^ 2));
         assert!(!algebra.scalar_nonzero(&(dependent - parse_lit!(x)))?);
         Ok(())
     }
@@ -589,13 +589,13 @@ mod tests {
         let mut algebra = SoftEnergyAlgebra::default();
         assert!(
             algebra
-                .normalize_energies(&function!(GS.energy_surface, 0, Atom::var(lambda)), lambda)
+                .normalize_energies(&function!(GS.on_shell_energy, 0, Atom::var(lambda)), lambda)
                 .is_err()
         );
         assert!(
             algebra
                 .normalize_energies(
-                    &function!(GS.energy_surface, 0, parse_lit!((x + y) ^ 100)),
+                    &function!(GS.on_shell_energy, 0, parse_lit!((x + y) ^ 100)),
                     lambda
                 )
                 .is_err()
@@ -604,7 +604,7 @@ mod tests {
             parse_lit!(x ^ (1 / 2)),
             Atom::num(0.125f64),
             function!(symbol!("gammalooprs::uv::numerator_family"), 0),
-            function!(GS.energy_surface, 9, parse_lit!(x)),
+            function!(GS.on_shell_energy, 9, parse_lit!(x)),
         ] {
             assert!(matches!(
                 algebra.scalar_zero(&scalar)?,

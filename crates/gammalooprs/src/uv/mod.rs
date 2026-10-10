@@ -22,7 +22,7 @@ use spenso::{
     },
 };
 use symbolica::{
-    atom::{Atom, AtomCore},
+    atom::{Atom, AtomCore, AtomView, Symbol},
     symbol,
 };
 
@@ -44,13 +44,14 @@ pub(crate) fn spenso_lor_atom(tag: i32, ind: impl Into<Aind>, dim: impl Into<Dim
 }
 
 /// Cut-indexed factorized integrands. UV markers and final tensor replacements
-/// act on these expressions before evaluator construction. Shared tensor-family
-/// bodies are retained separately; ordinary root maps never multiply or mark them.
+/// act on these expressions before evaluator construction. Shared tensor and
+/// scalar bodies are retained separately; root maps never multiply or mark them.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Encode, Decode)]
 #[trait_decode(trait = GammaLoopContext)]
 pub struct Integrands {
     atoms: BTreeMap<CutCFFIndex, Atom>,
     numerators: Vec<Arc<FnMapEntry>>,
+    scalars: Vec<Arc<FnMapEntry>>,
 }
 
 impl Integrands {
@@ -58,6 +59,7 @@ impl Integrands {
         Self {
             atoms: self.iter().map(|(key, atom)| (*key, f(atom))).collect(),
             numerators: self.numerators.clone(),
+            scalars: self.scalars.clone(),
         }
     }
 
@@ -68,6 +70,7 @@ impl Integrands {
                 .map(|(key, atom)| Ok((*key, f(atom)?)))
                 .collect::<Result<_>>()?,
             numerators: self.numerators.clone(),
+            scalars: self.scalars.clone(),
         })
     }
 
@@ -78,6 +81,164 @@ impl Integrands {
 
     pub(crate) fn numerators(&self) -> &[Arc<FnMapEntry>] {
         &self.numerators
+    }
+
+    pub(crate) fn scalar_symbol() -> Symbol {
+        symbol!("gammalooprs::uv::scalar_coefficient"; Scalar)
+    }
+
+    pub(crate) fn scalar_definitions(&self) -> &[Arc<FnMapEntry>] {
+        &self.scalars
+    }
+
+    /// Scalar bodies contain only arithmetic in formal variables. All physical
+    /// functions, momenta, masses, and energy owners remain in the call arguments,
+    /// where enclosing forest substitutions can still reach them.
+    pub(crate) fn with_scalar_definitions(
+        mut self,
+        scalars: impl IntoIterator<Item = Arc<FnMapEntry>>,
+    ) -> Result<Self> {
+        let head = Self::scalar_symbol();
+        let mut definitions: BTreeMap<Vec<Atom>, Arc<FnMapEntry>> = BTreeMap::new();
+        for entry in scalars {
+            if let Some(existing) = definitions.get(&entry.tags) {
+                if Arc::ptr_eq(existing, &entry) || existing == &entry {
+                    continue;
+                }
+                return Err(eyre!(
+                    "conflicting retained scalar definition for {}",
+                    entry.lhs
+                ));
+            }
+            let parameters = entry
+                .args
+                .iter()
+                .cloned()
+                .map(Atom::from)
+                .collect::<Vec<_>>();
+            if entry.tags.is_empty()
+                || entry.is_alias
+                || entry.tags.iter().any(|tag| tag.contains_symbol(head))
+                || entry.lhs != head.call_args(entry.tags.iter().chain(&parameters))
+                || parameters.iter().enumerate().any(|(index, parameter)| {
+                    !matches!(parameter.as_view(), AtomView::Var(_))
+                        || entry.tags.iter().any(|tag| tag.contains(parameter))
+                        || parameters[..index].contains(parameter)
+                })
+            {
+                return Err(eyre!("invalid retained scalar binding {}", entry.lhs));
+            }
+            let mut invalid = false;
+            entry.rhs.visitor(&mut |view| {
+                let valid = match view {
+                    AtomView::Num(_) | AtomView::Add(_) | AtomView::Mul(_) | AtomView::Pow(_) => {
+                        true
+                    }
+                    AtomView::Var(_) => parameters
+                        .iter()
+                        .any(|parameter| parameter.as_view() == view),
+                    _ => false,
+                };
+                invalid |= !valid;
+                valid
+            });
+            if invalid {
+                return Err(eyre!(
+                    "retained scalar bodies must contain only arithmetic in their formals: {}",
+                    entry.lhs
+                ));
+            }
+            definitions.insert(entry.tags.clone(), entry);
+        }
+        self.scalars = definitions.into_values().collect();
+        Ok(self)
+    }
+
+    /// Prepare bindings once for a complete residue scope. The returned resolver
+    /// shares instantiated scalar bodies across every root and numerator in it.
+    pub(crate) fn scalar_resolver(
+        scalars: impl IntoIterator<Item = Arc<FnMapEntry>>,
+    ) -> Result<impl FnMut(&Atom) -> Result<Atom>> {
+        let validated = Self::from_iter([]).with_scalar_definitions(scalars)?;
+        let mut replacements = BTreeMap::new();
+        for entry in &validated.scalars {
+            replacements
+                .entry(entry.tags.len())
+                .or_insert_with(BTreeMap::new)
+                .insert(
+                    entry.tags.clone(),
+                    (entry.tags.len() + entry.args.len(), entry.replacement()),
+                );
+        }
+        let head = Self::scalar_symbol();
+        let mut cache = BTreeMap::<Atom, Atom>::new();
+        Ok(move |atom: &Atom| -> Result<Atom> {
+            if !atom.contains_symbol(head) {
+                return Ok(atom.clone());
+            }
+            let mut error = None;
+            let result = atom.replace_map_bottom_up(|view, _, out| {
+                let AtomView::Fun(call) = view else {
+                    return;
+                };
+                if call.get_symbol() != head || error.is_some() {
+                    return;
+                }
+                let original = view.to_owned();
+                if let Some(cached) = cache.get(&original) {
+                    **out = cached.clone();
+                    return;
+                }
+                let mut matched = None;
+                for (tag_count, definitions) in &replacements {
+                    let tags = call
+                        .iter()
+                        .take(*tag_count)
+                        .map(|arg| arg.to_owned())
+                        .collect::<Vec<_>>();
+                    if let Some((arity, replacement)) = definitions.get(&tags)
+                        && *arity == call.get_nargs()
+                    {
+                        if matched.is_some() {
+                            error = Some(eyre!("ambiguous retained scalar call {view}"));
+                            return;
+                        }
+                        matched = Some(replacement);
+                    }
+                }
+                let Some(replacement) = matched else {
+                    error = Some(eyre!("unresolved retained scalar call {view}"));
+                    return;
+                };
+                let resolved = view.replace_multiple([replacement]);
+                if resolved.contains_symbol(head) {
+                    error = Some(eyre!("unresolved or cyclic retained scalar call {view}"));
+                    return;
+                }
+                cache.insert(original, resolved.clone());
+                **out = resolved;
+            });
+            if let Some(error) = error {
+                Err(error)
+            } else {
+                Ok(result)
+            }
+        })
+    }
+
+    #[cfg(test)]
+    pub(crate) fn resolve_scalar(&self, atom: &Atom) -> Result<Atom> {
+        Self::scalar_resolver(self.scalars.iter().cloned())?(atom)
+    }
+
+    /// Resolve innermost scalar calls first, without distributing products or
+    /// materializing shared graph numerators. Flat arithmetic definitions cannot
+    /// create new calls; nested calls may occur only in actual arguments.
+    pub(crate) fn resolved_scalars(&self) -> Result<Self> {
+        let mut resolve = Self::scalar_resolver(self.scalars.iter().cloned())?;
+        let mut resolved = self.fallible_map(&mut resolve)?.map_numerators(resolve)?;
+        resolved.scalars.clear();
+        Ok(resolved)
     }
 
     /// Replace the complete flat definition store. Equal definitions share one
@@ -163,13 +324,11 @@ impl Integrands {
         self.clone().with_numerators(numerators)
     }
 
-    /// Materialize a semantic view with the existing argument-aware replacement
-    /// rules. A single substitution pass suffices for this flat store; any
-    /// remaining family call is unresolved or cyclic and must not escape.
+    /// Resolve scalar arguments and bodies before materializing tensor families.
+    /// A single numerator substitution pass then suffices for its flat store;
+    /// unresolved or cyclic calls must not escape into a semantic view.
     pub(crate) fn resolved(&self) -> Result<Self> {
-        let validated = self
-            .clone()
-            .with_numerators(self.numerators.iter().cloned())?;
+        let validated = self.resolved_scalars()?;
         let replacements = validated
             .numerators
             .iter()
@@ -214,8 +373,10 @@ impl Integrands {
         Self {
             atoms,
             numerators: Vec::new(),
+            scalars: Vec::new(),
         }
-        .with_numerators(self.numerators.iter().chain(&other.numerators).cloned())
+        .with_numerators(self.numerators.iter().chain(&other.numerators).cloned())?
+        .with_scalar_definitions(self.scalars.iter().chain(&other.scalars).cloned())
     }
 
     pub fn zip_mul(&self, other: &Integrands) -> Result<Integrands> {
@@ -226,6 +387,7 @@ impl Integrands {
     /// accumulation repeatedly copies the already assembled residue numerator.
     pub fn zip_add(self, others: impl IntoIterator<Item = Self>) -> Result<Self> {
         let mut numerators = self.numerators;
+        let mut scalars = self.scalars;
         let mut terms = self
             .atoms
             .into_iter()
@@ -233,6 +395,7 @@ impl Integrands {
             .collect::<BTreeMap<_, _>>();
         for other in others {
             numerators.extend(other.numerators);
+            scalars.extend(other.scalars);
             for pair in terms
                 .iter_mut()
                 .merge_join_by(other.atoms, |(left, _), (right, _)| (*left).cmp(right))
@@ -254,8 +417,10 @@ impl Integrands {
                 .map(|(key, terms)| (key, Atom::add_many(terms)))
                 .collect(),
             numerators: Vec::new(),
+            scalars: Vec::new(),
         }
-        .with_numerators(numerators)
+        .with_numerators(numerators)?
+        .with_scalar_definitions(scalars)
     }
 }
 
@@ -264,6 +429,7 @@ impl FromIterator<(CutCFFIndex, Atom)> for Integrands {
         Self {
             atoms: BTreeMap::from_iter(iter),
             numerators: Vec::new(),
+            scalars: Vec::new(),
         }
     }
 }
