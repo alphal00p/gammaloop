@@ -17,6 +17,19 @@ pub struct ParsedGraphInternalEdge {
     pub had_pow: bool,
 }
 
+impl ParsedGraphInternalEdge {
+    pub(crate) fn canonical_pole(&self) -> (RepeatedGroupKey, i32) {
+        let (signature, relative_sign) = self.signature.canonical_up_to_sign();
+        (
+            RepeatedGroupKey {
+                signature,
+                mass_key: self.mass_key.clone(),
+            },
+            relative_sign,
+        )
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct ParsedGraphExternalEdge {
     pub edge_id: usize,
@@ -195,12 +208,9 @@ pub fn repeated_groups(parsed: &ParsedGraph) -> Vec<RepeatedGroup> {
         if parsed.is_initial_state_cut_edge(edge.edge_id) {
             continue;
         }
-        let (signature, relative_sign) = edge.signature.canonical_up_to_sign();
+        let (key, relative_sign) = edge.canonical_pole();
         groups
-            .entry(RepeatedGroupKey {
-                signature,
-                mass_key: edge.mass_key.clone(),
-            })
+            .entry(key)
             .or_default()
             .push((edge.edge_id, relative_sign));
     }
@@ -340,9 +350,11 @@ pub(crate) mod test_graphs {
 
     pub(crate) fn initial_state_cut_line_graph(external_sign: i32) -> ParsedGraph {
         ParsedGraph {
+            // A terminal loop contour and a fixed external alias share one
+            // vertex; the cut does not carry or constrain the loop momentum.
             internal_edges: vec![
-                internal(0, 0, 1, "p_in_cut", [0], [external_sign], "m_in"),
-                internal(1, 0, 1, "q0", [1], [0], "m_loop"),
+                internal(0, 0, 0, "p_in_cut", [0], [external_sign], "m_in"),
+                internal(1, 0, 0, "q0", [1], [0], "m_loop"),
             ],
             external_edges: Vec::new(),
             initial_state_cut_edges: vec![ParsedGraphInitialStateCutEdge {
@@ -352,7 +364,7 @@ pub(crate) mod test_graphs {
             }],
             loop_names: vec!["k1".to_string()],
             external_names: vec!["p_in".to_string()],
-            node_name_to_internal: node_map(2),
+            node_name_to_internal: node_map(1),
         }
     }
 

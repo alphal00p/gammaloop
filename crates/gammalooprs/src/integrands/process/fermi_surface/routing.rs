@@ -31,7 +31,7 @@ impl FermiSurfaceProduct {
                 factor.edge_id
             );
             ensure!(
-                matches!(factor.sign, -1 | 1),
+                matches!(factor.sign, -1..=1),
                 "Fermi-surface edge {} has invalid thermal sign {}",
                 factor.edge_id,
                 factor.sign
@@ -325,14 +325,19 @@ mod tests {
             sign: 1,
             derivative_order: 1,
         };
-        assert!(FermiSurfaceProduct::new(&graph, &[factor]).is_ok());
+        for sign in [-1, 0, 1] {
+            let factor = ThermalDistributionFactor { sign, ..factor };
+            let product = FermiSurfaceProduct::new(&graph, &[factor])?;
+            assert_eq!(product.factors(), &[factor]);
+            assert_eq!(product.derivative_orders, [0]);
+        }
         assert!(FermiSurfaceProduct::new(&graph, &[]).is_err());
         for invalid in [
             ThermalDistributionFactor {
                 derivative_order: 0,
                 ..factor
             },
-            ThermalDistributionFactor { sign: 0, ..factor },
+            ThermalDistributionFactor { sign: 2, ..factor },
             ThermalDistributionFactor {
                 edge_id: EdgeIndex(1),
                 ..factor

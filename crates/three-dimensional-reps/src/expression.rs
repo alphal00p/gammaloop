@@ -173,6 +173,7 @@ impl OrientationID {
     Clone, Debug, PartialOrd, Ord, Hash, PartialEq, Eq, Serialize, Deserialize, Encode, Decode,
 )]
 pub struct OrientationData {
+    /// Surviving pole directions are independent of numerator interpolation samples.
     pub orientation: EdgeVec<Orientation>,
     pub label: Option<String>,
     pub numerator_map_index: Option<usize>,
@@ -762,7 +763,7 @@ pub(crate) fn assign_numerator_map_labels(
     let mut map_indices_by_base = HashMap::<String, HashMap<String, usize>>::new();
     for orientation in orientations {
         let base_label = base_orientation_label(orientation);
-        let map_key = orientation.energy_map_key();
+        let map_key = orientation.residue_map_key();
         let next_index = map_indices_by_base
             .get(&base_label)
             .map(HashMap::len)
