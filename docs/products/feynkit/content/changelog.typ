@@ -29,6 +29,11 @@ and vertex rules: they no longer depend on model parameters, on the process that
 diagram or on its thread count, and they differ from the ids of earlier revisions. Select diagrams
 again by the ids of the current revision.
 
+Diagram validation, run by generation, numerator updates, cut and threshold installs and imports,
+checks vertex slots and interaction signatures in one pass over the edges instead of one per
+vertex, and each stored cut or threshold candidate in linear time. It performs the same checks
+and reports the same first error as before.
+
 GammaLoop states written before the unified FeynKit model/graph format require regeneration;
 that application-level state version is separate from FeynKit crate versions. See
 #source-link("docs/architecture/architecture-current.typ", label: "the persistence contract")

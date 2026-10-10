@@ -366,13 +366,8 @@ impl FeynmanDiagram {
                         right.includes(&diagram.half_edge_id(*half).expect("existing half-edge"))
                     })
                     .collect::<Vec<_>>();
-                let cut = diagram.cut_from_partitions(
-                    cuts.len(),
-                    &left,
-                    &right,
-                    &vertex_half_edges,
-                    None,
-                )?;
+                let cut =
+                    diagram.cut_from_partitions(cuts.len(), &left, &right, &vertex_half_edges)?;
                 let mut content = diagram.cut_particles(&cut)?;
                 content.sort();
                 if content == particles {
