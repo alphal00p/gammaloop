@@ -37,7 +37,10 @@ impl Numerator<UnInit> {
                 //     )
                 //     .map_structure(|s| {
                 //         let mut a = ParamTensor::param(DenseTensor::fill(s, Atom::new()).into()).into();
-                //         a.set_flat(FlatIndex(0), GS.emr_vec())
+                //         a.set_flat(
+                //             FlatIndex(0),
+                //             GS.emr_vec(eid, Minkowski {}.new_rep(4).to_symbolic([])),
+                //         )
                 //         a
                 //     }),
                 // );

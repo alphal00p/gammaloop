@@ -9,7 +9,7 @@ use linnet::half_edge::{
 use momtrop::assert_approx_eq;
 use spenso::{algebra::complex::Complex, structure::abstract_index::AIND_SYMBOLS};
 use symbolica::{
-    atom::{Atom, AtomCore},
+    atom::{Atom, AtomCore, AtomView},
     parse_lit,
 };
 
@@ -39,14 +39,19 @@ pub(crate) fn dummy_hedge_graph(n_edges: usize) -> HedgeGraph<NoData, NoData, No
 
 #[test]
 fn normalization() {
-    let a = GS.emr_vec_index(EdgeIndex(1), AIND_SYMBOLS.cind.call_args([0]));
-    let b = GS.emr_vec_index(EdgeIndex(1), AIND_SYMBOLS.cind.call_args([1]));
+    let a = GS.emr_vec(EdgeIndex(1), AIND_SYMBOLS.cind.call_args([0]));
+    let b = GS.emr_vec(EdgeIndex(1), AIND_SYMBOLS.cind.call_args([1]));
 
     assert!(a.is_zero());
     assert!((b - GS.emr_mom(EdgeIndex(1), GS.cind(1))).is_zero());
 
     let abstract_index = parse_lit!(spenso::mink(4, 1));
-    let b = GS.emr_vec_index(EdgeIndex(1), abstract_index.as_view());
+    let b = GS.emr_vec(EdgeIndex(1), abstract_index.as_view());
+    let AtomView::Fun(indexed) = b.as_view() else {
+        panic!("Q3 with an abstract Minkowski index should remain indexed");
+    };
+    assert_eq!(indexed.get_symbol(), GS.emr_vec);
+    assert_eq!(indexed.get(1), abstract_index.as_view());
     for component in 0..4 {
         let actual = b
             .replace(abstract_index.to_pattern())
@@ -77,12 +82,12 @@ fn normalization() {
 fn spatial_emr_rescaling_covers_abstract_and_concrete_indices() {
     let edge = EdgeIndex(1);
     let abstract_index = parse_lit!(spenso::mink(4, 1));
-    let abstract_momentum = GS.emr_vec_index(edge, abstract_index.as_view());
-    let concrete_momentum = GS.emr_vec_index(edge, GS.cind(1));
+    let abstract_momentum = GS.emr_vec(edge, abstract_index.as_view());
+    let concrete_momentum = GS.emr_vec(edge, GS.cind(1));
     let rescale = |momentum: &symbolica::atom::Atom| {
         momentum
-            .replace(GS.emr_vec_index(edge, crate::utils::W_.x___))
-            .with(GS.emr_vec_index(edge, crate::utils::W_.x___) * GS.rescale)
+            .replace(GS.emr_vec(edge, crate::utils::W_.x___))
+            .with(GS.emr_vec(edge, crate::utils::W_.x___) * GS.rescale)
             .replace(GS.emr_mom(edge, crate::utils::W_.x___))
             .with(GS.emr_mom(edge, crate::utils::W_.x___) * GS.rescale)
     };

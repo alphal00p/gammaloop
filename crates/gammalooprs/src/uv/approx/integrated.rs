@@ -17,10 +17,10 @@ use idenso::{
 };
 
 use linnet::half_edge::{
-    HedgeGraph, NodeIndex,
+    HedgeGraph,
     builder::HedgeGraphBuilder,
     involution::{EdgeIndex, HedgePair},
-    subgraph::{ModifySubSet, SuBitGraph, SubGraphLike, SubSetLike},
+    subgraph::{ModifySubSet, SuBitGraph, SubGraphLike, SubSetLike, SubSetOps},
 };
 use spenso::{
     network::{
@@ -39,7 +39,7 @@ use spenso::{
 };
 use symbolica::{
     atom::{AliasedAtom, Atom, AtomCore, AtomView, FunctionBuilder},
-    domains::atom::AtomField,
+    domains::{atom::AtomField, integer::Z, rational::Q},
     function,
     id::Replacement,
     parse, parse_lit,
@@ -56,7 +56,10 @@ use crate::{
     utils::{GS, W_},
     uv::{
         ApproximationType, UltravioletGraph,
-        approx::{ForestNodeLike, Rooted, UVCtx, local_4d::Local4dCts},
+        approx::{
+            ForestNodeLike, Rooted, UVCtx,
+            local_4d::{FourDSector, Local4dCts},
+        },
         marker::{UvMarker, UvOperation},
         settings::VakintSettings,
         uv_graph::UVE,
@@ -176,16 +179,20 @@ fn simplify(integrand: &Atom) -> Result<Atom> {
             let mut aliases = BTreeMap::<Atom, Atom>::new();
             let mut serial = 0usize;
             let protected = integrand.replace_map(|arg, _context, out| {
-                if matches!(arg, AtomView::Fun(fun)
+                // The complete scalar expression in a production denominator is
+                // metadata for propagator conversion, not a tensor-network factor.
+                // Protect it alongside scalar spectators before closing spin traces.
+                if matches!(arg, AtomView::Fun(fun) if fun.get_symbol() == GS.den)
+                    || (matches!(arg, AtomView::Fun(fun)
                     if fun.get_symbol() == SPENSO_TAG.dot || fun.get_symbol() == ETS.metric)
-                    && !arg.contains_symbol(AGS.gamma)
-                    && !arg.contains_symbol(SPENSO_TAG.trace)
-                    && arg
-                        .parse_to_symbolic_net::<Aind>(&ParseSettings {
-                            shorthand_parsing: ShorthandParsing::expand_all(),
-                            ..Default::default()
-                        })
-                        .is_ok_and(|network| network.graph.dangling_indices().is_empty())
+                        && !arg.contains_symbol(AGS.gamma)
+                        && !arg.contains_symbol(SPENSO_TAG.trace)
+                        && arg
+                            .parse_to_symbolic_net::<Aind>(&ParseSettings {
+                                shorthand_parsing: ShorthandParsing::expand_all(),
+                                ..Default::default()
+                            })
+                            .is_ok_and(|network| network.graph.dangling_indices().is_empty()))
                 {
                     let alias = aliases.entry(arg.to_owned()).or_insert_with(|| {
                         loop {
@@ -325,18 +332,35 @@ impl Integrated<'_> {
 
         let scheme = current.renormalization_scheme();
         match scheme {
-            ApproximationType::MUV | ApproximationType::PolePart => {
-                let integrand = integrand
-                    .atom()
-                    .replace(GS.integrated_loop_scale)
-                    .with(Atom::one());
-                let simplified = simplify(&integrand)?;
+            ApproximationType::MUV | ApproximationType::PolePart | ApproximationType::IR => {
+                // Integrate the complete signed operator in each retained frame.
+                // Linearity permits this sector sum; no soft branch is discarded
+                // before the nested forest has supplied its completed coefficient.
+                let mut integrated = Atom::Zero;
+                for sector in integrand.active_sectors() {
+                    let physical = sector
+                        .atom
+                        .replace(GS.integrated_loop_scale)
+                        .with(Atom::one());
+                    let simplified = simplify(&physical)?;
+                    if !simplified.is_zero() {
+                        integrated += self
+                            .integrate(&simplified, sector, ctx, current, given)
+                            .wrap_err_with(|| {
+                                format!(
+                                    "while integrating {scheme} counterterm {} with retained component frames {:?}",
+                                    current.subgraph().string_label(),
+                                    sector.active_components,
+                                )
+                            })?;
+                    }
+                }
                 let marker = UvMarker::new(ctx.settings);
                 let integrated = marker.apply(
                     UvOperation::Integrate,
                     marker_current.subgraph(),
                     marker_given.subgraph(),
-                    &self.integrate(&simplified, ctx, current, given)?,
+                    &integrated,
                 );
                 let expansion_depth =
                     usize::try_from(self.vakint_settings.number_of_terms_in_epsilon_expansion)
@@ -367,7 +391,6 @@ impl Integrated<'_> {
                     scale_power: 4 * n_loops as i64,
                 })
             }
-            ApproximationType::IR => Err(eyre!("Not yet implemented IR")),
             ApproximationType::VaccuumLimit => Err(eyre!("Not yet implemented VaccuumLimit")),
             ApproximationType::OS => Err(eyre!("Not yet implemented OS")),
             ApproximationType::Unsubtracted => {
@@ -384,6 +407,7 @@ impl Integrated<'_> {
     fn integrate<S: ForestNodeLike>(
         &self,
         integrand: &Atom,
+        sector: &FourDSector,
         ctx: &UVCtx<'_>,
         current: &S,
         given: &S,
@@ -401,70 +425,447 @@ impl Integrated<'_> {
         // Vakint's configured per-loop normalization hook. Forest-subtraction
         // signs are folded into the expression at the integrated CT composition
         // sites.
-        let mut integrand_vakint = to_vakint_integrand(
+        let integrand_vakint = to_vakint_integrand(
             integrand,
             graph,
             current.subgraph(),
             given.subgraph(),
-            current.lmb(),
+            &sector.active_components,
             &settings.vakint,
-            true,
+            false,
         )?;
 
-        for (term_index, t) in integrand_vakint.0.iter().enumerate() {
-            debug_tags!(#uv,#integrated,#vakint,#trace,#to_vakint;
-                term_index = %term_index,
-                log.integral = t.integral,
-                log.numerator = t.numerator,
-                "Vakint term as input"
-            );
-        }
-        debug_tags!(#uv,#integrated,#vakint;settings = ?&self.vakint_settings,"Vakint args");
+        let propagator = function!(
+            vakint::symbols::S.prop,
+            W_.a_,
+            W_.b_,
+            W_.mom_,
+            W_.mass_,
+            W_.e_
+        )
+        .to_pattern();
+        let retained_loop_count = sector
+            .active_components
+            .iter()
+            .flat_map(|(_, _, lmb)| lmb.loop_edges.iter())
+            .collect::<std::collections::HashSet<_>>()
+            .len();
+        let mut res = Atom::Zero;
+        for source_term in integrand_vakint.0 {
+            // A product of independent one-loop denominators can carry a
+            // coupled numerator. Integrate one factor at a time, treating all
+            // spectator loops as fixed vectors for its angular projection.
+            let mut loop_factors = std::collections::BTreeMap::<i64, Atom>::new();
+            let mut masses = std::collections::HashSet::new();
+            let mut independent = true;
+            for matched in source_term.integral.pattern_match(&propagator, None, None) {
+                let momentum = &matched[&W_.mom_];
+                let loop_id = [1, -1].into_iter().find_map(|sign| {
+                    let momentum = momentum * Atom::num(sign);
+                    let AtomView::Fun(vector) = momentum.as_view() else {
+                        return None;
+                    };
+                    (vector.get_symbol() == vakint::symbols::S.k && vector.get_nargs() == 1)
+                        .then(|| i64::try_from(vector.get(0)).ok())
+                        .flatten()
+                });
+                let Some(loop_id) = loop_id else {
+                    independent = false;
+                    break;
+                };
+                masses.insert(matched[&W_.mass_].clone());
+                *loop_factors.entry(loop_id).or_insert_with(Atom::one) *= propagator
+                    .replace_wildcards(&matched)
+                    .map_err(|error| eyre!(error))?;
+            }
+            let factorized = independent
+                && retained_loop_count > 1
+                && loop_factors.len() == retained_loop_count
+                && masses.len() > 1;
+            let loop_ids = loop_factors.keys().copied().collect::<Vec<_>>();
+            let stages = if factorized {
+                loop_factors
+                    .into_iter()
+                    .map(|(loop_id, propagators)| {
+                        (
+                            function!(vakint::symbols::S.topo, propagators),
+                            loop_ids
+                                .iter()
+                                .copied()
+                                .filter(|id| *id != loop_id)
+                                .collect::<Vec<_>>(),
+                        )
+                    })
+                    .collect::<Vec<_>>()
+            } else {
+                vec![(source_term.integral.clone(), Vec::new())]
+            };
+            let mut coefficient = source_term.numerator.clone();
+            if factorized {
+                // Preserve even custom normalization hooks that are not a
+                // product of identical per-loop factors. The converter's
+                // additional normalization already belongs to the full measure.
+                let normalization = self
+                    .vakint_settings
+                    .get_integral_normalization_factor_atom()?;
+                coefficient *= normalization
+                    .replace(vakint::symbols::S.n_loops.to_pattern())
+                    .with(Atom::num(retained_loop_count))
+                    / normalization
+                        .replace(vakint::symbols::S.n_loops.to_pattern())
+                        .with(Atom::one())
+                        .pow(retained_loop_count);
+            }
+            // Keep the same conservative epsilon target at every stage. Later
+            // vacuum poles can consume positive orders, while Vakint reserves
+            // coefficient and normalization poles independently.
+            for (integral, spectators) in stages {
+                let stage_loop_count = if factorized { 1 } else { retained_loop_count };
+                let external = function!(vakint::symbols::S.p, W_.i_, W_.x___).to_pattern();
+                let mut used_ids = coefficient
+                    .pattern_match(&external, None, None)
+                    .map(|matched| i64::try_from(matched[&W_.i_].as_view()))
+                    .collect::<Result<std::collections::HashSet<_>, _>>()
+                    .map_err(|error| eyre!(error))?;
+                let mut next_id = 0i64;
+                let mut restore_spectators = Vec::new();
+                for spectator in spectators {
+                    while used_ids.contains(&next_id) {
+                        next_id = next_id.checked_add(1).ok_or_else(|| {
+                            eyre!("no free external momentum ID for vacuum spectator")
+                        })?;
+                    }
+                    used_ids.insert(next_id);
+                    let source = function!(vakint::symbols::S.k, spectator, W_.x___);
+                    let target = function!(vakint::symbols::S.p, next_id, W_.x___);
+                    coefficient = coefficient
+                        .replace(source.to_pattern())
+                        .with(target.to_pattern());
+                    restore_spectators.push(Replacement::new(target, source));
+                }
+                let mut stage_term = source_term.clone();
+                stage_term.integral = integral;
+                stage_term.numerator = coefficient;
+                let mut integrand_vakint = VakintExpression(vec![stage_term]);
+                let mut same_momentum = std::collections::BTreeMap::<Atom, Vec<_>>::new();
+                for matched in integrand_vakint.0[0]
+                    .integral
+                    .pattern_match(&propagator, None, None)
+                {
+                    let momentum = &matched[&W_.mom_];
+                    same_momentum
+                        .entry(momentum.clone().min(-momentum))
+                        .or_default()
+                        .push((
+                            usize::try_from(matched[&W_.a_].as_view())
+                                .map_err(|error| eyre!(error))?,
+                            matched[&W_.mass_].clone(),
+                            matched[&W_.e_].clone(),
+                        ));
+                }
+                for (momentum, propagators) in same_momentum {
+                    let (_, first_mass, _) = &propagators[0];
+                    if propagators.iter().all(|(_, mass, _)| mass == first_mass)
+                        || momentum.contains_symbol(vakint::symbols::S.p)
+                        || propagators.iter().any(|(_, mass, power)| {
+                            mass.contains_symbol(W_.x_)
+                                || !i64::try_from(power.as_view()).is_ok_and(|power| power > 0)
+                        })
+                    {
+                        continue;
+                    }
 
-        // let mut res = vakint
-        //     .0
-        //     .evaluate(&vakint.1, integrand_vakint.as_view())
-        //     .unwrap();
+                    // A mixed-mass one-loop vacuum is a sum of single-mass
+                    // tadpoles: 1/(D_a D_b) = (1/D_a - 1/D_b)/(m_a²-m_b²).
+                    // The same identity applies to any equal-momentum group
+                    // with other vacuum propagators held fixed. Partial-fraction
+                    // only the denominator, including raised powers; the graph
+                    // numerator remains an unchanged factor.
+                    let loop_square = Atom::var(W_.x_);
+                    let denominator = propagators
+                        .iter()
+                        .fold(Atom::one(), |product, (_, mass, power)| {
+                            product * (&loop_square - mass).pow(-power)
+                        });
+                    let fractions = denominator
+                        .try_to_rational_polynomial::<_, _, u16>(&Q, &Z, [W_.x_])?
+                        .apart_factored_denominators(0);
+                    for term in std::mem::take(&mut integrand_vakint.0) {
+                        let powers = term
+                            .integral
+                            .pattern_match(&propagator, None, None)
+                            .map(|matched| {
+                                Ok((
+                                    usize::try_from(matched[&W_.a_].as_view())
+                                        .map_err(|error| eyre!(error))?,
+                                    matched[&W_.e_].clone(),
+                                ))
+                            })
+                            .collect::<Result<std::collections::BTreeMap<_, _>>>()?;
+                        let graph = vakint::graph::Graph::new_from_atom(
+                            term.integral.as_view(),
+                            *powers.keys().next_back().unwrap(),
+                        )?;
+                        for (coefficient, denominator, power) in &fractions {
+                            let denominator = denominator.to_expression();
+                            let constant = denominator.replace(W_.x_).with(Atom::Zero);
+                            let leading = denominator.replace(W_.x_).with(Atom::one()) - &constant;
+                            let (survivor, _, _) = propagators.iter().find(|(_, mass, _)| {
+                                (&denominator - &leading * (&loop_square - mass)).expand().is_zero()
+                            }).ok_or_else(|| eyre!("vacuum partial fraction has an unexpected denominator {denominator}"))?;
+                            let coefficient = coefficient.to_expression() / leading.pow(*power);
+                            if coefficient.contains_symbol(W_.x_) {
+                                return Err(eyre!(
+                                    "vacuum partial fraction retained loop dependence in its coefficient"
+                                ));
+                            }
+                            let mut contracted = graph.clone();
+                            for (id, _, _) in &propagators {
+                                if id != survivor {
+                                    contracted.contract_edges(&[*id].into_iter().collect());
+                                }
+                            }
+                            // Removing a serial line contracts its endpoints.
+                            // Dropping it without that contraction would silently
+                            // lower a sunset's graph rank although both loop
+                            // generators still occur in its denominators.
+                            if contracted.to_symbolica_graph(false).num_loops() != stage_loop_count
+                            {
+                                return Err(eyre!(
+                                    "vacuum partial fraction changed the retained {stage_loop_count}-loop integration domain for component {reduced_label}"
+                                ));
+                            }
+                            let mut fraction = term.clone();
+                            fraction.numerator *= coefficient;
+                            fraction.integral = function!(
+                                vakint::symbols::S.topo,
+                                contracted
+                                    .edges
+                                    .values()
+                                    .fold(Atom::one(), |product, edge| {
+                                        product
+                                            * function!(
+                                                vakint::symbols::S.prop,
+                                                edge.id,
+                                                function!(
+                                                    vakint::symbols::S.edge,
+                                                    edge.left_node_id,
+                                                    edge.right_node_id
+                                                ),
+                                                &edge.momentum,
+                                                &edge.mass,
+                                                if edge.id == *survivor {
+                                                    Atom::num(*power)
+                                                } else {
+                                                    powers[&edge.id].clone()
+                                                }
+                                            )
+                                    })
+                            );
+                            integrand_vakint.0.push(fraction);
+                        }
+                    }
+                }
+                // Only a vacuum topology whose actual masses all vanish is scaleless.
+                // Certify polynomial loop dependence as well: an external scale hidden
+                // inside a nonpolynomial numerator must not be erased with the soft jet.
+                integrand_vakint.0.retain(|term| {
+                    let propagators = term
+                        .integral
+                        .pattern_match(&propagator, None, None)
+                        .map(|matched| {
+                            matched[&W_.mass_].is_zero()
+                                && matched[&W_.mom_].contains_symbol(vakint::symbols::S.k)
+                        })
+                        .collect::<Vec<_>>();
+                    if propagators.is_empty()
+                        || propagators.iter().any(|massless_loop| !massless_loop)
+                        || term.integral.contains_symbol(vakint::symbols::S.p)
+                    {
+                        return true;
+                    }
+                    let mut pending = vec![term.numerator.as_view()];
+                    let mut scaleless = true;
+                    while let Some(view) = pending.pop() {
+                        if !view.contains_symbol(vakint::symbols::S.k) {
+                            continue;
+                        }
+                        match view {
+                            AtomView::Add(sum) => pending.extend(sum.iter()),
+                            AtomView::Mul(product) => pending.extend(product.iter()),
+                            AtomView::Pow(power) => {
+                                let (base, exponent) = power.get_base_exp();
+                                if i64::try_from(exponent).is_ok_and(|power| power >= 0) {
+                                    pending.push(base);
+                                } else {
+                                    scaleless = false;
+                                    break;
+                                }
+                            }
+                            AtomView::Fun(function)
+                                if function.get_symbol() == vakint::symbols::S.k
+                                    && function.get_nargs() > 0
+                                    && usize::try_from(function.get(0)).is_ok() => {}
+                            AtomView::Fun(function)
+                                if function.get_symbol() == vakint::symbols::S.dot
+                                    && function.get_nargs() == 2
+                                    && function.iter().all(|argument| {
+                                        matches!(argument, AtomView::Fun(vector)
+                                            if [vakint::symbols::S.k, vakint::symbols::S.p]
+                                                .contains(&vector.get_symbol())
+                                                && vector.get_nargs() == 1
+                                                && usize::try_from(vector.get(0)).is_ok())
+                                    }) => {}
+                            _ => {
+                                scaleless = false;
+                                break;
+                            }
+                        }
+                    }
+                    if scaleless {
+                        debug_tags!(#uv, #integrated, #vakint, #trace;
+                            stage = "certified_scaleless_vacuum",
+                            log.integral = term.integral,
+                            log.numerator = term.numerator,
+                            "Dropping a massless vacuum term with polynomial loop numerator"
+                        );
+                    }
+                    !scaleless
+                });
+                if integrand_vakint.0.is_empty() {
+                    coefficient = Atom::Zero;
+                    break;
+                }
 
-        integrand_vakint.canonicalize(self.vakint_settings, &self.vakint.topologies, false)?;
-        for (term_index, t) in integrand_vakint.0.iter().enumerate() {
-            debug_tags!(#uv,#integrated,#vakint,#trace,#canonicalize;
-                term_index = %term_index,
-                log.integral = t.integral,
-                log.numerator = t.numerator,
-                "Vakint term after canonicalization"
-            );
-        }
-        integrand_vakint.tensor_reduce(self.vakint, self.vakint_settings)?;
-        for (term_index, t) in integrand_vakint.0.iter().enumerate() {
-            debug_tags!(#uv,#integrated,#vakint,#trace,#tensor_reduce;
-                term_index = %term_index,
-                log.integral = t.integral,
-                log.numerator = t.numerator,
-                "Vakint term after tensor reduction"
-            );
-        }
-        for (term_index, term) in integrand_vakint.0.iter_mut().enumerate() {
-            term.numerator =
-                self.simplify_projected_numerator(&term.numerator, current.topo_order())?;
-            debug_tags!(#uv, #integrated, #vakint, #trace;
-                stage = "projected_numerator_after_d_dimensional_algebra",
-                term_index = %term_index,
-                log.numerator = term.numerator,
-                "Completed projected numerator algebra before Laurent expansion"
-            );
-        }
-        integrand_vakint.evaluate_integral(self.vakint, self.vakint_settings)?;
-        for (term_index, t) in integrand_vakint.0.iter().enumerate() {
-            debug_tags!(#uv,#integrated,#vakint,#trace,#evaluate;
-                term_index = %term_index,
-                log.integral = t.integral,
-                log.numerator = t.numerator,
-                "Vakint term after evaluation"
-            );
-        }
+                for (term_index, t) in integrand_vakint.0.iter().enumerate() {
+                    debug_tags!(#uv,#integrated,#vakint,#trace,#to_vakint;
+                        term_index = %term_index,
+                        log.integral = t.integral,
+                        log.numerator = t.numerator,
+                        "Vakint term as input"
+                    );
+                }
+                debug_tags!(#uv,#integrated,#vakint;settings = ?&self.vakint_settings,"Vakint args");
 
-        let res: Atom = integrand_vakint.into();
+                // let mut res = vakint
+                //     .0
+                //     .evaluate(&vakint.1, integrand_vakint.as_view())
+                //     .unwrap();
+
+                // The analytic backends identify a vacuum mass through a
+                // symbol or its square. Alias other exact nonzero mass values
+                // only in propagator mass slots, then restore the values below.
+                let mut mass_aliases = std::collections::BTreeMap::new();
+                let mut used_symbols = integrand_vakint
+                    .0
+                    .iter()
+                    .flat_map(|term| [&term.integral, &term.numerator])
+                    .flat_map(|atom| atom.get_all_symbols(true))
+                    .collect::<std::collections::HashSet<_>>();
+                let mut mass_serial = 0;
+                for term in &mut integrand_vakint.0 {
+                    let mut replacements = Vec::new();
+                    for matched in term.integral.pattern_match(&propagator, None, None) {
+                        let mass = &matched[&W_.mass_];
+                        if mass.contains_symbol(vakint::symbols::S.k)
+                            || mass.contains_symbol(vakint::symbols::S.p)
+                        {
+                            return Err(eyre!(
+                                "a vacuum propagator mass must be independent of momentum"
+                            ));
+                        }
+                        if mass.is_zero()
+                            || matches!(mass.as_view(), AtomView::Var(_))
+                            || matches!(mass.as_view(), AtomView::Pow(power)
+                                if matches!(power.get_base_exp().0, AtomView::Var(_))
+                                    && power.get_base_exp().1 == Atom::num(2).as_view())
+                        {
+                            continue;
+                        }
+                        let alias = mass_aliases.entry(mass.clone()).or_insert_with(|| {
+                            loop {
+                                let symbol = vakint_symbol!(format!(
+                                    "integrated_mass_squared_{mass_serial}"
+                                ));
+                                mass_serial += 1;
+                                if used_symbols.insert(symbol) {
+                                    break Atom::var(symbol);
+                                }
+                            }
+                        });
+                        replacements.push(Replacement::new(
+                            propagator
+                                .replace_wildcards(&matched)
+                                .map_err(|error| eyre!(error))?,
+                            function!(
+                                vakint::symbols::S.prop,
+                                &matched[&W_.a_],
+                                &matched[&W_.b_],
+                                &matched[&W_.mom_],
+                                &*alias,
+                                &matched[&W_.e_]
+                            ),
+                        ));
+                    }
+                    term.integral = term.integral.replace_multiple(&replacements);
+                }
+                integrand_vakint.canonicalize(
+                    self.vakint_settings,
+                    &self.vakint.topologies,
+                    false,
+                )?;
+                for (term_index, t) in integrand_vakint.0.iter().enumerate() {
+                    debug_tags!(#uv,#integrated,#vakint,#trace,#canonicalize;
+                        term_index = %term_index,
+                        log.integral = t.integral,
+                        log.numerator = t.numerator,
+                        "Vakint term after canonicalization"
+                    );
+                }
+                integrand_vakint.tensor_reduce(self.vakint, self.vakint_settings)?;
+                for (term_index, t) in integrand_vakint.0.iter().enumerate() {
+                    debug_tags!(#uv,#integrated,#vakint,#trace,#tensor_reduce;
+                        term_index = %term_index,
+                        log.integral = t.integral,
+                        log.numerator = t.numerator,
+                        "Vakint term after tensor reduction"
+                    );
+                }
+                for (term_index, term) in integrand_vakint.0.iter_mut().enumerate() {
+                    term.numerator =
+                        self.simplify_projected_numerator(&term.numerator, current.topo_order())?;
+                    debug_tags!(#uv, #integrated, #vakint, #trace;
+                        stage = "projected_numerator_after_d_dimensional_algebra",
+                        term_index = %term_index,
+                        log.numerator = term.numerator,
+                        "Completed projected numerator algebra before Laurent expansion"
+                    );
+                }
+                integrand_vakint.evaluate_integral(self.vakint, self.vakint_settings)?;
+                for (term_index, t) in integrand_vakint.0.iter().enumerate() {
+                    debug_tags!(#uv,#integrated,#vakint,#trace,#evaluate;
+                        term_index = %term_index,
+                        log.integral = t.integral,
+                        log.numerator = t.numerator,
+                        "Vakint term after evaluation"
+                    );
+                }
+
+                coefficient = Atom::from(integrand_vakint).replace_multiple(
+                    mass_aliases
+                        .into_iter()
+                        .map(|(mass, alias)| Replacement::new(alias, mass))
+                        .collect::<Vec<_>>(),
+                );
+                if coefficient.contains_symbol(vakint::symbols::S.k) {
+                    return Err(eyre!(
+                        "integrated vacuum factor retained an active loop momentum"
+                    ));
+                }
+                coefficient = coefficient.replace_multiple(&restore_spectators);
+            }
+            res += coefficient;
+        }
 
         debug_tags!(#uv,#integrated,#vakint,#trace,#raw;
             log.res = res,
@@ -807,12 +1208,22 @@ pub(crate) fn to_vakint_integrand<
     graph: &HedgeGraph<E, V, H>,
     reduced: &S,
     dependent_subgraph: &SS,
-    source_lmb: &LoopMomentumBasis,
+    active_components: &[(SuBitGraph, SuBitGraph, LoopMomentumBasis)],
     settings: &VakintSettings,
     substitute_masses_to_m_uv: bool,
 ) -> Result<VakintExpression> {
     let reduced_label = reduced.string_label();
     let dependent_subgraph_label = dependent_subgraph.string_label();
+    let source_lmbs = active_components
+        .iter()
+        .map(|(_, _, lmb)| lmb)
+        .collect::<Vec<_>>();
+    let mut retained_loop_edges = source_lmbs
+        .iter()
+        .flat_map(|lmb| lmb.loop_edges.iter().copied())
+        .collect::<Vec<_>>();
+    retained_loop_edges.sort();
+    retained_loop_edges.dedup();
     // Resolve color contractions before opening shorthand traces. Repeated
     // color spectators then share their reduced form instead of acquiring
     // distinct dummy indices during Lorentz preparation. Keep the kinematic
@@ -875,6 +1286,8 @@ pub(crate) fn to_vakint_integrand<
         .sum();
     let mut propagator_id = 1;
     let mut propagator_replacements = Vec::new();
+    let mut incidence_replacements = Vec::new();
+    let mut assigned_edges = std::collections::HashSet::new();
 
     let vk_prop = vakint::symbols::S.prop;
     let vk_edge = vakint_symbol!("edge");
@@ -891,44 +1304,75 @@ pub(crate) fn to_vakint_integrand<
     );
     // let first = contracted_nodes.first();
 
-    for (pair, index, _data) in graph.iter_edges_of(reduced) {
-        if let HedgePair::Paired { source, sink } = pair {
-            // let source = if contracted_nodes.contains(&graph.node_id(source)) {
-            //     first.unwrap().clone()
-            // } else {
-            //     graph.node_id(source)
-            // };
-            // let sink = if contracted_nodes.contains(&graph.node_id(sink)) {
-            //     first.unwrap().clone()
-            // } else {
-            //     graph.node_id(sink)
-            // };
-            propagator_replacements.push(Replacement::new(
-                function!(
-                    GS.den,
-                    usize::from(index) as i64,
-                    W_.mom_,
-                    W_.mass_,
-                    W_.x___
-                ),
-                function!(
-                    vk_prop,
-                    propagator_id,
+    for (owners, source_scope, _) in active_components {
+        // Shrink only this component's omitted prefix. Active child propagators
+        // retain their own incidence; its quotient attaches at the contracted
+        // vertex. Contract disjoint prefixes separately, preserving their loop
+        // domains instead of identifying unrelated component vertices.
+        let mut contracted_nodes = std::collections::HashMap::new();
+        for prefix in graph.connected_components(&source_scope.subtract(owners)) {
+            let mut nodes = graph.iter_nodes_of(&prefix).map(|(node, _, _)| node);
+            if let Some(first) = nodes.next() {
+                for node in nodes {
+                    contracted_nodes.insert(node, first);
+                }
+            }
+        }
+        for (pair, index, _data) in graph.iter_edges_of(owners) {
+            if let HedgePair::Paired { source, sink } = pair {
+                if !assigned_edges.insert(index) {
+                    return Err(eyre!(
+                        "Vakint denominator owner {index} belongs to multiple active components"
+                    ));
+                }
+                // The former global contraction selected `first` from all
+                // dependent nodes. Resolve each endpoint with this owner's
+                // prefix instead, leaving active child endpoints unchanged.
+                let source = graph.node_id(source);
+                let sink = graph.node_id(sink);
+                let contracted_source = contracted_nodes.get(&source).copied().unwrap_or(source);
+                let contracted_sink = contracted_nodes.get(&sink).copied().unwrap_or(sink);
+                propagator_replacements.push(Replacement::new(
                     function!(
-                        vk_edge,
-                        usize::from(graph.node_id(source)),
-                        usize::from(graph.node_id(sink))
+                        GS.den,
+                        usize::from(index) as i64,
+                        W_.mom_,
+                        W_.mass_,
+                        W_.x___
                     ),
-                    W_.mom_,
-                    if substitute_masses_to_m_uv {
-                        GS.m_uv_vacuum
-                    } else {
-                        W_.mass_
-                    },
-                    1
-                ),
-            ));
-            propagator_id += 1;
+                    function!(
+                        vk_prop,
+                        propagator_id,
+                        function!(vk_edge, usize::from(source), usize::from(sink)),
+                        W_.mom_,
+                        if substitute_masses_to_m_uv {
+                            Atom::var(GS.m_uv_vacuum).pow(2)
+                        } else {
+                            Atom::var(W_.mass_)
+                        },
+                        1
+                    ),
+                ));
+                incidence_replacements.push(Replacement::new(
+                    function!(
+                        vk_prop,
+                        propagator_id,
+                        function!(vk_edge, usize::from(source), usize::from(sink)),
+                        W_.x___
+                    ),
+                    function!(
+                        vk_prop,
+                        propagator_id,
+                        function!(
+                            vk_edge,
+                            usize::from(contracted_source),
+                            usize::from(contracted_sink)
+                        ),
+                        W_.x___
+                    ),
+                ));
+                propagator_id += 1;
+            }
         }
     }
     // Edge IDs make these denominator replacements disjoint. Convert all
@@ -945,48 +1389,16 @@ pub(crate) fn to_vakint_integrand<
         "Vakint trace after denominator-to-propagator conversion"
     );
 
-    let mut first: Option<NodeIndex> = None;
-
     debug_tags!(#uv, #integrated, #vakint, #graph, #dump;
         reduced = %graph.dot(dependent_subgraph),
-        "Shrinking subgraph for vakint"
+        "Shrinking each component's omitted prefix for vakint"
     );
-    // shrink vertices of the subgraph
-    for (id, _crown, _data) in graph.iter_nodes_of(dependent_subgraph) {
-        debug_tags!(#uv, #integrated, #vakint, #graph, #inspect;
-            id = %id,
-            "Shrinking Node"
-        );
-
-        if let Some(first) = first {
-            integrand_vakint = integrand_vakint
-                .replace(function!(
-                    vk_prop,
-                    W_.x_,
-                    function!(vk_edge, id.0, W_.y_),
-                    W_.x___
-                ))
-                .with(function!(
-                    vk_prop,
-                    W_.x_,
-                    function!(vk_edge, first.0, W_.y_),
-                    W_.x___
-                ))
-                .replace(function!(
-                    vk_prop,
-                    W_.x_,
-                    function!(vk_edge, W_.y_, id.0),
-                    W_.x___
-                ))
-                .with(function!(
-                    vk_prop,
-                    W_.x_,
-                    function!(vk_edge, W_.y_, first.0),
-                    W_.x___
-                ))
-        } else {
-            first = Some(id);
-        }
+    // Shrink vertices only on propagators belonging to that quotient.
+    integrand_vakint = integrand_vakint.replace_multiple(&incidence_replacements);
+    if integrand_vakint.contains_symbol(GS.den) {
+        return Err(eyre!(
+            "Vakint component {reduced_label} contains a denominator without an active owner"
+        ));
     }
     debug_tags!(#uv, #integrated, #vakint, #trace;
         stage = "to_vakint_integrand_after_shrink_subgraph",
@@ -1090,7 +1502,7 @@ pub(crate) fn to_vakint_integrand<
         );
 
         let mut graph = HedgeGraphBuilder::new();
-        //prop(<id>, edge(<node_source>,<node_sink>), <mom>, <mass>, <power>)
+        //prop(<id>, edge(<node_source>,<node_sink>), <mom>, <mass_squared>, <power>)
         let pat = function!(
             vk_prop,
             W_.a_,
@@ -1104,7 +1516,7 @@ pub(crate) fn to_vakint_integrand<
 
         struct ContractibleEdge {
             mom: Atom,
-            mass: Atom,
+            mass_squared: Atom,
             power: i32,
         }
 
@@ -1119,7 +1531,7 @@ pub(crate) fn to_vakint_integrand<
                 nodemap[&j],
                 ContractibleEdge {
                     mom: m[&W_.c_].clone(),
-                    mass: m[&W_.d_].clone(),
+                    mass_squared: m[&W_.d_].clone(),
                     power: m[&W_.e_].as_view().try_into().unwrap(),
                 },
                 false,
@@ -1139,16 +1551,16 @@ pub(crate) fn to_vakint_integrand<
 
         while let Some(same_mass_two_bond) = graph.a_bond(&|c| {
             let mut count = 0;
-            let mut mass = None;
+            let mut mass_squared = None;
             for (_, _, d) in graph.iter_edges_of(c) {
                 count += 1;
 
-                if let Some(m) = &mass
-                    && m != &d.data.mass
+                if let Some(m) = &mass_squared
+                    && m != &d.data.mass_squared
                 {
                     return false;
                 } else {
-                    mass = Some(d.data.mass.clone());
+                    mass_squared = Some(d.data.mass_squared.clone());
                 }
                 if count > 2 {
                     return false;
@@ -1198,8 +1610,7 @@ pub(crate) fn to_vakint_integrand<
                 ),
                 &e.data.mom,
                 &e.data
-                    .mass
-                    .pow(2)
+                    .mass_squared
                     .replace(GS.m_uv_expansion)
                     .with(GS.m_uv_vacuum),
                 e.data.power
@@ -1209,6 +1620,17 @@ pub(crate) fn to_vakint_integrand<
         // println!("{}->{}", t.integral, new_integral);
         t.integral = function!(vakint::symbols::S.topo, new_integral);
         let nloops = graph.cyclotomatic_number(&graph.full_filter());
+        // A cancelled denominator can remove an integration direction without
+        // leaving that coordinate in the numerator. Never silently replace the
+        // retained active measure by a lower-loop vacuum integral. Redundant
+        // EMR variables remain allowed when they span the full retained domain.
+        if nloops != retained_loop_edges.len() {
+            return Err(eyre!(
+                "Vakint term {term_index} for component {reduced_label} after prefix {dependent_subgraph_label} has {nloops} loop generators, expected {} retained active generators {:?}; a changed integration domain requires an explicit scaleless or factorization certificate",
+                retained_loop_edges.len(),
+                retained_loop_edges,
+            ));
+        }
         let contracted_propagator_count =
             graph.iter_edges().filter(|(p, _, _)| p.is_paired()).count();
         let contracted_propagator_power_sum = graph
@@ -1245,9 +1667,14 @@ pub(crate) fn to_vakint_integrand<
                         // external momenta. Solve only for hard coordinates;
                         // otherwise H=Q-P can solve for P and leave Q in the
                         // integrated numerator as a spurious external variable.
-                        if usize::try_from(m[&W_.a_].as_view())
-                            .is_ok_and(|edge| source_lmb.ext_from(EdgeIndex(edge)).is_some())
-                        {
+                        // A child crown carrier can become an active loop of
+                        // its parent. Retained hard coordinates take precedence
+                        // over an external classification in another frame.
+                        if usize::try_from(m[&W_.a_].as_view()).is_ok_and(|edge| {
+                            let edge = EdgeIndex(edge);
+                            source_lmbs.iter().any(|lmb| lmb.ext_from(edge).is_some())
+                                && !source_lmbs.iter().any(|lmb| lmb.loop_edges.contains(&edge))
+                        }) {
                             return;
                         }
                         let var = mom_pat.replace_wildcards(&m).unwrap();
@@ -1286,6 +1713,23 @@ pub(crate) fn to_vakint_integrand<
             term_index,
             "integral",
             &t.integral,
+            &add_additional_args,
+        )?;
+        momentum_solution.ensure_free_variables_eliminated(
+            term_index,
+            "numerator",
+            &t.numerator,
+            &add_additional_args,
+        )?;
+        let retained_hard_coordinates = retained_loop_edges
+            .iter()
+            .map(|edge| function!(GS.emr_mom, usize::from(*edge)))
+            .collect::<Vec<_>>();
+        momentum_solution.ensure_variables_eliminated(
+            term_index,
+            "numerator",
+            &t.numerator,
+            &retained_hard_coordinates,
             &add_additional_args,
         )?;
         debug_tags!(#uv, #integrated, #vakint, #trace;
@@ -2027,6 +2471,44 @@ mod tests {
     }
 
     #[test]
+    fn finite_projection_retains_child_epsilon_terms_until_parent_poles_multiply() {
+        test_initialise().unwrap();
+        let epsilon = Atom::var(GS.dim_epsilon);
+        let child = IntegratedCts {
+            expansion: series(
+                &(Atom::num(2) + Atom::num(3) * &epsilon + Atom::num(5) * epsilon.pow(2)),
+                3,
+            )
+            .unwrap(),
+            scale_power: 4,
+        };
+        let parent_poles = epsilon.pow(-2) + Atom::num(7) * epsilon.pow(-1);
+        let nested = IntegratedCts {
+            expansion: series(
+                &(child.physical_finite_counterterm_atom() * parent_poles),
+                1,
+            )
+            .unwrap(),
+            scale_power: 8,
+        };
+        // The finite projection retains nonnegative powers for further nesting.
+        let finite = nested.physical_finite_counterterm_atom();
+        assert_eq!(
+            finite.replace(GS.dim_epsilon).with(Atom::Zero),
+            Atom::num(26)
+        );
+        assert!(
+            (finite - Atom::num(26) - Atom::num(35) * &epsilon)
+                .expand()
+                .is_zero()
+        );
+        assert_eq!(
+            nested.physical_pole_atom(),
+            -Atom::num(2) * epsilon.pow(-2) - Atom::num(17) * epsilon.pow(-1),
+        );
+    }
+
+    #[test]
     fn factorized_product_projects_each_component() {
         test_initialise().unwrap();
 
@@ -2053,9 +2535,12 @@ mod tests {
     //     let euclidean_norm = GS.emr_mom(edge, GS.cind(1)).pow(2)
     //         + GS.emr_mom(edge, GS.cind(2)).pow(2)
     //         + GS.emr_mom(edge, GS.cind(3)).pow(2);
-    //     let minkowski_norm = Minkowski {}
-    //         .new_rep(4)
-    //         .inner_product(GS.emr_vec(edge), GS.emr_vec(edge));
+    //     let minkowski = Minkowski {}.new_rep(4).to_symbolic([]);
+    //     let minkowski_norm = function!(
+    //         SPENSO_TAG.dot,
+    //         GS.emr_vec(edge, minkowski.as_view()),
+    //         GS.emr_vec(edge, minkowski.as_view())
+    //     );
 
     //     assert_eq!(
     //         euclidean_norm,
@@ -2220,7 +2705,11 @@ mod tests {
             &graph,
             &graph.full_filter(),
             &graph.empty_subgraph::<SuBitGraph>(),
-            &graph.loop_momentum_basis,
+            &[(
+                graph.full_filter(),
+                graph.full_filter(),
+                graph.loop_momentum_basis.clone(),
+            )],
             &VakintSettings {
                 additional_normalization: "1".to_string(),
                 ..Default::default()
@@ -2234,6 +2723,138 @@ mod tests {
         let expected = Atom::i() / 2 * color_cas!(2, coad!(8)) * index * g!(&a, &d) * coefficient;
         assert_eq!(actual.0.len(), 1);
         assert_eq!(actual.0[0].numerator, expected);
+    }
+
+    #[test]
+    fn vakint_conversion_preserves_squared_masses() {
+        use crate::{
+            dot,
+            graph::{Graph, parse::IntoGraph},
+        };
+
+        test_initialise().unwrap();
+        let graph: Graph = dot!(digraph vakint_mass_tadpole {
+            edge [num=1 mass=2]
+            node [num=1]
+            incoming [style=invis]
+            outgoing [style=invis]
+            incoming -> a [id=0]
+            a -> a [id=1 lmb_id=0]
+            a -> outgoing [id=2]
+        })
+        .unwrap();
+        let momentum = function!(GS.emr_mom, 1);
+        let indexed_momentum =
+            function!(GS.emr_mom, 1, Minkowski {}.new_rep(GS.dim).to_symbolic([]));
+        let settings = VakintSettings {
+            additional_normalization: "1".to_string(),
+            ..Default::default()
+        };
+        // Both wrappers carry squared masses. A nonunit physical mass detects
+        // an accidental second square, while the UV substitution remains MUV^2.
+        for mass in [Atom::num(2), parse!("m_phys")] {
+            let mass_squared = mass.pow(2);
+            let denominator = function!(
+                GS.den,
+                1,
+                &momentum,
+                &mass_squared,
+                function!(SPENSO_TAG.dot, &indexed_momentum, &indexed_momentum) - &mass_squared
+            );
+            for substitute_masses_to_m_uv in [false, true] {
+                let actual = to_vakint_integrand(
+                    &denominator.pow(-3),
+                    &graph,
+                    &graph.full_filter(),
+                    &graph.empty_subgraph::<SuBitGraph>(),
+                    &[(
+                        graph.full_filter(),
+                        graph.full_filter(),
+                        graph.loop_momentum_basis.clone(),
+                    )],
+                    &settings,
+                    substitute_masses_to_m_uv,
+                )
+                .unwrap();
+                assert_eq!(actual.0.len(), 1);
+                assert_eq!(actual.0[0].numerator, Atom::one());
+                assert_eq!(
+                    actual.0[0].integral,
+                    function!(
+                        vakint::symbols::S.topo,
+                        function!(
+                            vakint::symbols::S.prop,
+                            1,
+                            function!(vakint::symbols::S.edge, 0, 0),
+                            function!(vakint::symbols::S.k, 0),
+                            if substitute_masses_to_m_uv {
+                                Atom::var(GS.m_uv_vacuum).pow(2)
+                            } else {
+                                mass_squared.clone()
+                            },
+                            3
+                        )
+                    )
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn vakint_conversion_rejects_a_lost_active_loop() {
+        use crate::{
+            dot,
+            graph::{Graph, parse::IntoGraph},
+        };
+
+        test_initialise().unwrap();
+        let graph: Graph = dot!(digraph cancelled_tadpole_loop {
+            edge [num=1 mass=2]
+            node [num=1]
+            a -> a [id=0 lmb_id=0]
+            a -> a [id=1 lmb_id=1]
+        })
+        .unwrap();
+        let remaining = graph.get_edge_subgraph(EdgeIndex(1));
+        // This is the denominator domain after the other tadpole propagator
+        // cancels against its edge-local numerator. The original two-loop
+        // measure cannot be replaced by the remaining massive one-loop value.
+        let input = graph.denominator(&remaining, |_| -3);
+        let error = to_vakint_integrand(
+            &input,
+            &graph,
+            &graph.full_filter(),
+            &graph.empty_subgraph::<SuBitGraph>(),
+            &[(
+                graph.full_filter(),
+                graph.full_filter(),
+                graph.loop_momentum_basis.clone(),
+            )],
+            &VakintSettings::default(),
+            false,
+        )
+        .unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("has 1 loop generators, expected 2")
+        );
+        let remaining_lmb = graph.lmb_of(&remaining);
+        let converted = to_vakint_integrand(
+            &input,
+            &graph,
+            &graph.full_filter(),
+            &graph.empty_subgraph::<SuBitGraph>(),
+            &[(
+                graph.full_filter(),
+                graph.full_filter(),
+                remaining_lmb.clone(),
+            )],
+            &VakintSettings::default(),
+            false,
+        )
+        .unwrap();
+        assert_eq!(converted.0.len(), 1);
     }
 
     #[test]
@@ -2271,60 +2892,190 @@ mod tests {
             additional_normalization: "1".to_string(),
             ..Default::default()
         };
-        for sign in [-1, 1] {
-            let denominator = function!(
-                GS.den,
-                1,
-                Atom::num(sign) * &hard,
-                Atom::var(GS.m_uv_vacuum).pow(2),
-                function!(SPENSO_TAG.dot, &indexed_hard, &indexed_hard)
-                    - Atom::var(GS.m_uv_vacuum).pow(2)
-            );
-            let actual = to_vakint_integrand(
-                &(&numerator / denominator.pow(3)),
-                &graph,
-                &graph.full_filter(),
-                &graph.empty_subgraph::<SuBitGraph>(),
+        // A retained parent loop overrides an earlier component's external
+        // classification. This adapter diagnostic changes coordinate metadata
+        // only; both signs must still preserve the fixed physical externals.
+        let mut child_frame = graph.empty_lmb();
+        child_frame.ext_edges.push(EdgeIndex(1));
+        for source_lmbs in [
+            vec![&graph.loop_momentum_basis],
+            vec![&child_frame, &graph.loop_momentum_basis],
+        ] {
+            for sign in [-1, 1] {
+                let denominator = function!(
+                    GS.den,
+                    1,
+                    Atom::num(sign) * &hard,
+                    Atom::var(GS.m_uv_vacuum).pow(2),
+                    function!(SPENSO_TAG.dot, &indexed_hard, &indexed_hard)
+                        - Atom::var(GS.m_uv_vacuum).pow(2)
+                );
+                let actual = to_vakint_integrand(
+                    &(&numerator / denominator.pow(3)),
+                    &graph,
+                    &graph.full_filter(),
+                    &graph.empty_subgraph::<SuBitGraph>(),
+                    &source_lmbs
+                        .iter()
+                        .map(|lmb| {
+                            let owners = if lmb.loop_edges.is_empty() {
+                                graph.empty_subgraph::<SuBitGraph>()
+                            } else {
+                                graph.full_filter()
+                            };
+                            (owners.clone(), owners, (*lmb).clone())
+                        })
+                        .collect::<Vec<_>>(),
+                    &settings,
+                    true,
+                )
+                .unwrap();
+                // Compare the complete rational integrand through Vakint's public
+                // expression conversion, independent of topology IDs and term layout.
+                let actual = Atom::from(actual)
+                    .replace(function!(vakint::symbols::S.topo, W_.x_))
+                    .with(W_.x_)
+                    .replace(function!(
+                        vakint::symbols::S.prop,
+                        W_.a_,
+                        W_.b_,
+                        W_.c_,
+                        W_.d_,
+                        W_.e_
+                    ))
+                    .with(
+                        (function!(vakint::symbols::S.dot, W_.c_, W_.c_) - Atom::var(W_.d_))
+                            .pow(-Atom::var(W_.e_)),
+                    );
+                let expected_numerator = function!(
+                    vakint::symbols::S.dot,
+                    function!(vakint::symbols::S.p, 0),
+                    function!(vakint::symbols::S.k, 0)
+                ) * function!(
+                    vakint::symbols::S.dot,
+                    function!(vakint::symbols::S.p, 2),
+                    function!(vakint::symbols::S.k, 0)
+                );
+                let radial = function!(
+                    vakint::symbols::S.dot,
+                    function!(vakint::symbols::S.k, 0),
+                    function!(vakint::symbols::S.k, 0)
+                ) - Atom::var(GS.m_uv_vacuum).pow(2);
+                assert!(
+                    (actual.collect_factors()
+                        - (expected_numerator / radial.pow(3)).collect_factors())
+                    .is_zero(),
+                    "the complete integrand must retain the fixed external momenta for either D(H) spelling"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn nested_active_sunset_keeps_its_two_loop_incidence() {
+        use crate::{
+            dot,
+            graph::{Graph, parse::IntoGraph},
+            momentum::sample::LoopIndex,
+        };
+
+        test_initialise().unwrap();
+        let graph: Graph = dot!(digraph nested_active_sunset {
+            edge [num=1 mass=1]
+            node [num=1]
+            ext [style=invis]
+            ext -> a:0 [id=0]
+            d:1 -> ext [id=1]
+            a -> b [id=2]
+            b -> c [id=3 lmb_id=0]
+            b -> c [id=4]
+            c -> d [id=5]
+            a -> d [id=6 lmb_id=2]
+            b -> c [id=7 lmb_id=1]
+        })
+        .unwrap();
+        let full = graph
+            .full_filter()
+            .subtract(&graph.external_filter::<SuBitGraph>());
+        let mut child = graph.empty_subgraph::<SuBitGraph>();
+        for edge in [3, 4, 7] {
+            child.add(graph[&EdgeIndex(edge)].1);
+        }
+        let quotient = full.subtract(&child);
+        let child_lmb = graph
+            .try_compatible_sub_lmb(
+                &child,
+                graph.dummy_less_full_crown(&child),
                 &graph.loop_momentum_basis,
-                &settings,
-                true,
             )
             .unwrap();
-            // Compare the complete rational integrand through Vakint's public
-            // expression conversion, independent of topology IDs and term layout.
-            let actual = Atom::from(actual)
-                .replace(function!(vakint::symbols::S.topo, W_.x_))
-                .with(W_.x_)
-                .replace(function!(
-                    vakint::symbols::S.prop,
-                    W_.a_,
-                    W_.b_,
-                    W_.c_,
-                    W_.d_,
-                    W_.e_
-                ))
-                .with(
-                    (function!(vakint::symbols::S.dot, W_.c_, W_.c_) - Atom::var(W_.d_))
-                        .pow(-Atom::var(W_.e_)),
-                );
-            let expected_numerator = function!(
-                vakint::symbols::S.dot,
-                function!(vakint::symbols::S.p, 0),
-                function!(vakint::symbols::S.k, 0)
-            ) * function!(
-                vakint::symbols::S.dot,
-                function!(vakint::symbols::S.p, 2),
-                function!(vakint::symbols::S.k, 0)
-            );
-            let radial = function!(
-                vakint::symbols::S.dot,
-                function!(vakint::symbols::S.k, 0),
-                function!(vakint::symbols::S.k, 0)
-            ) - Atom::var(GS.m_uv_vacuum).pow(2);
-            assert!(
-                (actual.collect_factors() - (expected_numerator / radial.pow(3)).collect_factors())
-                    .is_zero(),
-                "the complete integrand must retain the fixed external momenta for either D(H) spelling"
+        let mut quotient_lmb = graph.loop_momentum_basis.clone();
+        for index in (0..quotient_lmb.loop_edges.len()).rev() {
+            let index = LoopIndex(index);
+            if child_lmb
+                .loop_edges
+                .contains(&quotient_lmb.loop_edges[index])
+            {
+                quotient_lmb.put_loop_to_ext(index);
+            }
+        }
+        let [k, l, p] = [3, 7, 6].map(|edge| function!(GS.emr_mom, edge));
+        let mass_squared = Atom::var(GS.m_uv_vacuum).pow(2);
+        let child_denominators = function!(GS.den, 3, &k, &mass_squared)
+            * function!(GS.den, 7, &l, &mass_squared)
+            * function!(GS.den, 4, -&k - &l, &mass_squared).pow(3);
+        let quotient_denominators = function!(GS.den, 2, -&p, &mass_squared)
+            * function!(GS.den, 5, -&p, &mass_squared)
+            * function!(GS.den, 6, &p, &mass_squared);
+        let numerator = parse!("(a+b)*(c+d)");
+        for child_active in [true, false] {
+            let mut components = Vec::new();
+            let input = if child_active {
+                components.push((child.clone(), child.clone(), child_lmb.clone()));
+                &numerator / (&child_denominators * &quotient_denominators)
+            } else {
+                &numerator / &quotient_denominators
+            };
+            components.push((quotient.clone(), full.clone(), quotient_lmb.clone()));
+            let converted = to_vakint_integrand(
+                &input,
+                &graph,
+                &full,
+                &child,
+                &components,
+                &VakintSettings::default(),
+                false,
+            )
+            .unwrap();
+            assert_eq!(converted.0.len(), 1);
+            let term = &converted.0[0];
+            assert_eq!(term.numerator, numerator);
+            let propagator = function!(
+                vakint::symbols::S.prop,
+                W_.a_,
+                W_.b_,
+                W_.mom_,
+                W_.mass_,
+                W_.e_
+            )
+            .to_pattern();
+            let mut powers = term
+                .integral
+                .pattern_match(&propagator, None, None)
+                .map(|matched| {
+                    assert_eq!(matched[&W_.mass_], mass_squared);
+                    assert!(!matched[&W_.mom_].contains_symbol(vakint::symbols::S.p));
+                    i32::try_from(matched[&W_.e_].as_view()).unwrap()
+                })
+                .collect::<Vec<_>>();
+            powers.sort();
+            assert_eq!(
+                powers,
+                if child_active {
+                    vec![1, 1, 3, 3]
+                } else {
+                    vec![3]
+                }
             );
         }
     }
@@ -2368,7 +3119,11 @@ mod tests {
                 &graph,
                 &graph.full_filter(),
                 &graph.empty_subgraph::<SuBitGraph>(),
-                &graph.loop_momentum_basis,
+                &[(
+                    graph.full_filter(),
+                    graph.full_filter(),
+                    graph.loop_momentum_basis.clone(),
+                )],
                 &VakintSettings {
                     // This conversion oracle uses unit loop normalization in every prefix.
                     additional_normalization: "1".to_string(),

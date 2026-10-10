@@ -201,6 +201,7 @@ impl Forest {
                     term_index,
                     residue_index,
                     numerator: numerator.clone(),
+                    forest_provenance: None,
                 });
             }
         }
@@ -340,7 +341,9 @@ impl Forest {
 
             let integrated = n.data.integrated(graph)?;
             let physical = match n.data.renormalization_scheme() {
-                ApproximationType::MUV => integrated.physical_finite_counterterm_atom(),
+                ApproximationType::MUV | ApproximationType::IR => {
+                    integrated.physical_finite_counterterm_atom()
+                }
                 ApproximationType::PolePart => integrated.physical_pole_atom(),
                 scheme => return Err(eyre!("No terminal counterterm projection for {scheme}")),
             };

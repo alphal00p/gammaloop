@@ -9,8 +9,7 @@ use spenso::{
     structure::{
         abstract_index::AIND_SYMBOLS,
         concrete_index::ExpandedIndex,
-        representation::{Minkowski, RepName, Representation},
-        slot::{DummyAind, IsAbstractSlot},
+        representation::{Minkowski, RepName},
     },
     utils::{to_subscript, to_superscript},
 };
@@ -24,7 +23,7 @@ use symbolica::{
 };
 use symbolica_utils::{PrintSettingsExt, TypstMode};
 
-use crate::{cff::orientations::GraphOrientation, graph::LoopMomentumBasis, numerator::aind::Aind};
+use crate::{cff::orientations::GraphOrientation, graph::LoopMomentumBasis};
 
 /// Persistent ownership carried by an EMR momentum through a local 4D UV
 /// Taylor expansion. Wire value two is deliberately reserved for the
@@ -186,6 +185,9 @@ pub struct GammaloopSymbols {
     pub deta_right_th: Symbol,
     pub vbar: Symbol,
     pub ose: Symbol,
+    /// Positive on-shell energy with no additive energy shift. Arguments carry
+    /// the component owner and the invariant mass squared plus spatial norm squared.
+    pub energy_surface: Symbol,
     pub energy: Symbol,
     pub v: Symbol,
     pub u: Symbol,
@@ -227,7 +229,7 @@ pub struct GammaloopSymbols {
     pub expansion: Symbol,
     ///For selecting a concete index.
     pub delta_vec: Symbol,
-    /// `Q(<edgeid>, index___)`
+    /// Canonical spatial component `Q(edge, index___)`.
     pub emr_mom: Symbol,
     /// UV-local provenance stored in the tag slot of `Q(...)` while applying a
     /// Taylor operator. Its arguments are the immutable source edge, its
@@ -237,6 +239,8 @@ pub struct GammaloopSymbols {
     pub uv_momentum_provenance: Symbol,
     /// Projection-owned denominator class, never a physical edge identifier.
     pub uv_class: Symbol,
+    /// Raw `Q3` symbol for pattern construction; stored atoms always carry a
+    /// representation or `cind` through the canonical constructor.
     pub emr_vec: Symbol,
     pub dot: Symbol,
     pub external_mom: Symbol,
@@ -256,8 +260,8 @@ pub struct GammaloopSymbols {
     pub nc2_1: Symbol,
     pub expr: Symbol,
     pub num: Symbol,
-    /// Denominator wrapper, `den(<edge_id>, <momentum>, <mass>, <full_expr>)`
-    /// (no power and should not be multiplied in but divided!).
+    /// Denominator wrapper `den(edge, momentum, mass, full_expr)` (no power and
+    /// should not be multiplied in but divided).
     pub den: Symbol,
     pub radius_left: Symbol,
     pub radius_star_left: Symbol,
@@ -1004,15 +1008,28 @@ pub static GS, GS_INNER: GammaloopSymbols = || GammaloopSymbols {
             {
                 let mut iter = ff.iter();
                 let eid = iter.next().unwrap();
-                if let AtomView::Fun(cind) = iter.next().unwrap()
+                let structure = iter.next().unwrap();
+                let component = if let AtomView::Fun(cind) = structure
                     && cind.get_symbol() == AIND_SYMBOLS.cind
-                    && let Some(i) = cind.iter().next()
-                    && let Ok(i) = i64::try_from(i)
+                    && cind.get_nargs() == 1
+                {
+                    cind.iter()
+                        .next()
+                        .and_then(|i| i64::try_from(i).ok())
+                        .and_then(|i| usize::try_from(i).ok())
+                } else {
+                    None
+                };
+                if i64::try_from(eid).is_ok_and(|eid| eid >= 0)
+                    && let Some(i @ 0..=3) = component
                 {
                     if i == 0 {
                         **out = Atom::Zero;
                     } else {
-                        **out = get_symbol!("Q").unwrap().call_args([eid, cind.as_view()])
+                        let cind = AIND_SYMBOLS.cind.call_args([i as i64]);
+                        **out = get_symbol!("Q")
+                            .unwrap()
+                            .call_args([eid, cind.as_view()])
                     }
                 }
             }
@@ -1032,6 +1049,38 @@ pub static GS, GS_INNER: GammaloopSymbols = || GammaloopSymbols {
                     **out = Atom::num(1);
                 }
             }
+    ),
+    energy_surface: symbol!(
+        "Esurface"; Scalar;
+        norm = |view, out| {
+            if let AtomView::Fun(call) = view && call.get_nargs() == 2 {
+                // Canonicalize opposite routed momenta inside squared factors.
+                // Distribute numeric coefficients only; keep the invariant's
+                // momentum sums squared and graph numerators outside this call.
+                let invariant = call.get(1).replace_map(|part, _, output| {
+                    if let AtomView::Pow(power) = part {
+                        let (base, exponent) = power.get_base_exp();
+                        if i64::try_from(exponent) == Ok(2) {
+                            let direct = base.expand_num();
+                            let reversed = (-&direct).expand_num();
+                            **output = direct.min(reversed).pow(2);
+                        }
+                    }
+                }).expand_num();
+                if invariant.as_view() != call.get(1) {
+                    **out = call.get_symbol().call_args([call.get(0).to_owned(), invariant]);
+                }
+            }
+        },
+        der = |view, argument, out| {
+            if let AtomView::Fun(call) = view && call.get_nargs() == 2 {
+                **out = if argument == 1 {
+                    Atom::num((1, 2)) / view
+                } else {
+                    Atom::Zero
+                };
+            }
+        }
     ),
     energy: symbol!(
         "E",
@@ -1160,7 +1209,7 @@ impl GammaloopSymbols {
         // + GS.emr_mom(edge, Atom::from(ExpandedIndex::from_iter([3])))
         //     * GS.emr_mom(edge, Atom::from(ExpandedIndex::from_iter([3])));
 
-        // let dot = self.emr_vec_index(e, mink.to_atom()) * self.emr_vec_index(e, mink.to_atom())
+        // let dot = self.emr_vec(e, mink.to_atom()) * self.emr_vec(e, mink.to_atom())
         a.replace(pat).with(rhs)
 
         // a.replace_map(|a, ctx, out| {
@@ -1328,12 +1377,22 @@ impl GammaloopSymbols {
         }
     }
 
-    pub(crate) fn emr_vec(&self, e: EdgeIndex) -> Atom {
-        function!(GS.emr_vec, usize::from(e) as i64)
-    }
-
-    pub(crate) fn emr_vec_index<'a>(&self, e: EdgeIndex, index: impl Into<AtomOrView<'a>>) -> Atom {
-        function!(GS.emr_vec, usize::from(e) as i64, index.into().as_view())
+    /// Construct the canonical represented or indexed spatial momentum `Q3(e, structure)`.
+    ///
+    /// `e` is a non-negative graph edge ID. Stored abstract vectors use a
+    /// four-dimensional Minkowski representation. Tensor execution transiently
+    /// emits `Q3(e,cind(i))`; the symbol normalizer immediately maps that image
+    /// to `Q(e,cind(i))` (or zero for the temporal component), so it is never a
+    /// persistent second convention. An indexed Minkowski argument still carries
+    /// an abstract tensor index and must not be interpreted as a component. The
+    /// trailing argument may instead be one wildcard when constructing a
+    /// replacement pattern. This API deliberately has no bare `Q3(e)` form.
+    pub(crate) fn emr_vec<'a>(&self, e: EdgeIndex, structure: impl Into<AtomOrView<'a>>) -> Atom {
+        function!(
+            GS.emr_vec,
+            usize::from(e) as i64,
+            structure.into().as_view()
+        )
     }
 
     pub(crate) fn cind(&self, e: usize) -> Atom {
@@ -1351,20 +1410,15 @@ impl GammaloopSymbols {
         lmb_id: EdgeIndex,
         e_mass: Atom,
         index: Option<Atom>,
-        inner_product: bool,
     ) -> Atom {
-        let m2 = &e_mass * &e_mass;
-
-        let mink: Representation<Minkowski> = Minkowski {}.new_rep(4); //.slot(Aind::new_dummy());
-        let q3q3 = if inner_product {
-            mink.inner_product(self.emr_vec(e), self.emr_vec(e))
-        } else {
-            let mink = mink.slot::<Aind, Aind>(Aind::new_dummy()).to_atom();
-
-            self.emr_vec_index(e, mink.as_view()) * self.emr_vec_index(e, mink.as_view())
-        };
-
-        let ose = function!(self.ose, lmb_id.0, (m2 - q3q3)).pow((1, 2));
+        let ose = function!(
+            self.energy_surface,
+            lmb_id.0,
+            e_mass.pow(2)
+                + self.emr_vec(e, self.cind(1)).pow(2)
+                + self.emr_vec(e, self.cind(2)).pow(2)
+                + self.emr_vec(e, self.cind(3)).pow(2)
+        );
 
         if let Some(index) = index {
             ose * self.energy_delta(index)
@@ -1378,20 +1432,19 @@ impl GammaloopSymbols {
         e: EdgeIndex,
         lmb_id: EdgeIndex,
         e_mass: Atom,
-        inner_product: bool,
     ) -> Replacement {
         let id = Minkowski {}.to_symbolic([W_.a__]);
         Replacement::new(
             self.emr_mom(e, &id).to_pattern(),
-            self.emr_vec_index(e, &id)
-                + self.ose_full(e, lmb_id, e_mass, Some(id), inner_product) * sign_atom(e),
+            self.emr_vec(e, &id) + self.ose_full(e, lmb_id, e_mass, Some(id)) * sign_atom(e),
         )
     }
 
     /// Split Q(i,mu) into its spatial part and the already-generated on-shell
     /// energy, with the production sign attached to the time component. The
     /// typed 4D CFF source owns mass-dependent on-shell reconstruction before
-    /// this late numerator/export boundary.
+    /// this late numerator/export boundary. The split is
+    /// `Q(i,mink(4,mu)) -> Q3(i,mink(4,mu)) + OSE(i)σ(i)δ(cind(0),mink(4,mu))`.
     pub fn split_mom_pattern_simple(&self, e: EdgeIndex) -> Replacement {
         let eidc = usize::from(e) as i64;
         let index = Minkowski {}.to_symbolic([W_.a__]);
@@ -1419,6 +1472,120 @@ mod tests {
     use spenso::shadowing::symbolica_utils::LogPrint;
 
     use super::*;
+
+    #[test]
+    fn compact_energy_derivatives_keep_shift_and_mass_dependence() {
+        crate::initialisation::test_initialise().unwrap();
+        let (t, u, m, k, p, q) = symbol!(
+            "compact_energy_test::t",
+            "compact_energy_test::u",
+            "compact_energy_test::m",
+            "compact_energy_test::k",
+            "compact_energy_test::p",
+            "compact_energy_test::q"
+        );
+        let momentum = Atom::var(k) + Atom::var(t) * p + Atom::var(u) * q;
+        let transverse = Atom::var(t) * q;
+        let longitudinal = Atom::var(u) * p;
+        let energy = function!(
+            GS.energy_surface,
+            3,
+            Atom::var(m).pow(2) + momentum.pow(2) + transverse.pow(2) + longitudinal.pow(2)
+        );
+        assert_eq!(
+            energy,
+            function!(
+                GS.energy_surface,
+                3,
+                Atom::var(m).pow(2)
+                    + (-&momentum).expand_num().pow(2)
+                    + (-&transverse).expand_num().pow(2)
+                    + (-&longitudinal).expand_num().pow(2)
+            )
+        );
+        assert_eq!(energy.derivative(m), Atom::var(m) / &energy);
+        assert!(
+            (energy.derivative(t) - (&momentum * p + &transverse * q) / &energy)
+                .expand()
+                .is_zero()
+        );
+        assert!(
+            (energy.derivative(u) - (momentum * q + longitudinal * p) / &energy)
+                .expand()
+                .is_zero()
+        );
+        assert!(energy.contains_symbol(t) && energy.contains_symbol(u));
+
+        let lower = |atom: Atom| {
+            atom.replace(function!(GS.energy_surface, W_.a_, W_.prop_))
+                .with(Atom::var(W_.prop_).pow((1, 2)))
+        };
+        let specialize = |atom: Atom| {
+            atom.replace(m)
+                .with(3)
+                .replace(k)
+                .with(4)
+                .replace(p)
+                .with(2)
+                .replace(q)
+                .with(1)
+        };
+        // Positive mass and a nonzero routed spatial momentum fix the same
+        // energy branch in both independent constructions.
+        for exponent in [-3, -1, 1, 2, 3] {
+            let compact = specialize(energy.pow(exponent));
+            let explicit = lower(compact.clone());
+            let actual = compact
+                .series(t, Atom::Zero, 3)
+                .unwrap()
+                .to_atom()
+                .series(u, Atom::Zero, 2)
+                .unwrap()
+                .to_atom();
+            let expected = explicit
+                .series(t, Atom::Zero, 3)
+                .unwrap()
+                .to_atom()
+                .series(u, Atom::Zero, 2)
+                .unwrap()
+                .to_atom();
+            // Only this small scalar energy oracle is distributed; graph
+            // numerators never enter this comparison.
+            assert!(
+                (lower(actual) - expected).expand().is_zero(),
+                "power={exponent}"
+            );
+        }
+    }
+
+    #[test]
+    fn compact_energy_invariant_matches_high_order_laurent_coefficients() {
+        crate::initialisation::test_initialise().unwrap();
+        let t = symbol!("compact_energy_laurent_test::t");
+        let parameter = Atom::var(t);
+        // Three independently shifted components feed one differentiated
+        // invariant. This reproduces the order-six probe needed by a t^-6 body.
+        let squared = (&parameter + 1).pow(2)
+            + (&parameter * 2 + 2).pow(2)
+            + (Atom::num(2) - &parameter).pow(2);
+        let energy = function!(GS.energy_surface, 3, &squared);
+        let actual = (energy / parameter.pow(6))
+            .series(t, Atom::Zero, 0)
+            .unwrap();
+        let expected = (squared.pow((1, 2)) / parameter.pow(6))
+            .series(t, Atom::Zero, 0)
+            .unwrap();
+        assert_eq!(actual.terms().count(), 7);
+        // Native square-root series can include zero half-integer slots.
+        // Compare the exact polynomials rather than zipping their storage grids.
+        assert_eq!(
+            actual
+                .to_atom()
+                .replace(function!(GS.energy_surface, 3, 9))
+                .with(3),
+            expected.to_atom()
+        );
+    }
 
     #[test]
     fn orientation_collection_preserves_selector_free_factorization() {
@@ -1516,8 +1683,8 @@ mod tests {
                 r#"E^("os")_3(13)"#,
             ),
             (
-                GS.emr_vec.call_args([Atom::num(4), Atom::num(14)]),
-                "arrow(q)_4^(14)",
+                GS.emr_vec(EdgeIndex(4), Minkowski {}.new_rep(4).to_symbolic([])),
+                "arrow(q)_4",
             ),
             (
                 GS.epsilonbar.call_args([Atom::num(5), Atom::num(15)]),

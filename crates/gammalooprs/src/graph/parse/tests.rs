@@ -10,10 +10,18 @@ use spenso::{
         library::DummyLibrary,
         parsing::{ParseSettings, ShadowedStructure, StructureFromAtom},
         store::NetworkStore,
+        tags::SPENSO_TAG,
     },
-    structure::HasName,
+    structure::{
+        HasName,
+        abstract_index::AIND_SYMBOLS,
+        representation::{Minkowski, RepName},
+    },
 };
-use symbolica::atom::{Atom, FunctionBuilder, Symbol};
+use symbolica::{
+    atom::{Atom, AtomCore, FunctionBuilder, Symbol},
+    symbol,
+};
 use symbolica_utils::AtomPrintExt;
 use tracing::info;
 use typed_index_collections::ti_vec;
@@ -29,6 +37,7 @@ use crate::{
     momentum::sample::LoopIndex,
     numerator::{Numerator, UnInit, aind::Aind},
     processes::DotExportSettings,
+    utils::GS,
     uv::uv_graph::UVE,
 };
 
@@ -122,6 +131,102 @@ fn test_loop_momentum_basis() {
 }
 
 #[test]
+fn vacuum_tadpoles_keep_all_loop_generators_without_external_legs() {
+    use linnet::half_edge::subgraph::SubSetLike;
+
+    test_initialise().unwrap();
+    let graphs: Vec<Graph> = dot!(
+        digraph automatic_vacuum {
+            edge [num=1 mass=2]
+            node [num=1]
+            a -> a [id=0]
+            a -> a [id=1]
+        }
+        digraph specified_vacuum {
+            edge [num=1 mass=2]
+            node [num=1]
+            a -> a [id=0 lmb_id=1]
+            a -> a [id=1 lmb_id=0]
+        }
+        digraph disconnected_vacuum {
+            edge [num=1 mass=2]
+            node [num=1]
+            a -> a [id=0 lmb_id=1]
+            b -> b [id=1 lmb_id=0]
+        }
+    )
+    .unwrap();
+
+    for (graph, expected_edges) in graphs.iter().zip([[0, 1], [1, 0], [1, 0]]) {
+        let lmb = &graph.loop_momentum_basis;
+        assert!(graph.initial_state_cut.is_empty());
+        assert!(lmb.tree.is_empty());
+        assert!(lmb.ext_edges.is_empty());
+        assert_eq!(lmb.loop_edges.raw, expected_edges.map(EdgeIndex));
+        for (loop_id, edge) in lmb.loop_edges.iter().enumerate() {
+            let signature = &lmb.edge_signatures[*edge];
+            assert!(signature.external.is_empty());
+            assert_eq!(
+                signature
+                    .internal
+                    .iter()
+                    .map(|sign| *sign * 1_i32)
+                    .collect::<Vec<_>>(),
+                (0..2)
+                    .map(|index| i32::from(index == loop_id))
+                    .collect::<Vec<_>>()
+            );
+        }
+        let exported = graph.dot_serialize(&DotExportSettings::default());
+        let reparsed: Graph = exported
+            .into_graph(&crate::utils::load_generic_model("sm"))
+            .unwrap();
+        assert_eq!(reparsed.loop_momentum_basis, *lmb);
+    }
+}
+
+#[test]
+fn vacuum_loop_edges_must_leave_a_spanning_forest() {
+    test_initialise().unwrap();
+    let graph: eyre::Result<Graph> = dot!(digraph invalid_vacuum_basis {
+        edge [num=1 mass=2]
+        node [num=1]
+        a -> b [id=0 lmb_id=0]
+        b -> a [id=1 lmb_id=1]
+    });
+    let error = graph
+        .err()
+        .expect("an overcomplete loop basis must be rejected");
+    assert!(format!("{error:?}").contains("loop edges specified are not actual loop edges"));
+}
+
+#[test]
+fn initial_state_cut_permutation_preserves_specified_loop_edges() {
+    test_initialise().unwrap();
+    let graph: Graph = dot!(digraph cut_lmb_permutation {
+        edge [num=1 mass=2]
+        node [num=1]
+        a -> b [id=0 name=first_loop lmb_id=0]
+        a -> b [id=1 name=second_loop lmb_id=1]
+        a -> b [id=2]
+        b -> a [id=3 is_cut=0]
+        b -> a [id=4 is_cut=1]
+    })
+    .unwrap();
+
+    assert_eq!(
+        graph.loop_momentum_basis.ext_edges.raw,
+        [EdgeIndex(0), EdgeIndex(1)]
+    );
+    for (loop_id, name) in ["first_loop", "second_loop"].into_iter().enumerate() {
+        assert_eq!(
+            graph.loop_momentum_basis.loop_edges[LoopIndex(loop_id)],
+            graph.edge_name_to_index(name).unwrap()
+        );
+    }
+}
+
+#[test]
 fn scalar_without_model() {
     test_initialise().unwrap();
     let g: Graph = dot!(
@@ -140,6 +245,189 @@ fn scalar_without_model() {
     .unwrap();
 
     println!("{}", g.dot_serialize(&DotExportSettings::default()))
+}
+
+#[test]
+fn full_numerator_requires_one_q3_structure_argument() {
+    test_initialise().unwrap();
+    let mut graph: Graph = dot!(
+        digraph q3_validation {
+            edge [pdg=1000]
+            ext [style=invis]
+            ext -> v4
+            ext -> v5
+            v6 -> ext
+            v5 -> v4 [lmb_id=0]
+            v6 -> v5
+            v4 -> v6
+        },
+        "scalars"
+    )
+    .unwrap();
+
+    graph.overall_factor = GS.emr_vec.call_args([Atom::num(3)]);
+    let error = graph.validate_full_numerator_tensor_network().unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("Q3 in graph 'q3_validation' must have exactly two arguments"),
+        "unexpected Q3 arity error: {error:?}"
+    );
+
+    graph.overall_factor = GS
+        .emr_vec
+        .call_args([Atom::var(symbol!("invalid_q3_edge")), GS.cind(1)]);
+    let error = graph.validate_full_numerator_tensor_network().unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("found non-canonical edge argument invalid_q3_edge"),
+        "unexpected Q3 edge error: {error:?}"
+    );
+
+    graph.overall_factor = GS.emr_vec(EdgeIndex(3), Atom::var(symbol!("invalid_q3_structure")));
+    let error = graph.validate_full_numerator_tensor_network().unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("found non-canonical second argument invalid_q3_structure"),
+        "unexpected Q3 structure error: {error:?}"
+    );
+
+    graph.overall_factor = GS.emr_vec(EdgeIndex(3), Minkowski {}.new_rep(3).to_symbolic([]));
+    let error = graph.validate_full_numerator_tensor_network().unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("found non-canonical second argument"),
+        "unexpected Q3 dimension error: {error:?}"
+    );
+
+    let out_of_range_edge = EdgeIndex(graph.underlying.n_edges());
+    graph.overall_factor = GS.emr_vec(out_of_range_edge, Minkowski {}.new_rep(4).to_symbolic([]));
+    let error = graph.validate_full_numerator_tensor_network().unwrap_err();
+    assert!(
+        error.to_string().contains(&format!(
+            "found edge ID {} outside the valid range 0..{}",
+            out_of_range_edge.0,
+            graph.underlying.n_edges(),
+        )),
+        "unexpected out-of-range Q3 edge error: {error:?}"
+    );
+
+    graph.overall_factor = GS.emr_mom(out_of_range_edge, GS.cind(1));
+    let error = graph.validate_full_numerator_tensor_network().unwrap_err();
+    assert!(
+        error.to_string().contains(&format!(
+            "found edge ID {} outside the valid range 0..{}",
+            out_of_range_edge.0,
+            graph.underlying.n_edges(),
+        )),
+        "unexpected out-of-range Q edge error: {error:?}"
+    );
+
+    let minkowski = Minkowski {}.new_rep(4).to_symbolic([]);
+    let represented = GS.emr_vec(EdgeIndex(3), minkowski);
+    graph.overall_factor = SPENSO_TAG.dot.call_args([represented.clone(), represented]);
+    graph.validate_full_numerator_tensor_network().unwrap();
+
+    let indexed_minkowski = Minkowski {}
+        .new_rep(4)
+        .to_symbolic([Atom::var(symbol!("q3_validator_mu"))]);
+    let indexed = GS.emr_vec(EdgeIndex(3), indexed_minkowski);
+    graph.overall_factor = &indexed * &indexed;
+    graph.validate_full_numerator_tensor_network().unwrap();
+
+    graph.overall_factor = GS.emr_vec(EdgeIndex(3), GS.cind(1));
+    assert_eq!(
+        graph.overall_factor,
+        GS.emr_mom(EdgeIndex(3), GS.cind(1)),
+        "a transient tensor-network Q3 component must normalize immediately",
+    );
+
+    let abstract_slot = Minkowski {}.new_rep(4).to_symbolic([Atom::num(1)]);
+    graph.overall_factor = GS.emr_vec(EdgeIndex(3), abstract_slot);
+    let error = graph.validate_full_numerator_tensor_network().unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("Full numerator still has dangling tensor indices"),
+        "a numeric Minkowski index must be validated as an abstract index: {error:?}",
+    );
+    assert!(
+        graph.overall_factor.contains_symbol(GS.emr_vec)
+            && !graph.overall_factor.contains_symbol(GS.emr_mom),
+        "a numeric Minkowski index must remain an abstract Q3 label, not normalize to a Q component",
+    );
+
+    for malformed_component in [
+        AIND_SYMBOLS.cind.call_args([Atom::num(-1)]),
+        AIND_SYMBOLS.cind.call_args([Atom::num(4)]),
+        AIND_SYMBOLS.cind.call_args([Atom::num(1), Atom::num(2)]),
+    ] {
+        graph.overall_factor = GS.emr_vec(EdgeIndex(3), malformed_component);
+        let error = graph.validate_full_numerator_tensor_network().unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("found non-canonical second argument"),
+            "unexpected malformed Q3 component error: {error:?}",
+        );
+    }
+}
+
+#[test]
+fn graph_set_import_enforces_the_q3_convention_without_tensor_closure() {
+    test_initialise().unwrap();
+    let malformed = r#"
+        digraph q3_graph_set_validation {
+            num = "gammalooprs::Q3(0)"
+            edge [pdg=1000]
+            ext [style=invis]
+            ext -> v4
+            ext -> v5
+            v6 -> ext
+            v5 -> v4 [lmb_id=0]
+            v6 -> v5
+            v4 -> v6
+        }
+    "#;
+
+    let error = Graph::from_string(malformed, &crate::utils::load_generic_model("scalars"))
+        .err()
+        .expect("multi-graph imports must reject the obsolete one-argument Q3 form");
+    assert!(
+        format!("{error:#}")
+            .contains("Q3 in graph 'q3_graph_set_validation' must have exactly two arguments"),
+        "unexpected graph-set Q3 validation error: {error:?}"
+    );
+}
+
+#[test]
+fn open_fundamental_color_requires_an_explicit_projector() {
+    test_initialise().unwrap();
+    let mut graph: Graph = dot!(
+        digraph open_fundamental_color {
+            num = "1/3*spenso::g(spenso::dind(spenso::cof(3,gammalooprs::hedge(0))),spenso::cof(3,gammalooprs::hedge(1)))"
+            ext [style=invis]
+
+            ext -> v1:0 [id=0 particle=d]
+            v2:1 -> ext [id=1 particle=d]
+            v1:2 -> v2:3 [id=2 particle=d lmb_id=0]
+            v1:4 -> v2:5 [id=3 particle=g]
+        }
+    )
+    .unwrap();
+
+    graph.validate_full_numerator_tensor_network().unwrap();
+    graph.global_prefactor.num = Atom::num(1);
+    let error = graph.validate_full_numerator_tensor_network().unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("Full numerator still has dangling tensor indices"),
+        "removing delta_i^j/N_c must expose the open fundamental color string: {error:?}"
+    );
 }
 
 #[test]

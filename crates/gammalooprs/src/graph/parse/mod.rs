@@ -24,7 +24,7 @@ use crate::{
         ufo::UFO,
     },
     processes::DotExportSettings,
-    utils::symbolica_ext::DOD,
+    utils::{GS, symbolica_ext::DOD},
     uv::{UltravioletGraph, uv_graph::UVE},
 };
 use ahash::{AHashMap, AHashSet};
@@ -32,7 +32,13 @@ use idenso::{
     color::{ColorSimplifier, ColorSimplifySettings},
     tensor::SymbolicNetParse,
 };
-use spenso::shadowing::symbolica_utils::LogPrint;
+use spenso::{
+    shadowing::{IntoAtom, symbolica_utils::LogPrint},
+    structure::{
+        representation::{Minkowski, Representation},
+        slot::Slot,
+    },
+};
 
 use color_eyre::{Report, Result, Section};
 
@@ -46,7 +52,7 @@ use linnet::{
         builder::HedgeGraphBuilder,
         involution::{EdgeData, EdgeIndex, EdgeVec, Flow, Hedge, HedgePair},
         nodestore::NodeStorageVec,
-        subgraph::{Inclusion, ModifySubSet, OrientedCut, SuBitGraph, SubSetLike, SubSetOps},
+        subgraph::{Inclusion, ModifySubSet, OrientedCut, SuBitGraph, SubSetOps},
         swap::Swap,
     },
     parser::{DotEdgeData, DotGraph, DotHedgeData, DotVertexData, GraphSet, HedgeParseError},
@@ -59,7 +65,7 @@ use spenso::{
     tensors::{data::StorageTensor, parametric::ParamTensor},
 };
 use symbolica::{
-    atom::{Atom, AtomOrView},
+    atom::{Atom, AtomCore, AtomOrView, AtomView},
     graph::Graph as SymbolicaGraph,
 };
 use tracing::instrument;
@@ -67,7 +73,7 @@ use tracing::{debug, warn};
 use typed_index_collections::TiVec;
 
 use super::{
-    Autogen, Edge, Graph, HedgeData, LMBext, Vertex,
+    Autogen, Edge, Graph, HedgeData, LMBext, LmbError, Vertex,
     edge::{EdgeMass, ParseEdge},
     global::ParseData,
     hedge_data::{NumIndices, ParseHedgeData},
@@ -636,6 +642,9 @@ impl CutProcessingResult {
 
         debug!("Before after: {}", graph.dot(&self.initial_hedges));
         <HedgeGraph<_, _, _> as Swap<EdgeIndex>>::permute(graph, &per);
+        for edge in self.lmb_ids.values_mut() {
+            *edge = EdgeIndex(per[edge.0]);
+        }
 
         debug!(" after: {}", graph.dot(&self.initial_hedges));
         Ok(per)
@@ -817,10 +826,132 @@ impl Graph {
 
         debug!("{}", g.debug_dot());
 
+        g.validate_spatial_momentum_convention().with_context(|| {
+            format!(
+                "Failed to validate the spatial-momentum convention for graph {}",
+                g.name
+            )
+        })?;
+
         Ok(g)
     }
 
-    fn validate_full_numerator_tensor_network(&self) -> Result<()> {
+    fn validate_spatial_momentum_convention(&self) -> Result<()> {
+        let n_edges = self.underlying.n_edges();
+        let full_num = self
+            .numerator(&self.full_filter(), &self.empty_subgraph())
+            .get_single_atom()
+            .unwrap()
+            * &self.global_prefactor.num
+            * &self.global_prefactor.projector
+            * &self.overall_factor;
+        let mut invalid_q3 = None;
+        full_num.visitor(&mut |view| {
+            if invalid_q3.is_none()
+                && let AtomView::Fun(q3) = view
+                && q3.get_symbol() == GS.emr_vec
+            {
+                let arguments = q3.iter().collect::<Vec<_>>();
+                let invalid_reason = match arguments.as_slice() {
+                    [edge, structure] => {
+                        let edge_id = i64::try_from(*edge)
+                            .ok()
+                            .and_then(|edge| usize::try_from(edge).ok());
+                        let is_represented = matches!(structure, AtomView::Fun(rep)
+                            if rep.get_nargs() == 1)
+                            && Representation::<Minkowski>::try_from(*structure)
+                                .ok()
+                                .and_then(|rep| usize::try_from(rep).ok())
+                                == Some(4);
+                        let is_indexed = matches!(structure, AtomView::Fun(rep)
+                            if rep.get_nargs() == 2)
+                            && Slot::<Minkowski, Aind>::try_from(*structure)
+                                .ok()
+                                .and_then(|slot| usize::try_from(slot.rep()).ok())
+                                == Some(4);
+
+                        if edge_id.is_none() {
+                            Some(format!(
+                                "found non-canonical edge argument {}",
+                                edge.log_print(None)
+                            ))
+                        } else if edge_id.is_some_and(|edge| edge >= n_edges) {
+                            Some(format!(
+                                "found edge ID {} outside the valid range 0..{}",
+                                edge.log_print(None),
+                                n_edges,
+                            ))
+                        } else {
+                            (!is_represented && !is_indexed).then(|| {
+                                format!(
+                                    "found non-canonical second argument {}",
+                                    structure.log_print(None)
+                                )
+                            })
+                        }
+                    }
+                    _ => Some(format!("found arity {}", arguments.len())),
+                };
+                if let Some(reason) = invalid_reason {
+                    invalid_q3 = Some((reason, view.into_atom()));
+                }
+            }
+            true
+        });
+        if let Some((reason, q3)) = invalid_q3 {
+            return Err(eyre!(
+                "Spatial momentum Q3 in graph '{}' must have exactly two arguments, beginning with a non-negative edge ID: Q3(edge,mink(4)) for a represented vector or Q3(edge,mink(4,index)) for an indexed tensor-network image; explicit components are stored as Q(edge,cind(i)); {reason} in {}",
+                self.name,
+                q3.log_print(None),
+            ));
+        }
+
+        let mut invalid_q = None;
+        full_num.visitor(&mut |view| {
+            if invalid_q.is_none()
+                && let AtomView::Fun(q) = view
+                && q.get_symbol() == GS.emr_mom
+            {
+                let Some(edge) = q.iter().next() else {
+                    invalid_q = Some(("found no edge argument".to_owned(), view.into_atom()));
+                    return true;
+                };
+                let edge_id = i64::try_from(edge)
+                    .ok()
+                    .and_then(|edge| usize::try_from(edge).ok());
+                let invalid_reason = if edge_id.is_none() {
+                    Some(format!(
+                        "found non-canonical edge argument {}",
+                        edge.log_print(None)
+                    ))
+                } else {
+                    edge_id.filter(|edge| *edge >= n_edges).map(|_| {
+                        format!(
+                            "found edge ID {} outside the valid range 0..{}",
+                            edge.log_print(None),
+                            n_edges,
+                        )
+                    })
+                };
+                if let Some(reason) = invalid_reason {
+                    invalid_q = Some((reason, view.into_atom()));
+                }
+            }
+            true
+        });
+        if let Some((reason, q)) = invalid_q {
+            return Err(eyre!(
+                "Momentum Q in graph '{}' must begin with a valid non-negative graph-edge ID; {reason} in {}",
+                self.name,
+                q.log_print(None),
+            ));
+        }
+
+        Ok(())
+    }
+
+    pub(crate) fn validate_full_numerator_tensor_network(&self) -> Result<()> {
+        self.validate_spatial_momentum_convention()?;
         let full_num = self
             .numerator(&self.full_filter(), &self.empty_subgraph())
             .get_single_atom()
@@ -1169,21 +1300,30 @@ impl Graph {
     ) -> Result<LoopMomentumBasis> {
         debug!("{}", underlying.dot(full_cut));
 
-        let mut loop_momentum_basis = if full_cut.included_iter().next().is_some() {
-            let mut full = underlying.full_filter();
-
-            for (p, _, i) in underlying.iter_edges() {
-                if i.data.is_dummy {
-                    full.sub(p);
-                }
+        let mut full = underlying.full_filter();
+        for (p, _, i) in underlying.iter_edges() {
+            if i.data.is_dummy {
+                full.sub(p);
             }
-            let external = underlying.internal_crown(&full);
-            underlying.lmb_impl(&full, full_cut, external)?
-        } else {
-            return Err(eyre!(
-                "No included edges found in full_cut for loop momentum basis setup"
-            ));
-        };
+        }
+        let external = underlying.internal_crown(&full);
+        // A vacuum made only of tadpoles has an empty spanning forest when
+        // every loop edge is specified. The LMB builder handles this case.
+        let mut loop_momentum_basis = underlying.lmb_impl(&full, full_cut, external)?;
+        let missing_loop_edges = lmb_ids
+            .values()
+            .filter(|edge| !loop_momentum_basis.loop_edges.contains(edge))
+            .collect_vec();
+        if !missing_loop_edges.is_empty() {
+            return Err(LmbError::NotLoopEdges {
+                loop_edges: missing_loop_edges
+                    .iter()
+                    .map(|edge| edge.to_string())
+                    .join(","),
+                loop_edges_dot: underlying.dot(&full),
+            }
+            .into());
+        }
 
         let inv_lmb_ids: BTreeMap<_, _> = lmb_ids
             .iter()

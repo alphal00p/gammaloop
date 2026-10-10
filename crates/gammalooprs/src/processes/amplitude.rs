@@ -1356,7 +1356,11 @@ impl AmplitudeGraph {
             &self.graph,
             &self.graph.full_filter(),
             &self.graph.empty_subgraph::<SuBitGraph>(),
-            &component_lmb,
+            &[(
+                component.included().clone(),
+                component.included().clone(),
+                component_lmb,
+            )],
             config.settings,
             false,
         )?;
@@ -1450,6 +1454,7 @@ impl AmplitudeGraph {
         );
 
         let assign_started = std::time::Instant::now();
+        // The uncut amplitude must produce exactly one expression with exactly one residue.
         let [expr] = parametric_exprs.as_slice() else {
             return Err(eyre!(
                 "amplitude UV construction must produce exactly one cut integrand, got {}",
@@ -2732,7 +2737,7 @@ pub mod test {
 
     use crate::{
         DependentMomentaConstructor, GammaLoopContextContainer,
-        cff::{esurface::ExistingEsurfaceId, expression::OrientationID},
+        cff::{CutCFFIndex, esurface::ExistingEsurfaceId, expression::OrientationID},
         dot,
         graph::{
             FeynmanGraph, Graph, GraphGroupPosition,
@@ -2764,6 +2769,10 @@ pub mod test {
         },
         subtraction::amplitude_counterterm::AmplitudeCountertermComponentEvaluation,
         utils::{ArbPrec, F, load_generic_model},
+        uv::{
+            UVOrchestrator, UVgenerationSettings,
+            approx::{CutStructure, OrientationProjection},
+        },
     };
     use itertools::Itertools;
     use spenso::algebra::complex::Complex;
@@ -4944,6 +4953,68 @@ pub mod test {
         // )
         // .unwrap();
         // println!(" {}", a);
+    }
+
+    #[test]
+    fn uncut_amplitude_generation_has_one_residue_for_both_uv_backends() {
+        test_initialise().unwrap();
+        let mut amplitude_graph: AmplitudeGraph = dot!(
+            digraph bub {
+                edge [particle=scalar_1]
+                node [num=1]
+                e [style=invis]
+                e -> A:0 [id=3]
+                B:1 -> e [id=2]
+                A -> B [id=1]
+                A -> B [id=0]
+            },
+            "scalars"
+        )
+        .unwrap();
+        let generation_settings = GenerationSettings::default();
+        amplitude_graph.generate_cff(&generation_settings).unwrap();
+        let production = amplitude_graph
+            .derived_data
+            .cff_expression
+            .as_ref()
+            .unwrap();
+        let options = amplitude_graph
+            .graph
+            .production_cff_3d_expression_options(&generation_settings)
+            .unwrap();
+
+        for orchestrator in [UVOrchestrator::LegacyDagForest, UVOrchestrator::HedgePoset] {
+            let mut graph = amplitude_graph.graph.clone();
+            let cut_structure = CutStructure::empty(&graph);
+            assert_eq!(cut_structure.cuts.len(), 1);
+            let expected_cut = cut_structure.cuts[0].clone();
+            let settings = UVgenerationSettings {
+                generate_integrated: false,
+                softct: false,
+                orchestrator,
+                ..Default::default()
+            };
+            let generated = orchestrator
+                .parametric_integrands(
+                    &mut graph,
+                    cut_structure,
+                    crate::utils::vakint().unwrap(),
+                    OrientationProjection::exact_expression(
+                        production,
+                        &options,
+                        &generation_settings.orientation_pattern,
+                        generation_settings.explicit_orientation_sum_only,
+                    ),
+                    &settings,
+                )
+                .unwrap();
+
+            assert_eq!(generated.len(), 1, "{orchestrator}");
+            assert_eq!(generated[0].cuts, expected_cut, "{orchestrator}");
+            let residues = generated[0].integrands.iter().collect::<Vec<_>>();
+            assert_eq!(residues.len(), 1, "{orchestrator}");
+            assert_eq!(*residues[0].0, CutCFFIndex::new_all_none());
+        }
     }
 
     #[test]
