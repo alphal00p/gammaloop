@@ -1256,7 +1256,7 @@ mod tests {
         let outer_subgraph =
             InternalSubGraph::cleaned_filter_optimist(full.clone(), graph.as_ref());
         let inner_spinney =
-            Spinney::new(inner_subgraph.clone(), &graph, &graph.loop_momentum_basis)
+            Spinney::new(inner_subgraph.clone(), &graph, &graph.loop_momentum_basis)?
                 .ok_or_else(|| eyre!("the inner component fixture has no compatible sub-LMB"))?;
         let shell_lmb = graph.shrunken_sub_lmb(
             &full,

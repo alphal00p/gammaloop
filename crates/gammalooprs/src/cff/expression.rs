@@ -169,8 +169,7 @@ pub(crate) fn energy_map_replacements_gs(
         ));
         replacements.push(Replacement::new(
             GS.emr_mom(edge_id, &mink_index).to_pattern(),
-            (GS.emr_vec_index(edge_id, &mink_index) + energy * GS.energy_delta(&mink_index))
-                .to_pattern(),
+            (GS.emr_vec(edge_id, &mink_index) + energy * GS.energy_delta(&mink_index)).to_pattern(),
         ));
     }
 
@@ -208,7 +207,7 @@ pub(crate) fn energy_map_replacements_gs(
                 .add_arg(mink_index.as_view())
                 .finish()
                 .to_pattern(),
-            (GS.emr_vec_index(*loop_edge_id, &mink_index) + energy * GS.energy_delta(&mink_index))
+            (GS.emr_vec(*loop_edge_id, &mink_index) + energy * GS.energy_delta(&mink_index))
                 .to_pattern(),
         ));
     }

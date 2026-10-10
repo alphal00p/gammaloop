@@ -1,6 +1,7 @@
 use std::{
     collections::{BTreeMap, BTreeSet},
     fmt::Display,
+    sync::Arc,
 };
 
 #[cfg(test)]
@@ -54,7 +55,10 @@ use crate::{
             local_4d::{self, Full4dCts, Local4dCts},
             projected_4d::{Local4dProjectionContext, Projected4dApproximation},
         },
-        export::UVForestNodeExpression,
+        export::{
+            UVForestLocalProvenance, UVForestNodeExpression, UVForestNodeProvenance,
+            UVForestProvenance,
+        },
         forest::ParametricIntegrands,
         marker::UvMarker,
     },
@@ -168,21 +172,30 @@ impl Wood {
         (current, given)
     }
 
-    pub(crate) fn new(cuts: CutStructure, graph: &Graph, settings: &UVgenerationSettings) -> Self {
+    pub(crate) fn new(
+        cuts: CutStructure,
+        graph: &Graph,
+        settings: &UVgenerationSettings,
+    ) -> Result<Self> {
         let mut subgraph = graph.full_filter();
         subgraph.subtract_with(&graph.initial_state_cut.left);
         let mut spinneys = Vec::new();
 
-        for cut in cuts.cuts.iter() {
+        for (cut_index, cut) in cuts.cuts.iter().enumerate() {
             let cut_sub = subgraph.subtract(&cut.union);
-            spinneys.extend(graph.classified_spinneys(
-                &cut_sub,
-                settings,
-                &graph.loop_momentum_basis,
-            ));
+            spinneys.extend(
+                graph
+                    .classified_spinneys(&cut_sub, settings, &graph.loop_momentum_basis)
+                    .wrap_err_with(|| {
+                        format!(
+                            "graph '{}' cut {cut_index}: failed to classify UV counterterm components",
+                            graph.name
+                        )
+                    })?,
+            );
         }
 
-        Self::from_spinneys(spinneys, graph, cuts, settings)
+        Ok(Self::from_spinneys(spinneys, graph, cuts, settings))
     }
 
     pub(crate) fn from_spinneys<I: IntoIterator<Item = Spinney>>(
@@ -589,20 +602,31 @@ impl OperationNode {
         acc
     }
 
-    fn forest_node(&self, graph: &Graph, topo_order: usize) -> OwnedForestNode {
+    fn forest_node(&self, graph: &Graph, topo_order: usize) -> Result<OwnedForestNode> {
         let spinney = match self.covers() {
             Some(cover) if !cover.is_empty() => {
                 let subgraph = InternalSubGraph::cleaned_filter_optimist(cover, graph.as_ref());
                 Spinney::new(subgraph, graph, &graph.loop_momentum_basis)
-                    .expect("operation cover should define a valid spinney")
+                    .wrap_err_with(|| {
+                        format!(
+                            "graph '{}': failed to construct forest node for operation {self}",
+                            graph.name
+                        )
+                    })?
+                    .ok_or_else(|| {
+                        eyre!(
+                            "graph '{}': operation {self} cover has negative degree of divergence",
+                            graph.name
+                        )
+                    })?
             }
             _ => Spinney::empty(graph),
         };
 
-        OwnedForestNode {
+        Ok(OwnedForestNode {
             spinney,
             topo_order,
-        }
+        })
     }
 
     pub fn to_atom(&self) -> Atom {
@@ -1125,27 +1149,37 @@ impl Forests {
                     Direct3dApproximation::new(localizer, graph, settings)
                         .run_local(&root, &current, &given, &current, &given)?
                 } else {
-                    // Keep disconnected finite coefficients separate until their
-                    // vacuum masses carry the component that owns each Taylor weight.
-                    // Their complete union still determines the localization kernel.
+                    // Retain each connected coefficient's owner before the
+                    // product enters a local suffix. Equal physical masses in
+                    // a disjoint sibling must not acquire the parent's grading.
+                    // Keep disconnected vacuum masses owned as well; the
+                    // complete union still determines the localization kernel.
                     let components = if self.graph.is_disjoint_union(state.integrated) {
                         self.disconnected_component_nodes(state.integrated)?
                     } else {
                         vec![state.integrated]
                     };
-                    let integrated = components
+                    let finite_components = components
                         .into_iter()
                         .map(|component| {
                             let operation = &self.graph[component];
+                            let integrated = self
+                                .compute_store
+                                .require(operation)?
+                                .integrated(operation)?;
                             Ok((
-                                self.compute_store
-                                    .require(operation)?
-                                    .integrated(operation)?
-                                    .physical_finite_counterterm_atom(),
-                                self.source_spinney(component).filter(),
+                                integrated.physical_finite_counterterm_atom(),
+                                ForestNode {
+                                    spinney: self.source_spinney(component),
+                                    topo_order: operation.key.op_count(),
+                                },
                             ))
                         })
                         .collect::<Result<Vec<_>>>()?;
+                    let finite_counterterms = finite_components
+                        .iter()
+                        .map(|(coefficient, owner)| (coefficient, owner))
+                        .collect::<Vec<_>>();
                     // A disabled (or algebraically vanishing) integrated prefix
                     // still owns its typed component-path frame. Replay that
                     // zero coefficient through the local suffix; it remains
@@ -1155,7 +1189,7 @@ impl Forests {
                         topo_order: integrated_operation.key.op_count(),
                     };
                     Direct3dApproximation::new(localizer, graph, settings).run_integrated(
-                        integrated,
+                        &finite_counterterms,
                         &prefix_node,
                         &current,
                         &given,
@@ -1289,7 +1323,24 @@ impl Forests {
         orientation: OrientationProjection<'_>,
         settings: &UVgenerationSettings,
     ) -> Result<()> {
-        self.integrate(graph, vakint, settings)?;
+        if settings.generate_integrated || settings.local_uv_cts_from_expanded_4d_integrands {
+            // The projected route needs local 4D coefficients even when their
+            // integrated addbacks are disabled.
+            self.integrate(graph, vakint, settings)?;
+        } else {
+            // Direct local 3D generation only consumes the integrated branch,
+            // which is identically zero when integration is disabled.  Do not
+            // construct and simplify unrelated 4D local atoms merely to obtain
+            // that zero.  Seed every node because disconnected-union replay can
+            // read an integrated prefix before that node's cut result is built.
+            let zero = IntegratedCts::root();
+            for (_, _, operation) in self.graph.iter_nodes() {
+                self.compute_store
+                    .entry(operation.clone())
+                    .or_default()
+                    .integrated = Some(zero.clone());
+            }
+        }
         let mut projection_context = Local4dProjectionContext::default();
 
         for (compatible_subset, cutset) in self.cuts.clone() {
@@ -1359,7 +1410,11 @@ impl Forests {
                     None => terms,
                 });
             }
-
+            // A per-node final integrand retains inspect/export provenance but
+            // is not independently evaluator-ready.  In particular, temporal
+            // components in localized integrated counterterms can cancel only
+            // in the completed signed forest.  Preserve that exact cancellation
+            // before the final orientation-local momentum split.
             let integrands = sum
                 .ok_or_else(|| eyre!("No terms in hedge-poset forest for cut {cutset:?}"))?
                 .map_expressions(|integrand| {
@@ -1391,14 +1446,15 @@ impl Forests {
         {
             let operation = &self.graph[nidx];
             let computed = self.compute_store.require(operation)?;
-            let final_integrands = computed
-                .cut(operation, cutset)?
+            let cut_computation = computed.cut(operation, cutset)?;
+            let final_integrands = cut_computation
                 .final_integrands
                 .clone()
                 .into_integrands()
                 .resolved()?
                 .map(|numerator| post_process(numerator.clone()));
             let node_key = operation.to_string();
+            let provenance = self.node_export_3d_provenance(nidx, &cut_computation.local_3d);
             for (term_index, (&residue_index, numerator)) in final_integrands.iter().enumerate() {
                 terms.push(UVForestNodeExpression {
                     forest_index,
@@ -1407,11 +1463,81 @@ impl Forests {
                     term_index,
                     residue_index,
                     numerator: numerator.clone(),
+                    forest_provenance: Some(provenance.clone()),
                 });
             }
         }
 
         Ok(terms)
+    }
+
+    pub(crate) fn export_4d_node_expressions(
+        &self,
+        forest_index: usize,
+    ) -> Result<Vec<UVForestNodeExpression>> {
+        let (cut_compatible_forest_subset, _) = self
+            .cuts
+            .first()
+            .ok_or_else(|| eyre!("No cuts in hedge-poset forest export"))?;
+        self.compatible_topological_order(cut_compatible_forest_subset)?
+            .into_iter()
+            .enumerate()
+            .map(|(node_index, nidx)| {
+                let operation = &self.graph[nidx];
+                let local_4d = self.compute_store.require(operation)?.local_4d(operation)?;
+                Ok(UVForestNodeExpression {
+                    forest_index,
+                    node_index,
+                    node_key: operation.to_string(),
+                    term_index: 0,
+                    residue_index: crate::cff::CutCFFIndex::new_all_none(),
+                    numerator: local_4d.atom().clone(),
+                    forest_provenance: Some(self.node_export_4d_provenance(nidx, local_4d)),
+                })
+            })
+            .collect()
+    }
+
+    fn node_parent_keys(&self, node: NodeIndex) -> Vec<String> {
+        let mut parent_keys = self
+            .graph
+            .parents(node)
+            .map(|(parent, _)| self.graph[parent].to_string())
+            .collect::<Vec<_>>();
+        parent_keys.sort();
+        parent_keys.dedup();
+        parent_keys
+    }
+
+    fn node_export_4d_provenance(
+        &self,
+        node: NodeIndex,
+        local_4d: &Local4dCts,
+    ) -> Arc<UVForestProvenance> {
+        Arc::new(UVForestProvenance {
+            node: UVForestNodeProvenance {
+                parent_keys: self.node_parent_keys(node),
+                local: UVForestLocalProvenance::FourD {
+                    components: local_4d.provenance_components().to_vec(),
+                    branches: local_4d.provenance_branches().to_vec(),
+                },
+            },
+        })
+    }
+
+    fn node_export_3d_provenance(
+        &self,
+        node: NodeIndex,
+        local_3d: &Local3DCts,
+    ) -> Arc<UVForestProvenance> {
+        Arc::new(UVForestProvenance {
+            node: UVForestNodeProvenance {
+                parent_keys: self.node_parent_keys(node),
+                local: UVForestLocalProvenance::ThreeD {
+                    projection_paths: local_3d.projection_paths(),
+                },
+            },
+        })
     }
 
     pub(crate) fn renormalization_part_of_ends(
@@ -1431,7 +1557,7 @@ impl Forests {
                 continue;
             }
 
-            let forest_node = key.forest_node(graph, key.key.op_count());
+            let forest_node = key.forest_node(graph, key.key.op_count())?;
             // A disconnected terminal can combine components with different schemes. Select
             // each component's projection before multiplying; the aggregate integrated value
             // only represents the homogeneous all-finite and all-pole projections.
@@ -1449,7 +1575,9 @@ impl Forests {
                         .require(component_key)?
                         .integrated(component_key)?;
                     let projection = match self.source_spinney(component).renormalization_scheme {
-                        ApproximationType::MUV => integrated.physical_finite_counterterm_atom(),
+                        ApproximationType::MUV | ApproximationType::IR => {
+                            integrated.physical_finite_counterterm_atom()
+                        }
                         ApproximationType::PolePart => integrated.physical_pole_atom(),
                         scheme => {
                             return Err(eyre!("No terminal counterterm projection for {scheme}"));
@@ -1541,10 +1669,13 @@ impl Display for Forests {
 mod tests {
     use crate::{
         dot,
-        graph::{Graph, parse::IntoGraph},
+        graph::{FeynmanGraph, Graph, parse::IntoGraph},
         initialisation::test_initialise,
         processes::DotExportSettings,
-        uv::{UltravioletGraph, Wood as OldWood, settings::RenormalizationPrescriptionSettings},
+        uv::{
+            UltravioletGraph, Wood as OldWood, approx::local_4d::Local4dBranch,
+            settings::RenormalizationPrescriptionSettings,
+        },
     };
 
     use super::*;
@@ -1594,6 +1725,77 @@ mod tests {
     }
 
     #[test]
+    fn three_d_compute_skips_unused_four_d_atoms_when_integration_is_disabled() -> Result<()> {
+        test_initialise().unwrap();
+        for project_local_4d in [false, true] {
+            let mut graph: Graph = dot!(
+                digraph scalar_self_energy {
+                    edge [particle="scalar_1"];
+                    node [num=1];
+                    ext [style=invis];
+                    ext -> a;
+                    b -> ext;
+                    a -> b;
+                    a -> b;
+                },
+                "scalars"
+            )?;
+            let settings = UVgenerationSettings {
+                generate_integrated: false,
+                local_uv_cts_from_expanded_4d_integrands: project_local_4d,
+                ..Default::default()
+            };
+            let orientation_pattern = crate::settings::global::OrientationPattern::default();
+            let options = graph.denominator_only_cff_3d_expression_options();
+            let production = graph.generate_3d_expression_for_integrand(
+                &[],
+                &graph.get_esurface_canonization(&graph.loop_momentum_basis),
+                &options,
+                Some(&Atom::one()),
+            )?;
+            let mut forests = Wood::new(CutStructure::empty(&graph), &graph, &settings)?.unfold();
+
+            forests.compute(
+                &mut graph,
+                crate::utils::vakint()?,
+                OrientationProjection::exact_expression(
+                    &production,
+                    &options,
+                    &orientation_pattern,
+                    true,
+                ),
+                &settings,
+            )?;
+
+            assert_eq!(forests.compute_store.entries.len(), forests.graph.n_nodes());
+            for (_, _, operation) in forests.graph.iter_nodes() {
+                let computed = forests.compute_store.require(operation)?;
+                assert_eq!(
+                    computed.local_4d.is_some(),
+                    project_local_4d,
+                    "4D coefficients must be constructed exactly when the projected route needs them for {operation}"
+                );
+                let integrated = computed.integrated(operation)?;
+                assert!(integrated.physical_pole_atom().is_zero());
+                assert!(integrated.physical_finite_counterterm_atom().is_zero());
+                assert!(
+                    !computed.cuts.is_empty(),
+                    "both routes must compute a cut for {operation}"
+                );
+                assert!(
+                    computed
+                        .cuts
+                        .values()
+                        .all(|cut| cut.final_integrands.iter().next().is_some()),
+                    "every computed cut must retain a 3D final integrand for {operation}"
+                );
+            }
+        }
+
+        Ok(())
+    }
+
+    #[test]
     fn local_leaf_operations_follow_dependency_frontiers() -> Result<()> {
         test_initialise().unwrap();
         let dumbell: Graph = dot!(
@@ -1609,7 +1811,7 @@ mod tests {
             CutStructure::empty(&dumbell),
             &dumbell,
             &UVgenerationSettings::default(),
-        )
+        )?
         .unfold();
 
         let frontier_label = |operation: &OperationNode| {
@@ -1724,7 +1926,7 @@ mod tests {
             ..Default::default()
         };
         let cut_structure = CutStructure::empty(&graph);
-        let mut forests = Wood::new(cut_structure, &graph, &settings).unfold();
+        let mut forests = Wood::new(cut_structure, &graph, &settings)?.unfold();
         forests.integrate(&graph, crate::utils::vakint()?, &settings)?;
 
         let unions = forests
@@ -1777,7 +1979,7 @@ mod tests {
             .first()
             .expect("empty cut structure has one cut")
             .clone();
-        let mut forests = Wood::new(cut_structure, &graph, &settings).unfold();
+        let mut forests = Wood::new(cut_structure, &graph, &settings)?.unfold();
 
         let root_disconnected = forests
             .graph
@@ -1932,13 +2134,23 @@ mod tests {
         assert!(
             expected_active.empty_intersection(forests.source_spinney(state.integrated).filter())
         );
+        let sector = frontier_result
+            .local_3d
+            .direct()?
+            .sectors()?
+            .iter()
+            .find(|sector| sector.active_subgraph == expected_active)
+            .expect("the replay frontier contains the expected active sector");
         assert!(
-            frontier_result
-                .local_3d
-                .direct()?
-                .sectors()?
-                .iter()
-                .any(|sector| { sector.active_subgraph == expected_active })
+            !sector.projection_paths.is_empty()
+                && sector.projection_paths.iter().all(|path| {
+                    path.steps.len() == state.local_edges.len()
+                        && path
+                            .steps
+                            .windows(2)
+                            .all(|pair| pair[0].topo_order <= pair[1].topo_order)
+                }),
+            "each disconnected sector must retain its own ordered local replay path"
         );
         assert!(
             frontier_result
@@ -1952,6 +2164,231 @@ mod tests {
                 })),
             "a union must replay every component path from its typed root"
         );
+        Ok(())
+    }
+
+    #[test]
+    fn disconnected_soft_union_is_the_product_of_completed_component_atoms() -> Result<()> {
+        test_initialise().unwrap();
+        let mut graph: Graph =
+            include_str!("../../../../tests/resources/graphs/local_ir_dod2_scalar_spectacles.dot")
+                .into_graph(&crate::utils::load_generic_model("scalars"))?;
+        let settings = UVgenerationSettings {
+            generate_integrated: false,
+            renormalization_prescription: RenormalizationPrescriptionSettings {
+                log_divergent: ApproximationType::IR,
+                massive_power_divergent: ApproximationType::IR,
+                massless_power_divergent: ApproximationType::IR,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let mut forests = Wood::new(CutStructure::empty(&graph), &graph, &settings)?.unfold();
+        forests.integrate(&graph, crate::utils::vakint()?, &settings)?;
+
+        let union = forests
+            .graph
+            .iter_nodes()
+            .find_map(|(node, _, _)| forests.graph.is_disjoint_union(node).then_some(node))
+            .expect("the spectacles fixture must contain a disconnected UV union");
+        assert_eq!(
+            forests.source_spinney(union).renormalization_scheme,
+            ApproximationType::MUV,
+            "a disconnected union carries only the neutral aggregate scheme"
+        );
+        let components = forests.disconnected_component_nodes(union)?;
+        assert_eq!(components.len(), 2);
+        assert!(components.iter().all(|component| {
+            forests.source_spinney(*component).renormalization_scheme == ApproximationType::IR
+        }));
+
+        let expected =
+            components
+                .iter()
+                .try_fold(Atom::one(), |product, component| -> Result<Atom> {
+                    let completed = forests.recursion_input_4d(*component)?;
+                    assert!(
+                        !completed.atom().is_zero(),
+                        "each disconnected soft component must be completed before the join"
+                    );
+                    Ok(product * completed.atom())
+                })?;
+        let operation = &forests.graph[union];
+        let actual = forests
+            .compute_store
+            .require(operation)?
+            .local_4d(operation)?;
+        assert_eq!(actual.atom(), &expected);
+        let provenance = forests.node_export_4d_provenance(union, actual);
+        assert_eq!(provenance.node.parent_keys.len(), 2);
+        let UVForestLocalProvenance::FourD {
+            components: provenance_components,
+            branches,
+        } = &provenance.node.local
+        else {
+            panic!("a computed 4D union must carry 4D provenance")
+        };
+        assert_eq!(provenance_components.len(), 2);
+        assert!(provenance_components.iter().all(|component| {
+            component.scheme == ApproximationType::IR
+                && !component.route_loop_edges.is_empty()
+                && !component.route_signatures.is_empty()
+        }));
+        assert_eq!(branches.len(), 1);
+        assert_eq!(branches[0].branch, Local4dBranch::Combined);
+        assert!(branches[0].byte_size > 0);
+
+        // Exercise the same factorization directly in one parent-CFF
+        // orientation. With integrated generation disabled, only the replay
+        // sector containing both local component operations may survive at
+        // the disconnected-union node.
+        let cutset = CutSet::empty(graph.n_hedges());
+        let orientation_pattern = crate::settings::global::OrientationPattern::default();
+        let options = graph.production_cff_3d_expression_options(&Default::default())?;
+        let canonization = graph.get_esurface_canonization(&graph.loop_momentum_basis);
+        // Match the production root: its structural bridge remains a 4D
+        // denominator outside the CFF and its loop-energy contour.
+        let contract_edges = graph
+            .iter_edges_of(
+                &graph
+                    .tree_edges
+                    .subtract(&graph.initial_state_cut)
+                    .subtract(&graph.external_filter::<SuBitGraph>()),
+            )
+            .map(|(_, edge, _)| edge)
+            .collect::<Vec<_>>();
+        let mut production = graph.generate_3d_expression_for_integrand(
+            &contract_edges,
+            &canonization,
+            &options,
+            None,
+        )?;
+        assert!(
+            !production.expression.orientations.is_empty(),
+            "the spectacles parent CFF has at least one orientation"
+        );
+        production.expression.orientations.truncate(1);
+        let localizer = Localizer::new(
+            &cutset,
+            OrientationProjection::exact_expression(
+                &production,
+                &options,
+                &orientation_pattern,
+                false,
+            ),
+        );
+        let union_3d = forests.local_3d_for_node(
+            union,
+            &mut graph,
+            &cutset,
+            localizer,
+            &settings,
+            &mut Local4dProjectionContext::default(),
+        )?;
+        let sectors = union_3d
+            .local_3d
+            .direct()?
+            .sectors()
+            .expect("a disconnected local 3D union retains its replay sectors");
+        assert_eq!(sectors.len(), 3);
+        let combined_sectors = sectors
+            .iter()
+            .map(DirectSector::combine)
+            .collect::<Result<Vec<_>>>()?;
+        let nonzero_sectors = combined_sectors
+            .iter()
+            .filter(|branches| {
+                branches
+                    .iter_keys()
+                    .any(|(_, integrands)| integrands.iter().any(|(_, atom)| !atom.is_zero()))
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(
+            nonzero_sectors.len(),
+            1,
+            "zero integrated prefixes must leave only the two-local-component cross sector"
+        );
+        let cross = nonzero_sectors[0];
+
+        let assert_same_branches = |left: &DirectResidueBranches,
+                                    right: &DirectResidueBranches,
+                                    label: &str|
+         -> Result<()> {
+            let left = left.iter_keys().collect::<Vec<_>>();
+            let right = right.iter_keys().collect::<Vec<_>>();
+            assert_eq!(
+                left.len(),
+                right.len(),
+                "{label} differs in residue-map count"
+            );
+            for ((left_key, left), (right_key, right)) in left.into_iter().zip(right) {
+                assert_eq!(
+                    left_key, right_key,
+                    "{label} changed the complete residue map"
+                );
+                // Independently replayed forests have different numerator-family
+                // scopes. Compare their values using the retained definitions.
+                let left = left.resolved()?;
+                let right = right.resolved()?;
+                left.checked_zip(&right, |residue, left, right| {
+                    // Compare the exact factorized forest values before selectors
+                    // are materialized or any graph numerator is distributed.
+                    let difference = (left - right).together().cancel();
+                    assert!(
+                        difference.is_zero(),
+                        "{label} differs in residue {residue:?}: {difference}"
+                    );
+                    Ok(Atom::Zero)
+                })?;
+            }
+            Ok(())
+        };
+        assert_same_branches(
+            &union_3d.local_3d.direct()?.branches()?,
+            cross,
+            "the disconnected aggregate and its cross sector",
+        )?;
+
+        let component_edges = components
+            .iter()
+            .map(|component| {
+                let (parent, edge) = forests
+                    .graph
+                    .unique_parent(*component)
+                    .expect("a primitive disconnected component has one root edge");
+                assert!(
+                    forests.graph[parent].key.is_empty(),
+                    "the spectacles components must both be primitive"
+                );
+                edge
+            })
+            .collect::<Vec<_>>();
+        let mut replay = |edges: &[EdgeIndex]| -> Result<Direct3dCts> {
+            let mut local = Direct3dCts::root(&graph, localizer)?;
+            for (order, edge) in edges.iter().enumerate() {
+                let (current, given) = forests.wood.current_given_pair(*edge, order);
+                local = Direct3dApproximation::new(localizer, &mut graph, &settings)
+                    .run_local(&local, &current, &given, &current, &given)?;
+            }
+            assert!(local.branches()?.iter_keys().all(|(_, integrands)| {
+                integrands
+                    .iter()
+                    .all(|(_, atom)| !atom.contains_symbol(GS.rescale))
+            }));
+            Ok(local)
+        };
+        let forward = replay(&component_edges)?;
+        let reverse = replay(&component_edges.iter().rev().copied().collect::<Vec<_>>())?;
+        assert_same_branches(
+            &forward.branches()?,
+            cross,
+            "forward component-local replay and the produced cross sector",
+        )?;
+        assert_same_branches(
+            &reverse.branches()?,
+            cross,
+            "reverse component-local replay and the produced cross sector",
+        )?;
         Ok(())
     }
 
@@ -1982,7 +2419,7 @@ mod tests {
             },
             ..Default::default()
         };
-        let mut forests = Wood::new(CutStructure::empty(&graph), &graph, &settings).unfold();
+        let mut forests = Wood::new(CutStructure::empty(&graph), &graph, &settings)?.unfold();
         forests.integrate(&graph, crate::utils::vakint()?, &settings)?;
 
         let terminals = forests
@@ -2068,13 +2505,13 @@ mod tests {
         let spinneys: Vec<_> = dumbell
             .spinneys(&dumbell.full_filter())
             .into_iter()
-            .filter_map(|a| Spinney::new(a, &dumbell, &dumbell.loop_momentum_basis))
-            .collect();
+            .filter_map(|a| Spinney::new(a, &dumbell, &dumbell.loop_momentum_basis).transpose())
+            .collect::<Result<_>>()?;
         let f = Wood::new(
             CutStructure::empty(&dumbell),
             &dumbell,
             &UVgenerationSettings::default(),
-        );
+        )?;
 
         println!("{}", f);
 
@@ -2170,7 +2607,7 @@ mod tests {
             CutStructure::empty(&dt),
             &dt,
             &UVgenerationSettings::default(),
-        );
+        )?;
 
         println!("{}", dt.dot_serialize(&DotExportSettings::default()));
 
@@ -2207,13 +2644,13 @@ mod tests {
         let spinneys: Vec<_> = dumbell
             .spinneys(&dumbell.full_filter())
             .into_iter()
-            .filter_map(|a| Spinney::new(a, &dumbell, &dumbell.loop_momentum_basis))
-            .collect();
+            .filter_map(|a| Spinney::new(a, &dumbell, &dumbell.loop_momentum_basis).transpose())
+            .collect::<Result<_>>()?;
         let f = Wood::new(
             CutStructure::empty(&dumbell),
             &dumbell,
             &UVgenerationSettings::default(),
-        );
+        )?;
 
         println!("{}", f);
 
@@ -2265,13 +2702,13 @@ mod tests {
                 let spinneys: Vec<_> = g
                     .spinneys(&g.full_filter())
                     .into_iter()
-                    .filter_map(|a| Spinney::new(a, &g, &g.loop_momentum_basis))
-                    .collect();
+                    .filter_map(|a| Spinney::new(a, &g, &g.loop_momentum_basis).transpose())
+                    .collect::<Result<_>>()?;
                 let f = Wood::new(
                     CutStructure::empty(&g),
                     &g,
                     &UVgenerationSettings::default(),
-                );
+                )?;
 
                 println!("{}", f);
 
@@ -2340,7 +2777,7 @@ mod tests {
             CutStructure::empty(&mercedes),
             &mercedes,
             &UVgenerationSettings::default(),
-        );
+        )?;
         println!("{}", f);
         insta::assert_snapshot!(
         f.graph.n_nodes(),
@@ -2375,7 +2812,7 @@ mod tests {
             CutStructure::empty(&sunrise),
             &sunrise,
             &UVgenerationSettings::default(),
-        );
+        )?;
         println!("{}", f);
         insta::assert_snapshot!(
         f.graph.n_nodes(),
@@ -2411,7 +2848,7 @@ mod tests {
             CutStructure::empty(&sunrise),
             &sunrise,
             &UVgenerationSettings::default(),
-        );
+        )?;
         println!("{}", f);
         insta::assert_snapshot!(
         f.graph.n_nodes(),
@@ -2449,7 +2886,7 @@ mod tests {
             CutStructure::empty(&sunrise),
             &sunrise,
             &UVgenerationSettings::default(),
-        );
+        )?;
         println!("{}", f);
         insta::assert_snapshot!(
         f.graph.n_nodes(),
@@ -2493,9 +2930,9 @@ mod tests {
             .first()
             .expect("empty cut structure has one cut")
             .clone();
-        let f = Wood::new(cut_structure, &spectacles, &settings);
+        let f = Wood::new(cut_structure, &spectacles, &settings)?;
         println!("{}", f);
-        let f = f.unfold();
+        let mut f = f.unfold();
         println!("{}", f);
 
         let (union, edge) = f
@@ -2507,6 +2944,15 @@ mod tests {
                     .then_some((parent, edge))
             })
             .expect("spectacles has a connected child above its disconnected union");
+        let operations = f
+            .graph
+            .iter_nodes()
+            .map(|(_, _, operation)| operation.clone())
+            .collect::<Vec<_>>();
+        // Zero integrated terms isolate component-path replay in the local accumulator.
+        for operation in operations {
+            f.compute_store.entry(operation).or_default().integrated = Some(IntegratedCts::root());
+        }
         let orientation_pattern = crate::settings::global::OrientationPattern::default();
         // The replay fixture keeps its synthetic unit branch, while the
         // existing exact source supplies a valid energy map for that key.
@@ -2533,10 +2979,13 @@ mod tests {
                 false,
             ),
         );
-        let union_active = f
+        let replay_states = f
             .union_replay_states(union)?
             .into_iter()
             .filter(|state| !state.local_edges.is_empty())
+            .collect::<Vec<_>>();
+        let union_active = replay_states
+            .iter()
             .map(|state| {
                 state
                     .local_edges
@@ -2551,6 +3000,32 @@ mod tests {
                     .expect("a proper union replay state has a local suffix")
             })
             .collect::<Vec<_>>();
+        let computed = f.local_3d_for_node(
+            union,
+            &mut spectacles,
+            &cutset,
+            localizer,
+            &settings,
+            &mut Local4dProjectionContext::default(),
+        )?;
+        let sectors = computed.local_3d.direct()?.sectors()?;
+        assert_eq!(
+            sectors.len(),
+            replay_states.len(),
+            "every proper integrated prefix must produce one disconnected replay sector"
+        );
+        assert_eq!(
+            sectors
+                .iter()
+                .map(|sector| sector.active_subgraph.clone())
+                .collect::<Vec<_>>(),
+            union_active,
+            "the completed union must retain the active component support of every replay path"
+        );
+        assert!(
+            computed.final_integrands.iter().next().is_some(),
+            "the successfully replayed disconnected union must reach final-integrand construction"
+        );
         let union_local = Direct3dCts::from_sectors(
             union_active
                 .iter()
@@ -2574,6 +3049,7 @@ mod tests {
                             Integrands::root(),
                         )?,
                         frozen_integrands: Integrands::root(),
+                        projection_paths: Vec::new(),
                     })
                 })
                 .collect::<Result<_>>()?,
@@ -2596,6 +3072,52 @@ mod tests {
             .materialize(false)?
             .resolved()?
             .map(|atom| -(atom * &numerator));
+        let given_internal =
+            InternalSubGraph::try_new(given.subgraph().clone(), spectacles.as_ref())
+                .expect("the connected child has an internal given prefix");
+        let quotient_rank = spectacles
+            .shrunken_sub_lmb(
+                current.subgraph(),
+                &given_internal,
+                spectacles.dummy_stripped_external_flows_of(current.subgraph()),
+                None,
+            )?
+            .loop_edges
+            .len();
+        let expected_frames = union_local
+            .sectors()?
+            .iter()
+            .map(|sector| {
+                let retained_region = sector.active_subgraph.intersection(given.subgraph());
+                let mut retained = sector
+                    .coordinate_frames
+                    .iter()
+                    .filter(|frame| retained_region.includes(&frame.active_subgraph))
+                    .flat_map(|frame| frame.lmb.loop_edges.iter().copied())
+                    .collect::<Vec<_>>();
+                retained.sort();
+                retained.dedup();
+                let expected_rank = retained.len() + quotient_rank;
+                (retained, expected_rank)
+            })
+            .collect::<Vec<_>>();
+        let external: SuBitGraph = spectacles.external_filter();
+        let full_internal = spectacles.full_filter().subtract(&external);
+        let canonical_route = if current.subgraph() == &full_internal
+            && spectacles.n_loops(&full_internal) == spectacles.loop_momentum_basis.loop_edges.len()
+        {
+            spectacles.loop_momentum_basis.clone()
+        } else {
+            spectacles.try_compatible_sub_lmb(
+                current.subgraph(),
+                spectacles.dummy_less_full_crown(current.subgraph()),
+                &spectacles.loop_momentum_basis,
+            )?
+        };
+        let expected_active = union_active
+            .iter()
+            .map(|active| active.union(&reduced))
+            .collect::<Vec<_>>();
         let child_local = Direct3dApproximation::new(localizer, &mut spectacles, &settings).run(
             &union_local,
             &IntegratedCts::root(),
@@ -2610,17 +3132,82 @@ mod tests {
             expected.map(|atom| atom.collect_factors()),
             "the connected child must retain every complete source value across its enclosing Taylor operation",
         );
+        let child_sectors = child_local.sectors()?;
+        let child_active = child_sectors
+            .iter()
+            .map(|sector| sector.active_subgraph.clone())
+            .collect::<Vec<_>>();
+        assert_eq!(child_active.len(), 3);
+        assert_eq!(child_active, expected_active);
+        for (sector, (retained, expected_rank)) in child_sectors.iter().zip(expected_frames.iter())
+        {
+            assert_eq!(
+                sector.coordinate_frames.len(),
+                1,
+                "one connected enclosing Taylor operation must merge every contained child frame"
+            );
+            let child_carriers = sector
+                .coordinate_frames
+                .iter()
+                .flat_map(|frame| frame.lmb.loop_edges.iter())
+                .copied()
+                .collect::<BTreeSet<_>>();
+            assert!(
+                retained.iter().all(|edge| child_carriers.contains(edge)),
+                "the connected child must retain every carrier from the contained union frames"
+            );
+            assert!(
+                child_carriers.iter().all(|edge| {
+                    spectacles.loop_momentum_basis.edge_signatures[*edge]
+                        .external
+                        .iter()
+                        .all(|sign| sign.is_zero())
+                }),
+                "the connected child route must be homogeneous in graph-external momenta"
+            );
+            assert_eq!(
+                sector
+                    .coordinate_frames
+                    .iter()
+                    .map(|frame| frame.lmb.loop_edges.len())
+                    .sum::<usize>(),
+                *expected_rank,
+                "the connected child rank is the retained prefix rank plus its quotient rank"
+            );
+            let canonical_carriers = canonical_route
+                .loop_edges
+                .iter()
+                .copied()
+                .collect::<BTreeSet<_>>();
+            let canonical_is_admissible = retained
+                .iter()
+                .all(|edge| canonical_carriers.contains(edge))
+                && canonical_carriers.len() == *expected_rank
+                && canonical_carriers.iter().all(|edge| {
+                    spectacles.loop_momentum_basis.edge_signatures[*edge]
+                        .external
+                        .iter()
+                        .all(|sign| sign.is_zero())
+                });
+            if canonical_is_admissible {
+                assert_eq!(
+                    child_carriers, canonical_carriers,
+                    "an admissible graph-canonical route must win before equivalent fallbacks"
+                );
+            }
+        }
 
         Ok(())
     }
 
     #[test]
-    fn collective_two_component_region_matches_complete_taylor_cancellation() -> Result<()> {
+    fn collective_two_component_region_requires_independently_divergent_factors() -> Result<()> {
         test_initialise().unwrap();
 
         // The two-line component has DOD two, while the scalar triangle has DOD
-        // minus two. Their disconnected union is therefore logarithmically
-        // divergent even though the triangle is not a UV region on its own.
+        // minus two. Their disconnected union has logarithmic simultaneous
+        // power counting, but the triangle is not a UV region on its own.
+        // Componentwise classification therefore retains only the bubble.
         let graph: Graph = dot!(
             digraph G {
                 node [num = "1"];
@@ -2639,13 +3226,13 @@ mod tests {
             generate_integrated: false,
             ..Default::default()
         };
-        let wood = Wood::new(CutStructure::empty(&graph), &graph, &settings);
-        let collective = wood
-            .graph
-            .iter_nodes()
-            .find_map(|(node, _, spinney)| (spinney.n_components() == 2).then_some(node))
-            .expect("the mixed-DOD graph must contain its collective UV region");
-        let collective_filter = wood.graph[collective].filter().clone();
+        let wood = Wood::new(CutStructure::empty(&graph), &graph, &settings)?;
+        let collective = graph
+            .spinneys(&graph.full_filter())
+            .into_iter()
+            .find(|spinney| graph.as_ref().connected_components(spinney).len() == 2)
+            .expect("the raw cycle inventory contains the collective region");
+        let collective_filter = collective.filter;
         let components = graph
             .as_ref()
             .connected_components(&collective_filter)
@@ -2676,7 +3263,7 @@ mod tests {
                 InternalSubGraph::cleaned_filter_optimist(divergent_filter, graph.as_ref()),
                 &graph,
                 &graph.loop_momentum_basis,
-            )
+            )?
             .expect("the divergent component has a compatible source chart"),
             topo_order: 0,
         };
@@ -2688,7 +3275,7 @@ mod tests {
                 ),
                 &graph,
                 &graph.loop_momentum_basis,
-            )
+            )?
             .expect("the collective region has a compatible source chart"),
             topo_order: 1,
         };
@@ -2751,48 +3338,76 @@ mod tests {
         );
         assert!((actual - expected).collect_factors().is_zero());
 
-        let cut_component = components
+        assert!(
+            forests
+                .wood
+                .graph
+                .iter_nodes()
+                .all(|(_, _, spinney)| { spinney.filter() != &collective_filter }),
+            "a convergent connected factor cannot enter a disconnected UV spinney"
+        );
+        let convergent = components
             .iter()
             .find(|component| graph.compute_dod(*component) < 0)
-            .expect("the collective region has one convergent component")
-            .clone();
-        let divergent_component = components
+            .expect("the collective region has one convergent component");
+        let divergent = components
             .iter()
             .find(|component| graph.compute_dod(*component) >= 0)
-            .expect("the collective region has one independently divergent component")
-            .clone();
+            .expect("the collective region has one independently divergent component");
+        assert!(
+            forests
+                .wood
+                .graph
+                .iter_nodes()
+                .all(|(_, _, spinney)| spinney.filter() != convergent)
+        );
+        assert!(
+            forests
+                .wood
+                .graph
+                .iter_nodes()
+                .any(|(_, _, spinney)| spinney.filter() == divergent)
+        );
+
+        assert!(
+            forests.graph.iter_nodes().all(|(_, _, operation)| {
+                operation.covers().as_ref() != Some(&collective_filter)
+            }),
+            "neither atomic nor nested collective counterterms may bypass factor selection"
+        );
         let mut cut = CutSet::empty(graph.n_hedges());
-        cut.union = cut_component;
+        cut.union = convergent.clone();
+        assert!(
+            forests.graph.iter_nodes().any(|(_, _, operation)| {
+                operation.covers().as_ref() == Some(divergent) && operation.is_compatible_with(&cut)
+            }),
+            "a disjoint independently divergent prefix remains cut-compatible"
+        );
+        cut.union = divergent.clone();
         assert!(
             forests
                 .graph
                 .iter_nodes()
-                .filter(|(_, _, operation)| {
-                    operation.covers().as_ref() == Some(&collective_filter)
-                })
+                .filter(|(_, _, operation)| { operation.covers().as_ref() == Some(divergent) })
                 .all(|(_, _, operation)| !operation.is_compatible_with(&cut)),
-            "the cut must exclude both the atomic and nested collective counterterms"
-        );
-        assert!(
-            forests.graph.iter_nodes().any(|(_, _, operation)| {
-                operation.covers().as_ref() == Some(&divergent_component)
-                    && operation.is_compatible_with(&cut)
-            }),
-            "a disjoint independently divergent prefix remains cut-compatible"
+            "cutting the retained divergent factor must exclude its counterterms"
         );
 
         Ok(())
     }
 
     #[test]
-    fn collective_three_component_region_matches_complete_taylor_cancellation() -> Result<()> {
+    fn collective_three_component_region_keeps_only_its_divergent_join() -> Result<()> {
         test_initialise().unwrap();
 
         // The two bubbles have DOD two and the scalar triangle has DOD minus two.
         // Every component nevertheless has a divergent complement because the
         // other two components have non-negative combined DOD. The triangle itself
-        // supplies no independent counterterm: complete complement coverage alone
+        // supplies no independent counterterm: this aggregate edge-label cover
         // cannot replace the collective Taylor operation by a factorized product.
+        // Only the two independently divergent bubbles form a factorized join;
+        // their complete Taylor cancellation permits omitting the collective
+        // transition rather than classifying the triangle as a UV factor.
         let graph: Graph = dot!(
             digraph G {
                 node [num = "1"];
@@ -2814,13 +3429,13 @@ mod tests {
             generate_integrated: false,
             ..Default::default()
         };
-        let wood = Wood::new(CutStructure::empty(&graph), &graph, &settings);
-        let collective = wood
-            .graph
-            .iter_nodes()
-            .find_map(|(node, _, spinney)| (spinney.n_components() == 3).then_some(node))
-            .expect("the graph must contain its three-component collective UV region");
-        let collective_filter = wood.graph[collective].filter().clone();
+        let wood = Wood::new(CutStructure::empty(&graph), &graph, &settings)?;
+        let collective = graph
+            .spinneys(&graph.full_filter())
+            .into_iter()
+            .find(|spinney| graph.as_ref().connected_components(spinney).len() == 3)
+            .expect("the raw cycle inventory contains the collective region");
+        let collective_filter = collective.filter;
         let components = graph
             .as_ref()
             .connected_components(&collective_filter)
@@ -2836,24 +3451,51 @@ mod tests {
                 .collect::<Vec<_>>(),
             vec![-2, 2, 2]
         );
-        assert!(components.iter().all(|component| {
-            let complement = collective_filter.subtract(component);
-            wood.graph
-                .iter_nodes()
-                .any(|(_, _, spinney)| spinney.filter() == &complement)
-        }));
+        assert!(
+            wood.graph.iter_nodes().all(|(_, _, spinney)| {
+                graph
+                    .as_ref()
+                    .connected_components(spinney.filter())
+                    .iter()
+                    .all(|component| graph.compute_dod(component) >= 0)
+            }),
+            "a convergent connected factor cannot enter a disconnected UV spinney"
+        );
+        assert!(
+            components.iter().all(|component| {
+                graph.compute_dod(&collective_filter.subtract(component)) >= 0
+            })
+        );
+        let retained_components = components
+            .iter()
+            .filter(|component| {
+                wood.graph
+                    .iter_nodes()
+                    .any(|(_, _, spinney)| spinney.filter() == *component)
+            })
+            .cloned()
+            .collect::<BTreeSet<_>>();
         assert_eq!(
-            components
-                .iter()
-                .filter(|component| {
-                    wood.graph
-                        .iter_nodes()
-                        .any(|(_, _, spinney)| spinney.filter() == *component)
-                })
-                .count(),
+            retained_components.len(),
             2,
             "complete complement coverage must not stand in for independent component counterterms"
         );
+        assert!(
+            retained_components
+                .iter()
+                .all(|component| graph.compute_dod(component) >= 0)
+        );
+        let retained_union = retained_components
+            .iter()
+            .cloned()
+            .reduce(|left, right| left.union(&right))
+            .unwrap();
+        let join = wood
+            .graph
+            .iter_nodes()
+            .find_map(|(node, _, spinney)| (spinney.filter() == &retained_union).then_some(node))
+            .expect("the two independently divergent bubbles retain their union");
+        assert_eq!(wood.join_factors(join), Some(retained_components));
 
         let root = OwnedForestNode {
             spinney: Spinney::empty(&graph),
@@ -2884,7 +3526,7 @@ mod tests {
                     InternalSubGraph::cleaned_filter_optimist(component.clone(), graph.as_ref()),
                     &graph,
                     &graph.loop_momentum_basis,
-                )
+                )?
                 .expect("each divergent bubble has a compatible source chart"),
                 topo_order: 0,
             };
@@ -2897,7 +3539,7 @@ mod tests {
                     ),
                     &graph,
                     &graph.loop_momentum_basis,
-                )
+                )?
                 .expect("the bubble-triangle collective region is logarithmic"),
                 topo_order: 1,
             };
@@ -2940,7 +3582,7 @@ mod tests {
                 InternalSubGraph::cleaned_filter_optimist(joint_scope, graph.as_ref()),
                 &graph,
                 &graph.loop_momentum_basis,
-            )
+            )?
             .expect("the disjoint divergent bubbles have a compatible joint source chart"),
             topo_order: 1,
         };
@@ -2957,7 +3599,7 @@ mod tests {
                 ),
                 &graph,
                 &graph.loop_momentum_basis,
-            )
+            )?
             .expect("the collective region has a compatible source chart"),
             topo_order: 2,
         };
@@ -3008,8 +3650,28 @@ mod tests {
                 .normalize_dots()
         });
         assert!(
-            (actual - expected).expand().is_zero(),
+            (actual - expected).collect_factors().cancel().is_zero(),
             "the complete collective Taylor value must equal -T_U(1-T_A)(1-T_B)I"
+        );
+
+        assert!(
+            forests.graph.iter_nodes().all(|(_, _, operation)| {
+                operation.covers().is_none_or(|scope| {
+                    graph
+                        .as_ref()
+                        .connected_components(&scope)
+                        .iter()
+                        .all(|component| graph.compute_dod(component) >= 0)
+                })
+            }),
+            "no atomic or nested collective operation may include the convergent triangle"
+        );
+        assert!(
+            forests.graph.iter_nodes().any(|(node, _, operation)| {
+                operation.covers().as_ref() == Some(&retained_union)
+                    && forests.graph.is_disjoint_union(node)
+            }),
+            "the complete independently divergent cover remains a factorized join"
         );
 
         Ok(())
@@ -3040,7 +3702,7 @@ mod tests {
             ..Default::default()
         };
         let cut_structure = CutStructure::empty(&spectacles);
-        let f = Wood::new(cut_structure, &spectacles, &settings);
+        let f = Wood::new(cut_structure, &spectacles, &settings)?;
         println!("{}", f);
         let mut f = f.unfold();
         println!("{}", f);
@@ -3091,7 +3753,7 @@ mod tests {
             CutStructure::empty(&basketball),
             &basketball,
             &UVgenerationSettings::default(),
-        );
+        )?;
         println!("{}", f);
         insta::assert_snapshot!(
         f.graph.n_nodes(),
@@ -3129,7 +3791,7 @@ mod tests {
             CutStructure::empty(&fourloop_b),
             &fourloop_b,
             &UVgenerationSettings::default(),
-        );
+        )?;
         println!("{}", f);
         insta::assert_snapshot!(
         f.graph.n_nodes(),
@@ -3166,7 +3828,7 @@ mod tests {
             CutStructure::empty(&four_loop_a),
             &four_loop_a,
             &UVgenerationSettings::default(),
-        );
+        )?;
         println!("{}", f);
         insta::assert_snapshot!(
         f.graph.n_nodes(),
@@ -3200,7 +3862,7 @@ mod tests {
             CutStructure::empty(&dumbell),
             &dumbell,
             &UVgenerationSettings::default(),
-        );
+        )?;
 
         insta::assert_snapshot!(
             f.graph.n_nodes(),
@@ -3232,13 +3894,13 @@ mod tests {
             let spinneys: Vec<_> = dumbell
                 .spinneys(&dumbell.full_filter())
                 .into_iter()
-                .filter_map(|a| Spinney::new(a, &dumbell, &dumbell.loop_momentum_basis))
-                .collect();
+                .filter_map(|a| Spinney::new(a, &dumbell, &dumbell.loop_momentum_basis).transpose())
+                .collect::<Result<_>>()?;
             let f = Wood::new(
                 CutStructure::empty(&dumbell),
                 &dumbell,
                 &UVgenerationSettings::default(),
-            );
+            )?;
 
             println!("{}", f);
 
@@ -3265,9 +3927,9 @@ mod tests {
             insta::assert_snapshot!(
                 f.normalized_node_labels_with_cover("3L").join("\n"),
                 @r###"
-{36,F}: T(S_36(_))*T(S_F(_))
-{3} · {36,F}: T((-1*S_3+S_F(_))*T(S_3(_)))*T(S_36(_))
-{C} · {36,F}: T((-1*S_C+S_F(_))*T(S_C(_)))*T(S_36(_))
+{36,F}: Approx(S_36(_))*Approx(S_F(_))
+{3} · {36,F}: Approx((-1*S_3+S_F(_))*Approx(S_3(_)))*Approx(S_36(_))
+{C} · {36,F}: Approx((-1*S_C+S_F(_))*Approx(S_C(_)))*Approx(S_36(_))
 "###
             );
             insta::assert_snapshot!(
@@ -3278,15 +3940,15 @@ mod tests {
                 CutStructure::empty(&dumbell),
                 &dumbell,
                 &UVgenerationSettings::default(),
-            )
+            )?
             .unfold_uncached();
             assert!(f.compute_store.entries.is_empty());
             insta::assert_snapshot!(
                 f.normalized_node_labels_with_cover("3L").join("\n"),
                 @r###"
-{36,F}: T(S_36(_))*T(S_F(_))
-{3} · {36,F}: T((-1*S_3+S_F(_))*T(S_3(_)))*T(S_36(_))
-{C} · {36,F}: T((-1*S_C+S_F(_))*T(S_C(_)))*T(S_36(_))
+{36,F}: Approx(S_36(_))*Approx(S_F(_))
+{3} · {36,F}: Approx((-1*S_3+S_F(_))*Approx(S_3(_)))*Approx(S_36(_))
+{C} · {36,F}: Approx((-1*S_C+S_F(_))*Approx(S_C(_)))*Approx(S_36(_))
 "###
             );
 
@@ -3308,13 +3970,13 @@ mod tests {
             let _spinneys: Vec<_> = dumbell
                 .spinneys(&dumbell.full_filter())
                 .into_iter()
-                .map(|a| Spinney::new(a, &dumbell, &dumbell.loop_momentum_basis))
-                .collect();
+                .filter_map(|a| Spinney::new(a, &dumbell, &dumbell.loop_momentum_basis).transpose())
+                .collect::<Result<_>>()?;
             let f = Wood::new(
                 CutStructure::empty(&dumbell),
                 &dumbell,
                 &UVgenerationSettings::default(),
-            );
+            )?;
 
             println!("{}", f);
 
@@ -3334,7 +3996,7 @@ mod tests {
                 CutStructure::empty(&dumbell),
                 &dumbell,
                 &UVgenerationSettings::default(),
-            )
+            )?
             .unfold_uncached();
 
             let foata_labels = f
@@ -3354,3 +4016,7 @@ mod tests {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "overlap_poles.rs"]
+pub(crate) mod overlap_poles;

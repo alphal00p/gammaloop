@@ -322,8 +322,9 @@ pub trait LMBext {
 
     /// Spatial-vector variant of [`Self::uv_wrapped_replacement`].
     ///
-    /// This uses `EMRvec` for both the matched pattern and the wrapped loop
-    /// contribution.
+    /// This uses `Q3` for both the matched pattern and the wrapped loop
+    /// contribution, preserving the represented or indexed Minkowski structure
+    /// on every routed basis vector. Explicit components use `Q(edge,cind(i))`.
     fn uv_spatial_wrapped_replacement<'a, S: SubSetLike, I>(
         &self,
         subgraph: &S,
@@ -341,11 +342,11 @@ pub trait LMBext {
                         .add_args(rep_args)
                         .finish()
                         .to_pattern(),
-                    (a.replace(function!(GS.emr_vec, W_.x_))
+                    (a.replace(function!(GS.emr_vec, W_.a_))
                         .allow_new_wildcards_on_rhs(true)
                         .with(
                             FunctionBuilder::new(GS.emr_vec)
-                                .add_arg(W_.x_)
+                                .add_arg(W_.a_)
                                 .add_args(rep_args)
                                 .finish(),
                         )
@@ -871,8 +872,9 @@ impl<E, V, H> LMBext for HedgeGraph<E, V, H> {
         let mut not_seen = subgraph.clone();
         let mut forest_edge: SuBitGraph = self.empty_subgraph();
 
-        // The external flows are signed subgraphs (i.e. with only half of the edges to indicate a direction)
-        // They always contain the dependent external (except for the flow for the dep ext)
+        // External flows are signed paths (one half-edge per direction). A boundary
+        // flow contains the dependent external; a paired crown flow joins its two
+        // incidences without changing the net external momentum.
         let external_edge_order = self
             .iter_edges_of(&externals)
             .map(|(_, edge_id, _)| edge_id)
@@ -906,13 +908,18 @@ impl<E, V, H> LMBext for HedgeGraph<E, V, H> {
                 let external_cover = subgraph_tree.covers(&externals);
                 let subgraph_cover = subgraph_tree.covers(subgraph);
 
-                // Select the last half edge in this external cover as the dependent one.
-                root = external_cover.included_iter().next_back().ok_or_else(|| {
-                    LmbError::EmptyExternalCover {
+                // A paired crown edge injects and removes the same momentum within
+                // this component. It cannot balance the net external momentum.
+                root = external_cover
+                    .included_iter()
+                    .rfind(|hedge| {
+                        self.is_dangling(*hedge) || !external_cover.includes(&self.inv(*hedge))
+                    })
+                    .or_else(|| external_cover.included_iter().next_back())
+                    .ok_or_else(|| LmbError::EmptyExternalCover {
                         externals_dot: self.dot(&externals),
                         subgraph_dot: self.dot(subgraph),
-                    }
-                })?;
+                    })?;
                 let root_node = self.node_id(root);
                 let tree = if subgraph_tree.tree_subgraph.is_empty() {
                     // A singleton component has an empty spanning forest after external
@@ -993,20 +1000,24 @@ impl<E, V, H> LMBext for HedgeGraph<E, V, H> {
                             ext_edges.push(e);
                             external_flows.push((ext_sign, path_to_dep));
                         }
-                        HedgePair::Paired { source, .. } => {
-                            path_to_dep.add(root);
-
-                            let ext_sign: SignOrZero = Flow::Source.into();
-                            if source != root {
-                                let ext = tree.hedge_parent(source, self.as_ref());
-                                if let Some(ext) = ext {
+                        HedgePair::Paired { source, sink } => {
+                            // Both incidences of a crown edge retain the same physical
+                            // momentum. Join their root paths with opposite signs; the
+                            // shared part cancels, leaving the path between its ends.
+                            for (hedge, reverse) in [(source, false), (sink, true)] {
+                                if let Some(ext) = tree.hedge_parent(hedge, self.as_ref()) {
                                     for h in tree.ancestor_iter_hedge(ext, self.as_ref()).step_by(2)
                                     {
-                                        path_to_dep.add(h);
+                                        let h = if reverse { self.inv(h) } else { h };
+                                        if path_to_dep.includes(&self.inv(h)) {
+                                            path_to_dep.sub(self.inv(h));
+                                        } else {
+                                            path_to_dep.add(h);
+                                        }
                                     }
                                 }
                             }
-                            external_flows.push((ext_sign, path_to_dep));
+                            external_flows.push((Flow::Source.into(), path_to_dep));
                             ext_edges.push(e);
                         }
                     }
@@ -2092,6 +2103,104 @@ pub mod test {
     }
 
     #[test]
+    fn paired_crown_sub_lmbs_preserve_full_graph_momenta() {
+        test_initialise().unwrap();
+        let banana: Graph = dot!(digraph paired_crown_banana {
+            edge[num=1 mass=1]
+            node[num=1]
+            incoming[style=invis]
+            outgoing[style=invis]
+            incoming -> a:0 [id=0]
+            b:1 -> outgoing [id=5]
+            a:2 -> b:3 [id=1 lmb_id=0]
+            a:4 -> b:5 [id=2 lmb_id=1]
+            b:6 -> a:7 [id=3 lmb_id=2]
+            a:8 -> b:9 [id=4]
+        })
+        .unwrap();
+        let common_path: Graph = dot!(digraph paired_crown_common_path {
+            edge[num=1 mass=1]
+            node[num=1]
+            incoming[style=invis]
+            outgoing[style=invis]
+            incoming -> root [id=0]
+            root -> c [id=1]
+            c -> a [id=2]
+            c -> b [id=3]
+            a -> b [id=4 lmb_id=0]
+            root -> outgoing [id=5]
+            a -> b [id=6 lmb_id=1]
+        })
+        .unwrap();
+        let vacuum: Graph = dot!(digraph paired_crown_vacuum {
+            edge[num=1 mass=1]
+            node[num=1]
+            a -> b [id=0 lmb_id=0]
+            a -> b [id=1 lmb_id=1]
+            b -> a [id=2 lmb_id=2]
+            a -> b [id=3]
+        })
+        .unwrap();
+
+        for (graph, edge_sets) in [
+            (banana, vec![vec![1, 2], vec![1, 2, 3]]),
+            (common_path, vec![vec![1, 2, 3, 4]]),
+            (vacuum, vec![vec![0, 1], vec![0, 1, 2]]),
+        ] {
+            let physical = &graph.loop_momentum_basis;
+            for edges in edge_sets {
+                let mut subgraph = graph.empty_subgraph::<SuBitGraph>();
+                for edge in &edges {
+                    subgraph.union_with(&graph.get_edge_subgraph(EdgeIndex::from(*edge)));
+                }
+                let mut bases = graph.generate_loop_momentum_bases_of(&subgraph).raw;
+                bases.push(
+                    graph
+                        .try_compatible_sub_lmb(&subgraph, graph.full_crown(&subgraph), physical)
+                        .unwrap(),
+                );
+                for basis in bases {
+                    for edge in &edges {
+                        let edge = EdgeIndex::from(*edge);
+                        let signature = &basis.edge_signatures[edge];
+                        let mut routed =
+                            vec![0; physical.loop_edges.len() + physical.ext_edges.len()];
+                        for (carrier, coefficient) in basis
+                            .loop_edges
+                            .iter()
+                            .zip(signature.internal.iter())
+                            .chain(basis.ext_edges.iter().zip(signature.external.iter()))
+                        {
+                            let physical_carrier = &physical.edge_signatures[*carrier];
+                            for (value, sign) in routed.iter_mut().zip(
+                                physical_carrier
+                                    .internal
+                                    .iter()
+                                    .chain(physical_carrier.external.iter()),
+                            ) {
+                                *value += *coefficient * (*sign * 1_i32);
+                            }
+                        }
+                        let expected = &physical.edge_signatures[edge];
+                        assert_eq!(
+                            routed,
+                            expected
+                                .internal
+                                .iter()
+                                .chain(expected.external.iter())
+                                .map(|sign| *sign * 1_i32)
+                                .collect::<Vec<_>>(),
+                            "{} subgraph {edges:?}, loops {:?}, edge {edge}: the sub-LMB must retain every physical crown momentum",
+                            graph.name,
+                            basis.loop_edges,
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
     fn compatible_sub_lmb() {
         test_initialise().unwrap();
         let g: DotGraph = linnet::dot!(
@@ -2172,7 +2281,30 @@ pub mod test {
         let subgraph: SuBitGraph = g.compass_subgraph(Some(dot_parser::ast::CompassPt::S));
         let non_dummy = g.full_filter();
         let lmb = g.lmb_of(&non_dummy);
-        let sub_lmb = g.compatible_sub_lmb(&subgraph, non_dummy, &lmb);
+        let sub_lmb = g.compatible_sub_lmb(&subgraph, g.full_crown(&subgraph), &lmb);
+        // The bridge is external to each component; the two self-loop carriers
+        // must occur only as loop momenta, never also as external coordinates.
+        assert_eq!(
+            sub_lmb.loop_edges.raw,
+            vec![EdgeIndex::from(0), EdgeIndex::from(2)]
+        );
+        for (edge, expected) in [(0, [1, 0]), (2, [0, 1])] {
+            let signature = &sub_lmb.edge_signatures[EdgeIndex::from(edge)];
+            assert_eq!(
+                signature
+                    .internal
+                    .iter()
+                    .map(|sign| *sign * 1_i32)
+                    .collect::<Vec<_>>(),
+                expected
+            );
+            assert!(
+                signature
+                    .external
+                    .iter()
+                    .all(|sign| *sign == SignOrZero::Zero)
+            );
+        }
         assert_snapshot!(g.dot_lmb_of(&subgraph, &sub_lmb));
     }
 

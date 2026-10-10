@@ -31,10 +31,7 @@ use crate::{
     integrands::process::ProcessIntegrand,
     numerator::GlobalPrefactor,
     settings::{GlobalSettings, RuntimeSettings, runtime::LockedRuntimeSettings},
-    uv::{
-        approx::OrientationProjection,
-        export::{UVForestExportSettings, sanitize_file_component},
-    },
+    uv::export::{UVForestExportSettings, sanitize_file_component},
 };
 use eyre::{Context, eyre};
 
@@ -927,18 +924,8 @@ impl Process {
         graph_ids: &[usize],
         settings: &UVForestExportSettings,
     ) -> Result<()> {
-        let generation_settings = &self
-            .settings_history
-            .as_ref()
-            .ok_or_else(|| {
-                eyre!(
-                    "Cannot export UV forests for process {} without generation settings history",
-                    self.definition.folder_name
-                )
-            })?
-            .generation;
         let resolved = self.get_integrand(integrand_name)?;
-        let integrand = resolved.require_generated()?;
+        resolved.require_generated()?;
         let integrand_path = match &self.collection {
             ProcessCollection::Amplitudes(_) => path
                 .as_ref()
@@ -959,67 +946,7 @@ impl Process {
         })?;
 
         for &graph_id in graph_ids {
-            let source = if settings.computed {
-                let (graph, expression) = match &self.collection {
-                    ProcessCollection::Amplitudes(amplitudes) => {
-                        let source = amplitudes[&resolved.canonical_name]
-                            .graphs
-                            .get(graph_id)
-                            .ok_or_else(|| eyre!("Missing source amplitude graph {graph_id}"))?;
-                        (&source.graph, source.derived_data.cff_expression.as_ref())
-                    }
-                    ProcessCollection::CrossSections(cross_sections) => {
-                        let source = cross_sections[&resolved.canonical_name]
-                            .supergraphs
-                            .get(graph_id)
-                            .ok_or_else(|| {
-                                eyre!("Missing source cross-section graph {graph_id}")
-                            })?;
-                        (
-                            &source.graph,
-                            source.derived_data.global_cff_expression.as_ref(),
-                        )
-                    }
-                };
-                // Generation and persistent selection preserve graph order;
-                // reject stale runtime metadata instead of pairing a different
-                // graph with this stored production residue map.
-                if integrand.graph_name_by_id(graph_id) != Some(graph.name.as_str()) {
-                    return Err(eyre!(
-                        "Source/runtime graph mismatch for computed UV forest export at id {graph_id}"
-                    ));
-                }
-                Some((
-                    graph,
-                    expression.ok_or_else(|| {
-                        eyre!(
-                            "Graph {} has no stored production CFF for computed UV forest export",
-                            graph.name
-                        )
-                    })?,
-                ))
-            } else {
-                None
-            };
-            let cff_options = source
-                .map(|(graph, _)| graph.production_cff_3d_expression_options(generation_settings))
-                .transpose()?;
-            let orientation = source
-                .zip(cff_options.as_ref())
-                .map(|((_, expression), options)| {
-                    OrientationProjection::exact_expression(
-                        expression,
-                        options,
-                        &generation_settings.orientation_pattern,
-                        generation_settings.explicit_orientation_sum_only,
-                    )
-                });
-            let export = integrand.export_uv_forest_graph(
-                graph_id,
-                orientation,
-                generation_settings,
-                settings,
-            )?;
+            let export = self.export_uv_forest_graph(integrand_name, graph_id, settings)?;
             let graph_name = sanitize_file_component(&export.graph_name);
             let forest_path = integrand_path.join(format!("{graph_name}.forest.dot"));
             let mut forest_file = create_overwriting_file(&forest_path, "UV forest")?;

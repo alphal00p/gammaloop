@@ -1180,6 +1180,16 @@ impl<T: FloatLike> ParamBuilder<T> {
         new.add_function(GS.tree_denom_wrapper, vec![arg], Atom::var(arg))
             .unwrap();
 
+        // Compile the energy definition once at the evaluator boundary. The
+        // integrand keeps a semantic function with visible momentum dependence.
+        let invariant = symbol!("energy_invariant");
+        new.add_function(
+            GS.energy_surface,
+            vec![symbol!("energy_surface_owner"), invariant],
+            Atom::var(invariant).pow((1, 2)),
+        )
+        .unwrap();
+
         let lmb_ose_replacements = graph
             .iter_edge_ids()
             .filter(|edge_id| {

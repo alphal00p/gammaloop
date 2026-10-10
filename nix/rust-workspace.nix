@@ -447,6 +447,8 @@
     gammalooprs = [
       "tests/resources/graphs"
       "crates/gammalooprs/tests/resources/uv_parametric_numerator"
+      "examples/cli/aa_aa/3L/graphs/processes/amplitudes/aa_aa/3L/GL256.dot"
+      "examples/cli/aa_aa/3L/graphs/processes/amplitudes/aa_aa/3L/GL262.dot"
     ];
     "gammaloop-integration-tests" = [
       "tests/resources/graphs"

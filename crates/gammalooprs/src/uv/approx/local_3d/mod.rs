@@ -15,6 +15,12 @@ use crate::{
 };
 
 mod integrated_localizer;
+mod provenance;
+pub(crate) use super::direct_3d::LOCAL_3D_MASS_SCOPE;
+pub(in crate::uv) use provenance::paths_with_step;
+#[cfg(test)]
+pub(crate) use provenance::{Local3DConceptualBranch, Local3DMaterialization, Local3DSignedBranch};
+pub(crate) use provenance::{Local3DLoopRescaling, Local3DProjectionPath};
 mod projection_branches;
 mod residue_localizer;
 
@@ -85,6 +91,13 @@ impl Local3DCts {
             _ => Err(eyre!(
                 "projected local-4D coefficients are not direct local-3D counterterms"
             )),
+        }
+    }
+
+    pub(crate) fn projection_paths(&self) -> Vec<Local3DProjectionPath> {
+        match self {
+            Self::Direct(direct) => direct.projection_paths(),
+            Self::Projected4d(_) => Vec::new(),
         }
     }
 

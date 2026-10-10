@@ -3313,7 +3313,7 @@ mod tests {
         let original = symbol!("evaluator_test::reachable_original_function");
         let index = parse_lit!(spenso::mink(4, 1));
         let temporal = GS.energy_delta(index.as_view());
-        let spatial = GS.emr_vec_index(EdgeIndex(7), index.as_view());
+        let spatial = GS.emr_vec(EdgeIndex(7), index.as_view());
         let weight = Atom::add_many((1..512).map(|i| (&x + i).pow(2)));
         assert!(weight.as_view().get_byte_size() >= NETWORK_SCALAR_ALIAS_MIN_BYTES);
         let definitions = [
@@ -5666,7 +5666,7 @@ mod tests {
         test_initialise().unwrap();
         let abstract_index = parse_lit!(spenso::mink(4, 1));
         let edge = EdgeIndex(7);
-        let mapped_momentum = GS.emr_vec_index(edge, abstract_index.as_view())
+        let mapped_momentum = GS.emr_vec(edge, abstract_index.as_view())
             + GS.ose(edge) * GS.energy_delta(abstract_index.as_view());
         let numerator = &mapped_momentum * &mapped_momentum;
         let settings = EvaluatorSettings::default();
@@ -5701,7 +5701,7 @@ mod tests {
         let index = parse_lit!(spenso::mink(4, 1));
         let temporal = GS.energy_delta(index.as_view());
         let momentum =
-            GS.emr_vec_index(EdgeIndex(7), index.as_view()) + GS.ose(EdgeIndex(7)) * &temporal;
+            GS.emr_vec(EdgeIndex(7), index.as_view()) + GS.ose(EdgeIndex(7)) * &temporal;
         let numerator = &momentum * &momentum + Atom::num(3) * &temporal * &momentum + Atom::num(5);
         let mut whole = numerator.parse_into_net().unwrap();
         whole
@@ -5824,7 +5824,7 @@ mod tests {
         test_initialise().unwrap();
         let settings = EvaluatorSettings::default();
         let index = parse_lit!(spenso::mink(4, 1));
-        let spatial = GS.emr_vec_index(EdgeIndex(7), index.as_view());
+        let spatial = GS.emr_vec(EdgeIndex(7), index.as_view());
         let temporal = GS.energy_delta(index.as_view());
         let closed_zero = &spatial * &temporal;
         let cancellation =

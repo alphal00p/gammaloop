@@ -2466,7 +2466,7 @@ mod tests {
                         expression = expression
                             .replace(GS.emr_mom(edge, GS.cind(spatial_index)))
                             .with(Atom::Zero)
-                            .replace(GS.emr_vec_index(edge, GS.cind(spatial_index)))
+                            .replace(GS.emr_vec(edge, GS.cind(spatial_index)))
                             .with(Atom::Zero);
                     }
                 } else {
@@ -2480,7 +2480,7 @@ mod tests {
                     expression = expression
                         .replace(GS.emr_mom(edge, GS.cind(1)))
                         .with(spatial.clone())
-                        .replace(GS.emr_vec_index(edge, GS.cind(1)))
+                        .replace(GS.emr_vec(edge, GS.cind(1)))
                         .with(spatial)
                         .replace(GS.ose(edge))
                         .with(on_shell_energy.clone())
@@ -2490,7 +2490,7 @@ mod tests {
                         expression = expression
                             .replace(GS.emr_mom(edge, GS.cind(spatial_index)))
                             .with(Atom::Zero)
-                            .replace(GS.emr_vec_index(edge, GS.cind(spatial_index)))
+                            .replace(GS.emr_vec(edge, GS.cind(spatial_index)))
                             .with(Atom::Zero);
                     }
                 }

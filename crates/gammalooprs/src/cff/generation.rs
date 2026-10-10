@@ -994,7 +994,7 @@ impl Graph {
         ))
     }
 
-    pub(crate) fn generate_3d_expression_for_integrand(
+    pub fn generate_3d_expression_for_integrand(
         &mut self,
         contract_edges: &[EdgeIndex],
         canonize_esurface: &Option<ShiftRewrite>,
@@ -1202,7 +1202,7 @@ impl Graph {
         Ok(generated)
     }
 
-    pub(crate) fn production_cff_3d_expression_options(
+    pub fn production_cff_3d_expression_options(
         &self,
         settings: &GenerationSettings,
     ) -> Result<Generate3DExpressionOptions> {

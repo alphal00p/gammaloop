@@ -1,0 +1,22 @@
+digraph local_ir_dod2_scalar_spectacles {
+  num = "-1𝑖/2"
+  node [num = "1"]
+  edge [particle = scalar_1]
+
+  ext [style = invis]
+
+  ext -> A:0 [id = 5]
+  D:1 -> ext [id = 6]
+
+  A -> B [
+    id = 0
+    num = "Q(0,spenso::cind(1))^2+Q(0,spenso::cind(2))^2+Q(0,spenso::cind(3))^2"
+  ]
+  A -> B [id = 1]
+  B -> C [id = 2 particle = scalar_0]
+  C -> D [
+    id = 3
+    num = "Q(3,spenso::cind(1))^2+Q(3,spenso::cind(2))^2+Q(3,spenso::cind(3))^2"
+  ]
+  C -> D [id = 4]
+}
