@@ -1,10 +1,13 @@
+mod annotation;
 mod api;
+mod curves;
 mod ec_seed;
 pub use ec_seed::{Diagram, Seed, SeedRequest};
 pub mod geom;
 mod graph_api;
 pub mod impred_projection;
 mod label_placement;
+mod label_room;
 #[cfg(feature = "svg")]
 pub mod svg;
 pub use label_placement::{

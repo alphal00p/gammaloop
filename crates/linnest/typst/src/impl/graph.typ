@@ -1,11 +1,15 @@
 // Internal graph implementation. Public users should import `graph.typ`.
 
 #import "subgraph.typ" as subgraph-impl
+#import "style.typ": (
+  _as-content, _call, _canvas-length, _carrier-label-gap, _content, _data-fields,
+  _data-label, _edge-geometry, _edge-style-layers, _fixed-arrow-layer,
+  _layer-label, _painted-reach, _style, _style-key, _style-value,
+)
 
 #let _plugin = plugin("../../linnest.wasm")
 
 #let _graph-kind = "linnest-graph"
-#let _style-key = "linnest-style"
 
 #let _empty-native-data() = (
   graph: none,
@@ -694,57 +698,6 @@
   }
 }
 
-#let _canvas-length(unit) = {
-  if type(unit) in (int, float) {
-    unit * 1em
-  } else {
-    unit
-  }
-}
-
-#let _call(value, data) = {
-  if type(value) == function {
-    value(data)
-  } else {
-    value
-  }
-}
-
-#let _style(value, data) = {
-  let value = _call(value, data)
-  if value == none { (:) } else { value }
-}
-
-#let _as-content(value) = if value == none {
-  none
-} else if type(value) == str or type(value) == label {
-  [#str(value)]
-} else {
-  value
-}
-
-#let _content(value, data, default) = {
-  if value == auto {
-    default
-  } else {
-    _as-content(_call(value, data))
-  }
-}
-
-#let _data-label(record) = {
-  let data = record.at("data", default: none)
-  if type(data) == dictionary {
-    data.at("label", default: none)
-  } else {
-    none
-  }
-}
-
-#let _data-fields(record) = {
-  let data = record.at("data", default: none)
-  if type(data) == dictionary { data } else { (:) }
-}
-
 #let _padding-side(padding, side) = {
   if type(padding) in (int, float) {
     0
@@ -895,6 +848,60 @@
       + core
       + (fields: fields)
   )
+}
+
+// What the layout's label room must know of an edge's drawing, in graph
+// units: how far its paint reaches beside the carrier, its label's clearance
+// from the carrier or from the momentum arrow it rides, and that arrow as
+// `offset length ratio head-length head-width` (`none` for an unset window
+// bound). An unlabelled arrow is a fixed decoration beside its edge. Draw
+// options do not reach here: the room reads the styles `graph.style` attaches.
+#let _edge-room-statements(record, edge-data, style-record, labelled) = {
+  let layers = _edge-style-layers(
+    style-record, (edge-style: (:), source-style: (:), sink-style: (:)), edge-data,
+  )
+  let all = layers.source + layers.sink
+  if all.len() == 0 { return (:) }
+  let unit = _canvas-length(style-record.at("unit", default: 1))
+  let statements = (
+    "label-room-band": _painted-reach(all, unit),
+    "label-room-gap": _carrier-label-gap(all, 0),
+  )
+  // Only the edge's own halves paint their layers.
+  let present = (
+    (if record.at("source", default: none) == none { () } else { layers.source })
+      + (if record.at("sink", default: none) == none { () } else { layers.sink })
+  )
+  let riders = present.filter(style => (
+    _style-value(style, "label-path") != none and _layer-label(style, edge-data) != none
+  ))
+  let arrows = riders.map(style => _style-value(style, "label-path"))
+  if labelled and riders.len() > 0 {
+    statements.insert("label-room-gap", calc.max(0, _style-value(riders.first(), "label-gap")))
+  } else {
+    arrows += present.filter(style => _fixed-arrow-layer(style, edge-data))
+  }
+  if arrows.len() == 0 { return statements }
+  let units(value) = if type(value) == length {
+    value.to-absolute() / unit.to-absolute()
+  } else { value }
+  let mark-size(arrow, key) = {
+    let mark = arrow.at("mark", default: none)
+    if type(mark) == dictionary { units(mark.at(key, default: 0)) } else { 0 }
+  }
+  let geometry = _edge-geometry(arrows.first())
+  let method = geometry.resolve-length
+  let bound(value, methods) = if value == none or method not in methods { "none" } else {
+    str(float(value))
+  }
+  statements.insert("label-room-arrow", (
+    str(float(calc.abs(geometry.offset))),
+    bound(geometry.length, ("min", "length")),
+    bound(geometry.ratio, ("min", "ratio")),
+    str(float(calc.max(0, ..arrows.map(arrow => mark-size(arrow, "length"))))),
+    str(float(calc.max(0, ..arrows.map(arrow => mark-size(arrow, "width"))))),
+  ).join(" "))
+  statements
 }
 
 #let _edge-label-layout-statements(record, style-record) = {
@@ -1463,6 +1470,33 @@
   ))
 }
 
+// The graph with each edge's label room statements, from the styles
+// `graph.style` attached, for an ImPrEd layout making room for its measured
+// labels. Only label room evaluates edge styles before layout. Labelled
+// drawings record every edge, labelled or not.
+#let label-room(graph_) = {
+  let info = _info-record(graph_)
+  let data = info.at("data", default: none)
+  let style-record = if type(data) == dictionary { data.at(_style-key, default: none) }
+  if style-record == none or style-record.at("edge-label", default: none) == none {
+    return graph_
+  }
+  map(graph_, (
+    graph: none,
+    node: none,
+    edge: record => {
+      let statements = _edge-room-statements(
+        record,
+        _edge-style-data(record, style-record),
+        style-record,
+        "label-width" in record.statements,
+      )
+      if statements.len() == 0 { none } else { (statements: statements) }
+    },
+    source: none,
+    sink: none,
+  ))
+}
 
 #let _apply-default-data(
   graph_,

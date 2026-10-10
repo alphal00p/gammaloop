@@ -1114,7 +1114,44 @@
     [`impred-steps`], [`500`], [Nominal cooling budget.],
     [`impred-step-scale`], [`2`], [Positive maximum integration stride; `1` uses the reference schedule.],
     [`impred-level`], [`true`], [Rotate mixed-flow drawings to the external-pull optimum at checkpoints.],
+    [`impred-label-room`], [`true`], [Make room for measured edge labels that would meet something.],
+    [`impred-label-room-margin`], [`0.03`], [Extra clearance by which the room check grows painted bands.],
+    [`impred-label-room-max-scale`], [`1.5`], [Largest uniform growth of a drawing; at least `1`.],
   )
+
+  Label room keeps a layout whose measured edge labels all have a clear place
+  and otherwise changes it as little as it can. After relaxation, ImPrEd
+  predicts where the drawing's annotation search will put each label measured
+  by `graph.style`: on the Hobby curves the drawing paints, with its own
+  candidates, clearances and costs, every painted band grown by
+  `impred-label-room-margin` so that text which would only just clear a line
+  counts as meeting it. A label's own carrier counts by its centerline there.
+  When every label clears its preferred place, or clears once those that do
+  not move, the layout stays as it is. Otherwise the remedies are tried in
+  order, each kept only when the drawing's own search clears every label:
+  bending the edges whose paint crosses a label's predicted place while every
+  other edge, vertex and external leg holds still; scaling the drawing up
+  uniformly by the smallest sufficient factor, found by bisection up to
+  `impred-label-room-max-scale`, which keeps its shape exactly; and scaling,
+  then bending. A bend is eased back to the least part of it that still
+  gives the labels their places, and never brings painted bands into contact
+  where they did not touch. Without a clear remedy the one leaving the least
+  severe defects, counting band length through text, is kept if it improves
+  on the layout. Authored fixed coordinates never move, so pinned drawings
+  only bend. The drawing grows by up to `impred-label-room-max-scale`,
+  whatever the page width.
+
+  A label still meeting a painted line, another label, a vertex or an arrow
+  when drawn moves, with `draw(label-leaders: true)`, the default, to nearby
+  free space with a hairline leader back to its carrier or momentum arrow.
+  The leader leaves its anchor steeply toward the label's side, crosses no
+  other edge's painted line, arrow or text from its anchor on, nor its own
+  carrier once risen off it, and keeps 0.3 canvas units from vertices; its
+  text keeps one line height from other labels and clear of earlier leaders.
+  A label without such a spot keeps its place, where `linnest-label-report`
+  lists what it meets. `label-leaders` also takes a dictionary of `stroke` and
+  `dot` (a radius, or `none`). Hovering a leader in interactive output
+  highlights its edge and label.
 
   The same names work through CLI input overrides:
 

@@ -565,6 +565,28 @@
   /// point tethered beside its carrier, so the drawing makes room for it; the
   /// annotation search then prefers that side. Off by default. -> bool
   impred-labels: false,
+  /// Make room for measured edge labels. After relaxing, ImPrEd predicts
+  /// where the drawing's annotation search will put each label measured by
+  /// `graph.style`: on the drawn curves, with the search's own candidates,
+  /// clearances and costs, and every painted band grown by
+  /// `impred-label-room-margin`. A layout where every label has a clear place
+  /// is unchanged. Otherwise the edges whose paint crosses a label bend
+  /// around it, no further than the label needs, while every other edge,
+  /// vertex and external leg holds still and no painted bands come to touch;
+  /// if that is not enough, the drawing scales up uniformly by the smallest
+  /// sufficient factor, up to `impred-label-room-max-scale`. A change is kept
+  /// only when it leaves the labels less crossed. Authored fixed coordinates
+  /// never move, so such drawings only bend. Labels the drawing still cannot
+  /// clear are set off with leaders when drawn (`draw(label-leaders:)`).
+  /// -> bool
+  impred-label-room: true,
+  /// Extra clearance, in graph units, by which label room grows every
+  /// painted band beyond its stroke and pattern. -> float
+  impred-label-room-margin: 0.03,
+  /// Largest factor by which label room scales a drawing up, at least 1.
+  /// The drawing grows by up to this factor, whatever page it is set on.
+  /// -> float
+  impred-label-room-max-scale: 1.5,
   // Normalize the same options without moving geometry.
   _snapshot: false,
 ) = {
@@ -706,8 +728,9 @@
     if subgraph != none {
       panic("ImPrEd currently requires a complete layout graph")
     }
+    let measured = if impred-label-room { graph-module._impl.label-room(graph) } else { graph }
     let snapshot = _plugin.graph_layout_snapshot(
-      graph-module.graph-bytes(graph),
+      graph-module.graph-bytes(measured),
       cbor.encode(settings),
     )
     let seed = _plugin.graph_impred_seed(bytes(json.encode((
@@ -732,6 +755,9 @@
       impred-edge-clearance: impred-edge-clearance,
       impred-node-edge-strength: impred-node-edge-strength,
       impred-labels: impred-labels,
+      impred-label-room: impred-label-room,
+      impred-label-room-margin: impred-label-room-margin,
+      impred-label-room-max-scale: impred-label-room-max-scale,
     )
     let result = cbor(_plugin.graph_impred_layout(
       snapshot,

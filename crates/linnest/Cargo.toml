@@ -26,14 +26,15 @@ rand = "0.8.5"
 thiserror = { workspace = true }
 wasm-minimal-protocol = "0.2.0"
 roxmltree = { version = "0.21.1", optional = true }
-kurbo = { version = "0.13", optional = true }
-# Native SVG drawing shares Kurvst's curve geometry with the Typst renderer.
-kurvst = { path = "../kurvst", optional = true }
+# Label room and the native SVG drawing share Kurvst's curve geometry with the
+# Typst renderer.
+kurbo = "0.13"
+kurvst = { path = "../kurvst" }
 
 [features]
 projection-service = []
 # Native SVG drawing of prepared graphs; Typst only typesets their labels.
-svg = ["dep:kurbo", "dep:kurvst", "dep:roxmltree"]
+svg = ["dep:roxmltree"]
 custom = []
 typst-plugin = ["custom"]
 

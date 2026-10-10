@@ -1,5 +1,5 @@
 //! Native paint adapter for Kurvst's data-only mark batches.
-use kurbo::{BezPath, Cap, Shape};
+use kurbo::{BezPath, Cap};
 use kurvst::{
     marks::{
         MarkContext, MarkDirection, MarkGeometryBatchOutput, MarkGeometryMode, MarkGeometrySpec,
@@ -9,7 +9,7 @@ use kurvst::{
 };
 use serde::Deserialize;
 
-use super::{labels::Bounds, Stroke, UNIT};
+use super::{Stroke, UNIT};
 
 /// Paint overrides stay outside the shared geometry flags, in flattened leaf order.
 #[derive(Clone, Default, Deserialize)]
@@ -172,22 +172,11 @@ impl Batch {
     }
 }
 
-impl Bounds {
-    pub(super) fn painted(path: &BezPath) -> Self {
-        let rect = path.bounding_box();
-        Self {
-            left: rect.x0,
-            right: rect.x1,
-            bottom: rect.y0,
-            top: rect.y1,
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use kurbo::{PathEl, Point};
+    use crate::annotation::Bounds;
+    use kurbo::{PathEl, Point, Shape};
     use kurvst::marks::MarkFit;
 
     fn mark(shape: &str) -> MarkSpec {

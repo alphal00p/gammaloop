@@ -432,6 +432,7 @@ impl SpensoNet {
             .unwrap(),
             layout_edges: Some(Vec::new()),
             label_feedback: false,
+            label_leaders: true,
         };
         let mut indices = BTreeMap::new();
         for (index, record) in nodes.iter().enumerate() {

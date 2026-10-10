@@ -176,9 +176,15 @@ def obstacle_name(obstacle: dict) -> str:
     return f"e{obstacle['self-loop']}-loop"
 
 
+def leader(label: dict) -> dict:
+    """What a label's leader crosses; empty without a leader."""
+    return label.get("leader") or {"crossings": [], "labels": []}
+
+
 def contacts(drawings: list) -> set[tuple[str, object, object]]:
     """(kind, label edge, what it meets) of every drawing in a case: crossed
-    painted edges, obstacles and the edges of overlapped momentum arrows."""
+    painted edges, obstacles, the edges of overlapped momentum arrows, and the
+    edges and labels a leader crosses."""
     return {
         (kind, label["edge"], met)
         for drawing in drawings
@@ -187,6 +193,8 @@ def contacts(drawings: list) -> set[tuple[str, object, object]]:
             *(("crossing", crossing["edge"]) for crossing in label["crossings"]),
             *(("obstacle", obstacle_name(item)) for item in label["obstacles"]),
             *(("arrow", edge) for edge in label["arrows"]),
+            *(("leader-crossing", edge) for edge in leader(label)["crossings"]),
+            *(("leader-label", edge) for edge in leader(label)["labels"]),
         ]
     }
 
@@ -209,6 +217,12 @@ def label_summary(drawings: list) -> dict[str, object]:
         ),
         "arrows": " ".join(
             f"e{label['edge']}>e{edge}" for label in labels for edge in label["arrows"]
+        ),
+        "leaders": " ".join(
+            f"e{label['edge']}:{label['leader']['length']:.3f}"
+            + "".join(f">e{edge}" for edge in leader(label)["crossings"])
+            for label in labels
+            if label.get("leader")
         ),
     }
 
@@ -388,6 +402,7 @@ def main() -> None:
                 "crossings",
                 "obstacles",
                 "arrows",
+                "leaders",
             ]
             writer.writerow(["case", *fields])
             for case, summary in summaries.items():
@@ -403,6 +418,7 @@ def main() -> None:
                 f"  {case}: crossings {summary['crossings'] or '-'}, "
                 f"obstacles {summary['obstacles'] or '-'}, "
                 f"arrows {summary['arrows'] or '-'}, "
+                f"leaders {summary['leaders'] or '-'}, "
                 f"{summary['label_pairs']} label pairs"
             )
     regressions = []

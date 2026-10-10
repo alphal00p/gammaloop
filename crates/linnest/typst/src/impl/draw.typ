@@ -5,10 +5,9 @@
 #import "../graph.typ" as graph-api
 #import "../subgraph.typ" as subgraph-api
 #import "identity-targets.typ" as identity-targets
+#import "style.typ": *
 
 #let _plugin = plugin("../../linnest.wasm")
-
-#let _style-key = "linnest-style"
 
 #let _point-x(p) = if type(p) == array { p.at(0) } else { p.x }
 #let _point-y(p) = if type(p) == array { p.at(1) } else { p.y }
@@ -73,14 +72,6 @@
     value
   } else {
     float(str(value))
-  }
-}
-
-#let _canvas-length(unit) = {
-  if type(unit) in (int, float) {
-    unit * 1em
-  } else {
-    unit
   }
 }
 
@@ -156,253 +147,12 @@
   }
 }
 
-#let _edge-geometry-defaults = (
-  offset: 0,
-  length: none,
-  ratio: none,
-  resolve-length: "min",
-  shift: 0,
-  accuracy: 0.001,
-  offset-side: none,
-  split-gap: 0,
-)
-
-#let _edge-crossing-defaults = (
-  crossing-under: none,
-  crossing-gap: 0.55,
-)
-
-#let _edge-label-defaults = (
-  label-only: false,
-  label: none,
-  label-style: (:),
-  label-shift: 0,
-  label-slide: true,
-  label-path: none,
-  label-gap: 0.15,
-  label-side: auto,
-)
-
-#let _edge-routing-defaults = (
-  source-anchor: auto,
-  sink-anchor: auto,
-  anchor-control-distance: auto,
-  route: "edge-pos",
-  route-points: "through",
-  dangling-tangent: auto,
-)
-
-#let _mark-defaults = (
-  mark-position: "end",
-  mark-shift: 0,
-  mark-orientation: "path",
-  mark-direction: "forward",
-)
-
-#let _pattern-defaults = (
-  pattern: none,
-  pattern-amplitude: 0.1,
-  pattern-wavelength: 1.0,
-  pattern-fit: false,
-  pattern-phase: 0,
-  pattern-samples-per-period: 16,
-  pattern-coil-longitudinal-scale: 1.25,
-  pattern-endpoint-slope: 0,
-  pattern-natural-endpoints: false,
-  pattern-accuracy: 0.001,
-)
-
-#let _style-defaults = (_mark-defaults + _pattern-defaults + _edge-label-defaults
-  + _edge-routing-defaults + _edge-crossing-defaults + _edge-geometry-defaults)
-
-#let _without-keys(style, keys) = {
-  let clean = style
-  for key in keys {
-    if key in clean {
-      let _ = clean.remove(key)
-    }
-  }
-  clean
-}
-
-#let _without-pattern-style(style) = _without-keys(
-  style,
-  _pattern-defaults.keys(),
-)
-
-#let _draw-style(style) = _without-keys(style, _style-defaults.keys())
-
-#let _without-mark-style(style) = {
-  let clean = style
-  if clean.keys().contains("mark") {
-    let _ = clean.remove("mark")
-  }
-  clean
-}
-
-#let _style-value(style, key) = style.at(key, default: _style-defaults.at(key, default: none))
-
-#let _edge-geometry(style) = _edge-geometry-defaults + style
-
-#let _edge-routing(style) = _edge-routing-defaults + style
-
-#let _pattern-style(style) = _pattern-defaults + style
-
-#let _style-offset(style) = {
-  _style-value(style, "offset")
-}
-
-#let _resolve-length-method(style) = {
-  _style-value(style, "resolve-length")
-}
-
-#let _call(value, data) = {
-  if type(value) == function {
-    value(data)
-  } else {
-    value
-  }
-}
-
-#let _style(value, data) = {
-  let value = _call(value, data)
-  if value == none { (:) } else { value }
-}
-
-#let _style-dictionary(value) = if type(value) == dictionary {
-  value
-} else {
-  panic("style layer must be a dictionary")
-}
-
-#let _overlay-style(base, patch) = {
-  if (
-    patch == none
-      or patch == auto
-      or (type(patch) == dictionary and patch.len() == 0)
-  ) {
-    return base
-  }
-  if base == none {
-    return patch
-  }
-  if type(patch) == array {
-    let bases = if type(base) == array {
-      if base.len() == 0 { ((:),) } else { base }
-    } else {
-      (base,)
-    }
-    return patch
-      .enumerate()
-      .map(((index, layer)) => (
-        _style-dictionary(bases.at(index, default: bases.last()))
-          + _style-dictionary(layer)
-      ))
-  }
-  if type(base) == array {
-    return base.map(layer => (
-      _style-dictionary(layer) + _style-dictionary(patch)
-    ))
-  }
-  _style-dictionary(base) + _style-dictionary(patch)
-}
-
-#let _half-edge-style(record, side) = {
-  let half-edge = record.at(side + "-half-edge", default: none)
-  if half-edge == none { return (:) }
-  let data = half-edge.at("data", default: none)
-  if type(data) != dictionary { return (:) }
-  let routing = (:)
-  if data.keys().contains("anchor") {
-    routing.insert(side + "-anchor", data.anchor)
-  }
-  if data.keys().contains("routing") {
-    routing.insert("route", data.routing)
-  }
-  _overlay-style(routing, _call(
-    data.at(side + "-style", default: data.at("style", default: (:))), record,
-  ))
-}
-
-#let _edge-style-layers(defaults, options, data) = {
-  // Resolve logical-edge callbacks once, before composing the two endpoints.
-  let base = _call(defaults.at("edge-style", default: (:)), data)
-  let configured = _call(options.edge-style, data)
-  let local = _call(data.at("edge-style", default: auto), data)
-  if base == none or configured == none or local == none {
-    return (source: (), sink: ())
-  }
-  if base == auto { base = (:) }
-  let routing = if data.keys().contains("routing") {
-    (route: data.routing)
-  } else { (:) }
-  let decoration = if data.keys().contains("decoration") {
-    let value = _call(data.decoration, data)
-    if value == none { (pattern: none) }
-    else if type(value) in (dictionary, array) { value }
-    else { (pattern: value) }
-  } else { auto }
-  let result = (:)
-  for side in ("source", "sink") {
-    let style = _overlay-style(base, _call(
-      defaults.at(side + "-style", default: (:)), data,
-    ))
-    style = _overlay-style(style, configured)
-    style = _overlay-style(style, routing)
-    style = _overlay-style(style, local)
-    style = _overlay-style(style, _call(options.at(side + "-style"), data))
-    style = _overlay-style(style, _call(data.at(side + "-style", default: (:)), data))
-    style = _overlay-style(style, _half-edge-style(data, side))
-    let layers = if type(style) == array { style } else { (style,) }
-    // Per-edge decoration patches the base layer. Multiple explicit decorations
-    // create multiple decorated layers while retaining any later custom layers.
-    if decoration != auto {
-      let patches = if type(decoration) == array { decoration } else { (decoration,) }
-      let first = layers.at(0, default: (:))
-      layers = (patches.map(patch => _overlay-style(first, patch))
-        + layers.slice(calc.min(1, layers.len())))
-    }
-    result.insert(side, layers)
-  }
-  result
-}
-
 #let _style-layer(layers, index) = {
   if index < layers.len() {
     layers.at(index)
   } else {
     none
   }
-}
-
-#let _as-content(value) = if value == none {
-  none
-} else if type(value) == str or type(value) == label {
-  [#str(value)]
-} else {
-  value
-}
-
-#let _content(value, data, default) = {
-  if value == auto {
-    default
-  } else {
-    _as-content(_call(value, data))
-  }
-}
-
-#let _data-label(record) = {
-  let data = record.at("data", default: none)
-  if type(data) == dictionary {
-    data.at("label", default: none)
-  } else {
-    none
-  }
-}
-
-#let _data-fields(record) = {
-  let data = record.at("data", default: none)
-  if type(data) == dictionary { data } else { (:) }
 }
 
 #let _pattern-name(style) = _style-value(style, "pattern")
@@ -2119,11 +1869,6 @@
   }
 }
 
-#let _layer-label(style, data) = if style == none {
-  none
-} else {
-  _as-content(_call(_style-value(style, "label"), data))
-}
 
 #let _has-layer-label(layers, data) = layers.any(style => (
   _layer-label(style, data) != none
@@ -2422,7 +2167,7 @@
     (
       label: label, style: label-style, candidates: candidates,
       edge: data.at("eid", default: none), paths: paths, path-style: attached,
-      arrow-packets: packets, ctx: ctx,
+      arrow-packets: packets, ctx: ctx, href: href,
     )
   } else {
     let first = cbor(_plugin.label_first(cbor.encode(candidates)))
@@ -2459,7 +2204,7 @@
 // Joint proposals let annotations pass one another without requiring a single
 // temporarily worse move; a short joint descent settles remaining collisions,
 // then single-label moves settle each annotation against its final neighbours.
-#let _relax-label-placements(placements, obstacles, label-padding: _label-collision-padding.extra, fixed-arrows: (), edge-lines: ()) = {
+#let _relax-label-placements(placements, obstacles, label-padding: _label-collision-padding.extra, fixed-arrows: (), edge-lines: (), leaders: none) = {
   assert(label-padding >= 0, message: "label-collision-padding must be non-negative")
   if placements.len() == 0 { return () }
   let fixed = placements.all(label => (
@@ -2485,6 +2230,7 @@
     fixed-arrows: fixed-arrows, coordinated: coordinated, edge-lines: edge-lines,
     fixed: fixed,
     obstacle-padding: _label-collision-padding.obstacles,
+    leaders: leaders,
   ))
   let math = (
     temperatures: if fixed { () } else { range(84).map(sweep => 0.15 * calc.pow(0.9, sweep)) },
@@ -2507,7 +2253,76 @@
     if verified { break }
     result = cbor(_plugin.label_search(geometry, cbor.encode(math)))
   }
-  result.selected
+  if result.leaders.len() == 0 { return result.selected }
+  // A label set off its carrier keeps its candidate's arrow; its text moves.
+  result.selected.zip(result.leaders).map(((selected, leader)) => (
+    if leader == none { selected } else { selected + (leader: leader) }
+  ))
+}
+
+// Where a chosen annotation's text is drawn, at the end of its leader if it
+// has one: its local position, and its canvas box and corners, which the
+// label report and the collision overlay read.
+#let _drawn-label(candidate) = {
+  let leader = candidate.at("leader", default: none)
+  if leader == none {
+    (position: candidate.position, bounds: candidate.bounds, corners: candidate.at("corners", default: none))
+  } else {
+    (position: leader.position, bounds: leader.bounds, corners: leader.corners)
+  }
+}
+
+// `draw(label-leaders:)` as a leader style: `none` without leaders, else the
+// hairline's stroke and the anchor dot's radius, `none` for no dot.
+#let _leader-style(value) = {
+  if value == false { return none }
+  if value == true { return (stroke: 0.45pt, dot: 1.1pt) }
+  if type(value) != dictionary {
+    panic("draw: label-leaders must be true, false or a dictionary of `stroke` and `dot`, not " + repr(value))
+  }
+  for key in value.keys() {
+    if key not in ("stroke", "dot") {
+      panic("draw: label-leaders takes `stroke` and `dot`, not `" + key + "`")
+    }
+  }
+  let stroke = value.at("stroke", default: 0.45pt)
+  if type(stroke) not in (length, color, gradient, tiling, std.stroke, dictionary) {
+    panic("draw: label-leaders stroke must be a length, paint, stroke or dictionary, not " + repr(stroke))
+  }
+  let dot = value.at("dot", default: 1.1pt)
+  if dot != none and type(dot) != length {
+    panic("draw: label-leaders dot must be a length or none, not " + repr(dot))
+  }
+  (stroke: stroke, dot: dot)
+}
+
+// A leader's hairline and anchor dot, in local coordinates, in a
+// `_leader-style`. Strokes without a paint take the text colour, as the
+// label itself does.
+#let _leader-elements(leader, style) = {
+  let stroke = style.stroke
+  if type(stroke) in (length, color, gradient, tiling) { stroke = std.stroke(stroke) }
+  if type(stroke) == std.stroke {
+    stroke = (paint: stroke.paint, thickness: stroke.thickness, dash: stroke.dash)
+  }
+  if stroke.at("thickness", default: auto) == auto { stroke.thickness = 0.45pt }
+  if stroke.at("paint", default: auto) in (auto, none) { stroke.paint = text.fill }
+  let elements = (cetz.draw.line(leader.from, leader.to, stroke: (cap: "round") + stroke),)
+  if style.dot != none {
+    elements.push(cetz.draw.circle(leader.from, radius: style.dot, fill: stroke.paint, stroke: none))
+  }
+  elements
+}
+
+// Hover targets along a leader, sharing its label's edge identity link.
+#let _leader-identity-targets(ctx, leader, href) = {
+  if href == none { return () }
+  let length = _point-distance(leader.from, leader.to)
+  let count = calc.max(1, calc.ceil(length * ctx.length / 4pt))
+  range(count).map(index => (
+    position: _point-lerp(leader.from, leader.to, (index + 0.5) / count),
+    body: link(href, box(width: 6pt, height: 6pt)),
+  ))
 }
 
 // `<linnest-label-report>` records of the chosen annotations, with what the
@@ -2517,14 +2332,16 @@
 // boxes share an area with its text or its own arrows.
 #let _label-report-records(placements, chosen, edge-lines, line-edges, obstacles, fixed-arrows, fixed-arrow-edges) = {
   let found = cbor(_plugin.label_overlaps(cbor.encode((
-    labels: chosen.map(candidate => (
-      bounds: candidate.bounds,
-      corners: candidate.at("corners", default: none),
+    labels: placements.zip(chosen).map(((label, candidate)) => {
+      let (position, ..text) = _drawn-label(candidate)
+      text + (
       arrow-bounds: candidate.at("arrow-bounds", default: ()),
-    )),
-    lines: edge-lines, obstacles: obstacles, fixed-arrows: fixed-arrows,
+      leader: candidate.at("leader", default: (line: none)).line,
+      edge: label.at("edge", default: none),
+    )}),
+    lines: edge-lines, line-edges: line-edges, obstacles: obstacles, fixed-arrows: fixed-arrows,
   ))))
-  placements.zip(found).map(((label, found)) => {
+  placements.zip(chosen, found).map(((label, candidate, found)) => {
     let crossings = ()
     for (line, length) in found.lines {
       let edge = line-edges.at(line)
@@ -2545,6 +2362,14 @@
       arrows: found.arrows.map(arrow => if "fixed" in arrow {
         fixed-arrow-edges.at(arrow.fixed)
       } else { placements.at(arrow.label).edge }).dedup(),
+      leader: if "leader" in candidate {
+        let line = candidate.leader.line
+        (
+          length: _point-distance(line.first(), line.last()),
+          crossings: found.leader.map(line => line-edges.at(line, default: none)).dedup(),
+          labels: found.leader-labels.map(other => placements.at(other).edge),
+        )
+      } else { none },
     )
   })
 }
@@ -3300,6 +3125,7 @@
   let subgraph-edge-style = options.subgraph-edge-style
   let subgraph-edge-underlay = options.subgraph-edge-underlay
   let inspection-targets = _inspection-targets(options.inspection-targets)
+  let leader-style = _leader-style(options.label-leaders)
   let label-report = _label-report-enabled()
   let info = graph-api.info(graph)
   let graph-style = _graph-style(info)
@@ -4200,15 +4026,9 @@
                 }
               }
             }
-            // An unlabelled bounded offset layer is a fixed decoration, such
-            // as an external momentum arrow whose text stays at the endpoint.
-            // Other painted paths participate only when they intersect text.
-            if (source-draw-style, sink-draw-style).any(style => (
-              style != none and not _style-value(style, "label-only")
-                and _layer-label(style, edge-data) == none
-                and _style-value(style, "offset") != 0
-                and (_style-value(style, "length") != none or _style-value(style, "ratio") != none)
-            )) {
+            // Fixed decorations are boxes; other painted paths participate
+            // only when they intersect text.
+            if (source-draw-style, sink-draw-style).any(style => _fixed-arrow-layer(style, edge-data)) {
               fixed-arrow-layers.push((start: layer-start, end: elements.len(), ctx: ctx, edge: edge-data.eid))
             } else {
               edge-layers.push((ctx: ctx, start: layer-start, end: elements.len(), edge: edge-data.eid))
@@ -4218,11 +4038,7 @@
           // Only self-loop bends repel annotations: a remote part of the loop
           // can approach from another side. Ordinary carriers are handled by the
           // fixed normal gap. Waves and coils occupy a band, not just a line.
-          let radius = 0.06 + calc.max(0, ..(source-style-layers + sink-style-layers).map(style => (
-            if _style-value(style, "pattern") == none { 0 } else {
-              calc.abs(_style-value(style, "pattern-amplitude"))
-            }
-          )))
+          let radius = _painted-band(source-style-layers + sink-style-layers)
           let pad-x = radius * (calc.abs(ctx.transform.at(0).at(0)) + calc.abs(ctx.transform.at(0).at(1)))
           let pad-y = radius * (calc.abs(ctx.transform.at(1).at(0)) + calc.abs(ctx.transform.at(1).at(1)))
           if self-loop {
@@ -4237,11 +4053,7 @@
           if ev-label != none {
             let gap = _statement-number(edge, "layout-label-gap")
             if gap != none {
-              // Carrier-following labels clear the painted band, and plain
-              // lines by at least their label gap.
-              gap = calc.max(gap, radius, ..(source-style-layers + sink-style-layers).map(
-                style => _style-value(style, "label-gap"),
-              ))
+              gap = _carrier-label-gap(source-style-layers + sink-style-layers, gap)
             }
             let carrier = crossing-paths.ids.at(str(edge.edge), default: none)
             let follows-path = gap != none and carrier != none
@@ -4401,16 +4213,29 @@
           let finished = _materialize-mark-groups(elements, mark-batch, candidate-geometry)
           let painted = edge-layers.map(layer => cetz.process.many(layer.ctx,
             finished.slice(layer.start, layer.end).flatten(), compute-bounds: false).drawables)
-          edge-lines = _edge-collision-lines(ctx, painted.flatten(), painted: true)
-          if label-report {
-            // Each layer flattens to the same lines, in order; record their edges.
+          if label-report or leader-style != none {
+            // Each layer flattens to the lines it adds to all of them, in
+            // order; record their edges, a leader's own carrier among them.
             for (layer, drawables) in edge-layers.zip(painted) {
-              line-edges += _edge-collision-lines(ctx, drawables, painted: true).map(_ => layer.edge)
+              let lines = _edge-collision-lines(ctx, drawables, painted: true)
+              edge-lines += lines
+              line-edges += lines.map(_ => layer.edge)
             }
+          } else {
+            edge-lines = _edge-collision-lines(ctx, painted.flatten(), painted: true)
           }
         }
         let label-padding = options.label-collision-padding
-        let relaxed = _relax-label-placements(label-placements, label-obstacles, label-padding: label-padding, fixed-arrows: fixed-arrows, edge-lines: edge-lines)
+        let relaxed = _relax-label-placements(
+          label-placements, label-obstacles, label-padding: label-padding,
+          fixed-arrows: fixed-arrows, edge-lines: edge-lines,
+          leaders: if leader-style == none { none } else {
+            // One line of text keeps leadered labels apart from the rest.
+            (line-height: 1em.to-absolute() / ctx.length.to-absolute(),
+              transform: ctx.transform.map(row => row.map(float)),
+              line-edges: line-edges)
+          },
+        )
         if label-report {
           let labels = _label-report-records(
             label-placements, relaxed, edge-lines, line-edges,
@@ -4433,8 +4258,13 @@
               ctx, ((segments: curve-api.segments(path), visible: true),), label.hrefs,
             )
           }
+          let leader = candidate.at("leader", default: none)
+          if leader != none {
+            elements += _leader-elements(leader, leader-style)
+            edge-targets += _leader-identity-targets(ctx, leader, label.at("href", default: none))
+          }
           elements.push(cetz.draw.content(
-            candidate.position, label.label, padding: 0, ..label.style,
+            _drawn-label(candidate).position, label.label, padding: 0, ..label.style,
           ))
         }
         // Unchosen candidate windows are not part of the final geometry request.
@@ -4474,8 +4304,8 @@
             cetz.draw.set-transform(none)
             for (boxes, padding, color, dashed) in (
               (label-obstacles, _label-collision-padding.obstacles / 2, rgb("#f59e0b"), false),
-              (relaxed.map(candidate => candidate.bounds), _label-collision-padding.labels / 2 + label-padding, rgb("#a855f7"), true),
-              (relaxed.map(candidate => candidate.bounds), _label-collision-padding.obstacles / 2 + label-padding, rgb("#06b6d4"), false),
+              (relaxed.map(candidate => _drawn-label(candidate).bounds), _label-collision-padding.labels / 2 + label-padding, rgb("#a855f7"), true),
+              (relaxed.map(candidate => _drawn-label(candidate).bounds), _label-collision-padding.obstacles / 2 + label-padding, rgb("#06b6d4"), false),
               (relaxed.map(candidate => candidate.arrow-bounds).flatten() + fixed-arrows, _label-collision-padding.labels / 2, rgb("#22c55e"), true),
             ) {
               for box in boxes {

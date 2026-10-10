@@ -317,6 +317,19 @@
   /// moves help crowded annotations pass one another.
   /// -> int | float
   label-collision-padding: _impl-label-collision-padding.extra,
+  /// A label free to take either side whose text still meets a painted line,
+  /// another label, a vertex or an arrow after placement moves to nearby free
+  /// space, with a hairline leader back to its edge or momentum arrow; layout
+  /// room (`layout(impred-label-room:)`) clears what it can first. A leader
+  /// crosses no painted line, arrow or text, keeps 0.3 canvas units from
+  /// vertices, leaves its carrier steeply rather than running alongside it,
+  /// and its text keeps one line height from other labels. A label without
+  /// such a spot keeps its place. `true` draws a 0.45pt leader and a 1.1pt
+  /// anchor dot in the text colour; a dictionary sets `stroke` and `dot` (a
+  /// radius, or `none`). `false` leaves such labels on their carrier. Hovering
+  /// a leader highlights its edge and label in interactive output.
+  /// -> bool | dictionary
+  label-leaders: true,
   /// Clearance from a dangling endpoint to the nearest side of its automatic
   /// label's text box, in canvas units, measured along the outward tangent.
   /// Explicit label positions and path-attached labels keep their placement.
@@ -562,6 +575,7 @@
       debug: debug,
       debug-label-collisions: debug-label-collisions,
       label-collision-padding: label-collision-padding,
+      label-leaders: label-leaders,
       external-label-gap: external-label-gap,
       show-half-edge-ids: show-half-edge-ids,
       node-radius: node-radius,

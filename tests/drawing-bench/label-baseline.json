@@ -1,0 +1,2630 @@
+{
+  "crossed-higgs-double-box-momenta": [
+    {
+      "labels": [
+        {
+          "edge": 0,
+          "movable": false,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 1,
+          "movable": false,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 2,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 3,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 4,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 5,
+          "movable": false,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 6,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 7,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 8,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 9,
+          "movable": false,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 10,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        }
+      ]
+    }
+  ],
+  "crossed-higgs-double-box-particles": [
+    {
+      "labels": [
+        {
+          "edge": 0,
+          "movable": false,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 1,
+          "movable": false,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 2,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 3,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 4,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 5,
+          "movable": false,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 6,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 7,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 8,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 9,
+          "movable": false,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 10,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        }
+      ]
+    }
+  ],
+  "fermionic-momenta": [
+    {
+      "labels": [
+        {
+          "edge": 0,
+          "movable": false,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 1,
+          "movable": false,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 2,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 3,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 4,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 5,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 6,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 7,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 8,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 9,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 10,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 11,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 12,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        }
+      ]
+    }
+  ],
+  "fermionic-notebook": [
+    {
+      "labels": [
+        {
+          "edge": 0,
+          "movable": false,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 1,
+          "movable": false,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 2,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 3,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 4,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 5,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 6,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 7,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 8,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 9,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 10,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 11,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 12,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        }
+      ]
+    }
+  ],
+  "gluonic-momenta": [
+    {
+      "labels": [
+        {
+          "edge": 0,
+          "movable": false,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 1,
+          "movable": false,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 2,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 3,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 4,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 5,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 6,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 7,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 8,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 9,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 10,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 11,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 12,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        }
+      ]
+    }
+  ],
+  "gluonic-notebook": [
+    {
+      "labels": [
+        {
+          "edge": 0,
+          "movable": false,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 1,
+          "movable": false,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 2,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 3,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 4,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 5,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 6,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 7,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 8,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 9,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 10,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 11,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 12,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        }
+      ]
+    }
+  ],
+  "higgs-sunset-momenta": [
+    {
+      "labels": [
+        {
+          "edge": 0,
+          "movable": false,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 1,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 2,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 3,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 4,
+          "movable": false,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        }
+      ]
+    }
+  ],
+  "higgs-sunset-particles": [
+    {
+      "labels": [
+        {
+          "edge": 0,
+          "movable": false,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 1,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 2,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 3,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 4,
+          "movable": false,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        }
+      ]
+    }
+  ],
+  "multi-leg-eight-gluon-ladder-momenta": [
+    {
+      "labels": [
+        {
+          "edge": 0,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 1,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 2,
+          "movable": false,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 3,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 4,
+          "movable": false,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 5,
+          "movable": false,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 6,
+          "movable": false,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 7,
+          "movable": false,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 8,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 9,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 10,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 11,
+          "movable": false,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 12,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 13,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 14,
+          "movable": false,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 15,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 16,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 17,
+          "movable": false,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        }
+      ]
+    }
+  ],
+  "multi-leg-eight-gluon-ladder-particles": [
+    {
+      "labels": [
+        {
+          "edge": 0,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 1,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 2,
+          "movable": false,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 3,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 4,
+          "movable": false,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 5,
+          "movable": false,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 6,
+          "movable": false,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 7,
+          "movable": false,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 8,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 9,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 10,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 11,
+          "movable": false,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 12,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 13,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 14,
+          "movable": false,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 15,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 16,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 17,
+          "movable": false,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        }
+      ]
+    }
+  ],
+  "multi-leg-six-gluon-incoming-momenta": [
+    {
+      "labels": [
+        {
+          "edge": 0,
+          "movable": false,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 1,
+          "movable": false,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 2,
+          "movable": false,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 3,
+          "movable": false,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 4,
+          "movable": false,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 5,
+          "movable": false,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 6,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 7,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 8,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 9,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 10,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 11,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        }
+      ]
+    }
+  ],
+  "multi-leg-six-gluon-incoming-particles": [
+    {
+      "labels": [
+        {
+          "edge": 0,
+          "movable": false,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 1,
+          "movable": false,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 2,
+          "movable": false,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 3,
+          "movable": false,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 4,
+          "movable": false,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 5,
+          "movable": false,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 6,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 7,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 8,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 9,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 10,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 11,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        }
+      ]
+    }
+  ],
+  "multi-leg-six-higgs-theta-momenta": [
+    {
+      "labels": [
+        {
+          "edge": 0,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 1,
+          "movable": false,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 2,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 3,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 4,
+          "movable": false,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 5,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 6,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 7,
+          "movable": false,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 8,
+          "movable": false,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 9,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 10,
+          "movable": false,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 11,
+          "movable": false,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 12,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 13,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 14,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        }
+      ]
+    }
+  ],
+  "multi-leg-six-higgs-theta-particles": [
+    {
+      "labels": [
+        {
+          "edge": 0,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 1,
+          "movable": false,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 2,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 3,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 4,
+          "movable": false,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 5,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 6,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 7,
+          "movable": false,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 8,
+          "movable": false,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 9,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 10,
+          "movable": false,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 11,
+          "movable": false,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 12,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 13,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 14,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        }
+      ]
+    }
+  ],
+  "nonplanar-higgs-k33-momenta": [
+    {
+      "labels": [
+        {
+          "edge": 0,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 1,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 2,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 3,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 4,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 5,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 6,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 7,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 8,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 9,
+          "movable": false,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 10,
+          "movable": false,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 11,
+          "movable": false,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 12,
+          "movable": false,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        }
+      ]
+    }
+  ],
+  "nonplanar-higgs-k33-particles": [
+    {
+      "labels": [
+        {
+          "edge": 0,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 1,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 2,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 3,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 4,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 5,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 6,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 7,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 8,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 9,
+          "movable": false,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 10,
+          "movable": false,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 11,
+          "movable": false,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 12,
+          "movable": false,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        }
+      ]
+    }
+  ],
+  "paper-b1-momenta": [
+    {
+      "labels": [
+        {
+          "edge": 0,
+          "movable": false,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 1,
+          "movable": false,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 2,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 3,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 4,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 5,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 6,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 7,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 8,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 9,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        }
+      ]
+    }
+  ],
+  "paper-b1-particles": [
+    {
+      "labels": [
+        {
+          "edge": 0,
+          "movable": false,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 1,
+          "movable": false,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 2,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 3,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 4,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 5,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 6,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 7,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 8,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 9,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        }
+      ]
+    }
+  ],
+  "xs-extra-higgs-radiative-momenta": [
+    {
+      "labels": [
+        {
+          "edge": 0,
+          "movable": false,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 1,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 2,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 3,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 4,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 5,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 6,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 7,
+          "movable": false,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        }
+      ]
+    }
+  ],
+  "xs-extra-higgs-radiative-particles": [
+    {
+      "labels": [
+        {
+          "edge": 0,
+          "movable": false,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 1,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 2,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 3,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 4,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 5,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 6,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 7,
+          "movable": false,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        }
+      ]
+    }
+  ],
+  "xs-extra-higgs-scattering-momenta": [
+    {
+      "labels": [
+        {
+          "edge": 0,
+          "movable": false,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 1,
+          "movable": false,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 2,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 3,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 4,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 5,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 6,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 7,
+          "movable": false,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 8,
+          "movable": false,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        }
+      ]
+    }
+  ],
+  "xs-extra-higgs-scattering-particles": [
+    {
+      "labels": [
+        {
+          "edge": 0,
+          "movable": false,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 1,
+          "movable": false,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 2,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 3,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 4,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 5,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 6,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 7,
+          "movable": false,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 8,
+          "movable": false,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        }
+      ]
+    }
+  ],
+  "xs-extra-higgs-two-loop-virtual-momenta": [
+    {
+      "labels": [
+        {
+          "edge": 0,
+          "movable": false,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 1,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 2,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 3,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 4,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 5,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 6,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 7,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 8,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 9,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 10,
+          "movable": false,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        }
+      ]
+    }
+  ],
+  "xs-extra-higgs-two-loop-virtual-particles": [
+    {
+      "labels": [
+        {
+          "edge": 0,
+          "movable": false,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 1,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 2,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 3,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 4,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 5,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 6,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 7,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 8,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 9,
+          "movable": true,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        },
+        {
+          "edge": 10,
+          "movable": false,
+          "crossings": [],
+          "labels": [],
+          "obstacles": [],
+          "arrows": [],
+          "leader": null
+        }
+      ]
+    }
+  ]
+}

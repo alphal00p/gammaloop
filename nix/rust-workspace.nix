@@ -2480,6 +2480,7 @@
     doCheck = false;
     buildType = "release";
     CARGO_BUILD_TARGET = wasmTarget;
+    # Both plugins' dependencies; `linnest-wasm` builds each plugin on its own.
     cargoExtraArgs = "--locked -p linnest -p kurvst --features linnest/typst-plugin,kurvst/typst-plugin --target ${wasmTarget}";
   };
 
@@ -2491,7 +2492,15 @@
   linnest-wasm = wasmCraneLib.buildPackage (linnestWasmArgs
     // {
       cargoArtifacts = linnestWasmCargoArtifacts;
-      cargoBuildCommand = "cargo build --release";
+      # One build per plugin: a joint build unifies Kurvst's plugin feature
+      # into Linnest's Kurvst dependency, so linnest.wasm would export Kurvst's
+      # plugin functions too.
+      buildPhaseCargoCommand = ''
+        cargo build --release --locked -p kurvst --features kurvst/typst-plugin --target ${wasmTarget}
+        cargo build --release --locked -p linnest --features linnest/typst-plugin --target ${wasmTarget}
+      '';
+      # The install phase copies the plugins; there are no binaries to find.
+      doNotPostBuildInstallCargoBinaries = true;
       installPhaseCommand = ''
         mkdir -p \
           "$out/templates" \

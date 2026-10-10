@@ -2,7 +2,6 @@
 //! `draw.typ`: native layout, Kurvst geometry, the shared annotation search
 //! and SVG output. Typst only typesets the label pages a [`Scene`] lists.
 mod config;
-mod curves;
 pub use config::Config;
 mod interactive;
 mod labels;
@@ -19,15 +18,23 @@ pub use marks::MarkPaint;
 use serde_json::Value;
 use std::sync::Arc;
 
-use crate::{ImpredRun, TypstDotEdge, TypstDotEndpoint, TypstDotNode, TypstGraph, TypstGraphSpec};
-use labels::{Anchor, Bounds, Placement, Stroke as CollisionStroke};
+use crate::{
+    annotation::{ArrowStyle, NODE_RADIUS},
+    curves, ImpredRun, TypstDotEdge, TypstDotEndpoint, TypstDotNode, TypstGraph, TypstGraphSpec,
+};
+use labels::{Anchor, Bounds, Placement, Places, Stroke as CollisionStroke};
 pub use labels::{LabelPage, Typeset};
 pub use output::Details;
 
 /// Drawing unit in points: Linnest's default 1.5em at 9pt text.
 const UNIT: f64 = 13.5;
-/// Vertex radius and edge trim, in drawing units.
-const NODE_RADIUS: f64 = 0.16;
+
+/// The physics template's momentum arrows.
+pub(super) const MOMENTUM_ARROW: ArrowStyle = ArrowStyle {
+    offset: 0.35,
+    window: (1.4, 0.5),
+    gap: 0.2,
+};
 
 /// A prepared graph with its paint and label sources, drawn by [`Scene::render`].
 pub struct Scene {
@@ -49,6 +56,9 @@ pub struct Scene {
     pub layout_edges: Option<Vec<usize>>,
     /// Refine the layout around drawn labels in short warm ImPrEd passes.
     pub label_feedback: bool,
+    /// Set a label that still meets something after placement off its edge,
+    /// with a leader back to it, as `draw(label-leaders:)` does.
+    pub label_leaders: bool,
 }
 
 #[derive(Clone)]
@@ -128,6 +138,108 @@ impl Pattern {
             | Self::Zigzag { amplitude, .. } => amplitude.abs(),
         }
     }
+
+    /// The decoration painted over a whole edge.
+    fn path(&self, path: &BezPath) -> Result<BezPath, String> {
+        use kurvst::{FittedCoilInput, PatternInput, PatternPathSpec};
+        let length = curves::length(path);
+        if length <= f64::EPSILON {
+            return Ok(path.clone());
+        }
+        let spec = |pattern, amplitude, wavelength, longitudinal_scale| PatternPathSpec {
+            path: path.clone(),
+            pattern,
+            amplitude,
+            wavelength,
+            phase: 0.0,
+            samples_per_period: 16,
+            coil_longitudinal_scale: longitudinal_scale,
+            anchor_start: true,
+            anchor_end: true,
+            endpoint_slope: 0.0,
+            split_at: Vec::new(),
+            accuracy: curves::ACCURACY,
+        };
+        // Coils fit their natural endpoints to the complete edge before painting.
+        let spec = match *self {
+            Self::Coil {
+                amplitude,
+                wavelength,
+                longitudinal_scale,
+            } => spec(
+                PatternInput::FittedCoil(FittedCoilInput {
+                    kind: "fitted-coil".to_owned(),
+                    fit_length: length,
+                    amplitude,
+                    wavelength,
+                    longitudinal_scale,
+                    samples_per_period: 16,
+                }),
+                amplitude,
+                length,
+                longitudinal_scale,
+            ),
+            Self::Wave {
+                amplitude,
+                wavelength,
+            } => spec(PatternInput::wave(16), amplitude, wavelength, 1.25),
+            Self::Zigzag {
+                amplitude,
+                wavelength,
+            } => spec(PatternInput::zigzag(), amplitude, wavelength, 1.25),
+        };
+        spec.patterned().map(|output| output.path)
+    }
+}
+
+impl EdgeDrawing {
+    /// The label room statements `graph.style` records for the Typst route
+    /// (`_edge-room-statements`): the measured label, how far the paint
+    /// reaches beside the carrier, the label's gap, and the momentum arrow it
+    /// rides, on a `paired` edge, or that decorates it. A label riding its
+    /// arrow keeps the arrow's gap; others keep the largest gap of the
+    /// edge's layers, the arrow's among them.
+    fn room_statements(&self, typeset: &Typeset, paired: bool) -> Vec<(String, String)> {
+        let amplitude = self.pattern.as_ref().map_or(0.0, Pattern::amplitude);
+        let metrics = self.label.and_then(|page| typeset.pages[page].metrics);
+        let carrier = (0.06 + amplitude).max(0.15);
+        let gap = match (self.momentum, paired && metrics.is_some()) {
+            (true, true) => MOMENTUM_ARROW.gap,
+            (true, false) => carrier.max(MOMENTUM_ARROW.gap),
+            (false, _) => carrier,
+        };
+        let mut statements = vec![
+            (
+                "label-room-band".to_owned(),
+                (self.stroke.width / UNIT / 2.0 + amplitude).to_string(),
+            ),
+            ("label-room-gap".to_owned(), gap.to_string()),
+        ];
+        if let Some(metrics) = metrics {
+            let corners = labels::content_corners(metrics, Anchor::Center);
+            statements.push(("label-width".to_owned(), (2.0 * corners[1][0]).to_string()));
+            statements.push(("label-height".to_owned(), (2.0 * corners[0][1]).to_string()));
+        }
+        if self.momentum {
+            // Mark sizes resolve against the 1pt arrow stroke.
+            let size = |size: Option<kurvst::marks::MarkSize>| {
+                size.map_or(0.0, |size| (size.points + size.ratio) / UNIT)
+            };
+            let arrow = MOMENTUM_ARROW;
+            statements.push((
+                "label-room-arrow".to_owned(),
+                format!(
+                    "{} {} {} {} {}",
+                    arrow.offset,
+                    arrow.window.0,
+                    arrow.window.1,
+                    size(self.momentum_arrow.length),
+                    size(self.momentum_arrow.width)
+                ),
+            ));
+        }
+        statements
+    }
 }
 
 /// Warm label feedback: passes, cooling start and steps of each pass.
@@ -170,8 +282,9 @@ impl Scene {
         })
     }
 
-    /// The drawing of the least-overlapping layout.
-    fn draw(&self, typeset: &Typeset) -> Result<Drawing, String> {
+    /// The layout graph as `graph.style` measures it: node boxes and, for
+    /// ImPrEd's label room, each edge's measured label and drawing.
+    fn layout_graph(&self, typeset: &Typeset, room: bool) -> Result<TypstGraph, String> {
         let mut spec = self.graph.clone();
         for (node, drawing) in spec.nodes.iter_mut().zip(&self.nodes) {
             let (w, h) = drawing.size(typeset);
@@ -180,17 +293,54 @@ impl Scene {
             node.statements
                 .insert("layout-height".into(), (2.0 * h).to_string());
         }
-        let graph = TypstGraph::from_spec(spec)?;
+        if room {
+            for (edge, drawing) in spec.edges.iter_mut().zip(&self.edges) {
+                let paired = edge.source.is_some() && edge.sink.is_some();
+                edge.statements
+                    .extend(drawing.room_statements(typeset, paired));
+            }
+        }
+        TypstGraph::from_spec(spec)
+    }
+
+    /// The drawing of the least-overlapping layout.
+    fn draw(&self, typeset: &Typeset) -> Result<Drawing, String> {
         match self.layout.get("layout-algo").and_then(Value::as_str) {
-            Some("dot") => return Drawing::new(self, typeset, &Laid::layered(graph, self)?),
+            Some("dot") => {
+                let graph = self.layout_graph(typeset, false)?;
+                return Drawing::new(self, typeset, &Laid::layered(graph, self)?);
+            }
             Some("impred") | None => {}
             Some(algo) => return Err(format!("unsupported SVG layout algorithm {algo:?}")),
         }
+        let graph = self.layout_graph(typeset, true)?;
         let mut run = ImpredRun::seeded(graph, &Value::Object(self.layout.clone()))?;
-        let drawing = Drawing::new(self, typeset, &Laid::new(&run)?)?;
         if !self.label_feedback {
-            return Ok(drawing);
+            return Drawing::new(self, typeset, &Laid::new(&run)?);
         }
+        // Label feedback refines the relaxed layout around its drawn labels;
+        // label room steps in only where feedback leaves labels meeting
+        // something, and only if feedback over the room it makes does better.
+        let Some(relaxed) = run.relaxed.take() else {
+            return self.feedback(typeset, &mut run);
+        };
+        let room = std::mem::replace(&mut run.layout, relaxed);
+        let fed = self.feedback(typeset, &mut run)?;
+        if fed.score().0 == 0 {
+            return Ok(fed);
+        }
+        run.layout = room;
+        let roomy = self.feedback(typeset, &mut run)?;
+        Ok(if roomy.score() < fed.score() {
+            roomy
+        } else {
+            fed
+        })
+    }
+
+    /// The least-overlapping drawing of label feedback from the run's layout.
+    fn feedback(&self, typeset: &Typeset, run: &mut ImpredRun) -> Result<Drawing, String> {
+        let drawing = Drawing::new(self, typeset, &Laid::new(run)?)?;
         // Keep the least-overlapping drawing; later passes may not improve it.
         // A rejected pass still supplies the next pass's pinned labels.
         let mut best = (drawing.score(), drawing);
@@ -202,14 +352,14 @@ impl Scene {
             }
             // Pin each drawn movable internal label beside its carrier and let a
             // short warm pass make room around it.
-            run.layout.labels = drawing.pinned_labels(&run);
+            run.layout.labels = drawing.pinned_labels(run);
             run.layout.solve(ImpredConfig {
                 labels: true,
                 warm_start: FEEDBACK_WARM,
                 steps: FEEDBACK_STEPS,
                 ..run.config
             })?;
-            let drawing = Drawing::new(self, typeset, &Laid::new(&run)?)?;
+            let drawing = Drawing::new(self, typeset, &Laid::new(run)?)?;
             let scored = (drawing.score(), drawing);
             if scored.0 < best.0 {
                 best = scored;
@@ -344,6 +494,12 @@ enum Element {
         bounds: Bounds,
         href: String,
     },
+    /// A filled disc, such as a leader's anchor dot.
+    Dot {
+        at: [f64; 2],
+        radius: f64,
+        fill: String,
+    },
     Label {
         page: usize,
         bounds: Bounds,
@@ -375,6 +531,11 @@ fn arrow_stroke() -> Stroke {
     }
 }
 
+/// A label leader: a 0.45pt round ink hairline with a 1.1pt anchor dot, as
+/// `draw.typ` paints it in the label's text colour.
+const LEADER_WIDTH: f64 = 0.45;
+const LEADER_DOT: f64 = 1.1;
+
 struct Drawing {
     layers: Vec<Element>,
     targets: Vec<Target>,
@@ -397,11 +558,7 @@ impl Drawing {
     /// Label feedback's score, from the real overlaps of the chosen movable
     /// labels: overlapping labels first, then label pairs, then line hits.
     fn score(&self) -> (usize, usize, usize) {
-        let (overlapping, hits, pairs) = labels::overlaps(
-            &self.placements,
-            &self.searched.choices,
-            &self.searched.lines,
-        );
+        let (overlapping, hits, pairs) = labels::overlaps(&self.placements, &self.searched);
         (overlapping, pairs, hits)
     }
 
@@ -494,8 +651,8 @@ impl Drawing {
                 // without a label to carry them.
                 let arrow = curves::layer(
                     &visible,
-                    labels::ARROW_OFFSET * side,
-                    Some(labels::ARROW_WINDOW),
+                    MOMENTUM_ARROW.offset * side,
+                    Some(MOMENTUM_ARROW.window),
                     0.0,
                 )?;
                 let template = batch.template(&drawing.momentum_arrow, &arrow_stroke())?;
@@ -522,9 +679,8 @@ impl Drawing {
             match (&edge.source, &edge.sink) {
                 (Some(_), Some(_)) if drawing.momentum => {
                     let template = batch.template(&drawing.momentum_arrow, &arrow_stroke())?;
-                    let proposals = labels::MomentumCandidates::new(
-                        &visible, metrics, side, template, &mut batch,
-                    )?;
+                    let proposals =
+                        labels::MarkedMomentum::new(&visible, metrics, side, template, &mut batch)?;
                     momentum.push((placements.len(), proposals));
                     placements.push(placement(Vec::new()));
                     region_hrefs.push((edge.edge, hrefs.regions.clone()));
@@ -532,7 +688,13 @@ impl Drawing {
                 (Some(_), Some(_)) => {
                     // Clear the painted band and at least the label gap.
                     let band = 0.06 + drawing.pattern.as_ref().map_or(0.0, Pattern::amplitude);
-                    let candidates = labels::carrier_candidates(&visible, metrics, band.max(0.15))?;
+                    let candidates = labels::carrier_candidates(
+                        &visible,
+                        labels::content_corners(metrics, Anchor::Center),
+                        band.max(0.15),
+                        1.0,
+                        Places::Every,
+                    )?;
                     placements.push(placement(candidates));
                 }
                 (source, sink) => {
@@ -563,8 +725,7 @@ impl Drawing {
                     let candidates = labels::endpoint_candidates(
                         label_pos,
                         direction,
-                        Anchor::outward(dx, dy),
-                        metrics,
+                        labels::content_corners(metrics, Anchor::outward(dx, dy)),
                     )?;
                     placements.push(placement(candidates));
                 }
@@ -583,6 +744,7 @@ impl Drawing {
             let shaft = mark.map_or(&edge.visible, |mark| &mark.shaft.path);
             Self::paint_edge(
                 drawing,
+                edge.edge,
                 shaft,
                 mark,
                 &edge.hrefs.label,
@@ -614,7 +776,13 @@ impl Drawing {
                 }
             })
             .collect();
-        let searched = labels::search(&placements, &obstacles, &strokes, &fixed_arrows)?;
+        let searched = labels::search(
+            &placements,
+            &obstacles,
+            &strokes,
+            &fixed_arrows,
+            scene.label_leaders.then(|| typeset.line_height() / UNIT),
+        )?;
         let mut selected: Vec<_> = edge_geometry
             .iter()
             .flat_map(|edge| [edge.flow, edge.fixed_arrow].into_iter().flatten())
@@ -622,8 +790,10 @@ impl Drawing {
         selected.extend(
             placements
                 .iter()
-                .zip(&searched.choices)
-                .filter_map(|(placement, &choice)| placement.candidates[choice].arrow_mark),
+                .enumerate()
+                .filter_map(|(index, placement)| {
+                    placement.candidates[searched.drawn(index)].arrow_mark
+                }),
         );
         let geometry = batch.selected(&selected)?;
         let heads: std::collections::BTreeMap<_, _> =
@@ -639,6 +809,7 @@ impl Drawing {
             let shaft = mark.map_or(&edge.visible, |mark| &shafts[&mark.carrier].shaft.path);
             Self::paint_edge(
                 drawing,
+                edge.edge,
                 shaft,
                 mark,
                 &edge.hrefs.label,
@@ -666,8 +837,8 @@ impl Drawing {
                 }
             }
         }
-        for (placement, &choice) in placements.iter().zip(&searched.choices) {
-            let candidate = &placement.candidates[choice];
+        for (slot, placement) in placements.iter().enumerate() {
+            let candidate = &placement.candidates[searched.drawn(slot)];
             if let Some(index) = candidate.arrow_mark {
                 let mark = &heads[&index];
                 let arrow = &shafts[&mark.carrier].shaft.path;
@@ -691,9 +862,48 @@ impl Drawing {
                     }));
                 }
             }
+            let bounds = match &searched.leaders[slot] {
+                Some(leader) => {
+                    // The native drawing has no canvas transform: local
+                    // coordinates are canvas coordinates.
+                    let [from, to] = [leader.from, leader.to].map(|point| [point.0, point.1]);
+                    let mut line = BezPath::new();
+                    line.move_to((from[0], from[1]));
+                    line.line_to((to[0], to[1]));
+                    layers.push(Element::Path {
+                        path: line,
+                        stroke: Stroke {
+                            width: LEADER_WIDTH,
+                            ..arrow_stroke()
+                        },
+                    });
+                    layers.push(Element::Dot {
+                        at: from,
+                        radius: LEADER_DOT / UNIT,
+                        fill: output::INK.to_owned(),
+                    });
+                    // Hovering the leader highlights its edge and label.
+                    let length = (to[0] - from[0]).hypot(to[1] - from[1]);
+                    let count = ((length * UNIT / 4.0).ceil() as usize).max(1);
+                    let href: Arc<str> = placement.href.as_str().into();
+                    targets.extend((0..count).map(|step| {
+                        let at = (step as f64 + 0.5) / count as f64;
+                        Target {
+                            at: [
+                                from[0] + (to[0] - from[0]) * at,
+                                from[1] + (to[1] - from[1]) * at,
+                            ],
+                            size: 6.0,
+                            href: href.clone(),
+                        }
+                    }));
+                    leader.bounds
+                }
+                None => candidate.bounds,
+            };
             layers.push(Element::Label {
                 page: placement.page,
-                bounds: candidate.bounds,
+                bounds,
                 href: Some(placement.href.clone()),
             });
         }
@@ -923,6 +1133,7 @@ impl Drawing {
     /// the particle-flow arrowhead at the source/sink split or the center.
     fn paint_edge(
         drawing: &EdgeDrawing,
+        edge: usize,
         shaft: &BezPath,
         mark: Option<&kurvst::marks::MarkGeometryOutput>,
         href: &str,
@@ -941,6 +1152,7 @@ impl Drawing {
                 strokes.push(CollisionStroke {
                     radius: 0.0,
                     path: drawable.outline.path.clone(),
+                    edge,
                 });
             }
             Self::paint_head(
@@ -952,10 +1164,11 @@ impl Drawing {
         }
         let radius = drawing.stroke.width / UNIT / 2.0;
         if let Some(pattern) = &drawing.pattern {
-            let path = curves::pattern(shaft, pattern)?;
+            let path = pattern.path(shaft)?;
             strokes.push(CollisionStroke {
                 radius,
                 path: path.clone(),
+                edge,
             });
             layers.push(Element::Path {
                 path,
@@ -965,6 +1178,7 @@ impl Drawing {
             strokes.push(CollisionStroke {
                 radius,
                 path: shaft.clone(),
+                edge,
             });
             layers.push(Element::Path {
                 path: shaft.clone(),
@@ -1216,6 +1430,7 @@ mod tests {
             layout: serde_json::Map::new(),
             layout_edges: None,
             label_feedback: false,
+            label_leaders: true,
         }
     }
 
@@ -1226,7 +1441,7 @@ mod tests {
     }
 
     fn typeset(scene: &Scene) -> Typeset {
-        let label = page(r#"<g/><a href="linnest-metrics:10,8,8,12"><rect/></a>"#);
+        let label = page(r#"<g/><a href="linnest-metrics:10,8,8,12,9"><rect/></a>"#);
         scene.typeset(&[page("<g/>"), label]).unwrap()
     }
 
@@ -1305,6 +1520,8 @@ mod tests {
             .as_ref()
             .is_some_and(|title| title.metrics.is_none()));
         assert_eq!(typeset.pages[0].metrics, Some([10.0, 8.0, 8.0, 12.0]));
+        assert_eq!(typeset.pages[0].text_size, Some(9.0));
+        assert_eq!(typeset.line_height(), 9.0);
         assert_eq!(typeset.pages[0].body, "<g/>");
         assert_eq!(typeset.defs.matches("<symbol").count(), 1);
         assert!(scene.typeset(&[page("<g/>")]).is_err());
@@ -1539,14 +1756,9 @@ mod tests {
         let template = batch
             .template(&drawing.momentum_arrow, &arrow_stroke())
             .unwrap();
-        let proposals = labels::MomentumCandidates::new(
-            &path,
-            [10.0, 8.0, 8.0, 12.0],
-            1.0,
-            template,
-            &mut batch,
-        )
-        .unwrap();
+        let proposals =
+            labels::MarkedMomentum::new(&path, [10.0, 8.0, 8.0, 12.0], 1.0, template, &mut batch)
+                .unwrap();
         let geometry = batch
             .geometry(kurvst::marks::MarkGeometryMode::Candidates)
             .unwrap();
@@ -1697,6 +1909,307 @@ mod tests {
         assert!(expected.contains("#linnet-node-3?"));
     }
 
+    /// The scalar cube without one edge, every internal edge labelled
+    /// `width` points wide on its momentum arrow, its legs free.
+    fn labelled_cube(width: f64) -> (Scene, Typeset) {
+        let mut scene = bubble(true);
+        let node = scene.graph.nodes[0].clone();
+        scene.graph.nodes = (0..8)
+            .map(|index| TypstNodeSpec {
+                index: Some(index),
+                name: Some(format!("v{index}")),
+                ..node.clone()
+            })
+            .collect();
+        scene.nodes = vec![scene.nodes[0].clone(); 8];
+        let endpoint = scene.graph.edges[1].source.clone().unwrap();
+        let edge = scene.graph.edges[1].clone();
+        scene.graph.edges = [
+            (None, Some(0)),
+            (Some(1), None),
+            (Some(1), Some(2)),
+            (Some(2), Some(3)),
+            (Some(3), Some(0)),
+            (Some(4), Some(5)),
+            (Some(5), Some(6)),
+            (Some(6), Some(7)),
+            (Some(7), Some(4)),
+            (Some(0), Some(4)),
+            (Some(1), Some(5)),
+            (Some(2), Some(6)),
+            (Some(3), Some(7)),
+        ]
+        .into_iter()
+        .enumerate()
+        .map(|(id, (source, sink))| {
+            let end = |node| TypstEndpointSpec {
+                node,
+                ..endpoint.clone()
+            };
+            TypstEdgeSpec {
+                id: Some(id),
+                source: source.map(end),
+                sink: sink.map(end),
+                ..edge.clone()
+            }
+        })
+        .collect();
+        let mut drawing = scene.edges[2].clone();
+        drawing.flow = None;
+        drawing.pattern = None;
+        scene.edges = vec![drawing; 13];
+        scene.layout.insert("steps".into(), 100.into());
+        let mut typeset = typeset(&scene);
+        typeset.pages[0].width = width;
+        typeset.pages[0].metrics = Some([width, 8.0, 8.0, 12.0]);
+        (scene, typeset)
+    }
+
+    /// The labelled cube's vertices, then its leg ends, and its drawing
+    /// score with label room on or off and some vertices pinned.
+    fn cube_with_room(
+        width: f64,
+        room: bool,
+        pins: &[(usize, [f64; 2])],
+    ) -> (Vec<[f64; 2]>, (usize, usize, usize)) {
+        let (mut scene, typeset) = labelled_cube(width);
+        scene
+            .layout
+            .insert("impred-label-room".into(), Value::Bool(room));
+        scene.label_leaders = false;
+        for &(node, [x, y]) in pins {
+            scene.graph.nodes[node].pos =
+                Some(serde_json::from_value(serde_json::json!({"x": x, "y": y})).unwrap());
+        }
+        let graph = scene.layout_graph(&typeset, true).unwrap();
+        let run = ImpredRun::seeded(graph, &Value::Object(scene.layout.clone())).unwrap();
+        let legs = run
+            .layout
+            .anchor_points
+            .iter()
+            .zip(&run.layout.external)
+            .filter_map(|(point, external)| external.and(Some(point)));
+        let points = run
+            .layout
+            .node_points
+            .iter()
+            .chain(legs)
+            .map(|&point| run.layout.positions[point])
+            .collect();
+        (points, scene.draw(&typeset).unwrap().score())
+    }
+
+    /// The native drawing measures label room as the Typst route's
+    /// `_edge-room-statements` does for the physics template: these are the
+    /// statements it records for a labelled gluon, photon, Higgs and quark
+    /// with momentum arrows, inside the drawing and on an external leg.
+    #[test]
+    fn room_statements_match_the_typst_physics_template() {
+        let scene = bubble(true);
+        let typeset = typeset(&scene);
+        let arrow = "0.35 1.4 0.5 0.3359580052493438 0.25196850393700787";
+        let gluon = scene.edges[1].clone();
+        let photon = EdgeDrawing {
+            pattern: Some(Pattern::Wave {
+                amplitude: 0.14,
+                wavelength: 0.55,
+            }),
+            ..gluon.clone()
+        };
+        let higgs = EdgeDrawing {
+            stroke: Stroke {
+                width: 1.55,
+                dash: Dash::Dashed(0.9, 4.05),
+                ..gluon.stroke.clone()
+            },
+            pattern: None,
+            ..gluon.clone()
+        };
+        let quark = EdgeDrawing {
+            pattern: None,
+            ..gluon.clone()
+        };
+        for (drawing, paired, band, gap) in [
+            (&gluon, true, "0.18703703703703703", "0.2"),
+            (&gluon, false, "0.18703703703703703", "0.21"),
+            (&photon, true, "0.17703703703703705", "0.2"),
+            (&higgs, true, "0.05740740740740741", "0.2"),
+            (&higgs, false, "0.05740740740740741", "0.2"),
+            (&quark, true, "0.037037037037037035", "0.2"),
+        ] {
+            let statements: BTreeMap<_, _> = drawing
+                .room_statements(&typeset, paired)
+                .into_iter()
+                .filter(|(key, _)| key.starts_with("label-room"))
+                .collect();
+            let expected: BTreeMap<_, _> = [
+                ("label-room-arrow", arrow),
+                ("label-room-band", band),
+                ("label-room-gap", gap),
+            ]
+            .map(|(key, value)| (key.to_owned(), value.to_owned()))
+            .into();
+            assert_eq!(statements, expected, "{paired}");
+        }
+    }
+
+    #[test]
+    fn label_room_keeps_a_layout_whose_labels_fit() {
+        let (mut scene, typeset) = labelled_cube(30.0);
+        let room = linked(&scene.render(typeset.clone()).unwrap());
+        scene
+            .layout
+            .insert("impred-label-room".into(), Value::Bool(false));
+        assert_eq!(linked(&scene.render(typeset).unwrap()), room);
+    }
+
+    #[test]
+    fn label_room_scales_a_crowded_drawing_up_uniformly() {
+        let (before, crowded) = cube_with_room(60.0, false, &[]);
+        let (after, score) = cube_with_room(60.0, true, &[]);
+        assert!(crowded.0 > 0, "{crowded:?}");
+        assert_eq!(score, (0, 0, 0));
+        // One factor about one center maps every vertex and leg end.
+        let count = before.len() as f64;
+        let centroid = |points: &[[f64; 2]]| {
+            points.iter().fold([0.0; 2], |sum, p| {
+                [sum[0] + p[0] / count, sum[1] + p[1] / count]
+            })
+        };
+        let (a, b) = (centroid(&before), centroid(&after));
+        let spread = |points: &[[f64; 2]], c: [f64; 2]| {
+            points
+                .iter()
+                .map(|p| (p[0] - c[0]).powi(2) + (p[1] - c[1]).powi(2))
+                .sum::<f64>()
+                .sqrt()
+        };
+        let factor = spread(&after, b) / spread(&before, a);
+        assert!(factor > 1.0 && factor <= 1.5, "{factor}");
+        for (p, q) in before.iter().zip(&after) {
+            for axis in 0..2 {
+                let mapped = b[axis] + factor * (p[axis] - a[axis]);
+                assert!((mapped - q[axis]).abs() < 1e-9, "{p:?} -> {q:?}");
+            }
+        }
+    }
+
+    #[test]
+    fn label_room_never_moves_pinned_vertices() {
+        // Pin vertices where the free layout puts them.
+        let (free, _) = cube_with_room(60.0, false, &[]);
+        // One pinned vertex is the center of uniform scaling.
+        let pin = [(0, free[0])];
+        let (before, crowded) = cube_with_room(60.0, false, &pin);
+        let (after, score) = cube_with_room(60.0, true, &pin);
+        assert!(crowded.0 > 0, "{crowded:?}");
+        assert!(score < crowded, "{score:?} {crowded:?}");
+        assert_eq!(after[0], before[0]);
+        let center = before[0];
+        let factor = (after[1][0] - center[0]) / (before[1][0] - center[0]);
+        assert!(factor > 1.0 && factor <= 1.5, "{factor}");
+        for (p, q) in before.iter().zip(&after) {
+            for axis in 0..2 {
+                let mapped = center[axis] + factor * (p[axis] - center[axis]);
+                assert!((mapped - q[axis]).abs() < 1e-9, "{p:?} -> {q:?}");
+            }
+        }
+        // Pins at two places allow no uniform scaling: room only bends
+        // edges, holding every vertex and leg end, and the drawing scores
+        // better, as label feedback ranks drawings.
+        let pins = [(0, free[0]), (6, free[6])];
+        let (before, crowded) = cube_with_room(60.0, false, &pins);
+        let (after, score) = cube_with_room(60.0, true, &pins);
+        assert_eq!(before, after);
+        assert!(score < crowded, "{score:?} {crowded:?}");
+        // The bend brings no painted bands into contact.
+        let (mut scene, typeset) = labelled_cube(60.0);
+        for &(node, [x, y]) in &pins {
+            scene.graph.nodes[node].pos =
+                Some(serde_json::from_value(serde_json::json!({"x": x, "y": y})).unwrap());
+        }
+        let options = Value::Object(scene.layout.clone());
+        let graph = scene.layout_graph(&typeset, true).unwrap();
+        let room = crate::label_room::LabelRoom::new(&graph, &options)
+            .unwrap()
+            .unwrap();
+        let run = ImpredRun::seeded(graph, &options).unwrap();
+        let relaxed = run.relaxed.as_ref().expect("a bend");
+        assert!(!room.adds_contact(&run.layout, relaxed));
+    }
+
+    #[test]
+    fn native_leaders_follow_the_label_leaders_option() {
+        // Without room, the crowded cube's labels meet edges and labels; one
+        // has free space to be set off into.
+        let render = |leaders: Option<bool>| {
+            let (mut scene, typeset) = labelled_cube(90.0);
+            scene
+                .layout
+                .insert("impred-label-room".into(), Value::Bool(false));
+            if let Some(leaders) = leaders {
+                Config::from_json(
+                    &serde_json::json!({"drawing": {"label-leaders": leaders}}).to_string(),
+                )
+                .unwrap()
+                .apply(&mut scene)
+                .unwrap();
+            }
+            let drawing = scene.draw(&typeset).unwrap();
+            let leaders = drawing.searched.leaders.iter().flatten().count();
+            let svg = output::svg(&typeset, &drawing.layers, None);
+            (
+                leaders,
+                svg.matches(r#"stroke-width="0.45""#).count(),
+                drawing.score(),
+            )
+        };
+        let (led, hairlines, score) = render(None);
+        assert!(led > 0, "{score:?}");
+        assert_eq!(hairlines, led);
+        assert_eq!(render(Some(true)).0, led);
+        let (kept, hairlines, _) = render(Some(false));
+        assert_eq!((kept, hairlines), (0, 0));
+        // A leadered label is drawn at its leader's end, and hovering the
+        // leader inspects the label's edge.
+        let (mut scene, typeset) = labelled_cube(90.0);
+        scene
+            .layout
+            .insert("impred-label-room".into(), Value::Bool(false));
+        let drawing = scene.draw(&typeset).unwrap();
+        for (placement, leader) in drawing.placements.iter().zip(&drawing.searched.leaders) {
+            let Some(leader) = leader else { continue };
+            let drawn: Vec<_> = drawing
+                .layers
+                .iter()
+                .filter_map(|element| match element {
+                    Element::Label {
+                        bounds,
+                        href: Some(href),
+                        ..
+                    } if *href == placement.href => Some(*bounds),
+                    _ => None,
+                })
+                .collect();
+            assert_eq!(drawn, [leader.bounds]);
+            let [from, to] = [leader.from, leader.to].map(|point| [point.0, point.1]);
+            let on_leader = |at: [f64; 2]| {
+                let (dx, dy) = (to[0] - from[0], to[1] - from[1]);
+                let t = ((at[0] - from[0]) * dx + (at[1] - from[1]) * dy) / (dx * dx + dy * dy);
+                (0.0..=1.0).contains(&t)
+                    && ((at[0] - from[0]) * dy - (at[1] - from[1]) * dx).abs()
+                        <= 1e-9 * (dx * dx + dy * dy).sqrt()
+            };
+            assert!(drawing
+                .targets
+                .iter()
+                .any(|target| &*target.href == placement.href.as_str() && on_leader(target.at)));
+        }
+        let mut scene = bubble(true);
+        let invalid = Config::from_json(r#"{"drawing": {"label-leaders": 1}}"#).unwrap();
+        assert!(invalid.apply(&mut scene).is_err());
+    }
+
     #[test]
     fn feedback_emits_the_same_svg_as_serializing_every_pass() {
         // Keep an eager reference to check both painting order and selection:
@@ -1743,7 +2256,7 @@ mod tests {
 
         let mut continued_after_rejection = false;
         for momentum in [false, true] {
-            for width in [10.0, 80.0] {
+            for width in [10.0, 100.0] {
                 let mut scene = bubble(momentum);
                 scene.label_feedback = true;
                 let mut typeset = typeset(&scene);

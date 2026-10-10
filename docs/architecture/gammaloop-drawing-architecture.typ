@@ -88,10 +88,23 @@ that compiling without the input produces. PDF and PNG exports compile without i
 Label overlaps are measured by the placement code itself. The shared `label_placement` measure
 clips painted edge lines exactly against each chosen label's text box, as the search scores them,
 and lists the labels, nodes, self-loop bends and momentum arrows whose boxes share an area with
-the label. Native label feedback (`impred_labels`) scores its passes by the painted lines and
-labels it lists. On the Typst route the compile input `linnest-label-report=true` makes `draw`
-record the whole measure as `<linnest-label-report>` metadata, which the drawing benchmark's
-`--label-report` collects and compares with a baseline.
+the label, and what a label's leader crosses. Native label feedback (`impred_labels`) scores its
+passes by the painted lines and labels it lists, fixed labels included. On the Typst route the
+compile input `linnest-label-report=true` makes `draw` record the whole measure as
+`<linnest-label-report>` metadata, which the drawing benchmark's `--label-report` collects and
+compares with a baseline.
+
+Both routes share how labels get room and where they go. Typst `graph.style` (through
+`impl/style.typ`, which `draw` uses too) and the native `Scene` record each edge's measured label,
+painted band, label gap and momentum arrow as `label-*` statements. After ImPrEd relaxes,
+`linnest::label_room` predicts the drawing's placement from them: Kurvst Hobby curves through the
+routes and the candidates `linnest::annotation` builds, which the native drawing places its labels
+with as well. A layout whose labels all have a clear place is kept; otherwise the edges bend
+around the labels with every vertex held, or the drawing scales up uniformly, as the drawing's
+own search confirms. When annealing leaves text meeting something, the search keeps a placement
+that meets nothing if moving the touching labels to clear candidates reaches one, and
+`label_placement::leaders` sets a label it still cannot clear in nearby free space with a hairline
+back to its carrier, on both routes (`draw(label-leaders:)`, native `label-leaders`).
 
 The rendering contract has no evaluated-string mode. Generated particle styles are ordinary
 Typst dictionaries/functions in `edge-style.typ`, backed by

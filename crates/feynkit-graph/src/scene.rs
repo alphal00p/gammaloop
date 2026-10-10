@@ -412,6 +412,7 @@ impl FeynmanDiagram {
             layout: options.layout.clone(),
             layout_edges: None,
             label_feedback: options.label_feedback,
+            label_leaders: true,
         })
     }
 
@@ -534,6 +535,7 @@ impl SceneOptions {
             pages: vec![],
             layout: self.layout.clone(),
             label_feedback: self.label_feedback,
+            label_leaders: true,
             layout_edges: None,
         };
         for (is_incoming, particles) in [(true, incoming), (false, outgoing)] {

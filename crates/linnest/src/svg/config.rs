@@ -49,6 +49,9 @@ impl Config {
                 "impred-node-edge-strength",
                 "impred-labels",
                 "impred-level",
+                "impred-label-room",
+                "impred-label-room-margin",
+                "impred-label-room-max-scale",
             ]
             .contains(&key.as_str())
             {
@@ -64,13 +67,18 @@ impl Config {
             {
                 return Err(format!("{key} must be positive"));
             }
+            // Native label-aware layouts refine around the drawn labels.
             if key == "impred-labels" {
                 scene.label_feedback = value.as_bool().ok_or("impred-labels must be boolean")?;
+                continue;
             }
             scene.layout.insert(key, value.clone());
         }
         for (key, value) in &self.drawing {
             match key.replace('_', "-").as_str() {
+                "label-leaders" => {
+                    scene.label_leaders = value.as_bool().ok_or("label-leaders must be boolean")?;
+                }
                 "node-radius" => {
                     let radius = value
                         .as_f64()

@@ -1346,6 +1346,191 @@ fn public_linnest_label_report_lists_what_chosen_labels_meet() {
 }
 
 #[test]
+fn public_linnest_leaders_set_crowded_labels_off_their_edge() {
+    let configured_typst = std::env::var_os("TYPST_TEST_EXECUTABLE").map(PathBuf::from);
+    let typst = configured_typst
+        .clone()
+        .unwrap_or_else(|| PathBuf::from("typst"));
+    match Command::new(&typst).arg("--version").output() {
+        Ok(version) if version.status.success() => {}
+        result if configured_typst.is_some() => {
+            panic!("configured Typst executable failed: {result:?}")
+        }
+        _ => return,
+    }
+    let base = tempfile::tempdir().unwrap();
+    let renderer = TypstRenderer::new(base.path()).typst_executable(&typst);
+    renderer.check_version().unwrap();
+    renderer.stage_default_assets().unwrap();
+    let templates = base.path().join(".clinnet/templates");
+    // Edge 0's label is wider than the gap between edges 1 and 2, which
+    // cross its short carrier: every place on it meets them.
+    let fixture = |leaders: &str| {
+        let name: String = leaders
+            .chars()
+            .map(|c| if c.is_ascii_alphanumeric() { c } else { '-' })
+            .collect();
+        let path = templates.join(format!("leaders-{name}.typ"));
+        fs::write(
+            &path,
+            format!(
+                r#"#set page(width: auto, height: auto, margin: 0pt)
+#import "crates/linnest/typst/src/lib.typ": draw, graph
+#let g = graph.build({{
+  graph.node(<a>, pos: graph.pos(x: -1.5, y: 0))
+  graph.node(<b>, pos: graph.pos(x: 1.5, y: 0))
+  graph.node(<c>, pos: graph.pos(x: -0.7, y: -1.6))
+  graph.node(<d>, pos: graph.pos(x: -0.7, y: 1.6))
+  graph.node(<e>, pos: graph.pos(x: 0.7, y: -1.6))
+  graph.node(<f>, pos: graph.pos(x: 0.7, y: 1.6))
+  graph.edge(graph.source(<a>), graph.sink(<b>), pos: graph.pos(x: 0, y: 0))
+  graph.edge(graph.source(<c>), graph.sink(<d>), pos: graph.pos(x: -0.7, y: 0))
+  graph.edge(graph.source(<e>), graph.sink(<f>), pos: graph.pos(x: 0.7, y: 0))
+}})
+#draw(g, label-leaders: {leaders},
+  source-style: edge => if edge.eid == 0 {{ (label: [wide edge label]) }} else {{ (:) }})
+"#
+            ),
+        )
+        .unwrap();
+        path
+    };
+    let run = |args: &[&str]| {
+        Command::new(&typst)
+            .args(args)
+            .arg("--root")
+            .arg(&templates)
+            .output()
+            .unwrap()
+    };
+    let typst_output = |fixture: &PathBuf, args: &[&str]| {
+        let result = run(args);
+        assert!(
+            result.status.success(),
+            "{}: {}",
+            fixture.display(),
+            String::from_utf8_lossy(&result.stderr)
+        );
+        result.stdout
+    };
+    let report = |leaders: &str| {
+        let fixture = fixture(leaders);
+        let stdout = typst_output(
+            &fixture,
+            &[
+                "eval",
+                "query(<linnest-label-report>).map(record => record.value)",
+                "--in",
+                fixture.to_str().unwrap(),
+                "--input",
+                "linnest-label-report=true",
+            ],
+        );
+        let drawings: serde_json::Value = serde_json::from_slice(&stdout).unwrap();
+        drawings[0]["labels"][0].clone()
+    };
+    // Set off with a leader, the text meets nothing and neither does its
+    // leader; kept on its edge, it crosses both edges.
+    let led = report("true");
+    assert!(led["leader"].is_object(), "{led}");
+    for kind in ["crossings", "labels", "obstacles", "arrows"] {
+        assert_eq!(led[kind], serde_json::json!([]), "{kind}");
+    }
+    assert_eq!(led["leader"]["crossings"], serde_json::json!([]));
+    assert_eq!(led["leader"]["labels"], serde_json::json!([]));
+    let kept = report("false");
+    assert_eq!(kept["leader"], serde_json::Value::Null);
+    let crossed: Vec<_> = kept["crossings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|crossing| crossing["edge"].clone())
+        .collect();
+    assert_eq!(crossed, [1, 2]);
+    // Hovering the leader inspects the label's edge: its targets share the
+    // label's `#linnet-edge-0` link.
+    let svg = |leaders: &str, targets: bool| {
+        let fixture = fixture(leaders);
+        let output = base.path().join(format!("leaders-{targets}.svg"));
+        typst_output(
+            &fixture,
+            &[
+                "compile",
+                fixture.to_str().unwrap(),
+                output.to_str().unwrap(),
+                "--input",
+                &format!("linnest-inspection-targets={targets}"),
+            ],
+        );
+        fs::read_to_string(output).unwrap()
+    };
+    let targets = |leaders: &str| {
+        let svg = svg(leaders, true);
+        ["#linnet-edge-0", "#linnet-edge-1", "#linnet-edge-2"]
+            .map(|link| svg.matches(&format!("href=\"{link}")).count())
+    };
+    let (led, kept) = (targets("true"), targets("false"));
+    assert!(led[0] > kept[0], "{led:?} {kept:?}");
+    assert_eq!(led[1..], kept[1..]);
+    // The hairline is drawn, from its anchor to the text drawn at its end.
+    let hairline = |svg: &str| -> Vec<((f64, f64), (f64, f64))> {
+        paths_with_attr(svg, "stroke-width", "0.45")
+            .into_iter()
+            .map(|(_, tag)| {
+                let (x, y) = own_translation(tag);
+                let d = svg_numbers(svg_attr(tag, "d").unwrap());
+                let start = (x + d[2], y + d[3]);
+                (start, (start.0 + d[4], start.1 + d[5]))
+            })
+            .collect()
+    };
+    // The label text: its group's translation and its content frame.
+    let text = |svg: &str| {
+        let glyph = svg.find("<use").unwrap();
+        let key = r#"<g transform="translate("#;
+        let start = svg[..glyph].rfind(key).unwrap() + key.len() - "translate(".len();
+        let origin = translation(&svg[start..start + svg[start..].find('"').unwrap()]);
+        let frame = svg_paths(svg)
+            .into_iter()
+            .find(|(_, tag)| {
+                svg_attr(tag, "fill") == Some("none") && own_translation(tag) == origin
+            })
+            .map(|(_, tag)| svg_numbers(svg_attr(tag, "d").unwrap()))
+            .unwrap();
+        (origin, (frame[2], frame[3]))
+    };
+    let (drawn, kept) = (svg("true", false), svg("false", false));
+    let lines = hairline(&drawn);
+    assert_eq!(lines.len(), 1, "{lines:?}");
+    assert!(hairline(&kept).is_empty());
+    let (_, end) = lines[0];
+    let ((x, y), (width, height)) = text(&drawn);
+    assert_ne!((x, y), text(&kept).0);
+    // The leader stops just short of the text box.
+    let outside =
+        (x - end.0).max(end.0 - x - width).max(0.0) + (y - end.1).max(end.1 - y - height).max(0.0);
+    assert!(outside < 3.0, "{end:?} {x} {y} {width} {height}");
+    // A leader style sets the hairline and dot; malformed styles name the
+    // option.
+    let styled = svg("(stroke: 1pt + red, dot: none)", false);
+    assert_eq!(hairline(&styled).len(), 0);
+    assert_eq!(paths_with_attr(&styled, "stroke", "#ff4136").len(), 1);
+    assert_eq!(paths_with_attr(&styled, "fill", "#ff4136").len(), 0);
+    for (style, message) in [
+        ("(stroke: none)", "label-leaders stroke"),
+        ("\"yes\"", "label-leaders must be"),
+        ("(color: red)", "label-leaders takes"),
+        ("(dot: 1)", "label-leaders dot"),
+    ] {
+        let fixture = fixture(style);
+        let result = run(&["compile", fixture.to_str().unwrap(), "-"]);
+        assert!(!result.status.success(), "{style}");
+        let stderr = String::from_utf8_lossy(&result.stderr);
+        assert!(stderr.contains(message), "{style}: {stderr}");
+    }
+}
+
+#[test]
 fn public_weighted_cut_rejects_invalid_selections_and_stale_topology() {
     let configured_typst = std::env::var_os("TYPST_TEST_EXECUTABLE").map(PathBuf::from);
     let typst = configured_typst

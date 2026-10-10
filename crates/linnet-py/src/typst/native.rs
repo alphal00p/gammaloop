@@ -112,6 +112,7 @@ impl RenderSettingsTransport {
             layout: Default::default(),
             layout_edges: None,
             label_feedback: false,
+            label_leaders: true,
         };
         if let Some(title) = title {
             if !matches!(
@@ -184,6 +185,11 @@ impl RenderSettingsTransport {
             .unwrap_or(NativeValue::String("#ffffff".into()));
         let node_stroke = draw.remove("node-stroke");
         let edge_stroke = draw.remove("edge-stroke");
+        scene.label_leaders = match draw.remove("label-leaders") {
+            None => true,
+            Some(NativeValue::Bool(leaders)) => leaders,
+            Some(_) => return None,
+        };
         if !draw.is_empty() {
             return None;
         }

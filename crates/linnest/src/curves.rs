@@ -1,32 +1,32 @@
-//! Kurvst geometry with the arguments `draw.typ` passes.
+//! Kurvst geometry with the arguments `draw.typ` passes, shared by the native
+//! drawing and the label room check.
 use kurbo::{BezPath, CubicBez, ParamCurveArclen, Point};
-use kurvst::{
-    CubicBezierSpec, CurvePoint, FittedCoilInput, HobbySplineSpec, ParallelPathSpec,
-    PathFramesSpec, PathTrimmer, PatternInput, PatternPathSpec, RegionPart, RegionSamplesSpec,
-};
+#[cfg(feature = "svg")]
+use kurvst::{CubicBezierSpec, RegionPart, RegionSamplesSpec};
+use kurvst::{CurvePoint, HobbySplineSpec, ParallelPathSpec, PathFramesSpec, PathTrimmer};
 
 /// Kurvst's arc-length accuracy for drawing.
-pub(super) const ACCURACY: f64 = 0.001;
+pub(crate) const ACCURACY: f64 = 0.001;
 
 /// A point and unnormalized tangent on a path.
 #[derive(Clone, Copy)]
-pub(super) struct Frame {
+pub(crate) struct Frame {
     pub point: [f64; 2],
     pub tangent: [f64; 2],
 }
 
-pub(super) fn length(path: &BezPath) -> f64 {
+pub(crate) fn length(path: &BezPath) -> f64 {
     path.segments()
         .map(|segment| segment.arclen(ACCURACY))
         .sum()
 }
 
-pub(super) fn cubics(path: &BezPath) -> Vec<CubicBez> {
+pub(crate) fn cubics(path: &BezPath) -> Vec<CubicBez> {
     path.segments().map(|segment| segment.to_cubic()).collect()
 }
 
 /// `curve-api.path(..segments.map(from-cubic))`: contiguous cubics share a move.
-pub(super) fn from_cubics(segments: &[CubicBez]) -> BezPath {
+pub(crate) fn from_cubics(segments: &[CubicBez]) -> BezPath {
     let mut path = BezPath::new();
     let mut previous = None;
     for segment in segments {
@@ -42,14 +42,14 @@ pub(super) fn from_cubics(segments: &[CubicBez]) -> BezPath {
 }
 
 /// The arc-length window `[start, length - end]`; empty when nothing remains.
-pub(super) fn trim(path: &BezPath, start: f64, end: f64) -> Result<BezPath, String> {
+pub(crate) fn trim(path: &BezPath, start: f64, end: f64) -> Result<BezPath, String> {
     PathTrimmer::new(path.segments(), ACCURACY)
         .trim(start, end)
         .map(|segments| BezPath::from_path_segments(segments.into_iter()))
 }
 
 /// One measured path trimmed to every `(start, end)` outset window.
-pub(super) fn windows(path: &BezPath, outsets: &[(f64, f64)]) -> Result<Vec<BezPath>, String> {
+pub(crate) fn windows(path: &BezPath, outsets: &[(f64, f64)]) -> Result<Vec<BezPath>, String> {
     let trimmer = PathTrimmer::new(path.segments(), ACCURACY);
     outsets
         .iter()
@@ -62,7 +62,7 @@ pub(super) fn windows(path: &BezPath, outsets: &[(f64, f64)]) -> Result<Vec<BezP
 }
 
 /// `_trim-routed-path`: empty when the outsets consume the path.
-pub(super) fn trim_routed(path: &BezPath, start: f64, end: f64) -> Result<BezPath, String> {
+pub(crate) fn trim_routed(path: &BezPath, start: f64, end: f64) -> Result<BezPath, String> {
     if path.elements().is_empty() || (start == 0.0 && end == 0.0) {
         return Ok(path.clone());
     }
@@ -73,7 +73,7 @@ pub(super) fn trim_routed(path: &BezPath, start: f64, end: f64) -> Result<BezPat
 }
 
 /// `_routed-split-through(..).curve`: drop solver-collapsed knots, then Hobby.
-pub(super) fn routed_curve(points: &[[f64; 2]]) -> Result<BezPath, String> {
+pub(crate) fn routed_curve(points: &[[f64; 2]]) -> Result<BezPath, String> {
     let mut knots: Vec<CurvePoint> = Vec::new();
     for &[x, y] in points {
         if knots
@@ -96,7 +96,7 @@ pub(super) fn routed_curve(points: &[[f64; 2]]) -> Result<BezPath, String> {
 }
 
 /// `kurvst.parallel`: positive distances lie left of the path direction.
-pub(super) fn parallel(path: &BezPath, distance: f64) -> Result<BezPath, String> {
+pub(crate) fn parallel(path: &BezPath, distance: f64) -> Result<BezPath, String> {
     ParallelPathSpec {
         path: path.clone(),
         distance,
@@ -110,7 +110,7 @@ pub(super) fn parallel(path: &BezPath, distance: f64) -> Result<BezPath, String>
 
 /// Kurvst's Typst `layers`: offset, then shifted windows of `length`/`ratio`
 /// resolved by "min", from one trim batch. `None` keeps the full path.
-pub(super) fn layers(
+pub(crate) fn layers(
     path: &BezPath,
     shifts: &[f64],
     offset: f64,
@@ -138,7 +138,7 @@ pub(super) fn layers(
     windows(&path, &outsets)
 }
 
-pub(super) fn layer(
+pub(crate) fn layer(
     path: &BezPath,
     offset: f64,
     window: Option<(f64, f64)>,
@@ -148,7 +148,7 @@ pub(super) fn layer(
 }
 
 /// Points and tangents at arc distances, clamped onto the path.
-pub(super) fn frames(path: &BezPath, distances: Vec<f64>) -> Result<Vec<Frame>, String> {
+pub(crate) fn frames(path: &BezPath, distances: Vec<f64>) -> Result<Vec<Frame>, String> {
     let frames = PathFramesSpec {
         path: path.clone(),
         distances,
@@ -172,63 +172,13 @@ pub(super) fn frames(path: &BezPath, distances: Vec<f64>) -> Result<Vec<Frame>, 
         .collect())
 }
 
-/// A physics line decoration over a whole edge.
-pub(super) fn pattern(path: &BezPath, decoration: &super::Pattern) -> Result<BezPath, String> {
-    use super::Pattern;
-    let length = length(path);
-    if length <= f64::EPSILON {
-        return Ok(path.clone());
-    }
-    let spec = |pattern, amplitude, wavelength, longitudinal_scale| PatternPathSpec {
-        path: path.clone(),
-        pattern,
-        amplitude,
-        wavelength,
-        phase: 0.0,
-        samples_per_period: 16,
-        coil_longitudinal_scale: longitudinal_scale,
-        anchor_start: true,
-        anchor_end: true,
-        endpoint_slope: 0.0,
-        split_at: Vec::new(),
-        accuracy: ACCURACY,
-    };
-    // Coils fit their natural endpoints to the complete edge before painting.
-    let spec = match *decoration {
-        Pattern::Coil {
-            amplitude,
-            wavelength,
-            longitudinal_scale,
-        } => spec(
-            PatternInput::FittedCoil(FittedCoilInput {
-                kind: "fitted-coil".to_owned(),
-                fit_length: length,
-                amplitude,
-                wavelength,
-                longitudinal_scale,
-                samples_per_period: 16,
-            }),
-            amplitude,
-            length,
-            longitudinal_scale,
-        ),
-        Pattern::Wave {
-            amplitude,
-            wavelength,
-        } => spec(PatternInput::wave(16), amplitude, wavelength, 1.25),
-        Pattern::Zigzag {
-            amplitude,
-            wavelength,
-        } => spec(PatternInput::zigzag(), amplitude, wavelength, 1.25),
-    };
-    spec.patterned().map(|output| output.path)
-}
-
 /// Hover sample points per arc-length region (0..4) of the parts together.
-pub(super) type RegionSamples = Vec<(usize, Vec<[f64; 2]>)>;
+#[cfg(feature = "svg")]
+pub(crate) type RegionSamples = Vec<(usize, Vec<[f64; 2]>)>;
 
 /// Hover sample points along each visible part, in four arc-length regions.
-pub(super) fn region_samples(parts: &[&BezPath], unit: f64) -> Result<RegionSamples, String> {
+#[cfg(feature = "svg")]
+pub(crate) fn region_samples(parts: &[&BezPath], unit: f64) -> Result<RegionSamples, String> {
     RegionSamplesSpec {
         parts: parts
             .iter()
@@ -255,7 +205,7 @@ pub(super) fn region_samples(parts: &[&BezPath], unit: f64) -> Result<RegionSamp
 }
 
 /// Kurvst's Typst `cubic-tangent`, operation for operation.
-pub(super) fn cubic_tangent(segment: &CubicBez, t: f64) -> [f64; 2] {
+pub(crate) fn cubic_tangent(segment: &CubicBez, t: f64) -> [f64; 2] {
     let lerp = |a: Point, b: Point| a.lerp(b, t);
     let ab = lerp(segment.p0, segment.p1);
     let bc = lerp(segment.p1, segment.p2);

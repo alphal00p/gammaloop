@@ -13,7 +13,7 @@ python3 tests/drawing-bench/run.py --package-path /path/to/typst/packages --out 
 python3 tests/drawing-bench/run.py --inspection-targets --out target/drawing-bench/targets
 python3 tests/drawing-bench/run.py --label-report --out target/drawing-bench/labels
 python3 tests/drawing-bench/run.py --label-report \
-  --label-baseline target/drawing-bench/labels/label-report.json --out target/drawing-bench/labels-new
+  --label-baseline tests/drawing-bench/label-baseline.json --out target/drawing-bench/labels-new
 ```
 
 Output directories must be new and under `target/drawing-bench`. No references
@@ -42,13 +42,17 @@ own `run.py`, and named HISTORICAL/FROZEN snapshot, never CURRENT.
 `references.tar` contains the 24 current-source PNGs at 150 ppi, all 72 raw
 timing samples, case medians, source/package/environment metadata, and the
 paired comparison with the supplied snapshot. SHA256:
-`633b5b736b31d9f1378cf9b4108c3785a036e0d874558b90b469297b3be3142c`. These
+`b2bdbb47bf85cfcb3ecb4eeeb1b4599486a59786cdd6bf6560c4feb57718b248`. These
 references are the P0 renders with the formerly vendored, patched CeTZ 0.5.1;
-stock CeTZ renders are compared against them by image review.
+stock CeTZ renders are compared against them by image review. Label room
+redraws seven `-momenta` cases whose labels met edges, labels or arrows; their
+PNGs are stock-CeTZ renders of that change (see the manifest).
+`label-baseline.json` is the label report of the current sources, in which no
+label meets anything: `--label-baseline` against it fails on any new contact.
 
 The sum of three-round case medians is 15.010 s on the recorded M4 Pro host
-with Typst 0.15.1. All 24 PNGs are byte-identical to that host's supplied
-snapshot renders. This certifies no raster drift at 150 ppi in the reconciled
+with Typst 0.15.1. The 17 PNGs still from P0 are byte-identical to that
+host's supplied snapshot renders. This certifies no raster drift at 150 ppi in the reconciled
 baseline, not cross-platform SVG identity or future arrowhead implementation.
 
 ```sh
@@ -99,14 +103,17 @@ radius included, clipped exactly against each chosen label's text box; and
 other labels' text, nodes, self-loop bends and momentum arrows whose boxes
 share a positive area with the label's text or its own arrow. Arrow and node
 boxes are rectangles around their shapes, so a listed box overlap need not be
-visible. `label-report.json` keeps every drawing's records; `label-report.csv`
+visible. A label set off its edge with a leader is measured where it is drawn,
+and its leader by the painted edges and labels it crosses.
+`label-report.json` keeps every drawing's records; `label-report.csv`
 lists per case the labels, those whose text meets a painted edge, overlapping
 label pairs, each crossing as `e<label edge>>e<crossed edge>:<length inside the
 box>`, each obstacle as `e<label edge>>n<node>` or `e<label edge>>e<edge>-loop`,
-and each momentum arrow as `e<label edge>>e<arrow edge>`. With
+each momentum arrow as `e<label edge>>e<arrow edge>`, and each leader as
+`e<label edge>:<length>` followed by `>e<edge>` for every edge it crosses. With
 `--label-baseline`, the run fails when a case gains a (label edge, crossed
-edge, obstacle or arrow edge) contact or an overlapping label pair relative to
-an earlier `label-report.json`. The report describes the chosen candidates only;
+edge, obstacle, arrow edge or leader crossing) contact or an overlapping label
+pair relative to an earlier `label-report.json`. The report describes the chosen candidates only;
 whether a clear candidate existed needs Linnest's `debug-label-collisions`
 overlay or the placement's candidate costs.
 

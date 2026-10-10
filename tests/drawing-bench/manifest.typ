@@ -14,9 +14,15 @@ members are byte-identical to this archive's.
 
 Reconciled baseline archive: `references.tar` (USTAR, regular files only,
 mode 0644, uid/gid/mtime zero). SHA256:
-`633b5b736b31d9f1378cf9b4108c3785a036e0d874558b90b469297b3be3142c`.
+`b2bdbb47bf85cfcb3ecb4eeeb1b4599486a59786cdd6bf6560c4feb57718b248`.
 It contains 24 PNGs at 150 ppi and four generated reports: source/environment
-metadata, raw timings, medians, and paired snapshot PNG hashes.
+metadata, raw timings, medians, and paired snapshot PNG hashes. The PNGs of
+the seven cases label room redraws (higgs-sunset, multi-leg-eight-gluon-ladder,
+multi-leg-six-higgs-theta, nonplanar-higgs-k33 and the three xs-extra-higgs
+`-momenta` cases) are current stock-CeTZ renders of that change: the metadata
+and the snapshot comparison record their hashes (the comparison counts 17 of
+24 identical to the snapshot) and list them under `label_room_redraws`, while
+timings, medians and SVG hashes describe the original P0 run.
 
 The following diagram groups each have `-momenta.typ` and `-particles.typ`,
 except gluonic/fermionic whose second suffix is `-notebook.typ`:

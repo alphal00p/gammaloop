@@ -236,6 +236,9 @@ pub(super) fn svg(typeset: &Typeset, layers: &[Element], targets: Option<&[Targe
                 }
             }
             Element::HitBox { bounds, .. } => include(Rect::from(*bounds)),
+            Element::Dot {
+                at: [x, y], radius, ..
+            } => include(Rect::new(x - radius, y - radius, x + radius, y + radius)),
             Element::Label { bounds, .. } => include(Rect::from(*bounds)),
             Element::Node {
                 at: [x, y],
@@ -365,6 +368,20 @@ pub(super) fn svg(typeset: &Typeset, layers: &[Element], targets: Option<&[Targe
                     drawable.join,
                     number(drawable.miter_limit),
                     path_data(&drawable.path.path)
+                );
+            }
+            Element::Dot {
+                at: [dx, dy],
+                radius,
+                fill,
+            } => {
+                let _ = write!(
+                    svg,
+                    r#"<circle cx="{}" cy="{}" r="{}" fill="{}"/>"#,
+                    x(*dx),
+                    y(*dy),
+                    number(radius * UNIT),
+                    xml_escape(fill)
                 );
             }
             Element::Label {

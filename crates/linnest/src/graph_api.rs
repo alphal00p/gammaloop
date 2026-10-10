@@ -541,6 +541,8 @@ pub struct ImpredRun {
     pub session: crate::impred_projection::ProjectionSession,
     pub layout: ImpredLayout,
     pub config: ImpredConfig,
+    /// The layout as relaxed, when label room has since changed it.
+    pub relaxed: Option<ImpredLayout>,
 }
 
 impl ImpredRun {
@@ -618,14 +620,22 @@ impl ImpredRun {
             return Err("ImPrEd attachment pull must be finite and nonnegative".to_owned());
         }
         graph.layout_config.spring.external_pull_attachment = attachment;
+        let room = crate::label_room::LabelRoom::new(&graph, options)?;
         let (session, _) =
             ProjectionSession::initialize(graph, seed).map_err(|error| error.to_string())?;
         let mut layout = session.impred_layout().map_err(|error| error.to_string())?;
         layout.solve(config)?;
+        let relaxed = match room {
+            Some(room) => room
+                .remedy(&layout, config)?
+                .map(|remedy| std::mem::replace(&mut layout, remedy)),
+            None => None,
+        };
         Ok(Self {
             session,
             layout,
             config,
+            relaxed,
         })
     }
 

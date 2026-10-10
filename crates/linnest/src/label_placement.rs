@@ -5,12 +5,16 @@
 //! per-candidate transforms, collision costs and search without changing positions,
 //! costs, or tie-breaking. Typst certifies every acceptance decision by the search.
 use serde::{de::Error, Deserialize, Deserializer, Serialize};
-use std::{cell::Cell, collections::BTreeMap};
+use std::{cell::Cell, collections::BTreeMap, ops::Range};
+
+mod leaders;
+#[cfg(feature = "svg")]
+pub(crate) use leaders::Leader;
 
 #[derive(Deserialize)]
-struct Frame {
-    point: [f64; 2],
-    tangent: [f64; 2],
+pub(crate) struct Frame {
+    pub(crate) point: [f64; 2],
+    pub(crate) tangent: [f64; 2],
 }
 impl Frame {
     fn deserialize_batch<'de, D: Deserializer<'de>>(de: D) -> Result<Vec<Self>, D::Error> {
@@ -25,18 +29,18 @@ impl Frame {
 
 #[derive(Deserialize)]
 #[serde(transparent)]
-struct Transform([[f64; 4]; 4]);
+pub(crate) struct Transform([[f64; 4]; 4]);
 
 impl Transform {
+    pub(crate) const IDENTITY: Self = Self([
+        [1.0, 0.0, 0.0, 0.0],
+        [0.0, 1.0, 0.0, 0.0],
+        [0.0, 0.0, 1.0, 0.0],
+        [0.0, 0.0, 0.0, 1.0],
+    ]);
+
     fn point(&self, [x, y]: [f64; 2]) -> [f64; 3] {
-        if self.0
-            == [
-                [1.0, 0.0, 0.0, 0.0],
-                [0.0, 1.0, 0.0, 0.0],
-                [0.0, 0.0, 1.0, 0.0],
-                [0.0, 0.0, 0.0, 1.0],
-            ]
-        {
+        if self.0 == Self::IDENTITY.0 {
             return [x, y, 0.0];
         }
         std::array::from_fn(|i| {
@@ -46,7 +50,7 @@ impl Transform {
     }
 }
 
-#[derive(Clone, Copy, Deserialize, Serialize)]
+#[derive(Clone, Copy, Debug, Deserialize, Serialize)]
 pub(crate) struct Point(
     #[serde(deserialize_with = "crate::deserialize_f64")] pub(crate) f64,
     #[serde(deserialize_with = "crate::deserialize_f64")] pub(crate) f64,
@@ -69,7 +73,7 @@ impl Point {
 
 #[derive(Deserialize)]
 #[serde(rename_all = "kebab-case")]
-struct CubicSegment {
+pub(crate) struct CubicSegment {
     start: Point,
     control_start: Point,
     control_end: Point,
@@ -77,6 +81,17 @@ struct CubicSegment {
 }
 
 impl CubicSegment {
+    /// The cubic `[start, control, control, end]`.
+    pub(crate) fn new(points: [[f64; 2]; 4]) -> Self {
+        let [start, control_start, control_end, end] = points.map(|[x, y]| Point(x, y));
+        Self {
+            start,
+            control_start,
+            control_end,
+            end,
+        }
+    }
+
     fn point(&self, at: f64) -> [f64; 2] {
         // Match Kurvst's Typst cubic-point de Casteljau evaluation exactly.
         let ab = self.start.lerp(self.control_start, at);
@@ -236,6 +251,40 @@ impl Point {
     fn length(self) -> f64 {
         (self.0 * self.0 + self.1 * self.1).sqrt()
     }
+
+    fn add(self, other: Self) -> Self {
+        Self(self.0 + other.0, self.1 + other.1)
+    }
+
+    /// The distance from the point to the segment `a`-`b`.
+    fn segment_distance(self, a: Self, b: Self) -> f64 {
+        let ab = b.sub(a);
+        let squared = ab.dot(ab);
+        let at = if squared <= 1e-24 {
+            0.0
+        } else {
+            (self.sub(a).dot(ab) / squared).clamp(0.0, 1.0)
+        };
+        self.distance(a.lerp(b, at))
+    }
+}
+
+/// Whether the closed segments `a`-`b` and `c`-`d` cross or touch.
+fn segments_meet(a: Point, b: Point, c: Point, d: Point) -> bool {
+    let side = |p: Point, q: Point, r: Point| q.sub(p).cross(r.sub(p));
+    let (d1, d2, d3, d4) = (side(a, b, c), side(a, b, d), side(c, d, a), side(c, d, b));
+    d1 * d2 <= 0.0 && d3 * d4 <= 0.0 && (d1 != 0.0 || d2 != 0.0 || d3 != 0.0 || d4 != 0.0)
+}
+
+/// The distance between the segments `a`-`b` and `c`-`d`.
+fn segment_gap(a: Point, b: Point, c: Point, d: Point) -> f64 {
+    if segments_meet(a, b, c, d) {
+        return 0.0;
+    }
+    a.segment_distance(c, d)
+        .min(b.segment_distance(c, d))
+        .min(c.segment_distance(a, b))
+        .min(d.segment_distance(a, b))
 }
 
 #[derive(Deserialize)]
@@ -297,23 +346,35 @@ impl AttachmentSpec {
     }
 
     fn offset(&self) -> Option<f64> {
-        if self.lines.is_empty() {
+        Self::offset_of(
+            &[&self.lines],
+            self.corners,
+            self.frame,
+            self.outward,
+            self.gap,
+        )
+    }
+
+    /// The clearing offset of `corners` along `outward` from `frame`, past
+    /// the lines of every chunk in order, as if they were one list.
+    fn offset_of(
+        chunks: &[&[[Point; 2]]],
+        corners: [Point; 4],
+        frame: Point,
+        outward: Point,
+        gap: f64,
+    ) -> Option<f64> {
+        if chunks.iter().all(|lines| lines.is_empty()) {
             return None;
         }
-        let scale = self.outward.length();
+        let scale = outward.length();
         if scale <= 1e-9 {
             return None;
         }
-        let normal = self.outward.scaled(1.0 / scale);
+        let normal = outward.scaled(1.0 / scale);
         let tangent = Point(-normal.1, normal.0);
         let project = |point: Point| Point(point.dot(tangent), point.dot(normal));
-        let quad = [
-            self.corners[0],
-            self.corners[1],
-            self.corners[3],
-            self.corners[2],
-        ]
-        .map(project);
+        let quad = [corners[0], corners[1], corners[3], corners[2]].map(project);
         let orientation = quad[1].sub(quad[0]).cross(quad[2].sub(quad[1]));
         let left = quad
             .iter()
@@ -323,12 +384,22 @@ impl AttachmentSpec {
             .iter()
             .map(|point| point.0)
             .fold(f64::NEG_INFINITY, f64::max);
-        let radius = self.gap * scale;
-        let mut intervals = Vec::with_capacity(self.lines.len());
-        for &[start, end] in &self.lines {
-            let start = project(start.sub(self.frame));
-            let end = project(end.sub(self.frame));
-            if start.0.min(end.0) > right + radius || start.0.max(end.0) < left - radius {
+        let radius = gap * scale;
+        // The swept quad spans its own extent along the normal; a line whose
+        // capsule ends below the quad's lowest point at offset zero yields an
+        // interval wholly below zero, which never touches the frame.
+        let bottom = quad
+            .iter()
+            .map(|point| point.1)
+            .fold(f64::INFINITY, f64::min);
+        let mut intervals = Vec::new();
+        for &[start, end] in chunks.iter().flat_map(|lines| lines.iter()) {
+            let start = project(start.sub(frame));
+            let end = project(end.sub(frame));
+            if start.0.min(end.0) > right + radius
+                || start.0.max(end.0) < left - radius
+                || start.1.max(end.1) + radius < bottom
+            {
                 continue;
             }
             // Sweep the measured quad along this finite segment, preserving
@@ -476,36 +547,40 @@ impl ObstacleSpec {
     }
 }
 
+/// One batch of a label's candidates: stations along one carrier side, as
+/// `draw.typ` enumerates them.
 #[derive(Deserialize)]
 #[serde(rename_all = "kebab-case")]
-struct CandidateSpec {
+pub(crate) struct CandidateSpec {
     #[serde(default)]
-    attachment: Option<CandidateAttachment>,
+    pub(crate) attachment: Option<CandidateAttachment>,
     #[serde(default)]
-    endpoint_direction: Option<Point>,
+    pub(crate) endpoint_direction: Option<Point>,
     #[serde(deserialize_with = "Frame::deserialize_batch")]
-    frames: Vec<Frame>,
-    positions: Vec<f64>,
-    transform: Transform,
-    origin: [f64; 3],
-    corners: [[f64; 3]; 4],
-    total: f64,
-    preferred: f64,
-    accuracy: f64,
-    side: f64,
-    preferred_side: f64,
-    path_index: usize,
-    path_shift: f64,
-    gap: f64,
-    clear_box: bool,
-    fixed: bool,
+    pub(crate) frames: Vec<Frame>,
+    pub(crate) positions: Vec<f64>,
+    pub(crate) transform: Transform,
+    pub(crate) origin: [f64; 3],
+    pub(crate) corners: [[f64; 3]; 4],
+    pub(crate) total: f64,
+    pub(crate) preferred: f64,
+    pub(crate) accuracy: f64,
+    pub(crate) side: f64,
+    pub(crate) preferred_side: f64,
+    pub(crate) path_index: usize,
+    pub(crate) path_shift: f64,
+    pub(crate) gap: f64,
+    pub(crate) clear_box: bool,
+    pub(crate) fixed: bool,
 }
 
+/// The finite geometry a label clears: its carrier and, per station, the
+/// arrow it rides.
 #[derive(Deserialize)]
-struct CandidateAttachment {
-    carrier: Vec<CubicSegment>,
+pub(crate) struct CandidateAttachment {
+    pub(crate) carrier: Vec<CubicSegment>,
     #[serde(deserialize_with = "CandidateAttachment::deserialize_paths")]
-    paths: Vec<Vec<CubicSegment>>,
+    pub(crate) paths: Vec<Vec<CubicSegment>>,
 }
 impl CandidateAttachment {
     fn deserialize_paths<'de, D: Deserializer<'de>>(
@@ -540,7 +615,7 @@ pub(crate) struct Bounds {
 }
 
 impl Bounds {
-    fn expanded(self, padding: f64) -> Self {
+    pub(crate) fn expanded(self, padding: f64) -> Self {
         Self {
             left: self.left - padding,
             right: self.right + padding,
@@ -557,7 +632,7 @@ impl Bounds {
         width * (self.top.min(other.top) - self.bottom.max(other.bottom) + padding).max(0.0)
     }
 
-    fn union(self, other: Self) -> Self {
+    pub(crate) fn union(self, other: Self) -> Self {
         Self {
             left: self.left.min(other.left),
             right: self.right.max(other.right),
@@ -565,7 +640,49 @@ impl Bounds {
             top: self.top.max(other.top),
         }
     }
+
+    fn spanning(a: Point, b: Point) -> Self {
+        Self {
+            left: a.0.min(b.0),
+            right: a.0.max(b.0),
+            bottom: a.1.min(b.1),
+            top: a.1.max(b.1),
+        }
+    }
+
+    /// Corners in `TextFrame` order: north-west, north-east, south-west, south-east.
+    fn corners(self) -> [Point; 4] {
+        [
+            Point(self.left, self.top),
+            Point(self.right, self.top),
+            Point(self.left, self.bottom),
+            Point(self.right, self.bottom),
+        ]
+    }
+
+    /// The distance from the segment `a`-`b` to the box, zero when it enters.
+    fn segment_distance(self, a: Point, b: Point) -> f64 {
+        let inside = |p: Point| {
+            self.left <= p.0 && p.0 <= self.right && self.bottom <= p.1 && p.1 <= self.top
+        };
+        if inside(a) || inside(b) {
+            return 0.0;
+        }
+        let [nw, ne, sw, se] = self.corners();
+        [(nw, ne), (ne, se), (se, sw), (sw, nw)]
+            .into_iter()
+            .map(|(c, d)| segment_gap(a, b, c, d))
+            .fold(f64::INFINITY, f64::min)
+    }
 }
+
+/// The drawing's annotation clearances, in canvas units: label boxes grow by
+/// `LABEL_PADDING` against each other, and boxes overlap within
+/// `PAIR_PADDING` (between annotations) and `OBSTACLE_PADDING` (with nodes).
+/// Typst's `_label-collision-padding` holds the same values.
+pub(crate) const LABEL_PADDING: f64 = 0.6;
+pub(crate) const PAIR_PADDING: f64 = 0.35;
+pub(crate) const OBSTACLE_PADDING: f64 = 0.08;
 
 #[derive(Deserialize)]
 struct CollisionCandidate {
@@ -575,11 +692,26 @@ struct CollisionCandidate {
     corners: Option<[Point; 4]>,
     #[serde(default, rename = "arrow-bounds")]
     arrow_bounds: Vec<Bounds>,
+    /// The frame point on the carrier, in canvas coordinates: where a leader
+    /// meets it.
+    #[serde(default)]
+    anchor: Option<Point>,
+    /// The unit normal at the anchor toward the candidate's side, in canvas
+    /// coordinates: the way a leader leaves it.
+    #[serde(default)]
+    normal: Option<Point>,
+    /// The side of the carrier the candidate lies on.
+    #[serde(default)]
+    side: Option<ciborium::Value>,
+    /// The candidate's distance along its carrier from the preferred place,
+    /// relative to the carrier's length.
+    #[serde(default)]
+    relative: Option<f64>,
 }
 
 /// A painted collision line: one straight piece of a flattened stroke, with
 /// the stroke's half width.
-#[derive(Deserialize, Serialize)]
+#[derive(Clone, Copy, Deserialize, Serialize)]
 pub(crate) struct StrokeLine {
     start: Point,
     end: Point,
@@ -588,8 +720,53 @@ pub(crate) struct StrokeLine {
 }
 
 impl StrokeLine {
+    /// The collision lines of painted cubics `[start, control, control, end]`,
+    /// flattened as the drawing flattens its strokes.
+    pub(crate) fn flattened(
+        cubics: impl IntoIterator<Item = [[f64; 2]; 4]>,
+        radius: f64,
+    ) -> Vec<Self> {
+        cubics
+            .into_iter()
+            .flat_map(|cubic| CubicSegment::new(cubic).lines(&Transform::IDENTITY, STROKE_ACCURACY))
+            .map(|[start, end]| Self {
+                start: Point(start[0], start[1]),
+                end: Point(end[0], end[1]),
+                radius,
+            })
+            .collect()
+    }
+
+    /// The line as a room prediction counts it: grown by `margin` beyond
+    /// its stroke, or, as one of `own`, its label's own carrier, by its
+    /// centerline alone.
+    fn grown(self, index: usize, own: &Range<usize>, margin: f64) -> Self {
+        let radius = if own.contains(&index) {
+            0.0
+        } else {
+            self.radius + margin
+        };
+        Self { radius, ..self }
+    }
+
+    /// Whether the two strokes come within `clearance` of each other.
+    pub(crate) fn touches(&self, other: &Self, clearance: f64) -> bool {
+        segment_gap(self.start, self.end, other.start, other.end)
+            <= self.radius + other.radius + clearance
+    }
+
+    /// Whether the stroke, grown by `clearance`, reaches the box.
+    pub(crate) fn reaches(&self, bounds: Bounds, clearance: f64) -> bool {
+        bounds.segment_distance(self.start, self.end) <= self.radius + clearance
+    }
+
+    /// The length of the stroke's centerline.
+    pub(crate) fn length(&self) -> f64 {
+        self.start.distance(self.end)
+    }
+
     /// The stroke envelope tested by `edge_intersection`, with its exact roundings.
-    fn extent(&self) -> Bounds {
+    pub(crate) fn extent(&self) -> Bounds {
         Bounds {
             left: self.start.0.min(self.end.0) - self.radius,
             right: self.start.0.max(self.end.0) + self.radius,
@@ -610,7 +787,7 @@ impl Bounds {
 /// Uniform grid over stroke extents. A line that passes the bounding test in
 /// `edge_intersection` shares a cell with the query, because the cell index is
 /// monotone in each coordinate. Ascending indices keep every sum unchanged.
-struct LineGrid {
+pub(crate) struct LineGrid {
     origin: Point,
     cell: Point,
     side: usize,
@@ -621,7 +798,7 @@ struct LineGrid {
 }
 
 impl LineGrid {
-    fn new(lines: &[StrokeLine]) -> Self {
+    pub(crate) fn new(lines: &[StrokeLine]) -> Self {
         let side = (lines.len() as f64).sqrt().ceil().max(1.0) as usize;
         let total = lines
             .iter()
@@ -673,7 +850,7 @@ impl LineGrid {
     }
 
     /// Ascending indices of every line whose extent may meet `bounds`.
-    fn near(&self, bounds: Bounds) -> Vec<usize> {
+    pub(crate) fn near(&self, bounds: Bounds) -> Vec<usize> {
         if !bounds.is_finite() {
             return (0..self.count).collect();
         }
@@ -763,7 +940,15 @@ impl TextFrame {
 }
 
 impl CollisionCandidate {
-    fn edge_intersection(&self, lines: &[StrokeLine], grid: &LineGrid) -> Cost {
+    /// The crossing cost of painted lines through the text, except the lines
+    /// `own` of the label's own carrier when it is set off by construction.
+    fn edge_intersection(
+        &self,
+        lines: &[StrokeLine],
+        grid: &LineGrid,
+        own: &Range<usize>,
+        margin: f64,
+    ) -> Cost {
         let Some(frame) = self
             .corners
             .filter(|_| !lines.is_empty())
@@ -772,8 +957,8 @@ impl CollisionCandidate {
             return Cost::Integer(0);
         };
         let mut length = 0.0;
-        for index in grid.near(self.bounds) {
-            if let Some(inside) = frame.clip(&lines[index]) {
+        for index in grid.near(self.bounds.expanded(margin)) {
+            if let Some(inside) = frame.clip(&lines[index].grown(index, own, margin)) {
                 length += inside;
             }
         }
@@ -928,6 +1113,10 @@ impl CandidateRecords {
                     cost: ciborium::Value::Float(record.geometry.cost),
                     corners: Some(record.geometry.corners.map(|[x, y, _]| Point(x, y))),
                     arrow_bounds: record.arrow_bounds.clone(),
+                    anchor: Some(Point(record.geometry.anchor[0], record.geometry.anchor[1])),
+                    normal: record.geometry.normal(),
+                    side: Some(record.side.clone()),
+                    relative: Some(record.geometry.relative),
                 })
                 .collect()),
         }
@@ -973,6 +1162,12 @@ struct CollisionLabel {
     candidates: Vec<CollisionCandidate>,
     records: CandidateRecords,
     edge: Option<ciborium::Value>,
+    /// Painted lines of the label's own carrier, which a room prediction
+    /// counts by their centerline: the label clears its carrier by
+    /// construction, while the band standing in for a patterned carrier may
+    /// reach past the painted pattern; the carrier still may curve back into
+    /// the text. Drawings count every line as painted.
+    own_lines: Range<usize>,
 }
 impl<'de> Deserialize<'de> for CollisionLabel {
     fn deserialize<D: Deserializer<'de>>(de: D) -> Result<Self, D::Error> {
@@ -992,7 +1187,224 @@ impl<'de> Deserialize<'de> for CollisionLabel {
             candidates,
             records,
             edge,
+            own_lines: 0..0,
         })
+    }
+}
+
+impl CollisionLabel {
+    /// Whether the label may take either side of its carrier: an automatic
+    /// side, which a leader may also leave. Labels of explicit side keep it.
+    fn two_sided(&self) -> bool {
+        let sides: Vec<f64> = self
+            .candidates
+            .iter()
+            .filter_map(|candidate| Cost::from_value(candidate.side.as_ref()?).ok())
+            .map(Cost::float)
+            .collect();
+        sides.iter().any(|side| *side > 0.0) && sides.iter().any(|side| *side < 0.0)
+    }
+}
+
+impl CollisionSpec {
+    /// The vertex and self-loop boxes annotations must not meet.
+    fn node_boxes(&self) -> Vec<Bounds> {
+        self.obstacles
+            .iter()
+            .filter(|obstacle| obstacle.edge.is_none() || obstacle.self_loop)
+            .map(|obstacle| obstacle.bounds)
+            .collect()
+    }
+
+    /// What each chosen annotation meets: painted lines, other text, node
+    /// boxes and arrows, as the label report counts them, with every line
+    /// but each label's own carrier grown by `margin`.
+    fn meets(&self, choices: &[usize], margin: f64) -> Vec<LabelOverlaps> {
+        let placed: Vec<_> = self
+            .placements
+            .iter()
+            .zip(choices)
+            .map(|(label, &choice)| {
+                let candidate = &label.candidates[choice];
+                PlacedLabel {
+                    bounds: candidate.bounds,
+                    corners: candidate.corners,
+                    arrow_bounds: candidate.arrow_bounds.clone(),
+                    own_lines: label.own_lines.clone(),
+                    leader: None,
+                    edge: None,
+                }
+            })
+            .collect();
+        label_overlaps(
+            &placed,
+            &self.edge_lines,
+            &[],
+            margin,
+            &self.node_boxes(),
+            &self.fixed_arrows,
+        )
+    }
+
+    /// Each label at its cheapest candidate on its own, settled against the
+    /// others by the search's final descent.
+    fn settled(&self, geometry: &CollisionGeometry) -> Result<Vec<usize>, String> {
+        let costs: Vec<Vec<Cost>> = geometry
+            .costs
+            .iter()
+            .map(|costs| costs.iter().map(Cost::from_value).collect::<Result<_, _>>())
+            .collect::<Result<_, _>>()?;
+        let mut choices: Vec<usize> = costs
+            .iter()
+            .map(|costs| {
+                (0..costs.len())
+                    .min_by(|&a, &b| costs[a].float().total_cmp(&costs[b].float()))
+                    .unwrap_or(0)
+            })
+            .collect();
+        geometry.descend(&costs, &mut choices, geometry.pair_padding)?;
+        Ok(choices)
+    }
+
+    /// From `choices`, move each label that still meets something to its
+    /// cheapest candidate, against the others, that meets nothing, while one
+    /// does. The search may prefer a text that only touches a line to one
+    /// that clears it beside another label's padding; a drawing keeps no
+    /// touch it can avoid. Lines other than a label's own carrier count grown
+    /// by `margin`.
+    fn cleared(
+        &self,
+        geometry: &CollisionGeometry,
+        mut choices: Vec<usize>,
+        margin: f64,
+    ) -> Result<Vec<usize>, String> {
+        let costs: Vec<Vec<f64>> = geometry
+            .costs
+            .iter()
+            .map(|costs| {
+                costs
+                    .iter()
+                    .map(|cost| Cost::from_value(cost).map(Cost::float))
+                    .collect::<Result<_, _>>()
+            })
+            .collect::<Result<_, _>>()?;
+        let grid = LineGrid::new(&self.edge_lines);
+        let nodes = self.node_boxes();
+        let placed = |label: &CollisionLabel, choice: usize| {
+            let candidate = &label.candidates[choice];
+            PlacedLabel {
+                bounds: candidate.bounds,
+                corners: candidate.corners,
+                arrow_bounds: candidate.arrow_bounds.clone(),
+                own_lines: label.own_lines.clone(),
+                leader: None,
+                edge: None,
+            }
+        };
+        let mut labels: Vec<_> = self
+            .placements
+            .iter()
+            .zip(&choices)
+            .map(|(label, &choice)| placed(label, choice))
+            .collect();
+        // Every contact label `index` takes part in, on either side.
+        let involving = |labels: &[PlacedLabel], index: usize| {
+            let own = label_overlap(
+                index,
+                labels,
+                &self.edge_lines,
+                &[],
+                &grid,
+                margin,
+                &nodes,
+                &self.fixed_arrows,
+            )
+            .contacts();
+            let theirs = labels
+                .iter()
+                .enumerate()
+                .filter(|&(other, label)| {
+                    other != index
+                        && labels[index]
+                            .arrow_bounds
+                            .iter()
+                            .any(|&arrow| label.reaches(arrow))
+                })
+                .count();
+            own + theirs
+        };
+        loop {
+            let mut moved = false;
+            for index in 0..labels.len() {
+                let label = &self.placements[index];
+                let current = involving(&labels, index);
+                if current == 0 || label.candidates.len() < 2 {
+                    continue;
+                }
+                let mut best: Option<(f64, usize)> = None;
+                for (choice, cost) in costs[index].iter().enumerate() {
+                    labels[index] = placed(label, choice);
+                    if involving(&labels, index) > 0 {
+                        continue;
+                    }
+                    let energy = cost
+                        + (0..labels.len())
+                            .filter(|&other| other != index)
+                            .map(|other| {
+                                geometry.pair_cost(
+                                    index,
+                                    choice,
+                                    other,
+                                    choices[other],
+                                    geometry.pair_padding,
+                                )
+                            })
+                            .sum::<f64>();
+                    if best.is_none_or(|(cheapest, _)| energy.total_cmp(&cheapest).is_lt()) {
+                        best = Some((energy, choice));
+                    }
+                }
+                let choice = best.map_or(choices[index], |(_, choice)| {
+                    moved = true;
+                    choice
+                });
+                choices[index] = choice;
+                labels[index] = placed(label, choice);
+            }
+            if !moved {
+                return Ok(choices);
+            }
+        }
+    }
+
+    /// The search's placement from its annealed `choices`, with what each
+    /// chosen annotation meets: where annealing ends with text still meeting
+    /// something, the first of it, the descent from each label's cheapest
+    /// candidate and every label at its preferred place, its first
+    /// candidate, that meets nothing once cleared of what it can avoid; the
+    /// annealed placement when none does.
+    fn finished(
+        &self,
+        geometry: &CollisionGeometry,
+        choices: Vec<usize>,
+    ) -> Result<(Vec<usize>, Vec<LabelOverlaps>), String> {
+        let clear = |found: &[LabelOverlaps]| found.iter().all(|found| found.contacts() == 0);
+        let annealed = self.meets(&choices, self.margin);
+        if clear(&annealed) {
+            return Ok((choices, annealed));
+        }
+        for start in [
+            choices.clone(),
+            self.settled(geometry)?,
+            vec![0; self.placements.len()],
+        ] {
+            let cleared = self.cleared(geometry, start, self.margin)?;
+            let found = self.meets(&cleared, self.margin);
+            if clear(&found) {
+                return Ok((cleared, found));
+            }
+        }
+        Ok((choices, annealed))
     }
 }
 
@@ -1008,14 +1420,23 @@ struct Obstacle {
 
 impl Obstacle {
     fn belongs_to(&self, label: &CollisionLabel) -> bool {
-        use ciborium::Value::{Float, Integer};
         match (&self.edge, &label.edge) {
             (_, None) => false,
-            // Typst compares integer and float identifiers numerically.
-            (Some(Integer(left)), Some(Float(right)))
-            | (Some(Float(right)), Some(Integer(left))) => i128::from(*left) as f64 == *right,
-            (left, right) => left == right,
+            (Some(left), Some(right)) => same_edge(left, right),
+            (None, Some(_)) => false,
         }
+    }
+}
+
+/// Whether two edge identifiers are equal, as Typst compares them: integer
+/// and float identifiers numerically.
+fn same_edge(left: &ciborium::Value, right: &ciborium::Value) -> bool {
+    use ciborium::Value::{Float, Integer};
+    match (left, right) {
+        (Integer(left), Float(right)) | (Float(right), Integer(left)) => {
+            i128::from(*left) as f64 == *right
+        }
+        (left, right) => left == right,
     }
 }
 
@@ -1036,6 +1457,14 @@ struct CollisionSpec {
     fixed_arrows: Vec<Bounds>,
     #[serde(default)]
     coordinated: bool,
+    /// Set labels whose chosen text still meets something off their carrier,
+    /// with a leader back to it.
+    #[serde(default)]
+    leaders: Option<leaders::LeaderSpec>,
+    /// How far a room prediction grows the painted lines beyond their
+    /// strokes when it scores them; drawings score them as they are.
+    #[serde(skip)]
+    margin: f64,
 }
 
 struct CollisionGeometry {
@@ -1112,12 +1541,27 @@ struct SearchMath {
     pair_padding: f64,
 }
 
+impl SearchMath {
+    /// The search's cooling schedule: 84 sweeps from temperature 0.15, each
+    /// 0.9 of the last, with host-certified exponentials.
+    fn schedule(exponentials: Vec<(f64, f64)>, pair_padding: f64) -> Self {
+        Self {
+            temperatures: (0..84).map(|sweep| 0.15 * 0.9_f64.powi(sweep)).collect(),
+            exponentials,
+            pair_padding,
+        }
+    }
+}
+
 #[derive(Serialize)]
 struct SearchResult {
     choices: Vec<usize>,
     costs: Vec<ciborium::Value>,
     missing: Vec<ExponentialCheck>,
     selected: Vec<ciborium::Value>,
+    /// Per label, its leader when it is set off its carrier; empty without
+    /// leaders.
+    leaders: Vec<Option<leaders::Leader>>,
 }
 
 #[derive(Serialize)]
@@ -1237,6 +1681,94 @@ impl CollisionGeometry {
             cost = Cost::Float(cost.float() + self.pair_cost(i, choice, j, other, padding));
         }
         cost
+    }
+
+    /// A short joint descent that lets crowded annotations leave a basin
+    /// together, then single-label moves that settle each annotation against
+    /// its final neighbours. Every move lowers the total cost.
+    fn descend(
+        &self,
+        costs: &[Vec<Cost>],
+        choices: &mut [usize],
+        padding: f64,
+    ) -> Result<(), String> {
+        let count = self.boxes.len();
+        let score = |i, choice, choices: &[usize], excluding| {
+            self.local_cost(costs, i, choice, choices, excluding, padding)
+        };
+        for _ in 0..2 {
+            for i in 0..count {
+                if self.boxes[i].len() <= 1 {
+                    continue;
+                }
+                for j in i + 1..count {
+                    if self.boxes[j].len() <= 1
+                        || self.pair_cost(i, choices[i], j, choices[j], padding) <= 1e-12
+                    {
+                        continue;
+                    }
+                    // Rank without the partner so both annotations can
+                    // leave a crowded basin together. Bound the joint search.
+                    let ranked = [i, j].map(|index| {
+                        let other = if index == i { j } else { i };
+                        let mut ranked: Vec<_> = (0..self.boxes[index].len())
+                            .map(|choice| {
+                                (choice, score(index, choice, &*choices, Some(other)).float())
+                            })
+                            .collect();
+                        ranked.sort_by(|left, right| {
+                            left.1
+                                .partial_cmp(&right.1)
+                                .unwrap_or(std::cmp::Ordering::Equal)
+                        });
+                        ranked.truncate(6);
+                        ranked.push((
+                            choices[index],
+                            score(index, choices[index], &*choices, Some(other)).float(),
+                        ));
+                        ranked
+                    });
+                    let mut best = (choices[i], choices[j]);
+                    let mut cost = score(i, best.0, &*choices, None)
+                        .add(score(j, best.1, &*choices, Some(i)))?
+                        .float();
+                    for &(left, left_cost) in &ranked[0] {
+                        for &(right, right_cost) in &ranked[1] {
+                            let proposed =
+                                left_cost + right_cost + self.pair_cost(i, left, j, right, padding);
+                            if proposed < cost - 1e-12 {
+                                cost = proposed;
+                                best = (left, right);
+                            }
+                        }
+                    }
+                    choices[i] = best.0;
+                    choices[j] = best.1;
+                }
+            }
+        }
+        // Joint moves rank each partner without the other, so a label can
+        // end beside a cheaper spot. Settle labels one at a time against
+        // their final neighbours; every move lowers the total cost.
+        let mut moved = true;
+        while moved {
+            moved = false;
+            for i in 0..count {
+                if self.boxes[i].len() <= 1 {
+                    continue;
+                }
+                let mut current = score(i, choices[i], &*choices, None).float();
+                for choice in 0..self.boxes[i].len() {
+                    let proposed = score(i, choice, &*choices, None).float();
+                    if proposed < current - 1e-12 {
+                        choices[i] = choice;
+                        current = proposed;
+                        moved = true;
+                    }
+                }
+            }
+        }
+        Ok(())
     }
 
     fn search(&self, math: &SearchMath) -> Result<SearchResult, String> {
@@ -1375,80 +1907,7 @@ impl CollisionGeometry {
         }
         if self.coordinated {
             choices.clone_from(&best_choices);
-            for _ in 0..2 {
-                for i in 0..count {
-                    if self.boxes[i].len() <= 1 {
-                        continue;
-                    }
-                    for j in i + 1..count {
-                        if self.boxes[j].len() <= 1
-                            || self.pair_cost(i, choices[i], j, choices[j], math.pair_padding)
-                                <= 1e-12
-                        {
-                            continue;
-                        }
-                        // Rank without the partner so both annotations can
-                        // leave a crowded basin together. Bound the joint search.
-                        let ranked = [i, j].map(|index| {
-                            let other = if index == i { j } else { i };
-                            let mut ranked: Vec<_> = (0..self.boxes[index].len())
-                                .map(|choice| {
-                                    (choice, score(index, choice, &choices, Some(other)).float())
-                                })
-                                .collect();
-                            ranked.sort_by(|left, right| {
-                                left.1
-                                    .partial_cmp(&right.1)
-                                    .unwrap_or(std::cmp::Ordering::Equal)
-                            });
-                            ranked.truncate(6);
-                            ranked.push((
-                                choices[index],
-                                score(index, choices[index], &choices, Some(other)).float(),
-                            ));
-                            ranked
-                        });
-                        let mut best = (choices[i], choices[j]);
-                        let mut cost = score(i, best.0, &choices, None)
-                            .add(score(j, best.1, &choices, Some(i)))?
-                            .float();
-                        for &(left, left_cost) in &ranked[0] {
-                            for &(right, right_cost) in &ranked[1] {
-                                let proposed = left_cost
-                                    + right_cost
-                                    + self.pair_cost(i, left, j, right, math.pair_padding);
-                                if proposed < cost - 1e-12 {
-                                    cost = proposed;
-                                    best = (left, right);
-                                }
-                            }
-                        }
-                        choices[i] = best.0;
-                        choices[j] = best.1;
-                    }
-                }
-            }
-            // Joint moves rank each partner without the other, so a label can
-            // end beside a cheaper spot. Settle labels one at a time against
-            // their final neighbours; every move lowers the total cost.
-            let mut moved = true;
-            while moved {
-                moved = false;
-                for i in 0..count {
-                    if self.boxes[i].len() <= 1 {
-                        continue;
-                    }
-                    let mut current = score(i, choices[i], &choices, None).float();
-                    for choice in 0..self.boxes[i].len() {
-                        let proposed = score(i, choice, &choices, None).float();
-                        if proposed < current - 1e-12 {
-                            choices[i] = choice;
-                            current = proposed;
-                            moved = true;
-                        }
-                    }
-                }
-            }
+            self.descend(&costs, &mut choices, math.pair_padding)?;
             best_choices = choices;
         }
         Ok(SearchResult {
@@ -1460,6 +1919,7 @@ impl CollisionGeometry {
             choices: best_choices,
             missing,
             selected: Vec::new(),
+            leaders: Vec::new(),
         })
     }
 }
@@ -1508,8 +1968,13 @@ impl CollisionSpec {
                 let raw = candidate.bounds;
                 let area = (raw.right - raw.left) * (raw.top - raw.bottom);
                 areas.push(area);
-                let initial = Cost::from_value(&candidate.cost)?
-                    .add(candidate.edge_intersection(&self.edge_lines, &grid))?;
+                let initial =
+                    Cost::from_value(&candidate.cost)?.add(candidate.edge_intersection(
+                        &self.edge_lines,
+                        &grid,
+                        &label.own_lines,
+                        self.margin,
+                    ))?;
                 let mut cost = initial.float();
                 // Keep zero terms too: adding them converts integer costs to
                 // floats. Preserve both obstacle order and numeric types.
@@ -1607,21 +2072,39 @@ impl CollisionSpec {
 
 #[derive(Deserialize, Serialize)]
 #[serde(rename_all = "kebab-case")]
-struct Candidate {
+pub(crate) struct Candidate {
     position: [f64; 2],
     normal: [f64; 2],
     outward: [f64; 3],
     nearest: f64,
-    corners: [[f64; 3]; 4],
+    pub(crate) corners: [[f64; 3]; 4],
     at: f64,
-    side: f64,
+    pub(crate) side: f64,
     path_index: usize,
     path_shift: f64,
-    bounds: Bounds,
-    cost: f64,
+    pub(crate) bounds: Bounds,
+    pub(crate) cost: f64,
+    /// The arc distance from the carrier's preferred place, relative to the
+    /// carrier's length, that the cost weighs.
+    pub(crate) relative: f64,
+    /// The frame point on the carrier, in canvas coordinates: where a
+    /// leader meets it.
+    pub(crate) anchor: [f64; 2],
 }
 
+/// A candidate's static cost: `PLACE_WEIGHT` per squared relative distance
+/// from its carrier's preferred place, and `SIDE_COST` off its preferred side.
+const PLACE_WEIGHT: f64 = 0.002;
+const SIDE_COST: f64 = 0.00002;
+
 impl Candidate {
+    /// The unit normal toward the candidate's side, in canvas coordinates.
+    pub(crate) fn normal(&self) -> Option<Point> {
+        let normal = Point(self.outward[0], self.outward[1]);
+        let length = normal.length();
+        (length > 1e-12).then(|| normal.scaled(1.0 / length))
+    }
+
     fn record(
         &self,
         at: ciborium::Value,
@@ -1660,7 +2143,7 @@ impl Candidate {
 }
 
 impl CandidateSpec {
-    fn candidates(&self) -> Result<Vec<Candidate>, String> {
+    pub(crate) fn candidates(&self) -> Result<Vec<Candidate>, String> {
         if self.frames.len() != self.positions.len() {
             return Err("label frames and positions must have equal lengths".to_owned());
         }
@@ -1717,22 +2200,19 @@ impl CandidateSpec {
                     // The finite arrow precedes its physical carrier, exactly as
                     // in the scalar attachment boundary. Flatten the carrier once
                     // per label batch instead of encoding its lines per candidate.
-                    let mut lines = PathLinesSpec::flattened(
+                    let lines = PathLinesSpec::flattened(
                         &attachment.paths[index],
                         &self.transform,
                         self.accuracy,
                     );
-                    lines.extend_from_slice(&carrier_lines);
                     let [x, y, _] = self.transform.point(frame.point);
-                    AttachmentSpec {
-                        initial: ciborium::Value::Float(initial),
-                        lines,
-                        corners: self.corners.map(|[x, y, _]| Point(x, y)),
-                        frame: Point(x, y),
-                        outward: Point(outward[0], outward[1]),
-                        gap: self.gap,
-                    }
-                    .offset()
+                    AttachmentSpec::offset_of(
+                        &[&lines, &carrier_lines],
+                        self.corners.map(|[x, y, _]| Point(x, y)),
+                        Point(x, y),
+                        Point(outward[0], outward[1]),
+                        self.gap,
+                    )
                     .unwrap_or(initial)
                 });
                 let position = if self.fixed && self.endpoint_direction.is_none() {
@@ -1741,10 +2221,15 @@ impl CandidateSpec {
                     std::array::from_fn(|i| frame.point[i] + normal[i] * offset)
                 };
                 let center = self.transform.point(position);
+                let [anchor_x, anchor_y, _] = self.transform.point(frame.point);
                 let bounds = self
                     .corners
                     .map(|corner| std::array::from_fn(|i| center[i] + corner[i]));
-                let relative = (at - self.preferred) / self.total;
+                let relative = if self.total <= self.accuracy {
+                    0.0
+                } else {
+                    (at - self.preferred) / self.total
+                };
                 Candidate {
                     position,
                     normal,
@@ -1767,15 +2252,14 @@ impl CandidateSpec {
                             .map(|p| p[1])
                             .fold(f64::NEG_INFINITY, f64::max),
                     },
-                    cost: (if self.total <= self.accuracy {
-                        0.0
-                    } else {
-                        0.002 * relative.powi(2)
-                    }) + if self.side == self.preferred_side {
-                        0.0
-                    } else {
-                        0.00002
-                    },
+                    cost: PLACE_WEIGHT * relative.powi(2)
+                        + if self.side == self.preferred_side {
+                            0.0
+                        } else {
+                            SIDE_COST
+                        },
+                    relative,
+                    anchor: [anchor_x, anchor_y],
                 }
             })
             .collect())
@@ -1829,18 +2313,44 @@ pub fn search_bytes(arg: &[u8], math: &[u8]) -> Result<Vec<u8>, String> {
                 .collect(),
             missing: Vec::new(),
             selected,
+            leaders: Vec::new(),
         }
     } else {
         for label in &mut spec.placements {
             label.candidates = label.records.collision_candidates()?;
         }
-        let mut result = spec.geometry(math.pair_padding)?.search(&math)?;
+        let geometry = spec.geometry(math.pair_padding)?;
+        let mut result = geometry.search(&math)?;
+        // Annealing can end where text still meets something although the
+        // search's descent from each label's cheapest candidate meets less.
+        let (finished, found) = spec.finished(&geometry, result.choices.clone())?;
+        if finished != result.choices {
+            result.costs = finished
+                .iter()
+                .enumerate()
+                .map(|(i, &choice)| geometry.costs[i][choice].clone())
+                .collect();
+            result.choices = finished;
+        }
+        if let Some(style) = &spec.leaders {
+            result.leaders = style.place(&spec, &result.choices, &found);
+        }
+        // `choices` stay the search's places on the carriers. A leader may
+        // anchor at another candidate, whose record, and arrow, is drawn.
         result.selected = spec
             .placements
             .iter()
-            .zip(&result.choices)
-            .zip(&result.costs)
-            .map(|((label, &choice), cost)| label.records.selected(choice, Some(cost)))
+            .enumerate()
+            .map(|(index, label)| {
+                let choice = result
+                    .leaders
+                    .get(index)
+                    .and_then(Option::as_ref)
+                    .map_or(result.choices[index], |leader| leader.choice);
+                label
+                    .records
+                    .selected(choice, Some(&geometry.costs[index][choice]))
+            })
             .collect::<Result<_, _>>()?;
         result
     };
@@ -1858,6 +2368,10 @@ pub fn path_lines_bytes(arg: &[u8]) -> Result<Vec<u8>, String> {
         .map_err(|error| format!("Invalid label path geometry: {error}"))?;
     crate::graph_api::encode_cbor(&spec.lines())
 }
+
+/// The flattening accuracy of painted strokes, as `_edge-collision-lines`
+/// requests it.
+pub(crate) const STROKE_ACCURACY: f64 = 0.005;
 
 /// Painted CeTZ strokes, flattened to the collision lines of `CollisionSpec`.
 #[derive(Deserialize)]
@@ -1898,9 +2412,6 @@ impl StrokeLinesSpec {
         if !self.accuracy.is_finite() || self.accuracy <= 0.0 {
             return Err("painted stroke accuracy must be finite and positive".to_owned());
         }
-        let identity = Transform(std::array::from_fn(|row| {
-            std::array::from_fn(|column| if row == column { 1.0 } else { 0.0 })
-        }));
         let xy = |vertex: &[f64]| Point(vertex[0], vertex[1]);
         let mut lines = Vec::new();
         for stroke in &self.strokes {
@@ -1935,7 +2446,7 @@ impl StrokeLinesSpec {
                             control_end: xy(&Self::vertex(&command[2])?),
                             end: xy(&Self::vertex(&command[3])?),
                         };
-                        for [a, b] in segment.lines(&identity, self.accuracy) {
+                        for [a, b] in segment.lines(&Transform::IDENTITY, self.accuracy) {
                             push(Point(a[0], a[1]), Point(b[0], b[1]));
                         }
                         start = Self::vertex(command.last().expect("checked length"))?;
@@ -1968,14 +2479,29 @@ pub(crate) struct PlacedLabel {
     pub(crate) corners: Option<[Point; 4]>,
     #[serde(default)]
     pub(crate) arrow_bounds: Vec<Bounds>,
+    /// Lines of the label's own carrier, counted by their centerline, as
+    /// `CollisionLabel` has them.
+    #[serde(skip)]
+    pub(crate) own_lines: Range<usize>,
+    /// The leader drawn to a label set off its carrier, in canvas
+    /// coordinates: its anchor, where it has risen off its carrier, and its end.
+    #[serde(default)]
+    pub(crate) leader: Option<[Point; 3]>,
+    /// The label's edge, whose painted lines its leader may meet while it
+    /// rises off them.
+    #[serde(default)]
+    pub(crate) edge: Option<ciborium::Value>,
 }
 
-/// Chosen annotations and the drawing geometry the search scores them against.
+/// Chosen annotations and the drawing geometry the search scores them
+/// against, with the edge of each painted line.
 #[derive(Deserialize)]
 #[serde(rename_all = "kebab-case")]
 struct OverlapSpec {
     labels: Vec<PlacedLabel>,
     lines: Vec<StrokeLine>,
+    #[serde(default)]
+    line_edges: Vec<ciborium::Value>,
     #[serde(default)]
     obstacles: Vec<Bounds>,
     #[serde(default)]
@@ -1993,6 +2519,7 @@ pub(crate) enum ArrowBox {
 
 /// What one chosen annotation really meets, without search clearances.
 #[derive(Serialize)]
+#[serde(rename_all = "kebab-case")]
 pub(crate) struct LabelOverlaps {
     /// Painted lines reaching the text box, with the length inside it, as
     /// scored by the search; strokes only touching the box have length 0.
@@ -2005,6 +2532,23 @@ pub(crate) struct LabelOverlaps {
     /// Other momentum arrow boxes sharing a positive area with the text box or
     /// one of this label's arrow boxes.
     pub(crate) arrows: Vec<ArrowBox>,
+    /// Painted lines the label's leader reaches: anywhere for other edges'
+    /// lines, and once risen off it for its own carrier's.
+    pub(crate) leader: Vec<usize>,
+    /// Other labels whose text the label's leader passes through.
+    pub(crate) leader_labels: Vec<usize>,
+}
+
+impl LabelOverlaps {
+    /// Everything the annotation meets, counting each label pair from both sides.
+    pub(crate) fn contacts(&self) -> usize {
+        self.lines.len()
+            + self.labels.len()
+            + self.obstacles.len()
+            + self.arrows.len()
+            + self.leader.len()
+            + self.leader_labels.len()
+    }
 }
 
 /// What chosen annotations meet: painted lines, through the exact clipping the
@@ -2015,66 +2559,275 @@ pub(crate) struct LabelOverlaps {
 pub(crate) fn label_overlaps(
     labels: &[PlacedLabel],
     lines: &[StrokeLine],
+    line_edges: &[ciborium::Value],
+    margin: f64,
     obstacles: &[Bounds],
     fixed_arrows: &[Bounds],
 ) -> Vec<LabelOverlaps> {
     let grid = LineGrid::new(lines);
-    let shared = |a: Bounds, b: Bounds| a.overlap(b, 0.0) > 1e-9;
-    labels
-        .iter()
-        .enumerate()
-        .map(|(index, label)| {
-            let Bounds {
-                left,
-                right,
-                bottom,
-                top,
-            } = label.bounds;
-            let corners = label.corners.unwrap_or([
-                Point(left, top),
-                Point(right, top),
-                Point(left, bottom),
-                Point(right, bottom),
-            ]);
-            let crossed = TextFrame::new(label.bounds, corners).map_or_else(Vec::new, |frame| {
-                grid.near(label.bounds)
-                    .into_iter()
-                    .filter_map(|line| frame.clip(&lines[line]).map(|inside| (line, inside)))
-                    .collect()
-            });
-            let parts: Vec<_> = std::iter::once(label.bounds)
-                .chain(label.arrow_bounds.iter().copied())
-                .collect();
-            let reaches = |other: Bounds| parts.iter().any(|&part| shared(part, other));
-            let others = || {
-                labels
-                    .iter()
-                    .enumerate()
-                    .filter(move |&(other, _)| other != index)
-            };
-            LabelOverlaps {
-                lines: crossed,
-                labels: others()
-                    .filter(|(_, other)| shared(label.bounds, other.bounds))
-                    .map(|(other, _)| other)
-                    .collect(),
-                obstacles: (0..obstacles.len())
-                    .filter(|&obstacle| reaches(obstacles[obstacle]))
-                    .collect(),
-                arrows: (0..fixed_arrows.len())
-                    .filter(|&arrow| reaches(fixed_arrows[arrow]))
-                    .map(ArrowBox::Fixed)
-                    .chain(
-                        others()
-                            .filter(|(_, other)| {
-                                other.arrow_bounds.iter().any(|&arrow| reaches(arrow))
-                            })
-                            .map(|(other, _)| ArrowBox::Label(other)),
-                    )
-                    .collect(),
-            }
+    (0..labels.len())
+        .map(|index| {
+            label_overlap(
+                index,
+                labels,
+                lines,
+                line_edges,
+                &grid,
+                margin,
+                obstacles,
+                fixed_arrows,
+            )
         })
         .collect()
+}
+
+/// What label `index` meets, as [`label_overlaps`] lists it; `line_edges`
+/// holds the edge of each painted line, for the leader's own carrier.
+#[allow(clippy::too_many_arguments)]
+fn label_overlap(
+    index: usize,
+    labels: &[PlacedLabel],
+    lines: &[StrokeLine],
+    line_edges: &[ciborium::Value],
+    grid: &LineGrid,
+    margin: f64,
+    obstacles: &[Bounds],
+    fixed_arrows: &[Bounds],
+) -> LabelOverlaps {
+    let label = &labels[index];
+    let Bounds {
+        left,
+        right,
+        bottom,
+        top,
+    } = label.bounds;
+    let corners = label.corners.unwrap_or([
+        Point(left, top),
+        Point(right, top),
+        Point(left, bottom),
+        Point(right, bottom),
+    ]);
+    let crossed = TextFrame::new(label.bounds, corners).map_or_else(Vec::new, |frame| {
+        grid.near(label.bounds.expanded(margin))
+            .into_iter()
+            .filter_map(|line| {
+                frame
+                    .clip(&lines[line].grown(line, &label.own_lines, margin))
+                    .map(|inside| (line, inside))
+            })
+            .collect()
+    });
+    let others = || {
+        labels
+            .iter()
+            .enumerate()
+            .filter(move |&(other, _)| other != index)
+    };
+    let (leader, leader_labels) = label.leader.map_or_else(Default::default, |leader| {
+        let texts: Vec<_> = others().map(|(other, text)| (other, text.bounds)).collect();
+        let carrier = |line: usize| {
+            label
+                .edge
+                .as_ref()
+                .zip(line_edges.get(line))
+                .is_some_and(|(edge, owner)| same_edge(edge, owner))
+        };
+        LabelOverlaps::leader_contacts(leader, carrier, lines, grid, &texts)
+    });
+    LabelOverlaps {
+        lines: crossed,
+        labels: others()
+            .filter(|(_, other)| shares(label.bounds, other.bounds))
+            .map(|(other, _)| other)
+            .collect(),
+        obstacles: (0..obstacles.len())
+            .filter(|&obstacle| label.reaches(obstacles[obstacle]))
+            .collect(),
+        arrows: (0..fixed_arrows.len())
+            .filter(|&arrow| label.reaches(fixed_arrows[arrow]))
+            .map(ArrowBox::Fixed)
+            .chain(
+                others()
+                    .filter(|(_, other)| {
+                        other.arrow_bounds.iter().any(|&arrow| label.reaches(arrow))
+                    })
+                    .map(|(other, _)| ArrowBox::Label(other)),
+            )
+            .collect(),
+        leader,
+        leader_labels,
+    }
+}
+
+/// Whether two boxes share a positive area.
+fn shares(a: Bounds, b: Bounds) -> bool {
+    a.overlap(b, 0.0) > 1e-9
+}
+
+impl PlacedLabel {
+    /// Whether the label's text or arrows share area with `other`.
+    fn reaches(&self, other: Bounds) -> bool {
+        std::iter::once(&self.bounds)
+            .chain(&self.arrow_bounds)
+            .any(|&part| shares(part, other))
+    }
+}
+
+impl From<crate::annotation::Candidate> for CollisionCandidate {
+    /// A candidate of a predicted drawing, as the drawing's search scores it.
+    fn from(candidate: crate::annotation::Candidate) -> Self {
+        Self {
+            bounds: candidate.bounds,
+            cost: ciborium::Value::Float(candidate.cost),
+            corners: Some(candidate.corners.map(|[x, y, _]| Point(x, y))),
+            arrow_bounds: candidate.arrow_bounds,
+            anchor: Some(Point(candidate.anchor[0], candidate.anchor[1])),
+            normal: candidate.normal.map(|[x, y]| Point(x, y)),
+            side: Some(ciborium::Value::Float(candidate.side)),
+            relative: Some(candidate.relative),
+        }
+    }
+}
+
+/// How thoroughly to predict the drawing's annotation search.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) enum Thoroughness {
+    /// Each label starts at its cheapest candidate on its own, and the
+    /// search's final descent settles them against each other: quick, and
+    /// pessimistic where the annealing finds a better arrangement.
+    Settled,
+    /// The settled placement, or the full annealing's where the settled one
+    /// still meets something and the annealed one meets less: an optimistic
+    /// estimate.
+    Hopeful,
+    /// The settled placement where it still meets something; otherwise the
+    /// search's full annealing, as the drawing runs it: a pessimistic check.
+    Confirmed,
+    /// The search's full annealing, finished as the drawing finishes it: the
+    /// drawing's own placement.
+    Exact,
+    /// Every label at its preferred place, its first candidate, cleared of
+    /// what it can avoid, as the drawing's search finishes: quick, and exact
+    /// where each label has its preferred place alone.
+    Cleared,
+}
+
+/// Where the drawing's annotation search would place the labels of a
+/// predicted drawing, and what each chosen annotation then meets. What the
+/// chosen annotations meet counts each painted line grown by `margin`, and the
+/// quick predictions score the grown lines too, so they keep text clear of
+/// them where they can. The full annealing scores the lines as they are, as
+/// the drawing does. Single-candidate labels stay fixed.
+pub(crate) fn predict_placement(
+    labels: Vec<(Range<usize>, Vec<crate::annotation::Candidate>)>,
+    lines: Vec<StrokeLine>,
+    margin: f64,
+    nodes: &[Bounds],
+    fixed_arrows: &[Bounds],
+    thoroughness: Thoroughness,
+) -> Result<(Vec<usize>, Vec<LabelOverlaps>), String> {
+    let spec = CollisionSpec {
+        fixed: false,
+        edge_lines: lines,
+        placements: labels
+            .into_iter()
+            .map(|(own_lines, candidates)| CollisionLabel {
+                candidates: candidates
+                    .into_iter()
+                    .map(CollisionCandidate::from)
+                    .collect(),
+                records: CandidateRecords::Expanded(Vec::new()),
+                edge: None,
+                own_lines,
+            })
+            .collect(),
+        obstacles: nodes
+            .iter()
+            .map(|&bounds| Obstacle {
+                bounds,
+                edge: None,
+                self_loop: false,
+            })
+            .collect(),
+        label_padding: LABEL_PADDING,
+        obstacle_padding: OBSTACLE_PADDING,
+        fixed_arrows: fixed_arrows.to_vec(),
+        coordinated: true,
+        leaders: None,
+        margin,
+    };
+    if spec
+        .placements
+        .iter()
+        .any(|label| label.candidates.is_empty())
+    {
+        return Err("predicted labels need at least one candidate".to_owned());
+    }
+    let geometry = spec.geometry(PAIR_PADDING)?;
+    let meets = |choices: &[usize]| {
+        let overlaps = spec.meets(choices, margin);
+        let count = overlaps.iter().map(LabelOverlaps::contacts).sum::<usize>();
+        (count, overlaps)
+    };
+    let settled = || -> Result<_, String> {
+        let choices = spec.settled(&geometry)?;
+        let found = meets(&choices);
+        Ok((choices, found))
+    };
+    match thoroughness {
+        Thoroughness::Settled => {
+            let (choices, settled) = settled()?;
+            Ok((choices, settled.1))
+        }
+        Thoroughness::Hopeful => {
+            let (choices, settled) = settled()?;
+            if settled.0 == 0 {
+                return Ok((choices, settled.1));
+            }
+            let annealed = geometry
+                .search(&SearchMath::schedule(Vec::new(), PAIR_PADDING))?
+                .choices;
+            let searched = meets(&annealed);
+            Ok(if searched.0 < settled.0 {
+                (annealed, searched.1)
+            } else {
+                (choices, settled.1)
+            })
+        }
+        Thoroughness::Cleared => {
+            let choices = spec.cleared(&geometry, vec![0; spec.placements.len()], margin)?;
+            let overlaps = spec.meets(&choices, margin);
+            Ok((choices, overlaps))
+        }
+        Thoroughness::Confirmed | Thoroughness::Exact => {
+            if thoroughness == Thoroughness::Confirmed {
+                let (choices, settled) = settled()?;
+                if settled.0 > 0 {
+                    return Ok((choices, settled.1));
+                }
+            }
+            // As `search_bytes` places them, on every line as it is painted.
+            let mut spec = CollisionSpec {
+                margin: 0.0,
+                ..spec
+            };
+            let own: Vec<_> = spec
+                .placements
+                .iter_mut()
+                .map(|label| std::mem::take(&mut label.own_lines))
+                .collect();
+            let geometry = spec.geometry(PAIR_PADDING)?;
+            let annealed = geometry
+                .search(&SearchMath::schedule(Vec::new(), PAIR_PADDING))?
+                .choices;
+            let (choices, _) = spec.finished(&geometry, annealed)?;
+            for (label, own) in spec.placements.iter_mut().zip(own) {
+                label.own_lines = own;
+            }
+            let overlaps = spec.meets(&choices, margin);
+            Ok((choices, overlaps))
+        }
+    }
 }
 
 /// [`label_overlaps`] over the `label_overlaps` plugin wire format.
@@ -2084,6 +2837,8 @@ pub fn overlaps_bytes(arg: &[u8]) -> Result<Vec<u8>, String> {
     crate::graph_api::encode_cbor(&label_overlaps(
         &spec.labels,
         &spec.lines,
+        &spec.line_edges,
+        0.0,
         &spec.obstacles,
         &spec.fixed_arrows,
     ))
@@ -2423,9 +3178,12 @@ mod tests {
                 label_padding: 0.0,
                 obstacle_padding: 0.0,
                 coordinated: true,
+                leaders: None,
+                margin: 0.0,
                 placements: (0..4)
                     .map(|label| CollisionLabel {
                         records: CandidateRecords::Expanded(Vec::new()),
+                        own_lines: 0..0,
                         edge: None,
                         candidates: (0..5)
                             .map(|choice| {
@@ -2443,6 +3201,10 @@ mod tests {
                                         box_at(x - 0.2, y, 0.8, 0.2),
                                         box_at(x + 0.1, y - 0.1, 0.3, 0.8),
                                     ],
+                                    anchor: None,
+                                    normal: None,
+                                    side: None,
+                                    relative: None,
                                 }
                             })
                             .collect(),
@@ -2637,9 +3399,13 @@ mod tests {
             ]),
             cost: ciborium::Value::Integer(2.into()),
             arrow_bounds: Vec::new(),
+            anchor: None,
+            normal: None,
+            side: None,
+            relative: None,
         };
         assert!(matches!(
-            candidate.edge_intersection(&[], &LineGrid::new(&[])),
+            candidate.edge_intersection(&[], &LineGrid::new(&[]), &(0..0), 0.0),
             Cost::Integer(0)
         ));
         let lines = vec![StrokeLine {
@@ -2648,10 +3414,15 @@ mod tests {
             radius: 0.0,
         }];
         let grid = LineGrid::new(&lines);
-        assert_eq!(candidate.edge_intersection(&lines, &grid).float(), 12.0);
+        assert_eq!(
+            candidate
+                .edge_intersection(&lines, &grid, &(0..0), 0.0)
+                .float(),
+            12.0
+        );
         candidate.corners = Some([Point(0.0, 0.0); 4]);
         assert!(matches!(
-            candidate.edge_intersection(&lines, &grid),
+            candidate.edge_intersection(&lines, &grid, &(0..0), 0.0),
             Cost::Integer(0)
         ));
         candidate.corners = None;
@@ -2660,6 +3431,7 @@ mod tests {
             edge_lines: lines,
             placements: vec![CollisionLabel {
                 records: CandidateRecords::Expanded(Vec::new()),
+                own_lines: 0..0,
                 candidates: vec![candidate],
                 edge: None,
             }],
@@ -2668,6 +3440,8 @@ mod tests {
             obstacle_padding: 0.0,
             fixed_arrows: Vec::new(),
             coordinated: false,
+            leaders: None,
+            margin: 0.0,
         };
         assert_eq!(
             spec.geometry(0.0).unwrap().costs[0][0],
@@ -2759,6 +3533,9 @@ mod tests {
             bounds: bounds(left, right, bottom, top),
             corners: None,
             arrow_bounds: Vec::new(),
+            own_lines: 0..0,
+            leader: None,
+            edge: None,
         };
         let line = |start: (f64, f64), end: (f64, f64), radius: f64| StrokeLine {
             start: Point(start.0, start.1),
@@ -2799,7 +3576,7 @@ mod tests {
             bounds(22.0, 22.5, 0.25, 0.75),
         ];
         let fixed_arrows = [bounds(22.9, 24.0, -1.0, 0.1)];
-        let found = label_overlaps(&labels, &lines, &obstacles, &fixed_arrows);
+        let found = label_overlaps(&labels, &lines, &[], 0.0, &obstacles, &fixed_arrows);
         let lines: Vec<Vec<usize>> = found
             .iter()
             .map(|found| found.lines.iter().map(|&(line, _)| line).collect())
@@ -2908,6 +3685,10 @@ mod tests {
             },
             cost: ciborium::Value::Float(cost),
             arrow_bounds: Vec::new(),
+            anchor: None,
+            normal: None,
+            side: None,
+            relative: None,
         };
         // Either single move raises the energy, but taking both lowers it.
         let geometry = CollisionSpec {
@@ -2916,11 +3697,13 @@ mod tests {
             placements: vec![
                 CollisionLabel {
                     records: CandidateRecords::Expanded(Vec::new()),
+                    own_lines: 0..0,
                     candidates: vec![candidate(0.0, 0.001), candidate(10.9995, 0.0)],
                     edge: None,
                 },
                 CollisionLabel {
                     records: CandidateRecords::Expanded(Vec::new()),
+                    own_lines: 0..0,
                     candidates: vec![candidate(10.0, 0.001), candidate(0.9995, 0.0)],
                     edge: None,
                 },
@@ -2930,6 +3713,8 @@ mod tests {
             obstacle_padding: 0.0,
             fixed_arrows: Vec::new(),
             coordinated: false,
+            leaders: None,
+            margin: 0.0,
         }
         .geometry(0.0)
         .unwrap();
@@ -2970,6 +3755,294 @@ mod tests {
         );
     }
 
+    /// A drawing for leader tests: straight painted strokes, each one line
+    /// painted by the edge of its index, vertex boxes, and labels, the first
+    /// on edge 0, by their candidates.
+    struct LeaderScene {
+        strokes: Vec<[[f64; 2]; 2]>,
+        vertices: Vec<[f64; 2]>,
+        labels: Vec<Vec<serde_json::Value>>,
+        line_height: f64,
+    }
+
+    impl LeaderScene {
+        /// The labelled carrier along y = 0, between two edges across it,
+        /// with a label two units wide that crosses them on either side.
+        fn crossed() -> Self {
+            Self {
+                strokes: vec![
+                    [[-1.5, 0.0], [1.5, 0.0]],
+                    [[-0.7, -1.6], [-0.7, 1.6]],
+                    [[0.7, -1.6], [0.7, 1.6]],
+                ],
+                vertices: vec![
+                    [-1.5, 0.0],
+                    [1.5, 0.0],
+                    [-0.7, 1.6],
+                    [0.7, 1.6],
+                    [-0.7, -1.6],
+                    [0.7, -1.6],
+                ],
+                labels: vec![Self::carrier_label(&[1.0, -1.0])],
+                line_height: 0.6,
+            }
+        }
+
+        /// A label two units wide and half a unit tall beside the carrier
+        /// along y = 0, around x = 0, on `sides`.
+        fn carrier_label(sides: &[f64]) -> Vec<serde_json::Value> {
+            [-0.4, 0.0, 0.4]
+                .into_iter()
+                .flat_map(|x| {
+                    sides.iter().map(move |&side| {
+                        let (bottom, top) = if side > 0.0 { (0.2, 0.7) } else { (-0.7, -0.2) };
+                        let mut text = Self::text([x - 1.0, x + 1.0], [bottom, top]);
+                        text["cost"] = serde_json::json!(0.002 * x * x);
+                        text["anchor"] = serde_json::json!([x, 0.0]);
+                        text["normal"] = serde_json::json!([0.0, side]);
+                        text["side"] = serde_json::json!(side);
+                        text["relative"] = serde_json::json!(x / 3.0);
+                        text
+                    })
+                })
+                .collect()
+        }
+
+        /// A fixed text box.
+        fn text([left, right]: [f64; 2], [bottom, top]: [f64; 2]) -> serde_json::Value {
+            serde_json::json!({
+                "bounds": {"left": left, "right": right, "bottom": bottom, "top": top},
+                "corners": [[left, top], [right, top], [left, bottom], [right, bottom]],
+                "cost": 0.0, "position": [(left + right) / 2.0, (bottom + top) / 2.0],
+            })
+        }
+
+        fn encode(value: serde_json::Value) -> Vec<u8> {
+            crate::graph_api::encode_cbor(&value).unwrap()
+        }
+
+        fn lines(&self) -> serde_json::Value {
+            let strokes: Vec<_> = self
+                .strokes
+                .iter()
+                .map(|[from, to]| {
+                    serde_json::json!({"radius": 0.05, "segments": [[[from[0], from[1], 0.0], false, [["l", [to[0], to[1], 0.0]]]]]})
+                })
+                .collect();
+            let bytes = stroke_lines_bytes(&Self::encode(
+                serde_json::json!({"strokes": strokes, "accuracy": 0.005}),
+            ));
+            ciborium::from_reader(bytes.unwrap().as_slice()).unwrap()
+        }
+
+        fn search(&self) -> serde_json::Value {
+            let nodes: Vec<_> = self
+                .vertices
+                .iter()
+                .map(|[x, y]| serde_json::json!({"left": x - 0.16, "right": x + 0.16, "bottom": y - 0.16, "top": y + 0.16}))
+                .collect();
+            let placements: Vec<_> = self
+                .labels
+                .iter()
+                .enumerate()
+                .map(|(index, candidates)| {
+                    serde_json::json!({"edge": if index == 0 { 0 } else { 100 + index }, "candidates": candidates})
+                })
+                .collect();
+            let edges: Vec<usize> = (0..self.strokes.len()).collect();
+            let geometry = Self::encode(serde_json::json!({
+                "placements": placements,
+                "obstacles": nodes, "label-padding": 0.6, "obstacle-padding": 0.08,
+                "fixed-arrows": [], "coordinated": true, "edge-lines": self.lines(), "fixed": false,
+                "leaders": {"line-height": self.line_height, "line-edges": edges},
+            }));
+            let math = Self::encode(serde_json::json!({
+                "temperatures": (0..84).map(|sweep| 0.15 * 0.9f64.powi(sweep)).collect::<Vec<_>>(),
+                "exponentials": [], "pair-padding": 0.35,
+            }));
+            ciborium::from_reader(search_bytes(&geometry, &math).unwrap().as_slice()).unwrap()
+        }
+
+        /// What the first label's leadered text and leader meet, as the
+        /// label report lists it.
+        fn report(&self, leader: &serde_json::Value) -> serde_json::Value {
+            let edges: Vec<usize> = (0..self.strokes.len()).collect();
+            ciborium::from_reader(
+                overlaps_bytes(&Self::encode(serde_json::json!({
+                    "labels": [{"bounds": leader["bounds"], "corners": leader["corners"], "leader": leader["line"], "edge": 0}],
+                    "lines": self.lines(), "line-edges": edges,
+                })))
+                .unwrap()
+                .as_slice(),
+            )
+            .unwrap()
+        }
+    }
+
+    fn point(value: &serde_json::Value) -> Point {
+        Point(value[0].as_f64().unwrap(), value[1].as_f64().unwrap())
+    }
+
+    /// A label meeting an edge wherever it sits on its carrier is set off
+    /// with a leader into free space: steeply off the carrier, crossing no
+    /// line and clear of every vertex. Walled in, it keeps its place.
+    #[test]
+    fn crowded_labels_take_leaders_into_free_space_only() {
+        use serde_json::json;
+        let mut scene = LeaderScene::crossed();
+        let result = scene.search();
+        let leader = &result["leaders"][0];
+        assert!(leader.is_object(), "{result}");
+        let (anchor, end) = (point(&leader["from"]), point(&leader["to"]));
+        let direction = end.sub(anchor);
+        let normal = if direction.1 > 0.0 { 1.0 } else { -1.0 };
+        assert!(direction.1 * normal / direction.length() >= leaders::LEADER_DEPARTURE);
+        // The report measures the whole leader, from its anchor.
+        let line = &leader["line"];
+        assert_eq!(point(&line[0]).distance(anchor), 0.0);
+        assert_eq!(point(&line[2]).distance(end), 0.0);
+        // The moved text and its leader meet no line, and the leader keeps
+        // clear of every vertex.
+        let report = scene.report(leader);
+        assert_eq!(report[0]["lines"], json!([]));
+        assert_eq!(report[0]["leader"], json!([]));
+        for &[x, y] in &scene.vertices {
+            assert!(Point(x, y).segment_distance(anchor, end) >= 0.16 + leaders::VERTEX_CLEARANCE);
+        }
+        // Walled in by a frame and two edges across the space above and
+        // below, no place clears the text and the label keeps its place.
+        scene.strokes.extend([
+            [[-3.0, -3.0], [3.0, -3.0]],
+            [[3.0, -3.0], [3.0, 3.0]],
+            [[3.0, 3.0], [-3.0, 3.0]],
+            [[-3.0, 3.0], [-3.0, -3.0]],
+            [[-3.0, 2.0], [3.0, 2.0]],
+            [[-3.0, -2.0], [3.0, -2.0]],
+        ]);
+        let walled = scene.search();
+        assert_eq!(walled["leaders"], json!([null]));
+        assert_eq!(walled["choices"], result["choices"]);
+    }
+
+    /// Free space reached only by a leader running nearly along its carrier
+    /// takes no leader: here a corridor between the carrier and two walls,
+    /// beyond the edge across the label.
+    #[test]
+    fn leaders_never_run_along_their_carrier() {
+        let scene = LeaderScene {
+            strokes: vec![
+                [[-5.0, 0.0], [5.0, 0.0]],
+                [[0.0, -1.6], [0.0, 1.6]],
+                [[-2.5, 1.0], [2.5, 1.0]],
+                [[-2.5, -1.0], [2.5, -1.0]],
+            ],
+            vertices: vec![[-5.0, 0.0], [5.0, 0.0], [0.0, 1.6], [0.0, -1.6]],
+            labels: vec![LeaderScene::carrier_label(&[1.0, -1.0])],
+            line_height: 0.6,
+        };
+        let result = scene.search();
+        assert_eq!(result["leaders"], serde_json::json!([null]), "{result}");
+    }
+
+    /// Leadered text keeps one line height from other labels, though the
+    /// raster and exact tests keep painted lines only a little clear.
+    #[test]
+    fn leadered_text_keeps_a_line_height_from_other_labels() {
+        let mut scene = LeaderScene::crossed();
+        let free = scene.search()["leaders"][0]["bounds"].clone();
+        let bound = |key: &str| free[key].as_f64().unwrap();
+        // Another label just above where the leadered text went, closer
+        // than a line height, but clear of every line.
+        let gap = scene.line_height / 2.0;
+        let (bottom, top) = (bound("top") + gap, bound("top") + gap + 0.5);
+        scene.labels.push(vec![LeaderScene::text(
+            [bound("left"), bound("right")],
+            [bottom, top],
+        )]);
+        let result = scene.search();
+        let moved = &result["leaders"][0]["bounds"];
+        assert!(moved.is_object(), "{result}");
+        let moved = Bounds {
+            left: moved["left"].as_f64().unwrap(),
+            right: moved["right"].as_f64().unwrap(),
+            bottom: moved["bottom"].as_f64().unwrap(),
+            top: moved["top"].as_f64().unwrap(),
+        };
+        let other = Bounds {
+            left: bound("left"),
+            right: bound("right"),
+            bottom,
+            top,
+        };
+        assert_eq!(
+            moved.overlap(other, scene.line_height - 1e-9),
+            0.0,
+            "{moved:?}"
+        );
+    }
+
+    /// The search finishes an annealed placement whose text still meets
+    /// something at the first placement, of those it tries, that meets
+    /// nothing once cleared of what it can avoid, and reports what that
+    /// meets; with none, it keeps the annealed placement.
+    #[test]
+    fn finished_placements_clear_what_annealing_left() {
+        let scene = LeaderScene::crossed();
+        let mut labels = LeaderScene::carrier_label(&[1.0, -1.0]);
+        // A last candidate clear of both edges across the carrier.
+        labels.push(LeaderScene::text([1.0, 2.0], [0.2, 0.7]));
+        let spec = |labels: &[serde_json::Value]| {
+            let mut spec: CollisionSpec = ciborium::from_reader(
+                LeaderScene::encode(serde_json::json!({
+                    "placements": [{"edge": 0, "candidates": labels}],
+                    "obstacles": [], "label-padding": 0.6, "obstacle-padding": 0.08,
+                    "coordinated": true, "edge-lines": scene.lines(), "fixed": false,
+                }))
+                .as_slice(),
+            )
+            .unwrap();
+            for label in &mut spec.placements {
+                label.candidates = label.records.collision_candidates().unwrap();
+            }
+            spec
+        };
+        let cleared = spec(&labels);
+        let geometry = cleared.geometry(PAIR_PADDING).unwrap();
+        let (choices, found) = cleared.finished(&geometry, vec![0]).unwrap();
+        assert_eq!(choices, [labels.len() - 1]);
+        assert_eq!(found[0].contacts(), 0);
+        // Without a clear candidate, the annealed placement stands with
+        // what it meets.
+        labels.pop();
+        let crowded = spec(&labels);
+        let geometry = crowded.geometry(PAIR_PADDING).unwrap();
+        let (choices, found) = crowded.finished(&geometry, vec![0]).unwrap();
+        assert_eq!(choices, [0]);
+        assert!(found[0].contacts() > 0);
+    }
+
+    /// A label kept to one side of its carrier keeps its place: leaders
+    /// may only take labels that may take either side.
+    #[test]
+    fn labels_of_one_side_take_no_leader() {
+        let mut scene = LeaderScene::crossed();
+        scene.labels = vec![LeaderScene::carrier_label(&[1.0])];
+        assert_eq!(scene.search()["leaders"], serde_json::json!([null]));
+    }
+
+    /// A leader clears other edges' lines from its anchor on: only its own
+    /// carrier may lie under its first rise. Short edges just above and
+    /// below the carrier, within that rise but clear of the text, leave no
+    /// leader.
+    #[test]
+    fn leaders_clear_other_edges_from_their_anchor() {
+        let mut scene = LeaderScene::crossed();
+        scene
+            .strokes
+            .extend([[[-0.8, 0.12], [0.8, 0.12]], [[-0.8, -0.12], [0.8, -0.12]]]);
+        assert_eq!(scene.search()["leaders"], serde_json::json!([null]));
+    }
+
     #[test]
     fn paired_annotations_include_arrows_and_fixed_decorations_in_collisions() {
         let bounds = |left| Bounds {
@@ -2985,11 +4058,16 @@ mod tests {
                 .into_iter()
                 .map(|(text, arrow)| CollisionLabel {
                     records: CandidateRecords::Expanded(Vec::new()),
+                    own_lines: 0..0,
                     candidates: vec![CollisionCandidate {
                         corners: None,
                         bounds: bounds(text),
                         cost: ciborium::Value::Integer(0.into()),
                         arrow_bounds: vec![bounds(arrow)],
+                        anchor: None,
+                        normal: None,
+                        side: None,
+                        relative: None,
                     }],
                     edge: None,
                 })
@@ -3003,6 +4081,8 @@ mod tests {
             obstacle_padding: 0.0,
             fixed_arrows: vec![bounds(4.0)],
             coordinated: true,
+            leaders: None,
+            margin: 0.0,
         };
         let geometry = spec.geometry(0.0).unwrap();
         // The two texts are disjoint, but each arrow intersects the other text.
@@ -3027,6 +4107,10 @@ mod tests {
             },
             cost: ciborium::Value::Float(cost),
             arrow_bounds: Vec::new(),
+            anchor: None,
+            normal: None,
+            side: None,
+            relative: None,
         };
         let spec = CollisionSpec {
             fixed: false,
@@ -3034,11 +4118,13 @@ mod tests {
             placements: vec![
                 CollisionLabel {
                     records: CandidateRecords::Expanded(Vec::new()),
+                    own_lines: 0..0,
                     candidates: vec![candidate(0.0, 1.0), candidate(10.0, 0.0)],
                     edge: None,
                 },
                 CollisionLabel {
                     records: CandidateRecords::Expanded(Vec::new()),
+                    own_lines: 0..0,
                     candidates: vec![candidate(10.0, 1.0), candidate(0.0, 0.0)],
                     edge: None,
                 },
@@ -3048,6 +4134,8 @@ mod tests {
             obstacle_padding: 0.0,
             fixed_arrows: Vec::new(),
             coordinated: true,
+            leaders: None,
+            margin: 0.0,
         };
         let geometry = spec.geometry(0.0).unwrap();
         let mut math = SearchMath {
@@ -3083,6 +4171,7 @@ mod tests {
     fn coordinated_search_ends_where_no_single_label_can_improve() {
         let label = |candidates: &[(f64, f64, f64)]| CollisionLabel {
             records: CandidateRecords::Expanded(Vec::new()),
+            own_lines: 0..0,
             candidates: candidates
                 .iter()
                 .map(|&(left, bottom, cost)| CollisionCandidate {
@@ -3095,6 +4184,10 @@ mod tests {
                     },
                     cost: ciborium::Value::Float(cost),
                     arrow_bounds: Vec::new(),
+                    anchor: None,
+                    normal: None,
+                    side: None,
+                    relative: None,
                 })
                 .collect(),
             edge: None,
@@ -3124,6 +4217,8 @@ mod tests {
             obstacle_padding: 0.0,
             fixed_arrows: Vec::new(),
             coordinated: true,
+            leaders: None,
+            margin: 0.0,
         };
         let geometry = spec.geometry(0.0).unwrap();
         let math = SearchMath {
@@ -3203,11 +4298,16 @@ mod tests {
             edge_lines: Vec::new(),
             placements: vec![CollisionLabel {
                 records: CandidateRecords::Expanded(Vec::new()),
+                own_lines: 0..0,
                 candidates: vec![CollisionCandidate {
                     corners: None,
                     bounds,
                     cost: ciborium::Value::Integer(0.into()),
                     arrow_bounds: Vec::new(),
+                    anchor: None,
+                    normal: None,
+                    side: None,
+                    relative: None,
                 }],
                 edge: edge.clone(),
             }],
@@ -3220,6 +4320,8 @@ mod tests {
             obstacle_padding: 0.08,
             fixed_arrows: Vec::new(),
             coordinated: false,
+            leaders: None,
+            margin: 0.0,
         };
         let own_edge = spec.geometry(0.0).unwrap();
         assert_eq!(own_edge.costs[0][0], ciborium::Value::Integer(0.into()));
@@ -3266,11 +4368,16 @@ mod tests {
             edge_lines: Vec::new(),
             placements: vec![CollisionLabel {
                 records: CandidateRecords::Expanded(Vec::new()),
+                own_lines: 0..0,
                 candidates: vec![CollisionCandidate {
                     corners: None,
                     bounds,
                     cost: ciborium::Value::Float(cost),
                     arrow_bounds: Vec::new(),
+                    anchor: None,
+                    normal: None,
+                    side: None,
+                    relative: None,
                 }],
                 edge: None,
             }],
@@ -3285,6 +4392,8 @@ mod tests {
             obstacle_padding: 0.0,
             fixed_arrows: Vec::new(),
             coordinated: false,
+            leaders: None,
+            margin: 0.0,
         };
         // Each individual addition rounds back to the initial value. Summing
         // obstacle penalties before adding the initial cost would change it.

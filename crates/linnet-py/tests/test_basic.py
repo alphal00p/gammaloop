@@ -2932,6 +2932,24 @@ class TestTypedTypstSurface(unittest.TestCase):
                 with self.assertRaises((TypeError, ValueError)):
                     lp.LayoutSettings().then(impred_level=value)
 
+    def test_impred_label_room_max_scale_is_at_least_one(self):
+        layouts = lp.LayoutSettings(impred_label_room_max_scale=1).then(
+            impred_label_room_max_scale=2.5
+        )
+        self.assertEqual(layouts.pass_count, 2)
+        for value in (0.5, -1, "2"):
+            with (
+                self.subTest(value=value),
+                self.assertRaisesRegex(TypeError, "at least 1"),
+            ):
+                lp.LayoutSettings(impred_label_room_max_scale=value)
+        for value in (float("inf"), float("nan")):
+            with (
+                self.subTest(value=value),
+                self.assertRaises((TypeError, ValueError)),
+            ):
+                lp.LayoutSettings(impred_label_room_max_scale=value)
+
     def test_impred_step_scale_zero_is_rejected_before_rendering(self):
         with self.assertRaisesRegex(ValueError, "impred_step_scale"):
             lp.LayoutSettings(algorithm=lp.LayoutAlgorithm.Impred, impred_step_scale=0)

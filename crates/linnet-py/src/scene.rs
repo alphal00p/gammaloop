@@ -51,6 +51,7 @@ impl PyDiagramRender {
             layout: scene.layout.clone(),
             layout_edges: scene.layout_edges.clone(),
             label_feedback: scene.label_feedback,
+            label_leaders: scene.label_leaders,
         };
         let native = settings.config().and_then(|config| {
             let mut probe = probe;

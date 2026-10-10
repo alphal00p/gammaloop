@@ -157,7 +157,10 @@ sync-drawing-assets-cargo:
       rustup target add "$wasm_target"
     fi
 
-    cargo build --release -p linnest -p kurvst --features linnest/typst-plugin,kurvst/typst-plugin --target "$wasm_target"
+    # One build per plugin: a joint build unifies Kurvst's plugin feature into
+    # Linnest's Kurvst dependency, so linnest.wasm would export Kurvst's plugin.
+    cargo build --release -p kurvst --features kurvst/typst-plugin --target "$wasm_target"
+    cargo build --release -p linnest --features linnest/typst-plugin --target "$wasm_target"
 
     install_asset "$wasm_dir/kurvst.wasm" crates/kurvst/typst/kurvst.wasm
     install_asset "$wasm_dir/linnest.wasm" crates/linnest/typst/linnest.wasm

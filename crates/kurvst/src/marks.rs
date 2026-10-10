@@ -1190,18 +1190,50 @@ impl MarkGeometrySpec {
     }
 }
 
+/// `path` without the segments of no extent, which Kurbo cannot stroke: the
+/// next segment continues from where a dropped one starts.
+fn without_collapsed_segments(path: &BezPath) -> BezPath {
+    const EXTENT: f64 = 1e-9;
+    let mut kept = BezPath::new();
+    let mut current = Point::ZERO;
+    for element in path.elements() {
+        let collapsed = |points: &[Point]| points.iter().all(|p| p.distance(current) <= EXTENT);
+        match *element {
+            PathEl::LineTo(p) if collapsed(&[p]) => continue,
+            PathEl::QuadTo(p1, p2) if collapsed(&[p1, p2]) => continue,
+            PathEl::CurveTo(p1, p2, p3) if collapsed(&[p1, p2, p3]) => continue,
+            PathEl::MoveTo(p)
+            | PathEl::LineTo(p)
+            | PathEl::QuadTo(_, p)
+            | PathEl::CurveTo(_, _, p) => {
+                current = p;
+            }
+            PathEl::ClosePath => {}
+        }
+        kept.push(*element);
+    }
+    kept
+}
+
 impl PreparedMark {
     fn shaft_outline(&self, shaft: &BezPath) -> Result<BezPath, String> {
         if !shaft.is_finite() {
             return Err("shaft geometry must be finite".into());
         }
-        let outline = if self.line_thickness > 0.0 {
+        let stroke = |shaft: &BezPath| {
             kurbo::stroke(
                 shaft.elements().iter().copied(),
                 &self.shaft_style.stroke(self.line_thickness),
                 &StrokeOpts::default(),
                 1e-6,
             )
+        };
+        let outline = if self.line_thickness > 0.0 {
+            // A collapsed segment, which trimming keeps to stay connected,
+            // strokes to non-finite geometry: stroke the shaft without it.
+            Some(stroke(shaft))
+                .filter(BezPath::is_finite)
+                .unwrap_or_else(|| stroke(&without_collapsed_segments(shaft)))
         } else {
             BezPath::new()
         };
@@ -2602,6 +2634,31 @@ mod tests {
                 wire(&batch_result)
             );
         }
+    }
+
+    #[test]
+    fn shaft_outline_strokes_past_collapsed_segments() {
+        // A momentum arrow shaft whose trimmed offset kept a connector of no
+        // extent between two pieces; Kurbo strokes that connector to NaN.
+        let shaft = BezPath::from_svg(
+            "M-3.656055555308293,-0.7613805319421705 \
+             C-3.6786876991275057,-0.5100572356312115 -3.6955846365823164,-0.2581050230363345 \
+             -3.706713386685673,-0.005718853428716853 \
+             C-3.706713386685673,-0.005718853428716853 -3.706713386685673,-0.005718853428716905 \
+             -3.706713386685673,-0.005718853428716905 \
+             C-3.7146054238878334,0.17326270526881787 -3.7195883547812723,0.35228474730352444 \
+             -3.721667536026462,0.5312769234002387",
+        )
+        .unwrap();
+        let mut spec = mark("triangle");
+        spec.shorten = Some(0.0);
+        let mut request = batch(spec, shaft.clone());
+        request.templates[0].context.line_thickness = 0.07407407407407407;
+        let result = request.geometry().unwrap().marks[0].clone();
+        assert!(result.shaft_outline.path.is_finite());
+        let joined = without_collapsed_segments(&shaft);
+        assert_eq!(joined.elements().len(), shaft.elements().len() - 1);
+        assert_eq!(joined.elements().last(), shaft.elements().last());
     }
 
     #[test]

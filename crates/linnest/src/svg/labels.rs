@@ -3,28 +3,31 @@
 //! same records as the Typst renderer, so both route labels identically.
 use std::collections::BTreeMap;
 
-use kurbo::{BezPath, CubicBez, Point};
+use kurbo::{BezPath, Point};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
-use super::{curves, marks, UNIT};
-pub(super) use crate::label_placement::Bounds;
-use crate::label_placement::{label_overlaps, PlacedLabel, Point as PlanePoint, StrokeLine};
-
-/// Clearance between an external label and its free endpoint.
-const EXTERNAL_GAP: f64 = 0.25;
-/// Momentum arrows: offset beside the edge, visible length and ratio cap, label gap.
-pub(super) const ARROW_OFFSET: f64 = 0.35;
-pub(super) const ARROW_WINDOW: (f64, f64) = (1.4, 0.5);
-const MOMENTUM_GAP: f64 = 0.2;
+use super::MOMENTUM_ARROW;
+use super::{marks, UNIT};
+use crate::annotation::MomentumCandidates;
+pub(super) use crate::annotation::{
+    carrier_candidates, endpoint_candidates, Anchor, Bounds, Candidate, Places,
+};
+pub(super) use crate::label_placement::Leader;
+use crate::label_placement::{
+    label_overlaps, PlacedLabel, Point as PlanePoint, StrokeLine, LABEL_PADDING, OBSTACLE_PADDING,
+    PAIR_PADDING, STROKE_ACCURACY,
+};
 
 /// One typeset page: its size and SVG body in points. Label pages also carry
-/// the content measurements CeTZ uses (width, height, line baseline, line bounds).
+/// the content measurements CeTZ uses (width, height, line baseline, line
+/// bounds) and the surrounding text size.
 #[derive(Clone, Debug)]
 pub struct LabelPage {
     pub width: f64,
     pub height: f64,
     pub body: String,
     pub metrics: Option<[f64; 4]>,
+    pub text_size: Option<f64>,
 }
 
 /// A scene's typeset title and label pages, with their merged glyph definitions.
@@ -48,7 +51,7 @@ impl LabelPage {
              let line(edge) = measure(text(top-edge: \"cap-height\", bottom-edge: edge, [ #show linebreak: [ ]; #body])).height; \
              let (base, bounds) = (line(\"baseline\"), line(\"bounds\")); \
              block(width: size.width, height: size.height + bounds - base, {{ place(top + left, content); \
-             place(top + left, link(\"{METRICS_LINK}\" + (size.width, size.height, base, bounds).map(v => repr(v.pt())).join(\",\"), box(width: 1pt, height: 1pt))) }}) }}"
+             place(top + left, link(\"{METRICS_LINK}\" + (size.width, size.height, base, bounds, text.size).map(v => repr(v.pt())).join(\",\"), box(width: 1pt, height: 1pt))) }}) }}"
         )
     }
 
@@ -83,12 +86,18 @@ impl LabelPage {
                     .ok_or_else(invalid)?
                     .split(',')
                     .map(str::parse::<f64>);
-                let mut metrics = [0.0; 4];
+                let mut metrics = [0.0; 5];
                 for metric in &mut metrics {
                     *metric = values.next().and_then(Result::ok).ok_or_else(invalid)?;
                 }
                 Some(metrics)
             }
+        };
+        let (metrics, text_size) = match metrics {
+            Some([width, height, base, bounds, size]) => {
+                (Some([width, height, base, bounds]), Some(size))
+            }
+            None => (None, None),
         };
         if let (Some(start), Some(end)) = (svg.find("<defs"), svg.rfind("</defs>")) {
             let inner = &svg[start + svg[start..].find('>').ok_or_else(invalid)? + 1..end];
@@ -107,6 +116,7 @@ impl LabelPage {
             height,
             body,
             metrics,
+            text_size,
         })
     }
 }
@@ -133,126 +143,22 @@ impl Typeset {
             defs: defs.into_values().collect(),
         })
     }
-}
 
-fn cbor<T: Serialize>(value: &T) -> Result<Vec<u8>, String> {
-    crate::graph_api::encode_cbor(value)
+    /// The labels' line height in points: their largest surrounding text size.
+    pub(super) fn line_height(&self) -> f64 {
+        self.pages
+            .iter()
+            .filter_map(|page| page.text_size)
+            .fold(0.0, f64::max)
+    }
 }
 
 fn decode<T: DeserializeOwned>(bytes: &[u8]) -> Result<T, String> {
     ciborium::from_reader(bytes).map_err(|error| error.to_string())
 }
 
-#[derive(Serialize)]
-#[serde(rename_all = "kebab-case")]
-struct Cubic {
-    start: [f64; 2],
-    control_start: [f64; 2],
-    control_end: [f64; 2],
-    end: [f64; 2],
-}
-
-impl From<&CubicBez> for Cubic {
-    fn from(cubic: &CubicBez) -> Self {
-        let xy = |p: Point| [p.x, p.y];
-        Self {
-            start: xy(cubic.p0),
-            control_start: xy(cubic.p1),
-            control_end: xy(cubic.p2),
-            end: xy(cubic.p3),
-        }
-    }
-}
-
-fn wire(path: &BezPath) -> Vec<Cubic> {
-    curves::cubics(path).iter().map(Cubic::from).collect()
-}
-
-#[derive(Serialize)]
-struct Attachment {
-    carrier: Vec<Cubic>,
-    paths: Vec<Vec<Cubic>>,
-}
-
-#[derive(Serialize)]
-struct Frame {
-    point: [f64; 2],
-    tangent: [f64; 2],
-}
-
-#[derive(Serialize)]
-#[serde(rename_all = "kebab-case")]
-struct CandidateSpec {
-    frames: Vec<Frame>,
-    positions: Vec<f64>,
-    transform: [[f64; 4]; 4],
-    origin: [f64; 3],
-    corners: [[f64; 3]; 4],
-    total: f64,
-    preferred: f64,
-    accuracy: f64,
-    side: f64,
-    preferred_side: f64,
-    path_index: usize,
-    path_shift: f64,
-    gap: f64,
-    clear_box: bool,
-    fixed: bool,
-    endpoint_direction: Option<[f64; 2]>,
-    attachment: Option<Attachment>,
-}
-
-const IDENTITY: [[f64; 4]; 4] = [
-    [1.0, 0.0, 0.0, 0.0],
-    [0.0, 1.0, 0.0, 0.0],
-    [0.0, 0.0, 1.0, 0.0],
-    [0.0, 0.0, 0.0, 1.0],
-];
-
-impl CandidateSpec {
-    fn new(frames: Vec<curves::Frame>, positions: Vec<f64>, corners: [[f64; 3]; 4]) -> Self {
-        Self {
-            frames: frames
-                .into_iter()
-                .map(|frame| Frame {
-                    point: frame.point,
-                    tangent: frame.tangent,
-                })
-                .collect(),
-            positions,
-            transform: IDENTITY,
-            origin: [0.0; 3],
-            corners,
-            total: 0.0,
-            preferred: 0.0,
-            accuracy: curves::ACCURACY,
-            side: 1.0,
-            preferred_side: 1.0,
-            path_index: 0,
-            path_shift: 0.0,
-            gap: 0.0,
-            clear_box: true,
-            fixed: false,
-            endpoint_direction: None,
-            attachment: None,
-        }
-    }
-
-    fn candidates(&self) -> Result<Vec<Candidate>, String> {
-        decode(&crate::label_placement::candidates_bytes(&cbor(self)?)?)
-    }
-}
-
-#[derive(Deserialize, Clone)]
-#[serde(rename_all = "kebab-case")]
-pub(super) struct Candidate {
-    pub bounds: Bounds,
-    pub cost: f64,
-    pub corners: Vec<[f64; 3]>,
-    #[serde(skip)]
-    pub arrow_bounds: Vec<Bounds>,
-    #[serde(skip)]
-    pub arrow_mark: Option<usize>,
+fn cbor<T: Serialize>(value: &T) -> Result<Vec<u8>, String> {
+    crate::graph_api::encode_cbor(value)
 }
 
 /// One label's candidates, with its momentum arrow carriers per side.
@@ -263,112 +169,14 @@ pub(super) struct Placement {
     pub href: String,
 }
 
-/// CeTZ `content` corners (NW, NE, SW, SE) relative to the placement point.
-fn content_corners([width, height, baseline, bounds]: [f64; 4], anchor: Anchor) -> [[f64; 3]; 4] {
-    let measure = |pt: f64| (pt / UNIT).abs();
-    let w = measure(width) / 2.0;
-    let h = (measure(height) + measure(bounds) - measure(baseline)).abs() / 2.0;
-    let offset = match anchor {
-        Anchor::East => [-w, 0.0],
-        Anchor::West => [w, 0.0],
-        Anchor::North => [0.0, -h],
-        Anchor::South => [0.0, h],
-        Anchor::Center => [0.0, 0.0],
-    };
-    [[-w, h], [w, h], [-w, -h], [w, -h]].map(|[x, y]| [x + offset[0], y + offset[1], 0.0])
-}
-
-#[derive(Clone, Copy)]
-pub(super) enum Anchor {
-    Center,
-    East,
-    West,
-    North,
-    South,
-}
-
-impl Anchor {
-    /// The side of an external label facing away from its free endpoint.
-    pub(super) fn outward(dx: f64, dy: f64) -> Self {
-        if dx < -1e-9 {
-            Self::East
-        } else if dx > 1e-9 {
-            Self::West
-        } else if dy > 0.0 {
-            Self::South
-        } else if dy < 0.0 {
-            Self::North
-        } else {
-            Self::Center
-        }
-    }
-}
-
-/// The preferred position and the 3/32..29/32 arc positions draw.typ tries,
-/// clamped into `[low, high]`, deduplicated and away from the preferred one.
-fn positions(total: f64, preferred: f64, low: f64, high: f64) -> Vec<f64> {
-    let mut positions = vec![preferred];
-    let mut seen = Vec::new();
-    for i in 3..30 {
-        let at = (total * f64::from(i) / 32.0).clamp(low, high);
-        if seen.contains(&at) {
-            continue;
-        }
-        seen.push(at);
-        if (at - preferred).abs() > curves::ACCURACY {
-            positions.push(at);
-        }
-    }
-    positions
-}
-
-/// A particle label sliding along its carrier at `gap`, both sides,
-/// interleaved by position.
-pub(super) fn carrier_candidates(
-    path: &BezPath,
-    metrics: [f64; 4],
-    gap: f64,
-) -> Result<Vec<Candidate>, String> {
-    let total = curves::length(path);
-    let preferred = (total / 2.0).clamp(0.0, total);
-    let positions = positions(total, preferred, 0.0, total);
-    let frames = curves::frames(path, positions.clone())?;
-    let [left, right] = [1.0, -1.0].map(|side: f64| {
-        CandidateSpec {
-            total,
-            preferred,
-            side,
-            path_index: usize::from(side < 0.0),
-            gap,
-            attachment: Some(Attachment {
-                carrier: wire(path),
-                paths: positions.iter().map(|_| Vec::new()).collect(),
-            }),
-            ..CandidateSpec::new(
-                frames.clone(),
-                positions.clone(),
-                content_corners(metrics, Anchor::Center),
-            )
-        }
-        .candidates()
-    });
-    let (left, right) = (left?, right?);
-    Ok(left
-        .into_iter()
-        .zip(right)
-        .flat_map(|(a, b)| [a, b])
-        .collect())
-}
-
-/// A momentum label riding its arrow: per side, an offset carrier, arrow
-/// windows at each position, and their footprints. Sides are not
-/// interleaved. Returns the candidates and the offset carriers.
-pub(super) struct MomentumCandidates {
-    specs: Vec<CandidateSpec>,
+/// Momentum candidates whose arrow windows are mark placements of the
+/// drawing's batch, resolved with the marks' painted footprints.
+pub(super) struct MarkedMomentum {
+    proposals: MomentumCandidates,
     marks: Vec<usize>,
 }
 
-impl MomentumCandidates {
+impl MarkedMomentum {
     pub(super) fn new(
         path: &BezPath,
         metrics: [f64; 4],
@@ -376,97 +184,65 @@ impl MomentumCandidates {
         template: usize,
         batch: &mut marks::Batch,
     ) -> Result<Self, String> {
-        let carriers = [side, -side]
+        let proposals = MomentumCandidates::new(
+            path,
+            content_corners(metrics, Anchor::Center),
+            side,
+            MOMENTUM_ARROW,
+            Places::Every,
+        )?;
+        let marks = proposals
+            .windows()
             .iter()
-            .map(|&s| curves::layer(path, ARROW_OFFSET * s, None, 0.0))
-            .collect::<Result<Vec<_>, _>>()?;
-        let mut specs = Vec::new();
-        let mut marks = Vec::new();
-        for (index, carrier) in carriers.iter().enumerate() {
-            let total = curves::length(carrier);
-            let centered = curves::layer(carrier, 0.0, Some(ARROW_WINDOW), 0.0)?;
-            let half = curves::length(&centered) / 2.0;
-            let low = half.clamp(0.0, total);
-            let high = (total - half).clamp(low, total);
-            let preferred = (total / 2.0).clamp(low, high);
-            let positions = positions(total, preferred, low, high);
-            let frames = curves::frames(carrier, positions.clone())?;
-            let shifts: Vec<f64> = positions.iter().map(|at| at - total / 2.0).collect();
-            let windows = curves::layers(carrier, &shifts, 0.0, Some(ARROW_WINDOW))?;
-            for window in &windows {
-                marks.push(batch.push(template, window, kurvst::marks::MarkStation::End, true));
-            }
-            specs.push(CandidateSpec {
-                total,
-                preferred,
-                side: if index == 0 { side } else { -side },
-                preferred_side: side,
-                path_index: index,
-                gap: MOMENTUM_GAP,
-                attachment: Some(Attachment {
-                    carrier: wire(path),
-                    paths: Vec::new(),
-                }),
-                ..CandidateSpec::new(frames, positions, content_corners(metrics, Anchor::Center))
-            });
-        }
-        Ok(Self { specs, marks })
+            .map(|window| batch.push(template, window, kurvst::marks::MarkStation::End, true))
+            .collect();
+        Ok(Self { proposals, marks })
     }
 
     pub(super) fn resolve(
         self,
         geometry: &[kurvst::marks::MarkGeometryOutput],
     ) -> Result<Vec<Candidate>, String> {
-        let mut candidates = Vec::new();
-        let mut marks = self.marks.into_iter();
-        for mut spec in self.specs {
-            let indices: Vec<_> = marks.by_ref().take(spec.frames.len()).collect();
-            let geometry: Vec<_> = indices.iter().map(|&index| &geometry[index]).collect();
-            // Attachment clearance and search obstacles use the same geometry that
-            // selected painting will use, including a bent shaft and every head.
-            spec.attachment.as_mut().expect("momentum attachment").paths = geometry
-                .iter()
-                .map(|mark| wire(&mark.footprint.path))
-                .collect();
-            let mut resolved = spec.candidates()?;
-            for ((candidate, mark), index) in resolved.iter_mut().zip(geometry).zip(indices) {
-                candidate.arrow_bounds = vec![Bounds::painted(&mark.footprint.path)];
-                candidate.arrow_mark = Some(index);
-            }
-            candidates.extend(resolved);
+        // As `draw.typ` places them, labels clear the arrow's shaft by their
+        // gap, and the search weighs the painted arrow, heads included.
+        let arrows: Vec<_> = self
+            .marks
+            .iter()
+            .zip(self.proposals.windows())
+            .map(|(&index, window)| {
+                (
+                    window.clone(),
+                    Bounds::painted(&geometry[index].footprint.path),
+                )
+            })
+            .collect();
+        let mut candidates = self.proposals.resolve(&arrows)?;
+        for (candidate, &index) in candidates.iter_mut().zip(&self.marks) {
+            candidate.arrow_mark = Some(index);
         }
         Ok(candidates)
     }
 }
 
-/// A fixed external label, cleared outward from its free endpoint.
-pub(super) fn endpoint_candidates(
-    at: [f64; 2],
-    direction: [f64; 2],
+/// CeTZ `content` corners (NW, NE, SW, SE) of a typeset page relative to the
+/// placement point.
+pub(super) fn content_corners(
+    [width, height, baseline, bounds]: [f64; 4],
     anchor: Anchor,
-    metrics: [f64; 4],
-) -> Result<Vec<Candidate>, String> {
-    CandidateSpec {
-        gap: EXTERNAL_GAP,
-        clear_box: false,
-        fixed: true,
-        endpoint_direction: Some(direction),
-        ..CandidateSpec::new(
-            vec![curves::Frame {
-                point: at,
-                tangent: [1.0, 0.0],
-            }],
-            vec![0.0],
-            content_corners(metrics, anchor),
-        )
-    }
-    .candidates()
+) -> [[f64; 3]; 4] {
+    let measure = |pt: f64| (pt / UNIT).abs();
+    anchor.corners([
+        measure(width) / 2.0,
+        (measure(height) + measure(bounds) - measure(baseline)).abs() / 2.0,
+    ])
 }
 
-/// A painted stroke for collisions: its radius and path.
+/// A painted stroke for collisions: its radius, its path, and the edge
+/// that paints it.
 pub(super) struct Stroke {
     pub radius: f64,
     pub path: BezPath,
+    pub edge: usize,
 }
 
 #[derive(Serialize)]
@@ -529,8 +305,22 @@ struct StrokeLinesSpec {
 struct SearchCandidate<'a> {
     bounds: Bounds,
     cost: f64,
+    relative: f64,
     corners: Vec<[f64; 2]>,
     arrow_bounds: &'a [Bounds],
+    anchor: [f64; 2],
+    normal: Option<[f64; 2]>,
+    side: f64,
+}
+
+/// Leaders as `draw.typ` requests them: one line of text keeps leadered
+/// labels apart, each painted line names its edge, and the drawing has no
+/// canvas transform.
+#[derive(Serialize)]
+#[serde(rename_all = "kebab-case")]
+struct LeaderSpec<'a> {
+    line_height: f64,
+    line_edges: &'a [usize],
 }
 
 #[derive(Serialize)]
@@ -549,6 +339,7 @@ struct SearchGeometry<'a> {
     coordinated: bool,
     edge_lines: &'a [StrokeLine],
     obstacle_padding: f64,
+    leaders: Option<LeaderSpec<'a>>,
 }
 
 #[derive(Serialize)]
@@ -570,12 +361,25 @@ struct ExponentialCheck {
 struct SearchResult {
     choices: Vec<usize>,
     missing: Vec<ExponentialCheck>,
+    leaders: Vec<Option<Leader>>,
 }
 
-/// The chosen candidate per placement and the painted collision lines.
+/// The chosen candidate per placement, the leaders of labels set off their
+/// carrier, and the painted collision lines.
 pub(super) struct Searched {
     pub choices: Vec<usize>,
+    pub leaders: Vec<Option<Leader>>,
     pub lines: Vec<StrokeLine>,
+}
+
+impl Searched {
+    /// The candidate drawn for a placement: its leader's, if it has one.
+    pub fn drawn(&self, index: usize) -> usize {
+        self.leaders
+            .get(index)
+            .and_then(Option::as_ref)
+            .map_or(self.choices[index], |leader| leader.choice)
+    }
 }
 
 /// `_relax-label-placements`: one annealing search over all labels, with its
@@ -585,19 +389,28 @@ pub(super) fn search(
     obstacles: &[Bounds],
     strokes: &[Stroke],
     fixed_arrows: &[Bounds],
+    leaders: Option<f64>,
 ) -> Result<Searched, String> {
-    let spec = StrokeLinesSpec {
-        strokes: strokes.iter().map(PaintedStroke::from).collect(),
-        accuracy: 0.005,
-    };
-    let edge_lines: Vec<StrokeLine> =
-        decode(&crate::label_placement::stroke_lines_bytes(&cbor(&spec)?)?)?;
+    // Each stroke flattens on its own to the lines it adds to all of them.
+    let mut edge_lines = Vec::new();
+    let mut line_edges = Vec::new();
+    for stroke in strokes {
+        let spec = StrokeLinesSpec {
+            strokes: vec![PaintedStroke::from(stroke)],
+            accuracy: STROKE_ACCURACY,
+        };
+        let lines: Vec<StrokeLine> =
+            decode(&crate::label_placement::stroke_lines_bytes(&cbor(&spec)?)?)?;
+        line_edges.extend(std::iter::repeat_n(stroke.edge, lines.len()));
+        edge_lines.extend(lines);
+    }
     if placements
         .iter()
         .all(|placement| placement.candidates.len() == 1)
     {
         return Ok(Searched {
             choices: vec![0; placements.len()],
+            leaders: vec![None; placements.len()],
             lines: edge_lines,
         });
     }
@@ -612,23 +425,31 @@ pub(super) fn search(
                     .map(|candidate| SearchCandidate {
                         bounds: candidate.bounds,
                         cost: candidate.cost,
+                        relative: candidate.relative,
                         corners: candidate.corners.iter().map(|c| [c[0], c[1]]).collect(),
                         arrow_bounds: &candidate.arrow_bounds,
+                        anchor: candidate.anchor,
+                        normal: candidate.normal,
+                        side: candidate.side,
                     })
                     .collect(),
             })
             .collect(),
         obstacles,
-        label_padding: 0.6,
+        label_padding: LABEL_PADDING,
         fixed_arrows,
         coordinated: true,
         edge_lines: &edge_lines,
-        obstacle_padding: 0.08,
+        obstacle_padding: OBSTACLE_PADDING,
+        leaders: leaders.map(|line_height| LeaderSpec {
+            line_height,
+            line_edges: &line_edges,
+        }),
     })?;
     let mut math = SearchMath {
         temperatures: (0..84).map(|sweep| 0.15 * 0.9f64.powi(sweep)).collect(),
         exponentials: Vec::new(),
-        pair_padding: 0.35,
+        pair_padding: PAIR_PADDING,
     };
     loop {
         let result: SearchResult = decode(&crate::label_placement::search_bytes(
@@ -645,51 +466,47 @@ pub(super) fn search(
         if result.missing.is_empty() || verified {
             return Ok(Searched {
                 choices: result.choices,
+                leaders: if result.leaders.is_empty() {
+                    vec![None; placements.len()]
+                } else {
+                    result.leaders
+                },
                 lines: edge_lines,
             });
         }
     }
 }
 
-/// Real (unpadded) overlaps of the chosen movable labels with painted lines
-/// and other labels' text: (overlapping labels, line hits, overlapping label
-/// pairs). The shared placement clips each line exactly against the text box,
-/// stroke radius included, so a line merely touching it, such as a zero-radius
-/// mark outline, counts as a hit.
-pub(super) fn overlaps(
-    placements: &[Placement],
-    choices: &[usize],
-    lines: &[StrokeLine],
-) -> (usize, usize, usize) {
+/// Real (unpadded) overlaps of the chosen labels, fixed ones included, with
+/// painted lines and other labels' text: (overlapping labels, line hits,
+/// overlapping label pairs). The shared placement clips each line exactly
+/// against the text box, stroke radius included, so a line merely touching
+/// it, such as a zero-radius mark outline, counts as a hit. Labels set off
+/// their carrier with a leader count where the search placed them on it, so
+/// label feedback keeps making room for them there.
+pub(super) fn overlaps(placements: &[Placement], searched: &Searched) -> (usize, usize, usize) {
     let labels: Vec<_> = placements
         .iter()
-        .zip(choices)
+        .zip(&searched.choices)
         .map(|(placement, &choice)| {
             let candidate = &placement.candidates[choice];
             PlacedLabel {
                 bounds: candidate.bounds,
-                corners: <&[_; 4]>::try_from(candidate.corners.as_slice())
-                    .ok()
-                    .map(|corners| corners.map(|[x, y, _]| PlanePoint(x, y))),
+                corners: Some(candidate.corners.map(|[x, y, _]| PlanePoint(x, y))),
                 arrow_bounds: Vec::new(),
+                own_lines: 0..0,
+                leader: None,
+                edge: None,
             }
         })
         .collect();
     let mut overlapping = 0;
     let mut hits = 0;
     let mut pairs = 0;
-    for (placement, found) in placements
-        .iter()
-        .zip(label_overlaps(&labels, lines, &[], &[]))
-    {
-        if placement.candidates.len() == 1 {
-            continue;
-        }
+    for found in label_overlaps(&labels, &searched.lines, &[], 0.0, &[], &[]) {
         hits += found.lines.len();
         pairs += found.labels.len();
-        if !found.lines.is_empty() || !found.labels.is_empty() {
-            overlapping += 1;
-        }
+        overlapping += usize::from(!found.lines.is_empty() || !found.labels.is_empty());
     }
     (overlapping, hits, pairs / 2)
 }
@@ -712,7 +529,14 @@ mod tests {
     fn labels_avoid_and_report_a_dotted_edge_crossing_their_preferred_side() {
         let carrier = straight((-4.0, 0.0), (4.0, 0.0));
         // 8.1pt wide text: 0.6 drawing units.
-        let candidates = carrier_candidates(&carrier, [8.1, 13.5, 10.0, 13.5], 0.15).unwrap();
+        let candidates = carrier_candidates(
+            &carrier,
+            content_corners([8.1, 13.5, 10.0, 13.5], Anchor::Center),
+            0.15,
+            1.0,
+            Places::Every,
+        )
+        .unwrap();
         // The preferred text lies above the carrier, strictly between the
         // dotted edge's sample points x = -0.5 and x = 1.5.
         let preferred = candidates[0].bounds;
@@ -722,10 +546,12 @@ mod tests {
             Stroke {
                 radius: 0.05,
                 path: carrier.clone(),
+                edge: 0,
             },
             Stroke {
                 radius: 0.05,
                 path: straight((-8.5, middle), (7.5, middle)),
+                edge: 1,
             },
         ];
         let placements = [Placement {
@@ -734,23 +560,34 @@ mod tests {
             candidates,
             href: String::new(),
         }];
-        let searched = search(&placements, &[], &strokes, &[]).unwrap();
-        let chosen = &placements[0].candidates[searched.choices[0]];
+        let searched = search(&placements, &[], &strokes, &[], Some(9.0 / UNIT)).unwrap();
+        let chosen_index = searched.choices[0];
+        let chosen = &placements[0].candidates[chosen_index];
         assert!(chosen.bounds.top < 0.0, "the label takes the clear side");
-        assert_eq!(
-            overlaps(&placements, &searched.choices, &searched.lines),
-            (0, 0, 0)
-        );
+        assert!(searched.leaders.iter().all(Option::is_none));
+        assert_eq!(overlaps(&placements, &searched), (0, 0, 0));
         // On its preferred side, the text crosses the dotted edge.
-        assert_eq!(overlaps(&placements, &[0], &searched.lines), (1, 1, 0));
+        let preferred = Searched {
+            choices: vec![0],
+            leaders: vec![None],
+            lines: searched.lines,
+        };
+        assert_eq!(overlaps(&placements, &preferred), (1, 1, 0));
         // However short, a stroke reaching the chosen text is a hit: here a
         // zero-radius cut across its corner, about 0.14 units inside.
         let (right, top) = (chosen.bounds.right, chosen.bounds.top);
         let cut = Stroke {
             radius: 0.0,
             path: straight((right - 0.2, top + 0.1), (right + 0.1, top - 0.2)),
+            edge: 1,
         };
-        let cut = search(&placements, &[], &[cut], &[]).unwrap().lines;
-        assert_eq!(overlaps(&placements, &searched.choices, &cut), (1, 1, 0));
+        let cut = Searched {
+            choices: vec![chosen_index],
+            leaders: vec![None],
+            lines: search(&placements, &[], &[cut], &[], Some(9.0 / UNIT))
+                .unwrap()
+                .lines,
+        };
+        assert_eq!(overlaps(&placements, &cut), (1, 1, 0));
     }
 }

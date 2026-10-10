@@ -92,6 +92,66 @@ class SvgBrowserTests(unittest.TestCase):
                     finally:
                         browser.close()
 
+    def test_leader_targets_inspect_and_pin_their_label_edge(self):
+        from playwright.sync_api import sync_playwright
+
+        # Edge 0's label is wider than the gap between the edges crossing its
+        # carrier, so the drawing sets it off with a leader.
+        def drawing(leaders):
+            source = (
+                "#set page(width: auto, height: auto, margin: 0pt)\n"
+                '#import "/crates/linnest/typst/src/lib.typ": draw, graph\n'
+                "#let g = graph.build({\n"
+                "  graph.node(<a>, pos: graph.pos(x: -1.5, y: 0))\n"
+                "  graph.node(<b>, pos: graph.pos(x: 1.5, y: 0))\n"
+                "  graph.node(<c>, pos: graph.pos(x: -0.7, y: -1.6))\n"
+                "  graph.node(<d>, pos: graph.pos(x: -0.7, y: 1.6))\n"
+                "  graph.node(<e>, pos: graph.pos(x: 0.7, y: -1.6))\n"
+                "  graph.node(<f>, pos: graph.pos(x: 0.7, y: 1.6))\n"
+                "  graph.edge(graph.source(<a>), graph.sink(<b>), pos: graph.pos(x: 0, y: 0))\n"
+                "  graph.edge(graph.source(<c>), graph.sink(<d>), pos: graph.pos(x: -0.7, y: 0))\n"
+                "  graph.edge(graph.source(<e>), graph.sink(<f>), pos: graph.pos(x: 0.7, y: 0))\n"
+                "})\n"
+                f"#draw(g, label-leaders: {str(leaders).lower()},\n"
+                "  source-style: edge => if edge.eid == 0 { (label: [wide edge label]) } else { (:) })\n"
+            )
+            return lp.DiagramRender.from_sources(
+                {"main.typ": source.encode()}
+            ).to_html()
+
+        with sync_playwright() as playwright:
+            for engine in (playwright.chromium, playwright.webkit):
+                with self.subTest(browser=engine.name):
+                    browser = engine.launch()
+                    try:
+                        page = browser.new_page(viewport={"width": 1000, "height": 800})
+                        edge = '[data-linnet-kind="edge"][data-linnet-id="0"]'
+                        page.set_content('<meta charset="utf-8">' + drawing(False))
+                        kept = page.locator(edge).count()
+                        page.set_content('<meta charset="utf-8">' + drawing(True))
+                        targets = page.locator(edge)
+                        # The leader adds hover targets carrying its label's edge.
+                        self.assertGreater(targets.count(), kept)
+                        panel = page.locator(".linnet-inspector")
+                        highlight = page.locator(".linnet-edge-highlight")
+                        halos = set()
+                        for index in range(targets.count()):
+                            target = targets.nth(index)
+                            target.dispatch_event("pointerover")
+                            self.assertIn("Edge 0", panel.inner_text())
+                            # One shared halo covers the edge, its label and its leader.
+                            self.assertEqual(highlight.count(), 1)
+                            halos.add(highlight.locator("rect").count())
+                            target.dispatch_event("pointerout")
+                        self.assertEqual(len(halos), 1)
+                        leader = targets.nth(targets.count() - 1)
+                        leader.dispatch_event("click")
+                        leader.dispatch_event("pointerout")
+                        self.assertIn("Pinned", panel.inner_text())
+                        self.assertIn("Edge 0", panel.inner_text())
+                    finally:
+                        browser.close()
+
     def test_neutral_palette_follows_media_and_explicit_theme(self):
         from playwright.sync_api import sync_playwright
 

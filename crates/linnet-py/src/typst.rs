@@ -1394,6 +1394,8 @@ enum ValueRule {
     Number,
     NonNegativeNumber,
     NonNegativeFiniteNumber,
+    /// A finite factor of at least one.
+    ScaleFactor,
     Point,
     PointList,
     Angle,
@@ -1456,6 +1458,11 @@ impl ValueRule {
             Self::NonNegativeFiniteNumber => {
                 matches!(value, NativeValue::Int(number) if *number >= 0)
                     || matches!(value, NativeValue::Float(number) if number.is_finite() && *number >= 0.0)
+                    || expression_kind(SymbolKind::Value)
+            }
+            Self::ScaleFactor => {
+                matches!(value, NativeValue::Int(number) if *number >= 1)
+                    || matches!(value, NativeValue::Float(number) if number.is_finite() && *number >= 1.0)
                     || expression_kind(SymbolKind::Value)
             }
             Self::Point => {
@@ -1616,6 +1623,7 @@ impl ValueRule {
             Self::Number => "a number",
             Self::NonNegativeNumber => "a non-negative number",
             Self::NonNegativeFiniteNumber => "a non-negative finite number",
+            Self::ScaleFactor => "a finite number of at least 1",
             Self::Point => "a two-number point dictionary or array, or module value",
             Self::PointList => "an array of two-number points, or module value",
             Self::Angle => "an Angle, number, or module value",
@@ -3339,6 +3347,17 @@ const LAYOUT_FIELDS: &[FieldSpec] = &[
     ),
     FieldSpec::new("impred_level", "impred-level", ValueRule::Bool),
     FieldSpec::new("impred_labels", "impred-labels", ValueRule::Bool),
+    FieldSpec::new("impred_label_room", "impred-label-room", ValueRule::Bool),
+    FieldSpec::new(
+        "impred_label_room_margin",
+        "impred-label-room-margin",
+        ValueRule::NonNegativeNumber,
+    ),
+    FieldSpec::new(
+        "impred_label_room_max_scale",
+        "impred-label-room-max-scale",
+        ValueRule::ScaleFactor,
+    ),
     FieldSpec::new("subgraph", "subgraph", ValueRule::HedgeSelection).none(),
     FieldSpec::new("viewport_width", "viewport-w", ValueRule::NonNegativeNumber),
     FieldSpec::new(
@@ -3478,6 +3497,13 @@ const LAYOUT_FIELDS: &[FieldSpec] = &[
 /// their external-pull optimum at every refinement checkpoint.
 /// `impred_labels` (default false) opts into label-aware layout: drawn labels
 /// are fed back as tethered boxes into short warm ImPrEd passes.
+/// `impred_label_room` (default true) makes room for measured edge labels that
+/// would meet an edge, a vertex, an arrow or another label: the edges bend
+/// around them with every vertex held, else the drawing grows uniformly, by
+/// at most `impred_label_room_max_scale` (default 1.5, at least 1), keeping
+/// its shape. `impred_label_room_margin` (default 0.03 graph units) is how
+/// close to a line the check lets text come. Drawings whose labels already
+/// clear everything keep their layout.
 ///
 /// `external_pull_attachment` is a finite nonnegative multiplier for extra demand
 /// from distributed owners sharing an external X coordinate (default 1).
@@ -3500,7 +3526,7 @@ impl PyLayoutSettings {
     #[new]
     #[pyo3(
         signature = (**kwargs),
-        text_signature = "(*, impred_spacing=..., impred_repulsion=..., impred_attraction=..., impred_parallel_balance=..., impred_pull=..., impred_pull_balance=..., impred_pull_attachment=..., impred_external_max_points=..., impred_split_length_ratio=..., impred_contract_chord_ratio=..., impred_edge_clearance=..., impred_node_edge_strength=..., impred_steps=..., impred_step_scale=..., impred_level=..., impred_labels=..., subgraph=..., viewport_width=..., viewport_height=..., tree_dx=..., tree_dy=..., steps=..., seed=..., step=..., step_shrink=..., cool=..., accept_floor=..., early_tolerance=..., temperature=..., delta=..., beta=..., spring_strength=..., spring_length_scale=..., initial_repulsion=..., repulsion_growth=..., centering_strength=..., epochs=..., crossing_penalty=..., dangling_repulsion=..., dangling_centroid_repulsion=..., external_pull=..., external_pull_balance=..., external_pull_attachment=..., edge_edge_repulsion=..., directional_force=..., internal_label_length_scale=..., external_label_length_scale=..., label_spring=..., label_charge=..., label_steps=..., label_layout=..., label_step=..., label_early_tolerance=..., label_max_delta_scale=..., edge_vertex_repulsion=..., epsilon=..., incremental_energy=..., algorithm=..., nodes=..., direction=..., rank_align=..., roots=..., rank_same=..., route_edge_weight=..., route_exit_weight=..., route_label_width_scale=..., route_label_width_cap=..., z_spring=..., z_spring_growth=..., length_scale=...)"
+        text_signature = "(*, impred_spacing=..., impred_repulsion=..., impred_attraction=..., impred_parallel_balance=..., impred_pull=..., impred_pull_balance=..., impred_pull_attachment=..., impred_external_max_points=..., impred_split_length_ratio=..., impred_contract_chord_ratio=..., impred_edge_clearance=..., impred_node_edge_strength=..., impred_steps=..., impred_step_scale=..., impred_level=..., impred_labels=..., impred_label_room=..., impred_label_room_margin=..., impred_label_room_max_scale=..., subgraph=..., viewport_width=..., viewport_height=..., tree_dx=..., tree_dy=..., steps=..., seed=..., step=..., step_shrink=..., cool=..., accept_floor=..., early_tolerance=..., temperature=..., delta=..., beta=..., spring_strength=..., spring_length_scale=..., initial_repulsion=..., repulsion_growth=..., centering_strength=..., epochs=..., crossing_penalty=..., dangling_repulsion=..., dangling_centroid_repulsion=..., external_pull=..., external_pull_balance=..., external_pull_attachment=..., edge_edge_repulsion=..., directional_force=..., internal_label_length_scale=..., external_label_length_scale=..., label_spring=..., label_charge=..., label_steps=..., label_layout=..., label_step=..., label_early_tolerance=..., label_max_delta_scale=..., edge_vertex_repulsion=..., epsilon=..., incremental_energy=..., algorithm=..., nodes=..., direction=..., rank_align=..., roots=..., rank_same=..., route_edge_weight=..., route_exit_weight=..., route_label_width_scale=..., route_label_width_cap=..., z_spring=..., z_spring_growth=..., length_scale=...)"
     )]
     #[gen_stub(skip)]
     fn new(kwargs: Option<&Bound<'_, PyDict>>) -> PyResult<Self> {
@@ -3526,7 +3552,7 @@ impl PyLayoutSettings {
 
     #[pyo3(
         signature = (**kwargs),
-        text_signature = "($self, *, impred_spacing=..., impred_repulsion=..., impred_attraction=..., impred_parallel_balance=..., impred_pull=..., impred_pull_balance=..., impred_pull_attachment=..., impred_external_max_points=..., impred_split_length_ratio=..., impred_contract_chord_ratio=..., impred_edge_clearance=..., impred_node_edge_strength=..., impred_steps=..., impred_step_scale=..., impred_level=..., impred_labels=..., subgraph=..., viewport_width=..., viewport_height=..., tree_dx=..., tree_dy=..., steps=..., seed=..., step=..., step_shrink=..., cool=..., accept_floor=..., early_tolerance=..., temperature=..., delta=..., beta=..., spring_strength=..., spring_length_scale=..., initial_repulsion=..., repulsion_growth=..., centering_strength=..., epochs=..., crossing_penalty=..., dangling_repulsion=..., dangling_centroid_repulsion=..., external_pull=..., external_pull_balance=..., external_pull_attachment=..., edge_edge_repulsion=..., directional_force=..., internal_label_length_scale=..., external_label_length_scale=..., label_spring=..., label_charge=..., label_steps=..., label_layout=..., label_step=..., label_early_tolerance=..., label_max_delta_scale=..., edge_vertex_repulsion=..., epsilon=..., incremental_energy=..., algorithm=..., nodes=..., direction=..., rank_align=..., roots=..., rank_same=..., route_edge_weight=..., route_exit_weight=..., route_label_width_scale=..., route_label_width_cap=..., z_spring=..., z_spring_growth=..., length_scale=...)"
+        text_signature = "($self, *, impred_spacing=..., impred_repulsion=..., impred_attraction=..., impred_parallel_balance=..., impred_pull=..., impred_pull_balance=..., impred_pull_attachment=..., impred_external_max_points=..., impred_split_length_ratio=..., impred_contract_chord_ratio=..., impred_edge_clearance=..., impred_node_edge_strength=..., impred_steps=..., impred_step_scale=..., impred_level=..., impred_labels=..., impred_label_room=..., impred_label_room_margin=..., impred_label_room_max_scale=..., subgraph=..., viewport_width=..., viewport_height=..., tree_dx=..., tree_dy=..., steps=..., seed=..., step=..., step_shrink=..., cool=..., accept_floor=..., early_tolerance=..., temperature=..., delta=..., beta=..., spring_strength=..., spring_length_scale=..., initial_repulsion=..., repulsion_growth=..., centering_strength=..., epochs=..., crossing_penalty=..., dangling_repulsion=..., dangling_centroid_repulsion=..., external_pull=..., external_pull_balance=..., external_pull_attachment=..., edge_edge_repulsion=..., directional_force=..., internal_label_length_scale=..., external_label_length_scale=..., label_spring=..., label_charge=..., label_steps=..., label_layout=..., label_step=..., label_early_tolerance=..., label_max_delta_scale=..., edge_vertex_repulsion=..., epsilon=..., incremental_energy=..., algorithm=..., nodes=..., direction=..., rank_align=..., roots=..., rank_same=..., route_edge_weight=..., route_exit_weight=..., route_label_width_scale=..., route_label_width_cap=..., z_spring=..., z_spring_growth=..., length_scale=...)"
     )]
     #[gen_stub(skip)]
     fn then(&self, kwargs: Option<&Bound<'_, PyDict>>) -> PyResult<Self> {
@@ -3569,6 +3595,7 @@ const DRAW_FIELDS: &[FieldSpec] = &[
         "label-collision-padding",
         ValueRule::NonNegativeNumber,
     ),
+    FieldSpec::new("label_leaders", "label-leaders", ValueRule::Bool),
     FieldSpec::new("show_half_edge_ids", "show-half-edge-ids", ValueRule::Bool),
     FieldSpec::new("node_radius", "node-radius", ValueRule::Radius).auto(),
     FieldSpec::new(
@@ -3656,6 +3683,13 @@ const DRAW_FIELDS: &[FieldSpec] = &[
 ];
 
 /// Full typed option surface for `linnest.draw`.
+///
+/// `label_leaders` (default true) sets a label free to take either side,
+/// whose text still meets a line, another label, a vertex or an arrow after
+/// placement, in nearby free space with a hairline leader back to its edge or
+/// momentum arrow. A leader crosses nothing, keeps clear of vertices, leaves
+/// its edge steeply, and keeps its text one line from other labels; a label
+/// without such a spot keeps its place.
 #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(from_py_object, frozen, name = "DrawOptions")]
 #[cfg_attr(feature = "community", pyo3(module = "symbolica.community.graph"))]
@@ -3672,7 +3706,7 @@ impl PyDrawOptions {
     #[new]
     #[pyo3(
         signature = (**kwargs),
-        text_signature = "(*, scope=..., unit=..., title=..., subgraph=..., debug=..., debug_label_collisions=..., label_collision_padding=..., show_half_edge_ids=..., node_radius=..., node_min_radius=..., node_label_padding=..., node_fill=..., node_stroke=..., node_outset=..., node_label_style=..., node_style=..., node_label=..., draw_node=..., edge_stroke=..., edge_offset=..., edge_length=..., edge_ratio=..., edge_resolve_length=..., edge_accuracy=..., edge_split_gap=..., edge_dangling_tangent=..., source_style=..., sink_style=..., edge_label=..., edge_label_style=..., external_label_gap=..., edge_omega=..., edge_trim_accuracy=..., padding=..., debug_edge_radius=..., debug_edge_fill=..., debug_edge_stroke=..., debug_edge_label_fill=..., subgraph_edge_style=..., subgraph_edge_underlay=...)"
+        text_signature = "(*, scope=..., unit=..., title=..., subgraph=..., debug=..., debug_label_collisions=..., label_collision_padding=..., label_leaders=..., show_half_edge_ids=..., node_radius=..., node_min_radius=..., node_label_padding=..., node_fill=..., node_stroke=..., node_outset=..., node_label_style=..., node_style=..., node_label=..., draw_node=..., edge_stroke=..., edge_offset=..., edge_length=..., edge_ratio=..., edge_resolve_length=..., edge_accuracy=..., edge_split_gap=..., edge_dangling_tangent=..., source_style=..., sink_style=..., edge_label=..., edge_label_style=..., external_label_gap=..., edge_omega=..., edge_trim_accuracy=..., padding=..., debug_edge_radius=..., debug_edge_fill=..., debug_edge_stroke=..., debug_edge_label_fill=..., subgraph_edge_style=..., subgraph_edge_underlay=...)"
     )]
     #[gen_stub(skip)]
     fn new(kwargs: Option<&Bound<'_, PyDict>>) -> PyResult<Self> {
@@ -4056,8 +4090,8 @@ pyo3_stub_gen::inventory::submit! {
         import typing
 
         class PyLayoutSettings:
-            def __new__(cls, *, impred_spacing: _Number = ..., impred_repulsion: _Number = ..., impred_attraction: _Number = ..., impred_parallel_balance: _Number = ..., impred_pull: _Number = ..., impred_pull_balance: _Number = ..., impred_pull_attachment: _Number = ..., impred_external_max_points: _Integer = ..., impred_split_length_ratio: _Number = ..., impred_contract_chord_ratio: _Number = ..., impred_edge_clearance: _Number = ..., impred_node_edge_strength: _Number = ..., impred_steps: _Integer = ..., impred_step_scale: _Integer = ..., impred_level: _Boolean = ..., impred_labels: _Boolean = ..., subgraph: _OptionalHedgeSelection = ..., viewport_width: _Number = ..., viewport_height: _Number = ..., tree_dx: _Number = ..., tree_dy: _Number = ..., steps: _Integer = ..., seed: _Integer = ..., step: _Number = ..., step_shrink: _Number = ..., cool: _Number = ..., accept_floor: _Number = ..., early_tolerance: _Number = ..., temperature: _Number = ..., delta: _Number = ..., beta: _Number = ..., spring_strength: _Number = ..., spring_length_scale: _Number = ..., initial_repulsion: _Number = ..., repulsion_growth: _Number = ..., centering_strength: _Number = ..., epochs: _Integer = ..., crossing_penalty: _Number = ..., dangling_repulsion: _Number = ..., dangling_centroid_repulsion: _Number = ..., external_pull: _Number = ..., external_pull_balance: _Number = ..., external_pull_attachment: _Number = ..., edge_edge_repulsion: _Number = ..., directional_force: _Number = ..., internal_label_length_scale: _Number = ..., external_label_length_scale: _Number = ..., label_spring: _Number = ..., label_charge: _Number = ..., label_steps: _Integer = ..., label_layout: _LabelLayoutValue = ..., label_step: _Number = ..., label_early_tolerance: _Number = ..., label_max_delta_scale: _Number = ..., edge_vertex_repulsion: _Number = ..., epsilon: _Number = ..., incremental_energy: _Boolean = ..., algorithm: _LayoutAlgorithmValue = ..., nodes: _LayoutNodesValue = ..., direction: _LayoutDirectionValue = ..., rank_align: _RankAlignmentValue = ..., roots: _NodeIndices = ..., rank_same: _NodeGroups = ..., route_edge_weight: _Number = ..., route_exit_weight: _Number = ..., route_label_width_scale: _Number = ..., route_label_width_cap: _Number = ..., z_spring: _Number = ..., z_spring_growth: _Number = ..., length_scale: _Number = ...) -> LayoutSettings: ...
-            def then(self, *, impred_spacing: _Number = ..., impred_repulsion: _Number = ..., impred_attraction: _Number = ..., impred_parallel_balance: _Number = ..., impred_pull: _Number = ..., impred_pull_balance: _Number = ..., impred_pull_attachment: _Number = ..., impred_external_max_points: _Integer = ..., impred_split_length_ratio: _Number = ..., impred_contract_chord_ratio: _Number = ..., impred_edge_clearance: _Number = ..., impred_node_edge_strength: _Number = ..., impred_steps: _Integer = ..., impred_step_scale: _Integer = ..., impred_level: _Boolean = ..., impred_labels: _Boolean = ..., subgraph: _OptionalHedgeSelection = ..., viewport_width: _Number = ..., viewport_height: _Number = ..., tree_dx: _Number = ..., tree_dy: _Number = ..., steps: _Integer = ..., seed: _Integer = ..., step: _Number = ..., step_shrink: _Number = ..., cool: _Number = ..., accept_floor: _Number = ..., early_tolerance: _Number = ..., temperature: _Number = ..., delta: _Number = ..., beta: _Number = ..., spring_strength: _Number = ..., spring_length_scale: _Number = ..., initial_repulsion: _Number = ..., repulsion_growth: _Number = ..., centering_strength: _Number = ..., epochs: _Integer = ..., crossing_penalty: _Number = ..., dangling_repulsion: _Number = ..., dangling_centroid_repulsion: _Number = ..., external_pull: _Number = ..., external_pull_balance: _Number = ..., external_pull_attachment: _Number = ..., edge_edge_repulsion: _Number = ..., directional_force: _Number = ..., internal_label_length_scale: _Number = ..., external_label_length_scale: _Number = ..., label_spring: _Number = ..., label_charge: _Number = ..., label_steps: _Integer = ..., label_layout: _LabelLayoutValue = ..., label_step: _Number = ..., label_early_tolerance: _Number = ..., label_max_delta_scale: _Number = ..., edge_vertex_repulsion: _Number = ..., epsilon: _Number = ..., incremental_energy: _Boolean = ..., algorithm: _LayoutAlgorithmValue = ..., nodes: _LayoutNodesValue = ..., direction: _LayoutDirectionValue = ..., rank_align: _RankAlignmentValue = ..., roots: _NodeIndices = ..., rank_same: _NodeGroups = ..., route_edge_weight: _Number = ..., route_exit_weight: _Number = ..., route_label_width_scale: _Number = ..., route_label_width_cap: _Number = ..., z_spring: _Number = ..., z_spring_growth: _Number = ..., length_scale: _Number = ...) -> LayoutSettings: ...
+            def __new__(cls, *, impred_spacing: _Number = ..., impred_repulsion: _Number = ..., impred_attraction: _Number = ..., impred_parallel_balance: _Number = ..., impred_pull: _Number = ..., impred_pull_balance: _Number = ..., impred_pull_attachment: _Number = ..., impred_external_max_points: _Integer = ..., impred_split_length_ratio: _Number = ..., impred_contract_chord_ratio: _Number = ..., impred_edge_clearance: _Number = ..., impred_node_edge_strength: _Number = ..., impred_steps: _Integer = ..., impred_step_scale: _Integer = ..., impred_level: _Boolean = ..., impred_labels: _Boolean = ..., impred_label_room: _Boolean = ..., impred_label_room_margin: _Number = ..., impred_label_room_max_scale: _Number = ..., subgraph: _OptionalHedgeSelection = ..., viewport_width: _Number = ..., viewport_height: _Number = ..., tree_dx: _Number = ..., tree_dy: _Number = ..., steps: _Integer = ..., seed: _Integer = ..., step: _Number = ..., step_shrink: _Number = ..., cool: _Number = ..., accept_floor: _Number = ..., early_tolerance: _Number = ..., temperature: _Number = ..., delta: _Number = ..., beta: _Number = ..., spring_strength: _Number = ..., spring_length_scale: _Number = ..., initial_repulsion: _Number = ..., repulsion_growth: _Number = ..., centering_strength: _Number = ..., epochs: _Integer = ..., crossing_penalty: _Number = ..., dangling_repulsion: _Number = ..., dangling_centroid_repulsion: _Number = ..., external_pull: _Number = ..., external_pull_balance: _Number = ..., external_pull_attachment: _Number = ..., edge_edge_repulsion: _Number = ..., directional_force: _Number = ..., internal_label_length_scale: _Number = ..., external_label_length_scale: _Number = ..., label_spring: _Number = ..., label_charge: _Number = ..., label_steps: _Integer = ..., label_layout: _LabelLayoutValue = ..., label_step: _Number = ..., label_early_tolerance: _Number = ..., label_max_delta_scale: _Number = ..., edge_vertex_repulsion: _Number = ..., epsilon: _Number = ..., incremental_energy: _Boolean = ..., algorithm: _LayoutAlgorithmValue = ..., nodes: _LayoutNodesValue = ..., direction: _LayoutDirectionValue = ..., rank_align: _RankAlignmentValue = ..., roots: _NodeIndices = ..., rank_same: _NodeGroups = ..., route_edge_weight: _Number = ..., route_exit_weight: _Number = ..., route_label_width_scale: _Number = ..., route_label_width_cap: _Number = ..., z_spring: _Number = ..., z_spring_growth: _Number = ..., length_scale: _Number = ...) -> LayoutSettings: ...
+            def then(self, *, impred_spacing: _Number = ..., impred_repulsion: _Number = ..., impred_attraction: _Number = ..., impred_parallel_balance: _Number = ..., impred_pull: _Number = ..., impred_pull_balance: _Number = ..., impred_pull_attachment: _Number = ..., impred_external_max_points: _Integer = ..., impred_split_length_ratio: _Number = ..., impred_contract_chord_ratio: _Number = ..., impred_edge_clearance: _Number = ..., impred_node_edge_strength: _Number = ..., impred_steps: _Integer = ..., impred_step_scale: _Integer = ..., impred_level: _Boolean = ..., impred_labels: _Boolean = ..., impred_label_room: _Boolean = ..., impred_label_room_margin: _Number = ..., impred_label_room_max_scale: _Number = ..., subgraph: _OptionalHedgeSelection = ..., viewport_width: _Number = ..., viewport_height: _Number = ..., tree_dx: _Number = ..., tree_dy: _Number = ..., steps: _Integer = ..., seed: _Integer = ..., step: _Number = ..., step_shrink: _Number = ..., cool: _Number = ..., accept_floor: _Number = ..., early_tolerance: _Number = ..., temperature: _Number = ..., delta: _Number = ..., beta: _Number = ..., spring_strength: _Number = ..., spring_length_scale: _Number = ..., initial_repulsion: _Number = ..., repulsion_growth: _Number = ..., centering_strength: _Number = ..., epochs: _Integer = ..., crossing_penalty: _Number = ..., dangling_repulsion: _Number = ..., dangling_centroid_repulsion: _Number = ..., external_pull: _Number = ..., external_pull_balance: _Number = ..., external_pull_attachment: _Number = ..., edge_edge_repulsion: _Number = ..., directional_force: _Number = ..., internal_label_length_scale: _Number = ..., external_label_length_scale: _Number = ..., label_spring: _Number = ..., label_charge: _Number = ..., label_steps: _Integer = ..., label_layout: _LabelLayoutValue = ..., label_step: _Number = ..., label_early_tolerance: _Number = ..., label_max_delta_scale: _Number = ..., edge_vertex_repulsion: _Number = ..., epsilon: _Number = ..., incremental_energy: _Boolean = ..., algorithm: _LayoutAlgorithmValue = ..., nodes: _LayoutNodesValue = ..., direction: _LayoutDirectionValue = ..., rank_align: _RankAlignmentValue = ..., roots: _NodeIndices = ..., rank_same: _NodeGroups = ..., route_edge_weight: _Number = ..., route_exit_weight: _Number = ..., route_label_width_scale: _Number = ..., route_label_width_cap: _Number = ..., z_spring: _Number = ..., z_spring_growth: _Number = ..., length_scale: _Number = ...) -> LayoutSettings: ...
     "# }
 }
 
@@ -4067,7 +4101,7 @@ pyo3_stub_gen::inventory::submit! {
         import typing
 
         class PyDrawOptions:
-            def __new__(cls, *, scope: _Dictionary = ..., unit: _AutoLengthValue = ..., title: _AutoOptionalStaticContent = ..., subgraph: _DrawSubgraphs = ..., debug: _DebugValue = ..., debug_label_collisions: _Boolean = ..., label_collision_padding: _Number = ..., show_half_edge_ids: _Boolean = ..., node_radius: _AutoRadius = ..., node_min_radius: _Number = ..., node_label_padding: _Number = ..., node_fill: _Paint = ..., node_stroke: _StrokeValue = ..., node_outset: _AutoNumber = ..., node_label_style: _Style = ..., node_style: _OptionalStyle = ..., node_label: _AutoOptionalContent = ..., draw_node: _AutoFunction = ..., edge_stroke: _StrokeValue = ..., edge_offset: _Number = ..., edge_length: _OptionalNumber = ..., edge_ratio: _OptionalNumber = ..., edge_resolve_length: _EdgeLengthResolver = ..., edge_accuracy: _Number = ..., edge_split_gap: _Number = ..., edge_dangling_tangent: _DanglingTangentValue = ..., source_style: _OptionalStyleLayers = ..., sink_style: _OptionalStyleLayers = ..., edge_label: _OptionalContent = ..., edge_label_style: _OptionalStyle = ..., external_label_gap: _Number = ..., edge_omega: _Number = ..., edge_trim_accuracy: _Number = ..., padding: _OptionalPadding = ..., debug_edge_radius: _Number = ..., debug_edge_fill: _Paint = ..., debug_edge_stroke: _StrokeValue = ..., debug_edge_label_fill: _Paint = ..., subgraph_edge_style: _Style = ..., subgraph_edge_underlay: _Boolean = ...) -> DrawOptions: ...
+            def __new__(cls, *, scope: _Dictionary = ..., unit: _AutoLengthValue = ..., title: _AutoOptionalStaticContent = ..., subgraph: _DrawSubgraphs = ..., debug: _DebugValue = ..., debug_label_collisions: _Boolean = ..., label_collision_padding: _Number = ..., label_leaders: _Boolean = ..., show_half_edge_ids: _Boolean = ..., node_radius: _AutoRadius = ..., node_min_radius: _Number = ..., node_label_padding: _Number = ..., node_fill: _Paint = ..., node_stroke: _StrokeValue = ..., node_outset: _AutoNumber = ..., node_label_style: _Style = ..., node_style: _OptionalStyle = ..., node_label: _AutoOptionalContent = ..., draw_node: _AutoFunction = ..., edge_stroke: _StrokeValue = ..., edge_offset: _Number = ..., edge_length: _OptionalNumber = ..., edge_ratio: _OptionalNumber = ..., edge_resolve_length: _EdgeLengthResolver = ..., edge_accuracy: _Number = ..., edge_split_gap: _Number = ..., edge_dangling_tangent: _DanglingTangentValue = ..., source_style: _OptionalStyleLayers = ..., sink_style: _OptionalStyleLayers = ..., edge_label: _OptionalContent = ..., edge_label_style: _OptionalStyle = ..., external_label_gap: _Number = ..., edge_omega: _Number = ..., edge_trim_accuracy: _Number = ..., padding: _OptionalPadding = ..., debug_edge_radius: _Number = ..., debug_edge_fill: _Paint = ..., debug_edge_stroke: _StrokeValue = ..., debug_edge_label_fill: _Paint = ..., subgraph_edge_style: _Style = ..., subgraph_edge_underlay: _Boolean = ...) -> DrawOptions: ...
     "# }
 }
 
@@ -5426,13 +5460,17 @@ impl PyRenderSettings {
         }
         let mut result = self.clone();
         let module = PyTypstModule::file(module);
-        let drawing = ["draw-node", "source-style", "sink-style"]
+        let mut drawing = ["draw-node", "source-style", "sink-style"]
             .into_iter()
             .map(|name| {
                 let function = Py::new(py, module.function(name)?)?;
                 Ok((name.into(), native_from_py(function.bind(py).as_any(), 0)?))
             })
             .collect::<PyResult<BTreeMap<_, _>>>()?;
+        drawing.insert(
+            "label-leaders".into(),
+            NativeValue::Bool(scene.label_leaders),
+        );
         let merged = match result.values.get("draw") {
             Some(NativeValue::Dict(values)) => deep_overlay(&drawing, values),
             _ => drawing,
