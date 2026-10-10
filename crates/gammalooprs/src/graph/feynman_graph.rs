@@ -124,9 +124,13 @@ impl Graph {
                 let mut previous_body: Option<Atom> = None;
                 for derivative_order in 0..=max_order {
                     let body = if derivative_order > 2 {
+                        // Reuse the preceding order rather than recomputing the
+                        // whole derivative chain for every registered order.
                         previous_body
                             .as_ref()
-                            .map(|body| body.derivative(&energy).expand())
+                            .expect("lower derivative orders were generated")
+                            .derivative(&energy)
+                            .expand()
                     } else {
                         self.explicit_thermal_distribution_atom(
                             edge,
@@ -134,10 +138,7 @@ impl Graph {
                             Atom::var(thermal_sign),
                             Atom::var(orientation_sign),
                             medium_mode,
-                        )
-                    };
-                    let Some(body) = body else {
-                        continue;
+                        )?
                     };
                     entries.push(FnMapEntry {
                         inlining: InliningPolicy::Always,
@@ -369,7 +370,7 @@ where
         thermal_sign: Atom,
         orientation_sign: Atom,
         limit: MediumMode,
-    ) -> Option<Atom> {
+    ) -> eyre::Result<Atom> {
         self.1.explicit_thermal_distribution_atom(
             edge,
             derivative_order,
@@ -437,9 +438,9 @@ where
         thermal_sign: Atom,
         orientation_sign: Atom,
         limit: MediumMode,
-    ) -> Option<Atom> {
+    ) -> eyre::Result<Atom> {
         if limit == MediumMode::Vacuum {
-            return Some(ThermalDistributionFactor::vacuum_atom(
+            return Ok(ThermalDistributionFactor::vacuum_atom(
                 derivative_order,
                 thermal_sign,
             ));
@@ -454,18 +455,32 @@ where
                 let beta = Atom::var(GS.inverse_temperature);
                 let arg = beta.clone() * shifted_ose / Atom::num(2);
                 match (self[edge].is_fermion(), derivative_order) {
-                    (true, 0) => Some((thermal_sign + tanh().call_args([arg])) / Atom::num(2)),
-                    (false, 0) => Some((thermal_sign + coth().call_args([arg])) / Atom::num(2)),
-                    (true, 1) => Some(beta * sech().call_args([arg]).pow(2) / Atom::num(4)),
-                    (false, 1) => Some(-beta * csch().call_args([arg]).pow(2) / Atom::num(4)),
-                    (true, 2) => Some(
-                        -beta.pow(2) * sech().call_args([&arg]).pow(2) * tanh().call_args([arg])
-                            / Atom::num(4),
-                    ),
-                    (false, 2) => Some(
-                        beta.pow(2) * csch().call_args([&arg]).pow(2) * coth().call_args([arg])
-                            / Atom::num(4),
-                    ),
+                    (is_fermion, 0) => {
+                        // Order zero is (1 + s)/2 - n_F or (1 + s)/2 + n_B. Factoring
+                        // exp(-(a + |a|)) out of n_F = 1/(exp(2a) + 1) and
+                        // n_B = 1/(exp(2a) - 1) leaves nonpositive exponents and a
+                        // remainder free of cancellation, so exponentially small
+                        // occupations are not lost in s + tanh(a) once tanh(a) rounds
+                        // to one. coth keeps n_B accurate in the soft limit.
+                        let abs_arg = arg.abs();
+                        let tail = (-(&arg + &abs_arg)).exp();
+                        let occupation = if is_fermion {
+                            -tail / (Atom::one() + (Atom::num(-2) * &abs_arg).exp())
+                        } else {
+                            tail * (&arg / &abs_arg + coth().call_args([&arg])) / Atom::num(2)
+                        };
+                        Ok((thermal_sign + Atom::one()) / Atom::num(2) + occupation)
+                    }
+                    (true, 1) => Ok(beta * sech().call_args([arg]).pow(2) / Atom::num(4)),
+                    (false, 1) => Ok(-beta * csch().call_args([arg]).pow(2) / Atom::num(4)),
+                    (true, 2) => Ok(-beta.pow(2)
+                        * sech().call_args([&arg]).pow(2)
+                        * tanh().call_args([arg])
+                        / Atom::num(4)),
+                    (false, 2) => Ok(beta.pow(2)
+                        * csch().call_args([&arg]).pow(2)
+                        * coth().call_args([arg])
+                        / Atom::num(4)),
                     (_, _) => {
                         let energy = Indeterminate::try_from(ose_atom_from_index(edge)).unwrap();
                         let mut body = self.explicit_thermal_distribution_atom(
@@ -478,7 +493,7 @@ where
                         for _ in 2..derivative_order {
                             body = body.derivative(&energy).expand();
                         }
-                        Some(body)
+                        Ok(body)
                     }
                 }
             }
@@ -486,16 +501,20 @@ where
                 match (chemical_potential, derivative_order) {
                     // The contour offset may be zero for a symmetric terminal;
                     // its physical orientation still fixes E - sigma*mu.
-                    (Some(_), 0) => Some(
-                        GS.heaviside(shifted_ose) + (thermal_sign - Atom::one()) / Atom::num(2),
+                    (Some(_), 0) => Ok(
+                        (thermal_sign + Atom::one()) / Atom::num(2) - GS.heaviside(-shifted_ose)
                     ),
-                    (None, _) => Some(ThermalDistributionFactor::vacuum_atom(
+                    (None, _) => Ok(ThermalDistributionFactor::vacuum_atom(
                         derivative_order,
                         thermal_sign,
                     )),
                     // Zero-temperature derivatives are distributions, consumed by
                     // production Fermi-surface localization rather than a pointwise map.
-                    _ => None,
+                    _ => Err(eyre::eyre!(
+                        "Thermal distribution for edge {edge}, derivative order {derivative_order}, \
+                         and limit {limit:?} has no pointwise body; zero-temperature derivatives \
+                         require Fermi-surface localization"
+                    )),
                 }
             }
             MediumMode::Vacuum => unreachable!("vacuum handled before medium parameters"),
@@ -591,7 +610,7 @@ impl ParamBuilderGraph for Graph {
         thermal_sign: Atom,
         orientation_sign: Atom,
         limit: MediumMode,
-    ) -> Option<Atom> {
+    ) -> eyre::Result<Atom> {
         self.underlying.explicit_thermal_distribution_atom(
             edge,
             derivative_order,
@@ -1447,9 +1466,16 @@ mod tests {
                         MediumMode::ZeroTemperatureEquilibrium,
                     );
                     if chemical_potential.is_none() {
-                        assert_eq!(zero_temperature, Some(vacuum));
+                        assert_eq!(zero_temperature.unwrap(), vacuum);
                     } else {
-                        assert_eq!(zero_temperature.is_some(), order == 0);
+                        assert_eq!(zero_temperature.is_ok(), order == 0);
+                        if order > 0 {
+                            let error = zero_temperature.unwrap_err().to_string();
+                            assert!(error.contains(&format!("edge {edge}")));
+                            assert!(error.contains(&format!("derivative order {order}")));
+                            assert!(error.contains("ZeroTemperatureEquilibrium"));
+                            assert!(error.contains("has no pointwise body"));
+                        }
                     }
                 }
             }
@@ -1470,7 +1496,7 @@ mod tests {
             let mu = graph[edge].chemical_potential_atom().unwrap();
             assert!(!mu.is_zero());
             for orientation in [-1, 1] {
-                let shifted_energy = ose_atom_from_index(edge) - Atom::num(orientation) * &mu;
+                let energy = Atom::num(orientation) * &mu + symbol!("shifted_thermal_energy");
                 for limit in [
                     MediumMode::ThermodynamicEquilibrium,
                     MediumMode::ZeroTemperatureEquilibrium,
@@ -1491,32 +1517,26 @@ mod tests {
                             .expand()
                             .is_zero()
                     );
-                    let expected = if limit.is_finite_temperature() {
-                        let argument =
-                            Atom::var(GS.inverse_temperature) * &shifted_energy / Atom::num(2);
-                        let distribution = if graph[edge].is_fermion() {
-                            tanh().call_args([argument])
-                        } else {
-                            coth().call_args([argument])
-                        };
-                        distribution / Atom::num(2)
-                    } else {
-                        GS.heaviside(&shifted_energy) - Atom::one() / Atom::num(2)
-                    };
-                    assert_eq!(bodies[1], expected);
+                    // With E = sigma*mu + x, the body depends only on x = E - sigma*mu.
+                    let shifted = bodies[1]
+                        .replace(ose_atom_from_index(edge))
+                        .with(energy.clone());
+                    assert!(!shifted.contains(&mu), "{limit:?}: {shifted}");
                     for order in 1..=3 {
                         let derivatives = [-1, 0, 1].map(|contour| {
-                            graph.explicit_thermal_distribution_atom(
-                                edge,
-                                order,
-                                Atom::num(contour),
-                                Atom::num(orientation),
-                                limit,
-                            )
+                            graph
+                                .explicit_thermal_distribution_atom(
+                                    edge,
+                                    order,
+                                    Atom::num(contour),
+                                    Atom::num(orientation),
+                                    limit,
+                                )
+                                .map_err(|error| error.to_string())
                         });
                         assert_eq!(derivatives[0], derivatives[1]);
                         assert_eq!(derivatives[1], derivatives[2]);
-                        assert_eq!(derivatives[1].is_some(), limit.is_finite_temperature());
+                        assert_eq!(derivatives[1].is_ok(), limit.is_finite_temperature());
                     }
                 }
             }
@@ -1541,7 +1561,7 @@ mod tests {
                 .iter_edge_ids()
                 .find(|&edge| graph[edge].is_fermion() == fermion)
                 .unwrap();
-            let bodies = [0, 1, 2, 3, 4, 5, 6].map(|order| {
+            let mut bodies = [0, 1, 2, 3, 4, 5, 6].map(|order| {
                 graph
                     .explicit_thermal_distribution_atom(
                         edge,
@@ -1554,6 +1574,16 @@ mod tests {
                     .replace(ose_atom_from_index(edge))
                     .with(energy)
             });
+            // Order zero selects its decaying exponential through |E - sigma*mu|, which
+            // has no symbolic derivative. Start from its hyperbolic form instead;
+            // native_thermal_distributions checks that the two agree numerically.
+            let shifted_energy = match graph[edge].chemical_potential_atom() {
+                Some(mu) => Atom::var(energy) - GS.sign(edge) * mu,
+                None => Atom::var(energy),
+            };
+            let argument = Atom::var(GS.inverse_temperature) * shifted_energy / Atom::num(2);
+            let hyperbolic = if fermion { tanh() } else { coth() };
+            bodies[0] = (&thermal_sign + hyperbolic.call_args([argument])) / Atom::num(2);
             // Temperature, chemical potential, and orientation stay symbolic and fixed.
             for (order, pair) in bodies.windows(2).enumerate() {
                 assert!(
@@ -1659,6 +1689,13 @@ mod tests {
                             (1.0 + q) / denominator
                         };
                     let squared = 4.0 * q / denominator.powi(2);
+                    // n_F = 1/(exp(2x) + 1) and n_B = 1/(exp(2x) - 1) without cancellation.
+                    let occupation = match (fermion, x > 0.0) {
+                        (_, true) => q,
+                        (true, false) => 1.0,
+                        (false, false) => -1.0,
+                    } / denominator;
+                    let signed_occupation = if fermion { -occupation } else { occupation };
                     for sign in [-1.0, 1.0] {
                         for chemical_potential in [0.0, 0.5] {
                             let energy_value = x + if has_mu {
@@ -1667,7 +1704,7 @@ mod tests {
                                 0.0
                             };
                             let expected = match order {
-                                0 => (sign + hyperbolic) / 2.0,
+                                0 => (sign + 1.0) / 2.0 + signed_occupation,
                                 1 => {
                                     if fermion {
                                         squared / 2.0
@@ -1711,8 +1748,10 @@ mod tests {
                                 output[0],
                             ];
                             for result in results {
+                                // For s = -1 the scale is the occupation itself, so its
+                                // exponential tail is tested relatively.
                                 let tolerance = if order == 0 {
-                                    2e-15 * expected.abs().max(1.0)
+                                    2e-15 * ((sign + 1.0) / 2.0 + occupation.abs()) + 1e-300
                                 } else {
                                     2e-13 * expected.abs() + 1e-300
                                 };

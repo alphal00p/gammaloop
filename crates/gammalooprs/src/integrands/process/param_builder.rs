@@ -157,6 +157,8 @@ pub trait ParamBuilderGraph {
     /// Expand the medium numerator weight at the requested temperature limit.
     /// Derivatives are with respect to positive on-shell energy, holding temperature,
     /// chemical potential, and orientation fixed; cyclic-chain signs belong to CFF reduction.
+    /// Zero-temperature derivatives with a chemical potential require Fermi-surface
+    /// localization and return an error rather than a pointwise body.
     fn explicit_thermal_distribution_atom(
         &self,
         edge: EdgeIndex,
@@ -164,7 +166,7 @@ pub trait ParamBuilderGraph {
         thermal_sign: Atom,
         orientation_sign: Atom,
         limit: MediumMode,
-    ) -> Option<Atom>;
+    ) -> Result<Atom>;
     fn make_thermal_distributions_explicit(
         &self,
         atom: &Atom,
@@ -201,20 +203,16 @@ pub trait ParamBuilderGraph {
             if !edges.contains(&edge) {
                 return;
             }
-            let Some(replacement) = self.explicit_thermal_distribution_atom(
+            match self.explicit_thermal_distribution_atom(
                 edge,
                 derivative_order,
                 thermal_sign,
                 orientation_sign,
                 limit,
-            ) else {
-                error = Some(color_eyre::eyre::eyre!(
-                    "Thermal distribution for edge {edge}, derivative order {derivative_order}, \
-                     and limit {limit:?} is unsupported"
-                ));
-                return;
-            };
-            **out = replacement;
+            ) {
+                Ok(replacement) => **out = replacement,
+                Err(distribution_error) => error = Some(distribution_error),
+            }
         });
 
         match error {
