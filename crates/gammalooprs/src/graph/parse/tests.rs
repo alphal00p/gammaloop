@@ -2,7 +2,7 @@ use idenso::tensor::SymbolicTensor;
 use insta::assert_snapshot;
 use linnet::half_edge::{
     NodeIndex,
-    involution::{EdgeIndex, HedgePair},
+    involution::{EdgeIndex, Hedge, HedgePair},
 };
 use spenso::{
     network::{
@@ -31,7 +31,7 @@ use crate::{
     dot,
     graph::{
         GraphGroup, LMBext,
-        parse::{IntoGraph, complete_group_parsing, string_utils::ToOrderedSimple},
+        parse::{IntoGraph, complete_group_parsing},
     },
     initialisation::test_initialise,
     momentum::sample::LoopIndex,
@@ -374,33 +374,100 @@ fn full_numerator_requires_one_q3_structure_argument() {
             "unexpected malformed Q3 component error: {error:?}",
         );
     }
+
+    let wrapper = symbol!("q3_validation_wrapper");
+    let scalar = Atom::var(symbol!("q3_validation_scalar"));
+    let malformed_q3 = GS.emr_vec.call_args([Atom::num(3)]);
+    for nested in [
+        wrapper.call_args([malformed_q3.clone()]),
+        wrapper.call_args([malformed_q3.pow(2)]),
+        wrapper.call_args([&malformed_q3 + &scalar]),
+        wrapper.call_args([&malformed_q3 * &scalar]),
+    ] {
+        graph.overall_factor = nested;
+        let error = graph.validate_spatial_momentum_convention().unwrap_err();
+        assert!(
+            error.to_string().contains("Q3 in graph 'q3_validation'"),
+            "nested factorized payload must retain Q3 validation: {error:?}",
+        );
+    }
+
+    let malformed_q = FunctionBuilder::new(GS.emr_mom).finish();
+    graph.overall_factor = wrapper.call_args([&malformed_q3 + &malformed_q.pow(2)]);
+    let error = graph.validate_spatial_momentum_convention().unwrap_err();
+    assert!(
+        error.to_string().contains("Spatial momentum Q3"),
+        "the Q3 pass must retain priority over malformed Q: {error:?}",
+    );
+
+    let nested_q = wrapper.call_args([scalar.pow(malformed_q)]);
+    graph.overall_factor = nested_q.clone();
+    let error = graph.validate_spatial_momentum_convention().unwrap_err();
+    assert!(
+        error.to_string().contains("found no edge argument"),
+        "a malformed Q in a power exponent must remain visible: {error:?}",
+    );
+
+    graph.overall_factor = Atom::one();
+    let original_global = graph.global_prefactor.clone();
+    graph.global_prefactor.num = nested_q.clone();
+    assert!(graph.validate_spatial_momentum_convention().is_err());
+    graph.global_prefactor = original_global.clone();
+    graph.global_prefactor.projector = nested_q;
+    assert!(graph.validate_spatial_momentum_convention().is_err());
+    graph.global_prefactor = original_global;
+
+    // Component normalization happens before either traversal sees the atom.
+    let component = GS.emr_vec(out_of_range_edge, GS.cind(1));
+    assert_eq!(component, GS.emr_mom(out_of_range_edge, GS.cind(1)));
+    graph.overall_factor = wrapper.call_args([component]);
+    let error = graph.validate_spatial_momentum_convention().unwrap_err();
+    assert!(
+        error.to_string().contains("Momentum Q in graph"),
+        "a normalized Q3 component must be checked as Q: {error:?}",
+    );
+
+    // Validate the normalized product, including cancellation and annihilation.
+    graph.overall_factor = &malformed_q3 - &malformed_q3;
+    graph.validate_spatial_momentum_convention().unwrap();
+    graph.overall_factor = malformed_q3;
+    graph.global_prefactor.num = Atom::Zero;
+    graph.validate_spatial_momentum_convention().unwrap();
 }
 
 #[test]
 fn graph_set_import_enforces_the_q3_convention_without_tensor_closure() {
     test_initialise().unwrap();
-    let malformed = r#"
-        digraph q3_graph_set_validation {
-            num = "gammalooprs::Q3(0)"
-            edge [pdg=1000]
-            ext [style=invis]
-            ext -> v4
-            ext -> v5
-            v6 -> ext
-            v5 -> v4 [lmb_id=0]
-            v6 -> v5
-            v4 -> v6
-        }
-    "#;
+    for numerator in [
+        r#"num = "gammalooprs::Q3(0)""#,
+        r#"edge [num = "gammalooprs::Q3(0)"]"#,
+        r#"node [num = "gammalooprs::Q3(0)"]"#,
+    ] {
+        let malformed = format!(
+            r#"
+            digraph q3_graph_set_validation {{
+                {numerator}
+                edge [pdg=1000]
+                ext [style=invis]
+                ext -> v4
+                ext -> v5
+                v6 -> ext
+                v5 -> v4 [lmb_id=0]
+                v6 -> v5
+                v4 -> v6
+            }}
+            "#
+        );
 
-    let error = Graph::from_string(malformed, &crate::utils::load_generic_model("scalars"))
-        .err()
-        .expect("multi-graph imports must reject the obsolete one-argument Q3 form");
-    assert!(
-        format!("{error:#}")
-            .contains("Q3 in graph 'q3_graph_set_validation' must have exactly two arguments"),
-        "unexpected graph-set Q3 validation error: {error:?}"
-    );
+        let error = Graph::from_string(&malformed, &crate::utils::load_generic_model("scalars"))
+            .err()
+            .expect("multi-graph imports must reject the obsolete one-argument Q3 form");
+        assert!(
+            format!("{error:#}")
+                .contains("Q3 in graph 'q3_graph_set_validation' must have exactly two arguments"),
+            "unexpected graph-set Q3 validation error: {error:?}"
+        );
+    }
 }
 
 #[test]
@@ -1123,56 +1190,157 @@ fn edge_mass_attribute_drives_evaluated_edge_mass() {
     assert_eq!(evaluated_mass.im.0, 0.0);
 }
 
-mod failing {
-    use super::*;
+#[test]
+fn propagators() {
+    test_initialise().unwrap();
+    let gs: Vec<Graph> = dot!(
+        digraph g1{
+            node [num=1]
+            a -> b[particle="g"];
+        }
 
-    #[test]
-    fn xs_parsing() {
-        test_initialise().unwrap();
-        let g: Graph = dot!(
-            digraph{
-              ext0	 [style=invis is_cut=0];
-              ext1	 [style=invis is_cut=1];
-              ext0	-> 0	 [dir=back particle="e+"];
-              ext1	-> 0	 [particle="e-"];
-                0	-> 1	 [particle="a"];
-                1 -> 2	 [particle="d"];
-                2 -> 4   [particle="g"];
-                2 -> 3	 [particle="d"];
-                3 -> 4	 [particle="d"];
-                4 -> 1	 [particle="d"];
-                3->5	 [particle="a"];
-                5	-> ext0	 [dir=back particle="e+"];
-                5	-> ext1	 [particle="e-"];
+        digraph g2{
+            node [num=1]
+            a -> b [particle="d"];
+        }
+
+        digraph g3{
+            node [num=1]
+            a -> b [particle="Z"];
+        }
+
+    )
+    .unwrap();
+
+    // These are the embedded SM Feynman-gauge propagator numerators;
+    // masses enter their denominators, and every propagator carries i.
+    let expected = [
+        symbolica::parse!(
+            "-1i*spenso::g(spenso::coad(8,gammalooprs::hedge(0)),spenso::coad(8,gammalooprs::hedge(1)))*spenso::g(spenso::mink(4,gammalooprs::hedge(0)),spenso::mink(4,gammalooprs::hedge(1)))"
+        ),
+        symbolica::parse!(
+            "1i*gammalooprs::Q(0,spenso::mink(4,gammalooprs::edge(0,1)))*spenso::g(spenso::cof(3,gammalooprs::hedge(0)),spenso::dind(spenso::cof(3,gammalooprs::hedge(1))))*spenso::gamma(spenso::bis(4,gammalooprs::hedge(1)),spenso::bis(4,gammalooprs::hedge(0)),spenso::mink(4,gammalooprs::edge(0,1)))"
+        ),
+        symbolica::parse!(
+            "-1i*spenso::g(spenso::mink(4,gammalooprs::hedge(0)),spenso::mink(4,gammalooprs::hedge(1)))"
+        ),
+    ];
+    for (graph, expected) in gs.iter().zip(expected) {
+        assert_eq!(
+            graph.underlying[EdgeIndex(0)].num.as_view(),
+            expected.as_view(),
+            "{} must retain the UFO propagator phase and tensor indices",
+            graph.name,
+        );
+    }
+}
+
+impl Graph {
+    fn assert_fixture_hedge_routing(&self, expected: &[(u8, Option<u16>)]) {
+        use spenso::structure::TensorStructure;
+
+        // Cut permutations change graph positions while the tensor slots
+        // retain their parser indices. Generated UFO orders are omitted
+        // from DOT payloads, so check both pieces of routing directly.
+        assert_eq!(self.underlying.n_hedges(), expected.len());
+        for ((hedge, data), (order, index)) in self.underlying.iter_hedges().zip(expected) {
+            assert_eq!(data.ufo_order.value, *order, "UFO order at {hedge}");
+            let expected_index = index.map(|index| Aind::Hedge(index, 0));
+            let mut has_indices = false;
+            for structure in [
+                &data.num_indices.color_indices.edge_indices,
+                &data.num_indices.color_indices.vertex_indices,
+                &data.num_indices.spin_indices.edge_indices,
+                &data.num_indices.spin_indices.vertex_indices,
+            ] {
+                for slot in structure.external_structure_iter() {
+                    has_indices = true;
+                    assert_eq!(Some(slot.aind), expected_index, "tensor slot at {hedge}");
+                }
             }
-        )
-        .unwrap();
-        assert_snapshot!(g.debug_dot(),@r#"
+            assert_eq!(
+                has_indices,
+                expected_index.is_some(),
+                "slot presence at {hedge}"
+            );
+        }
+    }
+}
+
+#[test]
+fn xs_parsing() {
+    test_initialise().unwrap();
+    let g: Graph = dot!(
+        digraph{
+          ext0	 [style=invis is_cut=0];
+          ext1	 [style=invis is_cut=1];
+          ext0	-> 0	 [dir=back particle="e+"];
+          ext1	-> 0	 [particle="e-"];
+            0	-> 1	 [particle="a"];
+            1 -> 2	 [particle="d"];
+            2 -> 4   [particle="g"];
+            2 -> 3	 [particle="d"];
+            3 -> 4	 [particle="d"];
+            4 -> 1	 [particle="d"];
+            3->5	 [particle="a"];
+            5	-> ext0	 [dir=back particle="e+"];
+            5	-> ext1	 [particle="e-"];
+        }
+    )
+    .unwrap();
+    g.assert_fixture_hedge_routing(&[
+        (0, Some(16)),
+        (1, Some(17)),
+        (0, Some(2)),
+        (1, Some(3)),
+        (0, Some(4)),
+        (1, Some(5)),
+        (2, Some(6)),
+        (2, Some(7)),
+        (0, Some(8)),
+        (1, Some(9)),
+        (2, Some(10)),
+        (2, Some(11)),
+        (0, Some(12)),
+        (1, Some(13)),
+        (1, Some(14)),
+        (0, Some(15)),
+        (2, Some(0)),
+        (2, Some(1)),
+    ]);
+    assert_snapshot!(g.debug_dot_with_settings(&DotExportSettings {
+            include_autogenerated_fields: true,
+            ..DotExportSettings::default()
+        }),@r#"
         digraph {
           num = "1";
           overall_factor = "1";
           overall_factor_evaluated = "1";
           projector = "u(1,spenso::bis(4,hedge(17)))*ubar(1,spenso::bis(4,hedge(15)))*v(0,spenso::bis(4,hedge(14)))*vbar(0,spenso::bis(4,hedge(16)))";
-          0[dod="0" int_id="V_98" num="UFO::GC_3*spenso::gamma(spenso::bis(4,hedge(16)),spenso::bis(4,hedge(17)),spenso::mink(4,hedge(0)))"];
-          1[dod="0" int_id="V_71" num="UFO::GC_1*spenso::g(spenso::cof(3,hedge(13)),spenso::dind(spenso::cof(3,hedge(2))))*spenso::gamma(spenso::bis(4,hedge(2)),spenso::bis(4,hedge(13)),spenso::mink(4,hedge(1)))"];
-          2[dod="0" int_id="V_74" num="UFO::GC_11*spenso::gamma(spenso::bis(4,hedge(4)),spenso::bis(4,hedge(3)),spenso::mink(4,hedge(6)))*spenso::t(spenso::coad(8,hedge(6)),spenso::cof(3,hedge(3)),spenso::dind(spenso::cof(3,hedge(4))))"];
-          3[dod="0" int_id="V_71" num="UFO::GC_1*spenso::g(spenso::cof(3,hedge(5)),spenso::dind(spenso::cof(3,hedge(8))))*spenso::gamma(spenso::bis(4,hedge(8)),spenso::bis(4,hedge(5)),spenso::mink(4,hedge(10)))"];
-          4[dod="0" int_id="V_74" num="UFO::GC_11*spenso::gamma(spenso::bis(4,hedge(12)),spenso::bis(4,hedge(9)),spenso::mink(4,hedge(7)))*spenso::t(spenso::coad(8,hedge(7)),spenso::cof(3,hedge(9)),spenso::dind(spenso::cof(3,hedge(12))))"];
-          5[dod="0" int_id="V_98" num="UFO::GC_3*spenso::gamma(spenso::bis(4,hedge(15)),spenso::bis(4,hedge(14)),spenso::mink(4,hedge(11)))"];
+          threshold_counterterms = "
+        schema_version = 1
+        cuts = []
+        ";
+          "0"[dod="0" dod_autogen="true" int_id="V_98" name_autogen="true" num="UFO::GC_3*spenso::gamma(spenso::bis(4,hedge(16)),spenso::bis(4,hedge(17)),spenso::mink(4,hedge(0)))" num_autogen="true"];
+          "1"[dod="0" dod_autogen="true" int_id="V_71" name_autogen="true" num="UFO::GC_1*spenso::g(spenso::cof(3,hedge(13)),spenso::dind(spenso::cof(3,hedge(2))))*spenso::gamma(spenso::bis(4,hedge(2)),spenso::bis(4,hedge(13)),spenso::mink(4,hedge(1)))" num_autogen="true"];
+          "2"[dod="0" dod_autogen="true" int_id="V_74" name_autogen="true" num="UFO::GC_11*spenso::gamma(spenso::bis(4,hedge(4)),spenso::bis(4,hedge(3)),spenso::mink(4,hedge(6)))*spenso::t(spenso::coad(8,hedge(6)),spenso::cof(3,hedge(3)),spenso::dind(spenso::cof(3,hedge(4))))" num_autogen="true"];
+          "3"[dod="0" dod_autogen="true" int_id="V_71" name_autogen="true" num="UFO::GC_1*spenso::g(spenso::cof(3,hedge(5)),spenso::dind(spenso::cof(3,hedge(8))))*spenso::gamma(spenso::bis(4,hedge(8)),spenso::bis(4,hedge(5)),spenso::mink(4,hedge(10)))" num_autogen="true"];
+          "4"[dod="0" dod_autogen="true" int_id="V_74" name_autogen="true" num="UFO::GC_11*spenso::gamma(spenso::bis(4,hedge(12)),spenso::bis(4,hedge(9)),spenso::mink(4,hedge(7)))*spenso::t(spenso::coad(8,hedge(7)),spenso::cof(3,hedge(9)),spenso::dind(spenso::cof(3,hedge(12))))" num_autogen="true"];
+          "5"[dod="0" dod_autogen="true" int_id="V_98" name_autogen="true" num="UFO::GC_3*spenso::gamma(spenso::bis(4,hedge(15)),spenso::bis(4,hedge(14)),spenso::mink(4,hedge(11)))" num_autogen="true"];
 
-          5:14	-> 0:0	 [id=0 dir=back source="{ufo_order:1}" sink="{ufo_order:0}"  dod="-2" is_cut="0"  lmb_rep="P(0,a___)" name="e0" num="1" particle="e+"];
-          5:15	-> 0:1	 [id=1 source="{ufo_order:0}" sink="{ufo_order:1}"  dod="-2" is_cut="1"  lmb_rep="P(1,a___)" name="e1" num="1" particle="e-"];
-          2:4	-> 3:5	 [id=2 source="{ufo_order:0}" sink="{ufo_order:1}"  dod="-1"  lmb_rep="-1*K(1,a___)+K(0,a___)" name="e2" num="Q(2,spenso::mink(4,edge(2,1)))*spenso::g(spenso::cof(3,hedge(4)),spenso::dind(spenso::cof(3,hedge(5))))*spenso::gamma(spenso::bis(4,hedge(5)),spenso::bis(4,hedge(4)),spenso::mink(4,edge(2,1)))" particle="d"];
-          2:6	-> 4:7	 [id=3 dir=none source="{ufo_order:2}" sink="{ufo_order:2}"  dod="-2"  lmb_id="1" lmb_rep="K(1,a___)" name="e3" num="spenso::g(spenso::coad(8,hedge(6)),spenso::coad(8,hedge(7)))*spenso::g(spenso::mink(4,hedge(6)),spenso::mink(4,hedge(7)))" particle="g"];
-          3:8	-> 4:9	 [id=4 source="{ufo_order:0}" sink="{ufo_order:1}"  dod="-1"  lmb_rep="-1*K(1,a___)+-1*P(0,a___)+-1*P(1,a___)+K(0,a___)" name="e4" num="Q(4,spenso::mink(4,edge(4,1)))*spenso::g(spenso::cof(3,hedge(8)),spenso::dind(spenso::cof(3,hedge(9))))*spenso::gamma(spenso::bis(4,hedge(9)),spenso::bis(4,hedge(8)),spenso::mink(4,edge(4,1)))" particle="d"];
-          3:10	-> 5:11	 [id=5 dir=none source="{ufo_order:2}" sink="{ufo_order:2}"  dod="-2"  lmb_rep="P(0,a___)+P(1,a___)" name="e5" num="-1*spenso::g(spenso::mink(4,hedge(10)),spenso::mink(4,hedge(11)))" particle="a"];
-          4:12	-> 1:13	 [id=6 source="{ufo_order:0}" sink="{ufo_order:1}"  dod="-1"  lmb_rep="-1*P(0,a___)+-1*P(1,a___)+K(0,a___)" name="e6" num="Q(6,spenso::mink(4,edge(6,1)))*spenso::g(spenso::cof(3,hedge(12)),spenso::dind(spenso::cof(3,hedge(13))))*spenso::gamma(spenso::bis(4,hedge(13)),spenso::bis(4,hedge(12)),spenso::mink(4,edge(6,1)))" particle="d"];
-          0:16	-> 1:17	 [id=7 dir=none source="{ufo_order:2}" sink="{ufo_order:2}"  dod="-2"  lmb_rep="P(0,a___)+P(1,a___)" name="e7" num="-1*spenso::g(spenso::mink(4,hedge(0)),spenso::mink(4,hedge(1)))" particle="a"];
-          1:2	-> 2:3	 [id=8 source="{ufo_order:0}" sink="{ufo_order:1}"  dod="-1"  lmb_id="0" lmb_rep="K(0,a___)" name="e8" num="Q(8,spenso::mink(4,edge(8,1)))*spenso::g(spenso::cof(3,hedge(2)),spenso::dind(spenso::cof(3,hedge(3))))*spenso::gamma(spenso::bis(4,hedge(3)),spenso::bis(4,hedge(2)),spenso::mink(4,edge(8,1)))" particle="d"];
+          "5":14	-> "0":0	 [id=0 dir=back  dod="-1" dod_autogen="true" is_cut="0" lmb_rep="P(0,a___)" name="e0" name_autogen="true" num="1" num_autogen="true" particle="e+"];
+          "5":15	-> "0":1	 [id=1  dod="-1" dod_autogen="true" is_cut="1" lmb_rep="P(1,a___)" name="e1" name_autogen="true" num="1" num_autogen="true" particle="e-"];
+          "2":4	-> "3":5	 [id=2  dod="-1" dod_autogen="true" lmb_rep="-1*K(1,a___)+K(0,a___)" name="e2" name_autogen="true" num="Q(2,spenso::mink(4,edge(2,1)))*spenso::g(spenso::cof(3,hedge(4)),spenso::dind(spenso::cof(3,hedge(5))))*spenso::gamma(spenso::bis(4,hedge(5)),spenso::bis(4,hedge(4)),spenso::mink(4,edge(2,1)))*𝑖" num_autogen="true" particle="d"];
+          "2":6	-> "4":7	 [id=3 dir=none  dod="-2" dod_autogen="true" lmb_id="1" lmb_rep="K(1,a___)" name="e3" name_autogen="true" num="-𝑖*spenso::g(spenso::coad(8,hedge(6)),spenso::coad(8,hedge(7)))*spenso::g(spenso::mink(4,hedge(6)),spenso::mink(4,hedge(7)))" num_autogen="true" particle="g"];
+          "3":8	-> "4":9	 [id=4  dod="-1" dod_autogen="true" lmb_rep="-1*K(1,a___)+-1*P(0,a___)+-1*P(1,a___)+K(0,a___)" name="e4" name_autogen="true" num="Q(4,spenso::mink(4,edge(4,1)))*spenso::g(spenso::cof(3,hedge(8)),spenso::dind(spenso::cof(3,hedge(9))))*spenso::gamma(spenso::bis(4,hedge(9)),spenso::bis(4,hedge(8)),spenso::mink(4,edge(4,1)))*𝑖" num_autogen="true" particle="d"];
+          "3":10	-> "5":11	 [id=5 dir=none  dod="-2" dod_autogen="true" lmb_rep="P(0,a___)+P(1,a___)" name="e5" name_autogen="true" num="-𝑖*spenso::g(spenso::mink(4,hedge(10)),spenso::mink(4,hedge(11)))" num_autogen="true" particle="a"];
+          "4":12	-> "1":13	 [id=6  dod="-1" dod_autogen="true" lmb_rep="-1*P(0,a___)+-1*P(1,a___)+K(0,a___)" name="e6" name_autogen="true" num="Q(6,spenso::mink(4,edge(6,1)))*spenso::g(spenso::cof(3,hedge(12)),spenso::dind(spenso::cof(3,hedge(13))))*spenso::gamma(spenso::bis(4,hedge(13)),spenso::bis(4,hedge(12)),spenso::mink(4,edge(6,1)))*𝑖" num_autogen="true" particle="d"];
+          "0":16	-> "1":17	 [id=7 dir=none  dod="-2" dod_autogen="true" lmb_rep="P(0,a___)+P(1,a___)" name="e7" name_autogen="true" num="-𝑖*spenso::g(spenso::mink(4,hedge(0)),spenso::mink(4,hedge(1)))" num_autogen="true" particle="a"];
+          "1":2	-> "2":3	 [id=8  dod="-1" dod_autogen="true" lmb_id="0" lmb_rep="K(0,a___)" name="e8" name_autogen="true" num="Q(8,spenso::mink(4,edge(8,1)))*spenso::g(spenso::cof(3,hedge(2)),spenso::dind(spenso::cof(3,hedge(3))))*spenso::gamma(spenso::bis(4,hedge(3)),spenso::bis(4,hedge(2)),spenso::mink(4,edge(8,1)))*𝑖" num_autogen="true" particle="d"];
         }
         "#);
 
-        let g: Graph = dot!(
+    let g: Graph = dot!(
             digraph{
                 edge [
                     pdg=1000
@@ -1188,31 +1356,56 @@ mod failing {
 
             }
             ,"scalars")
-        .unwrap();
-        assert_snapshot!(g.debug_dot(),@r#"
+    .unwrap();
+    g.assert_fixture_hedge_routing(&[
+        (2, None),
+        (0, None),
+        (1, None),
+        (0, None),
+        (2, None),
+        (0, None),
+        (1, None),
+        (0, None),
+        (2, None),
+        (1, None),
+        (3, None),
+        (1, None),
+        (1, None),
+        (2, None),
+        (2, None),
+        (0, None),
+    ]);
+    assert_snapshot!(g.debug_dot_with_settings(&DotExportSettings {
+            include_autogenerated_fields: true,
+            ..DotExportSettings::default()
+        }),@r#"
         digraph {
           num = "1";
           overall_factor = "1";
           overall_factor_evaluated = "1";
           projector = "1";
-          a[dod="0" int_id="V_3_SCALAR_000" num="UFO::SCALAR_COUPLING"];
-          b[dod="0" int_id="V_3_SCALAR_000" num="UFO::SCALAR_COUPLING"];
-          c[dod="0" int_id="V_4_SCALAR_0000" num="UFO::SCALAR_COUPLING"];
-          d[dod="0" int_id="V_3_SCALAR_000" num="UFO::SCALAR_COUPLING"];
-          e[dod="0" int_id="V_3_SCALAR_000" num="UFO::SCALAR_COUPLING"];
+          threshold_counterterms = "
+        schema_version = 1
+        cuts = []
+        ";
+          a[dod="0" dod_autogen="true" int_id="V_3_SCALAR_000" num="UFO::SCALAR_COUPLING" num_autogen="true"];
+          b[dod="0" dod_autogen="true" int_id="V_3_SCALAR_000" num="UFO::SCALAR_COUPLING" num_autogen="true"];
+          c[dod="0" dod_autogen="true" int_id="V_4_SCALAR_0000" num="UFO::SCALAR_COUPLING" num_autogen="true"];
+          d[dod="0" dod_autogen="true" int_id="V_3_SCALAR_000" num="UFO::SCALAR_COUPLING" num_autogen="true"];
+          e[dod="0" dod_autogen="true" int_id="V_3_SCALAR_000" num="UFO::SCALAR_COUPLING" num_autogen="true"];
 
-          c:10	-> a:0	 [id=0 dir=none source="{ufo_order:3}" sink="{ufo_order:2}"  dod="-2" is_cut="0"  lmb_rep="P(0,a___)" name="e0" num="1" particle="scalar_0"];
-          b:2	-> c:3	 [id=1 dir=none source="{ufo_order:1}" sink="{ufo_order:0}"  dod="-2"  lmb_id="0" lmb_rep="K(0,a___)" name="e1" num="1" particle="scalar_0"];
-          b:4	-> e:5	 [id=2 dir=none source="{ufo_order:2}" sink="{ufo_order:0}"  dod="-2"  lmb_rep="-1*K(0,a___)+K(2,a___)+P(0,a___)" name="e2" num="1" particle="scalar_0"];
-          c:6	-> d:7	 [id=3 dir=none source="{ufo_order:1}" sink="{ufo_order:0}"  dod="-2"  lmb_rep="-1*K(1,a___)+-1*P(0,a___)+K(0,a___)" name="e3" num="1" particle="scalar_0"];
-          c:8	-> e:9	 [id=4 dir=none source="{ufo_order:2}" sink="{ufo_order:1}"  dod="-2"  lmb_id="1" lmb_rep="K(1,a___)" name="e4" num="1" particle="scalar_0"];
-          a:15	-> b:1	 [id=5 dir=none source="{ufo_order:0}" sink="{ufo_order:0}"  dod="-2"  lmb_rep="K(2,a___)+P(0,a___)" name="e5" num="1" particle="scalar_0"];
-          d:11	-> a:12	 [id=6 dir=none source="{ufo_order:1}" sink="{ufo_order:1}"  dod="-2"  lmb_id="2" lmb_rep="K(2,a___)" name="e6" num="1" particle="scalar_0"];
-          d:13	-> e:14	 [id=7 dir=none source="{ufo_order:2}" sink="{ufo_order:2}"  dod="-2"  lmb_rep="-1*K(1,a___)+-1*K(2,a___)+-1*P(0,a___)+K(0,a___)" name="e7" num="1" particle="scalar_0"];
+          c:10	-> a:0	 [id=0 dir=none  dod="-2" dod_autogen="true" is_cut="0" lmb_rep="P(0,a___)" name="e0" name_autogen="true" num="1" num_autogen="true" particle="scalar_0"];
+          b:2	-> c:3	 [id=1 dir=none  dod="-2" dod_autogen="true" lmb_id="0" lmb_rep="K(0,a___)" name="e1" name_autogen="true" num="𝑖" num_autogen="true" particle="scalar_0"];
+          b:4	-> e:5	 [id=2 dir=none  dod="-2" dod_autogen="true" lmb_rep="-1*K(0,a___)+K(2,a___)+P(0,a___)" name="e2" name_autogen="true" num="𝑖" num_autogen="true" particle="scalar_0"];
+          c:6	-> d:7	 [id=3 dir=none  dod="-2" dod_autogen="true" lmb_rep="-1*K(1,a___)+-1*P(0,a___)+K(0,a___)" name="e3" name_autogen="true" num="𝑖" num_autogen="true" particle="scalar_0"];
+          c:8	-> e:9	 [id=4 dir=none  dod="-2" dod_autogen="true" lmb_id="1" lmb_rep="K(1,a___)" name="e4" name_autogen="true" num="𝑖" num_autogen="true" particle="scalar_0"];
+          a:15	-> b:1	 [id=5 dir=none  dod="-2" dod_autogen="true" lmb_rep="K(2,a___)+P(0,a___)" name="e5" name_autogen="true" num="𝑖" num_autogen="true" particle="scalar_0"];
+          d:11	-> a:12	 [id=6 dir=none  dod="-2" dod_autogen="true" lmb_id="2" lmb_rep="K(2,a___)" name="e6" name_autogen="true" num="𝑖" num_autogen="true" particle="scalar_0"];
+          d:13	-> e:14	 [id=7 dir=none  dod="-2" dod_autogen="true" lmb_rep="-1*K(1,a___)+-1*K(2,a___)+-1*P(0,a___)+K(0,a___)" name="e7" name_autogen="true" num="𝑖" num_autogen="true" particle="scalar_0"];
         }
         "#);
 
-        let g: Graph = dot!(
+    let g: Graph = dot!(
             digraph GL06{
               num = "1";
               overall_factor = "(AutG(1))^(-1)*AntiFermionSpinSumSign(-1)*ExternalFermionOrderingSign(-1)*InternalFermionLoopSign(-1)*NumeratorIndependentSymmetryGrouping(2)";
@@ -1246,39 +1439,477 @@ mod failing {
         )
         .unwrap();
 
-        println!("{}", g.global_prefactor.projector);
+    println!("{}", g.global_prefactor.projector);
 
-        let g: Graph = dot!(
-        digraph GL06{
-            num = "-2";
-                exte0    [style=invis, is_cut=0];
-                exte0   -> 7:0   [id=0 particle="e+"];
-                exte1    [style=invis, is_cut=1];
-                exte1   -> 7:1   [id=1 particle="e-"];
-                4:22    -> 5:23  [id=2 particle="g"];
-                3:20    -> 6:21  [id=3 particle="a"];
-                0:4     -> 1:5   [id=4 particle="t" lmb_id=0];
-                0:6     -> 1:7   [id=5 particle="H" lmb_id=1];
-                5:8     -> 0:9   [id=6 particle="t"];
-                1:10    -> 3:11  [id=7 particle="t"];
-                4:12    -> 2:13  [id=8 particle="t"];
-                2:14    -> 5:15  [id=9 particle="t" lmb_id=2];
-                2:16    -> 7:17  [id=10 particle="a"];
-                3:18    -> 4:19  [id=11 particle="t"];
+    let g: Graph = dot!(
+    digraph GL06{
+        num = "-2";
+            exte0    [style=invis, is_cut=0];
+            exte0   -> 7:0   [id=0 particle="e+"];
+            exte1    [style=invis, is_cut=1];
+            exte1   -> 7:1   [id=1 particle="e-"];
+            4:22    -> 5:23  [id=2 particle="g"];
+            3:20    -> 6:21  [id=3 particle="a"];
+            0:4     -> 1:5   [id=4 particle="t" lmb_id=0];
+            0:6     -> 1:7   [id=5 particle="H" lmb_id=1];
+            5:8     -> 0:9   [id=6 particle="t"];
+            1:10    -> 3:11  [id=7 particle="t"];
+            4:12    -> 2:13  [id=8 particle="t"];
+            2:14    -> 5:15  [id=9 particle="t" lmb_id=2];
+            2:16    -> 7:17  [id=10 particle="a"];
+            3:18    -> 4:19  [id=11 particle="t"];
 
-                6:3     -> exte0        [id=12 particle="e+"];
+            6:3     -> exte0        [id=12 particle="e+"];
 
-                6:2     -> exte1        [id=13 particle="e-"];
-        })
+            6:2     -> exte1        [id=13 particle="e-"];
+    })
+    .unwrap();
+
+    println!("{}", g.global_prefactor.projector);
+}
+
+#[test]
+fn xs_glueing() {
+    test_initialise().unwrap();
+    let g: Graph = dot!(
+        digraph{
+          num = "1";
+          overall_factor = "1";
+          0[int_id=V_89];
+          1[int_id=V_127];
+          2[int_id=V_123];
+          3[int_id=V_93];
+
+          ext0	 [style=invis is_cut=0];
+          ext1	 [style=invis is_cut=1];
+          2	-> ext0	     [id=0  particle="d"];
+          ext0	-> 0	 [id=1  particle="d"];
+          3:2	-> ext1	 [id=2  particle="c"];
+          ext1	-> 1:3	 [id=3  particle="c"];
+          0:4	-> 2:5	 [id=4  particle="u"];
+          1:6	-> 3:7	 [id=5  particle="s"];
+          0:8	-> 1:9	 [id=6  particle="W-"];
+          2:10	-> 3:11	 [id=7  particle="W+"];
+        }
+    )
+    .unwrap();
+    g.assert_fixture_hedge_routing(&[
+        (1, Some(1)),
+        (1, Some(3)),
+        (0, Some(2)),
+        (0, Some(0)),
+        (0, Some(4)),
+        (1, Some(5)),
+        (0, Some(6)),
+        (1, Some(7)),
+        (2, Some(8)),
+        (2, Some(9)),
+        (2, Some(10)),
+        (2, Some(11)),
+    ]);
+    assert_snapshot!(g.debug_dot_with_settings(&DotExportSettings {
+            include_autogenerated_fields: true,
+            ..DotExportSettings::default()
+        }),@r#"
+        digraph {
+          num = "1";
+          overall_factor = "1";
+          overall_factor_evaluated = "1";
+          projector = "u(0,spenso::bis(4,hedge(1)))*u(1,spenso::bis(4,hedge(3)))*ubar(0,spenso::bis(4,hedge(0)))*ubar(1,spenso::bis(4,hedge(2)))";
+          threshold_counterterms = "
+        schema_version = 1
+        cuts = []
+        ";
+          "0"[dod="0" dod_autogen="true" int_id="V_89" name_autogen="true" num="(-1/2*spenso::gamma(spenso::bis(4,hedge(4)),spenso::bis(4,vertex(0,1)),spenso::mink(4,hedge(8)))*spenso::gamma5(spenso::bis(4,vertex(0,1)),spenso::bis(4,hedge(1)))+1/2*spenso::gamma(spenso::bis(4,hedge(4)),spenso::bis(4,hedge(1)),spenso::mink(4,hedge(8))))*UFO::GC_100*spenso::g(spenso::cof(3,hedge(1)),spenso::dind(spenso::cof(3,hedge(4))))" num_autogen="true"];
+          "1"[dod="0" dod_autogen="true" int_id="V_127" name_autogen="true" num="(-1/2*spenso::gamma(spenso::bis(4,hedge(6)),spenso::bis(4,vertex(1,1)),spenso::mink(4,hedge(9)))*spenso::gamma5(spenso::bis(4,vertex(1,1)),spenso::bis(4,hedge(3)))+1/2*spenso::gamma(spenso::bis(4,hedge(6)),spenso::bis(4,hedge(3)),spenso::mink(4,hedge(9))))*UFO::GC_45*spenso::g(spenso::cof(3,hedge(3)),spenso::dind(spenso::cof(3,hedge(6))))" num_autogen="true"];
+          "2"[dod="0" dod_autogen="true" int_id="V_123" name_autogen="true" num="(-1/2*spenso::gamma(spenso::bis(4,hedge(0)),spenso::bis(4,vertex(2,1)),spenso::mink(4,hedge(10)))*spenso::gamma5(spenso::bis(4,vertex(2,1)),spenso::bis(4,hedge(5)))+1/2*spenso::gamma(spenso::bis(4,hedge(0)),spenso::bis(4,hedge(5)),spenso::mink(4,hedge(10))))*UFO::GC_41*spenso::g(spenso::cof(3,hedge(5)),spenso::dind(spenso::cof(3,hedge(0))))" num_autogen="true"];
+          "3"[dod="0" dod_autogen="true" int_id="V_93" name_autogen="true" num="(-1/2*spenso::gamma(spenso::bis(4,hedge(2)),spenso::bis(4,vertex(3,1)),spenso::mink(4,hedge(11)))*spenso::gamma5(spenso::bis(4,vertex(3,1)),spenso::bis(4,hedge(7)))+1/2*spenso::gamma(spenso::bis(4,hedge(2)),spenso::bis(4,hedge(7)),spenso::mink(4,hedge(11))))*UFO::GC_104*spenso::g(spenso::cof(3,hedge(7)),spenso::dind(spenso::cof(3,hedge(2))))" num_autogen="true"];
+
+          "2":3	-> "0":0	 [id=0  dod="-1" dod_autogen="true" is_cut="0" lmb_rep="P(0,a___)" name="e0" name_autogen="true" num="spenso::g(spenso::cof(3,hedge(0)),spenso::dind(spenso::cof(3,hedge(1))))" num_autogen="true" particle="d"];
+          "3":2	-> "1":1	 [id=1  dod="-1" dod_autogen="true" is_cut="1" lmb_rep="P(1,a___)" name="e1" name_autogen="true" num="spenso::g(spenso::cof(3,hedge(2)),spenso::dind(spenso::cof(3,hedge(3))))" num_autogen="true" particle="c"];
+          "0":8	-> "1":9	 [id=2 dir=none  dod="-2" dod_autogen="true" lmb_rep="-1*K(0,a___)+P(0,a___)" name="e2" name_autogen="true" num="-𝑖*spenso::g(spenso::mink(4,hedge(8)),spenso::mink(4,hedge(9)))" num_autogen="true" particle="W-"];
+          "2":10	-> "3":11	 [id=3 dir=none  dod="-2" dod_autogen="true" lmb_rep="-1*P(0,a___)+K(0,a___)" name="e3" name_autogen="true" num="-𝑖*spenso::g(spenso::mink(4,hedge(10)),spenso::mink(4,hedge(11)))" num_autogen="true" particle="W+"];
+          "0":4	-> "2":5	 [id=4  dod="-1" dod_autogen="true" lmb_id="0" lmb_rep="K(0,a___)" name="e4" name_autogen="true" num="Q(4,spenso::mink(4,edge(4,1)))*spenso::g(spenso::cof(3,hedge(4)),spenso::dind(spenso::cof(3,hedge(5))))*spenso::gamma(spenso::bis(4,hedge(5)),spenso::bis(4,hedge(4)),spenso::mink(4,edge(4,1)))*𝑖" num_autogen="true" particle="u"];
+          "1":6	-> "3":7	 [id=5  dod="-1" dod_autogen="true" lmb_rep="-1*K(0,a___)+P(0,a___)+P(1,a___)" name="e5" name_autogen="true" num="Q(5,spenso::mink(4,edge(5,1)))*spenso::g(spenso::cof(3,hedge(6)),spenso::dind(spenso::cof(3,hedge(7))))*spenso::gamma(spenso::bis(4,hedge(7)),spenso::bis(4,hedge(6)),spenso::mink(4,edge(5,1)))*𝑖" num_autogen="true" particle="s"];
+        }
+        "#);
+
+    let g: Graph = dot!(
+        digraph{
+            a->b [particle= c];
+            b->a [particle= d];
+            b->a [particle= "W+"];
+            a[int_id=V_90]
+        }
+    )
+    .unwrap();
+    g.assert_fixture_hedge_routing(&[
+        (0, Some(0)),
+        (1, Some(1)),
+        (0, Some(2)),
+        (1, Some(3)),
+        (2, Some(4)),
+        (2, Some(5)),
+    ]);
+    assert_snapshot!(g.debug_dot_with_settings(&DotExportSettings {
+            include_autogenerated_fields: true,
+            ..DotExportSettings::default()
+        }),@r#"
+        digraph {
+          num = "1";
+          overall_factor = "1";
+          overall_factor_evaluated = "1";
+          projector = "1";
+          threshold_counterterms = "
+        schema_version = 1
+        cuts = []
+        ";
+          a[dod="0" dod_autogen="true" int_id="V_90" num="(-1/2*spenso::gamma(spenso::bis(4,hedge(0)),spenso::bis(4,vertex(0,1)),spenso::mink(4,hedge(5)))*spenso::gamma5(spenso::bis(4,vertex(0,1)),spenso::bis(4,hedge(3)))+1/2*spenso::gamma(spenso::bis(4,hedge(0)),spenso::bis(4,hedge(3)),spenso::mink(4,hedge(5))))*UFO::GC_103*spenso::g(spenso::cof(3,hedge(3)),spenso::dind(spenso::cof(3,hedge(0))))" num_autogen="true"];
+          b[dod="0" dod_autogen="true" int_id="V_126" num="(-1/2*spenso::gamma(spenso::bis(4,hedge(2)),spenso::bis(4,vertex(1,1)),spenso::mink(4,hedge(4)))*spenso::gamma5(spenso::bis(4,vertex(1,1)),spenso::bis(4,hedge(1)))+1/2*spenso::gamma(spenso::bis(4,hedge(2)),spenso::bis(4,hedge(1)),spenso::mink(4,hedge(4))))*UFO::GC_44*spenso::g(spenso::cof(3,hedge(1)),spenso::dind(spenso::cof(3,hedge(2))))" num_autogen="true"];
+
+          a:0	-> b:1	 [id=0  dod="-1" dod_autogen="true" lmb_id="0" lmb_rep="K(0,a___)" name="e0" name_autogen="true" num="(Q(0,spenso::mink(4,edge(0,1)))*spenso::gamma(spenso::bis(4,hedge(1)),spenso::bis(4,hedge(0)),spenso::mink(4,edge(0,1)))+UFO::MC*spenso::g(spenso::bis(4,hedge(0)),spenso::bis(4,hedge(1))))*spenso::g(spenso::cof(3,hedge(0)),spenso::dind(spenso::cof(3,hedge(1))))*𝑖" num_autogen="true" particle="c"];
+          b:2	-> a:3	 [id=1  dod="-1" dod_autogen="true" lmb_id="1" lmb_rep="K(1,a___)" name="e1" name_autogen="true" num="Q(1,spenso::mink(4,edge(1,1)))*spenso::g(spenso::cof(3,hedge(2)),spenso::dind(spenso::cof(3,hedge(3))))*spenso::gamma(spenso::bis(4,hedge(3)),spenso::bis(4,hedge(2)),spenso::mink(4,edge(1,1)))*𝑖" num_autogen="true" particle="d"];
+          b:4	-> a:5	 [id=2 dir=none  dod="-2" dod_autogen="true" lmb_rep="-1*K(1,a___)+K(0,a___)" name="e2" name_autogen="true" num="-𝑖*spenso::g(spenso::mink(4,hedge(4)),spenso::mink(4,hedge(5)))" num_autogen="true" particle="W+"];
+        }
+        "#);
+}
+
+#[test]
+fn vertex_normalization() {
+    test_initialise().unwrap();
+    let g: Graph = dot!(
+            digraph GL1{
+                num = "1";
+                overall_factor = "AutG(1)^-1*InternalFermionLoopSign(-1)*ExternalFermionOrderingSign(1)*AntiFermionSpinSumSign(1)";
+                0[int_id=V_117];
+                1[int_id=V_82];
+                2[int_id=V_71];
+                3[int_id=V_11];
+
+                ext0 [style=invis];
+                2:0 -> ext0 [id=0 dir=back is_cut=0 particle="a"];
+                ext1 [style=invis];
+                ext1 -> 3:1 [id=1 is_cut=0 particle="a"];
+                0:2 -> 1:3 [id=2 particle="c~"];
+                0:4 -> 2:5 [id=3 particle="d"];
+                0:6 -> 3:7 [id=4 particle="G+"];
+                1:8 -> 2:9 [id=5 particle="d~"];
+                1:10 -> 3:11 [id=6 particle="G-"];
+            }
+        ).unwrap();
+    g.assert_fixture_hedge_routing(&[
+        (0, Some(1)),
+        (2, Some(0)),
+        (1, Some(2)),
+        (0, Some(3)),
+        (0, Some(4)),
+        (1, Some(5)),
+        (2, None),
+        (2, None),
+        (1, Some(8)),
+        (0, Some(9)),
+        (2, None),
+        (1, None),
+    ]);
+    assert_snapshot!(g.debug_dot_with_settings(&DotExportSettings {
+            include_autogenerated_fields: true,
+            ..DotExportSettings::default()
+        }),@r#"
+        digraph GL1 {
+          num = "1";
+          overall_factor = "(AutG(1))^(-1)*AntiFermionSpinSumSign(1)*ExternalFermionOrderingSign(1)*InternalFermionLoopSign(-1)";
+          overall_factor_evaluated = "-1";
+          projector = "ϵ(0,spenso::mink(4,hedge(1)))*ϵbar(0,spenso::mink(4,hedge(0)))";
+          threshold_counterterms = "
+        schema_version = 1
+        cuts = []
+        ";
+          "0"[dod="0" dod_autogen="true" int_id="V_117" name_autogen="true" num="(1/2*spenso::g(spenso::bis(4,hedge(2)),spenso::bis(4,hedge(4)))+1/2*spenso::gamma5(spenso::bis(4,hedge(4)),spenso::bis(4,hedge(2))))*UFO::GC_22*spenso::g(spenso::cof(3,hedge(2)),spenso::dind(spenso::cof(3,hedge(4))))" num_autogen="true"];
+          "1"[dod="0" dod_autogen="true" int_id="V_82" name_autogen="true" num="(-1/2*spenso::gamma5(spenso::bis(4,hedge(3)),spenso::bis(4,hedge(8)))+1/2*spenso::g(spenso::bis(4,hedge(3)),spenso::bis(4,hedge(8))))*UFO::GC_16*spenso::g(spenso::cof(3,hedge(8)),spenso::dind(spenso::cof(3,hedge(3))))" num_autogen="true"];
+          "2"[dod="0" dod_autogen="true" int_id="V_71" name_autogen="true" num="UFO::GC_1*spenso::g(spenso::cof(3,hedge(5)),spenso::dind(spenso::cof(3,hedge(9))))*spenso::gamma(spenso::bis(4,hedge(9)),spenso::bis(4,hedge(5)),spenso::mink(4,hedge(0)))" num_autogen="true"];
+          "3"[dod="1" dod_autogen="true" int_id="V_11" name_autogen="true" num="(-1*Q(4,spenso::mink(4,hedge(1)))+Q(1,spenso::mink(4,hedge(1))))*UFO::GC_3" num_autogen="true"];
+
+          "2":1	-> "3":0	 [id=0 dir=none  dod="-2" dod_autogen="true" is_cut="0" lmb_rep="P(0,a___)" name="e0" name_autogen="true" num="1" num_autogen="true" particle="a"];
+          "1":10	-> "3":11	 [id=1 dir=none  dod="-2" dod_autogen="true" lmb_rep="-1*K(1,a___)+-1*P(0,a___)" name="e1" name_autogen="true" num="𝑖" num_autogen="true" particle="G-"];
+          "0":2	-> "1":3	 [id=2 dir=back  dod="-1" dod_autogen="true" lmb_id="0" lmb_rep="K(0,a___)" name="e2" name_autogen="true" num="(-1*Q(2,spenso::mink(4,edge(2,1)))*spenso::gamma(spenso::bis(4,hedge(2)),spenso::bis(4,hedge(3)),spenso::mink(4,edge(2,1)))+UFO::MC*spenso::g(spenso::bis(4,hedge(2)),spenso::bis(4,hedge(3))))*spenso::g(spenso::cof(3,hedge(3)),spenso::dind(spenso::cof(3,hedge(2))))*𝑖" num_autogen="true" particle="c~"];
+          "0":4	-> "2":5	 [id=3  dod="-1" dod_autogen="true" lmb_rep="-1*K(0,a___)+-1*K(1,a___)" name="e3" name_autogen="true" num="Q(3,spenso::mink(4,edge(3,1)))*spenso::g(spenso::cof(3,hedge(4)),spenso::dind(spenso::cof(3,hedge(5))))*spenso::gamma(spenso::bis(4,hedge(5)),spenso::bis(4,hedge(4)),spenso::mink(4,edge(3,1)))*𝑖" num_autogen="true" particle="d"];
+          "0":6	-> "3":7	 [id=4 dir=none  dod="-2" dod_autogen="true" lmb_id="1" lmb_rep="K(1,a___)" name="e4" name_autogen="true" num="𝑖" num_autogen="true" particle="G+"];
+          "1":8	-> "2":9	 [id=5 dir=back  dod="-1" dod_autogen="true" lmb_rep="K(0,a___)+K(1,a___)+P(0,a___)" name="e5" name_autogen="true" num="-𝑖*Q(5,spenso::mink(4,edge(5,1)))*spenso::g(spenso::cof(3,hedge(9)),spenso::dind(spenso::cof(3,hedge(8))))*spenso::gamma(spenso::bis(4,hedge(8)),spenso::bis(4,hedge(9)),spenso::mink(4,edge(5,1)))" num_autogen="true" particle="d~"];
+        }
+        "#);
+}
+
+#[test]
+fn validate_verterx() {
+    test_initialise().unwrap();
+    let g: Graph = dot!(digraph GL1{
+      //  0[dod=0 int_id=V_82 num="UFO::GC_16*spenso::g(spenso::dind(spenso::cof(3,hedge(2))),spenso::dind(spenso::cof(3,hedge(4))))*spenso::projp(spenso::bis(4,hedge(2)),spenso::bis(4,hedge(4)))"];
+      // 1[dod=0 int_id=V_117 num="UFO::GC_22*spenso::g(spenso::dind(spenso::cof(3,hedge(8))),spenso::cof(3,hedge(3)))*spenso::projm(spenso::bis(4,hedge(8)),spenso::bis(4,hedge(3)))"];
+      // 2[dod=0 int_id=V_71 num="UFO::GC_1*spenso::g(spenso::cof(3,hedge(5)),spenso::cof(3,hedge(9)))*spenso::gamma(spenso::bis(4,hedge(5)),spenso::bis(4,hedge(9)),spenso::mink(4,hedge(0)))"];
+      // 3[dod=0 int_id=V_11 num="UFO::GC_3*(UFO::P(spenso::mink(4,hedge(1)),2)-UFO::P(spenso::mink(4,hedge(1)),3))"];
+
+      2:1   -> 3:0   [id=0 is_cut=0 particle="a"];
+      1:8   -> 2:9   [id=1  particle="d"];
+      0:2   -> 1:3   [id=2 particle="c"];
+      0:4   -> 2:5   [id=3  particle="d~"];
+      0:6   -> 3:7   [id=4  particle="G-"];
+      1:10  -> 3:11  [id=5 particle="G+"];
+    })
+    .unwrap();
+
+    g.assert_fixture_hedge_routing(&[
+        (0, Some(0)),
+        (2, Some(1)),
+        (0, Some(2)),
+        (1, Some(3)),
+        (1, Some(4)),
+        (0, Some(5)),
+        (2, None),
+        (1, None),
+        (0, Some(8)),
+        (1, Some(9)),
+        (2, None),
+        (2, None),
+    ]);
+    assert_snapshot!(g.debug_dot_with_settings(&DotExportSettings {
+            include_autogenerated_fields: true,
+            ..DotExportSettings::default()
+        }),@r#"
+        digraph GL1 {
+          num = "1";
+          overall_factor = "1";
+          overall_factor_evaluated = "1";
+          projector = "ϵ(0,spenso::mink(4,hedge(0)))*ϵbar(0,spenso::mink(4,hedge(1)))";
+          threshold_counterterms = "
+        schema_version = 1
+        cuts = []
+        ";
+          "0"[dod="0" dod_autogen="true" int_id="V_82" name_autogen="true" num="(-1/2*spenso::gamma5(spenso::bis(4,hedge(2)),spenso::bis(4,hedge(4)))+1/2*spenso::g(spenso::bis(4,hedge(2)),spenso::bis(4,hedge(4))))*UFO::GC_16*spenso::g(spenso::cof(3,hedge(4)),spenso::dind(spenso::cof(3,hedge(2))))" num_autogen="true"];
+          "1"[dod="0" dod_autogen="true" int_id="V_117" name_autogen="true" num="(1/2*spenso::g(spenso::bis(4,hedge(3)),spenso::bis(4,hedge(8)))+1/2*spenso::gamma5(spenso::bis(4,hedge(8)),spenso::bis(4,hedge(3))))*UFO::GC_22*spenso::g(spenso::cof(3,hedge(3)),spenso::dind(spenso::cof(3,hedge(8))))" num_autogen="true"];
+          "2"[dod="0" dod_autogen="true" int_id="V_71" name_autogen="true" num="UFO::GC_1*spenso::g(spenso::cof(3,hedge(9)),spenso::dind(spenso::cof(3,hedge(5))))*spenso::gamma(spenso::bis(4,hedge(5)),spenso::bis(4,hedge(9)),spenso::mink(4,hedge(1)))" num_autogen="true"];
+          "3"[dod="1" dod_autogen="true" int_id="V_11" name_autogen="true" num="(-1*Q(5,spenso::mink(4,hedge(0)))+Q(4,spenso::mink(4,hedge(0))))*UFO::GC_3" num_autogen="true"];
+
+          "2":1	-> "3":0	 [id=0 dir=none  dod="-2" dod_autogen="true" is_cut="0" lmb_rep="P(0,a___)" name="e0" name_autogen="true" num="1" num_autogen="true" particle="a"];
+          "1":8	-> "2":9	 [id=1  dod="-1" dod_autogen="true" lmb_rep="K(0,a___)+K(1,a___)+P(0,a___)" name="e1" name_autogen="true" num="Q(1,spenso::mink(4,edge(1,1)))*spenso::g(spenso::cof(3,hedge(8)),spenso::dind(spenso::cof(3,hedge(9))))*spenso::gamma(spenso::bis(4,hedge(9)),spenso::bis(4,hedge(8)),spenso::mink(4,edge(1,1)))*𝑖" num_autogen="true" particle="d"];
+          "0":2	-> "1":3	 [id=2  dod="-1" dod_autogen="true" lmb_id="0" lmb_rep="K(0,a___)" name="e2" name_autogen="true" num="(Q(2,spenso::mink(4,edge(2,1)))*spenso::gamma(spenso::bis(4,hedge(3)),spenso::bis(4,hedge(2)),spenso::mink(4,edge(2,1)))+UFO::MC*spenso::g(spenso::bis(4,hedge(2)),spenso::bis(4,hedge(3))))*spenso::g(spenso::cof(3,hedge(2)),spenso::dind(spenso::cof(3,hedge(3))))*𝑖" num_autogen="true" particle="c"];
+          "0":4	-> "2":5	 [id=3 dir=back  dod="-1" dod_autogen="true" lmb_rep="-1*K(0,a___)+-1*K(1,a___)" name="e3" name_autogen="true" num="-𝑖*Q(3,spenso::mink(4,edge(3,1)))*spenso::g(spenso::cof(3,hedge(5)),spenso::dind(spenso::cof(3,hedge(4))))*spenso::gamma(spenso::bis(4,hedge(4)),spenso::bis(4,hedge(5)),spenso::mink(4,edge(3,1)))" num_autogen="true" particle="d~"];
+          "0":6	-> "3":7	 [id=4 dir=none  dod="-2" dod_autogen="true" lmb_id="1" lmb_rep="K(1,a___)" name="e4" name_autogen="true" num="𝑖" num_autogen="true" particle="G-"];
+          "1":10	-> "3":11	 [id=5 dir=none  dod="-2" dod_autogen="true" lmb_rep="-1*K(1,a___)+-1*P(0,a___)" name="e5" name_autogen="true" num="𝑖" num_autogen="true" particle="G+"];
+        }
+        "#);
+}
+
+#[test]
+fn test_ufo() {
+    test_initialise().unwrap();
+    let g: Graph = dot!(
+            digraph GL0{
+                num = "1";
+                overall_factor = "AutG(1)^-1*InternalFermionLoopSign(-1)*ExternalFermionOrderingSign(1)*AntiFermionSpinSumSign(1)";
+                0[int_id=V_79];
+            1[int_id=V_79];
+            2[int_id=V_71];
+            3[int_id=V_71];
+            ext0 [style=invis];
+            2:0-> ext0 [id=0 dir=back is_cut=0  particle="a"];
+            ext1 [style=invis];
+            ext1-> 3:1 [id=1 is_cut=0  particle="a"];
+            0:2-> 1:3 [id=2   particle="d"];
+            0:4-> 1:5 [id=3   particle="Z"];
+            0:6-> 3:7 [id=4   particle="d~"];
+            1:8-> 2:9 [id=5   particle="d"];
+            2:10-> 3:11 [id=6   particle="d"];
+            }
+        ).unwrap();
+
+    g.assert_fixture_hedge_routing(&[
+        (2, Some(1)),
+        (2, Some(0)),
+        (0, Some(2)),
+        (1, Some(3)),
+        (2, Some(4)),
+        (2, Some(5)),
+        (1, Some(6)),
+        (0, Some(7)),
+        (0, Some(8)),
+        (1, Some(9)),
+        (0, Some(10)),
+        (1, Some(11)),
+    ]);
+    assert_snapshot!(g.debug_dot_with_settings(&DotExportSettings {
+            include_autogenerated_fields: true,
+            ..DotExportSettings::default()
+        }),@r#"
+        digraph GL0 {
+          num = "1";
+          overall_factor = "(AutG(1))^(-1)*AntiFermionSpinSumSign(1)*ExternalFermionOrderingSign(1)*InternalFermionLoopSign(-1)";
+          overall_factor_evaluated = "-1";
+          projector = "ϵ(0,spenso::mink(4,hedge(1)))*ϵbar(0,spenso::mink(4,hedge(0)))";
+          threshold_counterterms = "
+        schema_version = 1
+        cuts = []
+        ";
+          "0"[dod="0" dod_autogen="true" int_id="V_79" name_autogen="true" num="((-1/2*spenso::gamma(spenso::bis(4,hedge(2)),spenso::bis(4,hedge(6)),spenso::mink(4,hedge(4)))+-3/2*spenso::gamma(spenso::bis(4,hedge(2)),spenso::bis(4,vertex(0,1)),spenso::mink(4,hedge(4)))*spenso::gamma5(spenso::bis(4,vertex(0,1)),spenso::bis(4,hedge(6))))*UFO::GC_58+(-1/2*spenso::gamma(spenso::bis(4,hedge(2)),spenso::bis(4,vertex(0,1)),spenso::mink(4,hedge(4)))*spenso::gamma5(spenso::bis(4,vertex(0,1)),spenso::bis(4,hedge(6)))+1/2*spenso::gamma(spenso::bis(4,hedge(2)),spenso::bis(4,hedge(6)),spenso::mink(4,hedge(4))))*UFO::GC_50)*spenso::g(spenso::cof(3,hedge(6)),spenso::dind(spenso::cof(3,hedge(2))))" num_autogen="true"];
+          "1"[dod="0" dod_autogen="true" int_id="V_79" name_autogen="true" num="((-1/2*spenso::gamma(spenso::bis(4,hedge(8)),spenso::bis(4,hedge(3)),spenso::mink(4,hedge(5)))+-3/2*spenso::gamma(spenso::bis(4,hedge(8)),spenso::bis(4,vertex(1,1)),spenso::mink(4,hedge(5)))*spenso::gamma5(spenso::bis(4,vertex(1,1)),spenso::bis(4,hedge(3))))*UFO::GC_58+(-1/2*spenso::gamma(spenso::bis(4,hedge(8)),spenso::bis(4,vertex(1,1)),spenso::mink(4,hedge(5)))*spenso::gamma5(spenso::bis(4,vertex(1,1)),spenso::bis(4,hedge(3)))+1/2*spenso::gamma(spenso::bis(4,hedge(8)),spenso::bis(4,hedge(3)),spenso::mink(4,hedge(5))))*UFO::GC_50)*spenso::g(spenso::cof(3,hedge(3)),spenso::dind(spenso::cof(3,hedge(8))))" num_autogen="true"];
+          "2"[dod="0" dod_autogen="true" int_id="V_71" name_autogen="true" num="UFO::GC_1*spenso::g(spenso::cof(3,hedge(9)),spenso::dind(spenso::cof(3,hedge(10))))*spenso::gamma(spenso::bis(4,hedge(10)),spenso::bis(4,hedge(9)),spenso::mink(4,hedge(0)))" num_autogen="true"];
+          "3"[dod="0" dod_autogen="true" int_id="V_71" name_autogen="true" num="UFO::GC_1*spenso::g(spenso::cof(3,hedge(11)),spenso::dind(spenso::cof(3,hedge(7))))*spenso::gamma(spenso::bis(4,hedge(7)),spenso::bis(4,hedge(11)),spenso::mink(4,hedge(1)))" num_autogen="true"];
+
+          "2":1	-> "3":0	 [id=0 dir=none  dod="-2" dod_autogen="true" is_cut="0" lmb_rep="P(0,a___)" name="e0" name_autogen="true" num="1" num_autogen="true" particle="a"];
+          "2":10	-> "3":11	 [id=1  dod="-1" dod_autogen="true" lmb_rep="-1*K(1,a___)+-1*P(0,a___)" name="e1" name_autogen="true" num="Q(1,spenso::mink(4,edge(1,1)))*spenso::g(spenso::cof(3,hedge(10)),spenso::dind(spenso::cof(3,hedge(11))))*spenso::gamma(spenso::bis(4,hedge(11)),spenso::bis(4,hedge(10)),spenso::mink(4,edge(1,1)))*𝑖" num_autogen="true" particle="d"];
+          "0":2	-> "1":3	 [id=2  dod="-1" dod_autogen="true" lmb_id="0" lmb_rep="K(0,a___)" name="e2" name_autogen="true" num="Q(2,spenso::mink(4,edge(2,1)))*spenso::g(spenso::cof(3,hedge(2)),spenso::dind(spenso::cof(3,hedge(3))))*spenso::gamma(spenso::bis(4,hedge(3)),spenso::bis(4,hedge(2)),spenso::mink(4,edge(2,1)))*𝑖" num_autogen="true" particle="d"];
+          "0":4	-> "1":5	 [id=3 dir=none  dod="-2" dod_autogen="true" lmb_rep="-1*K(0,a___)+-1*K(1,a___)" name="e3" name_autogen="true" num="-𝑖*spenso::g(spenso::mink(4,hedge(4)),spenso::mink(4,hedge(5)))" num_autogen="true" particle="Z"];
+          "0":6	-> "3":7	 [id=4 dir=back  dod="-1" dod_autogen="true" lmb_id="1" lmb_rep="K(1,a___)" name="e4" name_autogen="true" num="-𝑖*Q(4,spenso::mink(4,edge(4,1)))*spenso::g(spenso::cof(3,hedge(7)),spenso::dind(spenso::cof(3,hedge(6))))*spenso::gamma(spenso::bis(4,hedge(6)),spenso::bis(4,hedge(7)),spenso::mink(4,edge(4,1)))" num_autogen="true" particle="d~"];
+          "1":8	-> "2":9	 [id=5  dod="-1" dod_autogen="true" lmb_rep="-1*K(1,a___)" name="e5" name_autogen="true" num="Q(5,spenso::mink(4,edge(5,1)))*spenso::g(spenso::cof(3,hedge(8)),spenso::dind(spenso::cof(3,hedge(9))))*spenso::gamma(spenso::bis(4,hedge(9)),spenso::bis(4,hedge(8)),spenso::mink(4,edge(5,1)))*𝑖" num_autogen="true" particle="d"];
+        }
+        "#);
+}
+
+#[test]
+fn parse_lmbsetting() {
+    test_initialise().unwrap();
+    let g: Graph = dot!(
+        digraph G{
+            graph [
+                multiplicity_factor = "1/2"
+                overall_factor = "2*x"
+                color = "spenso::t"
+                colorless = "spenso::gamma"
+            ]
+            ext [style=invis]
+            A [num="1" color_num="a"]
+            B [num="1"]
+            C [num="1"]
+            D [num="1"]
+            E [num="1"]
+            ext -> A  [pdg=1000]
+            ext -> C  [pdg=1000]
+            C -> A    [pdg=1000, num="P(eid,spenso::mink(4,0))"]
+            A -> D    [pdg=1000, num="P(eid,spenso::mink(4,0))"]
+            D -> B    [pdg=1000, num="1"]
+            B -> ext   [pdg=1000]
+            E -> B    [pdg=1000,lmb_id=0]
+            E -> A    [pdg=1000,lmb_id=1]
+            E -> C   [pdg=1000]
+            C -> D    [pdg=1000, num="1"]
+            B -> ext   [pdg=1000]
+        },"scalars"
+    )
+    .unwrap();
+
+    g.assert_fixture_hedge_routing(&[
+        (0, None),
+        (0, None),
+        (0, None),
+        (1, None),
+        (0, None),
+        (1, None),
+        (1, None),
+        (1, None),
+        (2, None),
+        (2, None),
+        (0, None),
+        (2, None),
+        (1, None),
+        (3, None),
+        (2, None),
+        (2, None),
+        (3, None),
+        (3, None),
+    ]);
+    assert_snapshot!(g.debug_dot_with_settings(&DotExportSettings {
+            include_autogenerated_fields: true,
+            ..DotExportSettings::default()
+        }),@r#"
+        digraph G {
+          num = "1";
+          overall_factor = "2*x";
+          overall_factor_evaluated = "2*x";
+          projector = "1";
+          threshold_counterterms = "
+        schema_version = 1
+        cuts = []
+        ";
+          A[dod="0" dod_autogen="true" num="1"];
+          B[dod="0" dod_autogen="true" num="1"];
+          C[dod="0" dod_autogen="true" num="1"];
+          D[dod="0" dod_autogen="true" num="1"];
+          E[dod="0" dod_autogen="true" num="1"];
+
+          A:0	-> D:1	 [id=0 dir=none  dod="-2" dod_autogen="true" lmb_rep="K(1,a___)+K(2,a___)+P(2,a___)" name="e0" name_autogen="true" num="P(0,spenso::mink(4,0))" particle="scalar_0"];
+          ext1	 [style=invis];
+          B:2	-> ext1	 [id=1 dir=none dod="-2" dod_autogen="true" lmb_rep="P(0,a___)" name="e1" name_autogen="true" num="𝑖" num_autogen="true" particle="scalar_0"];
+          ext2	 [style=invis];
+          B:3	-> ext2	 [id=2 dir=none dod="-2" dod_autogen="true" lmb_rep="P(1,a___)" name="e2" name_autogen="true" num="𝑖" num_autogen="true" particle="scalar_0"];
+          C:4	-> A:5	 [id=3 dir=none  dod="-2" dod_autogen="true" lmb_id="2" lmb_rep="K(2,a___)" name="e3" name_autogen="true" num="P(3,spenso::mink(4,0))" particle="scalar_0"];
+          C:6	-> D:7	 [id=4 dir=none  dod="-2" dod_autogen="true" lmb_rep="-1*K(0,a___)+-1*K(1,a___)+-1*K(2,a___)+-1*P(2,a___)+P(0,a___)+P(1,a___)" name="e4" name_autogen="true" num="1" particle="scalar_0"];
+          D:8	-> B:9	 [id=5 dir=none  dod="-2" dod_autogen="true" lmb_rep="-1*K(0,a___)+P(0,a___)+P(1,a___)" name="e5" name_autogen="true" num="1" particle="scalar_0"];
+          E:10	-> A:11	 [id=6 dir=none  dod="-2" dod_autogen="true" lmb_id="1" lmb_rep="K(1,a___)" name="e6" name_autogen="true" num="𝑖" num_autogen="true" particle="scalar_0"];
+          E:12	-> B:13	 [id=7 dir=none  dod="-2" dod_autogen="true" lmb_id="0" lmb_rep="K(0,a___)" name="e7" name_autogen="true" num="𝑖" num_autogen="true" particle="scalar_0"];
+          E:14	-> C:15	 [id=8 dir=none  dod="-2" dod_autogen="true" lmb_rep="-1*K(0,a___)+-1*K(1,a___)" name="e8" name_autogen="true" num="𝑖" num_autogen="true" particle="scalar_0"];
+          ext9	 [style=invis];
+          ext9	-> A:16	 [id=9 dir=none dod="-2" dod_autogen="true" lmb_rep="P(2,a___)" name="e9" name_autogen="true" num="𝑖" num_autogen="true" particle="scalar_0"];
+          ext10	 [style=invis];
+          ext10	-> C:17	 [id=10 dir=none dod="-2" dod_autogen="true" lmb_rep="-1*P(2,a___)+P(0,a___)+P(1,a___)" name="e10" name_autogen="true" num="𝑖" num_autogen="true" particle="scalar_0"];
+        }
+        "#);
+
+    println!(
+        "{}",
+        g.underlying
+            .dot_lmb_of(&g.underlying.full(), &g.loop_momentum_basis)
+    );
+
+    let num = Numerator::<UnInit>::default().from_new_graph(&g, &g.underlying.full_filter());
+
+    let expr = num.state.expr.as_view();
+
+    let lib: DummyLibrary<SymbolicTensor<Aind>> = DummyLibrary::<_>::new();
+    let net =
+        Network::<NetworkStore<SymbolicTensor<Aind>, Atom>, _, Symbol, Aind>::try_from_view::<
+            SymbolicTensor<Aind>,
+            _,
+        >(expr, &lib, &ParseSettings::default())
         .unwrap();
 
-        println!("{}", g.global_prefactor.projector);
-    }
+    println!("{}", expr);
+    println!(
+        "{}",
+        net.dot_display_impl(
+            ToString::to_string,
+            |_| None,
+            |a| {
+                if let Ok(a) = ShadowedStructure::<Aind>::parse(a.expression.as_view()) {
+                    a.name()
+                        .map(|s| {
+                            if let Some(a) = a.args() {
+                                FunctionBuilder::new(s).add_args(&a).finish().to_string()
+                            } else {
+                                s.to_string()
+                            }
+                        })
+                        .unwrap_or("".to_string())
+                } else {
+                    "".to_string()
+                }
+            },
+            ToString::to_string
+        )
+    );
 
-    #[test]
-    fn massive_gluon() {
-        test_initialise().unwrap();
-        let _g: Graph = dot!(
+    let num = num.color_simplify();
+
+    println!("{}", num.state.expr);
+    let num = num.gamma_simplify();
+
+    println!("{}", num.state.expr);
+}
+
+#[test]
+fn massive_gluon() {
+    test_initialise().unwrap();
+    let model = crate::utils::load_generic_model("sm");
+    let mut graph = Graph::from_dot(
+        linnet::dot!(
         digraph ddxaaapentagon{
             // num = "-2";
             ext   [style=invis];
@@ -1296,78 +1927,17 @@ mod failing {
             // The option below would introduce an IR regulator
             1 -> 0     [id=9 lmb_id="0" particle="g" mass="1"];
         })
-        .unwrap();
-    }
+        .unwrap(),
+        &model,
+    )
+    .unwrap();
+    graph.global_prefactor.num *=
+        graph.underlying[Hedge(0)].color_kronekers(&graph.underlying[Hedge(1)]);
+    graph.validate_full_numerator_tensor_network().unwrap();
+}
 
-    #[test]
-    fn xs_glueing() {
-        test_initialise().unwrap();
-        let g: Graph = dot!(
-            digraph{
-              num = "1";
-              overall_factor = "1";
-              0[int_id=V_89];
-              1[int_id=V_127];
-              2[int_id=V_123];
-              3[int_id=V_93];
-
-              ext0	 [style=invis is_cut=0];
-              ext1	 [style=invis is_cut=1];
-              2	-> ext0	     [id=0  particle="d"];
-              ext0	-> 0	 [id=1  particle="d"];
-              3:2	-> ext1	 [id=2  particle="c"];
-              ext1	-> 1:3	 [id=3  particle="c"];
-              0:4	-> 2:5	 [id=4  particle="u"];
-              1:6	-> 3:7	 [id=5  particle="s"];
-              0:8	-> 1:9	 [id=6  particle="W-"];
-              2:10	-> 3:11	 [id=7  particle="W+"];
-            }
-        )
-        .unwrap();
-        assert_snapshot!(g.debug_dot(),@r#"
-        digraph {
-          num = "1";
-          overall_factor = "1";
-          overall_factor_evaluated = "1";
-          projector = "u(0,spenso::bis(4,hedge(1)))*u(1,spenso::bis(4,hedge(3)))*ubar(0,spenso::bis(4,hedge(0)))*ubar(1,spenso::bis(4,hedge(2)))";
-          0[dod="0" int_id="V_89" num="UFO::GC_100*spenso::g(spenso::cof(3,hedge(1)),spenso::dind(spenso::cof(3,hedge(4))))*spenso::gamma(spenso::bis(4,hedge(4)),spenso::bis(4,vertex(0,1)),spenso::mink(4,hedge(8)))*spenso::projm(spenso::bis(4,vertex(0,1)),spenso::bis(4,hedge(1)))"];
-          1[dod="0" int_id="V_127" num="UFO::GC_45*spenso::g(spenso::cof(3,hedge(3)),spenso::dind(spenso::cof(3,hedge(6))))*spenso::gamma(spenso::bis(4,hedge(6)),spenso::bis(4,vertex(1,1)),spenso::mink(4,hedge(9)))*spenso::projm(spenso::bis(4,vertex(1,1)),spenso::bis(4,hedge(3)))"];
-          2[dod="0" int_id="V_123" num="UFO::GC_41*spenso::g(spenso::cof(3,hedge(5)),spenso::dind(spenso::cof(3,hedge(0))))*spenso::gamma(spenso::bis(4,hedge(0)),spenso::bis(4,vertex(2,1)),spenso::mink(4,hedge(10)))*spenso::projm(spenso::bis(4,vertex(2,1)),spenso::bis(4,hedge(5)))"];
-          3[dod="0" int_id="V_93" num="UFO::GC_104*spenso::g(spenso::cof(3,hedge(7)),spenso::dind(spenso::cof(3,hedge(2))))*spenso::gamma(spenso::bis(4,hedge(2)),spenso::bis(4,vertex(3,1)),spenso::mink(4,hedge(11)))*spenso::projm(spenso::bis(4,vertex(3,1)),spenso::bis(4,hedge(7)))"];
-
-          2:3	-> 0:0	 [id=0 source="{ufo_order:0}" sink="{ufo_order:1}"  dod="-2" is_cut="0"  lmb_rep="P(0,a___)" name="e0" num="spenso::g(spenso::cof(3,hedge(0)),spenso::dind(spenso::cof(3,hedge(1))))" particle="d"];
-          3:2	-> 1:1	 [id=1 source="{ufo_order:0}" sink="{ufo_order:1}"  dod="-2" is_cut="1"  lmb_rep="P(1,a___)" name="e1" num="spenso::g(spenso::cof(3,hedge(2)),spenso::dind(spenso::cof(3,hedge(3))))" particle="c"];
-          0:8	-> 1:9	 [id=2 dir=none source="{ufo_order:2}" sink="{ufo_order:2}"  dod="0"  lmb_rep="-1*K(0,a___)+P(0,a___)" name="e2" num="-1*spenso::g(spenso::mink(4,hedge(8)),spenso::mink(4,hedge(9)))+Q(2,spenso::mink(4,hedge(8)))*Q(2,spenso::mink(4,hedge(9)))*UFO::MW^(-2)" particle="W-"];
-          2:10	-> 3:11	 [id=3 dir=none source="{ufo_order:2}" sink="{ufo_order:2}"  dod="0"  lmb_rep="-1*P(0,a___)+K(0,a___)" name="e3" num="-1*spenso::g(spenso::mink(4,hedge(10)),spenso::mink(4,hedge(11)))+Q(3,spenso::mink(4,hedge(10)))*Q(3,spenso::mink(4,hedge(11)))*UFO::MW^(-2)" particle="W+"];
-          0:4	-> 2:5	 [id=4 source="{ufo_order:0}" sink="{ufo_order:1}"  dod="-1"  lmb_id="0" lmb_rep="K(0,a___)" name="e4" num="Q(4,spenso::mink(4,edge(4,1)))*spenso::g(spenso::cof(3,hedge(4)),spenso::dind(spenso::cof(3,hedge(5))))*spenso::gamma(spenso::bis(4,hedge(5)),spenso::bis(4,hedge(4)),spenso::mink(4,edge(4,1)))" particle="u"];
-          1:6	-> 3:7	 [id=5 source="{ufo_order:0}" sink="{ufo_order:1}"  dod="-1"  lmb_rep="-1*K(0,a___)+P(0,a___)+P(1,a___)" name="e5" num="Q(5,spenso::mink(4,edge(5,1)))*spenso::g(spenso::cof(3,hedge(6)),spenso::dind(spenso::cof(3,hedge(7))))*spenso::gamma(spenso::bis(4,hedge(7)),spenso::bis(4,hedge(6)),spenso::mink(4,edge(5,1)))" particle="s"];
-        }
-        "#);
-
-        let g: Graph = dot!(
-            digraph{
-                a->b [particle= c];
-                b->a [particle= d];
-                b->a [particle= "W+"];
-                a[int_id=V_90]
-            }
-        )
-        .unwrap();
-        assert_snapshot!(g.debug_dot(),@r#"
-        digraph {
-          num = "1";
-          overall_factor = "1";
-          overall_factor_evaluated = "1";
-          projector = "1";
-          a[dod="0" int_id="V_90" num="UFO::GC_103*spenso::g(spenso::cof(3,hedge(3)),spenso::dind(spenso::cof(3,hedge(0))))*spenso::gamma(spenso::bis(4,hedge(0)),spenso::bis(4,vertex(0,1)),spenso::mink(4,hedge(5)))*spenso::projm(spenso::bis(4,vertex(0,1)),spenso::bis(4,hedge(3)))"];
-          b[dod="0" int_id="V_126" num="UFO::GC_44*spenso::g(spenso::cof(3,hedge(1)),spenso::dind(spenso::cof(3,hedge(2))))*spenso::gamma(spenso::bis(4,hedge(2)),spenso::bis(4,vertex(1,1)),spenso::mink(4,hedge(4)))*spenso::projm(spenso::bis(4,vertex(1,1)),spenso::bis(4,hedge(1)))"];
-
-          a:0	-> b:1	 [id=0 source="{ufo_order:0}" sink="{ufo_order:1}"  dod="-1"  lmb_id="0" lmb_rep="K(0,a___)" name="e0" num="(Q(0,spenso::mink(4,edge(0,1)))*spenso::gamma(spenso::bis(4,hedge(1)),spenso::bis(4,hedge(0)),spenso::mink(4,edge(0,1)))+UFO::MC*spenso::g(spenso::bis(4,hedge(0)),spenso::bis(4,hedge(1))))*spenso::g(spenso::cof(3,hedge(0)),spenso::dind(spenso::cof(3,hedge(1))))" particle="c"];
-          b:2	-> a:3	 [id=1 source="{ufo_order:0}" sink="{ufo_order:1}"  dod="-1"  lmb_id="1" lmb_rep="K(1,a___)" name="e1" num="Q(1,spenso::mink(4,edge(1,1)))*spenso::g(spenso::cof(3,hedge(2)),spenso::dind(spenso::cof(3,hedge(3))))*spenso::gamma(spenso::bis(4,hedge(3)),spenso::bis(4,hedge(2)),spenso::mink(4,edge(1,1)))" particle="d"];
-          b:4	-> a:5	 [id=2 dir=none source="{ufo_order:2}" sink="{ufo_order:2}"  dod="0"  lmb_rep="-1*K(1,a___)+K(0,a___)" name="e2" num="-1*spenso::g(spenso::mink(4,hedge(4)),spenso::mink(4,hedge(5)))+Q(2,spenso::mink(4,hedge(4)))*Q(2,spenso::mink(4,hedge(5)))*UFO::MW^(-2)" particle="W+"];
-        }
-        "#);
-    }
+mod failing {
+    use super::*;
 
     #[test]
     fn polarizations() {
@@ -1609,160 +2179,6 @@ mod failing {
     }
 
     #[test]
-    fn propagators() {
-        test_initialise().unwrap();
-        let gs: Vec<Graph> = dot!(
-            digraph g1{
-                node [num=1]
-                a -> b[particle="g"];
-            }
-
-            digraph g2{
-                node [num=1]
-                a -> b [particle="d"];
-            }
-
-            digraph g3{
-                node [num=1]
-                a -> b [particle="Z"];
-            }
-
-        )
-        .unwrap();
-
-        insta::assert_snapshot!(gs[0].underlying[EdgeIndex(0)].num.to_ordered_simple(),@"g(coad(8,hedge(0)),coad(8,hedge(1)))*g(mink(4,hedge(0)),mink(4,hedge(1)))");
-        insta::assert_snapshot!(gs[1].underlying[EdgeIndex(0)].num.to_ordered_simple(),@"Q(0,mink(4,edge(0,1)))*g(cof(3,hedge(0)),dind(cof(3,hedge(1))))*gamma(bis(4,hedge(1)),bis(4,hedge(0)),mink(4,edge(0,1)))");
-        insta::assert_snapshot!(gs[2].underlying[EdgeIndex(0)].num.to_ordered_simple(),@"-1*g(mink(4,hedge(0)),mink(4,hedge(1)))+MZ^(-2)*Q(0,mink(4,hedge(0)))*Q(0,mink(4,hedge(1)))");
-    }
-
-    #[test]
-    fn vertex_normalization() {
-        test_initialise().unwrap();
-        let g: Graph = dot!(
-            digraph GL1{
-                num = "1";
-                overall_factor = "AutG(1)^-1*InternalFermionLoopSign(-1)*ExternalFermionOrderingSign(1)*AntiFermionSpinSumSign(1)";
-                0[int_id=V_117];
-                1[int_id=V_82];
-                2[int_id=V_71];
-                3[int_id=V_11];
-
-                ext0 [style=invis];
-                2:0 -> ext0 [id=0 dir=back is_cut=0 particle="a"];
-                ext1 [style=invis];
-                ext1 -> 3:1 [id=1 is_cut=0 particle="a"];
-                0:2 -> 1:3 [id=2 particle="c~"];
-                0:4 -> 2:5 [id=3 particle="d"];
-                0:6 -> 3:7 [id=4 particle="G+"];
-                1:8 -> 2:9 [id=5 particle="d~"];
-                1:10 -> 3:11 [id=6 particle="G-"];
-            }
-        ).unwrap();
-        assert_snapshot!(g.debug_dot(),@r#"
-        digraph GL1{
-          num = "1";
-          overall_factor = "(AutG(1))^(-1)*AntiFermionSpinSumSign(1)*ExternalFermionOrderingSign(1)*InternalFermionLoopSign(-1)";
-          overall_factor_evaluated = "-1";
-          projector = "ϵ(0,spenso::mink(4,hedge(1)))*ϵbar(0,spenso::mink(4,hedge(0)))";
-          0[dod="0" int_id="V_117" num="UFO::GC_22*spenso::g(spenso::cof(3,hedge(2)),spenso::dind(spenso::cof(3,hedge(4))))*spenso::projm(spenso::bis(4,hedge(4)),spenso::bis(4,hedge(2)))"];
-          1[dod="0" int_id="V_82" num="UFO::GC_16*spenso::g(spenso::cof(3,hedge(8)),spenso::dind(spenso::cof(3,hedge(3))))*spenso::projp(spenso::bis(4,hedge(3)),spenso::bis(4,hedge(8)))"];
-          2[dod="0" int_id="V_71" num="UFO::GC_1*spenso::g(spenso::cof(3,hedge(5)),spenso::dind(spenso::cof(3,hedge(9))))*spenso::gamma(spenso::bis(4,hedge(9)),spenso::bis(4,hedge(5)),spenso::mink(4,hedge(0)))"];
-          3[dod="1" int_id="V_11" num="(-1*Q(4,spenso::mink(4,hedge(1)))+Q(1,spenso::mink(4,hedge(1))))*UFO::GC_3"];
-
-          2:1	-> 3:0	 [id=0 dir=none source="{ufo_order:2}" sink="{ufo_order:0}"  dod="-2" is_cut="0"  lmb_rep="P(0,a___)" name="e0" num="1" particle="a"];
-          1:10	-> 3:11	 [id=1 dir=none source="{ufo_order:2}" sink="{ufo_order:1}"  dod="-2"  lmb_rep="-1*K(1,a___)+-1*P(0,a___)" name="e1" num="1" particle="G-"];
-          0:2	-> 1:3	 [id=2 dir=back source="{ufo_order:1}" sink="{ufo_order:0}"  dod="-1"  lmb_id="0" lmb_rep="K(0,a___)" name="e2" num="(-1*Q(2,spenso::mink(4,edge(2,1)))*spenso::gamma(spenso::bis(4,hedge(2)),spenso::bis(4,hedge(3)),spenso::mink(4,edge(2,1)))+UFO::MC*spenso::g(spenso::bis(4,hedge(2)),spenso::bis(4,hedge(3))))*spenso::g(spenso::cof(3,hedge(3)),spenso::dind(spenso::cof(3,hedge(2))))" particle="c~"];
-          0:4	-> 2:5	 [id=3 source="{ufo_order:0}" sink="{ufo_order:1}"  dod="-1"  lmb_rep="-1*K(0,a___)+-1*K(1,a___)" name="e3" num="Q(3,spenso::mink(4,edge(3,1)))*spenso::g(spenso::cof(3,hedge(4)),spenso::dind(spenso::cof(3,hedge(5))))*spenso::gamma(spenso::bis(4,hedge(5)),spenso::bis(4,hedge(4)),spenso::mink(4,edge(3,1)))" particle="d"];
-          0:6	-> 3:7	 [id=4 dir=none source="{ufo_order:2}" sink="{ufo_order:2}"  dod="-2"  lmb_id="1" lmb_rep="K(1,a___)" name="e4" num="1" particle="G+"];
-          1:8	-> 2:9	 [id=5 dir=back source="{ufo_order:1}" sink="{ufo_order:0}"  dod="-1"  lmb_rep="K(0,a___)+K(1,a___)+P(0,a___)" name="e5" num="-1*Q(5,spenso::mink(4,edge(5,1)))*spenso::g(spenso::cof(3,hedge(9)),spenso::dind(spenso::cof(3,hedge(8))))*spenso::gamma(spenso::bis(4,hedge(8)),spenso::bis(4,hedge(9)),spenso::mink(4,edge(5,1)))" particle="d~"];
-        }
-        "#);
-    }
-
-    #[test]
-    fn validate_verterx() {
-        test_initialise().unwrap();
-        let g: Graph = dot!(digraph GL1{
-          //  0[dod=0 int_id=V_82 num="UFO::GC_16*spenso::g(spenso::dind(spenso::cof(3,hedge(2))),spenso::dind(spenso::cof(3,hedge(4))))*spenso::projp(spenso::bis(4,hedge(2)),spenso::bis(4,hedge(4)))"];
-          // 1[dod=0 int_id=V_117 num="UFO::GC_22*spenso::g(spenso::dind(spenso::cof(3,hedge(8))),spenso::cof(3,hedge(3)))*spenso::projm(spenso::bis(4,hedge(8)),spenso::bis(4,hedge(3)))"];
-          // 2[dod=0 int_id=V_71 num="UFO::GC_1*spenso::g(spenso::cof(3,hedge(5)),spenso::cof(3,hedge(9)))*spenso::gamma(spenso::bis(4,hedge(5)),spenso::bis(4,hedge(9)),spenso::mink(4,hedge(0)))"];
-          // 3[dod=0 int_id=V_11 num="UFO::GC_3*(UFO::P(spenso::mink(4,hedge(1)),2)-UFO::P(spenso::mink(4,hedge(1)),3))"];
-
-          2:1   -> 3:0   [id=0 is_cut=0 particle="a"];
-          1:8   -> 2:9   [id=1  particle="d"];
-          0:2   -> 1:3   [id=2 particle="c"];
-          0:4   -> 2:5   [id=3  particle="d~"];
-          0:6   -> 3:7   [id=4  particle="G-"];
-          1:10  -> 3:11  [id=5 particle="G+"];
-        })
-        .unwrap();
-
-        assert_snapshot!(g.debug_dot(),@r#"
-        digraph GL1{
-          num = "1";
-          overall_factor = "1";
-          overall_factor_evaluated = "1";
-          projector = "ϵ(0,spenso::mink(4,hedge(0)))*ϵbar(0,spenso::mink(4,hedge(1)))";
-          0[dod="0" int_id="V_82" num="UFO::GC_16*spenso::g(spenso::cof(3,hedge(4)),spenso::dind(spenso::cof(3,hedge(2))))*spenso::projp(spenso::bis(4,hedge(2)),spenso::bis(4,hedge(4)))"];
-          1[dod="0" int_id="V_117" num="UFO::GC_22*spenso::g(spenso::cof(3,hedge(3)),spenso::dind(spenso::cof(3,hedge(8))))*spenso::projm(spenso::bis(4,hedge(8)),spenso::bis(4,hedge(3)))"];
-          2[dod="0" int_id="V_71" num="UFO::GC_1*spenso::g(spenso::cof(3,hedge(9)),spenso::dind(spenso::cof(3,hedge(5))))*spenso::gamma(spenso::bis(4,hedge(5)),spenso::bis(4,hedge(9)),spenso::mink(4,hedge(1)))"];
-          3[dod="1" int_id="V_11" num="(-1*Q(5,spenso::mink(4,hedge(0)))+Q(4,spenso::mink(4,hedge(0))))*UFO::GC_3"];
-
-          2:1	-> 3:0	 [id=0 dir=none source="{ufo_order:2}" sink="{ufo_order:0}"  dod="-2" is_cut="0"  lmb_rep="P(0,a___)" name="e0" num="1" particle="a"];
-          1:8	-> 2:9	 [id=1 source="{ufo_order:0}" sink="{ufo_order:1}"  dod="-1"  lmb_rep="K(0,a___)+K(1,a___)+P(0,a___)" name="e1" num="Q(1,spenso::mink(4,edge(1,1)))*spenso::g(spenso::cof(3,hedge(8)),spenso::dind(spenso::cof(3,hedge(9))))*spenso::gamma(spenso::bis(4,hedge(9)),spenso::bis(4,hedge(8)),spenso::mink(4,edge(1,1)))" particle="d"];
-          0:2	-> 1:3	 [id=2 source="{ufo_order:0}" sink="{ufo_order:1}"  dod="-1"  lmb_id="0" lmb_rep="K(0,a___)" name="e2" num="(Q(2,spenso::mink(4,edge(2,1)))*spenso::gamma(spenso::bis(4,hedge(3)),spenso::bis(4,hedge(2)),spenso::mink(4,edge(2,1)))+UFO::MC*spenso::g(spenso::bis(4,hedge(2)),spenso::bis(4,hedge(3))))*spenso::g(spenso::cof(3,hedge(2)),spenso::dind(spenso::cof(3,hedge(3))))" particle="c"];
-          0:4	-> 2:5	 [id=3 dir=back source="{ufo_order:1}" sink="{ufo_order:0}"  dod="-1"  lmb_rep="-1*K(0,a___)+-1*K(1,a___)" name="e3" num="-1*Q(3,spenso::mink(4,edge(3,1)))*spenso::g(spenso::cof(3,hedge(5)),spenso::dind(spenso::cof(3,hedge(4))))*spenso::gamma(spenso::bis(4,hedge(4)),spenso::bis(4,hedge(5)),spenso::mink(4,edge(3,1)))" particle="d~"];
-          0:6	-> 3:7	 [id=4 dir=none source="{ufo_order:2}" sink="{ufo_order:1}"  dod="-2"  lmb_id="1" lmb_rep="K(1,a___)" name="e4" num="1" particle="G-"];
-          1:10	-> 3:11	 [id=5 dir=none source="{ufo_order:2}" sink="{ufo_order:2}"  dod="-2"  lmb_rep="-1*K(1,a___)+-1*P(0,a___)" name="e5" num="1" particle="G+"];
-        }
-        "#);
-    }
-
-    #[test]
-    fn test_ufo() {
-        test_initialise().unwrap();
-        let g: Graph = dot!(
-            digraph GL0{
-                num = "1";
-                overall_factor = "AutG(1)^-1*InternalFermionLoopSign(-1)*ExternalFermionOrderingSign(1)*AntiFermionSpinSumSign(1)";
-                0[int_id=V_79];
-            1[int_id=V_79];
-            2[int_id=V_71];
-            3[int_id=V_71];
-            ext0 [style=invis];
-            2:0-> ext0 [id=0 dir=back is_cut=0  particle="a"];
-            ext1 [style=invis];
-            ext1-> 3:1 [id=1 is_cut=0  particle="a"];
-            0:2-> 1:3 [id=2   particle="d"];
-            0:4-> 1:5 [id=3   particle="Z"];
-            0:6-> 3:7 [id=4   particle="d~"];
-            1:8-> 2:9 [id=5   particle="d"];
-            2:10-> 3:11 [id=6   particle="d"];
-            }
-        ).unwrap();
-
-        assert_snapshot!(g.debug_dot(),@r#"
-        digraph GL0{
-          num = "1";
-          overall_factor = "(AutG(1))^(-1)*AntiFermionSpinSumSign(1)*ExternalFermionOrderingSign(1)*InternalFermionLoopSign(-1)";
-          overall_factor_evaluated = "-1";
-          projector = "ϵ(0,spenso::mink(4,hedge(1)))*ϵbar(0,spenso::mink(4,hedge(0)))";
-          0[dod="0" int_id="V_79" num="((-2*spenso::gamma(spenso::bis(4,hedge(2)),spenso::bis(4,vertex(0,1)),spenso::mink(4,hedge(4)))*spenso::projp(spenso::bis(4,vertex(0,1)),spenso::bis(4,hedge(6)))+spenso::gamma(spenso::bis(4,hedge(2)),spenso::bis(4,vertex(0,1)),spenso::mink(4,hedge(4)))*spenso::projm(spenso::bis(4,vertex(0,1)),spenso::bis(4,hedge(6))))*UFO::GC_58+UFO::GC_50*spenso::gamma(spenso::bis(4,hedge(2)),spenso::bis(4,vertex(0,1)),spenso::mink(4,hedge(4)))*spenso::projm(spenso::bis(4,vertex(0,1)),spenso::bis(4,hedge(6))))*spenso::g(spenso::cof(3,hedge(6)),spenso::dind(spenso::cof(3,hedge(2))))"];
-          1[dod="0" int_id="V_79" num="((-2*spenso::gamma(spenso::bis(4,hedge(8)),spenso::bis(4,vertex(1,1)),spenso::mink(4,hedge(5)))*spenso::projp(spenso::bis(4,vertex(1,1)),spenso::bis(4,hedge(3)))+spenso::gamma(spenso::bis(4,hedge(8)),spenso::bis(4,vertex(1,1)),spenso::mink(4,hedge(5)))*spenso::projm(spenso::bis(4,vertex(1,1)),spenso::bis(4,hedge(3))))*UFO::GC_58+UFO::GC_50*spenso::gamma(spenso::bis(4,hedge(8)),spenso::bis(4,vertex(1,1)),spenso::mink(4,hedge(5)))*spenso::projm(spenso::bis(4,vertex(1,1)),spenso::bis(4,hedge(3))))*spenso::g(spenso::cof(3,hedge(3)),spenso::dind(spenso::cof(3,hedge(8))))"];
-          2[dod="0" int_id="V_71" num="UFO::GC_1*spenso::g(spenso::cof(3,hedge(9)),spenso::dind(spenso::cof(3,hedge(10))))*spenso::gamma(spenso::bis(4,hedge(10)),spenso::bis(4,hedge(9)),spenso::mink(4,hedge(0)))"];
-          3[dod="0" int_id="V_71" num="UFO::GC_1*spenso::g(spenso::cof(3,hedge(11)),spenso::dind(spenso::cof(3,hedge(7))))*spenso::gamma(spenso::bis(4,hedge(7)),spenso::bis(4,hedge(11)),spenso::mink(4,hedge(1)))"];
-
-          2:1	-> 3:0	 [id=0 dir=none source="{ufo_order:2}" sink="{ufo_order:2}"  dod="-2" is_cut="0"  lmb_rep="P(0,a___)" name="e0" num="1" particle="a"];
-          2:10	-> 3:11	 [id=1 source="{ufo_order:0}" sink="{ufo_order:1}"  dod="-1"  lmb_rep="-1*K(1,a___)+-1*P(0,a___)" name="e1" num="Q(1,spenso::mink(4,edge(1,1)))*spenso::g(spenso::cof(3,hedge(10)),spenso::dind(spenso::cof(3,hedge(11))))*spenso::gamma(spenso::bis(4,hedge(11)),spenso::bis(4,hedge(10)),spenso::mink(4,edge(1,1)))" particle="d"];
-          0:2	-> 1:3	 [id=2 source="{ufo_order:0}" sink="{ufo_order:1}"  dod="-1"  lmb_id="0" lmb_rep="K(0,a___)" name="e2" num="Q(2,spenso::mink(4,edge(2,1)))*spenso::g(spenso::cof(3,hedge(2)),spenso::dind(spenso::cof(3,hedge(3))))*spenso::gamma(spenso::bis(4,hedge(3)),spenso::bis(4,hedge(2)),spenso::mink(4,edge(2,1)))" particle="d"];
-          0:4	-> 1:5	 [id=3 dir=none source="{ufo_order:2}" sink="{ufo_order:2}"  dod="0"  lmb_rep="-1*K(0,a___)+-1*K(1,a___)" name="e3" num="-1*spenso::g(spenso::mink(4,hedge(4)),spenso::mink(4,hedge(5)))+Q(3,spenso::mink(4,hedge(4)))*Q(3,spenso::mink(4,hedge(5)))*UFO::MZ^(-2)" particle="Z"];
-          0:6	-> 3:7	 [id=4 dir=back source="{ufo_order:1}" sink="{ufo_order:0}"  dod="-1"  lmb_id="1" lmb_rep="K(1,a___)" name="e4" num="-1*Q(4,spenso::mink(4,edge(4,1)))*spenso::g(spenso::cof(3,hedge(7)),spenso::dind(spenso::cof(3,hedge(6))))*spenso::gamma(spenso::bis(4,hedge(6)),spenso::bis(4,hedge(7)),spenso::mink(4,edge(4,1)))" particle="d~"];
-          1:8	-> 2:9	 [id=5 source="{ufo_order:0}" sink="{ufo_order:1}"  dod="-1"  lmb_rep="-1*K(1,a___)" name="e5" num="Q(5,spenso::mink(4,edge(5,1)))*spenso::g(spenso::cof(3,hedge(8)),spenso::dind(spenso::cof(3,hedge(9))))*spenso::gamma(spenso::bis(4,hedge(9)),spenso::bis(4,hedge(8)),spenso::mink(4,edge(5,1)))" particle="d"];
-        }
-        "#);
-    }
-
-    #[test]
     fn test_pols_tree() {
         test_initialise().unwrap();
         let g: Graph = dot!(digraph qqx_aaa_tree_1 {
@@ -1906,119 +2322,6 @@ mod failing {
     }
 
     #[test]
-    fn parse_lmbsetting() {
-        test_initialise().unwrap();
-        let g: Graph = dot!(
-            digraph G{
-                graph [
-                    multiplicity_factor = "1/2"
-                    overall_factor = "2*x"
-                    color = "spenso::t"
-                    colorless = "spenso::gamma"
-                ]
-                ext [style=invis]
-                A [num="1" color_num="a"]
-                B [num="1"]
-                C [num="1"]
-                D [num="1"]
-                E [num="1"]
-                ext -> A  [pdg=1000]
-                ext -> C  [pdg=1000]
-                C -> A    [pdg=1000, num="P(eid,spenso::mink(4,0))"]
-                A -> D    [pdg=1000, num="P(eid,spenso::mink(4,0))"]
-                D -> B    [pdg=1000, num="1"]
-                B -> ext   [pdg=1000]
-                E -> B    [pdg=1000,lmb_id=0]
-                E -> A    [pdg=1000,lmb_id=1]
-                E -> C   [pdg=1000]
-                C -> D    [pdg=1000, num="1"]
-                B -> ext   [pdg=1000]
-            },"scalars"
-        )
-        .unwrap();
-
-        assert_snapshot!(g.debug_dot(),@r#"
-        digraph G{
-          num = "1";
-          overall_factor = "2*x";
-          overall_factor_evaluated = "2*x";
-          projector = "1";
-          A[dod="0" num="1"];
-          B[dod="0" num="1"];
-          C[dod="0" num="1"];
-          D[dod="0" num="1"];
-          E[dod="0" num="1"];
-
-          A:0	-> D:1	 [id=0 dir=none source="{ufo_order:0}" sink="{ufo_order:0}"  dod="-2"  lmb_rep="K(1,a___)+K(2,a___)+P(2,a___)" name="e0" num="P(0,spenso::mink(4,0))" particle="scalar_0"];
-          ext1	 [style=invis];
-          B:2	-> ext1	 [id=1 dir=none source="{ufo_order:0}" dod="-2"  lmb_rep="P(0,a___)" name="e1" num="1𝑖" particle="scalar_0"];
-          ext2	 [style=invis];
-          B:3	-> ext2	 [id=2 dir=none source="{ufo_order:1}" dod="-2"  lmb_rep="P(1,a___)" name="e2" num="1𝑖" particle="scalar_0"];
-          C:4	-> A:5	 [id=3 dir=none source="{ufo_order:0}" sink="{ufo_order:1}"  dod="-2"  lmb_id="2" lmb_rep="K(2,a___)" name="e3" num="P(3,spenso::mink(4,0))" particle="scalar_0"];
-          C:6	-> D:7	 [id=4 dir=none source="{ufo_order:1}" sink="{ufo_order:1}"  dod="-2"  lmb_rep="-1*K(0,a___)+-1*K(1,a___)+-1*K(2,a___)+-1*P(2,a___)+P(0,a___)+P(1,a___)" name="e4" num="1" particle="scalar_0"];
-          D:8	-> B:9	 [id=5 dir=none source="{ufo_order:2}" sink="{ufo_order:2}"  dod="-2"  lmb_rep="-1*K(0,a___)+P(0,a___)+P(1,a___)" name="e5" num="1" particle="scalar_0"];
-          E:10	-> A:11	 [id=6 dir=none source="{ufo_order:0}" sink="{ufo_order:2}"  dod="-2"  lmb_id="1" lmb_rep="K(1,a___)" name="e6" num="1" particle="scalar_0"];
-          E:12	-> B:13	 [id=7 dir=none source="{ufo_order:1}" sink="{ufo_order:3}"  dod="-2"  lmb_id="0" lmb_rep="K(0,a___)" name="e7" num="1" particle="scalar_0"];
-          E:14	-> C:15	 [id=8 dir=none source="{ufo_order:2}" sink="{ufo_order:2}"  dod="-2"  lmb_rep="-1*K(0,a___)+-1*K(1,a___)" name="e8" num="1" particle="scalar_0"];
-          ext9	 [style=invis];
-          ext9	-> A:16	 [id=9 dir=none sink="{ufo_order:3}" dod="-2"  lmb_rep="P(2,a___)" name="e9" num="1𝑖" particle="scalar_0"];
-          ext10	 [style=invis];
-          ext10	-> C:17	 [id=10 dir=none sink="{ufo_order:3}" dod="-2"  lmb_rep="-1*P(2,a___)+P(0,a___)+P(1,a___)" name="e10" num="1𝑖" particle="scalar_0"];
-        }
-        "#);
-
-        println!(
-            "{}",
-            g.underlying
-                .dot_lmb_of(&g.underlying.full(), &g.loop_momentum_basis)
-        );
-
-        let num = Numerator::<UnInit>::default().from_new_graph(&g, &g.underlying.full_filter());
-
-        let expr = num.state.expr.as_view();
-
-        let lib: DummyLibrary<SymbolicTensor<Aind>> = DummyLibrary::<_>::new();
-        let net =
-            Network::<NetworkStore<SymbolicTensor<Aind>, Atom>, _, Symbol, Aind>::try_from_view::<
-                SymbolicTensor<Aind>,
-                _,
-            >(expr, &lib, &ParseSettings::default())
-            .unwrap();
-
-        println!("{}", expr);
-        println!(
-            "{}",
-            net.dot_display_impl(
-                ToString::to_string,
-                |_| None,
-                |a| {
-                    if let Ok(a) = ShadowedStructure::<Aind>::parse(a.expression.as_view()) {
-                        a.name()
-                            .map(|s| {
-                                if let Some(a) = a.args() {
-                                    FunctionBuilder::new(s).add_args(&a).finish().to_string()
-                                } else {
-                                    s.to_string()
-                                }
-                            })
-                            .unwrap_or("".to_string())
-                    } else {
-                        "".to_string()
-                    }
-                },
-                ToString::to_string
-            )
-        );
-
-        let num = num.color_simplify();
-
-        println!("{}", num.state.expr);
-        let num = num.gamma_simplify();
-
-        println!("{}", num.state.expr);
-    }
-
-    #[test]
     fn explicit_hedge_payload_round_trips_in_dot_export() {
         test_initialise().unwrap();
         let g: Graph = dot!(
@@ -2088,36 +2391,55 @@ mod failing {
         );
         assert!(outgoing_edge.contains("!\""), "{outgoing_edge}");
     }
+}
 
-    #[test]
-    #[should_panic(expected = "vertex dod autogeneration is not implemented yet")]
-    fn missing_vertex_dod_panics() {
-        test_initialise().unwrap();
-        let _: Graph = dot!(
-            digraph missing_vertex_dod{
-                ext_in [style=invis]
-                ext_out [style=invis]
-                A [num=1]
-                ext_in -> A [name=e_in num=1 dod=-2 sink="{ufo_order:0,dod:-2}"]
-                A -> ext_out [name=e_out num=1 dod=-2 source="{ufo_order:1,dod:-2}"]
-            }
-        )
-        .unwrap();
-    }
+#[test]
+fn missing_vertex_dod_is_autogenerated() {
+    test_initialise().unwrap();
+    let graph: Graph = dot!(
+        digraph missing_vertex_dod{
+            ext_in [style=invis]
+            ext_out [style=invis]
+            A [num=1]
+            ext_in -> A [name=e_in num=1 dod=-2 sink="{ufo_order:0,dod:-2}"]
+            A -> ext_out [name=e_out num=1 dod=-2 source="{ufo_order:1,dod:-2}"]
+        }
+    )
+    .unwrap();
 
-    #[test]
-    #[should_panic(expected = "hedge dod autogeneration is not implemented yet")]
-    fn missing_hedge_dod_panics() {
-        test_initialise().unwrap();
-        let _: Graph = dot!(
-            digraph missing_hedge_dod{
-                ext_in [style=invis]
-                ext_out [style=invis]
-                A [num=1 dod=0]
-                ext_in -> A [name=e_in num=1 dod=-2 sink="{ufo_order:0}"]
-                A -> ext_out [name=e_out num=1 dod=-2 source="{ufo_order:1}"]
-            }
-        )
-        .unwrap();
+    let dod = &graph.underlying[NodeIndex(0)].dod;
+    assert_eq!(dod.value, 0);
+    assert!(dod.autogenerated);
+}
+
+#[test]
+fn hedge_payload_does_not_require_dod() {
+    test_initialise().unwrap();
+    let graph: Graph = dot!(
+        digraph missing_hedge_dod{
+            ext_in [style=invis]
+            ext_out [style=invis]
+            A [num=1 dod=0]
+            ext_in -> A [name=e_in num=1 dod=-2 sink="{ufo_order:0}"]
+            A -> ext_out [name=e_out num=1 dod=-2 source="{ufo_order:1}"]
+        }
+    )
+    .unwrap();
+
+    let mut orders = graph
+        .underlying
+        .iter_hedges()
+        .map(|(_, hedge)| {
+            assert!(!hedge.ufo_order.autogenerated);
+            hedge.ufo_order.value
+        })
+        .collect::<Vec<_>>();
+    orders.sort();
+    assert_eq!(orders, vec![0, 1]);
+    assert_eq!(graph.underlying[NodeIndex(0)].dod.value, 0);
+    assert!(!graph.underlying[NodeIndex(0)].dod.autogenerated);
+    for edge in [EdgeIndex(0), EdgeIndex(1)] {
+        assert_eq!(graph.underlying[edge].dod.value, -2);
+        assert!(!graph.underlying[edge].dod.autogenerated);
     }
 }

@@ -27,13 +27,14 @@ use std::collections::{HashSet, VecDeque};
 
 use std::ops::{Deref, RangeInclusive};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, OnceLock};
 use std::time::Instant;
 use symbolica::atom::AtomView;
 use symbolica::coefficient::Coefficient;
 use symbolica::domains::algebraic::AlgebraicExtension;
 use symbolica::domains::finite_field::PrimeIteratorU64;
 use symbolica::domains::float::Complex as SymbolicaComplex;
+use symbolica::domains::integer::Integer;
 use symbolica::function;
 use symbolica::graph::{GenerationSettings, HalfEdge};
 use symbolica::id::Replacement;
@@ -91,12 +92,10 @@ type RationalPoly = symbolica::poly::polynomial::MultivariatePolynomial<
         symbolica::domains::rational::FractionField<symbolica::domains::integer::IntegerRing>,
     >,
 >;
-type SampleEvaluationsAsPolynomial = (Vec<RationalPoly>, Vec<bool>);
 
 use color_eyre::Result;
 use itertools::Itertools;
 use linnet::half_edge::HedgeGraph;
-use linnet::half_edge::NodeIndex;
 use linnet::half_edge::involution::{EdgeData, EdgeIndex, Flow, Orientation};
 use linnet::half_edge::subgraph::{
     InternalSubGraph, ModifySubSet, OrientedCut, SuBitGraph, SubSetLike, SubSetOps,
@@ -156,6 +155,20 @@ impl EdgeColor {
             pdg: particle.0.pdg_code,
         }
     }
+}
+
+pub(crate) fn feynman_graph_automorphism_group_size<N, E>(
+    graph: &SymbolicaGraph<N, E>,
+    symbolica_group_size: &Integer,
+) -> Integer {
+    // Graphica 3.0 counts a flip for every self-loop, including directed
+    // loops. Their ends are distinct particle/antiparticle fields, so
+    // those flips do not belong to the Feynman graph automorphism group.
+    graph
+        .edges()
+        .iter()
+        .filter(|edge| edge.directed && edge.vertices.0 == edge.vertices.1)
+        .fold(symbolica_group_size.clone(), |size, _| size / 2)
 }
 
 fn polyrat_to_atom(
@@ -227,7 +240,6 @@ fn polyrat_to_atom(
 #[derive(Clone)]
 pub(crate) struct CanonizedGraphInfo {
     pub canonized_graph: SymbolicaGraph<NodeColorWithoutVertexRule, String>,
-    #[allow(dead_code)]
     pub graph: SymbolicaGraph<NodeColorWithVertexRule, EdgeColor>,
     pub graph_with_canonized_flow: SymbolicaGraph<NodeColorWithVertexRule, EdgeColor>,
     pub gammaloop_graph: ParseGraph,
@@ -1142,6 +1154,12 @@ pub fn evaluate_overall_factor(factor: AtomView) -> Atom {
     res.expand()
 }
 
+fn grouped_overall_factor_is_zero(factor: AtomView<'_>) -> bool {
+    // Rescaling can leave polynomial denominators. Combine only these scalar
+    // weights over a common denominator before deciding whether the class vanishes.
+    evaluate_overall_factor(factor).together().is_zero()
+}
+
 pub fn evaluate_sign_origin(factor: AtomView) -> Atom {
     let mut res = factor.to_owned();
     for header in [
@@ -1318,7 +1336,8 @@ impl ProcessDefinition {
                     let p = model.get_particle_from_pdg(*pdg as isize);
 
                     let structure = p.spin_reps();
-                    let global_name = EdgeData::new(p, Orientation::Default).pol_symbol(Flow::Sink);
+                    let global_name =
+                        EdgeData::new(p, Orientation::Default).pol_symbol(Flow::Source);
 
                     let len = structure.size().unwrap();
 
@@ -1682,14 +1701,14 @@ impl ProcessDefinition {
                     if let (Some(i), Some(f)) = (i, f) {
                         let i = he_graph
                             .iter_nodes()
-                            .find_position(|a| a.2.get_external_tag() == *i as i32);
+                            .find(|a| a.2.get_external_tag() == *i as i32);
                         let f = he_graph
                             .iter_nodes()
-                            .find_position(|a| a.2.get_external_tag() == *f as i32);
+                            .find(|a| a.2.get_external_tag() == *f as i32);
 
-                        if let (Some((id_i, (_, _, c_i))), Some((id_f, (_, _, _)))) = (i, f) {
-                            he_graph
-                                .identify_nodes(&[NodeIndex(id_i), NodeIndex(id_f)], c_i.clone());
+                        if let (Some((id_i, _, c_i)), Some((id_f, _, _))) = (i, f) {
+                            // Identification preserves node IDs, not iterator positions.
+                            he_graph.identify_nodes(&[id_i, id_f], c_i.clone());
                         }
                     }
                 }
@@ -2237,7 +2256,15 @@ impl ProcessDefinition {
                     model.get_particle_from_pdg(edge.data.pdg)
                 };
 
-                let keep_direction = is_edge_external;
+                // A ghost vertex differentiates one end of its propagator.
+                // Preserve that flow when selecting the momentum chart so an
+                // undirected skeleton reflection cannot misalign the derivatives.
+                // Mass/spin coloring identifies ghosts with antighosts, so the
+                // arrow must encode physical flow rather than storage orientation.
+                if particle.0.is_ghost() && particle.0.is_antiparticle() {
+                    remapped_edge_vertices = (remapped_edge_vertices.1, remapped_edge_vertices.0);
+                }
+                let keep_direction = is_edge_external || particle.0.is_ghost();
 
                 // // We want to forget the orientation of fermions (except for externals) to capture furry, but we need the canonization to be sensitive to charged vector bosons when it is connected to fermion lines
                 // if !keep_direction && edge.directed && particle.is_vector() {
@@ -2261,9 +2288,9 @@ impl ProcessDefinition {
                 // for performing numerical comparisons for grouping isomorphic graphs. If we do not include the spin in the colouring, we may incorrectly
                 // sort two isomorphic graphs with and interchange of massless quarks and gluons which will prevent their grouping (final result still correct, but more diagrams).
                 // This is avoided by including the spin in the color, which will prevent massless quark and gluons from ever being interchanged.
-                // Of course, even then, it could be that we pick two sorted representatives that are not isomorphic, even though there exist a different isomorphic skeletton graph
-                // which would have given a match when doing the numerical comparison. In the SM, this should never happen, and for BSM we can afford to lose some grouping.
-                // The only way to avoid this would be to numerically test all isomorphic permutations of the skeletton graph, which is prohibitively slow.
+                // Distinct routings of the same skeleton can still yield different comparison numerators,
+                // so selecting one routing can miss valid groupings. Numerically testing all isomorphic
+                // permutations of the skeleton graph would be prohibitively slow.
                 skeletton_graph
                     .add_edge(
                         remapped_edge_vertices.0,
@@ -2345,7 +2372,13 @@ impl ProcessDefinition {
                 // internal edges connecting these external fermions.
                 // If one would fix those edges (necessary e.g. for e- d > e- d DIS process) then one could add '&& is_external' below, which
                 // would allow to capture additional groupings involving the charged. W bosons.
-                if *was_left_and_right_swapped {
+                // Neutral adjoint Faddeev-Popov ghosts transform in color
+                // under CP without exchanging ghost and antighost fields.
+                // Retain their derivative flow; charged ghost partners require
+                // a separate ghost-number-preserving gauge-charge mapping.
+                if *was_left_and_right_swapped
+                    && !(particle.0.is_ghost() && particle.0.color == 8 && particle.0.charge == 0.0)
+                {
                     particle = particle.0.get_anti_particle(model);
                 }
                 (
@@ -3410,13 +3443,14 @@ impl ProcessDefinition {
             bar.finish_and_clear();
         }
 
-        // Re-interpret the symmetry factor as a multiplier where the symbolica factor from symbolica appears in the denominator
+        // The Feynman graph automorphism group appears in the denominator.
         let graphs = graphs
             .iter()
             .map(|(g, symmetry_factor)| {
+                let symmetry_factor = feynman_graph_automorphism_group_size(g, symmetry_factor);
                 (
                     g.clone(),
-                    Atom::num(1) / function!(symbol!("AutG"), Atom::num(symmetry_factor.clone())),
+                    Atom::num(1) / function!(symbol!("AutG"), Atom::num(symmetry_factor)),
                 )
             })
             .collect::<HashMap<_, _>>();
@@ -4062,7 +4096,10 @@ impl ProcessDefinition {
                         // it induces a misalignment of the LMB (w.r.t to their sign/orientation) due to the flip of the edges.
                         // In principle this could be fixed by forcing to pick an LMB for edges that have not been flipped and allowing closed loops
                         // of antiparticles as well, but I prefer to leave this a post-re-processing option instead.
-                        let canonized_fermion_flow_bare_graph = if CANONIZE_GRAPH_FLOWS {
+                        // An unchanged indexed graph already has the canonical
+                        // flow, including its edge IDs and momentum chart.
+                        let canonized_fermion_flow_bare_graph = if CANONIZE_GRAPH_FLOWS
+                            && canonical_graph.graph != canonical_graph.graph_with_canonized_flow {
                             let mut canonized_fermion_flow_graph = ParseGraph::from_symbolica_graph(
                                 model,
                                 graph_name.clone(),
@@ -4191,7 +4228,8 @@ impl ProcessDefinition {
 
                                 // Test if Lorentz evaluations are zero
                                 if !numerator_data.as_ref().unwrap().sample_evaluations.is_empty()
-                                    && numerator_data.as_ref().unwrap().sample_evaluations_are_zero.iter().all(|&b| b) {
+                                    && (0..numerator_data.as_ref().unwrap().sample_evaluations.len())
+                                        .all(|index| numerator_data.as_ref().unwrap().sample_is_zero(index)) {
                                         {
                                             let n_zeroes_color_value = n_zeroes_color.lock().unwrap();
                                             let mut n_zeroes_lorentz_value = n_zeroes_lorentz.lock().unwrap();
@@ -4290,10 +4328,7 @@ impl ProcessDefinition {
                 } else {
                     combined_overall_factor = bare_graph_representative.overall_factor.clone();
                 }
-                if evaluate_overall_factor(combined_overall_factor.as_view())
-                    .expand()
-                    .is_zero()
-                {
+                if grouped_overall_factor_is_zero(combined_overall_factor.as_view()) {
                     debug!(
                         combined_overall_factor = %combined_overall_factor,
                         "Numerator-aware grouping produced an exact cancellation"
@@ -4594,19 +4629,34 @@ pub(crate) struct ProcessedNumeratorForComparison {
     /// - Evaluations include color expansion, tensor network execution, and color factor substitution
     /// - May have common factors collected depending on the grouping mode and ANALYZE_RATIO_AS_RATIONAL_POLYNOMIAL setting
     sample_evaluations: Vec<Atom>,
-    sample_evaluations_as_polynomial: Vec<
-        symbolica::poly::polynomial::MultivariatePolynomial<
-            AlgebraicExtension<
-                symbolica::domains::rational::FractionField<
-                    symbolica::domains::integer::IntegerRing,
-                >,
-            >,
-        >,
-    >,
-    sample_evaluations_are_zero: Vec<bool>,
+    // Convert only sampled scalar coefficients, retaining factorized graph
+    // numerators and reusing each exact conversion for zero tests and ratios.
+    sample_evaluations_as_polynomial: Vec<OnceLock<RationalPoly>>,
 }
 
 impl ProcessedNumeratorForComparison {
+    fn sample_polynomial(&self, index: usize) -> &RationalPoly {
+        self.sample_evaluations_as_polynomial[index]
+            .get_or_init(|| self.sample_evaluations[index].to_polynomial(&Q_I.clone(), None))
+    }
+
+    fn sample_is_zero(&self, index: usize) -> bool {
+        let sample = &self.sample_evaluations[index];
+        if sample.is_zero() {
+            true
+        } else if matches!(sample.as_view(), AtomView::Num(_)) {
+            false
+        } else {
+            self.sample_polynomial(index).is_zero()
+        }
+    }
+
+    fn sample_zero_masks_match(&self, other: &Self) -> bool {
+        self.sample_evaluations.len() == other.sample_evaluations.len()
+            && (0..self.sample_evaluations.len())
+                .all(|index| self.sample_is_zero(index) == other.sample_is_zero(index))
+    }
+
     /// Compare two numerators allowing only sign changes (±1 ratios).
     #[instrument(skip_all, fields(self_id = %self.diagram_id, other_id = %other.diagram_id))]
     fn compare_with_sign_only(&self, other: &ProcessedNumeratorForComparison) -> Option<Atom> {
@@ -4670,7 +4720,7 @@ impl ProcessedNumeratorForComparison {
 
         // Fall back to sample evaluations. A zero/nonzero mismatch cannot
         // match, but must not override an earlier symbolic acceptance.
-        if self.sample_evaluations_are_zero != other.sample_evaluations_are_zero {
+        if !self.sample_zero_masks_match(other) {
             debug!("Sample zero masks differ - cannot group diagrams");
             return None;
         }
@@ -4702,8 +4752,8 @@ impl ProcessedNumeratorForComparison {
                 let ratio = analyze_diff_and_sum(a.as_view(), b.as_view()).or_else(|| {
                     // Only the already sampled scalar coefficients enter polynomial
                     // comparison; canonical tensor numerators stay factorized.
-                    let a = self.sample_evaluations_as_polynomial.get(idx)?;
-                    let b = other.sample_evaluations_as_polynomial.get(idx)?;
+                    let a = self.sample_polynomial(idx);
+                    let b = other.sample_polynomial(idx);
                     if (a - b).is_zero() {
                         Some(Atom::num(1))
                     } else if (a + b).is_zero() {
@@ -4845,7 +4895,7 @@ impl ProcessedNumeratorForComparison {
 
         // Fall back to sample evaluations. A zero/nonzero mismatch cannot
         // match, but must not override an earlier symbolic acceptance.
-        if self.sample_evaluations_are_zero != other.sample_evaluations_are_zero {
+        if !self.sample_zero_masks_match(other) {
             debug!("Sample zero masks differ - cannot group diagrams");
             return None;
         }
@@ -4870,7 +4920,7 @@ impl ProcessedNumeratorForComparison {
                     denominator_diagram_id = %other.diagram_id,
                     "Sample evaluation A"
                 );
-                let ratio = if a == b {
+                let ratio = if a == b || self.sample_is_zero(idx) {
                     Some(Atom::num(1))
                 } else if *a == b * Atom::num(-1) {
                     Some(Atom::num(-1))
@@ -4884,8 +4934,8 @@ impl ProcessedNumeratorForComparison {
                     let ratio = if ANALYZE_RATIO_AS_RATIONAL_POLYNOMIAL {
                         // let a_poly = a.to_polynomial(&Q_I.clone(), None);
                         // let b_poly = b.to_polynomial(&Q_I.clone(), None);
-                        let a_poly = &self.sample_evaluations_as_polynomial[idx];
-                        let b_poly = &other.sample_evaluations_as_polynomial[idx];
+                        let a_poly = self.sample_polynomial(idx);
+                        let b_poly = other.sample_polynomial(idx);
                         if a_poly.is_zero() || b_poly.is_zero() {
                             debug!(
                                 sample_idx = %idx,
@@ -4979,7 +5029,6 @@ impl ProcessedNumeratorForComparison {
             canonized_numerator: None,
             sample_evaluations: vec![],
             sample_evaluations_as_polynomial: vec![],
-            sample_evaluations_are_zero: vec![],
         };
         let res = if let Some(group_options) = numerator_aware_isomorphism_grouping.get_options() {
             if group_options.test_canonized_numerator
@@ -5054,6 +5103,8 @@ impl ProcessedNumeratorForComparison {
                         return Err(FeynGenError::Interrupted);
                     }
                     let expanded = numerator.expand_color();
+                    // Initialize at the original evaluation point to preserve error ordering.
+                    let mut canonized_colors = vec![None; expanded.len()];
 
                     let sample_evaluations = samples
                     .iter()
@@ -5131,16 +5182,19 @@ impl ProcessedNumeratorForComparison {
                                     .into();
 
                                 // println!("Trying to canonize:{c}");
-                                let canonized_color = c
-                                    .canonize::<Aind>(Aind::Dummy)
-                                    .map_err(|source| {
-                                        FeynGenError::Eyre(
-                                            eyre!(source).wrap_err(format!(
-                                                "{}; failed to canonicalize color factor",
-                                                context()
-                                            )),
-                                        )
-                                    })?;
+                                if canonized_colors[term_index].is_none() {
+                                    canonized_colors[term_index] = Some(c
+                                        .canonize::<Aind>(Aind::Dummy)
+                                        .map_err(|source| {
+                                            FeynGenError::Eyre(
+                                                eyre!(source).wrap_err(format!(
+                                                    "{}; failed to canonicalize color factor",
+                                                    context()
+                                                )),
+                                            )
+                                        })?);
+                                }
+                                let canonized_color = canonized_colors[term_index].as_ref().unwrap();
                                 debug!("canonizing \n{c}\n gives\n{canonized_color}");
                                 let a = ProcessDefinition::substitute_color_factors(
                                     (canonized_color * scalar).as_view(),
@@ -5195,36 +5249,14 @@ impl ProcessedNumeratorForComparison {
                         }
                     }
                 }
-                let samples_evals_as_polynomial: SampleEvaluationsAsPolynomial =
-                    if ANALYZE_RATIO_AS_RATIONAL_POLYNOMIAL
-                        || !matches!(
-                        numerator_aware_isomorphism_grouping,
-                        NumeratorAwareGraphGroupingOption::GroupIdenticalGraphUpToScalarRescaling(
-                            _
-                        )
-                    ) {
-                        let se_as_poly = sample_evaluations
-                            .iter()
-                            .map(|a| a.to_polynomial(&Q_I.clone(), None))
-                            .collect::<Vec<_>>();
-                        let se_are_zero =
-                            se_as_poly.iter().map(|p| p.is_zero()).collect::<Vec<_>>();
-                        (se_as_poly, se_are_zero)
-                    } else {
-                        (
-                            vec![],
-                            sample_evaluations
-                                .iter()
-                                .map(|a| a.expand().is_zero())
-                                .collect::<Vec<_>>(),
-                        )
-                    };
+                let sample_evaluations_as_polynomial = (0..sample_evaluations.len())
+                    .map(|_| OnceLock::new())
+                    .collect();
                 ProcessedNumeratorForComparison {
                     diagram_id,
                     canonized_numerator,
                     sample_evaluations,
-                    sample_evaluations_as_polynomial: samples_evals_as_polynomial.0,
-                    sample_evaluations_are_zero: samples_evals_as_polynomial.1,
+                    sample_evaluations_as_polynomial,
                 }
             } else {
                 default_processed_data
