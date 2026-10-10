@@ -258,7 +258,7 @@ fn generated_trees_match_the_free_tree_enumeration() {
         .allow_zero_flow_edges(true);
     let mut generated: BTreeMap<usize, BTreeSet<Form>> = BTreeMap::new();
     for diagram in generator.iter().unwrap() {
-        let tree = Graph::of_hedge_graph(&diagram.graph);
+        let tree = Graph::of_hedge_graph(diagram.graph());
         let symmetry = tree.symmetry();
         assert_eq!(diagram.automorphism_count, Some(symmetry.order));
         assert!(generated
@@ -542,7 +542,7 @@ fn genquarticg_quartic_graphs() {
     let mut generated = BTreeSet::new();
     let mut generated_orders = vec![];
     for diagram in generator.iter().unwrap() {
-        let g = Graph::of_hedge_graph(&diagram.graph);
+        let g = Graph::of_hedge_graph(diagram.graph());
         assert_eq!(g.n, 9);
         let symmetry = g.symmetry();
         assert_eq!(diagram.automorphism_count, Some(symmetry.order));

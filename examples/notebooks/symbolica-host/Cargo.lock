@@ -1387,6 +1387,7 @@ dependencies = [
  "linnest",
  "linnet",
  "nu-ansi-term",
+ "once_cell",
  "serde",
  "serde_json",
  "spenso",

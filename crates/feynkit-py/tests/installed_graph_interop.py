@@ -128,6 +128,34 @@ restored = fk.FeynmanDiagram.from_json(model, diagram.to_json())
 assert restored.to_json() == diagram.to_json()
 from_dot = fk.FeynmanDiagram.from_dot(model, diagram.to_dot())
 assert from_dot.to_json() == diagram.to_json()
+
+# Minimal output retains genuine name absence through every native graph view.
+minimal = (
+    model.process(
+        ["scalar_0"], ["scalar_0", "scalar_0"], vertex_allow=["V_3_SCALAR_000"]
+    )
+    .generate_diagrams(loops=0, output="minimal")
+    .diagrams[0]
+)
+assert minimal.name is None
+assert minimal.to_graph().name is None
+assert "name=None" in repr(minimal)
+for restored_minimal in (
+    fk.FeynmanDiagram.from_json(model, minimal.to_json()),
+    fk.FeynmanDiagram.from_dot(model, minimal.to_dot()),
+):
+    assert restored_minimal.name is None
+    assert restored_minimal.to_graph().name is None
+    assert restored_minimal.id == minimal.id
+    assert restored_minimal.numerator_expression() == minimal.numerator_expression()
+    assert restored_minimal.to_json() == minimal.to_json()
+for name in ("", "null"):
+    named_data = json.loads(minimal.to_json())
+    named_data["name"] = name
+    explicitly_named = fk.FeynmanDiagram.from_json(model, json.dumps(named_data))
+    assert explicitly_named.name == name
+    assert explicitly_named.id == minimal.id
+    assert fk.FeynmanDiagram.from_dot(model, explicitly_named.to_dot()).name == name
 try:
     diagram.compatible_momentum_basis(restored.loop_momentum_basis)
 except fk.DiagramError:

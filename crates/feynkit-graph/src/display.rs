@@ -202,7 +202,7 @@ impl FeynmanDiagram {
         writeln!(
             output,
             "  }}, name: {}, data: (symmetry-factor: {}, overall-factor: {}, numerator: {}, loop-count: {}))",
-            typst_string(self.name()),
+            typst_string(self.name().unwrap_or_default()),
             self.symmetry_factor(),
             typst_string(&self.overall_factor().to_canonical_string()),
             typst_string(&self.numerator().to_canonical_string()),

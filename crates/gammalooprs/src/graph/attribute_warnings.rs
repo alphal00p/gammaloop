@@ -178,7 +178,7 @@ fn unknown_attribute_warnings(dot: &DotDiagram) -> Vec<String> {
             let mut message = format!(
                 "Unknown {} attribute '{attr}' on graph '{}'",
                 spec.entity,
-                diagram.name()
+                diagram.name().unwrap_or("<unnamed>")
             );
             if let Some(owner) = &owner {
                 message.push_str(&format!(", {} '{owner}'", spec.entity));

@@ -18,11 +18,13 @@
 use std::{
     collections::{BTreeMap, BTreeSet},
     fmt::{self, Write as _},
+    sync::Arc,
 };
 
-use feynkit_generator::{GenerationReport, GenerationResult};
+use feynkit_generator::{GenerationReport, GenerationResult, SourceIdentity};
 use feynkit_graph::{
-    DiagramId, FeynmanDiagram, LoopMomentumBasis, expressions::evaluate_overall_factor,
+    CanonicalDiagramKey, DiagramId, FeynmanDiagram, LoopMomentumBasis,
+    expressions::evaluate_overall_factor,
 };
 use serde_json::Value;
 use symbolica::{
@@ -35,8 +37,13 @@ use symbolica::{
 pub struct Entry {
     /// Digest of the canonical key, the canonical form of the diagram's isomorphism class.
     pub key: u64,
+    /// Full owner key pairs diagrams without relying on the recorded digest.
+    full_key: Arc<CanonicalDiagramKey>,
+    /// Every serialized field except the separately retained typed ID and optional name.
+    /// Sharing this value keeps policy normalization and restricted censuses inexpensive.
+    payload: Arc<Value>,
     pub id: DiagramId,
-    pub name: String,
+    pub name: Option<String>,
     pub symmetry_factor: u64,
     pub overall_factor: String,
     /// The overall factor with its bookkeeping heads evaluated: `1 / |Aut|` with the fermion
@@ -55,8 +62,16 @@ pub struct Entry {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Group {
     pub master: usize,
-    /// Per member: source name, numerator ratio to the master and overall factor.
-    pub members: Vec<[String; 3]>,
+    pub members: Vec<Member>,
+}
+
+/// Group provenance retains physical indices/factors even when names and IDs were omitted.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Member {
+    pub source_index: usize,
+    pub identity: Option<SourceIdentity>,
+    pub ratio: String,
+    pub overall_factor: String,
 }
 
 #[derive(Clone, Debug)]
@@ -94,6 +109,14 @@ impl Digest {
     /// A string and a terminator, so that consecutive strings cannot run together.
     fn text(self, text: &str) -> Self {
         self.bytes(text.as_bytes()).bytes(&[0xff])
+    }
+
+    /// Preserve the previous named encoding; absence has its own tag.
+    fn name(self, name: Option<&str>) -> Self {
+        match name {
+            Some(name) => self.text(name),
+            None => self.bytes(&[0xfe]),
+        }
     }
 
     fn number(self, value: u64) -> Self {
@@ -171,12 +194,18 @@ fn canonical(atom: &Atom) -> String {
 
 impl Entry {
     fn of(diagram: &FeynmanDiagram) -> Entry {
-        let key = serde_json::to_value(diagram.canonical_key().unwrap()).unwrap();
-        // The serialized diagram without its id, model fingerprint and name, split into the
-        // numerators and the rest. The id is a `u128`, which a `Value` holds only once parsed
-        // (as a float), before it is dropped.
+        let full_key = Arc::new(diagram.canonical_key().unwrap());
+        let key = serde_json::to_value(full_key.as_ref()).unwrap();
+        // Preserve the u128 identity through DiagramId below, never through Value's number
+        // representation. Drop its lossy parsed copy and the separately compared name before
+        // retaining the full payload; model identity and every physical field remain exact.
+        // The existing oracle digests still split numerators from the remaining frame.
         let mut serialized: Value =
             serde_json::from_slice(&serde_json::to_vec(diagram).unwrap()).unwrap();
+        let fields = serialized.as_object_mut().unwrap();
+        fields.remove("id").unwrap();
+        fields.remove("name").unwrap();
+        let payload = Arc::new(serialized.clone());
         let fields = serialized.as_object_mut().unwrap();
         let mut numerator = Digest::new();
         for field in ["numerator", "numerator_prefactor", "projector"] {
@@ -189,19 +218,21 @@ impl Entry {
         for fragment in &fragments {
             numerator = numerator.json(fragment);
         }
-        for field in ["id", "model", "name", "symmetry_factor", "overall_factor"] {
+        for field in ["model", "symmetry_factor", "overall_factor"] {
             fields.remove(field);
         }
         let weight = evaluate_overall_factor(diagram.overall_factor().as_view());
         Entry {
             key: Digest::new().json(&key).0,
-            id: diagram.id(),
-            name: diagram.name().to_owned(),
+            full_key,
+            payload,
+            id: diagram.id().unwrap(),
+            name: diagram.name().map(str::to_owned),
             symmetry_factor: diagram.symmetry_factor(),
             overall_factor: canonical(diagram.overall_factor()),
             weight: Rational::try_from(&weight).unwrap_or_else(|_| {
                 panic!(
-                    "{}: overall factor {weight} is not a number",
+                    "{:?}: overall factor {weight} is not a number",
                     diagram.name()
                 )
             }),
@@ -222,12 +253,11 @@ impl Census {
                 members: group
                     .members
                     .iter()
-                    .map(|member| {
-                        [
-                            member.source_name.clone(),
-                            canonical(&member.ratio),
-                            canonical(&member.overall_factor),
-                        ]
+                    .map(|member| Member {
+                        source_index: member.source_diagram,
+                        identity: member.source_identity.clone(),
+                        ratio: canonical(&member.ratio),
+                        overall_factor: canonical(&member.overall_factor),
                     })
                     .collect(),
             })
@@ -239,8 +269,12 @@ impl Census {
         }
     }
 
-    fn by_key(&self) -> BTreeMap<u64, &Entry> {
-        let by_key: BTreeMap<_, _> = self.diagrams.iter().map(|d| (d.key, d)).collect();
+    fn by_key(&self) -> BTreeMap<&CanonicalDiagramKey, &Entry> {
+        let by_key: BTreeMap<_, _> = self
+            .diagrams
+            .iter()
+            .map(|d| (d.full_key.as_ref(), d))
+            .collect();
         assert_eq!(
             by_key.len(),
             self.diagrams.len(),
@@ -281,12 +315,20 @@ impl Census {
             .map(|d| Digest::new().number(d.key).number(d.numerator).0);
         let mut named = Digest::new();
         for d in &self.diagrams {
-            named = named.text(&d.name).number(d.key);
+            named = named.name(d.name.as_deref()).number(d.key);
         }
         for group in &self.groups {
             named = named.number(group.master as u64);
             for member in &group.members {
-                named = member.iter().fold(named, |named, text| named.text(text));
+                named = named
+                    .name(
+                        member
+                            .identity
+                            .as_ref()
+                            .map(|identity| identity.name.as_str()),
+                    )
+                    .text(&member.ratio)
+                    .text(&member.overall_factor);
             }
         }
         let ids: Vec<_> = self
@@ -319,9 +361,10 @@ impl Census {
             ));
         }
         let (left, right) = (self.by_key(), other.by_key());
-        let only = |a: &BTreeMap<u64, &Entry>, b: &BTreeMap<u64, &Entry>| {
+        let only = |a: &BTreeMap<&CanonicalDiagramKey, &Entry>,
+                    b: &BTreeMap<&CanonicalDiagramKey, &Entry>| {
             a.values()
-                .filter(|d| !b.contains_key(&d.key))
+                .filter(|d| !b.contains_key(d.full_key.as_ref()))
                 .take(5)
                 .map(|d| d.name.clone())
                 .collect::<Vec<_>>()
@@ -334,6 +377,23 @@ impl Census {
                 right.len(),
                 only(&left, &right),
                 only(&right, &left)
+            ));
+        }
+        if let Some((l, r)) = left
+            .values()
+            .zip(right.values())
+            .find(|(l, r)| l.payload != r.payload)
+        {
+            let left_payload = l.payload.as_object().unwrap();
+            let right_payload = r.payload.as_object().unwrap();
+            let field = left_payload
+                .keys()
+                .chain(right_payload.keys())
+                .find(|field| left_payload.get(*field) != right_payload.get(*field))
+                .expect("different payloads have a differing field");
+            return Some(format!(
+                "full {field} payload of {:?} vs {:?} differs",
+                l.name, r.name
             ));
         }
         type Field = fn(&Entry) -> String;
@@ -353,7 +413,7 @@ impl Census {
                 .find(|(l, r)| value(l) != value(r))
             {
                 return Some(format!(
-                    "{field} of {} vs {} differs: {} vs {}",
+                    "{field} of {:?} vs {:?} differs: {} vs {}",
                     l.name,
                     r.name,
                     value(l),
@@ -370,18 +430,25 @@ impl Census {
             .find(|(l, r)| l.basis != r.basis)
         {
             return Some(format!(
-                "momentum basis of {} vs {} differs: {:?} vs {:?}",
+                "momentum basis of {:?} vs {:?} differs: {:?} vs {:?}",
                 l.name, r.name, l.basis, r.basis
             ));
         }
         if scope == Scope::Content {
             return None;
         }
+        if self.groups.len() != other.groups.len() {
+            return Some(format!(
+                "group counts differ: {} vs {}",
+                self.groups.len(),
+                other.groups.len()
+            ));
+        }
         let group_sizes = |census: &Census| {
             census
                 .groups
                 .iter()
-                .map(|g| (census.diagrams[g.master].key, g.members.len()))
+                .map(|g| (census.diagrams[g.master].full_key.clone(), g.members.len()))
                 .collect::<BTreeMap<_, _>>()
         };
         if group_sizes(self) != group_sizes(other) {
@@ -396,13 +463,13 @@ impl Census {
             .zip(right.values())
             .find(|(l, r)| l.name != r.name)
         {
-            return Some(format!("names differ: {} vs {}", l.name, r.name));
+            return Some(format!("names differ: {:?} vs {:?}", l.name, r.name));
         }
-        if let Some(position) =
-            (0..self.diagrams.len()).find(|&i| self.diagrams[i].key != other.diagrams[i].key)
+        if let Some(position) = (0..self.diagrams.len())
+            .find(|&i| self.diagrams[i].full_key != other.diagrams[i].full_key)
         {
             return Some(format!(
-                "output order differs first at position {position}: {} vs {}",
+                "output order differs first at position {position}: {:?} vs {:?}",
                 self.diagrams[position].name, other.diagrams[position].name
             ));
         }
@@ -418,6 +485,99 @@ impl Census {
         }
     }
 
+    /// Only requested metadata may differ between Named and Minimal output.
+    pub fn assert_minimal(&self, minimal: &Census, context: &str) {
+        let mut unnamed = self.clone();
+        for entry in &mut unnamed.diagrams {
+            assert!(
+                entry.name.take().is_some(),
+                "{context}: Named diagram lacks a name"
+            );
+        }
+        for group in &mut unnamed.groups {
+            for member in &mut group.members {
+                assert!(
+                    member.identity.take().is_some(),
+                    "{context}: Named source lacks identity"
+                );
+            }
+        }
+        unnamed.assert_same(
+            minimal,
+            Scope::Exact,
+            &format!("{context}: Named vs Minimal"),
+        );
+    }
+
+    /// Resolve every Named member by identity against the full ungrouped inventory,
+    /// including discarded sources. Source indices belong to each request: grouping's
+    /// canonical encounter order can differ from the ungrouped search order.
+    pub fn assert_group_sources(&self, ungrouped: &Census, context: &str) {
+        assert_eq!(ungrouped.groups.len(), ungrouped.diagrams.len());
+        let source_indices: BTreeSet<_> = ungrouped
+            .groups
+            .iter()
+            .map(|group| {
+                assert_eq!(group.members.len(), 1, "{context}: ungrouped reference");
+                group.members[0].source_index
+            })
+            .collect();
+        assert_eq!(
+            source_indices.len(),
+            ungrouped.diagrams.len(),
+            "{context}: repeated ungrouped source index"
+        );
+        ungrouped.by_key(); // Require unique full canonical keys as well as unique IDs.
+        let sources = ungrouped
+            .diagrams
+            .iter()
+            .map(|source| (source.id, source))
+            .collect::<BTreeMap<_, _>>();
+        assert_eq!(
+            sources.len(),
+            ungrouped.diagrams.len(),
+            "{context}: repeated source ID"
+        );
+        let width = sources.len().saturating_sub(1).to_string().len();
+        let mut seen_indices = BTreeSet::new();
+        let mut seen_sources = BTreeSet::new();
+        for group in &self.groups {
+            let master = group.members.first().expect("nonempty group");
+            let identity = master.identity.as_ref().expect("Named source identity");
+            assert_eq!(
+                self.diagrams[group.master].name.as_ref(),
+                Some(&identity.name),
+                "{context}: master source name"
+            );
+            for member in &group.members {
+                assert!(
+                    member.source_index < sources.len(),
+                    "{context}: grouped source index out of bounds"
+                );
+                assert!(
+                    seen_indices.insert(member.source_index),
+                    "{context}: repeated grouped source index"
+                );
+                let identity = member.identity.as_ref().expect("Named source identity");
+                let source = sources.get(&identity.id).expect("group source exists");
+                assert!(
+                    seen_sources.insert(source.full_key.as_ref()),
+                    "{context}: repeated grouped source key"
+                );
+                // check() verifies these fixtures use default naming and no selectors.
+                assert_eq!(
+                    identity.name,
+                    format!("D{:0width$}", member.source_index),
+                    "{context}: source name and request-local index"
+                );
+                assert_eq!(
+                    member.overall_factor, source.overall_factor,
+                    "{context}: source factor"
+                );
+            }
+        }
+    }
+
     /// One line per diagram and per group, for comparing the runs of two builds with `diff`.
     pub fn dump(&self) -> String {
         let mut out = format!("{:?}\n", self.report);
@@ -425,7 +585,7 @@ impl Census {
             writeln!(
                 out,
                 "{} key={:016x} id={} S={} frame={:016x} numerator={:016x} factor={} basis={}",
-                d.name,
+                d.name.as_deref().unwrap_or("null"),
                 d.key,
                 d.id,
                 d.symmetry_factor,
@@ -440,7 +600,11 @@ impl Census {
             writeln!(
                 out,
                 "group {} {:?}",
-                self.diagrams[group.master].name, group.members
+                self.diagrams[group.master]
+                    .name
+                    .as_deref()
+                    .unwrap_or("null"),
+                group.members
             )
             .unwrap();
         }

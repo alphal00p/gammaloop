@@ -158,7 +158,9 @@ pub(crate) fn dot_id(value: &str) -> String {
     }
 }
 
-pub(crate) fn dot_value(value: &str) -> String {
+/// Encode an attribute value for lossless round-tripping through [`DotGraph::from_string`].
+/// Uses DOT quoting rather than JSON escaping, preserving literal backslashes.
+pub fn dot_value(value: &str) -> String {
     if value.ends_with('\\') || value.starts_with(HEX_DOT_ID_PREFIX) {
         dot_id(value)
     } else {

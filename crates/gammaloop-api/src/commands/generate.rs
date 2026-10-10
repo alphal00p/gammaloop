@@ -1318,7 +1318,9 @@ pub fn parse_spec_with_model(
         .filter_zero_color(args.filter_zero_color)
         .allow_self_loops(!args.filter_self_loop.unwrap_or(false))
         .allow_zero_flow_edges(!args.filter_zero_flow_edges.unwrap_or(true))
-        .graph_prefix(args.graph_prefix.clone().unwrap_or_else(|| "GL".to_owned()));
+        .output(feynkit_generator::GenerationOutput::Named {
+            prefix: args.graph_prefix.clone().unwrap_or_else(|| "GL".to_owned()),
+        });
     if let Some(selected) = &args.select_graphs {
         options = options.select_diagrams(selected.clone());
     }

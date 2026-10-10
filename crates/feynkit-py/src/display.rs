@@ -68,7 +68,7 @@ pub(crate) fn render_diagram_html(diagram: &FeynmanDiagram, svg: &str) -> String
          <div style=\"max-width:100%;overflow-x:auto\">{svg}</div>\
          <figcaption style=\"font-size:.85em;opacity:.75;text-align:center\">Feynman diagram {} \
          ({} loop{})</figcaption></figure>",
-        escape_html(diagram.name()),
+        escape_html(diagram.name().unwrap_or_default()),
         diagram.loop_count(),
         if diagram.loop_count() == 1 { "" } else { "s" },
     )
@@ -109,7 +109,7 @@ pub(crate) fn collection_html(
         let label = format!("Diagram {}", index + 1);
         let mut caption = format!(
             "{} · {} loop{}",
-            diagram.inner.name(),
+            diagram.inner.name().unwrap_or_default(),
             diagram.inner.loop_count(),
             if diagram.inner.loop_count() == 1 {
                 ""

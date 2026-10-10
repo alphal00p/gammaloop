@@ -6,9 +6,9 @@
 //! ```
 //!
 //! - `full CASE` runs the whole pipeline: enumeration, interaction filters, numerators,
-//!   selection and grouping.
-//! - `generation CASE` cancels at the first progress report after enumeration, so only the
-//!   enumeration and the canonical-form sort run.
+//!   selection and grouping, with Named output.
+//! - `generation CASE` explicitly requests Minimal output and cancels at the first progress
+//!   report after enumeration, retaining the compact search results without canonical forms.
 //! - `list [reference]` prints the case names.
 //!
 //! Both runs use one generation thread and print one `RESULT` line with the report counts. The
@@ -18,7 +18,7 @@
 mod cases;
 
 use cases::{CASES, Case, REFERENCE};
-use feynkit_generator::GenerationControl;
+use feynkit_generator::{GenerationControl, GenerationOutput};
 
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -38,13 +38,15 @@ fn run(case: &Case, generation_only: bool) {
     let model = case.model();
     let mut options = case.options(&model, 1);
     if generation_only {
-        options = options.progress(|progress| {
-            if progress.stage == "topologies" {
-                GenerationControl::Continue
-            } else {
-                GenerationControl::Cancel
-            }
-        });
+        options = options
+            .output(GenerationOutput::Minimal)
+            .progress(|progress| {
+                if progress.stage == "topologies" {
+                    GenerationControl::Continue
+                } else {
+                    GenerationControl::Cancel
+                }
+            });
     }
     let report = case
         .generate_with(model, &options)

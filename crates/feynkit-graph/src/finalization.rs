@@ -287,13 +287,13 @@ impl FeynmanDiagramBuilder {
         let numerator = match self.numerator {
             Some(mut numerator) => {
                 translate(&mut numerator)?;
-                numerator
+                DiagramNumerator::Explicit(numerator)
             }
-            None => FeynmanDiagram::fragment_numerator(&graph),
+            None => DiagramNumerator::default(),
         };
         let mut diagram = FeynmanDiagram {
             model: self.model,
-            id: DiagramId(0),
+            id: OnceCell::new(),
             name: self.name,
             graph,
             symmetry_factor: self.symmetry_factor,
@@ -415,7 +415,6 @@ impl FeynmanDiagramBuilder {
         let mut thresholds = std::mem::take(&mut diagram.topology_threshold_candidates);
         thresholds.sort_by_cached_key(|candidate| diagram.cut_order_key(&candidate.cut));
         diagram.topology_threshold_candidates = thresholds;
-        diagram.id = diagram.structural_id()?;
         let edges = match frame {
             Some(frame) => frame.edges.into_iter().map(EdgeId).collect(),
             None => (0..diagram.graph.n_edges()).map(EdgeId).collect(),
@@ -427,9 +426,10 @@ impl FeynmanDiagramBuilder {
 /// The orientation of `edge`: undirected, or against an antiparticle's edge so
 /// that directed edges follow the particle flow.
 fn orientation(model: &Model, edge: &DiagramEdge) -> Result<Orientation, DiagramError> {
+    let particle = model.particle_by_id(edge.particle)?;
     Ok(if !edge.directed {
         Orientation::Undirected
-    } else if model.particle_by_id(edge.particle)?.is_antiparticle() {
+    } else if particle.is_antiparticle() {
         Orientation::Reversed
     } else {
         Orientation::Default
@@ -465,6 +465,7 @@ fn generated_graph(
     let mut connections = BTreeMap::<usize, (Option<usize>, Option<usize>)>::new();
     let mut internal = Vec::new();
     for (id, (endpoints, edge)) in edges.iter().enumerate() {
+        model.particle_by_id(edge.particle)?;
         let Some(leg) = legs.get(&EdgeId(id)) else {
             if endpoints.source.is_none() || endpoints.target.is_none() || edge.external.is_some() {
                 return Err(DiagramError::Invariant {
@@ -556,6 +557,9 @@ fn generated_graph(
         vertices: vertices.len(),
     };
     for vertex in vertices {
+        if let Some(interaction) = vertex.interaction {
+            model.vertex_rule_by_id(interaction)?;
+        }
         builder.add_node(vertex);
     }
     let mut payloads = Vec::with_capacity(n_edges);
@@ -712,6 +716,9 @@ fn imported_graph(
 ) -> Result<HedgeGraph<DiagramEdge, DiagramVertex>, DiagramError> {
     let mut builder = HedgeGraphBuilder::with_capacity(vertices.len(), 2 * edges.len());
     for vertex in vertices {
+        if let Some(interaction) = vertex.interaction {
+            model.vertex_rule_by_id(interaction)?;
+        }
         builder.add_node(vertex);
     }
     for (endpoints, edge) in edges {
@@ -1021,6 +1028,27 @@ mod tests {
         builder
     }
 
+    #[test]
+    fn generated_build_rejects_unknown_model_references_without_demanding_id() {
+        for directed in [false, true] {
+            for edge in [0, 1] {
+                let mut builder = case("relabelled").canonical_loop_momentum_basis();
+                builder.edges[edge].1.particle = ParticleId::from_index(usize::MAX);
+                builder.edges[edge].1.directed = directed;
+                assert!(matches!(
+                    builder.build(),
+                    Err(DiagramError::Model(ModelError::NotFound { .. }))
+                ));
+            }
+        }
+        let mut builder = case("relabelled");
+        builder.vertices[0].interaction = Some(VertexRuleId::from_index(usize::MAX));
+        assert!(matches!(
+            builder.build(),
+            Err(DiagramError::Model(ModelError::NotFound { .. }))
+        ));
+    }
+
     /// Generated diagrams that exercise every path of the final-frame build.
     fn cases() -> Vec<(&'static str, FeynmanDiagramBuilder)> {
         let qed = || Arc::new(Model::qed());
@@ -1295,6 +1323,11 @@ mod tests {
                 let (_, frame) = final_graph(&builder);
                 assert_eq!(frame.canonical_order.is_some(), canonical, "{name}");
                 let diagram = builder.build().unwrap();
+                assert!(diagram.id.get().is_none(), "{name}");
+                assert!(
+                    matches!(&diagram.numerator, DiagramNumerator::Derived(value) if value.get().is_none()),
+                    "{name}"
+                );
                 if let Some(ordered) = frame.canonical_order {
                     assert_eq!(
                         ordered,

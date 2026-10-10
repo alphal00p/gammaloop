@@ -28,23 +28,19 @@ fn provisional_projector(generator: &Generator, graph: &GeneratedGraph) -> Atom 
 /// The diagram inputs of `case` as [`Generator::generate`] prepares them, from a sequential
 /// search, with the resolved options they were prepared with.
 fn diagram_inputs(generator: &Generator, case: &Case) -> (GenerationOptions, Vec<DiagramInput>) {
-    let model = &generator.model;
-    let process = case.process();
-    let options = process
-        .restrict_options(model, &case.options(model, 1))
-        .unwrap()
-        .resolve_selectors(model)
-        .unwrap();
-    let process = process
-        .clone()
-        .with_final_state_alternatives(process.covariant_cut_states(model, case.kind).unwrap())
-        .unwrap();
-    let resolved = ResolvedProcess::new(model, &process, case.kind, &options).unwrap();
-    let signatures = VertexSignatures::new(model, &options).unwrap();
-    let externals = resolved.externals(model).unwrap();
-    let pruner = Pruner::new(model, &options);
-    let search = signatures
-        .generator(model, &externals, &options, move |view| pruner.keeps(view))
+    let PreparedSearch {
+        options,
+        resolved,
+        signatures,
+        externals,
+        generator: search,
+    } = generator
+        .search(
+            &case.process(),
+            &case.options(&generator.model, 1),
+            case.kind,
+            |_, _| {},
+        )
         .unwrap();
     let inputs = search
         .iter()
@@ -90,7 +86,7 @@ fn check(name: &str) -> usize {
             let diagram = |options: &GenerationOptions| {
                 generator
                     .to_diagram(
-                        context.clone(),
+                        Some(context.clone()),
                         case.kind,
                         topology.clone(),
                         input.signs,

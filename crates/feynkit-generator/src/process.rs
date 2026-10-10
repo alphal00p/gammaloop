@@ -610,7 +610,7 @@ mod tests {
             result
                 .diagrams
                 .into_iter()
-                .map(|diagram| diagram.id())
+                .map(|diagram| diagram.id().unwrap())
                 .collect::<BTreeSet<_>>()
         };
         assert_eq!(

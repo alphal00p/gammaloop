@@ -391,7 +391,7 @@ impl FeynmanDiagram {
         let (edge_specs, edge_drawings) = edges.into_iter().unzip();
         Ok(Scene {
             graph: TypstGraphSpec {
-                name: Some(self.name().to_owned()),
+                name: self.name().map(str::to_owned),
                 data: None,
                 statements: BTreeMap::new(),
                 default_edge_statements: BTreeMap::new(),

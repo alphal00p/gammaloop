@@ -100,14 +100,17 @@ impl Graph {
                  Explicit `num` and `projector` attributes must name the indices of the \
                  model's Feynman rules, hedge(h,k) for the k-th index of half-edge h, \
                  counted from one",
-                diagram.name()
+                diagram.name().unwrap_or("<unnamed>")
             )
         })?;
         let mut parsed = ParseGraph::from_feynkit_diagram(&diagram)?;
         parsed
             .apply_dot_attributes(&dot.attributes)
             .with_context(|| {
-                format!("Invalid GammaLoop attribute in graph '{}'", diagram.name())
+                format!(
+                    "Invalid GammaLoop attribute in graph '{}'",
+                    diagram.name().unwrap_or("<unnamed>")
+                )
             })?;
         Self::from_feynkit_parse_graph(&diagram, parsed)
     }

@@ -23,9 +23,14 @@ use std::{
 use feynkit_graph::ExternalState;
 use feynkit_model::{Model, Particle, ParticleId, VertexRuleId};
 use linnet::half_edge::{
-    NodeIndex,
     generate::{Countable, Diagram, GraphGenerator, GraphView, Stage, Stub},
-    involution::{Flow, HedgePair, Orientation},
+    involution::{Flow, Hedge},
+};
+
+#[cfg(test)]
+use linnet::half_edge::{
+    NodeIndex,
+    involution::{HedgePair, Orientation},
 };
 
 use super::{
@@ -320,12 +325,12 @@ impl ProcessExternals {
     ) -> Option<u64> {
         let mut stabilizer = 1;
         for permutation in &self.sewn_pair_permutations {
-            let image = diagram.graph.canonical_form_by(
+            let image = diagram.graph().canonical_form_by(
                 |&rule| rule,
                 |field| *field,
                 |label| label.map(|label| permutation.get(&label).copied().unwrap_or(label)),
             );
-            match image.cmp(&diagram.canonical_form) {
+            match image.cmp(diagram.canonical_form()) {
                 Ordering::Less => return None,
                 Ordering::Equal => stabilizer += 1,
                 Ordering::Greater => {}
@@ -358,7 +363,92 @@ impl ProcessExternals {
         diagram: &Diagram<ParticleId, ExternalLabel>,
         signatures: &VertexSignatures,
     ) -> GeneratedGraph {
-        let graph = &diagram.graph;
+        let canonical = self
+            .classes
+            .values()
+            .any(|externals| externals.len() > 1)
+            .then(|| {
+                diagram
+                    .graph()
+                    .canonize_by(|&rule| rule, |field| *field, |label| *label)
+            });
+        // Compact legs use the materializer's native half-edge slot order. Canonical
+        // positions are demanded only to label interchangeable external momenta.
+        let mut legs = diagram
+            .legs()
+            .enumerate()
+            .map(|(slot, (vertex, label, stub))| {
+                let class = (
+                    *label,
+                    Stub {
+                        field: *stub.field,
+                        flow: stub.flow,
+                    },
+                );
+                let hedge = Hedge(slot);
+                let order = canonical
+                    .as_ref()
+                    .map_or(hedge, |form| form.canonical_hedge(hedge));
+                (
+                    class,
+                    order,
+                    slot,
+                    vertex,
+                    stub.flow.unwrap_or(Flow::Source),
+                )
+            })
+            .collect::<Vec<_>>();
+        let mut edges = vec![None; legs.len()];
+        legs.sort_by(|left, right| (&left.0, left.1).cmp(&(&right.0, right.1)));
+        let mut next = BTreeMap::<&(ExternalLabel, ParticleStub), usize>::new();
+        for (class, _, slot, vertex, flow) in &legs {
+            let index = next.entry(class).or_default();
+            let external = Endpoint::External(self.classes[class][*index]);
+            *index += 1;
+            let vertex = Endpoint::Vertex(*vertex);
+            let (source, sink) = match flow {
+                Flow::Sink => (external, vertex),
+                Flow::Source => (vertex, external),
+            };
+            edges[*slot] = Some(GeneratedEdge {
+                source,
+                sink,
+                particle: class.1.field,
+                directed: class.1.flow.is_some(),
+            });
+        }
+        edges.extend(diagram.edges().map(|edge| {
+            let stub = edge.stub.expect("a complete diagram assigns every edge");
+            let [mut source, mut sink] = edge.vertices.map(Endpoint::Vertex);
+            if stub.flow == Some(Flow::Sink) {
+                std::mem::swap(&mut source, &mut sink);
+            }
+            Some(GeneratedEdge {
+                source,
+                sink,
+                particle: *stub.field,
+                directed: stub.flow.is_some(),
+            })
+        }));
+        GeneratedGraph::new(
+            diagram
+                .rules()
+                .iter()
+                .map(|&rule| signatures.rules[rule as usize]),
+            edges
+                .into_iter()
+                .map(|edge| edge.expect("every compact edge is placed")),
+        )
+    }
+
+    // Independent old materialized boundary, retained only as a compact-consumer oracle.
+    #[cfg(test)]
+    fn materialized_reference(
+        &self,
+        diagram: &Diagram<ParticleId, ExternalLabel>,
+        signatures: &VertexSignatures,
+    ) -> GeneratedGraph {
+        let graph = diagram.graph();
         let canonical = self
             .classes
             .values()
@@ -581,6 +671,46 @@ fn permutations(n: usize) -> impl Iterator<Item = Vec<usize>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn compact_inputs_preserve_materialized_edges_slots_and_external_order() {
+        use crate::generation::{Generator, PreparedSearch, cases::Case};
+        for name in [
+            "qcd_gggg_L1",
+            "qcd_gggg_sym_L1",
+            "xs_qed_aaee_sym_lr_L2",
+            "qed_eemm_L1",
+            "xs_qed_eeaa_L2",
+            "qcd_tad_L2",
+            "qcd_vac_L2",
+        ] {
+            let case = Case::named(name);
+            let generator = Generator::new(case.model());
+            let PreparedSearch {
+                signatures,
+                externals,
+                generator: search,
+                ..
+            } = generator
+                .search(
+                    &case.process(),
+                    &case.options(&generator.model, 1),
+                    case.kind,
+                    |_, _| {},
+                )
+                .unwrap();
+            let mut count = 0;
+            for diagram in search.iter().unwrap() {
+                assert_eq!(
+                    externals.graph(&diagram, &signatures),
+                    externals.materialized_reference(&diagram, &signatures),
+                    "{name} diagram {count}"
+                );
+                count += 1;
+            }
+            assert!(count > 0, "{name}");
+        }
+    }
 
     #[test]
     fn closed_loops_count_components_without_leg_nodes() {

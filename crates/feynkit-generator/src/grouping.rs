@@ -83,45 +83,48 @@ pub enum GroupingError {
     #[error("source diagram index {0} does not fit in a symbolic integer")]
     SourceDiagramIndexOverflow(usize),
     #[error(
-        "failed to merge physical cuts from group members {members:?} into master diagram '{master}': {source}"
+        "failed to merge physical cuts from group members {members:?} into master diagram {master:?}: {source}"
     )]
     CutMerge {
-        master: String,
-        members: Vec<String>,
+        master: Option<String>,
+        members: Vec<Option<String>>,
         #[source]
         source: Box<DiagramError>,
     },
     #[error(
-        "failed to merge topology threshold candidates from group members {members:?} into master diagram '{master}': {source}"
+        "failed to merge topology threshold candidates from group members {members:?} into master diagram {master:?}: {source}"
     )]
     ThresholdCandidateMerge {
-        master: String,
-        members: Vec<String>,
+        master: Option<String>,
+        members: Vec<Option<String>>,
         #[source]
         source: Box<DiagramError>,
     },
     #[error(
-        "failed to transport grouped partition from member diagram '{member}' to master diagram '{master}': {message}"
+        "failed to transport grouped partition from member diagram {member:?} to master diagram {master:?}: {message}"
     )]
     PartitionTransport {
-        member: String,
-        master: String,
+        member: Option<String>,
+        master: Option<String>,
         message: String,
     },
-    #[error("failed to compare numerators of diagrams '{candidate}' and '{master}': {source}")]
+    #[error("failed to compare numerators of diagrams {candidate:?} and {master:?}: {source}")]
     NumeratorComparison {
-        candidate: String,
-        master: String,
+        candidate: Option<String>,
+        master: Option<String>,
         #[source]
         source: TensorInferenceError,
     },
-    #[error("failed to simplify numerator color for diagram '{diagram}': {message}")]
-    ColorSimplification { diagram: String, message: String },
+    #[error("failed to simplify numerator color for diagram {diagram:?}: {message}")]
+    ColorSimplification {
+        diagram: Option<String>,
+        message: String,
+    },
     #[error(
-        "failed to evaluate numerator tensors for diagram '{diagram}', sample {sample}: {message}"
+        "failed to evaluate numerator tensors for diagram {diagram:?}, sample {sample}: {message}"
     )]
     TensorEvaluation {
-        diagram: String,
+        diagram: Option<String>,
         sample: usize,
         message: String,
     },
@@ -433,7 +436,7 @@ pub(crate) fn group_diagrams(
                 // across the typed algebra boundary.
                 let cooked = cooking.try_cook(expression).map_err(|error| {
                     GroupingError::ColorSimplification {
-                        diagram: diagram.name().to_owned(),
+                        diagram: diagram.name().map(str::to_owned),
                         message: error.to_string(),
                     }
                 })?;
@@ -452,7 +455,7 @@ pub(crate) fn group_diagrams(
                         })
                     })
                     .map_err(|error| GroupingError::ColorSimplification {
-                        diagram: diagram.name().to_owned(),
+                        diagram: diagram.name().map(str::to_owned),
                         message: error.to_string(),
                     })
             };
@@ -463,7 +466,7 @@ pub(crate) fn group_diagrams(
                 let zero = tensor
                     .coefficients_are_zero(TensorCollectFilter::Reps(color_reps))
                     .map_err(|error| GroupingError::ColorSimplification {
-                        diagram: diagram.name().to_owned(),
+                        diagram: diagram.name().map(str::to_owned),
                         message: error.to_string(),
                     })?;
                 (tensor.expression().clone(), zero.is_true())
@@ -647,8 +650,8 @@ pub(crate) fn group_diagrams(
                     &scalar_names,
                 )
                 .map_err(|source| GroupingError::NumeratorComparison {
-                    candidate: retained[diagram].name().to_owned(),
-                    master: retained[group.master].name().to_owned(),
+                    candidate: retained[diagram].name().map(str::to_owned),
+                    master: retained[group.master].name().map(str::to_owned),
                     source,
                 })? {
                     matching_group = Some((group_index, ratio));
@@ -658,8 +661,7 @@ pub(crate) fn group_diagrams(
             if let Some((group_index, ratio)) = matching_group {
                 bucket_groups[group_index].members.push(GroupMember {
                     source_diagram: source_diagrams[diagram],
-                    source_id: retained[diagram].id(),
-                    source_name: retained[diagram].name().to_owned(),
+                    source_identity: None,
                     diagram,
                     ratio,
                     overall_factor: retained[diagram].overall_factor().clone(),
@@ -669,8 +671,7 @@ pub(crate) fn group_diagrams(
                     master: diagram,
                     members: vec![GroupMember {
                         source_diagram: source_diagrams[diagram],
-                        source_id: retained[diagram].id(),
-                        source_name: retained[diagram].name().to_owned(),
+                        source_identity: None,
                         diagram,
                         ratio: Atom::one(),
                         overall_factor: retained[diagram].overall_factor().clone(),
@@ -818,8 +819,8 @@ fn partition_vertices(
         .map(|half_edge| {
             let endpoints = endpoints.get(&half_edge.edge).ok_or_else(|| {
                 GroupingError::PartitionTransport {
-                    member: diagram.name().to_owned(),
-                    master: master.name().to_owned(),
+                    member: diagram.name().map(str::to_owned),
+                    master: master.name().map(str::to_owned),
                     message: format!("unknown source edge {}", half_edge.edge.0),
                 }
             })?;
@@ -828,8 +829,8 @@ fn partition_vertices(
                 DiagramEndpoint::Target => endpoints.target,
             }
             .ok_or_else(|| GroupingError::PartitionTransport {
-                member: diagram.name().to_owned(),
-                master: master.name().to_owned(),
+                member: diagram.name().map(str::to_owned),
+                master: master.name().map(str::to_owned),
                 message: format!("half-edge {:?} is absent", half_edge),
             })
         })
@@ -847,8 +848,8 @@ fn remap_partition(
         || master_frame.vertex_map.len() != master.vertices().count()
     {
         return Err(GroupingError::PartitionTransport {
-            member: member.name().to_owned(),
-            master: master.name().to_owned(),
+            member: member.name().map(str::to_owned),
+            master: master.name().map(str::to_owned),
             message: "canonical vertex map does not cover the diagram".to_owned(),
         });
     }
@@ -860,8 +861,8 @@ fn remap_partition(
             .is_some()
         {
             return Err(GroupingError::PartitionTransport {
-                member: member.name().to_owned(),
-                master: master.name().to_owned(),
+                member: member.name().map(str::to_owned),
+                master: master.name().map(str::to_owned),
                 message: format!("canonical master vertex {canonical} is not unique"),
             });
         }
@@ -873,15 +874,15 @@ fn remap_partition(
         .map(|vertex| {
             let canonical = member_frame.vertex_map.get(vertex.0).ok_or_else(|| {
                 GroupingError::PartitionTransport {
-                    member: member.name().to_owned(),
-                    master: master.name().to_owned(),
+                    member: member.name().map(str::to_owned),
+                    master: master.name().map(str::to_owned),
                     message: format!("source vertex {} has no canonical image", vertex.0),
                 }
             })?;
             canonical_to_master.get(canonical).copied().ok_or_else(|| {
                 GroupingError::PartitionTransport {
-                    member: member.name().to_owned(),
-                    master: master.name().to_owned(),
+                    member: member.name().map(str::to_owned),
+                    master: master.name().map(str::to_owned),
                     message: format!("canonical vertex {canonical} has no master preimage"),
                 }
             })
@@ -965,9 +966,9 @@ fn collapse_groups(
             let members = group
                 .members
                 .iter()
-                .map(|member| diagrams[member.diagram].name().to_owned())
+                .map(|member| diagrams[member.diagram].name().map(str::to_owned))
                 .collect::<Vec<_>>();
-            let master_name = master.name().to_owned();
+            let master_name = master.name().map(str::to_owned);
             master
                 .with_cut_partitions(cut_partitions)
                 .map_err(|source| GroupingError::CutMerge {
@@ -1001,9 +1002,9 @@ fn collapse_groups(
             let members = group
                 .members
                 .iter()
-                .map(|member| diagrams[member.diagram].name().to_owned())
+                .map(|member| diagrams[member.diagram].name().map(str::to_owned))
                 .collect::<Vec<_>>();
-            let master_name = master.name().to_owned();
+            let master_name = master.name().map(str::to_owned);
             master
                 .with_topology_threshold_partitions(threshold_partitions)
                 .map_err(|source| GroupingError::ThresholdCandidateMerge {
@@ -1056,8 +1057,7 @@ fn singleton_groups(diagrams: &[FeynmanDiagram], source_diagrams: &[usize]) -> V
             master: diagram,
             members: vec![GroupMember {
                 source_diagram,
-                source_id: source.id(),
-                source_name: source.name().to_owned(),
+                source_identity: None,
                 diagram,
                 ratio: Atom::one(),
                 overall_factor: source.overall_factor().clone(),
@@ -1344,7 +1344,7 @@ fn insert_sample_vector(
         .collect();
     let tensor = ParamTensor::from_dense(key.into_canonical(), data).map_err(|error| {
         GroupingError::TensorEvaluation {
-            diagram: "sample library".to_owned(),
+            diagram: Some("sample library".to_owned()),
             sample,
             message: error.to_string(),
         }
@@ -1380,7 +1380,7 @@ fn insert_sample_wavefunction(
         .collect();
     let tensor = ParamTensor::from_dense(key.into_canonical(), data).map_err(|error| {
         GroupingError::TensorEvaluation {
-            diagram: "sample library".to_owned(),
+            diagram: Some("sample library".to_owned()),
             sample,
             message: error.to_string(),
         }
@@ -1405,7 +1405,7 @@ fn tensor_evaluation_error(
     error: impl fmt::Display,
 ) -> GroupingError {
     GroupingError::TensorEvaluation {
-        diagram: diagram.name().to_owned(),
+        diagram: diagram.name().map(str::to_owned),
         sample,
         message: error.to_string(),
     }
@@ -2614,7 +2614,7 @@ mod tests {
     }
 
     #[test]
-    fn removes_only_proven_zero_numerators_and_preserves_source_ids() {
+    fn removes_only_proven_zero_numerators_and_preserves_source_indices() {
         let model = Arc::new(model());
         let grouped = group_diagrams(
             vec![
@@ -2631,7 +2631,7 @@ mod tests {
         assert_eq!(grouped.diagrams.len(), 1);
         assert_eq!(grouped.groups[0].members[0].diagram, 0);
         assert_eq!(grouped.groups[0].members[0].source_diagram, 1);
-        assert_eq!(grouped.diagrams[0].name(), "g1");
+        assert_eq!(grouped.diagrams[0].name(), Some("g1"));
     }
 
     #[test]

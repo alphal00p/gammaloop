@@ -1,6 +1,10 @@
 //! Differential oracles for diagram generation.
 //!
-//! Every case of [`cases::CASES`] runs at 1, 8 and 32 threads. The runs must agree exactly (diagram
+//! Every case of [`cases::CASES`] runs with Named and Minimal output at 1, 8 and 32 threads.
+//! Each policy compares full canonical keys and physical payloads across threads; the policies
+//! may differ only in names and optional source identities. Ungrouped references validate each
+//! group source index.
+//! The runs must agree exactly (diagram
 //! set, |Aut|, overall factors, frames, numerators, ids, groups, names and output order), and their
 //! [`census::Summary`] must equal the case's row below. Rows include a digest of the diagram ids,
 //! which depend on the diagrams alone, not on the process that computes them
@@ -27,6 +31,7 @@ use std::{collections::BTreeSet, process::Command};
 
 use cases::{CASES, Case, REFERENCE};
 use census::{Census, Scope, Summary};
+use feynkit_generator::{GenerationOutput, NumeratorGrouping};
 use feynkit_graph::FeynmanDiagram;
 use feynkit_model::Model;
 use symbolica::domains::rational::Rational;
@@ -38,8 +43,12 @@ fn threads() -> Vec<usize> {
 }
 
 fn census(case: &Case, threads: usize) -> Census {
+    census_with_output(case, threads, GenerationOutput::default())
+}
+
+fn census_with_output(case: &Case, threads: usize, output: GenerationOutput) -> Census {
     let model = case.model();
-    let options = case.options(&model, threads);
+    let options = case.options(&model, threads).output(output);
     let result = case
         .generate_with(model, &options)
         .unwrap_or_else(|error| panic!("{}: {error}", case.name));
@@ -86,14 +95,48 @@ fn check(name: &str, tier: &str, row: Row) {
     let mut threads = threads().into_iter();
     let first = threads.next().expect("a thread count");
     let reference = census(case, first);
+    let minimal = census_with_output(case, first, GenerationOutput::Minimal);
+    reference.assert_minimal(&minimal, name);
     for count in threads {
         let other = census(case, count);
         reference.assert_same(
             &other,
             Scope::Exact,
-            &format!("{name}: {first} vs {count} threads"),
+            &format!("{name}: Named {first} vs {count} threads"),
+        );
+        let other = census_with_output(case, count, GenerationOutput::Minimal);
+        minimal.assert_same(
+            &other,
+            Scope::Exact,
+            &format!("{name}: Minimal {first} vs {count} threads"),
         );
     }
+    // An independently ungrouped run retains even members that grouping discarded.
+    // Bind Named identities to full physical sources; the policy comparison above
+    // requires Minimal to preserve the same request-local indices, ratios and factors.
+    let model = case.model();
+    let options = case.options(&model, first);
+    // The source name/index assertion is specific to these selector-free fixtures.
+    let serialized = serde_json::to_value(&options).unwrap();
+    assert_eq!(
+        serialized["output"],
+        serde_json::json!({"named": {"prefix": "D"}})
+    );
+    for field in ["selected_diagram_ids", "selected_diagram_names"] {
+        assert!(serialized.get(field).unwrap().is_null(), "{name}: {field}");
+    }
+    for field in ["vetoed_diagram_ids", "vetoed_diagram_names"] {
+        assert_eq!(serialized[field], serde_json::json!([]), "{name}: {field}");
+    }
+    let ungrouped = case
+        .generate_with(
+            model.clone(),
+            &options
+                .numerator_grouping(NumeratorGrouping::None)
+                .filter_zero_color(false),
+        )
+        .unwrap();
+    reference.assert_group_sources(&Census::of(&ungrouped), name);
     if let Ok(directory) = std::env::var("FEYNKIT_ORACLE_DUMP") {
         std::fs::create_dir_all(&directory).unwrap();
         std::fs::write(format!("{directory}/{name}.census"), reference.dump()).unwrap();
@@ -138,17 +181,21 @@ const NON_SELF_DUAL_POWER: &[&str] = &[
 /// fragment of `error`.
 fn fails(name: &str, error: &[&str]) {
     let case = Case::named(name);
-    for threads in threads() {
-        let model = case.model();
-        let options = case.options(&model, threads);
-        match case.generate_with(model, &options) {
-            Ok(_) => panic!("{name} generates at {threads} threads: record its oracle row"),
-            Err(found) => {
-                let found = found.to_string();
-                assert!(
-                    error.iter().all(|fragment| found.contains(fragment)),
-                    "{name} at {threads} threads fails with {found:?}, not {error:?}"
-                );
+    for count in threads() {
+        for output in [GenerationOutput::default(), GenerationOutput::Minimal] {
+            let model = case.model();
+            let options = case.options(&model, count).output(output.clone());
+            match case.generate_with(model, &options) {
+                Ok(_) => panic!(
+                    "{name} generates at {count} threads ({output:?}): record its oracle row"
+                ),
+                Err(found) => {
+                    let found = found.to_string();
+                    assert!(
+                        error.iter().all(|fragment| found.contains(fragment)),
+                        "{name} at {count} threads ({output:?}) fails with {found:?}, not {error:?}"
+                    );
+                }
             }
         }
     }
@@ -379,7 +426,11 @@ fn ids_do_not_depend_on_threads_or_symbol_registration() {
             let model = case.model();
             let options = case.options(&model, threads.parse().unwrap());
             for diagram in case.generate_with(model, &options).unwrap().diagrams {
-                println!("{CHILD} {name} {} {}", diagram.name(), diagram.id());
+                println!(
+                    "{CHILD} {name} {} {}",
+                    diagram.name().expect("named oracle output"),
+                    diagram.id().unwrap()
+                );
             }
         }
         return;
@@ -421,7 +472,7 @@ fn in_flight_filters_select_like_vetoes_and_post_filtering() {
         .diagrams
         .iter()
         .filter(|diagram| !is_ghost(&model, diagram))
-        .map(FeynmanDiagram::id)
+        .map(|diagram| diagram.id().unwrap())
         .collect();
     assert!(ghost_free.len() < all.diagrams.len());
     let expected = Census::of(&all).restricted(|entry| ghost_free.contains(&entry.id));

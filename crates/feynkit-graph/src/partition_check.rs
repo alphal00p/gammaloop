@@ -644,7 +644,7 @@ mod tests {
                 outcomes.len(),
                 2 * kinds,
                 "{}: {outcomes:?}",
-                diagram.name()
+                diagram.name().unwrap_or("<unnamed>")
             );
         }
     }
@@ -671,7 +671,7 @@ mod tests {
         ));
 
         // A deserialized diagram is validated without normalizing its cuts.
-        let mut serialized = diagram.serde_view();
+        let mut serialized = diagram.serde_view().unwrap();
         alias(&mut serialized.cuts[0].left.half_edges[0]);
         assert!(matches!(
             FeynmanDiagram::from_json(

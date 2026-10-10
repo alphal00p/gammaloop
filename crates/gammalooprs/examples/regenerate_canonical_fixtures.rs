@@ -435,7 +435,6 @@ fn select_target(
             matches.push((diagram, exact));
         }
     }
-    matches.sort_by_key(|(diagram, _)| diagram.id());
     if matches.len() != 1 {
         let diagnostics = diagrams
             .iter()
@@ -443,9 +442,16 @@ fn select_target(
                 let candidate = candidate_data(diagram, model).ok()?;
                 (candidate.vertices.len() == target.vertices.len()
                     && candidate.edges.len() == target.edges.len())
-                .then(|| format!("{} ({}): {candidate:?}", diagram.name(), diagram.id()))
+                .then_some((diagram, candidate))
             })
-            .collect::<Vec<_>>()
+            .map(|(diagram, candidate)| {
+                Ok(format!(
+                    "{} ({}): {candidate:?}",
+                    diagram.name().unwrap_or("<unnamed>"),
+                    diagram.id()?
+                ))
+            })
+            .collect::<Result<Vec<_>, DynError>>()?
             .join("\n");
         return Err(format!(
             "target '{}' matched {} generated diagrams; refine its deterministic selector. Same-size candidates:\n{}",
@@ -503,7 +509,9 @@ fn generate_addbar() -> Result<(Model, Vec<(Target, FeynmanDiagram)>), DynError>
         .threads(1)
         .max_vertices(4)
         .allow_zero_flow_edges(true)
-        .graph_prefix("AUD")
+        .output(feynkit_generator::GenerationOutput::Named {
+            prefix: "AUD".into(),
+        })
         .with_graph_filter(GenerationFilter::VertexAllow(vec![
             VertexSelector::from("V_71"),
             VertexSelector::from("V_74"),

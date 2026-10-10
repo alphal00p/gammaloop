@@ -15,14 +15,15 @@ use feynkit_graph::momentum_symbol;
 
 pub use generation::{
     DiagramGroup, ExternalLabel, ExternalNode, FeynmanDiagramRulesExt, GenerationError,
-    GenerationReport, GenerationResult, GenerationView, GroupMember, UnresolvedCutContent,
-    unresolved_cut_content,
+    GenerationReport, GenerationResult, GenerationView, GroupMember, SourceIdentity,
+    UnresolvedCutContent, unresolved_cut_content,
 };
 pub use grouping::GroupingError;
 pub use options::{
     CancellationToken, FilterScope, GenerationControl, GenerationFilter, GenerationFilterKind,
-    GenerationOptions, GenerationProgress, GraphGroupingOptions, NumeratorGrouping,
-    SelfEnergyFilterOptions, SewnFilterOptions, SnailFilterOptions, TadpoleFilterOptions,
+    GenerationOptions, GenerationOutput, GenerationProgress, GraphGroupingOptions,
+    NumeratorGrouping, SelfEnergyFilterOptions, SewnFilterOptions, SnailFilterOptions,
+    TadpoleFilterOptions,
 };
 pub use process::{
     GenerationType, ModelProcessExt, ParticleSelector, Process, ProcessError, SelectorError,

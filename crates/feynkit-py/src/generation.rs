@@ -9,10 +9,10 @@ use std::{
 
 use feynkit_generator::{
     CancellationToken, DiagramGroup, ExternalLabel, FilterScope, GenerationControl,
-    GenerationFilter, GenerationOptions, GenerationProgress, GenerationReport, GenerationResult,
-    GenerationType, GraphGroupingOptions, GroupMember, ModelProcessExt, NumeratorGrouping,
-    ParticleSelector, Process, SelfEnergyFilterOptions, SewnFilterOptions, SnailFilterOptions,
-    TadpoleFilterOptions, VertexSelector,
+    GenerationFilter, GenerationOptions, GenerationOutput, GenerationProgress, GenerationReport,
+    GenerationResult, GenerationType, GraphGroupingOptions, GroupMember, ModelProcessExt,
+    NumeratorGrouping, ParticleSelector, Process, SelfEnergyFilterOptions, SewnFilterOptions,
+    SnailFilterOptions, TadpoleFilterOptions, VertexSelector,
 };
 use feynkit_graph::{DiagramId, EdgeId};
 use feynkit_model::{Model, ParticleId};
@@ -285,14 +285,18 @@ pub(crate) enum DiagramSelectionInput {
 }
 
 impl DiagramSelectionInput {
-    fn split(self, ids: &mut Vec<DiagramId>, names: &mut Vec<String>) {
+    fn split(self, ids: &mut Vec<DiagramId>, names: &mut Vec<String>) -> PyResult<()> {
         match self {
-            Self::Diagram(diagram) => ids.push(diagram.inner.id()),
-            Self::Text(text) => match text.parse() {
-                Ok(id) => ids.push(id),
-                Err(_) => names.push(text),
-            },
+            Self::Diagram(diagram) => ids.push(diagram.inner.id().map_err(error::diagram)?),
+            // IDs use their displayed width; short hexadecimal names such as D0 stay names.
+            Self::Text(text)
+                if text.len() == 32 && text.bytes().all(|byte| byte.is_ascii_hexdigit()) =>
+            {
+                ids.push(text.parse().expect("32 hexadecimal digits"));
+            }
+            Self::Text(text) => names.push(text),
         }
+        Ok(())
     }
 }
 
@@ -922,6 +926,10 @@ impl PyProcess {
     ///     Permit internal edges with identically zero momentum flow.
     /// graph_prefix : str or None, optional
     ///     Prefix assigned to generated diagram names; None uses "D" (diagram).
+    /// output : {"named", "minimal"}, optional
+    ///     Named (default) requests names and source identities. Minimal omits both;
+    ///     name selectors, named momentum bases and graph_prefix then require named output.
+    ///     Diagram IDs remain available on explicit access or persistence.
     /// maximum_bridges : int, None, or Ellipsis, optional
     ///     Omission or Ellipsis requires one-particle irreducibility only for diagrams
     ///     with loops; tree exchanges are allowed, including in mixed loop ranges.
@@ -958,6 +966,7 @@ impl PyProcess {
     ///     Inclusive combined loop count across both sides of every cut.
     /// select_diagrams : sequence[FeynmanDiagram | str] or None, optional
     ///     Retain only these diagram objects, content-derived IDs, or finalized names.
+    ///     Strings of exactly 32 hexadecimal digits denote IDs; other strings denote names.
     /// veto_diagrams : sequence[FeynmanDiagram | str] or None, optional
     ///     Remove these diagram objects, content-derived IDs, or finalized names.
     /// loop_momentum_bases : sequence[tuple[FeynmanDiagram | str, sequence[int]]] or None, optional
@@ -1000,9 +1009,9 @@ impl PyProcess {
     ///     Shared token for cancelling a running generation task. Token cancellation
     ///     returns an incomplete result; Python signal-handler exceptions, including
     ///     KeyboardInterrupt, stop generation and propagate to the caller.
-    #[pyo3(signature = (*, loops=OrderRangeInput::default(), symmetrize_initial=false, symmetrize_final=false, symmetrize_left_right=false, symmetrize_external_fermions=false, threads=None, max_vertices=None, allow_self_loops=true, allow_zero_flow_edges=false, graph_prefix=None, maximum_bridges=Some(Python::attach(|py| py.Ellipsis())), self_energy=Some(Python::attach(|py| py.Ellipsis())), tadpoles=Some(Python::attach(|py| py.Ellipsis())), zero_snails=Some(Python::attach(|py| py.Ellipsis())), coupling_orders=None, fermion_loop_count_range=None, factorized_loop_topologies_count_range=Some(Python::attach(|py| py.Ellipsis())), blob_range=Some(Python::attach(|py| py.Ellipsis())), spectator_range=Some(Python::attach(|py| py.Ellipsis())), perturbative_orders=None, sewn_tadpoles=None, cut_amplitude_coupling_orders=None, cut_amplitude_loop_count_range=None, select_diagrams=None, veto_diagrams=None, loop_momentum_bases=None, numerator_prefactor=None, projector=None, numerator_grouping=None, filter_zero_color=false, cancellation_token=None, progress=Some(Python::attach(|py| PyString::new(py, "auto").into_any().unbind())), filter=None))]
+    #[pyo3(signature = (*, loops=OrderRangeInput::default(), symmetrize_initial=false, symmetrize_final=false, symmetrize_left_right=false, symmetrize_external_fermions=false, threads=None, max_vertices=None, allow_self_loops=true, allow_zero_flow_edges=false, graph_prefix=None, output="named", maximum_bridges=Some(Python::attach(|py| py.Ellipsis())), self_energy=Some(Python::attach(|py| py.Ellipsis())), tadpoles=Some(Python::attach(|py| py.Ellipsis())), zero_snails=Some(Python::attach(|py| py.Ellipsis())), coupling_orders=None, fermion_loop_count_range=None, factorized_loop_topologies_count_range=Some(Python::attach(|py| py.Ellipsis())), blob_range=Some(Python::attach(|py| py.Ellipsis())), spectator_range=Some(Python::attach(|py| py.Ellipsis())), perturbative_orders=None, sewn_tadpoles=None, cut_amplitude_coupling_orders=None, cut_amplitude_loop_count_range=None, select_diagrams=None, veto_diagrams=None, loop_momentum_bases=None, numerator_prefactor=None, projector=None, numerator_grouping=None, filter_zero_color=false, cancellation_token=None, progress=Some(Python::attach(|py| PyString::new(py, "auto").into_any().unbind())), filter=None))]
     #[pyo3(
-        text_signature = "($self, *, loops=0, symmetrize_initial=False, symmetrize_final=False, symmetrize_left_right=False, symmetrize_external_fermions=False, threads=None, max_vertices=None, allow_self_loops=True, allow_zero_flow_edges=False, graph_prefix=None, maximum_bridges=..., self_energy=..., tadpoles=..., zero_snails=..., coupling_orders=None, fermion_loop_count_range=None, factorized_loop_topologies_count_range=..., blob_range=..., spectator_range=..., perturbative_orders=None, sewn_tadpoles=None, cut_amplitude_coupling_orders=None, cut_amplitude_loop_count_range=None, select_diagrams=None, veto_diagrams=None, loop_momentum_bases=None, numerator_prefactor=None, projector=None, numerator_grouping=None, filter_zero_color=False, cancellation_token=None, progress='auto', filter=None)"
+        text_signature = "($self, *, loops=0, symmetrize_initial=False, symmetrize_final=False, symmetrize_left_right=False, symmetrize_external_fermions=False, threads=None, max_vertices=None, allow_self_loops=True, allow_zero_flow_edges=False, graph_prefix=None, output='named', maximum_bridges=..., self_energy=..., tadpoles=..., zero_snails=..., coupling_orders=None, fermion_loop_count_range=None, factorized_loop_topologies_count_range=..., blob_range=..., spectator_range=..., perturbative_orders=None, sewn_tadpoles=None, cut_amplitude_coupling_orders=None, cut_amplitude_loop_count_range=None, select_diagrams=None, veto_diagrams=None, loop_momentum_bases=None, numerator_prefactor=None, projector=None, numerator_grouping=None, filter_zero_color=False, cancellation_token=None, progress='auto', filter=None)"
     )]
     #[allow(clippy::too_many_arguments)]
     fn generate_diagrams(
@@ -1018,6 +1027,8 @@ impl PyProcess {
         allow_self_loops: bool,
         allow_zero_flow_edges: bool,
         graph_prefix: Option<String>,
+        #[gen_stub(override_type(type_repr = "typing.Literal['named', 'minimal']", imports = ("typing")))]
+        output: &str,
         #[gen_stub(override_type(type_repr = "int | None | types.EllipsisType"))]
         maximum_bridges: Option<Py<PyAny>>,
         #[gen_stub(override_type(type_repr = "SelfEnergyFilterOptions | types.EllipsisType | None", imports = ("types")))]
@@ -1067,6 +1078,7 @@ impl PyProcess {
             allow_self_loops,
             allow_zero_flow_edges,
             graph_prefix,
+            output,
             maximum_bridges,
             self_energy,
             tadpoles,
@@ -1145,6 +1157,10 @@ impl PyProcess {
     ///     Permit internal edges with identically zero momentum flow.
     /// graph_prefix : str or None, optional
     ///     Prefix assigned to generated diagram names; None uses "D" (diagram).
+    /// output : {"named", "minimal"}, optional
+    ///     Named (default) requests names and source identities. Minimal omits both;
+    ///     name selectors, named momentum bases and graph_prefix then require named output.
+    ///     Diagram IDs remain available on explicit access or persistence.
     /// maximum_bridges : int, None, or Ellipsis, optional
     ///     Omission or Ellipsis requires one-particle irreducibility only for diagrams
     ///     with loops; tree exchanges are allowed, including in mixed loop ranges.
@@ -1181,6 +1197,7 @@ impl PyProcess {
     ///     Inclusive combined loop count across both sides of every cut.
     /// select_diagrams : sequence[FeynmanDiagram | str] or None, optional
     ///     Retain only these diagram objects, content-derived IDs, or finalized names.
+    ///     Strings of exactly 32 hexadecimal digits denote IDs; other strings denote names.
     /// veto_diagrams : sequence[FeynmanDiagram | str] or None, optional
     ///     Remove these diagram objects, content-derived IDs, or finalized names.
     /// loop_momentum_bases : sequence[tuple[FeynmanDiagram | str, sequence[int]]] or None, optional
@@ -1223,9 +1240,9 @@ impl PyProcess {
     ///     Shared token for cancelling a running generation task. Token cancellation
     ///     returns an incomplete result; Python signal-handler exceptions, including
     ///     KeyboardInterrupt, stop generation and propagate to the caller.
-    #[pyo3(signature = (*, dimension=None, real=None, loops=OrderRangeInput::default(), symmetrize_initial=false, symmetrize_final=false, symmetrize_left_right=false, symmetrize_external_fermions=false, threads=None, max_vertices=None, allow_self_loops=true, allow_zero_flow_edges=false, graph_prefix=None, maximum_bridges=Some(Python::attach(|py| py.Ellipsis())), self_energy=Some(Python::attach(|py| py.Ellipsis())), tadpoles=Some(Python::attach(|py| py.Ellipsis())), zero_snails=Some(Python::attach(|py| py.Ellipsis())), coupling_orders=None, fermion_loop_count_range=None, factorized_loop_topologies_count_range=Some(Python::attach(|py| py.Ellipsis())), blob_range=Some(Python::attach(|py| py.Ellipsis())), spectator_range=Some(Python::attach(|py| py.Ellipsis())), perturbative_orders=None, sewn_tadpoles=None, cut_amplitude_coupling_orders=None, cut_amplitude_loop_count_range=None, select_diagrams=None, veto_diagrams=None, loop_momentum_bases=None, numerator_prefactor=None, projector=None, numerator_grouping=None, filter_zero_color=false, cancellation_token=None, progress=Some(Python::attach(|py| PyString::new(py, "auto").into_any().unbind())), filter=None))]
+    #[pyo3(signature = (*, dimension=None, real=None, loops=OrderRangeInput::default(), symmetrize_initial=false, symmetrize_final=false, symmetrize_left_right=false, symmetrize_external_fermions=false, threads=None, max_vertices=None, allow_self_loops=true, allow_zero_flow_edges=false, graph_prefix=None, output="named", maximum_bridges=Some(Python::attach(|py| py.Ellipsis())), self_energy=Some(Python::attach(|py| py.Ellipsis())), tadpoles=Some(Python::attach(|py| py.Ellipsis())), zero_snails=Some(Python::attach(|py| py.Ellipsis())), coupling_orders=None, fermion_loop_count_range=None, factorized_loop_topologies_count_range=Some(Python::attach(|py| py.Ellipsis())), blob_range=Some(Python::attach(|py| py.Ellipsis())), spectator_range=Some(Python::attach(|py| py.Ellipsis())), perturbative_orders=None, sewn_tadpoles=None, cut_amplitude_coupling_orders=None, cut_amplitude_loop_count_range=None, select_diagrams=None, veto_diagrams=None, loop_momentum_bases=None, numerator_prefactor=None, projector=None, numerator_grouping=None, filter_zero_color=false, cancellation_token=None, progress=Some(Python::attach(|py| PyString::new(py, "auto").into_any().unbind())), filter=None))]
     #[pyo3(
-        text_signature = "($self, *, dimension=None, real=None, loops=0, symmetrize_initial=False, symmetrize_final=False, symmetrize_left_right=False, symmetrize_external_fermions=False, threads=None, max_vertices=None, allow_self_loops=True, allow_zero_flow_edges=False, graph_prefix=None, maximum_bridges=..., self_energy=..., tadpoles=..., zero_snails=..., coupling_orders=None, fermion_loop_count_range=None, factorized_loop_topologies_count_range=..., blob_range=..., spectator_range=..., perturbative_orders=None, sewn_tadpoles=None, cut_amplitude_coupling_orders=None, cut_amplitude_loop_count_range=None, select_diagrams=None, veto_diagrams=None, loop_momentum_bases=None, numerator_prefactor=None, projector=None, numerator_grouping=None, filter_zero_color=False, cancellation_token=None, progress='auto', filter=None)"
+        text_signature = "($self, *, dimension=None, real=None, loops=0, symmetrize_initial=False, symmetrize_final=False, symmetrize_left_right=False, symmetrize_external_fermions=False, threads=None, max_vertices=None, allow_self_loops=True, allow_zero_flow_edges=False, graph_prefix=None, output='named', maximum_bridges=..., self_energy=..., tadpoles=..., zero_snails=..., coupling_orders=None, fermion_loop_count_range=None, factorized_loop_topologies_count_range=..., blob_range=..., spectator_range=..., perturbative_orders=None, sewn_tadpoles=None, cut_amplitude_coupling_orders=None, cut_amplitude_loop_count_range=None, select_diagrams=None, veto_diagrams=None, loop_momentum_bases=None, numerator_prefactor=None, projector=None, numerator_grouping=None, filter_zero_color=False, cancellation_token=None, progress='auto', filter=None)"
     )]
     #[allow(clippy::too_many_arguments)]
     fn generate_amplitude(
@@ -1243,6 +1260,8 @@ impl PyProcess {
         allow_self_loops: bool,
         allow_zero_flow_edges: bool,
         graph_prefix: Option<String>,
+        #[gen_stub(override_type(type_repr = "typing.Literal['named', 'minimal']", imports = ("typing")))]
+        output: &str,
         #[gen_stub(override_type(type_repr = "int | None | types.EllipsisType"))]
         maximum_bridges: Option<Py<PyAny>>,
         #[gen_stub(override_type(type_repr = "SelfEnergyFilterOptions | types.EllipsisType | None", imports = ("types")))]
@@ -1292,6 +1311,7 @@ impl PyProcess {
             allow_self_loops,
             allow_zero_flow_edges,
             graph_prefix,
+            output,
             maximum_bridges,
             self_energy,
             tadpoles,
@@ -1390,6 +1410,10 @@ impl PyProcess {
     ///     Permit internal edges with identically zero momentum flow.
     /// graph_prefix : str or None, optional
     ///     Prefix assigned to generated diagram names; None uses "D" (diagram).
+    /// output : {"named", "minimal"}, optional
+    ///     Named (default) requests names and source identities. Minimal omits both;
+    ///     name selectors, named momentum bases and graph_prefix then require named output.
+    ///     Diagram IDs remain available on explicit access or persistence.
     /// maximum_bridges : int, None, or Ellipsis, optional
     ///     Omission or Ellipsis applies no bridge filter: it would act on the unsewn forward
     ///     graph, where every s-channel propagator is a bridge. An integer limits the internal
@@ -1426,6 +1450,7 @@ impl PyProcess {
     ///     Inclusive combined loop count across both sides of every cut.
     /// select_diagrams : sequence[FeynmanDiagram | str] or None, optional
     ///     Retain only these diagram objects, content-derived IDs, or finalized names.
+    ///     Strings of exactly 32 hexadecimal digits denote IDs; other strings denote names.
     /// veto_diagrams : sequence[FeynmanDiagram | str] or None, optional
     ///     Remove these diagram objects, content-derived IDs, or finalized names.
     /// loop_momentum_bases : sequence[tuple[FeynmanDiagram | str, sequence[int]]] or None, optional
@@ -1468,9 +1493,9 @@ impl PyProcess {
     ///     Shared token for cancelling a running generation task. Token cancellation
     ///     returns an incomplete result; Python signal-handler exceptions, including
     ///     KeyboardInterrupt, stop generation and propagate to the caller.
-    #[pyo3(signature = (*, loops=OrderRangeInput::default(), symmetrize_initial=false, symmetrize_left_right=false, symmetrize_external_fermions=false, threads=None, max_vertices=None, allow_self_loops=true, allow_zero_flow_edges=false, graph_prefix=None, maximum_bridges=Some(Python::attach(|py| py.Ellipsis())), self_energy=Some(Python::attach(|py| py.Ellipsis())), tadpoles=Some(Python::attach(|py| py.Ellipsis())), zero_snails=Some(Python::attach(|py| py.Ellipsis())), coupling_orders=None, fermion_loop_count_range=None, factorized_loop_topologies_count_range=Some(Python::attach(|py| py.Ellipsis())), blob_range=Some(Python::attach(|py| py.Ellipsis())), spectator_range=Some(Python::attach(|py| py.Ellipsis())), perturbative_orders=None, sewn_tadpoles=None, cut_amplitude_coupling_orders=None, cut_amplitude_loop_count_range=None, select_diagrams=None, veto_diagrams=None, loop_momentum_bases=None, numerator_prefactor=None, projector=None, numerator_grouping=None, filter_zero_color=false, cancellation_token=None, progress=Some(Python::attach(|py| PyString::new(py, "auto").into_any().unbind())), filter=None))]
+    #[pyo3(signature = (*, loops=OrderRangeInput::default(), symmetrize_initial=false, symmetrize_left_right=false, symmetrize_external_fermions=false, threads=None, max_vertices=None, allow_self_loops=true, allow_zero_flow_edges=false, graph_prefix=None, output="named", maximum_bridges=Some(Python::attach(|py| py.Ellipsis())), self_energy=Some(Python::attach(|py| py.Ellipsis())), tadpoles=Some(Python::attach(|py| py.Ellipsis())), zero_snails=Some(Python::attach(|py| py.Ellipsis())), coupling_orders=None, fermion_loop_count_range=None, factorized_loop_topologies_count_range=Some(Python::attach(|py| py.Ellipsis())), blob_range=Some(Python::attach(|py| py.Ellipsis())), spectator_range=Some(Python::attach(|py| py.Ellipsis())), perturbative_orders=None, sewn_tadpoles=None, cut_amplitude_coupling_orders=None, cut_amplitude_loop_count_range=None, select_diagrams=None, veto_diagrams=None, loop_momentum_bases=None, numerator_prefactor=None, projector=None, numerator_grouping=None, filter_zero_color=false, cancellation_token=None, progress=Some(Python::attach(|py| PyString::new(py, "auto").into_any().unbind())), filter=None))]
     #[pyo3(
-        text_signature = "($self, *, loops=0, symmetrize_initial=False, symmetrize_left_right=False, symmetrize_external_fermions=False, threads=None, max_vertices=None, allow_self_loops=True, allow_zero_flow_edges=False, graph_prefix=None, maximum_bridges=..., self_energy=..., tadpoles=..., zero_snails=..., coupling_orders=None, fermion_loop_count_range=None, factorized_loop_topologies_count_range=..., blob_range=..., spectator_range=..., perturbative_orders=None, sewn_tadpoles=None, cut_amplitude_coupling_orders=None, cut_amplitude_loop_count_range=None, select_diagrams=None, veto_diagrams=None, loop_momentum_bases=None, numerator_prefactor=None, projector=None, numerator_grouping=None, filter_zero_color=False, cancellation_token=None, progress='auto', filter=None)"
+        text_signature = "($self, *, loops=0, symmetrize_initial=False, symmetrize_left_right=False, symmetrize_external_fermions=False, threads=None, max_vertices=None, allow_self_loops=True, allow_zero_flow_edges=False, graph_prefix=None, output='named', maximum_bridges=..., self_energy=..., tadpoles=..., zero_snails=..., coupling_orders=None, fermion_loop_count_range=None, factorized_loop_topologies_count_range=..., blob_range=..., spectator_range=..., perturbative_orders=None, sewn_tadpoles=None, cut_amplitude_coupling_orders=None, cut_amplitude_loop_count_range=None, select_diagrams=None, veto_diagrams=None, loop_momentum_bases=None, numerator_prefactor=None, projector=None, numerator_grouping=None, filter_zero_color=False, cancellation_token=None, progress='auto', filter=None)"
     )]
     #[allow(clippy::too_many_arguments)]
     fn generate_cross_section(
@@ -1485,6 +1510,8 @@ impl PyProcess {
         allow_self_loops: bool,
         allow_zero_flow_edges: bool,
         graph_prefix: Option<String>,
+        #[gen_stub(override_type(type_repr = "typing.Literal['named', 'minimal']", imports = ("typing")))]
+        output: &str,
         #[gen_stub(override_type(type_repr = "int | None | types.EllipsisType"))]
         maximum_bridges: Option<Py<PyAny>>,
         #[gen_stub(override_type(type_repr = "SelfEnergyFilterOptions | types.EllipsisType | None", imports = ("types")))]
@@ -1535,6 +1562,7 @@ impl PyProcess {
             allow_self_loops,
             allow_zero_flow_edges,
             graph_prefix,
+            output,
             maximum_bridges,
             self_energy,
             tadpoles,
@@ -1986,6 +2014,7 @@ impl GenerationSettings {
         allow_self_loops: bool,
         allow_zero_flow_edges: bool,
         graph_prefix: Option<String>,
+        output: &str,
         maximum_bridges: Option<Py<PyAny>>,
         self_energy: Option<Py<PyAny>>,
         tadpoles: Option<Py<PyAny>>,
@@ -2092,9 +2121,18 @@ impl GenerationSettings {
         if let Some(value) = max_vertices {
             inner = inner.max_vertices(value);
         }
-        if let Some(value) = graph_prefix {
-            inner = inner.graph_prefix(value);
-        }
+        inner = inner.output(match (output, graph_prefix) {
+            ("named", prefix) => GenerationOutput::Named {
+                prefix: prefix.unwrap_or_else(|| "D".to_owned()),
+            },
+            ("minimal", None) => GenerationOutput::Minimal,
+            ("minimal", Some(_)) => {
+                return Err(PyValueError::new_err(
+                    "graph_prefix requires output='named'",
+                ));
+            }
+            _ => return Err(PyValueError::new_err("output must be 'named' or 'minimal'")),
+        });
 
         // Loop-only irreducibility is an amplitude default. For a cross section it would act on
         // the unsewn forward graph, where every s-channel propagator is a bridge.
@@ -2158,9 +2196,10 @@ impl GenerationSettings {
         if let Some(diagrams) = select_diagrams {
             let (mut ids, mut names) = (Vec::new(), Vec::new());
             for diagram in diagrams {
-                diagram.split(&mut ids, &mut names);
+                diagram.split(&mut ids, &mut names)?;
             }
-            if !ids.is_empty() {
+            // A present empty selection selects nothing, just like the native API.
+            if !ids.is_empty() || names.is_empty() {
                 inner = inner.select_diagram_ids(ids);
             }
             if !names.is_empty() {
@@ -2170,13 +2209,13 @@ impl GenerationSettings {
         if let Some(diagrams) = veto_diagrams {
             let (mut ids, mut names) = (Vec::new(), Vec::new());
             for diagram in diagrams {
-                diagram.split(&mut ids, &mut names);
+                diagram.split(&mut ids, &mut names)?;
             }
             inner = inner.veto_diagram_ids(ids).veto_diagrams(names);
         }
         for (diagram, edges) in loop_momentum_bases.unwrap_or_default() {
             let (mut ids, mut names) = (Vec::new(), Vec::new());
-            diagram.split(&mut ids, &mut names);
+            diagram.split(&mut ids, &mut names)?;
             let edges = edges.into_iter().map(EdgeId).collect::<Vec<_>>();
             inner = if let Some(id) = ids.into_iter().next() {
                 inner.with_loop_momentum_basis(id, edges)
@@ -2519,7 +2558,7 @@ impl PyGroupMember {
     fn source_diagram(&self) -> usize {
         self.inner.source_diagram
     }
-    /// Return the source diagram's stable content-derived ID.
+    /// Return the requested source ID, or None for minimal generation output.
     ///
     /// Examples
     /// --------
@@ -2527,10 +2566,13 @@ impl PyGroupMember {
     ///
     /// >>> source_ids = [entry.source_id for entry in group.members]
     #[getter]
-    fn source_id(&self) -> String {
-        self.inner.source_id.to_string()
+    fn source_id(&self) -> Option<String> {
+        self.inner
+            .source_identity
+            .as_ref()
+            .map(|identity| identity.id.to_string())
     }
-    /// Return the finalized display name assigned to the source diagram.
+    /// Return the requested source name, or None for minimal generation output.
     ///
     /// Examples
     /// --------
@@ -2538,8 +2580,11 @@ impl PyGroupMember {
     ///
     /// >>> source_names = [entry.source_name for entry in group.members]
     #[getter]
-    fn source_name(&self) -> &str {
-        &self.inner.source_name
+    fn source_name(&self) -> Option<&str> {
+        self.inner
+            .source_identity
+            .as_ref()
+            .map(|identity| identity.name.as_str())
     }
     /// Return the collapsed master index in ``GenerationResult.diagrams``.
     ///
@@ -3337,6 +3382,96 @@ for via_model in (True, False):
     }
 
     #[test]
+    fn minimal_output_preserves_physics_and_explicit_id_demands() {
+        Python::initialize();
+        Python::attach(|py| {
+            let module = PyModule::new(py, "symbolica.community.hepkit").unwrap();
+            crate::initialize_feynkit(&module).unwrap();
+            let locals = PyDict::new(py);
+            locals.set_item("fk", &module).unwrap();
+            locals
+                .set_item(
+                    "MODEL_JSON",
+                    include_str!("../tests/fixtures/scalars_2p_3p.json"),
+                )
+                .unwrap();
+            let code = CString::new(r#"
+import inspect
+import json
+model = fk.Model.from_json(MODEL_JSON)
+process = model.process([1000, 1000], [1000, 1000], vertex_allow=["V_3_SCALAR_000"])
+settings = dict(loops=0, threads=1, progress=None)
+named = process.generate_diagrams(**settings)
+minimal = process.generate_diagrams(output="minimal", **settings)
+assert len(named) == len(minimal) > 0
+for output in ("named", "minimal"):
+    assert len(process.generate_diagrams(output=output, select_diagrams=[], **settings)) == 0
+    assert len(process.generate_diagrams(output=output, veto_diagrams=[], **settings)) == len(named)
+assert all(d.name is not None for d in named.diagrams)
+assert all(d.name is None for d in minimal.diagrams)
+for left, right in zip(named.diagrams, minimal.diagrams):
+    left_json, right_json = json.loads(left.to_json()), json.loads(right.to_json())
+    left_json.pop("name")
+    right_json.pop("name")
+    assert left_json == right_json
+for left, right in zip(named.groups, minimal.groups):
+    assert left.master == right.master
+    assert len(left.members) == len(right.members)
+    for a, b in zip(left.members, right.members):
+        assert a.source_id is not None and a.source_name is not None
+        assert b.source_id is None and b.source_name is None
+        assert (a.source_diagram, a.diagram, a.ratio) == (b.source_diagram, b.diagram, b.ratio)
+        assert str(a.overall_factor_expression()) == str(b.overall_factor_expression())
+# Short hexadecimal names must remain names, including for keyed momentum bases.
+named_choice = named.diagrams[0]
+selected = process.generate_diagrams(select_diagrams=[named_choice.name], **settings)
+assert [d.id for d in selected.diagrams] == [named_choice.id]
+vetoed = process.generate_diagrams(veto_diagrams=[named_choice.name], **settings)
+assert {d.id for d in vetoed.diagrams} == {d.id for d in named.diagrams} - {named_choice.id}
+routed = process.generate_diagrams(loop_momentum_bases=[(named_choice.name, [])], **settings)
+assert [d.id for d in routed.diagrams] == [d.id for d in named.diagrams]
+# A tree has no independent loop edge: rejection proves the named override was applied.
+try:
+    process.generate_diagrams(loop_momentum_bases=[(named_choice.name, [0])], **settings)
+except fk.GenerationError as error:
+    assert "loop-momentum" in str(error)
+else:
+    raise AssertionError("named momentum-basis override was ignored")
+# Passing either a diagram or its ID explicitly demands identity, without naming it.
+chosen = minimal.diagrams[0]
+assert len(chosen.id) == 32
+for selector in (chosen, chosen.id):
+    selected = process.generate_diagrams(output="minimal", select_diagrams=[selector], **settings)
+    assert [d.id for d in selected.diagrams] == [chosen.id]
+    assert selected.diagrams[0].name is None
+    vetoed = process.generate_diagrams(output="minimal", veto_diagrams=[selector], **settings)
+    assert chosen.id not in [d.id for d in vetoed.diagrams]
+    routed = process.generate_diagrams(output="minimal", loop_momentum_bases=[(selector, [])], **settings)
+    assert len(routed) == len(minimal)
+for kwargs in (dict(graph_prefix="x"), dict(select_diagrams=[named.diagrams[0].name]),
+               dict(veto_diagrams=[named.diagrams[0].name]),
+               dict(loop_momentum_bases=[(named.diagrams[0].name, [])])):
+    try:
+        process.generate_diagrams(output="minimal", **kwargs, **settings)
+    except (ValueError, fk.GenerationError) as error:
+        assert "named" in str(error)
+    else:
+        raise AssertionError(f"Minimal accepted a name requirement: {kwargs}")
+for method in (fk.Process.generate_diagrams, fk.Process.generate_amplitude, fk.Process.generate_cross_section):
+    assert inspect.signature(method).parameters["output"].default == "named"
+for output in ("unknown", "Minimal"):
+    try:
+        process.generate_diagrams(output=output, **settings)
+    except ValueError:
+        pass
+    else:
+        raise AssertionError(f"unknown output policy {output} accepted")
+"#).unwrap();
+            py.run(&code, Some(&locals), Some(&locals)).unwrap();
+        });
+    }
+
+    #[test]
     fn generation_defaults_leave_numerator_grouping_opt_in() {
         Python::initialize();
         Python::attach(|py| {
@@ -3774,8 +3909,8 @@ assert foreign_process.outgoing_alternatives[0][0].pdg == 1000
                 .iter()
                 .map(|diagram| {
                     (
-                        diagram.name().to_owned(),
-                        diagram.id(),
+                        diagram.name().map(str::to_owned),
+                        diagram.id().unwrap(),
                         diagram.symmetry_factor(),
                         diagram.overall_factor().to_canonical_string(),
                     )

@@ -30,6 +30,8 @@
 
 use std::cmp::Ordering;
 
+use crate::half_edge::canon::{factorial, scaled};
+
 use super::{
     budget::Lines,
     model::{Fitting, Model, VertexState},
@@ -58,6 +60,8 @@ pub(crate) struct Decoration<'d> {
     pub(crate) states: &'d [VertexState],
     /// Per vertex: the signature index; empty until the rules are chosen.
     pub(crate) rules: &'d [u32],
+    /// Full half-edge group order, meaningful only after choosing the rules.
+    pub(crate) automorphism_count: Option<u128>,
     /// While checking the filter's heredity: the filter rejected a partial labelling of this
     /// diagram.
     pub(crate) vetoed: bool,
@@ -96,6 +100,10 @@ pub(crate) struct Decorator {
     preimage: Vec<u16>,
     flips: Vec<bool>,
     stabilizer: Vec<usize>,
+    /// The node stabilizer of the final rule tuple, and the kernel fixing all nodes.
+    node_stabilizer: Option<u128>,
+    leg_kernel: Option<u128>,
+    kernel: Option<u128>,
     image: Vec<u8>,
     choices: Vec<usize>,
     rules: Vec<u32>,
@@ -126,9 +134,27 @@ impl Decorator {
     /// Start decorating `topology`, whose node automorphism generators (stride `n`) are given
     /// unless the model allows a single diagram per topology. [`Self::next`] yields one diagram
     /// per isomorphism class.
-    pub(crate) fn start(&mut self, model: &Model, topology: &Topology, generators: &[u32]) {
+    pub(crate) fn start(
+        &mut self,
+        model: &Model,
+        topology: &Topology,
+        generators: &[u32],
+        node_group_order: Option<u128>,
+    ) {
         self.phase = Phase::Done;
         self.vetoed = None;
+        self.node_stabilizer = Some(1);
+        self.leg_kernel = topology.vertices[..topology.n]
+            .iter()
+            .try_fold(1, |order, v| {
+                (0..model.legs.n_classes()).try_fold(order, |order, class| {
+                    scaled(
+                        Some(order),
+                        factorial(model.legs.count(v.labelled, class) as usize),
+                    )
+                })
+            });
+        self.kernel = self.leg_kernel;
         let n = topology.n;
         let single = model.single_diagram();
         if single {
@@ -151,6 +177,10 @@ impl Decorator {
         }
         if single {
             if self.single(model) {
+                // All labels and rules are unique: every topology automorphism survives.
+                // Do not close the group here (a 13-leaf star already has 13! elements).
+                self.node_stabilizer = node_group_order;
+                self.kernel = self.kernel_order(model);
                 self.phase = Phase::Single;
             }
             return;
@@ -213,6 +243,7 @@ impl Decorator {
         }
         Some(Decoration {
             rules: &self.rules,
+            automorphism_count: scaled(self.node_stabilizer, self.kernel),
             vetoed: self.vetoed.is_some(),
             ..self.labelled(t, self.edges.len())
         })
@@ -226,6 +257,7 @@ impl Decorator {
             labels: &self.labels[..n],
             states: &self.states,
             rules: &[],
+            automorphism_count: None,
             vetoed: false,
         }
     }
@@ -684,7 +716,34 @@ impl Decorator {
                 Ordering::Greater => {}
             }
         }
+        self.kernel = self.kernel_order(model);
         true
+    }
+
+    /// The kernel fixing every node: equal edges and legs permute, and undirected loops flip.
+    fn kernel_order(&self, model: &Model) -> Option<u128> {
+        let mut order = self.leg_kernel;
+        let mut start = 0;
+        while start < self.edges.len() {
+            let edge = self.edges[start];
+            let label = self.labels[start];
+            let mut end = start + 1;
+            // Single uses bundle zero for every edge, so compare actual endpoints and labels.
+            while end < self.edges.len()
+                && (self.edges[end].u, self.edges[end].v, self.labels[end])
+                    == (edge.u, edge.v, label)
+            {
+                end += 1;
+            }
+            order = scaled(order, factorial(end - start));
+            if edge.u == edge.v && !model.loop_labels[label as usize].directed {
+                for _ in start..end {
+                    order = scaled(order, Some(2));
+                }
+            }
+            start = end;
+        }
+        order
     }
 
     /// Advance to the next rule tuple (the first if `first`) that is minimal under the
@@ -721,13 +780,18 @@ impl Decorator {
     fn rules_minimal(&mut self) -> bool {
         let n = self.rules.len();
         self.rule_image.resize(n, 0);
+        self.node_stabilizer = Some(1); // identity is omitted from `stabilizer`
         for &k in &self.stabilizer {
             let g = self.group.elements().nth(k).expect("stabilizer element");
             for (v, &r) in self.rules.iter().enumerate() {
                 self.rule_image[g[v] as usize] = r;
             }
-            if self.rule_image[..] < self.rules[..] {
-                return false;
+            match self.rule_image[..].cmp(&self.rules[..]) {
+                Ordering::Less => return false,
+                Ordering::Equal => {
+                    self.node_stabilizer = self.node_stabilizer.and_then(|n| n.checked_add(1));
+                }
+                Ordering::Greater => {}
             }
         }
         true

@@ -125,10 +125,10 @@ fn gluons(labels: &[u8]) -> Vec<(u8, Stub<u8>)> {
 fn check_canonical(diagrams: &[Diagram<u8, u8>]) {
     let mut seen = HashSet::new();
     for d in diagrams {
-        let canon = d.graph.canonize_by(|&s| s, |&f| f, |&h| h);
+        let canon = d.graph().canonize_by(|&s| s, |&f| f, |&h| h);
         assert_eq!(canon.automorphism_count(), d.automorphism_count);
-        assert_eq!(*canon.canonical_form(), d.canonical_form);
-        assert!(seen.insert(d.canonical_form.clone()), "duplicate graph");
+        assert_eq!(canon.canonical_form(), d.canonical_form());
+        assert!(seen.insert(d.canonical_form().clone()), "duplicate graph");
     }
 }
 
@@ -581,7 +581,7 @@ fn many_distinct_legs_stream() {
     assert_eq!(topologies.load(Ordering::Relaxed), 3);
     assert!(first
         .iter()
-        .all(|d| d.graph.n_live() == 38 && d.automorphism_count == Some(1)));
+        .all(|d| d.graph().n_live() == 38 && d.automorphism_count == Some(1)));
     check_canonical(&first);
 }
 
@@ -616,7 +616,7 @@ fn self_loop_bridge_and_vertex_limits() {
         (diagrams.len(), Ratio::sum(&diagrams)),
         (115, Ratio(339, 16))
     );
-    assert!(diagrams.iter().all(|d| d.graph.n_live() <= 4));
+    assert!(diagrams.iter().all(|d| d.graph().n_live() <= 4));
 }
 
 #[test]
@@ -624,7 +624,7 @@ fn loop_ranges_and_low_degree_vertices() {
     let diagrams = run(phi(&[3], &[]).loops(..=5));
     assert_eq!(diagrams.len(), 2 + 5 + 17 + 71);
     assert!(diagrams.windows(2).all(|w| w[0].loops <= w[1].loops));
-    assert!(diagrams.iter().all(|d| loop_count(&d.graph) == d.loops));
+    assert!(diagrams.iter().all(|d| loop_count(d.graph()) == d.loops));
     // a vertex bound alone bounds the loop order: eight cubic vertices reach five loops
     let bounded = run(phi(&[3], &[]).max_vertices(8));
     assert_eq!(bounded.len(), diagrams.len());
@@ -647,16 +647,183 @@ fn trees_of_every_degree() {
     let diagrams = run(phi(&degrees, &[]).loops(0..=0).max_vertices(11));
     let mut counts = [0; 12];
     for d in &diagrams {
-        counts[d.graph.n_live()] += 1;
+        counts[d.graph().n_live()] += 1;
     }
     assert_eq!(counts, [0, 0, 1, 1, 2, 3, 6, 11, 23, 47, 106, 235]);
     check_canonical(&diagrams);
-    // the partial stars on the way to the star with 13 leaves have up to 12! automorphisms, which
-    // the search must not list
+    // Partial stars have up to 12! automorphisms and the complete star has 13!: neither
+    // the search nor the Single decorator may enumerate that group
     let diagrams = run(phi(&[1, 13], &[]).loops(0..=0).max_vertices(14));
     let mut symmetries: Vec<_> = diagrams.iter().map(|d| d.automorphism_count).collect();
     symmetries.sort();
     assert_eq!(symmetries, [Some(2), Some((1..=13).product())]);
+}
+
+#[test]
+fn compact_automorphisms_split_node_stabilizers_and_local_kernels() {
+    let scalar = Stub::undirected(PHI);
+    let other = Stub::undirected(CHI);
+    let charged = Stub::incoming(ELECTRON);
+    let cases = [
+        // Node exchange times three interchangeable parallel edges.
+        (vec![scalar.clone(); 3], 2, 2, false, 12),
+        // Unequal fields split the edge kernel into 2! and 1!.
+        (
+            vec![scalar.clone(), scalar.clone(), other.clone()],
+            2,
+            2,
+            false,
+            4,
+        ),
+        // Opposite directed edges exchange only together with their nodes.
+        (
+            vec![charged.clone(), charged.clone().flipped()],
+            1,
+            2,
+            false,
+            2,
+        ),
+        (vec![scalar.clone(); 2], 1, 1, true, 2),
+        (vec![scalar.clone(); 4], 2, 1, true, 8),
+        // Different self-loop fields each flip, but cannot permute with each other.
+        (
+            vec![scalar.clone(), scalar.clone(), other.clone(), other],
+            2,
+            1,
+            true,
+            4,
+        ),
+        (
+            vec![charged.clone(), charged.clone().flipped()],
+            1,
+            1,
+            true,
+            1,
+        ),
+        // Directed loops permute, without the undirected flip factor.
+        (
+            vec![
+                charged.clone(),
+                charged.clone().flipped(),
+                charged.clone(),
+                charged.flipped(),
+            ],
+            2,
+            1,
+            true,
+            2,
+        ),
+    ];
+    for (rule, loops, vertices, self_loops, order) in cases {
+        let diagrams = run(GraphGenerator::<u8, u8>::new([], [rule])
+            .loops(loops..=loops)
+            .max_vertices(vertices)
+            .allow_self_loops(self_loops));
+        assert_eq!(diagrams.len(), 1);
+        assert_eq!(diagrams[0].automorphism_count, Some(order));
+        check_canonical(&diagrams);
+    }
+    for (labels, order) in [(vec![0, 0], 4), (vec![0, 1], 2)] {
+        let diagrams = run(phi(&[3], &labels).allow_self_loops(false).loops(1..=1));
+        assert_eq!(diagrams.len(), 1);
+        assert_eq!(diagrams[0].automorphism_count, Some(order));
+        check_canonical(&diagrams);
+    }
+    let diagrams = run(GraphGenerator::<u8, u8>::new(
+        [],
+        [vec![scalar.clone(); 3], vec![scalar; 3]],
+    )
+    .loops(2..=2)
+    .max_vertices(2));
+    let mut orders: Vec<_> = diagrams.iter().map(|d| d.automorphism_count).collect();
+    orders.sort();
+    assert_eq!(orders, [Some(6), Some(12), Some(12)]);
+    check_canonical(&diagrams);
+}
+
+#[test]
+fn identical_leg_kernel_and_checked_group_products() {
+    for (labels, expected) in [(vec![0; 13], (1..=13).product()), ((0..13).collect(), 1)] {
+        let diagrams = run(phi(&[13], &labels).loops(0..=0).max_vertices(1));
+        assert_eq!(diagrams.len(), 1);
+        assert_eq!(diagrams[0].automorphism_count, Some(expected));
+        check_canonical(&diagrams);
+    }
+    // A valid generator vertex has at most 15 stubs; exercise overflow at the shared arithmetic
+    // boundary instead of weakening that limit or attempting to enumerate an enormous group.
+    use crate::half_edge::canon::{factorial, scaled};
+    assert_eq!(factorial(34), Some(295232799039604140847618609643520000000));
+    assert_eq!(factorial(35), None);
+    assert_eq!(scaled(factorial(34), Some(2)), None);
+    assert_eq!(scaled(None, Some(1)), None);
+}
+
+#[test]
+fn compact_outputs_own_payloads_after_scratch_reuse_and_clone() {
+    use rayon::prelude::*;
+    let mut saved = run(qed(vec![
+        (1, Stub::undirected(PHOTON)),
+        (2, Stub::undirected(PHOTON)),
+    ])
+    .loops(2..=2));
+    let expected = canonical_forms(&saved);
+    for diagram in &mut saved {
+        // Debug emission warms both caches for its independent oracle. Clear only those derived
+        // caches so this ownership test exercises reconstruction after the iterator/model die.
+        diagram.graph.take();
+        diagram.canonical_form.take();
+        let _ = format!("{diagram:?}");
+        assert!(diagram.graph.get().is_none() && diagram.canonical_form.get().is_none());
+    }
+    let cold = saved.clone();
+    // A different model reuses the normal decorator buffers on its Single path.
+    let scalar = run(phi(&[1, 13], &[]).loops(0..=0).max_vertices(14));
+    assert!(scalar
+        .iter()
+        .any(|d| d.automorphism_count == Some((1..=13).product())));
+    let forms: Vec<_> = cold
+        .par_iter()
+        .map(|d| d.canonical_form().clone())
+        .collect();
+    assert_eq!(forms, expected);
+    assert!(cold.iter().all(|d| d.graph.get().is_none()));
+    check_canonical(&cold);
+    let warm = cold.clone();
+    assert!(warm
+        .iter()
+        .all(|d| d.graph.get().is_some() && d.canonical_form.get().is_some()));
+    assert_eq!(canonical_forms(&warm), expected);
+    assert!(saved
+        .iter()
+        .all(|d| d.graph.get().is_none() && d.canonical_form.get().is_none()));
+    check_canonical(&saved);
+}
+
+#[cfg(not(debug_assertions))]
+#[test]
+fn release_outputs_materialize_only_on_demand() {
+    let mut compact = run(phi(&[3], &[1, 2]).loops(1..=1).filter(|view| {
+        let _ = view.edges().count();
+        true
+    }));
+    assert!(!compact.is_empty());
+    for diagram in &compact {
+        assert!(diagram.graph.get().is_none() && diagram.canonical_form.get().is_none());
+    }
+    let first = compact.remove(0);
+    let _ = first.canonical_form();
+    assert!(first.graph.get().is_none());
+    let second = first.clone();
+    let _ = second.graph();
+    assert!(second.graph.get().is_some() && first.graph.get().is_none());
+    let requested = run(phi(&[3], &[1, 2]).loops(1..=1).filter(|view| {
+        let _ = view.complete_graph();
+        true
+    }));
+    assert!(requested
+        .iter()
+        .all(|d| d.graph.get().is_some() && d.canonical_form.get().is_none()));
+    check_canonical(&requested);
 }
 
 #[test]
@@ -673,7 +840,7 @@ fn identical_signatures_are_distinct_vertex_rules() {
     check_canonical(&diagrams);
     let rules: HashSet<usize> = diagrams
         .iter()
-        .flat_map(|d| d.graph.iter_nodes().map(|(_, _, &r)| r))
+        .flat_map(|d| d.graph().iter_nodes().map(|(_, _, &r)| r))
         .collect();
     assert_eq!(rules, HashSet::from([0, 1]));
 }
@@ -717,7 +884,7 @@ fn dead_field_assignments(generator: GraphGenerator<u8, u8>) -> (Vec<Diagram<u8,
     let edges: usize = diagrams
         .iter()
         .map(|d| {
-            d.graph
+            d.graph()
                 .iter_edges()
                 .filter(|(pair, ..)| matches!(pair, HedgePair::Paired { .. }))
                 .count()
@@ -778,7 +945,10 @@ fn filter_keeps_exactly_the_accepted_graphs() {
 }
 
 fn canonical_forms(diagrams: &[Diagram<u8, u8>]) -> Vec<CanonicalForm<usize, u8, Option<u8>>> {
-    diagrams.iter().map(|d| d.canonical_form.clone()).collect()
+    diagrams
+        .iter()
+        .map(|d| d.canonical_form().clone())
+        .collect()
 }
 
 type View<'a> = GraphView<'a, u8, u8>;
@@ -891,7 +1061,7 @@ fn hereditary_filters_prune_to_the_post_filtered_graphs() {
     assert!(pruned < all, "{pruned} < {all}");
     let ghostless = run(gggg())
         .into_iter()
-        .filter(|d| d.graph.iter_edges().all(|(_, _, f)| *f.data != GHOST))
+        .filter(|d| d.graph().iter_edges().all(|(_, _, f)| *f.data != GHOST))
         .collect::<Vec<_>>();
     assert_eq!(
         canonical_forms(&run(gggg().filter(without_field(GHOST)))),
@@ -1228,7 +1398,7 @@ impl Budget {
 
     /// The emitted graph `d` meets the budget, computed on the graph alone.
     fn admits(&self, d: &Diagram<u8, u8>) -> bool {
-        let g = &d.graph;
+        let g = d.graph();
         let n = g.node_bound();
         let rules: Vec<usize> = g.iter_nodes().map(|(_, _, &rule)| rule).collect();
         let lines = edges_and_legs(g);
@@ -1749,7 +1919,7 @@ fn one_leg_graphs_without_bridges_are_kept() {
         let diagrams = run(generator.loops(1..=2));
         let summary: Vec<_> = diagrams
             .iter()
-            .map(|d| (d.loops, d.graph.n_live(), d.automorphism_count))
+            .map(|d| (d.loops, d.graph().n_live(), d.automorphism_count))
             .collect();
         assert_eq!(summary, [(1, 1, Some(2)), (2, 3, Some(4))]);
     }
@@ -1770,8 +1940,11 @@ fn output_order_does_not_depend_on_threads() {
         ]
     };
     for (sequential, parallel) in generators().into_iter().zip(generators()) {
-        let order =
-            |d: Vec<Diagram<u8, u8>>| d.into_iter().map(|d| d.canonical_form).collect::<Vec<_>>();
+        let order = |d: Vec<Diagram<u8, u8>>| {
+            d.into_iter()
+                .map(|d| d.canonical_form().clone())
+                .collect::<Vec<_>>()
+        };
         let expected = order(run(sequential));
         let parallel = parallel.parallel(true);
         for threads in [1, 2, 4, 8, 32] {
@@ -1854,7 +2027,7 @@ mod graphica {
             generator
                 .iter()
                 .unwrap()
-                .map(|d| (d.canonical_form, d.automorphism_count.unwrap()))
+                .map(|d| (d.canonical_form().clone(), d.automorphism_count.unwrap()))
                 .collect()
         }
 
