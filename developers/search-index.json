@@ -252,6 +252,12 @@
     "kind": "developer current implemented heading"
   },
   {
+    "title": "Nested soft-counterterm oracle",
+    "summary": "UV renormalization architecture",
+    "href": "architecture/uv-renormalization/#nested-soft-counterterm-oracle",
+    "kind": "developer current implemented heading"
+  },
+  {
     "title": "Signs and Integrated Projections",
     "summary": "UV renormalization architecture",
     "href": "architecture/uv-renormalization/#signs-and-integrated-projections",
