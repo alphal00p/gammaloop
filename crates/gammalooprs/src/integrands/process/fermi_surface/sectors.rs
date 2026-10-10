@@ -1,6 +1,7 @@
 use std::collections::BTreeMap;
 
 use color_eyre::eyre::{Result, ensure, eyre};
+use linnet::half_edge::involution::EdgeIndex;
 use symbolica::atom::{Atom, AtomCore, AtomView};
 use three_dimensional_reps::ThermalDistributionFactor;
 
@@ -79,6 +80,17 @@ impl FermiSurfaceSector {
     /// orientation selection. The fifth N argument must be a definite sign;
     /// distinct signs in an explicit sum remain distinct supports.
     pub(crate) fn extract(graph: &Graph, expression: &Atom) -> Result<(Atom, Vec<Self>)> {
+        // Only fermions with a chemical potential can have a zero-temperature
+        // Fermi surface. A missing chemical potential is zero, and warm-up
+        // restricts bosons to |mu| < m or m = mu = 0. Either occupation is then
+        // constant on the shell E > 0, so its positive-order derivatives vanish.
+        let has_fermi_surface = |edge_id: EdgeIndex| -> Result<bool> {
+            let (_, _, edge) = graph
+                .iter_edges()
+                .find(|(_, edge, _)| *edge == edge_id)
+                .ok_or_else(|| eyre!("Unknown thermal distribution edge {edge_id}"))?;
+            Ok(edge.data.is_fermion() && edge.data.chemical_potential_atom().is_some())
+        };
         let calls = Self::calls(expression)?;
         let mut expression = expression.unwrap_function(GS.thermal_weight_wrapper);
         let mut active = Vec::new();
@@ -86,13 +98,7 @@ impl FermiSurfaceSector {
             if !call.temperature_flag.is_zero() || call.derivative_order == 0 {
                 continue;
             }
-            let (_, _, edge) = graph
-                .iter_edges()
-                .find(|(_, edge, _)| *edge == call.edge)
-                .ok_or_else(|| eyre!("Unknown thermal distribution edge {}", call.edge))?;
-            if edge.data.chemical_potential_atom().is_none() {
-                // At zero temperature an edge without a chemical potential has
-                // constant weight, so every positive-order derivative vanishes.
+            if !has_fermi_surface(call.edge)? {
                 expression = expression.replace(key.to_pattern()).with(Atom::Zero);
                 continue;
             }
@@ -187,14 +193,10 @@ impl FermiSurfaceSector {
                 "An explicit step in a Fermi coefficient has no certified independent routing"
             );
             for (_, step) in Self::calls(&coefficient)? {
-                if !step.temperature_flag.is_zero() || step.derivative_order != 0 {
-                    continue;
-                }
-                let (_, _, edge) = graph
-                    .iter_edges()
-                    .find(|(_, edge, _)| *edge == step.edge)
-                    .ok_or_else(|| eyre!("Unknown thermal distribution edge {}", step.edge))?;
-                if edge.data.chemical_potential_atom().is_none() {
+                if !step.temperature_flag.is_zero()
+                    || step.derivative_order != 0
+                    || !has_fermi_surface(step.edge)?
+                {
                     continue;
                 }
                 let routing = product
@@ -229,7 +231,10 @@ mod tests {
     use symbolica::{function, symbol};
 
     use super::*;
-    use crate::integrands::process::fermi_surface::routing;
+    use crate::{
+        dot, graph::parse::IntoGraph, initialisation::test_initialise,
+        integrands::process::fermi_surface::routing,
+    };
 
     #[test]
     fn fermi_sector_extraction_preserves_factorized_coefficients_and_regular_terms() -> Result<()> {
@@ -255,7 +260,7 @@ mod tests {
                 assert_eq!(
                     sectors[0].product.factors(),
                     &[ThermalDistributionFactor {
-                        edge_id: linnet::half_edge::involution::EdgeIndex(1),
+                        edge_id: EdgeIndex(1),
                         sign,
                         derivative_order,
                     }]
@@ -311,13 +316,7 @@ mod tests {
     fn fermi_sector_detector_accepts_unresolved_orientation_and_ignores_regular_weights()
     -> Result<()> {
         let graph = routing::test_graph()?;
-        let unresolved = GS.thermal_distribution(
-            1,
-            1,
-            0,
-            1,
-            GS.sign(linnet::half_edge::involution::EdgeIndex(1)),
-        );
+        let unresolved = GS.thermal_distribution(1, 1, 0, 1, GS.sign(EdgeIndex(1)));
         assert!(FermiSurfaceSector::is_present(&unresolved)?);
         assert!(FermiSurfaceSector::extract(&graph, &unresolved).is_err());
         for expression in [
@@ -337,6 +336,24 @@ mod tests {
             assert!(bulk.is_zero());
             assert!(sectors.is_empty());
         }
+        Ok(())
+    }
+
+    #[test]
+    fn fermi_sector_extraction_drops_boson_derivatives() -> Result<()> {
+        test_initialise()?;
+        let graph: Graph = dot!(digraph boson_cycle {
+            node [num=1]
+            edge [num=1 particle="W+"]
+            A -> B [id=0 lmb_id=0]
+            B -> A [id=1]
+        })?;
+        assert!(graph[EdgeIndex(0)].chemical_potential_atom().is_some());
+        let step = GS.thermal_distribution(1, 0, 0, 1, 1);
+        let expression = GS.thermal_distribution(0, 2, 0, 1, 1) * &step + &step;
+        let (bulk, sectors) = FermiSurfaceSector::extract(&graph, &expression)?;
+        assert_eq!(bulk, step);
+        assert!(sectors.is_empty());
         Ok(())
     }
 

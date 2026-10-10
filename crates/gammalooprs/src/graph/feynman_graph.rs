@@ -119,7 +119,8 @@ impl Graph {
                 thermal_edges.len().saturating_sub(1).max(2)
             } else {
                 // Positive zero-temperature orders belong to Fermi-surface
-                // extraction, including vanishing derivatives without a chemical potential.
+                // extraction, including the vanishing derivatives of bosons and
+                // of particles without a chemical potential.
                 0
             };
             let temperature_flag = Atom::num(i64::from(medium_mode.is_finite_temperature()));

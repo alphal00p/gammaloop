@@ -11,8 +11,14 @@ use crate::{
     utils::load_generic_model,
 };
 
-#[test]
-fn production_fermi_amplitude_preserves_orientation_sum_and_saved_state() -> Result<()> {
+/// The simplified `sm-thermal` model with vacuum-subtracted zero-temperature
+/// amplitude settings; `muB` is its only nonzero chemical potential.
+fn cold_dense_setup() -> Result<(
+    Model,
+    crate::model::InputParamCard<F<f64>>,
+    GlobalSettings,
+    RuntimeSettings,
+)> {
     test_initialise()?;
     let mut model = load_generic_model("sm");
     let mut card = crate::model::InputParamCard::from_file(
@@ -20,19 +26,7 @@ fn production_fermi_amplitude_preserves_orientation_sum_and_saved_state() -> Res
             .join("../../assets/models/json/sm/restrict_thermal.json"),
     )?;
     model.simplify(&mut card)?;
-    let mass = 3.0_f64;
-    let chemical_potential = 5.0_f64;
-    card.insert("MB".into(), Complex::new_re(F(mass)));
-    card.insert("muB".into(), Complex::new_re(F(3.0 * chemical_potential)));
-    model.apply_param_card(&card)?;
-    let graphs = Graph::from_string(
-        r#"digraph fermi_vacuum_cycle {
-            node [num=1]; edge [num=1 particle="b"];
-            A -> B [id=0 lmb_id=0]; B -> A [id=1];
-        }"#,
-        &model,
-    )?;
-    let mut global: GlobalSettings = toml::from_str(
+    let global: GlobalSettings = toml::from_str(
         r#"
 [generation.medium]
 mode = "zero_temperature_equilibrium"
@@ -65,6 +59,24 @@ graphs = "summed"
 orientations = "summed"
 sampling_multichanneling = false
 "#,
+    )?;
+    Ok((model, card, global, settings))
+}
+
+#[test]
+fn production_fermi_amplitude_preserves_orientation_sum_and_saved_state() -> Result<()> {
+    let (mut model, mut card, mut global, settings) = cold_dense_setup()?;
+    let mass = 3.0_f64;
+    let chemical_potential = 5.0_f64;
+    card.insert("MB".into(), Complex::new_re(F(mass)));
+    card.insert("muB".into(), Complex::new_re(F(3.0 * chemical_potential)));
+    model.apply_param_card(&card)?;
+    let graphs = Graph::from_string(
+        r#"digraph fermi_vacuum_cycle {
+            node [num=1]; edge [num=1 particle="b"];
+            A -> B [id=0 lmb_id=0]; B -> A [id=1];
+        }"#,
+        &model,
     )?;
     let pool = rayon::ThreadPoolBuilder::new()
         .num_threads(1)
@@ -222,6 +234,74 @@ sampling_multichanneling = false
             let error = restored.warm_up(&shifted_model).unwrap_err();
             assert!(error.to_string().contains("h_function"), "{error}");
         }
+    }
+    Ok(())
+}
+
+#[test]
+fn zero_chemical_potentials_have_no_fermi_surface() -> Result<()> {
+    // In sm-thermal, muQ = muLe = 0 make the chemical potentials of G+ and e-
+    // vanish. Their raised lines previously failed generation (a boson) and
+    // the first sample (a degenerate massless onset).
+    let (model, _, mut global, settings) = cold_dense_setup()?;
+    let pool = rayon::ThreadPoolBuilder::new()
+        .num_threads(1)
+        .stack_size(256 * 1024 * 1024)
+        .build()?;
+    let input = MomentumSpaceEvaluationInput {
+        loop_momenta: vec![ThreeMomentum::new(F(2.0), F(-1.0), F(0.5))],
+        integrator_weight: F(1.0),
+        graph_id: Some(0),
+        group_id: None,
+        orientation: None,
+        channel_id: None,
+    };
+    for (particle, fermi_sectors) in [("G+", false), ("e-", true)] {
+        let graphs = Graph::from_string(
+            format!(
+                r#"digraph zero_mu_cycle {{
+                    node [num=1]; edge [num=1 particle="{particle}"];
+                    A -> B [id=0 lmb_id=0]; B -> A [id=1];
+                }}"#
+            ),
+            &model,
+        )?;
+        let mut values = Vec::new();
+        for vacuum_subtraction in [false, true] {
+            global.generation.medium.vacuum_subtraction = vacuum_subtraction;
+            let mut amplitude = Amplitude::from_graph_list("zero_mu_cycle", graphs.clone())?;
+            amplitude.preprocess(&model, &global.generation, &(&settings).into(), &pool)?;
+            amplitude.build_integrand(
+                &model,
+                "zero_mu_cycle",
+                &global,
+                (&settings).into(),
+                &pool,
+            )?;
+            let runtime = amplitude.integrand.as_mut().unwrap();
+            runtime.warm_up(&model)?;
+            let ProcessIntegrand::Amplitude(generated) = &*runtime else {
+                unreachable!()
+            };
+            assert_eq!(
+                !generated.data.graph_terms[0].fermi_surfaces.is_empty(),
+                fermi_sectors,
+                "{particle}"
+            );
+            values.push(
+                runtime
+                    .evaluate_momentum_configuration(&model, &input, false)?
+                    .integrand_result,
+            );
+        }
+        // Without a Fermi sea, the medium contribution is only binary64
+        // rounding of the full (vacuum) value.
+        let [full, medium] = [&values[0], &values[1]].map(|value| value.re.0.hypot(value.im.0));
+        assert!(full > 0.0, "{particle}: {values:?}");
+        assert!(
+            medium <= 8.0 * f64::EPSILON * full,
+            "{particle}: {values:?}"
+        );
     }
     Ok(())
 }
