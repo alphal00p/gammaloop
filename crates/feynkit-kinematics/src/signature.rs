@@ -47,6 +47,14 @@ impl Signature {
         }
     }
 
+    /// Construct an all-zero signature of the given length.
+    #[inline]
+    pub fn zeros(len: usize) -> Self {
+        Self {
+            coefficients: vec![SignOrZero::Zero; len],
+        }
+    }
+
     /// Validate integer coefficients and construct a signature.
     pub fn try_from_integers(
         coefficients: impl IntoIterator<Item = i8>,
@@ -73,6 +81,12 @@ impl Signature {
     /// Borrow a coefficient by position.
     pub fn get(&self, index: usize) -> Option<SignOrZero> {
         self.coefficients.get(index).copied()
+    }
+
+    /// Mutably borrow a coefficient without changing the signature's length.
+    #[inline]
+    pub fn get_mut(&mut self, index: usize) -> Option<&mut SignOrZero> {
+        self.coefficients.get_mut(index)
     }
 
     /// Iterate over the coefficients.

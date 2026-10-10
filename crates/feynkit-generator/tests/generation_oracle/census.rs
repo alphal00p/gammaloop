@@ -21,7 +21,9 @@ use std::{
 };
 
 use feynkit_generator::{GenerationReport, GenerationResult};
-use feynkit_graph::{DiagramId, FeynmanDiagram, expressions::evaluate_overall_factor};
+use feynkit_graph::{
+    DiagramId, FeynmanDiagram, LoopMomentumBasis, expressions::evaluate_overall_factor,
+};
 use serde_json::Value;
 use symbolica::{
     atom::{Atom, AtomCore},
@@ -43,6 +45,8 @@ pub struct Entry {
     /// Digest of the diagram in its finalized frame: vertices, edges, slots, loop momentum
     /// basis, cuts and threshold candidates, without numerators.
     pub frame: u64,
+    /// Exact routing, retained for comparisons across threads and parent builds.
+    pub basis: LoopMomentumBasis,
     /// Digest of the numerator, its prefactor, the projector and the local numerator fragments.
     pub numerator: u64,
 }
@@ -202,6 +206,7 @@ impl Entry {
                 )
             }),
             frame: Digest::new().json(&serialized).0,
+            basis: diagram.loop_momentum_basis().clone(),
             numerator: numerator.0,
         }
     }
@@ -356,6 +361,19 @@ impl Census {
                 ));
             }
         }
+        // A retained group's basis may intentionally come from its comparison
+        // master before cut merging. Compare actual output bases, not a fresh
+        // canonical routing computed after that metadata changed.
+        if let Some((l, r)) = left
+            .values()
+            .zip(right.values())
+            .find(|(l, r)| l.basis != r.basis)
+        {
+            return Some(format!(
+                "momentum basis of {} vs {} differs: {:?} vs {:?}",
+                l.name, r.name, l.basis, r.basis
+            ));
+        }
         if scope == Scope::Content {
             return None;
         }
@@ -406,8 +424,15 @@ impl Census {
         for d in &self.diagrams {
             writeln!(
                 out,
-                "{} key={:016x} id={} S={} frame={:016x} numerator={:016x} factor={}",
-                d.name, d.key, d.id, d.symmetry_factor, d.frame, d.numerator, d.overall_factor
+                "{} key={:016x} id={} S={} frame={:016x} numerator={:016x} factor={} basis={}",
+                d.name,
+                d.key,
+                d.id,
+                d.symmetry_factor,
+                d.frame,
+                d.numerator,
+                d.overall_factor,
+                serde_json::to_string(&d.basis).unwrap()
             )
             .unwrap();
         }

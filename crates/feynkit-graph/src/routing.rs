@@ -1343,6 +1343,14 @@ impl crate::FeynmanDiagram {
                 return Err(invalid_forest());
             }
         }
+        self.basis_from_forest(forest)
+    }
+
+    /// Materialize a forest whose internal edges are already known to span.
+    fn basis_from_forest(
+        &self,
+        mut forest: SuBitGraph,
+    ) -> Result<crate::LoopMomentumBasis, crate::DiagramError> {
         let selected = self.momentum_subgraph();
         let externals = self.routing_externals(&selected);
         for (pair, _, _) in self.graph.iter_edges_of(&selected) {
@@ -1354,6 +1362,213 @@ impl crate::FeynmanDiagram {
             .lmb_impl(&selected, &forest, externals)
             .map(|basis| self.normalize_routing(basis))
             .map_err(|error| crate::DiagramError::InvalidLoopMomentumBasis(error.to_string()))
+    }
+
+    /// Route a freshly finalized generated graph without rebuilding it in
+    /// canonical order. Finalization inserts each internal source/sink pair in
+    /// `ordered` order; its later permutations preserve that half-edge order.
+    /// Ascending crowns therefore give the same DFS as the public ordered graph.
+    pub(crate) fn with_canonical_loop_momentum_basis_finalized(
+        self,
+        ordered: &[crate::EdgeId],
+    ) -> Result<Self, crate::DiagramError> {
+        let mut internal: SuBitGraph = self.graph.empty_subgraph();
+        for edge in ordered {
+            internal.add(self.graph[&EdgeIndex(edge.0)].1);
+        }
+        // A later edge of the same connection replaces an earlier one, just as
+        // in the public routing path. A sewn beam roots at its incoming sink.
+        let mut roots = Vec::new();
+        for (pair, _, edge) in self.graph.iter_edges() {
+            if let Some(external) = &edge.data.external {
+                let hedge = match pair {
+                    HedgePair::Paired { sink, .. } | HedgePair::Split { sink, .. } => sink,
+                    HedgePair::Unpaired { hedge, .. } => hedge,
+                };
+                roots.push((external.connection, self.graph.node_id(hedge)));
+            }
+        }
+        roots.sort_by_key(|(connection, _)| *connection);
+        roots.dedup_by(|later, earlier| {
+            if later.0 == earlier.0 {
+                earlier.1 = later.1;
+                true
+            } else {
+                false
+            }
+        });
+        let mut remaining = internal.clone();
+        let mut forest: SuBitGraph = self.graph.empty_subgraph();
+        while !remaining.is_empty() {
+            let root = roots
+                .iter()
+                .position(|(_, node)| {
+                    self.graph
+                        .iter_crown(*node)
+                        .any(|hedge| remaining.includes(&hedge))
+                })
+                .map(|position| roots.remove(position).1)
+                .unwrap_or_else(|| {
+                    self.graph.node_id(
+                        remaining
+                            .included_iter()
+                            .next()
+                            .expect("nonempty component"),
+                    )
+                });
+            let tree =
+                SimpleTraversalTree::depth_first_traverse(&self.graph, &internal, &root, None)
+                    .map_err(|error| {
+                        crate::DiagramError::InvalidLoopMomentumBasis(format!(
+                            "ordered depth-first traversal failed: {error:?}"
+                        ))
+                    })?;
+            if let Some(basis) = self.amplitude_basis_from_tree(ordered, &tree)? {
+                return self.with_cut_aware_loop_momentum_basis(ordered, basis);
+            }
+            forest.union_with(&tree.tree_subgraph);
+            remaining.subtract_with(&tree.covers(&internal));
+        }
+        // Sewn externals, disconnected graphs and singleton components retain
+        // generic routing and its external normalization, using the trusted
+        // forest directly instead of reconstructing and validating it again.
+        let basis = self.basis_from_forest(forest)?;
+        self.with_cut_aware_loop_momentum_basis(ordered, basis)
+    }
+
+    /// Read a connected amplitude's routing from its selected tree. Other
+    /// shapes use the same forest through the general routing implementation.
+    fn amplitude_basis_from_tree(
+        &self,
+        ordered: &[crate::EdgeId],
+        tree: &SimpleTraversalTree,
+    ) -> Result<Option<crate::LoopMomentumBasis>, crate::DiagramError> {
+        let graph = &self.graph;
+        let n_nodes = graph.node_bound();
+        let n_tree = tree.tree_subgraph.n_included() / 2;
+        if n_nodes < 2 || graph.n_live() != n_nodes || n_tree + 1 != n_nodes {
+            return Ok(None);
+        }
+        let mut externals = Vec::with_capacity(graph.n_edges() - ordered.len());
+        let mut n_internal = 0;
+        for (pair, edge, data) in graph.iter_edges() {
+            match pair {
+                _ if data.data.is_dummy => return Ok(None),
+                HedgePair::Paired { .. } if data.data.external.is_none() => n_internal += 1,
+                HedgePair::Unpaired { hedge, flow } if data.data.external.is_some() => {
+                    externals.push((edge, hedge, flow));
+                }
+                _ => return Ok(None),
+            }
+        }
+        if n_internal != ordered.len() || externals.is_empty() {
+            return Ok(None);
+        }
+        let &(dependent_edge, dependent, dependent_flow) = externals
+            .iter()
+            .max_by_key(|(_, hedge, _)| *hedge)
+            .expect("an amplitude has an external leg");
+        // Only external paths need a different root. Keep the traversal and
+        // its discovery order intact; fundamental cycles are root independent.
+        let mut parents = vec![None; n_nodes];
+        for (node, _, _) in graph.iter_nodes() {
+            if tree.node_data(node).is_child() {
+                parents[node.0] = Some(tree.root_hedge(node));
+            }
+        }
+        let mut node = graph.node_id(dependent);
+        let mut carried = None;
+        while let Some(up) = std::mem::replace(&mut parents[node.0], carried) {
+            let above = graph.inv(up);
+            carried = Some(above);
+            node = graph.node_id(above);
+        }
+        let mut tree_edges = Vec::with_capacity(n_tree);
+        let mut loop_edges = Vec::with_capacity(ordered.len() - n_tree);
+        for &edge in ordered {
+            // The forest contains both halves of every selected internal edge.
+            if tree
+                .tree_subgraph
+                .includes(&graph[&EdgeIndex(edge.0)].1.any_hedge())
+            {
+                tree_edges.push(edge);
+            } else {
+                loop_edges.push(edge);
+            }
+        }
+        // Fill the final row type directly so collection can move it unchanged.
+        let mut signatures = (0..graph.n_edges())
+            .map(|edge| {
+                (
+                    crate::EdgeId(edge),
+                    MomentumSignature::new(
+                        Signature::zeros(loop_edges.len()),
+                        Signature::zeros(externals.len()),
+                    ),
+                )
+            })
+            .collect::<Vec<_>>();
+        for (column, edge) in loop_edges.iter().enumerate() {
+            let HedgePair::Paired { source, .. } = graph[&EdgeIndex(edge.0)].1 else {
+                unreachable!("an amplitude's internal edges are paired");
+            };
+            let cycle = tree.get_signed_cycle(source, graph).ok_or_else(|| {
+                crate::DiagramError::InvalidLoopMomentumBasis(
+                    LmbError::MissingCycle {
+                        hedge: source,
+                        tree_dot: graph.dot(&tree.tree_subgraph),
+                    }
+                    .to_string(),
+                )
+            })?;
+            for hedge in cycle.filter.included_iter() {
+                *signatures[graph[&hedge].0]
+                    .1
+                    .loops
+                    .get_mut(column)
+                    .expect("loop signature covers basis columns") =
+                    SignOrZero::from(graph.flow(hedge));
+            }
+        }
+        // Each independent leg flows up to the dependent leg. Its own edge
+        // has unit coefficient, and the dependent leg's column remains zero.
+        let balance = -SignOrZero::from(dependent_flow);
+        for (column, &(edge, hedge, flow)) in externals.iter().enumerate() {
+            if hedge == dependent {
+                continue;
+            }
+            let flow = SignOrZero::from(flow);
+            *signatures[dependent_edge.0]
+                .1
+                .external
+                .get_mut(column)
+                .expect("external signature covers basis columns") = flow * balance;
+            *signatures[edge.0]
+                .1
+                .external
+                .get_mut(column)
+                .expect("external signature covers basis columns") = SignOrZero::Plus;
+            let mut node = graph.node_id(hedge);
+            while let Some(up) = parents[node.0] {
+                *signatures[graph[&up].0]
+                    .1
+                    .external
+                    .get_mut(column)
+                    .expect("external signature covers basis columns") =
+                    flow * -SignOrZero::from(graph.flow(up));
+                node = graph.node_id(graph.inv(up));
+            }
+        }
+        Ok(Some(crate::LoopMomentumBasis {
+            tree_edges,
+            loop_edges,
+            external_edges: externals
+                .iter()
+                .map(|(edge, _, _)| crate::EdgeId(edge.0))
+                .collect(),
+            dependent_externals: vec![crate::EdgeId(dependent_edge.0)],
+            edge_signatures: signatures.into_iter().collect(),
+        }))
     }
 
     /// The union-find keys of the two nodes joined by `pair`, or `None` when

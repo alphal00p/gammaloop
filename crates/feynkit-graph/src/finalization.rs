@@ -25,6 +25,9 @@ struct FinalFrame {
     half_edges: Vec<[Hedge; 2]>,
     /// Whether the final orientation reverses the provisional momentum.
     reversed: Vec<bool>,
+    /// Internal non-dummy edges in canonical insertion order, only when that
+    /// routing was requested. Logical edge ids need not be in this order.
+    canonical_order: Option<Vec<EdgeId>>,
     vertices: usize,
 }
 
@@ -238,6 +241,7 @@ impl FeynmanDiagramBuilder {
                 &self.generation_externals,
                 self.vertices,
                 self.edges,
+                self.canonical_loop_momentum_basis && self.loop_momentum_basis.is_none(),
             )?;
             (graph, Some(frame))
         };
@@ -360,7 +364,15 @@ impl FeynmanDiagramBuilder {
                 diagram
             }
         } else if self.canonical_loop_momentum_basis {
-            diagram.with_canonical_loop_momentum_basis()?
+            if let Some(frame) = &frame {
+                let ordered = frame
+                    .canonical_order
+                    .as_deref()
+                    .expect("canonical generated routing collected its order");
+                diagram.with_canonical_loop_momentum_basis_finalized(ordered)?
+            } else {
+                diagram.with_canonical_loop_momentum_basis()?
+            }
         } else {
             let basis = diagram
                 .loop_momentum_bases_with_limit(1)?
@@ -441,6 +453,7 @@ fn generated_graph(
     legs: &BTreeMap<EdgeId, ExternalLeg>,
     vertices: Vec<DiagramVertex>,
     edges: Vec<(EdgeEndpoints, DiagramEdge)>,
+    canonical_loop_momentum_basis: bool,
 ) -> Result<(HedgeGraph<DiagramEdge, DiagramVertex>, FinalFrame), DiagramError> {
     let mut external_indices = BTreeSet::new();
     for leg in legs.values() {
@@ -522,6 +535,7 @@ fn generated_graph(
     // Edge indices follow the insertion order unless the provisional order of
     // the internal edges is not canonical.
     let relabel = !internal.is_sorted();
+    let canonical_order = canonical_loop_momentum_basis.then(|| Vec::with_capacity(internal.len()));
     order.extend(internal.into_iter().map(|id| (id, Insertion::Internal)));
     let logical_edges = order.len();
     let sewn = connections
@@ -538,6 +552,7 @@ fn generated_graph(
         edges: final_edges,
         half_edges: vec![[Hedge(0); 2]; n_edges],
         reversed: vec![false; n_edges],
+        canonical_order,
         vertices: vertices.len(),
     };
     for vertex in vertices {
@@ -557,6 +572,13 @@ fn generated_graph(
                 unreachable!("internal edges of generated diagrams are attached at both ends")
             };
             let direction = orientation(model, &edge)?;
+            if !edge.is_dummy
+                && let Some(ordered) = &mut frame.canonical_order
+            {
+                // Internal insertion order is canonical, while logical ids
+                // retain provisional order even after the graph is relabelled.
+                ordered.push(EdgeId(frame.edges[id]));
+            }
             builder.add_edge(NodeIndex(source.0), NodeIndex(target.0), edge, direction);
             // The source, then the sink.
             frame.half_edges[id] = [Hedge(next_hedge), Hedge(next_hedge + 1)];
@@ -1020,6 +1042,25 @@ mod tests {
                     ],
                 ),
             ),
+            // Two components whose external-root priority opposes canonical
+            // internal order, with interleaved and reversed provisional edges.
+            (
+                "disconnected",
+                generated(
+                    scalar_model(),
+                    4,
+                    &[
+                        Leg(2, Sink, "phi", In, 0),
+                        Internal(2, 3, "phi"),
+                        Leg(0, Sink, "phi", In, 1),
+                        Internal(0, 1, "phi"),
+                        Internal(3, 2, "phi"),
+                        Leg(3, Source, "phi", Out, 3),
+                        Internal(1, 0, "phi"),
+                        Leg(1, Source, "phi", Out, 2),
+                    ],
+                ),
+            ),
             // A self-loop before its bridge.
             (
                 "tadpole",
@@ -1146,13 +1187,14 @@ mod tests {
 
     /// The final graph and frame of a generated builder.
     fn final_graph(
-        builder: FeynmanDiagramBuilder,
+        builder: &FeynmanDiagramBuilder,
     ) -> (HedgeGraph<DiagramEdge, DiagramVertex>, FinalFrame) {
         generated_graph(
             &builder.model,
             &builder.generation_externals,
-            builder.vertices,
-            builder.edges,
+            builder.vertices.clone(),
+            builder.edges.clone(),
+            builder.canonical_loop_momentum_basis && builder.loop_momentum_basis.is_none(),
         )
         .unwrap()
     }
@@ -1183,13 +1225,14 @@ mod tests {
     #[test]
     fn final_frame_matches_the_frame_resolved_on_the_graph() {
         for (name, builder) in cases() {
-            let (graph, frame) = final_graph(builder);
+            let (graph, frame) = final_graph(&builder);
             let edges = frame.edges.len();
             let mut resolved = FinalFrame {
                 endpoints: frame.endpoints.clone(),
                 edges: frame.edges.clone(),
                 half_edges: vec![[Hedge(0); 2]; edges],
                 reversed: vec![false; edges],
+                canonical_order: None,
                 vertices: frame.vertices,
             };
             for id in 0..edges {
@@ -1221,11 +1264,11 @@ mod tests {
     #[test]
     fn final_frame_relabels_edges_and_moves_cut_half_edges_only_when_needed() {
         // The second internal edge inserted is the last in provisional order.
-        let (graph, frame) = final_graph(case("relabelled"));
+        let (graph, frame) = final_graph(&case("relabelled"));
         assert_eq!(frame.half_edges[5], [Hedge(4), Hedge(5)]);
         assert_eq!(graph[&Hedge(4)], EdgeIndex(6));
         // The sewn incoming leg was inserted after the unsewn one.
-        let (graph, frame) = final_graph(case("partially_sewn"));
+        let (graph, frame) = final_graph(&case("partially_sewn"));
         let sinks = graph
             .iter_edges()
             .filter_map(|(pair, _, edge)| match pair {
@@ -1237,21 +1280,93 @@ mod tests {
         assert_eq!(frame.half_edges[1][1], Hedge(0));
         assert_ne!(frame.half_edges[0], [Hedge(0); 2]);
         // Fully sewn initial states keep their half-edges.
-        let (_, frame) = final_graph(case("sewn"));
+        let (_, frame) = final_graph(&case("sewn"));
         assert_eq!(frame.half_edges[0][1], Hedge(0));
         assert_eq!(frame.half_edges[1][1], Hedge(1));
     }
 
     #[test]
     fn generated_graphs_equal_their_import_reconstruction() {
-        for (name, builder) in cases() {
-            let diagram = builder.build().unwrap();
-            assert_eq!(
-                format!("{:?}", diagram.graph),
-                format!("{:?}", reimported(&diagram)),
-                "{name}"
-            );
+        for canonical in [false, true] {
+            for (name, mut builder) in cases() {
+                if canonical {
+                    builder = builder.canonical_loop_momentum_basis();
+                }
+                let (_, frame) = final_graph(&builder);
+                assert_eq!(frame.canonical_order.is_some(), canonical, "{name}");
+                let diagram = builder.build().unwrap();
+                if let Some(ordered) = frame.canonical_order {
+                    assert_eq!(
+                        ordered,
+                        diagram.canonical_internal_edge_order().unwrap(),
+                        "{name}"
+                    );
+                    let inserted = diagram
+                        .graph
+                        .iter_edges_of(&diagram.graph.full_filter())
+                        .filter_map(|(_, id, edge)| {
+                            (edge.data.external.is_none() && !edge.data.is_dummy)
+                                .then_some(EdgeId(id.0))
+                        })
+                        .collect::<Vec<_>>();
+                    assert_eq!(ordered, inserted, "{name}: canonical half-edge subsequence");
+                    // The final graph's crown order determines the DFS stack
+                    // order, including after partial sewing and relabelling.
+                    for (_, crown, _) in diagram.graph.iter_nodes() {
+                        assert!(crown.is_sorted(), "{name}: node crowns stay ascending");
+                    }
+                    let reference = diagram
+                        .clone()
+                        .with_canonical_loop_momentum_basis()
+                        .unwrap();
+                    assert_eq!(
+                        diagram.loop_momentum_basis(),
+                        reference.loop_momentum_basis(),
+                        "{name}"
+                    );
+                }
+                assert_eq!(
+                    format!("{:?}", diagram.graph),
+                    format!("{:?}", reimported(&diagram)),
+                    "{name}"
+                );
+            }
         }
+    }
+
+    #[test]
+    fn canonical_order_excludes_dummy_edges() {
+        let mut builder = case("relabelled").canonical_loop_momentum_basis();
+        builder.edges[1].1.is_dummy = true;
+        let (_, frame) = final_graph(&builder);
+        // Provisional edge 1 becomes logical edge 2. The external edges are
+        // logical 0 and 1, and internal insertion still differs from edge ids.
+        assert_eq!(
+            frame.canonical_order.unwrap(),
+            [EdgeId(6), EdgeId(3), EdgeId(4), EdgeId(5)]
+        );
+    }
+
+    #[test]
+    fn explicit_loop_basis_skips_canonical_order_collection() {
+        let builder = case("relabelled").canonical_loop_momentum_basis();
+        let (_, frame) = final_graph(&builder);
+        let diagram = builder.build().unwrap();
+        let expected = diagram
+            .loop_momentum_bases_with_limit(2)
+            .unwrap()
+            .into_iter()
+            .find(|basis| basis.loop_edges != diagram.loop_momentum_basis().loop_edges)
+            .expect("the two-loop fixture has a noncanonical basis");
+        let mut provisional = expected.clone();
+        for edge in &mut provisional.loop_edges {
+            edge.0 = frame.edges.iter().position(|&id| id == edge.0).unwrap();
+        }
+        let builder = case("relabelled")
+            .canonical_loop_momentum_basis()
+            .loop_momentum_basis(provisional);
+        assert!(final_graph(&builder).1.canonical_order.is_none());
+        assert_eq!(builder.build().unwrap().loop_momentum_basis(), &expected);
     }
 
     #[test]
@@ -1281,7 +1396,7 @@ mod tests {
             )
             .unwrap()
         };
-        let (_, frame) = final_graph(case("partially_sewn"));
+        let (_, frame) = final_graph(&case("partially_sewn"));
         let mut builder = case("partially_sewn");
         builder.vertices[0].numerator = fragment(None);
         let diagram = builder.build().unwrap();

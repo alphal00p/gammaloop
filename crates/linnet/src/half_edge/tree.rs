@@ -265,20 +265,22 @@ impl<P: ForestNodeStore<NodeData = ()>> SimpleTraversalTree<P> {
         filter.add(cut);
         let mut source_root = self.node_id(cut);
         let mut sink_root = self.node_id(opposite);
-        // Ancestors alternate between departing a child and arriving at its
-        // parent. The source path keeps arrivals; the sink path keeps departures.
-        for hedge in self.ancestor_iter_hedge(cut, inv).skip(2).step_by(2) {
-            source_root = self.node_id(hedge);
-            filter.add(hedge);
+        // Walk node parents directly: the source path keeps arrivals at each
+        // parent, while the sink path keeps departures from each child.
+        while self.node_data(source_root).is_child() {
+            let arrival = inv.inv(self.root_hedge(source_root));
+            filter.add(arrival);
+            source_root = self.node_id(arrival);
         }
-        for hedge in self.ancestor_iter_hedge(opposite, inv).skip(1).step_by(2) {
-            let reverse = inv.inv(hedge);
-            sink_root = self.node_id(reverse);
-            if filter.includes(&reverse) {
-                filter.sub(reverse);
+        while self.node_data(sink_root).is_child() {
+            let departure = self.root_hedge(sink_root);
+            let arrival = inv.inv(departure);
+            if filter.includes(&arrival) {
+                filter.sub(arrival);
             } else {
-                filter.add(hedge);
+                filter.add(departure);
             }
+            sink_root = self.node_id(arrival);
         }
         (source_root == sink_root).then_some(SignedCycle {
             filter,
@@ -666,31 +668,24 @@ impl SimpleTraversalTree {
         let mut iter_order = 0;
 
         while let Some(hedge) = stack.pop() {
-            // if the hedge is not external get the neighbors of the paired hedge
-            if let Some(cn) = graph.involved_node_crown(hedge) {
-                let connected = graph.inv(hedge);
+            let connected = graph.inv(hedge);
+            if connected == hedge || seen.includes(&connected) || !subgraph.includes(&connected) {
+                continue;
+            }
+            // Resolve the crown only after admitting a new node to the traversal.
+            let cn = graph.iter_crown(graph.node_id(connected));
+            init.tree_subgraph.add(connected);
+            init.tree_subgraph.add(hedge);
+            let node_id = init.forest.change_to_root(connected.into());
+            iter_order += 1;
+            init.forest[node_id] = TTRoot::Child(iter_order);
 
-                if !seen.includes(&connected) && subgraph.includes(&connected) {
-                    // if this new hedge hasn't been seen before, it means the node it belongs to
-                    // is a new node in the traversal
-                    init.tree_subgraph.add(connected);
-                    init.tree_subgraph.add(hedge);
-                    let node_id = init.forest.change_to_root(connected.into());
-                    iter_order += 1;
-                    init.forest[node_id] = TTRoot::Child(iter_order);
-                } else {
-                    continue;
-                }
-
-                // mark the new node as seen
-                // seen.union_with(&cn.hairs);
-
-                for i in cn {
-                    if subgraph.includes(&i) {
-                        seen.add(i);
-                        if !seen.includes(&graph.inv(i)) {
-                            stack.push(i);
-                        }
+            // Mark the new node as seen, preserving ascending crown and LIFO order.
+            for i in cn {
+                if subgraph.includes(&i) {
+                    seen.add(i);
+                    if !seen.includes(&graph.inv(i)) {
+                        stack.push(i);
                     }
                 }
             }
@@ -867,14 +862,19 @@ pub struct OwnedTraversalTree {
 // }
 #[cfg(test)]
 pub mod tests {
-    use crate::{dot, half_edge::involution::Orientation, parser::DotGraph};
+    use crate::{
+        dot,
+        half_edge::{
+            builder::HedgeGraphBuilder,
+            involution::{EdgeIndex, Flow, Orientation},
+        },
+        parser::DotGraph,
+    };
 
     use super::*;
 
     #[test]
     fn signed_parent_paths_match_validated_cycles() {
-        use crate::half_edge::{builder::HedgeGraphBuilder, involution::Flow};
-
         let mut builder = HedgeGraphBuilder::new();
         let nodes = (0..6).map(|_| builder.add_node(())).collect::<Vec<_>>();
         for (id, (source, target)) in [
@@ -902,25 +902,86 @@ pub mod tests {
                 guide.add(pair);
             }
         }
-        for selected in [graph.full_filter(), guide] {
+        let mut disconnected = guide.clone();
+        disconnected.sub(graph[&EdgeIndex(1)].1);
+        for selected in [graph.full_filter(), guide, disconnected] {
             for root in &nodes {
-                let Ok(tree) =
-                    SimpleTraversalTree::depth_first_traverse(&graph, &selected, root, None)
-                else {
-                    continue;
-                };
-                for hedge in (0..graph.n_hedges()).map(Hedge) {
-                    let expected = tree
-                        .get_cycle(hedge, &graph)
-                        .and_then(|cycle| SignedCycle::from_cycle(&cycle, hedge, &graph));
-                    assert_eq!(
-                        tree.get_signed_cycle(hedge, &graph),
-                        expected,
-                        "root {root:?}, half-edge {hedge:?}"
-                    );
+                for (traversal, result) in [
+                    (
+                        "depth-first",
+                        SimpleTraversalTree::depth_first_traverse(&graph, &selected, root, None),
+                    ),
+                    (
+                        "breadth-first",
+                        SimpleTraversalTree::breadth_first_traverse(&graph, &selected, root, None),
+                    ),
+                ] {
+                    let Ok(tree) = result else { continue };
+                    for hedge in (0..graph.n_hedges()).map(Hedge) {
+                        let expected = tree
+                            .get_cycle(hedge, &graph)
+                            .and_then(|cycle| SignedCycle::from_cycle(&cycle, hedge, &graph));
+                        assert_eq!(
+                            tree.get_signed_cycle(hedge, &graph),
+                            expected,
+                            "{traversal}, root {root:?}, half-edge {hedge:?}"
+                        );
+                    }
                 }
             }
         }
+    }
+
+    #[test]
+    fn depth_first_discovery_order_and_endpoint_boundaries() {
+        let mut builder = HedgeGraphBuilder::new();
+        let nodes = (0..4).map(|_| builder.add_node(())).collect::<Vec<_>>();
+        for (id, (source, target)) in [(0, 1), (0, 2), (1, 2), (2, 3), (1, 1)]
+            .into_iter()
+            .enumerate()
+        {
+            builder.add_edge(nodes[source], nodes[target], id, Orientation::Undirected);
+        }
+        builder.add_external_edge(nodes[0], 5, Orientation::Undirected, Flow::Source);
+        let graph: HedgeGraph<usize, ()> = builder.into();
+        // The golden masks below refer to these insertion-ordered half-edge pairs.
+        assert_eq!(
+            graph
+                .iter_edges()
+                .map(|(pair, _, _)| pair.any_hedge())
+                .collect::<Vec<_>>(),
+            [0, 2, 4, 6, 8, 10].map(Hedge)
+        );
+        let full = graph.full_filter();
+        let mut one_sided = full.clone();
+        one_sided.sub(Hedge(3));
+        for (selected, priority, order, tree_hedges) in [
+            (&full, None, [0, 2, 3, 1], [2, 3, 4, 5, 6, 7]),
+            (&full, Some(Hedge(0)), [0, 1, 2, 3], [0, 1, 4, 5, 6, 7]),
+            (&one_sided, None, [0, 1, 2, 3], [0, 1, 4, 5, 6, 7]),
+        ] {
+            let tree =
+                SimpleTraversalTree::depth_first_traverse(&graph, selected, &nodes[0], priority)
+                    .unwrap();
+            assert_eq!(tree.node_order(), order.map(NodeIndex));
+            assert_eq!(
+                tree.tree_subgraph.included_iter().collect::<Vec<_>>(),
+                tree_hedges.map(Hedge)
+            );
+        }
+        let empty: SuBitGraph = graph.empty_subgraph();
+        assert!(matches!(
+            SimpleTraversalTree::depth_first_traverse(&graph, &empty, &nodes[0], None),
+            Err(HedgeGraphError::RootNodeNotInSubgraph(NodeIndex(0)))
+        ));
+        assert!(matches!(
+            SimpleTraversalTree::depth_first_traverse(&graph, &full, &nodes[0], Some(Hedge(10))),
+            Err(HedgeGraphError::ExternalHedgeIncluded(Hedge(10)))
+        ));
+        assert!(matches!(
+            SimpleTraversalTree::depth_first_traverse(&graph, &full, &nodes[0], Some(Hedge(7))),
+            Err(HedgeGraphError::NotInNode(Hedge(7), NodeIndex(0)))
+        ));
     }
 
     #[test]

@@ -1391,12 +1391,22 @@ impl FeynmanDiagram {
     pub fn with_canonical_loop_momentum_basis(self) -> Result<Self, DiagramError> {
         let ordered = self.canonical_internal_edge_order()?;
         let depth_first = self.basis_from_tree(&self.first_depth_first_forest(&ordered)?)?;
+        self.with_cut_aware_loop_momentum_basis(&ordered, depth_first)
+    }
+
+    /// Select between the initial DFS basis and the cut-aligned basis. Both
+    /// general and freshly finalized routing keep the initial basis on a tie.
+    fn with_cut_aware_loop_momentum_basis(
+        self,
+        ordered: &[EdgeId],
+        depth_first: LoopMomentumBasis,
+    ) -> Result<Self, DiagramError> {
         let cut_edges = self.cut_edges();
         let partial = depth_first.partial_beam_momenta(&cut_edges);
         let basis = if partial == 0 {
             depth_first
         } else {
-            match self.cut_aligned_loop_momentum_basis(&ordered, &cut_edges)? {
+            match self.cut_aligned_loop_momentum_basis(ordered, &cut_edges)? {
                 (aligned_partial, aligned) if aligned_partial < partial => aligned,
                 _ => depth_first,
             }
@@ -4744,6 +4754,49 @@ mod tests {
             .0
     }
 
+    fn assert_finalized_cut_routing_matches_reference(diagram: &FeynmanDiagram) {
+        use linnet::{half_edge::remap::HedgeRemap, permutation::Permutation};
+
+        // These scalar cut fixtures have no half-edge-indexed numerator data.
+        // Put their internal half-edges in finalization's insertion order while
+        // retaining the stable edge IDs used by cuts and momentum labels.
+        let mut diagram = diagram.clone();
+        let ordered = diagram.canonical_internal_edge_order().unwrap();
+        let hedges = ordered
+            .iter()
+            .flat_map(|edge| match diagram.graph[&EdgeIndex(edge.0)].1 {
+                HedgePair::Paired { source, sink } => [source, sink],
+                _ => unreachable!("internal edges are paired"),
+            })
+            .collect::<Vec<_>>();
+        let mut positions = hedges.clone();
+        positions.sort_unstable();
+        let permutation = Permutation::from_mappings(
+            hedges
+                .iter()
+                .zip(positions)
+                .map(|(old, new)| (old.0, new.0)),
+            diagram.graph.n_hedges(),
+        )
+        .unwrap();
+        diagram
+            .graph
+            .permute_hedges(&HedgeRemap::from_permutation(&permutation))
+            .unwrap();
+        let reference = diagram
+            .clone()
+            .with_canonical_loop_momentum_basis()
+            .unwrap();
+        let finalized = diagram
+            .with_canonical_loop_momentum_basis_finalized(&ordered)
+            .unwrap();
+        finalized.validate().unwrap();
+        assert_eq!(
+            finalized.loop_momentum_basis(),
+            reference.loop_momentum_basis()
+        );
+    }
+
     #[test]
     fn canonical_routing_keeps_partial_beam_momenta_off_cut_edges() {
         // Forward scattering through a t-channel exchange: beam i enters at ai
@@ -4789,6 +4842,7 @@ mod tests {
                 .iter()
                 .all(|sign| !sign.is_zero())
         );
+        assert_finalized_cut_routing_matches_reference(&diagram);
     }
 
     /// Two loops whose three-particle cuts {i0, i1, m0 | m1, f0, f1} and
@@ -4876,13 +4930,14 @@ mod tests {
                 BTreeSet::from_iter(&aligned.loop_edges)
             );
 
+            assert_finalized_cut_routing_matches_reference(&diagram);
             let routed = diagram.with_canonical_loop_momentum_basis().unwrap();
             let expected = if routed_by_search {
                 &aligned
             } else {
                 &depth_first
             };
-            assert_eq!(routed.loop_momentum_basis().loop_edges, expected.loop_edges);
+            assert_eq!(routed.loop_momentum_basis(), expected);
         }
     }
 

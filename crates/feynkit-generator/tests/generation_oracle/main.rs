@@ -18,7 +18,7 @@
 //! Heavy cases are ignored by default; `just generation-oracle-heavy` runs them. Environment:
 //! `FEYNKIT_ORACLE_THREADS=1,8,32` sets the thread counts, `FEYNKIT_ORACLE_RECORD=1` prints each
 //! case's row instead of comparing it, and `FEYNKIT_ORACLE_DUMP=<dir>` writes every census as
-//! text, for diffing the diagrams of two builds.
+//! text (including their complete momentum bases), for diffing two builds.
 
 mod cases;
 mod census;
