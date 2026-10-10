@@ -87,20 +87,21 @@ impl OrientedCut {
         cut: SuBitGraph,
         graph: &HedgeGraph<E, V, H, N>,
     ) -> Result<Self, CutError> {
+        let mut left = cut.clone();
         let mut right = graph.empty_subgraph::<SuBitGraph>();
 
         for i in cut.included_iter() {
             let invh = graph.inv(i);
-            if cut.includes(&invh) {
+            if invh == i {
+                left.sub(i);
+            } else if cut.includes(&invh) {
                 return Err(CutError::CutEdgeAlreadySet);
-            } else if invh == i {
-                right.sub(i);
+            } else {
+                right.add(invh);
             }
-            right.add(invh);
         }
 
-        cut.subtract(&right);
-        Ok(OrientedCut { left: cut, right })
+        Ok(OrientedCut { left, right })
     }
 
     /// Errors for identity edges
@@ -112,10 +113,10 @@ impl OrientedCut {
 
         for i in cut.included_iter() {
             let invh = graph.inv(i);
-            if cut.includes(&invh) {
-                return Err(CutError::CutEdgeAlreadySet);
-            } else if invh == i {
+            if invh == i {
                 return Err(CutError::CutEdgeIsIdentity);
+            } else if cut.includes(&invh) {
+                return Err(CutError::CutEdgeAlreadySet);
             }
             right.add(invh);
         }
@@ -1010,6 +1011,34 @@ mod tests {
         assert_eq!(subgraph.intersection(&cut), subset(8, &[4]));
         assert_eq!(subgraph.sym_diff(&cut), subset(8, &[0, 1, 2, 3, 6]));
         assert_eq!(subgraph.subtract(&cut), subset(8, &[0, 6]));
+    }
+
+    #[test]
+    fn coercing_cut_ignores_dangling_hedges_but_rejects_paired_duplicates() {
+        let graph: DotGraph = dot!(
+            digraph {
+                ext [style=invis];
+                a:0 -> b:1;
+                a:2 -> ext;
+            }
+        )
+        .unwrap();
+        let graph = &graph.graph;
+        assert_eq!(graph.inv(Hedge(2)), Hedge(2));
+
+        let coerced = OrientedCut::from_underlying_coerce(subset(3, &[0, 2]), graph).unwrap();
+        assert_eq!(coerced.left, subset(3, &[0]));
+        assert_eq!(coerced.right, subset(3, &[1]));
+        assert!(matches!(
+            OrientedCut::from_underlying_strict(subset(3, &[2]), graph),
+            Err(CutError::CutEdgeIsIdentity)
+        ));
+        for result in [
+            OrientedCut::from_underlying_coerce(subset(3, &[0, 1]), graph),
+            OrientedCut::from_underlying_strict(subset(3, &[0, 1]), graph),
+        ] {
+            assert!(matches!(result, Err(CutError::CutEdgeAlreadySet)));
+        }
     }
 
     #[test]

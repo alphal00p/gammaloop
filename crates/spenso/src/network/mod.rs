@@ -3326,13 +3326,13 @@ where
         graph.ready_operations_from_tree_ignoring(ignored)
     };
     let batch_len = planned.len();
-    let batch_subgraph_hedges = if profile::enabled() {
+    let batch_subgraph_hedges = if profile::enabled() && profile::verbose() {
         planned.iter().map(|op| op.hedges().len()).sum::<usize>()
     } else {
         0
     };
 
-    if profile::enabled() {
+    if profile::enabled() && profile::verbose() {
         eprintln!(
             "spenso_profile execute.plan graph_nodes={} graph_hedges={} ignored_hedges={} rerooted={} ready_batch={} batch_subgraph_hedges={}",
             graph.graph.n_nodes(),
@@ -3736,6 +3736,8 @@ where
     }
 
     let mut terms = Vec::with_capacity(targets.len());
+    // Closed contractions may retain lazy tensor leaves. Extract their scalar
+    // entries before addition, independently of which kind of leaf comes first.
     for (_, leaf) in targets {
         match leaf.result_scalar(
             |tensor| store.tensor(tensor),
@@ -4477,7 +4479,10 @@ where
             };
             for (op_index, planned_op) in planned.iter().enumerate() {
                 let op_start = if profile_batch {
-                    if planned.len() <= 1024 && (op_index < 16 || op_index % 64 == 0) {
+                    if profile::verbose()
+                        && planned.len() <= 1024
+                        && (op_index < 16 || op_index % 64 == 0)
+                    {
                         eprintln!(
                             "spenso_profile execute.batch_op_start batch={} op_index={} total={} op={} leaves={} subgraph_hedges={}",
                             batch_index,
@@ -4506,7 +4511,7 @@ where
                             planned_op.hedges().len(),
                         );
                     }
-                    if planned.len() <= 1024 && (op_index + 1) % 64 == 0 {
+                    if profile::verbose() && planned.len() <= 1024 && (op_index + 1) % 64 == 0 {
                         eprintln!(
                             "spenso_profile execute.batch_progress batch={} done={} total={} elapsed_ms={:.3}",
                             batch_index,
@@ -4519,7 +4524,9 @@ where
                     }
                 }
             }
-            if let Some(batch_start) = batch_start {
+            if profile::verbose()
+                && let Some(batch_start) = batch_start
+            {
                 eprintln!(
                     "spenso_profile execute.batch_done batch={} ops={} elapsed_ms={:.3}",
                     batch_index,

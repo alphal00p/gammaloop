@@ -662,6 +662,227 @@ fn odd_library_tensor_powers_keep_the_base_square_fixed() {
 }
 
 #[test]
+fn scalar_sums_accept_closed_lazy_tensors_in_either_order() {
+    use crate::{
+        network::{
+            ExecutionResult, Network, NetworkLeaf, NetworkNode, ScaledTensorRef, Sequential,
+            SmallestDegree,
+            library::{DummyLibrary, DummyLibraryTensor, panicing::ErroringLibrary},
+            store::{NetworkStore, TensorScalarStore},
+        },
+        structure::{
+            OrderedStructure,
+            representation::{Euclidean, RepName},
+        },
+        tensors::data::DenseTensor,
+    };
+
+    type Tensor = DenseTensor<f64, OrderedStructure<Euclidean>>;
+    type Net = Network<NetworkStore<Tensor, f64>, DummyKey, DummyKey>;
+    type LibTensor = DummyLibraryTensor<Tensor>;
+    type Lib = DummyLibrary<Tensor, DummyKey>;
+    type FnLib = ErroringLibrary<DummyKey>;
+    let lib = Lib::new();
+    let fn_lib = FnLib::new();
+
+    for closed in [true, false] {
+        let slots = if closed {
+            vec![]
+        } else {
+            vec![Euclidean {}.new_slot(1, 1)]
+        };
+        let structure = OrderedStructure::new(slots).into_canonical();
+        let mut tensor_net =
+            Net::from_tensor(Tensor::from_storage_data(vec![2.0], structure.clone()).unwrap());
+        let second = tensor_net
+            .store
+            .add_tensor(Tensor::from_storage_data(vec![3.0], structure).unwrap());
+        let scale = tensor_net.store.add_scalar(-5.0);
+        let root = tensor_net.graph.result().unwrap().1;
+        for (leaf, expected) in [
+            (NetworkLeaf::LocalTensor(0), 9.0),
+            (NetworkLeaf::TensorSum(vec![0, second]), 12.0),
+            (
+                NetworkLeaf::ScaledTensor(ScaledTensorRef::scaled(0, scale)),
+                -3.0,
+            ),
+            (
+                NetworkLeaf::ScaledTensorSum(vec![
+                    ScaledTensorRef::scaled(0, scale),
+                    ScaledTensorRef::tensor(second),
+                ]),
+                0.0,
+            ),
+        ] {
+            if !closed {
+                // A one-component open vector is still not a scalar. Graph
+                // construction rejects mixed ranks before this scalarization boundary.
+                let scalar = NetworkLeaf::Scalar(tensor_net.store.add_scalar(7.0).into());
+                for leaves in [[&leaf, &scalar], [&scalar, &leaf]] {
+                    let targets = leaves
+                        .into_iter()
+                        .enumerate()
+                        .map(|(index, leaf)| (linnet::half_edge::NodeIndex(index), leaf))
+                        .collect::<Vec<_>>();
+                    assert!(
+                        super::try_balanced_scalar_sum(&mut tensor_net.store, &targets, None)
+                            .is_none()
+                    );
+                }
+                continue;
+            }
+            tensor_net.graph.graph[root] = NetworkNode::Leaf(leaf);
+            for mut sum in [
+                tensor_net.clone() + Net::from_scalar(7.0),
+                Net::from_scalar(7.0) + tensor_net.clone(),
+            ] {
+                let executed =
+                    sum.execute::<Sequential, SmallestDegree, LibTensor, Lib, FnLib>(&lib, &fn_lib);
+                executed.unwrap();
+                let ExecutionResult::Val(actual) = sum.result_scalar().unwrap() else {
+                    panic!("a closed tensor sum must return its scalar value");
+                };
+                assert_eq!(*actual, expected);
+            }
+        }
+    }
+}
+
+#[cfg(feature = "shadowing")]
+#[test]
+fn tensor_powers_preserve_exponents_for_every_leaf_kind() {
+    use symbolica::{
+        atom::{Atom, Symbol},
+        symbol,
+    };
+
+    use crate::{
+        network::{
+            ExecutionResult, Network, NetworkLeaf, NetworkNode, ScaledTensorRef, Sequential,
+            SmallestDegree,
+            library::{
+                panicing::ErroringLibrary,
+                symbolic::{ExplicitKey, TensorLibrary},
+            },
+            store::{NetworkStore, TensorScalarStore},
+        },
+        structure::{
+            NamedStructure, TensorStructure,
+            abstract_index::AbstractIndex,
+            representation::{Euclidean, RepName},
+        },
+        tensors::data::{DataTensor, DenseTensor},
+    };
+
+    type Tensor = DataTensor<f64, NamedStructure<Symbol, Vec<Atom>>>;
+    type LibTensor = DataTensor<f64, ExplicitKey<AbstractIndex>>;
+    type Net = Network<NetworkStore<Tensor, f64>, ExplicitKey<AbstractIndex>, DummyKey>;
+
+    let fn_lib = ErroringLibrary::<DummyKey>::new();
+    for closed in [true, false] {
+        let reps = if closed {
+            vec![]
+        } else {
+            vec![Euclidean {}.new_rep(2)]
+        };
+        let key = ExplicitKey::from_iter(reps, symbol!("tensor_power_fixture"), None);
+        let indices = if closed {
+            vec![]
+        } else {
+            vec![AbstractIndex::from(0)]
+        };
+        let structure = key
+            .canonical()
+            .clone()
+            .reindex_storage(&indices)
+            .unwrap()
+            .apply();
+        let data = if closed { vec![2.0] } else { vec![1.0, 2.0] };
+        let other = if closed { vec![1.0] } else { vec![2.0, 1.0] };
+        let mut lib = TensorLibrary::<LibTensor, AbstractIndex>::new();
+        lib.insert_explicit_dense(key.clone(), data.clone())
+            .unwrap();
+        let mut net = Net::from_tensor(
+            DenseTensor::from_storage_data(data.clone(), structure.clone())
+                .unwrap()
+                .into(),
+        );
+        let second = net.store.add_tensor(
+            DenseTensor::from_storage_data(other, structure.clone())
+                .unwrap()
+                .into(),
+        );
+        let scale = net.store.add_scalar(2.0);
+        let root = net.graph.result().unwrap().1;
+
+        for (kind, leaf, base) in [
+            ("library", NetworkLeaf::library_key(key), data.clone()),
+            ("local", NetworkLeaf::LocalTensor(0), data),
+            (
+                "sum",
+                NetworkLeaf::TensorSum(vec![0, second]),
+                if closed { vec![3.0] } else { vec![3.0, 3.0] },
+            ),
+            (
+                "scaled",
+                NetworkLeaf::ScaledTensor(ScaledTensorRef::scaled(0, scale)),
+                if closed { vec![4.0] } else { vec![2.0, 4.0] },
+            ),
+            (
+                "scaled sum",
+                NetworkLeaf::ScaledTensorSum(vec![
+                    ScaledTensorRef::scaled(0, scale),
+                    ScaledTensorRef::tensor(second),
+                ]),
+                if closed { vec![5.0] } else { vec![4.0, 5.0] },
+            ),
+        ] {
+            net.graph.graph[root] = NetworkNode::Leaf(leaf);
+            for pow in [-9, -5, -4, -3, -2, -1, 0, 1, 2, 3, 4, 5, 9] {
+                let mut powered = net.clone().pow(pow);
+                let executed =
+                    powered.execute::<Sequential, SmallestDegree, _, _, _>(&lib, &fn_lib);
+                if !closed && pow < 0 && pow % 2 != 0 {
+                    assert!(
+                        matches!(
+                            executed,
+                            Err(TensorNetworkError::NegativeExponentNonScalar(_))
+                        ),
+                        "{kind}, exponent {pow}: an open odd power must not be inverted"
+                    );
+                    continue;
+                }
+                executed.unwrap();
+
+                // A self-dual vector's odd power retains one open vector;
+                // the other copies contract in pairs, not repeated squarings.
+                let expected = if closed {
+                    vec![base[0].powi(i32::from(pow))]
+                } else {
+                    let norm_squared: f64 = base.iter().map(|x| x * x).sum();
+                    if pow % 2 == 0 {
+                        vec![norm_squared.powi(i32::from(pow) / 2)]
+                    } else {
+                        base.iter()
+                            .map(|x| x * norm_squared.powi(i32::from(pow - 1) / 2))
+                            .collect()
+                    }
+                };
+                let ExecutionResult::Val(actual) = powered.result_tensor(&lib).unwrap() else {
+                    panic!("{kind}, exponent {pow}: expected a value");
+                };
+                assert_eq!(actual.order(), usize::from(!closed && pow % 2 != 0));
+                assert_eq!(
+                    actual.into_owned().to_bare_dense().data,
+                    expected,
+                    "{kind}, closed {closed}, exponent {pow}"
+                );
+            }
+        }
+    }
+}
+
+#[test]
 fn lazy_scalar_tensors_add_scalars_in_either_order() {
     use super::{
         ExecutionResult, Network, NetworkGraph, NetworkLeaf, ScaledTensorRef, Sequential,

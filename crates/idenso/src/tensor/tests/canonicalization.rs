@@ -1,16 +1,110 @@
-use crate::{IndexTooling, test_support::test_initialize};
+use crate::{
+    Cookable, IndexTooling,
+    color::CS,
+    representations::{ColorAdjoint, ColorFundamental},
+    test_support::test_initialize,
+};
 use spenso::{antisym, bracket, broadcast_symbol, cyclic, dind, euc, lor, mink, sym, tensor};
 use symbolica::{
     atom::{Atom, AtomCore, AtomView},
-    function,
+    function, parse_lit, symbol,
 };
 
-use spenso::structure::abstract_index::AbstractIndex;
+use spenso::structure::{abstract_index::AbstractIndex, representation::RepName};
 
 fn canonicalize(expression: &Atom) -> Atom {
     expression
         .canonize::<AbstractIndex>(AbstractIndex::Dummy)
         .expect("test expression should canonicalize")
+}
+
+#[test]
+fn formal_color_dimensions_canonicalize_closed_quark_trace_partners() {
+    test_initialize();
+    let nc = Atom::var(CS.nc);
+    let adjoint_dimension = nc.clone().pow(2) - Atom::one();
+    let fundamental = ColorFundamental {}.to_symbolic([nc]);
+    let trace = |indices: [usize; 6]| {
+        spenso::shadowing::trace(
+            fundamental.clone(),
+            indices.map(|index| {
+                CS.chain_t(ColorAdjoint {}.to_symbolic([
+                    adjoint_dimension.clone(),
+                    function!(symbol!("formal_trace_hedge"), index),
+                ]))
+            }),
+        )
+        .cook_indices()
+    };
+
+    // Actual sampled color traces of XS GL204/205 (also GL206/207) and GL282/283.
+    // The two contracted adjoint names may be exchanged without changing T slots.
+    for (left, right) in [
+        ([6, 10, 12, 6, 10, 12], [6, 12, 10, 6, 12, 10]),
+        ([6, 14, 10, 6, 14, 10], [6, 10, 14, 6, 10, 14]),
+    ] {
+        let canonical = canonicalize(&trace(left));
+        assert_eq!(canonical, canonicalize(&trace(right)));
+        assert_eq!(canonical, canonicalize(&canonical));
+        assert!(canonical.contains(&adjoint_dimension));
+    }
+}
+
+#[test]
+fn formal_color_dimensions_preserve_free_adjoint_and_fundamental_slots() {
+    test_initialize();
+    let open_adjoint = spenso::shadowing::trace(
+        parse_lit!(cof(Nc), default_namespace = "spenso"),
+        [
+            parse_lit!(
+                coad(Nc ^ 2 - 1, formal_free_a),
+                default_namespace = "spenso"
+            ),
+            parse_lit!(
+                coad(Nc ^ 2 - 1, formal_free_b),
+                default_namespace = "spenso"
+            ),
+            parse_lit!(
+                coad(Nc ^ 2 - 1, formal_free_c),
+                default_namespace = "spenso"
+            ),
+        ]
+        .map(|adjoint| CS.chain_t(adjoint)),
+    );
+    let renamed_adjoint = open_adjoint
+        .replace(parse_lit!(formal_free_b, default_namespace = "spenso"))
+        .with(parse_lit!(formal_free_d, default_namespace = "spenso"));
+    let canonical = canonicalize(&open_adjoint);
+    assert_ne!(canonical, canonicalize(&renamed_adjoint));
+    assert!(canonical.contains(&parse_lit!(
+        coad(Nc ^ 2 - 1, formal_free_b),
+        default_namespace = "spenso"
+    )));
+
+    let open_fundamental = parse_lit!(
+        t(
+            coad(Nc ^ 2 - 1, formal_paired_a),
+            cof(Nc, formal_free_i),
+            dind(cof(Nc, formal_paired_j))
+        ) * t(
+            coad(Nc ^ 2 - 1, formal_paired_a),
+            cof(Nc, formal_paired_j),
+            dind(cof(Nc, formal_free_k))
+        ),
+        default_namespace = "spenso"
+    );
+    let renamed_fundamental = open_fundamental
+        .replace(parse_lit!(formal_free_i, default_namespace = "spenso"))
+        .with(parse_lit!(formal_free_l, default_namespace = "spenso"));
+    let canonical = canonicalize(&open_fundamental);
+    assert_ne!(canonical, canonicalize(&renamed_fundamental));
+    for external in [
+        parse_lit!(cof(Nc, formal_free_i), default_namespace = "spenso"),
+        parse_lit!(dind(cof(Nc, formal_free_k)), default_namespace = "spenso"),
+    ] {
+        assert!(canonical.contains(&external));
+    }
+    assert_eq!(canonical, canonicalize(&canonical));
 }
 
 fn odd_cycle() -> Atom {

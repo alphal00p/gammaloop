@@ -659,7 +659,9 @@ fn direct_contract_smallest_expanded_sum_side<
 ) -> Option<Atom> {
     let slot_pairs = contracted_slot_pairs(left, right, left_positions, right_positions)?;
 
-    if expression_size(left_expr) <= expression_size(right_expr) {
+    if is_sum(left_expr)
+        && (!is_sum(right_expr) || expression_size(left_expr) <= expression_size(right_expr))
+    {
         direct_contract_expanded_sum_side::<Aind>(
             &left_expr.collect_tensors(),
             right_expr,
@@ -1333,6 +1335,29 @@ impl<
             );
         }
 
+        // A composite vector sum cannot use the atomic rank-one shortcut.
+        // Contract its terms into the other tensor by slot replacement, keeping
+        // every factor outside this contraction intact. If no such replacement
+        // is certified, retain the factorized product.
+        if EXPANDSUMS
+            && !disable_direct_sum_contractions()
+            && pos_self.n_included() > 0
+            && is_sum(&sexpr) != is_sum(&oexpr)
+            && let Some(expression) = direct_contract_smallest_expanded_sum_side::<Aind>(
+                self, other, &pos_self, &pos_other, &sexpr, &oexpr,
+            )
+        {
+            return finish_contract::<EXPANDSUMS, RECURSE, DEPTH_FIRST, Aind>(
+                SymbolicTensor {
+                    structure,
+                    is_composite: true,
+                    is_metric: false,
+                    expression,
+                },
+                RECURSE && !DEPTH_FIRST,
+            );
+        }
+
         if trace_finish {
             eprintln!("contract_try generic_product");
         }
@@ -1342,9 +1367,7 @@ impl<
             && is_sum(&oexpr)
         {
             // Only distribute genuine sum-by-sum contractions. One-sided
-            // sums such as p(mu) * sum(mu) or g(mu,nu) * sum(mu) should be
-            // handled by the network-informed slot replacement above, not
-            // forced through expansion.
+            // sums are handled by the certified slot replacements above.
             let trace = trace_sum_contractions();
             let start = trace.then(Instant::now);
             let direct = if disable_direct_sum_contractions() {

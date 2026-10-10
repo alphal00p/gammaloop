@@ -31,7 +31,7 @@ use symbolica::{
     graph::{Graph, HiddenData},
 };
 
-use crate::Cookable;
+use crate::{CookSettings, Cookable};
 
 use super::{SymbolicNet, SymbolicNetParse, SymbolicTensor};
 
@@ -77,9 +77,15 @@ type SlotsByHedge<Aind> = BTreeMap<Hedge, SlotCopies<Aind>>;
 pub(crate) fn remove_antisymmetric_zero_terms<Aind: AbsInd + DummyAind + ParseableAind>(
     expression: AtomView<'_>,
 ) -> Atom {
-    // Structured index payloads such as `hedge(1)` are not abstract indices
-    // themselves. Cook a probe for parsing, but retain the original expression.
-    let cooked = expression.cook_indices();
+    // The parser accepts atomic indices and dimensions. Cook a probe for
+    // structured indices and dimensions such as Nc^2-1; retain the original
+    // expression and distinguish unequal dimension expressions exactly.
+    let prepare_probe = |expression: AtomView<'_>| {
+        CookSettings::reversible().try_cook_dimensions(expression.cook_indices().as_view())
+    };
+    let Ok(cooked) = prepare_probe(expression) else {
+        return expression.to_owned();
+    };
     let Ok(network) = cooked
         .as_view()
         .parse_to_symbolic_net::<Aind>(&ParseSettings::default())
@@ -112,11 +118,12 @@ pub(crate) fn remove_antisymmetric_zero_terms<Aind: AbsInd + DummyAind + Parseab
     let vanishes = if candidate.as_view() == expression {
         has_odd_automorphism(&network)
     } else {
-        candidate
-            .cook_indices()
-            .as_view()
-            .parse_to_symbolic_net::<Aind>(&ParseSettings::default())
-            .is_ok_and(|network| has_odd_automorphism(&network))
+        prepare_probe(candidate.as_view()).is_ok_and(|cooked| {
+            cooked
+                .as_view()
+                .parse_to_symbolic_net::<Aind>(&ParseSettings::default())
+                .is_ok_and(|network| has_odd_automorphism(&network))
+        })
     };
     if vanishes { Atom::zero() } else { candidate }
 }

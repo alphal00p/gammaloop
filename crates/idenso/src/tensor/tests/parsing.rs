@@ -303,7 +303,7 @@ fn parse_val() {
       layout = "neato";
 
       0	 [label = "∏"];
-      1	 [label = "S:((Q(5,cind(0)))^2+(Q(5,cind(1)))^2*-1+(Q(5,cind(2)))^2*-1+(Q(5,cind(3)))^2*-1)^(-1)*((Q(6,cind(0)))^2+(Q(6,cind(1)))^2*-1+(Q(6,cind(2)))^2*-1+(Q(6,cind(3)))^2*-1)^(-1)*1𝑖/27"];
+      1	 [label = "S:((Q(5,cind(0)))^2+(Q(5,cind(1)))^2*-1+(Q(5,cind(2)))^2*-1+(Q(5,cind(3)))^2*-1)^(-1)*((Q(6,cind(0)))^2+(Q(6,cind(1)))^2*-1+(Q(6,cind(2)))^2*-1+(Q(6,cind(3)))^2*-1)^(-1)*𝑖/27"];
       2	 [label = "T:g(cof(3,hedge_1),dind(cof(3,hedge_2)))"];
       3	 [label = "T:g(cof(3,hedge_2),dind(cof(3,hedge_1)))"];
       4	 [label = "T:gamma(bis(4,hedge_2),bis(4,hedge_8),mink(4,hedge_0))"];
@@ -796,42 +796,96 @@ fn parse_problem() {
         1 / 18 * ee
             ^ 2 * G
             ^ 4 * ((mUV
-                ^ 2 - (mUV ^ 2 - dot(Q3(3), Q3(3))) - dot(Q3(3), Q3(3))
-                    + OSE(3, Q3(3), mUV ^ 2, mUV ^ 2 - dot(Q3(3), Q3(3))))
+                ^ 2 - (mUV ^ 2 - dot(Q3(3, mink(4)), Q3(3, mink(4))))
+                    - dot(Q3(3, mink(4)), Q3(3, mink(4)))
+                    + OSE(
+                        3,
+                        Q3(3, mink(4)),
+                        mUV ^ 2,
+                        mUV ^ 2 - dot(Q3(3, mink(4)), Q3(3, mink(4)))
+                    ))
                 ^ (1 / 2)
                     + (mUV
-                        ^ 2 - (mUV ^ 2 - dot(Q3(3), Q3(3))) - dot(Q3(3), Q3(3))
-                            + OSE(4, -Q3(3), mUV ^ 2, mUV ^ 2 - dot(Q3(3), Q3(3))))
+                        ^ 2 - (mUV ^ 2 - dot(Q3(3, mink(4)), Q3(3, mink(4))))
+                            - dot(Q3(3, mink(4)), Q3(3, mink(4)))
+                            + OSE(
+                                4,
+                                -Q3(3, mink(4)),
+                                mUV ^ 2,
+                                mUV ^ 2 - dot(Q3(3, mink(4)), Q3(3, mink(4)))
+                            ))
                 ^ (1 / 2))
             ^ -1 * ((mUV
-                ^ 2 - (mUV ^ 2 - dot(Q3(3), Q3(3))) - dot(Q3(3), Q3(3))
-                    + OSE(3, Q3(3), mUV ^ 2, mUV ^ 2 - dot(Q3(3), Q3(3))))
+                ^ 2 - (mUV ^ 2 - dot(Q3(3, mink(4)), Q3(3, mink(4))))
+                    - dot(Q3(3, mink(4)), Q3(3, mink(4)))
+                    + OSE(
+                        3,
+                        Q3(3, mink(4)),
+                        mUV ^ 2,
+                        mUV ^ 2 - dot(Q3(3, mink(4)), Q3(3, mink(4)))
+                    ))
                 ^ (1 / 2)
                     + (mUV
-                        ^ 2 - (mUV ^ 2 - dot(Q3(3), Q3(3))) - dot(Q3(3), Q3(3))
-                            + OSE(5, -Q3(3), mUV ^ 2, mUV ^ 2 - dot(Q3(3), Q3(3))))
+                        ^ 2 - (mUV ^ 2 - dot(Q3(3, mink(4)), Q3(3, mink(4))))
+                            - dot(Q3(3, mink(4)), Q3(3, mink(4)))
+                            + OSE(
+                                5,
+                                -Q3(3, mink(4)),
+                                mUV ^ 2,
+                                mUV ^ 2 - dot(Q3(3, mink(4)), Q3(3, mink(4)))
+                            ))
                 ^ (1 / 2))
             ^ -1 * (-Q3(3, mink(4, edge_4_1))
                 + (mUV
-                    ^ 2 - (mUV ^ 2 - dot(Q3(3), Q3(3))) - dot(Q3(3), Q3(3))
-                        + OSE(4, -Q3(3), mUV ^ 2, mUV ^ 2 - dot(Q3(3), Q3(3))))
+                    ^ 2 - (mUV ^ 2 - dot(Q3(3, mink(4)), Q3(3, mink(4))))
+                        - dot(Q3(3, mink(4)), Q3(3, mink(4)))
+                        + OSE(
+                            4,
+                            -Q3(3, mink(4)),
+                            mUV ^ 2,
+                            mUV ^ 2 - dot(Q3(3, mink(4)), Q3(3, mink(4)))
+                        ))
                 ^ (1 / 2) * sigma(4) * delta(cind(0), mink(4, edge_4_1)))
                 * (-Q3(3, mink(4, edge_5_1))
                     + (mUV
-                        ^ 2 - (mUV ^ 2 - dot(Q3(3), Q3(3))) - dot(Q3(3), Q3(3))
-                            + OSE(5, -Q3(3), mUV ^ 2, mUV ^ 2 - dot(Q3(3), Q3(3))))
+                        ^ 2 - (mUV ^ 2 - dot(Q3(3, mink(4)), Q3(3, mink(4))))
+                            - dot(Q3(3, mink(4)), Q3(3, mink(4)))
+                            + OSE(
+                                5,
+                                -Q3(3, mink(4)),
+                                mUV ^ 2,
+                                mUV ^ 2 - dot(Q3(3, mink(4)), Q3(3, mink(4)))
+                            ))
                     ^ (1 / 2) * sigma(5) * delta(cind(0), mink(4, edge_5_1)))
                 * (mUV
-                    ^ 2 - (mUV ^ 2 - dot(Q3(3), Q3(3))) - dot(Q3(3), Q3(3))
-                        + OSE(3, Q3(3), mUV ^ 2, mUV ^ 2 - dot(Q3(3), Q3(3))))
+                    ^ 2 - (mUV ^ 2 - dot(Q3(3, mink(4)), Q3(3, mink(4))))
+                        - dot(Q3(3, mink(4)), Q3(3, mink(4)))
+                        + OSE(
+                            3,
+                            Q3(3, mink(4)),
+                            mUV ^ 2,
+                            mUV ^ 2 - dot(Q3(3, mink(4)), Q3(3, mink(4)))
+                        ))
             ^ (-1 / 2)
                 * (mUV
-                    ^ 2 - (mUV ^ 2 - dot(Q3(3), Q3(3))) - dot(Q3(3), Q3(3))
-                        + OSE(4, -Q3(3), mUV ^ 2, mUV ^ 2 - dot(Q3(3), Q3(3))))
+                    ^ 2 - (mUV ^ 2 - dot(Q3(3, mink(4)), Q3(3, mink(4))))
+                        - dot(Q3(3, mink(4)), Q3(3, mink(4)))
+                        + OSE(
+                            4,
+                            -Q3(3, mink(4)),
+                            mUV ^ 2,
+                            mUV ^ 2 - dot(Q3(3, mink(4)), Q3(3, mink(4)))
+                        ))
             ^ (-1 / 2)
                 * (mUV
-                    ^ 2 - (mUV ^ 2 - dot(Q3(3), Q3(3))) - dot(Q3(3), Q3(3))
-                        + OSE(5, -Q3(3), mUV ^ 2, mUV ^ 2 - dot(Q3(3), Q3(3))))
+                    ^ 2 - (mUV ^ 2 - dot(Q3(3, mink(4)), Q3(3, mink(4))))
+                        - dot(Q3(3, mink(4)), Q3(3, mink(4)))
+                        + OSE(
+                            5,
+                            -Q3(3, mink(4)),
+                            mUV ^ 2,
+                            mUV ^ 2 - dot(Q3(3, mink(4)), Q3(3, mink(4)))
+                        ))
             ^ (-1 / 2)
                 * g(mink(4, hedge_3), mink(4, hedge_4))
                 * gamma(bis(4, hedge(1)), bis(4, hedge(8)), mink(4, hedge_4))
@@ -909,7 +963,7 @@ fn infinite_execution() {
       overlap = "scale";
       layout = "neato";
 
-      0	 [label = "TT:(-1*g(mink(4,l_6),mink(4,l_9))*g(mink(4,l_7),mink(4,l_8))+g(mink(4,l_6),mink(4,l_8))*g(mink(4,l_7),mink(4,l_9)))*g(bis(4,l_2),bis(4,l_5))*g(bis(4,l_3),bis(4,l_6))*g(mink(4,l_0),mink(4,l_6))*g(mink(4,l_1),mink(4,l_7))*g(mink(4,l_4),mink(4,l_8))*g(mink(4,l_5),mink(4,l_9))*gamma(bis(4,l_6),bis(4,l_5),mink(4,l_5))*-1𝑖*G^3"];
+      0	 [label = "TT:(-1*g(mink(4,l_6),mink(4,l_9))*g(mink(4,l_7),mink(4,l_8))+g(mink(4,l_6),mink(4,l_8))*g(mink(4,l_7),mink(4,l_9)))*g(bis(4,l_2),bis(4,l_5))*g(bis(4,l_3),bis(4,l_6))*g(mink(4,l_0),mink(4,l_6))*g(mink(4,l_1),mink(4,l_7))*g(mink(4,l_4),mink(4,l_8))*g(mink(4,l_5),mink(4,l_9))*gamma(bis(4,l_6),bis(4,l_5),mink(4,l_5))*-𝑖*G^3"];
       ext0	 [style=invis];
       0:0:s	-> ext0	 [id=0 color="red"];
       ext1	 [style=invis];

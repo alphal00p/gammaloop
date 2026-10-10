@@ -2337,7 +2337,7 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
             }
         }
 
-        if profile::enabled() {
+        if profile::enabled() && profile::verbose() {
             eprintln!(
                 "spenso_profile merge_ops.start nodes={} hedges={}",
                 self.graph.n_nodes(),
@@ -2346,7 +2346,7 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
         }
         // build a traversal over *all* internal edges
         let tt: SimpleTraversalTree<ParentChildStore<()>> = self.expr_tree().cast();
-        if profile::enabled() {
+        if profile::enabled() && profile::verbose() {
             eprintln!("spenso_profile merge_ops.after_expr_tree");
         }
         let head = self.head();
@@ -2383,7 +2383,7 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
             }
         }
 
-        if profile::enabled() {
+        if profile::enabled() && profile::verbose() {
             let sums = op_nodes
                 .iter()
                 .filter(|(_, op)| *op == MergeOp::Sum)
@@ -2427,7 +2427,7 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
                 self.graph.identify_nodes(&nodes, NetworkNode::Op(op));
             }
         }
-        if profile::enabled() {
+        if profile::enabled() && profile::verbose() {
             eprintln!(
                 "spenso_profile merge_ops.after_components to_del={}",
                 to_del.n_included()
@@ -2437,11 +2437,11 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
         // println!("{}", self.graph.dot(&to_del));
 
         self.graph.forget_identification_history();
-        if profile::enabled() {
+        if profile::enabled() && profile::verbose() {
             eprintln!("spenso_profile merge_ops.after_forget");
         }
         self.delete(&to_del);
-        if profile::enabled() {
+        if profile::enabled() && profile::verbose() {
             eprintln!(
                 "spenso_profile merge_ops.end nodes={} hedges={}",
                 self.graph.n_nodes(),

@@ -493,32 +493,11 @@ impl<N> NodeStorageOps for NodeStorageVec<N> {
         let replacement = removed.included_iter().next().unwrap();
 
         for r in removed.included_iter().skip(1).rev() {
-            // let last_index = self.nodes.len() - 1;
-
-            // Before doing anything, update any hedge pointers that point to the node being removed.
             for (_, hedge) in self.hedge_data.iter_mut() {
                 if *hedge == r {
                     *hedge = replacement;
                 }
             }
-
-            // if r != last_index {
-            //     // Swap the target with the last element in both vectors.
-            //     self.nodes.swap(r, last_index);
-            //     self.node_data.swap(r, last_index);
-
-            //     // After swapping, update any hedge pointer that pointed to the moved element.
-            //     // It used to be at last_index, now it is at r.
-            //     for hedge in self.hedge_data.iter_mut() {
-            //         if *hedge == NodeIndex(last_index) {
-            //             *hedge = NodeIndex(r);
-            //         }
-            //     }
-            // }
-            // // Remove the (now last) element.
-
-            // self.nodes.pop();
-            // self.node_data.pop();
         }
 
         self.nodes[replacement] = full_node;
@@ -572,9 +551,14 @@ impl<N> NodeStorageOps for NodeStorageVec<N> {
 
         let mut roots = vec![];
 
-        for ((_, set), (_, d)) in self.nodes.iter().zip(&self.node_data) {
+        for ((owner, set), (_, d)) in self.nodes.iter().zip(&self.node_data) {
             let mut first = None;
             for i in set.included_iter() {
+                // Historical aliases retain their incidence, but traversal must
+                // attach each half-edge only to its current owner.
+                if self.hedge_data[i] != owner {
+                    continue;
+                }
                 if let Some(root) = first {
                     nodes[i.0] = Some(PPNode::dataless_child(root))
                 } else {

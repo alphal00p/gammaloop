@@ -9,6 +9,7 @@ use spenso::{
     structure::{
         abstract_index::{AIND_SYMBOLS, AbstractIndex},
         representation::RepName,
+        slot::DummyAind,
     },
     trace, trace_sym,
 };
@@ -16,13 +17,13 @@ use symbolica::{
     atom::{Atom, AtomCore, AtomView, Symbol},
     coefficient::CoefficientView,
     function,
-    id::{Context, Replacement},
+    id::{Context, Pattern, Replacement},
     utils::Settable,
 };
 use symbolica_utils::PatternReplacement;
 
 use crate::{
-    W_, color_f, color_t,
+    CookSettings, Cookable, IndexTooling, W_, color_f, color_t,
     representations::{ColorAdjoint, ColorFundamental, ColorSextet},
     shorthands::{chain::Chain, metric::MetricSimplifier},
     tensor::remove_antisymmetric_zero_terms,
@@ -121,6 +122,21 @@ impl ColorAlgebraSimplifier {
             };
             let next = rewritten.collect_color().simplify_metrics();
             if next == current {
+                if self.settings.evaluate_traces {
+                    let close_invariant = |term: AtomView<'_>| {
+                        self.simplify_invariant_fundamental_product(&ProductView::parse(term))
+                            .unwrap_or_else(|| term.to_owned())
+                    };
+                    let closed = if let AtomView::Add(add) = next.as_view() {
+                        add.iter().map(close_invariant).sum()
+                    } else {
+                        close_invariant(next.as_view())
+                    };
+                    if closed != next {
+                        current = closed;
+                        continue;
+                    }
+                }
                 // Every antisymmetric color tensor carries adjoint slots, so this
                 // isolates its complete network without expanding other sectors.
                 let mut pruned = false;
@@ -163,7 +179,13 @@ impl ColorAlgebraSimplifier {
         }
 
         if let Some(rewritten) = self.rewrite_node(expr) {
-            return rewritten;
+            // Contract newly distributed color terms before collection can
+            // refactor them into the unchanged input and stop the fixed point.
+            return if matches!(rewritten.as_view(), AtomView::Add(_)) {
+                self.rewrite_terms(rewritten.as_view())
+            } else {
+                rewritten
+            };
         }
 
         // Try product-level rewrites first so trace*f contractions can fire before the
@@ -319,6 +341,10 @@ impl ColorAlgebraSimplifier {
             return Some(rewritten);
         }
 
+        if let Some(rewritten) = Self::simplify_trace_fierz(&rep, &factors) {
+            return Some(rewritten);
+        }
+
         let generators = factors
             .iter()
             .map(|factor| color_generator_adjoint(factor.as_view()))
@@ -463,6 +489,51 @@ impl ColorAlgebraSimplifier {
         None
     }
 
+    fn simplify_trace_fierz(rep: &Atom, factors: &[Atom]) -> Option<Atom> {
+        let n = Atom::var(CS.nc);
+        if *rep != fundamental_rep(n.clone()) {
+            return None;
+        }
+        let generators = factors
+            .iter()
+            .map(|factor| color_generator_adjoint(factor.as_view()))
+            .collect::<Option<Vec<_>>>()?;
+        if !generators.iter().all(is_su_n_adjoint_slot) {
+            return None;
+        }
+        for (left, generator) in generators.iter().enumerate() {
+            if generators
+                .iter()
+                .filter(|other| *other == generator)
+                .count()
+                != 2
+            {
+                continue;
+            }
+            for right in left + 1..generators.len() {
+                if *generator != generators[right] {
+                    continue;
+                }
+                let middle = factors[left + 1..right].to_vec();
+                let rest = factors[right + 1..]
+                    .iter()
+                    .chain(&factors[..left])
+                    .cloned()
+                    .collect::<Vec<_>>();
+                // Fundamental completeness: Tr(T^a A T^a B) =
+                // TR (Tr(A) Tr(B) - Tr(A B)/Nc).
+                let joined = middle.iter().chain(&rest).cloned().collect();
+                return Some(
+                    fundamental_index(n.clone())
+                        * (trace_with_factors(rep.clone(), middle)
+                            * trace_with_factors(rep.clone(), rest)
+                            - trace_with_factors(rep.clone(), joined) / n),
+                );
+            }
+        }
+        None
+    }
+
     fn simplify_separated_chain_casimir(
         start: &Atom,
         end: &Atom,
@@ -526,6 +597,11 @@ impl ColorAlgebraSimplifier {
 
     fn simplify_product(&self, product: AtomView) -> Option<Atom> {
         let product = ProductView::parse(product);
+        if self.settings.evaluate_traces
+            && let Some(zero) = Self::simplify_cubic_trace_contraction(&product)
+        {
+            return Some(zero);
+        }
         if product.len() < 2 {
             return None;
         }
@@ -551,6 +627,181 @@ impl ColorAlgebraSimplifier {
                     .then(|| Self::simplify_cross_chain_fierz_product(&product))
                     .flatten()
             })
+    }
+
+    fn simplify_invariant_fundamental_product(&self, product: &ProductView) -> Option<Atom> {
+        let mut chains = product
+            .factors
+            .iter()
+            .enumerate()
+            .filter_map(|(index, factor)| factor.chain.as_ref().map(|chain| (index, chain)));
+        let (index, chain) = chains.next()?;
+        if chains.next().is_some() {
+            return None;
+        }
+        let n = fundamental_chain_dimension_view(chain.start, chain.end)?;
+        if n != Atom::var(CS.nc) {
+            return None;
+        }
+        let mut adjoints = Vec::new();
+        for (factor_index, factor) in product.factors.iter().enumerate() {
+            if factor_index == index {
+                for factor in &chain.factors {
+                    adjoints.extend(Self::invariant_color_adjoint_slots(*factor)?);
+                }
+            } else if atom_contains_color_node(factor.atom) {
+                adjoints.extend(Self::invariant_color_adjoint_slots(factor.atom)?);
+            }
+        }
+        let counts = adjoints.iter().counts();
+        // A fundamental operator can have no free adjoints (the singlet), or
+        // one (the unique adjoint intertwiner T^a). Reject all other tensors
+        // and repeated dummy labels before projecting onto either channel.
+        if counts.values().any(|count| !matches!(*count, 1 | 2)) {
+            return None;
+        }
+        let free = counts
+            .iter()
+            .filter_map(|(slot, count)| (*count == 1).then_some((**slot).clone()))
+            .collect::<Vec<_>>();
+        let (operator, norm, closing_generator) = match free.as_slice() {
+            [] => (
+                color_metric(chain.start.to_owned(), chain.end.to_owned()),
+                n.clone(),
+                None,
+            ),
+            [adjoint] => {
+                // A single generator already has the projected form. Keeping
+                // its chain avoids a fixed-point cycle through the closing trace.
+                if chain.factors.len() == 1
+                    && color_generator_adjoint(chain.factors[0]).as_ref() == Some(adjoint)
+                {
+                    return None;
+                }
+                let generator = color_t!(adjoint.clone());
+                let dimension = color_adjoint_dimension(adjoint)?;
+                // Close the projection with a distinct summed slot. Reusing
+                // the free slot would capture it when the scalar trace and
+                // preserved generator are subsequently multiplied.
+                let dummy = (0..)
+                    .map(|index| {
+                        ColorAdjoint {}.to_symbolic([
+                            dimension.clone(),
+                            Atom::from(AbstractIndex::new_dummy_at(index)),
+                        ])
+                    })
+                    .find(|candidate| !adjoints.contains(candidate))?;
+                (
+                    chain_with_factors(
+                        chain.start.to_owned(),
+                        chain.end.to_owned(),
+                        vec![generator],
+                    ),
+                    fundamental_index(n.clone()) * dimension,
+                    Some((adjoint.clone(), dummy)),
+                )
+            }
+            _ => return None,
+        };
+        let closed = product.replacing_one(
+            index,
+            trace_with_factors(
+                fundamental_rep(n.clone()),
+                chain
+                    .factors
+                    .iter()
+                    .map(|factor| factor.to_owned())
+                    .chain(
+                        closing_generator
+                            .as_ref()
+                            .map(|(_, dummy)| color_t!(dummy.clone())),
+                    )
+                    .collect(),
+            ),
+        );
+        let closed = if let Some((adjoint, dummy)) = closing_generator {
+            // Trace rewrites may introduce further summed slots. Reduce the
+            // closed network before adjoining the preserved free generator.
+            // Match concrete slots literally, including underscore labels.
+            let renamed = closed
+                .replace(Pattern::Literal(adjoint.clone()))
+                .with(Pattern::Literal(dummy));
+            let reduced = self.reduce_payload(renamed.as_view());
+            if reduced.contains(adjoint.as_view()) {
+                return None;
+            }
+            reduced
+        } else {
+            closed
+        };
+        // Spenso validates all remaining slots, including trace contractions.
+        // Composite dimension labels are only encoded in this parsing probe.
+        let probe = CookSettings::reversible()
+            .try_cook_dimensions(closed.cook_indices().as_view())
+            .ok()?;
+        if !probe.list_dangling::<AbstractIndex>().ok()?.is_empty() {
+            return None;
+        }
+        // Schur's lemma gives 1 Tr(S)/Nc for the singlet. With one adjoint,
+        // S^a = T^a sum_b Tr(T^b S^b)/(TR*(Nc^2-1)). The probe certifies that
+        // closing this channel leaves no additional free tensor slots.
+        Some(operator * closed / norm)
+    }
+
+    fn invariant_color_adjoint_slots(expression: AtomView<'_>) -> Option<Vec<Atom>> {
+        let slots = if let Some(adjoint) = color_generator_adjoint(expression) {
+            vec![adjoint]
+        } else if let AtomView::Fun(fun) = expression
+            && fun.get_symbol() == CS.t
+            && fun.get_nargs() == 3
+        {
+            let args = fun.iter().collect::<Vec<_>>();
+            if fundamental_chain_dimension_view(args[1], args[2])? != Atom::var(CS.nc) {
+                return None;
+            }
+            vec![args[0].to_owned()]
+        } else if let Some(chain) = ChainView::parse(expression) {
+            if fundamental_chain_dimension_view(chain.start, chain.end)? != Atom::var(CS.nc) {
+                return None;
+            }
+            return chain
+                .factors
+                .iter()
+                .map(|factor| Self::invariant_color_adjoint_slots(*factor))
+                .collect::<Option<Vec<_>>>()
+                .map(|slots| slots.into_iter().flatten().collect());
+        } else if let Some((rep, factors)) = trace_parts(expression) {
+            if rep != fundamental_rep(Atom::var(CS.nc)) {
+                return None;
+            }
+            return factors
+                .iter()
+                .map(|factor| Self::invariant_color_adjoint_slots(factor.as_view()))
+                .collect::<Option<Vec<_>>>()
+                .map(|slots| slots.into_iter().flatten().collect());
+        } else if let Some(args) = color_symmetric_trace_args(expression) {
+            args
+        } else if let Some((_, args)) = color_antisymmetric_generator_args(expression) {
+            args
+        } else if let Some(args) = structure_constant_args(expression) {
+            args.to_vec()
+        } else if let Some(invariant) = color_symmetric_invariant(expression) {
+            if invariant.rep != fundamental_rep(Atom::var(CS.nc)) {
+                return None;
+            }
+            invariant.args
+        } else if let AtomView::Fun(fun) = expression
+            && fun.get_symbol() == ETS.metric
+            && fun.get_nargs() == 2
+        {
+            fun.iter().map(|arg| arg.to_owned()).collect()
+        } else if matches!(expression, AtomView::Fun(fun) if [CS.cas, CS.idx, CS.gram].contains(&fun.get_symbol()))
+        {
+            return Some(Vec::new());
+        } else {
+            return None;
+        };
+        slots.iter().all(is_su_n_adjoint_slot).then_some(slots)
     }
 
     fn join_color_chain_product(product: &ProductView) -> Option<Atom> {
@@ -826,6 +1077,116 @@ impl ColorAlgebraSimplifier {
                         );
                     return Some(product.replacing_pair(chain_index, f_index, replacement));
                 }
+
+                if !self.settings.evaluate_traces || left == right {
+                    continue;
+                }
+                let Some(n) = fundamental_chain_dimension_view(chain.start, chain.end)
+                    .filter(|dimension| *dimension == Atom::var(CS.nc))
+                else {
+                    continue;
+                };
+                for (symmetric_index, factor) in product.factors.iter().enumerate() {
+                    let Some(invariant) = &factor.symmetric_invariant else {
+                        continue;
+                    };
+                    if invariant.rep != fundamental_rep(n.clone()).as_view()
+                        || invariant.args.len() != 3
+                        || invariant.args.iter().unique().count() != 3
+                        || !invariant.args.contains(&left)
+                        || !invariant.args.contains(&right)
+                    {
+                        continue;
+                    }
+                    let Some(slots) = product
+                        .factors
+                        .iter()
+                        .filter(|factor| atom_contains_color_node(factor.atom))
+                        .map(|factor| Self::invariant_color_adjoint_slots(factor.atom))
+                        .collect::<Option<Vec<_>>>()
+                    else {
+                        continue;
+                    };
+                    let slots = slots.into_iter().flatten().collect::<Vec<_>>();
+                    if slots.iter().counts().values().any(|count| *count > 2)
+                        || slots.iter().filter(|slot| slot.as_view() == left).count() != 2
+                        || slots.iter().filter(|slot| slot.as_view() == right).count() != 2
+                    {
+                        continue;
+                    }
+                    let target = invariant
+                        .args
+                        .iter()
+                        .find(|slot| **slot != left && **slot != right)?;
+                    // Fundamental Fierz completeness gives
+                    // STr(Ta Tb Tc) Tb Tc = TR^2 (Nc^2-4)/(2 Nc) Ta.
+                    // Reduce only this adjacent subchain. Other open color
+                    // lines and factorized momentum coefficients are spectators.
+                    let coefficient = fundamental_index(n.clone()).pow(2)
+                        * (n.clone().pow(2) - Atom::num(4))
+                        / (Atom::num(2) * n);
+                    let factors = chain
+                        .factors
+                        .iter()
+                        .map(|factor| factor.to_owned())
+                        .collect::<Vec<_>>();
+                    let replacement = coefficient
+                        * chain_replacing_factor_pair(
+                            &chain.start.to_owned(),
+                            &chain.end.to_owned(),
+                            &factors,
+                            pair_index,
+                            color_t!(target.to_owned()),
+                        );
+                    return Some(product.replacing_pair(chain_index, symmetric_index, replacement));
+                }
+            }
+
+            let Some(dimension) = fundamental_chain_dimension_view(chain.start, chain.end)
+                .filter(|dimension| *dimension == Atom::var(CS.nc))
+            else {
+                continue;
+            };
+            for (position, factors) in chain.factors.windows(3).enumerate() {
+                let Some(generators) = factors
+                    .iter()
+                    .map(|factor| color_generator_adjoint_view(*factor))
+                    .collect::<Option<Vec<_>>>()
+                else {
+                    continue;
+                };
+                if !generators
+                    .iter()
+                    .all(|slot| is_su_n_adjoint_slot(&slot.to_owned()))
+                {
+                    continue;
+                }
+                for (f_index, f_factor) in product.factors.iter().enumerate() {
+                    let Some(structure) = &f_factor.structure else {
+                        continue;
+                    };
+                    let Some((target, sign)) = Self::structure_target_for_generator_pair(
+                        &structure.args,
+                        &generators[0],
+                        &generators[2],
+                    ) else {
+                        continue;
+                    };
+                    // Fundamental Fierz completeness gives
+                    // sum_ac f(a,c,e) T^a T^b T^c = -i TR^2 g(b,e) 1.
+                    // Contract this color subchain without distributing its
+                    // surrounding numerator or the remaining generators.
+                    let replacement = -Atom::i()
+                        * sign
+                        * fundamental_index(dimension.clone()).pow(2)
+                        * color_metric(generators[1].to_owned(), target)
+                        * chain_with_factor_view_slices(
+                            chain.start,
+                            chain.end,
+                            &[&chain.factors[..position], &chain.factors[position + 3..]],
+                        );
+                    return Some(product.replacing_pair(chain_index, f_index, replacement));
+                }
             }
         }
 
@@ -837,13 +1198,18 @@ impl ColorAlgebraSimplifier {
         left: &AtomView<'_>,
         right: &AtomView<'_>,
     ) -> Option<(Atom, Atom)> {
-        let actual = color_f!(args[0].to_owned(), args[1].to_owned(), args[2].to_owned());
-
-        args.iter().find_map(|target| {
-            let oriented = color_f!(target.to_owned(), left.to_owned(), right.to_owned());
-            let prefactor = oriented.coefficient(actual.as_view());
-            (!prefactor.is_zero()).then_some((target.to_owned(), prefactor))
-        })
+        if args[0] == args[1] || args[0] == args[2] || args[1] == args[2] {
+            return None;
+        }
+        let left = args.iter().position(|arg| arg == left)?;
+        let right = args.iter().position(|arg| arg == right)?;
+        if left == right {
+            return None;
+        }
+        // The product coefficient already owns the stored f's sign. Use its
+        // literal slot order: underscore labels suppress antisymmetric sorting.
+        let sign = if (left + 1) % 3 == right { 1 } else { -1 };
+        Some((args[3 - left - right].to_owned(), Atom::num(sign)))
     }
 
     fn simplify_symmetric_structure_product(product: &ProductView) -> Option<Atom> {
@@ -1014,6 +1380,52 @@ impl ColorAlgebraSimplifier {
             return Some(product.excluding(&excluded) * replacement);
         }
 
+        None
+    }
+
+    fn simplify_cubic_trace_contraction(product: &ProductView) -> Option<Atom> {
+        for factor in &product.factors {
+            let Some(invariant) = &factor.symmetric_invariant else {
+                continue;
+            };
+            let [a, b, c] = invariant.args.as_slice() else {
+                continue;
+            };
+            let AtomView::Fun(rep) = invariant.rep else {
+                continue;
+            };
+            if rep.get_symbol() != CS.fundamental_rep || rep.get_nargs() != 1 {
+                continue;
+            }
+            let n = rep.iter().next()?.to_owned();
+            let dimension = n.pow(2) - Atom::num(1);
+            if ![a, b, c].iter().all(|arg| {
+                representation_slot(**arg, CS.adjoint_rep).is_some_and(|(d, _)| d == dimension)
+            }) {
+                continue;
+            }
+            // Contracting two slots of the symmetric cubic trace gives
+            // Tr(T^a T^a T^c) = C_F Tr(T^c) = 0. The metric may remain
+            // outside the trace projector after the other color reductions.
+            for (left, right) in [(a, b), (a, c), (b, c)] {
+                if left == right
+                    || product.factors.iter().any(|factor| {
+                        let AtomView::Fun(metric) = factor.atom else {
+                            return false;
+                        };
+                        if metric.get_symbol() != ETS.metric || metric.get_nargs() != 2 {
+                            return false;
+                        }
+                        let mut args = metric.iter();
+                        let first = args.next().unwrap();
+                        let second = args.next().unwrap();
+                        (first == *left && second == *right) || (first == *right && second == *left)
+                    })
+                {
+                    return Some(Atom::Zero);
+                }
+            }
+        }
         None
     }
 
@@ -1821,4 +2233,23 @@ fn positive_integer(expr: AtomView) -> Option<i64> {
     };
 
     (value > 0).then_some(value)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn trace_fierz_rejects_generator_repeated_more_than_twice() {
+        crate::test_support::test_initialize();
+        let n = Atom::var(CS.nc);
+        let adjoint = ColorAdjoint {}.to_symbolic([
+            n.clone().pow(2) - Atom::num(1),
+            Atom::var(symbolica::symbol!("repeated_adjoint")),
+        ]);
+        let factors = vec![color_t!(adjoint); 4];
+        assert!(
+            ColorAlgebraSimplifier::simplify_trace_fierz(&fundamental_rep(n), &factors,).is_none()
+        );
+    }
 }
