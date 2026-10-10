@@ -388,6 +388,7 @@ impl Amplitude {
         locked_runtime_settings: &LockedRuntimeSettings,
         thread_pool: &ThreadPool,
     ) -> Result<Vec<NamedGraphGenerationReport>> {
+        settings.validate_for_process(GenerationType::Amplitude)?;
         // preprocess each graph individually
         // Threshold directives of every member use the master's edge IDs and topology.
         // The supplied graph group is responsible for aligning their physical meaning.
@@ -1006,7 +1007,6 @@ impl AmplitudeGraph {
 
     #[instrument(skip_all, err)]
     pub(crate) fn generate_cff(&mut self, settings: &GenerationSettings) -> Result<()> {
-        settings.validate_for_process(GenerationType::Amplitude)?;
         self.graph.set_medium_mode(settings.medium.mode)?;
         self.graph.ensure_energy_convergent_cycles(
             &self

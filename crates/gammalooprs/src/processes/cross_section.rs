@@ -991,9 +991,6 @@ impl CrossSection {
         runtime_default: LockedRuntimeSettings,
         generation_pool: &ThreadPool,
     ) -> Result<Vec<NamedGraphGenerationReport>> {
-        global_settings
-            .generation
-            .validate_for_process(GenerationType::CrossSection)?;
         let process_name = process_definition.folder_name.as_str();
         let started = std::time::Instant::now();
         crate::debug_tags!(#generation, #profile, #graph, #summary;
