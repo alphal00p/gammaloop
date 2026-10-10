@@ -166,6 +166,13 @@ impl FermiSurfaceSector {
                 bulk += coefficient;
                 continue;
             }
+            // Expansion can multiply equal factors; a squared delta is undefined.
+            let power = |factor: AtomView<'_>| matches!(factor, AtomView::Pow(_));
+            ensure!(
+                !power(key.as_view())
+                    && !matches!(key.as_view(), AtomView::Mul(factors) if factors.iter().any(power)),
+                "Repeated Fermi distribution {key} has no defined product"
+            );
             let mut support = active
                 .iter()
                 .filter(|(candidate, _, _)| {
@@ -361,6 +368,15 @@ mod tests {
     fn fermi_sector_extraction_rejects_undefined_products_and_uncertified_steps() -> Result<()> {
         let graph = routing::test_graph()?;
         let delta = GS.thermal_distribution(1, 1, 0, 1, 1);
+        // Only polynomial expansion exposes this square.
+        let expanded = (&delta + Atom::var(symbol!("fermi_sector_x"))) * (&delta + Atom::num(2));
+        let Err(error) = FermiSurfaceSector::extract(&graph, &expanded) else {
+            panic!("accepted {expanded}");
+        };
+        assert!(
+            error.to_string().contains("Repeated Fermi distribution"),
+            "{error}"
+        );
         for malformed in [
             delta.clone().pow(2),
             delta.clone().pow(-1),
