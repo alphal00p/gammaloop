@@ -2,7 +2,7 @@
 
 #quote(block: true)[
 #strong[Status:] Current implementation architecture, audited against the Spenso source on
-2026-09-21.
+2026-10-01.
 
 This note covers the `spenso` Rust crate. `spenso-macros`, `spenso-hep-lib`, and `spynso3` are
 separate packages: they provide derives, concrete physics tensors, and a Python adapter rather
@@ -137,7 +137,10 @@ Separately, `FastTensorSum`, `FastTensorSumContractible`, balanced scalar/tensor
 contraction profiles, and pair estimates provide optional optimized paths inside the same
 network semantics. Unsupported shapes or unprofitable cases use the ordinary sum and
 contraction paths. Network counters and timers are opt-in diagnostic instrumentation; they do
-not change the execution result.
+not change the execution result. `SPENSO_NETWORK_PROFILE` records cumulative
+counters and timers with periodic reports and slow-operation diagnostics.
+Per-operation starts, batch completion and merge-progress lines additionally
+require `SPENSO_NETWORK_PROFILE_VERBOSE`.
 
 == Symbolica parsing boundary
 
@@ -155,6 +158,12 @@ names before allocating dummies, and parser clones share that reservation set an
 Positive powers that lower shorthand with internal dummies reparse each copy from the original
 base, giving it fresh internal indices while retaining explicit boundary slots. Callers combining
 independently parsed expressions must still manage index namespaces deliberately.
+
+Scalar precontraction applies to both products and sums. For a mixed sum, parsing
+collects the pure-scalar terms and combines them in one n-ary addition; a fully
+scalar sum reuses the original normalized atom. It does not grow an intermediate
+scalar sum by repeated pairwise copying. Closed lazy tensor leaves are converted
+to their scalar entries before execution adds them, independently of leaf order.
 
 The detailed dispatch and shorthand behavior are recorded in the
 #link("parsing-flow.typ")[Symbolica-to-network parsing flow]. Syntax and rewrite ownership across

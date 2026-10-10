@@ -1,7 +1,7 @@
 = UV renormalization architecture
 <uv-renormalization-architecture>
 #quote(block: true)[
-#strong[Reviewed:] 2026-08-17 against `c9f4e32acd2c`
+#strong[Reviewed:] 2026-10-01 against jj change `xuoqsyop`
 
 #strong[Lifecycle:] Current implementation architecture. Unsupported
 prescription paths are recorded explicitly under
@@ -65,6 +65,27 @@ node does not copy that policy; it stores computed values:
 This separation lets the same integrated result be consumed differently
 without storing scheme-specific copies.
 
+Four-dimensional recursive state stores completed signed counterterm sectors
+with their active component frames and frozen integrated frames. A containing
+operator acts on each complete sector and extends the loop generators fixed by
+its children. A spinney inherits the union of its components' loop generators;
+its containing component supplies the remaining quotient directions. Surviving
+child boundary momenta remain expressions in these coordinates and the current
+component's external momenta. They are not additional required loop generators:
+for a boundary momentum $q = r + p$, the containing soft operation scales
+$p$ while retaining its loop coordinate $r$. Pure and nested terms must use a
+consistent expansion basis; completed child loops cannot be redefined by an
+external-momentum shift. No change of loop variables is applied to a completed
+child to fit an enclosing basis.
+
+The `has_soft_ancestry` flag records an
+executed nonzero soft branch and propagates through later operators and
+disconnected products; degree-zero H or a zero S branch introduces no flag.
+The orchestrator validates scheme assignments before computation, while direct
+`uv_limit` calls retain cheap invariant checks using this metadata. Ordinary
+scheme controls are constructed explicitly in tests, without carrying a second
+symbolic counterterm through production recursion.
+
 == Signs and Integrated Projections
 <signs-and-integrated-projections>
 Each UV operation supplies its own subtraction sign. In particular, the
@@ -95,7 +116,7 @@ The projections are used as follows:
   integrated pole only;
 - a root `PolePart` result combines its local term with the integrated
   pole;
-- an `MUV` dependency combines its local term with the signed finite
+- an `MUV` or `IR` dependency combines its local term with the signed finite
   counterterm;
 - terminal renormalization output selects the pole or finite projection
   from the source Spinney\'s prescription;
@@ -159,6 +180,15 @@ paths from their common root. At a union it:
 
 The construction operates over an arbitrary number of components and is
 not special-cased for a two-component spectacles graph.
+
+Finite prefixes enter this replay as connected coefficients with their source
+owners retained. Algebraic physical-mass factors carry that owner's mass tag;
+scalar logarithms remain fixed coefficients of the soft jet. An enclosing
+operation promotes the tags of contained children, including children whose
+loops have already been integrated. A disjoint sibling with the same mass keeps
+its own tag. The normalized frozen kernels remain outside the Taylor operation.
+This preserves the engineering weight of finite mass vertices without rescaling
+unrelated factors in a disconnected product.
 
 The projected local-4D route is separate: it completes the Taylor expansion in four dimensions, reconstructs the exact source occurrence graph, performs the factorized minimax EMR dispatch needed for derivative-created occurrences, and only then projects that completed term to CFF. That reconstruction machinery is exclusive to projected local4D and is not a replacement for the direct replay above.
 
@@ -236,11 +266,19 @@ Each finite-precision ray is first fitted over its complete scale range. A missi
 
 == Current Boundaries
 <current-boundaries>
-- Local four-dimensional and integrated counterterm generation currently
-  support only `MUV` and `PolePart`. The local three-dimensional kernel
-  has an `IR` branch, but integrated `IR` generation is not implemented;
-  `VaccuumLimit` and `OS` are also unsupported, while `Unsubtracted` is
-  expected to be filtered out before these operations.
+- Local three-dimensional, local four-dimensional, and integrated counterterms
+  support `MUV`, `PolePart`, and `IR` within the supported wood assignments.
+  Positive-degree `IR` uses the completed soft prescription H; degree-zero H
+  reduces to U. Integrated `IR` uses the signed finite projection described above.
+- Scheme validation rejects a positive-degree MUV parent containing a
+  positive-degree IR child: its reduced-cograph subtraction lacks the containing
+  soft branch. It also rejects IR and PolePart components in one nested or
+  disconnected UV wood until their combined integrated policy is implemented.
+  Components that cannot occur together in a wood do not trigger this rejection.
+- Local `OS` dispatch remains deferred, and requesting integrated OS is rejected
+  before forest computation. `VaccuumLimit` is unsupported; `Unsubtracted` is
+  expected to be filtered out before these operations. These checks are skipped
+  when UV subtraction itself is disabled.
 - Parametric integrand generation currently supports final 3D output
   only. `FourD` is used by integrated renormalization internally but is
   rejected by the parametric orchestrator.

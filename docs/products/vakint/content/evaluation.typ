@@ -49,8 +49,8 @@ Run the four fast one-loop numerical checks explicitly when changing that backen
 
 ```bash
 RUN_PYSECDEC_TESTS=1 cargo nextest run -p vakint \
-  --cargo-profile dev-optim -P test_gammaloop --test integral_evaluation_pysecdec_tests \
-  --run-ignored only --ignore-default-filter \
+  --cargo-profile ci-optim -P ci_gammaloop --test integral_evaluation_pysecdec_tests \
+  --run-ignored ignored-only --ignore-default-filter \
   -E 'test(/^test_integrate_1l_(simple|complex_and_signed_parameters|cross_product|cross_product_with_additional_symbols_numerator)$/)'
 ```
 
