@@ -183,6 +183,10 @@
           "packages.${system}.cargoArtifacts"
           workspaceHackCacheAttr
         ]
+        ++ map cratePackageDepsAttr (
+          builtins.filter (package: builtins.elem package workspacePackagesWithDependencyArtifacts)
+          (unique (builtins.concatLists (map workspaceTestDependencyClosureFor workspaceTestComponentMembers.${representative})))
+        )
         ++ map crateTestDependencyAttr (
           builtins.filter (
             dependencyRepresentative: dependencyRepresentative != workspaceHackPackage
@@ -228,6 +232,11 @@
             if group.runtimePythonModule or false
             then ["packages.${system}.gammaloop-python-module"]
             else []
+          )
+          ++ (
+            if builtins.elem "gammaloop-api" group.packages
+            then ["packages.${system}.gammaloop-ufo-python-runtime"]
+            else []
           );
       })
       groups))
@@ -252,9 +261,13 @@
       "checks.${system}.gammaloop-check" = ["packages.${system}.cargoCheckArtifacts"];
       "checks.${system}.gammaloop-clippy" = ["packages.${system}.cargoCheckArtifacts"];
       "checks.${system}.gammaloop-doc" = ["packages.${system}.cargoCheckArtifacts"];
-      "checks.${system}.gammaloop-doctest" = ["packages.${system}.cargoCheckArtifacts"];
+      "checks.${system}.gammaloop-doctest" = [
+        "packages.${system}.cargoCheckArtifacts"
+        (cratePackageDepsAttr "gammaloop-api")
+      ];
       "packages.${system}.alphal00p-docs-pages" = ["packages.${system}.alphal00p-docs-cargo-artifacts"];
       "packages.${system}.alphal00p-docs-snapshot-fixture" = ["packages.${system}.alphal00p-docs-cargo-artifacts"];
+      "packages.${system}.alphal00p-docs-cargo-artifacts" = [(cratePackageDepsAttr "gammaloop-api")];
       "checks.${system}.alphal00p-docs" = [
         "packages.${system}.alphal00p-docs-pages"
         "packages.${system}.alphal00p-docs-snapshot-fixture"
@@ -265,10 +278,16 @@
       "checks.${system}.linnest-wasm" = ["packages.${system}.linnest-wasm"];
       "packages.${system}.gammaloop-llvm-coverage" = ["packages.${system}.gammaloop"];
       "packages.${system}.nix-ci-check-alphal00p-docs" = ["packages.${system}.alphal00p-docs-cargo-artifacts"];
-      "packages.${system}.nix-ci-check-gammaloop-doctest" = ["packages.${system}.cargoCheckArtifacts"];
+      "packages.${system}.nix-ci-check-gammaloop-doctest" = [
+        "packages.${system}.cargoCheckArtifacts"
+        (cratePackageDepsAttr "gammaloop-api")
+      ];
       "packages.${system}.nix-ci-check-gammaloop-nextest" =
         nextestBinaryChecks
-        ++ ["packages.${system}.gammaloop-python-module"];
+        ++ [
+          "packages.${system}.gammaloop-python-module"
+          "packages.${system}.gammaloop-ufo-python-runtime"
+        ];
     }
   ];
   missingWorkspaceCratePackageEdges =

@@ -16,8 +16,8 @@ vakint = { workspace = true, optional = true, features = ["python_stubgen", "sym
 
 [features]
 default = []
-gammaloop = ["dep:gammaloop-api"]
+gammaloop = ["dep:gammaloop-api", "dep:symbolica", "symbolica/python_export"]
 idenso = ["dep:idenso", "dep:symbolica", "idenso/native"]
-linnet = ["dep:linnet-py"]
-spenso = ["dep:spynso3"]
+linnet = ["dep:linnet-py", "dep:symbolica", "symbolica/python_export"]
+spenso = ["dep:spynso3", "dep:symbolica"]
 vakint = ["dep:symbolica", "dep:vakint"]

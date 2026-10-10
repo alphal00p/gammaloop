@@ -457,7 +457,7 @@ requires-dist = [
     { name = "pymupdf", specifier = ">=1.23.4" },
     { name = "pytest" },
     { name = "pyyaml", specifier = ">=6.0.1" },
-    { name = "symbolica", specifier = ">=0.14.0" },
+    { name = "symbolica", specifier = ">=3.0.0" },
     { name = "typst", marker = "extra == 'typst-display'", specifier = ">=0.15,<0.16" },
     { name = "ufo-model-loader", specifier = ">=0.1.6" },
 ]
@@ -470,7 +470,7 @@ dev = [
     { name = "marimo", specifier = ">=0.24,<0.25" },
     { name = "pytest", specifier = ">=8.3.5,<9" },
     { name = "pyyaml", specifier = ">=6.0.1,<7" },
-    { name = "symbolica", specifier = ">=0.16.0" },
+    { name = "symbolica", specifier = ">=3.0.0" },
     { name = "ufo-model-loader", specifier = ">=0.1.6" },
 ]
 
@@ -2020,14 +2020,15 @@ wheels = [
 
 [[package]]
 name = "symbolica"
-version = "0.18.0"
+version = "3.0.0"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/f8/87/8ea8f29b0f4193b6feb2eda0094422684863ad94062a75414cdee600cdeb/symbolica-0.18.0.tar.gz", hash = "sha256:60f06ac3c61864af6835eb448114521c3eb3adc2d4e7439cd9396b5d884f08a9", size = 84251, upload-time = "2025-09-04T08:35:24.628Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/cc/56/a2c6cb62f5b66b94b91d4a946319e7344ab327c2b8c8853b73ca86f2bc04/symbolica-3.0.0.tar.gz", hash = "sha256:f5bf56715fd3ff1017771f3f6ca9d3ee0cec335a283f679dca06d169e4200024", size = 732283, upload-time = "2026-10-02T11:34:55.192Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/ca/c5/1b96e9ed14294a18c876509e81efb844eaafe174b85a7094cbfe7ecf41d1/symbolica-0.18.0-1-cp39-abi3-win_amd64.whl", hash = "sha256:37e9470e67e8c0750a02f47f908a0f73c13541d8ea5b39e8d1703ff0f77dcb5f", size = 22236477, upload-time = "2025-09-19T08:38:16.527Z" },
-    { url = "https://files.pythonhosted.org/packages/a0/45/cfae4a98a1fe9663e5a0e7f232f547308cff3ea732933b2fcb0b7a38ab65/symbolica-0.18.0-cp310-abi3-macosx_10_12_x86_64.whl", hash = "sha256:4fb8bd329642b7ec51a0b9a226954b0312425323b3542f2e63c171e48df05b52", size = 20398835, upload-time = "2025-09-04T08:36:03.815Z" },
-    { url = "https://files.pythonhosted.org/packages/9c/82/d3cf3df128c9188e1b064f87fd88b55b1d8019d959ea1e74cc4558db63f6/symbolica-0.18.0-cp310-abi3-macosx_11_0_arm64.whl", hash = "sha256:959dbf51c201db529fe526335df08f4876489f9d63b69c34381364711a5936f6", size = 18412032, upload-time = "2025-09-04T08:36:14.162Z" },
-    { url = "https://files.pythonhosted.org/packages/da/07/6a5e5ea0656efcddb7198cd23fce0780709aef480bbd0757bd2e8194cef0/symbolica-0.18.0-cp38-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:f462839b0a5837a8ecbe7dba981e9bb5d57562ef614d94c4597445f707fcd161", size = 20874383, upload-time = "2025-09-04T08:35:52.222Z" },
+    { url = "https://files.pythonhosted.org/packages/91/6c/a7a4bfc317d942fb2712c6465f6aa6cd4f22c327f4c3a0982446290bb2b0/symbolica-3.0.0-cp314-abi3-pyemscripten_2026_0_wasm32.whl", hash = "sha256:8822b12d963f17131f778cb382be93f5b0e321b03d0f93d88aa1bae741e47673", size = 32340088, upload-time = "2026-10-02T11:47:19.718Z" },
+    { url = "https://files.pythonhosted.org/packages/b3/e7/7fa38476a5918994093d1af7acbd28489307ff780167dcfd3b40350c7905/symbolica-3.0.0-cp39-abi3-macosx_10_12_x86_64.whl", hash = "sha256:b2ea03b9be72a3ebc3fa950d7380b09223084cb5554aa0877c59e12d7749c2a7", size = 92946157, upload-time = "2026-10-02T11:34:41.285Z" },
+    { url = "https://files.pythonhosted.org/packages/e7/68/b019e129512b3ab21ad7912a268d4f9284b1a550edbb9cc519b9718ef792/symbolica-3.0.0-cp39-abi3-macosx_11_0_arm64.whl", hash = "sha256:6b7414d8d06ac20c92460e0685c794d97afe976968b5fba5cc9562c471b2365d", size = 79234978, upload-time = "2026-10-02T11:34:45.033Z" },
+    { url = "https://files.pythonhosted.org/packages/a8/c9/c18cccc41176637463872cf0111e3d55b5a8f1a144de94fcf9c1b1d7ee86/symbolica-3.0.0-cp39-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:a2977f78d8f40ce3206ba49850cf75f473785a32a9368e6115d059755a48d15e", size = 91636277, upload-time = "2026-10-02T11:34:48.915Z" },
+    { url = "https://files.pythonhosted.org/packages/05/8b/52026e47f6aedd150d92c02c5f3953ca0cd11ebfd7cb449ae0c99cf9b5ce/symbolica-3.0.0-cp39-abi3-win_amd64.whl", hash = "sha256:bcc3a69d4fd16e71b6d8189b9cf85bbc5724cf542a573cbdea21960ea16f9b32", size = 101959972, upload-time = "2026-10-02T11:34:52.664Z" },
 ]
 
 [[package]]

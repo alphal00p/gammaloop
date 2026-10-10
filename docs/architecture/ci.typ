@@ -1,14 +1,15 @@
 = CI maintenance and measurements
 
 Use `just ci-checks` for the selected local suite and `just ci-checks-and-upload`
-before final review. The latter checks first, then publishes matching outputs to
-NixCI. See #link("../../CONTRIBUTING.typ#nixci-cache")[CONTRIBUTING.typ] for credentials,
+before final review. The latter runs static checks and publishes compiled runtime
+producers without running the runtime suite. NixCI runs that suite after the push.
+See #link("../../CONTRIBUTING.typ#nixci-cache")[CONTRIBUTING.typ] for credentials,
 licenses and retries. `just check` runs Cargo checking only.
 
 On `itphlies`, run `just ci-checks-and-upload` before pushing CI-enabled work.
 The configured Nix daemon downloads matching cached outputs as needed; the
-command builds/checks missing outputs and uploads successful results plus their
-producer closures. Finish the upload before pushing so NixCI can reuse that
+command checks static inputs, builds missing runtime producers and uploads their
+closures. Finish the upload before pushing so NixCI can reuse that
 work. Keep substitution enabled rather than downloading the whole cache or
 forcing rebuilds.
 
@@ -31,18 +32,32 @@ the full five-product documentation check, necessary producers and final success
 The documentation check validates generated references and examples, renders
 latest and snapshot sites, checks their HTML, and exercises publication behavior.
 It uses the existing licensed-check runner with `SYMBOLICA_LICENSE_SIGNED`; its
-reusable Cargo artifacts are scheduled separately. Local checks and uploads select
-the same documentation check. Packaging, standalone Rustdoc, the persistent Typst
-renderer and WASM remain additional checks in `nix flake check --impure`.
+reusable Cargo artifacts are scheduled separately. `just ci-checks` selects the
+same documentation check; uploads select its launcher and compiled producers.
+Packaging, standalone Rustdoc, the persistent Typst renderer and WASM remain
+additional checks in `nix flake check --impure`.
 
 Compilation stays per crate. Source filtering preserves unaffected packages;
 manifest and lockfile changes still invalidate broadly. Test dependencies avoid
 multi-crate cycles: Linnet enables its own optional test features, and Spenso owns
 the macro integration test. Regenerate Hakari after dependency/feature changes so
-the shared cache does not retain unused build dependencies. Compatible test and
-Python builds share dependencies, while Python retains its required ABI, interpreter
-and features. Clippy and doctests share check dependencies but retain workspace-wide
-source inputs, so their rebuild isolation differs from package test artifacts.
+the shared cache does not retain unused build dependencies. Native package builds,
+test harnesses and documentation share the optimized CI profile, compatible
+features, Python interpreter and compiled library artifacts. Python extensions
+retain their ABI and extension settings. Documentation stub exporters remain
+separate because their global type registries can change the generated APIs when
+combined. Unit-test crates and Rustdoc snippets still require their own compilation.
+Clippy and doctests share check dependencies but retain workspace-wide source
+inputs, so their rebuild isolation differs from package test artifacts.
+
+Core API tests import UFO models using Python packages pinned in `uv.lock`.
+These dependencies enter the runtime environment through `PYTHONPATH`; they do
+not change the shared compiler interpreter or compiled test archives. The locked
+Symbolica Python wheels support Linux on x86-64 and macOS on ARM. Requesting this
+runtime on Linux ARM reports the missing upstream wheel.
+
+The four NLO acceptance cases share one executable. Their assertions, workloads
+and runtime worker reservations are unchanged.
 
 The Spenso group also runs `spynso3` unit and integration tests for typed tensor
 APIs and shared Symbolica expressions. Spynso's embedded `typst/*.typ` files are
@@ -52,10 +67,18 @@ test mocks Typst and checks the missing-optional-renderer behavior.
 Merged artifacts are self-contained compressed archives. Recursive inheritance,
 writable extraction, Cargo fingerprints and epoch-1 timestamps must survive
 changes to archive handling. Stable publication outputs depend on the artifacts,
-not the commit. Lightweight test runners look up the successful check result
-before fetching compiler state or test binaries. Necessary artifact producers
-remain explicitly selected for publication; an empty successful test output alone
-does not retain them. Test groups are scheduled and reported independently.
+not the commit. Lightweight test runners request the corresponding Nix check
+result before fetching compiler state or test binaries. NixCI launches a cached
+runner too, but a matching cached check result can avoid executing its tests.
+The local upload command selects static checks, runtime launchers and compiled
+producers, not runtime check results. Uncached runtime checks run in NixCI using
+those prepared inputs. An empty successful test output alone does not retain
+the necessary producers. Test groups are scheduled and reported independently.
+
+The local upload command keeps all selected outputs rooted through temporary
+result links until cache publication finishes. The command removes those links
+on exit. This prevents concurrent garbage collection from deleting a realized
+producer between the build and upload stages.
 
 Synchronous dependency discovery incorporates Syd's PR \#104 suggestion while
 retaining the explicit graph. Local uploads adapt \#105 through the Just command;

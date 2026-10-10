@@ -196,6 +196,13 @@ pub fn canonical_stub() -> pyo3_stub_gen::Result<String> {
         .modules
         .get("linnet_py")
         .expect("linnet StubInfo must contain the linnet_py module");
+    Ok(canonical_stub_from_module(module))
+}
+
+/// Render a gathered Linnet module without collecting the global inventory again.
+#[cfg(feature = "python_stubgen")]
+#[doc(hidden)]
+pub fn canonical_stub_from_module(module: &pyo3_stub_gen::generate::Module) -> String {
     let mut exports = module
         .class
         .values()
@@ -302,5 +309,5 @@ pub fn canonical_stub() -> pyo3_stub_gen::Result<String> {
         .collect::<Vec<_>>()
         .join("\n");
     canonical.push('\n');
-    Ok(canonical)
+    canonical
 }

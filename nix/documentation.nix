@@ -6,15 +6,22 @@
   workspaceRoot,
   cargoSources,
   nonCargoBuildSources,
-  commonArgs,
+  ciArgs,
+  ciCargoProfile,
+  nativeCargoArtifacts,
   dummyCargoTarget,
   normalizeWorkspaceHackBuildScriptTimestampScript,
   workspacePackageSrcFor,
   workspaceMissingCargoTargetsScript,
+  workspaceAnchorCargoTomlFor,
+  workspacePrebuildDependencyPackages,
+  workspacePrebuildPackage,
+  workspacePrebuildPackageDir,
+  craneCiFeaturesFor,
 }:
 let
   inherit (pkgs) lib;
-  docsCargoProfile = "docs";
+  docsCargoProfile = ciCargoProfile;
   documentationRevision = self.dirtyRev or (self.rev or (self.narHash or "local"));
   typst015 =
     assert lib.assertMsg (docsPkgs.typst.version == "0.15.1")
@@ -163,18 +170,63 @@ let
   );
   alphal00pDocsCargoTargetRoot = "target/alphal00p-docs-rustdoc";
   alphal00pDocsCargoTarget = "${alphal00pDocsCargoTargetRoot}/cargo-target-v1";
-  alphal00pDocsCargoArgs = commonArgs // {
+  alphal00pDocsCargoArgs = ciArgs // {
     buildType = docsCargoProfile;
     CARGO_PROFILE = docsCargoProfile;
     CARGO_TARGET_DIR = alphal00pDocsCargoTarget;
-    PYO3_PYTHON = "${pkgs.python313}/bin/python3";
-    PYTHONPATH = "${pkgs.python313}/lib/python3.13/site-packages";
     # Symbolica 3 needs no compile-time key in either the reusable producer or
     # the documentation consumer; the build below supplies its runtime license.
   };
   alphal00pDocsRealCargoArgs = alphal00pDocsCargoArgs // {
-    postPatch = normalizeWorkspaceHackBuildScriptTimestampScript;
+    postPatch = normalizeWorkspaceHackBuildScriptTimestampScript + ''
+      install -D -m 0644 ${documentationNativeCargoToml} ${workspacePrebuildPackageDir}/Cargo.toml
+      install -D -m 0644 ${dummyCargoTarget} ${workspacePrebuildPackageDir}/src/lib.rs
+      # Cargo separates build-script features from target features. Match the
+      # native workspace-hack's Symbolica build dependency on the host too.
+      cat >> ${workspacePrebuildPackageDir}/Cargo.toml <<'EOF'
+      [build-dependencies.symbolica]
+      workspace = true
+      features = ["tracing_max_level_info"]
+      EOF
+      install -D -m 0644 ${dummyCargoTarget} ${workspacePrebuildPackageDir}/build.rs
+      touch -d @0 ${workspacePrebuildPackageDir}/Cargo.toml ${workspacePrebuildPackageDir}/src/lib.rs ${workspacePrebuildPackageDir}/build.rs
+      ${lib.concatMapStringsSep "\n" (package: ''
+        cat >> crates/${package}/Cargo.toml <<'EOF'
+        [dependencies.${workspacePrebuildPackage}]
+        path = "../${workspacePrebuildPackage}"
+        EOF
+        touch -d @0 crates/${package}/Cargo.toml
+      '') ["alphal00p-docs-builder" "alphal00p-docs-examples" "alphal00p-docs-python-exporter"]}
+      install -D -m 0644 ${documentationCatalogCargoToml} crates/alphal00p-docs-catalogs/Cargo.toml
+      touch -d @0 crates/alphal00p-docs-catalogs/Cargo.toml
+    '';
+    # Cargo's vendor configuration is installed during configurePhase.
+    preBuild = (alphal00pDocsCargoArgs.preBuild or "") + ''
+      cargo update --offline --workspace
+    '';
   };
+  documentationNativeCargoToml = workspaceAnchorCargoTomlFor workspacePrebuildPackage
+    (lib.filter (package:
+      !lib.hasPrefix "alphal00p-docs-" package
+      && package != "gammaloop-integration-tests"
+      && package != "clinnet") workspacePrebuildDependencyPackages)
+    craneCiFeaturesFor;
+  # The examples build script uses neutral catalogs. Keep the native anchor
+  # out of that host dependency graph until a reference exporter needs it.
+  documentationCatalogCargoToml =
+    let
+      manifest = builtins.fromTOML (builtins.readFile (workspaceRoot + "/crates/alphal00p-docs-catalogs/Cargo.toml"));
+    in
+    (pkgs.formats.toml {}).generate "alphal00p-docs-catalogs-Cargo.toml" (manifest // {
+      dependencies = manifest.dependencies // {
+        ${workspacePrebuildPackage} = {
+          path = "../${workspacePrebuildPackage}";
+          optional = true;
+        };
+      };
+      features = manifest.features // lib.genAttrs ["gammaloop-reference" "vakint-reference"]
+        (feature: manifest.features.${feature} ++ ["dep:${workspacePrebuildPackage}"]);
+    });
   documentationRustComponents = lib.concatMap (
     product: product.rust_components or [ ]
   ) documentationRegistry.product;
@@ -201,13 +253,14 @@ let
   alphal00pDocsCargoArtifacts = craneLib.mkCargoDerivation (
     alphal00pDocsRealCargoArgs
     // {
-      cargoArtifacts = null;
+      # Reuse the same optimized native libraries as unit/integration tests.
+      cargoArtifacts = nativeCargoArtifacts;
       doInstallCargoArtifacts = true;
       pname = "alphal00p-docs-cargo";
       src = documentationWorkspaceBuildSrc;
       # Prime content-sensitive test dependency contexts without adding
       # authored documentation to this reusable source boundary.
-      postPatch = normalizeWorkspaceHackBuildScriptTimestampScript + ''
+      postPatch = alphal00pDocsRealCargoArgs.postPatch + ''
         install -D -m 0644 ${dummyCargoTarget} crates/alphal00p-docs-examples/build.rs
         install -D -m 0644 ${dummyCargoTarget} crates/alphal00p-docs-examples/src/lib.rs
       '';
@@ -232,13 +285,13 @@ let
 
   # Exercise the embedded Typst watcher behind its opt-in feature without
   # adding Typst's compiler crates to normal workspace or Pages artifacts.
-  persistentTypstArgs = commonArgs // {
+  persistentTypstArgs = ciArgs // {
     pname = "alphal00p-docs-persistent-typst";
     src = workspacePackageSrcFor "alphal00p-docs-builder";
     buildType = "docs-watch";
     CARGO_PROFILE = "docs-watch";
     cargoExtraArgs = "--locked -p alphal00p-docs-builder --features persistent-typst";
-    nativeBuildInputs = (commonArgs.nativeBuildInputs or [ ]) ++ [
+    nativeBuildInputs = (ciArgs.nativeBuildInputs or [ ]) ++ [
       docsTypst
       pkgs.roboto
     ];

@@ -38,17 +38,13 @@ coverage-nix:
 ci-checks: clippy-nix fmt-check-nix ci-graph-check doctest-nix test-nix
     nix build --impure .#checks.$(nix eval --impure --raw --expr 'builtins.currentSystem').alphal00p-docs
 
-# Build selected CI outputs explicitly so NixCI can reuse matching local results.
+# Check static inputs and upload compiled producers; leave runtime tests to NixCI.
 # See https://nix-ci.com/documentation/nix-ci-cache
 ci-checks-and-upload:
     #!/usr/bin/env bash
     set -euo pipefail
     netrc="${NIXCI_NETRC:-$HOME/.netrc}"
     test -r "$netrc" || { echo 'Set up ~/.netrc or NIXCI_NETRC before uploading.' >&2; exit 1; }
-
-    started=$SECONDS
-    just ci-checks
-    printf 'CI checks passed (%ss).\n' "$((SECONDS - started))"
 
     selection=$(nix eval --impure --raw --expr '
       let
@@ -57,19 +53,20 @@ ci-checks-and-upload:
           inherit system;
           workspaceGraph = builtins.fromJSON (builtins.readFile ./nix/ci-workspace-graph.json);
         };
-        testResults = map (name: "checks.${system}.${name}") (builtins.attrNames ci.configuration.test);
-      in builtins.concatStringsSep "\n" (ci.configuration.onlyBuild ++ testResults)
+      in builtins.concatStringsSep "\n" ci.configuration.onlyBuild
     ')
     targets=()
     while IFS= read -r target; do targets+=(".#$target"); done <<< "$selection"
     tmp=$(mktemp -d)
     trap 'rm -rf "$tmp"' EXIT
 
-    # Test-result outputs alone do not retain the binaries and compiler artifacts.
-    # Realize the scheduled producers too, including their stable publication links.
+    # Scheduled builds include static checks, runtime launchers and their producers.
+    # Do not realize test-result checks: NixCI runs them after these inputs arrive.
     started=$SECONDS
-    nix build --impure --no-link --print-out-paths "${targets[@]}" > "$tmp/outputs"
-    printf 'CI publication preparation completed (%ss).\n' "$((SECONDS - started))"
+    # Keep all selected closures rooted until the upload finishes, including
+    # across the gap between realization and nix copy on a shared daemon.
+    nix build --impure --out-link "$tmp/result" --print-out-paths "${targets[@]}" > "$tmp/outputs"
+    printf 'CI static checks and artifact preparation completed (%ss).\n' "$((SECONDS - started))"
 
     # Keep a throwaway XDG_CACHE_HOME so locally remembered unsigned narinfo cannot
     # prevent later substitution of the signed paths from the cache.
@@ -79,7 +76,7 @@ ci-checks-and-upload:
     # Run as the calling user with their netrc; a daemon post-build-hook would
     # require Nix trusted-user privileges to select the script and credentials.
     # Upload failures are visible failures of this explicitly requested phase;
-    # successful checks remain cached and do not need to be rebuilt.
+    # prepared outputs remain cached and do not need to be rebuilt.
     started=$SECONDS
     nix copy --netrc-file "$netrc" \
         --to 'https://cache.nix-ci.com?compression=xz&parallel-compression=true' \

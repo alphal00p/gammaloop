@@ -1440,7 +1440,8 @@ cold, but they do not publish merged workspace target trees back to the
 cache.
 
 Documentation publishing uses one reusable real-workspace Cargo artifact
-producer. It retains the generic catalogue exporter, each isolated
+producer seeded with the native GammaLoop API library archive. It retains
+the generic catalogue exporter, each isolated
 Python inventory exporter, the content-test dependency contexts, the
 documentation builder, the Linnet extension, Rustdoc, and a combined
 GammaLoop/Vakint reference-catalogue context. Stable dummy content
@@ -1450,13 +1451,17 @@ content-sensitive test targets. The combined context is last because
 Cargo retains only one active feature fingerprint for each workspace
 unit and it is also the terminal consumer\'s first context. The Python
 inventories remain separate because PyO3 stub registration uses a
-process-wide inventory.
+process-wide inventory. The catalogue helper enables its native feature anchor
+only for reference generation, so its use as a build dependency does not pull
+GammaLoop into a separate host-library build.
 
 The producer is keyed only by Cargo manifests, Rust, Cargo
 configuration, and non-Cargo build inputs. It and its consumer use the
-same relative Cargo target, compile-time Symbolica setting,
-workspace-hack timestamp normalization, and a debug-free profile derived
-from Cargo\'s development profile. Documentation assets, Typst, CSS,
+same relative Cargo target, compile-time Symbolica setting and workspace-hack
+timestamp normalization. Native packages, test harnesses and documentation
+share the optimized `ci-optim` profile, compatible features and Python interpreter
+at compile time. Python extensions retain their separate ABI settings, and
+Rustdoc metadata still needs its own compilation. Documentation assets, Typst, CSS,
 prose, publication-catalogue, channel, tag, and commit metadata do not
 change the reusable Cargo artifact. Checks whose Rust source is
 generated from the manuals remain in the terminal Pages derivation so
@@ -1804,6 +1809,13 @@ Those paths are compile-time inputs to the catalog proc macros, not normal
 Rust dependencies. Deriving the exact list preserves narrow invalidation
 while preventing a newly annotated API item from compiling in the full
 workspace but disappearing from the isolated `crate-deps-*` build.
+
+Embedded test graphs belong to the compiling test package's source slice. In
+particular, the GammaLoop core slice includes the GL256 and GL262 three-loop
+four-photon fixtures used with `include_str!`. Its RQFT renormalization graphs
+are runtime inputs instead. Declaring these files at their owning boundaries
+keeps isolated Nix test runs equivalent to a complete checkout without widening
+unrelated production sources.
 
 The Python ABI artifact family now selects Cargo library targets explicitly.
 Its `pyo3-extension-module` feature intentionally leaves Python symbols for
