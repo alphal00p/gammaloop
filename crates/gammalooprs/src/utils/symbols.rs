@@ -1,4 +1,4 @@
-use std::sync::LazyLock;
+use std::{cell::RefCell, collections::HashMap, sync::LazyLock};
 
 use itertools::Itertools;
 use linnet::half_edge::involution::{EdgeIndex, Orientation};
@@ -187,7 +187,9 @@ pub struct GammaloopSymbols {
     pub ose: Symbol,
     /// Positive on-shell energy with no additive energy shift. Arguments carry
     /// the component owner and the invariant mass squared plus spatial norm squared.
-    pub energy_surface: Symbol,
+    pub on_shell_energy: Symbol,
+    /// A CFF energy sum, including its shift, with every dependency in its arguments.
+    pub esurface: Symbol,
     pub energy: Symbol,
     pub v: Symbol,
     pub u: Symbol,
@@ -453,7 +455,7 @@ macro_rules! spenso_print_scripted_indexed {
                 };
 
                 let mut argiter = f.iter();
-                let id = argiter.next().unwrap();
+                let id = argiter.next()?;
                 let Ok(i) = usize::try_from(id) else {
                     return None;
                 };
@@ -1050,24 +1052,47 @@ pub static GS, GS_INNER: GammaloopSymbols = || GammaloopSymbols {
                 }
             }
     ),
-    energy_surface: symbol!(
-        "Esurface"; Scalar;
+    on_shell_energy: symbol!(
+        "OnShellEnergy"; Scalar;
         norm = |view, out| {
             if let AtomView::Fun(call) = view && call.get_nargs() == 2 {
+                // Series reconstruction repeatedly normalizes identical energy
+                // invariants. Keep a bounded cache per worker, with no borrow
+                // held during symbolic operations or recursive normalization.
+                thread_local! {
+                    static CACHE: RefCell<(HashMap<Atom, Atom>, usize)> = RefCell::default();
+                }
+                let input = call.get(1);
+                let cached = CACHE.with_borrow(|(cache, _)| cache.get(input.get_data()).cloned());
                 // Canonicalize opposite routed momenta inside squared factors.
                 // Distribute numeric coefficients only; keep the invariant's
                 // momentum sums squared and graph numerators outside this call.
-                let invariant = call.get(1).replace_map(|part, _, output| {
-                    if let AtomView::Pow(power) = part {
-                        let (base, exponent) = power.get_base_exp();
-                        if i64::try_from(exponent) == Ok(2) {
-                            let direct = base.expand_num();
-                            let reversed = (-&direct).expand_num();
-                            **output = direct.min(reversed).pow(2);
+                let invariant = cached.unwrap_or_else(|| {
+                    let invariant = input.replace_map(|part, _, output| {
+                        if let AtomView::Pow(power) = part {
+                            let (base, exponent) = power.get_base_exp();
+                            if i64::try_from(exponent) == Ok(2) {
+                                let direct = base.expand_num();
+                                let reversed = (-&direct).expand_num();
+                                **output = direct.min(reversed).pow(2);
+                            }
                         }
+                    }).expand_num();
+                    let bytes = input.get_byte_size() + invariant.as_view().get_byte_size();
+                    const MAX_BYTES: usize = 1024 * 1024;
+                    if bytes <= MAX_BYTES {
+                        CACHE.with_borrow_mut(|(cache, retained_bytes)| {
+                            if cache.len() >= 1024 || *retained_bytes + bytes > MAX_BYTES {
+                                cache.clear();
+                                *retained_bytes = 0;
+                            }
+                            cache.insert(input.to_owned(), invariant.clone());
+                            *retained_bytes += bytes;
+                        });
                     }
-                }).expand_num();
-                if invariant.as_view() != call.get(1) {
+                    invariant
+                });
+                if invariant.as_view() != input {
                     **out = call.get_symbol().call_args([call.get(0).to_owned(), invariant]);
                 }
             }
@@ -1081,6 +1106,59 @@ pub static GS, GS_INNER: GammaloopSymbols = || GammaloopSymbols {
                 };
             }
         }
+    ),
+    esurface: symbol!(
+        "Esurface"; Scalar;
+        norm = |view, out| {
+            if let AtomView::Fun(call) = view {
+                let sum = Atom::add_many(call.iter());
+                if let AtomView::Add(terms) = sum.as_view() {
+                    // Pull explicit Laurent monomials outside the function
+                    // before series expansion. Otherwise a function callback
+                    // receives already truncated pole-valued arguments and can
+                    // lose absolute precision when their leading terms cancel.
+                    let mut poles = std::collections::BTreeMap::<Symbol, i64>::new();
+                    let mut record = |factor: AtomView<'_>| {
+                        if let AtomView::Pow(power) = factor
+                            && let AtomView::Var(variable) = power.get_base()
+                            && let Ok(exponent) = i64::try_from(power.get_exp())
+                            && exponent < 0
+                        {
+                            poles.entry(variable.get_symbol())
+                                .and_modify(|power| *power = (*power).min(exponent))
+                                .or_insert(exponent);
+                        }
+                    };
+                    for term in terms.iter() {
+                        if let AtomView::Mul(product) = term {
+                            product.iter().for_each(&mut record);
+                        } else {
+                            record(term);
+                        }
+                    }
+                    if let Some((variable, exponent)) = poles.first_key_value() {
+                        let factor = Atom::var(*variable).pow(*exponent);
+                        let regular = call.get_symbol().call_args(
+                            terms.iter().map(|term| term / factor.as_view())
+                        );
+                        **out = factor * regular;
+                        return;
+                    }
+                    if !call.iter().eq(terms.iter()) {
+                        **out = call.get_symbol().call_args(terms.iter());
+                    }
+                } else {
+                    **out = sum;
+                }
+            }
+        },
+        der = |_, _, out| { **out = Atom::one(); },
+        eval = symbolica::atom::EvaluationInfo::new()
+            .register(|arguments: &[f64]| arguments.iter().sum::<f64>())
+            .register(|arguments: &[symbolica::domains::float::Complex<symbolica::domains::float::Float>]| {
+                arguments.iter().cloned().reduce(|left, right| left + right)
+                    .expect("a retained CFF surface has at least two summands")
+            })
     ),
     energy: symbol!(
         "E",
@@ -1404,6 +1482,46 @@ impl GammaloopSymbols {
             .call_args([self.cind(0), index.into().into_owned()])
     }
 
+    /// Keep a surface or one of its Taylor coefficients opaque to scalar
+    /// factor algebra, without hiding any physical dependency behind an ID.
+    pub(crate) fn wrap_esurface(&self, sum: &Atom) -> Atom {
+        if let AtomView::Add(terms) = sum.as_view() {
+            self.esurface.call_args(terms.iter())
+        } else {
+            sum.clone()
+        }
+    }
+
+    /// Apply only to the denominator-only CFF, before attaching a numerator.
+    pub(crate) fn retain_esurfaces(&self, cff: &Atom) -> Atom {
+        cff.replace_map(|view, _, out| {
+            if let AtomView::Pow(power) = view {
+                let (base, exponent) = power.get_base_exp();
+                if matches!(base, AtomView::Add(_))
+                    && i64::try_from(exponent).is_ok_and(|power| power < 0)
+                    && (base.contains_symbol(self.ose) || base.contains_symbol(self.energy))
+                {
+                    **out = self.wrap_esurface(&base.to_owned()).pow(exponent);
+                }
+            }
+        })
+    }
+
+    /// Lower on an evaluator or diagnostic copy, after all forest operations.
+    /// This unfolds sums only; it never distributes a numerator product.
+    pub(crate) fn lower_esurfaces(&self, atom: &Atom) -> Atom {
+        if !atom.contains_symbol(self.esurface) {
+            return atom.clone();
+        }
+        atom.replace_map_bottom_up(|view, _, out| {
+            if let AtomView::Fun(call) = view
+                && call.get_symbol() == self.esurface
+            {
+                **out = Atom::add_many(call.iter());
+            }
+        })
+    }
+
     pub(crate) fn ose_full(
         &self,
         e: EdgeIndex,
@@ -1412,7 +1530,7 @@ impl GammaloopSymbols {
         index: Option<Atom>,
     ) -> Atom {
         let ose = function!(
-            self.energy_surface,
+            self.on_shell_energy,
             lmb_id.0,
             e_mass.pow(2)
                 + self.emr_vec(e, self.cind(1)).pow(2)
@@ -1474,6 +1592,126 @@ mod tests {
     use super::*;
 
     #[test]
+    fn esurface_preserves_momentum_and_mass_substitutions() {
+        let t = symbol!("esurface_substitution_test::t"; Scalar);
+        let m = symbol!("esurface_substitution_test::m"; Scalar);
+        let q = GS.emr_vec(EdgeIndex(3), GS.cind(1));
+        let shift = GS.emr_mom(EdgeIndex(0), GS.cind(0));
+        let energy = function!(GS.on_shell_energy, 3, q.pow(2) + Atom::var(m).pow(2));
+        let sum = energy + &shift;
+        let surface = GS.wrap_esurface(&sum);
+        assert!(surface.contains_symbol(GS.esurface));
+        for scale in [Atom::var(t), Atom::var(t).pow(-1)] {
+            let replacements = [
+                Replacement::new(q.clone(), &q * &scale),
+                Replacement::new(Atom::var(m), Atom::var(m) * &scale),
+                Replacement::new(shift.clone(), &shift * &scale),
+            ];
+            let transformed = surface.replace_multiple(&replacements);
+            assert!(transformed.contains_symbol(t));
+            // Laurent normalization can factor a power of t out of the sum.
+            // Check scalar algebraic equality, including the chain rule.
+            assert!(
+                (GS.lower_esurfaces(&transformed) - sum.replace_multiple(&replacements))
+                    .expand()
+                    .is_zero()
+            );
+            assert!(
+                (GS.lower_esurfaces(&transformed.derivative(t))
+                    - sum.replace_multiple(&replacements).derivative(t))
+                .expand()
+                .is_zero()
+            );
+        }
+    }
+
+    #[test]
+    fn esurface_retention_is_idempotent_and_preserves_energy_shifts() {
+        let first = GS.ose(EdgeIndex(1));
+        let second = GS.ose(EdgeIndex(2));
+        let shift = GS.emr_mom(EdgeIndex(0), GS.cind(0));
+        let cff = (&first + &second - &shift).pow(-2) / &first;
+        let retained = GS.retain_esurfaces(&cff);
+        assert!(retained.contains_symbol(GS.esurface));
+        assert_eq!(GS.retain_esurfaces(&retained), retained);
+        assert_eq!(GS.lower_esurfaces(&retained), cff);
+        assert_eq!(
+            GS.lower_esurfaces(&retained.replace(shift.to_pattern()).with(0)),
+            cff.replace(shift.to_pattern()).with(0),
+        );
+    }
+
+    #[test]
+    fn esurface_series_preserves_cancelling_and_singular_leading_terms() {
+        use symbolica::poly::series::SeriesDepth;
+
+        let t = symbol!("esurface_laurent_test::t"; Scalar);
+        let x = Atom::var(t);
+        for sum in [
+            (Atom::one() + &x).pow((1, 2)) - 1,
+            (Atom::one() + &x).pow((1, 2)) - 1 - &x / 2,
+            &x + x.pow(-1),
+            (Atom::one() + &x).pow((1, 2)) / &x - x.pow(-1) - Atom::num((1, 2)),
+            (Atom::one() + &x).pow((1, 2)) / x.pow(2) - x.pow(-2) - Atom::num((1, 2)) / &x
+                + Atom::num((1, 8)),
+            (Atom::one() + &x).pow((1, 2)) / &x - x.pow(-1),
+        ] {
+            let wrapped = GS.wrap_esurface(&sum);
+            assert!((GS.lower_esurfaces(&wrapped) - &sum).expand().is_zero());
+            for power in [-2, -1, 1, 2] {
+                let actual = wrapped
+                    .pow(power)
+                    .series(t, 0, SeriesDepth::absolute(2))
+                    .unwrap();
+                let expected = sum
+                    .pow(power)
+                    .series(t, 0, SeriesDepth::absolute(2))
+                    .unwrap();
+                assert_eq!(actual.absolute_order(), expected.absolute_order());
+                // Denominator-only identity: no graph numerator is distributed.
+                assert!(
+                    (GS.lower_esurfaces(&actual.to_atom()) - expected.to_atom())
+                        .expand()
+                        .is_zero()
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn esurface_coefficients_accept_an_enclosing_momentum_deformation() {
+        use symbolica::poly::series::SeriesDepth;
+
+        let t = symbol!("esurface_nested_test::t"; Scalar);
+        let u = symbol!("esurface_nested_test::u"; Scalar);
+        let q = symbol!("esurface_nested_test::q"; Scalar);
+        let invariant = Atom::var(q).pow(2) + 1;
+        let sum = (&invariant + Atom::var(t)).pow((1, 2)) + &invariant;
+        let first = GS
+            .wrap_esurface(&sum)
+            .pow(-1)
+            .series(t, 0, SeriesDepth::absolute(2))
+            .unwrap()
+            .to_atom();
+        let expected_first = sum
+            .pow(-1)
+            .series(t, 0, SeriesDepth::absolute(2))
+            .unwrap()
+            .to_atom();
+        assert!(first.contains_symbol(GS.esurface));
+        let deform = |atom: Atom| atom.replace(q).with(Atom::var(u) + 2);
+        let actual = deform(first)
+            .series(u, 0, SeriesDepth::absolute(1))
+            .unwrap()
+            .to_atom();
+        let expected = deform(expected_first)
+            .series(u, 0, SeriesDepth::absolute(1))
+            .unwrap()
+            .to_atom();
+        assert!((GS.lower_esurfaces(&actual) - expected).expand().is_zero());
+    }
+
+    #[test]
     fn compact_energy_derivatives_keep_shift_and_mass_dependence() {
         crate::initialisation::test_initialise().unwrap();
         let (t, u, m, k, p, q) = symbol!(
@@ -1488,14 +1726,14 @@ mod tests {
         let transverse = Atom::var(t) * q;
         let longitudinal = Atom::var(u) * p;
         let energy = function!(
-            GS.energy_surface,
+            GS.on_shell_energy,
             3,
             Atom::var(m).pow(2) + momentum.pow(2) + transverse.pow(2) + longitudinal.pow(2)
         );
         assert_eq!(
             energy,
             function!(
-                GS.energy_surface,
+                GS.on_shell_energy,
                 3,
                 Atom::var(m).pow(2)
                     + (-&momentum).expand_num().pow(2)
@@ -1517,7 +1755,7 @@ mod tests {
         assert!(energy.contains_symbol(t) && energy.contains_symbol(u));
 
         let lower = |atom: Atom| {
-            atom.replace(function!(GS.energy_surface, W_.a_, W_.prop_))
+            atom.replace(function!(GS.on_shell_energy, W_.a_, W_.prop_))
                 .with(Atom::var(W_.prop_).pow((1, 2)))
         };
         let specialize = |atom: Atom| {
@@ -1568,7 +1806,7 @@ mod tests {
         let squared = (&parameter + 1).pow(2)
             + (&parameter * 2 + 2).pow(2)
             + (Atom::num(2) - &parameter).pow(2);
-        let energy = function!(GS.energy_surface, 3, &squared);
+        let energy = function!(GS.on_shell_energy, 3, &squared);
         let actual = (energy / parameter.pow(6))
             .series(t, Atom::Zero, 0)
             .unwrap();
@@ -1581,10 +1819,56 @@ mod tests {
         assert_eq!(
             actual
                 .to_atom()
-                .replace(function!(GS.energy_surface, 3, 9))
+                .replace(function!(GS.on_shell_energy, 3, 9))
                 .with(3),
             expected.to_atom()
         );
+    }
+
+    #[test]
+    fn compact_energy_normalization_preserves_owners_after_cache_eviction() {
+        crate::initialisation::test_initialise().unwrap();
+        let t = symbol!("compact_energy_cache_test::t");
+        let parameter = Atom::var(t);
+        let invariant = ((&parameter + 1).pow(2) + 3).pow(2) + 4;
+        let cold = function!(GS.on_shell_energy, 3, &invariant);
+        let other_owner = function!(GS.on_shell_energy, 7, &invariant);
+        let AtomView::Fun(cold_call) = cold.as_view() else {
+            panic!("Expected an owned energy function");
+        };
+        let AtomView::Fun(other_call) = other_owner.as_view() else {
+            panic!("Expected an owned energy function");
+        };
+        assert_eq!(other_call.get(0), Atom::num(7).as_view());
+        assert_eq!(cold_call.get(1), other_call.get(1));
+        assert_ne!(cold, other_owner);
+
+        // More than the entry budget evicts earlier invariants. Eviction must
+        // only repeat normalization, including for nested squared expressions.
+        for offset in 0..1050 {
+            let _ = function!(GS.on_shell_energy, 3, &invariant + offset);
+        }
+        assert_eq!(function!(GS.on_shell_energy, 3, &invariant), cold);
+        assert_eq!(function!(GS.on_shell_energy, 7, &invariant), other_owner);
+
+        let lower = |atom: Atom| {
+            atom.replace(function!(GS.on_shell_energy, W_.a_, W_.prop_))
+                .with(Atom::var(W_.prop_).pow((1, 2)))
+        };
+        let expected = invariant
+            .pow((1, 2))
+            .series(t, Atom::Zero, 3)
+            .unwrap()
+            .to_atom();
+        for energy in [cold, other_owner] {
+            let actual = energy.series(t, Atom::Zero, 3).unwrap().to_atom();
+            // The coefficients contain radicals: expansion alone need not
+            // identify equivalent roots such as sqrt(1/5) and sqrt(5)/5.
+            let (_, difference) = (lower(actual) - &expected)
+                .to_polynomial_in_algebraic_extension::<u16>(t, &[])
+                .unwrap();
+            assert!(difference.is_zero());
+        }
     }
 
     #[test]

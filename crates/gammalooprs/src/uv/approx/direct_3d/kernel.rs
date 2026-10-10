@@ -12,7 +12,7 @@ use symbolica::{
 
 use crate::{
     debug_tags,
-    graph::{LMBext, LoopMomentumBasis},
+    graph::{LMBext, LmbError, LoopMomentumBasis},
     numerator::symbolica_ext::NumeratorAtomExt,
     utils::{GS, W_},
     uv::{
@@ -73,11 +73,42 @@ pub(super) fn coordinate_lmb<S: ForestNodeLike>(
         .collect::<Vec<_>>();
     retained_loop_edges.sort();
     retained_loop_edges.dedup();
+    let external: SuBitGraph = graph.external_filter();
+    let full_internal = graph.full_filter().subtract(&external);
+    let inactive_subgraph = current.subgraph().subtract(&active_subgraph);
+    // Integrated lines no longer carry momentum in the active sector. A
+    // retained quotient loop must therefore be checked in that same quotient,
+    // rather than against its affine routing in the uncontracted graph.
+    let quotient_reference;
+    let reference_lmb = if inactive_subgraph.is_empty() {
+        &graph.loop_momentum_basis
+    } else {
+        let inactive = InternalSubGraph::try_new(inactive_subgraph, graph.as_ref())
+            .ok_or_else(|| eyre!("inactive direct local-3D prefix is not an internal subgraph"))?;
+        let externals = graph.dummy_stripped_external_flows_of(&full_internal);
+        quotient_reference = match graph.shrunken_sub_lmb(
+            &full_internal,
+            &inactive,
+            externals.clone(),
+            Some(&graph.loop_momentum_basis),
+        ) {
+            Ok(lmb) => lmb,
+            Err(LmbError::NoShrunkenLmb { source, .. })
+                if matches!(source.as_ref(), LmbError::NoCompatibleSubLmb { .. }) =>
+            {
+                // Contraction can retire every original carrier and turn a
+                // retained tree edge into a new quotient loop.
+                graph.shrunken_sub_lmb(&full_internal, &inactive, externals, None)?
+            }
+            Err(error) => return Err(error.into()),
+        };
+        &quotient_reference
+    };
     let affine_retained_loop_edges = retained_loop_edges
         .iter()
         .copied()
         .filter(|edge| {
-            graph.loop_momentum_basis.edge_signatures[*edge]
+            reference_lmb.edge_signatures[*edge]
                 .external
                 .iter()
                 .any(|sign| !sign.is_zero())
@@ -92,13 +123,6 @@ pub(super) fn coordinate_lmb<S: ForestNodeLike>(
         ));
     }
     let is_homogeneous = |candidate: &LoopMomentumBasis| {
-        // A new quotient carrier may recenter after contraction; retained
-        // carriers were already checked against the graph basis above.
-        let reference_lmb = if active_subgraph == *current.subgraph() {
-            &graph.loop_momentum_basis
-        } else {
-            candidate
-        };
         candidate.loop_edges.iter().all(|edge| {
             reference_lmb.edge_signatures[*edge]
                 .external
@@ -117,8 +141,6 @@ pub(super) fn coordinate_lmb<S: ForestNodeLike>(
     // equivalent child representation cannot select a different parent
     // Taylor chart.  Only genuine retained coordinates may force the stable
     // fallback below.
-    let external: SuBitGraph = graph.external_filter();
-    let full_internal = graph.full_filter().subtract(&external);
     let canonical_component_lmb = if current.subgraph() == &full_internal
         && graph.n_loops(&full_internal) == graph.loop_momentum_basis.loop_edges.len()
     {
@@ -755,7 +777,7 @@ impl Direct3dApproximation<'_> {
             let uv_expansion_mass_squared = uv_expansion_mass_squared.clone();
             let uv_vacuum_mass_squared = uv_vacuum_mass_squared.clone();
             atomarg = atomarg
-                .replace(function!(GS.energy_surface, eid, W_.prop_))
+                .replace(function!(GS.on_shell_energy, eid, W_.prop_))
                 .with_map(move |matched| {
                     let invariant = matched.get(W_.prop_).unwrap().to_atom();
                     let normalized_invariant = match deformation {
@@ -783,7 +805,7 @@ impl Direct3dApproximation<'_> {
                         }
                         Local3DDeformation::Soft => invariant / &rescale_squared,
                     };
-                    function!(GS.energy_surface, eid, normalized_invariant) * GS.rescale
+                    function!(GS.on_shell_energy, eid, normalized_invariant) * GS.rescale
                 });
         }
         debug_tags!(#generation, #profile, #uv, #local, #summary;

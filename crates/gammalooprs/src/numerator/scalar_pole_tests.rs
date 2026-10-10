@@ -156,8 +156,8 @@ fn scalar_poles_preserve_owned_energies_and_their_outer_derivatives() {
     let s = parse_lit!(pole_energy::s);
     let mass = parse_lit!(pole_energy::mass);
     let invariant = mass.pow(2) + (&q + &t).pow(2);
-    let energy = function!(GS.energy_surface, 3, &invariant);
-    let other_owner = function!(GS.energy_surface, 7, &invariant);
+    let energy = function!(GS.on_shell_energy, 3, &invariant);
+    let other_owner = function!(GS.on_shell_energy, 7, &invariant);
     let source = (energy.pow(-1) - (&energy + &s).pow(-1)) / &s;
     let result = source.cancel_scalar_poles(&[]);
     assert!(!result.contains(s.pow(-1)));

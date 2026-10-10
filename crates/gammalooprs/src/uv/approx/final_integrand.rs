@@ -146,8 +146,12 @@ impl<'a> FinalIntegrandBuilder<'a> {
         // Normalize complete mapped branches before their orientation sum grows
         // the scalar coefficients seen by color collection. Keep each branch's
         // numerator and CFF factors intact throughout this linear operation.
+        // The final copy also simplifies arithmetic across energy-call boundaries
+        // (for example even powers), so expose scalar bodies before normalizing.
         let normalize = Self::final_normalizer(graph, &reduced);
-        let finalized = final_branches.map_expressions(normalize)?;
+        let finalized = final_branches
+            .resolved_scalars()?
+            .map_expressions(normalize)?;
 
         // `DirectResidueBranches` is the sparse, factorization-preserving
         // representation of sum_k sigma(k) I_k while the Taylor forest is
@@ -354,6 +358,8 @@ impl<'a> FinalIntegrandBuilder<'a> {
                         .collect::<std::result::Result<Vec<_>, _>>()
                         .map_err(|error| eyre::eyre!(error))?,
                     tags: vec![scope.1],
+                    inlining: entry.inlining,
+                    is_alias: entry.is_alias,
                 });
                 // A child's arguments can depend on the entire graph. Bind the
                 // cograph body, child body and carrier with this same outer key
@@ -444,6 +450,7 @@ impl<'a> FinalIntegrandBuilder<'a> {
         Ok(FinalIntegrands(
             allowed_zero
                 .zip_add(selector_free)?
+                .resolved_scalars()?
                 .fallible_map(Self::final_normalizer(graph, &reduced))?
                 .map_numerators(Self::final_normalizer(graph, &reduced))?,
         ))
@@ -474,13 +481,13 @@ impl<'a> FinalIntegrandBuilder<'a> {
                 // The source local_3d atom still owns its component labels for
                 // outer Taylor operations. This separate final evaluator copy
                 // identifies equal physical energies independently of owner.
-                .replace(function!(GS.energy_surface, W_.a_, W_.prop_))
-                .with(function!(GS.energy_surface, 0, W_.prop_))
+                .replace(function!(GS.on_shell_energy, W_.a_, W_.prop_))
+                .with(function!(GS.on_shell_energy, 0, W_.prop_))
                 .replace_map(|view, _, out| {
                     if let AtomView::Pow(power) = view {
                         let (base, exponent) = power.get_base_exp();
                         if let AtomView::Fun(energy) = base
-                            && energy.get_symbol() == GS.energy_surface
+                            && energy.get_symbol() == GS.on_shell_energy
                             && energy.get_nargs() == 2
                             && let Ok(exponent) = i64::try_from(exponent)
                             && exponent % 2 == 0
@@ -566,8 +573,8 @@ mod tests {
         let mass_squared = Atom::var(symbol!("final_energy_test::mass")).pow(2);
         let momentum = Atom::var(symbol!("final_energy_test::momentum"));
         let squared = &mass_squared + momentum.pow(2);
-        let first = function!(GS.energy_surface, 3, &squared);
-        let second = function!(GS.energy_surface, 7, &squared);
+        let first = function!(GS.on_shell_energy, 3, &squared);
+        let second = function!(GS.on_shell_energy, 7, &squared);
         // The Taylor-side collector must not erase the component boundary.
         assert_eq!(first.collect_compact_factors(), first);
         for source in [
@@ -585,8 +592,8 @@ mod tests {
             );
         }
         let final_energy = normalize(&first)?;
-        assert_eq!(final_energy, function!(GS.energy_surface, 0, &squared));
-        assert_eq!(first, function!(GS.energy_surface, 3, &squared));
+        assert_eq!(final_energy, function!(GS.on_shell_energy, 0, &squared));
+        assert_eq!(first, function!(GS.on_shell_energy, 3, &squared));
         Ok(())
     }
 

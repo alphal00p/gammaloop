@@ -249,11 +249,17 @@ pub trait UltravioletGraph: LMBext + FeynmanGraph + ParamBuilderGraph {
         //     println!("ose{r}");
         // }
 
+        // This separate analytic copy uses native square-root Laurent series:
+        // after UV rescaling an energy invariant can have a pole, beyond the
+        // compact function's ordinary Taylor derivative domain. Lower energies
+        // after OSE substitution without distributing any numerator factors.
         let expr = expr
+            .replace_multiple(&ose_reps)
+            .replace_multiple(&mom_reps)
             .replace(function!(GS.broadcasting_sqrt, W_.a_))
             .with(Atom::var(W_.a_).sqrt())
-            .replace_multiple(&ose_reps)
-            .replace_multiple(&mom_reps);
+            .replace(function!(GS.on_shell_energy, W_.a_, W_.prop_))
+            .with(Atom::var(W_.prop_).sqrt());
         // .replace_multiple(&q3_reps);
         let mut loops = PowersetIterator::<LoopIndex>::new(lmb.loop_edges.len() as u8);
 

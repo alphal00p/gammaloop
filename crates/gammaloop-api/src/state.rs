@@ -27,6 +27,7 @@ use linnet::half_edge::subgraph::{SuBitGraph, SubGraphLike, SubSetLike};
 use schemars::{schema_for, JsonSchema, Schema};
 use serde::{Deserialize, Serialize};
 use spenso::algebra::complex::Complex;
+#[cfg(not(target_os = "linux"))]
 use sysinfo::{get_current_pid, ProcessRefreshKind, ProcessesToUpdate, System};
 use toml::Value as TomlValue;
 use tracing::{debug, info, info_span, Span};
@@ -616,10 +617,35 @@ impl GenerationProgressObserver for AggregateGenerationProgressReporter {
 impl GenerationMonitor {
     const POLL_INTERVAL: Duration = Duration::from_millis(100);
 
+    #[cfg(target_os = "linux")]
+    fn parse_resident_memory_bytes(status: &str) -> Option<u64> {
+        let mut fields = status
+            .lines()
+            .find_map(|line| line.strip_prefix("VmRSS:"))?
+            .split_ascii_whitespace();
+        let kibibytes = fields.next()?.parse::<u64>().ok()?;
+        if fields.next()? != "kB" || fields.next().is_some() {
+            return None;
+        }
+        kibibytes.checked_mul(1024)
+    }
+
+    #[cfg(target_os = "linux")]
+    fn resident_memory_bytes() -> Option<u64> {
+        // Refreshing one PID with sysinfo also walks the host's processes/tasks.
+        let status = fs::read_to_string("/proc/self/status").ok()?;
+        Self::parse_resident_memory_bytes(&status)
+    }
+
     fn start() -> Result<Self> {
+        #[cfg(not(target_os = "linux"))]
         let pid = get_current_pid().map_err(|err| eyre!("Failed to resolve current pid: {err}"))?;
-        let peak_ram_bytes = Arc::new(AtomicU64::new(0));
-        let current_ram_bytes = Arc::new(AtomicU64::new(0));
+        #[cfg(target_os = "linux")]
+        let initial_memory = Self::resident_memory_bytes().unwrap_or(0);
+        #[cfg(not(target_os = "linux"))]
+        let initial_memory = 0;
+        let peak_ram_bytes = Arc::new(AtomicU64::new(initial_memory));
+        let current_ram_bytes = Arc::new(AtomicU64::new(initial_memory));
         let stop_requested = Arc::new(AtomicBool::new(false));
         let peak_ram_bytes_for_thread = Arc::clone(&peak_ram_bytes);
         let current_ram_bytes_for_thread = Arc::clone(&current_ram_bytes);
@@ -628,6 +654,7 @@ impl GenerationMonitor {
         let handle = thread::Builder::new()
             .name("generation-ram-monitor".to_string())
             .spawn(move || {
+                #[cfg(not(target_os = "linux"))]
                 let mut system = System::new();
                 loop {
                     if stop_requested_for_thread.load(Ordering::Relaxed) || is_interrupt_requested()
@@ -635,17 +662,22 @@ impl GenerationMonitor {
                         break;
                     }
 
-                    system.refresh_processes_specifics(
-                        ProcessesToUpdate::Some(&[pid]),
-                        true,
-                        ProcessRefreshKind::nothing().with_memory(),
-                    );
-                    if let Some(process) = system.process(pid) {
-                        let memory = process.memory();
+                    #[cfg(target_os = "linux")]
+                    let memory = Self::resident_memory_bytes();
+                    #[cfg(not(target_os = "linux"))]
+                    let memory = {
+                        system.refresh_processes_specifics(
+                            ProcessesToUpdate::Some(&[pid]),
+                            true,
+                            ProcessRefreshKind::nothing().with_memory(),
+                        );
+                        system.process(pid).map(|process| process.memory())
+                    };
+                    if let Some(memory) = memory {
                         current_ram_bytes_for_thread.store(memory, Ordering::Relaxed);
                         peak_ram_bytes_for_thread.fetch_max(memory, Ordering::Relaxed);
                     }
-                    thread::sleep(Self::POLL_INTERVAL);
+                    thread::park_timeout(Self::POLL_INTERVAL);
                 }
             })
             .map_err(|err| eyre!("Failed to spawn generation RAM monitor: {err}"))?;
@@ -669,6 +701,7 @@ impl GenerationMonitor {
     fn finish(&mut self) -> u64 {
         self.stop_requested.store(true, Ordering::Relaxed);
         if let Some(handle) = self.handle.take() {
+            handle.thread().unpark();
             let _ = handle.join();
         }
         self.peak_ram_bytes.load(Ordering::Relaxed)
@@ -1592,6 +1625,9 @@ pub struct State {
 
 const STATE_MANIFEST_FILE: &str = "state_manifest.toml";
 const INTEGRAND_GENERATION_SUMMARY_FILE: &str = "generation_summary.json";
+// Version 12 names square roots OnShellEnergy and energy sums Esurface. Reject older
+// states before Symbolica import can assign the new meaning to an old Esurface atom.
+// Version 11 persists function inlining policies and caller-scope alias metadata.
 // Version 10 records UFO and subgraph printer registrations, including symbols removed
 // from a restricted model. Older archives cannot restore those callbacks and must be regenerated.
 // Version 9 combines the Symbolica 3 evaluator/CFF payloads with advanced sampling
@@ -1606,7 +1642,9 @@ const INTEGRAND_GENERATION_SUMMARY_FILE: &str = "generation_summary.json";
 // Version 5 persists component-local generated-CFF ownership and prefactor
 // metadata. Older states use a previous positional bincode layout and must be
 // regenerated rather than decoded as the new expression type.
-const CURRENT_STATE_MANIFEST_VERSION: u32 = 10;
+// Local UV forest contributions remain compatible with this layout because
+// they are combined into one persisted integrand before evaluator construction.
+const CURRENT_STATE_MANIFEST_VERSION: u32 = 12;
 const GENERATION_THREAD_STACK_SIZE_BYTES: usize = 32 * 1024 * 1024;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -3540,6 +3578,69 @@ mod tests {
 
     const STATE_LOAD_ORDER_CHILD: &str = "GAMMALOOP_STATE_LOAD_ORDER_CHILD";
     const STATE_LOAD_ORDER_TEST: &str = "state::tests::state_load_preserves_ufo_custom_printer";
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn generation_ram_monitor_parses_resident_bytes() {
+        assert_eq!(
+            GenerationMonitor::parse_resident_memory_bytes(
+                "Name:\tgammaloop\nVmSize:\t9999 kB\nVmRSS:\t 123 kB\nRssAnon:\t100 kB\n"
+            ),
+            Some(123 * 1024)
+        );
+        assert_eq!(
+            GenerationMonitor::parse_resident_memory_bytes("VmRSS: 0 kB\n"),
+            Some(0)
+        );
+        for status in [
+            "VmSize: 123 kB\n",
+            "VmRSS: invalid kB\n",
+            "VmRSS: 123\n",
+            "VmRSS: 123 MB\n",
+            "VmRSS: 123 kB extra\n",
+            "VmRSS: 18446744073709551615 kB\n",
+        ] {
+            assert_eq!(GenerationMonitor::parse_resident_memory_bytes(status), None);
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn generation_ram_monitor_records_short_generation() {
+        let mut monitor = GenerationMonitor::start().unwrap();
+        let initial_memory = monitor.current_ram_bytes().load(Ordering::Relaxed);
+        assert!(initial_memory > 0);
+        let peak_memory = monitor.finish();
+        assert!(peak_memory >= initial_memory);
+        assert!(peak_memory >= monitor.current_ram_bytes().load(Ordering::Relaxed));
+        assert!(monitor.stop_requested.load(Ordering::Relaxed));
+        assert!(monitor.handle.is_none());
+        assert_eq!(monitor.finish(), peak_memory);
+    }
+
+    #[test]
+    fn generation_ram_monitor_wakes_on_finish() {
+        let stop_requested = Arc::new(AtomicBool::new(false));
+        let stop_for_thread = Arc::clone(&stop_requested);
+        let (ready, ready_receiver) = std::sync::mpsc::channel();
+        let handle = thread::spawn(move || {
+            ready.send(()).unwrap();
+            loop {
+                thread::park();
+                if stop_for_thread.load(Ordering::Relaxed) {
+                    break;
+                }
+            }
+        });
+        let mut monitor = GenerationMonitor {
+            peak_ram_bytes: Arc::new(AtomicU64::new(123)),
+            current_ram_bytes: Arc::new(AtomicU64::new(123)),
+            stop_requested,
+            handle: Some(handle),
+        };
+        ready_receiver.recv().unwrap();
+        assert_eq!(monitor.finish(), 123);
+    }
 
     #[test]
     fn state_load_preserves_ufo_custom_printer() {

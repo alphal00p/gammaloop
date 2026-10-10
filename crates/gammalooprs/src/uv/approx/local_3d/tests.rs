@@ -468,9 +468,12 @@ fn direct_root_preserves_powered_production_entries() -> Result<()> {
             &numerator,
             DirectResidueBranches::numerator_scope(),
         )?;
+        // Compare the exact production expression after lowering only the
+        // retained scalar surfaces; the mapped numerator stays factorized.
         let actual = completed
             .materialize(!explicit_orientation_sum_only)?
-            .resolved()?;
+            .resolved()?
+            .map(|atom| GS.lower_esurfaces(atom));
         let expected = raw_root
             .terms
             .iter()

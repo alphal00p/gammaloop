@@ -125,7 +125,7 @@ impl ExactSoftJet {
                         }
                 }
                 AtomView::Fun(call)
-                    if call.get_symbol() == GS.energy_surface && call.get_nargs() == 2 =>
+                    if call.get_symbol() == GS.on_shell_energy && call.get_nargs() == 2 =>
                 {
                     let valuation = self.leading(&call.get(1).to_owned())?.0;
                     ensure!(
@@ -241,7 +241,7 @@ impl ExactSoftJet {
                         }
                     }
                     AtomView::Fun(call)
-                        if call.get_symbol() == GS.energy_surface && call.get_nargs() == 2 =>
+                        if call.get_symbol() == GS.on_shell_energy && call.get_nargs() == 2 =>
                     {
                         result = self.energy(&call.get(1).to_owned(), endpoint)?;
                     }
@@ -338,7 +338,7 @@ impl ExactSoftJet {
         }
         ensure!(count <= MAX_ORDER, "unproven: energy-jet depth budget");
         let base = self.through(invariant, valuation + count)?;
-        let root = GS.energy_surface.call_args([Atom::Zero, first]);
+        let root = GS.on_shell_energy.call_args([Atom::Zero, first]);
         let root = self.algebra.normalize_energies(&root, self.lambda)?;
         let mut coefficients = vec![root.clone()];
         for degree in 1..=count {
@@ -500,9 +500,9 @@ mod tests {
         crate::initialisation::test_initialise()?;
         let t = symbol!("exact_soft_jet_test::t");
         let x = Atom::var(t);
-        let energy = function!(GS.energy_surface, 0, x.pow(2) * (1 + &x));
+        let energy = function!(GS.on_shell_energy, 0, x.pow(2) * (1 + &x));
         let coefficients = ExactSoftJet::new(t, 3).coefficients(&energy)?;
-        let e = function!(GS.energy_surface, 0, 1);
+        let e = function!(GS.on_shell_energy, 0, 1);
         assert_eq!(coefficients[&1], e.clone());
         assert!(matches!(
             SoftEnergyAlgebra::default().scalar_zero(&(coefficients[&2].clone() - &e / 2))?,

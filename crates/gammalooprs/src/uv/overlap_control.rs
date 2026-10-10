@@ -194,7 +194,7 @@ impl ExactControlPoint {
                     let edge = i64::try_from(call.get(0))
                         .map_err(|_| eyre!("unproven control point: nonliteral momentum owner"))?;
                     self.momentum(edge, call.get(1), call.get_symbol() == GS.emr_vec)?
-                } else if call.get_symbol() == GS.energy_surface {
+                } else if call.get_symbol() == GS.on_shell_energy {
                     ensure!(
                         call.get_nargs() == 2 && call.get(0).is_zero(),
                         "unproven control point: energy has not been physically normalized"
@@ -334,12 +334,12 @@ mod tests {
         let hard_x = function!(GS.emr_mom, 5, GS.cind(1)) + function!(GS.emr_mom, 6, GS.cind(1));
         let hard_y = function!(GS.emr_mom, 5, GS.cind(2)) + function!(GS.emr_mom, 6, GS.cind(2));
         let hard = function!(
-            GS.energy_surface,
+            GS.on_shell_energy,
             0,
             hard_x.pow(2) + hard_y.pow(2) + Atom::var(GS.m_uv_vacuum).pow(2)
         );
         let bubble = function!(
-            GS.energy_surface,
+            GS.on_shell_energy,
             0,
             function!(GS.emr_mom, 8, GS.cind(1)).pow(2) + Atom::var(GS.m_uv_vacuum).pow(2)
         );
@@ -365,9 +365,9 @@ mod tests {
         // Even the vanishing numerator does not license a singular denominator.
         let denominator = function!(GS.emr_mom, 8, GS.cind(1)) - 4;
         assert!(point.apply(&(qx * denominator.pow(-1))).is_err());
-        assert!(point.apply(&function!(GS.energy_surface, 0, 2)).is_err());
-        assert!(point.apply(&function!(GS.energy_surface, 0, 0)).is_err());
-        assert!(point.apply(&function!(GS.energy_surface, 1, 4)).is_err());
+        assert!(point.apply(&function!(GS.on_shell_energy, 0, 2)).is_err());
+        assert!(point.apply(&function!(GS.on_shell_energy, 0, 0)).is_err());
+        assert!(point.apply(&function!(GS.on_shell_energy, 1, 4)).is_err());
         assert!(point.apply(&function!(GS.emr_mom, 5, GS.cind(0))).is_err());
         assert!(point.apply(&Atom::num(0.25f64)).is_err());
         assert!(point.nonzero_scalar_witness(&parse_lit!(1i / 3))?);

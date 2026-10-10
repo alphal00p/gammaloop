@@ -147,7 +147,7 @@ impl ScalarPoleCertificate {
             }
             AtomView::Var(_) | AtomView::Fun(_) => {
                 let owned_energy =
-                    matches!(atom, AtomView::Fun(call) if call.get_symbol() == GS.energy_surface);
+                    matches!(atom, AtomView::Fun(call) if call.get_symbol() == GS.on_shell_energy);
                 ensure!(
                     owned_energy || !atom.is_tensorial(StrictTensorFilter::ContainsReps),
                     ScalarPoleFailure::Unsupported("tensor in scalar coefficient")
@@ -390,7 +390,7 @@ mod tests {
     fn owned_energies_keep_their_full_arguments() {
         crate::initialisation::test_initialise().unwrap();
         let argument = parse_lit!(m ^ 2 + (q + t) ^ 2);
-        let energy = function!(GS.energy_surface, 3, &argument);
+        let energy = function!(GS.on_shell_energy, 3, &argument);
         let s = parse_lit!(s);
         let before = (energy.pow(-1) - (&energy + &s).pow(-1)) / &s;
         let after = (&energy * (&energy + &s)).pow(-1);
@@ -400,7 +400,7 @@ mod tests {
         assert!(!proof.opaque_leaves.contains(&argument));
         assert!(ScalarPoleCertificate::check(&energy.pow(2), &argument).is_err());
         assert!(
-            ScalarPoleCertificate::check(&energy, &function!(GS.energy_surface, 7, &argument))
+            ScalarPoleCertificate::check(&energy, &function!(GS.on_shell_energy, 7, &argument))
                 .is_err()
         );
     }

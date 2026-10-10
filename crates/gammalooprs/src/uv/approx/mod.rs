@@ -1426,7 +1426,7 @@ mod tests {
                 .with(W_.d_)
                 .replace(function!(GS.ose, W_.mass_, W_.prop_))
                 .with(W_.prop_)
-                .replace(function!(GS.energy_surface, W_.a_, W_.prop_))
+                .replace(function!(GS.on_shell_energy, W_.a_, W_.prop_))
                 .with(Atom::var(W_.prop_).pow((1, 2)))
                 .expand_dots()
                 .expect("test-only component expansion must succeed")
@@ -1705,7 +1705,7 @@ mod tests {
                     .with(W_.d_)
                     .replace(function!(GS.ose, W_.mass_, W_.prop_))
                     .with(W_.prop_)
-                    .replace(function!(GS.energy_surface, W_.a_, W_.prop_))
+                    .replace(function!(GS.on_shell_energy, W_.a_, W_.prop_))
                     .with(Atom::var(W_.prop_).pow((1, 2)))
                     .expand_dots()
                     .expect("test-only component expansion must succeed")
@@ -2197,7 +2197,7 @@ mod tests {
             };
             let evaluate_arb = |expression: Atom| -> Result<Complex<F<ArbPrec>>> {
                 let expression = expression
-                    .replace(function!(GS.energy_surface, W_.a_, W_.prop_))
+                    .replace(function!(GS.on_shell_energy, W_.a_, W_.prop_))
                     .with(Atom::var(W_.prop_).pow((1, 2)));
                 let parameters = [Atom::var(GS.pi)];
                 let rational: ExpressionEvaluator<SymComplex<Fraction<IntegerRing>>> = expression
@@ -2332,7 +2332,7 @@ mod tests {
                     .with(W_.d_)
                     .replace(function!(GS.ose, W_.mass_, W_.prop_))
                     .with(W_.prop_)
-                    .replace(function!(GS.energy_surface, W_.a_, W_.prop_))
+                    .replace(function!(GS.on_shell_energy, W_.a_, W_.prop_))
                     .with(Atom::var(W_.prop_).pow((1, 2)))
                     .expand_dots()?;
                 expression = scalarize(expression)?;
@@ -2441,7 +2441,7 @@ mod tests {
                         .with(W_.d_)
                         .replace(function!(GS.ose, W_.mass_, W_.prop_))
                         .with(W_.prop_)
-                        .replace(function!(GS.energy_surface, W_.a_, W_.prop_))
+                        .replace(function!(GS.on_shell_energy, W_.a_, W_.prop_))
                         .with(Atom::var(W_.prop_).pow((1, 2)))
                 })
                 .collect::<Vec<_>>();

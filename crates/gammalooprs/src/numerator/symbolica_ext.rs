@@ -155,7 +155,7 @@ impl ScalarRationalSize {
         };
         let size = match atom {
             AtomView::Fun(fun) => {
-                if fun.get_symbol() != GS.energy_surface
+                if fun.get_symbol() != GS.on_shell_energy
                     && atom.is_tensorial(StrictTensorFilter::ContainsReps)
                 {
                     return None;
@@ -444,7 +444,9 @@ impl NumeratorAtomExt for AtomView<'_> {
                 attempted += 1;
                 // Functions are indeterminates to rational normalization: in
                 // particular, E(owner, P)^2 is never replaced by P here.
-                let cancelled = scalar.together().cancel().collect_compact_factors();
+                // In this exact domain, together already cancels common
+                // factors; cancel would repeat rational conversion and GCDs.
+                let cancelled = scalar.together().collect_compact_factors();
                 if cancelled.is_zero()
                     || cancelled.as_view().get_byte_size() < scalar.as_view().get_byte_size()
                 {
@@ -477,6 +479,17 @@ impl NumeratorAtomExt for AtomView<'_> {
         // Replacing E(owner, P)^2 by P here would discard the mass-rearrangement
         // boundary needed by an outer U operation.
         let atom = self;
+        // This call is one collection scope. A residue can still contain inner
+        // selectors: only share scalar inverses when the entire scope is free
+        // of guards, so a finite inactive branch cannot become 0 * infinity.
+        let guarded = [
+            OrientationID::symbol(),
+            GS.theta,
+            GS.orientation_delta,
+            Symbol::IF,
+        ]
+        .into_iter()
+        .any(|head| atom.contains_symbol(head));
         // Collect only complete factors after Taylor and residue mapping.
         // Opaque powers keep distinct inverse denominators, their owners,
         // and numerator powers intact; functions keep their arguments intact.
@@ -493,10 +506,15 @@ impl NumeratorAtomExt for AtomView<'_> {
                 && view.is_tensorial(StrictTensorFilter::ContainsReps);
             if tensor_sum || matches!(view, AtomView::Pow(_) | AtomView::Fun(_)) {
                 let mut branch_local = tensor_sum;
+                let protect_inverse =
+                    guarded || view.is_tensorial(StrictTensorFilter::ContainsReps);
                 view.visitor(&mut |part| {
                     branch_local |= match part {
-                        AtomView::Pow(power) => !i64::try_from(power.get_base_exp().1)
-                            .is_ok_and(|exponent| exponent >= 0),
+                        AtomView::Pow(power) => {
+                            protect_inverse
+                                && !i64::try_from(power.get_base_exp().1)
+                                    .is_ok_and(|exponent| exponent >= 0)
+                        }
                         AtomView::Fun(fun) => [
                             OrientationID::symbol(),
                             GS.theta,
@@ -509,10 +527,10 @@ impl NumeratorAtomExt for AtomView<'_> {
                     };
                     !branch_local
                 });
-                // Identical inverses must remain inside their branch guards,
-                // including inverses nested in a function or numerator power.
-                // Selectors stay with their contributions so independent
-                // scalar contractions do not become one combined network.
+                // Guarded inverses remain occurrence-local, including inverses
+                // nested in functions or powers. Numerator families and tensor
+                // sums must still form independent contraction networks even
+                // when their scalar denominators can share a factor.
                 **out = if branch_local {
                     occurrence += 1;
                     function!(opaque, view, occurrence)
@@ -726,6 +744,47 @@ mod tests {
     };
 
     use super::NumeratorAtomExt;
+
+    #[test]
+    fn compact_factors_share_scalar_inverses_only_without_guards() {
+        test_initialise().unwrap();
+        let a = parse_lit!(a);
+        let b = parse_lit!(b);
+        // The complete inverse stays opaque, including its summed denominator.
+        let denominator = parse_lit!((D1 + D2) ^ -1);
+        let input = &a * &denominator + &b * &denominator;
+        let compact = input.collect_compact_factors();
+        assert_eq!(compact, (&a + &b) * &denominator);
+        assert_eq!(compact.collect_compact_factors(), compact);
+        for guard in [
+            crate::cff::expression::OrientationID(3).atom(),
+            function!(GS.theta, &a),
+            function!(GS.orientation_delta, &a, &b),
+            function!(symbolica::atom::Symbol::IF, &a, &b, 0),
+        ] {
+            let guarded = &guard * &a * &denominator + &b * &denominator;
+            assert_eq!(guarded.collect_compact_factors(), guarded);
+        }
+    }
+
+    #[test]
+    fn compact_factors_share_denominators_without_merging_numerator_networks() {
+        test_initialise().unwrap();
+        let numerator = function!(symbol!("gammalooprs::uv::numerator_family"), 1);
+        let denominator = parse_lit!((D1 + D2) ^ -1);
+        let first = &numerator * parse_lit!(a);
+        let second = &numerator * parse_lit!(b);
+        let input = &first * &denominator + &second * &denominator;
+        assert_eq!(
+            input.collect_compact_factors(),
+            (first + second) * &denominator
+        );
+        // An inverse containing a tensor contraction is not a scalar factor.
+        let tensor = spenso::tensor!(compact_test, spenso::mink!(4, mu));
+        let inverse = (&tensor + spenso::tensor!(other_compact_test, spenso::mink!(4, mu))).pow(-1);
+        let tensor_input = &inverse * parse_lit!(a) + &inverse * parse_lit!(b);
+        assert_eq!(tensor_input.collect_compact_factors(), tensor_input);
+    }
 
     #[test]
     fn series_preserves_independent_tensor_factors() {
