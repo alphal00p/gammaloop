@@ -2,7 +2,7 @@ digraph pentaboxbox {
   num = "1";
   overall_factor = "-1";
   overall_factor_evaluated = "-1";
-  projector = "1𝑖 * gammalooprs::ϵ(0,spenso::mink(4,gammalooprs::hedge(0))) * gammalooprs::ϵ(1,spenso::mink(4,gammalooprs::hedge(1))) * (1/8)*spenso::g(spenso::coad(8,gammalooprs::hedge(0)),spenso::coad(8,gammalooprs::hedge(1)))";
+  projector = "1𝑖 * gammalooprs::ϵ(0,spenso::mink(4,gammalooprs::hedge(0,1))) * gammalooprs::ϵ(1,spenso::mink(4,gammalooprs::hedge(1,1))) * (1/8)*spenso::g(spenso::coad(8,gammalooprs::hedge(0,1)),spenso::coad(8,gammalooprs::hedge(1,1)))";
 
   ext0   [style=invis];
   ext1   [style=invis];

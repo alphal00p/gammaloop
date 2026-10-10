@@ -111,7 +111,7 @@ fn scalar_unit_amplitudes_match_convergent_mc_integrals_at_one_through_four_loop
         cli.cli_settings.global.generation.orientation_pattern =
             OrientationPattern::from_user_pattern(&format!("({orientation})"))?;
         let mut dot = format!(
-            "digraph vacuum_triangles {{ edge [mass=1 num=1]; node [num=1]; \
+            "digraph vacuum_triangles {{ edge [particle=scalar_1 mass=1 num=1]; node [num=1]; \
              incoming [style=invis]; outgoing [style=invis]; \
              incoming -> a [id={} particle=scalar_0 mass=0]; \
              a -> outgoing [id={} particle=scalar_0 mass=0];",

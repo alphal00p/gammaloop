@@ -38,8 +38,8 @@ pub use feynkit_generator::{
 };
 #[cfg(feature = "graph")]
 pub use feynkit_graph::{
-    FeynmanDiagram, IntegralFamily, IntegralFamilyError, IntegralMapping, LoopMomentumBasis,
-    PropagatorMapping,
+    DotDiagram, FeynmanDiagram, IntegralFamily, IntegralFamilyError, IntegralMapping,
+    LoopMomentumBasis, PropagatorMapping,
 };
 #[cfg(feature = "kinematics")]
 pub use feynkit_kinematics::{

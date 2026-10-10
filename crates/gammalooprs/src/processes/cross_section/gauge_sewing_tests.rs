@@ -182,12 +182,9 @@ fn generated_higgs_covariant_cuts_equal_three_physical_vector_polarizations() ->
             let bosonic_graphs = filtered.generate(&model, &settings)?;
             assert_eq!(bosonic_graphs.len(), 4);
             assert!(bosonic_graphs.iter().all(|graph| {
-                graph.iter_edges().all(|(_, _, edge)| {
-                    !edge
-                        .data
-                        .particle()
-                        .is_some_and(|particle| particle.resolve(&model).is_ghost())
-                })
+                graph
+                    .iter_edges()
+                    .all(|(_, _, edge)| !edge.data.particle().resolve(&model).is_ghost())
             }));
             filtered.process = filtered
                 .process
@@ -292,7 +289,7 @@ fn generated_higgs_covariant_cuts_equal_three_physical_vector_polarizations() ->
                             | HedgePair::Unpaired { flow: split, .. } => *split,
                             HedgePair::Paired { .. } => panic!("cut edge must be split"),
                         };
-                        let particle = edge.data.particle().unwrap();
+                        let particle = edge.data.particle();
                         particles.push(if flow == Flow::Source {
                             particle.resolve(&model).pdg_code
                         } else {

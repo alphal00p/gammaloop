@@ -213,33 +213,27 @@ pub trait ReversibleEdge {
 
 impl ReversibleEdge for EdgeData<&Edge> {
     fn pdg(&self, model: &Model) -> isize {
-        self.data
-            .particle()
-            .map(|particle| oriented_pdg(particle.resolve(model).pdg_code, self.orientation))
-            .unwrap_or(0)
+        oriented_pdg(
+            self.data.particle().resolve(model).pdg_code,
+            self.orientation,
+        )
     }
 
     fn spin(&self, model: &Model) -> Option<i64> {
-        self.data
-            .particle()
-            .map(|particle| particle.resolve(model).spin)
+        Some(self.data.particle().resolve(model).spin)
     }
 }
 
 impl ReversibleEdge for EdgeData<&ParseEdge> {
     fn pdg(&self, model: &Model) -> isize {
-        self.data
-            .particle
-            .particle()
-            .map(|particle| oriented_pdg(particle.resolve(model).pdg_code, self.orientation))
-            .unwrap_or(0)
+        oriented_pdg(
+            self.data.particle.particle().resolve(model).pdg_code,
+            self.orientation,
+        )
     }
 
     fn spin(&self, model: &Model) -> Option<i64> {
-        self.data
-            .particle
-            .particle()
-            .map(|particle| particle.resolve(model).spin)
+        Some(self.data.particle.particle().resolve(model).spin)
     }
 }
 

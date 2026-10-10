@@ -1951,8 +1951,8 @@ mod tests {
 
     use super::*;
     use crate::{
-        finalized_runtime_dot,
-        graph::{Graph, GraphThreeDSource, parse::IntoFinalizedRuntimeGraph},
+        dot,
+        graph::{Graph, GraphThreeDSource, parse::IntoGraph},
         initialisation::test_initialise,
         numerator::{aind::Aind, energy_degree::EnergyPowerAnalyzer},
         uv::approx::projected_4d::Local4dProjectionContext,
@@ -2033,12 +2033,12 @@ mod tests {
     #[test]
     fn canonical_uv_classes_certify_signed_aliases_and_preserve_raw_sectors() -> Result<()> {
         test_initialise()?;
-        let graph: Graph = finalized_runtime_dot!(digraph canonical_signed_triangle {
+        let graph: Graph = dot!(digraph canonical_signed_triangle {
             edge [num=1 mass=1]
             node [num=1]
-            a -> b [id=0 lmb_id=0]
-            b -> c [id=1]
-            c -> a [id=2]
+            a -> b [particle=H id=0 lmb_id=0]
+            b -> c [particle=H id=1]
+            c -> a [particle=H id=2]
         })?;
         let owners = graph.full_filter();
         let hard = |owner| function!(GS.emr_mom, owner);
@@ -2112,12 +2112,12 @@ mod tests {
     #[test]
     fn canonical_uv_signed_multiloop_carriers_preserve_factorized_numerators() -> Result<()> {
         test_initialise()?;
-        let graph: Graph = finalized_runtime_dot!(digraph canonical_signed_sunset {
+        let graph: Graph = dot!(digraph canonical_signed_sunset {
             edge [num=1 mass=1]
             node [num=1]
-            a -> b [id=0 lmb_id=0]
-            a -> b [id=1 lmb_id=1]
-            a -> b [id=2]
+            a -> b [particle=H id=0 lmb_id=0]
+            a -> b [particle=H id=1 lmb_id=1]
+            a -> b [particle=H id=2]
         })?;
         let hard = -function!(GS.emr_mom, 0) - function!(GS.emr_mom, 1);
         let component = GS.indexed_momentum(&hard, &[GS.cind(0)]);
@@ -2193,12 +2193,12 @@ mod tests {
     #[test]
     fn canonical_uv_positive_blocks_and_absent_poles_keep_their_roles() -> Result<()> {
         test_initialise()?;
-        let graph: Graph = finalized_runtime_dot!(digraph canonical_positive_triangle {
+        let graph: Graph = dot!(digraph canonical_positive_triangle {
             edge [num=1 mass=1]
             node [num=1]
-            a -> b [id=0 lmb_id=0]
-            b -> c [id=1]
-            c -> a [id=2]
+            a -> b [particle=H id=0 lmb_id=0]
+            b -> c [particle=H id=1]
+            c -> a [particle=H id=2]
         })?;
         let owners = graph.full_filter();
         let den = |owner| {
@@ -2245,12 +2245,12 @@ mod tests {
     #[test]
     fn canonical_positive_denominator_recovers_one_class_from_expanded_coordinates() -> Result<()> {
         test_initialise()?;
-        let graph: Graph = finalized_runtime_dot!(digraph canonical_positive_sunset {
+        let graph: Graph = dot!(digraph canonical_positive_sunset {
             edge [num=1 mass=1]
             node [num=1]
-            a -> b [id=0 lmb_id=0]
-            a -> b [id=1 lmb_id=1]
-            a -> b [id=2]
+            a -> b [particle=H id=0 lmb_id=0]
+            a -> b [particle=H id=1 lmb_id=1]
+            a -> b [particle=H id=2]
         })?;
         let owners = graph.full_filter();
         let bindings = vec![(owners.clone(), owners, graph.loop_momentum_basis.clone())];
@@ -2298,12 +2298,12 @@ mod tests {
     #[test]
     fn projection_sector_grouping_preserves_frozen_domains_and_recursion() -> Result<()> {
         test_initialise()?;
-        let graph: Graph = finalized_runtime_dot!(digraph canonical_sector_triangle {
+        let graph: Graph = dot!(digraph canonical_sector_triangle {
             edge [num=1 mass=1]
             node [num=1]
-            a -> b [id=0 lmb_id=0]
-            b -> c [id=1]
-            c -> a [id=2]
+            a -> b [particle=H id=0 lmb_id=0]
+            b -> c [particle=H id=1]
+            c -> a [particle=H id=2]
         })?;
         let owners = graph.full_filter();
         let bindings = vec![(owners.clone(), owners, graph.loop_momentum_basis.clone())];
@@ -2355,11 +2355,11 @@ mod tests {
         };
 
         test_initialise()?;
-        let mut graph: Graph = finalized_runtime_dot!(digraph cancelling_projection_sectors {
+        let mut graph: Graph = dot!(digraph cancelling_projection_sectors {
             edge [num=1 mass=1];
             node [num=1];
-            a -> b [id=0 lmb_id=0];
-            a -> b [id=1];
+            a -> b [particle=H id=0 lmb_id=0];
+            a -> b [particle=H id=1];
         })?;
         let owners = graph.full_filter();
         let current = OwnedForestNode {
@@ -2425,19 +2425,19 @@ mod tests {
     #[test]
     fn analytic_uv_rejects_gamma5_before_simplification_with_subgraph_scope() -> Result<()> {
         test_initialise()?;
-        let mut graph: Graph = finalized_runtime_dot!(digraph gamma5_uv_scope {
+        let mut graph: Graph = dot!(digraph gamma5_uv_scope {
             projector=1
             edge [num=1 mass=1]
             node [num=1]
             incoming [style=invis]
             outgoing [style=invis]
-            incoming -> a [id=0 sink="{ufo_order:0}"]
-            a -> b [id=1 lmb_id=0 source="{ufo_order:1}" sink="{ufo_order:0}"]
-            b -> a [id=2 source="{ufo_order:1}" sink="{ufo_order:2}"]
-            b -> c [id=3 source="{ufo_order:2}" sink="{ufo_order:0}"]
-            c -> d [id=4 lmb_id=1 source="{ufo_order:1}" sink="{ufo_order:0}"]
-            d -> c [id=5 source="{ufo_order:1}" sink="{ufo_order:2}"]
-            d -> outgoing [id=6 source="{ufo_order:2}"]
+            incoming -> a [particle=H id=0]
+            a -> b [particle=H id=1 lmb_id=0]
+            b -> a [particle=H id=2]
+            b -> c [particle=H id=3]
+            c -> d [particle=H id=4 lmb_id=1]
+            d -> c [particle=H id=5]
+            d -> outgoing [particle=H id=6]
         })?;
         let filter = graph
             .get_edge_subgraph(EdgeIndex(1))
@@ -2630,13 +2630,13 @@ mod tests {
     #[test]
     fn nested_uv_rescaling_keeps_child_momentum_provenance_immutable() -> Result<()> {
         test_initialise()?;
-        let graph: Graph = finalized_runtime_dot!(digraph nested_provenance_rescaling {
+        let graph: Graph = dot!(digraph nested_provenance_rescaling {
             edge [num=1 mass=1]
             node [num=1]
 
-            a -> b [id=0 lmb_id=0]
-            b -> c [id=1]
-            c -> a [id=2]
+            a -> b [particle=H id=0 lmb_id=0]
+            b -> c [particle=H id=1]
+            c -> a [particle=H id=2]
         })?;
         let filter = (0..3)
             .map(|edge| graph.get_edge_subgraph(EdgeIndex(edge)))
@@ -2740,7 +2740,7 @@ mod tests {
     #[test]
     fn uv_taylor_provenance_erasure_matches_plain_child_lmb_expansion() -> Result<()> {
         test_initialise()?;
-        let graph: Graph = finalized_runtime_dot!(
+        let graph: Graph = dot!(
             digraph uv_taylor_provenance_oracle {
                 num = 1
                 edge [particle="scalar_1" num=1]
@@ -2970,7 +2970,7 @@ mod tests {
         // acceptance test. The quartic factor is local to e1. The deliberately
         // collected common denominator below stresses ownership while each
         // numerator stays factorized; production keeps Taylor topologies separate.
-        let graph: Graph = finalized_runtime_dot!(
+        let graph: Graph = dot!(
             digraph gl24_dod_two_taylor {
                 edge [particle="scalar_0" num=1]
                 node [num=1]
@@ -3375,21 +3375,21 @@ mod tests {
     #[test]
     fn dod_one_triangle_keeps_separate_denominator_topologies() -> Result<()> {
         test_initialise()?;
-        let graph: Graph = finalized_runtime_dot!(digraph exact_uv_triangle_taylor {
+        let graph: Graph = dot!(digraph exact_uv_triangle_taylor {
             edge [num=1 mass=1]
             node [num=1]
             incoming [style=invis]
             outgoing [style=invis]
 
-            incoming -> v5 [id=0]
-            v0 -> v2 [id=1 lmb_id=0]
-            v3 -> v0 [id=2]
-            v0 -> v5 [id=3]
-            v2 -> v1 [id=4]
-            v1 -> v3 [id=5 lmb_id=1]
-            v1 -> v4 [id=6]
-            v2 -> v3 [id=7]
-            v4 -> outgoing [id=8]
+            incoming -> v5 [particle=H id=0]
+            v0 -> v2 [particle=H id=1 lmb_id=0]
+            v3 -> v0 [particle=H id=2]
+            v0 -> v5 [particle=H id=3]
+            v2 -> v1 [particle=H id=4]
+            v1 -> v3 [particle=H id=5 lmb_id=1]
+            v1 -> v4 [particle=H id=6]
+            v2 -> v3 [particle=H id=7]
+            v4 -> outgoing [particle=H id=8]
         })?;
         let owners = [EdgeIndex(4), EdgeIndex(5), EdgeIndex(7)];
         let uv_filter = owners
@@ -3551,7 +3551,7 @@ mod tests {
     #[test]
     fn factorized_product_separates_active_and_completed_sectors() -> Result<()> {
         test_initialise()?;
-        let graph: Graph = finalized_runtime_dot!(
+        let graph: Graph = dot!(
             digraph G {
                 edge [particle="scalar_1"];
                 node [num=1];
@@ -3647,16 +3647,16 @@ mod tests {
     #[test]
     fn affine_uv_rescaling_preserves_enclosing_chart_and_owner() -> Result<()> {
         test_initialise()?;
-        let graph: Graph = finalized_runtime_dot!(digraph affine_enclosing_taylor_chart {
+        let graph: Graph = dot!(digraph affine_enclosing_taylor_chart {
             edge [num=1 mass=1]
             node [num=1]
             incoming [style=invis]
             outgoing [style=invis]
-            a -> b [id=0]
-            a -> b [id=1 lmb_id=0]
-            a -> b [id=2 lmb_id=1]
-            incoming -> a [id=3]
-            b -> outgoing [id=4]
+            a -> b [particle=H id=0]
+            a -> b [particle=H id=1 lmb_id=0]
+            a -> b [particle=H id=2 lmb_id=1]
+            incoming -> a [particle=H id=3]
+            b -> outgoing [particle=H id=4]
         })?;
         let filter = (0..3)
             .map(|edge| graph.get_edge_subgraph(EdgeIndex(edge)))
@@ -3845,14 +3845,14 @@ mod tests {
     #[test]
     fn early_color_simplification_preserves_open_and_nested_numerator_boundaries() -> Result<()> {
         test_initialise()?;
-        let mut graph: Graph = finalized_runtime_dot!(digraph nested_open_color_bubble {
+        let mut graph: Graph = dot!(digraph nested_open_color_bubble {
             projector=1
             edge [num=1 mass=1]
             node [num=1]
-            a -> b [id=0 lmb_id=0 source="{ufo_order:0}" sink="{ufo_order:0}"]
-            a -> b [id=1 source="{ufo_order:1}" sink="{ufo_order:1}"]
-            b -> c [id=2 lmb_id=1 source="{ufo_order:2}" sink="{ufo_order:0}"]
-            c -> a [id=3 source="{ufo_order:1}" sink="{ufo_order:2}"]
+            a -> b [particle=H id=0 lmb_id=0]
+            a -> b [particle=H id=1]
+            b -> c [particle=H id=2 lmb_id=1]
+            c -> a [particle=H id=3]
         })?;
         let [a, b, c, d, u, v]: [Atom; 6] =
             std::array::from_fn(|i| idenso::coad!(8, Atom::from(Aind::Normal(80 + i))));
@@ -3963,16 +3963,16 @@ mod tests {
     #[test]
     fn local_taylor_retains_dirac_traces_with_or_without_analytic_addbacks() -> Result<()> {
         test_initialise()?;
-        let mut graph: Graph = finalized_runtime_dot!(digraph factorized_local_spin {
+        let mut graph: Graph = dot!(digraph factorized_local_spin {
             projector=1
             edge [num=1 mass=1]
             node [num=1]
             incoming [style=invis]
             outgoing [style=invis]
-            incoming -> a [id=0 sink="{ufo_order:0}"]
-            a -> b [id=1 lmb_id=0 source="{ufo_order:1}" sink="{ufo_order:0}"]
-            b -> a [id=2 source="{ufo_order:1}" sink="{ufo_order:2}"]
-            b -> outgoing [id=3 source="{ufo_order:2}"]
+            incoming -> a [particle=H id=0]
+            a -> b [particle=H id=1 lmb_id=0]
+            b -> a [particle=H id=2]
+            b -> outgoing [particle=H id=3]
         })?;
         let filter = graph
             .get_edge_subgraph(EdgeIndex(1))

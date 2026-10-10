@@ -9,6 +9,7 @@
 
 mod compact_dot;
 mod display;
+mod dot;
 pub mod expressions;
 mod finalization;
 mod integrals;
@@ -21,6 +22,7 @@ pub mod symbols;
 pub mod thresholds;
 mod uv;
 
+pub use dot::{DotAttributes, DotDiagram, ExplicitFactors};
 pub use integrals::{
     IntegralFamily, IntegralFamilyError, IntegralMapping, PropagatorMapping, QuadraticMomentum,
 };
@@ -1711,8 +1713,10 @@ impl FeynmanDiagram {
             }
             if let Some(interaction) = vertex.interaction {
                 let rule = self.model.vertex_rule_by_id(interaction)?;
+                // Dummy edges are no legs of the interaction: they take the slots after its legs.
                 let mut actual = vec![None; degrees[vertex_id.0]];
-                for (edge_id, endpoints, edge) in self.edges() {
+                for (edge_id, endpoints, edge) in self.edges().filter(|(_, _, edge)| !edge.is_dummy)
+                {
                     let (particle, base_id) = self.resolve_particle(edge_id, edge)?;
                     let base = self.model.particle_by_id(base_id)?;
                     if endpoints.source == Some(vertex_id) {
@@ -1728,7 +1732,13 @@ impl FeynmanDiagram {
                         ));
                     }
                 }
-                let actual = actual.into_iter().flatten().collect::<Vec<_>>();
+                let legs = rule.particles.len().min(actual.len());
+                let dummy_takes_a_leg = actual[..legs].iter().any(Option::is_none);
+                let mut actual = actual.into_iter().flatten().collect::<Vec<_>>();
+                if dummy_takes_a_leg {
+                    // Report the gap instead of a shifted signature that could match.
+                    actual.clear();
+                }
                 let expected = rule
                     .particles
                     .iter()
@@ -1969,26 +1979,14 @@ impl FeynmanDiagram {
     }
 
     /// Parse compact model-aware DOT or the stable dialect emitted by [`Self::to_dot`].
+    ///
+    /// [`DotDiagram::from_dot`] also returns the input's attributes and explicit factors.
     pub fn from_dot(model: impl Into<Arc<Model>>, input: &str) -> Result<Self, DiagramError> {
-        let model = model.into();
-        let parsed: DotGraph = DotGraph::from_string(input)
-            .map_err(|error| DiagramError::DotParse(error.to_string()))?;
-        if ![
-            "model_fingerprint",
-            "feynkit_name",
-            "half_edge_order",
-            "loop_momentum_basis",
-            "cuts",
-            "topology_threshold_candidates",
-        ]
-        .iter()
-        .any(|key| parsed.global_data.statements.contains_key(*key))
-            && !parsed
-                .iter_edges()
-                .any(|(_, _, edge)| edge.data.statements.contains_key("particle_id"))
-        {
-            return Self::from_compact_dot(model, parsed);
-        }
+        DotDiagram::from_dot(model, input).map(|dot| dot.diagram)
+    }
+
+    /// Parse the stable dialect emitted by [`Self::to_dot`]. All of its factors are explicit.
+    fn from_annotated_dot(model: Arc<Model>, parsed: DotGraph) -> Result<DotDiagram, DiagramError> {
         let serialized_fingerprint = parsed
             .global_data
             .statements
@@ -2362,7 +2360,28 @@ impl FeynmanDiagram {
             None => Ok(diagram),
         }?;
         diagram.validate()?;
-        Ok(diagram)
+        // The annotated dialect keeps every edge and vertex ID of the finalized diagram.
+        let attributes = DotAttributes {
+            graph: parsed.global_data.statements.clone(),
+            vertices: parsed
+                .iter_nodes()
+                .map(|(_, _, data)| data.statements.clone())
+                .collect(),
+            edges: parsed
+                .iter_edges()
+                .map(|(_, _, data)| data.data.statements.clone())
+                .collect(),
+        };
+        let explicit = ExplicitFactors {
+            vertices: diagram.vertices().map(|(id, _)| id).collect(),
+            edges: diagram.edges().map(|(id, _, _)| id).collect(),
+            projector: true,
+        };
+        Ok(DotDiagram {
+            diagram,
+            attributes,
+            explicit,
+        })
     }
 
     /// Parse one or more model-aware FeynKit DOT diagrams from a single document.
@@ -2376,18 +2395,8 @@ impl FeynmanDiagram {
         model: impl Into<Arc<Model>>,
         input: &str,
     ) -> Result<Vec<Self>, DiagramError> {
-        let model = model.into();
-        let parsed = DotGraphSet::from_string(input)
-            .map_err(|error| DiagramError::DotParse(error.to_string()))?;
-        parsed
-            .set
-            .into_iter()
-            .zip(parsed.global_data)
-            .map(|(graph, global_data)| {
-                let graph = DotGraph { graph, global_data };
-                Self::from_dot(Arc::clone(&model), &graph.debug_dot())
-            })
-            .collect()
+        DotDiagram::from_dot_set(model, input)
+            .map(|diagrams| diagrams.into_iter().map(|dot| dot.diagram).collect())
     }
 
     pub fn loop_count(&self) -> usize {
@@ -2559,7 +2568,10 @@ impl FeynmanDiagram {
             .filter(|(symbol, _)| !matches!(symbol.get_data(), UserData::None))
             .map(|(symbol, _)| (Atom::var(symbol).to_canonical_string().into(), symbol))
             .collect();
-        let namespace = with_default_namespace!(&expression, "feynkit_graph");
+        // The index, momentum and polarization heads of `symbols` live in this
+        // namespace, so unqualified DOT references such as `hedge(3)` or
+        // `Q(1, ...)` resolve to them. Canonical strings are fully qualified.
+        let namespace = with_default_namespace!(&expression, "gammalooprs");
         Workspace::get_local()
             .with(|workspace| {
                 Token::parse_with_atom_info(
@@ -2759,7 +2771,7 @@ impl FeynmanDiagramBuilder {
     }
 
     pub fn build(self) -> Result<FeynmanDiagram, DiagramError> {
-        self.finalize()
+        self.finalize().map(|(diagram, _)| diagram)
     }
 }
 
@@ -2768,22 +2780,21 @@ mod tests {
     use super::*;
     use std::sync::Arc;
 
+    const PHI3: &str = r#"{
+        "name":"phi3","restriction":null,"orders":[],
+        "parameters":[
+            {"name":"ZERO","lhablock":null,"lhacode":null,"nature":"internal","parameter_type":"real","value":[0.0,0.0],"expression":null},
+            {"name":"M","lhablock":"MASS","lhacode":[25],"nature":"external","parameter_type":"real","value":[1.0,0.0],"expression":null}
+        ],
+        "particles":[{"pdg_code":25,"name":"phi","antiname":"phi","spin":1,"color":1,"mass":"M","width":"ZERO","texname":"phi","antitexname":"phi","charge":0.0,"ghost_number":0,"lepton_number":0,"y_charge":0}],
+        "propagators":[{"name":"phi_prop","particle":"phi","numerator":"1","denominator":"P^2-M^2"}],
+        "lorentz_structures":[{"name":"L1","spins":[1,1,1],"structure":"1"}],
+        "couplings":[],
+        "vertex_rules":[{"name":"V_1","particles":["phi","phi","phi"],"color_structures":["1"],"lorentz_structures":["L1"],"couplings":[[null]]}]
+    }"#;
+
     fn scalar_model() -> Arc<Model> {
-        Arc::new(Model::from_json(
-            r#"{
-                "name":"phi3","restriction":null,"orders":[],
-                "parameters":[
-                    {"name":"ZERO","lhablock":null,"lhacode":null,"nature":"internal","parameter_type":"real","value":[0.0,0.0],"expression":null},
-                    {"name":"M","lhablock":"MASS","lhacode":[25],"nature":"external","parameter_type":"real","value":[1.0,0.0],"expression":null}
-                ],
-                "particles":[{"pdg_code":25,"name":"phi","antiname":"phi","spin":1,"color":1,"mass":"M","width":"ZERO","texname":"phi","antitexname":"phi","charge":0.0,"ghost_number":0,"lepton_number":0,"y_charge":0}],
-                "propagators":[{"name":"phi_prop","particle":"phi","numerator":"1","denominator":"P^2-M^2"}],
-                "lorentz_structures":[{"name":"L1","spins":[1,1,1],"structure":"1"}],
-                "couplings":[],
-                "vertex_rules":[{"name":"V_1","particles":["phi","phi","phi"],"color_structures":["1"],"lorentz_structures":["L1"],"couplings":[[null]]}]
-            }"#,
-        )
-        .unwrap())
+        Arc::new(Model::from_json(PHI3).unwrap())
     }
 
     #[test]
@@ -2864,13 +2875,13 @@ mod tests {
             diagram.to_json().unwrap()
         );
         assert!(FeynmanDiagram::from_dot(model.clone(), &dot.replace("phi,phi", "phi")).is_err());
-        assert!(
-            FeynmanDiagram::from_dot(
-                model.clone(),
-                &dot.replace("graph [final_state=\"phi,phi\"];", "")
-            )
-            .is_err()
-        );
+        // Without a final state every separating cut is physical; here there is one.
+        let all_cuts = FeynmanDiagram::from_dot(
+            model.clone(),
+            &dot.replace("graph [final_state=\"phi,phi\"];", ""),
+        )
+        .unwrap();
+        assert_eq!(all_cuts.cuts(), diagram.cuts());
         assert!(FeynmanDiagram::from_dot(model, &dot.replace("b -> ext", "ext -> b")).is_err());
     }
 
@@ -2882,12 +2893,366 @@ mod tests {
             r#"digraph { ext [style=invis]; ext -> a [particle="phi"]; a -> ext [particle="phi"]; }"#,
             r#"digraph { ext [style=invis]; ext -> a [particle="phi", lmb_id=0]; a -> ext [particle="phi"]; a -> ext [particle="phi"]; }"#,
             r#"digraph { ext [style=invis]; ext -> a [particle="phi", pdg=999]; a -> ext [particle="phi"]; a -> ext [particle="phi"]; }"#,
+            // Loop slots must be contiguous from zero and form a basis.
+            r#"digraph { ext [style=invis]; ext -> a [particle="phi"]; a -> b [particle="phi", lmb_id=1]; a -> b [particle="phi"]; b -> ext [particle="phi"]; }"#,
+            r#"digraph { ext [style=invis]; ext -> a [particle="phi"]; a -> b [particle="phi", lmb_id=0]; a -> b [particle="phi", lmb_id=1]; b -> ext [particle="phi"]; }"#,
         ] {
             assert!(
                 FeynmanDiagram::from_dot(model.clone(), dot).is_err(),
                 "{dot}"
             );
         }
+    }
+
+    #[test]
+    fn compact_dot_records_attributes_and_explicit_factors() {
+        let model = scalar_model();
+        let dot = DotDiagram::from_dot(
+            model,
+            r#"digraph triangle {
+                graph [num="5", tool="x"];
+                ext [style=invis];
+                a [num="2", tag=left];
+                ext -> a:4 [id=0, particle="phi"];
+                b -> ext [id=1, particle="phi", num="7"];
+                c -> ext [id=2, particle="phi"];
+                a -> b [id=3, particle="phi", num="3", lmb_id=0, label=q];
+                b -> c [id=4, particle="phi"];
+                c -> a [id=5, particle="phi"];
+            }"#,
+        )
+        .unwrap();
+        assert_eq!(dot.explicit.vertices, BTreeSet::from([VertexId(0)]));
+        assert_eq!(dot.explicit.edges, BTreeSet::from([EdgeId(3)]));
+        assert!(!dot.explicit.projector);
+        assert_eq!(dot.attributes.graph["tool"], "x");
+        assert_eq!(dot.attributes.vertices[0]["tag"], "left");
+        assert_eq!(dot.attributes.edges[3]["label"], "q");
+        // External legs carry no numerator fragment: their `num` stays an attribute.
+        assert_eq!(dot.attributes.edges[1]["num"], "7");
+        assert_eq!(dot.diagram.numerator(), &Atom::num(6));
+        assert_eq!(dot.diagram.numerator_prefactor(), &Atom::num(5));
+    }
+
+    #[test]
+    fn compact_dot_sewn_initial_state_takes_the_incoming_leg_attributes() {
+        let dot = DotDiagram::from_dot(
+            scalar_model(),
+            r#"digraph bubble {
+                ext [style=invis];
+                b -> ext [particle="phi", is_cut=0, name=out, mass=7, tag=out];
+                ext -> a [particle="phi", is_cut=0, name=in, colour=red];
+                a -> b [particle="phi"];
+                b -> a [particle="phi"];
+            }"#,
+        )
+        .unwrap();
+        let (sewn, _, data) = dot.diagram.edges().next().unwrap();
+        assert!(data.external.is_some());
+        let attributes = &dot.attributes.edges[sewn.0];
+        assert_eq!(attributes["name"], "in");
+        assert_eq!(attributes["colour"], "red");
+        // The outgoing leg completes what the incoming one leaves out.
+        assert_eq!(attributes["mass"], "7");
+        assert_eq!(attributes["tag"], "out");
+    }
+
+    #[test]
+    fn compact_dot_rejects_particle_indices_without_a_model_fingerprint() {
+        // Earlier GammaLoop exports named particles by model index.
+        assert!(matches!(
+            FeynmanDiagram::from_dot(
+                scalar_model(),
+                r#"digraph { ext [style=invis]; ext -> a [particle_id=0]; a -> ext [particle_id=0]; a -> ext [particle_id=0]; }"#,
+            ),
+            Err(DiagramError::InvalidDotAttribute {
+                attribute: "particle_id",
+                ..
+            })
+        ));
+    }
+
+    #[test]
+    fn compact_dot_cut_internal_edge_is_a_sewn_initial_state() {
+        let model = scalar_model();
+        let split = FeynmanDiagram::from_dot(
+            model.clone(),
+            r#"digraph bubble {
+                ext [style=invis];
+                ext -> a [particle="phi", is_cut=3];
+                b -> ext [particle="phi", is_cut=3];
+                a -> b [particle="phi", lmb_id=0];
+                b -> a [particle="phi"];
+            }"#,
+        )
+        .unwrap();
+        let internal = FeynmanDiagram::from_dot(
+            model,
+            r#"digraph bubble {
+                b -> a [particle="phi", is_cut=3];
+                a -> b [particle="phi", lmb_id=0];
+                b -> a [particle="phi"];
+            }"#,
+        )
+        .unwrap();
+        // Leg names and interaction slots follow the DOT statement order.
+        assert_eq!(internal.cuts(), split.cuts());
+        assert_eq!(internal.loop_momentum_basis(), split.loop_momentum_basis());
+    }
+
+    #[test]
+    fn compact_dot_selects_cuts_by_final_state_or_keeps_them_all() {
+        let model = scalar_model();
+        let dot = |final_state: &str| {
+            format!(
+                r#"digraph two_loop {{
+                    {final_state}
+                    ext [style=invis];
+                    ext -> a [particle="phi", is_cut=0];
+                    d -> ext [particle="phi", is_cut=0];
+                    a -> b [particle="phi"];
+                    a -> c [particle="phi"];
+                    b -> c [particle="phi"];
+                    b -> d [particle="phi"];
+                    c -> d [particle="phi"];
+                }}"#
+            )
+        };
+        let cuts = |final_state: &str| {
+            FeynmanDiagram::from_dot(model.clone(), &dot(final_state))
+                .unwrap()
+                .cuts()
+                .iter()
+                .map(|cut| cut.cut.len())
+                .collect::<Vec<_>>()
+        };
+        let mut all = cuts("");
+        all.sort();
+        assert_eq!(all, [2, 2, 3, 3]);
+        assert_eq!(cuts(r#"graph [final_state="phi,phi"];"#), [2, 2]);
+        assert_eq!(cuts(r#"graph [final_state="phi,phi,phi"];"#), [3, 3]);
+        assert!(
+            FeynmanDiagram::from_dot(model, &dot(r#"graph [final_state="phi,phi,phi,phi"];"#))
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn compact_dot_transports_cross_section_expressions_to_the_sewn_frame() {
+        let model = scalar_model();
+        let diagram = FeynmanDiagram::from_dot(
+            model,
+            r#"digraph bubble {
+                graph [projector="hedge(1)", overall_factor="edge(3)"];
+                ext [style=invis];
+                a [num="hedge(0)*hedge(2)"];
+                ext -> a:0 [id=0, particle="phi", is_cut=0];
+                b:1 -> ext [id=1, particle="phi", is_cut=0];
+                a:2 -> b:3 [id=2, particle="phi", lmb_id=0];
+                a:4 -> b:5 [id=3, particle="phi", num="Q(eid,spenso::mink(4,1))*source"];
+            }"#,
+        )
+        .unwrap();
+        diagram.validate().unwrap();
+        // The legs sew into edge 0; the internal edges follow in DOT order.
+        let hedge = |edge, endpoint| {
+            diagram
+                .half_edge_id(DiagramHalfEdge {
+                    edge: EdgeId(edge),
+                    endpoint,
+                })
+                .unwrap()
+                .0
+        };
+        let index = |hedge: usize| symbols::hedge_index().call((hedge,));
+        let (_, vertex) = diagram.vertices().next().unwrap();
+        assert_eq!(
+            vertex.numerator,
+            index(hedge(0, DiagramEndpoint::Target)) * index(hedge(1, DiagramEndpoint::Source))
+        );
+        let (_, _, edge) = diagram.edges().nth(2).unwrap();
+        let momentum =
+            symbols::momentum().call((2, Minkowski {}.new_rep(4).to_symbolic([Atom::num(1)])));
+        assert_eq!(
+            edge.numerator,
+            momentum * Atom::num(hedge(2, DiagramEndpoint::Source) as i64)
+        );
+        assert_eq!(
+            diagram.projector(),
+            &index(hedge(0, DiagramEndpoint::Source))
+        );
+        assert_eq!(diagram.overall_factor(), &symbols::edge_index().call((2,)));
+    }
+
+    #[test]
+    fn compact_dot_resolves_unqualified_heads_and_edge_shorthand() {
+        let model = scalar_model();
+        let diagram = FeynmanDiagram::from_dot(
+            model,
+            r#"digraph bubble {
+                ext [style=invis];
+                a [num="hedge(1)*Q(2,spenso::mink(4,1))"];
+                ext -> a:0 [id=0, particle="phi"];
+                b:1 -> ext [id=1, particle="phi"];
+                a:2 -> b:3 [id=2, particle="phi", lmb_id=0, num="eid*source(1)*sink(0)*eid(2)"];
+                a:4 -> b:5 [id=3, particle="phi"];
+            }"#,
+        )
+        .unwrap();
+        let (_, vertex) = diagram.vertices().next().unwrap();
+        let momentum =
+            symbols::momentum().call((2, Minkowski {}.new_rep(4).to_symbolic([Atom::num(1)])));
+        assert_eq!(
+            vertex.numerator,
+            symbols::hedge_index().call((1,)) * momentum
+        );
+        let (_, _, edge) = diagram.edges().nth(2).unwrap();
+        assert_eq!(
+            edge.numerator,
+            Atom::num(2)
+                * symbols::hedge_index().call((2, 1))
+                * symbols::hedge_index().call((3,))
+                * symbols::edge_index().call((2, 2))
+        );
+    }
+
+    #[test]
+    fn compact_dot_dummy_edges_and_vertices_without_interactions() {
+        let model = scalar_model();
+        let dot = DotDiagram::from_dot(
+            model.clone(),
+            r#"digraph dummy {
+                ext [style=invis];
+                c [num="4"];
+                ext -> a [particle="phi"];
+                ext -> a [particle="phi", is_dummy=true];
+                a -> b [particle="phi", lmb_id=0];
+                a -> c [particle="phi"];
+                c -> b [particle="phi"];
+                b -> ext [particle="phi"];
+            }"#,
+        )
+        .unwrap();
+        let diagram = &dot.diagram;
+        diagram.validate().unwrap();
+        let rule = model.vertex_rule_id("V_1").unwrap();
+        let interactions = diagram
+            .vertices()
+            .map(|(_, vertex)| (vertex.name.as_str(), vertex.interaction))
+            .collect::<BTreeMap<_, _>>();
+        // `c` joins two lines: no interaction, so its numerator must be given.
+        assert_eq!(
+            interactions,
+            BTreeMap::from([("a", Some(rule)), ("b", Some(rule)), ("c", None)])
+        );
+        let (_, _, dummy) = diagram.edges().find(|(_, _, edge)| edge.is_dummy).unwrap();
+        assert!(dummy.external.is_none());
+        assert_eq!(dummy.target_slot(), VertexSlot(3));
+        assert!(
+            FeynmanDiagram::from_dot(model, &diagram_without(r#"c [num="4"];"#)).is_err(),
+            "a vertex without interaction needs a numerator"
+        );
+
+        fn diagram_without(statement: &str) -> String {
+            r#"digraph dummy {
+                ext [style=invis];
+                c [num="4"];
+                ext -> a [particle="phi"];
+                a -> b [particle="phi", lmb_id=0];
+                a -> c [particle="phi"];
+                c -> b [particle="phi"];
+                b -> ext [particle="phi"];
+            }"#
+            .replace(statement, "")
+        }
+    }
+
+    #[test]
+    fn compact_dot_checks_only_explicit_edge_directions() {
+        let model = scalar_model();
+        let bubble = |direction: &str| {
+            format!(
+                r#"digraph bubble {{
+                    ext [style=invis];
+                    {direction}
+                    ext -> a [particle="phi"];
+                    a -> b [particle="phi"];
+                    a -> b [particle="phi"];
+                    b -> ext [particle="phi"];
+                }}"#
+            )
+        };
+        assert!(FeynmanDiagram::from_dot(model.clone(), &bubble("edge [dir=forward];")).is_ok());
+        assert!(
+            FeynmanDiagram::from_dot(
+                model,
+                &bubble("").replace(
+                    r#"a -> b [particle="phi"];"#,
+                    r#"a -> b [particle="phi", dir=forward];"#
+                )
+            )
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn compact_dot_int_id_selects_among_matching_interactions() {
+        let model = Arc::new(
+            Model::from_json(&PHI3.replace(
+                r#""vertex_rules":["#,
+                r#""vertex_rules":[{"name":"V_2","particles":["phi","phi","phi"],"color_structures":["1"],"lorentz_structures":["L1"],"couplings":[[null]]},"#,
+            ))
+            .unwrap(),
+        );
+        let bubble = |rule: &str| {
+            format!(
+                r#"digraph bubble {{
+                    ext [style=invis];
+                    node [{rule}];
+                    ext -> a [particle="phi"];
+                    a -> b [particle="phi"];
+                    a -> b [particle="phi"];
+                    b -> ext [particle="phi"];
+                }}"#
+            )
+        };
+        let diagram = FeynmanDiagram::from_dot(model.clone(), &bubble("int_id=V_1")).unwrap();
+        let rule = model.vertex_rule_id("V_1").unwrap();
+        assert!(
+            diagram
+                .vertices()
+                .all(|(_, vertex)| vertex.interaction == Some(rule))
+        );
+        for ambiguous_or_unknown in ["", "int_id=V_3"] {
+            assert!(
+                FeynmanDiagram::from_dot(model.clone(), &bubble(ambiguous_or_unknown)).is_err(),
+                "{ambiguous_or_unknown}"
+            );
+        }
+    }
+
+    #[test]
+    fn compact_dot_without_loop_slots_routes_canonically() {
+        let model = scalar_model();
+        let diagram = FeynmanDiagram::from_dot(
+            model,
+            r#"digraph bubble {
+                ext [style=invis];
+                ext -> a [particle="phi", is_cut=0];
+                b -> ext [particle="phi", is_cut=0];
+                a -> b [particle="phi"];
+                b -> a [particle="phi"];
+            }"#,
+        )
+        .unwrap();
+        let canonical = diagram
+            .clone()
+            .with_canonical_loop_momentum_basis()
+            .unwrap();
+        assert_eq!(
+            diagram.loop_momentum_basis(),
+            canonical.loop_momentum_basis()
+        );
     }
 
     #[test]
@@ -4136,6 +4501,17 @@ mod tests {
     }
 
     #[test]
+    fn dot_import_rejects_a_different_model_fingerprint() {
+        let diagram = one_loop();
+        let wrong_model = Arc::new(Model::empty("different-model"));
+
+        assert!(matches!(
+            FeynmanDiagram::from_dot(wrong_model, &diagram.to_dot().unwrap()),
+            Err(DiagramError::DotModelFingerprintMismatch { .. })
+        ));
+    }
+
+    #[test]
     fn dot_import_rejects_external_index_overflow() {
         let diagram = one_loop();
         let metadata = diagram.edges().next().unwrap().2.external.clone();
@@ -4452,9 +4828,13 @@ mod tests {
             .unwrap();
         updated.loop_momentum_basis().validate(&updated).unwrap();
         let tree_edge = updated.loop_momentum_basis().tree_edges[0];
+        // A dummy edge is no interaction leg, so drop the interactions to isolate the routing.
         let changed = updated
             .map_data(
-                |_, vertex| vertex.clone(),
+                |_, vertex| DiagramVertex {
+                    interaction: None,
+                    ..vertex.clone()
+                },
                 |edge, _, data| {
                     let mut data = data.clone();
                     data.is_dummy |= edge == tree_edge;

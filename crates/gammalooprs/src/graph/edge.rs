@@ -1,19 +1,12 @@
-use std::{
-    fmt::Display,
-    sync::{Arc, Mutex},
-};
+use std::sync::{Arc, Mutex};
 
-use eyre::Context;
 use linnet::{
-    half_edge::{
-        HedgeGraph,
-        involution::{EdgeData, EdgeIndex, Flow, Hedge, HedgePair, Orientation},
-    },
-    parser::{DotEdgeData, DotHedgeData, DotVertexData},
+    half_edge::involution::{Flow, Orientation},
+    parser::DotEdgeData,
 };
 use spenso::{
     algebra::complex::Complex,
-    structure::{IndexLess, ScalarStructure, representation::LibraryRep},
+    structure::{IndexLess, representation::LibraryRep},
 };
 use symbolica::{domains::float::Complex as SymComplex, prelude::*};
 
@@ -23,40 +16,28 @@ use crate::{
         Model, ModelGammaLoopExt, ParticleGammaLoopExt, ParticleId, ParticleIdGammaLoopExt,
         UFOSymbol,
     },
-    momentum::{Helicity, sample::LoopIndex},
-    numerator::aind::{Aind, NewAind},
-    utils::{F, FloatLike, GS},
+    momentum::Helicity,
+    numerator::aind::Aind,
+    utils::{F, FloatLike},
     uv::uv_graph::UVE,
 };
 
-use super::parse::{StripParse, ToQuoted};
+use super::parse::ToQuoted;
 use crate::graph::Autogen;
 use color_eyre::Result;
 use eyre::eyre;
 
+/// The model particle of an edge, optionally with a DOT `mass` override.
 #[derive(Debug, Clone, bincode_trait_derive::Encode, bincode_trait_derive::Decode)]
 #[trait_decode(trait = crate::GammaLoopContext)]
 pub enum PossibleParticle {
     Particle(ParticleId),
     MassOverriddenParticle { particle: ParticleId, mass: Atom },
-    JustMass { expr: Atom },
 }
 
 impl From<ParticleId> for PossibleParticle {
     fn from(particle: ParticleId) -> Self {
         PossibleParticle::Particle(particle)
-    }
-}
-
-impl From<Atom> for PossibleParticle {
-    fn from(atom: Atom) -> Self {
-        PossibleParticle::JustMass { expr: atom }
-    }
-}
-
-impl From<()> for PossibleParticle {
-    fn from(_: ()) -> Self {
-        PossibleParticle::JustMass { expr: Atom::Zero }
     }
 }
 
@@ -72,103 +53,63 @@ impl PossibleParticle {
                     mass: mass.clone(),
                 }
             }
-            PossibleParticle::JustMass { expr } => {
-                PossibleParticle::JustMass { expr: expr.clone() }
-            }
         }
     }
 
     pub fn orientation(&self, model: &Model) -> Orientation {
-        self.particle()
-            .map(|particle| {
-                let particle = particle.resolve(model);
-                if particle.is_fermion() {
-                    if particle.pdg_code < 0 {
-                        Orientation::Reversed
-                    } else {
-                        Orientation::Default
-                    }
-                } else {
-                    Orientation::Undirected
-                }
-            })
-            .unwrap_or(Orientation::Undirected)
+        let particle = self.particle().resolve(model);
+        if !particle.is_fermion() {
+            Orientation::Undirected
+        } else if particle.pdg_code < 0 {
+            Orientation::Reversed
+        } else {
+            Orientation::Default
+        }
     }
 
     pub fn is_fermion(&self, model: &Model) -> bool {
-        match self {
-            PossibleParticle::Particle(particle)
-            | PossibleParticle::MassOverriddenParticle { particle, .. } => {
-                particle.resolve(model).is_fermion()
-            }
-            PossibleParticle::JustMass { .. } => false,
-        }
+        self.particle().resolve(model).is_fermion()
     }
 
     pub fn is_anticommutating(&self, model: &Model) -> bool {
-        self.particle()
-            .is_some_and(|p| p.resolve(model).is_anticommutating())
+        self.particle().resolve(model).is_anticommutating()
     }
 
     pub fn is_self_antiparticle(&self, model: &Model) -> bool {
-        match self {
-            PossibleParticle::Particle(particle)
-            | PossibleParticle::MassOverriddenParticle { particle, .. } => {
-                particle.is_self_antiparticle(model)
-            }
-            PossibleParticle::JustMass { .. } => false,
-        }
+        self.particle().is_self_antiparticle(model)
     }
+
     pub fn mass_atom(&self, model: &Model) -> Atom {
         match &self {
-            PossibleParticle::JustMass { expr, .. } => expr.clone(),
             PossibleParticle::Particle(particle) => particle.resolve(model).symbolic_mass(model),
             PossibleParticle::MassOverriddenParticle { mass, .. } => mass.clone(),
         }
     }
-    // pub fn just_mass(mass:Atom,)
 
-    pub fn zero() -> Self {
-        ().into()
-    }
-
-    pub(crate) fn override_mass(self, mass: Option<Atom>) -> Self {
-        let Some(mass) = mass else {
-            return self;
-        };
-
-        match self {
-            PossibleParticle::JustMass { .. } => PossibleParticle::JustMass { expr: mass },
-            PossibleParticle::MassOverriddenParticle { particle, .. }
-            | PossibleParticle::Particle(particle) => {
-                PossibleParticle::MassOverriddenParticle { particle, mass }
-            }
+    pub(crate) fn override_mass(self, mass: Atom) -> Self {
+        PossibleParticle::MassOverriddenParticle {
+            particle: self.particle(),
+            mass,
         }
     }
 
     pub(crate) fn color_reps(&self, model: &Model, flow: Flow) -> IndexLess {
-        self.particle()
-            .map(|particle| particle.resolve(model).color_reps(flow))
-            .unwrap_or_else(IndexLess::scalar_structure)
+        self.particle().resolve(model).color_reps(flow)
     }
 
     pub(crate) fn spin_reps(&self, model: &Model) -> IndexLess<LibraryRep, Aind> {
-        self.particle()
-            .map(|particle| particle.resolve(model).spin_reps())
-            .unwrap_or_else(IndexLess::scalar_structure)
+        self.particle().resolve(model).spin_reps()
     }
 
-    pub(crate) fn particle(&self) -> Option<ParticleId> {
+    pub(crate) fn particle(&self) -> ParticleId {
         match self {
             PossibleParticle::Particle(particle)
-            | PossibleParticle::MassOverriddenParticle { particle, .. } => Some(*particle),
-            _ => None,
+            | PossibleParticle::MassOverriddenParticle { particle, .. } => *particle,
         }
     }
 
     pub(crate) fn is_massless(&self, model: &Model) -> bool {
         match self {
-            PossibleParticle::JustMass { expr } => expr.is_zero(),
             PossibleParticle::Particle(particle) => particle.is_massless(model),
             PossibleParticle::MassOverriddenParticle { mass, .. } => mass.is_zero(),
         }
@@ -281,13 +222,13 @@ impl UVE for Edge {
     }
 
     fn particle_pdg_code(&self, model: &Model) -> Option<isize> {
-        self.particle().map(|particle| {
-            particle
+        Some(
+            self.particle()
                 .resolve(model)
                 .pdg_code
                 .try_into()
-                .expect("validated particle PDG codes must fit in isize")
-        })
+                .expect("validated particle PDG codes must fit in isize"),
+        )
     }
 
     fn is_massive(&self, model: &Model) -> bool {
@@ -304,7 +245,7 @@ impl Edge {
         }
     }
 
-    pub(crate) fn particle(&self) -> Option<ParticleId> {
+    pub(crate) fn particle(&self) -> ParticleId {
         self.particle.particle()
     }
 
@@ -318,31 +259,20 @@ impl Edge {
 }
 
 impl ParseEdge {
-    fn to_dot_data(&self) -> DotEdgeData {
+    /// Compact DOT attributes, naming the particle so that FeynKit can import them again.
+    fn to_dot_data(&self, model: &Model) -> DotEdgeData {
         let mut e = DotEdgeData::empty();
         if let Some(name) = &self.name {
             e.add_statement("name", name.clone());
         }
         match &self.particle {
             PossibleParticle::Particle(particle) => {
-                e.add_statement("particle_id", particle.index());
-            }
-            PossibleParticle::JustMass { expr, .. } => {
-                e.add_statement("mass", expr.to_quoted());
+                e.add_statement("particle", &particle.resolve(model).name);
             }
             PossibleParticle::MassOverriddenParticle { mass, particle, .. } => {
                 e.add_statement("mass", mass.to_quoted());
-                e.add_statement("particle_id", particle.index());
+                e.add_statement("particle", &particle.resolve(model).name);
             }
-        }
-        if let Some(lmb_id) = &self.lmb_id {
-            e.add_statement("lmb_id", usize::from(*lmb_id));
-        }
-        if let Some(cut) = &self.is_cut {
-            e.add_statement("is_cut", usize::from(*cut));
-        }
-        if self.initial_state_connection {
-            e.add_statement("initial_state_connection", true);
         }
         if let Some(dod) = &self.dod {
             e.add_statement("dod", *dod);
@@ -362,26 +292,7 @@ impl ParseEdge {
         if self.is_dummy {
             e.add_statement("is_dummy", self.is_dummy);
         }
-        // e.add_statement("color_num", value.color_num.to_quoted());
         e
-    }
-}
-
-impl From<&ParseEdge> for DotEdgeData {
-    fn from(value: &ParseEdge) -> Self {
-        value.to_dot_data()
-    }
-}
-
-impl From<&Edge> for DotEdgeData {
-    fn from(value: &Edge) -> Self {
-        value.to_dot_data(false)
-    }
-}
-
-impl From<&Edge> for ParseEdge {
-    fn from(value: &Edge) -> Self {
-        value.to_parse_edge(false)
     }
 }
 
@@ -396,21 +307,22 @@ impl Edge {
             particle: self.particle.clone(),
             dod: self.dod.option_with_generated(include_autogenerated_fields),
             is_dummy: self.is_dummy,
-            lmb_id: None,
             num: self
                 .num
                 .clone()
                 .option_with_generated(include_autogenerated_fields),
-            is_cut: None,
-            initial_state_connection: false,
             momtrop_edge_power: self.extra_data.momtrop_edge_power.clone(),
             vakint_edge_power: self.extra_data.vakint_edge_power,
         }
     }
 
-    pub(crate) fn to_dot_data(&self, include_autogenerated_fields: bool) -> DotEdgeData {
+    pub(crate) fn to_dot_data(
+        &self,
+        model: &Model,
+        include_autogenerated_fields: bool,
+    ) -> DotEdgeData {
         let parse_edge = self.to_parse_edge(include_autogenerated_fields);
-        let mut e = parse_edge.to_dot_data();
+        let mut e = parse_edge.to_dot_data(model);
         if include_autogenerated_fields {
             if self.name.autogenerated {
                 e.add_statement("name_autogen", true);
@@ -434,23 +346,11 @@ pub struct ParseEdge {
 
     pub dod: Option<i32>,
     pub is_dummy: bool,
-    pub lmb_id: Option<LoopIndex>,
 
     /// User provided numerator
     pub num: Option<Atom>,
-    /// Specifies the incoming initial state hedge
-    pub is_cut: Option<Hedge>,
-    /// Marks `is_cut` as an amplitude initial-state sewing connection rather
-    /// than an incomplete cross-section runtime cut.
-    pub initial_state_connection: bool,
     pub momtrop_edge_power: Option<Atom>,
     pub vakint_edge_power: Option<isize>,
-}
-
-impl Display for ParseEdge {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.to_dot_data().fmt(f)
-    }
 }
 
 impl UVE for ParseEdge {
@@ -459,13 +359,14 @@ impl UVE for ParseEdge {
     }
 
     fn particle_pdg_code(&self, model: &Model) -> Option<isize> {
-        self.particle.particle().map(|particle| {
-            particle
+        Some(
+            self.particle
+                .particle()
                 .resolve(model)
                 .pdg_code
                 .try_into()
-                .expect("validated particle PDG codes must fit in isize")
-        })
+                .expect("validated particle PDG codes must fit in isize"),
+        )
     }
 
     fn is_massive(&self, model: &Model) -> bool {
@@ -481,18 +382,10 @@ impl ParseEdge {
 
             particle: particle.into(),
             dod: None,
-            lmb_id: None,
             num: None,
-            is_cut: None,
-            initial_state_connection: false,
             momtrop_edge_power: None,
             vakint_edge_power: None,
         }
-    }
-
-    pub fn is_dummy(mut self) -> Self {
-        self.is_dummy = true;
-        self
     }
 
     pub fn with_label(mut self, label: String) -> Self {
@@ -500,186 +393,8 @@ impl ParseEdge {
         self
     }
 
-    pub fn with_dod(mut self, dod: i32) -> Self {
-        self.dod = Some(dod);
-        self
-    }
-
-    pub fn with_lmb_id(mut self, lmb_id: LoopIndex) -> Self {
-        self.lmb_id = Some(lmb_id);
-        self
-    }
-
     pub fn with_num(mut self, num: Atom) -> Self {
         self.num = Some(num);
         self
-    }
-}
-
-impl ParseEdge {
-    pub(crate) fn localize_ainds(
-        atom: impl AtomCore,
-        eid: EdgeIndex,
-        hedge_pair: HedgePair,
-    ) -> Atom {
-        let a = atom
-            .replace(GS.edgeid)
-            .with(Atom::num(usize::from(eid) as i64))
-            .replace_map(|term, _, out| {
-                if let AtomView::Fun(f) = term
-                    && f.get_symbol() == GS.edgeid
-                    && f.get_nargs() == 1
-                    && let Ok(i) = i64::try_from(f.iter().next().unwrap())
-                    && let Ok(u) = u16::try_from(i)
-                {
-                    **out = eid.aind(u).into();
-                }
-            });
-
-        match hedge_pair {
-            HedgePair::Paired { source, sink } | HedgePair::Split { source, sink, .. } => a
-                .replace(GS.sink_id)
-                .with(Atom::num(sink.0 as i64))
-                .replace_map(|term, _, out| {
-                    if let AtomView::Fun(f) = term
-                        && f.get_symbol() == GS.sink_id
-                        && f.get_nargs() == 1
-                        && let Ok(i) = i64::try_from(f.iter().next().unwrap())
-                        && let Ok(u) = u16::try_from(i)
-                    {
-                        **out = sink.aind(u).into();
-                    }
-                })
-                .replace(GS.source_id)
-                .with(Atom::num(source.0 as i64))
-                .replace_map(|term, _, out| {
-                    if let AtomView::Fun(f) = term
-                        && f.get_symbol() == GS.source_id
-                        && f.get_nargs() == 1
-                        && let Ok(i) = i64::try_from(f.iter().next().unwrap())
-                        && let Ok(u) = u16::try_from(i)
-                    {
-                        **out = source.aind(u).into();
-                    }
-                }),
-            HedgePair::Unpaired { hedge, flow } => match flow {
-                Flow::Source => a
-                    .replace(GS.source_id)
-                    .with(Atom::num(hedge.0 as i64))
-                    .replace_map(|term, _, out| {
-                        if let AtomView::Fun(f) = term
-                            && f.get_symbol() == GS.source_id
-                            && f.get_nargs() == 1
-                            && let Ok(i) = i64::try_from(f.iter().next().unwrap())
-                            && let Ok(u) = u16::try_from(i)
-                        {
-                            **out = hedge.aind(u).into();
-                        }
-                    }),
-                Flow::Sink => a
-                    .replace(GS.sink_id)
-                    .with(Atom::num(hedge.0 as i64))
-                    .replace_map(|term, _, out| {
-                        if let AtomView::Fun(f) = term
-                            && f.get_symbol() == GS.sink_id
-                            && f.get_nargs() == 1
-                            && let Ok(i) = i64::try_from(f.iter().next().unwrap())
-                            && let Ok(u) = u16::try_from(i)
-                        {
-                            **out = hedge.aind(u).into();
-                        }
-                    }),
-            },
-        }
-    }
-    #[allow(clippy::type_complexity)]
-    pub(crate) fn parse<'a>(
-        model: &'a Model,
-    ) -> impl FnMut(
-        &'a HedgeGraph<DotEdgeData, DotVertexData, DotHedgeData>,
-        EdgeIndex,
-        HedgePair,
-        EdgeData<&'a DotEdgeData>,
-    ) -> Result<EdgeData<Self>> {
-        |_: &'a HedgeGraph<DotEdgeData, DotVertexData, DotHedgeData>,
-         eid: EdgeIndex,
-         p: HedgePair,
-         e_data: EdgeData<&'a DotEdgeData>| {
-            let e = e_data.data;
-            let label = e.get::<_, String>("name").transpose()?;
-
-            let lmb_id: Option<LoopIndex> = e
-                .get::<_, usize>("lmb_id")
-                .transpose()?
-                .map(LoopIndex::from);
-
-            let is_cut: Option<Hedge> = e.get::<_, usize>("is_cut").transpose()?.map(Hedge::from);
-            let initial_state_connection = e
-                .get::<_, bool>("initial_state_connection")
-                .transpose()?
-                .unwrap_or(false);
-
-            let dod = e
-                .get::<_, String>("dod")
-                .transpose()
-                .with_context(|| "Error parsing dod".to_string())?
-                .map(|a| a.strip_parse())
-                .transpose()?;
-            let is_dummy = e.get::<_, bool>("is_dummy").transpose()?.unwrap_or(false);
-
-            let num = e
-                .get::<_, String>("num")
-                .transpose()?
-                .map(|a| -> Result<Atom> {
-                    Ok(Self::localize_ainds(a.strip_parse::<Atom>()?, eid, p))
-                })
-                .transpose()?;
-
-            let mass = e
-                .get::<_, String>("mass")
-                .transpose()?
-                .map(|a| a.strip_parse::<Atom>())
-                .transpose()?;
-
-            let momtrop_edge_power: Option<Atom> = e
-                .get::<_, String>("momtrop_edge_power")
-                .transpose()?
-                .map(|a| parse!(&a));
-            let vakint_edge_power: Option<isize> =
-                e.get::<_, isize>("vakint_edge_power").transpose()?;
-
-            let particle: PossibleParticle = if let Some(v) = e.get::<_, usize>("particle_id") {
-                model.particle_id_at(v?)?.into()
-            } else if let Some(v) = e.get::<_, isize>("pdg") {
-                model.try_get_particle_from_pdg(v?)?.into()
-            } else if let Some(v) = e.get::<_, String>("particle") {
-                let pname: String = v?.strip_parse()?;
-                model.try_get_particle(pname)?.into()
-            } else {
-                ().into()
-            };
-
-            let orientation = if e.local_statements.contains_key("dir") {
-                e_data.orientation
-            } else {
-                particle.orientation(model)
-            };
-            Ok(EdgeData::new(
-                ParseEdge {
-                    is_dummy,
-                    dod,
-                    lmb_id,
-                    particle: particle.override_mass(mass),
-                    num,
-                    is_cut,
-                    initial_state_connection,
-                    name: label,
-
-                    momtrop_edge_power,
-                    vakint_edge_power,
-                },
-                orientation,
-            ))
-        }
     }
 }

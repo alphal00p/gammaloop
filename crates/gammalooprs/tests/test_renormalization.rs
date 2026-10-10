@@ -1,6 +1,6 @@
 use gammalooprs::{
-    finalized_runtime_dot,
-    graph::{Graph, parse::IntoFinalizedRuntimeGraph},
+    dot,
+    graph::{Graph, parse::IntoGraph},
     initialisation::test_initialise,
     model::{Model, ModelGammaLoopExt},
     processes::{Amplitude, AmplitudeGraph},
@@ -118,7 +118,7 @@ pub fn align_to_rqft(atom: &Atom, model: &Model) -> Atom {
 #[test]
 fn scalar_pole_part() {
     test_initialise().unwrap();
-    let sunrise: Vec<Graph> = finalized_runtime_dot!( digraph sunrise{
+    let sunrise: Vec<Graph> = dot!( digraph sunrise{
         edge [particle=scalar_1]
         A -> B    [ id=0]
         A -> B     [ id=1]
@@ -209,7 +209,7 @@ fn finite_part_quark_lo() {
     test_initialise().unwrap();
     let fixture_model = load_generic_model("sm");
     let g: Vec<Graph> = include_str!("fixtures/renormalization/quark_lo.dot")
-        .into_finalized_runtime_graph(&fixture_model)
+        .into_graph(&fixture_model)
         .unwrap();
 
     let mut results = Vec::new();
@@ -312,7 +312,7 @@ fn finite_part_ghost_2loop() {
     test_initialise().unwrap();
     let fixture_model = load_generic_model("sm");
     let g: Vec<Graph> = include_str!("fixtures/renormalization/ghost_2loop.dot")
-        .into_finalized_runtime_graph(&fixture_model)
+        .into_graph(&fixture_model)
         .unwrap();
 
     let mut amp = Amplitude::from_graph_list("bub", g).unwrap();
@@ -488,7 +488,7 @@ fn finit_part_ghlo() {
 
     let fixture_model = load_generic_model("sm");
     let g: Vec<Graph> = include_str!("fixtures/renormalization/ghost_lo.dot")
-        .into_finalized_runtime_graph(&fixture_model)
+        .into_graph(&fixture_model)
         .unwrap();
 
     let mut amp = Amplitude::from_graph_list("bub", g).unwrap();
@@ -552,7 +552,7 @@ mod failing {
         test_initialise().unwrap();
 
         let model = load_generic_model("sm");
-        let g: Vec<Graph> = Graph::from_finalized_runtime_path(
+        let g: Vec<Graph> = Graph::from_dot_path(
             concat!(
                 env!("CARGO_MANIFEST_DIR"),
                 "/../../tests/resources/graphs/uv_tests/rqft_a_3l_no_ghost.dot"
@@ -615,7 +615,7 @@ mod failing {
         test_initialise().unwrap();
 
         let model = load_generic_model("sm");
-        let g: Vec<Graph> = Graph::from_finalized_runtime_path(
+        let g: Vec<Graph> = Graph::from_dot_path(
             concat!(
                 env!("CARGO_MANIFEST_DIR"),
                 "/../../tests/resources/graphs/uv_tests/rqft_ghG_3l.dot"
@@ -872,7 +872,7 @@ mod failing {
         test_initialise().unwrap();
 
         let model = load_generic_model("sm");
-        let g: Vec<Graph> = Graph::from_finalized_runtime_path(
+        let g: Vec<Graph> = Graph::from_dot_path(
             concat!(
                 env!("CARGO_MANIFEST_DIR"),
                 "/../../tests/resources/graphs/uv_tests/rqft_ghG_3l.dot"

@@ -1,5 +1,7 @@
+//! Warn about DOT attributes that neither FeynKit nor GammaLoop interprets.
+
 use ahash::AHashSet;
-use linnet::parser::{DotGraph, DotVertexData};
+use feynkit_graph::{DotDiagram, VertexId};
 use tracing::warn;
 
 struct AttributeSpec {
@@ -12,7 +14,7 @@ struct AttributeSpec {
 const GRAPH_SPEC: AttributeSpec = AttributeSpec {
     entity: "graph",
     known: &[
-        "canonical_cuts_required",
+        "final_state",
         "group_id",
         "is_group_master",
         "num",
@@ -48,7 +50,6 @@ const EDGE_SPEC: AttributeSpec = AttributeSpec {
     known: &[
         "dod",
         "is_cut",
-        "initial_state_connection",
         "is_dummy",
         "lmb_id",
         "mass",
@@ -56,7 +57,6 @@ const EDGE_SPEC: AttributeSpec = AttributeSpec {
         "name",
         "num",
         "particle",
-        "particle_id",
         "pdg",
         "vakint_edge_power",
     ],
@@ -115,108 +115,83 @@ const NODE_SPEC: AttributeSpec = AttributeSpec {
     ],
 };
 
-pub(crate) fn warn_about_unknown_attributes(graph: &DotGraph) {
+/// Warn once per unknown attribute of a compact DOT graph, naming its first owner by
+/// its DOT name. FeynKit's annotated export, which carries a model fingerprint, is not
+/// checked.
+pub(crate) fn warn_about_unknown_attributes(dot: &DotDiagram) {
+    for message in unknown_attribute_warnings(dot) {
+        warn!("{message}");
+    }
+}
+
+fn unknown_attribute_warnings(dot: &DotDiagram) -> Vec<String> {
+    let DotDiagram {
+        diagram,
+        attributes,
+        ..
+    } = dot;
+    if attributes.graph.contains_key("model_fingerprint") {
+        return Vec::new();
+    }
+    let vertex_name = |vertex: Option<VertexId>| {
+        vertex
+            .and_then(|vertex| diagram.vertices().find(|(id, _)| *id == vertex))
+            .map_or("ext", |(_, vertex)| vertex.name.as_str())
+    };
+    // Default statements are merged into every owner: report them on the first.
+    let owners =
+        std::iter::once((&GRAPH_SPEC, None, &attributes.graph))
+            .chain(
+                diagram
+                    .vertices()
+                    .zip(&attributes.vertices)
+                    .map(|((_, vertex), attributes)| {
+                        (&NODE_SPEC, Some(vertex.name.clone()), attributes)
+                    }),
+            )
+            .chain(diagram.edges().zip(&attributes.edges).map(
+                |((_, endpoints, _), attributes)| {
+                    // An edge without a name is identified by its endpoints.
+                    let name = attributes.get("name").cloned().unwrap_or_else(|| {
+                        format!(
+                            "{} -> {}",
+                            vertex_name(endpoints.source),
+                            vertex_name(endpoints.target)
+                        )
+                    });
+                    (&EDGE_SPEC, Some(name), attributes)
+                },
+            ));
     let mut emitted = AHashSet::new();
-
-    warn_attributes(
-        graph.global_data.statements.keys().map(String::as_str),
-        &GRAPH_SPEC,
-        &graph.global_data.name,
-        "graph",
-        None,
-        &mut emitted,
-    );
-    warn_attributes(
-        graph.global_data.edge_statements.keys().map(String::as_str),
-        &EDGE_SPEC,
-        &graph.global_data.name,
-        "default edge",
-        None,
-        &mut emitted,
-    );
-    warn_attributes(
-        graph.global_data.node_statements.keys().map(String::as_str),
-        &NODE_SPEC,
-        &graph.global_data.name,
-        "default node",
-        None,
-        &mut emitted,
-    );
-
-    for (_, _, edge) in graph.graph.iter_edges() {
-        warn_attributes(
-            edge.data.local_statements.keys().map(String::as_str),
-            &EDGE_SPEC,
-            &graph.global_data.name,
-            "edge",
-            edge_identifier(edge.data),
-            &mut emitted,
-        );
-    }
-
-    for (node_id, _, vertex) in graph.graph.iter_nodes() {
-        warn_attributes(
-            vertex
-                .statements
-                .keys()
-                .filter(|key| !graph.global_data.node_statements.contains_key(*key))
-                .map(String::as_str),
-            &NODE_SPEC,
-            &graph.global_data.name,
-            "node",
-            Some(node_identifier(node_id, vertex)),
-            &mut emitted,
-        );
-    }
-}
-
-fn warn_attributes<'a>(
-    attrs: impl IntoIterator<Item = &'a str>,
-    spec: &AttributeSpec,
-    graph_name: &str,
-    owner: &str,
-    identifier: Option<String>,
-    emitted: &mut AHashSet<String>,
-) {
-    for attr in attrs {
-        if spec
-            .known
-            .iter()
-            .chain(spec.ignored.iter())
-            .any(|known| *known == attr)
-        {
-            continue;
-        }
-
-        let mut message = format!("Unknown {owner} attribute '{attr}' on graph '{graph_name}'");
-        if let Some(identifier) = &identifier {
-            message.push_str(&format!(", {} '{identifier}'", spec.entity));
-        }
-        if let Some(suggestion) = best_match(attr, spec) {
-            message.push_str(&format!("; did you mean '{suggestion}'?"));
-        } else {
-            message.push('.');
-        }
-
-        if emitted.insert(message.clone()) {
-            warn!("{message}");
+    let mut warnings = Vec::new();
+    for (spec, owner, attributes) in owners {
+        for attr in attributes.keys() {
+            if spec
+                .known
+                .iter()
+                .chain(spec.ignored)
+                .any(|known| known == attr)
+                || !emitted.insert((spec.entity, attr))
+            {
+                continue;
+            }
+            let mut message = format!(
+                "Unknown {} attribute '{attr}' on graph '{}'",
+                spec.entity,
+                diagram.name()
+            );
+            if let Some(owner) = &owner {
+                message.push_str(&format!(", {} '{owner}'", spec.entity));
+            }
+            if let Some(suggestion) = best_match(attr, spec) {
+                message.push_str(&format!("; did you mean '{suggestion}'?"));
+            } else {
+                message.push('.');
+            }
+            warnings.push(message);
         }
     }
-}
-
-fn edge_identifier(edge: &linnet::parser::DotEdgeData) -> Option<String> {
-    edge.statements
-        .get("name")
-        .cloned()
-        .or_else(|| edge.edge_id.map(|edge_id| edge_id.0.to_string()))
-}
-
-fn node_identifier(node_id: linnet::half_edge::NodeIndex, vertex: &DotVertexData) -> String {
-    vertex
-        .name()
-        .map(ToOwned::to_owned)
-        .or_else(|| vertex.index.map(|index| index.0.to_string()))
-        .unwrap_or_else(|| node_id.0.to_string())
+    warnings
 }
 
 fn best_match<'a>(attr: &str, spec: &'a AttributeSpec) -> Option<&'a str> {
@@ -282,7 +257,49 @@ fn edit_distance(lhs: &str, rhs: &str) -> usize {
 
 #[cfg(test)]
 mod tests {
-    use super::{EDGE_SPEC, GRAPH_SPEC, NODE_SPEC, best_match};
+    use feynkit_graph::DotDiagram;
+
+    use super::{EDGE_SPEC, GRAPH_SPEC, NODE_SPEC, best_match, unknown_attribute_warnings};
+    use crate::{initialisation::test_initialise, utils::load_generic_model};
+
+    #[test]
+    fn warns_once_per_unknown_attribute_naming_its_dot_owner() {
+        test_initialise().unwrap();
+        let model = load_generic_model("scalars");
+        let dot = |statements: &str| {
+            DotDiagram::from_dot(
+                model.clone(),
+                &format!(
+                    r#"digraph forward {{
+                        {statements}
+                        ext [style=invis];
+                        ext -> a [particle="scalar_0", is_cut=0, colour=red];
+                        a -> b [particle="scalar_0", lmb_index=0];
+                        a -> b [particle="scalar_0", name=lower];
+                        b -> ext [particle="scalar_0", is_cut=0];
+                    }}"#
+                ),
+            )
+            .unwrap()
+        };
+        let warnings = unknown_attribute_warnings(&dot(
+            r#"node [inter_id=V_3]; edge [weight=2]; graph [numprojector=1];"#,
+        ));
+        assert_eq!(
+            warnings,
+            [
+                "Unknown graph attribute 'numprojector' on graph 'forward'; did you mean 'projector'?",
+                "Unknown node attribute 'inter_id' on graph 'forward', node 'a'; did you mean 'int_id'?",
+                "Unknown edge attribute 'colour' on graph 'forward', edge 'b -> a'.",
+                "Unknown edge attribute 'weight' on graph 'forward', edge 'b -> a'.",
+                "Unknown edge attribute 'lmb_index' on graph 'forward', edge 'a -> b'; did you mean 'lmb_id'?",
+            ]
+        );
+        // FeynKit's annotated export is not checked.
+        let annotated =
+            DotDiagram::from_dot(model.clone(), &dot("").diagram.to_dot().unwrap()).unwrap();
+        assert!(unknown_attribute_warnings(&annotated).is_empty());
+    }
 
     #[test]
     fn matches_common_graph_typos() {

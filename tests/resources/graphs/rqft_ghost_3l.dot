@@ -1,5 +1,5 @@
 digraph d1 {
-  num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))"
+  num = "spenso::g(spenso::coad(8,hedge(0,1)),spenso::coad(8,hedge(1,1)))"
   overall_factor= "+1/6"
 
   in1 [style=invis];
@@ -18,7 +18,7 @@ digraph d1 {
   v4 -> v3 [particle= "g"];
 }
 digraph d2 {
-  num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))"
+  num = "spenso::g(spenso::coad(8,hedge(0,1)),spenso::coad(8,hedge(1,1)))"
   overall_factor= "+1"
 
   in1 [style=invis];
@@ -38,7 +38,7 @@ digraph d2 {
   v5 -> v4 [particle= "g"];
 }
 digraph d3 {
-  num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))"
+  num = "spenso::g(spenso::coad(8,hedge(0,1)),spenso::coad(8,hedge(1,1)))"
   overall_factor= "+1/2"
 
   in1 [style=invis];
@@ -58,7 +58,7 @@ digraph d3 {
   v5 -> v4 [particle= "g"];
 }
 digraph d4 {
-  num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))"
+  num = "spenso::g(spenso::coad(8,hedge(0,1)),spenso::coad(8,hedge(1,1)))"
   overall_factor= "+1/2"
 
   in1 [style=invis];
@@ -78,7 +78,7 @@ digraph d4 {
   v5 -> v4 [particle= "g"];
 }
 digraph d5 {
-  num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))"
+  num = "spenso::g(spenso::coad(8,hedge(0,1)),spenso::coad(8,hedge(1,1)))"
   overall_factor= "+1/2"
 
   in1 [style=invis];
@@ -98,7 +98,7 @@ digraph d5 {
   v5 -> v4 [particle= "g"];
 }
 digraph d6 {
-  num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))"
+  num = "spenso::g(spenso::coad(8,hedge(0,1)),spenso::coad(8,hedge(1,1)))"
   overall_factor= "+1/2"
 
   in1 [style=invis];
@@ -118,7 +118,7 @@ digraph d6 {
   v5 -> v4 [particle= "g"];
 }
 digraph d7 {
-  num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))"
+  num = "spenso::g(spenso::coad(8,hedge(0,1)),spenso::coad(8,hedge(1,1)))"
   overall_factor= "+1/2"
 
   in1 [style=invis];
@@ -138,7 +138,7 @@ digraph d7 {
   v5 -> v4 [particle= "g"];
 }
 digraph d8 {
-  num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))"
+  num = "spenso::g(spenso::coad(8,hedge(0,1)),spenso::coad(8,hedge(1,1)))"
   overall_factor= "+1/4"
 
   in1 [style=invis];
@@ -158,7 +158,7 @@ digraph d8 {
   v5 -> v4 [particle= "g"];
 }
 digraph d9 {
-  num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))"
+  num = "spenso::g(spenso::coad(8,hedge(0,1)),spenso::coad(8,hedge(1,1)))"
   overall_factor= "+1"
 
   in1 [style=invis];
@@ -179,7 +179,7 @@ digraph d9 {
   v4 -> v6 [particle= "ghG"];
 }
 digraph d10 {
-  num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))"
+  num = "spenso::g(spenso::coad(8,hedge(0,1)),spenso::coad(8,hedge(1,1)))"
   overall_factor= "+1"
 
   in1 [style=invis];
@@ -200,7 +200,7 @@ digraph d10 {
   v6 -> v4 [particle= "g"];
 }
 digraph d11 {
-  num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))"
+  num = "spenso::g(spenso::coad(8,hedge(0,1)),spenso::coad(8,hedge(1,1)))"
   overall_factor= "-1"
 
   in1 [style=invis];
@@ -221,7 +221,7 @@ digraph d11 {
   v4 -> v6 [particle= "ghG"];
 }
 digraph d12 {
-  num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))"
+  num = "spenso::g(spenso::coad(8,hedge(0,1)),spenso::coad(8,hedge(1,1)))"
   overall_factor= "+1/2"
 
   in1 [style=invis];
@@ -242,7 +242,7 @@ digraph d12 {
   v4 -> v6 [particle= "ghG"];
 }
 digraph d13 {
-  num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))"
+  num = "spenso::g(spenso::coad(8,hedge(0,1)),spenso::coad(8,hedge(1,1)))"
   overall_factor= "-1"
 
   in1 [style=invis];
@@ -263,7 +263,7 @@ digraph d13 {
   v4 -> v6 [particle= "ghG"];
 }
 digraph d14 {
-  num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))"
+  num = "spenso::g(spenso::coad(8,hedge(0,1)),spenso::coad(8,hedge(1,1)))"
   overall_factor= "+1"
 
   in1 [style=invis];
@@ -284,7 +284,7 @@ digraph d14 {
   v6 -> v5 [particle= "g"];
 }
 digraph d15 {
-  num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))"
+  num = "spenso::g(spenso::coad(8,hedge(0,1)),spenso::coad(8,hedge(1,1)))"
   overall_factor= "+1"
 
   in1 [style=invis];
@@ -305,7 +305,7 @@ digraph d15 {
   v5 -> v6 [particle= "ghG"];
 }
 digraph d16 {
-  num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))"
+  num = "spenso::g(spenso::coad(8,hedge(0,1)),spenso::coad(8,hedge(1,1)))"
   overall_factor= "+1"
 
   in1 [style=invis];
@@ -326,7 +326,7 @@ digraph d16 {
   v6 -> v5 [particle= "ghG"];
 }
 digraph d17 {
-  num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))"
+  num = "spenso::g(spenso::coad(8,hedge(0,1)),spenso::coad(8,hedge(1,1)))"
   overall_factor= "+1"
 
   in1 [style=invis];
@@ -347,7 +347,7 @@ digraph d17 {
   v6 -> v5 [particle= "g"];
 }
 digraph d18 {
-  num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))"
+  num = "spenso::g(spenso::coad(8,hedge(0,1)),spenso::coad(8,hedge(1,1)))"
   overall_factor= "+1"
 
   in1 [style=invis];
@@ -368,7 +368,7 @@ digraph d18 {
   v6 -> v5 [particle= "ghG"];
 }
 digraph d19 {
-  num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))"
+  num = "spenso::g(spenso::coad(8,hedge(0,1)),spenso::coad(8,hedge(1,1)))"
   overall_factor= "+1"
 
   in1 [style=invis];
@@ -389,7 +389,7 @@ digraph d19 {
   v6 -> v5 [particle= "g"];
 }
 digraph d20 {
-  num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))"
+  num = "spenso::g(spenso::coad(8,hedge(0,1)),spenso::coad(8,hedge(1,1)))"
   overall_factor= "+1"
 
   in1 [style=invis];
@@ -410,7 +410,7 @@ digraph d20 {
   v6 -> v5 [particle= "g"];
 }
 digraph d21 {
-  num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))"
+  num = "spenso::g(spenso::coad(8,hedge(0,1)),spenso::coad(8,hedge(1,1)))"
   overall_factor= "+1"
 
   in1 [style=invis];
@@ -431,7 +431,7 @@ digraph d21 {
   v5 -> v6 [particle= "ghG"];
 }
 digraph d22 {
-  num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))"
+  num = "spenso::g(spenso::coad(8,hedge(0,1)),spenso::coad(8,hedge(1,1)))"
   overall_factor= "+1"
 
   in1 [style=invis];
@@ -452,7 +452,7 @@ digraph d22 {
   v6 -> v5 [particle= "ghG"];
 }
 digraph d23 {
-  num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))"
+  num = "spenso::g(spenso::coad(8,hedge(0,1)),spenso::coad(8,hedge(1,1)))"
   overall_factor= "+1"
 
   in1 [style=invis];
@@ -473,7 +473,7 @@ digraph d23 {
   v6 -> v5 [particle= "g"];
 }
 digraph d24 {
-  num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))"
+  num = "spenso::g(spenso::coad(8,hedge(0,1)),spenso::coad(8,hedge(1,1)))"
   overall_factor= "-1"
 
   in1 [style=invis];
@@ -494,7 +494,7 @@ digraph d24 {
   v6 -> v5 [particle= "d"];
 }
 digraph d25 {
-  num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))"
+  num = "spenso::g(spenso::coad(8,hedge(0,1)),spenso::coad(8,hedge(1,1)))"
   overall_factor= "-1"
 
   in1 [style=invis];
@@ -515,7 +515,7 @@ digraph d25 {
   v5 -> v6 [particle= "d"];
 }
 digraph d26 {
-  num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))"
+  num = "spenso::g(spenso::coad(8,hedge(0,1)),spenso::coad(8,hedge(1,1)))"
   overall_factor= "+1"
 
   in1 [style=invis];
@@ -536,7 +536,7 @@ digraph d26 {
   v6 -> v5 [particle= "g"];
 }
 digraph d27 {
-  num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))"
+  num = "spenso::g(spenso::coad(8,hedge(0,1)),spenso::coad(8,hedge(1,1)))"
   overall_factor= "-1"
 
   in1 [style=invis];
@@ -557,7 +557,7 @@ digraph d27 {
   v6 -> v5 [particle= "ghG"];
 }
 digraph d28 {
-  num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))"
+  num = "spenso::g(spenso::coad(8,hedge(0,1)),spenso::coad(8,hedge(1,1)))"
   overall_factor= "-1"
 
   in1 [style=invis];
@@ -578,7 +578,7 @@ digraph d28 {
   v5 -> v6 [particle= "ghG"];
 }
 digraph d29 {
-  num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))"
+  num = "spenso::g(spenso::coad(8,hedge(0,1)),spenso::coad(8,hedge(1,1)))"
   overall_factor= "+1"
 
   in1 [style=invis];
@@ -599,7 +599,7 @@ digraph d29 {
   v6 -> v5 [particle= "ghG"];
 }
 digraph d30 {
-  num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))"
+  num = "spenso::g(spenso::coad(8,hedge(0,1)),spenso::coad(8,hedge(1,1)))"
   overall_factor= "-1"
 
   in1 [style=invis];
@@ -620,7 +620,7 @@ digraph d30 {
   v5 -> v6 [particle= "d"];
 }
 digraph d31 {
-  num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))"
+  num = "spenso::g(spenso::coad(8,hedge(0,1)),spenso::coad(8,hedge(1,1)))"
   overall_factor= "+1/2"
 
   in1 [style=invis];
@@ -641,7 +641,7 @@ digraph d31 {
   v6 -> v5 [particle= "g"];
 }
 digraph d32 {
-  num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))"
+  num = "spenso::g(spenso::coad(8,hedge(0,1)),spenso::coad(8,hedge(1,1)))"
   overall_factor= "-1"
 
   in1 [style=invis];
@@ -662,7 +662,7 @@ digraph d32 {
   v5 -> v6 [particle= "ghG"];
 }
 digraph d33 {
-  num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))"
+  num = "spenso::g(spenso::coad(8,hedge(0,1)),spenso::coad(8,hedge(1,1)))"
   overall_factor= "+1"
 
   in1 [style=invis];
@@ -683,7 +683,7 @@ digraph d33 {
   v6 -> v5 [particle= "ghG"];
 }
 digraph d34 {
-  num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))"
+  num = "spenso::g(spenso::coad(8,hedge(0,1)),spenso::coad(8,hedge(1,1)))"
   overall_factor= "-1"
 
   in1 [style=invis];
@@ -704,7 +704,7 @@ digraph d34 {
   v5 -> v6 [particle= "d"];
 }
 digraph d35 {
-  num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))"
+  num = "spenso::g(spenso::coad(8,hedge(0,1)),spenso::coad(8,hedge(1,1)))"
   overall_factor= "+1/2"
 
   in1 [style=invis];
@@ -725,7 +725,7 @@ digraph d35 {
   v6 -> v5 [particle= "g"];
 }
 digraph d36 {
-  num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))"
+  num = "spenso::g(spenso::coad(8,hedge(0,1)),spenso::coad(8,hedge(1,1)))"
   overall_factor= "-1"
 
   in1 [style=invis];
@@ -746,7 +746,7 @@ digraph d36 {
   v5 -> v6 [particle= "ghG"];
 }
 digraph d37 {
-  num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))"
+  num = "spenso::g(spenso::coad(8,hedge(0,1)),spenso::coad(8,hedge(1,1)))"
   overall_factor= "+1"
 
   in1 [style=invis];
@@ -767,7 +767,7 @@ digraph d37 {
   v5 -> v6 [particle= "ghG"];
 }
 digraph d38 {
-  num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))"
+  num = "spenso::g(spenso::coad(8,hedge(0,1)),spenso::coad(8,hedge(1,1)))"
   overall_factor= "-1"
 
   in1 [style=invis];
@@ -788,7 +788,7 @@ digraph d38 {
   v5 -> v6 [particle= "d"];
 }
 digraph d39 {
-  num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))"
+  num = "spenso::g(spenso::coad(8,hedge(0,1)),spenso::coad(8,hedge(1,1)))"
   overall_factor= "+1/2"
 
   in1 [style=invis];
@@ -809,7 +809,7 @@ digraph d39 {
   v6 -> v5 [particle= "g"];
 }
 digraph d40 {
-  num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))"
+  num = "spenso::g(spenso::coad(8,hedge(0,1)),spenso::coad(8,hedge(1,1)))"
   overall_factor= "-1"
 
   in1 [style=invis];
@@ -830,7 +830,7 @@ digraph d40 {
   v5 -> v6 [particle= "ghG"];
 }
 digraph d41 {
-  num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))"
+  num = "spenso::g(spenso::coad(8,hedge(0,1)),spenso::coad(8,hedge(1,1)))"
   overall_factor= "+1"
 
   in1 [style=invis];
@@ -851,7 +851,7 @@ digraph d41 {
   v5 -> v6 [particle= "ghG"];
 }
 digraph d42 {
-  num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))"
+  num = "spenso::g(spenso::coad(8,hedge(0,1)),spenso::coad(8,hedge(1,1)))"
   overall_factor= "-1"
 
   in1 [style=invis];
@@ -872,7 +872,7 @@ digraph d42 {
   v5 -> v6 [particle= "d"];
 }
 digraph d43 {
-  num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))"
+  num = "spenso::g(spenso::coad(8,hedge(0,1)),spenso::coad(8,hedge(1,1)))"
   overall_factor= "+1/2"
 
   in1 [style=invis];
@@ -893,7 +893,7 @@ digraph d43 {
   v6 -> v5 [particle= "g"];
 }
 digraph d44 {
-  num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))"
+  num = "spenso::g(spenso::coad(8,hedge(0,1)),spenso::coad(8,hedge(1,1)))"
   overall_factor= "-1"
 
   in1 [style=invis];
@@ -914,7 +914,7 @@ digraph d44 {
   v5 -> v6 [particle= "ghG"];
 }
 digraph d45 {
-  num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))"
+  num = "spenso::g(spenso::coad(8,hedge(0,1)),spenso::coad(8,hedge(1,1)))"
   overall_factor= "-1"
 
   in1 [style=invis];
@@ -935,7 +935,7 @@ digraph d45 {
   v5 -> v6 [particle= "d"];
 }
 digraph d46 {
-  num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))"
+  num = "spenso::g(spenso::coad(8,hedge(0,1)),spenso::coad(8,hedge(1,1)))"
   overall_factor= "+1/2"
 
   in1 [style=invis];
@@ -956,7 +956,7 @@ digraph d46 {
   v6 -> v5 [particle= "g"];
 }
 digraph d47 {
-  num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))"
+  num = "spenso::g(spenso::coad(8,hedge(0,1)),spenso::coad(8,hedge(1,1)))"
   overall_factor= "-1"
 
   in1 [style=invis];
@@ -977,7 +977,7 @@ digraph d47 {
   v5 -> v6 [particle= "ghG"];
 }
 digraph d48 {
-  num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))"
+  num = "spenso::g(spenso::coad(8,hedge(0,1)),spenso::coad(8,hedge(1,1)))"
   overall_factor= "+1"
 
   in1 [style=invis];
@@ -998,7 +998,7 @@ digraph d48 {
   v6 -> v5 [particle= "ghG"];
 }
 digraph d49 {
-  num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))"
+  num = "spenso::g(spenso::coad(8,hedge(0,1)),spenso::coad(8,hedge(1,1)))"
   overall_factor= "+1"
 
   in1 [style=invis];
@@ -1019,7 +1019,7 @@ digraph d49 {
   v6 -> v5 [particle= "g"];
 }
 digraph d50 {
-  num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))"
+  num = "spenso::g(spenso::coad(8,hedge(0,1)),spenso::coad(8,hedge(1,1)))"
   overall_factor= "+1"
 
   in1 [style=invis];
@@ -1040,7 +1040,7 @@ digraph d50 {
   v6 -> v5 [particle= "ghG"];
 }
 digraph d51 {
-  num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))"
+  num = "spenso::g(spenso::coad(8,hedge(0,1)),spenso::coad(8,hedge(1,1)))"
   overall_factor= "-1"
 
   in1 [style=invis];
@@ -1061,7 +1061,7 @@ digraph d51 {
   v6 -> v5 [particle= "g"];
 }
 digraph d52 {
-  num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))"
+  num = "spenso::g(spenso::coad(8,hedge(0,1)),spenso::coad(8,hedge(1,1)))"
   overall_factor= "-1"
 
   in1 [style=invis];
@@ -1082,7 +1082,7 @@ digraph d52 {
   v6 -> v5 [particle= "d"];
 }
 digraph d53 {
-  num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))"
+  num = "spenso::g(spenso::coad(8,hedge(0,1)),spenso::coad(8,hedge(1,1)))"
   overall_factor= "-1"
 
   in1 [style=invis];
@@ -1103,7 +1103,7 @@ digraph d53 {
   v6 -> v5 [particle= "d"];
 }
 digraph d54 {
-  num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))"
+  num = "spenso::g(spenso::coad(8,hedge(0,1)),spenso::coad(8,hedge(1,1)))"
   overall_factor= "+1/2"
 
   in1 [style=invis];
@@ -1124,7 +1124,7 @@ digraph d54 {
   v6 -> v5 [particle= "g"];
 }
 digraph d55 {
-  num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))"
+  num = "spenso::g(spenso::coad(8,hedge(0,1)),spenso::coad(8,hedge(1,1)))"
   overall_factor= "-1"
 
   in1 [style=invis];
@@ -1145,7 +1145,7 @@ digraph d55 {
   v6 -> v5 [particle= "ghG"];
 }
 digraph d56 {
-  num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))"
+  num = "spenso::g(spenso::coad(8,hedge(0,1)),spenso::coad(8,hedge(1,1)))"
   overall_factor= "-1"
 
   in1 [style=invis];
@@ -1166,7 +1166,7 @@ digraph d56 {
   v6 -> v5 [particle= "ghG"];
 }
 digraph d57 {
-  num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))"
+  num = "spenso::g(spenso::coad(8,hedge(0,1)),spenso::coad(8,hedge(1,1)))"
   overall_factor= "-1"
 
   in1 [style=invis];
@@ -1187,7 +1187,7 @@ digraph d57 {
   v6 -> v5 [particle= "g"];
 }
 digraph d58 {
-  num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))"
+  num = "spenso::g(spenso::coad(8,hedge(0,1)),spenso::coad(8,hedge(1,1)))"
   overall_factor= "+1"
 
   in1 [style=invis];
@@ -1208,7 +1208,7 @@ digraph d58 {
   v5 -> v6 [particle= "ghG"];
 }
 digraph d59 {
-  num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))"
+  num = "spenso::g(spenso::coad(8,hedge(0,1)),spenso::coad(8,hedge(1,1)))"
   overall_factor= "+1"
 
   in1 [style=invis];
@@ -1229,7 +1229,7 @@ digraph d59 {
   v6 -> v5 [particle= "g"];
 }
 digraph d60 {
-  num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))"
+  num = "spenso::g(spenso::coad(8,hedge(0,1)),spenso::coad(8,hedge(1,1)))"
   overall_factor= "-1/2"
 
   in1 [style=invis];
@@ -1250,7 +1250,7 @@ digraph d60 {
   v6 -> v5 [particle= "g"];
 }
 digraph d61 {
-  num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))"
+  num = "spenso::g(spenso::coad(8,hedge(0,1)),spenso::coad(8,hedge(1,1)))"
   overall_factor= "+1"
 
   in1 [style=invis];
@@ -1271,7 +1271,7 @@ digraph d61 {
   v6 -> v5 [particle= "g"];
 }
 digraph d62 {
-  num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))"
+  num = "spenso::g(spenso::coad(8,hedge(0,1)),spenso::coad(8,hedge(1,1)))"
   overall_factor= "-1/2"
 
   in1 [style=invis];
@@ -1292,7 +1292,7 @@ digraph d62 {
   v6 -> v5 [particle= "g"];
 }
 digraph d63 {
-  num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))"
+  num = "spenso::g(spenso::coad(8,hedge(0,1)),spenso::coad(8,hedge(1,1)))"
   overall_factor= "+1/4"
 
   in1 [style=invis];
@@ -1313,7 +1313,7 @@ digraph d63 {
   v6 -> v5 [particle= "g"];
 }
 digraph d64 {
-  num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))"
+  num = "spenso::g(spenso::coad(8,hedge(0,1)),spenso::coad(8,hedge(1,1)))"
   overall_factor= "-1/2"
 
   in1 [style=invis];
@@ -1334,7 +1334,7 @@ digraph d64 {
   v6 -> v5 [particle= "g"];
 }
 digraph d65 {
-  num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))"
+  num = "spenso::g(spenso::coad(8,hedge(0,1)),spenso::coad(8,hedge(1,1)))"
   overall_factor= "+1"
 
   in1 [style=invis];
@@ -1355,7 +1355,7 @@ digraph d65 {
   v6 -> v5 [particle= "g"];
 }
 digraph d66 {
-  num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))"
+  num = "spenso::g(spenso::coad(8,hedge(0,1)),spenso::coad(8,hedge(1,1)))"
   overall_factor= "-1/2"
 
   in1 [style=invis];
@@ -1376,7 +1376,7 @@ digraph d66 {
   v6 -> v5 [particle= "g"];
 }
 digraph d67 {
-  num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))"
+  num = "spenso::g(spenso::coad(8,hedge(0,1)),spenso::coad(8,hedge(1,1)))"
   overall_factor= "+1"
 
   in1 [style=invis];
@@ -1397,7 +1397,7 @@ digraph d67 {
   v6 -> v5 [particle= "g"];
 }
 digraph d68 {
-  num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))"
+  num = "spenso::g(spenso::coad(8,hedge(0,1)),spenso::coad(8,hedge(1,1)))"
   overall_factor= "+1"
 
   in1 [style=invis];
@@ -1418,7 +1418,7 @@ digraph d68 {
   v5 -> v6 [particle= "ghG"];
 }
 digraph d69 {
-  num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))"
+  num = "spenso::g(spenso::coad(8,hedge(0,1)),spenso::coad(8,hedge(1,1)))"
   overall_factor= "-1"
 
   in1 [style=invis];
@@ -1439,7 +1439,7 @@ digraph d69 {
   v5 -> v6 [particle= "d"];
 }
 digraph d70 {
-  num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))"
+  num = "spenso::g(spenso::coad(8,hedge(0,1)),spenso::coad(8,hedge(1,1)))"
   overall_factor= "+1/2"
 
   in1 [style=invis];
@@ -1460,7 +1460,7 @@ digraph d70 {
   v6 -> v5 [particle= "g"];
 }
 digraph d71 {
-  num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))"
+  num = "spenso::g(spenso::coad(8,hedge(0,1)),spenso::coad(8,hedge(1,1)))"
   overall_factor= "-1"
 
   in1 [style=invis];
@@ -1481,7 +1481,7 @@ digraph d71 {
   v5 -> v6 [particle= "ghG"];
 }
 digraph d72 {
-  num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))"
+  num = "spenso::g(spenso::coad(8,hedge(0,1)),spenso::coad(8,hedge(1,1)))"
   overall_factor= "-1"
 
   in1 [style=invis];
@@ -1502,7 +1502,7 @@ digraph d72 {
   v6 -> v5 [particle= "g"];
 }
 digraph d73 {
-  num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))"
+  num = "spenso::g(spenso::coad(8,hedge(0,1)),spenso::coad(8,hedge(1,1)))"
   overall_factor= "-1"
 
   in1 [style=invis];
@@ -1523,7 +1523,7 @@ digraph d73 {
   v6 -> v5 [particle= "g"];
 }
 digraph d74 {
-  num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))"
+  num = "spenso::g(spenso::coad(8,hedge(0,1)),spenso::coad(8,hedge(1,1)))"
   overall_factor= "-1"
 
   in1 [style=invis];
@@ -1544,7 +1544,7 @@ digraph d74 {
   v5 -> v6 [particle= "d"];
 }
 digraph d75 {
-  num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))"
+  num = "spenso::g(spenso::coad(8,hedge(0,1)),spenso::coad(8,hedge(1,1)))"
   overall_factor= "+1/2"
 
   in1 [style=invis];
@@ -1565,7 +1565,7 @@ digraph d75 {
   v6 -> v5 [particle= "g"];
 }
 digraph d76 {
-  num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))"
+  num = "spenso::g(spenso::coad(8,hedge(0,1)),spenso::coad(8,hedge(1,1)))"
   overall_factor= "-1"
 
   in1 [style=invis];
@@ -1586,7 +1586,7 @@ digraph d76 {
   v5 -> v6 [particle= "ghG"];
 }
 digraph d77 {
-  num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))"
+  num = "spenso::g(spenso::coad(8,hedge(0,1)),spenso::coad(8,hedge(1,1)))"
   overall_factor= "-1"
 
   in1 [style=invis];
@@ -1607,7 +1607,7 @@ digraph d77 {
   v5 -> v6 [particle= "ghG"];
 }
 digraph d78 {
-  num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))"
+  num = "spenso::g(spenso::coad(8,hedge(0,1)),spenso::coad(8,hedge(1,1)))"
   overall_factor= "-1"
 
   in1 [style=invis];

@@ -688,3 +688,53 @@ payload = {{
 
     Ok(())
 }
+
+#[test]
+#[serial]
+fn python_import_graphs_and_get_lmbs_read_plain_dot_through_feynkit() -> Result<()> {
+    // The model fills in the omitted vertex factors and top propagators.
+    let dot = r#"digraph higgs_self_energy {
+    ext [style=invis];
+    ext -> a [id=0, particle="H"];
+    a -> b [id=1, particle="t"];
+    b -> a [id=2, particle="t"];
+    b -> ext [id=3, particle="H"];
+}"#;
+    let directory = new_test_artifact_dir("python_api_plain_dot_input")?;
+    let path = directory.join("higgs_self_energy.dot");
+    std::fs::write(&path, dot)?;
+    let payload = run_python_case(
+        "python_api_plain_dot_import",
+        &["import model sm-default".to_string()],
+        &format!(
+            r#"
+dot = {dot:?}
+api.import_graphs(dot, process_name="from_string", format="string")
+api.import_graphs({path:?})
+lmbs = api.get_lmbs({path:?})
+payload = {{
+    "exported": api.get_dot_files(process="from_string"),
+    "file_export": api.get_dot_files(process="higgs_self_energy"),
+    "loop_edges": [sorted(tuple(basis[0]) for basis in graph) for graph in lmbs],
+    "string_loop_edges": [
+        sorted(tuple(basis[0]) for basis in graph)
+        for graph in api.get_lmbs(dot, format="string")
+    ],
+}}
+"#,
+            path = path.display().to_string(),
+        ),
+    )?;
+
+    for export in ["exported", "file_export"] {
+        let exported = payload[export].as_str().unwrap();
+        assert!(exported.contains("particle=\"t\""), "{exported}");
+        assert!(exported.contains("int_id="), "{exported}");
+    }
+    // Either top propagator carries the loop momentum.
+    let loop_edges = serde_json::json!([[[1], [2]]]);
+    assert_eq!(payload["loop_edges"], loop_edges);
+    assert_eq!(payload["string_loop_edges"], loop_edges);
+
+    Ok(())
+}

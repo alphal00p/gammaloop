@@ -11,7 +11,7 @@ use linnet::{
     permutation::Permutation,
 };
 use std::cell::LazyCell;
-use symbolica::atom::{AtomView, FunctionBuilder};
+use symbolica::atom::{AtomView, FunctionBuilder, Symbol};
 
 #[derive(Clone)]
 struct PendingEdge {
@@ -19,8 +19,121 @@ struct PendingEdge {
     data: DiagramEdge,
 }
 
+/// What the first argument of an index head, or of a momentum or external-state
+/// carrier, names.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(super) enum IndexOwner {
+    HalfEdge,
+    Edge,
+    Vertex,
+    /// The momentum `Q` of an edge, whose sign follows the edge's orientation.
+    Momentum,
+    /// A spinor or polarization vector of an external edge.
+    ExternalState,
+}
+
+impl IndexOwner {
+    /// Carriers hold tensor indices in their other arguments.
+    fn is_carrier(self) -> bool {
+        matches!(self, Self::Momentum | Self::ExternalState)
+    }
+}
+
+/// The index heads and carriers whose first argument names a half-edge, an edge or a
+/// vertex.
+pub(super) struct IndexOwners([(Symbol, IndexOwner); 10]);
+
+impl IndexOwners {
+    pub(super) fn new() -> Self {
+        Self([
+            (symbols::hedge_index(), IndexOwner::HalfEdge),
+            (symbols::edge_index(), IndexOwner::Edge),
+            (symbols::vertex_index(), IndexOwner::Vertex),
+            (momentum_symbol(), IndexOwner::Momentum),
+            (symbols::u(), IndexOwner::ExternalState),
+            (symbols::ubar(), IndexOwner::ExternalState),
+            (symbols::v(), IndexOwner::ExternalState),
+            (symbols::vbar(), IndexOwner::ExternalState),
+            (symbols::epsilon(), IndexOwner::ExternalState),
+            (symbols::epsilonbar(), IndexOwner::ExternalState),
+        ])
+    }
+
+    /// Relabel the owner of every index head and carrier in `atom`. `relabel` returns
+    /// the new owner and whether the carrier changes sign, or `None` for an unknown
+    /// owner, which is an error. A zero local label of an index head is dropped:
+    /// `hedge(h, 0)` becomes `hedge(h')`.
+    pub(super) fn relabel(
+        &self,
+        atom: &Atom,
+        mut relabel: impl FnMut(IndexOwner, usize) -> Option<(usize, bool)>,
+    ) -> Result<Atom, String> {
+        let mut failure = None;
+        let mut relabelled = atom.clone();
+        // Relabel the indices inside carrier arguments before their carriers. A
+        // bottom-up signed replacement can collapse -Q to Q and then visit that new
+        // carrier again, applying the relabelling twice.
+        for carriers in [false, true] {
+            relabelled = relabelled.replace_map(|term, _, out| {
+                let AtomView::Fun(function) = term else {
+                    return;
+                };
+                let symbol = function.get_symbol();
+                let Some(owner) = self.0.iter().find_map(|&(head, owner)| {
+                    (head == symbol && owner.is_carrier() == carriers).then_some(owner)
+                }) else {
+                    return;
+                };
+                let mut arguments = function.iter();
+                let Some(index) = arguments
+                    .next()
+                    .and_then(|index| usize::try_from(index).ok())
+                else {
+                    return;
+                };
+                let Some((index, negated)) = relabel(owner, index) else {
+                    failure = Some(format!("{symbol} refers to unknown index {index}"));
+                    return;
+                };
+                let local = arguments.collect::<Vec<_>>();
+                let local = match local.as_slice() {
+                    [label] if !carriers && label.is_zero() => &[],
+                    local => local,
+                };
+                let value = FunctionBuilder::new(symbol)
+                    .add_arg(index)
+                    .add_args(local.iter().copied())
+                    .finish();
+                **out = if negated { -value } else { value };
+            });
+        }
+        failure.map_or(Ok(relabelled), Err)
+    }
+}
+
+impl DiagramHalfEdge {
+    /// The index of a builder half-edge in the provisional expressions of a generated
+    /// diagram: twice its edge, plus one at its target.
+    pub(super) fn provisional_index(self) -> usize {
+        2 * self.edge.0 + usize::from(self.endpoint == DiagramEndpoint::Target)
+    }
+
+    fn from_provisional_index(index: usize) -> Self {
+        Self {
+            edge: EdgeId(index / 2),
+            endpoint: if index.is_multiple_of(2) {
+                DiagramEndpoint::Source
+            } else {
+                DiagramEndpoint::Target
+            },
+        }
+    }
+}
+
 impl FeynmanDiagramBuilder {
-    pub(super) fn finalize(self) -> Result<FeynmanDiagram, DiagramError> {
+    /// Finalize the diagram and return, for every builder edge, its finalized edge.
+    /// Both legs of a sewn initial state map to its one edge.
+    pub(super) fn finalize(self) -> Result<(FeynmanDiagram, Vec<EdgeId>), DiagramError> {
         let generated = !self.generation_externals.is_empty();
         let mut external_indices = BTreeSet::new();
         for external in self.generation_externals.values() {
@@ -379,98 +492,31 @@ impl FeynmanDiagramBuilder {
         }
         // Resolve heads once per generated diagram. Imported diagrams bypass
         // transport and should not initialize its symbols.
-        let translated_heads = LazyCell::new(|| {
-            [
-                (symbols::hedge_index(), 0),
-                (symbols::edge_index(), 2),
-                (symbols::vertex_index(), 3),
-                (momentum_symbol(), 4),
-                (symbols::u(), 5),
-                (symbols::ubar(), 5),
-                (symbols::v(), 5),
-                (symbols::vbar(), 5),
-                (symbols::epsilon(), 5),
-                (symbols::epsilonbar(), 5),
-            ]
-        });
+        let owners = LazyCell::new(IndexOwners::new);
         let translate = |atom: &Atom| -> Result<Atom, DiagramError> {
             if !generated {
                 return Ok(atom.clone());
             }
-            let mut failure = None;
-            let mut translated = atom.clone();
-            // Remap indices inside momentum arguments before their carriers.
-            // A bottom-up signed replacement can collapse -Q to Q and then
-            // visit that new carrier again, applying the transport twice.
-            for carriers in [false, true] {
-                translated = translated.replace_map(|term, _, out| {
-                    let AtomView::Fun(function) = term else {
-                        return;
-                    };
-                    let symbol = function.get_symbol();
-                    let kind = translated_heads
-                        .iter()
-                        .find_map(|&(head, kind)| (head == symbol).then_some(kind));
-                    let Some(kind) = kind else {
-                        return;
-                    };
-                    if (kind >= 4) != carriers {
-                        return;
+            owners
+                .relabel(atom, |owner, index| match owner {
+                    IndexOwner::HalfEdge => {
+                        let half_edge = DiagramHalfEdge::from_provisional_index(index);
+                        logical
+                            .contains_key(&half_edge.edge)
+                            .then(|| (half_edges[&half_edge].0, false))
                     }
-                    let arguments = function.iter().collect::<Vec<_>>();
-                    let Some(raw_owner) = arguments
-                        .first()
-                        .and_then(|owner| usize::try_from(*owner).ok())
-                    else {
-                        return;
-                    };
-                    let owner = if kind == 0 { raw_owner / 2 } else { raw_owner };
-                    let mapped = if kind == 3 {
-                        vertices.get(&VertexId(owner)).map(|v| v.0)
-                    } else {
-                        logical.get(&EdgeId(owner)).copied()
-                    };
-                    let Some(mapped) = mapped else {
-                        failure = Some(format!("unknown expression index owner {owner}"));
-                        return;
-                    };
-                    let index = if kind == 0 {
-                        half_edges[&DiagramHalfEdge {
-                            edge: EdgeId(owner),
-                            endpoint: if raw_owner % 2 == 0 {
-                                DiagramEndpoint::Source
-                            } else {
-                                DiagramEndpoint::Target
-                            },
-                        }]
-                            .0
-                    } else {
-                        mapped
-                    };
-                    let local_arguments =
-                        if kind <= 3 && arguments.len() == 2 && arguments[1].is_zero() {
-                            &arguments[2..]
-                        } else {
-                            &arguments[1..]
-                        };
-                    let value = FunctionBuilder::new(symbol)
-                        .add_arg(index)
-                        .add_args(local_arguments.iter().copied())
-                        .finish();
-                    **out = if kind == 4 && signs[&EdgeId(owner)] < 0 {
-                        -value
-                    } else {
-                        value
-                    };
-                });
-            }
-            if let Some(message) = failure {
-                return Err(DiagramError::Invariant {
+                    IndexOwner::Vertex => vertices.get(&VertexId(index)).map(|v| (v.0, false)),
+                    IndexOwner::Momentum => logical
+                        .get(&EdgeId(index))
+                        .map(|edge| (*edge, signs[&EdgeId(index)] < 0)),
+                    IndexOwner::Edge | IndexOwner::ExternalState => {
+                        logical.get(&EdgeId(index)).map(|edge| (*edge, false))
+                    }
+                })
+                .map_err(|message| DiagramError::Invariant {
                     operation: "finalizing symbolic indices",
                     message,
-                });
-            }
-            Ok(translated)
+                })
         };
         graph = graph.map_data_ref_result(
             |_, _, vertex| {
@@ -600,7 +646,10 @@ impl FeynmanDiagramBuilder {
         thresholds.sort_by_cached_key(|candidate| diagram.cut_order_key(&candidate.cut));
         diagram.topology_threshold_candidates = thresholds;
         diagram.id = DiagramId::from_key(diagram.model.fingerprint(), &diagram.structural_key()?)?;
-        Ok(diagram)
+        let edges = (0..self.edges.len())
+            .map(|edge| EdgeId(logical[&EdgeId(edge)]))
+            .collect();
+        Ok((diagram, edges))
     }
 }
 

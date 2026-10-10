@@ -103,9 +103,8 @@ impl Graph {
                     edge_id
                 ));
             }
-            if matches!(pair, HedgePair::Paired { .. })
-                && let Some(particle) = edge.data.particle()
-            {
+            if matches!(pair, HedgePair::Paired { .. }) {
+                let particle = edge.data.particle();
                 let propagator = model.get_propagator_for_particle(particle).resolve(model);
                 let momentum = function!(UFO.momentum, 1);
                 let expected =
@@ -695,7 +694,7 @@ impl FeynmanGraph for Graph {
                 HedgePair::Unpaired { hedge, .. } => *hedge,
                 _ => unreachable!(),
             })
-            .filter_map(|(_, _, data)| data.data.particle())
+            .map(|(_, _, data)| data.data.particle())
             .collect()
     }
 
@@ -798,7 +797,7 @@ impl FeynmanGraph for Graph {
 mod tests {
     use super::*;
     use crate::{
-        graph::parse::from_dot::IntoFinalizedRuntimeGraph, initialisation::test_initialise,
+        graph::parse::from_dot::IntoGraph, initialisation::test_initialise,
         utils::load_generic_model,
     };
 
@@ -811,12 +810,12 @@ mod tests {
             digraph real_masses {
                 node [num=1];
                 edge [num=1];
-                A -> B [id=0 mass=0];
-                A -> B [id=1 mass=2];
+                A -> B [particle=H id=0 mass=0];
+                A -> B [particle=H id=1 mass=2];
                 A -> B [id=2 particle="t"];
             }
         "#
-        .into_finalized_runtime_graph(&model)?;
+        .into_graph(&model)?;
         graph.validate_real_masses(&model)
     }
 
@@ -848,7 +847,7 @@ mod tests {
                         A -> B [particle="{name}"];
                     }}"#
                 )
-                .into_finalized_runtime_graph(&model)?;
+                .into_graph(&model)?;
                 graph.validate_real_masses(&model)?;
             }
         }
@@ -883,20 +882,20 @@ mod tests {
             node [num=1]; edge [num=1];
             A -> B [particle="g"];
         }"#
-        .into_finalized_runtime_graph(&model)?;
+        .into_graph(&model)?;
         unused.validate_real_masses(&model)?;
         let amputated: Graph = r#"digraph amputated_width {
             ext [style=invis]; vertex [num=1]; edge [num=1];
             ext -> vertex [particle="H"];
         }"#
-        .into_finalized_runtime_graph(&model)?;
+        .into_graph(&model)?;
         assert!(amputated.iter_edges().all(|(pair, _, _)| !pair.is_paired()));
         amputated.validate_real_masses(&model)?;
         let used: Graph = r#"digraph explicit_width {
             node [num=1]; edge [num=1];
             A -> B [particle="H"];
         }"#
-        .into_finalized_runtime_graph(&model)?;
+        .into_graph(&model)?;
         let error = used.validate_real_masses(&model).unwrap_err().to_string();
         assert!(error.contains("explicit_width"));
         assert!(error.contains("unsupported propagator denominator"));
@@ -915,7 +914,7 @@ mod tests {
                 A -> B [particle="t" mass="{mass}+1"];
             }}"#
         )
-        .into_finalized_runtime_graph(&model)?;
+        .into_graph(&model)?;
         graph.validate_real_masses(&model)?;
         let mut definition = serde_json::to_value(&model)?;
         let propagator = definition["propagators"]
@@ -950,11 +949,11 @@ mod tests {
             digraph complex_mass {
                 node [num=1];
                 edge [num=1];
-                A -> B [id=0 mass="1+1𝑖"];
-                A -> B [id=1 mass=0];
+                A -> B [particle=H id=0 mass="1+1𝑖"];
+                A -> B [particle=H id=1 mass=0];
             }
         "#
-        .into_finalized_runtime_graph(&model)?;
+        .into_graph(&model)?;
         let error = graph.validate_real_masses(&model).unwrap_err().to_string();
         assert!(error.contains("complex_mass"));
         assert!(error.contains("unsupported complex mass"));
@@ -973,11 +972,11 @@ mod tests {
                 r#"digraph runtime_mass {{
                     node [num=1];
                     edge [num=1];
-                    A -> B [id=0 mass="{mass}{offset}"];
-                    A -> B [id=1 mass=0];
+                    A -> B [particle=H id=0 mass="{mass}{offset}"];
+                    A -> B [particle=H id=1 mass=0];
                 }}"#
             )
-            .into_finalized_runtime_graph(&model)?;
+            .into_graph(&model)?;
             graph.validate_real_masses(&model)?;
 
             let mut card = feynkit_model::ParameterCard::new();

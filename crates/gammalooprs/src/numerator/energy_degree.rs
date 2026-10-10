@@ -2155,8 +2155,8 @@ mod tests {
     use std::collections::BTreeMap;
 
     use crate::{
-        finalized_runtime_dot,
-        graph::{Graph, LMBext, parse::IntoFinalizedRuntimeGraph},
+        dot,
+        graph::{Graph, LMBext, parse::IntoGraph},
         initialisation::test_initialise,
         numerator::energy_degree::{
             EnergyCandidateFamily, EnergyPowerAnalysisError, EnergyPowerAnalyzer, EnergyReference,
@@ -2468,19 +2468,19 @@ mod tests {
     fn soft_taylor_routing_balances_the_outer_envelope_without_moving_originals()
     -> color_eyre::Result<()> {
         test_initialise()?;
-        let graph: Graph = finalized_runtime_dot!(digraph soft_taylor_cograph {
+        let graph: Graph = dot!(digraph soft_taylor_cograph {
             projector=1
             edge [num=1 mass=1]
             node [num=1]
             incoming [style=invis]
             outgoing [style=invis]
-            incoming -> a [id=0 sink="{ufo_order:0}"]
-            a -> b [id=1 lmb_id=0 source="{ufo_order:1}" sink="{ufo_order:0}"]
-            a -> b [id=2 source="{ufo_order:2}" sink="{ufo_order:1}"]
-            b -> c [id=3 lmb_id=1 source="{ufo_order:2}" sink="{ufo_order:0}"]
-            c -> d [id=4 source="{ufo_order:1}" sink="{ufo_order:0}"]
-            d -> a [id=5 source="{ufo_order:1}" sink="{ufo_order:3}"]
-            d -> outgoing [id=6 source="{ufo_order:2}"]
+            incoming -> a [particle=H id=0]
+            a -> b [particle=H id=1 lmb_id=0]
+            a -> b [particle=H id=2]
+            b -> c [particle=H id=3 lmb_id=1]
+            c -> d [particle=H id=4]
+            d -> a [particle=H id=5]
+            d -> outgoing [particle=H id=6]
         })?;
         let soft_component = |index: Atom| {
             let owner = Atom::num(4);

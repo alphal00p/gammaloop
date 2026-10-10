@@ -22,7 +22,7 @@ fn snapshot(graph: &Graph, model: &crate::model::Model) -> Value {
         let signature = &graph.loop_momentum_basis.edge_signatures[edge];
         json!({
             "id":edge.0,"pair":format!("{pair:?}"),"orientation":format!("{:?}",data.orientation),
-            "particle":data.data.particle.particle().map(|particle|particle.index()),
+            "particle":data.data.particle.particle().index(),
             "num":data.data.num.value.to_canonical_string(),"dummy":data.data.is_dummy,
             "mass":data.data.particle.mass_atom(model).to_canonical_string(),
             "internal":signature.internal.iter().map(|x|format!("{x:?}")).collect::<Vec<_>>(),

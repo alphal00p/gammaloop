@@ -48,6 +48,27 @@ the CLI, applies no bridge filter by default. Left/right symmetrization merges a
 with an identical mirror representative into one diagram whose factor counts both, so every
 diagram id appears once.
 
+GammaLoop's `import graphs` and Python `import_graphs` now read DOT through FeynKit, replacing
+GammaLoop's own DOT parser. Plain compact DOT imports again: the model's Feynman rules fill in
+every vertex factor, propagator numerator and external-state projector the input omits, and
+`num` and `projector` attributes replace single factors. Such a factor must use the tensor indices
+of the model's rules, `hedge(h, k)` for the k-th index on half-edge `h` counted from one; earlier
+GammaLoop graphs wrote `hedge(h)` for the first one, and import now refuses a graph whose
+numerator leaves an index other than external colour uncontracted, instead of failing, or
+exhausting memory, at integrand generation. Compact cross-section DOT is accepted too: `is_cut` may mark one internal edge
+instead of two legs, and without `final_state` every separating cut is physical until
+`--process-spec` selects. `FeynmanDiagram.from_dot` resolves unqualified symbols in the
+`gammalooprs` namespace, where the index, momentum and polarization heads live, instead of
+creating unrelated `feynkit_graph::` symbols, and Rust's `DotDiagram` also returns the input's
+attributes and which factors it wrote. Every edge needs `particle` or `pdg`; an edge's own `dir`
+must agree with its particle; a vertex `int_id` must name a rule of the incident particles,
+also next to `num`; a leg's `num` is ignored; and an edge `mass` replaces the particle mass in the
+propagator denominator only. GammaLoop no longer reads `particle_id`, `vertex_rule_id`,
+`initial_state_connection` or half-edge `ufo_order` payloads, and mass-only edges are gone.
+`save dot` writes particle names and `int_id` instead, so its exports re-import; exports written
+before this change name particles by `particle_id` and are refused with an error saying so, so
+re-export them or replace `particle_id` by `particle`.
+
 The current toolkit provides canonical model and graph ownership, deterministic generation,
 shared CFF arenas, native rank-20 vacuum tensor projection, and notebook diagram rendering.
 Use the #link("reference/interfaces/")[component references] to inspect the exact shipped surface.

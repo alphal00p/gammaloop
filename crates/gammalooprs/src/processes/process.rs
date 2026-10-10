@@ -1394,7 +1394,7 @@ mod tests {
                 ] {
                     // Keep the fixture's physical graph and all default subtraction
                     // terms; only the three requested CFF/UV routes differ.
-                    let mut graphs = Graph::from_finalized_runtime_string(source, &model)?;
+                    let mut graphs = Graph::from_dot(source, &model)?;
                     let exercise_selection = kind == GenerationType::CrossSection
                         && orchestrator == UVOrchestrator::HedgePoset
                         && mode == "direct_keyed";
@@ -1682,9 +1682,7 @@ mod tests {
                                 actual.insert(residue.clone());
                                 let node_dot = fs::read_to_string(node.path())?;
                                 assert!(node_dot.contains("forest_residue_index"));
-                                for exported in
-                                    Graph::from_finalized_runtime_string(&node_dot, &model)?
-                                {
+                                for exported in Graph::from_dot(&node_dot, &model)? {
                                     *exported_expressions
                                         .entry((forest_index, residue.clone()))
                                         .or_insert(Atom::Zero) += exported.global_prefactor.num;

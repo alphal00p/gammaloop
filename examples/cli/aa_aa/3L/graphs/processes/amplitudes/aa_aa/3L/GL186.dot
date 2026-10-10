@@ -2,7 +2,7 @@ digraph GL186{
     num = "1";
     overall_factor = "(AutG(1))^(-1)*ExternalFermionOrderingSign(1)*InternalFermionLoopSign(-1)*NumeratorIndependentSymmetryGrouping(4)";
     overall_factor_evaluated = "-4";
-    projector = "ϵ(0,spenso::mink(4,hedge(0)))*ϵ(1,spenso::mink(4,hedge(1)))*ϵbar(2,spenso::mink(4,hedge(2)))*ϵbar(3,spenso::mink(4,hedge(3)))";
+    projector = "ϵ(0,spenso::mink(4,hedge(0,1)))*ϵ(1,spenso::mink(4,hedge(1,1)))*ϵbar(2,spenso::mink(4,hedge(2,1)))*ϵbar(3,spenso::mink(4,hedge(3,1)))";
 
 	0 [int_id="V_137"];
 	1 [int_id="V_137"];

@@ -861,8 +861,8 @@ mod tests {
             CutCFFIndex,
             expression::{OrientationData, OrientationExpression},
         },
-        finalized_runtime_dot,
-        graph::{Graph, parse::IntoFinalizedRuntimeGraph},
+        dot,
+        graph::{Graph, parse::IntoGraph},
         initialisation::test_initialise,
         settings::global::OrientationPattern,
         utils::GS,
@@ -1402,7 +1402,7 @@ mod tests {
     #[test]
     fn prepared_numerator_keeps_full_affine_rows_and_independent_sampling_nodes() -> Result<()> {
         test_initialise()?;
-        let graph: Graph = finalized_runtime_dot!(
+        let graph: Graph = dot!(
             digraph G {
                 edge [particle="scalar_1"];
                 node [num=1];
@@ -1542,14 +1542,14 @@ mod tests {
     #[test]
     fn prepared_numerator_reuses_vector_loop_and_external_mapping_rules() -> Result<()> {
         test_initialise()?;
-        let graph: Graph = finalized_runtime_dot!(digraph G {
+        let graph: Graph = dot!(digraph G {
             edge [num=1 mass=0]
             node [num=1]
             ext [style=invis]
-            ext -> a [id=0]
-            a -> b [id=1 lmb_id=0]
-            a -> b [id=2]
-            b -> ext [id=3]
+            ext -> a [particle=H id=0]
+            a -> b [particle=H id=1 lmb_id=0]
+            a -> b [particle=H id=2]
+            b -> ext [particle=H id=3]
         })?;
         let production = vec![OrientationExpression {
             data: OrientationData::new(EdgeVec::from_iter([
@@ -1606,7 +1606,7 @@ mod tests {
     #[test]
     fn one_source_residue_map_is_a_homomorphism_for_all_factorized_factors() -> Result<()> {
         test_initialise()?;
-        let graph: Graph = finalized_runtime_dot!(
+        let graph: Graph = dot!(
             digraph G {
                 edge [particle="scalar_1"];
                 node [num=1];
@@ -1766,7 +1766,7 @@ mod tests {
         let graph: Graph = fixture["graph"]
             .as_str()
             .unwrap()
-            .into_finalized_runtime_graph(&crate::utils::load_generic_model("sm"))?;
+            .into_graph(&crate::utils::load_generic_model("sm"))?;
         let mut internal_edges = graph
             .underlying
             .iter_edges()

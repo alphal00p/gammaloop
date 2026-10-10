@@ -8,11 +8,8 @@ use crate::{
         orientations::GraphOrientation,
         surface::LinearEnergyExpr,
     },
-    finalized_runtime_dot,
-    graph::{
-        FeynmanGraph, FourDDenominator, Graph, LMBext, cuts::CutSet,
-        parse::IntoFinalizedRuntimeGraph,
-    },
+    dot,
+    graph::{FeynmanGraph, FourDDenominator, Graph, LMBext, cuts::CutSet, parse::IntoGraph},
     initialisation::test_initialise,
     settings::global::OrientationPattern,
     utils::GS,
@@ -75,7 +72,7 @@ fn two_edge_graph() -> Result<Graph> {
     Ok(TWO_EDGE_GRAPH
         .get_or_init(|| {
             test_initialise().expect("test model initialization succeeds");
-            finalized_runtime_dot!(
+            dot!(
                 digraph G {
                     edge [particle="scalar_1"];
                     node [num=1];
@@ -95,13 +92,13 @@ fn soft_dispatch_preserves_the_complete_quartic_contour() -> Result<()> {
     use three_dimensional_reps::{Generate3DExpressionOptions, NumeratorSamplingScaleMode};
 
     test_initialise()?;
-    let mut graph: Graph = finalized_runtime_dot!(digraph soft_count_triangle {
+    let mut graph: Graph = dot!(digraph soft_count_triangle {
         edge [num=1 mass=2]
         node [num=1]
-        a -> b [id=0 lmb_id=0]
-        b -> c [id=1]
-        c -> a [id=2]
-        a -> a [id=3 lmb_id=1]
+        a -> b [particle=H id=0 lmb_id=0]
+        b -> c [particle=H id=1]
+        c -> a [particle=H id=2]
+        a -> a [particle=H id=3 lmb_id=1]
     })?;
     let active = [EdgeIndex(0), EdgeIndex(1), EdgeIndex(2)];
     let temporal = active.map(|edge| GS.emr_mom(edge, GS.cind(0)));
@@ -1476,7 +1473,7 @@ fn denominator_only_cff_has_no_localizer_fallback() -> Result<()> {
 fn exact_localization_capacity_excludes_replaced_spinney_numerator() -> Result<()> {
     // Share model initialization with the other graph-backed tests in this module.
     let _ = two_edge_graph()?;
-    let mut graph: Graph = finalized_runtime_dot!(
+    let mut graph: Graph = dot!(
         digraph replaced_spinney_numerator {
             edge [pdg=1000 num=1 mass=1]
             node [num=1]
@@ -1522,7 +1519,7 @@ fn exact_localization_capacity_excludes_replaced_spinney_numerator() -> Result<(
 fn exact_localization_maps_finite_ct_instead_of_leaving_it_unmapped() -> Result<()> {
     // Share model initialization with the other graph-backed tests in this module.
     let _ = two_edge_graph()?;
-    let mut graph: Graph = finalized_runtime_dot!(
+    let mut graph: Graph = dot!(
         digraph finite_ct_map {
             edge [particle="scalar_1"];
             node [num=1];

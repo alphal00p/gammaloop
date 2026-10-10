@@ -869,8 +869,8 @@ mod tests {
             VertexSet,
             esurface::{Esurface, EsurfaceExistence, EsurfaceID},
         },
-        finalized_runtime_dot,
-        graph::{LMBext, parse::from_dot::IntoFinalizedRuntimeGraph},
+        dot,
+        graph::{LMBext, parse::from_dot::IntoGraph},
         initialisation::test_initialise,
         momentum::{FourMomentum, Rotatable, Rotation, RotationMethod},
     };
@@ -881,17 +881,17 @@ mod tests {
     #[test]
     fn global_center_check_preserves_fixed_complement_for_multidimensional_subspace() {
         test_initialise().unwrap();
-        let graph: Graph = finalized_runtime_dot!(digraph subspace_center {
+        let graph: Graph = dot!(digraph subspace_center {
             graph [projector=1]
             ext [style=invis]
             edge [num=1 mass=0]
             node [num=1]
-            ext->v1:0 [id=0 sink="{ufo_order:0}"]
-            v1->v2 [id=1 lmb_id=0 source="{ufo_order:1}" sink="{ufo_order:0}"]
-            v2->v1 [id=2 lmb_id=1 source="{ufo_order:1}" sink="{ufo_order:2}"]
-            v1->v2 [id=3 lmb_id=2 source="{ufo_order:3}" sink="{ufo_order:2}"]
-            v2->v1 [id=4 source="{ufo_order:3}" sink="{ufo_order:4}"]
-            ext->v2:1 [id=5 sink="{ufo_order:4}"]
+            ext->v1:0 [particle=H id=0]
+            v1->v2 [particle=H id=1 lmb_id=0]
+            v2->v1 [particle=H id=2 lmb_id=1]
+            v1->v2 [particle=H id=3 lmb_id=2]
+            v2->v1 [particle=H id=4]
+            ext->v2:1 [particle=H id=5]
         })
         .unwrap();
 
@@ -916,16 +916,16 @@ mod tests {
             "two graph-parallel defining edges without their spanning support contain only one independent loop"
         );
 
-        let raised_graph: Graph = finalized_runtime_dot!(digraph raised_signature_subspace {
+        let raised_graph: Graph = dot!(digraph raised_signature_subspace {
             graph [projector=1]
             ext [style=invis]
             edge [num=1 mass=0]
             node [num=1]
-            ext->a [id=0 sink="{ufo_order:0}"]
-            a->b [id=1 lmb_id=0 source="{ufo_order:1}" sink="{ufo_order:0}"]
-            b->c [id=2 source="{ufo_order:1}" sink="{ufo_order:0}"]
-            c->a [id=3 source="{ufo_order:1}" sink="{ufo_order:2}"]
-            ext->c [id=4 sink="{ufo_order:2}"]
+            ext->a [particle=H id=0]
+            a->b [particle=H id=1 lmb_id=0]
+            b->c [particle=H id=2]
+            c->a [particle=H id=3]
+            ext->c [particle=H id=4]
         })
         .unwrap();
         let raised_group = raised_graph

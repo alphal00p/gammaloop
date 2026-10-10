@@ -1205,7 +1205,7 @@ impl GraphSelectionAnalysis for GraphSelectionSubject<'_> {
     fn cycle_particle_sets(&self) -> Vec<Vec<ParticleId>> {
         self.internal_simple_cycles()
             .into_iter()
-            .filter_map(|cycle| cycle_particles(self.graph, &cycle))
+            .map(|cycle| cycle_particles(self.graph, &cycle))
             .collect()
     }
 
@@ -1244,7 +1244,7 @@ impl GraphSelectionAnalysis for GraphSelectionSubject<'_> {
         self.graph
             .underlying
             .iter_edges_of(&self.internal_edge_subgraph())
-            .filter_map(|(_, edge_id, _)| self.graph[edge_id].particle())
+            .map(|(_, edge_id, _)| self.graph[edge_id].particle())
             .filter_map(|particle| model.particle_by_id(particle).ok())
             .filter_map(|particle| isize::try_from(particle.pdg_code.abs()).ok())
             .collect()
@@ -1338,17 +1338,16 @@ fn raised_group_matches_scope(
     }
 }
 
-fn cycle_particles(graph: &Graph, cycle: &Cycle) -> Option<Vec<ParticleId>> {
+fn cycle_particles(graph: &Graph, cycle: &Cycle) -> Vec<ParticleId> {
     let mut particles = BTreeMap::<EdgeIndex, ParticleId>::new();
     for hedge in cycle.filter.included_iter() {
         let edge_id = graph.underlying[&hedge];
         if graph[edge_id].is_dummy {
             continue;
         }
-        let particle = graph[edge_id].particle()?;
-        particles.insert(edge_id, particle);
+        particles.insert(edge_id, graph[edge_id].particle());
     }
-    Some(particles.into_values().collect())
+    particles.into_values().collect()
 }
 
 fn cycle_requirement(particles: Vec<ParticleId>, model: &Model) -> Option<CycleRequirement> {
@@ -1573,11 +1572,11 @@ mod tests {
     use std::sync::OnceLock;
 
     use crate::{
-        finalized_runtime_dot,
+        dot,
         graph::{
             Graph, LoopMomentumBasis,
             edge::EdgeMass,
-            parse::{IntoFinalizedRuntimeGraph, complete_group_parsing},
+            parse::{IntoGraph, complete_group_parsing},
         },
         initialisation::test_initialise,
         model::VertexRuleId,
@@ -1605,19 +1604,19 @@ mod tests {
     }
 
     fn raised_test_graph() -> Result<Graph> {
-        let mut graph: Graph = finalized_runtime_dot!(
+        let mut graph: Graph = dot!(
             digraph raised {
                 projector=1
                 edge [particle=scalar_1 num=1]
                 node [num=1]
                 ext [style=invis]
-                ext -> A [id=3 sink="{ufo_order:0}"]
-                B -> ext [id=4 source="{ufo_order:0}"]
-                A -> B [id=0 lmb_id=0 source="{ufo_order:1}" sink="{ufo_order:1}"]
-                A -> B [id=1 lmb_id=1 source="{ufo_order:2}" sink="{ufo_order:2}"]
-                A -> B [id=2 lmb_id=2 source="{ufo_order:3}" sink="{ufo_order:3}"]
-                A -> B [id=5 lmb_id=3 source="{ufo_order:4}" sink="{ufo_order:4}"]
-                A -> B [id=6 source="{ufo_order:5}" sink="{ufo_order:5}"]
+                ext -> A [id=3]
+                B -> ext [id=4]
+                A -> B [id=0 lmb_id=0]
+                A -> B [id=1 lmb_id=1]
+                A -> B [id=2 lmb_id=2]
+                A -> B [id=5 lmb_id=3]
+                A -> B [id=6]
             },
             scalar_model()
         )?;
@@ -1652,17 +1651,17 @@ mod tests {
     }
 
     fn tree_raised_test_graph() -> Result<Graph> {
-        let mut graph: Graph = finalized_runtime_dot!(
+        let mut graph: Graph = dot!(
             digraph tree_raised {
                 projector=1
                 edge [particle=scalar_1 num=1]
                 node [num=1]
                 ext [style=invis]
-                ext -> A [id=3 sink="{ufo_order:0}"]
-                B -> ext [id=4 source="{ufo_order:0}"]
-                A -> B [id=0 lmb_id=0 source="{ufo_order:1}" sink="{ufo_order:1}"]
-                A -> B [id=1 lmb_id=1 source="{ufo_order:2}" sink="{ufo_order:2}"]
-                A -> B [id=2 source="{ufo_order:3}" sink="{ufo_order:3}"]
+                ext -> A [id=3]
+                B -> ext [id=4]
+                A -> B [id=0 lmb_id=0]
+                A -> B [id=1 lmb_id=1]
+                A -> B [id=2]
             },
             scalar_model()
         )?;
@@ -1685,16 +1684,16 @@ mod tests {
     }
 
     fn cycle_test_graph() -> Result<Graph> {
-        finalized_runtime_dot!(
+        dot!(
             digraph cycle_test {
                 projector=1
                 node [num="1"]
                 edge [num=1]
-                A -> B [particle=scalar_0, id=0, lmb_id=0, source="{ufo_order:0}", sink="{ufo_order:0}"]
-                B -> C [particle=scalar_1, id=1, source="{ufo_order:1}", sink="{ufo_order:0}"]
-                C -> A [particle=scalar_0, id=2, source="{ufo_order:1}", sink="{ufo_order:1}"]
-                B -> D [particle=scalar_2, id=3, lmb_id=1, source="{ufo_order:2}", sink="{ufo_order:0}"]
-                D -> C [particle=scalar_2, id=4, source="{ufo_order:1}", sink="{ufo_order:2}"]
+                A -> B [particle=scalar_0, id=0, lmb_id=0]
+                B -> C [particle=scalar_1, id=1]
+                C -> A [particle=scalar_0, id=2]
+                B -> D [particle=scalar_2, id=3, lmb_id=1]
+                D -> C [particle=scalar_2, id=4]
             },
             scalar_model()
         )
@@ -1711,11 +1710,11 @@ mod tests {
             projector=1
             node [num="1"]
             edge [particle=scalar_1 num=1]
-            A -> B [id=0 lmb_id=0 source="{ufo_order:0}" sink="{ufo_order:0}"]
-            B -> C [id=1 source="{ufo_order:1}" sink="{ufo_order:0}"]
-            C -> A [id=2 source="{ufo_order:1}" sink="{ufo_order:1}"]
+            A -> B [id=0 lmb_id=0]
+            B -> C [id=1]
+            C -> A [id=2]
         }"#
-        .into_finalized_runtime_graph(scalar_model())?;
+        .into_graph(scalar_model())?;
         graph.name = name.to_string();
         let vertex_rules = vertex_names
             .iter()
@@ -1736,11 +1735,11 @@ mod tests {
             projector=1
             node [num="1"]
             edge [num=1]
-            A -> B [particle=scalar_0, id=0, lmb_id=0, source="{ufo_order:0}", sink="{ufo_order:0}"]
-            B -> C [particle=scalar_1, id=1, source="{ufo_order:1}", sink="{ufo_order:0}"]
-            C -> A [particle=scalar_2, id=2, source="{ufo_order:1}", sink="{ufo_order:1}"]
+            A -> B [particle=scalar_0, id=0, lmb_id=0]
+            B -> C [particle=scalar_1, id=1]
+            C -> A [particle=scalar_2, id=2]
         }"#
-        .into_finalized_runtime_graph(scalar_model())?;
+        .into_graph(scalar_model())?;
         graph.name = name.to_string();
         Ok(graph)
     }

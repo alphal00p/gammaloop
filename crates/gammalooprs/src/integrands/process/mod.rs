@@ -4248,11 +4248,8 @@ mod tests {
     };
     use crate::cff::OrientationID;
     use crate::{
-        finalized_runtime_dot,
-        graph::{
-            Graph, GroupId, LMBext, LmbIndex, LoopMomentumBasis,
-            parse::from_dot::IntoFinalizedRuntimeGraph,
-        },
+        dot,
+        graph::{Graph, GroupId, LMBext, LmbIndex, LoopMomentumBasis, parse::from_dot::IntoGraph},
         initialisation::test_initialise,
         momentum::{
             ThreeMomentum,
@@ -4514,14 +4511,14 @@ mod tests {
         static GRAPH: OnceLock<Graph> = OnceLock::new();
         let graph = GRAPH
             .get_or_init(|| {
-                finalized_runtime_dot!(
+                dot!(
                     digraph lmb_basis_selection {
                         graph [projector=1]
                         edge [num=1 mass=0]
                         node [num=1]
-                        A -> B [id=0 lmb_id=0 source="{ufo_order:0}" sink="{ufo_order:0}"]
-                        A -> B [id=1 lmb_id=1 source="{ufo_order:1}" sink="{ufo_order:1}"]
-                        A -> B [id=2 source="{ufo_order:2}" sink="{ufo_order:2}"]
+                        A -> B [particle=H id=0 lmb_id=0]
+                        A -> B [particle=H id=1 lmb_id=1]
+                        A -> B [particle=H id=2]
                     }
                 )
                 .unwrap()
@@ -4589,16 +4586,16 @@ mod tests {
     #[test]
     fn lmb_channel_prefactors_form_a_partition_of_unity() {
         test_initialise().unwrap();
-        let mut graph: Graph = finalized_runtime_dot!(
+        let mut graph: Graph = dot!(
             digraph lmb_prefactor_partition {
                 graph [projector=1]
                 edge [num=1 mass=0]
                 node [num=1]
                 ext [style=invis]
-                ext -> A [id=0 sink="{ufo_order:0}"]
-                A -> B [id=1 lmb_id=0 source="{ufo_order:1}" sink="{ufo_order:0}"]
-                A -> B [id=2 source="{ufo_order:2}" sink="{ufo_order:1}"]
-                B -> ext [id=3 source="{ufo_order:2}"]
+                ext -> A [particle=H id=0]
+                A -> B [particle=H id=1 lmb_id=0]
+                A -> B [particle=H id=2]
+                B -> ext [particle=H id=3]
             }
         )
         .unwrap();

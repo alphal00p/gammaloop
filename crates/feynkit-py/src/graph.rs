@@ -2982,8 +2982,10 @@ impl PyFeynmanDiagram {
     /// model : Model
     ///     Model used to resolve particles and interactions or validate annotated IDs.
     /// dot : str
-    ///     Compact physics DOT or annotated HEP DOT. Compact cross-sections pair
-    ///     initial-state legs with is_cut and specify comma-separated final_state particles.
+    ///     Compact physics DOT or annotated HEP DOT. Compact cross-sections mark
+    ///     their initial states with is_cut, on an incoming and an outgoing leg or on
+    ///     one internal edge. They keep every separating cut as physical unless a
+    ///     comma-separated final_state names the particles of the physical cuts.
     #[staticmethod]
     fn from_dot(model: &PyModel, dot: &str) -> PyResult<Self> {
         FeynmanDiagram::from_dot(Arc::clone(&model.inner), dot)

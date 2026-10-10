@@ -7,10 +7,10 @@ use typed_index_collections::ti_vec;
 
 use super::Graph;
 use crate::{
-    finalized_runtime_dot,
+    dot,
     graph::{
         FeynmanGraph, GraphGroup,
-        parse::{IntoFinalizedRuntimeGraph, complete_group_parsing},
+        parse::{IntoGraph, complete_group_parsing},
     },
     initialisation::test_initialise,
     momentum::sample::LoopIndex,
@@ -29,12 +29,12 @@ fn triangle_fixture(loop_edge: usize, loop_edge_mass: Option<i64>) -> String {
             node [num="1"]
             edge [pdg=1000 num="1" dir=none]
             ext [style=invis]
-            ext -> v4 [id=0 sink="{{ufo_order:0}}"]
-            v5 -> ext [id=1 source="{{ufo_order:0}}"]
-            v6 -> ext [id=2 source="{{ufo_order:0}}"]
-            v4 -> v5 [id=3{}{} source="{{ufo_order:1}}" sink="{{ufo_order:1}}"]
-            v5 -> v6 [id=4{} source="{{ufo_order:2}}" sink="{{ufo_order:1}}"]
-            v6 -> v4 [id=5{} source="{{ufo_order:2}}" sink="{{ufo_order:2}}"]
+            ext -> v4 [id=0]
+            v5 -> ext [id=1]
+            v6 -> ext [id=2]
+            v4 -> v5 [id=3{}{}]
+            v5 -> v6 [id=4{}]
+            v6 -> v4 [id=5{}]
         }}"#,
         loop_attribute(3),
         if loop_edge == 3 { mass.as_str() } else { "" },
@@ -45,7 +45,7 @@ fn triangle_fixture(loop_edge: usize, loop_edge_mass: Option<i64>) -> String {
 
 fn parse_triangle_fixture(loop_edge: usize, loop_edge_mass: Option<i64>) -> Graph {
     triangle_fixture(loop_edge, loop_edge_mass)
-        .into_finalized_runtime_graph(&crate::utils::load_generic_model("scalars"))
+        .into_graph(&crate::utils::load_generic_model("scalars"))
         .unwrap()
 }
 
@@ -82,7 +82,7 @@ fn legacy_internal_order_key_recovers_pre_normalized_fermion_flow() {
 
 fn split_forward_fixture(outgoing_momentum: &str, explicit_connection: bool) -> String {
     let connection = if explicit_connection {
-        r#" is_cut="0" initial_state_connection="true""#
+        r#" is_cut="0""#
     } else {
         ""
     };
@@ -93,10 +93,10 @@ fn split_forward_fixture(outgoing_momentum: &str, explicit_connection: bool) -> 
             edge [pdg=1000 num="1" dir=none]
             ext_in [style=invis]
             ext_out [style=invis]
-            ext_in -> A [id=0 lmb_rep="P(0,a___)" sink="{{ufo_order:0}}"{connection}]
-            A -> B [id=1 lmb_id=0 lmb_rep="K(0,a___)" source="{{ufo_order:1}}" sink="{{ufo_order:0}}"]
-            A -> B [id=2 lmb_rep="-K(0,a___)+P(0,a___)" source="{{ufo_order:2}}" sink="{{ufo_order:1}}"]
-            B -> ext_out [id=3 lmb_rep="{outgoing_momentum}" source="{{ufo_order:2}}"{connection}]
+            ext_in -> A [id=0 lmb_rep="P(0,a___)"{connection}]
+            A -> B [id=1 lmb_id=0 lmb_rep="K(0,a___)"]
+            A -> B [id=2 lmb_rep="-K(0,a___)+P(0,a___)"]
+            B -> ext_out [id=3 lmb_rep="{outgoing_momentum}"{connection}]
         }}"#
     )
 }
@@ -110,11 +110,11 @@ fn two_split_forward_connections_fixture() -> &'static str {
         out0 [style=invis]
         in1 [style=invis]
         out1 [style=invis]
-        in0 -> A [id=0 lmb_rep="P(0,a___)" sink="{ufo_order:0}" is_cut="0" initial_state_connection="true"]
-        in1 -> A [id=1 lmb_rep="P(1,a___)" sink="{ufo_order:1}" is_cut="1" initial_state_connection="true"]
-        A -> B [id=2 lmb_rep="P(0,a___)+P(1,a___)" source="{ufo_order:2}" sink="{ufo_order:0}"]
-        B -> out0 [id=3 lmb_rep="P(0,a___)" source="{ufo_order:1}" is_cut="0" initial_state_connection="true"]
-        B -> out1 [id=4 lmb_rep="P(1,a___)" source="{ufo_order:2}" is_cut="1" initial_state_connection="true"]
+        in0 -> A [id=0 lmb_rep="P(0,a___)" is_cut="0"]
+        in1 -> A [id=1 lmb_rep="P(1,a___)" is_cut="1"]
+        A -> B [id=2 lmb_rep="P(0,a___)+P(1,a___)"]
+        B -> out0 [id=3 lmb_rep="P(0,a___)" is_cut="0"]
+        B -> out1 [id=4 lmb_rep="P(1,a___)" is_cut="1"]
     }"#
 }
 
@@ -123,7 +123,7 @@ fn explicitly_marked_split_forward_endpoints_are_one_connection() {
     test_initialise().unwrap();
     let model = crate::utils::load_generic_model("scalars");
     let graph: Graph = split_forward_fixture("P(0,a___)", true)
-        .into_finalized_runtime_graph(&model)
+        .into_graph(&model)
         .unwrap();
 
     assert!(graph.get_external_signature().is_empty());
@@ -136,7 +136,7 @@ fn explicitly_marked_split_forward_endpoints_are_one_connection() {
     });
     assert_eq!(serialized.matches("is_cut=").count(), 2, "{serialized}");
 
-    let round_trip: Graph = serialized.into_finalized_runtime_graph(&model).unwrap();
+    let round_trip: Graph = serialized.into_graph(&model).unwrap();
     assert!(round_trip.get_external_signature().is_empty());
     assert_eq!(round_trip.loop_momentum_basis.ext_edges.len(), 1);
 }
@@ -145,7 +145,7 @@ fn explicitly_marked_split_forward_endpoints_are_one_connection() {
 fn equal_external_momenta_without_explicit_markers_remain_distinct_legs() {
     test_initialise().unwrap();
     let graph: Graph = split_forward_fixture("P(0,a___)", false)
-        .into_finalized_runtime_graph(&crate::utils::load_generic_model("scalars"))
+        .into_graph(&crate::utils::load_generic_model("scalars"))
         .unwrap();
 
     assert_eq!(graph.get_external_signature().len(), 2);
@@ -158,7 +158,7 @@ fn multiple_undirected_forward_connections_survive_split_round_trip() {
     test_initialise().unwrap();
     let model = crate::utils::load_generic_model("scalars");
     let graph: Graph = two_split_forward_connections_fixture()
-        .into_finalized_runtime_graph(&model)
+        .into_graph(&model)
         .unwrap();
     assert!(graph.get_external_signature().is_empty());
     assert_eq!(graph.loop_momentum_basis.ext_edges.len(), 2);
@@ -169,7 +169,7 @@ fn multiple_undirected_forward_connections_survive_split_round_trip() {
     });
     assert_eq!(serialized.matches("is_cut=").count(), 4, "{serialized}");
 
-    let round_trip: Graph = serialized.into_finalized_runtime_graph(&model).unwrap();
+    let round_trip: Graph = serialized.into_graph(&model).unwrap();
     assert!(round_trip.get_external_signature().is_empty());
     assert_eq!(round_trip.loop_momentum_basis.ext_edges.len(), 2);
 }
@@ -190,17 +190,17 @@ fn test_loop_momentum_basis() {
 #[test]
 fn dod_rescales_only_internal_edge_qs() {
     test_initialise().unwrap();
-    let g: Graph = finalized_runtime_dot!(
+    let g: Graph = dot!(
         digraph G {
             graph [projector="1"]
             edge [pdg=1000 num="1" dir=none]
             node [num="1"]
             ext0 [style=invis]
             ext1 [style=invis]
-            ext0 -> A [id=0 sink="{ufo_order:0}"]
-            B -> ext1 [id=1 source="{ufo_order:0}"]
-            A -> B [id=2, lmb_id=0, source="{ufo_order:1}", sink="{ufo_order:1}", num="Q(2,spenso::mink(4,edge(2,1)))*Q(0,spenso::mink(4,edge(2,1)))"]
-            A -> B [id=3, source="{ufo_order:2}", sink="{ufo_order:2}"]
+            ext0 -> A [id=0]
+            B -> ext1 [id=1]
+            A -> B [id=2, lmb_id=0 num="Q(2,spenso::mink(4,edge(2,1)))*Q(0,spenso::mink(4,edge(2,1)))"]
+            A -> B [id=3]
         },
         "scalars"
     )
@@ -260,10 +260,10 @@ fn grouped_graph_fixture(name: &str, group_id: Option<usize>, master: Option<boo
             node [num="1"]
             edge [pdg=1000 num="1" dir=none]
             ext [style=invis]
-            ext -> A [sink="{{ufo_order:0}}"]
-            A -> B [lmb_id=0 source="{{ufo_order:1}}" sink="{{ufo_order:0}}"]
-            A -> B [source="{{ufo_order:2}}" sink="{{ufo_order:1}}"]
-            B -> ext [source="{{ufo_order:2}}"]
+            ext -> A
+            A -> B [lmb_id=0]
+            A -> B
+            B -> ext
         }}"#
     )
 }
@@ -275,7 +275,7 @@ fn parse_grouped_graphs(specs: &[(&str, Option<usize>, Option<bool>)]) -> Vec<Gr
         .collect::<Vec<_>>()
         .join("\n");
     input
-        .into_finalized_runtime_graph(&crate::utils::load_generic_model("scalars"))
+        .into_graph(&crate::utils::load_generic_model("scalars"))
         .unwrap()
 }
 
@@ -420,24 +420,44 @@ fn edge_mass_attribute_drives_evaluated_edge_mass() {
 }
 
 #[test]
-fn explicit_hedge_payload_round_trips_in_dot_export() {
+fn gammaloop_attributes_round_trip_through_dot_export() {
     test_initialise().unwrap();
-    let g: Graph = finalized_runtime_dot!(
-        digraph payload_graph{
-            graph [projector="1"]
+    let model = crate::utils::load_generic_model("sm");
+    let g: Graph = dot!(
+        digraph attribute_graph {
+            graph [projector="1" params="x;y"]
             ext_in [style=invis]
             ext_out [style=invis]
-            A [num=1 dod=0]
-            ext_in -> A [name=e_in num=1 dod=-2 sink="{ufo_order:0,dod:-2}"]
-            A -> ext_out [name=e_out num=1 dod=-2 source="{ufo_order:1,dod:-2}"]
+            A [num=1 dod=1]
+            ext_in -> A [id=0 particle=H mass=0 name=e_in dod=-3 vakint_edge_power=2]
+            A -> ext_out [id=1 particle=H mass=0 name=e_out momtrop_edge_power="1/2"]
         }
     )
     .unwrap();
 
     let serialized = g.dot_serialize(&DotExportSettings::default());
-    assert!(serialized.contains("ufo_order"));
-    assert!(serialized.contains("dod"));
-    assert!(serialized.contains("source=") || serialized.contains("sink="));
+    let round_trip: Graph = serialized.as_str().into_graph(&model).unwrap();
+    for graph in [&g, &round_trip] {
+        let edges = graph
+            .underlying
+            .iter_edges()
+            .map(|(_, _, edge)| edge.data)
+            .collect::<Vec<_>>();
+        assert_eq!(edges[0].name.value, "e_in");
+        assert_eq!(edges[1].name.value, "e_out");
+        assert!(edges.iter().all(|edge| edge.mass_atom(&model).is_zero()));
+        assert_eq!(edges[0].dod.value, -3);
+        assert_eq!(edges[0].extra_data.vakint_edge_power, Some(2));
+        assert_eq!(
+            edges[1].extra_data.momtrop_edge_power,
+            Some(symbolica::parse!("1/2"))
+        );
+        assert_eq!(
+            graph.underlying[linnet::half_edge::NodeIndex(0)].dod.value,
+            1
+        );
+        assert_eq!(graph.param_builder.pairs.additional_params.params.len(), 2);
+    }
 }
 
 fn assert_native_runtime_parity(diagram: &feynkit_graph::FeynmanDiagram) {

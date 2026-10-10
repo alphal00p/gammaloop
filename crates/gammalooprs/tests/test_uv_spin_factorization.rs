@@ -1,5 +1,5 @@
 use gammalooprs::{
-    graph::{Graph, parse::IntoFinalizedRuntimeGraph},
+    graph::{Graph, parse::IntoGraph},
     initialisation::test_initialise,
     processes::Amplitude,
     utils::load_generic_model,
@@ -42,7 +42,7 @@ fn massive_fermion_bubble_matches_contracted_numerator_after_uv_integration() {
                 }}"#,
                 edges[0], edges[1], vertices[0], vertices[1],
             )
-            .into_finalized_runtime_graph(&model)
+            .into_graph(&model)
             .unwrap();
             let mut amplitude = Amplitude::from_graph_list("fermion_bubble", vec![graph]).unwrap();
             let result = amplitude.graphs[0]

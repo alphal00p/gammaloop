@@ -1683,33 +1683,6 @@ impl AmplitudeState for Processed {}
 // impl AmplitudeState for ReadyForTerm {}
 
 impl Amplitude {
-    pub fn from_finalized_runtime_dot_string<Str: AsRef<str>>(
-        s: Str,
-        name: String,
-        model: &Model,
-    ) -> Result<Self> {
-        let graphs = Graph::from_finalized_runtime_string(s, model)?;
-
-        let mut amp = Amplitude::new(name);
-        for g in graphs {
-            amp.add_graph(g)?;
-        }
-        Ok(amp)
-    }
-
-    pub fn from_finalized_runtime_dot_file<P>(p: P, name: String, model: &Model) -> Result<Self>
-    where
-        P: AsRef<Path>,
-    {
-        let graphs = Graph::from_finalized_runtime_file(p, model)?;
-
-        let mut amp = Amplitude::new(name);
-        for g in graphs {
-            amp.add_graph(g)?;
-        }
-        Ok(amp)
-    }
-
     pub fn from_graph_list(name: impl ToString, mut graphs: Vec<Graph>) -> Result<Self> {
         let mut amplitude: Amplitude = Amplitude::new(name);
         amplitude.graph_group_structure = complete_group_parsing(&mut graphs)?;
@@ -1851,8 +1824,8 @@ pub mod test {
 
     use crate::cff::OrientationID;
     use crate::{
-        finalized_runtime_dot,
-        graph::{GraphGroupPosition, parse::IntoFinalizedRuntimeGraph},
+        dot,
+        graph::{GraphGroupPosition, parse::IntoGraph},
         initialisation::test_initialise,
         integrands::process::amplitude::AmplitudeGraphTerm,
         processes::AmplitudeGraph,
@@ -1868,19 +1841,19 @@ pub mod test {
     #[test]
     fn amplitude_tree() {
         test_initialise().unwrap();
-        let mut graph: AmplitudeGraph = finalized_runtime_dot!(digraph qqx_aaa_tree_1 {
+        let mut graph: AmplitudeGraph = dot!(digraph qqx_aaa_tree_1 {
                     num=1
                     projector=1
                     node [num=1]
                     edge [num=1]
                     ext    [style=invis]
-                    ext -> v1:1 [particle="d" id=1 sink="{ufo_order:0}"];
-                    ext -> v3:2 [particle="d~" id=2 sink="{ufo_order:0}"];
-                    v1:3 -> ext [particle="a" id=3 source="{ufo_order:1}"];
-                    v2:4 -> ext [particle="a" id=4 source="{ufo_order:1}"];
-                    v3:0 -> ext [particle="a" id=0 source="{ufo_order:2}"];
-                    v1 -> v2 [particle="d" id=5 source="{ufo_order:2}" sink="{ufo_order:0}"];
-                    v2 -> v3 [particle="d" id=6 source="{ufo_order:2}" sink="{ufo_order:1}"];
+                    ext -> v1:1 [particle="d" id=1];
+                    ext -> v3:2 [particle="d~" id=2];
+                    v1:3 -> ext [particle="a" id=3];
+                    v2:4 -> ext [particle="a" id=4];
+                    v3:0 -> ext [particle="a" id=0];
+                    v1 -> v2 [particle="d" id=5];
+                    v2 -> v3 [particle="d" id=6];
         })
         .unwrap();
 
@@ -1906,16 +1879,16 @@ pub mod test {
     #[test]
     fn generation_orientation_pattern_filters_evaluator_orientations() {
         test_initialise().unwrap();
-        let mut graph: AmplitudeGraph = finalized_runtime_dot!(
+        let mut graph: AmplitudeGraph = dot!(
             digraph bub {
                 projector=1
                 edge [particle=scalar_1 num=1]
                 node [num=1]
                 e [style=invis]
-                e -> A:0 [id=3 sink="{ufo_order:0}"]
-                B:1 -> e [id=2 source="{ufo_order:0}"]
-                A -> B [id=1 lmb_id=0 source="{ufo_order:1}" sink="{ufo_order:1}"]
-                A -> B [id=0 source="{ufo_order:2}" sink="{ufo_order:2}"]
+                e -> A:0 [id=3]
+                B:1 -> e [id=2]
+                A -> B [id=1 lmb_id=0]
+                A -> B [id=0]
             },
             "scalars"
         )

@@ -1212,12 +1212,12 @@ impl FinalizedCut {
             let cut_content_builder = self
                 .cut
                 .iter_edges(&cross_section_graph.graph.underlying)
-                .filter_map(|(orientation, edge_data)| {
-                    Some(if orientation == Orientation::Reversed {
-                        edge_data.data.particle()?.antiparticle(model)
+                .map(|(orientation, edge_data)| {
+                    if orientation == Orientation::Reversed {
+                        edge_data.data.particle().antiparticle(model)
                     } else {
-                        edge_data.data.particle()?
-                    })
+                        edge_data.data.particle()
+                    }
                 })
                 .collect_vec();
 
@@ -1383,9 +1383,7 @@ impl CrossSectionGraph {
             //println!("{extid},{hel:?}");
             let eid = self.graph.loop_momentum_basis.ext_edges[ExternalIndex(extid)];
 
-            let Some(p) = self.graph.underlying[eid].particle() else {
-                continue;
-            };
+            let p = self.graph.underlying[eid].particle();
 
             match hel {
                 Helicity::Summed => {
@@ -3740,8 +3738,8 @@ mod tests {
             CutCFFIndex,
             esurface::{EsurfaceID, RaisedEsurfaceData, RaisedEsurfaceGroup},
         },
-        finalized_runtime_dot,
-        graph::parse::from_dot::IntoFinalizedRuntimeGraph,
+        dot,
+        graph::parse::from_dot::IntoGraph,
         initialisation::test_initialise,
         utils::GS,
     };
@@ -3816,8 +3814,10 @@ mod tests {
         test_initialise().unwrap();
         // This one-line cut is a residue-boundary diagnostic, not a 1->1
         // scattering-rate fixture. It deliberately bypasses the physical
-        // process selector's requirement of at least two final particles.
-        let graph: Graph = finalized_runtime_dot!(
+        // process selector's requirement of at least two final particles:
+        // without a final state, the imported graph keeps its only separating
+        // cut, which crosses one edge and so is no threshold candidate.
+        let graph: Graph = dot!(
             digraph scalar_cut_line {
                 node [num=1];
                 edge [particle="scalar_0", num="1𝑖"];
@@ -3828,17 +3828,7 @@ mod tests {
             }, "scalars"
         )
         .unwrap();
-        let mut graph = super::CrossSectionGraph::new(graph);
-        graph.cuts = graph
-            .graph
-            .finalized_topology_threshold_candidates
-            .iter()
-            .map(|candidate| super::FinalizedCut {
-                cut: candidate.cut.clone(),
-                left: candidate.left.clone(),
-                right: candidate.right.clone(),
-            })
-            .collect();
+        let graph = super::CrossSectionGraph::new(graph);
         assert_eq!(graph.cuts.len(), 1);
         let group = super::CutGroup {
             cuts: vec![super::CutId(0)],
@@ -4046,16 +4036,16 @@ mod tests {
     fn cross_section_lmb_cut_edge_exclusion_prefers_massive_then_fermion_then_id() {
         test_initialise().unwrap();
         let model = crate::utils::load_generic_model("sm");
-        let graph: crate::graph::Graph = finalized_runtime_dot!(
+        let graph: crate::graph::Graph = dot!(
             digraph cut_edge_priority {
                 graph [projector=1]
                 edge [num=1]
                 node [num=1]
-                A -> B [id=0 particle="g" lmb_id=0 source="{ufo_order:0}" sink="{ufo_order:0}"]
-                A -> B [id=1 particle="d" lmb_id=1 source="{ufo_order:1}" sink="{ufo_order:1}"]
-                A -> B [id=2 particle="t" mass=1 lmb_id=2 source="{ufo_order:2}" sink="{ufo_order:2}"]
-                A -> B [id=3 particle="a" lmb_id=3 source="{ufo_order:3}" sink="{ufo_order:3}"]
-                A -> B [id=4 mass=0 source="{ufo_order:4}" sink="{ufo_order:4}"]
+                A -> B [id=0 particle="g" lmb_id=0]
+                A -> B [id=1 particle="d" lmb_id=1]
+                A -> B [id=2 particle="t" mass=1 lmb_id=2]
+                A -> B [id=3 particle="a" lmb_id=3]
+                A -> B [particle=H id=4 mass=0]
             }
         )
         .unwrap();
@@ -4127,16 +4117,16 @@ mod tests {
     fn cut_side_lmbs_ignore_boundary_hairs() {
         test_initialise().unwrap();
         let model = crate::utils::load_generic_model("scalars");
-        let graph: crate::graph::Graph = finalized_runtime_dot!(
+        let graph: crate::graph::Graph = dot!(
             digraph hairy_cut_side {
                 graph [projector=1]
                 edge [num=1 particle="scalar_0"]
                 node [num=1]
                 ext [style=invis]
-                ext -> A [id=0 sink="{ufo_order:0}"]
-                A -> B [id=1 lmb_id=0 source="{ufo_order:1}" sink="{ufo_order:0}"]
-                B -> C [id=2 source="{ufo_order:1}" sink="{ufo_order:0}"]
-                C -> A [id=3 source="{ufo_order:1}" sink="{ufo_order:2}"]
+                ext -> A [id=0]
+                A -> B [id=1 lmb_id=0]
+                B -> C [id=2]
+                C -> A [id=3]
             },
             &model
         )

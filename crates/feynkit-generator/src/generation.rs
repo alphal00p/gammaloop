@@ -15,8 +15,8 @@ use std::{
 
 use feynkit_graph::{
     DiagramCut, DiagramCutSide, DiagramEdge, DiagramEndpoint, DiagramError, DiagramHalfEdge,
-    DiagramId, DiagramThresholdCandidate, DiagramVertex, EdgeId, ExternalLeg, ExternalState,
-    FeynmanDiagram, VertexSlot,
+    DiagramId, DiagramThresholdCandidate, DiagramVertex, DotDiagram, EdgeId, ExternalLeg,
+    ExternalState, FeynmanDiagram, VertexId, VertexSlot,
 };
 use feynkit_model::{Model, ModelError, Particle, ParticleId, VertexRule, VertexRuleId};
 use idenso::{color::CS, dirac::AGS, epsilon::EPSILON_SYMBOL, representations::Bispinor};
@@ -1357,13 +1357,16 @@ pub trait FeynmanDiagramRulesExt {
     /// Instantiate vertex and propagator numerators in an imported diagram's
     /// existing half-edge frame, using its interaction-slot assignments.
     ///
-    /// The diagram's routing, overall factor, numerator prefactor and projector
-    /// are retained. Existing local numerator fragments are replaced with the
-    /// model's Feynman rules, just as during diagram generation. Only these
-    /// fragments come from the model: a compact-DOT diagram without
-    /// `projector` and `overall_factor` attributes keeps both at 1, whereas a
-    /// generated diagram also carries its external-state projector and its sign
-    /// and symmetry factors.
+    /// The model's Feynman rules replace local numerator fragments, just as during
+    /// diagram generation, at every vertex with an interaction and on every internal
+    /// edge. Dummy edges are no propagators or interaction legs and keep their
+    /// fragments, as does a vertex without an interaction. The routing, overall
+    /// factor and numerator prefactor are retained.
+    ///
+    /// A [`FeynmanDiagram`] keeps its projector and replaces all of these
+    /// fragments. A [`DotDiagram`] keeps the fragments and the projector its input
+    /// wrote and fills in the others: an omitted projector becomes the spinor or
+    /// polarization vector of every external state, as in generation.
     fn apply_feynman_rules(&self) -> Result<FeynmanDiagram, GenerationError>;
 }
 
@@ -1372,7 +1375,26 @@ impl FeynmanDiagramRulesExt for FeynmanDiagram {
         // `map_data` returns unvalidated diagrams: check their slots before they
         // index the vertex rules. The check is cached for validated diagrams.
         self.validate()?;
-        Generator::new(self.model_arc()).construct_numerators(self.clone())
+        Generator::new(self.model_arc()).construct_numerators(self.clone(), |_| true)
+    }
+}
+
+impl FeynmanDiagramRulesExt for DotDiagram {
+    fn apply_feynman_rules(&self) -> Result<FeynmanDiagram, GenerationError> {
+        self.diagram.validate()?;
+        let generator = Generator::new(self.diagram.model_arc());
+        let diagram =
+            generator.construct_numerators(self.diagram.clone(), |owner| match owner {
+                NumeratorOwner::Vertex(vertex) => {
+                    !self.explicit.vertices.contains(&VertexId(vertex))
+                }
+                NumeratorOwner::Edge(edge) => !self.explicit.edges.contains(&EdgeId(edge)),
+            })?;
+        if self.explicit.projector {
+            return Ok(diagram);
+        }
+        let projector = generator.finalized_external_state_projector(&diagram)?;
+        Ok(diagram.with_projector(projector))
     }
 }
 
@@ -2337,12 +2359,14 @@ impl Generator {
             }
         }
         let diagram = builder.build()?;
-        self.construct_numerators(diagram)
+        self.construct_numerators(diagram, |_| true)
     }
 
+    /// Instantiate the Feynman rules of the fragments `replaced` selects.
     fn construct_numerators(
         &self,
         diagram: FeynmanDiagram,
+        replaced: impl Fn(NumeratorOwner) -> bool,
     ) -> Result<FeynmanDiagram, GenerationError> {
         // Instantiate directly in the finalized frame. This avoids building
         // every factor in provisional indices and then translating it again.
@@ -2351,9 +2375,13 @@ impl Generator {
             let Some(rule_id) = data.interaction else {
                 continue;
             };
+            if !replaced(NumeratorOwner::Vertex(vertex.0)) {
+                continue;
+            }
             let rule = self.model.vertex_rule_by_id(rule_id)?;
             let mut legs = vec![None; rule.particles.len()];
-            for (edge, endpoints, data) in diagram.edges() {
+            // Dummy edges take the slots after the interaction legs.
+            for (edge, endpoints, data) in diagram.edges().filter(|(_, _, data)| !data.is_dummy) {
                 for (attached, slot, endpoint, flow) in [
                     (
                         endpoints.source,
@@ -2396,10 +2424,9 @@ impl Generator {
             vertices.push((vertex, self.interaction_numerator(rule_id, &instantiation)?));
         }
         let mut edges = Vec::new();
-        for (edge, _, data) in diagram
-            .edges()
-            .filter(|(_, _, data)| data.external.is_none())
-        {
+        for (edge, _, data) in diagram.edges().filter(|(edge, _, data)| {
+            data.external.is_none() && !data.is_dummy && replaced(NumeratorOwner::Edge(edge.0))
+        }) {
             let hedges = [DiagramEndpoint::Source, DiagramEndpoint::Target].map(|endpoint| {
                 diagram
                     .half_edge_id(DiagramHalfEdge { edge, endpoint })
@@ -2426,33 +2453,86 @@ impl Generator {
                 .ok_or(GenerationError::ArithmeticOverflow(
                     "an external half-edge identifier",
                 ))?;
-            let index = feynkit_graph::symbols::hedge_index().call((hedge, 1_i64));
-            let particle = self.model.particle_by_id(external.particle)?;
-            let (head, index) = match particle.spin {
-                2 => {
-                    let head = match (external.state, particle.is_antiparticle()) {
-                        (ExternalState::Incoming, false) => feynkit_graph::symbols::u(),
-                        (ExternalState::Incoming, true) => feynkit_graph::symbols::vbar(),
-                        (ExternalState::Outgoing, false) => feynkit_graph::symbols::ubar(),
-                        (ExternalState::Outgoing, true) => feynkit_graph::symbols::v(),
-                    };
-                    (head, Bispinor {}.new_rep(4).to_symbolic([index]))
-                }
-                3 => {
-                    let head = match external.state {
-                        ExternalState::Incoming => feynkit_graph::symbols::epsilon(),
-                        ExternalState::Outgoing => feynkit_graph::symbols::epsilonbar(),
-                    };
-                    (head, Minkowski {}.new_rep(4).to_symbolic([index]))
-                }
-                _ => continue,
-            };
-            projector *= FunctionBuilder::new(head)
-                .add_arg(edge_id)
-                .add_arg(index)
-                .finish();
+            if let Some(factor) =
+                self.external_state_factor(external.particle, external.state, edge_id, hedge)?
+            {
+                projector *= factor;
+            }
         }
         Ok(projector)
+    }
+
+    /// The external-state projector of a finalized diagram. An incoming state is
+    /// indexed at the target of its edge and an outgoing one at the source; a sewn
+    /// cross-section initial state carries both copies.
+    fn finalized_external_state_projector(
+        &self,
+        diagram: &FeynmanDiagram,
+    ) -> Result<Atom, GenerationError> {
+        let mut projector = Atom::one();
+        for (edge, endpoints, data) in diagram.edges() {
+            let Some(leg) = &data.external else {
+                continue;
+            };
+            let states = if endpoints.source.is_some() && endpoints.target.is_some() {
+                vec![ExternalState::Incoming, ExternalState::Outgoing]
+            } else {
+                vec![leg.state]
+            };
+            for state in states {
+                let endpoint = match state {
+                    ExternalState::Incoming => DiagramEndpoint::Target,
+                    ExternalState::Outgoing => DiagramEndpoint::Source,
+                };
+                let hedge = diagram
+                    .half_edge_id(DiagramHalfEdge { edge, endpoint })
+                    .expect("finalized external endpoint");
+                if let Some(factor) =
+                    self.external_state_factor(data.particle, state, edge.0, hedge.0)?
+                {
+                    projector *= factor;
+                }
+            }
+        }
+        Ok(projector)
+    }
+
+    /// The spinor or polarization vector of one external state on `edge`, indexed at
+    /// `hedge`. Scalars have none.
+    fn external_state_factor(
+        &self,
+        particle: ParticleId,
+        state: ExternalState,
+        edge: usize,
+        hedge: usize,
+    ) -> Result<Option<Atom>, GenerationError> {
+        let index = feynkit_graph::symbols::hedge_index().call((hedge, 1_i64));
+        let particle = self.model.particle_by_id(particle)?;
+        let (head, index) = match particle.spin {
+            2 => {
+                let head = match (state, particle.is_antiparticle()) {
+                    (ExternalState::Incoming, false) => feynkit_graph::symbols::u(),
+                    (ExternalState::Incoming, true) => feynkit_graph::symbols::vbar(),
+                    (ExternalState::Outgoing, false) => feynkit_graph::symbols::ubar(),
+                    (ExternalState::Outgoing, true) => feynkit_graph::symbols::v(),
+                };
+                (head, Bispinor {}.new_rep(4).to_symbolic([index]))
+            }
+            3 => {
+                let head = match state {
+                    ExternalState::Incoming => feynkit_graph::symbols::epsilon(),
+                    ExternalState::Outgoing => feynkit_graph::symbols::epsilonbar(),
+                };
+                (head, Minkowski {}.new_rep(4).to_symbolic([index]))
+            }
+            _ => return Ok(None),
+        };
+        Ok(Some(
+            FunctionBuilder::new(head)
+                .add_arg(edge)
+                .add_arg(index)
+                .finish(),
+        ))
     }
 
     fn interaction_half_edges(
@@ -6544,6 +6624,137 @@ mod tests {
         assert!(combined.contains("spenso::t("));
         assert!(combined.contains("spenso::f("));
         assert!(combined.contains("spenso::g("));
+    }
+
+    #[test]
+    fn dot_rules_keep_explicit_fragments_and_fill_the_others() {
+        let model = Arc::new(scalar_model());
+        let dot = DotDiagram::from_dot(
+            model,
+            r#"digraph bubble {
+                ext [style=invis];
+                a [num="7"];
+                ext -> a [particle="phi"];
+                a -> b [particle="phi", lmb_id=0, num="11"];
+                a -> b [particle="phi"];
+                b -> ext [particle="phi"];
+            }"#,
+        )
+        .unwrap();
+        let diagram = dot.apply_feynman_rules().unwrap();
+        assert_eq!(diagram.numerator(), &(Atom::num(77) * test_atom("GC1")));
+        assert_eq!(
+            diagram.loop_momentum_basis(),
+            dot.diagram.loop_momentum_basis()
+        );
+        assert_eq!(diagram.projector(), &Atom::one());
+        diagram.validate().unwrap();
+    }
+
+    /// The external states of `diagram`'s projector as `(head, edge, half-edge)`.
+    fn projector_states(diagram: &FeynmanDiagram) -> BTreeSet<(String, usize, usize)> {
+        let mut states = BTreeSet::new();
+        diagram.projector().as_view().visitor(&mut |term| {
+            if let AtomView::Fun(function) = term
+                && let [edge, index] = function.iter().collect::<Vec<_>>()[..]
+                && let Ok(edge) = usize::try_from(edge)
+            {
+                let mut hedge = None;
+                index.visitor(&mut |inner| {
+                    if let AtomView::Fun(inner) = inner
+                        && inner.get_symbol() == feynkit_graph::symbols::hedge_index()
+                    {
+                        hedge = usize::try_from(inner.iter().next().unwrap()).ok();
+                    }
+                    true
+                });
+                states.insert((
+                    function.get_symbol().get_stripped_name().to_owned(),
+                    edge,
+                    hedge.unwrap(),
+                ));
+                return false;
+            }
+            true
+        });
+        states
+    }
+
+    #[test]
+    fn dot_rules_build_an_omitted_projector_in_the_finalized_frame() {
+        let model = Arc::new(standard_model());
+        let attached = |diagram: &FeynmanDiagram, edge: usize, endpoint| {
+            diagram
+                .half_edge_id(DiagramHalfEdge {
+                    edge: EdgeId(edge),
+                    endpoint,
+                })
+                .unwrap()
+                .0
+        };
+        let amplitude = r#"digraph ee_mumu {
+            ext [style=invis];
+            ext -> a [id=0, particle="e-"];
+            ext -> a [id=1, particle="e+"];
+            a -> b [id=2, particle="a"];
+            b -> ext [id=3, particle="mu-"];
+            b -> ext [id=4, particle="mu+"];
+        }"#;
+        let diagram = DotDiagram::from_dot(model.clone(), amplitude)
+            .unwrap()
+            .apply_feynman_rules()
+            .unwrap();
+        use DiagramEndpoint::{Source, Target};
+        assert_eq!(
+            projector_states(&diagram),
+            BTreeSet::from([
+                ("u".to_owned(), 0, attached(&diagram, 0, Target)),
+                ("vbar".to_owned(), 1, attached(&diagram, 1, Target)),
+                ("ubar".to_owned(), 3, attached(&diagram, 3, Source)),
+                ("v".to_owned(), 4, attached(&diagram, 4, Source)),
+            ])
+        );
+        let explicit = DotDiagram::from_dot(
+            model.clone(),
+            &amplitude.replace(
+                "ext [style=invis];",
+                r#"graph [projector="2"]; ext [style=invis];"#,
+            ),
+        )
+        .unwrap()
+        .apply_feynman_rules()
+        .unwrap();
+        assert_eq!(explicit.projector(), &Atom::num(2));
+
+        // A sewn initial state carries its incoming copy at its target and its
+        // outgoing copy at its source.
+        let cross_section = DotDiagram::from_dot(
+            model,
+            r#"digraph ee_mumu_ee {
+                ext [style=invis];
+                ext -> a [particle="e-", is_cut=0];
+                ext -> a [particle="e+", is_cut=1];
+                a -> b [particle="a"];
+                b -> c [particle="mu-"];
+                b -> c [particle="mu+"];
+                c -> d [particle="a"];
+                d -> ext [particle="e-", is_cut=0];
+                d -> ext [particle="e+", is_cut=1];
+            }"#,
+        )
+        .unwrap()
+        .apply_feynman_rules()
+        .unwrap();
+        assert_eq!(
+            projector_states(&cross_section),
+            BTreeSet::from([
+                ("u".to_owned(), 0, attached(&cross_section, 0, Target)),
+                ("ubar".to_owned(), 0, attached(&cross_section, 0, Source)),
+                ("vbar".to_owned(), 1, attached(&cross_section, 1, Target)),
+                ("v".to_owned(), 1, attached(&cross_section, 1, Source)),
+            ])
+        );
+        cross_section.validate().unwrap();
     }
 
     #[test]

@@ -1208,25 +1208,16 @@ impl CrossSectionGraphTerm {
             .underlying
             .iter_edges_of(&self.graph.initial_state_cut)
             .map(|(_, edge_index, edge_data)| {
-                edge_data
+                let pdg: isize = edge_data
                     .data
                     .particle()
-                    .map(|particle| {
-                        let pdg = particle
-                            .resolve(event_context.model)
-                            .pdg_code
-                            .try_into()
-                            .expect("PDG code must fit in an isize");
-                        (edge_index, pdg)
-                    })
-                    .ok_or_else(|| {
-                        eyre!(
-                            "Initial-state cut edge {edge_index:?} in graph {} has no particle specifier",
-                            self.graph.name
-                        )
-                    })
+                    .resolve(event_context.model)
+                    .pdg_code
+                    .try_into()
+                    .expect("PDG code must fit in an isize");
+                (edge_index, pdg)
             })
-            .collect::<Result<Vec<_>>>()?;
+            .collect::<Vec<_>>();
         incoming_pdgs.sort_by_key(|(edge_index, _)| edge_index.0);
         new_event
             .cut_info
@@ -1263,9 +1254,7 @@ impl CrossSectionGraphTerm {
                     momentum_sample.external_moms(),
                 );
 
-            let particle = d.data.particle().ok_or_else(|| {
-                eyre!("Cut legs in Local Unitarity must have a particle specifier.")
-            })?;
+            let particle = d.data.particle();
             let edge_pdg: isize = particle
                 .resolve(event_context.model)
                 .pdg_code

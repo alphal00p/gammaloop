@@ -1243,7 +1243,7 @@ mod test {
         state.model_parameters = state.model.default_param_card();
         let graph_path =
             crate::test_workspace_root().join("tests/resources/graphs/scalar_bubble.dot");
-        let graphs = Graph::from_finalized_runtime_path(&graph_path, &state.model)
+        let graphs = Graph::from_dot_path(&graph_path, &state.model)
             .expect("scalar bubble graph fixture should load");
 
         for process_name in process_names {

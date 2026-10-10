@@ -3442,11 +3442,8 @@ impl GammaLoopAPI {
                 let process_name = process_name
                     .unwrap_or(dot_path.file_stem().unwrap().to_string_lossy().into_owned());
 
-                let graphs =
-                    Graph::from_finalized_runtime_path(&dot_path, &self.gammaloop_state.model)
-                        .map_err(|e| {
-                            eyre!("Could not parse graphs from path: {}", e.to_string())
-                        })?;
+                let graphs = Graph::from_dot_path(&dot_path, &self.gammaloop_state.model)
+                    .map_err(|e| eyre!("Could not parse graphs from path: {}", e.to_string()))?;
                 (graphs, Some(process_name))
             }
             "string" => {
@@ -3456,16 +3453,13 @@ impl GammaLoopAPI {
                     ));
                 }
 
-                let graphs =
-                    Graph::from_finalized_runtime_string(&graphs, &self.gammaloop_state.model)
-                        .map_err(|e| {
-                            eyre!("Could not parse graphs from string: {}", e.to_string())
-                        })?;
+                let graphs = Graph::from_dot(&graphs, &self.gammaloop_state.model)
+                    .map_err(|e| eyre!("Could not parse graphs from string: {}", e.to_string()))?;
                 (graphs, process_name)
             }
             other => {
                 return Err(eyre!(
-                    "Unknown graph import format: {}. Supported formats are 'yaml' and 'json'",
+                    "Unknown graph import format: {}. Supported formats are 'dot' and 'string'",
                     other
                 ));
             }
@@ -3520,24 +3514,14 @@ impl GammaLoopAPI {
                     return Err(eyre!("Path does not exist: {}", dot_path.display()));
                 }
 
-                let graphs =
-                    Graph::from_finalized_runtime_path(&dot_path, &self.gammaloop_state.model)
-                        .map_err(|e| {
-                            eyre!("Could not parse graphs from path: {}", e.to_string())
-                        })?;
-                graphs
+                Graph::from_dot_path(&dot_path, &self.gammaloop_state.model)
+                    .map_err(|e| eyre!("Could not parse graphs from path: {}", e.to_string()))?
             }
-            "string" => {
-                let graphs =
-                    Graph::from_finalized_runtime_string(&graphs, &self.gammaloop_state.model)
-                        .map_err(|e| {
-                            eyre!("Could not parse graphs from string: {}", e.to_string())
-                        })?;
-                graphs
-            }
+            "string" => Graph::from_dot(&graphs, &self.gammaloop_state.model)
+                .map_err(|e| eyre!("Could not parse graphs from string: {}", e.to_string()))?,
             other => {
                 return Err(eyre!(
-                    "Unknown graph import format: {}. Supported formats are sting and dot",
+                    "Unknown graph import format: {}. Supported formats are 'dot' and 'string'",
                     other
                 ));
             }

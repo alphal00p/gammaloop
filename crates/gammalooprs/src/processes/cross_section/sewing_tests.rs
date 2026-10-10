@@ -12,7 +12,11 @@ use spenso::{
         library::symbolic::{ExplicitKey, TensorLibrary},
         parsing::ParseSettings,
     },
-    structure::{TensorStructure, representation::Minkowski, slot::IsAbstractSlot},
+    structure::{
+        TensorStructure,
+        representation::{LibrarySlot, Minkowski},
+        slot::IsAbstractSlot,
+    },
     tensors::parametric::ParamTensor,
 };
 use symbolica::{
@@ -69,6 +73,18 @@ fn spin_sum(left: &Matrix, right: &Matrix) -> Atom {
     (0..4).fold(Atom::Zero, |sum, i| sum + &sewn[i][i])
 }
 
+/// The index the model's rules give to a runtime half-edge slot: the k-th index of
+/// half-edge h is `hedge(h, k)` counted from one, where the runtime counts from zero.
+fn rule_index(slot: &LibrarySlot<Aind>) -> Atom {
+    match slot.aind() {
+        Aind::Hedge(hedge, local) => slot
+            .rep()
+            .slot::<Aind, _>(Aind::Hedge(hedge, local + 1))
+            .to_atom(),
+        _ => slot.to_atom(),
+    }
+}
+
 fn vertex_matrix(
     graph: &Graph,
     vertex_name: &str,
@@ -98,7 +114,7 @@ fn vertex_matrix(
             .external_structure_iter()
         {
             index_rules.push(Replacement::new(
-                slot.to_atom().to_pattern(),
+                rule_index(&slot).to_pattern(),
                 slot.rep().slot::<Aind, _>(Aind::Normal(order)).to_atom(),
             ));
         }
@@ -109,7 +125,7 @@ fn vertex_matrix(
             .external_structure_iter()
         {
             index_rules.push(Replacement::new(
-                slot.to_atom().to_pattern(),
+                rule_index(&slot).to_pattern(),
                 slot.rep()
                     .slot::<Aind, _>(Aind::Normal(3 + order))
                     .to_atom(),
@@ -201,7 +217,7 @@ fn tensor_matrix(expression: Atom, vector_component: usize) -> Matrix {
 fn generated_charged_scalar_forward_vertex_is_already_the_hermitian_partner() {
     test_initialise().unwrap();
     let model = load_generic_model("sm");
-    let graphs = Graph::from_finalized_runtime_string(
+    let graphs = Graph::from_dot(
         r#"
         digraph direct {
             ext [style=invis];
@@ -235,7 +251,7 @@ fn generated_charged_scalar_forward_vertex_is_already_the_hermitian_partner() {
 fn generated_complex_charged_current_preserves_the_ckm_norm() {
     test_initialise().unwrap();
     let model = load_generic_model("sm");
-    let graphs = Graph::from_finalized_runtime_string(
+    let graphs = Graph::from_dot(
         r#"
         digraph direct {
             ext [style=invis];
@@ -276,7 +292,7 @@ fn generated_sm_charged_ward_and_ghost_momentum_follow_the_action() {
     // The approved canonical model carries the action-consistent Lorentz rules;
     // loading it rebuilds the vertex rules and their shared Lorentz references.
     let model = load_generic_model("sm");
-    let graphs = Graph::from_finalized_runtime_string(
+    let graphs = Graph::from_dot(
         r#"
             digraph goldstone {
                 ext [style=invis];
@@ -373,7 +389,7 @@ fn generated_sm_charged_ward_and_ghost_momentum_follow_the_action() {
                     .external_structure_iter()
                 {
                     expression = expression
-                        .replace(slot.to_atom().to_pattern())
+                        .replace(rule_index(&slot).to_pattern())
                         .with(GS.cind(0));
                 }
             }
@@ -411,8 +427,8 @@ fn generated_sm_virtual_vector_and_goldstone_exchange_matches_unitary_current() 
         } else {
             ("Z", "G0", "ta-", "MZ")
         };
-        let graphs = Graph::from_finalized_runtime_string(
-            format!(
+        let graphs = Graph::from_dot(
+            &format!(
                 r#"
                 digraph vector_exchange {{
                     ext [style=invis];
@@ -532,7 +548,7 @@ fn generated_sm_virtual_vector_and_goldstone_exchange_matches_unitary_current() 
                 .external_structure_iter()
             {
                 numerator = numerator
-                    .replace(slot.to_atom().to_pattern())
+                    .replace(rule_index(&slot).to_pattern())
                     .with(slot.rep().slot::<Aind, _>(Aind::Normal(order)).to_atom());
             }
         }

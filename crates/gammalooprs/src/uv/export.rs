@@ -426,8 +426,8 @@ mod tests {
     };
     use crate::{
         cff::CutCFFIndex,
-        finalized_runtime_dot,
-        graph::{Graph, parse::IntoFinalizedRuntimeGraph},
+        dot,
+        graph::{Graph, parse::IntoGraph},
         initialisation::test_initialise,
         settings::global::GenerationSettings,
         utils::GS,
@@ -480,18 +480,18 @@ mod tests {
     #[test]
     fn computed_node_full_numerator_is_a_spenso_aware_typst_fragment() {
         test_initialise().unwrap();
-        let graph: Graph = finalized_runtime_dot!(digraph G {
+        let graph: Graph = dot!(digraph G {
             graph [projector=1]
             ext [style=invis]
             node [num=1]
-            edge [mass=0 num=1]
-            ext -> A [sink="{ufo_order:0}"]
-            C -> A [lmb_id=0 source="{ufo_order:0}" sink="{ufo_order:1}"]
-            A -> D [source="{ufo_order:2}" sink="{ufo_order:0}"]
-            D -> B [source="{ufo_order:1}" sink="{ufo_order:0}"]
-            B -> C [source="{ufo_order:1}" sink="{ufo_order:1}"]
-            C -> D [lmb_id=1 source="{ufo_order:2}" sink="{ufo_order:2}"]
-            B -> ext [source="{ufo_order:2}"]
+            edge [particle=H mass=0 num=1]
+            ext -> A
+            C -> A [lmb_id=0]
+            A -> D
+            D -> B
+            B -> C
+            C -> D [lmb_id=1]
+            B -> ext
         })
         .unwrap();
         let term = UVForestNodeExpression {
@@ -549,7 +549,7 @@ mod tests {
                     source.push('}');
                     (GenerationType::CrossSection, source)
                 };
-                let graphs = Graph::from_finalized_runtime_string(&source, &model)?;
+                let graphs = Graph::from_dot(&source, &model)?;
                 let definition = ProcessDefinition::from_graph_list(&graphs, kind, &model)?;
                 let mut process = Process::from_graph_list(
                     "export_phase".into(),
@@ -624,7 +624,7 @@ mod tests {
                     .collect::<Vec<_>>();
                 let mut actual = Atom::Zero;
                 for term in &exported.node_terms {
-                    for parsed in Graph::from_finalized_runtime_string(&term.dot, &model)? {
+                    for parsed in Graph::from_dot(&term.dot, &model)? {
                         actual += UvMarker::new(&settings.generation.uv).finish(
                             &parsed
                                 .global_prefactor
@@ -706,8 +706,8 @@ mod tests {
     fn computed_export_retains_nonempty_forests_in_all_routes_and_orchestrators()
     -> color_eyre::Result<()> {
         test_initialise()?;
-        let mut graph: Graph = finalized_runtime_dot!(digraph computed_direct_forest {
-            edge [num=1 mass=1]
+        let mut graph: Graph = dot!(digraph computed_direct_forest {
+            edge [particle=H num=1 mass=1]
             node [num=1]
             a -> b [id=0 lmb_id=0]
             a -> b [id=1]

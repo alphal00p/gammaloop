@@ -638,8 +638,8 @@ mod tests {
     use super::*;
     use crate::uv::approx::local_4d::FourDSector;
     use crate::{
-        finalized_runtime_dot,
-        graph::{LMBext, parse::IntoFinalizedRuntimeGraph},
+        dot,
+        graph::{LMBext, parse::IntoGraph},
         initialisation::test_initialise,
         settings::global::OrientationPattern,
         utils::W_,
@@ -654,11 +654,11 @@ mod tests {
     #[test]
     fn projected_rows_retain_one_ordinary_numerator_and_scalar_arguments() -> Result<()> {
         test_initialise()?;
-        let mut graph: Graph = finalized_runtime_dot!(digraph projected_parametric_numerator {
+        let mut graph: Graph = dot!(digraph projected_parametric_numerator {
             edge [num=1 mass=1]
             node [num=1]
-            a -> b [id=0 lmb_id=0]
-            a -> b [id=1]
+            a -> b [particle=H id=0 lmb_id=0]
+            a -> b [particle=H id=1]
         })?;
         let common = symbol!("projected_parametric_test::common"; Scalar);
         let numerator = Atom::var(common)
@@ -811,11 +811,11 @@ mod tests {
     #[test]
     fn canonical_source_and_template_preparation_share_retention_invariant_budget() -> Result<()> {
         test_initialise()?;
-        let mut graph: Graph = finalized_runtime_dot!(digraph preparation_retention {
+        let mut graph: Graph = dot!(digraph preparation_retention {
             edge [num=1 mass=1]
             node [num=1]
-            a -> b [id=0 lmb_id=0]
-            a -> b [id=1]
+            a -> b [particle=H id=0 lmb_id=0]
+            a -> b [particle=H id=1]
         })?;
         let mut coefficient = GS.emr_mom(EdgeIndex(0), GS.cind(0)).pow(2) + Atom::one();
         for edge in [EdgeIndex(0), EdgeIndex(1)] {
@@ -878,17 +878,17 @@ mod tests {
     #[test]
     fn nested_banana_quotient_powered_component_has_the_analytic_one_energy_sign() -> Result<()> {
         test_initialise()?;
-        let mut graph: Graph = finalized_runtime_dot!(digraph nested_banana_quotient_sign {
+        let mut graph: Graph = dot!(digraph nested_banana_quotient_sign {
             edge [num=1 mass=1]
             node [num=1]
             incoming [style=invis]
             outgoing [style=invis]
 
-            incoming -> a [id=0]
-            a -> b [id=1 lmb_id=0]
-            a -> b [id=2 lmb_id=1]
-            a -> b [id=3]
-            b -> outgoing [id=4]
+            incoming -> a [particle=H id=0]
+            a -> b [particle=H id=1 lmb_id=0]
+            a -> b [particle=H id=2 lmb_id=1]
+            a -> b [particle=H id=3]
+            b -> outgoing [particle=H id=4]
         })?;
         let inner_filter = graph
             .get_edge_subgraph(EdgeIndex(1))
@@ -1100,7 +1100,7 @@ mod tests {
     #[test]
     fn typed_taylor_wave_batches_genuine_owner_relabelled_terms() -> Result<()> {
         test_initialise()?;
-        let mut graph: Graph = finalized_runtime_dot!(
+        let mut graph: Graph = dot!(
             digraph G {
                 edge [particle="scalar_1"];
                 node [num=1];
@@ -1243,7 +1243,7 @@ mod tests {
     #[test]
     fn typed_taylor_next_component_reuses_one_topology_for_prior_residue_states() -> Result<()> {
         test_initialise()?;
-        let mut graph: Graph = finalized_runtime_dot!(digraph typed_taylor_component_waves {
+        let mut graph: Graph = dot!(digraph typed_taylor_component_waves {
             edge [particle="scalar_1"];
             node [num=1];
             a -> b [id=0 lmb_id=0];

@@ -2282,22 +2282,22 @@ mod tests {
     #[test]
     fn vakint_preparation_reduces_color_before_opening_traces() {
         use crate::{
-            finalized_runtime_dot,
-            graph::{Graph, parse::IntoFinalizedRuntimeGraph},
+            dot,
+            graph::{Graph, parse::IntoGraph},
         };
         use idenso::{coad, cof, color_cas, color_f, color_idx, color_t};
         use spenso::{g, trace_sym};
 
         test_initialise().unwrap();
-        let graph: Graph = finalized_runtime_dot!(digraph color_vakint_tadpole {
+        let graph: Graph = dot!(digraph color_vakint_tadpole {
             projector=1
             edge [num=1 mass=1]
             node [num=1]
             incoming [style=invis]
             outgoing [style=invis]
-            incoming -> a [id=0 sink="{ufo_order:0}"]
-            a -> a [id=1 lmb_id=0 source="{ufo_order:1}" sink="{ufo_order:2}"]
-            a -> outgoing [id=2 source="{ufo_order:3}"]
+            incoming -> a [particle=H id=0]
+            a -> a [particle=H id=1 lmb_id=0]
+            a -> outgoing [particle=H id=2]
         })
         .unwrap();
         let [a, b, c, d] = [
@@ -2341,20 +2341,20 @@ mod tests {
     #[test]
     fn affine_vakint_routing_keeps_external_momenta_fixed() {
         use crate::{
-            finalized_runtime_dot,
-            graph::{Graph, parse::IntoFinalizedRuntimeGraph},
+            dot,
+            graph::{Graph, parse::IntoGraph},
         };
 
         test_initialise().unwrap();
-        let graph: Graph = finalized_runtime_dot!(digraph affine_vakint_tadpole {
+        let graph: Graph = dot!(digraph affine_vakint_tadpole {
             projector=1
             edge [num=1 mass=1]
             node [num=1]
             incoming [style=invis]
             outgoing [style=invis]
-            incoming -> a [id=0 sink="{ufo_order:0}"]
-            a -> a [id=1 lmb_id=0 source="{ufo_order:1}" sink="{ufo_order:2}"]
-            a -> outgoing [id=2 source="{ufo_order:3}"]
+            incoming -> a [particle=H id=0]
+            a -> a [particle=H id=1 lmb_id=0]
+            a -> outgoing [particle=H id=2]
         })
         .unwrap();
         let hard = function!(GS.emr_mom, 1) - function!(GS.emr_mom, 0);
@@ -2435,21 +2435,21 @@ mod tests {
     #[test]
     fn nested_vacuum_denominators_preserve_incidence_and_factorized_numerators() {
         use crate::{
-            finalized_runtime_dot,
-            graph::{Graph, parse::IntoFinalizedRuntimeGraph},
+            dot,
+            graph::{Graph, parse::IntoGraph},
         };
 
         test_initialise().unwrap();
-        let graph: Graph = finalized_runtime_dot!(digraph nested_vacuum_bubble {
+        let graph: Graph = dot!(digraph nested_vacuum_bubble {
             projector=1
             edge [num=1 mass=1]
             node [num=1]
             incoming [style=invis]
             outgoing [style=invis]
-            incoming -> a [id=0 sink="{ufo_order:0}"]
-            b -> outgoing [id=1 source="{ufo_order:0}"]
-            a -> b [id=2 lmb_id=0 source="{ufo_order:1}" sink="{ufo_order:1}"]
-            a -> b [id=3 source="{ufo_order:2}" sink="{ufo_order:2}"]
+            incoming -> a [particle=H id=0]
+            b -> outgoing [particle=H id=1]
+            a -> b [particle=H id=2 lmb_id=0]
+            a -> b [particle=H id=3]
         })
         .unwrap();
         let denominators = [(2, 1), (3, -1)].map(|(edge, sign)| {

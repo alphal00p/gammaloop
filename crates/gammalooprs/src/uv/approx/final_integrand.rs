@@ -587,8 +587,8 @@ mod tests {
     use super::*;
     use crate::{
         cff::esurface::RaisedEsurfaceGroup,
-        finalized_runtime_dot,
-        graph::{cuts::CutSet, parse::IntoFinalizedRuntimeGraph},
+        dot,
+        graph::{cuts::CutSet, parse::IntoGraph},
         initialisation::test_initialise,
         settings::global::OrientationPattern,
         uv::{
@@ -606,11 +606,11 @@ mod tests {
     #[test]
     fn final_integrand_collects_tensor_factors_without_merging_denominators() -> Result<()> {
         test_initialise()?;
-        let graph: Graph = finalized_runtime_dot!(digraph factorized_final {
+        let graph: Graph = dot!(digraph factorized_final {
             edge [num=1 mass=1];
             node [num=1];
-            a -> b [id=0 lmb_id=0];
-            a -> b [id=1];
+            a -> b [particle=H id=0 lmb_id=0];
+            a -> b [particle=H id=1];
         })?;
         let index = CutCFFIndex::new_all_none();
         let (a, b, d1, d2) = symbol!(
@@ -879,11 +879,11 @@ mod tests {
     #[test]
     fn projected_zero_sectors_preserve_cut_orders_without_energy_maps() -> Result<()> {
         test_initialise()?;
-        let mut graph: Graph = finalized_runtime_dot!(digraph projected_zero {
+        let mut graph: Graph = dot!(digraph projected_zero {
             edge [num=1 mass=1];
             node [num=1];
-            a -> b [id=0 lmb_id=0];
-            a -> b [id=1];
+            a -> b [particle=H id=0 lmb_id=0];
+            a -> b [particle=H id=1];
         })?;
         let current = OwnedForestNode {
             spinney: Spinney::new(

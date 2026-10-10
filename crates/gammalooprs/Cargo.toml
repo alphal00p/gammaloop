@@ -43,7 +43,6 @@ idenso = { workspace = true, features = ["bincode", "native"] }
 include_dir = { workspace = true }
 indicatif = { workspace = true, features = ["improved_unicode", "rayon"] }
 itertools = { workspace = true }
-json5 = { workspace = true }
 # cgmath = "0.18.0"
 # argmin = "0.10.0"
 # by_address = "1.2.1"

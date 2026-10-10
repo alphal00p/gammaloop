@@ -157,9 +157,9 @@ digraph demo {
   edge [particle="a"];
 
   ext0 [style=invis];
-  ext0 -> v0:0 [id=0, is_cut=0, initial_state_connection=true];
+  ext0 -> v0:0 [id=0, is_cut=0];
   v0:1 -> v1:2 [id=1, particle="d", lmb_id=0];
-  v1:3 -> ext1 [id=2, particle="a", is_cut=0, initial_state_connection=true];
+  v1:3 -> ext1 [id=2, particle="a", is_cut=0];
   ext1 [style=invis];
 }
 ```
@@ -183,8 +183,11 @@ Important parser rules:
 
 == GammaLoop DOT Syntax
 
-GammaLoop expects canonical attribute names. Some older aliases may be mentioned
-by warnings, but new DOT should use the names below.
+GammaLoop imports DOT through FeynKit's compact importer, which resolves particles,
+interactions, cuts and loop momenta, then fills in every numerator fragment and the projector
+the input omits from the model's Feynman rules. GammaLoop applies the remaining attributes
+below itself. It expects canonical attribute names. Some older aliases may be mentioned by
+warnings, but new DOT should use the names below.
 
 === Graph Attributes
 
@@ -208,11 +211,11 @@ for inspection but are not input knobs.
 
 === Node Attributes
 
-/ `int_id`: UFO vertex-rule id. If omitted, GammaLoop infers the vertex rule from the
-  oriented incident particles when possible.
+/ `int_id`: UFO vertex-rule name. If omitted, FeynKit matches the vertex rule from the
+  incident particles; it is required when several rules match.
 
-/ `num`: Explicit vertex numerator. If present, it is used instead of a UFO vertex
-  rule.
+/ `num`: Explicit vertex numerator, used instead of the matched rule's vertex factor. A
+  vertex that matches no rule must carry one.
 
 / `dod`: Degree of divergence override for the vertex.
 
@@ -231,39 +234,33 @@ GraphViz-only presentation fields such as `label`, `shape`, `style`, `pos`,
 / `particle`: Model particle name, for example `"a"`, `"d"`, `"d~"`, `"g"`, `"ghG"`, or
   `"W+"`.
 
-/ `pdg`: Alternative to `particle`; looked up through the model PDG code.
+/ `pdg`: Alternative to `particle`; looked up through the model PDG code. Every edge
+  needs `particle` or `pdg`.
 
-/ `mass`: Symbolica mass expression. With `particle`, this overrides the model mass for
-  that edge. Without `particle`, it creates a mass-only scalar-like edge.
+/ `mass`: Symbolica mass expression overriding the model mass for that edge.
 
-/ `dir`: DOT direction/orientation. `forward` means default orientation, `back` means
-  reversed, and `none` means undirected. If omitted, GammaLoop derives the
-  orientation from the particle.
+/ `dir`: DOT direction/orientation. The orientation follows from the particle; an edge's
+  own `dir` must agree with it, while a default `edge [dir=...]` is drawing style only.
 
-/ `source`: Half-edge payload for the source half-edge. GammaLoop expects JSON5 when the
-  payload carries structured data, for example `source="{ufo_order:2}"`.
+/ `lmb_id`: Loop-momentum-basis slot of a chosen loop edge. Slots are contiguous from
+  zero and complete the basis; without them, momenta are routed through the canonical
+  basis used by generation.
 
-/ `sink`: Half-edge payload for the sink half-edge, with the same JSON5 convention as
-  `source`.
+/ `is_cut`: Initial-state tag of a cross section, on an incoming and an outgoing dangling
+  leg of the same particle or on one internal edge. The graph's optional `final_state`
+  names the particles of its physical cuts; without it every separating cut is physical.
 
-/ `lmb_id`: Loop-momentum-basis id for a chosen loop edge.
-
-/ `is_cut`: Shared sewing key on both dangling halves of a forward-amplitude
-  initial-state connection. Both halves also set `initial_state_connection=true`.
-
-/ `initial_state_connection`: Identifies mechanical forward-amplitude sewing metadata.
-  Canonical cross-section cuts belong to the FeynKit `FeynmanDiagram` artifact
-  and are not inferred from runtime DOT.
-
-/ `num`: Explicit edge numerator. The parser localizes `edgeid(...)`, `sourceid(...)`,
-  and `sinkid(...)` placeholders to the concrete edge and hedge indices.
+/ `num`: Explicit numerator of an internal edge, used instead of the model propagator
+  numerator; external legs carry none. `eid`, `source` and `sink` stand for the edge and
+  its endpoint half-edge indices, and `eid(i)`, `source(i)` and `sink(i)` for the
+  corresponding tensor-index identities.
 
 / `dod`: Degree of divergence override for the edge.
 
 / `name`: Optional semantic edge name.
 
 / `is_dummy`: Boolean marking a dummy edge. Dummy edges are filtered out of some physics
-  operations and vertex matching.
+  operations and of vertex matching, where they take the slots after the interaction's legs.
 
 / `momtrop_edge_power`: Optional Symbolica expression controlling the momentum power used by the
   momtrop sampler. This does not change the graph topology.

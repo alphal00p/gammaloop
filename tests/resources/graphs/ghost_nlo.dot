@@ -1,6 +1,6 @@
 digraph d1 {
 
-projector = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))"
+projector = "spenso::g(spenso::coad(8,hedge(0,1)),spenso::coad(8,hedge(1,1)))"
 
 in1 [style=invis];
 in1 -> v1:0

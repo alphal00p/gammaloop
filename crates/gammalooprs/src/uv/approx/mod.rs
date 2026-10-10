@@ -550,8 +550,8 @@ mod tests {
     use super::*;
     use crate::{
         cff::CutCFFIndex,
-        finalized_runtime_dot,
-        graph::{FeynmanGraph, cuts::LuCutSelection, parse::IntoFinalizedRuntimeGraph},
+        dot,
+        graph::{FeynmanGraph, cuts::LuCutSelection, parse::IntoGraph},
         initialisation::test_initialise,
         integrands::{
             evaluation::EvaluationMetaData,
@@ -597,12 +597,12 @@ mod tests {
     #[test]
     fn expanded_4d_setting_does_not_change_the_empty_forest_root() -> Result<()> {
         test_initialise()?;
-        let mut graph: Graph = finalized_runtime_dot!(digraph root_identity {
+        let mut graph: Graph = dot!(digraph root_identity {
             edge [num=1 mass=1]
             node [num=1]
 
-            a -> b [id=0 lmb_id=0]
-            a -> b [id=1]
+            a -> b [particle=H id=0 lmb_id=0]
+            a -> b [particle=H id=1]
         })?;
         let options = graph.denominator_only_cff_3d_expression_options();
         let canonization = graph.get_esurface_canonization(&graph.loop_momentum_basis);
@@ -653,7 +653,7 @@ mod tests {
     #[test]
     fn selected_raised_lu_projection_preserves_quadratic_contact_family() -> Result<()> {
         test_initialise()?;
-        let mut graph: Graph = finalized_runtime_dot!(digraph raised_lu_contact_family {
+        let mut graph: Graph = dot!(digraph raised_lu_contact_family {
             num = 1
             edge [particle="scalar_1" num=1]
             node [num=1]
@@ -877,19 +877,19 @@ mod tests {
     #[test]
     fn gl24_direct_3d_modes_preserve_orientation_selector_contracts() -> Result<()> {
         test_initialise()?;
-        let mut graph: Graph = finalized_runtime_dot!(digraph gl24_selector_contract {
+        let mut graph: Graph = dot!(digraph gl24_selector_contract {
             edge [num=1 mass=1]
             node [num=1]
 
-            v0 -> v1 [id=0 is_cut=0]
-            v0 -> v3 [id=1 lmb_id=0 num="(Q(1,spenso::cind(0))^2-Q(1,spenso::cind(1))^2-Q(1,spenso::cind(2))^2-Q(1,spenso::cind(3))^2)^2"]
-            v0 -> v5 [id=2]
-            v1 -> v2 [id=3 lmb_id=1]
-            v1 -> v3 [id=4]
-            v2 -> v4 [id=5 lmb_id=2]
-            v2 -> v4 [id=6]
-            v3 -> v5 [id=7]
-            v4 -> v5 [id=8 mass=2]
+            v0 -> v1 [particle=H id=0 is_cut=0]
+            v0 -> v3 [particle=H id=1 lmb_id=0 num="(Q(1,spenso::cind(0))^2-Q(1,spenso::cind(1))^2-Q(1,spenso::cind(2))^2-Q(1,spenso::cind(3))^2)^2"]
+            v0 -> v5 [particle=H id=2]
+            v1 -> v2 [particle=H id=3 lmb_id=1]
+            v1 -> v3 [particle=H id=4]
+            v2 -> v4 [particle=H id=5 lmb_id=2]
+            v2 -> v4 [particle=H id=6]
+            v3 -> v5 [particle=H id=7]
+            v4 -> v5 [particle=H id=8 mass=2]
         })?;
         let options = graph.denominator_only_cff_3d_expression_options();
         let numerator = graph.production_numerator_atom_for_full_3d_expression();
@@ -1040,7 +1040,7 @@ mod tests {
     #[test]
     fn nested_scalar_bubble_direct_3d_modes_match_without_a_cut() -> Result<()> {
         test_initialise()?;
-        let mut graph: Graph = finalized_runtime_dot!(
+        let mut graph: Graph = dot!(
             digraph nested_scalar_bubble_selector_contract {
                 edge [particle="scalar_1"];
                 node [num=1];
@@ -1269,16 +1269,16 @@ mod tests {
     #[test]
     fn factorized_owned_dot_child_cff_matches_direct_3d_for_uncut_self_energy() -> Result<()> {
         test_initialise()?;
-        let mut graph: Graph = finalized_runtime_dot!(digraph factorized_child_cff {
+        let mut graph: Graph = dot!(digraph factorized_child_cff {
             edge [num=1 mass=1]
             node [num=1]
             incoming [style=invis]
             outgoing [style=invis]
 
-            incoming -> v0 [id=0]
-            v0 -> v1 [id=1 lmb_id=0]
-            v0 -> v1 [id=2 num="Q(2,spenso::cind(0))^2-Q(2,spenso::cind(1))^2-Q(2,spenso::cind(2))^2-Q(2,spenso::cind(3))^2-1"]
-            v1 -> outgoing [id=3]
+            incoming -> v0 [particle=H id=0]
+            v0 -> v1 [particle=H id=1 lmb_id=0]
+            v0 -> v1 [particle=H id=2 num="Q(2,spenso::cind(0))^2-Q(2,spenso::cind(1))^2-Q(2,spenso::cind(2))^2-Q(2,spenso::cind(3))^2-1"]
+            v1 -> outgoing [particle=H id=3]
         })?;
         let options = graph.denominator_only_cff_3d_expression_options();
         let numerator = graph.production_numerator_atom_for_full_3d_expression();
@@ -1579,31 +1579,31 @@ mod tests {
         test_initialise()?;
         for depth in [2, 3] {
             let mut graph: Graph = if depth == 2 {
-                finalized_runtime_dot!(digraph nested_scalar_banana {
+                dot!(digraph nested_scalar_banana {
                     edge [num=1 mass=1]
                     node [num=1]
                     incoming [style=invis]
                     outgoing [style=invis]
 
-                    incoming -> a [id=0]
-                    a -> b [id=1 lmb_id=0]
-                    a -> b [id=2 lmb_id=1]
-                    a -> b [id=3]
-                    b -> outgoing [id=4]
+                    incoming -> a [particle=H id=0]
+                    a -> b [particle=H id=1 lmb_id=0]
+                    a -> b [particle=H id=2 lmb_id=1]
+                    a -> b [particle=H id=3]
+                    b -> outgoing [particle=H id=4]
                 })?
             } else {
-                finalized_runtime_dot!(digraph depth_three_scalar_banana {
+                dot!(digraph depth_three_scalar_banana {
                     edge [num=1 mass=1]
                     node [num=1]
                     incoming [style=invis]
                     outgoing [style=invis]
 
-                    incoming -> a [id=0]
-                    a -> b [id=1 lmb_id=0]
-                    a -> b [id=2 lmb_id=1]
-                    a -> b [id=3 lmb_id=2]
-                    a -> b [id=4]
-                    b -> outgoing [id=5]
+                    incoming -> a [particle=H id=0]
+                    a -> b [particle=H id=1 lmb_id=0]
+                    a -> b [particle=H id=2 lmb_id=1]
+                    a -> b [particle=H id=3 lmb_id=2]
+                    a -> b [particle=H id=4]
+                    b -> outgoing [particle=H id=5]
                 })?
             };
             let global_marker = symbolica::symbol!("nested_scalar_banana::global");
@@ -1880,7 +1880,7 @@ mod tests {
     #[test]
     fn complete_self_energy_taylor_sum_matches_direct_3d_for_raised_lu_jets() -> Result<()> {
         test_initialise()?;
-        let base_graph: Graph = finalized_runtime_dot!(
+        let base_graph: Graph = dot!(
             digraph complete_self_energy_taylor_sum {
                 num = 1
                 edge [particle="scalar_1" num=1]

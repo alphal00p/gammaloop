@@ -3529,7 +3529,7 @@ mod tests {
 
         let graph_path =
             crate::test_workspace_root().join("tests/resources/graphs/scalar_bubble.dot");
-        let graphs = Graph::from_finalized_runtime_path(&graph_path, &state.model)
+        let graphs = Graph::from_dot_path(&graph_path, &state.model)
             .expect("scalar bubble graph fixture should load");
 
         state
@@ -3582,7 +3582,7 @@ mod tests {
             let mut state = State::new_test();
             state.model = load_generic_model("scalars");
             state.model_parameters = state.model.default_param_card();
-            let mut graphs = Graph::from_finalized_runtime_string(source, &state.model)?;
+            let mut graphs = Graph::from_dot(source, &state.model)?;
             graphs.truncate(1);
             let graph_name = graphs[0].name.clone();
             for name in ["first", "second"] {
@@ -3721,9 +3721,7 @@ mod tests {
                                 let node = node?;
                                 let dot = fs::read_to_string(node.path())?;
                                 assert!(dot.contains("forest_residue_index"));
-                                for graph in
-                                    Graph::from_finalized_runtime_string(&dot, &state.model)?
-                                {
+                                for graph in Graph::from_dot(&dot, &state.model)? {
                                     exported_graph = true;
                                     expression += graph.full_numerator_atom();
                                 }
@@ -4036,7 +4034,7 @@ mod tests {
 
         let graph_path =
             crate::test_workspace_root().join("tests/resources/graphs/scalar_bubble.dot");
-        let graphs = Graph::from_finalized_runtime_path(&graph_path, &state.model)
+        let graphs = Graph::from_dot_path(&graph_path, &state.model)
             .expect("scalar bubble graph fixture should load");
         state
             .import_graphs(

@@ -631,8 +631,8 @@ mod tests {
     use symbolica::state::State;
 
     use crate::{
-        GammaLoopContextContainer, finalized_runtime_dot,
-        graph::{Graph, parse::IntoFinalizedRuntimeGraph},
+        GammaLoopContextContainer, dot,
+        graph::{Graph, parse::IntoGraph},
         settings::{
             RuntimeSettings,
             global::{
@@ -655,19 +655,19 @@ mod tests {
             // load the model and hack the masses, go through serializable model since arc is not mutable
             let model = load_generic_model("sm");
 
-            let graph: Graph = finalized_runtime_dot!(
+            let graph: Graph = dot!(
                 digraph G{
                     graph [projector=1]
                     node [num=1]
                     edge [num=1]
                     ext [style=invis]
-                    ext -> n1  [particle=H sink="{ufo_order:0}"]
-                    ext -> n4  [particle=H sink="{ufo_order:0}"]
-                    n1 -> n2  [particle=H lmb_id=0 source="{ufo_order:1}" sink="{ufo_order:0}"]
-                    n1 -> n3  [particle=H source="{ufo_order:2}" sink="{ufo_order:0}"]
-                    n2 -> n3  [particle=t lmb_id=1 source="{ufo_order:1}" sink="{ufo_order:1}"]
-                    n3 -> n4  [particle=t source="{ufo_order:2}" sink="{ufo_order:1}"]
-                    n4 -> n2  [particle=t source="{ufo_order:2}" sink="{ufo_order:2}"]
+                    ext -> n1  [particle=H]
+                    ext -> n4  [particle=H]
+                    n1 -> n2  [particle=H lmb_id=0]
+                    n1 -> n3  [particle=H]
+                    n2 -> n3  [particle=t lmb_id=1]
+                    n3 -> n4  [particle=t]
+                    n4 -> n2  [particle=t]
                 }
             )
             .unwrap();

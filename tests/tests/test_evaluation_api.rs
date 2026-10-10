@@ -82,7 +82,6 @@ fn is_multichannel_fixture_topology(graph: &Graph, model: &Model) -> bool {
             let particle = match &edge.data.particle {
                 PossibleParticle::Particle(particle)
                 | PossibleParticle::MassOverriddenParticle { particle, .. } => *particle,
-                PossibleParticle::JustMass { .. } => return false,
             };
             let Ok(particle) = model.particle_by_id(particle) else {
                 return false;

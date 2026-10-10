@@ -879,7 +879,7 @@ fn import_graphs_inline_dot_process_spec_filters_cutkosky_cuts() -> Result<()> {
     let mut cli = get_test_cli(None, root.join("state"), None, true)?;
     cli.run_command("import model sm-default.json")?;
 
-    let graphs = Graph::from_finalized_runtime_string(DOT, &cli.state.model)?;
+    let graphs = Graph::from_dot(DOT, &cli.state.model)?;
     let inferred_definition = ProcessDefinition::from_graph_list(
         &graphs,
         GenerationType::CrossSection,

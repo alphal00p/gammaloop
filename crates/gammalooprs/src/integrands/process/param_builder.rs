@@ -1730,8 +1730,8 @@ impl<T: FloatLike> Display for ParamBuilder<T> {
 mod tests {
     use super::*;
     use crate::{
-        finalized_runtime_dot,
-        graph::parse::from_dot::IntoFinalizedRuntimeGraph,
+        dot,
+        graph::parse::from_dot::IntoGraph,
         initialisation::test_initialise,
         momentum::sample::{BareMomentumSample, LoopMomenta},
     };
@@ -1772,11 +1772,11 @@ mod tests {
     #[test]
     fn arb_parameter_baseline_uses_decimal_promotion() {
         test_initialise().unwrap();
-        let graph = finalized_runtime_dot!(
+        let graph = dot!(
             digraph arb_parameter_baseline {
                 edge [num=1 mass=0]
                 node [num=1]
-                A -> B [id=0]
+                A -> B [particle=H id=0]
             }
         )
         .unwrap();

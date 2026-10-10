@@ -181,18 +181,27 @@ impl Graph {
     }
 
     pub(crate) fn external_momentum_edge_order(&self) -> Vec<EdgeIndex> {
-        if self.initial_state_cut.nedges(&self.underlying) == 0 {
-            let external_filter: SuBitGraph = self.external_filter();
+        Self::external_momentum_edge_order_of(&self.underlying, &self.initial_state_cut)
+    }
+
+    /// GammaLoop's external momentum order: amplitude legs by dangling half-edge, and
+    /// cross-section initial states by their incoming half-edge.
+    pub(crate) fn external_momentum_edge_order_of<E, V, H>(
+        graph: &HedgeGraph<E, V, H>,
+        initial_state_cut: &OrientedCut,
+    ) -> Vec<EdgeIndex> {
+        if initial_state_cut.nedges(graph) == 0 {
+            let external_filter: SuBitGraph = graph.external_filter();
             external_filter
                 .included_iter()
                 .sorted()
-                .map(|hedge| self.underlying[&hedge])
+                .map(|hedge| graph[&hedge])
                 .collect_vec()
         } else {
-            self.initial_state_cut
+            initial_state_cut
                 .iter_left_hedges()
                 .sorted()
-                .map(|hedge| self.underlying[&hedge])
+                .map(|hedge| graph[&hedge])
                 .collect_vec()
         }
     }
@@ -716,8 +725,8 @@ pub fn get_cff_inverse_energy_product_impl<E, V, H, S: SubSetLike>(
 mod tests {
     use super::*;
     use crate::{
-        finalized_runtime_dot, graph::parse::from_dot::IntoFinalizedRuntimeGraph,
-        initialisation::test_initialise, momentum::signature::LoopExtSignature,
+        dot, graph::parse::from_dot::IntoGraph, initialisation::test_initialise,
+        momentum::signature::LoopExtSignature,
     };
     use std::sync::OnceLock;
 
@@ -737,16 +746,16 @@ mod tests {
         GRAPH
             .get_or_init(|| {
                 test_initialise().unwrap();
-                finalized_runtime_dot!(
+                dot!(
                     digraph lmb_selector {
                         graph [projector=1]
                         edge [num=1 mass=0]
                         node [num=1]
-                        A -> B [id=0 lmb_id=0 source="{ufo_order:0}" sink="{ufo_order:0}"]
-                        A -> B [id=1 lmb_id=1 source="{ufo_order:1}" sink="{ufo_order:1}"]
-                        A -> B [id=2 lmb_id=2 source="{ufo_order:2}" sink="{ufo_order:2}"]
-                        A -> B [id=3 lmb_id=3 source="{ufo_order:3}" sink="{ufo_order:3}"]
-                        A -> B [id=4 mass=1 source="{ufo_order:4}" sink="{ufo_order:4}"]
+                        A -> B [particle=H id=0 lmb_id=0]
+                        A -> B [particle=H id=1 lmb_id=1]
+                        A -> B [particle=H id=2 lmb_id=2]
+                        A -> B [particle=H id=3 lmb_id=3]
+                        A -> B [particle=H id=4 mass=1]
                     }
                 )
                 .unwrap()

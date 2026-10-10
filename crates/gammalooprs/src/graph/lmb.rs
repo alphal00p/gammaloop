@@ -1244,8 +1244,8 @@ pub mod test {
     };
 
     use crate::{
-        finalized_runtime_dot,
-        graph::{FeynmanGraph, Graph, LMBext, LmbError, parse::IntoFinalizedRuntimeGraph},
+        dot,
+        graph::{FeynmanGraph, Graph, LMBext, LmbError, parse::IntoGraph},
         initialisation::test_initialise,
         momentum::SignOrZero,
     };
@@ -1256,23 +1256,23 @@ pub mod test {
     #[test]
     fn generated_singleton_lmbs_conserve_external_momentum() {
         test_initialise().unwrap();
-        let graphs: Vec<Graph> = finalized_runtime_dot!(
+        let graphs: Vec<Graph> = dot!(
             digraph contact {
                 ext [style=invis]
                 node[num=1]
-                ext->v:0[id=0]
-                ext->v:1[id=1]
-                v:2->ext[id=2]
-                v:3->ext[id=3]
+                ext->v:0[particle=H mass=0 id=0]
+                ext->v:1[particle=H mass=0 id=1]
+                v:2->ext[particle=H mass=0 id=2]
+                v:3->ext[particle=H mass=0 id=3]
             }
             digraph tadpole {
                 ext [style=invis]
                 node[num=1]
-                ext->v:0[id=0]
-                ext->v:1[id=1]
-                v:2->ext[id=2]
-                v:3->ext[id=3]
-                v->v[id=4 num=1 mass=1]
+                ext->v:0[particle=H mass=0 id=0]
+                ext->v:1[particle=H mass=0 id=1]
+                v:2->ext[particle=H mass=0 id=2]
+                v:3->ext[particle=H mass=0 id=3]
+                v->v[particle=H id=4 num=1 mass=1]
             }
         )
         .unwrap();
@@ -1323,25 +1323,25 @@ pub mod test {
     #[test]
     fn lmb_for_dummy() {
         test_initialise().unwrap();
-        let gs: Vec<Graph> = finalized_runtime_dot!(
+        let gs: Vec<Graph> = dot!(
             digraph dxda{
                 graph [projector="1"]
                 ext [style=invis]
                 node[num=1]
                 edge[num=1 particle=a dir=none]
-                ext->v1:0[id=0 is_dummy=true sink="{ufo_order:0}"]
-                ext->v1:1[id=1 sink="{ufo_order:1}"]
-                ext->v1:2[id=2 sink="{ufo_order:2}"]
+                ext->v1:0[id=0 is_dummy=true]
+                ext->v1:1[id=1]
+                ext->v1:2[id=2]
             }
             digraph aa{
                 graph [projector="1"]
                 ext [style=invis]
                 node[num=1]
                 edge[num=1 particle=a dir=none]
-                ext->v1:0[id=0 is_dummy=true sink="{ufo_order:0}"]
-                ext->v1:1[id=1 is_dummy=true sink="{ufo_order:1}"]
-                v1->v2[id=3 source="{ufo_order:2}" sink="{ufo_order:0}"]
-                ext->v2:2[id=2 sink="{ufo_order:1}"]
+                ext->v1:0[id=0 is_dummy=true]
+                ext->v1:1[id=1 is_dummy=true]
+                v1->v2[id=3]
+                ext->v2:2[id=2]
             }
         )
         .unwrap();
@@ -1358,16 +1358,16 @@ pub mod test {
     #[test]
     fn generated_lmbs_do_not_use_dummy_external_carriers() {
         test_initialise().unwrap();
-        let g: Graph = finalized_runtime_dot!(digraph{
+        let g: Graph = dot!(digraph{
             graph [projector="1"]
             ext [style=invis]
             edge[num=1 mass=1 particle=a dir=none]
             node[num=1]
-            ext->v1:0[id=0 is_dummy=true sink="{ufo_order:0}"]
-            ext->v1:1[id=1 sink="{ufo_order:1}"]
-            v1->v2[id=2 lmb_id=0 source="{ufo_order:2}" sink="{ufo_order:0}"]
-            v2->v1[id=3 source="{ufo_order:1}" sink="{ufo_order:3}"]
-            ext->v2:2[id=4 sink="{ufo_order:2}"]
+            ext->v1:0[id=0 is_dummy=true]
+            ext->v1:1[id=1]
+            v1->v2[id=2 lmb_id=0]
+            v2->v1[id=3]
+            ext->v2:2[id=4]
         })
         .unwrap();
 
@@ -1714,19 +1714,19 @@ pub mod test {
 
         let _guard = SHRUNKEN_LMB_TEST_LOCK.lock().unwrap();
         SHRUNKEN_LMB_TEST_INIT.call_once(|| test_initialise().unwrap());
-        let g: Graph = finalized_runtime_dot!(digraph {
+        let g: Graph = dot!(digraph {
             edge[num=1 mass=1]
             node[num=1]
-            b:17 -> a:0 [id=0]
-            a:1 -> e:2 [id=1]
-            a:3 -> f:4 [id=2]
-            b:5 -> c:6 [id=3]
-            b:7 -> d:8 [id=4]
-            c:9 -> d:10 [id=5]
-            c:11 -> f:12 [id=6]
-            d:13 -> e:14 [id=7]
-            e:15 -> f:16 [id=8]
-            x:18 -> y:19 [id=9]
+            b:17 -> a:0 [particle=H id=0]
+            a:1 -> e:2 [particle=H id=1]
+            a:3 -> f:4 [particle=H id=2]
+            b:5 -> c:6 [particle=H id=3]
+            b:7 -> d:8 [particle=H id=4]
+            c:9 -> d:10 [particle=H id=5]
+            c:11 -> f:12 [particle=H id=6]
+            d:13 -> e:14 [particle=H id=7]
+            e:15 -> f:16 [particle=H id=8]
+            x:18 -> y:19 [particle=H id=9]
         })
         .unwrap();
         let mut outer: SuBitGraph = g.empty_subgraph();

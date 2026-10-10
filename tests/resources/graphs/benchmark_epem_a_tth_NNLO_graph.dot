@@ -2,7 +2,7 @@ digraph benchmark_epem_a_tth_NNLO_graph {
     num = "1";
     overall_factor = "1";
     overall_factor_evaluated = "1";
-    projector = "u(1,spenso::bis(4,hedge(1)))*ubar(1,spenso::bis(4,hedge(3)))*v(0,spenso::bis(4,hedge(2)))*vbar(0,spenso::bis(4,hedge(0)))";
+    projector = "u(1,spenso::bis(4,hedge(1,1)))*ubar(1,spenso::bis(4,hedge(3,1)))*v(0,spenso::bis(4,hedge(2,1)))*vbar(0,spenso::bis(4,hedge(0,1)))";
 
 	exte0	 [style=invis];
 	exte0	-> 0:0	 [id=0 is_cut="2" particle="e+"];
