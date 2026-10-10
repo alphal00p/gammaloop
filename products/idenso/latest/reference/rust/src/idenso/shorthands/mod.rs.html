@@ -283,35 +283,57 @@
 <a href=#282 id=282 data-nosnippet>282</a>    }
 <a href=#283 id=283 data-nosnippet>283</a>
 <a href=#284 id=284 data-nosnippet>284</a>    <span class="attr">#[test]
-<a href=#285 id=285 data-nosnippet>285</a>    </span><span class="kw">fn </span>undo_schoonschip_across_chain() {
-<a href=#286 id=286 data-nosnippet>286</a>        <span class="kw">let _ </span>= test_initialize();
-<a href=#287 id=287 data-nosnippet>287</a>        <span class="kw">let </span>expr = <span class="macro">chain!</span>(
-<a href=#288 id=288 data-nosnippet>288</a>            <span class="macro">mink!</span>(<span class="number">4</span>, i),
-<a href=#289 id=289 data-nosnippet>289</a>            <span class="macro">mink!</span>(<span class="number">4</span>, j),
-<a href=#290 id=290 data-nosnippet>290</a>            <span class="macro">chain_factor!</span>(
-<a href=#291 id=291 data-nosnippet>291</a>                schoonschip_only_factor,
-<a href=#292 id=292 data-nosnippet>292</a>                <span class="kw">in</span>,
-<a href=#293 id=293 data-nosnippet>293</a>                out,
-<a href=#294 id=294 data-nosnippet>294</a>                (<span class="macro">vector!</span>(compact_p, <span class="macro">mink!</span>(<span class="number">4</span>)))
-<a href=#295 id=295 data-nosnippet>295</a>            )
-<a href=#296 id=296 data-nosnippet>296</a>        );
-<a href=#297 id=297 data-nosnippet>297</a>
-<a href=#298 id=298 data-nosnippet>298</a>        <span class="macro">insta::assert_snapshot!</span>( expr.undo_schoonschip::&lt;AbstractIndex&gt;().unwrap().to_bare_ordered_string(), @<span class="string">"chain(mink(4,i),mink(4,j),schoonschip_only_factor(in,out,mink(4,d_1000000)))*compact_p(mink(4,d_1000000))"</span>);
-<a href=#299 id=299 data-nosnippet>299</a>    }
-<a href=#300 id=300 data-nosnippet>300</a>
-<a href=#301 id=301 data-nosnippet>301</a>    <span class="attr">#[test]
-<a href=#302 id=302 data-nosnippet>302</a>    </span><span class="kw">fn </span>network_tooling_malformed_shorthand_returns_a_parse_error() {
-<a href=#303 id=303 data-nosnippet>303</a>        <span class="kw">let _ </span>= test_initialize();
-<a href=#304 id=304 data-nosnippet>304</a>        <span class="kw">let </span>expression = FunctionBuilder::new(SPENSO_TAG.dot)
-<a href=#305 id=305 data-nosnippet>305</a>            .add_arg(Atom::var(<span class="macro">symbol!</span>(<span class="string">"malformed_dot_operand"</span>)))
-<a href=#306 id=306 data-nosnippet>306</a>            .finish();
-<a href=#307 id=307 data-nosnippet>307</a>
-<a href=#308 id=308 data-nosnippet>308</a>        <span class="macro">assert!</span>(<span class="macro">matches!</span>(
-<a href=#309 id=309 data-nosnippet>309</a>            expression
-<a href=#310 id=310 data-nosnippet>310</a>                .undo_dots::&lt;AbstractIndex&gt;()
-<a href=#311 id=311 data-nosnippet>311</a>                .expect_err(<span class="string">"malformed dot notation should return an error"</span>),
-<a href=#312 id=312 data-nosnippet>312</a>            NetworkToolingError::Parse { reason } <span class="kw">if </span>reason.contains(<span class="string">"Invalid dot function"</span>)
-<a href=#313 id=313 data-nosnippet>313</a>        ));
-<a href=#314 id=314 data-nosnippet>314</a>    }
-<a href=#315 id=315 data-nosnippet>315</a>}
+<a href=#285 id=285 data-nosnippet>285</a>    </span><span class="kw">fn </span>undo_shorthands_preserves_radial_powers() {
+<a href=#286 id=286 data-nosnippet>286</a>        <span class="kw">use </span>symbolica::atom::AtomCore;
+<a href=#287 id=287 data-nosnippet>287</a>
+<a href=#288 id=288 data-nosnippet>288</a>        test_initialize();
+<a href=#289 id=289 data-nosnippet>289</a>        <span class="kw">for </span>representation <span class="kw">in </span>[<span class="macro">mink!</span>(<span class="number">4</span>), <span class="macro">mink!</span>(dim)] {
+<a href=#290 id=290 data-nosnippet>290</a>            <span class="kw">let </span>momentum = <span class="macro">vector!</span>(Q, <span class="number">9</span>, representation);
+<a href=#291 id=291 data-nosnippet>291</a>            <span class="kw">let </span>radial = <span class="macro">spenso::dot!</span>(<span class="kw-2">&amp;</span>momentum, <span class="kw-2">&amp;</span>momentum);
+<a href=#292 id=292 data-nosnippet>292</a>            <span class="kw">for </span>power <span class="kw">in </span>[-<span class="number">9</span>, -<span class="number">5</span>, -<span class="number">3</span>, -<span class="number">2</span>, -<span class="number">1</span>, <span class="number">0</span>, <span class="number">1</span>, <span class="number">2</span>, <span class="number">3</span>, <span class="number">5</span>, <span class="number">9</span>] {
+<a href=#293 id=293 data-nosnippet>293</a>                <span class="kw">let </span>original = radial.clone().pow(power);
+<a href=#294 id=294 data-nosnippet>294</a>                <span class="comment">// Integrated UV conversion runs these three parsing/execution
+<a href=#295 id=295 data-nosnippet>295</a>                // passes in sequence. A cube must stay a cube at every boundary.
+<a href=#296 id=296 data-nosnippet>296</a>                </span><span class="kw">let </span>schoonschip = original.undo_schoonschip::&lt;AbstractIndex&gt;().unwrap();
+<a href=#297 id=297 data-nosnippet>297</a>                <span class="macro">assert_eq!</span>(schoonschip, original, <span class="string">"schoonschip, power {power}"</span>);
+<a href=#298 id=298 data-nosnippet>298</a>                <span class="kw">let </span>chain = schoonschip.undo_chain::&lt;AbstractIndex&gt;().unwrap();
+<a href=#299 id=299 data-nosnippet>299</a>                <span class="macro">assert_eq!</span>(chain, original, <span class="string">"chain, power {power}"</span>);
+<a href=#300 id=300 data-nosnippet>300</a>                <span class="kw">let </span>trace = chain.undo_trace::&lt;AbstractIndex&gt;().unwrap();
+<a href=#301 id=301 data-nosnippet>301</a>                <span class="macro">assert_eq!</span>(trace, original, <span class="string">"trace, power {power}"</span>);
+<a href=#302 id=302 data-nosnippet>302</a>            }
+<a href=#303 id=303 data-nosnippet>303</a>        }
+<a href=#304 id=304 data-nosnippet>304</a>    }
+<a href=#305 id=305 data-nosnippet>305</a>
+<a href=#306 id=306 data-nosnippet>306</a>    <span class="attr">#[test]
+<a href=#307 id=307 data-nosnippet>307</a>    </span><span class="kw">fn </span>undo_schoonschip_across_chain() {
+<a href=#308 id=308 data-nosnippet>308</a>        <span class="kw">let _ </span>= test_initialize();
+<a href=#309 id=309 data-nosnippet>309</a>        <span class="kw">let </span>expr = <span class="macro">chain!</span>(
+<a href=#310 id=310 data-nosnippet>310</a>            <span class="macro">mink!</span>(<span class="number">4</span>, i),
+<a href=#311 id=311 data-nosnippet>311</a>            <span class="macro">mink!</span>(<span class="number">4</span>, j),
+<a href=#312 id=312 data-nosnippet>312</a>            <span class="macro">chain_factor!</span>(
+<a href=#313 id=313 data-nosnippet>313</a>                schoonschip_only_factor,
+<a href=#314 id=314 data-nosnippet>314</a>                <span class="kw">in</span>,
+<a href=#315 id=315 data-nosnippet>315</a>                out,
+<a href=#316 id=316 data-nosnippet>316</a>                (<span class="macro">vector!</span>(compact_p, <span class="macro">mink!</span>(<span class="number">4</span>)))
+<a href=#317 id=317 data-nosnippet>317</a>            )
+<a href=#318 id=318 data-nosnippet>318</a>        );
+<a href=#319 id=319 data-nosnippet>319</a>
+<a href=#320 id=320 data-nosnippet>320</a>        <span class="macro">insta::assert_snapshot!</span>( expr.undo_schoonschip::&lt;AbstractIndex&gt;().unwrap().to_bare_ordered_string(), @<span class="string">"chain(mink(4,i),mink(4,j),schoonschip_only_factor(in,out,mink(4,d_1000000)))*compact_p(mink(4,d_1000000))"</span>);
+<a href=#321 id=321 data-nosnippet>321</a>    }
+<a href=#322 id=322 data-nosnippet>322</a>
+<a href=#323 id=323 data-nosnippet>323</a>    <span class="attr">#[test]
+<a href=#324 id=324 data-nosnippet>324</a>    </span><span class="kw">fn </span>network_tooling_malformed_shorthand_returns_a_parse_error() {
+<a href=#325 id=325 data-nosnippet>325</a>        <span class="kw">let _ </span>= test_initialize();
+<a href=#326 id=326 data-nosnippet>326</a>        <span class="kw">let </span>expression = FunctionBuilder::new(SPENSO_TAG.dot)
+<a href=#327 id=327 data-nosnippet>327</a>            .add_arg(Atom::var(<span class="macro">symbol!</span>(<span class="string">"malformed_dot_operand"</span>)))
+<a href=#328 id=328 data-nosnippet>328</a>            .finish();
+<a href=#329 id=329 data-nosnippet>329</a>
+<a href=#330 id=330 data-nosnippet>330</a>        <span class="macro">assert!</span>(<span class="macro">matches!</span>(
+<a href=#331 id=331 data-nosnippet>331</a>            expression
+<a href=#332 id=332 data-nosnippet>332</a>                .undo_dots::&lt;AbstractIndex&gt;()
+<a href=#333 id=333 data-nosnippet>333</a>                .expect_err(<span class="string">"malformed dot notation should return an error"</span>),
+<a href=#334 id=334 data-nosnippet>334</a>            NetworkToolingError::Parse { reason } <span class="kw">if </span>reason.contains(<span class="string">"Invalid dot function"</span>)
+<a href=#335 id=335 data-nosnippet>335</a>        ));
+<a href=#336 id=336 data-nosnippet>336</a>    }
+<a href=#337 id=337 data-nosnippet>337</a>}
 </code></pre></div></section></main></body></html>

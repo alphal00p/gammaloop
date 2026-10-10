@@ -934,7 +934,7 @@
             "source": {
               "identifier": "spenso::network::ExecutionMode",
               "file": "crates/spenso/src/network/mod.rs",
-              "line": 4084,
+              "line": 4086,
               "column": 1
             }
           },
@@ -1670,7 +1670,7 @@
                 "kind": "field",
                 "docs": {
                   "format": "rust-markdown",
-                  "body": "Fold factors that parse as pure scalars into one scalar factor while\nparsing a product.\n\nThis keeps scalar-only subexpressions out of the tensor graph when they\ncannot affect contraction topology. Disable it when the caller needs\nevery product factor to remain represented separately in the network."
+                  "body": "Fold pure scalar operands into one scalar while parsing a product or sum.\n\nThis keeps scalar-only subexpressions out of the tensor graph when they\ncannot affect contraction topology. Disable it when the caller needs\nevery operand to remain represented separately in the network."
                 },
                 "signature": "bool",
                 "default": null,
@@ -1792,7 +1792,7 @@
             "source": {
               "identifier": "spenso::network::parsing::NetworkParse",
               "file": "crates/spenso/src/network/parsing/mod.rs",
-              "line": 1062,
+              "line": 1065,
               "column": 1
             }
           },

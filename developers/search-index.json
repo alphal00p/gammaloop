@@ -645,181 +645,181 @@
     "title": "Spenso Symbolica Syntax And Rewrite Idioms",
     "summary": "Implemented Spenso surface forms, tag-aware builders and patterns, and the Idenso pass boundaries used for static and dynamic algebraic rewrites.",
     "href": "architecture/spenso-symbolica-syntax-and-rewrites/",
-    "kind": "developer current implemented reference · reviewed 2026-09-14"
+    "kind": "developer current implemented reference · reviewed 2026-10-05"
   },
   {
     "title": "Tensor Syntax",
     "summary": "Spenso Symbolica Syntax And Rewrite Idioms",
     "href": "architecture/spenso-symbolica-syntax-and-rewrites/#tensor-syntax",
-    "kind": "developer current implemented reference · reviewed 2026-09-14 heading"
+    "kind": "developer current implemented reference · reviewed 2026-10-05 heading"
   },
   {
     "title": "Supported Surface Forms",
     "summary": "Spenso Symbolica Syntax And Rewrite Idioms",
     "href": "architecture/spenso-symbolica-syntax-and-rewrites/#supported-surface-forms",
-    "kind": "developer current implemented reference · reviewed 2026-09-14 heading"
+    "kind": "developer current implemented reference · reviewed 2026-10-05 heading"
   },
   {
     "title": "Tagged Builders And Patterns",
     "summary": "Spenso Symbolica Syntax And Rewrite Idioms",
     "href": "architecture/spenso-symbolica-syntax-and-rewrites/#tagged-builders-and-patterns",
-    "kind": "developer current implemented reference · reviewed 2026-09-14 heading"
+    "kind": "developer current implemented reference · reviewed 2026-10-05 heading"
   },
   {
     "title": "Rust Rewrite Idioms",
     "summary": "Spenso Symbolica Syntax And Rewrite Idioms",
     "href": "architecture/spenso-symbolica-syntax-and-rewrites/#rust-rewrite-idioms",
-    "kind": "developer current implemented reference · reviewed 2026-09-14 heading"
+    "kind": "developer current implemented reference · reviewed 2026-10-05 heading"
   },
   {
     "title": "Factorization during index canonicalization",
     "summary": "Spenso Symbolica Syntax And Rewrite Idioms",
     "href": "architecture/spenso-symbolica-syntax-and-rewrites/#factorization-during-index-canonicalization",
-    "kind": "developer current implemented reference · reviewed 2026-09-14 heading"
+    "kind": "developer current implemented reference · reviewed 2026-10-05 heading"
   },
   {
     "title": "Spenso implementation architecture",
     "summary": "Tensor structures and payloads, direct contraction, network graph/store execution, Symbolica parsing, serialization and ownership boundaries, invariants, and tests.",
     "href": "architecture/spenso-architecture/",
-    "kind": "developer current implemented · reviewed 2026-09-21"
+    "kind": "developer current implemented · reviewed 2026-10-01"
   },
   {
     "title": "Boundaries",
     "summary": "Spenso implementation architecture",
     "href": "architecture/spenso-architecture/#boundaries",
-    "kind": "developer current implemented · reviewed 2026-09-21 heading"
+    "kind": "developer current implemented · reviewed 2026-10-01 heading"
   },
   {
     "title": "Core representation",
     "summary": "Spenso implementation architecture",
     "href": "architecture/spenso-architecture/#core-representation",
-    "kind": "developer current implemented · reviewed 2026-09-21 heading"
+    "kind": "developer current implemented · reviewed 2026-10-01 heading"
   },
   {
     "title": "Direct contraction flow",
     "summary": "Spenso implementation architecture",
     "href": "architecture/spenso-architecture/#direct-contraction-flow",
-    "kind": "developer current implemented · reviewed 2026-09-21 heading"
+    "kind": "developer current implemented · reviewed 2026-10-01 heading"
   },
   {
     "title": "Network representation and execution",
     "summary": "Spenso implementation architecture",
     "href": "architecture/spenso-architecture/#network-representation-and-execution",
-    "kind": "developer current implemented · reviewed 2026-09-21 heading"
+    "kind": "developer current implemented · reviewed 2026-10-01 heading"
   },
   {
     "title": "Symbolic parallelism and optimized sums",
     "summary": "Spenso implementation architecture",
     "href": "architecture/spenso-architecture/#symbolic-parallelism-and-optimized-sums",
-    "kind": "developer current implemented · reviewed 2026-09-21 heading"
+    "kind": "developer current implemented · reviewed 2026-10-01 heading"
   },
   {
     "title": "Symbolica parsing boundary",
     "summary": "Spenso implementation architecture",
     "href": "architecture/spenso-architecture/#symbolica-parsing-boundary",
-    "kind": "developer current implemented · reviewed 2026-09-21 heading"
+    "kind": "developer current implemented · reviewed 2026-10-01 heading"
   },
   {
     "title": "Features and serialization",
     "summary": "Spenso implementation architecture",
     "href": "architecture/spenso-architecture/#features-and-serialization",
-    "kind": "developer current implemented · reviewed 2026-09-21 heading"
+    "kind": "developer current implemented · reviewed 2026-10-01 heading"
   },
   {
     "title": "Ownership and error boundaries",
     "summary": "Spenso implementation architecture",
     "href": "architecture/spenso-architecture/#ownership-and-error-boundaries",
-    "kind": "developer current implemented · reviewed 2026-09-21 heading"
+    "kind": "developer current implemented · reviewed 2026-10-01 heading"
   },
   {
     "title": "Maintained invariants",
     "summary": "Spenso implementation architecture",
     "href": "architecture/spenso-architecture/#maintained-invariants",
-    "kind": "developer current implemented · reviewed 2026-09-21 heading"
+    "kind": "developer current implemented · reviewed 2026-10-01 heading"
   },
   {
     "title": "Verification and related documentation",
     "summary": "Spenso implementation architecture",
     "href": "architecture/spenso-architecture/#verification-and-related-documentation",
-    "kind": "developer current implemented · reviewed 2026-09-21 heading"
+    "kind": "developer current implemented · reviewed 2026-10-01 heading"
   },
   {
     "title": "Factor preservation at materialization",
     "summary": "Spenso implementation architecture",
     "href": "architecture/spenso-architecture/#factor-preservation-at-materialization",
-    "kind": "developer current implemented · reviewed 2026-09-21 heading"
+    "kind": "developer current implemented · reviewed 2026-10-01 heading"
   },
   {
     "title": "Idenso implementation architecture",
     "summary": "Representation and symbol initialization, symbolic tensor/network boundaries, rewrite families, Schoonschip execution, feature and serialization limits, index ownership, invariants, and tests.",
     "href": "architecture/idenso-architecture/",
-    "kind": "developer current implemented · reviewed 2026-09-14"
+    "kind": "developer current implemented · reviewed 2026-10-05"
   },
   {
     "title": "Boundaries",
     "summary": "Idenso implementation architecture",
     "href": "architecture/idenso-architecture/#boundaries",
-    "kind": "developer current implemented · reviewed 2026-09-14 heading"
+    "kind": "developer current implemented · reviewed 2026-10-05 heading"
   },
   {
     "title": "Symbol and representation boundary",
     "summary": "Idenso implementation architecture",
     "href": "architecture/idenso-architecture/#symbol-and-representation-boundary",
-    "kind": "developer current implemented · reviewed 2026-09-14 heading"
+    "kind": "developer current implemented · reviewed 2026-10-05 heading"
   },
   {
     "title": "Core symbolic representation",
     "summary": "Idenso implementation architecture",
     "href": "architecture/idenso-architecture/#core-symbolic-representation",
-    "kind": "developer current implemented · reviewed 2026-09-14 heading"
+    "kind": "developer current implemented · reviewed 2026-10-05 heading"
   },
   {
     "title": "Rewrite families and execution flow",
     "summary": "Idenso implementation architecture",
     "href": "architecture/idenso-architecture/#rewrite-families-and-execution-flow",
-    "kind": "developer current implemented · reviewed 2026-09-14 heading"
+    "kind": "developer current implemented · reviewed 2026-10-05 heading"
   },
   {
     "title": "Schoonschip network path",
     "summary": "Idenso implementation architecture",
     "href": "architecture/idenso-architecture/#schoonschip-network-path",
-    "kind": "developer current implemented · reviewed 2026-09-14 heading"
+    "kind": "developer current implemented · reviewed 2026-10-05 heading"
   },
   {
     "title": "Parsing, shorthand, and index invariants",
     "summary": "Idenso implementation architecture",
     "href": "architecture/idenso-architecture/#parsing-shorthand-and-index-invariants",
-    "kind": "developer current implemented · reviewed 2026-09-14 heading"
+    "kind": "developer current implemented · reviewed 2026-10-05 heading"
   },
   {
     "title": "Features and serialization",
     "summary": "Idenso implementation architecture",
     "href": "architecture/idenso-architecture/#features-and-serialization",
-    "kind": "developer current implemented · reviewed 2026-09-14 heading"
+    "kind": "developer current implemented · reviewed 2026-10-05 heading"
   },
   {
     "title": "Ownership and error boundaries",
     "summary": "Idenso implementation architecture",
     "href": "architecture/idenso-architecture/#ownership-and-error-boundaries",
-    "kind": "developer current implemented · reviewed 2026-09-14 heading"
+    "kind": "developer current implemented · reviewed 2026-10-05 heading"
   },
   {
     "title": "Maintained invariants",
     "summary": "Idenso implementation architecture",
     "href": "architecture/idenso-architecture/#maintained-invariants",
-    "kind": "developer current implemented · reviewed 2026-09-14 heading"
+    "kind": "developer current implemented · reviewed 2026-10-05 heading"
   },
   {
     "title": "Verification and related documentation",
     "summary": "Idenso implementation architecture",
     "href": "architecture/idenso-architecture/#verification-and-related-documentation",
-    "kind": "developer current implemented · reviewed 2026-09-14 heading"
+    "kind": "developer current implemented · reviewed 2026-10-05 heading"
   },
   {
     "title": "Factorized canonicalization and symbolic targets",
     "summary": "Idenso implementation architecture",
     "href": "architecture/idenso-architecture/#factorized-canonicalization-and-symbolic-targets",
-    "kind": "developer current implemented · reviewed 2026-09-14 heading"
+    "kind": "developer current implemented · reviewed 2026-10-05 heading"
   },
   {
     "title": "Idenso FORM color and Dirac source map",
@@ -1131,55 +1131,55 @@
     "title": "Vakint implementation architecture",
     "summary": "Topology construction, canonicalization and tensor-reduction flow, backend selection, external-process ownership, persistence boundaries, invariants, and tests.",
     "href": "architecture/vakint-architecture/",
-    "kind": "developer current implemented · reviewed 2026-08-18"
+    "kind": "developer current implemented · reviewed 2026-10-04"
   },
   {
     "title": "Boundaries",
     "summary": "Vakint implementation architecture",
     "href": "architecture/vakint-architecture/#boundaries",
-    "kind": "developer current implemented · reviewed 2026-08-18 heading"
+    "kind": "developer current implemented · reviewed 2026-10-04 heading"
   },
   {
     "title": "Core representation",
     "summary": "Vakint implementation architecture",
     "href": "architecture/vakint-architecture/#core-representation",
-    "kind": "developer current implemented · reviewed 2026-08-18 heading"
+    "kind": "developer current implemented · reviewed 2026-10-04 heading"
   },
   {
     "title": "Main control flow",
     "summary": "Vakint implementation architecture",
     "href": "architecture/vakint-architecture/#main-control-flow",
-    "kind": "developer current implemented · reviewed 2026-08-18 heading"
+    "kind": "developer current implemented · reviewed 2026-10-04 heading"
   },
   {
     "title": "External tools and feature boundaries",
     "summary": "Vakint implementation architecture",
     "href": "architecture/vakint-architecture/#external-tools-and-feature-boundaries",
-    "kind": "developer current implemented · reviewed 2026-08-18 heading"
+    "kind": "developer current implemented · reviewed 2026-10-04 heading"
   },
   {
     "title": "Persistence and reproducibility",
     "summary": "Vakint implementation architecture",
     "href": "architecture/vakint-architecture/#persistence-and-reproducibility",
-    "kind": "developer current implemented · reviewed 2026-08-18 heading"
+    "kind": "developer current implemented · reviewed 2026-10-04 heading"
   },
   {
     "title": "Maintained invariants",
     "summary": "Vakint implementation architecture",
     "href": "architecture/vakint-architecture/#maintained-invariants",
-    "kind": "developer current implemented · reviewed 2026-08-18 heading"
+    "kind": "developer current implemented · reviewed 2026-10-04 heading"
   },
   {
     "title": "Verification and related documentation",
     "summary": "Vakint implementation architecture",
     "href": "architecture/vakint-architecture/#verification-and-related-documentation",
-    "kind": "developer current implemented · reviewed 2026-08-18 heading"
+    "kind": "developer current implemented · reviewed 2026-10-04 heading"
   },
   {
     "title": "Factorized tensor projection and epsilon coefficients",
     "summary": "Vakint implementation architecture",
     "href": "architecture/vakint-architecture/#factorized-tensor-projection-and-epsilon-coefficients",
-    "kind": "developer current implemented · reviewed 2026-08-18 heading"
+    "kind": "developer current implemented · reviewed 2026-10-04 heading"
   },
   {
     "title": "GammaLoop architecture roadmap",
@@ -2241,6 +2241,18 @@
     "title": "Configuration and cache boundaries",
     "summary": "CI maintenance and measurements",
     "href": "architecture/ci/#configuration-and-cache-boundaries",
+    "kind": "developer current guide heading"
+  },
+  {
+    "title": "Fast tests and the full main suite",
+    "summary": "CI maintenance and measurements",
+    "href": "architecture/ci/#fast-tests-and-the-full-main-suite",
+    "kind": "developer current guide heading"
+  },
+  {
+    "title": "Performance measurements",
+    "summary": "CI maintenance and measurements",
+    "href": "architecture/ci/#performance-measurements",
     "kind": "developer current guide heading"
   },
   {

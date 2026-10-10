@@ -2,5 +2,5 @@ alphal00p documentation
 product=vakint
 channel=latest
 tag=
-commit=18fa197ba5d39172dff69e69e8acd9651bd30215
+commit=22c41932202218bd225aa6779d251f0b6000775e
 route=/products/vakint/latest/

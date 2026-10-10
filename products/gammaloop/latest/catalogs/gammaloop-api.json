@@ -535,7 +535,7 @@
             "source": {
               "identifier": "gammaloop_api::state::CommandHistory",
               "file": "crates/gammaloop-api/src/state.rs",
-              "line": 1022,
+              "line": 1055,
               "column": 1
             }
           },
@@ -578,7 +578,7 @@
             "source": {
               "identifier": "gammaloop_api::state::CommandHistory::from_raw_string",
               "file": "crates/gammaloop-api/src/state.rs",
-              "line": 1178,
+              "line": 1211,
               "column": 1
             }
           },
@@ -655,7 +655,7 @@
             "source": {
               "identifier": "gammaloop_api::state::RunHistory",
               "file": "crates/gammaloop-api/src/state.rs",
-              "line": 1211,
+              "line": 1244,
               "column": 1
             }
           },
@@ -698,7 +698,7 @@
             "source": {
               "identifier": "gammaloop_api::state::RunHistory::load",
               "file": "crates/gammaloop-api/src/state.rs",
-              "line": 1487,
+              "line": 1520,
               "column": 1
             }
           },
@@ -775,7 +775,7 @@
             "source": {
               "identifier": "gammaloop_api::state::State",
               "file": "crates/gammaloop-api/src/state.rs",
-              "line": 1582,
+              "line": 1615,
               "column": 1
             }
           },
@@ -832,7 +832,7 @@
             "source": {
               "identifier": "gammaloop_api::state::State::get_integrand_info",
               "file": "crates/gammaloop-api/src/state.rs",
-              "line": 2256,
+              "line": 2294,
               "column": 1
             }
           },
@@ -2243,7 +2243,7 @@
             "source": {
               "identifier": "gammaloop_api::state::StateFolderKind",
               "file": "crates/gammaloop-api/src/state.rs",
-              "line": 1684,
+              "line": 1722,
               "column": 1
             }
           },
@@ -2286,7 +2286,7 @@
             "source": {
               "identifier": "gammaloop_api::state::classify_state_folder",
               "file": "crates/gammaloop-api/src/state.rs",
-              "line": 1702,
+              "line": 1740,
               "column": 1
             }
           },

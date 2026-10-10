@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"struct":["CacheAnalysisResult","DebugCacheStatus","FnMapEntry","GammaLoopPairs","LUParams","ParamBuilder","ParamCache","ParamValuePairs","ThresholdParams"],"trait":["ParamBuilderGraph","SplitPolarizations","UpdateAndGetParams"]};
+window.SIDEBAR_ITEMS = {"struct":["CacheAnalysisResult","DebugCacheStatus","FnMapEntry","GammaLoopPairs","LUParams","ParamBuilder","ParamCache","ParamValuePairs","ThresholdParams"],"trait":["ParamBuilderGraph","SplitPolarizations","UpdateAndGetParams"],"type":["SerializedFnMapEntry"]};

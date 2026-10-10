@@ -7250,81 +7250,90 @@
 <a href=#7249 id=7249 data-nosnippet>7249</a>        <span class="macro">assert!</span>(rendered.contains(<span class="string">"graph: 0, xs: ["</span>), <span class="string">"{rendered}"</span>);
 <a href=#7250 id=7250 data-nosnippet>7250</a>    }
 <a href=#7251 id=7251 data-nosnippet>7251</a>
-<a href=#7252 id=7252 data-nosnippet>7252</a>    <span class="kw">mod </span>failing {
-<a href=#7253 id=7253 data-nosnippet>7253</a>        <span class="kw">use super</span>::<span class="kw-2">*</span>;
-<a href=#7254 id=7254 data-nosnippet>7254</a>
-<a href=#7255 id=7255 data-nosnippet>7255</a>        <span class="attr">#[test]
-<a href=#7256 id=7256 data-nosnippet>7256</a>        </span><span class="kw">fn </span>target_accuracy_status_treats_zero_relative_reference_as_inactive() {
-<a href=#7257 id=7257 data-nosnippet>7257</a>            <span class="kw">let </span>state = make_integration_state();
-<a href=#7258 id=7258 data-nosnippet>7258</a>            <span class="kw">let </span>status = status_update::evaluate_target_accuracy(
-<a href=#7259 id=7259 data-nosnippet>7259</a>                <span class="kw-2">&amp;</span>state,
-<a href=#7260 id=7260 data-nosnippet>7260</a>                <span class="number">100_000</span>,
-<a href=#7261 id=7261 data-nosnippet>7261</a>                Duration::from_secs(<span class="number">10</span>),
-<a href=#7262 id=7262 data-nosnippet>7262</a>                <span class="kw-2">&amp;</span>[<span class="prelude-val">Some</span>(Complex::new(F(<span class="number">0.0</span>), F(<span class="number">0.0</span>))), <span class="prelude-val">None</span>],
-<a href=#7263 id=7263 data-nosnippet>7263</a>                IntegrationStatusPhaseDisplay::Real,
-<a href=#7264 id=7264 data-nosnippet>7264</a>                <span class="prelude-val">Some</span>(<span class="number">0.05</span>),
-<a href=#7265 id=7265 data-nosnippet>7265</a>                <span class="prelude-val">None</span>,
-<a href=#7266 id=7266 data-nosnippet>7266</a>            );
-<a href=#7267 id=7267 data-nosnippet>7267</a>
-<a href=#7268 id=7268 data-nosnippet>7268</a>            <span class="macro">assert!</span>(!status.relative_reached);
-<a href=#7269 id=7269 data-nosnippet>7269</a>            <span class="macro">assert!</span>(!status.absolute_reached);
-<a href=#7270 id=7270 data-nosnippet>7270</a>            <span class="macro">assert_eq!</span>(status.eta_to_target, <span class="prelude-val">None</span>);
-<a href=#7271 id=7271 data-nosnippet>7271</a>        }
-<a href=#7272 id=7272 data-nosnippet>7272</a>    }
-<a href=#7273 id=7273 data-nosnippet>7273</a>}
-<a href=#7274 id=7274 data-nosnippet>7274</a>
-<a href=#7275 id=7275 data-nosnippet>7275</a><span class="attr">#[test]
-<a href=#7276 id=7276 data-nosnippet>7276</a></span><span class="kw">fn </span>test_threading() {
-<a href=#7277 id=7277 data-nosnippet>7277</a>    <span class="kw">use </span>symbolica::numerical_integration::ContinuousGrid;
-<a href=#7278 id=7278 data-nosnippet>7278</a>
-<a href=#7279 id=7279 data-nosnippet>7279</a>    <span class="kw">fn </span>test_fn(x: f64) -&gt; f64 {
-<a href=#7280 id=7280 data-nosnippet>7280</a>        x * x * (x * <span class="number">6.</span>).sin()
+<a href=#7252 id=7252 data-nosnippet>7252</a>    <span class="attr">#[test]
+<a href=#7253 id=7253 data-nosnippet>7253</a>    </span><span class="kw">fn </span>target_accuracy_status_treats_zero_relative_reference_as_inactive() {
+<a href=#7254 id=7254 data-nosnippet>7254</a>        <span class="kw">let </span>state = make_integration_state();
+<a href=#7255 id=7255 data-nosnippet>7255</a>        <span class="kw">let </span>targets = <span class="macro">vec!</span>[<span class="prelude-val">Some</span>(Complex::new(F(<span class="number">0.0</span>), F(<span class="number">0.0</span>))); state.all_integrals.len()];
+<a href=#7256 id=7256 data-nosnippet>7256</a>        <span class="kw">let </span>status = status_update::evaluate_target_accuracy(
+<a href=#7257 id=7257 data-nosnippet>7257</a>            <span class="kw-2">&amp;</span>state,
+<a href=#7258 id=7258 data-nosnippet>7258</a>            <span class="number">100_000</span>,
+<a href=#7259 id=7259 data-nosnippet>7259</a>            Duration::from_secs(<span class="number">10</span>),
+<a href=#7260 id=7260 data-nosnippet>7260</a>            <span class="kw-2">&amp;</span>targets,
+<a href=#7261 id=7261 data-nosnippet>7261</a>            IntegrationStatusPhaseDisplay::Real,
+<a href=#7262 id=7262 data-nosnippet>7262</a>            <span class="prelude-val">Some</span>(<span class="number">0.05</span>),
+<a href=#7263 id=7263 data-nosnippet>7263</a>            <span class="prelude-val">None</span>,
+<a href=#7264 id=7264 data-nosnippet>7264</a>        );
+<a href=#7265 id=7265 data-nosnippet>7265</a>
+<a href=#7266 id=7266 data-nosnippet>7266</a>        <span class="macro">assert!</span>(!status.relative_reached);
+<a href=#7267 id=7267 data-nosnippet>7267</a>        <span class="macro">assert!</span>(!status.absolute_reached);
+<a href=#7268 id=7268 data-nosnippet>7268</a>        <span class="macro">assert_eq!</span>(status.eta_to_target, <span class="prelude-val">None</span>);
+<a href=#7269 id=7269 data-nosnippet>7269</a>
+<a href=#7270 id=7270 data-nosnippet>7270</a>        <span class="comment">// A missing reference still uses that integral's nonzero mean.
+<a href=#7271 id=7271 data-nosnippet>7271</a>        </span><span class="kw">let </span>status = status_update::evaluate_target_accuracy(
+<a href=#7272 id=7272 data-nosnippet>7272</a>            <span class="kw-2">&amp;</span>state,
+<a href=#7273 id=7273 data-nosnippet>7273</a>            <span class="number">100_000</span>,
+<a href=#7274 id=7274 data-nosnippet>7274</a>            Duration::from_secs(<span class="number">10</span>),
+<a href=#7275 id=7275 data-nosnippet>7275</a>            <span class="kw-2">&amp;</span>[<span class="prelude-val">Some</span>(Complex::new(F(<span class="number">0.0</span>), F(<span class="number">0.0</span>))), <span class="prelude-val">None</span>],
+<a href=#7276 id=7276 data-nosnippet>7276</a>            IntegrationStatusPhaseDisplay::Real,
+<a href=#7277 id=7277 data-nosnippet>7277</a>            <span class="prelude-val">Some</span>(<span class="number">0.05</span>),
+<a href=#7278 id=7278 data-nosnippet>7278</a>            <span class="prelude-val">None</span>,
+<a href=#7279 id=7279 data-nosnippet>7279</a>        );
+<a href=#7280 id=7280 data-nosnippet>7280</a>        <span class="macro">assert!</span>(status.eta_to_target.is_some());
 <a href=#7281 id=7281 data-nosnippet>7281</a>    }
-<a href=#7282 id=7282 data-nosnippet>7282</a>
-<a href=#7283 id=7283 data-nosnippet>7283</a>    <span class="kw">let </span><span class="kw-2">mut </span>acc_1 = StatisticsAccumulator::&lt;f64&gt;::new();
-<a href=#7284 id=7284 data-nosnippet>7284</a>    <span class="kw">let </span><span class="kw-2">mut </span>acc_2 = StatisticsAccumulator::&lt;f64&gt;::new();
-<a href=#7285 id=7285 data-nosnippet>7285</a>
-<a href=#7286 id=7286 data-nosnippet>7286</a>    <span class="kw">let </span>samples_per_sample = <span class="number">4</span>;
-<a href=#7287 id=7287 data-nosnippet>7287</a>    <span class="kw">let </span>samples_per_iter = <span class="number">100000</span>;
-<a href=#7288 id=7288 data-nosnippet>7288</a>    <span class="kw">let </span>n_iter = <span class="number">10</span>;
-<a href=#7289 id=7289 data-nosnippet>7289</a>
-<a href=#7290 id=7290 data-nosnippet>7290</a>    <span class="kw">let </span><span class="kw-2">mut </span>rng = MonteCarloRng::new(<span class="number">42</span>, <span class="number">0</span>);
+<a href=#7282 id=7282 data-nosnippet>7282</a>}
+<a href=#7283 id=7283 data-nosnippet>7283</a>
+<a href=#7284 id=7284 data-nosnippet>7284</a><span class="attr">#[test]
+<a href=#7285 id=7285 data-nosnippet>7285</a></span><span class="kw">fn </span>test_threading() {
+<a href=#7286 id=7286 data-nosnippet>7286</a>    <span class="kw">use </span>symbolica::numerical_integration::ContinuousGrid;
+<a href=#7287 id=7287 data-nosnippet>7287</a>
+<a href=#7288 id=7288 data-nosnippet>7288</a>    <span class="kw">fn </span>test_fn(x: f64) -&gt; f64 {
+<a href=#7289 id=7289 data-nosnippet>7289</a>        x * x * (x * <span class="number">6.</span>).sin()
+<a href=#7290 id=7290 data-nosnippet>7290</a>    }
 <a href=#7291 id=7291 data-nosnippet>7291</a>
-<a href=#7292 id=7292 data-nosnippet>7292</a>    <span class="kw">let </span><span class="kw-2">mut </span>grid = Grid::&lt;f64&gt;::Continuous(ContinuousGrid::new(<span class="number">1</span>, <span class="number">64</span>, <span class="number">100</span>, <span class="prelude-val">None</span>, <span class="bool-val">false</span>).unwrap());
-<a href=#7293 id=7293 data-nosnippet>7293</a>
-<a href=#7294 id=7294 data-nosnippet>7294</a>    <span class="kw">for </span>_i_iter <span class="kw">in </span><span class="number">0</span>..n_iter {
-<a href=#7295 id=7295 data-nosnippet>7295</a>        <span class="kw">let </span><span class="kw-2">mut </span>multiplice_accs = <span class="macro">vec!</span>[StatisticsAccumulator::&lt;f64&gt;::new(); samples_per_sample];
-<a href=#7296 id=7296 data-nosnippet>7296</a>        <span class="kw">for </span>_i_sample <span class="kw">in </span><span class="number">0</span>..samples_per_iter {
-<a href=#7297 id=7297 data-nosnippet>7297</a>            <span class="kw">let </span>n_samples = (<span class="number">0</span>..samples_per_sample)
-<a href=#7298 id=7298 data-nosnippet>7298</a>                .map(|<span class="kw">_</span>| {
-<a href=#7299 id=7299 data-nosnippet>7299</a>                    <span class="kw">let </span><span class="kw-2">mut </span>sample = Sample::new();
-<a href=#7300 id=7300 data-nosnippet>7300</a>                    grid.sample(<span class="kw-2">&amp;mut </span>rng, <span class="kw-2">&amp;mut </span>sample);
-<a href=#7301 id=7301 data-nosnippet>7301</a>                    sample
-<a href=#7302 id=7302 data-nosnippet>7302</a>                })
-<a href=#7303 id=7303 data-nosnippet>7303</a>                .collect_vec();
-<a href=#7304 id=7304 data-nosnippet>7304</a>
-<a href=#7305 id=7305 data-nosnippet>7305</a>            <span class="kw">let </span>n_evals = n_samples
-<a href=#7306 id=7306 data-nosnippet>7306</a>                .iter()
-<a href=#7307 id=7307 data-nosnippet>7307</a>                .map(|s| <span class="kw">match </span>s {
-<a href=#7308 id=7308 data-nosnippet>7308</a>                    Sample::Continuous(<span class="kw">_</span>, xs) =&gt; test_fn(xs[<span class="number">0</span>]),
-<a href=#7309 id=7309 data-nosnippet>7309</a>                    <span class="kw">_ </span>=&gt; <span class="macro">unreachable!</span>(),
-<a href=#7310 id=7310 data-nosnippet>7310</a>                })
-<a href=#7311 id=7311 data-nosnippet>7311</a>                .collect_vec();
-<a href=#7312 id=7312 data-nosnippet>7312</a>
-<a href=#7313 id=7313 data-nosnippet>7313</a>            <span class="kw">for </span>(i_eval, (sample, eval)) <span class="kw">in </span>n_samples.iter().zip(<span class="kw-2">&amp;</span>n_evals).enumerate() {
-<a href=#7314 id=7314 data-nosnippet>7314</a>                acc_1.add_sample(eval * sample.get_weight(), <span class="prelude-val">Some</span>(sample));
-<a href=#7315 id=7315 data-nosnippet>7315</a>                multiplice_accs[i_eval].add_sample(eval * sample.get_weight(), <span class="prelude-val">Some</span>(sample));
-<a href=#7316 id=7316 data-nosnippet>7316</a>            }
-<a href=#7317 id=7317 data-nosnippet>7317</a>        }
-<a href=#7318 id=7318 data-nosnippet>7318</a>
-<a href=#7319 id=7319 data-nosnippet>7319</a>        <span class="kw">for </span>acc <span class="kw">in </span>multiplice_accs {
-<a href=#7320 id=7320 data-nosnippet>7320</a>            acc_2.merge_samples(<span class="kw-2">&amp;mut </span>acc.clone());
-<a href=#7321 id=7321 data-nosnippet>7321</a>        }
-<a href=#7322 id=7322 data-nosnippet>7322</a>        acc_1.update_iter(<span class="bool-val">false</span>);
-<a href=#7323 id=7323 data-nosnippet>7323</a>        acc_2.update_iter(<span class="bool-val">false</span>);
-<a href=#7324 id=7324 data-nosnippet>7324</a>    }
-<a href=#7325 id=7325 data-nosnippet>7325</a>
-<a href=#7326 id=7326 data-nosnippet>7326</a>    <span class="macro">println!</span>(<span class="string">"acc1: {:?}"</span>, acc_1);
-<a href=#7327 id=7327 data-nosnippet>7327</a>    <span class="macro">println!</span>(<span class="string">"acc2: {:?}"</span>, acc_2);
-<a href=#7328 id=7328 data-nosnippet>7328</a>}
+<a href=#7292 id=7292 data-nosnippet>7292</a>    <span class="kw">let </span><span class="kw-2">mut </span>acc_1 = StatisticsAccumulator::&lt;f64&gt;::new();
+<a href=#7293 id=7293 data-nosnippet>7293</a>    <span class="kw">let </span><span class="kw-2">mut </span>acc_2 = StatisticsAccumulator::&lt;f64&gt;::new();
+<a href=#7294 id=7294 data-nosnippet>7294</a>
+<a href=#7295 id=7295 data-nosnippet>7295</a>    <span class="kw">let </span>samples_per_sample = <span class="number">4</span>;
+<a href=#7296 id=7296 data-nosnippet>7296</a>    <span class="kw">let </span>samples_per_iter = <span class="number">100000</span>;
+<a href=#7297 id=7297 data-nosnippet>7297</a>    <span class="kw">let </span>n_iter = <span class="number">10</span>;
+<a href=#7298 id=7298 data-nosnippet>7298</a>
+<a href=#7299 id=7299 data-nosnippet>7299</a>    <span class="kw">let </span><span class="kw-2">mut </span>rng = MonteCarloRng::new(<span class="number">42</span>, <span class="number">0</span>);
+<a href=#7300 id=7300 data-nosnippet>7300</a>
+<a href=#7301 id=7301 data-nosnippet>7301</a>    <span class="kw">let </span><span class="kw-2">mut </span>grid = Grid::&lt;f64&gt;::Continuous(ContinuousGrid::new(<span class="number">1</span>, <span class="number">64</span>, <span class="number">100</span>, <span class="prelude-val">None</span>, <span class="bool-val">false</span>).unwrap());
+<a href=#7302 id=7302 data-nosnippet>7302</a>
+<a href=#7303 id=7303 data-nosnippet>7303</a>    <span class="kw">for </span>_i_iter <span class="kw">in </span><span class="number">0</span>..n_iter {
+<a href=#7304 id=7304 data-nosnippet>7304</a>        <span class="kw">let </span><span class="kw-2">mut </span>multiplice_accs = <span class="macro">vec!</span>[StatisticsAccumulator::&lt;f64&gt;::new(); samples_per_sample];
+<a href=#7305 id=7305 data-nosnippet>7305</a>        <span class="kw">for </span>_i_sample <span class="kw">in </span><span class="number">0</span>..samples_per_iter {
+<a href=#7306 id=7306 data-nosnippet>7306</a>            <span class="kw">let </span>n_samples = (<span class="number">0</span>..samples_per_sample)
+<a href=#7307 id=7307 data-nosnippet>7307</a>                .map(|<span class="kw">_</span>| {
+<a href=#7308 id=7308 data-nosnippet>7308</a>                    <span class="kw">let </span><span class="kw-2">mut </span>sample = Sample::new();
+<a href=#7309 id=7309 data-nosnippet>7309</a>                    grid.sample(<span class="kw-2">&amp;mut </span>rng, <span class="kw-2">&amp;mut </span>sample);
+<a href=#7310 id=7310 data-nosnippet>7310</a>                    sample
+<a href=#7311 id=7311 data-nosnippet>7311</a>                })
+<a href=#7312 id=7312 data-nosnippet>7312</a>                .collect_vec();
+<a href=#7313 id=7313 data-nosnippet>7313</a>
+<a href=#7314 id=7314 data-nosnippet>7314</a>            <span class="kw">let </span>n_evals = n_samples
+<a href=#7315 id=7315 data-nosnippet>7315</a>                .iter()
+<a href=#7316 id=7316 data-nosnippet>7316</a>                .map(|s| <span class="kw">match </span>s {
+<a href=#7317 id=7317 data-nosnippet>7317</a>                    Sample::Continuous(<span class="kw">_</span>, xs) =&gt; test_fn(xs[<span class="number">0</span>]),
+<a href=#7318 id=7318 data-nosnippet>7318</a>                    <span class="kw">_ </span>=&gt; <span class="macro">unreachable!</span>(),
+<a href=#7319 id=7319 data-nosnippet>7319</a>                })
+<a href=#7320 id=7320 data-nosnippet>7320</a>                .collect_vec();
+<a href=#7321 id=7321 data-nosnippet>7321</a>
+<a href=#7322 id=7322 data-nosnippet>7322</a>            <span class="kw">for </span>(i_eval, (sample, eval)) <span class="kw">in </span>n_samples.iter().zip(<span class="kw-2">&amp;</span>n_evals).enumerate() {
+<a href=#7323 id=7323 data-nosnippet>7323</a>                acc_1.add_sample(eval * sample.get_weight(), <span class="prelude-val">Some</span>(sample));
+<a href=#7324 id=7324 data-nosnippet>7324</a>                multiplice_accs[i_eval].add_sample(eval * sample.get_weight(), <span class="prelude-val">Some</span>(sample));
+<a href=#7325 id=7325 data-nosnippet>7325</a>            }
+<a href=#7326 id=7326 data-nosnippet>7326</a>        }
+<a href=#7327 id=7327 data-nosnippet>7327</a>
+<a href=#7328 id=7328 data-nosnippet>7328</a>        <span class="kw">for </span>acc <span class="kw">in </span>multiplice_accs {
+<a href=#7329 id=7329 data-nosnippet>7329</a>            acc_2.merge_samples(<span class="kw-2">&amp;mut </span>acc.clone());
+<a href=#7330 id=7330 data-nosnippet>7330</a>        }
+<a href=#7331 id=7331 data-nosnippet>7331</a>        acc_1.update_iter(<span class="bool-val">false</span>);
+<a href=#7332 id=7332 data-nosnippet>7332</a>        acc_2.update_iter(<span class="bool-val">false</span>);
+<a href=#7333 id=7333 data-nosnippet>7333</a>    }
+<a href=#7334 id=7334 data-nosnippet>7334</a>
+<a href=#7335 id=7335 data-nosnippet>7335</a>    <span class="macro">println!</span>(<span class="string">"acc1: {:?}"</span>, acc_1);
+<a href=#7336 id=7336 data-nosnippet>7336</a>    <span class="macro">println!</span>(<span class="string">"acc2: {:?}"</span>, acc_2);
+<a href=#7337 id=7337 data-nosnippet>7337</a>}
 </code></pre></div></section></main></body></html>

@@ -99,7 +99,7 @@
             "source": {
               "identifier": "vakint::vakint_symbol",
               "file": "crates/vakint/src/utils.rs",
-              "line": 76,
+              "line": 82,
               "column": 1
             }
           },
@@ -143,7 +143,7 @@
             "source": {
               "identifier": "vakint::Vakint",
               "file": "crates/vakint/src/lib.rs",
-              "line": 2314,
+              "line": 2353,
               "column": 1
             }
           },
@@ -341,7 +341,7 @@
             "source": {
               "identifier": "vakint::VakintSettings",
               "file": "crates/vakint/src/lib.rs",
-              "line": 2039,
+              "line": 2078,
               "column": 1
             }
           },
@@ -385,7 +385,7 @@
             "source": {
               "identifier": "vakint::VakintExpression",
               "file": "crates/vakint/src/lib.rs",
-              "line": 2912,
+              "line": 2951,
               "column": 1
             }
           },
@@ -429,7 +429,7 @@
             "source": {
               "identifier": "vakint::EvaluationOrder",
               "file": "crates/vakint/src/lib.rs",
-              "line": 1922,
+              "line": 1961,
               "column": 1
             }
           },
@@ -493,7 +493,7 @@
             "source": {
               "identifier": "vakint::VakintExpression::canonicalize",
               "file": "crates/vakint/src/lib.rs",
-              "line": 2963,
+              "line": 3002,
               "column": 1
             }
           },
@@ -550,7 +550,7 @@
             "source": {
               "identifier": "vakint::VakintExpression::tensor_reduce",
               "file": "crates/vakint/src/lib.rs",
-              "line": 2985,
+              "line": 3024,
               "column": 1
             }
           },
@@ -607,7 +607,7 @@
             "source": {
               "identifier": "vakint::VakintExpression::evaluate_integral",
               "file": "crates/vakint/src/lib.rs",
-              "line": 3002,
+              "line": 3041,
               "column": 1
             }
           },
@@ -651,7 +651,7 @@
             "source": {
               "identifier": "vakint::NumericalEvaluationResult",
               "file": "crates/vakint/src/lib.rs",
-              "line": 3086,
+              "line": 3125,
               "column": 1
             }
           }

@@ -188,7 +188,7 @@
             "source": {
               "identifier": "idenso::cook::CookSettings",
               "file": "crates/idenso/src/cook.rs",
-              "line": 271,
+              "line": 272,
               "column": 1
             }
           },
@@ -309,7 +309,7 @@
             "source": {
               "identifier": "idenso::cook::Cookable",
               "file": "crates/idenso/src/cook.rs",
-              "line": 572,
+              "line": 644,
               "column": 1
             }
           },

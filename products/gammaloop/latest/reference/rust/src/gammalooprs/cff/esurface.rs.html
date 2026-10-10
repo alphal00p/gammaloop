@@ -4690,27 +4690,27 @@
 <a href=#4689 id=4689 data-nosnippet>4689</a>        <span class="macro">assert_eq!</span>(esurface_1, esurface_2);
 <a href=#4690 id=4690 data-nosnippet>4690</a>    }
 <a href=#4691 id=4691 data-nosnippet>4691</a>
-<a href=#4692 id=4692 data-nosnippet>4692</a>    <span class="kw">mod </span>failing {
-<a href=#4693 id=4693 data-nosnippet>4693</a>        <span class="kw">use super</span>::<span class="kw-2">*</span>;
-<a href=#4694 id=4694 data-nosnippet>4694</a>
-<a href=#4695 id=4695 data-nosnippet>4695</a>        <span class="attr">#[test]
-<a href=#4696 id=4696 data-nosnippet>4696</a>        </span><span class="kw">fn </span>test_to_atom() {
-<a href=#4697 id=4697 data-nosnippet>4697</a>            <span class="kw">let </span>external_shift = <span class="macro">vec!</span>[(EdgeIndex::from(<span class="number">1</span>), -<span class="number">1</span>)];
-<a href=#4698 id=4698 data-nosnippet>4698</a>
-<a href=#4699 id=4699 data-nosnippet>4699</a>            <span class="kw">let </span>esurface = Esurface {
-<a href=#4700 id=4700 data-nosnippet>4700</a>                energies: <span class="macro">vec!</span>[EdgeIndex::from(<span class="number">2</span>), EdgeIndex::from(<span class="number">3</span>)],
-<a href=#4701 id=4701 data-nosnippet>4701</a>                external_shift,
-<a href=#4702 id=4702 data-nosnippet>4702</a>                vertex_set: VertexSet::dummy(),
-<a href=#4703 id=4703 data-nosnippet>4703</a>                <span class="comment">// subspace_graph: unsafe { InternalSubGraph::new_unchecked(SuBitGraph::new()) },
-<a href=#4704 id=4704 data-nosnippet>4704</a>            </span>};
+<a href=#4692 id=4692 data-nosnippet>4692</a>    <span class="attr">#[test]
+<a href=#4693 id=4693 data-nosnippet>4693</a>    </span><span class="kw">fn </span>test_to_atom() {
+<a href=#4694 id=4694 data-nosnippet>4694</a>        <span class="kw">let </span>external_shift = <span class="macro">vec!</span>[(EdgeIndex::from(<span class="number">1</span>), -<span class="number">1</span>)];
+<a href=#4695 id=4695 data-nosnippet>4695</a>
+<a href=#4696 id=4696 data-nosnippet>4696</a>        <span class="kw">let </span>esurface = Esurface {
+<a href=#4697 id=4697 data-nosnippet>4697</a>            energies: <span class="macro">vec!</span>[EdgeIndex::from(<span class="number">2</span>), EdgeIndex::from(<span class="number">3</span>)],
+<a href=#4698 id=4698 data-nosnippet>4698</a>            external_shift,
+<a href=#4699 id=4699 data-nosnippet>4699</a>            vertex_set: VertexSet::dummy(),
+<a href=#4700 id=4700 data-nosnippet>4700</a>            <span class="comment">// subspace_graph: unsafe { InternalSubGraph::new_unchecked(SuBitGraph::new()) },
+<a href=#4701 id=4701 data-nosnippet>4701</a>        </span>};
+<a href=#4702 id=4702 data-nosnippet>4702</a>
+<a href=#4703 id=4703 data-nosnippet>4703</a>        <span class="kw">let </span>esurface_atom = esurface.to_atom(<span class="kw-2">&amp;</span>[]);
+<a href=#4704 id=4704 data-nosnippet>4704</a>        <span class="kw">let </span>expected_atom = <span class="macro">parse!</span>(<span class="string">"OSE(2) + OSE(3) - Q(1, spenso::cind(0))"</span>);
 <a href=#4705 id=4705 data-nosnippet>4705</a>
-<a href=#4706 id=4706 data-nosnippet>4706</a>            <span class="kw">let </span>esurface_atom = esurface.to_atom(<span class="kw-2">&amp;</span>[]);
-<a href=#4707 id=4707 data-nosnippet>4707</a>            <span class="kw">let </span>expected_atom = <span class="macro">parse!</span>(<span class="string">"Q(2, cind(0)) + Q(3, cind(0)) - P(1, cind(0))"</span>);
-<a href=#4708 id=4708 data-nosnippet>4708</a>
-<a href=#4709 id=4709 data-nosnippet>4709</a>            <span class="kw">let </span>diff = esurface_atom - <span class="kw-2">&amp;</span>expected_atom;
-<a href=#4710 id=4710 data-nosnippet>4710</a>            <span class="kw">let </span>diff = diff.expand();
-<a href=#4711 id=4711 data-nosnippet>4711</a>            <span class="macro">assert_eq!</span>(diff, Atom::new());
-<a href=#4712 id=4712 data-nosnippet>4712</a>        }
+<a href=#4706 id=4706 data-nosnippet>4706</a>        <span class="kw">let </span>diff = esurface_atom - <span class="kw-2">&amp;</span>expected_atom;
+<a href=#4707 id=4707 data-nosnippet>4707</a>        <span class="kw">let </span>diff = diff.expand();
+<a href=#4708 id=4708 data-nosnippet>4708</a>        <span class="macro">assert_eq!</span>(diff, Atom::new());
+<a href=#4709 id=4709 data-nosnippet>4709</a>    }
+<a href=#4710 id=4710 data-nosnippet>4710</a>
+<a href=#4711 id=4711 data-nosnippet>4711</a>    <span class="kw">mod </span>failing {
+<a href=#4712 id=4712 data-nosnippet>4712</a>        <span class="kw">use super</span>::<span class="kw-2">*</span>;
 <a href=#4713 id=4713 data-nosnippet>4713</a>
 <a href=#4714 id=4714 data-nosnippet>4714</a>        <span class="attr">#[test]
 <a href=#4715 id=4715 data-nosnippet>4715</a>        </span><span class="kw">fn </span>test_from_cut_left_dt() {

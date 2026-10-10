@@ -1933,34 +1933,30 @@
 <a href=#1932 id=1932 data-nosnippet>1932</a>        <span class="macro">assert!</span>(!rendered.contains(<span class="string">"Numerical stability"</span>), <span class="string">"{rendered}"</span>);
 <a href=#1933 id=1933 data-nosnippet>1933</a>    }
 <a href=#1934 id=1934 data-nosnippet>1934</a>
-<a href=#1935 id=1935 data-nosnippet>1935</a>    <span class="kw">mod </span>failing {
-<a href=#1936 id=1936 data-nosnippet>1936</a>        <span class="kw">use super</span>::<span class="kw-2">*</span>;
-<a href=#1937 id=1937 data-nosnippet>1937</a>
-<a href=#1938 id=1938 data-nosnippet>1938</a>        <span class="attr">#[test]
-<a href=#1939 id=1939 data-nosnippet>1939</a>        </span><span class="kw">fn </span>zero_eval_statistics_snapshot_and_render_are_sanitized() {
-<a href=#1940 id=1940 data-nosnippet>1940</a>            <span class="kw">let </span>stats = StatisticsCounter::new_empty();
-<a href=#1941 id=1941 data-nosnippet>1941</a>            <span class="kw">let </span>snapshot = stats.snapshot();
-<a href=#1942 id=1942 data-nosnippet>1942</a>
-<a href=#1943 id=1943 data-nosnippet>1943</a>            <span class="macro">assert_eq!</span>(snapshot.num_evals, <span class="number">0</span>);
-<a href=#1944 id=1944 data-nosnippet>1944</a>            <span class="macro">assert_eq!</span>(snapshot.average_total_time_seconds, <span class="number">0.0</span>);
-<a href=#1945 id=1945 data-nosnippet>1945</a>            <span class="macro">assert_eq!</span>(snapshot.average_parameterization_time_seconds, <span class="number">0.0</span>);
-<a href=#1946 id=1946 data-nosnippet>1946</a>            <span class="macro">assert_eq!</span>(snapshot.average_integrand_time_seconds, <span class="number">0.0</span>);
-<a href=#1947 id=1947 data-nosnippet>1947</a>            <span class="macro">assert_eq!</span>(snapshot.average_evaluator_time_seconds, <span class="number">0.0</span>);
-<a href=#1948 id=1948 data-nosnippet>1948</a>            <span class="macro">assert_eq!</span>(snapshot.average_observable_time_seconds, <span class="number">0.0</span>);
-<a href=#1949 id=1949 data-nosnippet>1949</a>            <span class="macro">assert_eq!</span>(snapshot.average_integrator_time_seconds, <span class="number">0.0</span>);
-<a href=#1950 id=1950 data-nosnippet>1950</a>            <span class="macro">assert_eq!</span>(snapshot.f64_percentage, <span class="number">0.0</span>);
-<a href=#1951 id=1951 data-nosnippet>1951</a>            <span class="macro">assert_eq!</span>(snapshot.f128_percentage, <span class="number">0.0</span>);
-<a href=#1952 id=1952 data-nosnippet>1952</a>            <span class="macro">assert_eq!</span>(snapshot.arb_percentage, <span class="number">0.0</span>);
-<a href=#1953 id=1953 data-nosnippet>1953</a>            <span class="macro">assert_eq!</span>(snapshot.nan_percentage, <span class="number">0.0</span>);
-<a href=#1954 id=1954 data-nosnippet>1954</a>            <span class="macro">assert_eq!</span>(snapshot.nan_or_unstable_percentage, <span class="number">0.0</span>);
-<a href=#1955 id=1955 data-nosnippet>1955</a>            <span class="macro">assert_eq!</span>(snapshot.selection_efficiency_percentage, <span class="prelude-val">None</span>);
-<a href=#1956 id=1956 data-nosnippet>1956</a>
-<a href=#1957 id=1957 data-nosnippet>1957</a>            <span class="kw">let </span>rendered = stats.render_status_table();
-<a href=#1958 id=1958 data-nosnippet>1958</a>            <span class="macro">assert!</span>(rendered.contains(<span class="string">"sel. % :     N/A"</span>), <span class="string">"{rendered}"</span>);
-<a href=#1959 id=1959 data-nosnippet>1959</a>            <span class="macro">assert!</span>(rendered.contains(<span class="string">"f64 :     0.00%"</span>), <span class="string">"{rendered}"</span>);
-<a href=#1960 id=1960 data-nosnippet>1960</a>            <span class="macro">assert!</span>(rendered.contains(<span class="string">"nans+unstable :     0.0%"</span>), <span class="string">"{rendered}"</span>);
-<a href=#1961 id=1961 data-nosnippet>1961</a>            <span class="macro">assert!</span>(rendered.contains(<span class="string">"integrator :   0.00 ns"</span>), <span class="string">"{rendered}"</span>);
-<a href=#1962 id=1962 data-nosnippet>1962</a>        }
-<a href=#1963 id=1963 data-nosnippet>1963</a>    }
-<a href=#1964 id=1964 data-nosnippet>1964</a>}
+<a href=#1935 id=1935 data-nosnippet>1935</a>    <span class="attr">#[test]
+<a href=#1936 id=1936 data-nosnippet>1936</a>    </span><span class="kw">fn </span>zero_eval_statistics_snapshot_and_render_are_sanitized() {
+<a href=#1937 id=1937 data-nosnippet>1937</a>        <span class="kw">let </span>stats = StatisticsCounter::new_empty();
+<a href=#1938 id=1938 data-nosnippet>1938</a>        <span class="kw">let </span>snapshot = stats.snapshot();
+<a href=#1939 id=1939 data-nosnippet>1939</a>
+<a href=#1940 id=1940 data-nosnippet>1940</a>        <span class="macro">assert_eq!</span>(snapshot.num_evals, <span class="number">0</span>);
+<a href=#1941 id=1941 data-nosnippet>1941</a>        <span class="macro">assert_eq!</span>(snapshot.average_total_time_seconds, <span class="number">0.0</span>);
+<a href=#1942 id=1942 data-nosnippet>1942</a>        <span class="macro">assert_eq!</span>(snapshot.average_parameterization_time_seconds, <span class="number">0.0</span>);
+<a href=#1943 id=1943 data-nosnippet>1943</a>        <span class="macro">assert_eq!</span>(snapshot.average_integrand_time_seconds, <span class="number">0.0</span>);
+<a href=#1944 id=1944 data-nosnippet>1944</a>        <span class="macro">assert_eq!</span>(snapshot.average_evaluator_time_seconds, <span class="number">0.0</span>);
+<a href=#1945 id=1945 data-nosnippet>1945</a>        <span class="macro">assert_eq!</span>(snapshot.average_observable_time_seconds, <span class="number">0.0</span>);
+<a href=#1946 id=1946 data-nosnippet>1946</a>        <span class="macro">assert_eq!</span>(snapshot.average_integrator_time_seconds, <span class="number">0.0</span>);
+<a href=#1947 id=1947 data-nosnippet>1947</a>        <span class="macro">assert_eq!</span>(snapshot.f64_percentage, <span class="number">0.0</span>);
+<a href=#1948 id=1948 data-nosnippet>1948</a>        <span class="macro">assert_eq!</span>(snapshot.f128_percentage, <span class="number">0.0</span>);
+<a href=#1949 id=1949 data-nosnippet>1949</a>        <span class="macro">assert_eq!</span>(snapshot.arb_percentage, <span class="number">0.0</span>);
+<a href=#1950 id=1950 data-nosnippet>1950</a>        <span class="macro">assert_eq!</span>(snapshot.nan_percentage, <span class="number">0.0</span>);
+<a href=#1951 id=1951 data-nosnippet>1951</a>        <span class="macro">assert_eq!</span>(snapshot.nan_or_unstable_percentage, <span class="number">0.0</span>);
+<a href=#1952 id=1952 data-nosnippet>1952</a>        <span class="macro">assert_eq!</span>(snapshot.selection_efficiency_percentage, <span class="prelude-val">None</span>);
+<a href=#1953 id=1953 data-nosnippet>1953</a>
+<a href=#1954 id=1954 data-nosnippet>1954</a>        <span class="kw">let </span>rendered = stats.render_status_table();
+<a href=#1955 id=1955 data-nosnippet>1955</a>        <span class="macro">assert!</span>(rendered.contains(<span class="string">"sel. % :     N/A"</span>), <span class="string">"{rendered}"</span>);
+<a href=#1956 id=1956 data-nosnippet>1956</a>        <span class="macro">assert!</span>(rendered.contains(<span class="string">"f64 :     0.00%"</span>), <span class="string">"{rendered}"</span>);
+<a href=#1957 id=1957 data-nosnippet>1957</a>        <span class="macro">assert!</span>(rendered.contains(<span class="string">"nans+unstable :     0.0%"</span>), <span class="string">"{rendered}"</span>);
+<a href=#1958 id=1958 data-nosnippet>1958</a>        <span class="macro">assert!</span>(rendered.contains(<span class="string">"integrator :     0.00 µs"</span>), <span class="string">"{rendered}"</span>);
+<a href=#1959 id=1959 data-nosnippet>1959</a>    }
+<a href=#1960 id=1960 data-nosnippet>1960</a>}
 </code></pre></div></section></main></body></html>

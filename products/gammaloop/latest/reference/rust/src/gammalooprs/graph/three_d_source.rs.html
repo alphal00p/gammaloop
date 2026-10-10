@@ -541,7 +541,7 @@
 <a href=#540 id=540 data-nosnippet>540</a>                    &amp;&amp; index.get_symbol() == LibraryRep::from(Minkowski {}).symbol()
 <a href=#541 id=541 data-nosnippet>541</a>                {
 <a href=#542 id=542 data-nosnippet>542</a>                    <span class="kw">let </span>owner = EdgeIndex(owner);
-<a href=#543 id=543 data-nosnippet>543</a>                    <span class="kw-2">**</span>output = GS.emr_vec_index(owner, momentum.get(<span class="number">1</span>))
+<a href=#543 id=543 data-nosnippet>543</a>                    <span class="kw-2">**</span>output = GS.emr_vec(owner, momentum.get(<span class="number">1</span>))
 <a href=#544 id=544 data-nosnippet>544</a>                        + GS.emr_mom(owner, GS.cind(<span class="number">0</span>)) * GS.energy_delta(momentum.get(<span class="number">1</span>));
 <a href=#545 id=545 data-nosnippet>545</a>                }
 <a href=#546 id=546 data-nosnippet>546</a>            });
@@ -977,7 +977,7 @@
 <a href=#976 id=976 data-nosnippet>976</a>            ));
 <a href=#977 id=977 data-nosnippet>977</a>            replacements.push(Replacement::new(
 <a href=#978 id=978 data-nosnippet>978</a>                GS.emr_mom(<span class="kw-2">*</span>edge, <span class="kw-2">&amp;</span>mink_index).to_pattern(),
-<a href=#979 id=979 data-nosnippet>979</a>                (GS.emr_vec_index(<span class="kw-2">*</span>edge, <span class="kw-2">&amp;</span>mink_index) + energy * GS.energy_delta(<span class="kw-2">&amp;</span>mink_index))
+<a href=#979 id=979 data-nosnippet>979</a>                (GS.emr_vec(<span class="kw-2">*</span>edge, <span class="kw-2">&amp;</span>mink_index) + energy * GS.energy_delta(<span class="kw-2">&amp;</span>mink_index))
 <a href=#980 id=980 data-nosnippet>980</a>                    .to_pattern(),
 <a href=#981 id=981 data-nosnippet>981</a>            ));
 <a href=#982 id=982 data-nosnippet>982</a>        }
@@ -1013,7 +1013,7 @@
 <a href=#1012 id=1012 data-nosnippet>1012</a>                    .add_arg(mink_index.as_view())
 <a href=#1013 id=1013 data-nosnippet>1013</a>                    .finish()
 <a href=#1014 id=1014 data-nosnippet>1014</a>                    .to_pattern(),
-<a href=#1015 id=1015 data-nosnippet>1015</a>                (GS.emr_vec_index(<span class="kw-2">*</span>loop_edge, <span class="kw-2">&amp;</span>mink_index) + energy * GS.energy_delta(<span class="kw-2">&amp;</span>mink_index))
+<a href=#1015 id=1015 data-nosnippet>1015</a>                (GS.emr_vec(<span class="kw-2">*</span>loop_edge, <span class="kw-2">&amp;</span>mink_index) + energy * GS.energy_delta(<span class="kw-2">&amp;</span>mink_index))
 <a href=#1016 id=1016 data-nosnippet>1016</a>                    .to_pattern(),
 <a href=#1017 id=1017 data-nosnippet>1017</a>            ));
 <a href=#1018 id=1018 data-nosnippet>1018</a>        }
@@ -5285,8 +5285,8 @@
 <a href=#5284 id=5284 data-nosnippet>5284</a>        <span class="kw">let </span>abstract_loops = loop_component(<span class="number">0</span>, <span class="kw-2">&amp;</span>mink_index) + loop_component(<span class="number">1</span>, <span class="kw-2">&amp;</span>mink_index);
 <a href=#5285 id=5285 data-nosnippet>5285</a>        <span class="macro">assert_eq!</span>(
 <a href=#5286 id=5286 data-nosnippet>5286</a>            mapper.map_numerator(std::slice::from_ref(<span class="kw-2">&amp;</span>active_map), <span class="kw-2">&amp;</span>[], <span class="kw-2">&amp;</span>abstract_loops)<span class="question-mark">?</span>,
-<a href=#5287 id=5287 data-nosnippet>5287</a>            GS.emr_vec_index(parent_edges[<span class="number">0</span>], <span class="kw-2">&amp;</span>mink_index)
-<a href=#5288 id=5288 data-nosnippet>5288</a>                + GS.emr_vec_index(parent_edges[<span class="number">1</span>], <span class="kw-2">&amp;</span>mink_index)
+<a href=#5287 id=5287 data-nosnippet>5287</a>            GS.emr_vec(parent_edges[<span class="number">0</span>], <span class="kw-2">&amp;</span>mink_index)
+<a href=#5288 id=5288 data-nosnippet>5288</a>                + GS.emr_vec(parent_edges[<span class="number">1</span>], <span class="kw-2">&amp;</span>mink_index)
 <a href=#5289 id=5289 data-nosnippet>5289</a>                + Atom::num(<span class="number">5</span>) * <span class="kw-2">&amp;</span>active_energy * GS.energy_delta(<span class="kw-2">&amp;</span>mink_index)
 <a href=#5290 id=5290 data-nosnippet>5290</a>        );
 <a href=#5291 id=5291 data-nosnippet>5291</a>        <span class="macro">assert_eq!</span>(
@@ -5295,7 +5295,7 @@
 <a href=#5294 id=5294 data-nosnippet>5294</a>                <span class="kw-2">&amp;</span>[],
 <a href=#5295 id=5295 data-nosnippet>5295</a>                <span class="kw-2">&amp;</span>GS.emr_mom(mapped_edge, <span class="kw-2">&amp;</span>mink_index),
 <a href=#5296 id=5296 data-nosnippet>5296</a>            )<span class="question-mark">?</span>,
-<a href=#5297 id=5297 data-nosnippet>5297</a>            GS.emr_vec_index(mapped_edge, <span class="kw-2">&amp;</span>mink_index)
+<a href=#5297 id=5297 data-nosnippet>5297</a>            GS.emr_vec(mapped_edge, <span class="kw-2">&amp;</span>mink_index)
 <a href=#5298 id=5298 data-nosnippet>5298</a>                + (-<span class="kw-2">&amp;</span>active_energy + <span class="kw">crate</span>::utils::external_energy_atom_from_index(external_edge))
 <a href=#5299 id=5299 data-nosnippet>5299</a>                    * GS.energy_delta(<span class="kw-2">&amp;</span>mink_index)
 <a href=#5300 id=5300 data-nosnippet>5300</a>        );
@@ -5626,7 +5626,7 @@
 <a href=#5625 id=5625 data-nosnippet>5625</a>                    <span class="string">"each dispatched temporal factor must retain hard sign {hard_sign} for raw signs {raw_signs:?} and parsed sign {parsed_sign}"</span>,
 <a href=#5626 id=5626 data-nosnippet>5626</a>                );
 <a href=#5627 id=5627 data-nosnippet>5627</a>
-<a href=#5628 id=5628 data-nosnippet>5628</a>                <span class="kw">let </span>expected_vector = Atom::num(hard_sign) * GS.emr_vec_index(owner, <span class="kw-2">&amp;</span>mink_index)
+<a href=#5628 id=5628 data-nosnippet>5628</a>                <span class="kw">let </span>expected_vector = Atom::num(hard_sign) * GS.emr_vec(owner, <span class="kw-2">&amp;</span>mink_index)
 <a href=#5629 id=5629 data-nosnippet>5629</a>                    + Atom::num(hard_sign) * <span class="kw-2">&amp;</span>energy * GS.energy_delta(<span class="kw-2">&amp;</span>mink_index);
 <a href=#5630 id=5630 data-nosnippet>5630</a>                <span class="kw">for </span>occurrence <span class="kw">in </span>occurrences.into_iter().skip(<span class="number">1</span>) {
 <a href=#5631 id=5631 data-nosnippet>5631</a>                    <span class="kw">let </span>forced_candidates =
@@ -6306,7 +6306,7 @@
 <a href=#6305 id=6305 data-nosnippet>6305</a>        );
 <a href=#6306 id=6306 data-nosnippet>6306</a>        <span class="kw">let </span>fixed_abstract_plan = EnergyPowerAnalyzer::for_physical_emr_edges(owners)
 <a href=#6307 id=6307 data-nosnippet>6307</a>            .plan_atom_assignment(<span class="kw-2">&amp;</span>fixed_abstract, <span class="kw-2">&amp;</span>candidates)<span class="question-mark">?</span>;
-<a href=#6308 id=6308 data-nosnippet>6308</a>        <span class="kw">let </span>mapped_vectors = owners.map(|owner| GS.emr_vec_index(owner, <span class="kw-2">&amp;</span>abstract_index));
+<a href=#6308 id=6308 data-nosnippet>6308</a>        <span class="kw">let </span>mapped_vectors = owners.map(|owner| GS.emr_vec(owner, <span class="kw-2">&amp;</span>abstract_index));
 <a href=#6309 id=6309 data-nosnippet>6309</a>        <span class="macro">assert_eq!</span>(
 <a href=#6310 id=6310 data-nosnippet>6310</a>            mapper.map_planned_numerator(
 <a href=#6311 id=6311 data-nosnippet>6311</a>                <span class="kw-2">&amp;</span>loop_energy_map,
@@ -7051,13 +7051,13 @@
 <a href=#7050 id=7050 data-nosnippet>7050</a>            .zip(<span class="kw-2">&amp;</span>owners[..<span class="number">2</span>])
 <a href=#7051 id=7051 data-nosnippet>7051</a>            .map(|(direct_owner, physical_owner)| {
 <a href=#7052 id=7052 data-nosnippet>7052</a>                Replacement::new(
-<a href=#7053 id=7053 data-nosnippet>7053</a>                    GS.emr_vec_index(<span class="kw-2">*</span>direct_owner, <span class="kw-2">&amp;</span>mink_index).to_pattern(),
-<a href=#7054 id=7054 data-nosnippet>7054</a>                    GS.emr_vec_index(<span class="kw-2">*</span>physical_owner, <span class="kw-2">&amp;</span>mink_index).to_pattern(),
+<a href=#7053 id=7053 data-nosnippet>7053</a>                    GS.emr_vec(<span class="kw-2">*</span>direct_owner, <span class="kw-2">&amp;</span>mink_index).to_pattern(),
+<a href=#7054 id=7054 data-nosnippet>7054</a>                    GS.emr_vec(<span class="kw-2">*</span>physical_owner, <span class="kw-2">&amp;</span>mink_index).to_pattern(),
 <a href=#7055 id=7055 data-nosnippet>7055</a>                )
 <a href=#7056 id=7056 data-nosnippet>7056</a>            })
 <a href=#7057 id=7057 data-nosnippet>7057</a>            .collect::&lt;Vec&lt;<span class="kw">_</span>&gt;&gt;();
-<a href=#7058 id=7058 data-nosnippet>7058</a>        <span class="kw">let </span>spatial_from = GS.emr_vec_index(owners[<span class="number">1</span>], <span class="kw-2">&amp;</span>mink_index);
-<a href=#7059 id=7059 data-nosnippet>7059</a>        <span class="kw">let </span>spatial_to = -GS.emr_vec_index(owners[<span class="number">0</span>], <span class="kw-2">&amp;</span>mink_index);
+<a href=#7058 id=7058 data-nosnippet>7058</a>        <span class="kw">let </span>spatial_from = GS.emr_vec(owners[<span class="number">1</span>], <span class="kw-2">&amp;</span>mink_index);
+<a href=#7059 id=7059 data-nosnippet>7059</a>        <span class="kw">let </span>spatial_to = -GS.emr_vec(owners[<span class="number">0</span>], <span class="kw-2">&amp;</span>mink_index);
 <a href=#7060 id=7060 data-nosnippet>7060</a>        <span class="kw">let </span>direct_surface_replacements = direct.expression.surfaces.get_all_replacements_gs(<span class="kw-2">&amp;</span>[]);
 <a href=#7061 id=7061 data-nosnippet>7061</a>        <span class="kw">let </span>exact_surface_replacements = exact.expression.surfaces.get_all_replacements_gs(<span class="kw-2">&amp;</span>[]);
 <a href=#7062 id=7062 data-nosnippet>7062</a>        <span class="kw">let </span>direct_terms = direct

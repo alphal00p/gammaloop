@@ -256,27 +256,34 @@
 <a href=#255 id=255 data-nosnippet>255</a>            <span class="string">r#"#import "drawings/templates/edge-style.typ" as physics
 <a href=#256 id=256 data-nosnippet>256</a>#import "drawings/templates/crates/linnest/typst/src/lib.typ": graph
 <a href=#257 id=257 data-nosnippet>257</a>#let g = graph.parse(read("processes/amplitudes/example.dot")).first()
-<a href=#258 id=258 data-nosnippet>258</a>#let styles = physics.style()
-<a href=#259 id=259 data-nosnippet>259</a>#for edge in graph.edges(g) {
-<a href=#260 id=260 data-nosnippet>260</a>  assert(repr((styles.edge-label)(edge)).contains(repr(physics.map.at("scalar_0").label)))
-<a href=#261 id=261 data-nosnippet>261</a>}
-<a href=#262 id=262 data-nosnippet>262</a>[Model-generated particle labels work directly in Typst.]
-<a href=#263 id=263 data-nosnippet>263</a>"#</span>,
-<a href=#264 id=264 data-nosnippet>264</a>        )<span class="question-mark">?</span>;
-<a href=#265 id=265 data-nosnippet>265</a>        <span class="kw">let </span>output = Command::new(bin.join(<span class="string">"typst"</span>))
-<a href=#266 id=266 data-nosnippet>266</a>            .env(<span class="string">"PATH"</span>, <span class="kw-2">&amp;</span>bin)
-<a href=#267 id=267 data-nosnippet>267</a>            .arg(<span class="string">"compile"</span>)
-<a href=#268 id=268 data-nosnippet>268</a>            .arg(<span class="string">"--root"</span>)
-<a href=#269 id=269 data-nosnippet>269</a>            .arg(temp.path())
-<a href=#270 id=270 data-nosnippet>270</a>            .arg(<span class="kw-2">&amp;</span>assertions)
-<a href=#271 id=271 data-nosnippet>271</a>            .arg(temp.path().join(<span class="string">"model-style.pdf"</span>))
-<a href=#272 id=272 data-nosnippet>272</a>            .output()<span class="question-mark">?</span>;
-<a href=#273 id=273 data-nosnippet>273</a>        <span class="macro">assert!</span>(
-<a href=#274 id=274 data-nosnippet>274</a>            output.status.success(),
-<a href=#275 id=275 data-nosnippet>275</a>            <span class="string">"{}"</span>,
-<a href=#276 id=276 data-nosnippet>276</a>            String::from_utf8_lossy(<span class="kw-2">&amp;</span>output.stderr)
-<a href=#277 id=277 data-nosnippet>277</a>        );
-<a href=#278 id=278 data-nosnippet>278</a>        <span class="prelude-val">Ok</span>(())
-<a href=#279 id=279 data-nosnippet>279</a>    }
-<a href=#280 id=280 data-nosnippet>280</a>}
+<a href=#258 id=258 data-nosnippet>258</a>#let particle-label = physics.map.at("scalar_0").label
+<a href=#259 id=259 data-nosnippet>259</a>#let styles = physics.style(label-size: 12pt, label-fill: blue)
+<a href=#260 id=260 data-nosnippet>260</a>#let expected-label = text(size: 12pt, fill: blue)[#particle-label]
+<a href=#261 id=261 data-nosnippet>261</a>#assert(particle-label != none)
+<a href=#262 id=262 data-nosnippet>262</a>#assert(graph.edges(g).len() == 3)
+<a href=#263 id=263 data-nosnippet>263</a>// Drawing callbacks receive flattened fields, while graph.edges stores DOT
+<a href=#264 id=264 data-nosnippet>264</a>// attributes in statements. Use the public mapper's normalized view.
+<a href=#265 id=265 data-nosnippet>265</a>#let _ = graph.map(g, edge: edge =&gt; {
+<a href=#266 id=266 data-nosnippet>266</a>  assert((styles.edge-label)(edge.fields) == expected-label)
+<a href=#267 id=267 data-nosnippet>267</a>  none
+<a href=#268 id=268 data-nosnippet>268</a>})
+<a href=#269 id=269 data-nosnippet>269</a>[Model-generated particle labels work directly in Typst.]
+<a href=#270 id=270 data-nosnippet>270</a>"#</span>,
+<a href=#271 id=271 data-nosnippet>271</a>        )<span class="question-mark">?</span>;
+<a href=#272 id=272 data-nosnippet>272</a>        <span class="kw">let </span>output = Command::new(bin.join(<span class="string">"typst"</span>))
+<a href=#273 id=273 data-nosnippet>273</a>            .env(<span class="string">"PATH"</span>, <span class="kw-2">&amp;</span>bin)
+<a href=#274 id=274 data-nosnippet>274</a>            .arg(<span class="string">"compile"</span>)
+<a href=#275 id=275 data-nosnippet>275</a>            .arg(<span class="string">"--root"</span>)
+<a href=#276 id=276 data-nosnippet>276</a>            .arg(temp.path())
+<a href=#277 id=277 data-nosnippet>277</a>            .arg(<span class="kw-2">&amp;</span>assertions)
+<a href=#278 id=278 data-nosnippet>278</a>            .arg(temp.path().join(<span class="string">"model-style.pdf"</span>))
+<a href=#279 id=279 data-nosnippet>279</a>            .output()<span class="question-mark">?</span>;
+<a href=#280 id=280 data-nosnippet>280</a>        <span class="macro">assert!</span>(
+<a href=#281 id=281 data-nosnippet>281</a>            output.status.success(),
+<a href=#282 id=282 data-nosnippet>282</a>            <span class="string">"{}"</span>,
+<a href=#283 id=283 data-nosnippet>283</a>            String::from_utf8_lossy(<span class="kw-2">&amp;</span>output.stderr)
+<a href=#284 id=284 data-nosnippet>284</a>        );
+<a href=#285 id=285 data-nosnippet>285</a>        <span class="prelude-val">Ok</span>(())
+<a href=#286 id=286 data-nosnippet>286</a>    }
+<a href=#287 id=287 data-nosnippet>287</a>}
 </code></pre></div></section></main></body></html>

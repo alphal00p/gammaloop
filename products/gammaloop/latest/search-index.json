@@ -4567,6 +4567,13 @@
     "text": "Number of Horner-scheme optimization passes applied to scalar expressions. integer  1"
   },
   {
+    "title": "cli.global.generation.evaluator.inline_numerator_functions",
+    "summary": "Inline generated numerator functions instead of retaining shared evaluator bodies.",
+    "href": "reference/cli/settings/cli/global/generation/evaluator/#setting-cli-global-generation-evaluator-inline-numerator-functions-57f8bcf3aef83986",
+    "kind": "setting",
+    "text": "Inline generated numerator functions instead of retaining shared evaluator bodies. boolean  true"
+  },
+  {
     "title": "cli.global.generation.evaluator.iterative_orientation_optimization",
     "summary": "Re-optimize orientation expressions iteratively while building the evaluator.",
     "href": "reference/cli/settings/cli/global/generation/evaluator/#setting-cli-global-generation-evaluator-iterative-orientation-optimization-9be2af3ebabad4a7",
