@@ -37,6 +37,15 @@ jobs:
       manifest-version: ${{ steps.matrix.outputs.manifest-version }}
     steps:
       - uses: actions/checkout@v4
+      - name: Require the main test license
+        if: github.ref == 'refs/heads/main'
+        env:
+          LICENSE: ${{ secrets.SYMBOLICA_LICENSE_SIGNED }}
+        run: |
+          if [ -z "$LICENSE" ]; then
+            echo "::error::Main test coverage requires the Symbolica license secret"
+            exit 1
+          fi
       - uses: NixOS/nix-installer-action@main
       - uses: Mic92/hestia@v3
         with:
@@ -98,11 +107,18 @@ jobs:
           SYMBOLICA_LICENSE: GAMMALOOP_MATRIX_${{ github.run_id }}
         run: |
           set -euo pipefail
+          check_collection=hydraJobs.x86_64-linux
+          if [ "${{ github.ref }}" = refs/heads/main ]; then
+            # Main runs full package checks and fast integration plus four
+            # long-test shards, including mandatory local soft-CT acceptance.
+            # All runtime checks reuse the published archives.
+            check_collection=hydraJobsMain.x86_64-linux
+          fi
           "$HESTIA_BIN" matrix \
-            --flake ".#hydraJobs.x86_64-linux" \
+            --flake ".#$check_collection" \
             --socket "$HESTIA_SOCKET" \
             --nix-eval-jobs "nix run nixpkgs#nix-eval-jobs -- --impure" \
-            --attr-prefix "hydraJobs.x86_64-linux" \
+            --attr-prefix "$check_collection" \
             --drain-timeout "$HESTIA_DRAIN_TIMEOUT"
       - id: filter-matrix
         name: Filter unavailable licensed tests
@@ -150,25 +166,77 @@ jobs:
           no-closure: true
           upstream-cache-filter: true
           wait-manifest-version: ${{ needs.prepare.outputs.manifest-version }}
-      - name: Build checks
+      - id: build-check
+        name: Build checks
         env:
           CHECK_ATTR: ${{ matrix.attr }}
           SYMBOLICA_LICENSE: ${{ secrets.SYMBOLICA_LICENSE_SIGNED || 'GAMMALOOP_USER' }}
         run: |
           set -euo pipefail
+          result_dir=target/ci-results
+          mkdir -p "$result_dir"
+          rm -f "$result_dir/metrics.csv"
+          artifact_name=${CHECK_ATTR//[^a-zA-Z0-9_.-]/_}
+          echo "artifact-name=nix-metrics-$artifact_name" >> "$GITHUB_OUTPUT"
+          printf 'check=%s\ncommit=%s\nrun=%s/%s/actions/runs/%s\nattempt=%s\n' \
+            "$CHECK_ATTR" "$GITHUB_SHA" "$GITHUB_SERVER_URL" \
+            "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" \
+            > "$result_dir/provenance.txt"
           nix_options=()
           case "$CHECK_ATTR" in
             *.gammaloop-doctest|*.gammaloop-nextest-*)
-              # Do not persist secret-derived test identities or results.
+              # Keep licensed test results out of the public Hestia cache.
               nix_options+=(--option post-build-hook "")
               ;;
           esac
+          exec 3> >(tee "$result_dir/nix-build.log" >&2)
+          log_pid=$!
+          set +e
           nix "${nix_options[@]}" build \
             --impure \
             --keep-going \
             --no-link \
             --print-build-logs \
-            ".#$CHECK_ATTR"
+            --print-out-paths \
+            ".#$CHECK_ATTR" \
+            > "$result_dir/output-paths.txt" 2>&3
+          build_status=$?
+          exec 3>&-
+          wait "$log_pid"
+          log_status=$?
+          set -e
+          printf 'build-exit-code=%s\n' "$build_status" >> "$result_dir/provenance.txt"
+          reports=()
+          while IFS= read -r output; do
+            [[ "$output" == /nix/store/* ]] || continue
+            for report in "$output"/*.xml; do
+              [ -f "$report" ] || continue
+              reports+=("$report")
+            done
+          done < "$result_dir/output-paths.txt"
+          export_status=0
+          if [ "${#reports[@]}" -gt 0 ]; then
+            # Only metadata CSV is uploaded; raw JUnit and licensed output stay local.
+            python3 .github/scripts/export-test-timings.py \
+              --check "$CHECK_ATTR" \
+              --output "$result_dir/metrics.csv" \
+              "${reports[@]}" || export_status=$?
+          fi
+          if [ "$build_status" -ne 0 ]; then
+            exit "$build_status"
+          fi
+          if [ "$log_status" -ne 0 ]; then
+            exit "$log_status"
+          fi
+          exit "$export_status"
+      - name: Upload test timing metadata
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.build-check.outputs.artifact-name }}
+          path: target/ci-results/metrics.csv
+          if-no-files-found: ignore
+          retention-days: 7
 
   flake-checks:
     name: Flake checks

@@ -1,0 +1,80 @@
+# Four workloads, with each scalar tested through all three LU routes.
+[settings]
+schema_version = 1
+pairs = 5
+fixture_timeout_seconds = 240
+bench_duration_seconds = 5.0
+bench_batches = 10
+required_metrics = ["generation_seconds", "warm_runtime_seconds_per_sample"]
+correctness_tolerance = { absolute = 1e-14, relative = 1e-9 }
+
+[physical]
+card = "gg-hhh-gl15.toml"
+
+[physical.corpus]
+process_id = 0
+integrand = "1L"
+continuous_dimension = 3
+discrete_dim = [0, 0, 0]
+inputs = ["assets/models/json/sm/sm.json", "assets/models/json/sm/restrict_default.json"]
+points = [[0.23, 0.41, 0.67], [0.31, 0.47, 0.59], [0.41, 0.29, 0.73], [0.53, 0.61, 0.37]]
+
+[scalar]
+card = "scalar.toml"
+bench_duration_seconds = 2.0
+correctness_tolerance = { absolute = 0.0, relative = 1e-9 }
+
+[scalar.corpus]
+schema_version = 1
+process_id = 0
+integrand = "numerator"
+continuous_dimension = 9
+discrete_dim = []
+inputs = ["assets/models/json/scalars/scalars.json", "assets/models/json/scalars/restrict_default.json"]
+points = [
+  [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9],
+  [0.13, 0.23, 0.33, 0.43, 0.53, 0.63, 0.73, 0.83, 0.93],
+  [0.17, 0.27, 0.37, 0.47, 0.57, 0.67, 0.77, 0.87, 0.97],
+  [0.11, 0.21, 0.31, 0.41, 0.51, 0.61, 0.71, 0.81, 0.91],
+]
+
+[routes.orientation-3d]
+explicit_orientation_sum_only = false
+summed = true
+projected_4d = false
+evaluator_method = "Summed"
+
+[routes.explicit-3d]
+explicit_orientation_sum_only = true
+summed = false
+projected_4d = false
+evaluator_method = "SingleParametric"
+
+[routes.projected-4d]
+explicit_orientation_sum_only = true
+summed = false
+projected_4d = true
+evaluator_method = "SingleParametric"
+
+[workloads.gl15]
+family = "physical"
+process = "gg_hhh"
+graph_name = "GL15"
+
+[workloads.gl04-q1-squared]
+family = "scalar"
+process = "scalar_gl04"
+graph_name = "GL04"
+graph = "scalar-3l-gl04-q1-squared.dot"
+
+[workloads.gl16-q7-squared]
+family = "scalar"
+process = "scalar_gl16"
+graph_name = "GL16"
+graph = "scalar-3l-gl16-q7-squared.dot"
+
+[workloads.gl02-energy-quartic]
+family = "scalar"
+process = "scalar_gl02"
+graph_name = "GL02"
+graph = "scalar-3l-gl02-energy-quartic.dot"

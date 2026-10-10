@@ -18,10 +18,14 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  readiness:
-    name: NixCI readiness
+  configuration:
+    name: CI configuration
     runs-on: ubuntu-24.04
     timeout-minutes: 5
+    outputs:
+      run-performance: ${{ steps.plan.outputs.run-performance }}
+      candidate: ${{ steps.plan.outputs.candidate }}
+      baseline: ${{ steps.plan.outputs.baseline }}
     steps:
       - name: Require final review
         if: github.event_name == 'pull_request'
@@ -38,6 +42,9 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
 
+      - name: Test the CI timing and comparison tools
+        run: python3 -m unittest discover -s .github/scripts -p 'test_*.py'
+
       - uses: NixOS/nix-installer-action@main
 
       - name: Require enabled NixCI configuration
@@ -48,3 +55,66 @@ jobs:
             echo '::error::Set top-level enable = true in nix-ci.nix, validate the final code, and push before requesting final review.'
             exit 1
           fi
+
+      - id: plan
+        name: Select changes that need performance measurements
+        env:
+          EVENT: ${{ github.event_name }}
+          CANDIDATE: ${{ github.event.pull_request.head.sha || github.sha }}
+          BASELINE: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
+        run: |
+          set -euo pipefail
+          echo "candidate=$CANDIDATE" >> "$GITHUB_OUTPUT"
+          echo "baseline=$BASELINE" >> "$GITHUB_OUTPUT"
+          if [ "$EVENT" = push ]; then
+            # Main runs the full correctness suite and uploads its timings.
+            # Do not repeat the paired performance run after merging.
+            echo 'run-performance=false' >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          [[ "$CANDIDATE" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$BASELINE" =~ ^[0-9a-f]{40}$ ]]
+          git fetch --no-tags --depth=1 origin "$BASELINE"
+          python3 .github/scripts/performance_changes.py "$BASELINE" "$CANDIDATE"
+
+      - name: Require a repository branch for licensed candidate execution
+        if: steps.plan.outputs.run-performance == 'true' && github.event_name == 'pull_request'
+        env:
+          SAME_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
+        run: |
+          if [ "$SAME_REPOSITORY" != true ]; then
+            echo '::error::The licensed performance gate requires a branch in this repository for final review'
+            exit 1
+          fi
+
+  performance:
+    needs: configuration
+    if: needs.configuration.outputs.run-performance == 'true'
+    uses: ./.github/workflows/performance.yml
+    with:
+      candidate: ${{ needs.configuration.outputs.candidate }}
+      baseline: ${{ needs.configuration.outputs.baseline }}
+    secrets:
+      SYMBOLICA_LICENSE_SIGNED: ${{ secrets.SYMBOLICA_LICENSE_SIGNED }}
+      NIXCI_NETRC: ${{ secrets.NIXCI_NETRC }}
+
+  # Preserve the status name already required by the main branch ruleset.
+  readiness:
+    name: NixCI readiness
+    needs: [configuration, performance]
+    if: always()
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Require the planned checks to pass
+        env:
+          CONFIGURATION_RESULT: ${{ needs.configuration.result }}
+          PERFORMANCE_RESULT: ${{ needs.performance.result }}
+          RUN_PERFORMANCE: ${{ needs.configuration.outputs.run-performance }}
+        run: |
+          test "$CONFIGURATION_RESULT" = success
+          case "$RUN_PERFORMANCE" in
+            true) test "$PERFORMANCE_RESULT" = success ;;
+            false) test "$PERFORMANCE_RESULT" = skipped ;;
+            *) exit 1 ;;
+          esac

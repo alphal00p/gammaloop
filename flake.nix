@@ -112,6 +112,7 @@
         alphal00pDocsSnapshotFixture
         allChecks
         hestiaChecks
+        mainTestChecks
         gammaloop-cli
         clinnet-cli
         gammaloop-python-module
@@ -233,6 +234,8 @@
       checks = allChecks;
 
       hydraJobs = hestiaChecks;
+
+      hydraJobsMain = mainTestChecks;
 
       packages =
         {

@@ -1,0 +1,155 @@
+name: Performance
+
+on:
+  workflow_call:
+    inputs:
+      candidate:
+        type: string
+        required: true
+      baseline:
+        type: string
+        required: true
+    secrets:
+      SYMBOLICA_LICENSE_SIGNED:
+        required: true
+      NIXCI_NETRC:
+        required: true
+  workflow_dispatch:
+    inputs:
+      baseline:
+        description: Baseline revision (pinned before building)
+        default: main
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  compare:
+    name: Physical and scalar generation and runtime
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
+    env:
+      HESTIA_CACHE_WRITABLE: false
+      HESTIA_CACHE_VERSION_SALT: gammaloop-no-closure-v1
+      SYMBOLICA_LICENSE: GAMMALOOP_USER
+      RAYON_NUM_THREADS: "1"
+      OMP_NUM_THREADS: "1"
+    steps:
+      - name: Require the benchmark license
+        env:
+          LICENSE: ${{ secrets.SYMBOLICA_LICENSE_SIGNED }}
+        run: |
+          if [ -z "$LICENSE" ]; then
+            echo '::error::Performance measurements require the Symbolica license secret'
+            exit 1
+          fi
+      - name: Check out candidate
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.candidate || github.sha }}
+          path: candidate
+          persist-credentials: false
+      - name: Check out baseline
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.baseline }}
+          path: baseline
+          persist-credentials: false
+      - id: revisions
+        name: Pin the measured revisions
+        run: |
+          echo "candidate=$(git -C candidate rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          echo "baseline=$(git -C baseline rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - name: Authenticate with the NixCI cache
+        env:
+          NIXCI_NETRC_SECRET: ${{ secrets.NIXCI_NETRC }}
+        run: |
+          set -euo pipefail
+          if [ -z "$NIXCI_NETRC_SECRET" ]; then
+            echo '::error::Performance builds require the NixCI cache netrc secret'
+            exit 1
+          fi
+          umask 077
+          printf '%s\n' "$NIXCI_NETRC_SECRET" > "$RUNNER_TEMP/nixci.netrc"
+          curl --fail --silent --show-error --max-time 30 \
+            --netrc-file "$RUNNER_TEMP/nixci.netrc" \
+            https://cache.nix-ci.com/nix-cache-info >/dev/null
+      - uses: NixOS/nix-installer-action@main
+        with:
+          extra-conf: |
+            netrc-file = ${{ runner.temp }}/nixci.netrc
+            extra-substituters = https://cache.nix-ci.com
+            extra-trusted-public-keys = nix-ci:g3xV5BDTLtIBZr/A00IU1x0EtKKlb7YLgBN2SgYgM6A=
+      - uses: Mic92/hestia@v3.1.0
+        with:
+          version: v3.1.0
+          read-only: true
+          no-closure: true
+          upstream-cache-filter: true
+      - id: binaries
+        name: Reuse or build the normal CLI packages
+        run: |
+          set -euo pipefail
+          for revision in baseline candidate; do
+            output=$(nix --option post-build-hook "" build --accept-flake-config \
+              --out-link "$RUNNER_TEMP/performance-cli-$revision" --print-out-paths \
+              "./$revision#packages.x86_64-linux.gammaloop")
+            test -x "$output/bin/gammaloop"
+            echo "$revision=$output/bin/gammaloop" >> "$GITHUB_OUTPUT"
+            echo "$revision-package=$output" >> "$GITHUB_OUTPUT"
+          done
+      - name: Upload the two normal CLI closures
+        env:
+          BASELINE_PACKAGE: ${{ steps.binaries.outputs.baseline-package }}
+          CANDIDATE_PACKAGE: ${{ steps.binaries.outputs.candidate-package }}
+        run: |
+          set -euo pipefail
+          # Discard upload metadata so unsigned local narinfo cannot mask the
+          # signed entries returned by NixCI on a later substitution.
+          metadata=$(mktemp -d)
+          trap 'rm -rf "$metadata"' EXIT
+          XDG_CACHE_HOME="$metadata" NIX_CACHE_HOME="$metadata/nix" \
+            nix copy --netrc-file "$RUNNER_TEMP/nixci.netrc" \
+            --to 'https://cache.nix-ci.com?compression=xz&parallel-compression=true' \
+            "$BASELINE_PACKAGE" "$CANDIDATE_PACKAGE"
+      - name: Measure and enforce the performance thresholds
+        env:
+          SYMBOLICA_LICENSE: ${{ secrets.SYMBOLICA_LICENSE_SIGNED }}
+          BASELINE_COMMIT: ${{ steps.revisions.outputs.baseline }}
+          CANDIDATE_COMMIT: ${{ steps.revisions.outputs.candidate }}
+          BASELINE_BINARY: ${{ steps.binaries.outputs.baseline }}
+          CANDIDATE_BINARY: ${{ steps.binaries.outputs.candidate }}
+        run: |
+          set -euo pipefail
+          # Only compiled products are cached. Timings execute afresh on this
+          # one host, with separate generated states for the two revisions.
+          # Let each binary resolve its own pinned libraries rather than
+          # loading candidate libraries into the baseline through LD paths.
+          # The runner measures the manifest's cases sequentially, with separate
+          # state, evidence and a four-minute budget for each comparison.
+          nix --option post-build-hook "" shell --accept-flake-config --inputs-from ./candidate \
+            nixpkgs#python313 nixpkgs#form nixpkgs#gcc nixpkgs#gnum4 \
+            --command env -u LD_LIBRARY_PATH -u DYLD_LIBRARY_PATH \
+            python3 candidate/.github/scripts/run_performance.py \
+            --input-root "$PWD/candidate" \
+            --baseline-binary "$BASELINE_BINARY" --candidate-binary "$CANDIDATE_BINARY" \
+            --baseline-commit "$BASELINE_COMMIT" --candidate-commit "$CANDIDATE_COMMIT" \
+            --work-dir "$RUNNER_TEMP/performance-private-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" \
+            --output-dir "$PWD/target/performance"
+      - name: Upload numeric performance evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: performance-${{ github.run_id }}-${{ github.run_attempt }}
+          # Explicit files only: no generated states, expressions or logs.
+          path: |
+            target/performance/*/measurements.json
+            target/performance/*/report.json
+            target/performance/*/measurement_metadata.json
+          if-no-files-found: ignore
+          retention-days: 14
+      - name: Remove the cache credentials
+        if: always()
+        run: rm -f "$RUNNER_TEMP/nixci.netrc"
