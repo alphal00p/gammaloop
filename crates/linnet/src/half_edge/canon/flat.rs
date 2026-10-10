@@ -52,8 +52,9 @@ pub(crate) struct Flat {
     /// Hedges of node `v` are `adj[off[v]..off[v + 1]]`.
     pub(crate) off: Vec<u32>,
     pub(crate) adj: Vec<u32>,
-    /// Certificate prefix fixing the meaning of `hcol`: empty for the mixed-radix colours,
-    /// otherwise the sorted `(edge key, hedge key, role)` table that dense colours index.
+    /// Prefix of the canonical-form words fixing the meaning of `hcol`: empty for the
+    /// mixed-radix colours, otherwise the sorted `(edge key, hedge key, role)` table that dense
+    /// colours index.
     pub(crate) colour_table: Vec<u32>,
     edge_key: Vec<u32>,
     hedge_key: Vec<u32>,
@@ -245,7 +246,7 @@ impl Flat {
             return;
         }
         // Too many distinct keys for one word: index the sorted table of present colours, which
-        // then becomes part of the certificate.
+        // then becomes part of the canonical form.
         let packed = |c: u32, e: u32, k: u32| ((e as u128) << 64) | ((k as u128) << 32) | c as u128;
         let mut present: Vec<u128> = (0..self.hcol.len())
             .map(|h| {

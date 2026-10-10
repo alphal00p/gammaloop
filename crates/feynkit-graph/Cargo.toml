@@ -9,6 +9,7 @@ keywords = ["feynman", "graph", "physics"]
 categories = ["science"]
 
 [dependencies]
+blake3 = "1.8.3"
 itertools = { workspace = true }
 nu-ansi-term = { workspace = true }
 symbolica-utils = { workspace = true }

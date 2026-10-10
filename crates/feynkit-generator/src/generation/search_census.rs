@@ -11,20 +11,16 @@
 //! The counts are deterministic. `FEYNKIT_ORACLE_RECORD=1` prints them instead of comparing
 //! them; heavy workloads run with `just generation-oracle-heavy`.
 
-#[path = "../../tests/generation_oracle/cases.rs"]
-#[allow(dead_code)]
-mod cases;
-
 use std::sync::{Arc, Mutex};
 
-use linnet::half_edge::generate::{GraphGenerator, Stage};
+use linnet::half_edge::generate::Stage;
 
 use super::{
     Generator, ResolvedProcess,
+    cases::Case,
     enumeration::{GenerationView, Pruner, VertexSignatures},
 };
 use crate::{GenerationControl, GenerationError};
-use cases::Case;
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 struct SearchCensus {
@@ -37,7 +33,9 @@ struct SearchCensus {
     dead_partial_topologies: usize,
     useless_partial_topologies: usize,
     /// Kept partial field assignments (complete labellings included); dead ones lead to no
-    /// complete labelling, useless ones (dead ones included) to no diagram.
+    /// complete labelling, useless ones (dead ones included) to no diagram. Assignments that
+    /// linnet's forward checking or budgets (coupling orders, fermion loops) drop never reach the
+    /// filter and are not counted.
     dressings: usize,
     dead_dressings: usize,
     useless_dressings: usize,
@@ -221,24 +219,14 @@ impl SearchCensus {
         let signatures = VertexSignatures::new(model, &options)?;
         let externals = resolved.externals(model)?;
         assert!(!externals.vetoed(model, &options));
-        let pruner = Pruner::new(model, &options, &signatures)?;
+        let pruner = Pruner::new(model, &options);
         let tracker = Arc::new(Mutex::new(Tracker::default()));
         let recorder = Arc::clone(&tracker);
-        let mut search = GraphGenerator::new(externals.legs(), signatures.stubs.clone())
-            .loops(options.loop_count())
-            .allow_self_loops(options.allow_self_loops)
-            .allow_zero_flow_edges(options.allow_zero_flow_edges)
-            .filter(move |view| {
-                let kept = pruner.keeps(view);
-                recorder.lock().unwrap().record(view, kept);
-                kept
-            });
-        if let Some(maximum) = options.max_vertices {
-            search = search.max_vertices(maximum);
-        }
-        if let Some(maximum) = options.max_bridges(*options.loop_count().start()) {
-            search = search.max_bridges(maximum);
-        }
+        let search = signatures.generator(model, &externals, &options, move |view| {
+            let kept = pruner.keeps(view);
+            recorder.lock().unwrap().record(view, kept);
+            kept
+        })?;
         let diagrams = search.iter()?.count();
         drop(search);
         let census = Arc::into_inner(tracker)
@@ -286,9 +274,9 @@ fn ee_to_four_leptons_at_two_loops() {
             partial_topologies: 102805,
             dead_partial_topologies: 87076,
             useless_partial_topologies: 97981,
-            dressings: 73100,
-            dead_dressings: 32732,
-            useless_dressings: 33722,
+            dressings: 53951,
+            dead_dressings: 13583,
+            useless_dressings: 14573,
             diagrams: 8460,
             rejected: [0, 0, 0],
         },
@@ -305,9 +293,9 @@ fn standard_model_ee_to_mumu_at_two_loops() {
             partial_topologies: 1391,
             dead_partial_topologies: 1086,
             useless_partial_topologies: 1190,
-            dressings: 213675,
-            dead_dressings: 39740,
-            useless_dressings: 57794,
+            dressings: 175615,
+            dead_dressings: 1680,
+            useless_dressings: 19734,
             diagrams: 69697,
             rejected: [0, 0, 0],
         },
@@ -324,11 +312,11 @@ fn standard_model_uu_to_dd_with_qed_order_two_at_two_loops() {
             partial_topologies: 1698,
             dead_partial_topologies: 1325,
             useless_partial_topologies: 1423,
-            dressings: 52023,
-            dead_dressings: 39321,
-            useless_dressings: 40303,
+            dressings: 14463,
+            dead_dressings: 1761,
+            useless_dressings: 2743,
             diagrams: 3286,
-            rejected: [0, 24690, 0],
+            rejected: [0, 0, 0],
         },
     );
 }
@@ -343,9 +331,9 @@ fn gg_to_six_gluon_trees() {
             partial_topologies: 65417,
             dead_partial_topologies: 19,
             useless_partial_topologies: 19,
-            dressings: 200655,
-            dead_dressings: 59920,
-            useless_dressings: 59920,
+            dressings: 140735,
+            dead_dressings: 0,
+            useless_dressings: 0,
             diagrams: 34300,
             rejected: [0, 0, 0],
         },
@@ -363,9 +351,9 @@ fn gg_to_gg_at_three_loops() {
             partial_topologies: 35379,
             dead_partial_topologies: 6324,
             useless_partial_topologies: 6324,
-            dressings: 5178680,
-            dead_dressings: 1695407,
-            useless_dressings: 2038974,
+            dressings: 3853181,
+            dead_dressings: 369908,
+            useless_dressings: 713475,
             diagrams: 686501,
             rejected: [0, 0, 0],
         },
@@ -383,9 +371,9 @@ fn gg_to_ggg_at_two_loops() {
             partial_topologies: 24107,
             dead_partial_topologies: 1138,
             useless_partial_topologies: 1138,
-            dressings: 1645875,
-            dead_dressings: 627550,
-            useless_dressings: 659505,
+            dressings: 1171205,
+            dead_dressings: 152880,
+            useless_dressings: 184835,
             diagrams: 213390,
             rejected: [0, 0, 0],
         },
@@ -403,9 +391,9 @@ fn uu_to_gg_at_three_loops() {
             partial_topologies: 61781,
             dead_partial_topologies: 51158,
             useless_partial_topologies: 53959,
-            dressings: 845880,
-            dead_dressings: 252664,
-            useless_dressings: 324208,
+            dressings: 642646,
+            dead_dressings: 49430,
+            useless_dressings: 120974,
             diagrams: 114301,
             rejected: [0, 0, 0],
         },
@@ -423,9 +411,9 @@ fn photon_self_energy_at_five_loops() {
             partial_topologies: 12596,
             dead_partial_topologies: 11655,
             useless_partial_topologies: 11655,
-            dressings: 3141954,
-            dead_dressings: 1131624,
-            useless_dressings: 1548315,
+            dressings: 2490381,
+            dead_dressings: 480051,
+            useless_dressings: 896742,
             diagrams: 322704,
             rejected: [0, 0, 0],
         },

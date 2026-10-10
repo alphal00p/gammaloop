@@ -1,5 +1,12 @@
+// The case table of the generation oracle tests, shared by the unit tests that run its workloads.
+#[cfg(test)]
+#[path = "../tests/generation_oracle/cases.rs"]
+#[allow(dead_code)]
+mod cases;
 mod enumeration;
 mod graph;
+#[cfg(test)]
+mod projector_equivalence;
 #[cfg(test)]
 mod search_census;
 mod special_topologies;
@@ -7,6 +14,7 @@ mod special_topologies;
 use std::{
     collections::{BTreeMap, BTreeSet, HashMap},
     fmt,
+    hash::Hash,
     sync::{
         Arc, Mutex, RwLock,
         atomic::{AtomicUsize, Ordering},
@@ -24,7 +32,6 @@ use linnet::half_edge::{
     HedgeGraph, NodeIndex,
     builder::HedgeGraphBuilder,
     canon::ignore,
-    generate::GraphGenerator,
     involution::{Flow, Orientation},
     subgraph::{InternalSubGraph, SuBitGraph, SubSetLike},
 };
@@ -211,7 +218,10 @@ pub struct DiagramGroup {
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct GenerationReport {
-    /// Complete untyped topologies accepted during enumeration.
+    /// Complete untyped topologies accepted during enumeration. Loop orders that the coupling
+    /// orders rule out (no multiset of vertex rules has the degrees and orders they need), and
+    /// requests with external charges or parities that no vertex rule balances or with an empty
+    /// coupling-order or fermion-loop range, are not enumerated and add none.
     pub topology_count: usize,
     /// Enumerated diagrams: topologies with fields and vertex rules, before the cut and
     /// charge-conjugation filters that need their canonical frame.
@@ -1336,6 +1346,64 @@ pub(crate) struct Generator {
 struct NumeratorCache {
     interactions: RwLock<HashMap<InteractionNumeratorKey, Atom>>,
     propagators: RwLock<HashMap<PropagatorNumeratorKey, Atom>>,
+    /// Automatic projectors by the finalized position of every external state. Finalization
+    /// numbers the external legs first, so all diagrams of an amplitude share one entry. A cross
+    /// section adds the sewn final-state copies after the internal edges, so its entries vary
+    /// with the internal edge count.
+    projectors: RwLock<HashMap<Vec<ExternalStatePosition>, Atom>>,
+}
+
+/// The atom cached under `key`, computed and stored on first use.
+fn memoised<K: Eq + Hash>(
+    cache: &RwLock<HashMap<K, Atom>>,
+    key: K,
+    compute: impl FnOnce(&K) -> Result<Atom, GenerationError>,
+) -> Result<Atom, GenerationError> {
+    if let Some(atom) = cache.read().unwrap().get(&key) {
+        return Ok(atom.clone());
+    }
+    let atom = compute(&key)?;
+    cache.write().unwrap().insert(key, atom.clone());
+    Ok(atom)
+}
+
+/// An external state at its position in a diagram: the edge that carries it and the half-edge
+/// where it attaches.
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+struct ExternalStatePosition {
+    external: ExternalNode,
+    edge: usize,
+    hedge: usize,
+}
+
+impl ExternalStatePosition {
+    /// The position of `external`, carried by the leg with `connection`, in a finalized diagram.
+    /// An incoming state attaches at the target of its edge and an outgoing one at the source.
+    /// `FeynmanDiagram::validate` requires this orientation of the unpaired legs. Finalization
+    /// sews a cross-section initial state with the amplitude-side sink as the target and the
+    /// conjugate-side source as the source, so the sewn edge carries both copies.
+    fn finalized(external: ExternalNode, connection: usize, diagram: &FeynmanDiagram) -> Self {
+        let (edge, _, _) = diagram
+            .edges()
+            .find(|(_, _, data)| {
+                data.external
+                    .as_ref()
+                    .is_some_and(|leg| leg.connection == connection)
+            })
+            .expect("finalized external leg");
+        let endpoint = match external.state {
+            ExternalState::Incoming => DiagramEndpoint::Target,
+            ExternalState::Outgoing => DiagramEndpoint::Source,
+        };
+        let hedge = diagram
+            .half_edge_id(DiagramHalfEdge { edge, endpoint })
+            .expect("finalized external endpoint");
+        Self {
+            external,
+            edge: edge.0,
+            hedge: hedge.0,
+        }
+    }
 }
 
 #[derive(PartialEq, Eq, Hash)]
@@ -1432,15 +1500,14 @@ impl Generator {
         let resolved = ResolvedProcess::new(&self.model, process, generation_type, options)?;
         let signatures = VertexSignatures::new(&self.model, options)?;
         let externals = resolved.externals(&self.model)?;
-        let pruner = Pruner::new(&self.model, options, &signatures)?;
+        let pruner = Pruner::new(&self.model, options);
 
         options.report_progress("topologies", 0, None);
         let topologies = Arc::new(AtomicUsize::new(0));
-        let mut generator = GraphGenerator::new(externals.legs(), signatures.stubs.clone())
-            .loops(options.loop_count())
-            .allow_self_loops(options.allow_self_loops)
-            .allow_zero_flow_edges(options.allow_zero_flow_edges)
-            .filter(move |view| pruner.keeps(view))
+        let generator = signatures
+            .generator(&self.model, &externals, options, move |view| {
+                pruner.keeps(view)
+            })?
             .progress({
                 let options = options.clone();
                 let topologies = Arc::clone(&topologies);
@@ -1454,12 +1521,6 @@ impl Generator {
                 let options = options.clone();
                 move || options.cancellation_requested()
             });
-        if let Some(maximum) = options.max_vertices {
-            generator = generator.max_vertices(maximum);
-        }
-        if let Some(maximum) = options.max_bridges(*options.loop_count().start()) {
-            generator = generator.max_bridges(maximum);
-        }
         #[cfg(not(target_arch = "wasm32"))]
         let generator = generator.parallel(true);
         let enumerate = || {
@@ -1487,8 +1548,8 @@ impl Generator {
             generated
         };
         let mut completed = !options.cancellation_requested();
-        // The certificate order is canonical, hence reproducible, and it fixes the names.
-        generated.sort_by(|left, right| left.certificate.cmp(&right.certificate));
+        // The order of the canonical forms is reproducible, and it fixes the names.
+        generated.sort_by(|left, right| left.canonical_form.cmp(&right.canonical_form));
         let topology_count = topologies.load(Ordering::Relaxed);
         let interaction_assignment_count = generated.len();
 
@@ -2283,18 +2344,15 @@ impl Generator {
             .externals()
             .filter(|(_, external, _)| external.state == ExternalState::Incoming)
             .count();
-        let projector = match &options.projector {
-            Some(projector) => projector.clone(),
-            None => self.external_state_projector(graph)?,
-        };
         let mut builder = FeynmanDiagram::builder(Arc::clone(&self.model), name)
             .canonical_loop_momentum_basis()
             .symmetry_factor(topology.symmetry)
             .overall_factor(overall_factor)
             .numerator_prefactor(options.numerator_prefactor.clone())
-            .projector(projector)
             .cuts(topology.cut_partitions.clone())
             .topology_threshold_candidates(topology.topology_threshold_candidates.clone());
+        // Every external state with the connection of the leg that carries it.
+        let mut external_states = Vec::new();
         let mut endpoint_slots = BTreeMap::new();
         for (vertex, rule_id) in graph.vertices().enumerate() {
             let rule = self.model.vertex_rule_by_id(rule_id)?;
@@ -2340,6 +2398,7 @@ impl Generator {
                                 index: external.index,
                             })?,
                     };
+                    external_states.push((external, connection));
                     builder.add_generation_external(
                         feynkit_graph::VertexId(vertex),
                         flow,
@@ -2358,7 +2417,25 @@ impl Generator {
                 }
             }
         }
-        let diagram = builder.build()?;
+        let diagram = match &options.projector {
+            // A requested projector refers to the provisional frame and is finalized with the
+            // diagram.
+            Some(projector) => builder.projector(projector.clone()).build()?,
+            // The automatic one is built directly in the final frame.
+            None => {
+                let diagram = builder.build()?;
+                let positions = external_states
+                    .into_iter()
+                    .map(|(external, connection)| {
+                        ExternalStatePosition::finalized(external, connection, &diagram)
+                    })
+                    .collect();
+                let projector = memoised(&self.numerators.projectors, positions, |positions| {
+                    self.external_state_projector(positions)
+                })?;
+                diagram.with_projector(projector)
+            }
+        };
         self.construct_numerators(diagram, |_| true)
     }
 
@@ -2438,23 +2515,22 @@ impl Generator {
         Ok(diagram.with_numerator_fragments(vertices, edges)?)
     }
 
-    fn external_state_projector(&self, graph: &GeneratedGraph) -> Result<Atom, GenerationError> {
+    /// The external-state projector: the spinor or polarization vector of every state, on the
+    /// edge that carries it and indexed at the half-edge where it attaches. Scalars contribute no
+    /// factor.
+    fn external_state_projector(
+        &self,
+        positions: &[ExternalStatePosition],
+    ) -> Result<Atom, GenerationError> {
         let mut projector = Atom::one();
-        for (edge_id, external, _) in graph.externals() {
-            // The half-edge at the attachment vertex.
-            let flow = if graph.edge(edge_id).source.external().is_some() {
-                Flow::Sink
-            } else {
-                Flow::Source
-            };
-            let hedge = edge_id
-                .checked_mul(2)
-                .and_then(|index| index.checked_add(usize::from(flow == Flow::Sink)))
-                .ok_or(GenerationError::ArithmeticOverflow(
-                    "an external half-edge identifier",
-                ))?;
+        for &ExternalStatePosition {
+            external,
+            edge,
+            hedge,
+        } in positions
+        {
             if let Some(factor) =
-                self.external_state_factor(external.particle, external.state, edge_id, hedge)?
+                self.external_state_factor(external.particle, external.state, edge, hedge)?
             {
                 projector *= factor;
             }
@@ -2588,39 +2664,32 @@ impl Generator {
             owner: instantiation.owner,
             legs: instantiation.legs.to_vec(),
         };
-        if let Some(numerator) = self.numerators.interactions.read().unwrap().get(&key) {
-            return Ok(numerator.clone());
-        }
-        let rule = self.model.vertex_rule_by_id(rule_id)?;
-        let mut terms = Vec::new();
-        for (color_index, color) in rule.color_structures.iter().enumerate() {
-            for (lorentz_index, lorentz_name) in rule.lorentz_structures.iter().enumerate() {
-                if let Some(coupling) = rule
-                    .couplings
-                    .get(color_index)
-                    .and_then(|row| row.get(lorentz_index))
-                    .and_then(Option::as_ref)
-                {
-                    let coupling = self.model.coupling_by_id(*coupling)?;
-                    let coupling = Atom::var(symbol!(&format!("UFO::{}", coupling.name)));
-                    let lorentz = &self.model.lorentz_structure_by_id(*lorentz_name)?.structure;
-                    let color = instantiation.instantiate(color, NumeratorSector::Color)?;
-                    let lorentz = instantiation.instantiate(lorentz, NumeratorSector::Spin)?;
-                    terms.push(coupling * color * lorentz);
+        memoised(&self.numerators.interactions, key, |_| {
+            let rule = self.model.vertex_rule_by_id(rule_id)?;
+            let mut terms = Vec::new();
+            for (color_index, color) in rule.color_structures.iter().enumerate() {
+                for (lorentz_index, lorentz_name) in rule.lorentz_structures.iter().enumerate() {
+                    if let Some(coupling) = rule
+                        .couplings
+                        .get(color_index)
+                        .and_then(|row| row.get(lorentz_index))
+                        .and_then(Option::as_ref)
+                    {
+                        let coupling = self.model.coupling_by_id(*coupling)?;
+                        let coupling = Atom::var(symbol!(&format!("UFO::{}", coupling.name)));
+                        let lorentz = &self.model.lorentz_structure_by_id(*lorentz_name)?.structure;
+                        let color = instantiation.instantiate(color, NumeratorSector::Color)?;
+                        let lorentz = instantiation.instantiate(lorentz, NumeratorSector::Spin)?;
+                        terms.push(coupling * color * lorentz);
+                    }
                 }
             }
-        }
-        let numerator = if terms.is_empty() {
-            Atom::one()
-        } else {
-            Atom::add_many(terms)
-        };
-        self.numerators
-            .interactions
-            .write()
-            .unwrap()
-            .insert(key, numerator.clone());
-        Ok(numerator)
+            Ok(if terms.is_empty() {
+                Atom::one()
+            } else {
+                Atom::add_many(terms)
+            })
+        })
     }
 
     fn edge_numerator(
@@ -2634,38 +2703,31 @@ impl Generator {
             edge,
             hedges,
         };
-        if let Some(numerator) = self.numerators.propagators.read().unwrap().get(&key) {
-            return Ok(numerator.clone());
-        }
-        let particle = self.model.particle_by_id(particle_id)?;
-        let (propagator, reversed) = self.propagator_numerator(particle)?;
-        let flows = if reversed {
-            [Flow::Sink, Flow::Source]
-        } else {
-            [Flow::Source, Flow::Sink]
-        };
-        let legs = flows.map(|flow| NumeratorHalfEdge {
-            edge,
-            flow,
-            hedge: hedges[usize::from(flow == Flow::Sink)],
-            spin: particle.spin,
-            color: particle.color,
-        });
-        let instantiation = NumeratorInstantiation {
-            owner: NumeratorOwner::Edge(edge),
-            legs: &legs,
-        };
-        let spin = instantiation.instantiate(&propagator, NumeratorSector::Spin)?;
-        let numerator = match instantiation.edge_color_identity(particle.color)? {
-            None => spin,
-            Some(color) => spin * color,
-        };
-        self.numerators
-            .propagators
-            .write()
-            .unwrap()
-            .insert(key, numerator.clone());
-        Ok(numerator)
+        memoised(&self.numerators.propagators, key, |_| {
+            let particle = self.model.particle_by_id(particle_id)?;
+            let (propagator, reversed) = self.propagator_numerator(particle)?;
+            let flows = if reversed {
+                [Flow::Sink, Flow::Source]
+            } else {
+                [Flow::Source, Flow::Sink]
+            };
+            let legs = flows.map(|flow| NumeratorHalfEdge {
+                edge,
+                flow,
+                hedge: hedges[usize::from(flow == Flow::Sink)],
+                spin: particle.spin,
+                color: particle.color,
+            });
+            let instantiation = NumeratorInstantiation {
+                owner: NumeratorOwner::Edge(edge),
+                legs: &legs,
+            };
+            let spin = instantiation.instantiate(&propagator, NumeratorSector::Spin)?;
+            Ok(match instantiation.edge_color_identity(particle.color)? {
+                None => spin,
+                Some(color) => spin * color,
+            })
+        })
     }
 }
 
@@ -3319,7 +3381,7 @@ impl ResolvedProcess {
             let positions: Vec<usize> = (0..graph.n_vertices())
                 .map(|vertex| canonical.canonical_node(NodeIndex(vertex)).0)
                 .collect();
-            candidates.push((canonical.into_certificate(), swapped, positions));
+            candidates.push((canonical.into_canonical_form(), swapped, positions));
         }
         let (_, left_right_swapped, positions) = candidates
             .into_iter()
@@ -4830,58 +4892,37 @@ mod tests {
 
     #[test]
     fn finalizes_vector_projectors_and_leaves_scalar_states_trivial() {
-        let generator = Generator::new(fermion_model());
-        let mut vector_graph = Graph::new();
-        let incoming = vector_graph.add_node(ColoredNode::External(ExternalNode {
-            index: 0,
-            state: ExternalState::Incoming,
-            particle: particle(&generator.model, 22),
-        }));
-        let left = vector_graph.add_node(ColoredNode::Interaction(vertex(&generator.model, "V")));
-        let right = vector_graph.add_node(ColoredNode::Interaction(vertex(&generator.model, "V")));
-        let outgoing = vector_graph.add_node(ColoredNode::External(ExternalNode {
-            index: 1,
-            state: ExternalState::Outgoing,
-            particle: particle(&generator.model, 22),
-        }));
-        vector_graph
-            .add_edge(incoming, left, false, edge(&generator.model, 22))
+        let options = GenerationOptions::default()
+            .with_loop_count(1, 1)
+            .unwrap()
+            .threads(1);
+        let vectors = Generator::new(fermion_model())
+            .generate(&photon_process(), &options, GenerationType::Amplitude)
             .unwrap();
-        vector_graph
-            .add_edge(right, outgoing, false, edge(&generator.model, 22))
-            .unwrap();
-        let vector_projector = generator
-            .external_state_projector(&vector_graph.build())
-            .unwrap();
-        assert_eq!(
-            function_count(&vector_projector, feynkit_graph::symbols::epsilon()),
-            1
-        );
-        assert_eq!(
-            function_count(&vector_projector, feynkit_graph::symbols::epsilonbar()),
-            1
-        );
-        assert_eq!(
-            function_count(&vector_projector, feynkit_graph::symbols::hedge_index()),
-            2
-        );
+        assert!(!vectors.diagrams.is_empty());
+        for diagram in &vectors.diagrams {
+            for (head, count) in [
+                (feynkit_graph::symbols::epsilon(), 1),
+                (feynkit_graph::symbols::epsilonbar(), 1),
+                (feynkit_graph::symbols::hedge_index(), 2),
+            ] {
+                assert_eq!(function_count(diagram.projector(), head), count);
+            }
+        }
 
-        let mut scalar_graph = Graph::new();
-        let scalar = scalar_graph.add_node(ColoredNode::External(ExternalNode {
-            index: 0,
-            state: ExternalState::Incoming,
-            particle: particle(&generator.model, 25),
-        }));
-        let internal =
-            scalar_graph.add_node(ColoredNode::Interaction(vertex(&generator.model, "V")));
-        scalar_graph
-            .add_edge(scalar, internal, false, edge(&generator.model, 25))
+        let scalars = Generator::new(scalar_model())
+            .generate(
+                &Process::new(["phi"], ["phi"]),
+                &options,
+                GenerationType::Amplitude,
+            )
             .unwrap();
-        assert_eq!(
-            generator
-                .external_state_projector(&scalar_graph.build())
-                .unwrap(),
-            Atom::one()
+        assert!(!scalars.diagrams.is_empty());
+        assert!(
+            scalars
+                .diagrams
+                .iter()
+                .all(|diagram| diagram.projector() == &Atom::one())
         );
     }
 
@@ -7750,6 +7791,104 @@ mod tests {
         assert_eq!(
             born_cross_section_factors(&model, &photon_fusion, true).unwrap(),
             factors(&[-2, -2])
+        );
+    }
+
+    #[test]
+    fn coupling_budgets_preserve_beam_exchange_orbits() {
+        let model = Model::qcd_qed();
+        let generator = Generator::new(model.clone());
+        let orders = |diagram: &FeynmanDiagram| {
+            let mut total = BTreeMap::new();
+            for (_, vertex) in diagram.vertices() {
+                let rule = model
+                    .vertex_rule_by_id(vertex.interaction.unwrap())
+                    .unwrap();
+                for (name, power) in rule.coupling_orders(&model) {
+                    *total.entry(name).or_insert(0_usize) += power;
+                }
+            }
+            total
+        };
+        let selected = |diagram: &FeynmanDiagram| orders(diagram).get("QCD") == Some(&2);
+        // Filtering can renumber names; every other serialized field must agree,
+        // including IDs, symmetry factors, projectors, fragments, cuts and routing.
+        let snapshot = |diagram: &FeynmanDiagram| {
+            diagram
+                .clone()
+                .with_name("budget-comparison")
+                .to_json()
+                .unwrap()
+        };
+        let mut nontrivial_orbit = false;
+        for (process, loops) in [
+            (Process::new(["u", "u"], ["u", "u"]), 1),
+            (Process::new(["a", "a"], ["u", "u~"]), 2),
+        ] {
+            let mut exact_weights = None;
+            for symmetrize_initial in [false, true] {
+                let options = GenerationOptions::default()
+                    .with_loop_count(loops, loops)
+                    .unwrap()
+                    .threads(1)
+                    .symmetrize_initial(symmetrize_initial)
+                    .symmetrize_left_right(false);
+                let all = generator
+                    .generate(&process, &options, GenerationType::CrossSection)
+                    .unwrap();
+                assert!(all.report.completed);
+                let mut expected = all
+                    .diagrams
+                    .iter()
+                    .filter(|diagram| selected(diagram))
+                    .map(snapshot)
+                    .collect::<Vec<_>>();
+                assert!(!expected.is_empty(), "no QCD^2 diagrams at {loops} loops");
+                assert!(
+                    expected.len() < all.diagrams.len(),
+                    "the budget must reject diagrams"
+                );
+                let filtered = generator
+                    .generate(
+                        &process,
+                        &options.with_graph_filter(GenerationFilter::CouplingOrders(
+                            BTreeMap::from([("QCD".to_owned(), (2, Some(2)))]),
+                        )),
+                        GenerationType::CrossSection,
+                    )
+                    .unwrap();
+                assert!(filtered.report.completed);
+                let mut actual = filtered.diagrams.iter().map(snapshot).collect::<Vec<_>>();
+                expected.sort();
+                actual.sort();
+                assert_eq!(
+                    actual, expected,
+                    "{loops} loops, beam exchange {symmetrize_initial}"
+                );
+
+                // Compare each order class separately: signed totals across classes can cancel.
+                let mut weights = BTreeMap::new();
+                for diagram in &all.diagrams {
+                    *weights.entry(orders(diagram)).or_insert_with(Atom::zero) +=
+                        evaluated_overall_factor(diagram);
+                }
+                if symmetrize_initial {
+                    assert_eq!(Some(weights), exact_weights, "{loops} loops");
+                    // Two beams have only singleton and size-two orbits. Require the
+                    // budgeted cases to exercise a size-two orbit, beyond fixed points.
+                    nontrivial_orbit |= filtered.diagrams.iter().any(|diagram| {
+                        let multiplicity = evaluated_overall_factor(diagram)
+                            * Atom::num(i64::try_from(diagram.symmetry_factor()).unwrap());
+                        multiplicity == Atom::num(2) || multiplicity == Atom::num(-2)
+                    });
+                } else {
+                    exact_weights = Some(weights);
+                }
+            }
+        }
+        assert!(
+            nontrivial_orbit,
+            "the budget must retain a nontrivial beam orbit"
         );
     }
 

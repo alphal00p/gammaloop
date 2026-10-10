@@ -500,6 +500,19 @@ impl Topology {
         );
     }
 
+    /// Calls `bridge(u, v)` for every bridge `(u, v)` of a connected topology.
+    pub(crate) fn bridges(&self, mut bridge: impl FnMut(usize, usize)) {
+        let mut scratch = BridgeScratch::default();
+        scratch.reset(self.n);
+        self.lowlink(
+            0,
+            usize::MAX,
+            &mut scratch,
+            &|_| (0, 0),
+            &mut |[v, u], _, _| bridge(v, u),
+        );
+    }
+
     /// Depth-first low-link pass from `v`; calls `bridge([parent, child], open, legs)` with the
     /// totals of `stubs` (open stubs and legs per vertex) over the child's side of every bridge.
     /// Returns the subtree totals.
@@ -1439,7 +1452,7 @@ impl Search {
         for &degree in &model.degrees {
             let budget = t.budget - (degree as i32 - 2);
             for &(legs, n_legs) in &level.subsets {
-                if n_legs > degree as u32 || !model.legs_fit(degree, legs) {
+                if n_legs > degree as u32 || model.leg_state(degree, legs).is_none() {
                     continue;
                 }
                 let max_loops = if limits.self_loops {
@@ -1727,11 +1740,12 @@ impl Search {
 #[cfg(test)]
 mod tests {
     use super::{Corolla, Legs, Limits, Model, OpenStubs, Pendants, Topology};
+    use crate::half_edge::generate::budget::Request;
 
     #[test]
     fn twins_have_equal_corollas_and_neighbours() {
         // phi^3 with anonymous legs
-        let model = Model::new(1, &[vec![0; 3]], &[(0, 1); 5]).unwrap();
+        let model = Model::new(1, &[vec![0; 3]], &[(0, 1); 5], &Request::default()).unwrap();
         let limits = Limits::new(&model, 3, 3, None, true, true);
         let corolla = |n_legs: u32| Corolla {
             degree: 3,
@@ -1758,7 +1772,7 @@ mod tests {
     fn twins_have_equal_multiplicities() {
         // phi^4: vertices 2 and 3 share the neighbours 0 and 1, which look alike, but with swapped
         // multiplicities, so exchanging 2 and 3 alone is not an automorphism
-        let model = Model::new(1, &[vec![0; 4]], &[]).unwrap();
+        let model = Model::new(1, &[vec![0; 4]], &[], &Request::default()).unwrap();
         let limits = Limits::new(&model, 8, 4, None, true, true);
         let phi4 = Corolla {
             degree: 4,

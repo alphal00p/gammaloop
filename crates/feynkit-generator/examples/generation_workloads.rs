@@ -8,7 +8,7 @@
 //! - `full CASE` runs the whole pipeline: enumeration, interaction filters, numerators,
 //!   selection and grouping.
 //! - `generation CASE` cancels at the first progress report after enumeration, so only the
-//!   enumeration and the certificate sort run.
+//!   enumeration and the canonical-form sort run.
 //! - `list [reference]` prints the case names.
 //!
 //! Both runs use one generation thread and print one `RESULT` line with the report counts. The

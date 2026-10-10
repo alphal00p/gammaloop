@@ -13,10 +13,79 @@ use linnet::{
 use std::cell::LazyCell;
 use symbolica::atom::{AtomView, FunctionBuilder, Symbol};
 
-#[derive(Clone)]
-struct PendingEdge {
-    original: EdgeId,
-    data: DiagramEdge,
+/// Where finalization put each provisional edge of a generated diagram, indexed
+/// by provisional edge id. Vertices keep their ids.
+struct FinalFrame {
+    /// The provisional endpoints.
+    endpoints: Vec<EdgeEndpoints>,
+    /// The final (logical) edge index.
+    edges: Vec<usize>,
+    /// The final half-edges at the provisional source and target; a dangling
+    /// edge has one half-edge for both.
+    half_edges: Vec<[Hedge; 2]>,
+    /// Whether the final orientation reverses the provisional momentum.
+    reversed: Vec<bool>,
+    vertices: usize,
+}
+
+impl FinalFrame {
+    fn half_edge(&self, half_edge: DiagramHalfEdge) -> Option<Hedge> {
+        let end = match half_edge.endpoint {
+            DiagramEndpoint::Source => 0,
+            DiagramEndpoint::Target => 1,
+        };
+        self.half_edges.get(half_edge.edge.0).map(|ends| ends[end])
+    }
+
+    /// Resolve provisional edge `id` on the finalized graph. Each provisional
+    /// end takes a half-edge of the final edge at its vertex, preferring the
+    /// end's flow (source or sink). The momentum is reversed when the
+    /// half-edge at the provisional source, or at the target of a leg without
+    /// a source, no longer has its provisional flow.
+    fn resolve(&mut self, graph: &HedgeGraph<DiagramEdge, DiagramVertex>, id: usize) {
+        let candidates = match graph[&EdgeIndex(self.edges[id])].1 {
+            HedgePair::Paired { source, sink } | HedgePair::Split { source, sink, .. } => {
+                [source, sink]
+            }
+            HedgePair::Unpaired { hedge, .. } => [hedge; 2],
+        };
+        let endpoints = self.endpoints[id];
+        let at = |vertex: Option<VertexId>, flow| {
+            let attached = || {
+                candidates.into_iter().filter(move |&hedge| {
+                    vertex.is_none_or(|vertex| graph.node_id(hedge) == NodeIndex(vertex.0))
+                })
+            };
+            attached()
+                .find(|&hedge| graph.flow(hedge) == flow)
+                .or_else(|| attached().next())
+                .or_else(|| {
+                    candidates
+                        .into_iter()
+                        .find(|&hedge| graph.flow(hedge) == flow)
+                })
+                .unwrap_or(candidates[0])
+        };
+        self.half_edges[id] = [
+            at(endpoints.source, Flow::Source),
+            at(endpoints.target, Flow::Sink),
+        ];
+        let (end, flow) = if endpoints.source.is_some() {
+            (0, Flow::Source)
+        } else {
+            (1, Flow::Sink)
+        };
+        self.reversed[id] = graph.flow(self.half_edges[id][end]) != flow;
+    }
+}
+
+/// How a provisional edge of a generated diagram enters its final graph.
+#[derive(Clone, Copy)]
+enum Insertion {
+    /// A leg, dangling with its final process flow at its vertex.
+    Leg(Flow),
+    /// An internal edge, attached at both ends.
+    Internal,
 }
 
 /// What the first argument of an index head, or of a momentum or external-state
@@ -57,6 +126,18 @@ impl IndexOwners {
             (symbols::epsilon(), IndexOwner::ExternalState),
             (symbols::epsilonbar(), IndexOwner::ExternalState),
         ])
+    }
+
+    /// Whether an expression contains an index head or carrier to transport.
+    fn contains(&self, atom: &Atom) -> bool {
+        let mut found = false;
+        atom.visitor(&mut |term| {
+            found = found
+                || matches!(term, AtomView::Fun(function)
+                    if self.0.iter().any(|(head, _)| *head == function.get_symbol()));
+            !found
+        });
+        found
     }
 
     /// Relabel the owner of every index head and carrier in `atom`. `relabel` returns
@@ -134,420 +215,88 @@ impl FeynmanDiagramBuilder {
     /// Finalize the diagram and return, for every builder edge, its finalized edge.
     /// Both legs of a sewn initial state map to its one edge.
     pub(super) fn finalize(self) -> Result<(FeynmanDiagram, Vec<EdgeId>), DiagramError> {
-        let generated = !self.generation_externals.is_empty();
-        let mut external_indices = BTreeSet::new();
-        for external in self.generation_externals.values() {
-            if !external_indices.insert(external.index) {
-                return Err(DiagramError::DuplicateExternalIndex(external.index));
-            }
-        }
-        let mut builder = HedgeGraphBuilder::new();
-        let vertices: BTreeMap<_, _> = self
-            .vertices
-            .iter()
-            .enumerate()
-            .map(|(id, vertex)| (VertexId(id), builder.add_node(vertex.clone())))
-            .collect();
-        let mut connections = BTreeMap::<usize, (Option<usize>, Option<usize>)>::new();
-        let mut externals = BTreeMap::new();
-        let mut internal = Vec::new();
-        for (id, (endpoints, edge)) in self.edges.iter().enumerate() {
-            let Some(leg) = self.generation_externals.get(&EdgeId(id)) else {
-                internal.push(id);
-                continue;
-            };
-            // The flow and slot of the leg at its attachment vertex.
-            let (attachment, old_flow, slot) = match (endpoints.source, endpoints.target) {
-                (Some(vertex), None) => (vertex, Flow::Source, edge.source_slot),
-                (None, Some(vertex)) => (vertex, Flow::Sink, edge.target_slot),
-                _ => unreachable!("generated legs are dangling edges"),
-            };
-            if edge.numerator != Atom::one() {
-                return Err(DiagramError::ExternalEdgeNumerator { edge: id });
-            }
-            let entry = connections.entry(leg.connection).or_default();
-            let target = match leg.state {
-                ExternalState::Incoming => &mut entry.0,
-                ExternalState::Outgoing => &mut entry.1,
-            };
-            if target.replace(id).is_some() {
-                return Err(DiagramError::InvalidExternalConnectionStates {
-                    connection: leg.connection,
-                    state: leg.state.as_str(),
-                });
-            }
-            externals.insert(id, (leg.clone(), attachment, old_flow, slot));
-        }
-        let orientation = |edge: &DiagramEdge| -> Result<Orientation, DiagramError> {
-            Ok(if !edge.directed {
-                Orientation::Undirected
-            } else if self.model.particle_by_id(edge.particle)?.is_antiparticle() {
-                Orientation::Reversed
-            } else {
-                Orientation::Default
-            })
-        };
-        let mut logical = BTreeMap::new();
-        let mut next_edge = 0;
-        let add_external = |id: usize,
-                            flow: Flow,
-                            builder: &mut HedgeGraphBuilder<PendingEdge, DiagramVertex>|
-         -> Result<(), DiagramError> {
-            let (leg, vertex, old_flow, slot) = &externals[&id];
-            let mut edge = self.edges[id].1.clone();
-            edge.external = Some(leg.clone());
-            if old_flow != &flow {
-                edge.particle = self.model.particle_by_id(edge.particle)?.antiparticle;
-            }
-            match flow {
-                Flow::Source => edge.source_slot = *slot,
-                Flow::Sink => edge.target_slot = *slot,
-            }
-            let direction = orientation(&edge)?;
-            builder.add_external_edge(
-                vertices[vertex],
-                PendingEdge {
-                    original: EdgeId(id),
-                    data: edge,
-                },
-                direction,
-                flow,
-            );
-            Ok(())
-        };
-        // Half-edge insertion order controls channel coordinates. Logical edge
-        // identity is assigned separately, as in GammaLoop's finalization.
-        if generated {
-            for (incoming, _) in connections.values() {
-                if let Some(id) = incoming {
-                    logical.insert(EdgeId(*id), next_edge);
-                    next_edge += 1;
-                    add_external(*id, Flow::Sink, &mut builder)?;
-                }
-            }
-            for (incoming, outgoing) in connections.values() {
-                if incoming.is_none()
-                    && let Some(id) = outgoing
-                {
-                    logical.insert(EdgeId(*id), next_edge);
-                    next_edge += 1;
-                    add_external(*id, Flow::Source, &mut builder)?;
-                }
-            }
-            for id in &internal {
-                logical.insert(EdgeId(*id), next_edge);
-                next_edge += 1;
-            }
-            internal.sort_by_key(|id| {
-                let (endpoints, edge) = &self.edges[*id];
-                let (source, target, particle) = if endpoints.source <= endpoints.target {
-                    (endpoints.source, endpoints.target, edge.particle)
-                } else {
-                    (
-                        endpoints.target,
-                        endpoints.source,
-                        self.model
-                            .particle_by_id(edge.particle)
-                            .expect("resolved particle")
-                            .antiparticle,
-                    )
-                };
-                (
-                    source,
-                    target,
-                    self.model
-                        .particle_by_id(particle)
-                        .expect("resolved particle")
-                        .pdg_code,
-                    *id,
-                )
+        // The vertices and edges move into the graph. Expressions, cuts and a
+        // requested basis of a generated diagram refer to its provisional
+        // frame; an imported diagram is already final.
+        let (mut graph, frame) = if self.generation_externals.is_empty() {
+            let graph = imported_graph(
+                &self.model,
+                self.vertices,
+                self.edges,
+                self.edge_orientations.as_deref(),
+                self.half_edge_order.as_deref(),
+            )?;
+            (graph, None)
+        } else if self.edge_orientations.is_some() || self.half_edge_order.is_some() {
+            return Err(DiagramError::Invariant {
+                operation: "finalizing generated legs",
+                message: "only imported diagrams restore a serialized frame".into(),
             });
-        }
-        for id in internal {
-            let (endpoints, edge) = &self.edges[id];
-            let data = PendingEdge {
-                original: EdgeId(id),
-                data: edge.clone(),
-            };
-            let direction = orientation(edge)?;
-            match (endpoints.source, endpoints.target) {
-                (Some(source), Some(target)) => {
-                    builder.add_edge(vertices[&source], vertices[&target], data, direction);
-                }
-                (Some(vertex), None) => {
-                    builder.add_external_edge(vertices[&vertex], data, direction, Flow::Source);
-                }
-                (None, Some(vertex)) => {
-                    builder.add_external_edge(vertices[&vertex], data, direction, Flow::Sink);
-                }
-                (None, None) => unreachable!("builder validates attached endpoints"),
-            }
-            if !generated {
-                logical.insert(EdgeId(id), id);
-            }
-        }
-        for (incoming, outgoing) in connections.values() {
-            if let (Some(incoming), Some(outgoing)) = (incoming, outgoing) {
-                logical.insert(EdgeId(*outgoing), logical[&EdgeId(*incoming)]);
-                add_external(*outgoing, Flow::Source, &mut builder)?;
-            }
-        }
-        let mut pending: HedgeGraph<PendingEdge, DiagramVertex> = builder.into();
-        if generated {
-            pending
-                .sew(
-                    |_, left, _, right| match (&left.data.data.external, &right.data.data.external)
-                    {
-                        (Some(left), Some(right)) => {
-                            left.connection == right.connection && left.state != right.state
-                        }
-                        _ => false,
-                    },
-                    |left_flow, mut left, right_flow, right| match (left_flow, right_flow) {
-                        (Flow::Sink, Flow::Source) => {
-                            left.data.data.source_slot = right.data.data.source_slot;
-                            (Flow::Sink, left)
-                        }
-                        (Flow::Source, Flow::Sink) => {
-                            let mut incoming = right;
-                            incoming.data.data.source_slot = left.data.data.source_slot;
-                            (Flow::Source, incoming)
-                        }
-                        _ => unreachable!("external connections have opposite process flows"),
-                    },
-                )
-                .map_err(|error| DiagramError::Invariant {
-                    operation: "sewing initial-state edges",
-                    message: format!("{error:?}"),
-                })?;
-            let cut_hedges = pending
-                .iter_edges()
-                .filter_map(|(pair, _, edge)| {
-                    if let HedgePair::Paired { sink, .. } = pair {
-                        edge.data
-                            .data
-                            .external
-                            .as_ref()
-                            .map(|external| (external.connection, sink))
-                    } else {
-                        None
-                    }
-                })
-                .collect::<BTreeMap<_, _>>();
-            let permutation = Permutation::from_mappings(
-                cut_hedges
-                    .values()
-                    .enumerate()
-                    .map(|(target, hedge)| (hedge.0, target)),
-                pending.n_hedges(),
-            )
-            .map_err(|error| DiagramError::Invariant {
-                operation: "ordering initial-state half-edges",
-                message: error.to_string(),
-            })?;
-            (pending)
-                .permute_hedges(&HedgeRemap::from_permutation(&permutation))
-                .map_err(|error| DiagramError::Invariant {
-                    operation: "ordering initial-state half-edges",
-                    message: error.to_string(),
-                })?;
-        }
-        let permutation = Permutation::from_mappings(
-            pending
-                .iter_edges()
-                .map(|(_, id, edge)| (id.0, logical[&edge.data.original])),
-            pending.n_edges(),
-        )
-        .map_err(|error| DiagramError::Invariant {
-            operation: "ordering logical edges",
-            message: error.to_string(),
-        })?;
-        <HedgeGraph<_, _> as Swap<EdgeIndex>>::permute(&mut pending, &permutation);
-        let mut graph = pending.map_data_ref(
-            |_, _, vertex| vertex.clone(),
-            |_, _, _, edge| edge.map(|edge| edge.data.clone()),
-            |_, data| *data,
-        );
-        if let Some(orientations) = &self.edge_orientations {
-            if orientations.len() != graph.n_edges() {
-                return Err(DiagramError::Invariant {
-                    operation: "restoring edge orientations",
-                    message: "orientation count differs from edge count".into(),
-                });
-            }
-            for (edge, orientation) in orientations.iter().enumerate() {
-                graph.set_orientation(EdgeIndex(edge), *orientation);
-            }
-        }
-        if let Some(order) = &self.half_edge_order {
-            let mut mappings = Vec::new();
-            for (target, half_edge) in order.iter().enumerate() {
-                let Some(pair) = (half_edge.edge.0 < graph.n_edges())
-                    .then(|| graph[&EdgeIndex(half_edge.edge.0)].1)
-                else {
-                    return Err(DiagramError::UnknownEdge {
-                        edge: half_edge.edge.0,
-                        edges: graph.n_edges(),
-                    });
-                };
-                let hedge = match (pair, half_edge.endpoint) {
-                    (HedgePair::Paired { source, .. }, DiagramEndpoint::Source)
-                    | (
-                        HedgePair::Unpaired {
-                            hedge: source,
-                            flow: Flow::Source,
-                        },
-                        DiagramEndpoint::Source,
-                    ) => source,
-                    (HedgePair::Paired { sink, .. }, DiagramEndpoint::Target)
-                    | (
-                        HedgePair::Unpaired {
-                            hedge: sink,
-                            flow: Flow::Sink,
-                        },
-                        DiagramEndpoint::Target,
-                    ) => sink,
-                    _ => {
-                        return Err(DiagramError::Invariant {
-                            operation: "restoring half-edge order",
-                            message: "serialized endpoint does not exist".into(),
-                        });
-                    }
-                };
-                mappings.push((hedge.0, target));
-            }
-            if order.len() != graph.n_hedges()
-                || order.iter().collect::<BTreeSet<_>>().len() != order.len()
-            {
-                return Err(DiagramError::Invariant {
-                    operation: "restoring half-edge order",
-                    message: "serialized order must contain every half-edge exactly once".into(),
-                });
-            }
-            let permutation =
-                Permutation::from_mappings(mappings, graph.n_hedges()).map_err(|error| {
-                    DiagramError::Invariant {
-                        operation: "restoring half-edge order",
-                        message: error.to_string(),
-                    }
-                })?;
-            (graph)
-                .permute_hedges(&HedgeRemap::from_permutation(&permutation))
-                .map_err(|error| DiagramError::Invariant {
-                    operation: "restoring half-edge order",
-                    message: error.to_string(),
-                })?;
-        }
-        let mut half_edges = BTreeMap::new();
-        let mut signs = BTreeMap::new();
-        for (old, (endpoints, _)) in self.edges.iter().enumerate() {
-            let edge = EdgeId(old);
-            let pair = graph[&EdgeIndex(logical[&edge])].1;
-            let candidates = match pair {
-                HedgePair::Paired { source, sink } | HedgePair::Split { source, sink, .. } => {
-                    vec![source, sink]
-                }
-                HedgePair::Unpaired { hedge, .. } => vec![hedge],
-            };
-            for (vertex, endpoint, flow) in [
-                (endpoints.source, DiagramEndpoint::Source, Flow::Source),
-                (endpoints.target, DiagramEndpoint::Target, Flow::Sink),
-            ] {
-                let attached = candidates
-                    .iter()
-                    .copied()
-                    .filter(|hedge| {
-                        vertex
-                            .and_then(|v| vertices.get(&v))
-                            .is_none_or(|v| graph.node_id(*hedge) == *v)
-                    })
-                    .collect::<Vec<_>>();
-                let hedge = attached
-                    .iter()
-                    .copied()
-                    .find(|h| graph.flow(*h) == flow)
-                    .or_else(|| attached.first().copied())
-                    .or_else(|| candidates.iter().copied().find(|h| graph.flow(*h) == flow))
-                    .unwrap_or(candidates[0]);
-                half_edges.insert(DiagramHalfEdge { edge, endpoint }, hedge);
-            }
-            let original_flow = if endpoints.source.is_some_and(|v| vertices.contains_key(&v)) {
-                Flow::Source
-            } else {
-                Flow::Sink
-            };
-            let endpoint = if original_flow == Flow::Source {
-                DiagramEndpoint::Source
-            } else {
-                DiagramEndpoint::Target
-            };
-            signs.insert(
-                edge,
-                if graph.flow(half_edges[&DiagramHalfEdge { edge, endpoint }]) == original_flow {
-                    1
-                } else {
-                    -1
-                },
-            );
-        }
+        } else {
+            let (graph, frame) = generated_graph(
+                &self.model,
+                &self.generation_externals,
+                self.vertices,
+                self.edges,
+            )?;
+            (graph, Some(frame))
+        };
         // Resolve heads once per generated diagram. Imported diagrams bypass
         // transport and should not initialize its symbols.
         let owners = LazyCell::new(IndexOwners::new);
-        let translate = |atom: &Atom| -> Result<Atom, DiagramError> {
-            if !generated {
-                return Ok(atom.clone());
+        let translate = |atom: &mut Atom| -> Result<(), DiagramError> {
+            // Imported diagrams keep their frame, and atoms without an index
+            // head, such as unset fragments and the generated overall factor,
+            // have nothing to remap.
+            let Some(frame) = &frame else {
+                return Ok(());
+            };
+            if !owners.contains(atom) {
+                return Ok(());
             }
-            owners
+            *atom = owners
                 .relabel(atom, |owner, index| match owner {
-                    IndexOwner::HalfEdge => {
-                        let half_edge = DiagramHalfEdge::from_provisional_index(index);
-                        logical
-                            .contains_key(&half_edge.edge)
-                            .then(|| (half_edges[&half_edge].0, false))
-                    }
-                    IndexOwner::Vertex => vertices.get(&VertexId(index)).map(|v| (v.0, false)),
-                    IndexOwner::Momentum => logical
-                        .get(&EdgeId(index))
-                        .map(|edge| (*edge, signs[&EdgeId(index)] < 0)),
+                    IndexOwner::HalfEdge => frame
+                        .half_edge(DiagramHalfEdge::from_provisional_index(index))
+                        .map(|half_edge| (half_edge.0, false)),
+                    IndexOwner::Vertex => (index < frame.vertices).then_some((index, false)),
+                    IndexOwner::Momentum => frame
+                        .edges
+                        .get(index)
+                        .map(|edge| (*edge, frame.reversed[index])),
                     IndexOwner::Edge | IndexOwner::ExternalState => {
-                        logical.get(&EdgeId(index)).map(|edge| (*edge, false))
+                        frame.edges.get(index).map(|edge| (*edge, false))
                     }
                 })
                 .map_err(|message| DiagramError::Invariant {
                     operation: "finalizing symbolic indices",
                     message,
-                })
+                })?;
+            Ok(())
         };
-        graph = graph.map_data_ref_result(
-            |_, _, vertex| {
-                let mut vertex = vertex.clone();
-                vertex.numerator = translate(&vertex.numerator)?;
-                Ok::<_, DiagramError>(vertex)
-            },
-            |_, _, _, edge| {
-                let numerator = translate(&edge.data.numerator)?;
-                Ok(edge.map(|edge| {
-                    let mut edge = edge.clone();
-                    edge.numerator = numerator;
-                    edge
-                }))
-            },
-            |(_, data)| Ok(*data),
-        )?;
-        let numerator = match &self.numerator {
-            Some(numerator) => translate(numerator)?,
+        for (_, _, vertex) in graph.iter_nodes_mut() {
+            translate(&mut vertex.numerator)?;
+        }
+        for edge in 0..graph.n_edges() {
+            translate(&mut graph[EdgeIndex(edge)].numerator)?;
+        }
+        let numerator = match self.numerator {
+            Some(mut numerator) => {
+                translate(&mut numerator)?;
+                numerator
+            }
             None => FeynmanDiagram::fragment_numerator(&graph),
         };
         let mut diagram = FeynmanDiagram {
-            model: self.model.clone(),
+            model: self.model,
             id: DiagramId(0),
             name: self.name,
             graph,
             symmetry_factor: self.symmetry_factor,
-            overall_factor: translate(&self.overall_factor)?,
+            overall_factor: self.overall_factor,
             numerator,
-            numerator_prefactor: translate(&self.numerator_prefactor)?,
-            projector: translate(&self.projector)?,
+            numerator_prefactor: self.numerator_prefactor,
+            projector: self.projector,
             loop_momentum_basis: LoopMomentumBasis {
                 tree_edges: vec![],
                 loop_edges: vec![],
@@ -555,19 +304,29 @@ impl FeynmanDiagramBuilder {
                 dependent_externals: vec![],
                 edge_signatures: BTreeMap::new(),
             },
-            cuts: self.cuts.clone(),
-            topology_threshold_candidates: self.topology_threshold_candidates.clone(),
+            cuts: self.cuts,
+            topology_threshold_candidates: self.topology_threshold_candidates,
             validation: OnceLock::new(),
             routing_validation: OnceLock::new(),
         };
-        if generated {
+        for atom in [
+            &mut diagram.overall_factor,
+            &mut diagram.numerator_prefactor,
+            &mut diagram.projector,
+        ] {
+            translate(atom)?;
+        }
+        // Only cross sections have cuts and threshold candidates.
+        if let Some(frame) = &frame
+            && !(diagram.cuts.is_empty() && diagram.topology_threshold_candidates.is_empty())
+        {
             let mut incoming = BTreeSet::new();
             let mut outgoing = BTreeSet::new();
             for (edge, external) in &self.generation_externals {
                 // The provisional end of the leg away from its attachment vertex.
                 let half_edge = DiagramHalfEdge {
                     edge: *edge,
-                    endpoint: if self.edges[edge.0].0.source.is_none() {
+                    endpoint: if frame.endpoints[edge.0].source.is_none() {
                         DiagramEndpoint::Source
                     } else {
                         DiagramEndpoint::Target
@@ -578,22 +337,20 @@ impl FeynmanDiagramBuilder {
                     ExternalState::Outgoing => outgoing.insert(half_edge),
                 };
             }
-            diagram.finalize_cut_indices(&half_edges, &incoming, &outgoing)?;
+            diagram.finalize_cut_indices(frame, &incoming, &outgoing)?;
         }
         diagram = if let Some(basis) = self.loop_momentum_basis {
-            if generated {
+            if let Some(frame) = &frame {
                 let requested = basis
                     .loop_edges
                     .iter()
                     .map(|id| {
-                        logical
-                            .get(id)
-                            .copied()
-                            .map(EdgeId)
-                            .ok_or(DiagramError::UnknownEdge {
+                        frame.edges.get(id.0).copied().map(EdgeId).ok_or(
+                            DiagramError::UnknownEdge {
                                 edge: id.0,
-                                edges: self.edges.len(),
-                            })
+                                edges: frame.edges.len(),
+                            },
+                        )
                     })
                     .collect::<Result<Vec<_>, _>>()?;
                 diagram.with_loop_momentum_edges(&requested)?
@@ -616,7 +373,8 @@ impl FeynmanDiagramBuilder {
         // Each branch above either constructs a routing from a spanning forest
         // or validates an imported routing against that same construction.
         let _ = diagram.routing_validation.set(());
-        if generated {
+        // The initial-state tree only trims threshold candidates.
+        if frame.is_some() && !diagram.topology_threshold_candidates.is_empty() {
             let ignored = diagram.initial_state_tree().0;
             let excluded = diagram
                 .half_edges()
@@ -645,12 +403,382 @@ impl FeynmanDiagramBuilder {
         let mut thresholds = std::mem::take(&mut diagram.topology_threshold_candidates);
         thresholds.sort_by_cached_key(|candidate| diagram.cut_order_key(&candidate.cut));
         diagram.topology_threshold_candidates = thresholds;
-        diagram.id = DiagramId::from_key(diagram.model.fingerprint(), &diagram.structural_key()?)?;
-        let edges = (0..self.edges.len())
-            .map(|edge| EdgeId(logical[&EdgeId(edge)]))
-            .collect();
+        diagram.id = diagram.structural_id()?;
+        let edges = match frame {
+            Some(frame) => frame.edges.into_iter().map(EdgeId).collect(),
+            None => (0..diagram.graph.n_edges()).map(EdgeId).collect(),
+        };
         Ok((diagram, edges))
     }
+}
+
+/// The orientation of `edge`: undirected, or against an antiparticle's edge so
+/// that directed edges follow the particle flow.
+fn orientation(model: &Model, edge: &DiagramEdge) -> Result<Orientation, DiagramError> {
+    Ok(if !edge.directed {
+        Orientation::Undirected
+    } else if model.particle_by_id(edge.particle)?.is_antiparticle() {
+        Orientation::Reversed
+    } else {
+        Orientation::Default
+    })
+}
+
+/// Build the graph of a generated diagram once, in its final frame, with the
+/// payloads moved in, and record where each provisional edge went.
+///
+/// Half-edge insertion order controls channel coordinates: the legs by
+/// connection (the incoming legs, then the outgoing legs of connections
+/// without one), the internal edges in canonical order, and last the outgoing
+/// copies of cross-section initial states, which sewing merges into their
+/// incoming copies. Logical edge identity is assigned separately, as in
+/// GammaLoop's finalization: the legs as inserted, then the internal edges in
+/// provisional order. The frame follows from the insertion order; only sewn
+/// legs are resolved on the graph, and every edge when sewing moves
+/// half-edges.
+fn generated_graph(
+    model: &Model,
+    legs: &BTreeMap<EdgeId, ExternalLeg>,
+    vertices: Vec<DiagramVertex>,
+    edges: Vec<(EdgeEndpoints, DiagramEdge)>,
+) -> Result<(HedgeGraph<DiagramEdge, DiagramVertex>, FinalFrame), DiagramError> {
+    let mut external_indices = BTreeSet::new();
+    for leg in legs.values() {
+        if !external_indices.insert(leg.index) {
+            return Err(DiagramError::DuplicateExternalIndex(leg.index));
+        }
+    }
+    // The incoming and outgoing leg of each connection.
+    let mut connections = BTreeMap::<usize, (Option<usize>, Option<usize>)>::new();
+    let mut internal = Vec::new();
+    for (id, (endpoints, edge)) in edges.iter().enumerate() {
+        let Some(leg) = legs.get(&EdgeId(id)) else {
+            if endpoints.source.is_none() || endpoints.target.is_none() || edge.external.is_some() {
+                return Err(DiagramError::Invariant {
+                    operation: "finalizing generated legs",
+                    message: format!(
+                        "edge {id} is dangling or carries a leg but is not a generated leg"
+                    ),
+                });
+            }
+            internal.push(id);
+            continue;
+        };
+        if edge.numerator != *ONE {
+            return Err(DiagramError::ExternalEdgeNumerator { edge: id });
+        }
+        let entry = connections.entry(leg.connection).or_default();
+        let target = match leg.state {
+            ExternalState::Incoming => &mut entry.0,
+            ExternalState::Outgoing => &mut entry.1,
+        };
+        if target.replace(id).is_some() {
+            return Err(DiagramError::InvalidExternalConnectionStates {
+                connection: leg.connection,
+                state: leg.state.as_str(),
+            });
+        }
+    }
+    // Every provisional edge in insertion order.
+    let mut order = connections
+        .values()
+        .filter_map(|&(incoming, _)| Some((incoming?, Insertion::Leg(Flow::Sink))))
+        .collect::<Vec<_>>();
+    order.extend(connections.values().filter_map(|&(incoming, outgoing)| {
+        Some((
+            outgoing.filter(|_| incoming.is_none())?,
+            Insertion::Leg(Flow::Source),
+        ))
+    }));
+    let n_edges = edges.len();
+    let mut final_edges = vec![0; n_edges];
+    for (index, &id) in order.iter().map(|(id, _)| id).chain(&internal).enumerate() {
+        final_edges[id] = index;
+    }
+    internal.sort_by_cached_key(|&id| {
+        let (endpoints, edge) = &edges[id];
+        let (source, target, particle) = if endpoints.source <= endpoints.target {
+            (endpoints.source, endpoints.target, edge.particle)
+        } else {
+            (
+                endpoints.target,
+                endpoints.source,
+                model
+                    .particle_by_id(edge.particle)
+                    .expect("resolved particle")
+                    .antiparticle,
+            )
+        };
+        (
+            source,
+            target,
+            model
+                .particle_by_id(particle)
+                .expect("resolved particle")
+                .pdg_code,
+            id,
+        )
+    });
+    // Edge indices follow the insertion order unless the provisional order of
+    // the internal edges is not canonical.
+    let relabel = !internal.is_sorted();
+    order.extend(internal.into_iter().map(|id| (id, Insertion::Internal)));
+    let logical_edges = order.len();
+    let sewn = connections
+        .into_values()
+        .filter_map(|(incoming, outgoing)| Some((incoming?, outgoing?)))
+        .collect::<Vec<_>>();
+    for &(incoming, outgoing) in &sewn {
+        final_edges[outgoing] = final_edges[incoming];
+        order.push((outgoing, Insertion::Leg(Flow::Source)));
+    }
+    let mut builder = HedgeGraphBuilder::with_capacity(vertices.len(), 2 * n_edges);
+    let mut frame = FinalFrame {
+        endpoints: Vec::with_capacity(n_edges),
+        edges: final_edges,
+        half_edges: vec![[Hedge(0); 2]; n_edges],
+        reversed: vec![false; n_edges],
+        vertices: vertices.len(),
+    };
+    for vertex in vertices {
+        builder.add_node(vertex);
+    }
+    let mut payloads = Vec::with_capacity(n_edges);
+    for (endpoints, edge) in edges {
+        frame.endpoints.push(endpoints);
+        payloads.push(Some(edge));
+    }
+    let mut next_hedge = 0;
+    for &(id, insertion) in &order {
+        let mut edge = payloads[id].take().expect("edges are inserted once");
+        let endpoints = frame.endpoints[id];
+        let Insertion::Leg(flow) = insertion else {
+            let (Some(source), Some(target)) = (endpoints.source, endpoints.target) else {
+                unreachable!("internal edges of generated diagrams are attached at both ends")
+            };
+            let direction = orientation(model, &edge)?;
+            builder.add_edge(NodeIndex(source.0), NodeIndex(target.0), edge, direction);
+            // The source, then the sink.
+            frame.half_edges[id] = [Hedge(next_hedge), Hedge(next_hedge + 1)];
+            next_hedge += 2;
+            continue;
+        };
+        // The flow and slot of the leg at its attachment vertex.
+        let (vertex, old_flow, slot) = match (endpoints.source, endpoints.target) {
+            (Some(vertex), None) => (vertex, Flow::Source, edge.source_slot),
+            (None, Some(vertex)) => (vertex, Flow::Sink, edge.target_slot),
+            _ => unreachable!("generated legs are dangling edges"),
+        };
+        edge.external = Some(legs[&EdgeId(id)].clone());
+        if old_flow != flow {
+            edge.particle = model.particle_by_id(edge.particle)?.antiparticle;
+        }
+        match flow {
+            Flow::Source => edge.source_slot = slot,
+            Flow::Sink => edge.target_slot = slot,
+        }
+        let direction = orientation(model, &edge)?;
+        builder.add_external_edge(NodeIndex(vertex.0), edge, direction, flow);
+        frame.half_edges[id] = [Hedge(next_hedge); 2];
+        frame.reversed[id] = flow != old_flow;
+        next_hedge += 1;
+    }
+    let mut graph: HedgeGraph<DiagramEdge, DiagramVertex> = builder.into();
+    // Without a sewn connection, no two legs match.
+    let mut moved_hedges = false;
+    if !sewn.is_empty() {
+        graph
+            .sew(
+                |_, left, _, right| match (&left.data.external, &right.data.external) {
+                    (Some(left), Some(right)) => {
+                        left.connection == right.connection && left.state != right.state
+                    }
+                    _ => false,
+                },
+                |left_flow, mut left, right_flow, right| match (left_flow, right_flow) {
+                    (Flow::Sink, Flow::Source) => {
+                        left.data.source_slot = right.data.source_slot;
+                        (Flow::Sink, left)
+                    }
+                    (Flow::Source, Flow::Sink) => {
+                        let mut incoming = right;
+                        incoming.data.source_slot = left.data.source_slot;
+                        (Flow::Source, incoming)
+                    }
+                    _ => unreachable!("external connections have opposite process flows"),
+                },
+            )
+            .map_err(|error| DiagramError::Invariant {
+                operation: "sewing initial-state edges",
+                message: format!("{error:?}"),
+            })?;
+        // The sinks of the sewn edges come first, by connection. They do
+        // already unless an incoming leg without an outgoing copy precedes a
+        // sewn one.
+        let cut_hedges = graph
+            .iter_edges()
+            .filter_map(|(pair, _, edge)| {
+                if let HedgePair::Paired { sink, .. } = pair {
+                    edge.data
+                        .external
+                        .as_ref()
+                        .map(|external| (external.connection, sink))
+                } else {
+                    None
+                }
+            })
+            .collect::<BTreeMap<_, _>>();
+        moved_hedges = cut_hedges
+            .values()
+            .enumerate()
+            .any(|(target, hedge)| hedge.0 != target);
+        if moved_hedges {
+            let permutation = Permutation::from_mappings(
+                cut_hedges
+                    .values()
+                    .enumerate()
+                    .map(|(target, hedge)| (hedge.0, target)),
+                graph.n_hedges(),
+            )
+            .map_err(|error| DiagramError::Invariant {
+                operation: "ordering initial-state half-edges",
+                message: error.to_string(),
+            })?;
+            graph
+                .permute_hedges(&HedgeRemap::from_permutation(&permutation))
+                .map_err(|error| DiagramError::Invariant {
+                    operation: "ordering initial-state half-edges",
+                    message: error.to_string(),
+                })?;
+        }
+    }
+    // Sewing keeps the edge index of the incoming copy and drops the outgoing
+    // copies, which come last.
+    if relabel {
+        let permutation = Permutation::from_mappings(
+            order[..logical_edges]
+                .iter()
+                .enumerate()
+                .map(|(index, &(id, _))| (index, frame.edges[id])),
+            graph.n_edges(),
+        )
+        .map_err(|error| DiagramError::Invariant {
+            operation: "ordering logical edges",
+            message: error.to_string(),
+        })?;
+        <HedgeGraph<_, _> as Swap<EdgeIndex>>::permute(&mut graph, &permutation);
+    }
+    if moved_hedges {
+        (0..n_edges).for_each(|id| frame.resolve(&graph, id));
+    } else {
+        for (incoming, outgoing) in sewn {
+            frame.resolve(&graph, incoming);
+            frame.resolve(&graph, outgoing);
+        }
+    }
+    Ok((graph, frame))
+}
+
+/// Build the graph of an imported diagram in its serialized edge order and
+/// restore its serialized orientations and half-edge order.
+fn imported_graph(
+    model: &Model,
+    vertices: Vec<DiagramVertex>,
+    edges: Vec<(EdgeEndpoints, DiagramEdge)>,
+    orientations: Option<&[Orientation]>,
+    half_edge_order: Option<&[DiagramHalfEdge]>,
+) -> Result<HedgeGraph<DiagramEdge, DiagramVertex>, DiagramError> {
+    let mut builder = HedgeGraphBuilder::with_capacity(vertices.len(), 2 * edges.len());
+    for vertex in vertices {
+        builder.add_node(vertex);
+    }
+    for (endpoints, edge) in edges {
+        let direction = orientation(model, &edge)?;
+        match (endpoints.source, endpoints.target) {
+            (Some(source), Some(target)) => {
+                builder.add_edge(NodeIndex(source.0), NodeIndex(target.0), edge, direction);
+            }
+            (Some(vertex), None) => {
+                builder.add_external_edge(NodeIndex(vertex.0), edge, direction, Flow::Source);
+            }
+            (None, Some(vertex)) => {
+                builder.add_external_edge(NodeIndex(vertex.0), edge, direction, Flow::Sink);
+            }
+            (None, None) => unreachable!("builder validates attached endpoints"),
+        }
+    }
+    let mut graph: HedgeGraph<DiagramEdge, DiagramVertex> = builder.into();
+    if let Some(orientations) = orientations {
+        if orientations.len() != graph.n_edges() {
+            return Err(DiagramError::Invariant {
+                operation: "restoring edge orientations",
+                message: "orientation count differs from edge count".into(),
+            });
+        }
+        for (edge, orientation) in orientations.iter().enumerate() {
+            graph.set_orientation(EdgeIndex(edge), *orientation);
+        }
+    }
+    if let Some(order) = half_edge_order {
+        let mut mappings = Vec::new();
+        for (target, half_edge) in order.iter().enumerate() {
+            let Some(pair) =
+                (half_edge.edge.0 < graph.n_edges()).then(|| graph[&EdgeIndex(half_edge.edge.0)].1)
+            else {
+                return Err(DiagramError::UnknownEdge {
+                    edge: half_edge.edge.0,
+                    edges: graph.n_edges(),
+                });
+            };
+            let hedge = match (pair, half_edge.endpoint) {
+                (HedgePair::Paired { source, .. }, DiagramEndpoint::Source)
+                | (
+                    HedgePair::Unpaired {
+                        hedge: source,
+                        flow: Flow::Source,
+                    },
+                    DiagramEndpoint::Source,
+                ) => source,
+                (HedgePair::Paired { sink, .. }, DiagramEndpoint::Target)
+                | (
+                    HedgePair::Unpaired {
+                        hedge: sink,
+                        flow: Flow::Sink,
+                    },
+                    DiagramEndpoint::Target,
+                ) => sink,
+                _ => {
+                    return Err(DiagramError::Invariant {
+                        operation: "restoring half-edge order",
+                        message: "serialized endpoint does not exist".into(),
+                    });
+                }
+            };
+            mappings.push((hedge.0, target));
+        }
+        if order.len() != graph.n_hedges()
+            || order.iter().collect::<BTreeSet<_>>().len() != order.len()
+        {
+            return Err(DiagramError::Invariant {
+                operation: "restoring half-edge order",
+                message: "serialized order must contain every half-edge exactly once".into(),
+            });
+        }
+        let permutation =
+            Permutation::from_mappings(mappings, graph.n_hedges()).map_err(|error| {
+                DiagramError::Invariant {
+                    operation: "restoring half-edge order",
+                    message: error.to_string(),
+                }
+            })?;
+        graph
+            .permute_hedges(&HedgeRemap::from_permutation(&permutation))
+            .map_err(|error| DiagramError::Invariant {
+                operation: "restoring half-edge order",
+                message: error.to_string(),
+            })?;
+    }
+    Ok(graph)
 }
 
 impl FeynmanDiagram {
@@ -668,7 +796,7 @@ impl FeynmanDiagram {
 
     fn finalize_cut_indices(
         &mut self,
-        mapping: &BTreeMap<DiagramHalfEdge, Hedge>,
+        frame: &FinalFrame,
         incoming: &BTreeSet<DiagramHalfEdge>,
         outgoing: &BTreeSet<DiagramHalfEdge>,
     ) -> Result<(), DiagramError> {
@@ -688,8 +816,8 @@ impl FeynmanDiagram {
             }
         };
         let native = |half_edge: &DiagramHalfEdge| -> Result<DiagramHalfEdge, DiagramError> {
-            let hedge = *mapping
-                .get(half_edge)
+            let hedge = frame
+                .half_edge(*half_edge)
                 .ok_or_else(|| DiagramError::Invariant {
                     operation: "finalizing cut endpoints",
                     message: format!("unknown provisional endpoint {half_edge:?}"),
@@ -806,5 +934,472 @@ impl FeynmanDiagram {
         self.topology_threshold_candidates.sort();
         self.topology_threshold_candidates.dedup();
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::tests::scalar_model;
+
+    /// An edge of a generated diagram, in provisional order.
+    enum Provisional {
+        /// A leg at a vertex where its end has the flow, with its particle,
+        /// process state and connection.
+        Leg(usize, Flow, &'static str, ExternalState, usize),
+        /// An internal edge from a vertex to a vertex, with its particle.
+        Internal(usize, usize, &'static str),
+    }
+    use ExternalState::{Incoming as In, Outgoing as Out};
+    use Flow::{Sink, Source};
+    use Provisional::{Internal, Leg};
+
+    fn generated(
+        model: Arc<Model>,
+        vertices: usize,
+        edges: &[Provisional],
+    ) -> FeynmanDiagramBuilder {
+        let rule = model.vertex_rule_id_at(0).unwrap();
+        let mut builder = FeynmanDiagram::builder(Arc::clone(&model), "final-frame");
+        let vertices = (0..vertices)
+            .map(|vertex| {
+                builder.add_vertex(DiagramVertex::interaction(format!("v{vertex}"), rule))
+            })
+            .collect::<Vec<_>>();
+        let edge = |particle| {
+            let particle = model.particle_id(particle).unwrap();
+            DiagramEdge::new(particle, model.particle_by_id(particle).unwrap().spin == 2)
+        };
+        for (index, provisional) in edges.iter().enumerate() {
+            match *provisional {
+                Leg(vertex, flow, particle, state, connection) => {
+                    let leg = ExternalLeg {
+                        name: format!("p{index}"),
+                        index,
+                        state,
+                        connection,
+                    };
+                    builder
+                        .add_generation_external(
+                            vertices[vertex],
+                            flow,
+                            edge(particle),
+                            VertexSlot(0),
+                            leg,
+                        )
+                        .unwrap();
+                }
+                Internal(source, target, particle) => {
+                    builder
+                        .add_edge(vertices[source], vertices[target], edge(particle))
+                        .unwrap();
+                }
+            }
+        }
+        builder
+    }
+
+    /// Generated diagrams that exercise every path of the final-frame build.
+    fn cases() -> Vec<(&'static str, FeynmanDiagramBuilder)> {
+        let qed = || Arc::new(Model::qed());
+        vec![
+            // Internal edges out of canonical order: edge indices are relabelled.
+            (
+                "relabelled",
+                generated(
+                    scalar_model(),
+                    4,
+                    &[
+                        Leg(0, Sink, "phi", In, 0),
+                        Internal(0, 1, "phi"),
+                        Internal(1, 2, "phi"),
+                        Internal(1, 2, "phi"),
+                        Internal(2, 3, "phi"),
+                        Internal(0, 3, "phi"),
+                        Leg(3, Source, "phi", Out, 1),
+                    ],
+                ),
+            ),
+            // A self-loop before its bridge.
+            (
+                "tadpole",
+                generated(
+                    scalar_model(),
+                    2,
+                    &[
+                        Leg(0, Sink, "phi", In, 0),
+                        Internal(1, 1, "phi"),
+                        Internal(1, 0, "phi"),
+                        Leg(0, Source, "phi", Out, 1),
+                    ],
+                ),
+            ),
+            // Legs out of connection order, the incoming one against the process flow.
+            (
+                "reversed_legs",
+                generated(
+                    scalar_model(),
+                    1,
+                    &[
+                        Leg(0, Source, "phi", Out, 2),
+                        Leg(0, Source, "phi", In, 0),
+                        Leg(0, Source, "phi", Out, 1),
+                    ],
+                ),
+            ),
+            // A cross section whose initial states are all sewn, one against the process flow.
+            (
+                "sewn",
+                generated(
+                    scalar_model(),
+                    4,
+                    &[
+                        Leg(0, Sink, "phi", In, 0),
+                        Leg(1, Source, "phi", In, 1),
+                        Leg(2, Source, "phi", Out, 0),
+                        Leg(3, Source, "phi", Out, 1),
+                        Internal(0, 1, "phi"),
+                        Internal(1, 2, "phi"),
+                        Internal(2, 3, "phi"),
+                        Internal(3, 0, "phi"),
+                    ],
+                ),
+            ),
+            // An incoming leg without an outgoing copy, against the process
+            // flow, before a sewn one: the sewn sink moves to the front, and the
+            // internal edges are relabelled.
+            (
+                "partially_sewn",
+                generated(
+                    scalar_model(),
+                    4,
+                    &[
+                        Leg(0, Source, "phi", In, 0),
+                        Leg(1, Sink, "phi", In, 1),
+                        Leg(2, Source, "phi", Out, 1),
+                        Leg(3, Source, "phi", Out, 2),
+                        Internal(2, 3, "phi"),
+                        Internal(0, 1, "phi"),
+                        Internal(1, 2, "phi"),
+                        Internal(3, 0, "phi"),
+                        Internal(1, 3, "phi"),
+                    ],
+                ),
+            ),
+            // A cross section with both initial states at one vertex, and a
+            // bubble between two loop-independent bridges.
+            (
+                "s_channel",
+                generated(
+                    scalar_model(),
+                    4,
+                    &[
+                        Leg(0, Sink, "phi", In, 0),
+                        Leg(0, Sink, "phi", In, 1),
+                        Leg(3, Source, "phi", Out, 0),
+                        Leg(3, Source, "phi", Out, 1),
+                        Internal(0, 1, "phi"),
+                        Internal(1, 2, "phi"),
+                        Internal(1, 2, "phi"),
+                        Internal(2, 3, "phi"),
+                    ],
+                ),
+            ),
+            // Fermion legs against the process flow and an s-channel photon.
+            (
+                "fermion_legs",
+                generated(
+                    qed(),
+                    2,
+                    &[
+                        Leg(1, Sink, "mu+", Out, 2),
+                        Leg(0, Source, "e+", In, 0),
+                        Internal(1, 0, "a"),
+                        Leg(0, Sink, "e+", In, 1),
+                        Leg(1, Source, "mu+", Out, 3),
+                    ],
+                ),
+            ),
+            // Antiparticle and anti-parallel fermion edges.
+            (
+                "fermion_loop",
+                generated(
+                    qed(),
+                    2,
+                    &[
+                        Leg(0, Sink, "a", In, 0),
+                        Internal(1, 0, "e+"),
+                        Internal(0, 1, "e+"),
+                        Leg(1, Source, "a", Out, 1),
+                    ],
+                ),
+            ),
+        ]
+    }
+
+    fn case(name: &str) -> FeynmanDiagramBuilder {
+        cases()
+            .into_iter()
+            .find_map(|(case, builder)| (case == name).then_some(builder))
+            .unwrap()
+    }
+
+    /// The final graph and frame of a generated builder.
+    fn final_graph(
+        builder: FeynmanDiagramBuilder,
+    ) -> (HedgeGraph<DiagramEdge, DiagramVertex>, FinalFrame) {
+        generated_graph(
+            &builder.model,
+            &builder.generation_externals,
+            builder.vertices,
+            builder.edges,
+        )
+        .unwrap()
+    }
+
+    /// The graph of `diagram` rebuilt by the import path from its edges,
+    /// orientations and half-edge order, as JSON import restores it.
+    fn reimported(diagram: &FeynmanDiagram) -> HedgeGraph<DiagramEdge, DiagramVertex> {
+        let orientations = (0..diagram.graph.n_edges())
+            .map(|edge| diagram.graph.orientation(EdgeIndex(edge)))
+            .collect::<Vec<_>>();
+        let order = diagram.half_edges().collect::<Vec<_>>();
+        imported_graph(
+            &diagram.model,
+            diagram
+                .vertices()
+                .map(|(_, vertex)| vertex.clone())
+                .collect(),
+            diagram
+                .edges()
+                .map(|(_, endpoints, edge)| (endpoints, edge.clone()))
+                .collect(),
+            Some(&orientations),
+            Some(&order),
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn final_frame_matches_the_frame_resolved_on_the_graph() {
+        for (name, builder) in cases() {
+            let (graph, frame) = final_graph(builder);
+            let edges = frame.edges.len();
+            let mut resolved = FinalFrame {
+                endpoints: frame.endpoints.clone(),
+                edges: frame.edges.clone(),
+                half_edges: vec![[Hedge(0); 2]; edges],
+                reversed: vec![false; edges],
+                vertices: frame.vertices,
+            };
+            for id in 0..edges {
+                resolved.resolve(&graph, id);
+                // Each provisional end, as cuts name it, lies on its final edge
+                // at its vertex.
+                let endpoints = frame.endpoints[id];
+                for (endpoint, vertex) in [
+                    (DiagramEndpoint::Source, endpoints.source),
+                    (DiagramEndpoint::Target, endpoints.target),
+                ] {
+                    let hedge = frame
+                        .half_edge(DiagramHalfEdge {
+                            edge: EdgeId(id),
+                            endpoint,
+                        })
+                        .unwrap();
+                    assert_eq!(graph[&hedge], EdgeIndex(frame.edges[id]), "{name}");
+                    if let Some(vertex) = vertex {
+                        assert_eq!(graph.node_id(hedge), NodeIndex(vertex.0), "{name}");
+                    }
+                }
+            }
+            assert_eq!(frame.half_edges, resolved.half_edges, "{name}");
+            assert_eq!(frame.reversed, resolved.reversed, "{name}");
+        }
+    }
+
+    #[test]
+    fn final_frame_relabels_edges_and_moves_cut_half_edges_only_when_needed() {
+        // The second internal edge inserted is the last in provisional order.
+        let (graph, frame) = final_graph(case("relabelled"));
+        assert_eq!(frame.half_edges[5], [Hedge(4), Hedge(5)]);
+        assert_eq!(graph[&Hedge(4)], EdgeIndex(6));
+        // The sewn incoming leg was inserted after the unsewn one.
+        let (graph, frame) = final_graph(case("partially_sewn"));
+        let sinks = graph
+            .iter_edges()
+            .filter_map(|(pair, _, edge)| match pair {
+                HedgePair::Paired { sink, .. } if edge.data.external.is_some() => Some(sink),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(sinks, [Hedge(0)]);
+        assert_eq!(frame.half_edges[1][1], Hedge(0));
+        assert_ne!(frame.half_edges[0], [Hedge(0); 2]);
+        // Fully sewn initial states keep their half-edges.
+        let (_, frame) = final_graph(case("sewn"));
+        assert_eq!(frame.half_edges[0][1], Hedge(0));
+        assert_eq!(frame.half_edges[1][1], Hedge(1));
+    }
+
+    #[test]
+    fn generated_graphs_equal_their_import_reconstruction() {
+        for (name, builder) in cases() {
+            let diagram = builder.build().unwrap();
+            assert_eq!(
+                format!("{:?}", diagram.graph),
+                format!("{:?}", reimported(&diagram)),
+                "{name}"
+            );
+        }
+    }
+
+    #[test]
+    fn finalization_translates_fragments_in_the_final_frame() {
+        // Both half-edges, the momentum and the index of every provisional edge.
+        let fragment = |frame: Option<&FinalFrame>| {
+            let terms = (0..9)
+                .map(|id| {
+                    let (sign, edge, [source, target]) = frame.map_or((1, id, [2 * id, 2 * id + 1]), |frame| {
+                        (
+                            if frame.reversed[id] { -1 } else { 1 },
+                            frame.edges[id],
+                            frame.half_edges[id].map(|hedge| hedge.0),
+                        )
+                    });
+                    format!(
+                        "{sign}*gammalooprs::Q({edge},spenso::mink(4,gammalooprs::hedge({source},1)))\
+                         +{sign}*gammalooprs::Q({edge},spenso::mink(4,gammalooprs::hedge({target},2)))\
+                         +gammalooprs::edge({edge},3)"
+                    )
+                })
+                .collect::<Vec<_>>();
+            Atom::parse(
+                format!("({})*gammalooprs::vertex(3,4)", terms.join("+")),
+                "feynkit_graph",
+                ParseSettings::default(),
+            )
+            .unwrap()
+        };
+        let (_, frame) = final_graph(case("partially_sewn"));
+        let mut builder = case("partially_sewn");
+        builder.vertices[0].numerator = fragment(None);
+        let diagram = builder.build().unwrap();
+        assert_eq!(diagram.numerator(), &fragment(Some(&frame)));
+    }
+
+    #[test]
+    fn threshold_candidates_without_cuts_reach_the_final_frame() {
+        // The bubble of the s-channel cross section cut, vertices 0 and 1
+        // against 2 and 3, in provisional half-edges as the generator
+        // partitions it: each side holds the half-edges at its vertices and
+        // both ends of its legs, the cut the left ends of the bubble.
+        let (source, target) = (DiagramEndpoint::Source, DiagramEndpoint::Target);
+        let half_edges = |ends: &[(usize, DiagramEndpoint)]| {
+            ends.iter()
+                .map(|&(edge, endpoint)| DiagramHalfEdge {
+                    edge: EdgeId(edge),
+                    endpoint,
+                })
+                .collect::<Vec<_>>()
+        };
+        let candidate = DiagramThresholdCandidate {
+            cut: half_edges(&[(5, source), (6, source)]),
+            left: half_edges(&[
+                (0, source),
+                (0, target),
+                (1, source),
+                (1, target),
+                (4, source),
+                (4, target),
+                (5, source),
+                (6, source),
+            ]),
+            right: half_edges(&[
+                (2, source),
+                (2, target),
+                (3, source),
+                (3, target),
+                (5, target),
+                (6, target),
+                (7, source),
+                (7, target),
+            ]),
+        };
+        let diagram = case("s_channel")
+            .topology_threshold_candidates(vec![candidate.clone()])
+            .build()
+            .unwrap();
+        let [finalized] = diagram.topology_threshold_candidates() else {
+            panic!("one candidate");
+        };
+        let vertex = |half_edge| {
+            diagram
+                .graph
+                .node_id(diagram.half_edge_id(half_edge).unwrap())
+                .0
+        };
+        // The crowns of the initial-state vertices 0 and 3, attached through
+        // the loop-independent bridges, belong to neither side.
+        assert_eq!(finalized.cut.len(), 2);
+        assert!(
+            finalized
+                .cut
+                .iter()
+                .chain(&finalized.left)
+                .all(|&half_edge| vertex(half_edge) == 1)
+        );
+        assert!(
+            finalized
+                .right
+                .iter()
+                .all(|&half_edge| vertex(half_edge) == 2)
+        );
+        assert_eq!((finalized.left.len(), finalized.right.len()), (3, 3));
+        // Physical cuts do not change how candidates are finalized.
+        let side = |half_edges: &[DiagramHalfEdge]| DiagramCutSide {
+            half_edges: half_edges.to_vec(),
+            coupling_orders: BTreeMap::new(),
+            loop_count: 0,
+        };
+        let cut = DiagramCut {
+            cut: candidate.cut.clone(),
+            left: side(&candidate.left),
+            right: side(&candidate.right),
+        };
+        let with_cut = case("s_channel")
+            .topology_threshold_candidates(vec![candidate])
+            .cuts(vec![cut])
+            .build()
+            .unwrap();
+        assert_eq!(
+            with_cut.topology_threshold_candidates(),
+            diagram.topology_threshold_candidates()
+        );
+    }
+
+    #[test]
+    fn generated_diagrams_reject_other_dangling_edges_legs_and_restored_frames() {
+        let rejected = |builder: FeynmanDiagramBuilder| {
+            matches!(
+                builder.build(),
+                Err(DiagramError::Invariant {
+                    operation: "finalizing generated legs",
+                    ..
+                })
+            )
+        };
+        let mut builder = case("relabelled");
+        let particle = builder.edges[1].1.particle;
+        builder
+            .add_edge(VertexId(1), None, DiagramEdge::new(particle, false))
+            .unwrap();
+        assert!(rejected(builder));
+        let mut builder = case("relabelled");
+        builder.edges[1].1.external = builder.generation_externals.get(&EdgeId(0)).cloned();
+        assert!(rejected(builder));
+        let mut builder = case("relabelled");
+        builder.half_edge_order = Some(Vec::new());
+        assert!(rejected(builder));
     }
 }

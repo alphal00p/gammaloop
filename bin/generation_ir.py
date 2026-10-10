@@ -6,8 +6,8 @@ under valgrind and attributes their instructions (callgrind Ir) to the generatio
 stages. Each workload runs in two modes:
 
   generation  cancelled at the first progress report after enumeration: stage-1
-              topologies, stage-2 dressing, graph materialization and certificates,
-              and feynkit's certificate sort, exactly as feynkit runs them;
+              topologies, stage-2 dressing, graph materialization and canonical
+              forms, and feynkit's canonical-form sort, exactly as feynkit runs them;
   full        the whole pipeline, adding interaction filters, numerators and
               grouping.
 
@@ -27,20 +27,27 @@ Commands:
   compare OLD.json NEW.json
       Print new/old ratios of the total and of every stage, per workload and mode.
 
-Ir varies between runs of one binary: hash maps take random keys at run time (the
-ahash maps of linnet's stage-2 feasibility checks dominate), which moves the totals
-of dressing-heavy workloads by up to two percent (the photon self-energy at five
-loops) and the dressing stage by several percent. Totals and stages are therefore
-medians over the runs, with the totals of every run kept; compare medians of
-several runs of builds with the same toolchain and flags. The [min, max] of a
-baseline's runs is not a tolerance band: a run of the unchanged build can fall
-outside it, so gates judge the ratio of the medians. A stage is the inclusive cost of
-the functions its pattern matches, summed over every source file their inlined
-code comes from; calls between matched functions count once, and recursive calls
-of a function to itself are ignored. A stage whose functions are all inlined away
-is reported as missing, never as zero. Work run on a rayon pool is attributed on
-the worker thread, so the stages are not nested in `Generator::generate`; `total`
-is the whole program, including the model build.
+Ir varies between runs of one binary. glibc's malloc consolidates freed chunks at
+run-dependent times, which adds up to two percent outside every stage to many runs
+(SM ee->mumu at two loops took it in three of three runs, gg->ggg at two loops in
+one of three), so the median of three runs can move by one to two percent; and hash
+maps with random run-time keys move the stages that use them: in the checked-in
+baseline, linnet's stage-2 feasibility maps moved the dressing stage by several
+percent and dressing-heavy totals by up to two percent, while the vertex automaton
+that replaced them repeats to the instruction. Totals and stages are therefore
+medians over the runs, with the totals of every run kept; compare stages as well as
+totals, and medians of several runs of builds with the same toolchain and flags. The
+[min, max] of a baseline's runs is not a tolerance band: a run of the unchanged
+build can fall outside it, so gates judge the ratio of the medians. A stage is the
+inclusive cost of the functions its pattern matches, summed over every source file
+their inlined code comes from; calls between matched functions count once, and
+recursive calls of a function to itself are ignored. A stage whose functions are
+all inlined away is reported as missing, never as zero. Work run on a rayon pool is
+attributed on the worker thread, so the stages are not nested in
+`Generator::generate`; `total` is the whole program, including the model build.
+The filter is called through linnet's `Prune::keeps` on search states and straight
+on complete graphs; the two stages add up to every filter call. Summaries written
+before the second stage existed report it as missing.
 """
 
 import argparse
@@ -65,6 +72,8 @@ PROFILE_CONFIG = [
 
 LINNET = r"<linnet::half_edge::generate"
 FEYNKIT = r"<feynkit_generator::generation"
+# linnet's filter call on partial topologies, complete topologies and partial field assignments
+FILTER = rf"^{LINNET}::view::Pruner<.*> as {LINNET[1:]}::view::Prune>::keeps$"
 # (key, description, pattern of the function names)
 STAGES = [
     (
@@ -88,11 +97,9 @@ STAGES = [
     ),
     ("dressing_start", "  stage 2: start", rf"^{LINNET}::decorate::Decorator>::start$"),
     ("dressing", "  stage 2: dressing", rf"^{LINNET}::decorate::Decorator>::next$"),
-    (
-        "filter",
-        "  filter (process filters)",
-        rf"^{LINNET}::view::Pruner<.*> as {LINNET[1:]}::view::Prune>::keeps$",
-    ),
+    ("filter", "  filter on search states", FILTER),
+    # the search calls the filter straight on complete graphs, see `filter_on_complete_graphs`
+    ("filter_complete", "  filter on complete graphs", None),
     (
         "materialize",
         "  HedgeGraph materialization",
@@ -100,12 +107,12 @@ STAGES = [
     ),
     (
         "certify",
-        "  certificates",
+        "  canonical forms",
         r"^<linnet::half_edge::canon::Workspace>::certify::<",
     ),
     (
         "sort",
-        "certificate sort",
+        "canonical-form sort",
         rf"^<\[{LINNET[1:]}::Diagram<.*>\]>::sort_by::<{FEYNKIT}::Generator>::generate",
     ),
     (
@@ -169,6 +176,26 @@ def parse_callgrind(path):
     return total, self_cost, edges
 
 
+def filter_on_complete_graphs(functions, edges):
+    """The calls of the filter callback that do not go through `Prune::keeps`: the search calls
+    it straight on complete graphs. The callback is what `Prune::keeps` calls outside linnet and
+    the standard library."""
+    keeps = {f for f in functions if re.search(FILTER, f)}
+    library = re.compile(r"^<?(linnet|core|alloc|std)::|^__")
+    callbacks = {
+        callee
+        for caller, callee in edges
+        if caller in keeps and callee != caller and not library.search(callee)
+    }
+    if not callbacks:
+        return None
+    return sum(
+        cost
+        for (caller, callee), cost in edges.items()
+        if callee in callbacks and caller not in keeps | callbacks
+    )
+
+
 def stage_costs(path):
     total, self_cost, edges = parse_callgrind(path)
     inclusive = collections.Counter(self_cost)
@@ -176,8 +203,10 @@ def stage_costs(path):
         if caller != callee:
             inclusive[caller] += cost
     functions = set(self_cost) | {callee for _, callee in edges}
-    stages = {}
+    stages = {"filter_complete": filter_on_complete_graphs(functions, edges)}
     for key, _, pattern in STAGES:
+        if pattern is None:
+            continue
         regex = re.compile(pattern)
         matched = {f for f in functions if regex.search(f)}
         if not matched:

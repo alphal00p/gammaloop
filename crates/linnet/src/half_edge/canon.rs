@@ -62,14 +62,14 @@ pub fn ignore<T: ?Sized>(_: &T) -> NoData {
     NoData {}
 }
 
-/// Canonical labelling, certificate and automorphism group of a graph, from
+/// Canonical labelling, canonical form and automorphism group of a graph, from
 /// [`HedgeGraph::canonize_by`].
 ///
 /// Applying [`Self::hedge_permutation`] and [`Self::node_permutation`] to isomorphic graphs gives
 /// identical relabelled graphs (same incidence, pairing, keys and physical orientations).
 #[derive(Clone, Debug)]
 pub struct Canonization<KV, KE, KH> {
-    certificate: Certificate<KV, KE, KH>,
+    canonical_form: CanonicalForm<KV, KE, KH>,
     hedge_map: Vec<u32>,
     node_map: Vec<u32>,
     edge_map: Vec<u32>,
@@ -82,19 +82,20 @@ pub struct Canonization<KV, KE, KH> {
 /// Complete isomorphism invariant: equal iff the graphs are isomorphic under the same keys.
 ///
 /// `words` encodes the canonically relabelled structure, with colours that are ranks into the
-/// sorted distinct key tables, which are part of the certificate.
+/// sorted distinct key tables, which are part of the canonical form. Forms are comparable only
+/// within one version of the canonizer.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct Certificate<KV, KE, KH> {
+pub struct CanonicalForm<KV, KE, KH> {
     words: Vec<u32>,
     node_keys: Vec<KV>,
     edge_keys: Vec<KE>,
     hedge_keys: Vec<KH>,
 }
 
-impl<KV, KE, KH> Certificate<KV, KE, KH> {
-    /// The certificate and automorphism count of a graph given by its node colours (ranks of the
-    /// node keys) and hedges; equal to those of [`HedgeGraph::canonize_by`] on the same graph with
-    /// keys whose sorted distinct values are `keys`.
+impl<KV, KE, KH> CanonicalForm<KV, KE, KH> {
+    /// The canonical form and automorphism count of a graph given by its node colours (ranks of
+    /// the node keys) and hedges; equal to those of [`HedgeGraph::canonize_by`] on the same graph
+    /// with keys whose sorted distinct values are `keys`.
     pub(crate) fn of_hedges(
         node_colours: &[u32],
         hedges: &[RawHedge],
@@ -128,6 +129,11 @@ impl<KV, KE, KH> Certificate<KV, KE, KH> {
 
     pub fn hedge_keys(&self) -> &[KH] {
         &self.hedge_keys
+    }
+
+    /// The words and the node, edge and half-edge key tables, by value.
+    pub fn into_parts(self) -> (Vec<u32>, Vec<KV>, Vec<KE>, Vec<KH>) {
+        (self.words, self.node_keys, self.edge_keys, self.hedge_keys)
     }
 }
 
@@ -169,12 +175,12 @@ fn permutation(map: &[u32]) -> Permutation {
 }
 
 impl<KV, KE, KH> Canonization<KV, KE, KH> {
-    pub fn certificate(&self) -> &Certificate<KV, KE, KH> {
-        &self.certificate
+    pub fn canonical_form(&self) -> &CanonicalForm<KV, KE, KH> {
+        &self.canonical_form
     }
 
-    pub fn into_certificate(self) -> Certificate<KV, KE, KH> {
-        self.certificate
+    pub fn into_canonical_form(self) -> CanonicalForm<KV, KE, KH> {
+        self.canonical_form
     }
 
     /// Position of `hedge` in the canonical labelling.
@@ -259,14 +265,14 @@ impl<KV, KE, KH> Canonization<KV, KE, KH> {
             .collect()
     }
 
-    /// The isomorphism from this graph to `other`, if their certificates agree.
+    /// The isomorphism from this graph to `other`, if their canonical forms agree.
     pub fn isomorphism_to(&self, other: &Self) -> Option<Isomorphism>
     where
         KV: PartialEq,
         KE: PartialEq,
         KH: PartialEq,
     {
-        if self.certificate != other.certificate {
+        if self.canonical_form != other.canonical_form {
             return None;
         }
         let compose = |from: &[u32], to: &[u32]| {
@@ -333,7 +339,7 @@ impl Orbits {
 
 /// Node canonization of a graph given by node colours and coloured undirected edges, for searches
 /// that keep their own light graph state (the graph generator): the canonical node order and the
-/// node automorphisms found, without hedge maps, certificates or twin handling. Nodes without
+/// node automorphisms found, without hedge maps, canonical forms or twin handling. Nodes without
 /// edges are not permuted among themselves.
 #[derive(Debug, Default)]
 pub(crate) struct NodeCanon {
@@ -523,7 +529,7 @@ impl Workspace {
         }
 
         Canonization {
-            certificate: Certificate {
+            canonical_form: CanonicalForm {
                 words,
                 node_keys: keys.nodes,
                 edge_keys: keys.edges,
@@ -539,7 +545,7 @@ impl Workspace {
         }
     }
 
-    /// The certificate words of the searched graph.
+    /// The canonical-form words of the searched graph.
     fn words(g: &Flat, search: &Search) -> Vec<u32> {
         let lab = search.best_lab();
         let mut words =
@@ -551,11 +557,26 @@ impl Workspace {
         words
     }
 
-    /// Certificate and automorphism count only: no labelling maps and no generators.
+    /// The canonical form only: no labelling maps, generators or automorphism count.
+    fn canonical_form<KV, KE, KH>(
+        &mut self,
+        keys: KeyTables<KV, KE, KH>,
+    ) -> CanonicalForm<KV, KE, KH> {
+        self.search.run(&self.flat);
+        CanonicalForm {
+            words: Self::words(&self.flat, &self.search),
+            node_keys: keys.nodes,
+            edge_keys: keys.edges,
+            hedge_keys: keys.hedges,
+        }
+    }
+
+    /// The canonical form and the automorphism count, without labelling maps and generators.
     fn certify<KV, KE, KH>(
         &mut self,
         keys: KeyTables<KV, KE, KH>,
-    ) -> (Certificate<KV, KE, KH>, Option<u128>) {
+    ) -> (CanonicalForm<KV, KE, KH>, Option<u128>) {
+        let form = self.canonical_form(keys);
         let Workspace {
             flat: g,
             search,
@@ -563,19 +584,12 @@ impl Workspace {
             twins,
             ..
         } = self;
-        search.run(g);
         let mut order = search.group_order;
         g.twin_classes(scratch, twins, |class| order = scaled(order, class.order()));
         for run in g.isolated_runs(search.best_lab()) {
             order = scaled(order, factorial(run.len()));
         }
-        let certificate = Certificate {
-            words: Self::words(g, search),
-            node_keys: keys.nodes,
-            edge_keys: keys.edges,
-            hedge_keys: keys.hedges,
-        };
-        (certificate, order)
+        (form, order)
     }
 }
 
@@ -606,18 +620,28 @@ impl<E, V, H, N: Topology> HedgeGraph<E, V, H, N> {
         self.canonize_by(|v| v, |e| e, |h| h)
     }
 
-    /// The certificate and automorphism count of [`Self::canonize_by`], without the labelling
-    /// maps and automorphism generators.
-    pub(crate) fn certificate_by<'a, KV: Ord, KE: Ord, KH: Ord>(
+    /// The canonical form of [`Self::canonize_by`], without the labelling maps, automorphism
+    /// generators and automorphism count.
+    pub fn canonical_form_by<'a, KV: Ord, KE: Ord, KH: Ord>(
         &'a self,
         node_key: impl FnMut(&'a V) -> KV,
         edge_key: impl FnMut(&'a E) -> KE,
         hedge_key: impl FnMut(&'a H) -> KH,
-    ) -> (Certificate<KV, KE, KH>, Option<u128>) {
+    ) -> CanonicalForm<KV, KE, KH> {
         Workspace::with(|ws| {
             let keys = ws.flat.load(self, node_key, edge_key, hedge_key);
-            ws.certify(keys)
+            ws.canonical_form(keys)
         })
+    }
+
+    /// The canonical form with every node, edge and half-edge payload as its key.
+    pub fn canonical_form(&self) -> CanonicalForm<&V, &E, &H>
+    where
+        V: Ord,
+        E: Ord,
+        H: Ord,
+    {
+        self.canonical_form_by(|v| v, |e| e, |h| h)
     }
 
     /// Whether `other` is isomorphic to this graph under the given keys.
@@ -630,12 +654,8 @@ impl<E, V, H, N: Topology> HedgeGraph<E, V, H, N> {
     ) -> bool {
         self.n_live() == other.n_live()
             && self.n_hedges() == other.n_hedges()
-            && self
-                .certificate_by(&mut node_key, &mut edge_key, &mut hedge_key)
-                .0
-                == other
-                    .certificate_by(&mut node_key, &mut edge_key, &mut hedge_key)
-                    .0
+            && self.canonical_form_by(&mut node_key, &mut edge_key, &mut hedge_key)
+                == other.canonical_form_by(&mut node_key, &mut edge_key, &mut hedge_key)
     }
 
     /// An isomorphism from this graph to `other` under the given keys, if one exists.

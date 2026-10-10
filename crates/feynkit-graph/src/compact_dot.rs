@@ -628,8 +628,7 @@ impl FeynmanDiagram {
                     .collect::<Vec<_>>()
             };
             let (left, right) = (side(&left), side(&right));
-            let cut =
-                self.cut_from_partitions(cuts.len(), &left, &right, &vertex_half_edges, None)?;
+            let cut = self.cut_from_partitions(cuts.len(), &left, &right, &vertex_half_edges)?;
             let selected = match &particles {
                 Some(particles) => {
                     let mut content = self.cut_particles(&cut)?;

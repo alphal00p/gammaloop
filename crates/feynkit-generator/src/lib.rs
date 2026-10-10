@@ -2,8 +2,7 @@
 
 #![forbid(unsafe_code)]
 
-// The search census tests share the case table of the generation oracle tests, which names
-// this crate.
+// Unit tests share the case table of the generation oracle tests, which names this crate.
 #[cfg(test)]
 extern crate self as feynkit_generator;
 

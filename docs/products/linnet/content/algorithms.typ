@@ -136,14 +136,19 @@ paths.
 
 `HedgeGraph::canonize_by` takes one key function each for node, edge, and half-edge payloads
 (`canon::ignore` disregards one) and returns a `Canonization`: canonical half-edge, node, and edge
-labels, a `Certificate` that is equal exactly for isomorphic graphs, automorphism generators as
+labels, a `CanonicalForm` that is equal exactly for isomorphic graphs, automorphism generators as
 half-edge permutations with their node permutations, orbits, and the exact automorphism count.
+`canonical_form_by` (and `canonical_form`, with every payload as its key) computes the canonical
+form alone, without labels, generators or count. A canonical form holds words that encode the
+canonically relabelled structure, with colours that rank into the sorted distinct node, edge and
+half-edge keys, and those key tables; `into_parts` moves them out. Canonical forms are comparable
+only between graphs canonized by the same version of Linnet.
 Symmetry is half-edge symmetry: an automorphism permutes half-edges compatibly with the
 involution, so `m` interchangeable parallel edges or dangling legs contribute `m!` and an
 undirected self-loop with indistinguishable ends contributes `2`. Undirected edges ignore their
 stored source/sink roles, while directed edges and legs keep their physical direction, including
 `Reversed` orientations. `is_isomorphic_by` and `isomorphism_by` compare two graphs through their
-certificates.
+canonical forms.
 
 == Feynman-graph generation
 
@@ -155,7 +160,9 @@ both undirected, or one is outgoing and the other incoming. Legs are `(label, st
 become dangling half-edges keyed by their label; repeating a label makes those legs
 interchangeable. Settings cover a loop range, a vertex bound (legs are not vertices), a bridge
 limit (`0` for one-particle-irreducible graphs), self-loops and zero-flow bridges (a bridge with no
-leg on one side), a filter that prunes the search, and progress and abort callbacks. The filter
+leg on one side), budgets (sums of integer signature weights such as coupling and counterterm
+orders, and counts of vertices, propagators, chords and closed lines of some fields, each within a
+range), a filter that prunes the search, and progress and abort callbacks. The filter
 sees read-only views of the partial untyped topologies, the partial field assignments and the
 complete graphs; it must be hereditary (reject every completion of a state it rejects), so the
 output is exactly the complete graphs it accepts, and a validation mode searches without pruning
@@ -163,7 +170,7 @@ and fails when a rejected state completes to an accepted graph. Only paired edge
 internal bridges, where Graphica counts the leg as a zero-flow bridge and drops them.
 
 Each output carries the `HedgeGraph` (fields on edges, signature indices on nodes), its loop
-order, the exact automorphism count and the canonizer's certificate under the keys
+order, the exact automorphism count and the canonizer's canonical form under the keys
 `(signature, field, Option<label>)`, so a graph from elsewhere can be matched against generated
 ones by canonizing it with the same keys. Signatures with identical stubs are distinct vertex rules.
 
@@ -181,10 +188,29 @@ previous labels, so many distinct legs cost few symmetric topologies instead of 
 labelled dead ends. Twin vertices (equal corollas and multiplicities to every other vertex) are
 exchanged by an automorphism, so rule-2 ties among twins and groups whose colour classes are twin
 classes need no node canonization. Each complete topology is then
-decorated with fields, orientations and vertex rules edge by edge, with partial vertices checked
-against the sub-multisets of the signatures, keeping one decoration per orbit of the topology's
-automorphism group. Typed canonical augmentation (signatures as the corollas) was measured as the
+decorated with fields, orientations and vertex rules edge by edge, keeping one decoration per orbit
+of the topology's automorphism group. A partial vertex is a state of an automaton over the
+sub-multisets of the signatures, so an edge tries only the fields both of its ends can still take,
+and forward checking drops a partial decoration before the filter sees it once an edge at the ends
+of the last decorated one has no field left; a topology with an edge that no field fits at its
+ends gets no decoration. Typed canonical augmentation (signatures as the corollas) was measured as the
 alternative and visits about four times as many partial objects on QED and QCD processes.
+
+Budgets prune the decorations in the same way. Every automaton state carries the least and the
+most weight of the signatures containing it, so the sums of these bounds over the vertices bound
+each weight of a partial decoration, and a decoration step changes them at its two ends only;
+propagator and chord counts are bounded by the edges counted and the edges still undecorated, and
+closed lines by the lines closed so far (a union-find over the decorated edges of their fields),
+unless a signature lets lines branch. A partial decoration whose bounds miss a range is dropped
+before the filter sees it, and the vertex rules are checked exactly; the weights are invariant
+under the stabilizer of a labelling, so keeping the orbit-minimal rule tuples that meet them is
+exact. Before any search, a loop order is skipped when no multiset of signatures has the degrees
+its Euler relation needs and weights within the ranges, and a request is empty when its legs
+carry a charge or a parity that no combination of vertices balances (the leg vector lies outside
+the span of the signatures' flows, modulo a large prime, or of their stub parities, modulo two).
+The emptiness test follows the reachable sums of degrees and weights rather than the vertex
+partitions themselves: on SMEFTsim with an NP budget the partitions number tens of thousands
+(2->3 at three loops: 46,697) while the sums stay a few thousand (2,533).
 
 #callout("Streaming, deterministic order and parallelism", [
   Both stages are resumable depth-first searches with explicit stacks, so the iterator streams:

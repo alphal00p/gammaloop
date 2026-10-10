@@ -96,7 +96,7 @@ fn projective_plane_incidence_graphs() {
         let order = 2 * e * q.pow(3) * (q.pow(3) - 1) * (q * q - 1);
         assert_eq!(symmetry.order, order, "PG(2,{q})");
         assert_eq!(symmetry.node_orbits.len(), 1, "PG(2,{q}) is self-dual");
-        g.check_invariance(&symmetry.certificate, 2, &mut rng);
+        g.check_invariance(&symmetry.canonical_form, 2, &mut rng);
     }
 }
 
@@ -152,14 +152,14 @@ fn latin_square_graphs() {
         cases.push((&order_12, 1));
     }
     let mut rng = rng();
-    let mut certificates = vec![];
+    let mut forms = vec![];
     for (rows, order) in cases {
         let g = latin_square_graph(rows);
         let symmetry = g.symmetry();
         assert_eq!(symmetry.order, order, "{rows:?}");
-        g.check_invariance(&symmetry.certificate, 2, &mut rng);
-        certificates.push(symmetry.certificate);
+        g.check_invariance(&symmetry.canonical_form, 2, &mut rng);
+        forms.push(symmetry.canonical_form);
     }
     // different main classes: nauty finds the two graphs non-isomorphic
-    assert_ne!(certificates[0], certificates[1]);
+    assert_ne!(forms[0], forms[1]);
 }

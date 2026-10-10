@@ -2,7 +2,7 @@
 //!
 //! [`GraphGenerator`] enumerates the connected graphs built from vertex signatures (multisets of
 //! typed stubs) and a set of external legs, one per isomorphism class, each with its exact
-//! automorphism count and the certificate of the native canonizer.
+//! automorphism count and the canonical form of the native canonizer.
 //!
 //! A stub is a field with a direction relative to its vertex: undirected (self-conjugate
 //! fields), incoming or outgoing (fermions, ghosts, any charged field). Two stubs pair into an
@@ -14,7 +14,7 @@
 //! Output graphs are `HedgeGraph<F, usize, Option<L>>`: edges and legs carry their field, nodes
 //! the index of their signature, leg half-edges `Some(label)` and paired half-edges `None`.
 //! Directed edges point from the outgoing to the incoming stub; legs keep the direction of their
-//! stub. The certificate and automorphism count are those of
+//! stub. The canonical form and automorphism count are those of
 //! `graph.canonize_by(|&s| s, |f| f.clone(), |h| h.clone())`, so symmetry factors follow the
 //! canonizer's half-edge convention: `m!` for `m` interchangeable parallel edges or legs and `2`
 //! for an undirected self-loop. Signatures with identical stubs are distinct vertex rules and give
@@ -45,8 +45,11 @@
 //! placed as anonymous legs and labelled once the topology is shaped, each label up to the
 //! stabilizer of the previous ones, so many distinct legs cost few topologies. Every complete
 //! topology is then decorated with fields, orientations and vertex rules, one decoration per orbit
-//! of its automorphism group ([`decorate`]). Only accepted diagrams are materialized as
-//! [`HedgeGraph`]s and canonized.
+//! of its automorphism group ([`decorate`]). Budgets ([`GraphGenerator::weight`],
+//! [`GraphGenerator::count`]) bound every partial decoration and drop those whose bounds miss their
+//! ranges. Loop orders without a vertex multiset that meets the weights, and requests whose legs
+//! carry a charge or parity that no vertex balances, are not searched. Only accepted diagrams are
+//! materialized as [`HedgeGraph`]s and canonized.
 //!
 //! Both stages are resumable depth-first searches, so [`Diagrams`] streams: each `next` call
 //! searches only up to the next diagram and nothing is buffered. Output order is the depth-first
@@ -87,6 +90,7 @@
 //! assert_eq!(diagrams.len(), 111);
 //! ```
 
+mod budget;
 mod decorate;
 mod model;
 #[cfg(test)]
@@ -101,6 +105,8 @@ use std::{
     sync::atomic::{AtomicBool, Ordering},
 };
 
+pub use budget::Countable;
+use budget::{inclusive, Request};
 use decorate::{Decoration, Decorator, Edge};
 use model::{Direction, Model, INCOMING, OUTGOING, UNDIRECTED};
 use topology::{Context, Limits, Search, Topology, MAX_VERTICES};
@@ -108,7 +114,7 @@ pub use view::{Bridge, EdgeView, GraphView, Stage, VertexSet};
 use view::{Prune, Pruner, State};
 
 use super::{
-    canon::{Certificate, KeyTables, RawHedge, Role},
+    canon::{CanonicalForm, KeyTables, RawHedge, Role},
     involution::Flow,
     HedgeGraph,
 };
@@ -170,9 +176,9 @@ pub struct Diagram<F, L> {
     /// Order of the half-edge automorphism group (the symmetry factor); `None` if it exceeds
     /// `u128`.
     pub automorphism_count: Option<u128>,
-    /// Equal for isomorphic graphs: the certificate of
+    /// Equal for isomorphic graphs: the canonical form of
     /// `graph.canonize_by(|&s| s, |f| f.clone(), |h| h.clone())`.
-    pub certificate: Certificate<usize, F, Option<L>>,
+    pub canonical_form: CanonicalForm<usize, F, Option<L>>,
 }
 
 /// Counts passed to the progress callback.
@@ -180,7 +186,8 @@ pub struct Diagram<F, L> {
 pub struct Progress {
     /// Loop order being generated.
     pub loops: usize,
-    /// Complete topologies decorated so far.
+    /// Complete topologies decorated so far. Loop orders and requests proven empty before the
+    /// search (see [`GraphGenerator::weight`] and [`GraphGenerator::iter`]) add none.
     pub topologies: usize,
     /// Graphs emitted so far.
     pub diagrams: usize,
@@ -198,6 +205,10 @@ pub enum GenerationError {
     TooManyLegs,
     #[error("graphs of this size would need more than 64 vertices")]
     TooManyVertices,
+    #[error("a weight needs one value per signature: {signatures} signatures, {weights} values")]
+    Weights { signatures: usize, weights: usize },
+    #[error("at most 64 propagator, chord and closed-line counts are supported")]
+    TooManyCounts,
 }
 
 type Filter<F, L> = dyn Fn(&GraphView<'_, F, L>) -> bool + Send + Sync;
@@ -218,6 +229,9 @@ pub struct GraphGenerator<F, L> {
     allow_zero_flow_edges: bool,
     #[cfg(feature = "rayon")]
     parallel: bool,
+    /// Per weight: one value per signature and the range of the sum.
+    weights: Vec<(Vec<i32>, [i64; 2])>,
+    counts: Vec<(Countable<F>, [i64; 2])>,
     filter: Option<Box<Filter<F, L>>>,
     check_heredity: bool,
     progress: Option<Box<ProgressFn>>,
@@ -245,6 +259,8 @@ where
             allow_zero_flow_edges: false,
             #[cfg(feature = "rayon")]
             parallel: false,
+            weights: vec![],
+            counts: vec![],
             filter: None,
             check_heredity: false,
             progress: None,
@@ -299,6 +315,56 @@ where
         self
     }
 
+    /// Keep only the graphs whose vertex weights sum into `range`; `weights` gives one weight per
+    /// signature, in the order of the signatures (a coupling order, a counterterm order or any
+    /// integer tag). Several weights must all be met.
+    ///
+    /// Unlike a filter, a weight prunes with bounds that the search keeps: every partial vertex
+    /// bounds its weight by the signatures that it can still become, and the field assignments
+    /// whose bounds miss `range` are dropped before the filter sees them (see [`Self::filter`]).
+    /// The vertex rules are then checked exactly. A loop order whose vertex degrees cannot meet
+    /// the weights is not searched. A weight that every graph meets (weights of one sign, `range`
+    /// unbounded on that side of zero) costs nothing.
+    ///
+    /// ```
+    /// use linnet::half_edge::generate::{GraphGenerator, Stub};
+    ///
+    /// // e+ e- -> mu+ mu- at one loop with photons (signatures 0 and 1) and a scalar (2 and 3) whose
+    /// // vertices have order one: order zero keeps the graphs without the scalar
+    /// let (a, h) = (Stub::undirected('a'), Stub::undirected('h'));
+    /// let (e, m) = (Stub::incoming('e'), Stub::incoming('m'));
+    /// let vertex = |f: &Stub<char>, b: &Stub<char>| vec![f.clone(), f.clone().flipped(), b.clone()];
+    /// let signatures = [vertex(&e, &a), vertex(&m, &a), vertex(&e, &h), vertex(&m, &h)];
+    /// let legs = [(1, e.clone()), (2, e.flipped()), (3, m.clone()), (4, m.flipped())];
+    /// let generator = |signatures: &[Vec<Stub<char>>]| {
+    ///     GraphGenerator::new(legs.clone(), signatures.to_vec()).loops(1..=1)
+    /// };
+    /// let without_scalar = generator(&signatures[..2]).iter().unwrap().count();
+    /// let order_zero = generator(&signatures).weight([0, 0, 1, 1], ..=0);
+    /// assert_eq!(order_zero.iter().unwrap().count(), without_scalar);
+    /// ```
+    pub fn weight(
+        mut self,
+        weights: impl IntoIterator<Item = i32>,
+        range: impl RangeBounds<i32>,
+    ) -> Self {
+        let range = inclusive(&range, i64::from);
+        self.weights.push((weights.into_iter().collect(), range));
+        self
+    }
+
+    /// Keep only the graphs in which `count` lies in `range`. Several counts must all be met.
+    ///
+    /// Counts prune like weights ([`Self::weight`]): a vertex count is a weight of one on its
+    /// signatures; propagators and chords are counted as their fields are assigned, against the
+    /// edges still to assign; closed lines are counted as they close, and on complete assignments
+    /// only if a signature has three or more stubs of their fields (lines may branch).
+    pub fn count(mut self, count: Countable<F>, range: impl RangeBounds<usize>) -> Self {
+        let range = inclusive(&range, |n| i64::try_from(n).unwrap_or(i64::MAX));
+        self.counts.push((count, range));
+        self
+    }
+
     /// Keep only the graphs accepted by `filter`, and prune the search with it.
     ///
     /// `filter` sees every state of the search as a [`GraphView`]. Stage 1 builds untyped
@@ -306,8 +372,13 @@ where
     /// pendant vertices that complete a topology at once, then the labels of anonymous legs one at
     /// a time (see [`Stage::Topology`]). Stage 2 assigns fields to the edges of an accepted
     /// complete topology ([`Stage::Fields`]) up to each complete graph ([`Stage::Complete`]), seen
-    /// before it is canonized. The output is the graphs whose complete topology and complete graph
-    /// `filter` accepts.
+    /// before it is canonized. Assignments that a single edge or the budgets ([`Self::weight`],
+    /// [`Self::count`]) show to have no completion are dropped unseen: a topology with an edge
+    /// that no field fits at its ends (given their legs and degrees), or whose legs alone exceed
+    /// a budget, gets no assignment; an assignment that leaves an edge at the vertices of the last
+    /// assigned one without a fitting field, or whose bounds on a budget already miss its range, is
+    /// dropped; and the complete graphs it sees meet the budgets. The output is the graphs whose
+    /// complete topology and complete graph `filter` accepts.
     ///
     /// A rejected state is dropped with everything that completes it, so `filter` must be
     /// hereditary within each stage: when it rejects a partial topology, it rejects every complete
@@ -362,11 +433,16 @@ where
         self
     }
 
-    /// Generate lazily: each call to `next` searches up to the next graph.
+    /// Generate lazily: each call to `next` searches up to the next graph. A request whose legs
+    /// carry a conserved charge or parity that the signatures cannot balance, or with an empty
+    /// budget range, yields nothing without a search.
     pub fn iter(&self) -> Result<Diagrams<'_, F, L>, GenerationError> {
         let compiled = Compiled::new(self)?;
         let n_legs = compiled.model.legs.total as usize;
         let degrees = &compiled.model.degrees;
+        let budgets = &compiled.model.budgets;
+        // the legs carry a charge no vertex balances, or no value meets a budget
+        let empty = !compiled.model.balanced || budgets.unsatisfiable();
         let mut orders = VecDeque::new();
         // without signatures there is no vertex, hence no graph
         if let (Some(&min_degree), Some(&max_degree)) = (degrees.first(), degrees.last()) {
@@ -393,6 +469,9 @@ where
                     .ok_or(GenerationError::Unbounded)?;
                 if max_vertices > MAX_VERTICES {
                     return Err(GenerationError::TooManyVertices);
+                }
+                if empty || !budgets.partition_exists(budget, max_vertices) {
+                    continue;
                 }
                 let limits = Limits::new(
                     &compiled.model,
@@ -492,12 +571,61 @@ impl<F: Clone + Ord, L: Clone + Ord> Compiled<F, L> {
                 flow: s.flow,
             });
         }
+        let request = Self::request(generator, &fields)?;
         Ok(Compiled {
-            model: Model::new(fields.len(), &signatures, &classes)?,
+            model: Model::new(fields.len(), &signatures, &classes, &request)?,
             fields,
             labels,
             legs,
         })
+    }
+
+    /// The budgets of `generator` with fields as ranks in `fields`: vertex counts become weights,
+    /// and fields that no stub carries are left out of the counts. Budgets that every graph meets
+    /// are left out, so they cost nothing.
+    fn request(generator: &GraphGenerator<F, L>, fields: &[F]) -> Result<Request, GenerationError> {
+        let n_signatures = generator.signatures.len();
+        // a sum of values of one sign, with the range unbounded on that side of zero
+        let bounds_nothing = |values: &[i32], [min, max]: [i64; 2]| {
+            (min <= 0 && max == i64::MAX && values.iter().all(|&v| v >= 0))
+                || (max >= 0 && min == i64::MIN && values.iter().all(|&v| v <= 0))
+        };
+        let mut request = Request::default();
+        for (weights, range) in &generator.weights {
+            if weights.len() != n_signatures {
+                return Err(GenerationError::Weights {
+                    signatures: n_signatures,
+                    weights: weights.len(),
+                });
+            }
+            request.weights.push((weights.clone(), *range));
+        }
+        let set = |counted: &[F]| {
+            (counted.iter())
+                .filter_map(|f| fields.binary_search(f).ok())
+                .fold(0u128, |set, field| set | 1 << field)
+        };
+        for (count, range) in &generator.counts {
+            match count {
+                Countable::Vertices(signatures) => request.weights.push((
+                    (0..n_signatures)
+                        .map(|s| signatures.contains(&s) as i32)
+                        .collect(),
+                    *range,
+                )),
+                // counts are sums of ones
+                _ if bounds_nothing(&[1], *range) => {}
+                Countable::Propagators(counted) => {
+                    request.edges.push((false, set(counted), *range))
+                }
+                Countable::Chords(counted) => request.edges.push((true, set(counted), *range)),
+                Countable::ClosedLines(counted) => request.lines.push((set(counted), *range)),
+            }
+        }
+        request
+            .weights
+            .retain(|(weights, range)| !bounds_nothing(weights, *range));
+        Ok(request)
     }
 
     /// Filter, materialize and certify a decorated topology.
@@ -520,23 +648,24 @@ impl<F: Clone + Ord, L: Clone + Ord> Compiled<F, L> {
             );
         }
         let graph = view.take_complete_graph();
-        let (certificate, automorphism_count) = self.certify(&d, raw);
+        let (canonical_form, automorphism_count) = self.certify(&d, raw);
         Some(Diagram {
             graph,
             loops,
             automorphism_count,
-            certificate,
+            canonical_form,
         })
     }
 
-    /// The certificate of the materialized graph under `canonize_by(|&s| s, F::clone,
-    /// Option::clone)`, from the decoration directly: node keys are signatures, edge keys fields
-    /// and half-edge keys `None` for paired hedges and the label for legs.
+    /// The canonical form and automorphism count of the materialized graph under
+    /// `canonize_by(|&s| s, F::clone, Option::clone)`, from the decoration directly: node keys
+    /// are signatures, edge keys fields and half-edge keys `None` for paired hedges and the label
+    /// for legs.
     fn certify(
         &self,
         d: &Decoration<'_>,
         raw: &mut RawDiagram,
-    ) -> (Certificate<usize, F, Option<L>>, Option<u128>) {
+    ) -> (CanonicalForm<usize, F, Option<L>>, Option<u128>) {
         let t = d.topology;
         let model = &self.model;
         raw.rules.clear();
@@ -636,7 +765,7 @@ impl<F: Clone + Ord, L: Clone + Ord> Compiled<F, L> {
                 .chain(self.labels.iter().cloned().map(Some))
                 .collect(),
         };
-        Certificate::of_hedges(&raw.colours, &raw.hedges, n_edges as usize, keys)
+        CanonicalForm::of_hedges(&raw.colours, &raw.hedges, n_edges as usize, keys)
     }
 }
 
