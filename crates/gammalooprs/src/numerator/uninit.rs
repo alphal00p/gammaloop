@@ -12,7 +12,7 @@ use super::{AppliedFeynmanRule, Numerator, UnInit};
 static MAXEDGECOUNTER: AtomicUsize = AtomicUsize::new(0);
 
 impl Numerator<UnInit> {
-    #[instrument(skip_all, fields(graph=%graph.name,debug_dot=%graph.debug_dot(),subgraph_dot=%graph.dot(subgraph)))]
+    #[instrument(skip_all, fields(graph=%graph.name))]
     #[allow(clippy::wrong_self_convention)]
     pub(crate) fn from_new_graph<S: SubGraphLike>(
         self,
@@ -57,7 +57,7 @@ impl Numerator<UnInit> {
             },
         }
     }
-    #[instrument(skip_all, fields(graph=%graph.name,debug_dot=%graph.debug_dot(),subgraph_dot=%graph.dot(subgraph)))]
+    #[instrument(skip_all, fields(graph=%graph.name))]
     #[allow(clippy::wrong_self_convention)]
     pub(crate) fn fill_in_reduced<S: SubGraphLike + SubSetOps>(
         self,

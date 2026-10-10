@@ -28,8 +28,8 @@ use color_eyre::Result;
 use eyre::{Context, Ok, eyre};
 use itertools::Itertools;
 use linnet::half_edge::{
-    HedgeGraph,
-    involution::{EdgeData, EdgeIndex, Flow, HedgePair},
+    EdgeAccessors, HedgeGraph,
+    involution::{EdgeData, EdgeIndex, Flow, Hedge, HedgePair},
     subgraph::{ModifySubSet, OrientedCut, SuBitGraph, SubSetOps},
 };
 use symbolica::{atom::Atom, id::ConditionResult};
@@ -66,6 +66,34 @@ impl Deref for ParseGraph {
 }
 
 impl ParseGraph {
+    /// Runtime payload overrides must preserve the finalized frame before its
+    /// half-edge IDs are used to construct cuts and momentum carriers.
+    fn validate_feynkit_frame(&self, diagram: &FeynmanDiagram) -> Result<()> {
+        let source = diagram.underlying();
+        let graph = &self.graph;
+        let same = source.n_live() == graph.n_live()
+            && source.node_bound() == graph.node_bound()
+            && source.n_edges() == graph.n_edges()
+            && source.n_hedges() == graph.n_hedges()
+            && source.iter_node_ids().eq(graph.iter_node_ids())
+            && source.iter_edges().all(|(pair, edge, data)| {
+                graph[&edge].1 == pair && graph.orientation(edge) == data.orientation
+            })
+            && (0..source.n_hedges()).all(|index| {
+                let hedge = Hedge(index);
+                graph.node_id(hedge) == source.node_id(hedge)
+                    && graph.flow(hedge) == source.flow(hedge)
+                    && graph[&hedge] == source[&hedge]
+            });
+        if !same {
+            return Err(eyre!(
+                "GammaLoop runtime conversion of FeynKit diagram '{}' changed its finalized topology",
+                diagram.name().unwrap_or("<unnamed>")
+            ));
+        }
+        Ok(())
+    }
+
     /// Attach runtime parse payloads to the finalized half-edge storage.
     /// The map retains every vertex, edge, half-edge, orientation and expression.
     fn from_feynkit_diagram(diagram: &FeynmanDiagram) -> Result<Self> {
@@ -101,7 +129,7 @@ impl ParseGraph {
         )?;
         Ok(Self {
             global_data: ParseData {
-                name: diagram.name().to_owned(),
+                name: diagram.name().unwrap_or_default().to_owned(),
                 overall_factor: diagram.overall_factor().clone(),
                 projector: diagram.projector().clone(),
                 num: diagram.numerator_prefactor().clone(),
@@ -183,10 +211,11 @@ impl Graph {
         diagram.validate().with_context(|| {
             format!(
                 "FeynKit diagram '{}' is not finalized consistently",
-                diagram.name()
+                diagram.name().unwrap_or("<unnamed>")
             )
         })?;
 
+        parsed.validate_feynkit_frame(diagram)?;
         let model = diagram.model();
         let (initial_data, graph) = Self::extract_initial_data(&parsed, model)?;
 
@@ -305,28 +334,81 @@ impl Graph {
             &result.loop_momentum_basis,
             initial_data.additional_params,
         );
-        let runtime_numerator = result
-            .numerator(&result.full_filter(), &result.empty_subgraph())
-            .get_single_atom()?;
-        if runtime_numerator != diagram.numerator() {
-            let cooking = CookSettings::indices()
-                .with_mode(CookMode::ReversibleEncoding)
-                .with_representation_payloads(true, true);
-            let runtime = SymbolicTensor::infer(cooking.try_cook(runtime_numerator.as_view())?)?;
-            let finalized =
-                SymbolicTensor::infer(cooking.try_cook(diagram.numerator().as_view())?)?;
-            // Keep graph numerators factorized, including at this validation
-            // boundary. Only an exact coefficient proof certifies a rewrite.
-            if runtime.coefficients_equal(&finalized, TensorCollectFilter::<0>::Tensors)?
-                != ConditionResult::True
+        result.certify_feynkit_numerators(diagram)?;
+        Ok(result)
+    }
+
+    fn numerators_equal(runtime: &Atom, finalized: &Atom) -> Result<bool> {
+        if runtime == finalized {
+            return Ok(true);
+        }
+        let cooking = CookSettings::indices()
+            .with_mode(CookMode::ReversibleEncoding)
+            .with_representation_payloads(true, true);
+        let runtime = SymbolicTensor::infer(cooking.try_cook(runtime.as_view())?)?;
+        let finalized = SymbolicTensor::infer(cooking.try_cook(finalized.as_view())?)?;
+        // Keep graph numerators factorized. An inconclusive coefficient proof
+        // cannot certify a runtime rewrite.
+        Ok(
+            runtime.coefficients_equal(&finalized, TensorCollectFilter::<0>::Tensors)?
+                == ConditionResult::True,
+        )
+    }
+
+    fn certify_feynkit_numerators(&self, diagram: &FeynmanDiagram) -> Result<()> {
+        // Both runtime construction maps retain the frame checked on ParseGraph.
+        // Match actual node/edge IDs; products alone could hide a factor moved
+        // between distinct momentum-local fragments.
+        let source = diagram.underlying();
+        let name = diagram.name().unwrap_or("<unnamed>");
+        for (vertex, _, data) in source.iter_nodes() {
+            let context = || {
+                format!(
+                    "GammaLoop runtime conversion of FeynKit diagram '{name}' could not certify the numerator of vertex {vertex}"
+                )
+            };
+            if !Self::numerators_equal(&self.underlying[vertex].num.value, &data.numerator)
+                .with_context(context)?
             {
-                return Err(eyre!(
-                    "GammaLoop runtime conversion of FeynKit diagram '{}' could not certify its finalized numerator",
-                    diagram.name()
-                ));
+                return Err(eyre!(context()));
             }
         }
-        Ok(result)
+        let mut omitted = Vec::new();
+        for (pair, edge, data) in source.iter_edges() {
+            let context = || {
+                format!(
+                    "GammaLoop runtime conversion of FeynKit diagram '{name}' could not certify the numerator of edge {edge}"
+                )
+            };
+            if !Self::numerators_equal(&self.underlying[&edge].0.num.value, &data.data.numerator)
+                .with_context(context)?
+            {
+                return Err(eyre!(context()));
+            }
+            if matches!(pair, HedgePair::Unpaired { .. }) && !data.data.numerator.is_one() {
+                omitted.push(&data.data.numerator);
+            }
+        }
+
+        // Runtime subgraph products omit dangling edges. Native validation
+        // forces physical external fragments to one but permits non-unit dummy
+        // fragments; their product can cancel, or the retained product be zero.
+        if !omitted.is_empty() {
+            let omitted = Atom::mul_many(omitted);
+            // A failed or inconclusive unity proof still needs the old full
+            // comparison: a zero retained numerator can make the omission harmless.
+            if !Self::numerators_equal(&omitted, &Atom::one()).unwrap_or(false) {
+                let runtime = self
+                    .numerator(&self.full_filter(), &self.empty_subgraph())
+                    .get_single_atom()?;
+                if !Self::numerators_equal(&runtime, diagram.numerator())? {
+                    return Err(eyre!(
+                        "GammaLoop runtime conversion of FeynKit diagram '{name}' omits a non-unit dangling numerator"
+                    ));
+                }
+            }
+        }
+        Ok(())
     }
 
     pub(crate) fn validate_full_numerator_tensor_network(&self) -> Result<()> {

@@ -603,6 +603,166 @@ fn assert_native_runtime_parity(diagram: &feynkit_graph::FeynmanDiagram) {
     }
 }
 
+fn native_fragment_fixture(
+    vertex_numerator: symbolica::atom::Atom,
+    dangling: &[symbolica::atom::Atom],
+    paired: bool,
+) -> feynkit_graph::FeynmanDiagram {
+    use feynkit_graph::{DiagramVertex, FeynmanDiagram};
+    let model = std::sync::Arc::new(crate::utils::load_generic_model("scalars"));
+    let particle = model.particle_id("scalar_1").unwrap();
+    let mut builder = FeynmanDiagram::builder(model, "native_fragments");
+    let vertex = builder.add_vertex(DiagramVertex {
+        name: "v".into(),
+        interaction: None,
+        numerator: vertex_numerator,
+    });
+    if paired {
+        builder
+            .add_edge(vertex, vertex, DiagramEdge::new(particle, false))
+            .unwrap();
+    }
+    for numerator in dangling {
+        let mut edge = DiagramEdge::new(particle, false);
+        edge.is_dummy = true;
+        edge.numerator = numerator.clone();
+        builder.add_edge(Some(vertex), None, edge).unwrap();
+    }
+    let diagram = builder.build().unwrap();
+    diagram.validate().unwrap();
+    diagram
+}
+
+#[test]
+fn native_runtime_conversion_certifies_local_fragments() {
+    use symbolica::{atom::Atom, parse};
+    test_initialise().unwrap();
+    let diagram = native_fragment_fixture(Atom::one(), &[], true);
+    let parsed = super::ParseGraph::from_feynkit_diagram(&diagram).unwrap();
+    let vertex = parsed.graph.iter_node_ids().next().unwrap();
+    let edge = EdgeIndex(0);
+
+    for changed_vertex in [true, false] {
+        let mut changed = parsed.clone();
+        if changed_vertex {
+            changed.graph[vertex].num = Some(Atom::num(2));
+        } else {
+            changed.graph[&edge].0.num = Some(Atom::num(2));
+        }
+        let error = Graph::from_feynkit_parse_graph(&diagram, changed)
+            .err()
+            .expect("runtime conversion must reject the changed diagram");
+        assert!(
+            error
+                .to_string()
+                .contains(if changed_vertex { "vertex" } else { "edge" }),
+            "{error:?}"
+        );
+    }
+    let mut compensated = parsed;
+    compensated.graph[vertex].num = Some(Atom::num(2));
+    compensated.graph[&edge].0.num = Some(Atom::one() / 2);
+    assert!(
+        Graph::from_feynkit_parse_graph(&diagram, compensated)
+            .err()
+            .expect("runtime conversion must reject the changed diagram")
+            .to_string()
+            .contains("vertex")
+    );
+
+    let factored = parse!("x*(y+z)", default_namespace = "runtime_fragment");
+    let expanded = parse!("x*y+x*z", default_namespace = "runtime_fragment");
+    // The conservative coefficient proof cancels factored minus distributed,
+    // while the reverse remains inconclusive. Retain the former aggregate
+    // comparison's runtime-minus-finalized operand order in both cases.
+    let diagram = native_fragment_fixture(expanded.clone(), &[], true);
+    let mut parsed = super::ParseGraph::from_feynkit_diagram(&diagram).unwrap();
+    parsed.graph[vertex].num = Some(factored.clone());
+    Graph::from_feynkit_parse_graph(&diagram, parsed).unwrap();
+
+    let diagram = native_fragment_fixture(factored, &[], true);
+    let mut parsed = super::ParseGraph::from_feynkit_diagram(&diagram).unwrap();
+    parsed.graph[vertex].num = Some(expanded);
+    assert!(
+        Graph::from_feynkit_parse_graph(&diagram, parsed)
+            .err()
+            .expect("runtime conversion must reject an unproved fragment identity")
+            .to_string()
+            .contains("vertex")
+    );
+
+    let diagram = native_fragment_fixture(
+        parse!("(x+y)^2", default_namespace = "runtime_fragment"),
+        &[],
+        true,
+    );
+    let mut parsed = super::ParseGraph::from_feynkit_diagram(&diagram).unwrap();
+    parsed.graph[vertex].num = Some(parse!(
+        "x^2+2*x*y+y^2",
+        default_namespace = "runtime_fragment"
+    ));
+    assert!(
+        Graph::from_feynkit_parse_graph(&diagram, parsed)
+            .err()
+            .expect("runtime conversion must reject the changed diagram")
+            .to_string()
+            .contains("vertex")
+    );
+}
+
+#[test]
+fn native_runtime_conversion_rejects_changed_frame_before_cut_indexing() {
+    use linnet::half_edge::{EdgeAccessors, involution::Orientation};
+    use symbolica::atom::Atom;
+    test_initialise().unwrap();
+    let diagram = native_fragment_fixture(Atom::one(), &[], true);
+    let parsed = super::ParseGraph::from_feynkit_diagram(&diagram).unwrap();
+    let mut changed = parsed.clone();
+    let vertex = changed.graph.iter_nodes().next().unwrap().2.clone();
+    changed.graph.add_node(vertex);
+    assert!(
+        Graph::from_feynkit_parse_graph(&diagram, changed)
+            .err()
+            .expect("runtime conversion must reject the changed diagram")
+            .to_string()
+            .contains("changed its finalized topology")
+    );
+    let mut changed = parsed;
+    changed
+        .graph
+        .set_orientation(EdgeIndex(0), Orientation::Default);
+    assert!(
+        Graph::from_feynkit_parse_graph(&diagram, changed)
+            .err()
+            .expect("runtime conversion must reject the changed diagram")
+            .to_string()
+            .contains("changed its finalized topology")
+    );
+}
+
+#[test]
+fn native_runtime_conversion_preserves_dangling_dummy_product_acceptance() {
+    use symbolica::atom::Atom;
+    test_initialise().unwrap();
+    for paired in [false, true] {
+        for (vertex, omitted, accepted) in [
+            (Atom::one(), vec![Atom::one()], true),
+            (Atom::one(), vec![Atom::num(2)], false),
+            (Atom::one(), vec![Atom::num(2), Atom::one() / 2], true),
+            (Atom::Zero, vec![Atom::num(2)], true),
+        ] {
+            let diagram = native_fragment_fixture(vertex, &omitted, paired);
+            let runtime = Graph::from_feynkit(&diagram, None, true);
+            assert_eq!(
+                runtime.is_ok(),
+                accepted,
+                "paired={paired}, omitted={omitted:?}, error={:?}",
+                runtime.as_ref().err()
+            );
+        }
+    }
+}
+
 #[test]
 fn native_amplitude_runtime_enrichment_preserves_every_graph_coordinate() {
     use feynkit_generator::{GenerationOptions, Process};
@@ -642,6 +802,16 @@ fn native_cross_section_runtime_enrichment_preserves_cuts_and_positive_external_
     assert!(!generated.diagrams.is_empty());
     for diagram in generated.diagrams {
         assert!(!diagram.cuts().is_empty());
+        let mut changed = super::ParseGraph::from_feynkit_diagram(&diagram).unwrap();
+        let vertex = changed.graph.iter_nodes().next().unwrap().2.clone();
+        changed.graph.add_node(vertex);
+        assert!(
+            Graph::from_feynkit_parse_graph(&diagram, changed)
+                .err()
+                .expect("runtime conversion must reject the changed diagram")
+                .to_string()
+                .contains("changed its finalized topology")
+        );
         for (slot, edge) in diagram
             .loop_momentum_basis()
             .external_edges

@@ -238,7 +238,9 @@ impl Default for ProcessDefinition {
             generation_type: GenerationType::Amplitude,
             process: GenerationProcess::new(Vec::<i64>::new(), Vec::<i64>::new()),
             generation_options: GenerationOptions::default()
-                .graph_prefix("GL")
+                .output(feynkit_generator::GenerationOutput::Named {
+                    prefix: "GL".into(),
+                })
                 .with_loop_count(1, 1)
                 .expect("the default loop range is valid"),
             folder_name: "undefined_process".to_string(),

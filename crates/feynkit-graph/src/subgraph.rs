@@ -10,8 +10,8 @@ use linnet::half_edge::{
 use symbolica::atom::{Atom, AtomCore, AtomView, FunctionBuilder};
 
 use crate::{
-    DiagramEndpoint, DiagramError, DiagramHalfEdge, ExternalLeg, ExternalState, FeynmanDiagram,
-    VertexId, symbols,
+    DiagramEndpoint, DiagramError, DiagramHalfEdge, DiagramNumerator, ExternalLeg, ExternalState,
+    FeynmanDiagram, FeynmanDiagramBuilder, VertexId, symbols,
 };
 
 impl FeynmanDiagram {
@@ -76,7 +76,10 @@ impl FeynmanDiagram {
                 contributing.extend([self.graph.node_id(source), self.graph.node_id(sink)]);
             }
         }
-        let mut builder = Self::builder(self.model_arc(), format!("{}_subgraph", self.name));
+        let mut builder = FeynmanDiagramBuilder::new(
+            self.model_arc(),
+            self.name.as_ref().map(|name| format!("{name}_subgraph")),
+        );
         let mut vertices = BTreeMap::new();
         let mut original_vertices = Vec::new();
         for node in retained.iter().copied() {
@@ -270,11 +273,7 @@ impl FeynmanDiagram {
             },
             |_, data| Ok(data),
         )?;
-        diagram.numerator = diagram
-            .vertices()
-            .map(|(_, vertex)| vertex.numerator.clone())
-            .chain(diagram.edges().map(|(_, _, edge)| edge.numerator.clone()))
-            .product();
+        diagram.numerator = DiagramNumerator::default();
         diagram.validate()?;
         Ok(diagram)
     }
@@ -431,7 +430,8 @@ mod tests {
             * function!(symbols::vertex_index(), 1, 2)
             * function!(symbols::edge_index(), old_edge, 3)
             * function!(symbols::loop_momentum(), 0);
-        parent.numerator = Atom::num(2) * &parent.graph[NodeIndex(1)].numerator;
+        parent.numerator =
+            DiagramNumerator::Explicit(Atom::num(2) * &parent.graph[NodeIndex(1)].numerator);
         let result = parent.excise(&selected, &[]).unwrap();
         let new_hedge = result.graph.iter_crown(NodeIndex(0)).last().unwrap();
         let new_edge = result.graph[&new_hedge].0;

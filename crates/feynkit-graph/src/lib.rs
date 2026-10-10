@@ -14,6 +14,8 @@ mod dot;
 pub mod expressions;
 mod finalization;
 mod integrals;
+#[cfg(test)]
+mod lazy_tests;
 mod partition_check;
 mod power_counting;
 pub mod routing;
@@ -77,8 +79,9 @@ use linnet::{
         subgraph::{Inclusion, SuBitGraph, SubSetLike, SubSetOps},
         tree::SimpleTraversalTree,
     },
-    parser::{DotGraph, set::DotGraphSet},
+    parser::{DotGraph, dot_value, set::DotGraphSet},
 };
+use once_cell::sync::OnceCell;
 use serde::{Deserialize, Serialize};
 use spenso::structure::representation::{Minkowski, RepName};
 use symbolica::{
@@ -541,7 +544,7 @@ pub enum DiagramError {
 struct DiagramSerde {
     id: DiagramId,
     model: ModelFingerprint,
-    name: String,
+    name: Option<String>,
     vertices: Vec<DiagramVertexSerde>,
     edges: Vec<(EdgeEndpoints, DiagramEdgeSerde)>,
     half_edge_order: Vec<DiagramHalfEdge>,
@@ -575,16 +578,30 @@ struct DiagramEdgeSerde {
     target_slot: VertexSlot,
 }
 
+/// A derived aggregate is computed only at an explicit expression boundary.
+/// An imported or explicitly supplied aggregate remains independently checked.
+#[derive(Debug, Clone)]
+enum DiagramNumerator {
+    Derived(OnceLock<Atom>),
+    Explicit(Atom),
+}
+
+impl Default for DiagramNumerator {
+    fn default() -> Self {
+        Self::Derived(OnceLock::new())
+    }
+}
+
 /// Model-aware Feynman-diagram IR backed by Linnet's half-edge graph.
 #[derive(Debug, Clone)]
 pub struct FeynmanDiagram {
     model: Arc<Model>,
-    id: DiagramId,
-    name: String,
+    id: OnceCell<DiagramId>,
+    name: Option<String>,
     graph: HedgeGraph<DiagramEdge, DiagramVertex>,
     symmetry_factor: u64,
     overall_factor: Atom,
-    numerator: Atom,
+    numerator: DiagramNumerator,
     numerator_prefactor: Atom,
     projector: Atom,
     loop_momentum_basis: LoopMomentumBasis,
@@ -601,13 +618,15 @@ impl Serialize for FeynmanDiagram {
     where
         S: serde::Serializer,
     {
-        self.serde_view().serialize(serializer)
+        self.serde_view()
+            .map_err(serde::ser::Error::custom)?
+            .serialize(serializer)
     }
 }
 
 impl FeynmanDiagram {
     pub fn builder(model: impl Into<Arc<Model>>, name: impl Into<String>) -> FeynmanDiagramBuilder {
-        FeynmanDiagramBuilder::new(model, name)
+        FeynmanDiagramBuilder::new(model, Some(name.into()))
     }
 
     pub fn model(&self) -> &Model {
@@ -618,12 +637,14 @@ impl FeynmanDiagram {
         Arc::clone(&self.model)
     }
 
-    pub fn id(&self) -> DiagramId {
-        self.id
+    /// Compute the structural identity on first successful demand.
+    pub fn id(&self) -> Result<DiagramId, DiagramError> {
+        self.id.get_or_try_init(|| self.structural_id()).copied()
     }
 
-    pub fn name(&self) -> &str {
-        &self.name
+    /// The requested display name, absent for minimal generated output.
+    pub fn name(&self) -> Option<&str> {
+        self.name.as_deref()
     }
 
     /// Return the raw automorphism order retained as generation provenance.
@@ -640,7 +661,12 @@ impl FeynmanDiagram {
     }
 
     pub fn numerator(&self) -> &Atom {
-        &self.numerator
+        match &self.numerator {
+            DiagramNumerator::Derived(value) => {
+                value.get_or_init(|| Self::fragment_numerator(&self.graph))
+            }
+            DiagramNumerator::Explicit(value) => value,
+        }
     }
 
     fn fragment_numerator(graph: &HedgeGraph<DiagramEdge, DiagramVertex>) -> Atom {
@@ -659,7 +685,7 @@ impl FeynmanDiagram {
     }
 
     /// Replace local numerator fragments in the finalized index frame and
-    /// rebuild their product. Fragment edits preserve topology and routing.
+    /// derive their product on demand. Fragment edits preserve topology and routing.
     pub fn with_numerator_fragments(
         mut self,
         vertices: impl IntoIterator<Item = (VertexId, Atom)>,
@@ -684,8 +710,8 @@ impl FeynmanDiagram {
             }
             self.graph[EdgeIndex(edge.0)].numerator = numerator;
         }
-        self.numerator = Self::fragment_numerator(&self.graph);
-        self.validate_with_fragment_numerator(Some(&self.numerator))?;
+        self.numerator = DiagramNumerator::default();
+        self.validate()?;
         Ok(self)
     }
 
@@ -814,14 +840,39 @@ impl FeynmanDiagram {
             .edges()
             .map(|(id, endpoints, _)| (id, endpoints))
             .collect::<BTreeMap<_, _>>();
-        diagram.graph = self.graph.clone().map(
-            |_, id, vertex| map_vertex(VertexId(id.0), &vertex),
-            |_, _, _, id, edge| {
-                edge.map(|edge| map_edge(EdgeId(id.0), endpoints[&EdgeId(id.0)], &edge))
+        let mut vertex_structure_changed = false;
+        let mut edge_structure_changed = false;
+        let mut vertex_numerator_changed = false;
+        let mut edge_numerator_changed = false;
+        diagram.graph = diagram.graph.map_result(
+            |_, id, vertex| {
+                let mapped = map_vertex(VertexId(id.0), &vertex);
+                if let Some(interaction) = mapped.interaction {
+                    self.model.vertex_rule_by_id(interaction)?;
+                }
+                vertex_structure_changed |= !vertex.same_structure(&mapped);
+                vertex_numerator_changed |= vertex.numerator != mapped.numerator;
+                Ok::<_, DiagramError>(mapped)
             },
-            |_, data| data,
-        );
-        diagram.id = diagram.structural_id()?;
+            |_, _, _, id, edge| {
+                let mapped = map_edge(EdgeId(id.0), endpoints[&EdgeId(id.0)], &edge.data);
+                self.model.particle_by_id(mapped.particle)?;
+                edge_structure_changed |= !edge.data.same_structure(&mapped);
+                edge_numerator_changed |= edge.data.numerator != mapped.numerator;
+                Ok(edge.map(|_| mapped))
+            },
+            |_, data| Ok(data),
+        )?;
+        if vertex_structure_changed || edge_structure_changed {
+            diagram.id.take();
+        }
+        if (vertex_numerator_changed || edge_numerator_changed)
+            && matches!(self.numerator, DiagramNumerator::Derived(_))
+        {
+            // Mapping is not an aggregate replacement: preserve the old value
+            // so validation still detects inconsistent fragment edits.
+            diagram.numerator = DiagramNumerator::Explicit(self.numerator().clone());
+        }
         Ok(diagram)
     }
 
@@ -877,14 +928,16 @@ impl FeynmanDiagram {
                 reverse_half_edge(half_edge);
             }
         }
-        let mut builder = Self::builder(Arc::clone(&self.model), &self.name)
+        let mut builder = FeynmanDiagramBuilder::new(Arc::clone(&self.model), self.name.clone())
             .symmetry_factor(self.symmetry_factor)
             .overall_factor(self.overall_factor.clone())
-            .numerator(self.numerator.clone())
             .numerator_prefactor(self.numerator_prefactor.clone())
             .projector(self.projector.clone())
             .cuts(cuts)
             .topology_threshold_candidates(topology_threshold_candidates);
+        if let DiagramNumerator::Explicit(numerator) = &self.numerator {
+            builder = builder.numerator(numerator.clone());
+        }
         for (_, vertex) in self.vertices() {
             builder.add_vertex(vertex.clone());
         }
@@ -950,7 +1003,7 @@ impl FeynmanDiagram {
 
     /// Return this diagram with a finalized deterministic name.
     pub fn with_name(mut self, name: impl Into<String>) -> Self {
-        self.name = name.into();
+        self.name = Some(name.into());
         self
     }
 
@@ -1003,7 +1056,7 @@ impl FeynmanDiagram {
         self
     }
 
-    /// Replace the finalized physical cuts and refresh the content-derived ID.
+    /// Replace the finalized physical cuts and invalidate the cached structural ID.
     pub fn with_cuts(mut self, mut cuts: Vec<DiagramCut>) -> Result<Self, DiagramError> {
         for cut in &mut cuts {
             cut.cut.sort();
@@ -1018,7 +1071,7 @@ impl FeynmanDiagram {
         self.cuts = cuts;
         self.validation.take();
         self.validate()?;
-        self.id = self.structural_id()?;
+        self.id.take();
         Ok(self)
     }
 
@@ -1051,7 +1104,7 @@ impl FeynmanDiagram {
         self.topology_threshold_candidates = candidates;
         self.validation.take();
         self.validate()?;
-        self.id = self.structural_id()?;
+        self.id.take();
         Ok(self)
     }
 
@@ -1515,7 +1568,7 @@ impl FeynmanDiagram {
     }
 
     pub fn to_json(&self) -> Result<String, DiagramError> {
-        Ok(serde_json::to_string_pretty(&self.serde_view())?)
+        Ok(serde_json::to_string_pretty(&self.serde_view()?)?)
     }
 
     pub fn from_json(model: impl Into<Arc<Model>>, input: &str) -> Result<Self, DiagramError> {
@@ -1528,15 +1581,6 @@ impl FeynmanDiagram {
         if self.validation.get().is_some() {
             return Ok(());
         }
-        self.validate_with_fragment_numerator(None)
-    }
-
-    // Fragment edits already rebuild this product. Reuse it while checking all
-    // other invariants; public validation derives it independently from the graph.
-    fn validate_with_fragment_numerator(
-        &self,
-        fragment_numerator: Option<&Atom>,
-    ) -> Result<(), DiagramError> {
         let node_bound = self.graph.node_bound();
         let mut external_indices = BTreeSet::new();
         let mut external_connections = BTreeSet::new();
@@ -1731,18 +1775,11 @@ impl FeynmanDiagram {
             });
         }
         self.validate_partitions(&paired_external_edges)?;
-        let reconstructed;
-        let fragment_numerator = match fragment_numerator {
-            Some(numerator) => numerator,
-            None => {
-                reconstructed = Self::fragment_numerator(&self.graph);
-                &reconstructed
+        if let DiagramNumerator::Explicit(numerator) = &self.numerator {
+            let fragments = Self::fragment_numerator(&self.graph);
+            if fragments != *numerator && fragments.expand() != numerator.expand() {
+                return Err(DiagramError::NumeratorFragmentMismatch);
             }
-        };
-        if fragment_numerator != &self.numerator
-            && fragment_numerator.expand() != self.numerator.expand()
-        {
-            return Err(DiagramError::NumeratorFragmentMismatch);
         }
         if self.routing_validation.get().is_none() {
             self.loop_momentum_basis.validate(self)?;
@@ -1753,9 +1790,11 @@ impl FeynmanDiagram {
     }
 
     /// Serialize to a stable DOT dialect that can be parsed by [`Self::from_dot`].
+    /// The graph's `feynkit_name` attribute contains a JSON optional string, so
+    /// an absent name remains distinct from an explicitly empty name.
     pub fn to_dot(&self) -> Result<String, DiagramError> {
         let mut output = String::new();
-        let snapshot = self.serde_view();
+        let snapshot = self.serde_view()?;
         let loop_momentum_edges = self
             .loop_momentum_basis
             .loop_edges
@@ -1767,18 +1806,18 @@ impl FeynmanDiagram {
         writeln!(
             output,
             "  graph [feynkit_name={}, model_fingerprint={}, symmetry_factor={}, overall_factor={}, numerator={}, numerator_prefactor={}, projector={}, loop_momentum_edges={}, loop_momentum_basis={}, half_edge_order={}, cuts={}, topology_threshold_candidates={}];",
-            Self::dot_string(&self.name)?,
-            Self::dot_string(&self.model.fingerprint().to_string())?,
+            dot_value(&serde_json::to_string(&self.name)?),
+            dot_value(&self.model.fingerprint().to_string()),
             self.symmetry_factor,
-            Self::dot_string(&snapshot.overall_factor)?,
-            Self::dot_string(&snapshot.numerator)?,
-            Self::dot_string(&snapshot.numerator_prefactor)?,
-            Self::dot_string(&snapshot.projector)?,
-            Self::dot_string(&loop_momentum_edges)?,
-            Self::dot_string(&serde_json::to_string(&self.loop_momentum_basis)?)?,
-            Self::dot_string(&serde_json::to_string(&snapshot.half_edge_order)?)?,
-            Self::dot_string(&serde_json::to_string(&self.cuts)?)?,
-            Self::dot_string(&serde_json::to_string(&self.topology_threshold_candidates)?)?,
+            dot_value(&snapshot.overall_factor),
+            dot_value(&snapshot.numerator),
+            dot_value(&snapshot.numerator_prefactor),
+            dot_value(&snapshot.projector),
+            dot_value(&loop_momentum_edges),
+            dot_value(&serde_json::to_string(&self.loop_momentum_basis)?),
+            dot_value(&serde_json::to_string(&snapshot.half_edge_order)?),
+            dot_value(&serde_json::to_string(&self.cuts)?),
+            dot_value(&serde_json::to_string(&self.topology_threshold_candidates)?),
         )?;
         for (id, vertex) in self.vertices() {
             write!(
@@ -1786,20 +1825,20 @@ impl FeynmanDiagram {
                 "  v{} [id={}, feynkit_name={}",
                 id.0,
                 id.0,
-                Self::dot_string(&vertex.name)?
+                dot_value(&vertex.name)
             )?;
             if let Some(rule) = vertex.interaction {
                 write!(
                     output,
                     ", interaction_id={}, interaction={}",
                     rule.index(),
-                    Self::dot_string(&self.model.vertex_rule_by_id(rule)?.name)?
+                    dot_value(&self.model.vertex_rule_by_id(rule)?.name)
                 )?;
             }
             writeln!(
                 output,
                 ", numerator={}];",
-                Self::dot_string(&vertex.numerator.to_canonical_string())?
+                dot_value(&vertex.numerator.to_canonical_string())
             )?;
         }
         for (id, endpoints, edge) in self.edges() {
@@ -1830,14 +1869,14 @@ impl FeynmanDiagram {
                 id.0,
                 edge.particle.index(),
                 particle.pdg_code,
-                Self::dot_string(&particle.name)?,
+                dot_value(&particle.name),
                 edge.directed,
                 edge.source_slot.0,
                 edge.target_slot.0,
                 direction,
-                Self::dot_string(&serde_json::to_string(&edge.external)?)?,
+                dot_value(&serde_json::to_string(&edge.external)?),
                 edge.is_dummy,
-                Self::dot_string(&edge.numerator.to_canonical_string())?,
+                dot_value(&edge.numerator.to_canonical_string()),
             )?;
         }
         writeln!(output, "}}")?;
@@ -1872,8 +1911,9 @@ impl FeynmanDiagram {
             .global_data
             .statements
             .get("feynkit_name")
-            .cloned()
-            .unwrap_or_else(|| parsed.global_data.name.clone());
+            .map(|name| serde_json::from_str::<Option<String>>(name))
+            .transpose()?
+            .unwrap_or_else(|| Some(parsed.global_data.name.clone()));
         let symmetry_factor = parsed
             .global_data
             .statements
@@ -1966,7 +2006,7 @@ impl FeynmanDiagram {
                 })
             })?;
 
-        let mut builder = Self::builder(Arc::clone(&model), name)
+        let mut builder = FeynmanDiagramBuilder::new(Arc::clone(&model), name)
             .symmetry_factor(symmetry_factor)
             .overall_factor(Self::parse_expression("overall factor", overall_factor)?)
             .numerator(Self::parse_expression("numerator", numerator)?)
@@ -2311,9 +2351,9 @@ impl FeynmanDiagram {
         Ok((particle, base))
     }
 
-    fn serde_view(&self) -> DiagramSerde {
-        DiagramSerde {
-            id: self.id,
+    fn serde_view(&self) -> Result<DiagramSerde, DiagramError> {
+        Ok(DiagramSerde {
+            id: self.id()?,
             model: self.model.fingerprint(),
             name: self.name.clone(),
             vertices: self
@@ -2348,13 +2388,13 @@ impl FeynmanDiagram {
             half_edge_order: self.half_edges().collect(),
             symmetry_factor: self.symmetry_factor,
             overall_factor: self.overall_factor.to_canonical_string(),
-            numerator: self.numerator.to_canonical_string(),
+            numerator: self.numerator().to_canonical_string(),
             numerator_prefactor: self.numerator_prefactor.to_canonical_string(),
             projector: self.projector.to_canonical_string(),
             loop_momentum_basis: self.loop_momentum_basis.clone(),
             cuts: self.cuts.clone(),
             topology_threshold_candidates: self.topology_threshold_candidates.clone(),
-        }
+        })
     }
 
     fn from_serde(model: Arc<Model>, data: DiagramSerde) -> Result<Self, DiagramError> {
@@ -2366,7 +2406,7 @@ impl FeynmanDiagram {
             });
         }
         let serialized_id = data.id;
-        let mut builder = Self::builder(model, data.name)
+        let mut builder = FeynmanDiagramBuilder::new(model, data.name)
             .symmetry_factor(data.symmetry_factor)
             .overall_factor(Self::parse_expression(
                 "overall factor",
@@ -2413,18 +2453,15 @@ impl FeynmanDiagram {
             )?;
         }
         let diagram = builder.build()?;
-        if diagram.id != serialized_id {
+        let actual = diagram.id()?;
+        if actual != serialized_id {
             return Err(DiagramError::DiagramIdMismatch {
                 serialized: serialized_id,
-                actual: diagram.id,
+                actual,
             });
         }
         diagram.validate()?;
         Ok(diagram)
-    }
-
-    fn dot_string(value: &str) -> Result<String, DiagramError> {
-        serde_json::to_string(value).map_err(DiagramError::from)
     }
 
     fn parse_expression(field: &'static str, expression: String) -> Result<Atom, DiagramError> {
@@ -2458,7 +2495,7 @@ impl FeynmanDiagram {
 /// Incremental owner for enforcing diagram-construction invariants.
 pub struct FeynmanDiagramBuilder {
     model: Arc<Model>,
-    name: String,
+    name: Option<String>,
     vertices: Vec<DiagramVertex>,
     /// Generated external legs, by their provisional dangling edge.
     generation_externals: BTreeMap<EdgeId, ExternalLeg>,
@@ -2477,10 +2514,11 @@ pub struct FeynmanDiagramBuilder {
 }
 
 impl FeynmanDiagramBuilder {
-    pub fn new(model: impl Into<Arc<Model>>, name: impl Into<String>) -> Self {
+    /// Start a diagram with an optional display name; `None` requests no name.
+    pub fn new(model: impl Into<Arc<Model>>, name: Option<String>) -> Self {
         Self {
             model: model.into(),
-            name: name.into(),
+            name,
             vertices: Vec::new(),
             generation_externals: BTreeMap::new(),
             edges: Vec::new(),
@@ -3862,11 +3900,7 @@ mod tests {
                 },
             )
             .unwrap();
-        with_momenta.numerator = with_momenta
-            .vertices()
-            .map(|(_, vertex)| &vertex.numerator)
-            .chain(with_momenta.edges().map(|(_, _, edge)| &edge.numerator))
-            .fold(Atom::num(1), |product, numerator| product * numerator);
+        with_momenta.numerator = DiagramNumerator::default();
         assert_eq!(with_momenta.superficial_degree_of_divergence(4).unwrap(), 4);
         let restored =
             FeynmanDiagram::from_json(with_momenta.model_arc(), &with_momenta.to_json().unwrap())
@@ -3966,7 +4000,7 @@ mod tests {
             "canonical DOT must not contain trailing whitespace"
         );
         let from_dot = FeynmanDiagram::from_dot(diagram.model_arc(), &dot).unwrap();
-        assert_eq!(from_dot.name(), "bubble");
+        assert_eq!(from_dot.name(), Some("bubble"));
         assert_eq!(from_dot.loop_count(), 1);
         assert_eq!(from_dot.edges().count(), 4);
     }
@@ -3983,7 +4017,7 @@ mod tests {
                 .iter()
                 .map(|diagram| diagram.name())
                 .collect::<Vec<_>>(),
-            ["first", "second"]
+            [Some("first"), Some("second")]
         );
         assert!(
             diagrams
@@ -4019,10 +4053,10 @@ mod tests {
         let mut diagram = one_loop().with_numerator(factored.clone()).unwrap();
         diagram.validate().unwrap();
         diagram.validation.take();
-        diagram.numerator = factored.expand();
+        diagram.numerator = DiagramNumerator::Explicit(factored.expand());
         diagram.validate().unwrap();
         diagram.validation.take();
-        diagram.numerator += Atom::one();
+        diagram.numerator = DiagramNumerator::Explicit(diagram.numerator().clone() + Atom::one());
         assert!(matches!(
             diagram.validate(),
             Err(DiagramError::NumeratorFragmentMismatch)
@@ -4044,7 +4078,7 @@ mod tests {
             .with_numerator_fragments([(vertex, Atom::num(2))], [(edge, Atom::num(3))])
             .unwrap();
         assert_eq!(updated.numerator(), &Atom::num(6));
-        assert_eq!(updated.id(), original.id());
+        assert_eq!(updated.id().unwrap(), original.id().unwrap());
         assert_eq!(
             updated.loop_momentum_basis(),
             original.loop_momentum_basis()
@@ -4088,10 +4122,10 @@ mod tests {
     #[test]
     fn replacing_a_numerator_preserves_identity_and_fragment_invariants() {
         let diagram = one_loop();
-        let topology_id = diagram.id();
+        let topology_id = diagram.id().unwrap();
         let replaced = diagram.with_numerator(Atom::num(7)).unwrap();
 
-        assert_eq!(replaced.id(), topology_id);
+        assert_eq!(replaced.id().unwrap(), topology_id);
         assert_eq!(replaced.numerator(), &Atom::num(7));
         assert_eq!(
             replaced
@@ -4181,7 +4215,7 @@ mod tests {
             .clone()
             .with_topology_threshold_candidates(Vec::new())
             .unwrap();
-        assert_ne!(diagram.id(), without_candidates.id());
+        assert_ne!(diagram.id().unwrap(), without_candidates.id().unwrap());
         assert_ne!(
             diagram.canonical_key().unwrap(),
             without_candidates.canonical_key().unwrap()
@@ -4317,7 +4351,7 @@ mod tests {
     #[test]
     fn json_import_rejects_invalid_external_structure() {
         let diagram = one_loop();
-        let mut missing_edge = diagram.serde_view();
+        let mut missing_edge = diagram.serde_view().unwrap();
         missing_edge.edges.remove(0);
         assert!(matches!(
             FeynmanDiagram::from_json(
@@ -4327,7 +4361,7 @@ mod tests {
             Err(DiagramError::UnknownEdge { .. } | DiagramError::Invariant { .. })
         ));
 
-        let mut external_edge = diagram.serde_view();
+        let mut external_edge = diagram.serde_view().unwrap();
         external_edge.edges[0].0.target = None;
         assert!(matches!(
             FeynmanDiagram::from_json(
@@ -4408,8 +4442,8 @@ mod tests {
         let mut overflow = metadata.clone();
         overflow.as_mut().unwrap().index = usize::MAX;
         let dot = diagram.to_dot().unwrap().replacen(
-            &FeynmanDiagram::dot_string(&serde_json::to_string(&metadata).unwrap()).unwrap(),
-            &FeynmanDiagram::dot_string(&serde_json::to_string(&overflow).unwrap()).unwrap(),
+            &dot_value(&serde_json::to_string(&metadata).unwrap()),
+            &dot_value(&serde_json::to_string(&overflow).unwrap()),
             1,
         );
         assert!(matches!(
@@ -4561,7 +4595,7 @@ mod tests {
                         if actual == expected.0 && all == expected.1
                 ),
                 "{}: {slots:?}",
-                diagram.name()
+                diagram.name().unwrap_or("<unnamed>")
             );
         }
         // A permutation of the slots of one vertex is valid.

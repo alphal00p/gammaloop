@@ -80,4 +80,4 @@ package = false
 
 # The Python distribution is not yet on PyPI; use the community source branch.
 [tool.uv.sources]
-symbolica = { git = "https://github.com/symbolica-dev/symbolica.git", branch = "community" }
+symbolica = { git = "https://github.com/symbolica-dev/symbolica.git", rev = "1bd6cbcff8ad4e8be689f8e8ffbcb9779354db70" }

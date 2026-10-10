@@ -47,7 +47,7 @@ use super::{
     view::{Prune, State as View, VertexSet},
     AbortCheck,
 };
-use crate::half_edge::canon::{mix, NodeCanon, Orbits};
+use crate::half_edge::canon::{factorial, mix, scaled, NodeCanon, Orbits};
 
 /// Largest number of vertices: neighbour sets are `u64` bit sets.
 pub(crate) const MAX_VERTICES: usize = 64;
@@ -616,6 +616,8 @@ struct Level {
     /// Node automorphism generators of the object at this depth (stride `n`), when known.
     generators: Vec<u32>,
     known: bool,
+    /// Checked node group order, valid whenever `known` is true.
+    group_order: Option<u128>,
     /// Vertex invariants of the object at this depth, while it is expanded.
     invariants: Vec<(u64, u64)>,
     /// Its deletable vertices by decreasing invariant.
@@ -1037,6 +1039,12 @@ impl Search {
         }
     }
 
+    /// Node group order of the last complete connected topology, including the Single path.
+    pub(crate) fn node_group_order(&self) -> Option<u128> {
+        debug_assert!(self.buf.levels[self.found].known);
+        self.buf.levels[self.found].group_order
+    }
+
     /// Advance to the next complete topology, or to the next child of the root with
     /// [`Self::children`]; `false` when the subtree is exhausted or the generation stops.
     pub(crate) fn next(&mut self, cx: &Context<'_>) -> bool {
@@ -1136,7 +1144,7 @@ impl Search {
     fn found(&mut self, depth: usize) {
         self.found = depth;
         self.topology.vetoed = self.buf.levels[depth].vetoed;
-        if self.need_generators && !self.children_only && !self.buf.levels[depth].known {
+        if !self.children_only && !self.buf.levels[depth].known {
             self.canonize(depth, false);
         }
     }
@@ -1192,6 +1200,11 @@ impl Search {
         }
         // distinct colours leave no tie to break, so `twins` holds then too
         if twins && !labelling {
+            level.group_order = keys
+                .chunk_by(|a, b| a.0 == b.0)
+                .try_fold(1, |order, class| {
+                    scaled(Some(order), factorial(class.len()))
+                });
             return;
         }
         level.generators.clear();
@@ -1203,6 +1216,7 @@ impl Search {
         }
         canon.run(colours, edges);
         level.generators.extend(canon.generators().flatten());
+        level.group_order = canon.group_order();
     }
 
     /// Set up the enumeration of the children of the object at `depth`: labels for a shaped
@@ -1261,6 +1275,7 @@ impl Search {
         child.known = rigid;
         if rigid {
             child.generators.clear();
+            child.group_order = Some(1);
         }
         true
     }

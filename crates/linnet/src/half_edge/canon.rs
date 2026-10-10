@@ -358,6 +358,11 @@ impl NodeCanon {
         self.search.best_lab()
     }
 
+    /// Order of the node group for the connected graphs used by generation; `None` on overflow.
+    pub(crate) fn group_order(&self) -> Option<u128> {
+        self.search.group_order
+    }
+
     /// Generators of the node automorphism group, each as the image of every node.
     pub(crate) fn generators(&self) -> impl Iterator<Item = &[u32]> {
         (0..self.search.n_generators()).map(|i| self.search.generator(i))
@@ -365,12 +370,12 @@ impl NodeCanon {
 }
 
 /// `n!`, or `None` beyond `u128`.
-fn factorial(n: usize) -> Option<u128> {
+pub(crate) fn factorial(n: usize) -> Option<u128> {
     (2..=n as u128).try_fold(1u128, |acc, k| acc.checked_mul(k))
 }
 
 /// A group order times a factor, `None` once either overflows.
-fn scaled(order: Option<u128>, factor: Option<u128>) -> Option<u128> {
+pub(crate) fn scaled(order: Option<u128>, factor: Option<u128>) -> Option<u128> {
     order.zip(factor).and_then(|(a, b)| a.checked_mul(b))
 }
 

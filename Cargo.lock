@@ -1923,6 +1923,7 @@ dependencies = [
  "linnest",
  "linnet",
  "nu-ansi-term",
+ "once_cell",
  "serde",
  "serde_json",
  "spenso",
@@ -2592,7 +2593,7 @@ dependencies = [
 [[package]]
 name = "graphica"
 version = "3.0.1"
-source = "git+https://github.com/symbolica-dev/symbolica?branch=community#ed2374f1d880d52c3a7ca48cd7c22f4baad5c020"
+source = "git+https://github.com/symbolica-dev/symbolica?branch=community#1bd6cbcff8ad4e8be689f8e8ffbcb9779354db70"
 dependencies = [
  "ahash 0.8.12",
  "dyn-clone",
@@ -4271,7 +4272,7 @@ dependencies = [
 [[package]]
 name = "numerica"
 version = "3.0.1"
-source = "git+https://github.com/symbolica-dev/symbolica?branch=community#ed2374f1d880d52c3a7ca48cd7c22f4baad5c020"
+source = "git+https://github.com/symbolica-dev/symbolica?branch=community#1bd6cbcff8ad4e8be689f8e8ffbcb9779354db70"
 dependencies = [
  "ahash 0.8.12",
  "astro-float",
@@ -6523,7 +6524,7 @@ dependencies = [
 [[package]]
 name = "symbolica"
 version = "3.0.1"
-source = "git+https://github.com/symbolica-dev/symbolica?branch=community#ed2374f1d880d52c3a7ca48cd7c22f4baad5c020"
+source = "git+https://github.com/symbolica-dev/symbolica?branch=community#1bd6cbcff8ad4e8be689f8e8ffbcb9779354db70"
 dependencies = [
  "ahash 0.8.12",
  "append-only-vec",

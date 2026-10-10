@@ -472,7 +472,7 @@ requires-dist = [
     { name = "pymupdf", specifier = ">=1.23.4" },
     { name = "pytest" },
     { name = "pyyaml", specifier = ">=6.0.1" },
-    { name = "symbolica", git = "https://github.com/symbolica-dev/symbolica.git?branch=community" },
+    { name = "symbolica", git = "https://github.com/symbolica-dev/symbolica.git?rev=1bd6cbcff8ad4e8be689f8e8ffbcb9779354db70" },
     { name = "ufo-model-loader", git = "https://github.com/alphal00p/ufo_model_loader.git?rev=70ddee6b416f8c8b340e0d087646d77095c5d24b" },
 ]
 provides-extras = ["notebook-display"]
@@ -484,7 +484,7 @@ dev = [
     { name = "marimo", specifier = ">=0.24,<0.25" },
     { name = "pytest", specifier = ">=8.3.5,<9" },
     { name = "pyyaml", specifier = ">=6.0.1,<7" },
-    { name = "symbolica", git = "https://github.com/symbolica-dev/symbolica.git?branch=community" },
+    { name = "symbolica", git = "https://github.com/symbolica-dev/symbolica.git?rev=1bd6cbcff8ad4e8be689f8e8ffbcb9779354db70" },
     { name = "ufo-model-loader", git = "https://github.com/alphal00p/ufo_model_loader.git?rev=70ddee6b416f8c8b340e0d087646d77095c5d24b" },
 ]
 
@@ -2069,7 +2069,7 @@ wheels = [
 [[package]]
 name = "symbolica"
 version = "3.0.1"
-source = { git = "https://github.com/symbolica-dev/symbolica.git?branch=community#942bd2c0cd2ef16414d69c176fc9eff7b21c0ab2" }
+source = { git = "https://github.com/symbolica-dev/symbolica.git?rev=1bd6cbcff8ad4e8be689f8e8ffbcb9779354db70#1bd6cbcff8ad4e8be689f8e8ffbcb9779354db70" }
 
 [[package]]
 name = "terminado"

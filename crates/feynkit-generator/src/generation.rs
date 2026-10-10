@@ -24,7 +24,7 @@ use std::{
 use feynkit_graph::{
     DiagramCut, DiagramCutSide, DiagramEdge, DiagramEndpoint, DiagramError, DiagramHalfEdge,
     DiagramId, DiagramThresholdCandidate, DiagramVertex, DotDiagram, EdgeId, ExternalLeg,
-    ExternalState, FeynmanDiagram, VertexId, VertexSlot,
+    ExternalState, FeynmanDiagram, FeynmanDiagramBuilder, VertexId, VertexSlot,
 };
 use feynkit_model::{Model, ModelError, Particle, ParticleId, VertexRule, VertexRuleId};
 use idenso::{color::CS, dirac::AGS, epsilon::EPSILON_SYMBOL, representations::Bispinor};
@@ -32,6 +32,7 @@ use linnet::half_edge::{
     HedgeGraph, NodeIndex,
     builder::HedgeGraphBuilder,
     canon::ignore,
+    generate::GraphGenerator,
     involution::{Flow, Orientation},
     subgraph::{InternalSubGraph, SuBitGraph, SubSetLike},
 };
@@ -52,9 +53,9 @@ use thiserror::Error;
 use feynkit_amplitude::ColorRepresentation;
 
 use crate::{
-    FilterScope, GenerationFilter, GenerationFilterKind, GenerationOptions, GenerationType,
-    GroupingError, NumeratorGrouping, ParticleSelector, Process, ProcessError, SelectorError,
-    SewnFilterOptions, grouping, momentum_symbol,
+    FilterScope, GenerationFilter, GenerationFilterKind, GenerationOptions, GenerationOutput,
+    GenerationType, GroupingError, NumeratorGrouping, ParticleSelector, Process, ProcessError,
+    SelectorError, SewnFilterOptions, grouping, momentum_symbol,
 };
 pub use enumeration::{ExternalLabel, GenerationView};
 use enumeration::{
@@ -66,6 +67,8 @@ use graph::{Endpoint, GeneratedEdge, GeneratedGraph, PlainNodes, PlainVertex};
 
 #[derive(Debug, Error)]
 pub enum GenerationError {
+    #[error("name selection and named momentum bases require named generation output")]
+    NamesRequireNamedOutput,
     #[error(transparent)]
     Process(#[from] ProcessError),
     #[error(transparent)]
@@ -192,14 +195,19 @@ pub enum GenerationError {
     },
 }
 
+/// Source metadata requested by named generation output.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SourceIdentity {
+    pub id: DiagramId,
+    pub name: String,
+}
+
 #[derive(Debug, Clone)]
 pub struct GroupMember {
     /// Stable generated-order index assigned before zero-numerator removal.
     pub source_diagram: usize,
-    /// Stable content-derived ID of the source diagram.
-    pub source_id: DiagramId,
-    /// Finalized display name of the source diagram.
-    pub source_name: String,
+    /// Requested source identity; absent for minimal output.
+    pub source_identity: Option<SourceIdentity>,
     /// Index into [`GenerationResult::diagrams`] after zero-numerator removal.
     pub diagram: usize,
     /// The numerator of this member divided by the numerator of the master.
@@ -1334,6 +1342,16 @@ impl NumeratorInstantiation<'_> {
     }
 }
 
+/// Resolved process inputs and their one shared search builder. The search census and
+/// projector oracle use the same pruning and budget construction as ordinary generation.
+struct PreparedSearch {
+    options: GenerationOptions,
+    resolved: ResolvedProcess,
+    signatures: VertexSignatures,
+    externals: ProcessExternals,
+    generator: GraphGenerator<ParticleId, ExternalLabel>,
+}
+
 #[derive(Clone)]
 pub(crate) struct Generator {
     model: Arc<Model>,
@@ -1474,12 +1492,13 @@ impl Generator {
         }
     }
 
-    pub fn generate(
+    fn search(
         &self,
         process: &Process,
         options: &GenerationOptions,
         generation_type: GenerationType,
-    ) -> Result<GenerationResult, GenerationError> {
+        observe: impl Fn(&GenerationView<'_>, bool) + Send + Sync + 'static,
+    ) -> Result<PreparedSearch, GenerationError> {
         process.validate()?;
         if generation_type == GenerationType::Amplitude
             && process.outgoing_alternatives().len() != 1
@@ -1490,24 +1509,49 @@ impl Generator {
         let options = process
             .restrict_options(&self.model, options)?
             .resolve_selectors(&self.model)?;
-        let options = &options;
-        self.validate_options(generation_type, options)?;
-        process.validate_covariant_cut_filters(&self.model, options, generation_type)?;
+        self.validate_options(generation_type, &options)?;
+        process.validate_covariant_cut_filters(&self.model, &options, generation_type)?;
         let expanded_process = process.clone().with_final_state_alternatives(
             process.covariant_cut_states(&self.model, generation_type)?,
         )?;
         let process = &expanded_process;
-        let resolved = ResolvedProcess::new(&self.model, process, generation_type, options)?;
-        let signatures = VertexSignatures::new(&self.model, options)?;
+        let resolved = ResolvedProcess::new(&self.model, process, generation_type, &options)?;
+        let signatures = VertexSignatures::new(&self.model, &options)?;
         let externals = resolved.externals(&self.model)?;
-        let pruner = Pruner::new(&self.model, options);
+        let pruner = Pruner::new(&self.model, &options);
+
+        let generator = signatures.generator(&self.model, &externals, &options, move |view| {
+            let kept = pruner.keeps(view);
+            observe(view, kept);
+            kept
+        })?;
+        Ok(PreparedSearch {
+            options,
+            resolved,
+            signatures,
+            externals,
+            generator,
+        })
+    }
+
+    pub fn generate(
+        &self,
+        process: &Process,
+        options: &GenerationOptions,
+        generation_type: GenerationType,
+    ) -> Result<GenerationResult, GenerationError> {
+        let PreparedSearch {
+            options,
+            resolved,
+            signatures,
+            externals,
+            generator,
+        } = self.search(process, options, generation_type, |_, _| {})?;
+        let options = &options;
 
         options.report_progress("topologies", 0, None);
         let topologies = Arc::new(AtomicUsize::new(0));
-        let generator = signatures
-            .generator(&self.model, &externals, options, move |view| {
-                pruner.keeps(view)
-            })?
+        let generator = generator
             .progress({
                 let options = options.clone();
                 let topologies = Arc::clone(&topologies);
@@ -1548,8 +1592,12 @@ impl Generator {
             generated
         };
         let mut completed = !options.cancellation_requested();
-        // The order of the canonical forms is reproducible, and it fixes the names.
-        generated.sort_by(|left, right| left.canonical_form.cmp(&right.canonical_form));
+        // Numerator grouping keeps the first representative, so preserve its canonical
+        // encounter order. Ungrouped output retains Linnet's deterministic search order
+        // without demanding canonical forms merely for naming.
+        if !matches!(options.numerator_grouping, NumeratorGrouping::None) {
+            generated.sort_by(|a, b| a.canonical_form().cmp(b.canonical_form()));
+        }
         let topology_count = topologies.load(Ordering::Relaxed);
         let interaction_assignment_count = generated.len();
 
@@ -1602,7 +1650,6 @@ impl Generator {
         }
         let total = diagram_inputs.len();
         options.report_progress("numerators", 0, Some(total));
-        let width = diagram_inputs.len().saturating_sub(1).to_string().len();
         let constructed = Mutex::new(0);
         let construct = || {
             #[cfg(target_arch = "wasm32")]
@@ -1610,13 +1657,11 @@ impl Generator {
             #[cfg(not(target_arch = "wasm32"))]
             let inputs = diagram_inputs.into_par_iter();
             inputs
-                .enumerate()
-                .map(|(index, input)| {
+                .map(|input| {
                     if options.cancellation_requested() {
                         return Ok::<_, GenerationError>(None);
                     }
-                    let name = format!("{}{index:0width$}", options.graph_prefix);
-                    let pair = self.diagram_pair(name, generation_type, input, options)?;
+                    let pair = self.diagram_pair(None, generation_type, input, options)?;
                     let mut count = constructed.lock().unwrap();
                     *count += 1;
                     options.report_progress("numerators", *count, Some(total));
@@ -1684,45 +1729,61 @@ impl Generator {
                 });
             }
         }
-        let width = diagram_pairs
-            .len()
-            .saturating_sub(1)
-            .to_string()
-            .len()
-            .max(1);
+        let naming = match &options.output {
+            GenerationOutput::Minimal => None,
+            GenerationOutput::Named { prefix } => Some((
+                prefix,
+                diagram_pairs.len().saturating_sub(1).to_string().len(),
+            )),
+        };
         let mut comparison_diagrams = Vec::with_capacity(diagram_pairs.len());
         let mut representatives = Vec::with_capacity(diagram_pairs.len());
         for (index, mut pair) in diagram_pairs.into_iter().enumerate() {
-            let name = format!("{}{index:0width$}", options.graph_prefix);
-            let selected_by_id = options
-                .selected_diagram_ids
-                .as_ref()
-                .is_some_and(|selected| {
-                    selected.contains(&pair.comparison.id())
-                        || selected.contains(&pair.representative.id())
-                });
-            let selected_by_name = options
-                .selected_diagram_names
-                .as_ref()
-                .is_some_and(|selected| selected.contains(&name));
+            let name = naming.map(|(prefix, width)| format!("{prefix}{index:0width$}"));
+            let selected_by_id = match &options.selected_diagram_ids {
+                Some(selected) if !selected.is_empty() => {
+                    selected.contains(&pair.comparison.id()?)
+                        || selected.contains(&pair.representative.id()?)
+                }
+                _ => false,
+            };
+            let selected_by_name = name.as_ref().is_some_and(|name| {
+                options
+                    .selected_diagram_names
+                    .as_ref()
+                    .is_some_and(|selected| selected.contains(name))
+            });
+            // A present empty selection still selects nothing, without demanding an ID.
             let has_selection =
                 options.selected_diagram_ids.is_some() || options.selected_diagram_names.is_some();
             if (has_selection && !selected_by_id && !selected_by_name)
-                || options.vetoed_diagram_ids.contains(&pair.comparison.id())
-                || options
-                    .vetoed_diagram_ids
-                    .contains(&pair.representative.id())
-                || options.vetoed_diagram_names.contains(&name)
+                || (!options.vetoed_diagram_ids.is_empty()
+                    && (options.vetoed_diagram_ids.contains(&pair.comparison.id()?)
+                        || options
+                            .vetoed_diagram_ids
+                            .contains(&pair.representative.id()?)))
+                || name
+                    .as_ref()
+                    .is_some_and(|name| options.vetoed_diagram_names.contains(name))
             {
                 continue;
             }
-            pair.comparison = pair.comparison.with_name(&name);
-            pair.representative = pair.representative.with_name(&name);
-            let requested_basis = options
-                .loop_momentum_bases
-                .get(&pair.representative.id())
-                .or_else(|| options.loop_momentum_bases.get(&pair.comparison.id()))
-                .or_else(|| options.named_loop_momentum_bases.get(&name));
+            if let Some(name) = &name {
+                pair.comparison = pair.comparison.with_name(name);
+                pair.representative = pair.representative.with_name(name);
+            }
+            let by_id = if options.loop_momentum_bases.is_empty() {
+                None
+            } else if let Some(edges) = options.loop_momentum_bases.get(&pair.representative.id()?)
+            {
+                Some(edges)
+            } else {
+                options.loop_momentum_bases.get(&pair.comparison.id()?)
+            };
+            let requested_basis = by_id.or_else(|| {
+                name.as_ref()
+                    .and_then(|name| options.named_loop_momentum_bases.get(name))
+            });
             if let Some(edges) = requested_basis {
                 pair.comparison = pair.comparison.with_loop_momentum_edges(edges)?;
                 pair.representative = pair.representative.with_loop_momentum_edges(edges)?;
@@ -1820,9 +1881,11 @@ impl Generator {
                     &comparison_master.loop_momentum_basis().loop_edges,
                 )?;
             }
-            representative = representative
-                .with_name(comparison_master.name())
-                .with_overall_factor(comparison_master.overall_factor().clone());
+            if let Some(name) = comparison_master.name() {
+                representative = representative.with_name(name);
+            }
+            representative =
+                representative.with_overall_factor(comparison_master.overall_factor().clone());
             diagrams.push(representative);
 
             for member in &mut group.members {
@@ -1832,8 +1895,18 @@ impl Generator {
                         member.source_diagram
                     ))
                 })?;
-                member.source_id = source.id();
-                member.source_name = source.name().to_owned();
+                if matches!(options.output, GenerationOutput::Named { .. }) {
+                    let name = source.name().ok_or_else(|| {
+                        GenerationError::InvalidGroups(format!(
+                            "named source {} has no name",
+                            member.source_diagram
+                        ))
+                    })?;
+                    member.source_identity = Some(SourceIdentity {
+                        id: source.id()?,
+                        name: name.to_owned(),
+                    });
+                }
             }
             options.report_progress_with_zero_count(
                 "grouping",
@@ -1942,7 +2015,7 @@ impl Generator {
     /// Finalize the comparison and representative diagrams of a prepared input.
     fn diagram_pair(
         &self,
-        name: String,
+        name: Option<String>,
         generation_type: GenerationType,
         input: DiagramInput,
         options: &GenerationOptions,
@@ -2298,7 +2371,7 @@ impl Generator {
 
     fn to_diagram(
         &self,
-        name: String,
+        name: Option<String>,
         generation_type: GenerationType,
         topology: ColoredTopology,
         fermion_signs: FermionSigns,
@@ -2344,7 +2417,7 @@ impl Generator {
             .externals()
             .filter(|(_, external, _)| external.state == ExternalState::Incoming)
             .count();
-        let mut builder = FeynmanDiagram::builder(Arc::clone(&self.model), name)
+        let mut builder = FeynmanDiagramBuilder::new(Arc::clone(&self.model), name)
             .canonical_loop_momentum_basis()
             .symmetry_factor(topology.symmetry)
             .overall_factor(overall_factor)
@@ -3092,7 +3165,69 @@ fn permutation_is_odd(values: &[usize]) -> bool {
         == 1
 }
 
+/// Intern exactly the reduced numerator colors in their old string order. External
+/// particle names and internal mass/spin spellings share one table, including collisions.
+/// A strictly order-preserving relabeling leaves the canonizer's partition and tie breaks
+/// unchanged; the richer generator certificate has a different equivalence relation.
+struct NumeratorColors {
+    particles: Vec<usize>,
+    masses_and_spins: Vec<usize>,
+}
+
+impl NumeratorColors {
+    fn new(model: &Model) -> Result<Self, GenerationError> {
+        let particles = model
+            .particles()
+            .iter()
+            .map(|p| p.name.clone())
+            .collect::<Vec<_>>();
+        let masses_and_spins = model
+            .particles()
+            .iter()
+            .map(|particle| {
+                Ok(format!(
+                    "{} | {}",
+                    model.parameter_by_id(particle.mass)?.name,
+                    particle.spin
+                ))
+            })
+            .collect::<Result<Vec<_>, GenerationError>>()?;
+        let ranks = particles
+            .iter()
+            .chain(&masses_and_spins)
+            .collect::<BTreeSet<_>>()
+            .into_iter()
+            .enumerate()
+            .map(|(rank, text)| (text, rank))
+            .collect::<BTreeMap<_, _>>();
+        Ok(Self {
+            particles: particles.iter().map(|text| ranks[text]).collect(),
+            masses_and_spins: masses_and_spins.iter().map(|text| ranks[text]).collect(),
+        })
+    }
+
+    fn edge(
+        &self,
+        edge: &GeneratedEdge,
+        model: &Model,
+        exact: bool,
+    ) -> Result<usize, GenerationError> {
+        let particle = model.particle_by_id(edge.particle)?;
+        let id = if edge.is_external() && edge.sink.external().is_some() {
+            particle.antiparticle
+        } else {
+            edge.particle
+        };
+        Ok(if edge.is_external() || exact {
+            self.particles[id.index()]
+        } else {
+            self.masses_and_spins[id.index()]
+        })
+    }
+}
+
 struct ResolvedProcess {
+    numerator_colors: NumeratorColors,
     generation_type: GenerationType,
     incoming: Vec<Particle>,
     outgoing: Vec<Vec<Particle>>,
@@ -3113,6 +3248,7 @@ impl ResolvedProcess {
             Ok(model.particle_by_id(selector.resolve(model)?)?.clone())
         };
         Ok(Self {
+            numerator_colors: NumeratorColors::new(model)?,
             generation_type,
             incoming: process
                 .incoming()
@@ -3324,26 +3460,10 @@ impl ResolvedProcess {
         let edge_colors = graph
             .edges()
             .map(|edge| {
-                let particle = model.particle_by_id(edge.particle)?;
-                Ok(if edge.is_external() {
-                    if edge.sink.external().is_some() {
-                        model.antiparticle(particle)?
-                    } else {
-                        particle
-                    }
-                    .name
-                    .clone()
-                } else if exact_internal_particles {
-                    particle.name.clone()
-                } else {
-                    format!(
-                        "{} | {}",
-                        model.parameter_by_id(particle.mass)?.name,
-                        particle.spin
-                    )
-                })
+                self.numerator_colors
+                    .edge(&edge, model, exact_internal_particles)
             })
-            .collect::<Result<Vec<_>, GenerationError>>()?;
+            .collect::<Result<Vec<_>, _>>()?;
         let mut candidates = Vec::new();
         for swapped in [false, true] {
             if swapped && !include_left_right_remapping {
@@ -3376,8 +3496,8 @@ impl ResolvedProcess {
                     }
                 }
             }
-            let skeleton: HedgeGraph<&String, (), Option<i64>> = skeleton.build();
-            let canonical = skeleton.canonize_by(ignore, |color| (*color).clone(), |color| *color);
+            let skeleton: HedgeGraph<&usize, (), Option<i64>> = skeleton.build();
+            let canonical = skeleton.canonize_by(ignore, |color| **color, |color| *color);
             let positions: Vec<usize> = (0..graph.n_vertices())
                 .map(|vertex| canonical.canonical_node(NodeIndex(vertex)).0)
                 .collect();
@@ -4350,7 +4470,7 @@ mod tests {
                 .diagrams
                 .iter()
                 .filter(|diagram| diagram.loop_count() == loops)
-                .map(FeynmanDiagram::id)
+                .map(|diagram| diagram.id().unwrap())
                 .collect::<BTreeSet<_>>()
         };
         assert_eq!(
@@ -4878,7 +4998,7 @@ mod tests {
                             let shift = &momentum.external;
                             assert!(
                                 shift.iter().all(|sign| Some(sign) == shift.get(0)),
-                                "{incoming:?} > {outgoing:?} L{loops} {}: cut edge {} carries {}",
+                                "{incoming:?} > {outgoing:?} L{loops} {:?}: cut edge {} carries {}",
                                 diagram.name(),
                                 half_edge.edge.0,
                                 momentum.format_momentum(),
@@ -5219,7 +5339,7 @@ mod tests {
                         .collect::<Vec<_>>();
                     legs.sort();
                     assert_eq!(legs, [0, 1, 2, 3]);
-                    diagram.id()
+                    diagram.id().unwrap()
                 })
                 .collect::<Vec<_>>()
         };
@@ -5227,6 +5347,151 @@ mod tests {
         // s channel, t channel (the u channel exchanges the final gluons) and the contact vertex
         assert_eq!(serial.len(), 3);
         assert_eq!(serial, ids(4));
+    }
+
+    #[test]
+    fn output_metadata_and_explicit_selection_are_independent() {
+        let model = Model::qed();
+        let process = Process::new(["e-", "e+"], ["a", "a"]);
+        let minimal = GenerationOptions::default().output(GenerationOutput::Minimal);
+        let all = process.generate_diagrams(model.clone(), &minimal).unwrap();
+        assert_eq!(all.diagrams.len(), 2);
+        assert!(all.diagrams.iter().all(|diagram| diagram.name().is_none()));
+        assert!(
+            all.groups
+                .iter()
+                .flat_map(|group| &group.members)
+                .all(|member| member.source_identity.is_none())
+        );
+        let chosen = all.diagrams[0].id().unwrap();
+        let selected = process
+            .generate_diagrams(model.clone(), &minimal.clone().select_diagram_ids([chosen]))
+            .unwrap();
+        assert_eq!(selected.diagrams.len(), 1);
+        assert_eq!(selected.diagrams[0].id().unwrap(), chosen);
+        assert!(selected.diagrams[0].name().is_none());
+        let vetoed = process
+            .generate_diagrams(model.clone(), &minimal.clone().veto_diagram_ids([chosen]))
+            .unwrap();
+        assert_eq!(vetoed.diagrams.len(), 1);
+        assert_ne!(vetoed.diagrams[0].id().unwrap(), chosen);
+        for empty in [
+            minimal.clone().select_diagram_ids([]),
+            minimal.clone().select_diagrams(Vec::<String>::new()),
+        ] {
+            assert!(
+                process
+                    .generate_diagrams(model.clone(), &empty)
+                    .unwrap()
+                    .diagrams
+                    .is_empty()
+            );
+        }
+        let named = minimal.clone().output(GenerationOutput::Named {
+            prefix: "test_".into(),
+        });
+        let selected = process
+            .generate_diagrams(model.clone(), &named.clone().select_diagrams(["test_0"]))
+            .unwrap();
+        assert_eq!(selected.diagrams.len(), 1);
+        assert_eq!(selected.diagrams[0].name(), Some("test_0"));
+        assert_eq!(selected.diagrams[0].id().unwrap(), chosen);
+        // Both requests match: ID routing takes precedence over the invalid name map.
+        let routed = named
+            .with_loop_momentum_basis(chosen, [])
+            .with_named_loop_momentum_basis("test_0", [EdgeId(usize::MAX)]);
+        assert_eq!(
+            process
+                .generate_diagrams(model, &routed)
+                .unwrap()
+                .diagrams
+                .len(),
+            2
+        );
+    }
+
+    #[test]
+    fn interned_numerator_colors_preserve_old_string_order_and_collisions() {
+        // No interactions are needed to exercise the color alphabet. Include a
+        // particle name equal to another role's mass/spin spelling and spins
+        // whose decimal order differs from their numeric order.
+        let mut definition: serde_json::Value =
+            serde_json::from_str(&scalar_model().to_json().unwrap()).unwrap();
+        for field in [
+            "vertex_rules",
+            "propagators",
+            "lorentz_structures",
+            "couplings",
+        ] {
+            definition[field] = serde_json::json!([]);
+        }
+        let template = definition["particles"][0].clone();
+        definition["particles"] = serde_json::json!([]);
+        for (index, (name, spin)) in [("M | 2", 1), ("ten", 10), ("two", 2)]
+            .into_iter()
+            .enumerate()
+        {
+            let mut particle = template.clone();
+            particle["name"] = name.into();
+            particle["antiname"] = name.into();
+            particle["spin"] = spin.into();
+            particle["pdg_code"] = (100 + index).into();
+            definition["particles"]
+                .as_array_mut()
+                .unwrap()
+                .push(particle);
+        }
+        let collision_model = Model::from_json(&definition.to_string()).unwrap();
+        for model in [collision_model, Model::qed(), Model::qcd()] {
+            let colors = NumeratorColors::new(&model).unwrap();
+            let mut observations = Vec::new();
+            for (index, particle) in model.particles().iter().enumerate() {
+                let id = model.particle_id_at(index).unwrap();
+                let external = Endpoint::External(ExternalNode {
+                    index: 0,
+                    state: ExternalState::Outgoing,
+                    particle: id,
+                });
+                for (source, sink) in [
+                    (Endpoint::Vertex(0), Endpoint::Vertex(1)),
+                    (external, Endpoint::Vertex(0)),
+                    (Endpoint::Vertex(0), external),
+                ] {
+                    let edge = GeneratedEdge {
+                        source,
+                        sink,
+                        particle: id,
+                        directed: !model.particle_is_self_conjugate(id),
+                    };
+                    for exact in [false, true] {
+                        let entering = if edge.is_external() && edge.sink.external().is_some() {
+                            model.particle_by_id(particle.antiparticle).unwrap()
+                        } else {
+                            particle
+                        };
+                        let old = if edge.is_external() || exact {
+                            entering.name.clone()
+                        } else {
+                            format!(
+                                "{} | {}",
+                                model.parameter_by_id(particle.mass).unwrap().name,
+                                particle.spin
+                            )
+                        };
+                        observations.push((colors.edge(&edge, &model, exact).unwrap(), old));
+                    }
+                }
+            }
+            for (left_rank, left_text) in &observations {
+                for (right_rank, right_text) in &observations {
+                    assert_eq!(
+                        left_rank.cmp(right_rank),
+                        left_text.cmp(right_text),
+                        "{left_text:?} vs {right_text:?}"
+                    );
+                }
+            }
+        }
     }
 
     #[test]
@@ -5284,7 +5549,7 @@ mod tests {
             assert_eq!(serial.master, parallel.master);
             assert_eq!(serial.members.len(), parallel.members.len());
             for (serial, parallel) in serial.members.iter().zip(&parallel.members) {
-                assert_eq!(serial.source_id, parallel.source_id);
+                assert_eq!(serial.source_identity, parallel.source_identity);
                 assert_eq!(serial.source_diagram, parallel.source_diagram);
                 assert_eq!(serial.ratio, parallel.ratio);
                 assert_eq!(serial.overall_factor, parallel.overall_factor);
@@ -5979,7 +6244,7 @@ mod tests {
 
         let diagram = generator
             .to_diagram(
-                "antiparticle-propagator".to_owned(),
+                Some("antiparticle-propagator".to_owned()),
                 GenerationType::Amplitude,
                 ColoredTopology {
                     graph: graph.build(),
@@ -6814,11 +7079,11 @@ mod tests {
         .unwrap();
         assert_eq!(diagram.numerator(), &Atom::one());
         let routed = diagram.loop_momentum_basis().clone();
-        let id = diagram.id();
+        let id = diagram.id().unwrap();
         let diagram = diagram.apply_feynman_rules().unwrap();
         assert_eq!(diagram.numerator(), &test_atom("GC1^2"));
         assert_eq!(diagram.loop_momentum_basis(), &routed);
-        assert_eq!(diagram.id(), id);
+        assert_eq!(diagram.id().unwrap(), id);
         diagram.validate().unwrap();
 
         let invalid_slots = diagram
@@ -6891,7 +7156,7 @@ mod tests {
         assert_eq!(loop_count, 1);
         let diagram = generator
             .to_diagram(
-                "loop".to_owned(),
+                Some("loop".to_owned()),
                 GenerationType::Amplitude,
                 ColoredTopology {
                     graph: graph.build(),
@@ -7199,7 +7464,7 @@ mod tests {
         let generator = Generator::new(fermion_model());
         let diagram = generator
             .to_diagram(
-                "positive".to_owned(),
+                Some("positive".to_owned()),
                 GenerationType::Amplitude,
                 ColoredTopology {
                     graph: GeneratedGraph::new([], []),
@@ -7629,7 +7894,11 @@ mod tests {
         }
         boxes.sort();
         (
-            result.diagrams.iter().map(FeynmanDiagram::id).collect(),
+            result
+                .diagrams
+                .iter()
+                .map(|diagram| diagram.id().unwrap())
+                .collect(),
             Atom::add_many(result.diagrams.iter().map(evaluated_overall_factor)),
             boxes,
         )
@@ -7942,7 +8211,7 @@ mod tests {
         let (exact, symmetrized) = (generate(false), generate(true));
         let ids = symmetrized
             .iter()
-            .map(FeynmanDiagram::id)
+            .map(|diagram| diagram.id().unwrap())
             .collect::<BTreeSet<_>>();
         assert_eq!(ids.len(), symmetrized.len());
         assert!(symmetrized.len() < exact.len());
@@ -8128,7 +8397,7 @@ mod tests {
 
         let diagram = generator
             .to_diagram(
-                "localized".to_owned(),
+                Some("localized".to_owned()),
                 GenerationType::Amplitude,
                 ColoredTopology {
                     graph: graph.build(),

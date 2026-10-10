@@ -20,6 +20,26 @@ Python symbolic constants are now static methods: use `Symbols.dimension()`,
 follow this convention, as does the tensor module's `Nc()`. Deferring their construction lets
 callers set a license key after import.
 
+Generation now exposes `output="minimal"` in Python and `GenerationOutput::Minimal` in Rust.
+This omits diagram names and group-member source identities while retaining physical graphs,
+source indices and grouping factors. Named output remains the default. Ungrouped generation
+now assigns names in deterministic search order; numerator grouping keeps canonical ordering
+to preserve its representatives. Regenerate names used in selections. Name selectors, named
+momentum bases and `graph_prefix` require named
+output; ID selectors and ID-keyed momentum bases compute IDs on demand in either mode.
+Python's `select_diagrams=[]` now selects nothing. Python selectors recognize IDs as exactly
+32 hexadecimal digits, so short hexadecimal names such as `D0` work as names.
+
+A diagram name is optional (`None` for unnamed diagrams); JSON and annotated DOT distinguish
+it from an empty name. Rust's `FeynmanDiagram::id()` now returns a `Result`, computing and
+caching the ID when requested. Generated aggregate numerators are constructed and cached on
+first use from the stored local fragments; explicit or imported aggregate numerators are
+retained. Serialization requests both the ID and aggregate.
+
+Model fingerprints now preserve symbolic namespaces and function attributes while remaining
+independent of symbol-registration order. Regenerate annotated diagram exports from their
+original models when upgrading from the previous fingerprint encoding.
+
 The default loop momentum basis of a cross-section diagram no longer lets a cut edge carry part
 of the beam momenta, such as `K + P1`: GammaLoop rescales loop momenta about the origin of this
 basis, which must lie inside every cut energy surface. Regenerated cross sections can therefore

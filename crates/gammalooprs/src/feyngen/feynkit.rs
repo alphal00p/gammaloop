@@ -54,7 +54,7 @@ impl FeynmanDiagramGammaLoopExt for FeynmanDiagram {
     ) -> Result<Graph, FeynkitRuntimeError> {
         Graph::from_feynkit(self, group_id, is_group_master).map_err(|source| {
             FeynkitRuntimeError::GraphConversion {
-                diagram: self.name().to_owned(),
+                diagram: self.name().unwrap_or("<unnamed>").to_owned(),
                 source,
             }
         })
@@ -695,14 +695,17 @@ mod tests {
     fn direct_conversion_rejects_inconsistent_diagram_numerator() {
         let model = model();
         let diagram = diagram(&model, None);
-        let mut builder = FeynmanDiagram::builder(Arc::clone(&model), diagram.name())
-            .symmetry_factor(diagram.symmetry_factor())
-            .overall_factor(diagram.overall_factor().clone())
-            .numerator(atom("different_numerator"))
-            .numerator_prefactor(diagram.numerator_prefactor().clone())
-            .projector(diagram.projector().clone())
-            .loop_momentum_basis(diagram.loop_momentum_basis().clone())
-            .cuts(diagram.cuts().to_vec());
+        let mut builder = feynkit_graph::FeynmanDiagramBuilder::new(
+            Arc::clone(&model),
+            diagram.name().map(str::to_owned),
+        )
+        .symmetry_factor(diagram.symmetry_factor())
+        .overall_factor(diagram.overall_factor().clone())
+        .numerator(atom("different_numerator"))
+        .numerator_prefactor(diagram.numerator_prefactor().clone())
+        .projector(diagram.projector().clone())
+        .loop_momentum_basis(diagram.loop_momentum_basis().clone())
+        .cuts(diagram.cuts().to_vec());
         for (_, vertex) in diagram.vertices() {
             builder.add_vertex(vertex.clone());
         }

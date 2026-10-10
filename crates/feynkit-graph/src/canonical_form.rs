@@ -21,8 +21,8 @@ use linnet::half_edge::{
 
 use crate::{
     CanonicalCutSide, CanonicalDiagramEdge, CanonicalDiagramKey, CanonicalDiagramVertex,
-    DiagramError, DiagramHalfEdge, DiagramId, ExternalLeg, ExternalState, FeynmanDiagram,
-    VertexSlot,
+    DiagramEdge, DiagramError, DiagramHalfEdge, DiagramId, DiagramVertex, ExternalLeg,
+    ExternalState, FeynmanDiagram, VertexSlot,
 };
 
 /// Vertex key of the keyed graph, ordered like the [`CanonicalDiagramVertex`] it stands for.
@@ -45,6 +45,36 @@ enum EdgeKey {
     },
     CutPair,
     CutMembership,
+}
+
+impl DiagramVertex {
+    fn structural_key(&self) -> VertexKey<'static> {
+        VertexKey::Diagram(self.interaction)
+    }
+
+    pub(super) fn same_structure(&self, other: &Self) -> bool {
+        self.structural_key() == other.structural_key()
+    }
+}
+
+impl DiagramEdge {
+    fn structural_key(&self, particle: ParticleId) -> EdgeKey {
+        EdgeKey::Diagram {
+            particle,
+            external: self
+                .external
+                .as_ref()
+                .map(|leg| (leg.index, leg.state, leg.connection)),
+            is_dummy: self.is_dummy,
+        }
+    }
+
+    pub(super) fn same_structure(&self, other: &Self) -> bool {
+        self.structural_key(self.particle) == other.structural_key(other.particle)
+            && self.directed == other.directed
+            && self.source_slot == other.source_slot
+            && self.target_slot == other.target_slot
+    }
 }
 
 type Form<'a> = CanonicalForm<VertexKey<'a>, EdgeKey, Option<VertexSlot>>;
@@ -87,7 +117,7 @@ impl FeynmanDiagram {
             })
             .transpose()?;
         let mut graph = self.graph.map_data_ref(
-            |_, _, vertex| VertexKey::Diagram(vertex.interaction),
+            |_, _, vertex| vertex.structural_key(),
             |_, index, _, edge| {
                 let edge = edge.data;
                 let (particle, reversed) = match &normalized {
@@ -100,14 +130,7 @@ impl FeynmanDiagram {
                         (true, false) => Orientation::Default,
                         (true, true) => Orientation::Reversed,
                     },
-                    data: EdgeKey::Diagram {
-                        particle,
-                        external: edge
-                            .external
-                            .as_ref()
-                            .map(|leg| (leg.index, leg.state, leg.connection)),
-                        is_dummy: edge.is_dummy,
-                    },
+                    data: edge.structural_key(particle),
                 }
             },
             |hedge, _| {
@@ -488,8 +511,18 @@ mod tests {
             expected.extend(tables.concat());
             let hash = blake3::hash(&expected);
             let hashed = u128::from_le_bytes(hash.as_bytes()[..16].try_into().unwrap());
-            assert_eq!(diagram.id(), DiagramId(hashed), "{}", diagram.name());
-            assert_eq!(diagram.id().to_string(), id, "{}", diagram.name());
+            assert_eq!(
+                diagram.id().unwrap(),
+                DiagramId(hashed),
+                "{:?}",
+                diagram.name()
+            );
+            assert_eq!(
+                diagram.id().unwrap().to_string(),
+                id,
+                "{:?}",
+                diagram.name()
+            );
         }
     }
 
@@ -579,7 +612,7 @@ mod tests {
     #[test]
     fn diagram_ids_identify_the_structural_colored_topology() {
         let diagram = one_loop();
-        assert_eq!(diagram.id(), one_loop_reordered().id());
+        assert_eq!(diagram.id().unwrap(), one_loop_reordered().id().unwrap());
 
         let mut heavier = scalar_model().as_ref().clone();
         heavier
@@ -590,14 +623,16 @@ mod tests {
             .unwrap();
         let heavier = one_loop_in(Arc::new(heavier));
         assert_ne!(heavier.model().fingerprint(), diagram.model().fingerprint());
-        assert_eq!(heavier.id(), diagram.id());
+        assert_eq!(heavier.id().unwrap(), diagram.id().unwrap());
 
         let renamed = |from: &str, to: &str| {
             let json = scalar_model().to_json().unwrap().replace(from, to);
-            one_loop_in(Arc::new(Model::from_json(&json).unwrap())).id()
+            one_loop_in(Arc::new(Model::from_json(&json).unwrap()))
+                .id()
+                .unwrap()
         };
-        assert_ne!(renamed("\"phi\"", "\"chi\""), diagram.id());
-        assert_ne!(renamed("\"V_1\"", "\"V_2\""), diagram.id());
+        assert_ne!(renamed("\"phi\"", "\"chi\""), diagram.id().unwrap());
+        assert_ne!(renamed("\"V_1\"", "\"V_2\""), diagram.id().unwrap());
 
         let changed_connection = diagram
             .map_data(
@@ -613,7 +648,7 @@ mod tests {
                 },
             )
             .unwrap();
-        assert_ne!(changed_connection.id(), diagram.id());
+        assert_ne!(changed_connection.id().unwrap(), diagram.id().unwrap());
         let changed_interaction = diagram
             .map_data(
                 |id, vertex| {
@@ -626,7 +661,7 @@ mod tests {
                 |_, _, edge| edge.clone(),
             )
             .unwrap();
-        assert_ne!(changed_interaction.id(), diagram.id());
+        assert_ne!(changed_interaction.id().unwrap(), diagram.id().unwrap());
     }
 
     /// The normalized form ([`FeynmanDiagram::canonical_key`]) keys every antiparticle edge by
@@ -640,7 +675,7 @@ mod tests {
             reversed.canonical_key().unwrap(),
             line.canonical_key().unwrap()
         );
-        assert_ne!(reversed.id(), line.id());
+        assert_ne!(reversed.id().unwrap(), line.id().unwrap());
 
         // An undirected edge between vertices without interaction, stored as `f` or as `f~`.
         let model = fermion_model();
@@ -667,6 +702,6 @@ mod tests {
             [CanonicalDiagramEdge::Diagram { particle, .. }]
                 if particle == model.particle_id("f").unwrap()
         ));
-        assert_ne!(antiparticle.id(), particle.id());
+        assert_ne!(antiparticle.id().unwrap(), particle.id().unwrap());
     }
 }

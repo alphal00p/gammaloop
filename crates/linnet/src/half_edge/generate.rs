@@ -48,8 +48,8 @@
 //! of its automorphism group ([`decorate`]). Budgets ([`GraphGenerator::weight`],
 //! [`GraphGenerator::count`]) bound every partial decoration and drop those whose bounds miss their
 //! ranges. Loop orders without a vertex multiset that meets the weights, and requests whose legs
-//! carry a charge or parity that no vertex balances, are not searched. Only accepted diagrams are
-//! materialized as [`HedgeGraph`]s and canonized.
+//! carry a charge or parity that no vertex balances, are not searched. Accepted diagrams own compact data; their [`HedgeGraph`] and canonical form are
+//! materialized only when requested (also checked independently in debug builds).
 //!
 //! Both stages are resumable depth-first searches, so [`Diagrams`] streams: each `next` call
 //! searches only up to the next diagram and nothing is buffered. Output order is the depth-first
@@ -102,13 +102,16 @@ use std::{
     cell::RefCell,
     collections::VecDeque,
     ops::{Bound, RangeBounds},
-    sync::atomic::{AtomicBool, Ordering},
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc, OnceLock,
+    },
 };
 
 pub use budget::Countable;
 use budget::{inclusive, Request};
-use decorate::{Decoration, Decorator, Edge};
-use model::{Direction, Model, INCOMING, OUTGOING, UNDIRECTED};
+use decorate::{Decoration, Decorator};
+use model::{Model, INCOMING, OUTGOING, UNDIRECTED};
 use topology::{Context, Limits, Search, Topology, MAX_VERTICES};
 pub use view::{Bridge, EdgeView, GraphView, Stage, VertexSet};
 use view::{Prune, Pruner, State};
@@ -166,19 +169,177 @@ impl<F> Stub<F> {
     }
 }
 
-/// A generated graph.
-#[derive(Clone, Debug)]
+/// A generated graph, with compact owned data and independently lazy graph/form caches.
+#[derive(Clone)]
 pub struct Diagram<F, L> {
-    /// Fields on edges and legs, signature indices on nodes, `Some(label)` on leg half-edges.
-    pub graph: HedgeGraph<F, usize, Option<L>>,
+    rules: Box<[u32]>,
+    edges: Box<[DiagramEdge]>,
+    /// `(vertex, leg class)` in native half-edge insertion order.
+    legs: Box<[(u8, u32)]>,
+    tables: Arc<OutputTables<F, L>>,
+    graph: OnceLock<HedgeGraph<F, usize, Option<L>>>,
+    canonical_form: OnceLock<CanonicalForm<usize, F, Option<L>>>,
     /// Loop order.
     pub loops: usize,
-    /// Order of the half-edge automorphism group (the symmetry factor); `None` if it exceeds
-    /// `u128`.
+    /// Order of the half-edge automorphism group (the symmetry factor); `None` beyond `u128`.
     pub automorphism_count: Option<u128>,
-    /// Equal for isomorphic graphs: the canonical form of
-    /// `graph.canonize_by(|&s| s, |f| f.clone(), |h| h.clone())`.
-    pub canonical_form: CanonicalForm<usize, F, Option<L>>,
+}
+
+/// Payload ranks for an internal edge; no search buffers or automaton are retained.
+#[derive(Clone)]
+struct DiagramEdge {
+    vertices: [u8; 2],
+    stub: Stub<u8>,
+}
+
+impl<F, L> std::fmt::Debug for Diagram<F, L> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Diagram")
+            .field("rules", &self.rules)
+            .field("edges", &self.edges.len())
+            .field("legs", &self.legs.len())
+            .field("loops", &self.loops)
+            .field("automorphism_count", &self.automorphism_count)
+            .field("graph_cached", &self.graph.get().is_some())
+            .field(
+                "canonical_form_cached",
+                &self.canonical_form.get().is_some(),
+            )
+            .finish()
+    }
+}
+
+impl<F, L> Diagram<F, L> {
+    /// Signature indices in native vertex order, without materializing the graph.
+    pub fn rules(&self) -> &[u32] {
+        &self.rules
+    }
+
+    /// Internal edges in decorator order; every stub is assigned, at the first endpoint.
+    pub fn edges(&self) -> impl ExactSizeIterator<Item = EdgeView<'_, F>> {
+        self.edges.iter().map(|edge| EdgeView {
+            vertices: edge.vertices.map(usize::from),
+            stub: Some(Stub {
+                field: &self.tables.fields[edge.stub.field as usize],
+                flow: edge.stub.flow,
+            }),
+        })
+    }
+
+    /// External slots in insertion order: vertex, leg class, then repetition within the class.
+    pub fn legs(&self) -> impl ExactSizeIterator<Item = (usize, &L, Stub<&F>)> {
+        self.legs.iter().map(|&(vertex, class)| {
+            let leg = self.tables.legs[class as usize];
+            (
+                vertex as usize,
+                &self.tables.labels[leg.label as usize],
+                Stub {
+                    field: &self.tables.fields[leg.field as usize],
+                    flow: leg.flow,
+                },
+            )
+        })
+    }
+}
+
+impl<F: Clone, L: Clone> Diagram<F, L> {
+    /// Fields on edges/legs, signature indices on nodes and `Some(label)` on dangling hedges.
+    pub fn graph(&self) -> &HedgeGraph<F, usize, Option<L>> {
+        self.graph.get_or_init(|| {
+            GraphView::build(
+                self.rules.len(),
+                self.legs.len(),
+                self.legs(),
+                self.edges(),
+                |v| self.rules[v] as usize,
+                |stub| stub.expect("complete edge").field.clone(),
+            )
+        })
+    }
+}
+
+impl<F: Clone + Ord, L: Clone + Ord> Diagram<F, L> {
+    /// The form of `graph().canonize_by(rule, field, optional_leg_label)`, without building a graph.
+    pub fn canonical_form(&self) -> &CanonicalForm<usize, F, Option<L>> {
+        self.canonical_form.get_or_init(|| self.certify().0)
+    }
+
+    fn certify(&self) -> (CanonicalForm<usize, F, Option<L>>, Option<u128>) {
+        let mut raw = RawDiagram::default();
+        raw.rules.extend_from_slice(&self.rules);
+        raw.rules.sort_unstable();
+        raw.rules.dedup();
+        raw.colours.extend(
+            self.rules
+                .iter()
+                .map(|rule| raw.rules.binary_search(rule).expect("present rule") as u32),
+        );
+        raw.fields
+            .extend(self.tables.legs.iter().map(|leg| leg.field));
+        raw.fields
+            .extend(self.edges.iter().map(|edge| edge.stub.field));
+        raw.fields.sort_unstable();
+        raw.fields.dedup();
+        let field_rank = |field| raw.fields.binary_search(&field).expect("present field") as u32;
+        // `None` (paired hedges) sorts before every label.
+        let paired = !self.edges.is_empty();
+        let mut n_edges = 0;
+        for &(vertex, class) in &self.legs {
+            let leg = self.tables.legs[class as usize];
+            let role = match leg.flow {
+                None => Role::Leg,
+                Some(Flow::Sink) => Role::LegIn,
+                Some(Flow::Source) => Role::LegOut,
+            };
+            let hedge = raw.hedges.len() as u32;
+            raw.hedges.push(RawHedge {
+                node: vertex as u32,
+                opposite: hedge,
+                edge: n_edges,
+                role,
+                edge_key: field_rank(leg.field),
+                hedge_key: leg.label + paired as u32,
+            });
+            n_edges += 1;
+        }
+        for edge in &self.edges {
+            let roles = match edge.stub.flow {
+                None => (Role::Undirected, Role::Undirected),
+                Some(Flow::Source) => (Role::Tail, Role::Head),
+                Some(Flow::Sink) => (Role::Head, Role::Tail),
+            };
+            let hedge = raw.hedges.len() as u32;
+            let edge_key = field_rank(edge.stub.field);
+            for (node, opposite, role) in [
+                (edge.vertices[0], hedge + 1, roles.0),
+                (edge.vertices[1], hedge, roles.1),
+            ] {
+                raw.hedges.push(RawHedge {
+                    node: node as u32,
+                    opposite,
+                    edge: n_edges,
+                    role,
+                    edge_key,
+                    hedge_key: 0,
+                });
+            }
+            n_edges += 1;
+        }
+        let keys = KeyTables {
+            nodes: raw.rules.iter().map(|&rule| rule as usize).collect(),
+            edges: raw
+                .fields
+                .iter()
+                .map(|&field| self.tables.fields[field as usize].clone())
+                .collect(),
+            hedges: paired
+                .then_some(None)
+                .into_iter()
+                .chain(self.tables.labels.iter().cloned().map(Some))
+                .collect(),
+        };
+        CanonicalForm::of_hedges(&raw.colours, &raw.hedges, n_edges as usize, keys)
+    }
 }
 
 /// Counts passed to the progress callback.
@@ -501,15 +662,18 @@ where
     }
 }
 
-/// Generation input in dense form, with the payloads needed to materialize graphs.
+/// Generation input in dense form; emitted diagrams retain only the immutable output tables.
 struct Compiled<F, L> {
     model: Model,
-    /// Distinct fields, sorted: field ids are ranks.
-    fields: Vec<F>,
-    /// Distinct leg labels, sorted.
-    labels: Vec<L>,
+    tables: Arc<OutputTables<F, L>>,
+}
+
+struct OutputTables<F, L> {
+    /// Distinct fields and labels, sorted: their ids are ranks.
+    fields: Box<[F]>,
+    labels: Box<[L]>,
     /// Per leg class, in the model's class order.
-    legs: Vec<LegClass>,
+    legs: Box<[LegClass]>,
 }
 
 /// Interchangeable external legs: equal label and stub.
@@ -574,9 +738,11 @@ impl<F: Clone + Ord, L: Clone + Ord> Compiled<F, L> {
         let request = Self::request(generator, &fields)?;
         Ok(Compiled {
             model: Model::new(fields.len(), &signatures, &classes, &request)?,
-            fields,
-            labels,
-            legs,
+            tables: Arc::new(OutputTables {
+                fields: fields.into_boxed_slice(),
+                labels: labels.into_boxed_slice(),
+                legs: legs.into_boxed_slice(),
+            }),
         })
     }
 
@@ -628,13 +794,12 @@ impl<F: Clone + Ord, L: Clone + Ord> Compiled<F, L> {
         Ok(request)
     }
 
-    /// Filter, materialize and certify a decorated topology.
+    /// Freeze accepted output without retaining the topology, decorator or scratch pool.
     fn diagram(
         &self,
         d: Decoration<'_>,
         loops: usize,
         filter: Option<&Filter<F, L>>,
-        raw: &mut RawDiagram,
     ) -> Option<Diagram<F, L>> {
         let mut view = GraphView::new(self, loops, State::Decoration(d));
         if let Some(filter) = filter {
@@ -647,125 +812,49 @@ impl<F: Clone + Ord, L: Clone + Ord> Compiled<F, L> {
                  assignment it completes"
             );
         }
-        let graph = view.take_complete_graph();
-        let (canonical_form, automorphism_count) = self.certify(&d, raw);
-        Some(Diagram {
-            graph,
+        let diagram = Diagram {
+            rules: d.rules.into(),
+            edges: d
+                .edges
+                .iter()
+                .zip(d.labels)
+                .map(|(edge, &label)| self.edge(edge, label))
+                .collect(),
+            legs: (0..d.topology.n)
+                .flat_map(|vertex| {
+                    self.tables
+                        .legs
+                        .iter()
+                        .enumerate()
+                        .flat_map(move |(class, _)| {
+                            std::iter::repeat_n(
+                                (vertex as u8, class as u32),
+                                self.model
+                                    .legs
+                                    .count(d.topology.vertices[vertex].labelled, class)
+                                    as usize,
+                            )
+                        })
+                })
+                .collect(),
+            tables: Arc::clone(&self.tables),
+            graph: view
+                .take_complete_graph()
+                .map_or_else(OnceLock::new, OnceLock::from),
+            canonical_form: OnceLock::new(),
             loops,
-            automorphism_count,
-            canonical_form,
-        })
-    }
-
-    /// The canonical form and automorphism count of the materialized graph under
-    /// `canonize_by(|&s| s, F::clone, Option::clone)`, from the decoration directly: node keys
-    /// are signatures, edge keys fields and half-edge keys `None` for paired hedges and the label
-    /// for legs.
-    fn certify(
-        &self,
-        d: &Decoration<'_>,
-        raw: &mut RawDiagram,
-    ) -> (CanonicalForm<usize, F, Option<L>>, Option<u128>) {
-        let t = d.topology;
-        let model = &self.model;
-        raw.rules.clear();
-        raw.rules.extend_from_slice(d.rules);
-        raw.rules.sort_unstable();
-        raw.rules.dedup();
-        raw.colours.clear();
-        raw.colours.extend(
-            d.rules
-                .iter()
-                .map(|r| raw.rules.binary_search(r).expect("present rule") as u32),
-        );
-        let edge_field = |(e, &l): (&Edge, &u8)| {
-            if e.u == e.v {
-                model.loop_labels[l as usize].field
-            } else {
-                model.labels[l as usize].field
-            }
+            automorphism_count: d.automorphism_count,
         };
-        raw.fields.clear();
-        raw.fields.extend(self.legs.iter().map(|leg| leg.field));
-        raw.fields
-            .extend(d.edges.iter().zip(d.labels).map(edge_field));
-        raw.fields.sort_unstable();
-        raw.fields.dedup();
-        let fields = &raw.fields;
-        let field_rank = |f: u8| fields.binary_search(&f).expect("present field") as u32;
-        // `None` (paired hedges) sorts before every label
-        let paired = !d.edges.is_empty();
-        let hedges = &mut raw.hedges;
-        hedges.clear();
-        let mut n_edges = 0;
-        for v in 0..t.n {
-            let labelled = t.vertices[v].labelled;
-            for (c, leg) in self.legs.iter().enumerate() {
-                let role = match leg.flow {
-                    None => Role::Leg,
-                    Some(Flow::Sink) => Role::LegIn,
-                    Some(Flow::Source) => Role::LegOut,
-                };
-                for _ in 0..model.legs.count(labelled, c) {
-                    let h = hedges.len() as u32;
-                    hedges.push(RawHedge {
-                        node: v as u32,
-                        opposite: h,
-                        edge: n_edges,
-                        role,
-                        edge_key: field_rank(leg.field),
-                        hedge_key: leg.label + paired as u32,
-                    });
-                    n_edges += 1;
-                }
-            }
+        #[cfg(debug_assertions)]
+        {
+            // Independent native-graph oracle: neither the certificate nor group count is trusted.
+            let canon = diagram
+                .graph()
+                .canonize_by(|&rule| rule, F::clone, Option::clone);
+            assert!(canon.canonical_form() == diagram.canonical_form());
+            assert_eq!(canon.automorphism_count(), diagram.automorphism_count);
         }
-        for (edge, &l) in d.edges.iter().zip(d.labels) {
-            let (field, roles) = if edge.u == edge.v {
-                let label = model.loop_labels[l as usize];
-                let roles = if label.directed {
-                    (Role::Tail, Role::Head)
-                } else {
-                    (Role::Undirected, Role::Undirected)
-                };
-                (label.field, roles)
-            } else {
-                let label = model.labels[l as usize];
-                let roles = match label.direction {
-                    Direction::Undirected => (Role::Undirected, Role::Undirected),
-                    Direction::Forward => (Role::Tail, Role::Head),
-                    Direction::Backward => (Role::Head, Role::Tail),
-                };
-                (label.field, roles)
-            };
-            let h = hedges.len() as u32;
-            let edge_key = field_rank(field);
-            for (node, opposite, role) in [(edge.u, h + 1, roles.0), (edge.v, h, roles.1)] {
-                hedges.push(RawHedge {
-                    node: node as u32,
-                    opposite,
-                    edge: n_edges,
-                    role,
-                    edge_key,
-                    hedge_key: 0,
-                });
-            }
-            n_edges += 1;
-        }
-        let keys = KeyTables {
-            nodes: raw.rules.iter().map(|&r| r as usize).collect(),
-            edges: raw
-                .fields
-                .iter()
-                .map(|&f| self.fields[f as usize].clone())
-                .collect(),
-            hedges: paired
-                .then_some(None)
-                .into_iter()
-                .chain(self.labels.iter().cloned().map(Some))
-                .collect(),
-        };
-        CanonicalForm::of_hedges(&raw.colours, &raw.hedges, n_edges as usize, keys)
+        Some(diagram)
     }
 }
 
@@ -774,7 +863,6 @@ impl<F: Clone + Ord, L: Clone + Ord> Compiled<F, L> {
 struct Scratch {
     search: topology::Buffers,
     decorator: Decorator,
-    raw: RawDiagram,
 }
 
 /// Spare buffers per thread, for later generations and the subtrees of a parallel search.
@@ -811,7 +899,7 @@ struct RunContext<'a, F, L> {
     filter: Option<Pruner<'a, F, L>>,
 }
 
-impl<'a, F: Sync, L: Sync> RunContext<'a, F, L> {
+impl<'a, F: Send + Sync, L: Send + Sync> RunContext<'a, F, L> {
     fn new(
         generator: &'a GraphGenerator<F, L>,
         compiled: &'a Compiled<F, L>,
@@ -862,7 +950,6 @@ fn report(callback: Option<&ProgressFn>, progress: &Progress, stop: &AtomicBool)
 struct Run {
     search: Search,
     decorator: Decorator,
-    raw: RawDiagram,
     decorating: bool,
 }
 
@@ -871,7 +958,6 @@ impl Run {
         Run {
             search: Search::new(model, task, scratch.search),
             decorator: scratch.decorator,
-            raw: scratch.raw,
             decorating: false,
         }
     }
@@ -880,13 +966,12 @@ impl Run {
         Scratch {
             search: self.search.into_buffers(),
             decorator: self.decorator,
-            raw: self.raw,
         }
     }
 
     /// The next diagram; `None` when the subtree is exhausted or the generation stops.
     /// `topology` is called on every complete topology before it is decorated.
-    fn next<F: Clone + Ord + Sync, L: Clone + Ord + Sync>(
+    fn next<F: Clone + Ord + Send + Sync, L: Clone + Ord + Send + Sync>(
         &mut self,
         cx: &RunContext<'_, F, L>,
         topology: &mut dyn FnMut(),
@@ -900,7 +985,7 @@ impl Run {
                     self.decorating = false;
                     break;
                 };
-                if let Some(diagram) = cx.compiled.diagram(d, cx.loops, filter, &mut self.raw) {
+                if let Some(diagram) = cx.compiled.diagram(d, cx.loops, filter) {
                     return Some(diagram);
                 }
             }
@@ -911,8 +996,12 @@ impl Run {
             if cx.stop.load(Ordering::Relaxed) {
                 return None;
             }
-            self.decorator
-                .start(model, self.search.topology(), self.search.generators());
+            self.decorator.start(
+                model,
+                self.search.topology(),
+                self.search.generators(),
+                self.search.node_group_order(),
+            );
             self.decorating = true;
         }
     }
@@ -934,7 +1023,7 @@ struct Slot<F, L> {
     done: bool,
 }
 
-impl<F: Clone + Ord + Sync, L: Clone + Ord + Sync> Slot<F, L> {
+impl<F: Clone + Ord + Send + Sync, L: Clone + Ord + Send + Sync> Slot<F, L> {
     fn new(task: Topology) -> Self {
         Slot {
             task: Some(task),

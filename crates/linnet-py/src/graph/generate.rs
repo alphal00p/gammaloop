@@ -513,7 +513,7 @@ impl PyGeneratedGraphs {
         let count = automorphism_order(diagram.automorphism_count)?;
         let graph = self
             .objects
-            .graph(py, &diagram.graph, |&field| Some(field))?;
+            .graph(py, diagram.graph(), |&field| Some(field))?;
         Ok(Some((graph, count)))
     }
 }

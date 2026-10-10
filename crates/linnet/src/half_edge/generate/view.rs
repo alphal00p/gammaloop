@@ -9,7 +9,7 @@ use super::{
     decorate::{Decoration, Edge},
     model::Direction,
     topology::Topology,
-    Compiled, Filter, Stub,
+    Compiled, DiagramEdge, Filter, Stub,
 };
 use crate::half_edge::{
     builder::HedgeGraphBuilder,
@@ -40,7 +40,7 @@ pub(crate) struct Pruner<'a, F, L> {
     pub(super) check_heredity: bool,
 }
 
-impl<F: Sync, L: Sync> Prune for Pruner<'_, F, L> {
+impl<F: Send + Sync, L: Send + Sync> Prune for Pruner<'_, F, L> {
     fn keeps(&self, state: State<'_>) -> bool {
         (self.filter)(&GraphView::new(self.compiled, self.loops, state))
     }
@@ -206,14 +206,19 @@ impl<'a, F, L> GraphView<'a, F, L> {
     /// The legs attached to `v`, with their stubs at `v`.
     pub fn legs(&self, v: usize) -> impl Iterator<Item = (&'a L, Stub<&'a F>)> + 'a {
         let (compiled, packed) = (self.compiled, self.topology().vertices[v].labelled);
-        compiled.legs.iter().enumerate().flat_map(move |(c, leg)| {
-            let stub = Stub {
-                field: &compiled.fields[leg.field as usize],
-                flow: leg.flow,
-            };
-            let count = compiled.model.legs.count(packed, c) as usize;
-            iter::repeat_n((&compiled.labels[leg.label as usize], stub), count)
-        })
+        compiled
+            .tables
+            .legs
+            .iter()
+            .enumerate()
+            .flat_map(move |(c, leg)| {
+                let stub = Stub {
+                    field: &compiled.tables.fields[leg.field as usize],
+                    flow: leg.flow,
+                };
+                let count = compiled.model.legs.count(packed, c) as usize;
+                iter::repeat_n((&compiled.tables.labels[leg.label as usize], stub), count)
+            })
     }
 
     /// Legs not attached to a vertex yet; zero from [`Stage::Fields`] on.
@@ -326,7 +331,11 @@ impl<'a, F, L> GraphView<'a, F, L> {
         F: Clone,
         L: Clone,
     {
-        self.build(
+        Self::build(
+            self.n_vertices(),
+            self.compiled.model.legs.total as usize,
+            (0..self.n_vertices())
+                .flat_map(|v| self.legs(v).map(move |(label, stub)| (v, label, stub))),
             self.edges(),
             |v| match self.rules(v) {
                 Some(&[rule]) => Some(rule as usize),
@@ -347,7 +356,11 @@ impl<'a, F, L> GraphView<'a, F, L> {
         };
         (!d.rules.is_empty()).then(|| {
             self.complete.get_or_init(|| {
-                self.build(
+                Self::build(
+                    self.n_vertices(),
+                    self.compiled.model.legs.total as usize,
+                    (0..self.n_vertices())
+                        .flat_map(|v| self.legs(v).map(move |(label, stub)| (v, label, stub))),
                     self.compiled.edges(d),
                     |v| d.rules[v] as usize,
                     |stub| {
@@ -360,52 +373,40 @@ impl<'a, F, L> GraphView<'a, F, L> {
         })
     }
 
-    /// The complete graph, built unless the filter asked for it already.
-    pub(crate) fn take_complete_graph(&mut self) -> HedgeGraph<F, usize, Option<L>>
-    where
-        F: Clone,
-        L: Clone,
-    {
-        self.complete_graph().expect("the view is complete");
-        self.complete.take().expect("built above")
+    /// Transfer only a complete graph already requested by the final filter.
+    pub(crate) fn take_complete_graph(&mut self) -> Option<HedgeGraph<F, usize, Option<L>>> {
+        self.complete.take()
     }
 
     /// The graph of the placed `edges` and the legs.
-    fn build<E, N>(
-        &self,
+    pub(super) fn build<E, N>(
+        n_vertices: usize,
+        n_legs: usize,
+        legs: impl Iterator<Item = (usize, &'a L, Stub<&'a F>)>,
         edges: impl Iterator<Item = EdgeView<'a, F>>,
         node: impl Fn(usize) -> N,
         edge: impl Fn(Option<Stub<&'a F>>) -> E,
     ) -> HedgeGraph<E, N, Option<L>>
     where
-        L: Clone,
+        F: 'a,
+        L: Clone + 'a,
     {
-        let (compiled, t) = (self.compiled, self.topology());
-        let n_hedges = compiled.model.legs.total as usize + 2 * edges.size_hint().0;
-        let mut builder = HedgeGraphBuilder::with_capacity(t.n, n_hedges);
-        for v in 0..t.n {
+        let n_hedges = n_legs + 2 * edges.size_hint().0;
+        let mut builder = HedgeGraphBuilder::with_capacity(n_vertices, n_hedges);
+        for v in 0..n_vertices {
             builder.add_node(node(v));
         }
-        for v in 0..t.n {
-            let labelled = t.vertices[v].labelled;
-            for (c, leg) in compiled.legs.iter().enumerate() {
-                let (orientation, underlying) = match leg.flow {
-                    None => (Orientation::Undirected, Flow::Source),
-                    Some(flow) => (Orientation::Default, flow),
-                };
-                for _ in 0..compiled.model.legs.count(labelled, c) {
-                    let stub = Stub {
-                        field: &compiled.fields[leg.field as usize],
-                        flow: leg.flow,
-                    };
-                    builder.add_external_edge(
-                        NodeIndex(v).add_data(Some(compiled.labels[leg.label as usize].clone())),
-                        edge(Some(stub)),
-                        orientation,
-                        underlying,
-                    );
-                }
-            }
+        for (vertex, label, stub) in legs {
+            let (orientation, underlying) = match stub.flow {
+                None => (Orientation::Undirected, Flow::Source),
+                Some(flow) => (Orientation::Default, flow),
+            };
+            builder.add_external_edge(
+                NodeIndex(vertex).add_data(Some(label.clone())),
+                edge(Some(stub)),
+                orientation,
+                underlying,
+            );
         }
         for e in edges {
             let [u, v] = e.vertices.map(NodeIndex);
@@ -428,8 +429,8 @@ impl<F, L> Compiled<F, L> {
         })
     }
 
-    /// The stub that label `l` puts at the first vertex of `e`.
-    fn stub(&self, e: &Edge, l: u8) -> Stub<&F> {
+    /// The decorated edge, with its field rank and direction at the first vertex.
+    pub(super) fn edge(&self, e: &Edge, l: u8) -> DiagramEdge {
         let model = &self.model;
         let (field, flow) = if e.u == e.v {
             let label = model.loop_labels[l as usize];
@@ -443,9 +444,17 @@ impl<F, L> Compiled<F, L> {
             };
             (label.field, flow)
         };
+        DiagramEdge {
+            vertices: [e.u, e.v],
+            stub: Stub { field, flow },
+        }
+    }
+
+    fn stub(&self, e: &Edge, label: u8) -> Stub<&F> {
+        let edge = self.edge(e, label);
         Stub {
-            field: &self.fields[field as usize],
-            flow,
+            field: &self.tables.fields[edge.stub.field as usize],
+            flow: edge.stub.flow,
         }
     }
 }

@@ -3050,7 +3050,7 @@ impl PyFeynmanDiagram {
             .map_err(error::diagram)
     }
 
-    /// Return the deterministic name assigned during diagram generation.
+    /// Return the diagram name, or ``None`` for an unnamed diagram.
     ///
     /// Examples
     /// --------
@@ -3058,7 +3058,7 @@ impl PyFeynmanDiagram {
     ///
     /// >>> by_name = {item.name: item for item in result.diagrams}
     #[getter]
-    fn name(&self) -> &str {
+    fn name(&self) -> Option<&str> {
         self.inner.name()
     }
 
@@ -3071,8 +3071,11 @@ impl PyFeynmanDiagram {
     /// >>> selected = process.generate_diagrams(loops=1, select_diagrams=[diagram.id])
     /// >>> assert len(selected.diagrams) == 1
     #[getter]
-    fn id(&self) -> String {
-        self.inner.id().to_string()
+    fn id(&self) -> PyResult<String> {
+        self.inner
+            .id()
+            .map(|id| id.to_string())
+            .map_err(error::diagram)
     }
 
     /// Return the automorphism count of the graph, the denominator of its symmetry factor.
@@ -4354,13 +4357,15 @@ impl PyFeynmanDiagram {
     /// >>> print(diagram)
     fn __repr__(&self) -> PyResult<String> {
         Ok(format!(
-            "{}(name='{}', loops={}, vertices={}, edges={})",
+            "{}(name={}, loops={}, vertices={}, edges={})",
             if self.selected_region.is_some() {
                 "Subgraph"
             } else {
                 "FeynmanDiagram"
             },
-            self.inner.name(),
+            self.inner
+                .name()
+                .map_or_else(|| "None".to_owned(), |name| format!("{name:?}")),
             self.loop_count()?,
             self.vertices().len(),
             self.edges().len()

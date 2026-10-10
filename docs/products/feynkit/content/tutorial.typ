@@ -120,6 +120,15 @@ empty result can therefore mean the chosen constraints admit no graph. This is a
 `GenerationResult` with zero retained diagrams, not a configuration error. Inspect the generation
 report and relax a specific constraint before enlarging the search indiscriminately.
 
+Generation defaults to `output="named"`, with names prefixed by `D` or the supplied
+`graph_prefix`. Use `output="minimal"` to omit names and group-member source identities;
+the returned diagrams, source indices and physical factors remain available. An unnamed
+diagram has `name is None`. Name selectors, named momentum-basis overrides and an explicit
+`graph_prefix` require named output. ID selectors and ID-keyed momentum bases work in either
+mode and compute IDs when needed. In selectors and momentum-basis keys, strings of exactly
+32 hexadecimal digits denote IDs; other strings denote names. `select_diagrams=[]` selects no
+diagrams; omitting the selection retains all diagrams that pass the other requested filters.
+
 All three Process generation methods check Python signals while they run. Ctrl-C or a notebook
 interrupt stops generation and raises `KeyboardInterrupt`; exceptions from custom Python
 signal handlers also propagate. Cancelling an explicit `CancellationToken` instead returns
@@ -586,10 +595,17 @@ generated counterterm matching separately from scalar-integral reduction.
 
 == Use finalized output
 
-Generation performs topology expansion, interaction assignment, filters, canonicalization,
-fermion flow, numerator and projector construction, routing, zero detection, and grouping.
-The returned diagrams retain vertex/edge numerator fragments, the aggregate numerator,
-external projector, and separate scalar prefactors. Keep group multiplicities and prefactors
+Generation performs topology expansion, interaction assignment, filters, fermion flow,
+numerator and projector construction, routing, zero detection, and grouping. Canonical
+forms and IDs are computed when an operation needs them. Output order and names are
+deterministic across thread counts, but names can change between revisions; use names from
+the current generation result when selecting diagrams.
+
+The returned diagrams retain vertex/edge numerator fragments, an external projector and
+separate scalar prefactors. A generated aggregate numerator is built and cached on first use;
+numerator grouping, expression access and serialization may request it. Reading `diagram.id`
+or serializing the diagram similarly computes and caches its ID. JSON and annotated DOT
+preserve an absent name separately from an empty name. Keep group multiplicities and prefactors
 when forming a complete expression; a diagram's numerator alone is not the whole amplitude.
 
 Named coefficients such as `UFO::GC_11` stay in generated numerators. For analytic work, expand

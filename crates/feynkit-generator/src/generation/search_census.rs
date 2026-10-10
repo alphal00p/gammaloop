@@ -15,11 +15,7 @@ use std::sync::{Arc, Mutex};
 
 use linnet::half_edge::generate::Stage;
 
-use super::{
-    Generator, ResolvedProcess,
-    cases::Case,
-    enumeration::{GenerationView, Pruner, VertexSignatures},
-};
+use super::{Generator, cases::Case, enumeration::GenerationView};
 use crate::{GenerationControl, GenerationError};
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -204,31 +200,15 @@ impl SearchCensus {
         let options = case.options(&model, 1);
         let generator = Generator::new(model);
         let model = &generator.model;
-        let process = case.process();
-        process.validate()?;
-        process.validate_in(model)?;
-        let options = process
-            .restrict_options(model, &options)?
-            .resolve_selectors(model)?;
-        generator.validate_options(case.kind, &options)?;
-        process.validate_covariant_cut_filters(model, &options, case.kind)?;
-        let process = process
-            .clone()
-            .with_final_state_alternatives(process.covariant_cut_states(model, case.kind)?)?;
-        let resolved = ResolvedProcess::new(model, &process, case.kind, &options)?;
-        let signatures = VertexSignatures::new(model, &options)?;
-        let externals = resolved.externals(model)?;
-        assert!(!externals.vetoed(model, &options));
-        let pruner = Pruner::new(model, &options);
         let tracker = Arc::new(Mutex::new(Tracker::default()));
         let recorder = Arc::clone(&tracker);
-        let search = signatures.generator(model, &externals, &options, move |view| {
-            let kept = pruner.keeps(view);
-            recorder.lock().unwrap().record(view, kept);
-            kept
-        })?;
-        let diagrams = search.iter()?.count();
-        drop(search);
+        let prepared =
+            generator.search(&case.process(), &options, case.kind, move |view, kept| {
+                recorder.lock().unwrap().record(view, kept);
+            })?;
+        assert!(!prepared.externals.vetoed(model, &prepared.options));
+        let diagrams = prepared.generator.iter()?.count();
+        drop(prepared);
         let census = Arc::into_inner(tracker)
             .unwrap()
             .into_inner()

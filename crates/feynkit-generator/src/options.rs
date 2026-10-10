@@ -343,6 +343,32 @@ type ProgressCallback =
 type GenerationFilterCallback = Arc<dyn Fn(&GenerationView<'_>) -> bool + Send + Sync + 'static>;
 type CancellationCheck = Arc<dyn Fn() -> bool + Send + Sync + 'static>;
 
+/// Metadata requested from generation, independently of progress and cancellation.
+/// Minimal output retains graphs and physical grouping factors without names or source IDs.
+#[derive(
+    Debug,
+    Clone,
+    PartialEq,
+    Eq,
+    Serialize,
+    Deserialize,
+    bincode_trait_derive::Encode,
+    bincode_trait_derive::Decode,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum GenerationOutput {
+    Minimal,
+    Named { prefix: String },
+}
+
+impl Default for GenerationOutput {
+    fn default() -> Self {
+        Self::Named {
+            prefix: "D".to_owned(),
+        }
+    }
+}
+
 #[derive(Clone)]
 pub struct GenerationOptions {
     pub(crate) threads: Option<usize>,
@@ -358,7 +384,7 @@ pub struct GenerationOptions {
     pub(crate) cut_amplitude_filters: Vec<GenerationFilter>,
     pub(crate) numerator_grouping: NumeratorGrouping,
     pub(crate) filter_zero_color: bool,
-    pub(crate) graph_prefix: String,
+    pub(crate) output: GenerationOutput,
     pub(crate) selected_diagram_ids: Option<BTreeSet<DiagramId>>,
     pub(crate) selected_diagram_names: Option<BTreeSet<String>>,
     pub(crate) vetoed_diagram_ids: BTreeSet<DiagramId>,
@@ -400,7 +426,7 @@ struct GenerationOptionsPersistent {
     numerator_grouping: NumeratorGrouping,
     #[serde(default)]
     filter_zero_color: bool,
-    graph_prefix: String,
+    output: GenerationOutput,
     selected_diagram_ids: Option<BTreeSet<u128>>,
     selected_diagram_names: Option<BTreeSet<String>>,
     vetoed_diagram_ids: BTreeSet<u128>,
@@ -428,7 +454,7 @@ impl From<&GenerationOptions> for GenerationOptionsPersistent {
             cut_amplitude_filters: options.cut_amplitude_filters.clone(),
             numerator_grouping: options.numerator_grouping.clone(),
             filter_zero_color: options.filter_zero_color,
-            graph_prefix: options.graph_prefix.clone(),
+            output: options.output.clone(),
             selected_diagram_ids: options
                 .selected_diagram_ids
                 .as_ref()
@@ -528,7 +554,7 @@ impl Default for GenerationOptions {
             cut_amplitude_filters: Vec::new(),
             numerator_grouping: NumeratorGrouping::None,
             filter_zero_color: false,
-            graph_prefix: "D".to_owned(),
+            output: GenerationOutput::default(),
             selected_diagram_ids: None,
             selected_diagram_names: None,
             vetoed_diagram_ids: BTreeSet::new(),
@@ -661,6 +687,16 @@ impl GenerationOptions {
         if generation_type == GenerationType::CrossSection && self.symmetrize_final {
             return Err(GenerationError::CrossSectionFinalStateSymmetrization);
         }
+        if matches!(self.output, GenerationOutput::Minimal)
+            && (self
+                .selected_diagram_names
+                .as_ref()
+                .is_some_and(|names| !names.is_empty())
+                || !self.vetoed_diagram_names.is_empty()
+                || !self.named_loop_momentum_bases.is_empty())
+        {
+            return Err(GenerationError::NamesRequireNamedOutput);
+        }
         Ok(())
     }
 
@@ -687,7 +723,7 @@ impl GenerationOptions {
             cut_amplitude_filters: persistent.cut_amplitude_filters,
             numerator_grouping: persistent.numerator_grouping,
             filter_zero_color: persistent.filter_zero_color,
-            graph_prefix: persistent.graph_prefix,
+            output: persistent.output,
             selected_diagram_ids: persistent
                 .selected_diagram_ids
                 .map(|ids| ids.into_iter().map(DiagramId).collect()),
@@ -786,7 +822,7 @@ impl fmt::Debug for GenerationOptions {
             .field("cut_amplitude_filters", &self.cut_amplitude_filters)
             .field("numerator_grouping", &self.numerator_grouping)
             .field("filter_zero_color", &self.filter_zero_color)
-            .field("graph_prefix", &self.graph_prefix)
+            .field("output", &self.output)
             .field("selected_diagram_ids", &self.selected_diagram_ids)
             .field("selected_diagram_names", &self.selected_diagram_names)
             .field("vetoed_diagram_ids", &self.vetoed_diagram_ids)
@@ -861,8 +897,10 @@ impl GenerationOptions {
         self
     }
 
-    pub fn graph_prefix(mut self, prefix: impl Into<String>) -> Self {
-        self.graph_prefix = prefix.into();
+    /// Choose whether names and source identities are produced. Nonempty name selectors
+    /// and named momentum-basis maps require `GenerationOutput::Named`.
+    pub fn output(mut self, output: GenerationOutput) -> Self {
+        self.output = output;
         self
     }
 
@@ -1049,6 +1087,50 @@ impl GenerationOptions {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn output_policy_roundtrips_and_rejects_only_actual_name_requirements() {
+        use super::{GenerationOutput, GenerationType};
+        for output in [
+            GenerationOutput::Minimal,
+            GenerationOutput::Named {
+                prefix: "graph_".into(),
+            },
+        ] {
+            let options = GenerationOptions::default().output(output);
+            let json = serde_json::to_string(&options).unwrap();
+            assert_eq!(
+                serde_json::from_str::<GenerationOptions>(&json).unwrap(),
+                options
+            );
+            let bytes = bincode::encode_to_vec(&options, bincode::config::standard()).unwrap();
+            let (decoded, consumed): (GenerationOptions, usize) =
+                bincode::decode_from_slice(&bytes, bincode::config::standard()).unwrap();
+            assert_eq!(consumed, bytes.len());
+            assert_eq!(decoded, options);
+        }
+        let minimal = GenerationOptions::default().output(GenerationOutput::Minimal);
+        for options in [
+            minimal.clone(),
+            minimal.clone().select_diagrams(Vec::<String>::new()),
+            minimal.clone().veto_diagrams(Vec::<String>::new()),
+            minimal.clone().select_diagram_ids([DiagramId(1)]),
+            minimal.clone().veto_diagram_ids([DiagramId(1)]),
+            minimal.clone().with_loop_momentum_basis(DiagramId(1), []),
+        ] {
+            options.validate_for(GenerationType::Amplitude).unwrap();
+        }
+        for options in [
+            minimal.clone().select_diagrams(["D0"]),
+            minimal.clone().veto_diagrams(["D0"]),
+            minimal.with_named_loop_momentum_basis("D0", []),
+        ] {
+            assert!(matches!(
+                options.validate_for(GenerationType::Amplitude),
+                Err(crate::GenerationError::NamesRequireNamedOutput)
+            ));
+        }
+    }
+
     #[test]
     fn application_cancellation_remains_latched_after_the_signal_clears() {
         use std::sync::{

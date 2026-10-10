@@ -193,7 +193,13 @@ generator = TensorExpression.color_t(8, 3)(ports[3], ports[2], ports[1]).to_expr
 gs = S("UFO::G")
 # The generated convention gives a common minus relative to the reference's
 # emission current. Its relative quark/antiquark sign and square agree.
-for emitted, vector, product, sign in zip(channels[1:], (n, nb), (kp, km), (-1, 1)):
+# Bind each emitter by its physical propagator, independently of generation order.
+emitters = {
+    Q * kp * lam**2: (n, kp, -1),
+    Qbar * km * lam**2: (nb, km, 1),
+}
+for emitted, denominator in zip(channels[1:], denominators[1:], strict=True):
+    vector, product, sign = emitters[denominator]
     expected = sign * gs * vector(mink(D, ports[3])) / product * current * generator
     assert simplify(emitted - expected).together() == zero
 eikonal = ((channels[1] + channels[2]) / (current * generator * gs)).together()

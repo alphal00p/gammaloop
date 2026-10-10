@@ -2608,9 +2608,9 @@ class FeynmanDiagram:
         >>> assert region.n_half_edges == len(diagram.half_edges)
         """
     @property
-    def name(self) -> builtins.str:
+    def name(self) -> typing.Optional[builtins.str]:
         r"""
-        Return the deterministic name assigned during diagram generation.
+        Return the diagram name, or ``None`` for an unnamed diagram.
 
         Examples
         --------
@@ -4604,9 +4604,9 @@ class GroupMember:
         >>> source_identity = (source_index, member.source_id, member.source_name)
         """
     @property
-    def source_id(self) -> builtins.str:
+    def source_id(self) -> typing.Optional[builtins.str]:
         r"""
-        Return the source diagram's stable content-derived ID.
+        Return the requested source ID, or None for minimal generation output.
 
         Examples
         --------
@@ -4615,9 +4615,9 @@ class GroupMember:
         >>> source_ids = [entry.source_id for entry in group.members]
         """
     @property
-    def source_name(self) -> builtins.str:
+    def source_name(self) -> typing.Optional[builtins.str]:
         r"""
-        Return the finalized display name assigned to the source diagram.
+        Return the requested source name, or None for minimal generation output.
 
         Examples
         --------
@@ -8676,7 +8676,7 @@ class Process:
         vertex_veto : sequence[VertexRule | str] or None, optional
             Replace the excluded interaction rules.
         """
-    def generate_diagrams(self, *, loops: builtins.int | tuple[builtins.int, builtins.int] = 0, symmetrize_initial: builtins.bool = False, symmetrize_final: builtins.bool = False, symmetrize_left_right: builtins.bool = False, symmetrize_external_fermions: builtins.bool = False, threads: typing.Optional[builtins.int] = None, max_vertices: typing.Optional[builtins.int] = None, allow_self_loops: builtins.bool = True, allow_zero_flow_edges: builtins.bool = False, graph_prefix: typing.Optional[builtins.str] = None, maximum_bridges: int | None | types.EllipsisType = ..., self_energy: SelfEnergyFilterOptions | types.EllipsisType | None = ..., tadpoles: TadpoleFilterOptions | types.EllipsisType | None = ..., zero_snails: SnailFilterOptions | types.EllipsisType | None = ..., coupling_orders: typing.Optional[typing.Mapping[builtins.str, builtins.int | tuple[builtins.int, typing.Optional[builtins.int]]]] = None, fermion_loop_count_range: typing.Optional[tuple[builtins.int, builtins.int]] = None, factorized_loop_topologies_count_range: tuple[int, int] | types.EllipsisType | None = ..., blob_range: tuple[int, int] | types.EllipsisType | None = ..., spectator_range: tuple[int, int] | types.EllipsisType | None = ..., perturbative_orders: typing.Optional[typing.Mapping[builtins.str, builtins.int]] = None, sewn_tadpoles: typing.Optional[builtins.bool] = None, cut_amplitude_coupling_orders: typing.Optional[typing.Mapping[builtins.str, builtins.int | tuple[builtins.int, typing.Optional[builtins.int]]]] = None, cut_amplitude_loop_count_range: typing.Optional[tuple[builtins.int, builtins.int]] = None, select_diagrams: typing.Optional[typing.Sequence[FeynmanDiagram | builtins.str]] = None, veto_diagrams: typing.Optional[typing.Sequence[FeynmanDiagram | builtins.str]] = None, loop_momentum_bases: typing.Optional[typing.Sequence[tuple[FeynmanDiagram | builtins.str, typing.Sequence[builtins.int]]]] = None, numerator_prefactor: typing.Optional[Expression] = None, projector: typing.Optional[Expression] = None, numerator_grouping: typing.Optional[NumeratorGrouping] = None, filter_zero_color: builtins.bool = False, cancellation_token: typing.Optional[CancellationToken] = None, progress: typing.Literal['auto'] | collections.abc.Callable[[GenerationProgress], None] | None = 'auto', filter: collections.abc.Callable[[symbolica.community.graph.Graph, str], bool] | None = None) -> GenerationResult:
+    def generate_diagrams(self, *, loops: builtins.int | tuple[builtins.int, builtins.int] = 0, symmetrize_initial: builtins.bool = False, symmetrize_final: builtins.bool = False, symmetrize_left_right: builtins.bool = False, symmetrize_external_fermions: builtins.bool = False, threads: typing.Optional[builtins.int] = None, max_vertices: typing.Optional[builtins.int] = None, allow_self_loops: builtins.bool = True, allow_zero_flow_edges: builtins.bool = False, graph_prefix: typing.Optional[builtins.str] = None, output: typing.Literal['named', 'minimal'] = "named", maximum_bridges: int | None | types.EllipsisType = ..., self_energy: SelfEnergyFilterOptions | types.EllipsisType | None = ..., tadpoles: TadpoleFilterOptions | types.EllipsisType | None = ..., zero_snails: SnailFilterOptions | types.EllipsisType | None = ..., coupling_orders: typing.Optional[typing.Mapping[builtins.str, builtins.int | tuple[builtins.int, typing.Optional[builtins.int]]]] = None, fermion_loop_count_range: typing.Optional[tuple[builtins.int, builtins.int]] = None, factorized_loop_topologies_count_range: tuple[int, int] | types.EllipsisType | None = ..., blob_range: tuple[int, int] | types.EllipsisType | None = ..., spectator_range: tuple[int, int] | types.EllipsisType | None = ..., perturbative_orders: typing.Optional[typing.Mapping[builtins.str, builtins.int]] = None, sewn_tadpoles: typing.Optional[builtins.bool] = None, cut_amplitude_coupling_orders: typing.Optional[typing.Mapping[builtins.str, builtins.int | tuple[builtins.int, typing.Optional[builtins.int]]]] = None, cut_amplitude_loop_count_range: typing.Optional[tuple[builtins.int, builtins.int]] = None, select_diagrams: typing.Optional[typing.Sequence[FeynmanDiagram | builtins.str]] = None, veto_diagrams: typing.Optional[typing.Sequence[FeynmanDiagram | builtins.str]] = None, loop_momentum_bases: typing.Optional[typing.Sequence[tuple[FeynmanDiagram | builtins.str, typing.Sequence[builtins.int]]]] = None, numerator_prefactor: typing.Optional[Expression] = None, projector: typing.Optional[Expression] = None, numerator_grouping: typing.Optional[NumeratorGrouping] = None, filter_zero_color: builtins.bool = False, cancellation_token: typing.Optional[CancellationToken] = None, progress: typing.Literal['auto'] | collections.abc.Callable[[GenerationProgress], None] | None = 'auto', filter: collections.abc.Callable[[symbolica.community.graph.Graph, str], bool] | None = None) -> GenerationResult:
         r"""
         Generate and optionally group all diagrams matching a process.
 
@@ -8718,6 +8718,10 @@ class Process:
             Permit internal edges with identically zero momentum flow.
         graph_prefix : str or None, optional
             Prefix assigned to generated diagram names; None uses "D" (diagram).
+        output : {"named", "minimal"}, optional
+            Named (default) requests names and source identities. Minimal omits both;
+            name selectors, named momentum bases and graph_prefix then require named output.
+            Diagram IDs remain available on explicit access or persistence.
         maximum_bridges : int, None, or Ellipsis, optional
             Omission or Ellipsis requires one-particle irreducibility only for diagrams
             with loops; tree exchanges are allowed, including in mixed loop ranges.
@@ -8754,6 +8758,7 @@ class Process:
             Inclusive combined loop count across both sides of every cut.
         select_diagrams : sequence[FeynmanDiagram | str] or None, optional
             Retain only these diagram objects, content-derived IDs, or finalized names.
+            Strings of exactly 32 hexadecimal digits denote IDs; other strings denote names.
         veto_diagrams : sequence[FeynmanDiagram | str] or None, optional
             Remove these diagram objects, content-derived IDs, or finalized names.
         loop_momentum_bases : sequence[tuple[FeynmanDiagram | str, sequence[int]]] or None, optional
@@ -8797,7 +8802,7 @@ class Process:
             returns an incomplete result; Python signal-handler exceptions, including
             KeyboardInterrupt, stop generation and propagate to the caller.
         """
-    def generate_amplitude(self, *, dimension: typing.Optional[Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal]] = None, real: typing.Optional[typing.Sequence[Expression]] = None, loops: builtins.int | tuple[builtins.int, builtins.int] = 0, symmetrize_initial: builtins.bool = False, symmetrize_final: builtins.bool = False, symmetrize_left_right: builtins.bool = False, symmetrize_external_fermions: builtins.bool = False, threads: typing.Optional[builtins.int] = None, max_vertices: typing.Optional[builtins.int] = None, allow_self_loops: builtins.bool = True, allow_zero_flow_edges: builtins.bool = False, graph_prefix: typing.Optional[builtins.str] = None, maximum_bridges: int | None | types.EllipsisType = ..., self_energy: SelfEnergyFilterOptions | types.EllipsisType | None = ..., tadpoles: TadpoleFilterOptions | types.EllipsisType | None = ..., zero_snails: SnailFilterOptions | types.EllipsisType | None = ..., coupling_orders: typing.Optional[typing.Mapping[builtins.str, builtins.int | tuple[builtins.int, typing.Optional[builtins.int]]]] = None, fermion_loop_count_range: typing.Optional[tuple[builtins.int, builtins.int]] = None, factorized_loop_topologies_count_range: tuple[int, int] | types.EllipsisType | None = ..., blob_range: tuple[int, int] | types.EllipsisType | None = ..., spectator_range: tuple[int, int] | types.EllipsisType | None = ..., perturbative_orders: typing.Optional[typing.Mapping[builtins.str, builtins.int]] = None, sewn_tadpoles: typing.Optional[builtins.bool] = None, cut_amplitude_coupling_orders: typing.Optional[typing.Mapping[builtins.str, builtins.int | tuple[builtins.int, typing.Optional[builtins.int]]]] = None, cut_amplitude_loop_count_range: typing.Optional[tuple[builtins.int, builtins.int]] = None, select_diagrams: typing.Optional[typing.Sequence[FeynmanDiagram | builtins.str]] = None, veto_diagrams: typing.Optional[typing.Sequence[FeynmanDiagram | builtins.str]] = None, loop_momentum_bases: typing.Optional[typing.Sequence[tuple[FeynmanDiagram | builtins.str, typing.Sequence[builtins.int]]]] = None, numerator_prefactor: typing.Optional[Expression] = None, projector: typing.Optional[Expression] = None, numerator_grouping: typing.Optional[NumeratorGrouping] = None, filter_zero_color: builtins.bool = False, cancellation_token: typing.Optional[CancellationToken] = None, progress: typing.Literal['auto'] | collections.abc.Callable[[GenerationProgress], None] | None = 'auto', filter: collections.abc.Callable[[symbolica.community.graph.Graph, str], bool] | None = None) -> Amplitude:
+    def generate_amplitude(self, *, dimension: typing.Optional[Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal]] = None, real: typing.Optional[typing.Sequence[Expression]] = None, loops: builtins.int | tuple[builtins.int, builtins.int] = 0, symmetrize_initial: builtins.bool = False, symmetrize_final: builtins.bool = False, symmetrize_left_right: builtins.bool = False, symmetrize_external_fermions: builtins.bool = False, threads: typing.Optional[builtins.int] = None, max_vertices: typing.Optional[builtins.int] = None, allow_self_loops: builtins.bool = True, allow_zero_flow_edges: builtins.bool = False, graph_prefix: typing.Optional[builtins.str] = None, output: typing.Literal['named', 'minimal'] = "named", maximum_bridges: int | None | types.EllipsisType = ..., self_energy: SelfEnergyFilterOptions | types.EllipsisType | None = ..., tadpoles: TadpoleFilterOptions | types.EllipsisType | None = ..., zero_snails: SnailFilterOptions | types.EllipsisType | None = ..., coupling_orders: typing.Optional[typing.Mapping[builtins.str, builtins.int | tuple[builtins.int, typing.Optional[builtins.int]]]] = None, fermion_loop_count_range: typing.Optional[tuple[builtins.int, builtins.int]] = None, factorized_loop_topologies_count_range: tuple[int, int] | types.EllipsisType | None = ..., blob_range: tuple[int, int] | types.EllipsisType | None = ..., spectator_range: tuple[int, int] | types.EllipsisType | None = ..., perturbative_orders: typing.Optional[typing.Mapping[builtins.str, builtins.int]] = None, sewn_tadpoles: typing.Optional[builtins.bool] = None, cut_amplitude_coupling_orders: typing.Optional[typing.Mapping[builtins.str, builtins.int | tuple[builtins.int, typing.Optional[builtins.int]]]] = None, cut_amplitude_loop_count_range: typing.Optional[tuple[builtins.int, builtins.int]] = None, select_diagrams: typing.Optional[typing.Sequence[FeynmanDiagram | builtins.str]] = None, veto_diagrams: typing.Optional[typing.Sequence[FeynmanDiagram | builtins.str]] = None, loop_momentum_bases: typing.Optional[typing.Sequence[tuple[FeynmanDiagram | builtins.str, typing.Sequence[builtins.int]]]] = None, numerator_prefactor: typing.Optional[Expression] = None, projector: typing.Optional[Expression] = None, numerator_grouping: typing.Optional[NumeratorGrouping] = None, filter_zero_color: builtins.bool = False, cancellation_token: typing.Optional[CancellationToken] = None, progress: typing.Literal['auto'] | collections.abc.Callable[[GenerationProgress], None] | None = 'auto', filter: collections.abc.Callable[[symbolica.community.graph.Graph, str], bool] | None = None) -> Amplitude:
         r"""
         Generate a coherent symbolic amplitude for this process.
         Cancelled or empty generation cannot produce an amplitude.
@@ -8844,6 +8849,10 @@ class Process:
             Permit internal edges with identically zero momentum flow.
         graph_prefix : str or None, optional
             Prefix assigned to generated diagram names; None uses "D" (diagram).
+        output : {"named", "minimal"}, optional
+            Named (default) requests names and source identities. Minimal omits both;
+            name selectors, named momentum bases and graph_prefix then require named output.
+            Diagram IDs remain available on explicit access or persistence.
         maximum_bridges : int, None, or Ellipsis, optional
             Omission or Ellipsis requires one-particle irreducibility only for diagrams
             with loops; tree exchanges are allowed, including in mixed loop ranges.
@@ -8880,6 +8889,7 @@ class Process:
             Inclusive combined loop count across both sides of every cut.
         select_diagrams : sequence[FeynmanDiagram | str] or None, optional
             Retain only these diagram objects, content-derived IDs, or finalized names.
+            Strings of exactly 32 hexadecimal digits denote IDs; other strings denote names.
         veto_diagrams : sequence[FeynmanDiagram | str] or None, optional
             Remove these diagram objects, content-derived IDs, or finalized names.
         loop_momentum_bases : sequence[tuple[FeynmanDiagram | str, sequence[int]]] or None, optional
@@ -8923,7 +8933,7 @@ class Process:
             returns an incomplete result; Python signal-handler exceptions, including
             KeyboardInterrupt, stop generation and propagate to the caller.
         """
-    def generate_cross_section(self, *, loops: builtins.int | tuple[builtins.int, builtins.int] = 0, symmetrize_initial: builtins.bool = False, symmetrize_left_right: builtins.bool = False, symmetrize_external_fermions: builtins.bool = False, threads: typing.Optional[builtins.int] = None, max_vertices: typing.Optional[builtins.int] = None, allow_self_loops: builtins.bool = True, allow_zero_flow_edges: builtins.bool = False, graph_prefix: typing.Optional[builtins.str] = None, maximum_bridges: int | None | types.EllipsisType = ..., self_energy: SelfEnergyFilterOptions | types.EllipsisType | None = ..., tadpoles: TadpoleFilterOptions | types.EllipsisType | None = ..., zero_snails: SnailFilterOptions | types.EllipsisType | None = ..., coupling_orders: typing.Optional[typing.Mapping[builtins.str, builtins.int | tuple[builtins.int, typing.Optional[builtins.int]]]] = None, fermion_loop_count_range: typing.Optional[tuple[builtins.int, builtins.int]] = None, factorized_loop_topologies_count_range: tuple[int, int] | types.EllipsisType | None = ..., blob_range: tuple[int, int] | types.EllipsisType | None = ..., spectator_range: tuple[int, int] | types.EllipsisType | None = ..., perturbative_orders: typing.Optional[typing.Mapping[builtins.str, builtins.int]] = None, sewn_tadpoles: typing.Optional[builtins.bool] = None, cut_amplitude_coupling_orders: typing.Optional[typing.Mapping[builtins.str, builtins.int | tuple[builtins.int, typing.Optional[builtins.int]]]] = None, cut_amplitude_loop_count_range: typing.Optional[tuple[builtins.int, builtins.int]] = None, select_diagrams: typing.Optional[typing.Sequence[FeynmanDiagram | builtins.str]] = None, veto_diagrams: typing.Optional[typing.Sequence[FeynmanDiagram | builtins.str]] = None, loop_momentum_bases: typing.Optional[typing.Sequence[tuple[FeynmanDiagram | builtins.str, typing.Sequence[builtins.int]]]] = None, numerator_prefactor: typing.Optional[Expression] = None, projector: typing.Optional[Expression] = None, numerator_grouping: typing.Optional[NumeratorGrouping] = None, filter_zero_color: builtins.bool = False, cancellation_token: typing.Optional[CancellationToken] = None, progress: typing.Literal['auto'] | collections.abc.Callable[[GenerationProgress], None] | None = 'auto', filter: collections.abc.Callable[[symbolica.community.graph.Graph, str], bool] | None = None) -> GenerationResult:
+    def generate_cross_section(self, *, loops: builtins.int | tuple[builtins.int, builtins.int] = 0, symmetrize_initial: builtins.bool = False, symmetrize_left_right: builtins.bool = False, symmetrize_external_fermions: builtins.bool = False, threads: typing.Optional[builtins.int] = None, max_vertices: typing.Optional[builtins.int] = None, allow_self_loops: builtins.bool = True, allow_zero_flow_edges: builtins.bool = False, graph_prefix: typing.Optional[builtins.str] = None, output: typing.Literal['named', 'minimal'] = "named", maximum_bridges: int | None | types.EllipsisType = ..., self_energy: SelfEnergyFilterOptions | types.EllipsisType | None = ..., tadpoles: TadpoleFilterOptions | types.EllipsisType | None = ..., zero_snails: SnailFilterOptions | types.EllipsisType | None = ..., coupling_orders: typing.Optional[typing.Mapping[builtins.str, builtins.int | tuple[builtins.int, typing.Optional[builtins.int]]]] = None, fermion_loop_count_range: typing.Optional[tuple[builtins.int, builtins.int]] = None, factorized_loop_topologies_count_range: tuple[int, int] | types.EllipsisType | None = ..., blob_range: tuple[int, int] | types.EllipsisType | None = ..., spectator_range: tuple[int, int] | types.EllipsisType | None = ..., perturbative_orders: typing.Optional[typing.Mapping[builtins.str, builtins.int]] = None, sewn_tadpoles: typing.Optional[builtins.bool] = None, cut_amplitude_coupling_orders: typing.Optional[typing.Mapping[builtins.str, builtins.int | tuple[builtins.int, typing.Optional[builtins.int]]]] = None, cut_amplitude_loop_count_range: typing.Optional[tuple[builtins.int, builtins.int]] = None, select_diagrams: typing.Optional[typing.Sequence[FeynmanDiagram | builtins.str]] = None, veto_diagrams: typing.Optional[typing.Sequence[FeynmanDiagram | builtins.str]] = None, loop_momentum_bases: typing.Optional[typing.Sequence[tuple[FeynmanDiagram | builtins.str, typing.Sequence[builtins.int]]]] = None, numerator_prefactor: typing.Optional[Expression] = None, projector: typing.Optional[Expression] = None, numerator_grouping: typing.Optional[NumeratorGrouping] = None, filter_zero_color: builtins.bool = False, cancellation_token: typing.Optional[CancellationToken] = None, progress: typing.Literal['auto'] | collections.abc.Callable[[GenerationProgress], None] | None = 'auto', filter: collections.abc.Callable[[symbolica.community.graph.Graph, str], bool] | None = None) -> GenerationResult:
         r"""
         Generate sewn forward diagrams and their physical final-state cuts.
         The result contains diagrams and cut metadata, before phase-space integration.
@@ -8984,6 +8994,10 @@ class Process:
             Permit internal edges with identically zero momentum flow.
         graph_prefix : str or None, optional
             Prefix assigned to generated diagram names; None uses "D" (diagram).
+        output : {"named", "minimal"}, optional
+            Named (default) requests names and source identities. Minimal omits both;
+            name selectors, named momentum bases and graph_prefix then require named output.
+            Diagram IDs remain available on explicit access or persistence.
         maximum_bridges : int, None, or Ellipsis, optional
             Omission or Ellipsis applies no bridge filter: it would act on the unsewn forward
             graph, where every s-channel propagator is a bridge. An integer limits the internal
@@ -9020,6 +9034,7 @@ class Process:
             Inclusive combined loop count across both sides of every cut.
         select_diagrams : sequence[FeynmanDiagram | str] or None, optional
             Retain only these diagram objects, content-derived IDs, or finalized names.
+            Strings of exactly 32 hexadecimal digits denote IDs; other strings denote names.
         veto_diagrams : sequence[FeynmanDiagram | str] or None, optional
             Remove these diagram objects, content-derived IDs, or finalized names.
         loop_momentum_bases : sequence[tuple[FeynmanDiagram | str, sequence[int]]] or None, optional

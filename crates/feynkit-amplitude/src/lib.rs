@@ -155,14 +155,16 @@ impl Amplitude {
             if !Arc::ptr_eq(&first.model_arc(), &diagram.model_arc())
                 && diagram.model().fingerprint() != fingerprint
             {
-                return Err(AmplitudeError::DifferentModel(diagram.name().to_owned()));
+                return Err(AmplitudeError::DifferentModel(
+                    diagram.name().unwrap_or("<unnamed>").to_owned(),
+                ));
             }
             let (term, external) = Self::diagram_term(diagram, &options)?;
             if terms.is_empty() {
                 legs = external;
             } else if legs != external {
                 return Err(AmplitudeError::DifferentExternals(
-                    diagram.name().to_owned(),
+                    diagram.name().unwrap_or("<unnamed>").to_owned(),
                 ));
             }
             terms.push(term);
@@ -339,7 +341,9 @@ impl Amplitude {
         options: &AmplitudeOptions,
     ) -> Result<(Atom, Vec<AmplitudeLeg>), AmplitudeError> {
         if !diagram.cuts().is_empty() {
-            return Err(AmplitudeError::SewnDiagram(diagram.name().to_owned()));
+            return Err(AmplitudeError::SewnDiagram(
+                diagram.name().unwrap_or("<unnamed>").to_owned(),
+            ));
         }
         let dimension = options.dimension.to_symbolic();
         let index = symbol!("feynkit_amplitude::index_");
@@ -362,7 +366,9 @@ impl Amplitude {
                 continue;
             };
             let HedgePair::Unpaired { hedge, .. } = pair else {
-                return Err(AmplitudeError::SewnDiagram(diagram.name().to_owned()));
+                return Err(AmplitudeError::SewnDiagram(
+                    diagram.name().unwrap_or("<unnamed>").to_owned(),
+                ));
             };
             let old_index = symbols::hedge_index().call((hedge.0, 1));
             let mut leg = AmplitudeLeg {
@@ -382,14 +388,14 @@ impl Amplitude {
             let expected = usize::from(particle.spin != 1) + usize::from(particle.color != 1);
             if leg.slots.len() != expected || legs.insert(leg.index, leg).is_some() {
                 return Err(AmplitudeError::ExternalPorts(
-                    diagram.name().to_owned(),
+                    diagram.name().unwrap_or("<unnamed>").to_owned(),
                     "missing, duplicate, or unsupported external slots".into(),
                 ));
             }
         }
         if identified != ports.len() {
             return Err(AmplitudeError::ExternalPorts(
-                diagram.name().to_owned(),
+                diagram.name().unwrap_or("<unnamed>").to_owned(),
                 "unassigned open tensor slots".into(),
             ));
         }
