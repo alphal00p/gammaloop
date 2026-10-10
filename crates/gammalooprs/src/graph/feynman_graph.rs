@@ -214,21 +214,25 @@ impl Graph {
             {
                 continue;
             }
-            let mu = match edge.data.chemical_potential_atom() {
-                Some(atom) if !atom.is_zero() => parameters
+            let chemical_potential = edge
+                .data
+                .chemical_potential_atom()
+                .filter(|atom| !atom.is_zero());
+            let mu = match &chemical_potential {
+                Some(atom) => parameters
                     .pairs
                     .model_parameters
                     .params
                     .iter()
                     .zip(parameters.model_values())
-                    .find_map(|(parameter, value)| (parameter == &atom).then_some(*value))
+                    .find_map(|(parameter, value)| (parameter == atom).then_some(*value))
                     .ok_or_else(|| {
                         eyre::eyre!(
                             "Thermal graph '{}' has no value for chemical potential {atom} on edge {edge_id}",
                             self.name
                         )
                     })?,
-                _ => Complex::new_re(F(0.0)),
+                None => Complex::new_re(F(0.0)),
             };
             if !mu.im.is_zero() || !mu.re.0.is_finite() {
                 return Err(eyre::eyre!(
@@ -236,7 +240,11 @@ impl Graph {
                     self.name
                 ));
             }
-            if edge.data.is_fermion() {
+            // A zero-temperature fermion step, including any Fermi surface it
+            // localizes, needs a real shell energy.
+            let fermion_step =
+                mode == MediumMode::ZeroTemperatureEquilibrium && chemical_potential.is_some();
+            if edge.data.is_fermion() && !fermion_step {
                 continue;
             }
             let mass = match edge.data.mass_value::<f64>(model, parameters) {
@@ -244,12 +252,21 @@ impl Graph {
                 None if edge.data.mass_atom().is_zero() => Complex::new_re(F(0.0)),
                 None => {
                     return Err(eyre::eyre!(
-                        "Thermal graph '{}' has no value for boson mass '{}' on edge {edge_id}",
+                        "Thermal graph '{}' has no value for mass '{}' on edge {edge_id}",
                         self.name,
                         edge.data.mass_atom()
                     ));
                 }
             };
+            if edge.data.is_fermion() {
+                if !mass.im.is_zero() || !mass.re.0.is_finite() {
+                    return Err(eyre::eyre!(
+                        "Thermal graph '{}' requires a finite real fermion mass at zero temperature on edge {edge_id}; got {mass}",
+                        self.name
+                    ));
+                }
+                continue;
+            }
             if !mass.im.is_zero() || !mass.re.0.is_finite() || mass.re.0 < 0.0 {
                 return Err(eyre::eyre!(
                     "Thermal graph '{}' requires a finite nonnegative real boson mass on edge {edge_id}; got {mass}",
@@ -1196,6 +1213,44 @@ mod tests {
                 valid,
                 "mass override MT+1 with MT={mass}, mu={mu}"
             );
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn zero_temperature_fermion_steps_require_real_masses() -> eyre::Result<()> {
+        test_initialise()?;
+        let mut model = load_generic_model("sm");
+        let mass_parameter = Atom::var(model.get_parameter("MT").name.0).to_canonical_string();
+        let mut graph: Graph = format!(
+            r#"digraph cold_fermion {{
+                node [num=1]; edge [num=1];
+                A -> A [particle="d" mass="{mass_parameter}"];
+            }}"#
+        )
+        .into_graph(&model)?;
+        for (mass, valid) in [
+            (Complex::new_re(F(-2.0)), true),
+            (Complex::new(F(2.0), F(0.5)), false),
+        ] {
+            model.get_parameter_mut("MT")?.value = Some(mass);
+            for mode in [
+                MediumMode::ThermodynamicEquilibrium,
+                MediumMode::ZeroTemperatureEquilibrium,
+            ] {
+                graph.set_medium_mode(mode)?;
+                graph.param_builder.update_model_values(&model)?;
+                let result = graph.validate_medium_parameters(&model, 1.0);
+                // Finite-temperature fermions keep their existing domain.
+                assert_eq!(
+                    result.is_ok(),
+                    valid || mode.is_finite_temperature(),
+                    "{mode:?}, MT={mass}"
+                );
+                if let Err(error) = result {
+                    assert!(error.to_string().contains("real fermion mass"), "{error}");
+                }
+            }
         }
         Ok(())
     }
