@@ -46,7 +46,9 @@ anchor = "load_state_manifest(&save_path)?"
 # model values and coupling slots; State::load and persistence are unchanged.
 # Reviewed 2026-10-07: state version 11 persists the selected medium in graph
 # parameter builders, as documented in architecture-current.typ.
-digest = "6a94c2c669746b776d8f6b69ad275a884e3afab5"
+# Reviewed 2026-10-10: the version-11 comment also names the persisted Fermi-surface
+# evaluators, matching the persistence contract; State::load is unchanged.
+digest = "69e5e22997e1e49e01097f65ab7c75d08f5fcaa5"
 
 [[section.note.scope]]
 path = "crates/gammaloop-api/src/commands/integrate.rs"
@@ -674,6 +676,7 @@ kind = "Correctness investigation"
 status = "Historical fix record"
 lifecycle = "archived"
 owner = "unassigned"
+captured_at = "2026-09-09"
 evidence_revision = "5a1ece22b3a1d0dbc6f3dc7ac00579aea8ba9130"
 products = ["gammaloop", "spenso"]
 topics = ["thermal", "evaluation", "precision"]

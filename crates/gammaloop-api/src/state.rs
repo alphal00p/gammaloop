@@ -1592,7 +1592,8 @@ pub struct State {
 
 const STATE_MANIFEST_FILE: &str = "state_manifest.toml";
 const INTEGRAND_GENERATION_SUMMARY_FILE: &str = "generation_summary.json";
-// Version 11 persists the selected medium in graph parameter builders for runtime validation.
+// Version 11 persists the selected medium in graph parameter builders for runtime validation,
+// and amplitude graph terms store their zero-temperature Fermi-surface evaluators.
 // Older positional bincode layouts must be regenerated.
 // Version 10 records UFO and subgraph printer registrations, including symbols removed
 // from a restricted model. Older archives cannot restore those callbacks and must be regenerated.

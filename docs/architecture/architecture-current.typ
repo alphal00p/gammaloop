@@ -185,8 +185,11 @@ contact terms; each surviving denominator sector generates its own
 contraction numerators, and distribution derivatives separately from rational
 coefficients, keeping physical distributions outside Laurent interpolation.
 Distribution derivatives are ordinary energy derivatives at fixed temperature,
-chemical potential, and orientation. Reducing an m-edge cyclic chain with a common pole contributes
-`(-1)^(m-1)/(m-1)!` to the CFF coefficient and a distribution derivative of order `m-1`.
+chemical potential, and orientation. An m-edge cyclic chain has a common pole when
+all of its edges share the loop-momentum signature up to sign and the same symbolic
+mass key. Reducing it contributes `(-1)^(m-1)/(m-1)!` to the CFF coefficient and a
+distribution derivative of order `m-1` on the chain's lowest edge ID. Equal routing
+with distinct mass keys is not a common pole and stays a divided difference.
 Ordinary thermal contractions require a connected virtual complement. Sources
 and sinks take priority; a mixed vertex needs at least three virtual boundary
 edges, or one incoming and one outgoing virtual edge with external attachments
@@ -210,7 +213,23 @@ products of disconnected components. Initial-state cuts remain external energy
 aliases and never acquire thermal distribution factors. GammaLoop's graph and
 parameter layer expands the symbolic weights using particle statistics,
 chemical potentials, and inverse temperature; the shared generator does not
-own the physics model. At zero density, the zero-temperature tadpole weights
+own the physics model.
+
+Each distribution factor is the tagged call `N(e, r, t, s, sigma)`. Here `e` is
+the edge ID and `r` the derivative order with respect to the positive on-shell
+energy `E` of `e`. The flag `t` is 1 at finite temperature and 0 in the
+zero-temperature limit. The contour offset `s` is +1 or -1 for a directed weight
+and 0 for their symmetric average. The physical energy orientation
+`sigma = sign(e)` selects the chemical potential `sigma*mu` and stays symbolic
+until orientation selection. With `x = beta*(E - sigma*mu)/2`, order zero is
+`(s + tanh(x))/2 = (1 + s)/2 - n_F(E - sigma*mu)` for fermions and
+`(s + coth(x))/2 = (1 + s)/2 + n_B(E - sigma*mu)` for bosons. Orders one and two
+are written in closed form with `sech` and `csch`; higher orders are
+differentiated symbolically from order two. The zero-temperature order zero is
+`theta(E - sigma*mu) + (s - 1)/2`, whose positive orders are the distributions
+localized below. Without a chemical potential it is the vacuum weight `(1 + s)/2`,
+whose derivatives vanish. Vacuum subtraction replaces every factor by this
+vacuum weight before subtracting. At zero density, the zero-temperature tadpole weights
 reduce to the corresponding vacuum prescription; occupied fermionic states
 retain their finite-density contribution at zero temperature.
 
@@ -258,7 +277,8 @@ registers only that mode's distribution functions. Finite-temperature energy der
 are built incrementally. Zero-temperature registration contains only order zero; positive-order
 factors are removed or localized before ordinary evaluator construction, as described below.
 The builder persists the mode so runtime warmup can validate the current
-temperature, chemical potentials, and bosonic mass domain after loading or updating a model.
+temperature, chemical potentials, bosonic mass domain, and the real masses of
+zero-temperature fermion steps after loading or updating a model.
 Vacuum builders register no thermal distribution functions.
 
 `integrands::process::fermi_surface::FermiSurfaceProduct` localizes zero-temperature
@@ -278,8 +298,10 @@ spatial integration dimension. Independent energy-offset jets give the analytic
 root `t(u) = sqrt((sigma*mu + u)^2 - m^2)/|k|`. The differentiated weight includes
 the complete `h(t)*t^3/g'(t)` measure and the smooth coefficient callback.
 HyperDual Taylor coefficients are converted to ordinary mixed derivatives with
-the distribution-action signs and factorials. Empty shells contribute zero;
-degenerate onsets, invalid radial coordinates and nonfinite results are errors.
+the distribution-action signs and factorials. Only the squared mass enters the
+shell. Empty shells, including a zero oriented chemical potential for a massless
+fermion, contribute zero; degenerate onsets `sigma*mu = m > 0`, invalid radial
+coordinates and nonfinite results are errors.
 Masses and chemical potentials are held fixed during differentiation.
 
 `ThermalBoundaryTerm` keeps a smooth symbolic coefficient and explicit thermal
@@ -306,17 +328,23 @@ It runs after vacuum subtraction and both local and integrated UV contributions
 have been assembled. Parametric orientation branches select the complete residue
 key before fixing orientation signs; explicit orientation sums are extracted
 once. Distinct signed chemical-potential supports stay separate, and the
-ordinary bulk retains its existing evaluator path. Residual zero-temperature
-steps must be independent of the localized loop directions; unsupported moving
-step boundaries are rejected instead of differentiated pointwise.
+ordinary bulk retains its existing evaluator path. Only fermions with a chemical
+potential have Fermi surfaces. A missing chemical potential is zero, and warm-up
+restricts bosons to `|mu| < m` or `m = mu = 0`; their zero-temperature occupation
+is then constant on `E > 0`, so extraction removes their positive orders and
+ignores their steps. Expanded keys with a repeated distribution are rejected.
+Residual fermion steps must be independent of the localized loop directions;
+unsupported moving step boundaries are rejected instead of differentiated pointwise.
 Basis completion first retains additional independent fermion routes before
 choosing arbitrary remaining graph chords. This keeps an untouched occupation
 step independent when the input basis mixes its momentum with a localized one,
 as in a dotted sunset with a boson and an undotted fermion as its input LMB.
 
 Each sector evaluates its masses and signed chemical potentials in the current
-numerical precision using the shared parameter builder. The runtime maps the
-sample to its adapted loop basis, uses the configured positive-scale profile,
+numerical precision using the shared parameter builder. Warm-up applies the
+LU-h sampling checks to the configured positive-scale profile: a positive finite
+`sigma`, a tabulated power, and no `exponential_ct`. The runtime maps the
+sample to its adapted loop basis, uses that profile,
 then routes momentum jets back to the graph basis for the smooth coefficient
 evaluator. Numerical representability failures enter the existing precision
 retry path. Model refresh, evaluator backends and saved process state include
@@ -1000,7 +1028,8 @@ performance-heavy data.
 === Persistence Compatibility Contract
 <persistence-compatibility-contract>
 - State format is versioned with `state_manifest.toml` (`version = 11` currently).
-- Version 11 stores the selected medium in graph parameter builders. Earlier states
+- Version 11 stores the selected medium in graph parameter builders and the
+  zero-temperature Fermi-surface evaluators of amplitude graph terms. Earlier states
   use a different positional layout and must be regenerated.
 - Version 10 records UFO symbol names and Linnet subgraph labels with custom print callbacks,
   including couplings removed from the saved model by restrictions. State loading restores

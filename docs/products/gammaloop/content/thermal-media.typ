@@ -1,4 +1,4 @@
-#import "../../shared.typ": boundary, source-link
+#import "../../shared.typ": boundary, developer-link, source-link
 
 #let thermal-media = [
 = Thermal and dense media
@@ -28,6 +28,9 @@ The following are also unsupported:
 - external momenta that make otherwise distinct propagator poles coincide, such as zero
   four-momentum transfer between equal-mass propagators, which can leave unresolved `0/0`
   thermal factors (repeated poles found during generation use the derivative treatment below);
+- at zero temperature, a Fermi-surface term in which another fermion's occupation step
+  depends on the localized loop momentum, so that the two Fermi surfaces intersect; generation
+  reports it;
 - standalone evaluator export of processes with Fermi-surface localization; keep the saved
   process state instead;
 - evaluating medium expressions with the standalone evaluator of the diagnostic `3Drep`
@@ -87,7 +90,8 @@ chemical potentials must vary. Then set the values, for example with `set model 
 Finite-temperature evaluation requires a finite, positive inverse temperature. Chemical
 potentials must be finite and real. Bosons require a finite, nonnegative real mass and
 `|mu| < m`, with the massless `m = mu = 0` case also supported. Massive saturation
-(`|mu| = m > 0`) and boson condensation are unsupported. Fermions may have `|mu| >= m`. These
+(`|mu| = m > 0`) and boson condensation are unsupported. Fermions may have `|mu| >= m`; at zero
+temperature, a fermion with a chemical potential needs a finite real mass. These
 checks use the current model values and any DOT mass overrides when the integrand is warmed up,
 including after model updates or state reloads.
 
@@ -103,7 +107,7 @@ GammaLoop keeps equilibrium vacuum amplitudes in its Minkowski convention. For t
 connected vacuum-graph sum $A$, including model factors and counterterms, convert to the pressure
 contribution by hand: $delta p = -i A$. This holds at every loop order and also after vacuum
 subtraction. The
-#source-link("docs/architecture/phase-conventions.typ", label: "phase-convention derivation")
+#developer-link("phase-conventions", "phase-conventions.typ", "phase-convention derivation")
 follows from Wick rotating the single overall spacetime-volume factor; stripped integrals and
 arbitrary numerator replacements require their own conversion. Keep
 `integrator.integrated_phase = "imag"` and comparison targets in the Minkowski convention; the
@@ -116,12 +120,14 @@ integrates such a contribution.
 
 Several equal-mass propagators carrying the same loop momentum, as in self-energy insertions,
 produce energy derivatives of a distribution. In `zero_temperature_equilibrium`, those
-derivatives of a particle with a chemical potential are delta functions on its Fermi surface.
-GammaLoop localizes each one by rescaling the loop momentum and inserting the normalized
-positive-scale profile configured in
-#link("reference/cli/settings/runtime/h-function/")[`runtime.h_function`]. Integrated results do
-not depend on that profile, but pointwise values do, so fix it explicitly when comparing sampled
-values. The
+derivatives of a fermion with a nonzero chemical potential are delta functions on its Fermi
+surface. Bosons and fermions at zero chemical potential have no Fermi surface, so their
+derivatives vanish. GammaLoop localizes each delta function by rescaling the loop momentum and
+inserting the normalized positive-scale profile configured in
+#link("reference/cli/settings/runtime/h-function/")[`runtime.h_function`]. The profile needs a
+positive `sigma` and a supported `power`; `exponential_ct` is rejected. Integrated results do not
+depend on that profile, but pointwise values do, so fix it explicitly when comparing sampled
+values. A Fermi surface that shrinks to a point, `|mu| = m > 0`, is unsupported. The
 #source-link("tests/resources/run_cards/fermi_surface_1l_integration.toml", label: "one-loop Fermi-surface run card")
 integrates such a contribution.
 ]

@@ -1,8 +1,11 @@
 = Symbolica evaluation-domain bug and fix
 
-This investigation records the callback-dispatch fix in commit `5a1ece22b`. Its
-validation ran before the branch was rebased onto Symbolica 3, so the test
-results are historical.
+This investigation records the callback-dispatch fix "fix symbolica callback
+resolution for numeric wrappers", authored on 2026-09-09. Its validation ran
+before the feature branch was rebased onto Symbolica 3, so the test results are
+historical. The rebased commit is `5a1ece22b`; after a squash or rebase merge it
+remains reachable only through the pull request, so the callback forwarding
+described below identifies the fix on `main`.
 
 After replacing exponential workarounds with Symbolica's native hyperbolic
 functions, GammaLoop's interpreted evaluator could panic during thermal CFF
