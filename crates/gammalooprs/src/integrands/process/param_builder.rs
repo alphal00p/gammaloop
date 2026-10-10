@@ -113,33 +113,37 @@ impl TryFrom<AtomView<'_>> for ThermalDistributionCall {
     type Error = color_eyre::Report;
 
     fn try_from(atom: AtomView<'_>) -> Result<Self> {
-        let AtomView::Fun(function) = atom else {
-            return Err(color_eyre::eyre::eyre!(
-                "Expected a thermal distribution call, got {atom}"
-            ));
-        };
-        if function.get_symbol() != GS.thermal_distribution || function.get_nargs() != 5 {
-            return Err(color_eyre::eyre::eyre!(
-                "Thermal distribution must be an N call with five arguments, got {atom}"
-            ));
+        let [
+            edge,
+            derivative_order,
+            temperature_flag,
+            thermal_sign,
+            orientation_sign,
+        ] = match atom {
+            AtomView::Fun(function) if function.get_symbol() == GS.thermal_distribution => {
+                <[_; 5]>::try_from(function.iter().collect::<Vec<_>>()).ok()
+            }
+            _ => None,
         }
-        let mut args = function.iter();
-        let edge = args.next().unwrap();
+        .ok_or_else(|| {
+            color_eyre::eyre::eyre!(
+                "Thermal distribution must be an N call with five arguments, got {atom}"
+            )
+        })?;
         let edge = usize::try_from(edge).map_err(|_| {
             color_eyre::eyre::eyre!(
                 "Thermal distribution edge must be a non-negative integer, got {edge}"
             )
         })?;
-        let derivative_order = args.next().unwrap();
         let derivative_order = usize::try_from(derivative_order).map_err(|_| color_eyre::eyre::eyre!(
             "Thermal distribution derivative order must be a non-negative integer, got {derivative_order}"
         ))?;
         Ok(Self {
             edge: EdgeIndex(edge),
             derivative_order,
-            temperature_flag: args.next().unwrap().to_owned(),
-            thermal_sign: args.next().unwrap().to_owned(),
-            orientation_sign: args.next().unwrap().to_owned(),
+            temperature_flag: temperature_flag.to_owned(),
+            thermal_sign: thermal_sign.to_owned(),
+            orientation_sign: orientation_sign.to_owned(),
         })
     }
 }
