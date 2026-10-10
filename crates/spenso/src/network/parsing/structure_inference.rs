@@ -7,7 +7,7 @@
 //! 4. optionally validate by expanding shorthand and comparing the graph's dangling slots.
 
 use symbolica::{
-    atom::{Atom, AtomView, MulView, PowView, Symbol, representation::FunView},
+    atom::{Atom, AtomCore, AtomView, MulView, PowView, Symbol, representation::FunView},
     domains::rational::Rational,
 };
 use thiserror::Error;
@@ -482,7 +482,19 @@ impl<Aind: AbsInd + ParseableAind> OrderedStructure<LibraryRep, Aind> {
         value: AtomView<'_>,
         slots: &mut Vec<Slot<LibraryRep, Aind>>,
     ) -> Result<(), StructureError> {
-        slots.extend(Self::syntactic_structure_from_atom(value)?.structure);
+        // For exposed-slot inference, a projector has the same incidence as
+        // its factor product. Keep the actual opaque expression unexpanded.
+        let structural_factor = value.replace_map_bottom_up(|arg, _, out| {
+            if let AtomView::Fun(fun) = arg
+                && [*shadowing::SYM, *shadowing::ANTISYM, *shadowing::CYCLIC]
+                    .contains(&fun.get_symbol())
+            {
+                **out = fun
+                    .iter()
+                    .fold(Atom::num(1), |product, factor| product * factor);
+            }
+        });
+        slots.extend(Self::syntactic_structure_from_atom(structural_factor.as_view())?.structure);
         Ok(())
     }
 }

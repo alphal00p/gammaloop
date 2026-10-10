@@ -381,7 +381,15 @@ impl IndexTooling for AtomView<'_> {
         mut new_dummy: impl FnMut(usize) -> Aind,
     ) -> Result<Atom, CanonicalizationError> {
         let filtered = remove_antisymmetric_zero_terms::<Aind>(*self);
-        let mut net = filtered
+        // Composite dimensions such as Nc^2-1 must remain distinct while
+        // Spenso recognizes their slots and Symbolica relabels contractions.
+        let dimensions = CookSettings::reversible();
+        let prepared = dimensions
+            .try_cook_dimensions(filtered.as_view())
+            .map_err(|error| CanonicalizationError::Prepare {
+                reason: format!("cannot encode representation dimensions: {error:?}"),
+            })?;
+        let mut net = prepared
             .as_view()
             .parse_to_symbolic_net::<Aind>(&ParseSettings::default())
             .map_err(|error| NetworkToolingError::Parse {
@@ -481,10 +489,11 @@ impl IndexTooling for AtomView<'_> {
             reps.push(Replacement::new(d.to_pattern(), target));
         }
 
-        Ok(canonical
+        let canonical = canonical
             .canonical_form
             .replace_multiple(&reps)
-            .replace_multiple(&redual_reps))
+            .replace_multiple(&redual_reps);
+        Ok(dimensions.uncook_dimensions(canonical.as_view()))
     }
     fn spenso_conj(&self) -> Atom {
         self.conj()
