@@ -98,7 +98,7 @@ fn fermi_localization_matches_raised_cut_residues_on_nonlinear_shells() -> Resul
                 &momenta,
                 std::slice::from_ref(&mass),
                 std::slice::from_ref(&nu),
-                |_, scale| Ok((-scale.clone()).exp()),
+                |scale| Ok((-scale.clone()).exp()),
                 |momenta| Ok(coefficient(momenta)),
             )?;
 

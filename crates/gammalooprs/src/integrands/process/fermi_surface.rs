@@ -16,10 +16,12 @@
 
 use bincode_trait_derive::{Decode, Encode};
 use color_eyre::eyre::{Result, eyre};
-use linnet::half_edge::involution::EdgeIndex;
 use spenso::algebra::complex::Complex;
 use symbolica::{
-    domains::dual::{DualNumberStructure, HyperDual},
+    domains::{
+        dual::{DualNumberStructure, HyperDual},
+        float::SingleFloat,
+    },
     prelude::Real,
 };
 use three_dimensional_reps::thermal::ThermalDistributionFactor;
@@ -57,8 +59,9 @@ impl FermiSurfaceProduct {
     /// Localize a smooth coefficient while preserving the spatial integration dimension.
     ///
     /// `loop_momenta` is in `lmb()`. Masses and oriented chemical potentials
-    /// (`sigma*mu`, not their absolute values) follow `factors()` in order.
-    /// `profile(edge, t)` must integrate to one over `t > 0` for each edge.
+    /// (`sigma*mu`, not their absolute values) follow `factors()` in order;
+    /// only the squared mass enters the shell. `profile(t)` must integrate to
+    /// one over `t > 0`.
     /// Both callbacks must return jets with the supplied shape. The coefficient
     /// includes all routed numerator/denominator dependence; the localizer owns
     /// the scale profiles, spatial dilation factors and delta Jacobians.
@@ -75,7 +78,7 @@ impl FermiSurfaceProduct {
         loop_momenta: &LoopMomenta<F<T>>,
         masses: &[F<T>],
         oriented_chemical_potentials: &[F<T>],
-        mut profile: impl FnMut(EdgeIndex, &HyperDual<F<T>>) -> Result<HyperDual<F<T>>>,
+        mut profile: impl FnMut(&HyperDual<F<T>>) -> Result<HyperDual<F<T>>>,
         coefficient: impl FnOnce(&LoopMomenta<HyperDual<F<T>>>) -> Result<HyperDual<Complex<F<T>>>>,
     ) -> Result<Complex<F<T>>> {
         if loop_momenta.len() != self.lmb.loop_edges.len()
@@ -90,22 +93,18 @@ impl FermiSurfaceProduct {
         }
         let representative = &oriented_chemical_potentials[0];
         for (index, (mass, nu)) in masses.iter().zip(oriented_chemical_potentials).enumerate() {
-            if mass.is_nan()
-                || mass.is_infinite()
-                || *mass < mass.zero()
-                || nu.is_nan()
-                || nu.is_infinite()
-            {
+            if !mass.is_finite() || !nu.is_finite() {
                 return Err(eyre!(
-                    "Fermi surface on edge {} requires a finite nonnegative mass and finite oriented chemical potential",
+                    "Fermi surface on edge {} requires a finite mass and finite oriented chemical potential",
                     self.factors[index].edge_id
                 ));
             }
         }
+        let masses = masses.iter().map(|mass| mass.abs()).collect::<Vec<_>>();
         if loop_momenta.iter().any(|momentum| {
             [&momentum.px, &momentum.py, &momentum.pz]
                 .into_iter()
-                .any(|value| value.is_nan() || value.is_infinite())
+                .any(|value| !value.is_finite())
         }) {
             return Err(SamplingEvaluationError::Unrepresentable {
                 operation: "Fermi localization",
@@ -114,10 +113,12 @@ impl FermiSurfaceProduct {
             .into());
         }
         // Empty support is a physical zero, independent of the smooth coefficient.
+        // A zero chemical potential leaves the occupation constant on E > 0,
+        // also for a massless fermion, exactly as for a particle without one.
         if masses
             .iter()
             .zip(oriented_chemical_potentials)
-            .any(|(mass, nu)| nu < mass)
+            .any(|(mass, nu)| nu < mass || nu.is_zero())
         {
             return Ok(Complex::new_re(representative.zero()));
         }
@@ -136,7 +137,7 @@ impl FermiSurfaceProduct {
         for (axis, ((factor, mass), nu)) in self
             .factors
             .iter()
-            .zip(masses)
+            .zip(&masses)
             .zip(oriented_chemical_potentials)
             .enumerate()
         {
@@ -148,7 +149,7 @@ impl FermiSurfaceProduct {
             }
             let momentum = &loop_momenta[axis.into()];
             let norm_squared = momentum.norm_squared();
-            if norm_squared <= representative.zero() || norm_squared.is_infinite() {
+            if norm_squared <= representative.zero() || !norm_squared.is_finite() {
                 return Err(SamplingEvaluationError::Unrepresentable {
                     operation: "Fermi localization",
                     detail: format!(
@@ -180,10 +181,7 @@ impl FermiSurfaceProduct {
             };
             let scale = radius / new_constant(&template, &norm_squared.sqrt());
             if scale.values[0] <= representative.zero()
-                || scale
-                    .values
-                    .iter()
-                    .any(|value| value.is_nan() || value.is_infinite())
+                || scale.values.iter().any(|value| !value.is_finite())
             {
                 return Err(SamplingEvaluationError::Unrepresentable {
                     operation: "Fermi localization",
@@ -191,7 +189,7 @@ impl FermiSurfaceProduct {
                 }
                 .into());
             }
-            let density = profile(factor.edge_id, &scale)?;
+            let density = profile(&scale)?;
             if density.get_shape() != template.get_shape()
                 || density.values.len() != self.shape.len()
             {
@@ -223,11 +221,7 @@ impl FermiSurfaceProduct {
                 (scale, false),
                 (new_constant(&template, &norm_squared), true),
             ] {
-                if factor
-                    .values
-                    .iter()
-                    .any(|value| value.is_nan() || value.is_infinite())
-                {
+                if factor.values.iter().any(|value| !value.is_finite()) {
                     return Err(SamplingEvaluationError::Unrepresentable {
                         operation: "Fermi localization",
                         detail: "Nonfinite Fermi measure jet".to_owned(),
@@ -269,11 +263,7 @@ impl FermiSurfaceProduct {
                     })
                     .collect(),
             );
-            if weighted
-                .values
-                .iter()
-                .any(|value| value.is_nan() || value.is_infinite())
-            {
+            if weighted.values.iter().any(|value| !value.is_finite()) {
                 return Err(SamplingEvaluationError::Unrepresentable {
                     operation: "Fermi localization",
                     detail: "Nonfinite Fermi coefficient jet".to_owned(),
@@ -305,11 +295,7 @@ impl FermiSurfaceProduct {
                 } else {
                     weighted *= factor;
                 }
-                if weighted
-                    .values
-                    .iter()
-                    .any(|value| value.is_nan() || value.is_infinite())
-                {
+                if weighted.values.iter().any(|value| !value.is_finite()) {
                     return Err(SamplingEvaluationError::Unrepresentable {
                         operation: "Fermi localization",
                         detail: "Nonfinite localized Fermi contribution".to_owned(),
@@ -328,11 +314,7 @@ impl FermiSurfaceProduct {
         }
         let [real, imaginary] = components;
         let result = Complex::new(real, imaginary);
-        if result.re.is_nan()
-            || result.re.is_infinite()
-            || result.im.is_nan()
-            || result.im.is_infinite()
-        {
+        if !result.re.is_finite() || !result.im.is_finite() {
             return Err(SamplingEvaluationError::Unrepresentable {
                 operation: "Fermi localization",
                 detail: "Nonfinite localized Fermi contribution".to_owned(),

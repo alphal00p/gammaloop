@@ -271,7 +271,7 @@ mod tests {
             &LoopMomenta(vec![ThreeMomentum::new(F(1.0), F(0.0), F(0.0)); 2]),
             &[F(0.0), F(0.0)],
             &[F(1.0), F(2.0)],
-            |_, scale| Ok((-scale.clone()).exp()),
+            |scale| Ok((-scale.clone()).exp()),
             |momenta| {
                 let value = new_constant(&momenta.0[0].px, &F(coefficient));
                 Ok(HyperDual::from_values(
