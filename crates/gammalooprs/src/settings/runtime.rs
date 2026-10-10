@@ -31,7 +31,7 @@ use crate::{
         },
     },
 };
-use symbolica::domains::float::Real;
+use symbolica::domains::{float::Real, integer::Integer, rational::Rational};
 
 use super::{RuntimeSettings, global::OrientationPattern};
 
@@ -755,6 +755,112 @@ mod tests {
         let json = serde_json::to_value(SamplingRadialProfile::default()).unwrap();
         assert!(json.get("scale").is_some());
         assert!(json.get("shape").is_some());
+    }
+
+    #[test]
+    fn h_function_normalizations_match_bessel_integrals_in_native_precision() {
+        use symbolica::{
+            atom::{Atom, AtomView},
+            coefficient::CoefficientView,
+            domains::float::{Float, RealLike},
+            function,
+            transcendental::bessel_k,
+        };
+
+        use crate::utils::{ArbPrec, SamplingFloat, f128};
+
+        const ORACLE_PRECISION: u32 = 1200;
+        // Symbolica's own arbitrary-precision evaluation of e^2 K_nu(2).
+        let scaled_bessel_k = |twice_order: usize| {
+            let value = function!(
+                bessel_k(),
+                Atom::num((twice_order as i64, 2)),
+                Atom::num(Float::with_val(ORACLE_PRECISION, 2))
+            );
+            let AtomView::Num(number) = value.as_view() else {
+                panic!("bessel_k did not evaluate: {value}");
+            };
+            let CoefficientView::Float(real, _) = number.get_coeff_view() else {
+                panic!("bessel_k did not evaluate to a float: {value}");
+            };
+            real.to_float() * Float::with_val(ORACLE_PRECISION, 2).exp()
+        };
+        // The previously tabulated binary64 integrals anchor the Bessel orders.
+        let sqrt_pi_half = std::f64::consts::PI.sqrt() / 2.0;
+        let poly = [
+            (None, sqrt_pi_half),
+            (Some(1), 0.841_568_215_070_771_4),
+            (Some(3), 1.033_476_847_068_688_6),
+            (Some(4), 1.329_340_388_179_137),
+            (Some(6), 2.880_237_507_721_463_7),
+            (Some(7), 4.783_566_971_347_609),
+            (Some(9), 16.225_745_976_182_285),
+            (Some(10), 32.735_007_058_911_25),
+            (Some(12), 155.837_465_922_583_42),
+            (Some(13), 364.658_500_356_566_04),
+            (Some(15), 2_257.637_553_015_473),
+            (Some(16), 5_939.804_418_537_864),
+        ];
+        let left_right = [
+            (Some(0), 2.066_953_694_137_377),
+            (Some(1), 1.683_136_430_141_542_8),
+            (Some(3), 3.750_090_124_278_92),
+            (Some(4), 9.567_133_942_695_218),
+            (Some(6), 139.373_101_752_153_5),
+            (Some(7), 729.317_000_713_132_1),
+            (Some(9), 32_336.242_742_929_753),
+            (Some(10), 263_205.217_049_469),
+            (Some(12), 2.427_503_717_893_097_5e7),
+            (Some(13), 2.694_265_921_644_289e8),
+            (Some(15), 4.261_555_045_314_143e10),
+            (Some(16), 5.998_751_004_871_322e11),
+        ];
+        let tabulated = std::iter::once((HFunction::Exponential, None, sqrt_pi_half))
+            .chain(poly.map(|(power, value)| (HFunction::PolyExponential, power, value)))
+            .chain(
+                left_right
+                    .map(|(power, value)| (HFunction::PolyLeftRightExponential, power, value)),
+            );
+        fn check<T: FloatLike>(sigma: F<T>, settings: &HFunctionSettings, expected: &Float) {
+            let actual: Float = settings.normalization(&sigma).0.into();
+            let relative = ((actual - expected) / expected).norm();
+            // The K_0 series cancels about four bits before the upward recurrence.
+            let epsilon: Float = sigma.epsilon().0.into();
+            assert!(
+                relative <= epsilon * 64,
+                "{settings:?} in {}: relative error {relative}",
+                std::any::type_name::<T>()
+            );
+        }
+        for (function, power, binary64) in tabulated {
+            let settings = HFunctionSettings {
+                function: function.clone(),
+                power,
+                ..Default::default()
+            };
+            let p = power.unwrap_or(0);
+            let expected = match function {
+                HFunction::Exponential => scaled_bessel_k(1),
+                HFunction::PolyExponential => scaled_bessel_k(p.abs_diff(1)),
+                _ => scaled_bessel_k(2 * p.abs_diff(1)) * 2,
+            };
+            assert!(
+                ((expected.to_f64() - binary64) / binary64).abs() < 4.0 * f64::EPSILON,
+                "{settings:?}: {expected} != tabulated {binary64}"
+            );
+            // A sigma that is exact in binary keeps every precision comparable.
+            let expected = expected * Float::with_val(ORACLE_PRECISION, 1.25);
+            check(F(1.25_f64), &settings, &expected);
+            check(F(f128::from_f64(1.25)), &settings, &expected);
+            check(F(SamplingFloat::from_f64(1.25)), &settings, &expected);
+            check(F(ArbPrec::from_f64(1.25)), &settings, &expected);
+        }
+        // The default profile keeps its exact sqrt(pi)*sigma/2 normalization.
+        let sigma = F(ArbPrec::from_f64(1.25));
+        assert_eq!(
+            HFunctionSettings::default().normalization(&sigma),
+            sigma.PI().sqrt() * &sigma / sigma.from_usize(2)
+        );
     }
 
     #[test]
@@ -2582,8 +2688,80 @@ impl Default for HFunctionSettings {
 }
 
 impl HFunctionSettings {
-    /// Powers with a tabulated normalization for the polynomial profiles.
+    /// Supported powers of the polynomial profiles.
     const NORMALIZED_POWERS: [usize; 12] = [0, 1, 3, 4, 6, 7, 9, 10, 12, 13, 15, 16];
+
+    /// Integral of the unnormalized profile over `t > 0`, in the precision of
+    /// `sigma`. With `x = t/sigma`, `exponential` integrates `exp(-x^2)` to
+    /// `sqrt(pi)/2`, while the polynomial profiles are Bessel integrals:
+    /// `x^-p exp(2 - x^2 - x^-2)` gives `e^2 K_{(1-p)/2}(2)` and
+    /// `x^-p exp(2 - x - 1/x)` gives `2 e^2 K_{1-p}(2)`.
+    pub(crate) fn normalization<T: FloatLike>(&self, sigma: &F<T>) -> F<T> {
+        let one = sigma.one();
+        let power = self.power.unwrap_or(0);
+        if self.function != HFunction::Exponential && !Self::NORMALIZED_POWERS.contains(&power) {
+            panic!("Value {power} of power in poly exponential h function not supported");
+        }
+        let unit = match self.function {
+            HFunction::Exponential => Self::scaled_bessel_k_at_two(1, &one),
+            HFunction::PolyExponential => Self::scaled_bessel_k_at_two(power.abs_diff(1), &one),
+            HFunction::PolyLeftRightExponential => {
+                one.from_usize(2) * Self::scaled_bessel_k_at_two(2 * power.abs_diff(1), &one)
+            }
+            HFunction::ExponentialCT => {
+                unreachable!("exponential_ct is a threshold localization without a normalization")
+            }
+        };
+        unit * sigma
+    }
+
+    /// `e^2 K_nu(2)` for `nu = twice_order/2`, in the precision of `one`.
+    ///
+    /// Half-integer orders are elementary, `e^2 K_{n+1/2}(2) = sqrt(pi)/2 *
+    /// sum_k (n+k)!/(k! (n-k)! 4^k)`, an exact rational times `sqrt(pi)/2`.
+    /// Integer orders start from the `K_0` series, where `log(z/2)` vanishes at
+    /// `z = 2` and leaves Euler's constant as the only transcendental input.
+    /// The Wronskian `I_0 K_1 + I_1 K_0 = 1/2` gives `K_1`, and the upward
+    /// recurrence `K_{n+1}(2) = K_{n-1}(2) + n K_n(2)` is stable for `K`.
+    fn scaled_bessel_k_at_two<T: FloatLike>(twice_order: usize, one: &F<T>) -> F<T> {
+        use symbolica::domains::float::SingleFloat;
+
+        if twice_order % 2 == 1 {
+            let n = twice_order / 2;
+            let sum = (0..=n).fold(Rational::zero(), |sum, k| {
+                sum + Rational::from((
+                    Integer::factorial((n + k) as u32),
+                    Integer::factorial(k as u32)
+                        * Integer::factorial((n - k) as u32)
+                        * Integer::from(4).pow(k as u64),
+                ))
+            });
+            return one.PI().sqrt() * one.from_rational(&(sum / Rational::from(2)));
+        }
+        // Each series term carries (z^2/4)^k/(k!)^2 = 1/(k!)^2 at z = 2.
+        let (mut i0, mut i1, mut harmonic_sum) = (one.zero(), one.zero(), one.zero());
+        let (mut inverse_square, mut harmonic) = (one.clone(), one.zero());
+        for k in 1.. {
+            i0 += &inverse_square;
+            i1 += &inverse_square / one.from_usize(k);
+            inverse_square = &inverse_square / one.from_usize(k * k);
+            harmonic += one.from_usize(k).inv();
+            // H_k >= 1 bounds every remaining I_0 and I_1 term as well.
+            let term = &harmonic * &inverse_square;
+            harmonic_sum += &term;
+            if term <= &harmonic_sum * one.epsilon() {
+                break;
+            }
+        }
+        let k0 = harmonic_sum - one.euler() * &i0;
+        let k1 = (one.from_usize(2).inv() - &i1 * &k0) / &i0;
+        let order = twice_order / 2;
+        let (mut lower, mut upper) = (k0, k1);
+        for n in 1..order {
+            (lower, upper) = (upper.clone(), lower + one.from_usize(n) * &upper);
+        }
+        one.from_usize(2).exp() * if order == 0 { lower } else { upper }
+    }
 
     /// Require a profile normalized to one over positive scales `t`. LU-h
     /// sampling and Fermi-surface localization both insert it as a unit integral.

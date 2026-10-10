@@ -631,6 +631,48 @@ mod tests {
     }
 
     #[test]
+    fn normalized_h_functions_integrate_to_one() {
+        use super::{F, h, h_dual, hyperdual_utils::new_constant};
+        use crate::settings::runtime::{HFunction, HFunctionSettings};
+        use symbolica::domains::dual::HyperDual;
+
+        let template = HyperDual::from_values(vec![vec![0], vec![1]], vec![F(1.0), F(0.0)]);
+        // With t = sigma e^u, the trapezoidal rule converges exponentially for
+        // these profiles, which decay doubly exponentially at both ends.
+        let step = 0.01;
+        for function in [
+            HFunction::Exponential,
+            HFunction::PolyExponential,
+            HFunction::PolyLeftRightExponential,
+        ] {
+            // The exponential profile ignores the power.
+            for power in [None, Some(1), Some(4), Some(16)] {
+                let settings = HFunctionSettings {
+                    function: function.clone(),
+                    sigma: 1.5,
+                    power,
+                    ..Default::default()
+                };
+                let integral = (-4000..=4000)
+                    .map(|n| {
+                        let t = F(settings.sigma * (n as f64 * step).exp());
+                        let value = h(&t, None, None, &settings);
+                        let dual = h_dual(&new_constant(&template, &t), None, None, &settings);
+                        // Far tails amplify argument rounding but are negligible.
+                        let scale = value.0.abs().max(1.0);
+                        assert!((dual.values[0].0 - value.0).abs() <= 1e-14 * scale);
+                        value.0 * t.0 * step
+                    })
+                    .sum::<f64>();
+                assert!(
+                    (integral - 1.0).abs() < 1e-12,
+                    "{settings:?} integrates to {integral}"
+                );
+            }
+        }
+    }
+
+    #[test]
     fn debug_tags_macro_supports_tags_and_regular_fields() {
         crate::debug_tags!(#integration, #summary;
             inspect = false,
@@ -3689,86 +3731,35 @@ pub(crate) fn h_dual<T: FloatLike>(
     sigma: Option<F<T>>,
     h_function_settings: &crate::settings::runtime::HFunctionSettings,
 ) -> HyperDual<F<T>> {
-    let sqrt_pi = new_constant(t, &t.values[0].PI().sqrt());
-    let sig = if let Some(s) = sigma {
-        new_constant(t, &s)
-    } else {
-        new_constant(t, &F::<T>::from_f64(h_function_settings.sigma))
-    };
+    let sigma = sigma.unwrap_or_else(|| F::<T>::from_f64(h_function_settings.sigma));
+    let sig = new_constant(t, &sigma);
+    let two = new_constant(t, &sigma.from_usize(2));
     let power = h_function_settings.power;
+    let prefactor = || {
+        let normalisation = new_constant(t, &h_function_settings.normalization(&sigma));
+        match power {
+            None | Some(0) => normalisation.inv(),
+            Some(p) => (t.clone() / &sig).inv().pow(p as u64) / normalisation,
+        }
+    };
     match h_function_settings.function {
         crate::settings::runtime::HFunction::Exponential => {
-            (-(t.clone() * t) / (sig.clone() * sig.clone())).exp()
-                * new_constant(t, &F::<T>::from_f64(2_f64))
-                / (sqrt_pi * sig)
+            // This profile has no power.
+            (-(t.clone() * t) / (sig.clone() * &sig)).exp()
+                / new_constant(t, &h_function_settings.normalization(&sigma))
         }
         crate::settings::runtime::HFunction::PolyExponential => {
-            // Result of \int_0^{\infty} dt (t/sigma)^{-p} exp(2-t^2/sigma^2-sigma^2/t^2)
-            let normalisation = match power {
-                None | Some(0) => {
-                    sqrt_pi.clone() * &sig / new_constant(t, &F::<T>::from_f64(2_f64))
-                }
-                Some(1) => new_constant(t, &F::<T>::from_f64(0.841_568_215_070_771_4)) * &sig,
-                Some(3) => new_constant(t, &F::<T>::from_f64(1.033_476_847_068_688_6)) * &sig,
-                Some(4) => new_constant(t, &F::<T>::from_f64(1.329_340_388_179_137)) * &sig,
-                Some(6) => new_constant(t, &F::<T>::from_f64(2.880_237_507_721_463_7)) * &sig,
-                Some(7) => new_constant(t, &F::<T>::from_f64(4.783_566_971_347_609)) * &sig,
-                Some(9) => new_constant(t, &F::<T>::from_f64(16.225_745_976_182_285)) * &sig,
-                Some(10) => new_constant(t, &F::<T>::from_f64(32.735_007_058_911_25)) * &sig,
-                Some(12) => new_constant(t, &F::<T>::from_f64(155.837_465_922_583_42)) * &sig,
-                Some(13) => new_constant(t, &F::<T>::from_f64(364.658_500_356_566_04)) * &sig,
-                Some(15) => new_constant(t, &F::<T>::from_f64(2_257.637_553_015_473)) * &sig,
-                Some(16) => new_constant(t, &F::<T>::from_f64(5_939.804_418_537_864)) * &sig,
-                _ => panic!(
-                    "Value {} of power in poly exponential h function not supported",
-                    power.unwrap()
-                ),
-            };
-            let prefactor = match power {
-                None | Some(0) => normalisation.inv(),
-                Some(p) => (t.clone() / &sig).inv().pow(p as u64) / normalisation,
-            };
-            prefactor
-                * (new_constant(t, &F::<T>::from_f64(2_f64))
+            // Normalized by the integral of (t/sigma)^{-p} exp(2-t^2/sigma^2-sigma^2/t^2).
+            prefactor()
+                * (two
                     - (t.clone() * t) / (sig.clone() * &sig)
-                    - (sig.clone() * sig) / (t.clone() * t))
+                    - (sig.clone() * &sig) / (t.clone() * t))
                     .exp()
         }
         crate::settings::runtime::HFunction::PolyLeftRightExponential => {
-            // Result of \int_0^{\infty} dt (t/sigma)^{-p} exp( -((t^2/sigma^2 +1)/ (t/sigma) -2) )
-            let normalisation = match power {
-                None | Some(0) => new_constant(t, &F::<T>::from_f64(2.066_953_694_137_377)) * &sig,
-                Some(1) => new_constant(t, &F::<T>::from_f64(1.683_136_430_141_542_8)) * &sig,
-                Some(3) => new_constant(t, &F::<T>::from_f64(3.750_090_124_278_92)) * &sig,
-                Some(4) => new_constant(t, &F::<T>::from_f64(9.567_133_942_695_218)) * &sig,
-                Some(6) => new_constant(t, &F::<T>::from_f64(139.373_101_752_153_5)) * &sig,
-                Some(7) => new_constant(t, &F::<T>::from_f64(729.317_000_713_132_1)) * &sig,
-                Some(9) => new_constant(t, &F::<T>::from_f64(32_336.242_742_929_753)) * &sig,
-                Some(10) => new_constant(t, &F::<T>::from_f64(263_205.217_049_469)) * &sig,
-                Some(12) => new_constant(t, &F::<T>::from_f64(2.427_503_717_893_097_5e7)) * &sig,
-                Some(13) => new_constant(t, &F::<T>::from_f64(2.694_265_921_644_289e8)) * &sig,
-                Some(15) => new_constant(t, &F::<T>::from_f64(4.261_555_045_314_143e10)) * &sig,
-                Some(16) => new_constant(t, &F::<T>::from_f64(5.998_751_004_871_322e11)) * &sig,
-                _ => panic!(
-                    "Value {} of power in poly exponential h function not supported",
-                    power.unwrap()
-                ),
-            };
-
-            // println!("normalisation: {}", normalisation);
-            // println!("t: {}", t);
-            // println!("sig: {}", sig);
-            // println!("power: {:?}", power);
-
-            let prefactor = match power {
-                None | Some(0) => normalisation.inv(),
-                Some(p) => (t.clone() / &sig).inv().pow(p as u64) / normalisation,
-            };
-
-            // println!("prefactor: {}", prefactor);
-            prefactor
-                * (new_constant(t, &F::<T>::from_f64(2_f64))
-                    - ((t.clone() * t) / (sig.clone() * &sig) + t.one()) / (t.clone() / &sig))
+            // Normalized by the integral of (t/sigma)^{-p} exp(-((t^2/sigma^2+1)/(t/sigma)-2)).
+            prefactor()
+                * (two - ((t.clone() * t) / (sig.clone() * &sig) + t.one()) / (t.clone() / &sig))
                     .exp()
         }
         crate::settings::runtime::HFunction::ExponentialCT => {
@@ -3804,82 +3795,29 @@ pub(crate) fn h<T: FloatLike>(
     sigma: Option<F<T>>,
     h_function_settings: &crate::settings::runtime::HFunctionSettings,
 ) -> F<T> {
-    let sqrt_pi = t.PI().sqrt();
-    let sig = if let Some(s) = sigma {
-        s
-    } else {
-        F::<T>::from_f64(h_function_settings.sigma)
-    };
+    let sig = sigma.unwrap_or_else(|| F::<T>::from_f64(h_function_settings.sigma));
+    let two = sig.from_usize(2);
     let power = h_function_settings.power;
+    let prefactor = || {
+        let normalisation = h_function_settings.normalization(&sig);
+        match power {
+            None | Some(0) => normalisation.inv(),
+            Some(p) => (t / &sig).powi(-(p as i32)) / normalisation,
+        }
+    };
     match h_function_settings.function {
         crate::settings::runtime::HFunction::Exponential => {
-            (-(t.square()) / (sig.square())).exp() * F::<T>::from_f64(2_f64) / (sqrt_pi * &sig)
+            // This profile has no power.
+            (-(t.square()) / (sig.square())).exp() / h_function_settings.normalization(&sig)
         }
         crate::settings::runtime::HFunction::PolyExponential => {
-            // Result of \int_0^{\infty} dt (t/sigma)^{-p} exp(2-t^2/sigma^2-sigma^2/t^2)
-            let normalisation = match power {
-                None | Some(0) => sqrt_pi * &sig / F::<T>::from_f64(2_f64),
-                Some(1) => F::<T>::from_f64(0.841_568_215_070_771_4) * &sig,
-                Some(3) => F::<T>::from_f64(1.033_476_847_068_688_6) * &sig,
-                Some(4) => F::<T>::from_f64(1.329_340_388_179_137) * &sig,
-                Some(6) => F::<T>::from_f64(2.880_237_507_721_463_7) * &sig,
-                Some(7) => F::<T>::from_f64(4.783_566_971_347_609) * &sig,
-                Some(9) => F::<T>::from_f64(16.225_745_976_182_285) * &sig,
-                Some(10) => F::<T>::from_f64(32.735_007_058_911_25) * &sig,
-                Some(12) => F::<T>::from_f64(155.837_465_922_583_42) * &sig,
-                Some(13) => F::<T>::from_f64(364.658_500_356_566_04) * &sig,
-                Some(15) => F::<T>::from_f64(2_257.637_553_015_473) * &sig,
-                Some(16) => F::<T>::from_f64(5_939.804_418_537_864) * &sig,
-                _ => panic!(
-                    "Value {} of power in poly exponential h function not supported",
-                    power.unwrap()
-                ),
-            };
-            let prefactor = match power {
-                None | Some(0) => normalisation.inv(),
-                Some(p) => (t / &sig).powi(-(p as i32)) / normalisation,
-            };
-            prefactor
-                * (F::<T>::from_f64(2_f64)
-                    - (t.square()) / (sig.square())
-                    - (sig.square()) / (t.square()))
-                .exp()
+            // Normalized by the integral of (t/sigma)^{-p} exp(2-t^2/sigma^2-sigma^2/t^2).
+            prefactor()
+                * (two - (t.square()) / (sig.square()) - (sig.square()) / (t.square())).exp()
         }
         crate::settings::runtime::HFunction::PolyLeftRightExponential => {
-            // Result of \int_0^{\infty} dt (t/sigma)^{-p} exp( -((t^2/sigma^2 +1)/ (t/sigma) -2) )
-            let normalisation = match power {
-                None | Some(0) => F::<T>::from_f64(2.066_953_694_137_377) * &sig,
-                Some(1) => F::<T>::from_f64(1.683_136_430_141_542_8) * &sig,
-                Some(3) => F::<T>::from_f64(3.750_090_124_278_92) * &sig,
-                Some(4) => F::<T>::from_f64(9.567_133_942_695_218) * &sig,
-                Some(6) => F::<T>::from_f64(139.373_101_752_153_5) * &sig,
-                Some(7) => F::<T>::from_f64(729.317_000_713_132_1) * &sig,
-                Some(9) => F::<T>::from_f64(32_336.242_742_929_753) * &sig,
-                Some(10) => F::<T>::from_f64(263_205.217_049_469) * &sig,
-                Some(12) => F::<T>::from_f64(2.427_503_717_893_097_5e7) * &sig,
-                Some(13) => F::<T>::from_f64(2.694_265_921_644_289e8) * &sig,
-                Some(15) => F::<T>::from_f64(4.261_555_045_314_143e10) * &sig,
-                Some(16) => F::<T>::from_f64(5.998_751_004_871_322e11) * &sig,
-                _ => panic!(
-                    "Value {} of power in poly exponential h function not supported",
-                    power.unwrap()
-                ),
-            };
-
-            // println!("normalisation: {}", normalisation);
-            // println!("t: {}", t);
-            // println!("sig: {}", sig);
-            // println!("power: {:?}", power);
-
-            let prefactor = match power {
-                None | Some(0) => normalisation.inv(),
-                Some(p) => (t / &sig).powi(-(p as i32)) / normalisation,
-            };
-
-            // println!("prefactor: {}", prefactor);
-            prefactor
-                * (F::<T>::from_f64(2_f64) - ((t.square()) / (sig.square()) + t.one()) / (t / sig))
-                    .exp()
+            // Normalized by the integral of (t/sigma)^{-p} exp(-((t^2/sigma^2+1)/(t/sigma)-2)).
+            prefactor() * (two - ((t.square()) / (sig.square()) + t.one()) / (t / &sig)).exp()
         }
         crate::settings::runtime::HFunction::ExponentialCT => {
             let delta_t_sq = (tstar.clone().unwrap() - t).square();

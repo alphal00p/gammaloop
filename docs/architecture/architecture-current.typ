@@ -343,7 +343,9 @@ as in a dotted sunset with a boson and an undotted fermion as its input LMB.
 Each sector evaluates its masses and signed chemical potentials in the current
 numerical precision using the shared parameter builder. Warm-up applies the
 LU-h sampling checks to the configured positive-scale profile: a positive finite
-`sigma`, a tabulated power, and no `exponential_ct`. The runtime maps the
+`sigma`, a supported power, and no `exponential_ct`. The profile normalization
+is evaluated in the active precision from its closed form, `e^2 K_nu(2)` for the
+polynomial profiles, so precision retries inherit no binary64 constants. The runtime maps the
 sample to its adapted loop basis, uses that profile,
 then routes momentum jets back to the graph basis for the smooth coefficient
 evaluator. Numerical representability failures enter the existing precision
