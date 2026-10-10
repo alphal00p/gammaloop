@@ -104,8 +104,8 @@ tests, algebraic settings or CI settings were changed for this investigation.
 
 == Evidence
 
-The adjacent `soft-ct-main-comparison-2026-09-23/` directory retains input cards,
-the MUV overlay, command receipts, result/resource records, compressed stage
-logs, debugger snapshots and scripts, executable fingerprints, the build log,
-the settings comparison and a source/method manifest. Full scratch states and
-binaries remain under `/tmp/soft-ct-main-comparison-2026-09-23/`.
+This report retains the input revisions, settings, measurements and limits.
+The original command receipts, traces, debugger inputs, binaries and manifests
+were local campaign artifacts and are not distributed. Obsolete host-specific
+runners and duplicate cards have been removed. A reusable ordinary-U input is
+available in #link("../../examples/cli/uv_scalar_growth/orientation_58_muv.toml")[the scalar-growth example].

@@ -2671,8 +2671,8 @@ pub(crate) fn uv_limit<S: ForestNodeLike, M: ForestNodeLike>(
             );
             Ok(local)
         }
-        // The abandoned rest-frame/projector prototype is documented in
-        // SOFT_OS_CT_SCHEME_GOAL.typ. OS awaits completed local-4D reconstruction.
+        // OS remains deferred; see the current-boundaries section in
+        // docs/architecture/uv-renormalization.typ.
         atype => Err(eyre!("Not yet implemented {:?}", atype)),
     }
 }
@@ -7795,9 +7795,9 @@ mod tests {
             );
         }
 
-        // Normalize the production route to the independent scalar coordinates
-        // used in the derivation in SOFT_OS_CT_SCHEME_GOAL.typ.  This mapping is
-        // deliberately algebraic: it does not invoke either Taylor projector.
+        // Normalize to the independent scalar coordinates in the nested-soft-toy
+        // section of docs/architecture/uv-renormalization.typ. This algebraic
+        // mapping does not invoke either Taylor projector.
         let k0 = Atom::var(symbol!("production_nested_toy_k0"));
         let p0 = Atom::var(symbol!("production_nested_toy_p0"));
         let k_vec = Atom::var(symbol!("production_nested_toy_k_vec"));

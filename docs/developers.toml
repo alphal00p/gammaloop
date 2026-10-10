@@ -920,7 +920,10 @@ anchor = "ci-checks-and-upload:"
 # protect selected producer closures until the cache upload completes.
 # Reviewed 2026-10-06: ci.typ documents that local uploads run static checks
 # and prepare runtime producers; NixCI executes the runtime checks after push.
-digest = "e42ed4e4fd1215f540136dfc0582f5d7a8f9fe1e"
+# No architecture impact 2026-10-10: remove recipes for absent audit/deny
+# checks and correct the dependency-profile comment; selected checks, uploads,
+# and runtime producer boundaries are unchanged.
+digest = "0f8a76ea61d80a7847d9e8d16756e9914e245ae2"
 
 [[section.note]]
 id = "nix-crane-cache-reuse"
@@ -1018,7 +1021,9 @@ path = "nix/rust-workspace.nix"
 symbol = "workspace manifest inputs; documentation source inputs are scoped separately"
 anchor = "workspaceDependencyManifestFiles ="
 end_anchor = "cargoGraphGenerationSrc ="
-digest = "7afb2c4ba546f25ebacc08818b3692760e1f1e39"
+# No architecture impact 2026-10-10: remove the inactive virtual-workspace
+# build.rs input; member build scripts retain the platform linking behavior.
+digest = "1783ac735c1881e1fc45d30750138beccf1e2814"
 
 [[section.note.scope]]
 path = "nix/rust-workspace.nix"

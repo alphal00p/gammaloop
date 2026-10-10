@@ -311,8 +311,8 @@ from the rendered PDF.
   `crates/gammaloop-api/python/gammaloop`).
 - `tests/` contains the integration-test crate and shared fixtures.
 - `examples/` includes command cards and notebooks for end-to-end runs.
-- `bin/` provides scripts like `compile.sh`, `run_tests.sh`, and the
-  `gammaloop` entrypoints after build.
+- `bin/` contains the process-tree memory watchdog used by guarded test runs.
+  The repository-root `gammaloop` script launches the CLI.
 - `assets/` stores schemas/data and model files (`assets/models/`).
 - Rust benches live under `crates/gammalooprs/benches/`.
 
@@ -340,7 +340,8 @@ from the rendered PDF.
   just clippy
   ```
 - If you run into a macOS linking issue complaining about a missing `__emul...`
-  symbol, try building with `EXTRA_MACOS_LIBS_FOR_GNU_GCC=T`; see `build.rs`
+  symbol, try building with `EXTRA_MACOS_LIBS_FOR_GNU_GCC=T`; see
+  #link("crates/gammaloop-api/build.rs")[`crates/gammaloop-api/build.rs`]
   for the impact of this setting.
 
 The root `justfile` keeps build and lint commands. Test, NixCI and drawing recipes

@@ -40,6 +40,12 @@ crates/gammaloop-api/python/gammaloop/libgammaloop_api*
 # Temporary cache files
 *.sw*
 integration_workspace_*
+# Legacy example checkpoints and generated drawing outputs.
+examples/cli/gg_hhh/2L/integration_workspace/
+examples/cli/aa_aa/3L/graphs/drawings/
+examples/cli/aa_aa/3L/graphs/drawings.pdf
+examples/cli/aa_aa/3L/graphs_grouped/drawings/
+examples/cli/aa_aa/3L/graphs_grouped/drawings.pdf
 
 examples/*/*/*_workspace/
 gammaloop_state_integration_workspace/

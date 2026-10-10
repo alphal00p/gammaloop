@@ -280,8 +280,7 @@
 
   workspaceDependencyBuildScripts =
     lib.filter builtins.pathExists (
-      [(workspaceRoot + "/build.rs")]
-      ++ map (member: workspaceRoot + "/${member}/build.rs") workspaceMemberDirs
+      map (member: workspaceRoot + "/${member}/build.rs") workspaceMemberDirs
     );
 
   workspacePackageBuildScriptsForSourcePackages = sourcePackages:
@@ -301,7 +300,6 @@
       ++ workspaceDependencyBuildScripts
       ++ workspaceCargoTargetEntrypoints
       ++ [
-        (workspaceRoot + "/crate-hashes.json")
         (workspaceRoot + "/.config/hakari.toml")
       ]
     );

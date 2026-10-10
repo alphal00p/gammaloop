@@ -48,7 +48,7 @@ The monitor sampled 12,752,996 KiB RSS against a 12,582,912 KiB bound: 170,084 K
 
 == Smaller reproducer: source orientation 58
 <smaller-reproducer-source-orientation-58>
-The existing orientation display independently lists `(0,0,+,+,-,-,+,+,+,-)` as source orientation 58. A copied card changes only the selected localized orientation; U/H then differ only in the same prescription overlay used above. This supplies a much smaller reproducer than generating every source map. See the #link("soft-ct-expression-growth-2026-09-14/orientation-58.toml")[card] and actual orientation inventory;.
+The existing orientation display independently lists `(0,0,+,+,-,-,+,+,+,-)` as source orientation 58. A copied card changes only the selected localized orientation; U/H then differ only in the same prescription overlay used above. This supplies a much smaller reproducer than generating every source map. The reusable ordinary-U input is retained in #link("../../examples/cli/uv_scalar_growth/orientation_58_muv.toml")[the scalar-growth example]; the original campaign inventory is historical.
 
 Both U and H cross the initial 2 GiB RSS bound during #strong[finite tensor execution];, after parsing zero-based summand 5 and before its execution-complete event. Numeric summand indices are not stable coefficient identities across schemes or repeated runs; this locates the shared pipeline stage, not an identical U/H input term. All local Taylor projections had already completed. Repeating this one-orientation pair with 60-second/12-GiB bounds reaches the completed preprocessed scalar in both cases:
 

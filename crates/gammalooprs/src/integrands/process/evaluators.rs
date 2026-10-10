@@ -782,7 +782,6 @@ impl EvaluatorStack {
                     .map(|(orientation, production_id)| {
                         let selected = Self::select_orientation(atom, orientation, *production_id);
                         selected_alias_bodies += selected.get_aliases().len();
-                        debug!(selected_expr = %selected.log_print(None), "Summed");
                         selected
                     })
                     .fold(AliasedAtom::default(), |acc, atom| {

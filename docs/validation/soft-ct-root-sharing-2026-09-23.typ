@@ -86,11 +86,19 @@ retained representation on the smallest nonzero orientation before full U/H.
 
 == Evidence and limits
 
-The adjacent evidence directory records the compact structural metrics, the
-lossless DAG, the verified debugger snapshot and command/result receipts, and
-the read-only decoder. Packed root dumps, full logs and monitor scripts remain
-in `/tmp/soft-ct-root-size-2026-09-23/`. No symbol state is attached to these raw
-bytes: the audit only decodes lengths and compares exact byte subtrees, without
-importing symbols or doing algebra. The initial debugger probe exposed invalid
-optimized-frame fields for the definition store; those values are excluded.
-Only the subsequently verified root/protected byte lengths are reported.
+The structural metrics above and the adjacent
+#link("soft-ct-root-sharing-2026-09-23/root-structure.dag")[lossless DAG]
+are retained. Original packed root dumps, debugger inputs, logs and receipts
+were local campaign artifacts and are not distributed. The host-specific
+capture and audit scripts have been removed.
+
+The DAG begins with the eight bytes `SCFDAG1\0`, then little-endian `u32` root
+ID and node count. Each node stores `u32` prefix length and child count, its
+literal prefix bytes, then the ordered `u32` child IDs. Recursively emitting a
+node's prefix followed by its children reconstructs the original packed byte
+stream. No Symbolica symbol state or numerator-definition catalogue is attached;
+this is structural evidence, not an evaluator input.
+
+The initial debugger probe exposed invalid optimized-frame fields for the
+definition store; those values are excluded. Only the subsequently verified
+root/protected byte lengths are reported.

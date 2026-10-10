@@ -42,9 +42,9 @@ runs are expected; the earlier matched run produced 394,216,189 bytes.
 
 Completing Symbolica evaluator construction is unnecessary for observing this
 growth. Numeric summand indices can reorder between runs; compare stage sizes
-and stable forest/source-map identities. This card reproduces the current
-implementation's ordinary-U behavior; it makes no claim about a pre-change
-revision or numerical UV/IR correctness.
+and stable forest/source-map identities. This card records the ordinary-U input used in the September 2026
+investigation. The measurements above describe that historical revision; they
+are not current performance expectations or numerical UV/IR acceptance checks.
 
-The [investigation report](../../../docs/validation/soft-ct-expression-growth-2026-09-14.md)
+The [investigation report](../../../docs/validation/soft-ct-expression-growth-2026-09-14.typ)
 contains the matched U/H measurements and their limits.
