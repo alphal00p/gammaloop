@@ -223,10 +223,14 @@ and 0 for their symmetric average. The physical energy orientation
 `sigma = sign(e)` selects the chemical potential `sigma*mu` and stays symbolic
 until orientation selection. With `x = beta*(E - sigma*mu)/2`, order zero is
 `(s + tanh(x))/2 = (1 + s)/2 - n_F(E - sigma*mu)` for fermions and
-`(s + coth(x))/2 = (1 + s)/2 + n_B(E - sigma*mu)` for bosons. Orders one and two
-are written in closed form with `sech` and `csch`; higher orders are
-differentiated symbolically from order two. The zero-temperature order zero is
-`theta(E - sigma*mu) + (s - 1)/2`, whose positive orders are the distributions
+`(s + coth(x))/2 = (1 + s)/2 + n_B(E - sigma*mu)` for bosons. The evaluated body
+keeps the occupation separate from the vacuum weight `(1 + s)/2` and factors
+`exp(-(x + |x|))` out of it, so its exponents are nonpositive and an
+exponentially small occupation is not lost once `tanh(x)` rounds to one; `coth`
+keeps `n_B` accurate in the soft limit. Orders one and two are written in closed
+form with `sech` and `csch`; higher orders are differentiated symbolically from
+order two. The zero-temperature order zero is
+`(1 + s)/2 - theta(sigma*mu - E)`, whose positive orders are the distributions
 localized below. Without a chemical potential it is the vacuum weight `(1 + s)/2`,
 whose derivatives vanish. Vacuum subtraction replaces every factor by this
 vacuum weight before subtracting. At zero density, the zero-temperature tadpole weights
