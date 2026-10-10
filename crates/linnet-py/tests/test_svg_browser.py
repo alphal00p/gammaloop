@@ -146,7 +146,7 @@ class SvgBrowserTests(unittest.TestCase):
         graph = lp.Graph(
             nodes=[left, right], edges=[lp.Edge(source=left, sink=right, name="p")]
         )
-        drawing = graph.to_svg().replace(
+        drawing = graph.to_svg(interactive=True).replace(
             'data-linnet-interactive="true"',
             'data-linnet-interactive="true" data-linnet-viewport-height="360"',
             1,
@@ -188,7 +188,8 @@ class SvgBrowserTests(unittest.TestCase):
                     try:
                         page = browser.new_page(viewport={"width": 1000, "height": 800})
                         page.set_content(
-                            '<!doctype html><meta charset="utf-8">' + graph.to_svg()
+                            '<!doctype html><meta charset="utf-8">'
+                            + graph.to_svg(interactive=True)
                         )
                         panel = page.locator(".linnet-inspector")
                         self.assertFalse(panel.is_visible())
@@ -222,7 +223,7 @@ class SvgBrowserTests(unittest.TestCase):
         graph = lp.Graph(
             nodes=[left, right], edges=[lp.Edge(source=left, sink=right, name="p")]
         )
-        drawing = graph.to_svg()
+        drawing = graph.to_svg(interactive=True)
         document = (
             '<!doctype html><meta charset="utf-8">'
             f'<div id="first">{drawing}</div><div id="second">{drawing}</div>'

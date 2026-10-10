@@ -441,7 +441,7 @@ impl PyAmplitude {
             style,
             limit,
         )?;
-        PyDiagramRender::from_diagrams(diagrams, html)
+        Ok(PyDiagramRender::from_diagrams(diagrams, html))
     }
     /// Render compact diagram rows with weighted operators and expandable graphs.
     ///

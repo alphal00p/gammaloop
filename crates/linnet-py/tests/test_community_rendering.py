@@ -84,9 +84,12 @@ class CommunityRenderingTests(unittest.TestCase):
                     svg,
                 )
                 self.assertEqual(result.to_svg(), svg)
+                self.assertNotIn("#linnet-", svg)
+                interactive = result.to_svg(interactive=True)
+                self.assertIn("#123456", interactive)
                 details = [
                     json.loads(element.attrib["data-linnet-detail"])
-                    for element in ET.fromstring(svg).iter()
+                    for element in ET.fromstring(interactive).iter()
                     if element.get("data-linnet-kind") == "edge"
                 ]
                 self.assertTrue(details)

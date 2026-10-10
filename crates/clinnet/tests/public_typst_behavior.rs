@@ -1179,6 +1179,83 @@ fn public_configurable_map_style_behavior_is_observable() {
 }
 
 #[test]
+fn public_linnest_inspection_targets_are_an_output_property() {
+    let configured_typst = std::env::var_os("TYPST_TEST_EXECUTABLE").map(PathBuf::from);
+    let typst = configured_typst
+        .clone()
+        .unwrap_or_else(|| PathBuf::from("typst"));
+    match Command::new(&typst).arg("--version").output() {
+        Ok(version) if version.status.success() => {}
+        result if configured_typst.is_some() => {
+            panic!("configured Typst executable failed: {result:?}")
+        }
+        _ => return,
+    }
+    let base = tempfile::tempdir().unwrap();
+    let renderer = TypstRenderer::new(base.path()).typst_executable(&typst);
+    renderer.check_version().unwrap();
+    renderer.stage_default_assets().unwrap();
+    let templates = base.path().join(".clinnet/templates");
+    let fixture = templates.join("inspection-targets.typ");
+    // The default follows the compile input; explicit values override it.
+    fs::write(
+        &fixture,
+        r#"#set page(width: auto, height: auto, margin: 0pt)
+#import "crates/linnest/typst/src/lib.typ": draw, graph, layout
+#let g = layout(graph.parse("digraph { a -> b [label=p]; b -> c; c -> a; c -> out; out [style=invis] }").first())
+#draw(g)
+#draw(g, inspection-targets: true)
+#draw(g, inspection-targets: false)
+"#,
+    )
+    .unwrap();
+    let anchors = |input: Option<&str>| {
+        let output = base.path().join("inspection-targets.svg");
+        let mut command = Command::new(&typst);
+        command
+            .arg("compile")
+            .arg("--root")
+            .arg(&templates)
+            .arg(&fixture)
+            .arg(&output);
+        if let Some(input) = input {
+            command.arg("--input").arg(input);
+        }
+        let result = command.output().unwrap();
+        assert!(
+            result.status.success(),
+            "{}",
+            String::from_utf8_lossy(&result.stderr)
+        );
+        let svg = fs::read_to_string(output).unwrap();
+        ["#linnet-node-", "#linnet-edge-", "#linnet-halfedge-"]
+            .map(|kind| svg.matches(&format!("href=\"{kind}")).count())
+    };
+    // Only the explicitly enabled drawing links its nodes, edges and half-edges.
+    let static_document = anchors(None);
+    assert!(static_document.iter().all(|&count| count > 0));
+    assert_eq!(
+        anchors(Some("linnest-inspection-targets=false")),
+        static_document
+    );
+    // The input enables the automatic drawing as well, never the disabled one.
+    let interactive_document = anchors(Some("linnest-inspection-targets=true"));
+    assert_eq!(interactive_document, static_document.map(|count| 2 * count));
+    let invalid = Command::new(&typst)
+        .arg("compile")
+        .arg("--root")
+        .arg(&templates)
+        .arg("--input")
+        .arg("linnest-inspection-targets=yes")
+        .arg(&fixture)
+        .arg(base.path().join("invalid.svg"))
+        .output()
+        .unwrap();
+    assert!(!invalid.status.success());
+    assert!(String::from_utf8_lossy(&invalid.stderr).contains("must be \"true\" or \"false\""));
+}
+
+#[test]
 fn public_weighted_cut_rejects_invalid_selections_and_stale_topology() {
     let configured_typst = std::env::var_os("TYPST_TEST_EXECUTABLE").map(PathBuf::from);
     let typst = configured_typst

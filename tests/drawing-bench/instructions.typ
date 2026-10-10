@@ -10,6 +10,7 @@ python3 tests/drawing-bench/run.py --dry-run --out target/drawing-bench/setup
 python3 tests/drawing-bench/run.py --rounds 3 --png 150
 python3 tests/drawing-bench/run.py --cases higgs-sunset-particles --out target/drawing-bench/single
 python3 tests/drawing-bench/run.py --package-path /path/to/typst/packages --out target/drawing-bench/stock
+python3 tests/drawing-bench/run.py --inspection-targets --out target/drawing-bench/targets
 ```
 
 Output directories must be new and under `target/drawing-bench`. No references
@@ -58,7 +59,11 @@ tar -xf tests/drawing-bench/references.tar -C target/drawing-bench/reference-ima
 `medians.csv` reports each case's median and their sum. Compare revisions by
 running the harness from each checkout on the same host, interleaved, and keep
 diagram pairs (momenta and particles/notebook) together when reporting grouped
-regressions. PNG export is optional and untimed. Wall time includes process
+regressions. Runs are static by default, but revisions whose Linnest `draw` has
+no `inspection-targets` parameter, and the recorded reference medians, compiled
+every case with its link targets; time this checkout with `--inspection-targets`
+when comparing against them (`metadata.json` records the flag as
+`inspection_targets`). PNG export is optional and untimed. Wall time includes process
 startup, compilation, SVG export, file output and process exit; assembly and
 hash inventory are outside the timing boundary. Warmups exclude the initial
 cold disk reads, not subsequent process startup.
@@ -76,9 +81,12 @@ User-approved policy allows bounded arrow/label differences plus explicit
 image review. Review paired images at identical resolution, recording case,
 reviewer, displacement/shape bounds, accepted differences and rejected
 overlaps/clipping in a review record alongside the run. No numerical tolerance
-has been approved here: do not invent one. Link targets and hit-area coverage
-must also be inspected in SVG/browser output; PNG equality alone cannot certify
-them. The harness always marks visual review pending.
+has been approved here: do not invent one. The cases are static documents, so
+their renders carry no link targets. `--inspection-targets` compiles them with
+`--input linnest-inspection-targets=true`, as the interactive viewers do; inspect
+link targets and hit-area coverage in that SVG/browser output, since PNG equality
+alone cannot certify them. The targets are invisible, so both modes give the same
+PNGs. The harness always marks visual review pending.
 
 == Provenance
 
@@ -131,7 +139,7 @@ and no title. This has empty label pages and uses the native `Scene::render`
 branch, not Typst typesetting.
 
 Ten untimed warmups precede twenty-one `perf_counter_ns` samples. Only the
-installed Python `diagram.render(config=..., style=...).to_svg()` call is timed;
+installed Python `diagram.render(config=..., style=...).to_svg(interactive=True)` call is timed;
 imports, model loading, validation, SVG parsing, hashing and writes are
 excluded. The reported median is compared with an absolute upper target of
 100 ms. This is not a nonregression certificate; compare installed wheels of

@@ -165,7 +165,7 @@ def run(out, metadata):
         style = fk.DiagramStyle(
             **{**CONFIG["style"], "momentum_arrows": momentum_arrows}
         )
-        return diagram.render(config=settings, style=style).to_svg()
+        return diagram.render(config=settings, style=style).to_svg(interactive=True)
 
     plain = render(momentum_arrows=False)
     arrows = render()
@@ -236,7 +236,9 @@ def main():
         "warmups": 10,
         "sample_count": 21,
         "clock": vars(time.get_clock_info("perf_counter")),
-        "timing_boundary": "installed diagram.render(config, style).to_svg() only",
+        "timing_boundary": (
+            "installed diagram.render(config, style).to_svg(interactive=True) only"
+        ),
         "build_source_match": "unverified; module hashes identify installed artifacts",
         "native_route": "no labels/title; Scene.pages empty, Scene::render branch",
     }

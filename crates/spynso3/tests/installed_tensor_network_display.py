@@ -28,7 +28,7 @@ from symbolica.community.tensor import (
 
 def graph_labels(network):
     labels = {}
-    for node in ET.fromstring(network.render().to_svg()).iter():
+    for node in ET.fromstring(network.render().to_svg(interactive=True)).iter():
         if node.attrib.get("data-linnet-kind") not in {"node", "edge"}:
             continue
         detail = json.loads(node.attrib["data-linnet-detail"])
@@ -47,7 +47,7 @@ class NetworkDisplayTests(unittest.TestCase):
         q = TensorName.vector("network_layout_tests::q")(rep)
         network = (A("i", "j", "k") * p("i") * q("j") / (p * p)).to_network()
         before = network.to_dot()
-        root = ET.fromstring(network.render().to_svg())
+        root = ET.fromstring(network.render().to_svg(interactive=True))
         centers, edges = {}, {}
         for element in root.iter():
             kind = element.attrib.get("data-linnet-kind")
@@ -145,7 +145,7 @@ class NetworkDisplayTests(unittest.TestCase):
         gamma = TensorExpression.dirac_gamma(4)
         network = (jbar(1) * gamma(1, 2, 1)).to_network()
         self.assertIn("macron(J)", graph_labels(network))
-        root = ET.fromstring(network.render().to_svg())
+        root = ET.fromstring(network.render().to_svg(interactive=True))
         details = [
             json.loads(node.attrib["data-linnet-detail"])
             for node in root.iter()
@@ -252,22 +252,24 @@ class NetworkDisplayTests(unittest.TestCase):
             (p("mu") * q("mu")).to_network(),
             TensorExpression.dirac_gamma(4)("a", "b", "mu").to_network(),
         ):
-            with self.subTest(network=repr(network)):
-                svg = network.render().to_svg()
-                self.assertIn("data-linnet-interactive", svg)
-                self.assertIn("spenso-network-svg", svg)
-                self.assertIn("light-dark", svg)
-                # Every emitted default paint must participate in theme switching,
-                # including operator backgrounds and Linnest's arrowheads.
-                root = ET.fromstring(svg)
-                styles = "".join(root.itertext())
-                for node in root.iter():
-                    for paint in ("fill", "stroke"):
-                        color = node.get(paint, "")
-                        if color.startswith("#"):
-                            self.assertIn(
-                                f'[{paint}="{color}"]{{{paint}:light-dark(', styles
-                            )
+            for interactive in (False, True):
+                with self.subTest(network=repr(network), interactive=interactive):
+                    svg = network.render().to_svg(interactive=interactive)
+                    self.assertEqual("data-linnet-interactive" in svg, interactive)
+                    self.assertIn("spenso-network-svg", svg)
+                    self.assertIn("light-dark", svg)
+                    # Every emitted default paint must participate in theme
+                    # switching, including operator backgrounds and arrowheads.
+                    root = ET.fromstring(svg)
+                    styles = "".join(root.itertext())
+                    for node in root.iter():
+                        for paint in ("fill", "stroke"):
+                            color = node.get(paint, "")
+                            if color.startswith("#"):
+                                self.assertIn(
+                                    f'[{paint}="{color}"]{{{paint}:light-dark(',
+                                    styles,
+                                )
 
     def test_configured_snapshot_has_rich_display_and_is_stable(self):
         network = TensorNetwork(E("2 + x"))

@@ -344,23 +344,37 @@ class DiagramRender:
         r"""
         Snapshot an authored Typst project, including its referenced assets.
         """
-    def to_svg(self) -> builtins.str:
+    def to_svg(self, *, interactive: builtins.bool = False) -> builtins.str:
         r"""
         Return the one-page SVG. Use to_svg_pages for multipage documents.
+
+        The SVG is static by default: the drawing alone, for files and documents.
+        ``interactive=True`` adds the hover, selection and keyboard targets of
+        notebook display, with their script and style.
         """
-    def to_svg_pages(self) -> builtins.list[builtins.str]: ...
-    def to_html(self) -> builtins.str: ...
+    def to_svg_pages(self, *, interactive: builtins.bool = False) -> builtins.list[builtins.str]:
+        r"""
+        Return one SVG per page, static or ``interactive`` as in ``to_svg``.
+        """
+    def to_html(self) -> builtins.str:
+        r"""
+        Return the interactive HTML display.
+        """
     def to_linnest(self) -> builtins.str: ...
     def save(self, output: builtins.str | os.PathLike | pathlib.Path) -> pathlib.Path:
         r"""
         Export SVG, HTML, Typst, PDF, or PNG, selected by the filename suffix.
+        HTML is the interactive display; the other formats are static.
         """
     def save_pages(self, directory: builtins.str | os.PathLike | pathlib.Path, *, format: builtins.str = 'svg') -> builtins.list[pathlib.Path]:
         r"""
-        Export every SVG or PNG page to a directory and return the written paths.
+        Export every static SVG or PNG page to a directory and return the written paths.
         """
     def _repr_html_(self) -> builtins.str: ...
-    def _repr_svg_(self) -> typing.Optional[builtins.str]: ...
+    def _repr_svg_(self) -> typing.Optional[builtins.str]:
+        r"""
+        The static SVG, for frontends that show or export images.
+        """
     def _mime_(self) -> tuple[builtins.str, builtins.str]: ...
     def __repr__(self) -> builtins.str: ...
 
@@ -672,7 +686,11 @@ class Graph:
         r"""
         Snapshot a drawing, using native SVG geometry for ordinary graph settings.
         """
-    def to_svg(self, *, config: RenderSettings | None = None) -> builtins.str: ...
+    def to_svg(self, *, config: RenderSettings | None = None, interactive: builtins.bool = False) -> builtins.str:
+        r"""
+        Render one static SVG page; ``interactive=True`` adds the hover,
+        selection and keyboard targets of notebook display.
+        """
     def _repr_svg_(self) -> builtins.str: ...
     def _repr_html_(self) -> builtins.str:
         r"""
@@ -1448,9 +1466,10 @@ class Subgraph:
         Prepare the full owner graph with this selection highlighted and its complement dotted.
         The owner's layout, drawing configuration, and topology remain unchanged.
         """
-    def to_svg(self, *, config: RenderSettings | None = None) -> builtins.str:
+    def to_svg(self, *, config: RenderSettings | None = None, interactive: builtins.bool = False) -> builtins.str:
         r"""
         Render this selection in the context of the full graph, including isolated nodes.
+        The SVG is static unless ``interactive`` adds notebook inspection targets.
         """
     def _repr_svg_(self) -> builtins.str: ...
     def _repr_html_(self) -> builtins.str:

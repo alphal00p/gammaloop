@@ -317,7 +317,7 @@ def export(
             generator.add_code(
                 "notebook_browser_ready\n" + match.group(1) + "\n\n"
                 "import marimo as mo\n"
-                "mo.Html(graph.to_svg())",
+                "mo.Html(graph.to_svg(interactive=True))",
                 display_code=True,
             )
             generators.append(

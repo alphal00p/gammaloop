@@ -105,6 +105,7 @@ def compile_case(
     case: str,
     output: Path,
     ppi: int | None = None,
+    inputs: tuple[str, ...] = (),
 ) -> float:
     """Fresh process; wall time includes launch, compile, SVG export and exit."""
     command = [
@@ -120,6 +121,8 @@ def compile_case(
     ]
     if ppi:
         command += ["--ppi", str(ppi)]
+    for value in inputs:
+        command += ["--input", value]
     command += [str(root / "cases" / f"{case}.typ"), str(output)]
     # TYPST_FONT_PATHS could otherwise add non-embedded fonts, and the package
     # cache could supply different copies of the checked packages.
@@ -151,6 +154,12 @@ def main() -> None:
     parser.add_argument("--cases", nargs="+", default=[])
     parser.add_argument("--png", type=int, metavar="PPI")
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument(
+        "--inspection-targets",
+        action="store_true",
+        help="render the interactive viewer's link targets for SVG/browser review "
+        "(the corpus documents are static by default)",
+    )
     parser.add_argument(
         "--out", type=Path, default=REPO / "target/drawing-bench/current"
     )
@@ -217,8 +226,9 @@ def main() -> None:
         },
         "policy": (
             "bounded arrow/label differences + explicit image review; "
-            "links and hit coverage required"
+            "links and hit coverage reviewed in --inspection-targets renders"
         ),
+        "inspection_targets": args.inspection_targets,
         "visual_review": "pending (not automated by this harness)",
         "dry_run": args.dry_run,
     }
@@ -228,7 +238,10 @@ def main() -> None:
         return
     renders = out / "current"
     renders.mkdir()
-    compile_case(executable, root, packages, cases[0], renders / f"{cases[0]}.svg")
+    inputs = ("linnest-inspection-targets=true",) if args.inspection_targets else ()
+    compile_case(
+        executable, root, packages, cases[0], renders / f"{cases[0]}.svg", None, inputs
+    )
     times: dict[str, list[float]] = {}
     with (out / "timings.csv").open("w", newline="") as handle:
         writer = csv.writer(handle)
@@ -236,7 +249,13 @@ def main() -> None:
         for round_index in range(args.rounds):
             for case in cases:
                 ms = compile_case(
-                    executable, root, packages, case, renders / f"{case}.svg"
+                    executable,
+                    root,
+                    packages,
+                    case,
+                    renders / f"{case}.svg",
+                    None,
+                    inputs,
                 )
                 times.setdefault(case, []).append(ms)
                 writer.writerow([case, round_index + 1, f"{ms:.6f}"])
@@ -251,7 +270,13 @@ def main() -> None:
     if args.png:
         for case in cases:
             compile_case(
-                executable, root, packages, case, renders / f"{case}.png", args.png
+                executable,
+                root,
+                packages,
+                case,
+                renders / f"{case}.png",
+                args.png,
+                inputs,
             )
         metadata["png_ppi"] = args.png
         metadata["png_hashes"] = {

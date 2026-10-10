@@ -45,7 +45,7 @@ class SvgInteractionTests(unittest.TestCase):
         )
 
     def test_logical_ids_and_escaped_details_are_safe_and_keyboard_addressable(self):
-        root = ET.fromstring(self.graph.to_svg())
+        root = ET.fromstring(self.graph.to_svg(interactive=True))
         targets = root.findall(".//*[@data-linnet-kind]")
         identities = {
             (target.attrib["data-linnet-kind"], int(target.attrib["data-linnet-id"]))
@@ -111,7 +111,7 @@ class SvgInteractionTests(unittest.TestCase):
                         )
                     ],
                 )
-                root = ET.fromstring(graph.to_svg())
+                root = ET.fromstring(graph.to_svg(interactive=True))
                 targets = root.findall(".//*[@data-linnet-kind='halfedge']")
                 self.assertEqual(
                     {int(target.get("data-linnet-id")) for target in targets},
@@ -137,34 +137,57 @@ class SvgInteractionTests(unittest.TestCase):
                         self.assertNotEqual(detail["pair"], half.index)
 
     def test_native_drawing_contains_custom_paints_and_inspection_targets(self):
-        root = ET.fromstring(self.graph.to_svg())
-        self.assertTrue(
-            any(
-                element.get("stroke", "").lower() == "#356a9a"
-                for element in root.iter()
+        for interactive in (False, True):
+            root = ET.fromstring(self.graph.to_svg(interactive=interactive))
+            self.assertTrue(
+                any(
+                    element.get("stroke", "").lower() == "#356a9a"
+                    for element in root.iter()
+                )
             )
-        )
-        self.assertTrue(root.findall(".//*[@data-linnet-kind]"))
+            # Only interactive output carries inspection targets and their script.
+            self.assertEqual(bool(root.findall(".//*[@data-linnet-kind]")), interactive)
+            self.assertEqual(bool(root.findall(".//" + SVG + "a")), interactive)
+            self.assertEqual(bool(root.findall(".//" + SVG + "script")), interactive)
 
-    def assert_native_drawing_unchanged(self, native, decorated):
-        # Called by the Rust integration test at the embedded compiler boundary.
-        native_root = ET.fromstring(native)
-        decorated_root = ET.fromstring(decorated)
-        self.assertTrue(decorated_root.findall(".//*[@data-linnet-kind]"))
-        # Compare the complete native drawing after removing inspection-only
-        # hit targets and scripts/styles from both documents.
-        for root in (native_root, decorated_root):
+    def assert_native_drawing_unchanged(self, drawing, interactive):
+        # Also called by the Rust integration test at the embedded compiler boundary.
+        drawing_root = ET.fromstring(drawing)
+        interactive_root = ET.fromstring(interactive)
+        self.assertFalse(drawing_root.findall(".//" + SVG + "a"))
+        self.assertTrue(interactive_root.findall(".//*[@data-linnet-kind]"))
+
+        # Compare the complete drawings after removing inspection-only hit
+        # targets, their scripts/styles, and the groups Typst places them in.
+        def remove_targets(parent):
+            for child in list(parent):
+                href = child.get("href", child.get(XLINK + "href", ""))
+                if (
+                    child.tag in {SVG + "script", SVG + "style"}
+                    or "data-linnet-kind" in child.attrib
+                    or (child.tag == SVG + "a" and href.startswith("#linnet-"))
+                ):
+                    parent.remove(child)
+                    continue
+                remove_targets(child)
+                if child.tag == SVG + "g" and len(child) == 0:
+                    parent.remove(child)
+
+        for root in (drawing_root, interactive_root):
             root.attrib.pop("data-linnet-interactive", None)
-            for parent in list(root.iter()):
-                for child in list(parent):
-                    href = child.get("href", child.get(XLINK + "href", ""))
-                    if (
-                        child.tag in {SVG + "script", SVG + "style"}
-                        or "data-linnet-kind" in child.attrib
-                        or (child.tag == SVG + "a" and href.startswith("#linnet-"))
-                    ):
-                        parent.remove(child)
-        self.assertEqual(ET.tostring(native_root), ET.tostring(decorated_root))
+            remove_targets(root)
+        self.assertEqual(ET.tostring(drawing_root), ET.tostring(interactive_root))
+
+    def test_static_and_interactive_output_share_the_drawing(self):
+        typst_route = lp.RenderSettings(
+            layouts=lp.LayoutSettings(impred_steps=1).then(impred_steps=1)
+        )
+        for config in (None, typst_route):
+            with self.subTest(typst=config is not None):
+                result = self.graph.render(config=config)
+                self.assert_native_drawing_unchanged(
+                    result.to_svg(), result.to_svg(interactive=True)
+                )
 
     def test_svg_file_and_rich_representations_share_the_prepared_drawing(self):
         prepared = self.graph.render()
@@ -173,10 +196,14 @@ class SvgInteractionTests(unittest.TestCase):
             output = Path(directory) / "graph.svg"
             self.assertEqual(prepared.save(output), output)
             self.assertEqual(output.read_text(), expected)
-        self.assertEqual(self.graph._repr_html_(), self.graph._repr_svg_())
+        # HTML display is interactive; the SVG image representation is static.
+        self.assertEqual(self.graph._repr_svg_(), expected)
+        self.assertEqual(self.graph._repr_html_(), prepared.to_svg(interactive=True))
         self.assertIn('data-linnet-interactive="true"', self.graph._repr_html_())
+        self.assertNotIn("data-linnet-interactive", self.graph._repr_svg_())
         selected = self.graph.subgraph(edges=["propagator"])
         self.assertIn('data-linnet-interactive="true"', selected._repr_html_())
+        self.assertNotIn("data-linnet-interactive", selected._repr_svg_())
 
     @unittest.skipUnless(importlib.util.find_spec("marimo"), "Marimo is not installed")
     def test_marimo_prefers_scripted_html_and_wraps_it_for_execution(self):

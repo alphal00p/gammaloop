@@ -71,6 +71,20 @@ rendering run has these steps:
    drawing options, titles) and cross sections, whose initial states open before layout, still
    compile this Typst renderer.
 
+Inspection targets are a property of the output, not of the drawing: the transparent
+`#linnet-node-*`, `#linnet-edge-*` and `#linnet-halfedge-*` links that an interactive viewer
+decorates for hover, selection and keyboard focus. Each is a PDF link annotation or an SVG anchor,
+and edges carry many, so static output omits them. Typst `draw` emits them only with
+`inspection-targets: true`; its default `auto` follows the compile input
+`linnest-inspection-targets`, which documents, manuals, docs assets, Clinnet and GammaLoop CLI
+drawings leave unset. `linnest::svg::Figure` serializes one native drawing either as its static
+`svg()` or as `interactive_svg()`. Python `DiagramRender` snapshots keep both: HTML and notebook
+display use the interactive pages, while `to_svg()`, `_repr_svg_()` and file exports use the
+static pages; `to_svg(interactive=True)` requests the interactive SVG explicitly. On the Typst
+route one SVG compile with that input serves both outputs, since a notebook display requests both:
+`Scene::static_svg` removes the targets and the groups that held only them, leaving the document
+that compiling without the input produces. PDF and PNG exports compile without it.
+
 The rendering contract has no evaluated-string mode. Generated particle styles are ordinary
 Typst dictionaries/functions in `edge-style.typ`, backed by
 #link("../../assets/embedded/drawing/templates/physics-edge-style.typ")[GammaLoop's

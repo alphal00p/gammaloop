@@ -160,8 +160,18 @@ impl Scene {
         Ok(typeset)
     }
 
-    /// Lay out and draw the scene with its typeset pages; one SVG document.
-    pub fn render(&self, typeset: &Typeset) -> Result<String, String> {
+    /// Lay out and draw the scene with its typeset pages.
+    pub fn render(&self, typeset: Typeset) -> Result<Figure, String> {
+        let best = self.draw(&typeset)?;
+        Ok(Figure {
+            typeset,
+            layers: best.layers,
+            targets: best.targets,
+        })
+    }
+
+    /// The drawing of the least-overlapping layout.
+    fn draw(&self, typeset: &Typeset) -> Result<Drawing, String> {
         let mut spec = self.graph.clone();
         for (node, drawing) in spec.nodes.iter_mut().zip(&self.nodes) {
             let (w, h) = drawing.size(typeset);
@@ -172,17 +182,14 @@ impl Scene {
         }
         let graph = TypstGraph::from_spec(spec)?;
         match self.layout.get("layout-algo").and_then(Value::as_str) {
-            Some("dot") => {
-                let laid = Laid::layered(graph, self)?;
-                return Ok(Drawing::new(self, typeset, &laid)?.svg(typeset));
-            }
+            Some("dot") => return Drawing::new(self, typeset, &Laid::layered(graph, self)?),
             Some("impred") | None => {}
             Some(algo) => return Err(format!("unsupported SVG layout algorithm {algo:?}")),
         }
         let mut run = ImpredRun::seeded(graph, &Value::Object(self.layout.clone()))?;
         let drawing = Drawing::new(self, typeset, &Laid::new(&run)?)?;
         if !self.label_feedback {
-            return Ok(drawing.svg(typeset));
+            return Ok(drawing);
         }
         // Keep the least-overlapping drawing; later passes may not improve it.
         // A rejected pass still supplies the next pass's pinned labels.
@@ -210,7 +217,32 @@ impl Scene {
                 rejected = Some(drawing);
             }
         }
-        Ok(best.svg(typeset))
+        Ok(best)
+    }
+}
+
+/// A drawn scene with its typeset labels. Static output is the painted drawing
+/// alone; interactive output adds the inspection targets an SVG viewer decorates.
+pub struct Figure {
+    typeset: Typeset,
+    layers: Vec<Element>,
+    targets: Vec<Target>,
+}
+
+impl Figure {
+    /// The static SVG document, without inspection links, for files and documents.
+    pub fn svg(&self) -> String {
+        output::svg(&self.typeset, &self.layers, None)
+    }
+
+    /// The SVG document with decorated inspection targets: hover details,
+    /// selection and keyboard focus for notebook and HTML display.
+    pub fn interactive_svg(&self) -> Result<String, String> {
+        Scene::interactive_svg(&output::svg(
+            &self.typeset,
+            &self.layers,
+            Some(&self.targets),
+        ))
     }
 }
 
@@ -362,11 +394,6 @@ struct EdgeGeometry {
 }
 
 impl Drawing {
-    /// Serialize only the selected feedback pass, preserving painting order.
-    fn svg(&self, typeset: &Typeset) -> String {
-        output::svg(typeset, &self.layers, &self.targets)
-    }
-
     /// Overlapping labels first, then label pairs, then line hits.
     fn score(&self) -> (usize, usize, usize) {
         (self.overlaps.0, self.overlaps.2, self.overlaps.1)
@@ -1200,6 +1227,11 @@ mod tests {
         scene.typeset(&[page("<g/>"), label]).unwrap()
     }
 
+    /// The figure with its raw inspection links, before interactive decoration.
+    fn linked(figure: &Figure) -> String {
+        output::svg(&figure.typeset, &figure.layers, Some(&figure.targets))
+    }
+
     #[test]
     fn four_loop_scalar_cube_with_default_momentum_marks() {
         let mut scene = bubble(true);
@@ -1257,7 +1289,7 @@ mod tests {
             for edge in &mut scene.edges {
                 edge.momentum = momentum;
             }
-            scene.render(&typeset(&scene)).unwrap();
+            scene.render(typeset(&scene)).unwrap();
         }
     }
 
@@ -1281,7 +1313,7 @@ mod tests {
     #[test]
     fn draws_decorations_flow_marks_labels_and_links() {
         let scene = bubble(false);
-        let svg = scene.render(&typeset(&scene)).unwrap();
+        let svg = linked(&scene.render(typeset(&scene)).unwrap());
         assert!(svg.starts_with("<svg viewBox=\"0 0 "));
         assert_eq!(svg.matches("<circle ").count(), 2);
         // One fermion arrowhead; every decoration is a single path.
@@ -1296,10 +1328,29 @@ mod tests {
     }
 
     #[test]
+    fn static_figures_are_the_linked_drawing_without_any_link() {
+        for momentum in [false, true] {
+            let scene = bubble(momentum);
+            let figure = scene.render(typeset(&scene)).unwrap();
+            let linked = linked(&figure);
+            assert!(linked.matches("<a href=\"#linnet-").count() > 20);
+            // Native and Typst-route static output share one definition.
+            assert_eq!(figure.svg(), Scene::static_svg(&linked).unwrap());
+            assert!(!figure.svg().contains("<a "));
+            let interactive = figure.interactive_svg().unwrap();
+            assert!(interactive.contains("data-linnet-interactive=\"true\""));
+            assert_eq!(
+                interactive.matches("role=\"button\"").count(),
+                linked.matches("<a href=\"#linnet-").count()
+            );
+        }
+    }
+
+    #[test]
     fn node_labels_share_one_click_target_with_their_node() {
         let mut scene = bubble(false);
         scene.nodes[0].label = Some(0);
-        let svg = scene.render(&typeset(&scene)).unwrap();
+        let svg = linked(&scene.render(typeset(&scene)).unwrap());
         assert_eq!(svg.matches("#linnet-node-0?").count(), 1);
         assert_eq!(svg.matches("#linnet-node-1?").count(), 1);
     }
@@ -1307,7 +1358,7 @@ mod tests {
     #[test]
     fn rides_momentum_labels_on_their_arrows() {
         let scene = bubble(true);
-        let svg = scene.render(&typeset(&scene)).unwrap();
+        let svg = scene.render(typeset(&scene)).unwrap().svg();
         // One chevron per edge: searched internal arrows and fixed external ones.
         let chevron = r##"fill="none" stroke="#3d2645" stroke-width="1" stroke-linecap="round" stroke-linejoin="miter""##;
         assert_eq!(svg.matches(chevron).count(), 4);
@@ -1316,7 +1367,7 @@ mod tests {
         for edge in &mut unlabelled.edges {
             edge.label = None;
         }
-        let svg = unlabelled.render(&typeset(&unlabelled)).unwrap();
+        let svg = unlabelled.render(typeset(&unlabelled)).unwrap().svg();
         assert_eq!(svg.matches(chevron).count(), 4);
     }
 
@@ -1324,7 +1375,7 @@ mod tests {
     fn one_candidate_and_one_selected_geometry_call_cover_the_entire_drawing() {
         marks::Batch::take_calls();
         let scene = bubble(true);
-        scene.render(&typeset(&scene)).unwrap();
+        scene.render(typeset(&scene)).unwrap();
         assert_eq!(
             marks::Batch::take_calls(),
             [
@@ -1379,7 +1430,7 @@ mod tests {
             )
             .unwrap();
             config.apply(&mut scene).unwrap();
-            let svg = scene.render(&typeset(&scene)).unwrap();
+            let svg = scene.render(typeset(&scene)).unwrap().svg();
             assert!(!svg.contains("NaN") && !svg.contains("inf"), "{shape}");
             assert_eq!(svg.matches("stroke-miterlimit=").count(), 5, "{shape}");
         }
@@ -1402,10 +1453,11 @@ mod tests {
             }}
         }).to_string()).unwrap();
         config.apply(&mut scene).unwrap();
-        let svg = scene.render(&typeset(&scene)).unwrap();
+        let figure = scene.render(typeset(&scene)).unwrap();
+        let svg = figure.svg();
         assert_eq!(svg.matches(r#"fill="red" stroke="blue""#).count(), 4);
         assert_eq!(svg.matches(r#"fill="yellow" stroke="purple""#).count(), 4);
-        let interactive = Scene::interactive_svg(&svg).unwrap();
+        let interactive = figure.interactive_svg().unwrap();
         assert!(interactive.contains("data-linnet-kind=\"edge\""));
         assert_eq!(interactive.matches("stroke-miterlimit=").count(), 13);
     }
@@ -1636,9 +1688,9 @@ mod tests {
             }
         }
         // Enabling force-label feedback must not relax away the selected ranks.
-        let expected = scene.render(&typeset).unwrap();
+        let expected = linked(&scene.render(typeset.clone()).unwrap());
         scene.label_feedback = true;
-        assert_eq!(scene.render(&typeset).unwrap(), expected);
+        assert_eq!(linked(&scene.render(typeset).unwrap()), expected);
         assert!(expected.contains("#linnet-node-3?"));
     }
 
@@ -1659,7 +1711,9 @@ mod tests {
             let mut run = ImpredRun::seeded(graph, &Value::Object(scene.layout.clone())).unwrap();
             let mut drawing = Drawing::new(scene, typeset, &Laid::new(&run).unwrap()).unwrap();
             let mut scores = vec![drawing.score()];
-            let (mut best, mut svg) = (drawing.score(), drawing.svg(typeset));
+            let svg =
+                |drawing: &Drawing| output::svg(typeset, &drawing.layers, Some(&drawing.targets));
+            let (mut best, mut selected) = (drawing.score(), svg(&drawing));
             for _ in 0..FEEDBACK_PASSES {
                 if drawing.overlaps.0 == 0 {
                     break;
@@ -1674,14 +1728,14 @@ mod tests {
                     })
                     .unwrap();
                 drawing = Drawing::new(scene, typeset, &Laid::new(&run).unwrap()).unwrap();
-                let rendered = drawing.svg(typeset);
+                let rendered = svg(&drawing);
                 scores.push(drawing.score());
                 if drawing.score() < best {
                     best = drawing.score();
-                    svg = rendered;
+                    selected = rendered;
                 }
             }
-            (svg, scores)
+            (selected, scores)
         }
 
         let mut continued_after_rejection = false;
@@ -1695,7 +1749,11 @@ mod tests {
                 let (expected, scores) = eager(&scene, &typeset);
                 continued_after_rejection |= (1..scores.len().saturating_sub(1))
                     .any(|i| scores[i] >= *scores[..i].iter().min().unwrap());
-                assert_eq!(scene.render(&typeset).unwrap(), expected, "{scores:?}");
+                assert_eq!(
+                    linked(&scene.render(typeset).unwrap()),
+                    expected,
+                    "{scores:?}"
+                );
             }
         }
         assert!(

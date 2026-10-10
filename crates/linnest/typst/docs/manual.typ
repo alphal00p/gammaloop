@@ -591,6 +591,13 @@
   )
   #draw(layout(g), source-style: oriented-arrow, sink-style: oriented-arrow)
   ```
+
+  Drawings are static by default. Interactive SVG viewers, such as Linnet's
+  notebook display, inspect nodes, edges and half-edges through transparent
+  identity links sampled along every edge. Each one is a PDF link annotation or
+  an SVG anchor, so `draw` emits them only with `inspection-targets: true`, or
+  at the default `auto` when the document is compiled with
+  `--input linnest-inspection-targets=true`.
 ]
 
 #let domain-style-concepts = [

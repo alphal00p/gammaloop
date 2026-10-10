@@ -557,7 +557,7 @@ def _(Representation, Tensor, TensorName, display_settings, lp):
     contraction_math = contraction.to_html(settings=display_settings)
     contraction_dot = contraction.to_dot()
     graph = lp.Graph.from_dot(contraction_dot, lp.DotCodec.topology())
-    contraction_graph = graph.to_svg()
+    contraction_graph = graph.to_svg(interactive=True)
     contraction.execute()
     contraction_result = contraction.result_scalar()
     return (

@@ -86,6 +86,20 @@
 
 // Typst preserves links as transparent SVG rectangles. Floating content keeps
 // these identity targets out of the graph's bounds and visible drawing styles.
+// Every target is one PDF link annotation or SVG anchor, so only drawings for
+// interactive viewers emit them; `auto` follows the document's compile input.
+#let _inspection-targets(value) = {
+  if value == auto {
+    let input = sys.inputs.at("linnest-inspection-targets", default: "false")
+    assert(input in ("true", "false"),
+      message: "the linnest-inspection-targets input must be \"true\" or \"false\"")
+    input == "true"
+  } else {
+    assert(type(value) == bool, message: "inspection-targets must be auto, true or false")
+    value
+  }
+}
+
 #let _identity-href(kind, id, details) = {
   // SVG link attributes escape quotes but need JSON escapes for XML metacharacters.
   let details = json.encode(details).replace("&", "\\u0026").replace("<", "\\u003c").replace(">", "\\u003e")
@@ -101,6 +115,8 @@
 }
 
 #let _edge-identity-targets(ctx, parts, hrefs) = {
+  // Static drawings carry no hrefs and get no targets.
+  if hrefs == none { return () }
   let targets = ()
   // Preserve arc-length quarters and the control-polygon sampling bound while
   // batching path construction, trimming and de Casteljau evaluation.
@@ -3233,6 +3249,7 @@
   let debug-edge-label-fill = options.debug-edge-label-fill
   let subgraph-edge-style = options.subgraph-edge-style
   let subgraph-edge-underlay = options.subgraph-edge-underlay
+  let inspection-targets = _inspection-targets(options.inspection-targets)
   let info = graph-api.info(graph)
   let graph-style = _graph-style(info)
   unit = if unit == auto { graph-style.at("unit", default: 1) } else { unit }
@@ -3397,7 +3414,7 @@
               ))
             }
           }
-          if not boundary {
+          if not boundary and inspection-targets {
             let details = (
               edges: edges.filter(e => (
                 (e.source != none and e.source.node == i)
@@ -3566,42 +3583,48 @@
               and sink-half-edge != none
               and source-half-edge.node == sink-half-edge.node
           )
-          let inspection = edge-data.at("inspection", default: (:))
-          let details = (
-            edge: edge.edge,
-            source: if source-half-edge == none { none } else { source-half-edge.node },
-            sink: if sink-half-edge == none { none } else { sink-half-edge.node },
-            orientation: edge.orientation,
-          ) + inspection
-          if edge.name != none {
-            details.insert("name", str(edge.name))
-          }
-          for key in ("particle", "pdg", "external-state", "external-index", "external-name", "momentum") {
-            let value = edge-data.at(key, default: none)
-            if type(value) in (str, int, float, bool) {
-              details.insert(key, value)
+          // The label link and the four region links: source half-edge,
+          // source edge, sink edge and sink half-edge.
+          let (href, hrefs) = if not inspection-targets { (none, none) } else {
+            let inspection = edge-data.at("inspection", default: (:))
+            let details = (
+              edge: edge.edge,
+              source: if source-half-edge == none { none } else { source-half-edge.node },
+              sink: if sink-half-edge == none { none } else { sink-half-edge.node },
+              orientation: edge.orientation,
+            ) + inspection
+            if edge.name != none {
+              details.insert("name", str(edge.name))
             }
+            for key in ("particle", "pdg", "external-state", "external-index", "external-name", "momentum") {
+              let value = edge-data.at(key, default: none)
+              if type(value) in (str, int, float, bool) {
+                details.insert(key, value)
+              }
+            }
+            let half-hrefs = ()
+            let edge-hrefs = ()
+            for (side, half-edge, pair) in (
+              ("source", source-half-edge, sink-half-edge),
+              ("sink", sink-half-edge, source-half-edge),
+            ) {
+              let owner = if half-edge == none { pair } else { half-edge }
+              let flow = if half-edge != none { side } else if side == "source" { "sink" } else { "source" }
+              let other = if flow == "source" { "sink" } else { "source" }
+              let hedge = inspection.at(flow + "-hedge", default: owner.hedge)
+              let half-details = details + ("half-edge": hedge)
+              edge-hrefs.push(_identity-href("edge", details.edge, half-details))
+              half-hrefs.push(_identity-href("halfedge", hedge, half-details + (
+                node: owner.node,
+                flow: flow,
+                pair: inspection.at(other + "-hedge", default: if half-edge == none or pair == none { none } else { pair.hedge }),
+              )))
+            }
+            (
+              _identity-href("edge", details.edge, details),
+              (half-hrefs.at(0), edge-hrefs.at(0), edge-hrefs.at(1), half-hrefs.at(1)),
+            )
           }
-          let href = _identity-href("edge", details.edge, details)
-          let half-hrefs = ()
-          let edge-hrefs = ()
-          for (side, half-edge, pair) in (
-            ("source", source-half-edge, sink-half-edge),
-            ("sink", sink-half-edge, source-half-edge),
-          ) {
-            let owner = if half-edge == none { pair } else { half-edge }
-            let flow = if half-edge != none { side } else if side == "source" { "sink" } else { "source" }
-            let other = if flow == "source" { "sink" } else { "source" }
-            let hedge = inspection.at(flow + "-hedge", default: owner.hedge)
-            let half-details = details + ("half-edge": hedge)
-            edge-hrefs.push(_identity-href("edge", details.edge, half-details))
-            half-hrefs.push(_identity-href("halfedge", hedge, half-details + (
-              node: owner.node,
-              flow: flow,
-              pair: inspection.at(other + "-hedge", default: if half-edge == none or pair == none { none } else { pair.hedge }),
-            )))
-          }
-          let hrefs = (half-hrefs.at(0), edge-hrefs.at(0), edge-hrefs.at(1), half-hrefs.at(1))
 
           for layer-index in range(0, layer-count) {
             let layer-start = elements.len()

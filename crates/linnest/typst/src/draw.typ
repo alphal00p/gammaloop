@@ -267,6 +267,8 @@
 /// unknown, or invisible edges are errors.
 /// A valid pair with no proper interior intersection is left unchanged.
 ///
+/// Interactive SVG viewers inspect nodes, edges and half-edges through
+/// transparent identity links, emitted only with `inspection-targets`.
 /// SVG inspection normally uses the drawn graph's IDs. Display transformations
 /// may also supply `title`, `summary`, and `properties` in `inspection` data.
 /// `summary` supplies the hover text; `title` names the click inspector and
@@ -541,6 +543,14 @@
   subgraph-edge-style: (stroke: rgb("#ffd166") + 4.5pt),
   /// Draw subgraph shading below the normal half-edge style. -> bool
   subgraph-edge-underlay: true,
+  /// Emit transparent identity links (`#linnet-node-*`, `#linnet-edge-*`,
+  /// `#linnet-halfedge-*`) along edges and over nodes and labels, for an
+  /// interactive viewer to decorate. Each is a PDF link annotation or an SVG
+  /// anchor, so static documents omit them. `auto` follows the compile input
+  /// `linnest-inspection-targets` (`"true"` or `"false"`, default `"false"`):
+  /// `typst compile --input linnest-inspection-targets=true` emits them in
+  /// every drawing of the document that leaves this `auto`. -> auto | bool
+  inspection-targets: auto,
 ) = {
   _impl-draw(
     graph,
@@ -587,6 +597,7 @@
       debug-edge-label-fill: debug-edge-label-fill,
       subgraph-edge-style: subgraph-edge-style,
       subgraph-edge-underlay: subgraph-edge-underlay,
+      inspection-targets: inspection-targets,
     ),
   )
 }

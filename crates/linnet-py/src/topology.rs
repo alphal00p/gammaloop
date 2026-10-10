@@ -384,15 +384,17 @@ impl PySubgraph {
     }
 
     /// Render this selection in the context of the full graph, including isolated nodes.
-    #[pyo3(signature = (*, config=None))]
+    /// The SVG is static unless ``interactive`` adds notebook inspection targets.
+    #[pyo3(signature = (*, config=None, interactive=false))]
     fn to_svg(
         &self,
         py: Python<'_>,
         #[gen_stub(override_type(type_repr = "RenderSettings | None"))] config: Option<
             &Bound<'_, PyAny>,
         >,
+        interactive: bool,
     ) -> PyResult<String> {
-        let svg = self.render(py, config)?.to_svg()?;
+        let svg = self.render(py, config)?.to_svg(interactive)?;
         Ok(svg
             .replacen("<svg ", "<svg class=\"linnet-subgraph\" ", 1)
             .replacen(
@@ -407,12 +409,12 @@ impl PySubgraph {
     }
 
     fn _repr_svg_(&self, py: Python<'_>) -> PyResult<String> {
-        self.to_svg(py, None)
+        self.to_svg(py, None, false)
     }
 
     /// Show the selected half-edges within their complete graph in notebook output.
     fn _repr_html_(&self, py: Python<'_>) -> PyResult<String> {
-        self.to_svg(py, None)
+        self.to_svg(py, None, true)
     }
 
     fn __repr__(&self, py: Python<'_>) -> PyResult<String> {

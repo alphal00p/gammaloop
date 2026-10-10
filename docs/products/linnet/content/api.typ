@@ -67,6 +67,7 @@ Call `.render(config=settings)` to capture a `DiagramRender`. Its SVG, HTML, sou
 and file exports reuse the snapshot, even after later graph or settings mutations.
 HepKit's physics-specific options live in `DiagramStyle`, passed separately as `style`.
 For multipage renders, use `to_svg_pages()`; `to_svg()` requires exactly one page.
+Both return static SVG unless called with `interactive=True`.
 
 `Graph.generate()` runs Linnet's native generator on `EdgeSignature` slots, whose fields and leg
 labels are hashable keys like canonization keys, and streams `(graph, symmetry factor)` pairs in
@@ -430,8 +431,10 @@ svg = graph.to_svg()
 graph  # the final expression in a notebook renders inline
 ```
 
-SVG output preserves the native drawing and adds vertex, edge, and half-edge inspection.
-Hover to see an element's identity; click to pin its details without changing the selection. Shift-, Ctrl-, or
+Notebook display, `to_html()` and `to_svg(interactive=True)` add vertex, edge, and half-edge
+inspection to the native drawing. Static output (`to_svg()`, `_repr_svg_()` and every file
+export except HTML) is the same drawing without inspection targets or script, so saved SVGs stay
+small and PDFs carry no link annotations. Hover to see an element's identity; click to pin its details without changing the selection. Shift-, Ctrl-, or
 Meta-click toggles the element in that displayed selection. Enter and Space perform the same
 actions on a focused element; Escape dismisses the details while retaining the selection.
 The first and last quarters of arc length pick the source and sink half-edges; the middle
@@ -460,14 +463,14 @@ half-edges, and draw the complement dotted and muted through Linnest's subgraph 
 Selecting one half of a paired edge highlights only that half; selected isolated nodes are
 highlighted too. The display uses the owner's layout, drawing values, and render configuration
 without changing the graph or its stored settings. `region.to_svg(config=None)` returns the
-same SVG explicitly, and `region.render(config=None)` prepares it for inspection or
+same drawing as static SVG (`interactive=True` keeps the inspection targets), and `region.render(config=None)` prepares it for inspection or
 export through `DiagramRender`. Like other selection operations, rendering checks the topology
 revision and raises `ReferenceError` for a stale selection.
 
 The selected template's defaults are overlaid by the graph's `render_config` and then by a sparse
 per-call `config`. `render(config=None).save(output)` writes PDF, SVG, PNG, HTML, or portable Typst according to the output
-suffix. Use `save_pages(directory, format="svg")` to export each page separately. `to_svg(config=None)` returns SVG text; `_repr_html_()` supports interactive notebook
-display, while `_repr_svg_()` supplies the SVG representation. These are
+suffix; only HTML is interactive. Use `save_pages(directory, format="svg")` to export each page separately. `to_svg(config=None, interactive=False)` returns SVG text; `_repr_html_()` supports interactive notebook
+display, while `_repr_svg_()` supplies the static SVG representation. These are
 the only high-level rendering methods; there are no raw command-line inputs or string-expression
 escape hatches. The Community wheel embeds the Typst compiler and compiles in-process without
 looking up or launching a Typst executable. Generated inputs and imported modules remain alive

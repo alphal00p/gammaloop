@@ -47,7 +47,10 @@ def check_render_snapshot(value):
     assert isinstance(drawing, render.DiagramRender)
     svg, html = drawing.to_svg(), drawing.to_html()
     ET.fromstring(svg)
-    assert svg in html
+    # HTML displays the interactive SVG; the static SVG has no inspection links.
+    assert drawing.to_svg(interactive=True) in html
+    assert "data-linnet-kind" in html
+    assert "<a " not in svg
     assert drawing._repr_svg_() == svg
     assert drawing._repr_html_() == html
     assert drawing._mime_() == ("text/html", html)
@@ -441,7 +444,9 @@ try:
         assert len(tree.fundamental_cycle(internal_half.id).edges) == 1
     sewn_identities = None
     for split in (False, True):
-        svg = cross.render(style=hep.DiagramStyle(split_initial_state=split)).to_svg()
+        svg = cross.render(style=hep.DiagramStyle(split_initial_state=split)).to_svg(
+            interactive=True
+        )
         root = ET.fromstring(svg)
         targets = [n for n in root.iter() if "data-linnet-kind" in n.attrib]
         identities = {

@@ -17,7 +17,8 @@ use typst_library::{
     Feature, Library, World, WorldExt,
     diag::{FileError, FileResult, PackageError, SourceDiagnostic},
     foundations::{
-        Bytes, Datetime, Duration, NativeElement, Recipe, Selector, Styles, Transformation, Value,
+        Bytes, Datetime, Dict, Duration, NativeElement, Recipe, Selector, Styles, Transformation,
+        Value,
     },
     math::EquationElem,
     text::{Font, FontBook, FontFamily, FontList, TextElem},
@@ -126,15 +127,27 @@ impl<'a> Document<'a> {
             packages,
             files,
             sources: Mutex::new(HashMap::new()),
-            library: LazyHash::new(Self::library()),
+            library: LazyHash::new(Self::library(Dict::new())),
         }
+    }
+
+    /// Expose string `inputs` through `sys.inputs`, like the CLI's `--input`,
+    /// so one document can compile to different outputs.
+    pub fn with_inputs<'k>(mut self, inputs: impl IntoIterator<Item = (&'k str, &'k str)>) -> Self {
+        let inputs = inputs
+            .into_iter()
+            .map(|(key, value)| (key.into(), Value::Str(value.into())))
+            .collect();
+        self.library = LazyHash::new(Self::library(inputs));
+        self
     }
 
     /// The standard library with STIX Two Math as the equation font. Typst's
     /// default, New Computer Modern Math, is not embedded; a font set lacking
     /// it would make equations fall back to a text font and lose their layout.
-    fn library() -> Library {
+    fn library(inputs: Dict) -> Library {
         let mut library = Library::builder()
+            .with_inputs(inputs)
             .with_features([Feature::Html].into_iter().collect())
             .build();
         let mut math = Styles::new();
@@ -471,6 +484,23 @@ mod tests {
                 .contains("<math")
         );
     }
+    #[test]
+    fn inputs_reach_sys_inputs_of_one_compilation() {
+        let root = tempfile::tempdir().unwrap();
+        let files = BTreeMap::from([(
+            "main.typ".to_owned(),
+            br#"#sys.inputs.at("output", default: "unset")"#.to_vec(),
+        )]);
+        let html = |document: Document| {
+            String::from_utf8(document.compile("html").unwrap().remove(0)).unwrap()
+        };
+        assert!(html(Document::new(root.path(), &[], &files)).contains("unset"));
+        assert!(
+            html(Document::new(root.path(), &[], &files).with_inputs([("output", "interactive")]))
+                .contains("interactive")
+        );
+    }
+
     #[test]
     fn renders_math_styles_and_raw_text() {
         let files = BTreeMap::from([(

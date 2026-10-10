@@ -39,6 +39,10 @@ for value in (model.process(["scalar_0"], ["scalar_0"]), diagram, region):
     bundle, _ = DisplayFormatter().format(drawing)
     assert bundle["text/html"] == drawing.to_html()
     assert bundle["image/svg+xml"] == drawing.to_svg()
+    # Notebook HTML is interactive; the SVG image and file exports are static.
+    assert "data-linnet-kind" in drawing.to_html()
+    assert "<a " not in drawing.to_svg()
+    assert "data-linnet-interactive" not in drawing.to_svg()
     formatted = try_format(drawing)
     assert formatted.mimetype == "text/html"
     assert formatted.data == drawing.to_html()
@@ -57,7 +61,7 @@ canonical = ET.fromstring(diagram.to_graph()._repr_html_())
 shared_script = canonical.find(namespace + "script").text
 
 for value in (diagram, region):
-    svg = value.render().to_svg()
+    svg = value.render().to_svg(interactive=True)
     root = ET.fromstring(svg)
     assert root.get("data-linnet-interactive") == "true"
     assert "feynkit-diagram-svg" in root.get("class", "")
@@ -131,7 +135,7 @@ for style in (
         cross_section,
         cross_section.filter(edge=lambda edge: edge.is_external),
     ):
-        root = ET.fromstring(value.render(style=style).to_svg())
+        root = ET.fromstring(value.render(style=style).to_svg(interactive=True))
         targets = root.findall(".//*[@data-linnet-kind]")
         assert {
             (target.attrib["data-linnet-kind"], int(target.attrib["data-linnet-id"]))

@@ -71,11 +71,13 @@ such as `LayoutAlgorithm.Force` continue to select their respective algorithms.
 
 == The rendering boundary
 
-Returning a `Graph` from a cell invokes its interactive HTML representation. `graph.to_svg()`
-explicitly produces the same native drawing with hover labels, pinned click details, and local
-selection using Shift-, Ctrl-, or Meta-click. These interactions do not update Python graph
-selections automatically. In Marimo, direct rich display enables the embedded script; when
-embedding the SVG explicitly, use `mo.iframe(graph.to_svg())`.
+Returning a `Graph` from a cell invokes its interactive HTML representation: the native drawing
+with hover labels, pinned click details, and local selection using Shift-, Ctrl-, or Meta-click.
+These interactions do not update Python graph selections automatically. `graph.to_svg()` returns
+the static drawing for files and documents, without inspection targets or script;
+`graph.to_svg(interactive=True)` returns the interactive SVG. In Marimo, direct rich display
+enables the embedded script; when embedding the SVG explicitly, use
+`mo.iframe(graph.to_svg(interactive=True))`.
 Drag the drawing to pan, or use Ctrl/Meta-scroll to zoom gently around the pointer.
 At 100%, SVG points retain their physical size, so equally styled labels, vertices,
 and strokes have the same size across drawings. The viewport grows vertically to

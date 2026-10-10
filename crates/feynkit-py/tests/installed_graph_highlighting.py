@@ -125,10 +125,12 @@ style = fk.DiagramStyle(
     show_edge_index=True,
 )
 assert (
-    diagram.render(style=fk.DiagramStyle(show_momentum=True, momentum_arrows=True)).to_svg()
+    diagram.render(
+        style=fk.DiagramStyle(show_momentum=True, momentum_arrows=True)
+    ).to_svg()
     == diagram.render(lmb=basis).to_svg()
 )
-svg = diagram.render(config=config, style=style, lmb=basis).to_svg()
+svg = diagram.render(config=config, style=style, lmb=basis).to_svg(interactive=True)
 root = ET.fromstring(svg)
 assert root.tag == "{http://www.w3.org/2000/svg}svg"
 assert 'data-linnet-interactive="true"' in svg

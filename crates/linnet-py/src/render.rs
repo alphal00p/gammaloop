@@ -1,9 +1,11 @@
 use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::OnceLock;
 
 use linnest::{
-    encode_graph_spec_bytes, TypstEdgeSpec, TypstEndpointSpec, TypstGraphSpec, TypstNodeSpec,
+    encode_graph_spec_bytes, svg::Scene, TypstEdgeSpec, TypstEndpointSpec, TypstGraphSpec,
+    TypstNodeSpec,
 };
 use linnet::half_edge::involution::{Flow, Hedge, HedgePair, Orientation};
 use linnet::half_edge::subgraph::{Inclusion, SubSetLike};
@@ -29,6 +31,8 @@ const DEFAULT_TEMPLATE: &str = "crates/linnest/typst/src/render/figure.typ";
 const ENTRYPOINT: &str = "main.typ";
 const TOPOLOGY: &str = "diagram.cbor";
 const SUBGRAPH_STYLE: &str = "subgraph.typ";
+/// The compile input with which Linnest's `draw` emits inspection targets.
+const INSPECTION_TARGETS_INPUT: (&str, &str) = ("linnest-inspection-targets", "true");
 
 #[derive(RustEmbed)]
 #[folder = "$CARGO_MANIFEST_DIR/../linnest/typst"]
@@ -641,6 +645,8 @@ pub struct PreparedRender {
     /// Package directories in lookup order: the bundled MiTeX and oxifmt, then
     /// the Typst CLI's local package path and cache, which supply CeTZ.
     packages: Vec<PathBuf>,
+    /// The SVG pages with Linnest's inspection targets, compiled on first use.
+    linked_pages: OnceLock<Vec<String>>,
 }
 
 impl PreparedRender {
@@ -675,6 +681,7 @@ impl PreparedRender {
             files,
             root: build_root,
             packages,
+            linked_pages: OnceLock::new(),
         })
     }
 
@@ -734,17 +741,40 @@ impl PreparedRender {
         .map_err(|error| PyRuntimeError::new_err(error.to_string()))
     }
 
-    /// Compile the prepared project to one SVG document per page.
-    pub fn svg_pages(&self, _py: Python<'_>) -> PyResult<Vec<String>> {
-        self.compile("svg")?
-            .into_iter()
-            .map(|bytes| {
-                String::from_utf8(bytes).map_err(|error| PyRuntimeError::new_err(error.to_string()))
+    /// One SVG document per page. Both outputs come from a single compile with
+    /// Linnest's inspection targets: interactive pages decorate the targets and
+    /// static pages remove them. Linnest emits targets only with that input, so
+    /// a static page is the document compiled without it, like PDF and PNG.
+    pub fn svg_pages(&self, interactive: bool) -> PyResult<Vec<String>> {
+        self.linked_pages()?
+            .iter()
+            .map(|svg| {
+                if interactive {
+                    Self::interactive_svg(svg)
+                } else {
+                    Scene::static_svg(svg).map_err(PyRuntimeError::new_err)
+                }
             })
             .collect()
     }
 
-    /// Compile with the embedded Rust compiler and offline package store.
+    fn linked_pages(&self) -> PyResult<&[String]> {
+        if let Some(pages) = self.linked_pages.get() {
+            return Ok(pages);
+        }
+        let pages = typst_renderer::Document::new(&self.root, &self.packages, &self.files)
+            .with_inputs([INSPECTION_TARGETS_INPUT])
+            .compile("svg")
+            .map_err(PyRuntimeError::new_err)?
+            .into_iter()
+            .map(|bytes| {
+                String::from_utf8(bytes).map_err(|error| PyRuntimeError::new_err(error.to_string()))
+            })
+            .collect::<PyResult<_>>()?;
+        Ok(self.linked_pages.get_or_init(|| pages))
+    }
+
+    /// Compile a static document with the embedded Rust compiler and offline package store.
     pub fn compile(&self, format: &str) -> PyResult<Vec<Vec<u8>>> {
         typst_renderer::Document::new(&self.root, &self.packages, &self.files)
             .compile(format)
@@ -794,11 +824,12 @@ pub(crate) fn graph_to_svg(
     py: Python<'_>,
     graph: &Py<PyGraph>,
     config: Option<&Bound<'_, PyAny>>,
+    interactive: bool,
 ) -> PyResult<String> {
-    let pages = render_graph(py, graph, config, None)?.to_svg_pages()?;
-    match pages.as_slice() {
+    let render = render_graph(py, graph, config, None)?;
+    match render.pages(interactive)? {
         [svg] => Ok(svg.clone()),
-        _ => Err(PyRuntimeError::new_err(format!(
+        pages => Err(PyRuntimeError::new_err(format!(
             "Typst SVG render produced {} pages; expected exactly one",
             pages.len()
         ))),
@@ -894,12 +925,11 @@ mod tests {
             let graph = case.getattr("graph")?.extract::<Py<PyGraph>>()?;
             let (topology, transport) = request(py, &graph, None, false)?;
             let prepared = prepare(topology, transport, None)?;
-            let pages = prepared.svg_pages(py)?;
-            assert_eq!(pages.len(), 1);
-            case.call_method1(
-                "assert_native_drawing_unchanged",
-                (&pages[0], PreparedRender::interactive_svg(&pages[0])?),
-            )?;
+            let [drawing] = <[String; 1]>::try_from(prepared.svg_pages(false)?).unwrap();
+            let [interactive] = <[String; 1]>::try_from(prepared.svg_pages(true)?).unwrap();
+            assert!(!drawing.contains("#linnet-"));
+            assert_eq!(drawing.as_bytes(), prepared.compile("svg")?[0]);
+            case.call_method1("assert_native_drawing_unchanged", (drawing, interactive))?;
             Ok(())
         })
         .unwrap();
@@ -920,6 +950,30 @@ mod tests {
         assert!(std::str::from_utf8(&pages[0]).unwrap().contains("<svg"));
         assert!(prepared.compile("pdf").unwrap()[0].starts_with(b"%PDF"));
         assert!(prepared.compile("png").unwrap()[0].starts_with(b"\x89PNG"));
+    }
+
+    #[test]
+    fn static_pages_are_the_document_compiled_without_inspection_targets() {
+        // Like Linnest's draw, the document places each target, in its own
+        // group, only when the compile input asks for targets.
+        let sources = BTreeMap::from([(
+            ENTRYPOINT.to_owned(),
+            br##"#set page(width: auto, height: auto, margin: 0pt)
+#let targets = sys.inputs.at("linnest-inspection-targets", default: "false") == "true"
+#let target(id) = if targets {
+  place(dx: 2pt, dy: 2pt, box(place(link("#linnet-edge-" + id, box(width: 4pt, height: 4pt)))))
+}
+#box(width: 12pt, height: 8pt, fill: blue, target("0"))
+#box(width: 12pt, height: 8pt, stroke: red, target("1"))
+"##
+            .to_vec(),
+        )]);
+        let prepared = PreparedRender::from_sources(sources).unwrap();
+        let [drawing] = <[String; 1]>::try_from(prepared.svg_pages(false).unwrap()).unwrap();
+        let [interactive] = <[String; 1]>::try_from(prepared.svg_pages(true).unwrap()).unwrap();
+        let compiled = prepared.compile("svg").unwrap().remove(0);
+        assert_eq!(drawing, String::from_utf8(compiled).unwrap());
+        assert_eq!(interactive.matches("data-linnet-kind=\"edge\"").count(), 2);
     }
 
     #[test]

@@ -1,5 +1,5 @@
-//! SVG output: painted layers, typeset labels, and the `#linnet-*` inspection
-//! links the interactive viewer decorates, as `draw.typ` emits them.
+//! SVG output: painted layers, typeset labels, and for interactive output the
+//! `#linnet-*` inspection links the viewer decorates, as `draw.typ` emits them.
 use std::fmt::Write as _;
 use std::sync::Arc;
 
@@ -204,7 +204,9 @@ fn number(value: f64) -> String {
 }
 
 /// The page: an optional centered title above the padded drawing canvas.
-pub(super) fn svg(typeset: &Typeset, layers: &[Element], targets: &[Target]) -> String {
+/// `targets` adds the inspection links: label and head hit areas, then the
+/// hover targets. `None` draws a static page without links.
+pub(super) fn svg(typeset: &Typeset, layers: &[Element], targets: Option<&[Target]>) -> String {
     let mut bounds = Rect::new(
         f64::INFINITY,
         f64::INFINITY,
@@ -377,7 +379,8 @@ pub(super) fn svg(typeset: &Typeset, layers: &[Element], targets: &[Target]) -> 
                     r#"<g transform="translate({lx} {ly})">{body}</g>"#,
                     body = page.body,
                 );
-                if let Some(href) = href {
+                // Interactive pages also link each edge label to its edge.
+                if let (Some(href), Some(_)) = (href, targets) {
                     let _ = write!(
                         svg,
                         r#"<a href="{href}" transform="translate({lx} {ly})"><rect width="{w}" height="{h}" fill="transparent" stroke="none"/></a>"#,
@@ -418,28 +421,30 @@ pub(super) fn svg(typeset: &Typeset, layers: &[Element], targets: &[Target]) -> 
             }
         }
     }
-    // Put head hit areas above paint so the full authoritative footprint is
-    // clickable even where the mark's raw stroke is not itself an anchor.
-    for element in layers {
-        if let Element::HitBox { bounds: b, href } = element {
+    if let Some(targets) = targets {
+        // Put head hit areas above paint so the full authoritative footprint is
+        // clickable even where the mark's raw stroke is not itself an anchor.
+        for element in layers {
+            if let Element::HitBox { bounds: b, href } = element {
+                let _ = write!(
+                    svg,
+                    r#"<a href="{href}"><rect x="{}" y="{}" width="{}" height="{}" fill="transparent" stroke="none"/></a>"#,
+                    x(b.left),
+                    y(b.top),
+                    number((b.right - b.left) * UNIT),
+                    number((b.top - b.bottom) * UNIT)
+                );
+            }
+        }
+        for Target { at, size, href } in targets {
             let _ = write!(
                 svg,
-                r#"<a href="{href}"><rect x="{}" y="{}" width="{}" height="{}" fill="transparent" stroke="none"/></a>"#,
-                x(b.left),
-                y(b.top),
-                number((b.right - b.left) * UNIT),
-                number((b.top - b.bottom) * UNIT)
+                r#"<a href="{href}" transform="translate({} {})"><rect width="{s}" height="{s}" fill="transparent" stroke="none"/></a>"#,
+                number(ox + (at[0] - bounds.x0 + PAD) * UNIT - size / 2.0),
+                number(oy + (bounds.y1 + PAD - at[1]) * UNIT - size / 2.0),
+                s = number(*size)
             );
         }
-    }
-    for Target { at, size, href } in targets {
-        let _ = write!(
-            svg,
-            r#"<a href="{href}" transform="translate({} {})"><rect width="{s}" height="{s}" fill="transparent" stroke="none"/></a>"#,
-            number(ox + (at[0] - bounds.x0 + PAD) * UNIT - size / 2.0),
-            number(oy + (bounds.y1 + PAD - at[1]) * UNIT - size / 2.0),
-            s = number(*size)
-        );
     }
     let _ = write!(
         svg,
