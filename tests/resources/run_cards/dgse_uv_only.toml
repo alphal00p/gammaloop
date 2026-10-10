@@ -1,0 +1,62 @@
+commands = []
+
+[[command_blocks]]
+name = "generate"
+commands = [
+  "import model sm-default",
+  "remove processes",
+  "import graphs ./tests/resources/graphs/dgse_local_ir_offshell.dot -p dgse -i dgse",
+  "generate existing -p dgse -i dgse",
+]
+
+[[command_blocks]]
+name = "profile_uv"
+commands = [
+  "profile ultra-violet -p dgse -i dgse --min-scaling 8 --max-scaling 16 --n-points 33 --seed 1337 --per-orientation",
+]
+
+[default_runtime_settings.kinematics.externals]
+type = "constant"
+
+[default_runtime_settings.kinematics.externals.data]
+momenta = [
+  [
+    0.23,
+    0.0,
+    0.0,
+    0.2,
+  ],
+  [
+    0.37,
+    0.1,
+    0.0,
+    -0.282842712474619,
+  ],
+  "dependent",
+]
+helicities = [1, 1, 1]
+
+[default_runtime_settings.general]
+m_uv = 20.0
+mu_r = 20.0
+evaluator_method = "SingleParametric"
+
+[cli_settings.global]
+logfile_directive = "off"
+display_directive = "info"
+
+[cli_settings.global.generation.uv]
+generate_integrated = false
+softct = true
+add_marker = false
+inner_products = true
+
+[cli_settings.global.generation.tropical_subgraph_table]
+panic_on_fail = false
+disable_tropical_generation = true
+
+[cli_settings.global.generation.threshold_subtraction]
+enable_thresholds = false
+
+[cli_settings.global.generation.evaluator]
+iterative_orientation_optimization = false

@@ -2781,7 +2781,13 @@ impl HistogramAccumulatorState {
             log_y_axis: snapshot.log_y_axis,
             discrete_min_bin_id,
             discrete_ordering: snapshot.discrete_ordering,
-            bin_labels: bins.iter().map(|bin| bin.label.clone()).collect(),
+            bin_labels: if snapshot.kind == HistogramSnapshotKind::Discrete
+                || bins.iter().any(|bin| bin.label.is_some())
+            {
+                bins.iter().map(|bin| bin.label.clone()).collect()
+            } else {
+                Vec::new()
+            },
             bins: bins
                 .iter()
                 .map(ObservableBinAccumulator::from_snapshot)
@@ -4531,6 +4537,99 @@ mod tests {
         let _ = fs::remove_file(&file_path);
 
         assert_eq!(loaded, snapshot);
+    }
+
+    #[test]
+    fn continuous_histogram_checkpoint_resumes_worker_merges() {
+        let mut uninterrupted = HistogramAccumulatorState::continuous(
+            "leading_jet_pt_hist".to_string(),
+            "AL".to_string(),
+            ObservablePhase::Real,
+            ObservableValueTransform::Identity,
+            0.0,
+            1000.0,
+            false,
+            true,
+            8,
+        );
+        for sample in [
+            &[
+                (5.0, 1.5),
+                (145.0, 0.5),
+                (-1.0, -0.75),
+                (1000.0, 2.0),
+                (f64::NAN, 1.0),
+            ][..],
+            &[(5.0, -0.5), (145.0, 1.25)][..],
+        ] {
+            uninterrupted.fill_continuous_sample(sample).unwrap();
+        }
+        uninterrupted.update_results();
+        let checkpoint = uninterrupted.snapshot();
+        let loaded: HistogramSnapshot =
+            serde_json::from_slice(&serde_json::to_vec(&checkpoint).unwrap()).unwrap();
+        let mut resumed = loaded.into_accumulator_state();
+        assert_eq!(resumed.snapshot(), checkpoint);
+
+        let mut worker = uninterrupted.cleared_clone();
+        worker
+            .fill_continuous_sample(&[(260.0, 2.0), (145.0, -0.5), (-2.0, 0.25)])
+            .unwrap();
+        uninterrupted = uninterrupted.merged_with(&worker).unwrap();
+        resumed.merge_in_place(&mut worker).unwrap();
+        uninterrupted.update_results();
+        resumed.update_results();
+        assert_eq!(resumed.snapshot(), uninterrupted.snapshot());
+    }
+
+    #[test]
+    fn continuous_histogram_checkpoint_preserves_explicit_label_guard() {
+        let mut checkpoint = sample_histogram_snapshot();
+        let mut unlabeled = checkpoint.clone().into_accumulator_state();
+        checkpoint.bins[0].label = Some("region".to_string());
+        let loaded: HistogramSnapshot =
+            serde_json::from_slice(&serde_json::to_vec(&checkpoint).unwrap()).unwrap();
+        let mut labeled = loaded.into_accumulator_state();
+        assert_eq!(labeled.bin_labels, vec![Some("region".to_string())]);
+        assert!(unlabeled.merge_in_place(&mut labeled).is_err());
+    }
+
+    #[test]
+    fn discrete_histogram_checkpoint_retains_ordering_and_labels() {
+        let mut uninterrupted = HistogramAccumulatorState::discrete(
+            "jet_count".to_string(),
+            "AL".to_string(),
+            ObservablePhase::Real,
+            0,
+            2,
+            DiscreteBinOrdering::ValueDescending,
+            true,
+            vec![Some("zero".to_string()), None, Some("two".to_string())],
+        )
+        .unwrap();
+        for sample in [
+            &[(0, 1.0), (1, 3.0), (2, 2.0), (-1, -0.5), (3, 0.25)][..],
+            &[(0, 0.5), (2, -1.0)][..],
+        ] {
+            uninterrupted.fill_discrete_sample(sample).unwrap();
+        }
+        uninterrupted.update_results();
+        let checkpoint = uninterrupted.snapshot();
+        assert_eq!(checkpoint.bins[0].bin_id, Some(1));
+        let loaded: HistogramSnapshot =
+            serde_json::from_slice(&serde_json::to_vec(&checkpoint).unwrap()).unwrap();
+        let mut resumed = loaded.into_accumulator_state();
+        assert_eq!(resumed.snapshot(), checkpoint);
+        assert_eq!(resumed.bin_labels, uninterrupted.bin_labels);
+        assert_eq!(resumed.discrete_ordering, uninterrupted.discrete_ordering);
+
+        let mut worker = uninterrupted.cleared_clone();
+        worker.fill_discrete_sample(&[(2, 4.0), (0, -0.5)]).unwrap();
+        uninterrupted = uninterrupted.merged_with(&worker).unwrap();
+        resumed.merge_in_place(&mut worker).unwrap();
+        uninterrupted.update_results();
+        resumed.update_results();
+        assert_eq!(resumed.snapshot(), uninterrupted.snapshot());
     }
 
     #[test]

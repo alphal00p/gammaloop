@@ -6,7 +6,8 @@ commands = [
   # "import graphs ./tests/resources/graphs/epem_dd_dt.dot",
   # "generate",
   # "save dot",
-  "generate xs e+ e- > d~ d | d~ d g e+ e- a QCD^2>=2 QED^2>=2 [{{2}}] --select-graphs GL2 --clear-existing-processes --only-diagrams",
+  # The virtual cuts require the complementary real-gluon cuts for IR finiteness.
+  "generate xs e+ e- > {d~ d,d~ d g} | d~ d g e+ e- a QCD^2>=2 QED^2>=2 [{{2}}] --select-graphs GL2 --clear-existing-processes --only-diagrams",
   "save dot",
   "generate"
   # "integrate"
@@ -32,13 +33,18 @@ check_esurface_at_generation = true
 # pat = "orientation_delta(1,1,1,-1,1,-1,1)"
 
 [cli_settings.global.generation.uv]
-generate_integrated = true
+# The March 2026 references were produced with local UV subtraction only.
+generate_integrated = false
 softct = false
 add_marker = false
 inner_products = true
 
 [default_runtime_settings.general]
+# Pin the existing local vertex-subtraction mass used by the analytic reference.
+m_uv = 1000.0
 evaluator_method = "SummedFunctionMap"
+# The stored pointwise and integrated references use natural units.
+integral_unit = "none"
 
 [default_runtime_settings.kinematics]
 e_cm = 1.0

@@ -9,7 +9,6 @@ use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
-use crate::DependentMomentaConstructor;
 use crate::cff::expression::{OrientationData, OrientationID};
 use crate::cff::orientations::GraphOrientation;
 use crate::graph::parse::string_utils::ToOrderedSimple;
@@ -21,7 +20,7 @@ use crate::integrands::process::{
 };
 use crate::model::Model;
 use crate::momentum::ThreeMomentum;
-use crate::momentum::sample::{LoopIndex, LoopMomenta, MomentumSample};
+use crate::momentum::sample::LoopIndex;
 use crate::processes::{Amplitude, AmplitudeGraph, CrossSection, CutId};
 use crate::settings::RuntimeSettings;
 use crate::utils::F;
@@ -376,7 +375,7 @@ mod tests {
         BareMomentumSample, ExternalThreeMomenta, LoopIndex, LoopMomenta, MomentumSample,
     };
     use crate::observables::events::{AdditionalWeightKey, Event};
-    use crate::utils::F;
+    use crate::utils::{ArbPrec, F, load_generic_model};
     use crate::uv::UltravioletGraph;
     use spenso::algebra::complex::Complex;
     use symbolica::atom::{Atom, AtomCore};
@@ -384,7 +383,7 @@ mod tests {
 
     use super::{
         Analysis, FitResult, InspectAnalysis, InspectFitStatus, InspectResult,
-        OrientationInspectAnalysis, SubsetOrientationInput, UV_PROFILE_ASYMPTOTIC_MIN_R_SQUARED,
+        OrientationInspectAnalysis, UV_PROFILE_ASYMPTOTIC_MIN_R_SQUARED,
         UV_PROFILE_RETRY_MIN_R_SQUARED, UVLimitSelection, UVProfile, UVProfileAnalysis,
         UVProfileFailure, UVProfileFixedRay, UVProfileGraphAnalysis, UVProfileLmbAnalysis,
         UVProfilePassFail, UVProfileSubsetAnalysis, UVSamplingResult,
@@ -607,30 +606,15 @@ mod tests {
                 parameterization_branch: None,
             },
         };
-        let subset = SubSet::empty(candidate.loop_edges.len());
-        let candidate_sample = candidate
-            .loop_edges
-            .iter()
-            .map(|_| ThreeMomentum::default())
-            .collect();
-        let input = SubsetOrientationInput {
-            graph_id: 0,
-            subset: &subset,
-            lmb: candidate,
-            generation_lmb: &graph.loop_momentum_basis,
-            sample: &candidate_sample,
-            orientation: None,
-            compatible_event_cut_ids: None,
-        };
-        let transformed: LoopMomenta<F<f64>> =
-            input.generation_loop_momenta(&sample).into_iter().collect();
+        let transformed = sample.lmb_transform(candidate, &graph.loop_momentum_basis);
+        let transformed = transformed.loop_moms();
         let externals: ExternalThreeMomenta<F<f64>> = Vec::new().into();
 
         for (_, edge_id, _) in graph.underlying.iter_edges() {
             assert_eq!(
                 candidate.edge_signatures[edge_id].compute_momentum(&loop_moms, &externals),
                 graph.loop_momentum_basis.edge_signatures[edge_id]
-                    .compute_momentum(&transformed, &externals)
+                    .compute_momentum(transformed, &externals)
             );
         }
     }
@@ -742,7 +726,13 @@ mod tests {
                             }]),
                             analytic: None,
                         },
-                        per_orientation_inspect_entries: None,
+                        per_orientation_inspect_entries: Some(vec![
+                            super::UVProfileOrientationInspectEntry {
+                                orientation_label: "+-".to_string(),
+                                analysis: Some(fit(-1.0, -1)),
+                                inspect_fit_status: InspectFitStatus::default(),
+                            },
+                        ]),
                         analytic_entries: None,
                     }],
                 }],
@@ -824,6 +814,59 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn uv_profile_json_round_trip_preserves_pass_fail_policy_and_fit_status() {
+        let fit_status = InspectFitStatus {
+            finite_samples: 25,
+            positive_finite_samples: 0,
+        };
+        let analysis = Analysis {
+            inspect_level: None,
+            inspect_fit_status: fit_status,
+            per_orientation_inspect: Some(vec![OrientationInspectAnalysis {
+                orientation_label: "orientation_0".to_string(),
+                analysis: None,
+                inspect_fit_status: fit_status,
+            }]),
+            analytic: None,
+        };
+        let per_orientation_inspect_entries = analysis.per_orientation_inspect_entries();
+        let profile = UVProfileAnalysis {
+            stopped_early: false,
+            scales: vec![1.0, 10.0],
+            graphs: vec![UVProfileGraphAnalysis {
+                graph_index: 0,
+                graph_name: "GL0".to_string(),
+                cutkosky_cut: None,
+                lmbs: vec![UVProfileLmbAnalysis {
+                    lmb_index: 0,
+                    lmb_label: "loop_edges=[e0]".to_string(),
+                    subsets: vec![UVProfileSubsetAnalysis {
+                        subset_index: 0,
+                        fixed: Vec::new(),
+                        free: vec![EdgeIndex(0)],
+                        initial_dod: 0,
+                        analysis,
+                        per_orientation_inspect_entries,
+                        analytic_entries: None,
+                    }],
+                }],
+            }],
+            allow_vanishing_missing_fits: true,
+        };
+
+        let before = profile.pass_fail(-0.9);
+        let encoded = serde_json::to_string(&profile).unwrap();
+        let decoded: UVProfileAnalysis = serde_json::from_str(&encoded).unwrap();
+        let after = decoded.pass_fail(-0.9);
+
+        assert_eq!(before.total, 2);
+        assert_eq!(before.failed, 0);
+        assert_eq!(after.total, before.total);
+        assert_eq!(after.failed, before.failed);
+        assert!(decoded.allow_vanishing_missing_fits);
     }
 
     #[test]
@@ -999,6 +1042,134 @@ mod tests {
         assert!(json["result"].get("full_range_intercept").is_some());
         assert!(json["result"].get("full_range_r_squared").is_some());
         assert!(json["result"].get("points_detail").is_none());
+    }
+
+    #[test]
+    fn nested_soft_fixed_e3_is_a_direct_candidate_coordinate() {
+        test_initialise().unwrap();
+        let graph: Graph = include_str!(
+            "../../../../tests/resources/graphs/local_nested_soft_top_self_energy.dot"
+        )
+        .into_graph(&load_generic_model("sm"))
+        .unwrap();
+        let candidate = graph
+            .generate_loop_momentum_bases()
+            .into_iter()
+            .find(|lmb| lmb.loop_edges.iter().map(|edge| edge.0).eq([3, 6]))
+            .expect("nested fixture must expose candidate LMB [e3,e6]");
+        let fixed_e3_signature = &candidate.edge_signatures[3.into()];
+
+        assert_eq!(
+            fixed_e3_signature
+                .internal
+                .iter()
+                .copied()
+                .collect::<Vec<_>>(),
+            vec![
+                crate::momentum::SignOrZero::Plus,
+                crate::momentum::SignOrZero::Zero
+            ],
+        );
+        assert!(
+            fixed_e3_signature
+                .external
+                .iter()
+                .all(crate::momentum::SignOrZero::is_zero),
+            "the fixed e3 momentum must not be reconstructed by cancellation or an external shift",
+        );
+    }
+
+    #[test]
+    fn candidate_lmb_affine_shift_is_applied_after_precision_cast() {
+        test_initialise().unwrap();
+        let graph: Graph = include_str!(
+            "../../../../tests/resources/graphs/local_nested_soft_top_self_energy.dot"
+        )
+        .into_graph(&load_generic_model("sm"))
+        .unwrap();
+        let candidate = graph
+            .generate_loop_momentum_bases()
+            .into_iter()
+            .find(|lmb| lmb.loop_edges.iter().map(|edge| edge.0).eq([3, 6]))
+            .expect("nested fixture must expose candidate LMB [e3,e6]");
+        assert_eq!(
+            graph
+                .loop_momentum_basis
+                .loop_edges
+                .iter()
+                .map(|edge| edge.0)
+                .collect::<Vec<_>>(),
+            vec![2, 3],
+        );
+
+        let e2_signature = &candidate.edge_signatures[EdgeIndex(2)];
+        let e6_slot = candidate
+            .loop_edges
+            .iter_enumerated()
+            .find_map(|(slot, edge)| (*edge == EdgeIndex(6)).then_some(slot))
+            .unwrap();
+        let loop_sign = e2_signature.internal[e6_slot];
+        let (external_slot, external_sign) = e2_signature
+            .external
+            .iter()
+            .copied()
+            .enumerate()
+            .find(|(_, sign)| sign.is_sign())
+            .expect("the [e3,e6] -> [e2,e3] route must contain an external shift");
+
+        let large = 2_f64.powi(53);
+        let candidate_momenta: LoopMomenta<F<f64>> = candidate
+            .loop_edges
+            .iter()
+            .map(|edge| {
+                let px = if *edge == EdgeIndex(6) { large } else { 0.0 };
+                ThreeMomentum::new(F(px), F(0.0), F(0.0))
+            })
+            .collect();
+        let mut externals = (0..candidate.ext_edges.len())
+            .map(|_| ThreeMomentum::new(F(0.0), F(0.0), F(0.0)))
+            .collect::<crate::momentum::sample::ExternalThreeMomenta<_>>();
+        externals[crate::momentum::sample::ExternalIndex::from(external_slot)].px =
+            F(if external_sign == loop_sign {
+                1.0
+            } else {
+                -1.0
+            });
+
+        let canonical_in_f64 =
+            candidate_momenta.lmb_transform(&candidate, &graph.loop_momentum_basis, &externals);
+        let externals_arb = externals
+            .iter()
+            .map(|momentum| {
+                ThreeMomentum::new(
+                    F::<ArbPrec>::from_ff64(momentum.px),
+                    F::<ArbPrec>::from_ff64(momentum.py),
+                    F::<ArbPrec>::from_ff64(momentum.pz),
+                )
+            })
+            .collect::<crate::momentum::sample::ExternalThreeMomenta<_>>();
+        let old_routed_e6: ThreeMomentum<F<ArbPrec>> = graph.loop_momentum_basis.edge_signatures
+            [EdgeIndex(6)]
+        .compute_momentum(&canonical_in_f64.cast::<ArbPrec>(), &externals_arb);
+
+        let canonical_in_arb = candidate_momenta.cast::<ArbPrec>().lmb_transform(
+            &candidate,
+            &graph.loop_momentum_basis,
+            &externals_arb,
+        );
+        let precisely_routed_e6: ThreeMomentum<F<ArbPrec>> =
+            graph.loop_momentum_basis.edge_signatures[EdgeIndex(6)]
+                .compute_momentum(&canonical_in_arb, &externals_arb);
+        let expected = F::<ArbPrec>::from_f64(large);
+
+        assert_ne!(
+            old_routed_e6.px, expected,
+            "the oracle must expose the f64 affine-route rounding loss",
+        );
+        assert_eq!(
+            precisely_routed_e6.px, expected,
+            "the candidate LMB must be cast before its affine transform",
+        );
     }
 }
 
@@ -1534,18 +1705,18 @@ impl UVProfile {
     }
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UVProfileAnalysis {
     /// Results cover only the completed prefix when fail-fast stopped sampling.
-    #[serde(skip_serializing_if = "crate::utils::serde_utils::is_false")]
+    #[serde(default, skip_serializing_if = "crate::utils::serde_utils::is_false")]
     pub stopped_early: bool,
     pub scales: Vec<f64>,
     pub graphs: Vec<UVProfileGraphAnalysis>,
-    #[serde(skip_serializing)]
+    #[serde(default, skip_serializing_if = "crate::utils::serde_utils::is_false")]
     pub allow_vanishing_missing_fits: bool,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UVProfileGraphAnalysis {
     pub graph_index: usize,
     pub graph_name: String,
@@ -1553,14 +1724,14 @@ pub struct UVProfileGraphAnalysis {
     pub lmbs: Vec<UVProfileLmbAnalysis>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UVProfileLmbAnalysis {
     pub lmb_index: usize,
     pub lmb_label: String,
     pub subsets: Vec<UVProfileSubsetAnalysis>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UVProfileSubsetAnalysis {
     pub subset_index: usize,
     pub fixed: Vec<EdgeIndex>,
@@ -1681,7 +1852,7 @@ impl Display for UVProfilePassFail {
     }
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UVProfileAnalyticEntry {
     pub graph_index: usize,
     pub lmb_index: usize,
@@ -1695,10 +1866,12 @@ pub struct UVProfileAnalyticEntry {
     pub leading_coef: String,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UVProfileOrientationInspectEntry {
     pub orientation_label: String,
     pub analysis: Option<InspectAnalysis>,
+    #[serde(default)]
+    inspect_fit_status: InspectFitStatus,
 }
 
 #[derive(Tabled)]
@@ -1739,7 +1912,7 @@ struct UVProfileOrientationSubsetRow {
     inspect: String,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 struct FitResult {
     slope: f64,
     points: Vec<f64>,
@@ -2001,6 +2174,20 @@ impl UVProfileAnalysis {
                     for (orientation_label, reason) in subset
                         .analysis
                         .inspect_verdicts(max_dod, self.allow_vanishing_missing_fits)
+                        .take(1)
+                        .chain(subset.per_orientation_inspect_entries.iter().flatten().map(
+                            |entry| {
+                                (
+                                    Some(entry.orientation_label.as_str()),
+                                    inspect_failure_reason(
+                                        entry.analysis.as_ref(),
+                                        entry.inspect_fit_status,
+                                        max_dod,
+                                        self.allow_vanishing_missing_fits,
+                                    ),
+                                )
+                            },
+                        ))
                     {
                         total += 1;
                         if let Some(reason) = reason {
@@ -2448,7 +2635,6 @@ impl<'a> UVProfileRunner<'a> {
                     subset,
                     initial_dod: *initial_dod,
                     lmb,
-                    generation_lmb: &graph.loop_momentum_basis,
                     sample: &sample,
                     orientation_labels,
                     compatible_event_cut_ids: compatible_event_cut_ids.as_deref(),
@@ -2529,21 +2715,9 @@ struct SubsetOrientationInput<'a> {
     graph_id: usize,
     subset: &'a SubSet<LoopIndex>,
     lmb: &'a LoopMomentumBasis,
-    generation_lmb: &'a LoopMomentumBasis,
     sample: &'a LoopMomentumSample,
     orientation: Option<usize>,
     compatible_event_cut_ids: Option<&'a [CutId]>,
-}
-
-impl SubsetOrientationInput<'_> {
-    fn generation_loop_momenta(self, sample: &MomentumSample<f64>) -> Vec<ThreeMomentum<F<f64>>> {
-        sample
-            .lmb_transform(self.lmb, self.generation_lmb)
-            .loop_moms()
-            .iter()
-            .cloned()
-            .collect()
-    }
 }
 
 struct SubsetSampleInput<'a> {
@@ -2551,7 +2725,6 @@ struct SubsetSampleInput<'a> {
     subset: &'a SubSet<LoopIndex>,
     initial_dod: i32,
     lmb: &'a LoopMomentumBasis,
-    generation_lmb: &'a LoopMomentumBasis,
     sample: &'a LoopMomentumSample,
     orientation_labels: Option<&'a [String]>,
     compatible_event_cut_ids: Option<&'a [CutId]>,
@@ -2574,7 +2747,6 @@ impl<'a> UVProfileRunner<'a> {
                             graph_id: input.graph_id,
                             subset: input.subset,
                             lmb: input.lmb,
-                            generation_lmb: input.generation_lmb,
                             sample: input.sample,
                             orientation: Some(orientation_id),
                             compatible_event_cut_ids: input.compatible_event_cut_ids,
@@ -2587,12 +2759,36 @@ impl<'a> UVProfileRunner<'a> {
                     })
                 })
                 .collect::<Result<Vec<_>>>()?;
-            let summed = sum_orientation_inspect_samples(&per_orientation);
-            InspectSamples {
-                summed,
-                summed_used_arb_prec_retry: per_orientation
+            let summed_input = SubsetOrientationInput {
+                graph_id: input.graph_id,
+                subset: input.subset,
+                lmb: input.lmb,
+                sample: input.sample,
+                orientation: None,
+                compatible_event_cut_ids: input.compatible_event_cut_ids,
+            };
+            // Evaluate the sum before converting the result to f64. Summing the
+            // exported per-orientation values can lose the cancellations that
+            // the local subtraction is specifically meant to expose.
+            let mut summed = self.sample_subset_orientation(integrand, summed_input)?;
+            if !self.profile_settings.use_f128
+                && !summed.used_arb_prec_retry
+                && per_orientation
                     .iter()
-                    .any(|orientation| orientation.used_arb_prec_retry),
+                    .any(|orientation| orientation.used_arb_prec_retry)
+            {
+                summed = InspectRun {
+                    inspect: self.sample_subset_orientation_with_precision(
+                        integrand,
+                        summed_input,
+                        true,
+                    )?,
+                    used_arb_prec_retry: true,
+                };
+            }
+            InspectSamples {
+                summed: summed.inspect,
+                summed_used_arb_prec_retry: summed.used_arb_prec_retry,
                 per_orientation,
             }
         } else {
@@ -2602,7 +2798,6 @@ impl<'a> UVProfileRunner<'a> {
                     graph_id: input.graph_id,
                     subset: input.subset,
                     lmb: input.lmb,
-                    generation_lmb: input.generation_lmb,
                     sample: input.sample,
                     orientation: None,
                     compatible_event_cut_ids: input.compatible_event_cut_ids,
@@ -2662,31 +2857,15 @@ impl<'a> UVProfileRunner<'a> {
                 for l in input.subset.included_iter() {
                     scaled_sample[l] = scaled_sample[l].map_ref(&|a| a * F(*s));
                 }
-                let dependent_momenta_constructor = match &*integrand {
-                    ProcessIntegrand::Amplitude(amplitude) => {
-                        DependentMomentaConstructor::Amplitude(&amplitude.data.external_signature)
-                    }
-                    ProcessIntegrand::CrossSection(_) => DependentMomentaConstructor::CrossSection,
-                };
-                let sample_in_lmb = MomentumSample::new(
-                    scaled_sample.iter().cloned().collect::<LoopMomenta<_>>(),
-                    0,
-                    &self.settings.kinematics.externals,
-                    0,
-                    F(1.0),
-                    dependent_momenta_constructor,
-                    input.orientation,
-                )?;
-                let loop_momenta = input.generation_loop_momenta(&sample_in_lmb);
-
+                // Keep the profile ray in candidate coordinates. The evaluator
+                // casts it to the requested precision before routing it to the
+                // selected graph's canonical LMB.
                 let inspect_res_eval = evaluate_momentum_space_point(
                     integrand,
                     self.model,
-                    loop_momenta,
-                    input.graph_id,
-                    input.orientation,
+                    scaled_sample.raw,
+                    input,
                     use_arb_prec,
-                    input.compatible_event_cut_ids,
                 )?;
 
                 Ok(InspectResult {
@@ -2904,25 +3083,6 @@ fn log_log_slope(inspect: &[InspectResult], scales: &[f64]) -> Option<FitResult>
     })
 }
 
-fn sum_orientation_inspect_samples(
-    per_orientation: &[OrientationInspectSamples],
-) -> Vec<InspectResult> {
-    let Some((first, rest)) = per_orientation.split_first() else {
-        return Vec::new();
-    };
-
-    (0..first.inspect.len())
-        .map(|point_index| {
-            let mut summed = first.inspect[point_index].clone();
-            for orientation in rest {
-                summed.result.integrand_result +=
-                    orientation.inspect[point_index].result.integrand_result;
-            }
-            summed
-        })
-        .collect()
-}
-
 fn inspect_retry_label(analysis: Option<&InspectAnalysis>) -> String {
     match analysis {
         Some(analysis) if analysis.used_arb_prec_retry => "arb retry".yellow().to_string(),
@@ -2935,31 +3095,31 @@ fn evaluate_momentum_space_point(
     integrand: &mut ProcessIntegrand,
     model: &Model,
     loop_momenta: Vec<ThreeMomentum<F<f64>>>,
-    graph_id: usize,
-    orientation: Option<usize>,
+    input: SubsetOrientationInput<'_>,
     use_arb_prec: bool,
-    compatible_event_cut_ids: Option<&[CutId]>,
 ) -> Result<EvaluationResult> {
     let mut result = match integrand {
         ProcessIntegrand::Amplitude(amplitude) => evaluate_profile_momentum_point(
             amplitude,
             model,
-            graph_id,
-            orientation,
+            input.graph_id,
+            input.orientation,
             loop_momenta,
+            Some(input.lmb),
             use_arb_prec,
         ),
         ProcessIntegrand::CrossSection(cross_section) => evaluate_profile_momentum_point(
             cross_section,
             model,
-            graph_id,
-            orientation,
+            input.graph_id,
+            input.orientation,
             loop_momenta,
+            Some(input.lmb),
             use_arb_prec,
         ),
     }?;
 
-    if let Some(compatible_event_cut_ids) = compatible_event_cut_ids {
+    if let Some(compatible_event_cut_ids) = input.compatible_event_cut_ids {
         result.integrand_result = result
             .event_groups
             .iter()
@@ -2988,7 +3148,7 @@ impl InspectResult {
     }
 }
 
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize)]
 struct InspectFitStatus {
     finite_samples: usize,
     positive_finite_samples: usize,
@@ -3016,16 +3176,16 @@ impl InspectFitStatus {
     }
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Analysis {
     ///Is None if the fit hasn't worked
     inspect_level: Option<InspectAnalysis>,
-    #[serde(skip_serializing)]
+    #[serde(default)]
     inspect_fit_status: InspectFitStatus,
-    #[serde(skip_serializing)]
+    #[serde(skip, default)]
     per_orientation_inspect: Option<Vec<OrientationInspectAnalysis>>,
     ///Is None if the analytic analysis is disabled
-    #[serde(skip_serializing)]
+    #[serde(skip, default)]
     analytic: Option<AnalyticAnalysis>,
 }
 
@@ -3060,6 +3220,7 @@ impl Analysis {
                 .map(|entry| UVProfileOrientationInspectEntry {
                     orientation_label: entry.orientation_label.clone(),
                     analysis: entry.analysis.clone(),
+                    inspect_fit_status: entry.inspect_fit_status,
                 })
                 .collect()
         })
@@ -3084,7 +3245,7 @@ pub struct OrientationAnalyticAnalysis {
     leading_coef: String,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct InspectAnalysis {
     result: FitResult,
     estimated_dod: i64,

@@ -1,35 +1,47 @@
 use std::{
-    collections::BTreeMap,
-    fs,
+    collections::{BTreeMap, BTreeSet},
+    env, fs,
+    panic::{AssertUnwindSafe, catch_unwind},
     path::PathBuf,
+    process::Command,
     time::{Duration, Instant},
 };
 
 use color_eyre::Result;
 use gammaloop_api::commands::{
-    Profile,
+    Commands, Profile,
     evaluate_samples::{
         EvaluateSamples, EvaluateSamplesPrecise, evaluate_sample, evaluate_sample_precise,
     },
     integrate::Integrate,
     profile::{InfraRedProfile, UltraVioletProfile},
 };
-use gammaloop_api::state::ProcessRef;
+use gammaloop_api::{
+    StateLoadOption,
+    state::{CommandHistory, ProcessRef},
+};
 use gammaloop_integration_tests::{
     CLIState, clean_test, get_test_cli, get_tests_workspace_path, workspace_root,
 };
 use gammalooprs::integrands::{
     HasIntegrand,
-    evaluation::{EvaluationMetaData, PreciseEvaluationResultOutput},
+    evaluation::{EvaluationMetaData, PreciseEvaluationResultOutput, StabilityStatus},
 };
 use gammalooprs::observables::events::AdditionalWeightKey;
+use gammalooprs::processes::ProcessCollection;
 use gammalooprs::settings::runtime::{IntegralEstimate, SlotIntegrationResult};
 use gammalooprs::utils::{ArbPrec, F, FloatLike};
-use gammalooprs::uv::{ApproximationType, UVOrchestrator, settings::FinalIntegrandDimension};
+use gammalooprs::uv::{
+    ApproximationType, CTIdentifier, CTRenormalizationRule, UVOrchestrator, UVProfileAnalysis,
+    UltravioletGraph, settings::FinalIntegrandDimension,
+};
 use ndarray::Array2;
 use serde_json::{Map, Value, json};
 use spenso::algebra::{algebraic_traits::IsZero, complex::Complex};
-use symbolica::domains::float::Real;
+use symbolica::{
+    atom::{Atom, AtomCore},
+    domains::float::Real,
+};
 use tabled::{Table, Tabled};
 
 const INSPECT_DEPENDENCE_ACCURACY_FACTOR: f64 = 1000.0;
@@ -474,23 +486,33 @@ fn required_stability_accuracy_floor(
         .unwrap_or(f64::EPSILON))
 }
 
-fn stability_relative_accuracy(metadata: &EvaluationMetaData, accuracy_floor: f64) -> f64 {
-    let stability_accuracy = metadata
-        .stability_results
-        .iter()
-        .filter_map(|result| result.estimated_relative_accuracy.as_ref())
-        .fold(0.0_f64, |max, accuracy| max.max(accuracy.0.abs()));
-    let instability_error = metadata
-        .relative_instability_error
-        .re
-        .0
-        .abs()
-        .max(metadata.relative_instability_error.im.0.abs());
+fn stability_relative_accuracy(metadata: &EvaluationMetaData, accuracy_floor: f64) -> Result<f64> {
+    // Earlier attempts describe discarded values. The last attempt owns the
+    // returned value, matching EvaluationMetaData::final_precision.
+    let final_result = metadata.stability_results.last().ok_or_else(|| {
+        eyre::eyre!("inspect evaluation should report its final stability attempt")
+    })?;
+    eyre::ensure!(
+        !metadata.is_nan && !matches!(final_result.status, StabilityStatus::Unstable(_)),
+        "inspect evaluation ended at {} with status {:?} and is_nan={}",
+        final_result.precision,
+        final_result.status,
+        metadata.is_nan,
+    );
+    let accuracies = [
+        final_result
+            .estimated_relative_accuracy
+            .map_or(0.0, |accuracy| accuracy.0.abs()),
+        metadata.relative_instability_error.re.0.abs(),
+        metadata.relative_instability_error.im.0.abs(),
+        accuracy_floor.abs(),
+    ];
+    eyre::ensure!(
+        accuracies.iter().all(|accuracy| accuracy.is_finite()),
+        "inspect evaluation has non-finite final accuracy metadata: {accuracies:?}",
+    );
 
-    stability_accuracy
-        .max(instability_error)
-        .max(accuracy_floor.abs())
-        .max(f64::EPSILON)
+    Ok(accuracies.into_iter().fold(f64::EPSILON, f64::max))
 }
 
 struct InspectProbePoint {
@@ -571,6 +593,92 @@ fn inspect_probe_dependence_uses_reported_accuracy_and_rejects_nonfinite_probes(
     }
 }
 
+#[test]
+fn inspect_stability_accuracy_uses_the_final_accepted_precision() -> Result<()> {
+    use gammalooprs::integrands::evaluation::{EvaluationResult, StabilityResult};
+    use gammalooprs::settings::runtime::Precision;
+
+    let mut metadata = EvaluationResult::zero().evaluation_metadata;
+    metadata.stability_results = vec![
+        StabilityResult {
+            precision: Precision::Double,
+            estimated_relative_accuracy: Some(F(0.02)),
+            estimated_decimal_digits: None,
+            status: StabilityStatus::Unstable(2),
+            total_time: Duration::ZERO,
+        },
+        StabilityResult {
+            precision: Precision::Quad,
+            estimated_relative_accuracy: Some(F(1.0e-12)),
+            estimated_decimal_digits: None,
+            status: StabilityStatus::Stable(2),
+            total_time: Duration::ZERO,
+        },
+    ];
+    let accuracy = stability_relative_accuracy(&metadata, 1.0e-8)?;
+    assert_eq!(accuracy, 1.0e-8);
+    let mut probe = InspectProbeResult {
+        probe: InspectProbePoint {
+            point: vec![1.0],
+            scale_exponent: 0.0,
+            seed_index: 0,
+        },
+        relative_delta: 0.003,
+        relative_accuracy: accuracy,
+        required_relative_delta: INSPECT_DEPENDENCE_ACCURACY_FACTOR * accuracy,
+    };
+    assert!(probe.passes(false)?);
+
+    // A successful retry cannot relax the configured accuracy floor.
+    probe.relative_accuracy = stability_relative_accuracy(&metadata, 1.0e-5)?;
+    assert_eq!(probe.relative_accuracy, 1.0e-5);
+    probe.required_relative_delta = INSPECT_DEPENDENCE_ACCURACY_FACTOR * probe.relative_accuracy;
+    assert!(!probe.passes(false)?);
+
+    metadata.relative_instability_error.im = F(2.0e-6);
+    assert_eq!(stability_relative_accuracy(&metadata, 1.0e-8)?, 2.0e-6);
+    metadata.relative_instability_error.im = F(0.0);
+    metadata.stability_results[1].estimated_relative_accuracy = None;
+    metadata.stability_results[1].status = StabilityStatus::Unknown;
+    assert_eq!(stability_relative_accuracy(&metadata, 1.0e-8)?, 1.0e-8);
+    Ok(())
+}
+
+#[test]
+fn inspect_stability_accuracy_rejects_unstable_and_nonfinite_final_results() {
+    use gammalooprs::integrands::evaluation::{EvaluationResult, StabilityResult};
+    use gammalooprs::settings::runtime::Precision;
+
+    let mut metadata = EvaluationResult::zero().evaluation_metadata;
+    metadata.stability_results.push(StabilityResult {
+        precision: Precision::Quad,
+        estimated_relative_accuracy: Some(F(1.0e-12)),
+        estimated_decimal_digits: None,
+        status: StabilityStatus::Unstable(2),
+        total_time: Duration::ZERO,
+    });
+    assert!(stability_relative_accuracy(&metadata, 1.0e-8).is_err());
+
+    metadata.stability_results[0].status = StabilityStatus::Stable(2);
+    metadata.is_nan = true;
+    assert!(stability_relative_accuracy(&metadata, 1.0e-8).is_err());
+    metadata.is_nan = false;
+    for invalid in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
+        metadata.stability_results[0].estimated_relative_accuracy = Some(F(invalid));
+        assert!(stability_relative_accuracy(&metadata, 1.0e-8).is_err());
+        metadata.stability_results[0].estimated_relative_accuracy = Some(F(1.0e-12));
+        metadata.relative_instability_error.re = F(invalid);
+        assert!(stability_relative_accuracy(&metadata, 1.0e-8).is_err());
+        metadata.relative_instability_error.re = F(0.0);
+        metadata.relative_instability_error.im = F(invalid);
+        assert!(stability_relative_accuracy(&metadata, 1.0e-8).is_err());
+        metadata.relative_instability_error.im = F(0.0);
+        assert!(stability_relative_accuracy(&metadata, invalid).is_err());
+    }
+    metadata.stability_results.clear();
+    assert!(stability_relative_accuracy(&metadata, 1.0e-8).is_err());
+}
+
 fn deterministic_uv_momentum_points(
     cli: &mut CLIState,
     process: &str,
@@ -614,11 +722,12 @@ struct InspectEvaluation {
     relative_accuracy: f64,
 }
 
-fn evaluate_summed_momentum_sample(
+fn evaluate_momentum_sample(
     cli: &mut CLIState,
     process: &str,
     integrand_name: &str,
     point: &[f64],
+    orientation: Option<usize>,
     accuracy_floor: f64,
 ) -> Result<InspectEvaluation> {
     let process_id = cli
@@ -646,7 +755,7 @@ fn evaluate_summed_momentum_sample(
             integrator_weights: None,
             discrete_dims: None,
             graph_names: Some(vec![Some(graph_name)]),
-            orientations: Some(vec![None]),
+            orientations: Some(vec![orientation]),
         },
     )?;
     let evaluation = result.sample.evaluation;
@@ -657,7 +766,7 @@ fn evaluate_summed_momentum_sample(
 
     Ok(InspectEvaluation {
         value: evaluation.integrand_result.map(|entry| entry.0),
-        relative_accuracy: stability_relative_accuracy(metadata, accuracy_floor),
+        relative_accuracy: stability_relative_accuracy(metadata, accuracy_floor)?,
     })
 }
 
@@ -674,18 +783,20 @@ fn inspect_scale_dependence_row(
     let n_probes = probes.len();
     let mut best: Option<(f64, InspectProbeResult)> = None;
     for probe in probes {
-        let baseline = evaluate_summed_momentum_sample(
+        let baseline = evaluate_momentum_sample(
             cli,
             case.process,
             baseline_name,
             &probe.point,
+            None,
             accuracy_floor,
         )?;
-        let shifted = evaluate_summed_momentum_sample(
+        let shifted = evaluate_momentum_sample(
             cli,
             case.process,
             shifted_name,
             &probe.point,
+            None,
             accuracy_floor,
         )?;
         let delta_norm =
@@ -1378,7 +1489,7 @@ fn scalar_amplitudes_match_across_local_uv_routes() -> Result<()> {
         for (index, (route, cli)) in states.iter_mut().enumerate() {
             let evaluation_started = Instant::now();
             let evaluation =
-                evaluate_summed_momentum_sample(cli, process, integrand, point, 1.0e-12)?;
+                evaluate_momentum_sample(cli, process, integrand, point, None, 1.0e-12)?;
             evaluation_times[index] += evaluation_started.elapsed();
             if !evaluation.value.re.is_finite() || !evaluation.value.im.is_finite() {
                 failures.push(format!(
@@ -1712,25 +1823,28 @@ fn scalar_spectacles_integrated_uv_factorizes_over_bridge() -> Result<()> {
     // so the spectacles graph is the product of both bubbles divided by 2s.
     let external_s = 1.0_f64;
     let bridge_factor = 1.0 / (2.0 * external_s);
-    let bubble_left = evaluate_summed_momentum_sample(
+    let bubble_left = evaluate_momentum_sample(
         &mut cli,
         "bubble",
         "scalar_bubble",
         &[0.11, -0.07, 0.19],
+        None,
         bubble_accuracy_floor,
     )?;
-    let bubble_right = evaluate_summed_momentum_sample(
+    let bubble_right = evaluate_momentum_sample(
         &mut cli,
         "bubble",
         "scalar_bubble",
         &[0.23, 0.31, -0.17],
+        None,
         bubble_accuracy_floor,
     )?;
-    let spectacles_point = evaluate_summed_momentum_sample(
+    let spectacles_point = evaluate_momentum_sample(
         &mut cli,
         "spectacles",
         "scalar_spectacles",
         &[0.11, -0.07, 0.19, 0.23, 0.31, -0.17],
+        None,
         spectacles_accuracy_floor,
     )?;
     let expected_point = Complex::new(
@@ -2273,11 +2387,12 @@ impl GraphUvRichInspectCase {
             let evaluations = points
                 .iter()
                 .map(|point| {
-                    evaluate_summed_momentum_sample(
+                    evaluate_momentum_sample(
                         &mut cli,
                         &process,
                         integrand_name,
                         point,
+                        None,
                         1.0e-12,
                     )
                 })
@@ -2557,8 +2672,4213 @@ fn assert_json_approx_eq(actual: &Value, expected: &Value, path: &str) {
     }
 }
 
+fn local_ct_cli(
+    run_card: &str,
+    test_name: &str,
+    unsubtracted: bool,
+    project_local_4d: bool,
+    explicit_orientation_sum_only: bool,
+) -> Result<CLIState> {
+    let test_name = format!(
+        "{test_name}_explicit_{explicit_orientation_sum_only}_project_local_4d_{project_local_4d}"
+    );
+    let mut cli = get_test_cli(
+        Some(run_card.into()),
+        get_tests_workspace_path().join(&test_name),
+        Some(test_name),
+        true,
+    )?;
+    let generation = &mut cli.cli_settings.global.generation;
+    generation.explicit_orientation_sum_only = explicit_orientation_sum_only;
+    if explicit_orientation_sum_only {
+        generation.orientation_pattern = Default::default();
+    }
+    let uv = &mut generation.uv;
+    uv.final_integrand = FinalIntegrandDimension::ThreeD;
+    uv.local_uv_cts_from_expanded_4d_integrands = project_local_4d;
+    assert!(
+        !uv.generate_integrated,
+        "local profile fixtures intentionally isolate unintegrated counterterms"
+    );
+    if unsubtracted {
+        let prescription = &mut uv.renormalization_prescription;
+        prescription.log_divergent = ApproximationType::Unsubtracted;
+        prescription.massive_power_divergent = ApproximationType::Unsubtracted;
+        prescription.massless_power_divergent = ApproximationType::Unsubtracted;
+        prescription.overrides.clear();
+        // The legacy wood does not represent an entirely unsubtracted graph,
+        // so Compare is meaningful only for the selected local counterterm.
+        // Keep the bare side of each non-vacuity check on the reference path.
+        if uv.orchestrator == UVOrchestrator::Compare {
+            uv.orchestrator = UVOrchestrator::HedgePoset;
+        }
+    }
+    cli.run_command("run generate")?;
+    Ok(cli)
+}
+
+#[test]
+#[serial_test::serial]
+fn local_ir_integrated_generation_succeeds_across_local_uv_routes() -> Result<()> {
+    for (name, external_pdg_sets, internal_pdgs, component_counts, momenta, require_nonzero) in [
+        (
+            "local_ir_quark_self_energy",
+            &[[-1, 1]][..],
+            &[1, 21][..],
+            &[1][..],
+            &[0.11, -0.29, 0.37][..],
+            false,
+        ),
+        (
+            "local_ir_gluon_self_energy",
+            &[[-21, 21]][..],
+            &[1][..],
+            &[1][..],
+            &[0.11, -0.29, 0.37][..],
+            false,
+        ),
+        (
+            "local_ir_dod2_scalar_spectacles",
+            &[[-1000, 1001], [-1001, 1000]][..],
+            &[1001][..],
+            &[1, 1][..],
+            &[0.11, -0.29, 0.37, 0.59, -0.43, 0.71][..],
+            true,
+        ),
+        (
+            "local_nested_soft_top_self_energy",
+            &[[-6, 6]][..],
+            &[6, 21][..],
+            &[2][..],
+            &[0.11, -0.29, 0.37, 0.59, -0.43, 0.71][..],
+            true,
+        ),
+    ] {
+        let mut values = Vec::new();
+        let routes = [
+            (false, false, true),
+            (true, false, true),
+            (true, true, true),
+        ]
+        .into_iter()
+        .chain((name == "local_nested_soft_top_self_energy").then_some((true, false, false)));
+        for (
+            explicit_orientation_sum_only,
+            project_local_4d,
+            project_integrated_uv_cts_onto_tensor_integrals,
+        ) in routes
+        {
+            let test_name = format!(
+                "{name}_integrated_explicit_{explicit_orientation_sum_only}_project_local_4d_{project_local_4d}_project_integrated_{project_integrated_uv_cts_onto_tensor_integrals}"
+            );
+            let mut cli = get_test_cli(
+                Some(format!("{name}.toml").into()),
+                get_tests_workspace_path().join(&test_name),
+                Some(test_name),
+                true,
+            )?;
+            let generation = &mut cli.cli_settings.global.generation;
+            generation.explicit_orientation_sum_only = explicit_orientation_sum_only;
+            generation.orientation_pattern = Default::default();
+            generation.uv.final_integrand = FinalIntegrandDimension::ThreeD;
+            generation.uv.local_uv_cts_from_expanded_4d_integrands = project_local_4d;
+            generation.uv.generate_integrated = true;
+            generation
+                .uv
+                .project_integrated_uv_cts_onto_tensor_integrals =
+                project_integrated_uv_cts_onto_tensor_integrals;
+            cli.run_command("run generate")?;
+            assert_generated_local_integrand(&cli, name, name, momenta.len())?;
+            assert_eq!(
+                selected_local_identifiers(&cli, name, name, ApproximationType::IR)?.len(),
+                component_counts.iter().sum::<usize>(),
+                "{name} must retain every expected integrated IR component",
+            );
+            for (external_pdgs, minimum_count) in external_pdg_sets.iter().zip(component_counts) {
+                assert_selected_local_identifier(
+                    &cli,
+                    name,
+                    name,
+                    ApproximationType::IR,
+                    external_pdgs.iter().copied(),
+                    internal_pdgs.iter().copied(),
+                    *minimum_count,
+                )?;
+            }
+
+            // Force arbitrary precision for route equality; serialized values
+            // are f64, so their rounding sets the comparison's accuracy floor.
+            let process_id = cli
+                .state
+                .resolve_process_ref(Some(&ProcessRef::Unqualified(name.to_string())))?;
+            let points = Array2::from_shape_vec((1, momenta.len()), momenta.to_vec())?;
+            let result = evaluate_sample(
+                &mut cli.state,
+                &EvaluateSamples {
+                    process_id: Some(process_id),
+                    integrand_name: Some(name.to_string()),
+                    use_arb_prec: true,
+                    minimal_output: false,
+                    return_generated_events: Some(false),
+                    momentum_space: true,
+                    points: points.view(),
+                    integrator_weights: None,
+                    discrete_dims: None,
+                    graph_names: None,
+                    orientations: Some(vec![None]),
+                },
+            )?;
+            let evaluation = result.sample.evaluation;
+            let metadata = evaluation.evaluation_metadata.as_ref().ok_or_else(|| {
+                eyre::eyre!("integrated route comparison must report its numerical accuracy")
+            })?;
+            let value = InspectEvaluation {
+                value: evaluation.integrand_result.map(|entry| entry.0),
+                relative_accuracy: stability_relative_accuracy(metadata, f64::EPSILON)?,
+            };
+            assert!(
+                value.value.re.is_finite() && value.value.im.is_finite(),
+                "{name} integrated local IR generation must evaluate finitely for explicit={explicit_orientation_sum_only}, project_local_4d={project_local_4d}, project_integrated={project_integrated_uv_cts_onto_tensor_integrals}: {:?}",
+                value.value,
+            );
+            assert!(
+                !require_nonzero || value.value.re.hypot(value.value.im) > 0.0,
+                "{name} integrated local IR generation must be nonzero for explicit={explicit_orientation_sum_only}, project_local_4d={project_local_4d}, project_integrated={project_integrated_uv_cts_onto_tensor_integrals}",
+            );
+            values.push((
+                (
+                    explicit_orientation_sum_only,
+                    project_local_4d,
+                    project_integrated_uv_cts_onto_tensor_integrals,
+                ),
+                value,
+            ));
+            clean_test(&cli.cli_settings.state.folder);
+        }
+        // External on-shell spinors can annihilate the quark self-energy's
+        // finite addback. Its uncontracted nonzero atom has a separate unit oracle.
+        // Compare complete physical sums with integration enabled in all routes.
+        let reference = &values[0].1;
+        for (
+            (
+                explicit_orientation_sum_only,
+                project_local_4d,
+                project_integrated_uv_cts_onto_tensor_integrals,
+            ),
+            value,
+        ) in &values[1..]
+        {
+            let delta =
+                (value.value.re - reference.value.re).hypot(value.value.im - reference.value.im);
+            let scale = reference
+                .value
+                .re
+                .hypot(reference.value.im)
+                .max(value.value.re.hypot(value.value.im))
+                .max(f64::MIN_POSITIVE);
+            let relative_accuracy = reference
+                .relative_accuracy
+                .max(value.relative_accuracy)
+                .max(f64::EPSILON);
+            assert!(
+                relative_accuracy.is_finite()
+                    && INSPECT_DEPENDENCE_ACCURACY_FACTOR * relative_accuracy < 1.0
+                    && delta <= INSPECT_DEPENDENCE_ACCURACY_FACTOR * relative_accuracy * scale,
+                "{name} integrated local IR routes disagree for explicit={explicit_orientation_sum_only}, project_local_4d={project_local_4d}, project_integrated={project_integrated_uv_cts_onto_tensor_integrals}: localized direct={:?}, value={:?}, delta={delta:.3e}, scale={scale:.3e}, accuracy={relative_accuracy:.3e}",
+                reference.value,
+                value.value,
+            );
+        }
+    }
+    Ok(())
+}
+
+#[test]
+#[serial_test::serial]
+fn genuine_vacuum_tadpole_matches_all_local_uv_routes_and_vakint_inputs() -> Result<()> {
+    const VACUUM_TADPOLE: &str = r#"
+        digraph vacuum_tadpole {
+            edge [num=1 mass=2]
+            node [num=1]
+            a -> a [id=0 lmb_id=0]
+        }
+    "#;
+    const VACUUM_RUNTIME: &str = r#"
+        [general]
+        evaluator_method = "SingleParametric"
+        m_uv = 1000.0
+        renormalization_localization_scale = 1000.0
+        mu_r = 1000.0
+
+        [kinematics]
+        e_cm = 64.0
+
+        [kinematics.externals]
+        type = "constant"
+
+        [kinematics.externals.data]
+        momenta = []
+        helicities = []
+
+        [sampling]
+        graphs = "summed"
+        orientations = "summed"
+
+        [subtraction]
+        disable_threshold_subtraction = true
+    "#;
+    let mut values = Vec::new();
+    for project_integrated_uv_cts_onto_tensor_integrals in [false, true] {
+        for (route, explicit_orientation_sum_only, project_local_4d) in [
+            ("localized_direct_3d", false, false),
+            ("explicit_direct_3d", true, false),
+            ("projected_local_4d", true, true),
+        ] {
+            let test_name = format!(
+                "genuine_vacuum_tadpole_{route}_project_integrated_{project_integrated_uv_cts_onto_tensor_integrals}"
+            );
+            let mut cli = get_test_cli(
+                None,
+                get_tests_workspace_path().join(&test_name),
+                Some(test_name),
+                true,
+            )?;
+            let generation = &mut cli.cli_settings.global.generation;
+            generation.explicit_orientation_sum_only = explicit_orientation_sum_only;
+            generation.orientation_pattern = Default::default();
+            generation
+                .tropical_subgraph_table
+                .disable_tropical_generation = true;
+            generation.evaluator.iterative_orientation_optimization = false;
+            generation.threshold_subtraction.enable_thresholds = false;
+            generation.uv.generate_integrated = true;
+            generation
+                .uv
+                .project_integrated_uv_cts_onto_tensor_integrals =
+                project_integrated_uv_cts_onto_tensor_integrals;
+            generation.uv.subtract_uv = true;
+            generation.uv.final_integrand = FinalIntegrandDimension::ThreeD;
+            generation.uv.local_uv_cts_from_expanded_4d_integrands = project_local_4d;
+            generation.uv.add_marker = false;
+            generation.uv.inner_products = true;
+            generation.uv.orchestrator = UVOrchestrator::HedgePoset;
+            let prescription = &mut generation.uv.renormalization_prescription;
+            prescription.log_divergent = ApproximationType::MUV;
+            prescription.massive_power_divergent = ApproximationType::MUV;
+            prescription.massless_power_divergent = ApproximationType::MUV;
+            prescription.overrides.clear();
+
+            cli.run_command("import model scalars-default.json")?;
+            cli.run_command(&format!(
+                r#"import graphs --inline-dot """{VACUUM_TADPOLE}""" -p vacuum -i tadpole"#
+            ))?;
+            cli.run_command(&format!("set default-runtime string '{VACUUM_RUNTIME}'"))?;
+            cli.run_command("generate existing -p vacuum -i tadpole")?;
+            assert_generated_local_integrand(&cli, "vacuum", "tadpole", 3)?;
+
+            let spinneys = classified_local_spinneys(&cli, "vacuum", "tadpole")?;
+            assert_eq!(
+                spinneys.len(),
+                2,
+                "the vacuum tadpole must have its physical component and inert empty root: {spinneys:?}"
+            );
+            let spinney = spinneys
+                .iter()
+                .find(|spinney| spinney.edge_ids == [0])
+                .expect("the vacuum tadpole must retain its physical component");
+            assert!(spinney.identifier.external_pdg_set.is_empty());
+            assert_eq!(spinney.edge_ids, [0]);
+            assert_eq!(spinney.n_components, 1);
+            assert_eq!(spinney.scheme, ApproximationType::MUV);
+            assert_eq!(spinney.dod, 2);
+            let root = spinneys
+                .iter()
+                .find(|spinney| spinney.edge_ids.is_empty())
+                .expect("the vacuum tadpole must retain its inert empty root");
+            assert!(root.identifier.external_pdg_set.is_empty());
+            assert_eq!(root.identifier.internal_pdg_set, Some(BTreeSet::new()));
+            assert_eq!(root.n_components, 0);
+            assert_eq!(root.scheme, ApproximationType::MUV);
+            assert_eq!(root.dod, 0);
+
+            let value = evaluate_momentum_sample(
+                &mut cli,
+                "vacuum",
+                "tadpole",
+                &[0.11, -0.29, 0.37],
+                None,
+                f64::EPSILON,
+            )?;
+            assert!(
+                value.value.re.is_finite() && value.value.im.is_finite(),
+                "{route}, project_integrated={project_integrated_uv_cts_onto_tensor_integrals}: vacuum evaluation is not finite: {:?}",
+                value.value,
+            );
+            assert!(
+                value.value.re.hypot(value.value.im) > 0.0,
+                "{route}, project_integrated={project_integrated_uv_cts_onto_tensor_integrals}: vacuum evaluation is zero",
+            );
+            values.push((
+                (route, project_integrated_uv_cts_onto_tensor_integrals),
+                value,
+            ));
+            clean_test(&cli.cli_settings.state.folder);
+        }
+    }
+
+    let reference = &values
+        .iter()
+        .find(|((route, project_integrated), _)| {
+            *route == "explicit_direct_3d" && *project_integrated
+        })
+        .expect("the vacuum matrix must contain its explicit direct reference")
+        .1;
+    assert!(
+        reference.value.re.abs() <= 1.0e-12
+            && (reference.value.im + 9.760529078735244e-4).abs() <= 1.0e-12,
+        "the genuine-vacuum reference changed: {:?}",
+        reference.value,
+    );
+    for ((route, project_integrated), value) in &values {
+        let delta =
+            (value.value.re - reference.value.re).hypot(value.value.im - reference.value.im);
+        let scale = reference
+            .value
+            .re
+            .hypot(reference.value.im)
+            .max(value.value.re.hypot(value.value.im))
+            .max(f64::MIN_POSITIVE);
+        let relative_accuracy = reference
+            .relative_accuracy
+            .max(value.relative_accuracy)
+            .max(f64::EPSILON);
+        assert!(
+            relative_accuracy.is_finite()
+                && INSPECT_DEPENDENCE_ACCURACY_FACTOR * relative_accuracy < 1.0
+                && delta <= INSPECT_DEPENDENCE_ACCURACY_FACTOR * relative_accuracy * scale,
+            "{route}, project_integrated={project_integrated}: genuine-vacuum routes disagree: reference={:?}, value={:?}, delta={delta:.3e}, scale={scale:.3e}, accuracy={relative_accuracy:.3e}",
+            reference.value,
+            value.value,
+        );
+    }
+    Ok(())
+}
+
+#[test]
+#[serial_test::serial]
+fn local_os_integrated_generation_is_rejected_by_run_generate() -> Result<()> {
+    let mut cli = get_test_cli(
+        Some(LOCAL_OS_CARD.into()),
+        get_tests_workspace_path().join("local_os_integrated_generation_rejected"),
+        Some("local_os_integrated_generation_rejected".to_string()),
+        true,
+    )?;
+    cli.cli_settings.global.generation.uv.generate_integrated = true;
+
+    let error = cli
+        .run_command("run generate")
+        .expect_err("the production generate command must reject integrated local OS CTs");
+    let message = format!("{error:#}");
+    assert!(
+        message.contains("local on-shell/OS counterterms are local-only in phase 1")
+            && message.contains("generate_integrated=false"),
+        "the generation error lacks the phase-1 OS policy and corrective setting: {message}"
+    );
+
+    let process_id = cli
+        .state
+        .resolve_process_ref(Some(&ProcessRef::Unqualified(LOCAL_OS_NAME.to_string())))?;
+    let resolved = cli
+        .state
+        .process_list
+        .get_integrand(process_id, LOCAL_OS_NAME)?;
+    assert!(
+        resolved.integrand.is_none(),
+        "a rejected production generation must not publish a partial integrand"
+    );
+
+    clean_test(&cli.cli_settings.state.folder);
+    Ok(())
+}
+
+#[test]
+#[serial_test::serial]
+fn local_ir_and_pole_part_wood_is_rejected_by_run_generate() -> Result<()> {
+    const PROCESS: &str = "dgse";
+    const INTEGRAND: &str = "dgse";
+    let mut cli = get_test_cli(
+        Some("dgse_local_ir.toml".into()),
+        get_tests_workspace_path().join("local_ir_pole_part_wood_rejected"),
+        Some("local_ir_pole_part_wood_rejected".to_string()),
+        true,
+    )?;
+    cli.cli_settings
+        .global
+        .generation
+        .uv
+        .renormalization_prescription
+        .overrides
+        .push(CTRenormalizationRule::new(
+            CTIdentifier::new(
+                [-1, 1, 21].into_iter().collect(),
+                Some([1, 21].into_iter().collect()),
+            ),
+            ApproximationType::PolePart,
+        ));
+
+    let error = cli
+        .run_command("run generate")
+        .expect_err("a local IR/PolePart wood must be rejected by production generation");
+    let message = format!("{error:#}");
+    assert!(
+        message.contains("graph 'se' cut 0")
+            && message.contains("local soft/IR and PolePart counterterms")
+            && message.contains("cannot be combined in one UV wood")
+            && message.contains("component"),
+        "the production rejection lacks graph, cut, component, and scheme-policy context: {message}"
+    );
+
+    let process_id = cli
+        .state
+        .resolve_process_ref(Some(&ProcessRef::Unqualified(PROCESS.to_string())))?;
+    let resolved = cli
+        .state
+        .process_list
+        .get_integrand(process_id, INTEGRAND)?;
+    assert!(
+        resolved.integrand.is_none(),
+        "a rejected IR/PolePart generation must not publish a partial integrand"
+    );
+
+    clean_test(&cli.cli_settings.state.folder);
+    Ok(())
+}
+
+#[test]
+#[serial_test::serial]
+fn local_ir_child_under_positive_degree_muv_parent_is_rejected_by_run_generate() -> Result<()> {
+    const NAME: &str = "nested_positive_degree_hu";
+    let mut cli = get_test_cli(
+        Some("local_ir_child_muv_parent_rejected.toml".into()),
+        get_tests_workspace_path().join("local_ir_child_muv_parent_rejected"),
+        Some("local_ir_child_muv_parent_rejected".to_string()),
+        true,
+    )?;
+    let uv = &cli.cli_settings.global.generation.uv;
+    assert!(
+        !uv.generate_integrated,
+        "the policy fixture must be local-only"
+    );
+    assert_eq!(uv.orchestrator, UVOrchestrator::HedgePoset);
+    assert_eq!(
+        uv.renormalization_prescription.overrides,
+        [CTRenormalizationRule::new(
+            CTIdentifier::new(
+                [-1001, 1001].into_iter().collect(),
+                Some([1002].into_iter().collect()),
+            ),
+            ApproximationType::IR,
+        )],
+        "the run card must select only the scalar_2 child bubble as IR"
+    );
+
+    let error = cli.run_command("run generate").expect_err(
+        "a positive-degree MUV parent over a positive-degree IR child must be rejected",
+    );
+    let message = format!("{error:#}");
+    assert!(
+        message.contains("graph 'nested_positive_degree_hu' cut 0")
+            && message.contains("positive-degree MUV component 140 (d=1)")
+            && message.contains("cannot contain local soft/IR component FU (d=1)")
+            && message.contains("in phase 1")
+            && message.contains("reduced-cograph subtraction is not local")
+            && message.contains("assign IR to the containing component")
+            && message.contains("deferred finite scheme-change/integrated policy"),
+        "the production rejection lacks graph, cut, component, degree, or phase-policy context: {message}"
+    );
+
+    let process_id = cli
+        .state
+        .resolve_process_ref(Some(&ProcessRef::Unqualified(NAME.to_string())))?;
+    let resolved = cli.state.process_list.get_integrand(process_id, NAME)?;
+    assert!(
+        resolved.integrand.is_none(),
+        "a rejected positive-degree H/U generation must not publish a partial integrand"
+    );
+
+    clean_test(&cli.cli_settings.state.folder);
+    Ok(())
+}
+
+#[derive(Debug)]
+struct ClassifiedLocalSpinney {
+    identifier: CTIdentifier,
+    edge_ids: Vec<usize>,
+    n_components: usize,
+    scheme: ApproximationType,
+    dod: i32,
+}
+
+fn classified_local_spinneys(
+    cli: &CLIState,
+    process_name: &str,
+    integrand_name: &str,
+) -> Result<Vec<ClassifiedLocalSpinney>> {
+    let process_id = cli
+        .state
+        .resolve_process_ref(Some(&ProcessRef::Unqualified(process_name.to_string())))?;
+    let process = &cli.state.process_list.processes[process_id];
+    let amplitudes = match &process.collection {
+        ProcessCollection::Amplitudes(amplitudes) => amplitudes,
+        ProcessCollection::CrossSections(_) => {
+            return Err(eyre::eyre!(
+                "local CT fixture '{process_name}' must be an amplitude"
+            ));
+        }
+    };
+    let amplitude = amplitudes
+        .get(integrand_name)
+        .ok_or_else(|| eyre::eyre!("missing local CT integrand '{integrand_name}'"))?;
+    let settings = &cli.cli_settings.global.generation.uv;
+    let mut classified = Vec::new();
+    for amplitude_graph in &amplitude.graphs {
+        let graph = &amplitude_graph.graph;
+        classified.extend(
+            graph
+                .classified_spinneys(&graph.full_filter(), settings, &graph.loop_momentum_basis)?
+                .into_iter()
+                .map(|spinney| {
+                    let mut edge_ids = graph
+                        .iter_edges_of(spinney.filter())
+                        .map(|(_, edge, _)| usize::from(edge))
+                        .collect::<Vec<_>>();
+                    edge_ids.sort_unstable();
+                    ClassifiedLocalSpinney {
+                        identifier: graph.ct_identifier(spinney.filter()),
+                        edge_ids,
+                        n_components: spinney.n_components(),
+                        scheme: spinney.renormalization_scheme,
+                        dod: spinney.dod,
+                    }
+                }),
+        );
+    }
+    Ok(classified)
+}
+
+fn local_ct_canonical_routes(
+    cli: &CLIState,
+    process_name: &str,
+    integrand_name: &str,
+) -> Result<Vec<gammalooprs::graph::LoopMomentumBasis>> {
+    let process_id = cli
+        .state
+        .resolve_process_ref(Some(&ProcessRef::Unqualified(process_name.to_string())))?;
+    let ProcessCollection::Amplitudes(amplitudes) =
+        &cli.state.process_list.processes[process_id].collection
+    else {
+        return Err(eyre::eyre!(
+            "local CT fixture '{process_name}' must be an amplitude"
+        ));
+    };
+    Ok(amplitudes
+        .get(integrand_name)
+        .ok_or_else(|| eyre::eyre!("missing local CT integrand '{integrand_name}'"))?
+        .graphs
+        .iter()
+        .map(|graph| graph.graph.loop_momentum_basis.clone())
+        .collect())
+}
+
+fn assert_matched_local_routes(
+    subtracted: &CLIState,
+    bare: &CLIState,
+    process_name: &str,
+    integrand_name: &str,
+) -> Result<()> {
+    assert_eq!(
+        local_ct_canonical_routes(subtracted, process_name, integrand_name)?,
+        local_ct_canonical_routes(bare, process_name, integrand_name)?,
+        "subtracted and bare {process_name}/{integrand_name} fixtures must use the same canonical routes"
+    );
+    Ok(())
+}
+
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+struct UVForestTermIdentity {
+    forest_index: usize,
+    node_index: usize,
+    node_key: String,
+    term_index: usize,
+    residue_index: gammalooprs::cff::CutCFFIndex,
+}
+
+impl From<&gammalooprs::uv::export::UVForestNodeTerm> for UVForestTermIdentity {
+    fn from(term: &gammalooprs::uv::export::UVForestNodeTerm) -> Self {
+        Self {
+            forest_index: term.forest_index,
+            node_index: term.node_index,
+            node_key: term.node_key.clone(),
+            term_index: term.term_index,
+            residue_index: term.residue_index,
+        }
+    }
+}
+
+fn assert_unique_uv_forest_term_identities(
+    export: &gammalooprs::uv::export::UVForestExport,
+    context: &str,
+) {
+    assert_unique_uv_forest_term_identities_with_dimension(export, context, true);
+}
+
+fn assert_unique_uv_forest_term_identities_with_dimension(
+    export: &gammalooprs::uv::export::UVForestExport,
+    context: &str,
+    is_three_dimensional: bool,
+) {
+    assert!(
+        !export.node_terms.is_empty(),
+        "{context} exported no final forest atoms"
+    );
+    let mut identities = BTreeSet::new();
+    let mut combined_atoms = BTreeSet::new();
+    for term in &export.node_terms {
+        let identity = UVForestTermIdentity::from(term);
+        assert!(
+            identities.insert(identity.clone()),
+            "{context} duplicated the full export identity {identity:?}"
+        );
+        assert!(
+            combined_atoms.insert((
+                identity.forest_index,
+                identity.node_index,
+                identity.node_key.clone(),
+                identity.residue_index,
+            )),
+            "{context} emitted more than one final combined atom for forest {}, node {} ({}), residue {:?}",
+            identity.forest_index,
+            identity.node_index,
+            identity.node_key,
+            identity.residue_index,
+        );
+    }
+    assert_eq!(
+        identities.len(),
+        export.node_terms.len(),
+        "{context} must preserve one full export identity per final atom"
+    );
+
+    let mut canonical_component_routes = BTreeMap::<String, (Value, Value)>::new();
+    let exported_nodes = export
+        .node_terms
+        .iter()
+        .map(|term| (term.forest_index, term.node_key.as_str()))
+        .collect::<BTreeSet<_>>();
+    for term in &export.node_terms {
+        let provenance = term
+            .forest_provenance()
+            .unwrap_or_else(|error| {
+                panic!("{context} could not parse computed Hedge provenance: {error}")
+            })
+            .unwrap_or_else(|| panic!("{context} has no computed Hedge provenance"));
+        assert_eq!(
+            provenance.as_object().map(serde_json::Map::len),
+            Some(1),
+            "{context} forest provenance must contain only node-level data: {provenance}",
+        );
+        let local = &provenance["node"]["local"];
+        let representation = local["representation"]
+            .as_str()
+            .unwrap_or_else(|| panic!("{context} has untagged local provenance: {local}"));
+        assert_eq!(
+            representation,
+            if is_three_dimensional { "3d" } else { "4d" },
+            "{context} provenance does not match its exported numerator"
+        );
+        match representation {
+            "4d" => {
+                for component in local["components"]
+                    .as_array()
+                    .unwrap_or_else(|| panic!("{context} has malformed component provenance"))
+                {
+                    let label = component["component"]
+                        .as_str()
+                        .unwrap_or_else(|| {
+                            panic!("{context} has an unlabeled component: {component}")
+                        })
+                        .to_string();
+                    let route = (
+                        component["route_loop_edges"].clone(),
+                        component["route_external_edges"].clone(),
+                    );
+                    if let Some(existing) =
+                        canonical_component_routes.insert(label.clone(), route.clone())
+                    {
+                        assert_eq!(
+                            existing, route,
+                            "{context} exported incompatible canonical routes for component {label}",
+                        );
+                    }
+                }
+            }
+            "3d" => {
+                let paths = local["projection_paths"]
+                    .as_array()
+                    .unwrap_or_else(|| panic!("{context} has malformed 3D projection paths"));
+                for path in paths {
+                    let steps = path["steps"]
+                        .as_array()
+                        .unwrap_or_else(|| panic!("{context} has a malformed 3D path: {path}"));
+                    assert!(
+                        steps.windows(2).all(|pair| {
+                            let child = pair[0]["topo_order"].as_u64().unwrap_or_else(|| {
+                                panic!("{context} has no child topology order: {}", pair[0])
+                            });
+                            let parent = pair[1]["topo_order"].as_u64().unwrap_or_else(|| {
+                                panic!("{context} has no parent topology order: {}", pair[1])
+                            });
+                            child <= parent
+                        }),
+                        "{context} must record each direct-3D path in child-to-parent replay order: {path}"
+                    );
+                    for step in steps {
+                        let current = step["current_component"].as_str().unwrap_or_else(|| {
+                            panic!("{context} has an unlabeled 3D projection step: {step}")
+                        });
+                        let rescaled = step["rescaled_subgraph"].as_str().unwrap_or_else(|| {
+                            panic!("{context} has no rescaled component context: {step}")
+                        });
+                        let rescaling = step["rescaling"].as_str().unwrap_or_else(|| {
+                            panic!("{context} has no 3D rescaling context: {step}")
+                        });
+                        let label = format!("{current}|{rescaled}|{rescaling}");
+                        let route = (
+                            step["route_loop_edges"].clone(),
+                            step["route_external_edges"].clone(),
+                        );
+                        if let Some(existing) =
+                            canonical_component_routes.insert(label.clone(), route.clone())
+                        {
+                            assert_eq!(
+                                existing, route,
+                                "{context} exported incompatible direct-3D routes for {label}",
+                            );
+                        }
+                    }
+                }
+            }
+            other => panic!("{context} has unsupported provenance representation {other:?}"),
+        }
+    }
+
+    for term in &export.node_terms {
+        let provenance = term
+            .forest_provenance()
+            .unwrap_or_else(|error| {
+                panic!("{context} could not parse computed Hedge provenance: {error}")
+            })
+            .unwrap_or_else(|| panic!("{context} has no computed Hedge provenance"));
+        let node = &provenance["node"];
+        let parent_keys = node["parent_keys"]
+            .as_array()
+            .unwrap_or_else(|| panic!("{context} has malformed parent keys: {node}"));
+        let local = &node["local"];
+        let representation = local["representation"]
+            .as_str()
+            .unwrap_or_else(|| panic!("{context} has untagged local provenance: {local}"));
+        for parent_key in parent_keys {
+            let parent_key = parent_key
+                .as_str()
+                .unwrap_or_else(|| panic!("{context} has a non-string parent key: {node}"));
+            assert!(
+                exported_nodes.contains(&(term.forest_index, parent_key)),
+                "{context} node {} refers to missing parent {parent_key:?} in forest {}",
+                term.node_key,
+                term.forest_index,
+            );
+        }
+        if !is_three_dimensional {
+            assert_eq!(
+                term.residue_index,
+                gammalooprs::cff::CutCFFIndex::new_all_none(),
+                "{context} assigned a residue identity to a 4D forest atom"
+            );
+        }
+        if representation == "4d" {
+            let components = local["components"]
+                .as_array()
+                .unwrap_or_else(|| panic!("{context} has malformed components: {local}"));
+            let branches = local["branches"]
+                .as_array()
+                .unwrap_or_else(|| panic!("{context} has malformed 4D branches: {local}"));
+            let mut branch_names = BTreeSet::new();
+            for branch in branches {
+                let branch_name = branch["branch"]
+                    .as_str()
+                    .unwrap_or_else(|| panic!("{context} has an unnamed 4D branch: {branch}"));
+                assert!(
+                    branch["byte_size"].as_u64().is_some_and(|size| size > 0),
+                    "{context} recorded a vacuous 4D branch: {branch}"
+                );
+                assert!(
+                    branch_names.insert(branch_name),
+                    "{context} duplicated a 4D branch for {}: {branches:?}",
+                    term.file_name(),
+                );
+            }
+            if !components.is_empty() {
+                assert_eq!(
+                    branches
+                        .iter()
+                        .filter(|branch| branch["branch"] == "Combined")
+                        .count(),
+                    1,
+                    "{context} must expose exactly one completed 4D atom for an active node: {branches:?}",
+                );
+            }
+            for component in components {
+                let component_loop_edges =
+                    component["route_loop_edges"].as_array().unwrap_or_else(|| {
+                        panic!(
+                            "{context} has malformed component loop-route provenance: {component}"
+                        )
+                    });
+                assert!(
+                    component["route_external_edges"].is_array()
+                        && component["route_signatures"].is_array(),
+                    "{context} has malformed component route provenance: {component}"
+                );
+                assert!(
+                    !component_loop_edges.is_empty()
+                        && component["route_signatures"]
+                            .as_array()
+                            .is_some_and(|signatures| !signatures.is_empty()),
+                    "{context} has an active component without a canonical route: {component}"
+                );
+            }
+            let has_positive_degree_soft_component = components.iter().any(|component| {
+                component["scheme"] == "IR" && component["dod"].as_i64().is_some_and(|dod| dod > 0)
+            });
+            // A multi-parent node is a disconnected join. Its completed component
+            // factors have already recorded their own U/S/US splits, so the join
+            // itself correctly carries only one Combined branch.
+            let is_disconnected_join = parent_keys.len() > 1;
+            if has_positive_degree_soft_component && !is_disconnected_join {
+                let expected = ["U", "S", "US", "Combined"]
+                    .into_iter()
+                    .collect::<BTreeSet<_>>();
+                assert_eq!(
+                    branch_names, expected,
+                    "{context} did not expose the complete 4D U/S/US/H branch split"
+                );
+            }
+        } else {
+            let paths = local["projection_paths"]
+                .as_array()
+                .unwrap_or_else(|| panic!("{context} has malformed 3D projection paths: {local}"));
+            for path in paths {
+                let steps = path["steps"]
+                    .as_array()
+                    .unwrap_or_else(|| panic!("{context} has a malformed 3D path: {path}"));
+                for step in steps {
+                    assert!(
+                        step["given_component"].is_string()
+                            && step["active_subgraph"].is_string()
+                            && step["rescaled_subgraph"].is_string()
+                            && step["canonical_route_loop_edges"].is_array()
+                            && step["canonical_route_external_edges"].is_array()
+                            && step["canonical_route_signatures"].is_array()
+                            && step["route_loop_edges"].is_array()
+                            && step["route_external_edges"].is_array()
+                            && step["route_signatures"].is_array(),
+                        "{context} has incomplete direct-3D projection context: {step}"
+                    );
+                    let branches = step["conceptual_branches"].as_array().unwrap_or_else(|| {
+                        panic!("{context} has malformed conceptual 3D branches: {step}")
+                    });
+                    let actual_branches = branches
+                        .iter()
+                        .map(|branch| {
+                            (
+                                branch["branch"].as_str().unwrap_or_else(|| {
+                                    panic!("{context} has an unnamed 3D branch: {branch}")
+                                }),
+                                branch["coefficient"].as_i64().unwrap_or_else(|| {
+                                    panic!("{context} has an unsigned 3D branch: {branch}")
+                                }),
+                            )
+                        })
+                        .collect::<Vec<_>>();
+                    if step["scheme"] == "IR" && step["dod"].as_i64().is_some_and(|dod| dod > 0) {
+                        assert_eq!(
+                            actual_branches,
+                            vec![("U", 1), ("S", 1), ("US", -1)],
+                            "{context} did not expose the direct-3D U/S/US/H algebra"
+                        );
+                        assert_eq!(step["materialization"], "factorized_soft");
+                    } else {
+                        assert_eq!(actual_branches, vec![("U", 1)]);
+                        assert_eq!(step["materialization"], "direct_u");
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+struct CliUvProfileSummary {
+    total: usize,
+    resolved: usize,
+    failed: usize,
+    dod_failures: usize,
+    orientation_total: usize,
+    orientation_resolved: usize,
+    orientation_failed: usize,
+    orientation_dod_failures: usize,
+    orientation_labels: BTreeSet<String>,
+    orientation_label_counts: BTreeMap<String, usize>,
+    failure_diagnostics: Value,
+    profile_identity: Value,
+}
+
+fn selected_local_identifiers(
+    cli: &CLIState,
+    process_name: &str,
+    integrand_name: &str,
+    scheme: ApproximationType,
+) -> Result<Vec<CTIdentifier>> {
+    Ok(
+        classified_local_spinneys(cli, process_name, integrand_name)?
+            .into_iter()
+            .filter(|spinney| spinney.n_components == 1 && spinney.scheme == scheme)
+            .map(|spinney| spinney.identifier)
+            .collect(),
+    )
+}
+
+fn assert_selected_local_identifier(
+    cli: &CLIState,
+    process_name: &str,
+    integrand_name: &str,
+    scheme: ApproximationType,
+    external_pdgs: impl IntoIterator<Item = isize>,
+    internal_pdgs: impl IntoIterator<Item = isize>,
+    minimum_count: usize,
+) -> Result<()> {
+    let expected = CTIdentifier::new(
+        external_pdgs.into_iter().collect(),
+        Some(internal_pdgs.into_iter().collect()),
+    );
+    let identifiers = selected_local_identifiers(cli, process_name, integrand_name, scheme)?;
+    let count = identifiers
+        .iter()
+        .filter(|identifier| **identifier == expected)
+        .count();
+    assert!(
+        count >= minimum_count,
+        "expected at least {minimum_count} {scheme} component(s) matching {expected:?}; got {identifiers:?}"
+    );
+    Ok(())
+}
+
+fn assert_generated_local_integrand(
+    cli: &CLIState,
+    process_name: &str,
+    integrand_name: &str,
+    minimum_dimensions: usize,
+) -> Result<()> {
+    let process_id = cli
+        .state
+        .resolve_process_ref(Some(&ProcessRef::Unqualified(process_name.to_string())))?;
+    let integrand = cli
+        .state
+        .process_list
+        .get_integrand(process_id, integrand_name)?
+        .require_generated()?;
+    assert!(
+        integrand.get_n_dim() >= minimum_dimensions,
+        "fixture '{process_name}' did not retain its loop integrations"
+    );
+    Ok(())
+}
+
+fn cli_uv_profile_pass_fail(
+    cli: &mut CLIState,
+    process: &str,
+    integrand: &str,
+) -> Result<CliUvProfileSummary> {
+    let profiles_per_orientation = !cli
+        .cli_settings
+        .global
+        .generation
+        .explicit_orientation_sum_only;
+    let profile_command = cli
+        .run_history
+        .command_blocks
+        .iter()
+        .find(|block| block.name == "profile_uv")
+        .and_then(|block| block.commands.first())
+        .and_then(|command| command.raw_string.as_deref())
+        .ok_or_else(|| {
+            eyre::eyre!("local CT run card must contain a non-empty 'profile_uv' command block")
+        })?
+        .to_string();
+    assert!(
+        profile_command.starts_with("profile ultra-violet "),
+        "profile_uv must use the ultra-violet CLI syntax; got {profile_command:?}"
+    );
+    assert!(
+        profile_command.contains(&format!("-p {process}"))
+            && profile_command.contains(&format!("-i {integrand}")),
+        "profile_uv does not target {process}/{integrand}: {profile_command}"
+    );
+    let command_tokens = profile_command.split_whitespace().collect::<Vec<_>>();
+    let option_value = |name| {
+        command_tokens
+            .windows(2)
+            .find_map(|pair| (pair[0] == name).then_some(pair[1]))
+    };
+    let min_scale_exponent = option_value("--min-scaling")
+        .ok_or_else(|| eyre::eyre!("profile_uv has no --min-scaling: {profile_command}"))?
+        .parse::<f64>()?;
+    let max_scale_exponent = option_value("--max-scaling")
+        .ok_or_else(|| eyre::eyre!("profile_uv has no --max-scaling: {profile_command}"))?
+        .parse::<f64>()?;
+    let n_points = option_value("--n-points")
+        .ok_or_else(|| eyre::eyre!("profile_uv has no --n-points: {profile_command}"))?
+        .parse::<usize>()?;
+    let seed = option_value("--seed")
+        .ok_or_else(|| eyre::eyre!("profile_uv has no --seed: {profile_command}"))?
+        .parse::<u64>()?;
+    assert!(
+        min_scale_exponent < max_scale_exponent
+            && n_points >= 2
+            && seed == 1337
+            && command_tokens.contains(&"--per-orientation"),
+        "profile_uv must use an increasing per-orientation window with at least two points and seed 1337: {profile_command}"
+    );
+
+    // Explicit sums have no independently selectable production orientations.
+    // Keep every scale, seed, LMB and numerical threshold of the original profile.
+    let profile_command = if profiles_per_orientation {
+        profile_command
+    } else {
+        profile_command.replace(" --per-orientation", "")
+    };
+    let output = cli.cli_settings.state.folder.join("local_ct_uv_profile");
+    // Preserve the exhaustive LMB coverage used by the matched soft-CT controls.
+    let Commands::Profile(profile @ Profile::UltraViolet(_)) =
+        CommandHistory::from_raw_string(&format!(
+            "{profile_command} --selected-limits all --output {}",
+            output.display()
+        ))?
+        .command
+    else {
+        return Err(eyre::eyre!(
+            "profile_uv must parse as an ultra-violet profile"
+        ));
+    };
+    // The CLI handler writes and returns failed-limit reports; the outer
+    // command dispatcher converts their verdict into an error. Bare controls
+    // need those reports, while parser, evaluation and output errors still fail.
+    profile.run(&mut cli.state, &cli.cli_settings)?;
+    let profile_json = fs::read_to_string(output.join("uv_profile.json"))?;
+    let profile: Value = serde_json::from_str(&profile_json)?;
+    let typed_profile: UVProfileAnalysis = serde_json::from_str(&profile_json)?;
+    let pass_fail = typed_profile.pass_fail(-0.9);
+    let scales = profile["scales"]
+        .as_array()
+        .ok_or_else(|| eyre::eyre!("CLI UV profile JSON has no scales array"))?;
+    assert_eq!(
+        scales.len(),
+        n_points,
+        "profile_uv did not evaluate its requested number of scales"
+    );
+    assert_eq!(
+        scales.first().and_then(Value::as_f64),
+        Some(10.0_f64.powf(min_scale_exponent)),
+    );
+    assert_eq!(
+        scales.last().and_then(Value::as_f64),
+        Some(10.0_f64.powf(max_scale_exponent)),
+    );
+
+    let mut total = 0;
+    let mut resolved = 0;
+    let mut orientation_total = 0;
+    let mut orientation_resolved = 0;
+    let mut orientation_labels = BTreeSet::new();
+    let mut orientation_label_counts = BTreeMap::new();
+    for subset in profile["graphs"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .flat_map(|graph| graph["lmbs"].as_array().into_iter().flatten())
+        .flat_map(|lmb| lmb["subsets"].as_array().into_iter().flatten())
+    {
+        total += 1;
+        let orientation_entries = subset["per_orientation_inspect_entries"].as_array();
+        if profiles_per_orientation {
+            let orientation_entries = orientation_entries.ok_or_else(|| {
+                eyre::eyre!(
+                    "per-orientation CLI UV profile has no orientation entries for subset: {subset}"
+                )
+            })?;
+            assert!(
+                !orientation_entries.is_empty(),
+                "per-orientation CLI UV profile selected no orientations for subset: {subset}"
+            );
+        } else {
+            assert!(
+                subset["per_orientation_inspect_entries"].is_null(),
+                "summed CLI UV profile unexpectedly emitted production-orientation entries: {subset}"
+            );
+        }
+        for entry in orientation_entries.into_iter().flatten() {
+            orientation_total += 1;
+            let orientation_label = entry["orientation_label"]
+                .as_str()
+                .ok_or_else(|| eyre::eyre!("CLI UV orientation entry has no label: {entry}"))?;
+            assert!(
+                !orientation_label.is_empty(),
+                "CLI UV orientation entry has an empty label: {entry}"
+            );
+            orientation_labels.insert(orientation_label.to_string());
+            *orientation_label_counts
+                .entry(orientation_label.to_string())
+                .or_default() += 1;
+            let Some(inspect) = entry["analysis"].as_object() else {
+                continue;
+            };
+            orientation_resolved += 1;
+            let slope = inspect["result"]["slope"].as_f64().ok_or_else(|| {
+                eyre::eyre!(
+                    "resolved CLI UV orientation fit {orientation_label} has no finite slope"
+                )
+            })?;
+            let r_squared = inspect["result"]["r_squared"].as_f64().ok_or_else(|| {
+                eyre::eyre!(
+                    "resolved CLI UV orientation fit {orientation_label} has no finite R-squared"
+                )
+            })?;
+            assert!(
+                slope.is_finite() && r_squared.is_finite(),
+                "CLI UV orientation {orientation_label} produced a non-finite fit: slope={slope}, R-squared={r_squared}"
+            );
+        }
+        let Some(inspect) = subset["analysis"]["inspect_level"].as_object() else {
+            continue;
+        };
+        resolved += 1;
+        let slope = inspect["result"]["slope"]
+            .as_f64()
+            .ok_or_else(|| eyre::eyre!("resolved CLI UV fit has no finite slope"))?;
+        let r_squared = inspect["result"]["r_squared"]
+            .as_f64()
+            .ok_or_else(|| eyre::eyre!("resolved CLI UV fit has no finite R-squared"))?;
+        assert!(
+            slope.is_finite() && r_squared.is_finite(),
+            "CLI UV profile produced a non-finite fit: slope={slope}, R-squared={r_squared}"
+        );
+    }
+    if profiles_per_orientation {
+        assert!(
+            orientation_total > 0,
+            "per-orientation CLI UV profile selected no orientation-level limits"
+        );
+    }
+    assert_eq!(pass_fail.total, total + orientation_total);
+    let dod_failures = pass_fail
+        .failures
+        .iter()
+        .filter(|failure| failure.reason == "dod_exceeds_threshold")
+        .count();
+    let orientation_failed = pass_fail
+        .failures
+        .iter()
+        .filter(|failure| failure.orientation_label.is_some())
+        .count();
+    let orientation_dod_failures = pass_fail
+        .failures
+        .iter()
+        .filter(|failure| {
+            failure.orientation_label.is_some() && failure.reason == "dod_exceeds_threshold"
+        })
+        .count();
+    let failure_diagnostics = serde_json::to_value(&pass_fail.failures)?;
+    let profile_identity = serde_json::json!({
+        "scales": profile["scales"].clone(),
+        "graphs": profile["graphs"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .map(|graph| serde_json::json!({
+                "graph_index": graph["graph_index"].clone(),
+                "lmbs": graph["lmbs"]
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .map(|lmb| serde_json::json!({
+                        "lmb_index": lmb["lmb_index"].clone(),
+                        "lmb_label": lmb["lmb_label"].clone(),
+                        "subsets": lmb["subsets"]
+                            .as_array()
+                            .into_iter()
+                            .flatten()
+                            .map(|subset| serde_json::json!({
+                                "subset_index": subset["subset_index"].clone(),
+                                "free": subset["free"].clone(),
+                                "fixed": subset["fixed"].clone(),
+                                "initial_dod": subset["initial_dod"].clone(),
+                                "orientation_labels": subset["per_orientation_inspect_entries"]
+                                    .as_array()
+                                    .into_iter()
+                                    .flatten()
+                                    .map(|entry| entry["orientation_label"].clone())
+                                    .collect::<Vec<_>>(),
+                            }))
+                            .collect::<Vec<_>>(),
+                    }))
+                    .collect::<Vec<_>>(),
+            }))
+            .collect::<Vec<_>>(),
+    });
+    Ok(CliUvProfileSummary {
+        total,
+        resolved,
+        failed: pass_fail.failed,
+        dod_failures,
+        orientation_total,
+        orientation_resolved,
+        orientation_failed,
+        orientation_dod_failures,
+        orientation_labels,
+        orientation_label_counts,
+        failure_diagnostics,
+        profile_identity,
+    })
+}
+
+#[derive(Clone, Debug, PartialEq)]
+struct CliSoftProfileFit {
+    scaling: f64,
+    r_squared: f64,
+    ray_fingerprint: Value,
+}
+
+fn cli_soft_profile_report(
+    cli: &mut CLIState,
+    process: &str,
+    integrand: &str,
+    per_orientation: bool,
+) -> Result<Value> {
+    let profile_command = cli
+        .run_history
+        .command_blocks
+        .iter()
+        .find(|block| block.name == "profile_soft")
+        .and_then(|block| block.commands.first())
+        .and_then(|command| command.raw_string.as_deref())
+        .ok_or_else(|| {
+            eyre::eyre!("top-bubble run card must contain a non-empty 'profile_soft' command block")
+        })?
+        .to_string();
+    assert!(
+        profile_command.starts_with("profile bulk ")
+            && profile_command.contains(&format!("-p {process}"))
+            && profile_command.contains(&format!("-i {integrand}"))
+            && profile_command.contains("--select 'top_bubble_vertex S(e6)'")
+            && profile_command.contains("--min-scaling=-2")
+            && profile_command.contains("--max-scaling=-5")
+            && profile_command.contains("--n-points 25")
+            && profile_command.contains("--seed 1337"),
+        "profile_soft does not encode the matched q_g ray: {profile_command}"
+    );
+
+    let output = cli.cli_settings.state.folder.join(format!(
+        "{integrand}_soft{}_profile.json",
+        if per_orientation {
+            "_per_orientation"
+        } else {
+            ""
+        }
+    ));
+    cli.run_command(&format!(
+        "{profile_command} {}--output {}",
+        if per_orientation {
+            "--per-orientation "
+        } else {
+            ""
+        },
+        output.display()
+    ))?;
+    let report: Value = serde_json::from_str(&fs::read_to_string(output)?)?;
+    assert_eq!(report["settings"]["n_points"], 25);
+    assert_eq!(report["settings"]["min_scale_exponent"], -2.0);
+    assert_eq!(report["settings"]["max_scale_exponent"], -5.0);
+    assert_eq!(report["settings"]["seed"], 1337);
+    assert_eq!(report["settings"]["select"], "top_bubble_vertex S(e6)");
+    assert_eq!(report["settings"]["per_orientation"], per_orientation);
+    let graphs = report["graphs"]
+        .as_array()
+        .ok_or_else(|| eyre::eyre!("profile_soft JSON has no graph reports"))?;
+    assert_eq!(
+        graphs.len(),
+        1,
+        "profile_soft must select exactly one graph"
+    );
+    assert_eq!(graphs[0]["graph_name"], "top_bubble_vertex");
+    Ok(report)
+}
+
+fn parse_cli_soft_profile_fit(fit: &Value) -> Result<CliSoftProfileFit> {
+    assert_eq!(fit["limit_name"], "S(e6)");
+    let scaling = fit["scaling"]
+        .as_f64()
+        .ok_or_else(|| eyre::eyre!("profile_soft JSON has no finite scaling"))?;
+    let r_squared = fit["r_squared"]
+        .as_f64()
+        .ok_or_else(|| eyre::eyre!("profile_soft JSON has no finite R-squared"))?;
+    let ray_fingerprint = fit["ray_fingerprint"].clone();
+    assert!(
+        ray_fingerprint["lmb_edges"].is_array()
+            && ray_fingerprint["digest"]
+                .as_str()
+                .is_some_and(|digest| digest.len() == 16),
+        "profile_soft JSON has no routed-ray fingerprint: {ray_fingerprint}"
+    );
+    assert_eq!(
+        ray_fingerprint["lmb_edges"],
+        serde_json::json!([6, 8]),
+        "the sampled q_g ray must use the fixture's canonical [e6,e8] route"
+    );
+    assert!(
+        scaling.is_finite() && r_squared.is_finite(),
+        "profile_soft returned a non-finite fit: scaling={scaling}, R-squared={r_squared}"
+    );
+    Ok(CliSoftProfileFit {
+        scaling,
+        r_squared,
+        ray_fingerprint,
+    })
+}
+
+fn cli_soft_profile_fit(
+    cli: &mut CLIState,
+    process: &str,
+    integrand: &str,
+) -> Result<CliSoftProfileFit> {
+    let report = cli_soft_profile_report(cli, process, integrand, false)?;
+    let reports = report["graphs"][0]["single_limit_reports"]
+        .as_array()
+        .ok_or_else(|| eyre::eyre!("profile_soft JSON has no limit reports"))?;
+    assert_eq!(
+        reports.len(),
+        1,
+        "profile_soft must resolve top_bubble_vertex S(e6) exactly once"
+    );
+    assert!(reports[0]["orientation_label"].is_null());
+    parse_cli_soft_profile_fit(&reports[0])
+}
+
+fn cli_soft_profile_orientation_fits(
+    cli: &mut CLIState,
+    process: &str,
+    integrand: &str,
+) -> Result<BTreeMap<String, CliSoftProfileFit>> {
+    let report = cli_soft_profile_report(cli, process, integrand, true)?;
+    let reports = report["graphs"][0]["single_limit_reports"]
+        .as_array()
+        .ok_or_else(|| eyre::eyre!("profile_soft JSON has no limit reports"))?;
+    let fits = reports
+        .iter()
+        .map(|report| {
+            let orientation = report["orientation_label"]
+                .as_str()
+                .filter(|label| !label.is_empty())
+                .ok_or_else(|| eyre::eyre!("per-orientation soft fit has no orientation label"))?
+                .to_string();
+            Ok((orientation, parse_cli_soft_profile_fit(report)?))
+        })
+        .collect::<Result<BTreeMap<_, _>>>()?;
+    assert_eq!(
+        fits.len(),
+        reports.len(),
+        "per-orientation soft profile contains duplicate orientation labels"
+    );
+    Ok(fits)
+}
+
+fn run_dgse_local_ir_profiles_are_non_vacuous(
+    project_local_4d: bool,
+    explicit_orientation_sum_only: bool,
+) -> Result<()> {
+    const BOUNDED_SOFT_SCALING: f64 = 3.0;
+    const MINIMUM_SOFT_IMPROVEMENT: f64 = 1.0;
+    const MINIMUM_R_SQUARED: f64 = 0.9;
+    const EXPECTED_ORIENTATIONS: usize = 30;
+    const EXPECTED_UV_LIMITS_PER_ORIENTATION: usize = 27;
+
+    let mut subtracted = local_ct_cli(
+        "dgse_local_ir.toml",
+        "dgse_local_ir",
+        false,
+        project_local_4d,
+        explicit_orientation_sum_only,
+    )?;
+    let classified = classified_local_spinneys(&subtracted, "dgse", "dgse")?;
+    assert_selected_local_identifier(
+        &subtracted,
+        "dgse",
+        "dgse",
+        ApproximationType::IR,
+        [-1, 1],
+        [1, 21],
+        1,
+    )?;
+    let process_id = subtracted
+        .state
+        .resolve_process_ref(Some(&ProcessRef::Unqualified("dgse".to_string())))?;
+    let integrand_info = subtracted.state.get_integrand_info(
+        Some(&ProcessRef::Unqualified("dgse".to_string())),
+        Some(&"dgse".to_string()),
+    )?;
+    // Keep physical-signature uniqueness separate from the report's runtime slot labels.
+    assert_eq!(
+        integrand_info
+            .graph_groups
+            .iter()
+            .flat_map(|group| &group.orientations)
+            .map(|orientation| &orientation.signature)
+            .collect::<BTreeSet<_>>()
+            .len(),
+        EXPECTED_ORIENTATIONS,
+        "the unfiltered DGSE fixture must generate every expected acyclic orientation"
+    );
+    let generated_orientation_labels = integrand_info
+        .graph_groups
+        .iter()
+        .flat_map(|group| &group.orientations)
+        .map(|orientation| {
+            let label = orientation
+                .signature
+                .iter()
+                .map(|sign| match *sign {
+                    -1 => '-',
+                    0 => '0',
+                    1 => '+',
+                    _ => panic!("invalid generated orientation sign {sign}"),
+                })
+                .collect::<String>();
+            format!("{label}|sigma({})", orientation.orientation_id)
+        })
+        .collect::<BTreeSet<_>>();
+    assert_eq!(
+        generated_orientation_labels.len(),
+        EXPECTED_ORIENTATIONS,
+        "the unfiltered DGSE fixture must generate every expected acyclic orientation"
+    );
+    let soft_export = subtracted.state.process_list.processes[process_id].export_uv_forest_graph(
+        "dgse",
+        0,
+        &gammalooprs::uv::export::UVForestExportSettings { computed: true },
+    )?;
+    assert_unique_uv_forest_term_identities(&soft_export, "DGSE soft forest");
+    let soft_forest_keys = soft_export
+        .node_terms
+        .iter()
+        .map(|term| term.node_key.clone())
+        .collect::<BTreeSet<_>>();
+
+    let ir_settings = InfraRedProfile {
+        process: Some(ProcessRef::Unqualified("dgse".to_string())),
+        integrand_name: Some("dgse".to_string()),
+        select: Some("se S(e0)".into()),
+        seed: Some(1337),
+        ..Default::default()
+    };
+    let subtracted_ir = Profile::InfraRed(ir_settings.clone())
+        .run(&mut subtracted.state, &subtracted.cli_settings)?
+        .unwrap_ir();
+    let subtracted_ir_reports = subtracted_ir
+        .results_per_graph
+        .iter()
+        .flat_map(|graph| &graph.single_limit_reports)
+        .collect::<Vec<_>>();
+    assert_eq!(
+        subtracted_ir_reports.len(),
+        1,
+        "IR profile must resolve the requested S(e0) limit exactly once"
+    );
+    let subtracted_ir_report = subtracted_ir_reports[0];
+    let subtracted_ir_r_squared = subtracted_ir_report.power_law_fit.r_squared();
+    assert!(
+        subtracted_ir_report.scaling.is_finite()
+            && subtracted_ir_r_squared.is_finite()
+            && subtracted_ir_r_squared >= MINIMUM_R_SQUARED,
+        "subtracted DGSE soft profile must have a finite, resolved fit; scaling={}, R-squared={subtracted_ir_r_squared}",
+        subtracted_ir_report.scaling,
+    );
+    let subtracted_ir_ray = subtracted_ir_report
+        .ray_fingerprint
+        .clone()
+        .expect("subtracted DGSE soft profile must record its routed ray");
+    assert!(
+        !subtracted_ir_ray.lmb_edges.is_empty() && !subtracted_ir_ray.digest.is_empty(),
+        "subtracted DGSE soft profile must have a non-empty routed-ray fingerprint: {subtracted_ir_ray:?}"
+    );
+    assert!(
+        subtracted_ir_report.scaling > BOUNDED_SOFT_SCALING,
+        "local IR subtraction must make the pointwise integrand bounded in S(e0); got scaling {}",
+        subtracted_ir_report.scaling
+    );
+    let subtracted_ir_scaling = subtracted_ir_report.scaling;
+    let subtracted_uv = cli_uv_profile_pass_fail(&mut subtracted, "dgse", "dgse")?;
+    assert_eq!(
+        subtracted_uv.total, EXPECTED_UV_LIMITS_PER_ORIENTATION,
+        "the DGSE UV profile selected an unexpected hard-limit inventory"
+    );
+    assert_eq!(
+        subtracted_uv.resolved, subtracted_uv.total,
+        "every summed DGSE UV limit must resolve"
+    );
+    if !explicit_orientation_sum_only {
+        assert_eq!(
+            subtracted_uv.orientation_labels, generated_orientation_labels,
+            "the per-orientation UV profile must cover exactly the generated DGSE orientations"
+        );
+        assert_eq!(
+            subtracted_uv.orientation_total,
+            EXPECTED_ORIENTATIONS * EXPECTED_UV_LIMITS_PER_ORIENTATION,
+            "the DGSE UV profile must evaluate every hard limit in every orientation"
+        );
+        assert_eq!(
+            subtracted_uv.orientation_label_counts,
+            generated_orientation_labels
+                .iter()
+                .cloned()
+                .map(|label| (label, EXPECTED_UV_LIMITS_PER_ORIENTATION))
+                .collect::<BTreeMap<_, _>>(),
+            "every generated DGSE orientation must occur once in each hard limit",
+        );
+        assert_eq!(
+            subtracted_uv.orientation_resolved, subtracted_uv.orientation_total,
+            "every orientation-local DGSE UV fit must resolve"
+        );
+    }
+    if subtracted_uv.failed != 0 {
+        let mut uv_only = local_ct_cli(
+            "dgse_uv_only.toml",
+            "dgse_uv_only_diagnostic",
+            false,
+            project_local_4d,
+            explicit_orientation_sum_only,
+        )?;
+        let uv_process_id = uv_only
+            .state
+            .resolve_process_ref(Some(&ProcessRef::Unqualified("dgse".to_string())))?;
+        let uv_export = uv_only.state.process_list.processes[uv_process_id]
+            .export_uv_forest_graph(
+                "dgse",
+                0,
+                &gammalooprs::uv::export::UVForestExportSettings { computed: true },
+            )?;
+        assert_unique_uv_forest_term_identities(&uv_export, "DGSE ordinary-U forest");
+        let uv_forest_keys = uv_export
+            .node_terms
+            .iter()
+            .map(|term| term.node_key.clone())
+            .collect::<BTreeSet<_>>();
+        let dump = subtracted
+            .cli_settings
+            .state
+            .folder
+            .join("dgse_soft_uv_forest_comparison");
+        fs::create_dir_all(&dump)?;
+        for (prefix, export) in [("soft", &soft_export), ("uv", &uv_export)] {
+            fs::write(
+                dump.join(format!("{prefix}_forest.dot")),
+                &export.forest_dot,
+            )?;
+            for term in &export.node_terms {
+                fs::write(
+                    dump.join(format!("{prefix}_{}", term.file_name())),
+                    &term.dot,
+                )?;
+            }
+        }
+        let uv = cli_uv_profile_pass_fail(&mut uv_only, "dgse", "dgse")?;
+        clean_test(&uv_only.cli_settings.state.folder);
+        assert_eq!(
+            subtracted_uv.failed,
+            0,
+            "local IR subtraction failed its UV profile; classified={classified:?}, soft forest={soft_forest_keys:?}, failures={}; matched ordinary-U control: total={}, resolved={}, orientation_total={}, orientation_resolved={}, failed={}, orientation_failed={}, forest={uv_forest_keys:?}",
+            subtracted_uv.failure_diagnostics,
+            uv.total,
+            uv.resolved,
+            uv.orientation_total,
+            uv.orientation_resolved,
+            uv.failed,
+            uv.orientation_failed,
+        );
+    }
+
+    let mut bare = local_ct_cli(
+        "dgse_local_ir.toml",
+        "dgse_local_ir_bare",
+        true,
+        project_local_4d,
+        explicit_orientation_sum_only,
+    )?;
+    let bare_ir = Profile::InfraRed(ir_settings)
+        .run(&mut bare.state, &bare.cli_settings)?
+        .unwrap_ir();
+    let bare_ir_reports = bare_ir
+        .results_per_graph
+        .iter()
+        .flat_map(|graph| &graph.single_limit_reports)
+        .collect::<Vec<_>>();
+    assert_eq!(
+        bare_ir_reports.len(),
+        1,
+        "bare IR profile must resolve the requested S(e0) limit exactly once"
+    );
+    let bare_ir_report = bare_ir_reports[0];
+    let bare_ir_r_squared = bare_ir_report.power_law_fit.r_squared();
+    assert!(
+        bare_ir_report.scaling.is_finite()
+            && bare_ir_r_squared.is_finite()
+            && bare_ir_r_squared >= MINIMUM_R_SQUARED,
+        "bare DGSE soft profile must have a finite, resolved fit; scaling={}, R-squared={bare_ir_r_squared}",
+        bare_ir_report.scaling,
+    );
+    let bare_ir_ray = bare_ir_report
+        .ray_fingerprint
+        .as_ref()
+        .expect("bare DGSE soft profile must record its routed ray");
+    assert_eq!(
+        &subtracted_ir_ray, bare_ir_ray,
+        "subtracted and bare DGSE soft controls must evaluate the identical routed ray",
+    );
+    assert!(
+        bare_ir_report.scaling <= BOUNDED_SOFT_SCALING,
+        "bare dgse fixture must retain a pointwise soft singularity; got scaling {}",
+        bare_ir_report.scaling
+    );
+    assert!(
+        subtracted_ir_scaling - bare_ir_report.scaling >= MINIMUM_SOFT_IMPROVEMENT,
+        "local IR subtraction must improve the matched DGSE S(e0) scaling by at least one power; bare={}, subtracted={subtracted_ir_scaling}",
+        bare_ir_report.scaling,
+    );
+    let bare_uv = cli_uv_profile_pass_fail(&mut bare, "dgse", "dgse")?;
+    assert!(bare_uv.total > 0, "bare UV profile selected no limits");
+    assert!(
+        bare_uv.resolved > 0
+            && (explicit_orientation_sum_only
+                || (bare_uv.orientation_total > 0 && bare_uv.orientation_resolved > 0)),
+        "bare UV profile produced no resolved summed and per-orientation fits"
+    );
+    assert!(
+        bare_uv.dod_failures > 0
+            && (explicit_orientation_sum_only || (bare_uv.orientation_dod_failures > 0)),
+        "bare dgse fixture must have a resolved per-orientation fit above the UV bound; summary={bare_uv:?}"
+    );
+    assert_eq!(
+        subtracted_uv.profile_identity, bare_uv.profile_identity,
+        "subtracted and bare DGSE controls must profile the same UV LMBs, subsets, and orientations",
+    );
+
+    clean_test(&subtracted.cli_settings.state.folder);
+    clean_test(&bare.cli_settings.state.folder);
+    Ok(())
+}
+
+#[test]
+#[serial_test::serial]
+fn dgse_local_ir_profiles_are_non_vacuous() -> Result<()> {
+    for (explicit_orientation_sum_only, project_local_4d) in
+        [(false, false), (true, false), (true, true)]
+    {
+        println!(
+            "explicit_orientation_sum_only={explicit_orientation_sum_only}, project_local_4d={project_local_4d}"
+        );
+        let test = std::thread::Builder::new()
+            .name("dgse-local-ir-profile".to_string())
+            .stack_size(128 * 1024 * 1024)
+            .spawn(move || {
+                run_dgse_local_ir_profiles_are_non_vacuous(
+                    project_local_4d,
+                    explicit_orientation_sum_only,
+                )
+            })?;
+        test.join()
+            .map_err(|_| eyre::eyre!("DGSE local-IR profile thread panicked"))??;
+    }
+    Ok(())
+}
+
+#[test]
+#[serial_test::serial]
+fn dgse_local_ir_generation_orientation_filter_profiles_one_orientation() -> Result<()> {
+    let project_local_4d = false;
+    // Runtime production-orientation indices are exposed by the localized direct route.
+    const UNFILTERED_ORIENTATION_INDEX: usize = 3;
+    const PATTERN: &str = "(-,-,0,0,+,+,+,0,+)";
+    const SIGNATURE: [i8; 9] = [-1, -1, 0, 0, 1, 1, 1, 0, 1];
+    const LABEL: &str = "--00+++0+";
+    const EXPECTED_UV_LIMITS: usize = 27;
+
+    let test = std::thread::Builder::new()
+        .name("dgse-local-ir-filtered-orientation-profile".to_string())
+        .stack_size(128 * 1024 * 1024)
+        .spawn(move || -> Result<()> {
+            let test_name = format!("dgse_local_ir_generation_orientation_filter_project_local_4d_{project_local_4d}");
+            let mut cli = get_test_cli(
+                Some("dgse_local_ir.toml".into()),
+                get_tests_workspace_path().join(&test_name),
+                Some(test_name.to_string()),
+                true,
+            )?;
+            let generation = &mut cli.cli_settings.global.generation;
+            generation.explicit_orientation_sum_only = false;
+            generation.uv.final_integrand = FinalIntegrandDimension::ThreeD;
+            generation.uv.local_uv_cts_from_expanded_4d_integrands = project_local_4d;
+            assert!(
+                !cli.cli_settings.global.generation.uv.generate_integrated,
+                "the focused local-IR orientation profile must remain local-only"
+            );
+
+            cli.run_command("run generate")?;
+            let process = ProcessRef::Unqualified("dgse".to_string());
+            let integrand_name = "dgse".to_string();
+            let unfiltered_info = cli
+                .state
+                .get_integrand_info(Some(&process), Some(&integrand_name))?;
+            assert!(
+                !unfiltered_info.graph_groups.is_empty()
+                    && unfiltered_info.graph_groups.iter().all(|group| {
+                        group
+                            .orientations
+                            .get(UNFILTERED_ORIENTATION_INDEX)
+                            .is_some_and(|orientation| orientation.signature == SIGNATURE)
+                    }),
+                "unfiltered DGSE orientation {UNFILTERED_ORIENTATION_INDEX} must be {LABEL}",
+            );
+            let point = deterministic_uv_momentum_points(&mut cli, "dgse", "dgse")?
+                .remove(0)
+                .point;
+            let unfiltered_floor =
+                required_stability_accuracy_floor(&mut cli, "dgse", "dgse")?;
+            let unfiltered = evaluate_momentum_sample(
+                &mut cli,
+                "dgse",
+                "dgse",
+                &point,
+                Some(UNFILTERED_ORIENTATION_INDEX),
+                unfiltered_floor,
+            )?;
+
+            cli.run_command(&format!(
+                "set global string '\n[global.generation.orientation_pattern]\npat = \"{PATTERN}\"\n'"
+            ))?;
+            cli.run_command("run generate")?;
+
+            let info = cli
+                .state
+                .get_integrand_info(Some(&process), Some(&integrand_name))?;
+            assert!(
+                !info.graph_groups.is_empty()
+                    && info.graph_groups.iter().all(|group| {
+                        group.orientations.len() == 1
+                            && group.orientations[0].orientation_id == 0
+                            && group.orientations[0].signature == SIGNATURE
+                    }),
+                "the generation-time pattern must retain only {LABEL}: {:?}",
+                info.graph_groups
+                    .iter()
+                    .map(|group| &group.orientations)
+                    .collect::<Vec<_>>(),
+            );
+            let filtered_floor =
+                required_stability_accuracy_floor(&mut cli, "dgse", "dgse")?;
+            let filtered = evaluate_momentum_sample(
+                &mut cli,
+                "dgse",
+                "dgse",
+                &point,
+                Some(0),
+                filtered_floor,
+            )?;
+            let delta = (filtered.value.re - unfiltered.value.re)
+                .hypot(filtered.value.im - unfiltered.value.im);
+            let scale = filtered
+                .value
+                .re
+                .hypot(filtered.value.im)
+                .max(unfiltered.value.re.hypot(unfiltered.value.im))
+                .max(f64::MIN_POSITIVE);
+            let relative_delta = delta / scale;
+            let relative_accuracy = filtered
+                .relative_accuracy
+                .max(unfiltered.relative_accuracy)
+                .max(f64::EPSILON);
+            assert!(
+                filtered.value.re.is_finite()
+                    && filtered.value.im.is_finite()
+                    && unfiltered.value.re.is_finite()
+                    && unfiltered.value.im.is_finite()
+                    && INSPECT_DEPENDENCE_ACCURACY_FACTOR * relative_accuracy < 1.0
+                    && relative_delta <= INSPECT_DEPENDENCE_ACCURACY_FACTOR * relative_accuracy,
+                "filtered visible orientation 0 differs from unfiltered orientation {UNFILTERED_ORIENTATION_INDEX}: filtered={:?}, unfiltered={:?}, relative delta={relative_delta:.3e}, accuracy={relative_accuracy:.3e}",
+                filtered.value,
+                unfiltered.value,
+            );
+
+            // UV reports identify the visible runtime slot as well as its physical signs.
+            let profile_label = format!(
+                "{LABEL}|sigma({})",
+                info.graph_groups[0].orientations[0].orientation_id
+            );
+            let profile = cli_uv_profile_pass_fail(&mut cli, "dgse", "dgse")?;
+            assert_eq!(
+                profile.orientation_labels,
+                BTreeSet::from([profile_label.clone()]),
+                "the filtered UV profile must contain only the generated orientation"
+            );
+            assert_eq!(
+                profile.orientation_label_counts,
+                BTreeMap::from([(profile_label, EXPECTED_UV_LIMITS)]),
+                "the filtered orientation must occur once in every hard limit"
+            );
+            assert!(
+                profile.total == EXPECTED_UV_LIMITS
+                    && profile.resolved == profile.total
+                    && profile.orientation_total == EXPECTED_UV_LIMITS
+                    && profile.orientation_resolved == profile.orientation_total
+                    && profile.failed == 0
+                    && profile.orientation_failed == 0,
+                "the focused DGSE orientation failed its UV subtraction: {profile:?}"
+            );
+
+            clean_test(&cli.cli_settings.state.folder);
+            Ok(())
+        })?;
+    test.join()
+        .map_err(|_| eyre::eyre!("filtered DGSE orientation profile thread panicked"))??;
+
+    Ok(())
+}
+
+#[test]
+#[serial_test::serial]
+fn massless_quark_self_energy_local_ir_profile_is_non_vacuous() -> Result<()> {
+    for (explicit_orientation_sum_only, project_local_4d) in
+        [(false, false), (true, false), (true, true)]
+    {
+        println!(
+            "explicit_orientation_sum_only={explicit_orientation_sum_only}, project_local_4d={project_local_4d}"
+        );
+        const CARD: &str = "local_ir_quark_self_energy.toml";
+        const NAME: &str = "local_ir_quark_self_energy";
+
+        let mut subtracted = local_ct_cli(
+            CARD,
+            NAME,
+            false,
+            project_local_4d,
+            explicit_orientation_sum_only,
+        )?;
+        assert_selected_local_identifier(
+            &subtracted,
+            NAME,
+            NAME,
+            ApproximationType::IR,
+            [-1, 1],
+            [1, 21],
+            1,
+        )?;
+        let subtracted_uv = cli_uv_profile_pass_fail(&mut subtracted, NAME, NAME)?;
+        assert!(subtracted_uv.total > 0, "IR UV profile selected no limits");
+        assert!(
+            subtracted_uv.resolved > 0
+                && (explicit_orientation_sum_only
+                    || (subtracted_uv.orientation_total > 0
+                        && subtracted_uv.orientation_resolved > 0)),
+            "local IR subtraction produced no resolved summed and per-orientation UV fits"
+        );
+        assert_eq!(
+            (subtracted_uv.failed, subtracted_uv.orientation_failed),
+            (0, 0),
+            "primitive local IR subtraction failed its UV profile"
+        );
+
+        let mut bare = local_ct_cli(
+            CARD,
+            "local_ir_quark_self_energy_bare",
+            true,
+            project_local_4d,
+            explicit_orientation_sum_only,
+        )?;
+        assert_matched_local_routes(&subtracted, &bare, NAME, NAME)?;
+        let bare_uv = cli_uv_profile_pass_fail(&mut bare, NAME, NAME)?;
+        assert!(bare_uv.total > 0, "bare IR UV profile selected no limits");
+        assert!(
+            bare_uv.resolved > 0
+                && (explicit_orientation_sum_only
+                    || (bare_uv.orientation_total > 0 && bare_uv.orientation_resolved > 0)),
+            "bare IR profile produced no resolved summed and per-orientation UV fits"
+        );
+        assert!(
+            bare_uv.dod_failures > 0
+                && (explicit_orientation_sum_only || (bare_uv.orientation_dod_failures > 0)),
+            "bare massless quark self-energy must have a resolved per-orientation fit above the UV bound; summary={bare_uv:?}"
+        );
+        assert_eq!(
+            subtracted_uv.profile_identity, bare_uv.profile_identity,
+            "subtracted and bare massless-quark controls must profile the same UV LMBs, subsets, and orientations",
+        );
+
+        clean_test(&subtracted.cli_settings.state.folder);
+        clean_test(&bare.cli_settings.state.folder);
+    }
+    Ok(())
+}
+
+#[test]
+#[serial_test::serial]
+fn massless_gluon_self_energy_local_ir_profile_is_non_vacuous() -> Result<()> {
+    for (explicit_orientation_sum_only, project_local_4d) in
+        [(false, false), (true, false), (true, true)]
+    {
+        println!(
+            "explicit_orientation_sum_only={explicit_orientation_sum_only}, project_local_4d={project_local_4d}"
+        );
+        const CARD: &str = "local_ir_gluon_self_energy.toml";
+        const NAME: &str = "local_ir_gluon_self_energy";
+
+        let mut subtracted = local_ct_cli(
+            CARD,
+            NAME,
+            false,
+            project_local_4d,
+            explicit_orientation_sum_only,
+        )?;
+        assert_selected_local_identifier(
+            &subtracted,
+            NAME,
+            NAME,
+            ApproximationType::IR,
+            [-21, 21],
+            [1],
+            1,
+        )?;
+        let subtracted_uv = cli_uv_profile_pass_fail(&mut subtracted, NAME, NAME)?;
+        assert!(
+            subtracted_uv.total > 0
+                && subtracted_uv.resolved > 0
+                && subtracted_uv.failed == 0
+                && (explicit_orientation_sum_only
+                    || (subtracted_uv.orientation_total > 0
+                        && subtracted_uv.orientation_resolved > 0
+                        && subtracted_uv.orientation_failed == 0)),
+            "massless-gluon H_2 subtraction must pass a non-vacuous UV profile: {subtracted_uv:?}"
+        );
+
+        let mut bare = local_ct_cli(
+            CARD,
+            "local_ir_gluon_self_energy_bare",
+            true,
+            project_local_4d,
+            explicit_orientation_sum_only,
+        )?;
+        assert_matched_local_routes(&subtracted, &bare, NAME, NAME)?;
+        let bare_uv = cli_uv_profile_pass_fail(&mut bare, NAME, NAME)?;
+        assert!(
+            bare_uv.total > 0
+                && bare_uv.resolved > 0
+                && bare_uv.dod_failures > 0
+                && (explicit_orientation_sum_only
+                    || (bare_uv.orientation_total > 0
+                        && bare_uv.orientation_resolved > 0
+                        && bare_uv.orientation_dod_failures > 0)),
+            "bare massless gluon self-energy must have a resolved per-orientation fit above the UV bound: {bare_uv:?}"
+        );
+        assert_eq!(
+            subtracted_uv.profile_identity, bare_uv.profile_identity,
+            "subtracted and bare massless-gluon controls must profile the same UV LMBs, subsets, and orientations",
+        );
+
+        clean_test(&subtracted.cli_settings.state.folder);
+        clean_test(&bare.cli_settings.state.folder);
+    }
+    Ok(())
+}
+
+const SOFT_CFF_PERSISTENCE_MODE: &str = "GAMMALOOP_SOFT_CFF_PERSISTENCE_MODE";
+const SOFT_CFF_PERSISTENCE_STATE: &str = "GAMMALOOP_SOFT_CFF_PERSISTENCE_STATE";
+const SOFT_CFF_PERSISTENCE_PROJECT_LOCAL_4D: &str =
+    "GAMMALOOP_SOFT_CFF_PERSISTENCE_PROJECT_LOCAL_4D";
+
+#[test]
+#[ignore = "spawned by soft_cff_state_survives_a_fresh_process_reload"]
+fn soft_cff_state_round_trip_child() -> Result<()> {
+    const CARD: &str = "local_ir_gluon_self_energy.toml";
+    const NAME: &str = "local_ir_gluon_self_energy";
+
+    let Ok(mode) = env::var(SOFT_CFF_PERSISTENCE_MODE) else {
+        return Ok(());
+    };
+    let state_path = env::var_os(SOFT_CFF_PERSISTENCE_STATE)
+        .map(PathBuf::from)
+        .ok_or_else(|| eyre::eyre!("missing {SOFT_CFF_PERSISTENCE_STATE} child state path"))?;
+
+    let project_local_4d: bool = env::var(SOFT_CFF_PERSISTENCE_PROJECT_LOCAL_4D)?.parse()?;
+    let worker = std::thread::Builder::new()
+        .name(format!("soft-cff-persistence-{mode}"))
+        .stack_size(128 * 1024 * 1024)
+        .spawn(move || -> Result<()> {
+            match mode.as_str() {
+                "save" => {
+                    let mut cli = get_test_cli(
+                        Some(CARD.into()),
+                        &state_path,
+                        Some("soft_cff_persistence_save".to_string()),
+                        true,
+                    )?;
+                    let generation = &mut cli.cli_settings.global.generation;
+                    generation.explicit_orientation_sum_only = true;
+                    generation.uv.final_integrand = FinalIntegrandDimension::ThreeD;
+                    generation.uv.local_uv_cts_from_expanded_4d_integrands = project_local_4d;
+                    assert!(!generation.uv.generate_integrated);
+                    cli.run_command("run generate")?;
+                    assert_generated_local_integrand(&cli, NAME, NAME, 3)?;
+                    cli.save_state()?;
+                }
+                "load" => {
+                    let mut loaded = StateLoadOption {
+                        state_folder: Some(state_path),
+                        ..Default::default()
+                    }
+                    .load()?;
+                    assert_eq!(
+                        loaded.cli_settings.global.generation.uv.local_uv_cts_from_expanded_4d_integrands,
+                        project_local_4d,
+                        "the fresh process must retain the requested local CT route",
+                    );
+                    assert!(loaded.cli_settings.global.generation.explicit_orientation_sum_only);
+                    assert!(
+                loaded.state_load_summary.is_some(),
+                "the load child started a blank state instead of deserializing the saved soft CFF"
+            );
+                    loaded
+                        .cli_session()
+                        .execute_command(CommandHistory::from_raw_string(&format!(
+                            "generate existing -p {NAME} -i {NAME}"
+                        ))?)?;
+
+                    let process_id = loaded
+                        .state
+                        .resolve_process_ref(Some(&ProcessRef::Unqualified(NAME.to_string())))?;
+                    let integrand = loaded
+                        .state
+                        .process_list
+                        .get_integrand(process_id, NAME)?
+                        .require_generated()?;
+                    let export = loaded.state.process_list.processes[process_id].export_uv_forest_graph(
+NAME,
+0,
+                        &gammalooprs::uv::export::UVForestExportSettings {
+                            computed: true,
+                        },
+                    )?;
+                    assert_unique_uv_forest_term_identities(
+                        &export,
+                        "fresh-process soft-CFF state",
+                    );
+
+                    let n_dim = integrand.get_n_dim();
+                    let graph_name = integrand
+                        .graph_name_by_id(0)
+                        .ok_or_else(|| eyre::eyre!("reloaded soft-CFF integrand has no graph 0"))?
+                        .to_string();
+                    let point = (0..n_dim)
+                        .map(|index| 0.13 + 0.07 * index as f64)
+                        .collect::<Vec<_>>();
+                    let points = Array2::from_shape_vec((1, n_dim), point)?;
+                    let result = evaluate_sample(
+                        &mut loaded.state,
+                        &EvaluateSamples {
+                            process_id: Some(process_id),
+                            integrand_name: Some(NAME.to_string()),
+                            use_arb_prec: false,
+                            minimal_output: false,
+                            return_generated_events: Some(false),
+                            momentum_space: true,
+                            points: points.view(),
+                            integrator_weights: None,
+                            discrete_dims: None,
+                            graph_names: Some(vec![Some(graph_name)]),
+                            orientations: Some(vec![None]),
+                        },
+                    )?;
+                    let evaluation = result.sample.evaluation;
+                    let value = evaluation.integrand_result.map(|entry| entry.0);
+                    assert!(
+                value.re.is_finite()
+                    && value.im.is_finite()
+                    && evaluation.evaluation_metadata.is_some(),
+                "the freshly loaded and regenerated soft CFF did not evaluate normally: {value:?}"
+            );
+                }
+                other => {
+                    return Err(eyre::eyre!(
+                        "unknown {SOFT_CFF_PERSISTENCE_MODE} child mode {other:?}"
+                    ));
+                }
+            }
+            Ok(())
+        })?;
+    worker
+        .join()
+        .map_err(|_| eyre::eyre!("soft-CFF persistence child worker panicked"))?
+}
+
+#[test]
+#[serial_test::serial]
+fn soft_cff_state_survives_a_fresh_process_reload() -> Result<()> {
+    for project_local_4d in [false, true] {
+        println!("project_local_4d={project_local_4d}");
+        let state_path = get_tests_workspace_path().join(format!(
+            "soft_cff_fresh_process_state_project_local_4d_{project_local_4d}"
+        ));
+        clean_test(&state_path);
+        let outcome = (|| -> Result<()> {
+            let executable = env::current_exe()?;
+            for mode in ["save", "load"] {
+                let output = Command::new(&executable)
+                    .current_dir(workspace_root())
+                    .args([
+                        "--exact",
+                        "soft_cff_state_round_trip_child",
+                        "--ignored",
+                        "--nocapture",
+                    ])
+                    .env(SOFT_CFF_PERSISTENCE_MODE, mode)
+                    .env(SOFT_CFF_PERSISTENCE_STATE, &state_path)
+                    .env(
+                        SOFT_CFF_PERSISTENCE_PROJECT_LOCAL_4D,
+                        project_local_4d.to_string(),
+                    )
+                    .output()?;
+                if !output.status.success() {
+                    return Err(eyre::eyre!(
+                        "fresh-process soft-CFF {mode} child failed with {}\nstdout:\n{}\nstderr:\n{}",
+                        output.status,
+                        String::from_utf8_lossy(&output.stdout),
+                        String::from_utf8_lossy(&output.stderr),
+                    ));
+                }
+            }
+            Ok(())
+        })();
+        clean_test(&state_path);
+        outcome?;
+    }
+    Ok(())
+}
+
+const LOCAL_OS_CARD: &str = "local_os_top_self_energy.toml";
+const LOCAL_OS_NAME: &str = "local_os_top_self_energy";
+
+#[test]
+#[serial_test::serial]
+fn massive_top_self_energy_local_os_dispatch_is_deferred() {
+    let state_path = get_tests_workspace_path().join(format!(
+        "{LOCAL_OS_NAME}_explicit_false_project_local_4d_false"
+    ));
+    clean_test(&state_path);
+    let panic = catch_unwind(AssertUnwindSafe(|| {
+        let _ = local_ct_cli(LOCAL_OS_CARD, LOCAL_OS_NAME, false, false, false);
+    }))
+    .expect_err("the local OS fixture must reach the intentional deferred-dispatch panic");
+    clean_test(&state_path);
+    let message = panic
+        .downcast_ref::<String>()
+        .map(String::as_str)
+        .or_else(|| panic.downcast_ref::<&str>().copied())
+        .unwrap_or("non-string panic payload");
+    assert!(
+        message.contains(
+            "local on-shell counterterms are deferred until local counterterms can be derived from the 4D expanded representation"
+        ),
+        "unexpected local OS panic: {message}",
+    );
+}
+
+#[test]
+#[serial_test::serial]
+fn paper_appendix_b1_os_child_reaches_deferred_dispatch() {
+    const NAME: &str = "paper_appendix_b1_nested_gluon_self_energy_os";
+    let state_path =
+        get_tests_workspace_path().join(format!("{NAME}_explicit_false_project_local_4d_false"));
+    clean_test(&state_path);
+    let panic = catch_unwind(AssertUnwindSafe(|| {
+        let _ = local_ct_cli(
+            "paper_appendix_b1_nested_gluon_self_energy_os.toml",
+            NAME,
+            false,
+            false,
+            false,
+        );
+    }))
+    .expect_err("the Appendix-B.1 OS fixture must reach the intentional deferred-dispatch panic");
+    clean_test(&state_path);
+    let message = panic
+        .downcast_ref::<String>()
+        .map(String::as_str)
+        .or_else(|| panic.downcast_ref::<&str>().copied())
+        .unwrap_or("non-string panic payload");
+    assert!(
+        message.contains(
+            "local on-shell counterterms are deferred until local counterterms can be derived from the 4D expanded representation"
+        ),
+        "unexpected Appendix-B.1 OS panic: {message}",
+    );
+}
+
+#[test]
+#[serial_test::serial]
+fn local_ir_disconnected_completed_components_form_nonzero_union() -> Result<()> {
+    for (explicit_orientation_sum_only, project_local_4d) in
+        [(false, false), (true, false), (true, true)]
+    {
+        println!(
+            "explicit_orientation_sum_only={explicit_orientation_sum_only}, project_local_4d={project_local_4d}"
+        );
+        let test = std::thread::Builder::new()
+        .name("local-ir-disconnected-replay".to_string())
+        .stack_size(64 * 1024 * 1024)
+        .spawn(move || -> Result<()> {
+            use gammalooprs::graph::parse::IntoGraph;
+
+            const NAME: &str = "local_ir_dod2_scalar_spectacles";
+            let mut spectacles =
+                local_ct_cli("local_ir_dod2_scalar_spectacles.toml", NAME, false, project_local_4d, explicit_orientation_sum_only)?;
+            assert_generated_local_integrand(&spectacles, NAME, NAME, 6)?;
+            let classified = classified_local_spinneys(&spectacles, NAME, NAME)?;
+            let connected = classified
+                .iter()
+                .filter(|spinney| spinney.n_components == 1)
+                .collect::<Vec<_>>();
+            assert!(
+                connected.len() == 2
+                    && connected.iter().all(|spinney| {
+                        spinney.scheme == ApproximationType::IR && spinney.dod == 2
+                    }),
+                "dotted spectacles must select exactly two degree-2 soft components: {connected:?}"
+            );
+            let disconnected = classified
+                .iter()
+                .filter(|spinney| spinney.n_components > 1)
+                .collect::<Vec<_>>();
+            assert!(
+                !disconnected.is_empty()
+                    && disconnected
+                        .iter()
+                        .all(|spinney| spinney.scheme == ApproximationType::MUV),
+                "disconnected unions must use only the neutral MUV tag: {disconnected:?}"
+            );
+
+            let process_id = spectacles
+                .state
+                .resolve_process_ref(Some(&ProcessRef::Unqualified(NAME.to_string())))?;
+            let export = spectacles.state.process_list.processes[process_id].export_uv_forest_graph(
+NAME,
+0,
+                &gammalooprs::uv::export::UVForestExportSettings {
+                    computed: true,
+                },
+            )?;
+            assert_unique_uv_forest_term_identities(
+                &export,
+                "disconnected spectacles forest",
+            );
+            let mut nodes = BTreeMap::<String, Atom>::new();
+            for term in export.node_terms {
+                let graph: gammalooprs::graph::Graph =
+                    term.dot.as_str().into_graph(&spectacles.state.model)?;
+                nodes
+                    .entry(term.node_key)
+                    .and_modify(|sum| *sum += &graph.global_prefactor.num)
+                    .or_insert(graph.global_prefactor.num);
+            }
+            assert_eq!(
+                nodes.len(),
+                4,
+                "fixture must expose a root, two completed components, and their union"
+            );
+
+            let root = nodes
+                .remove("∅")
+                .expect("the exported forest must contain its root node");
+            let union_key = nodes
+                .keys()
+                .find(|key| key.contains(','))
+                .cloned()
+                .expect("the exported forest must contain a two-component union");
+            let union = nodes
+                .remove(&union_key)
+                .expect("the identified union must remain in the node map");
+            let components = nodes.into_values().collect::<Vec<_>>();
+            assert_eq!(
+                components.len(),
+                2,
+                "the disconnected union must have exactly two completed component nodes"
+            );
+            assert!(
+                !root.is_zero()
+                    && !union.is_zero()
+                    && components.iter().all(|component| !component.is_zero()),
+                "the disconnected-union assertion must not be satisfied by vanishing forest nodes"
+            );
+
+            // HedgePoset replays both connected-component operators with
+            // independent local hard parameters. Its unit test checks the
+            // resulting two-component CFF sector against both explicit replay
+            // orders in one parent orientation. Here we additionally require
+            // every exported family to be nonzero before checking the summed
+            // and individual-orientation UV profiles below.
+
+            let subtracted_uv = cli_uv_profile_pass_fail(&mut spectacles, NAME, NAME)?;
+            let mut bare = local_ct_cli(
+                "local_ir_dod2_scalar_spectacles.toml",
+                "local_ir_dod2_scalar_spectacles_bare",
+                true, project_local_4d, explicit_orientation_sum_only)?;
+            let bare_uv = cli_uv_profile_pass_fail(&mut bare, NAME, NAME)?;
+            let mut ordinary_uv = get_test_cli(
+                Some("local_ir_dod2_scalar_spectacles.toml".into()),
+                get_tests_workspace_path().join(format!("local_ir_dod2_scalar_spectacles_muv_explicit_{explicit_orientation_sum_only}_project_local_4d_{project_local_4d}")),
+                Some(format!("local_ir_dod2_scalar_spectacles_muv_explicit_{explicit_orientation_sum_only}_project_local_4d_{project_local_4d}")),
+                true,
+            )?;
+            let generation = &mut ordinary_uv.cli_settings.global.generation;
+            generation.explicit_orientation_sum_only = explicit_orientation_sum_only;
+            generation.uv.final_integrand = FinalIntegrandDimension::ThreeD;
+            generation.uv.local_uv_cts_from_expanded_4d_integrands = project_local_4d;
+            let ordinary_prescription = &mut ordinary_uv
+                .cli_settings
+                .global
+                .generation
+                .uv
+                .renormalization_prescription;
+            ordinary_prescription.log_divergent = ApproximationType::MUV;
+            ordinary_prescription.massive_power_divergent = ApproximationType::MUV;
+            ordinary_prescription.massless_power_divergent = ApproximationType::MUV;
+            ordinary_prescription.overrides.clear();
+            ordinary_uv.run_command("run generate")?;
+            let ordinary_components = classified_local_spinneys(&ordinary_uv, NAME, NAME)?
+                .into_iter()
+                .filter(|spinney| spinney.n_components == 1)
+                .map(|spinney| (spinney.edge_ids, spinney.dod, spinney.scheme))
+                .collect::<Vec<_>>();
+            assert!(
+                ordinary_components.len() == 2
+                    && ordinary_components.iter().all(|(_, dod, scheme)| {
+                        *dod == 2 && *scheme == ApproximationType::MUV
+                    }),
+                "ordinary spectacles control must select exactly both d=2 components as MUV: {ordinary_components:?}",
+            );
+            let ordinary_uv_profile = cli_uv_profile_pass_fail(&mut ordinary_uv, NAME, NAME)?;
+            assert_eq!(
+                subtracted_uv.profile_identity, bare_uv.profile_identity,
+                "subtracted and bare disconnected controls must profile the same UV LMBs, subsets, and orientations",
+            );
+            assert_eq!(
+                subtracted_uv.profile_identity, ordinary_uv_profile.profile_identity,
+                "soft-refined and ordinary-MUV spectacles controls must profile the same UV LMBs, subsets, and orientations",
+            );
+            assert!(
+subtracted_uv.total > 0 && subtracted_uv.resolved > 0 && subtracted_uv.failed == 0
+ && (explicit_orientation_sum_only || (subtracted_uv.orientation_total > 0 && subtracted_uv.orientation_resolved > 0 && subtracted_uv.orientation_failed == 0)),
+                "completed disconnected soft components must pass a non-vacuous CLI UV profile: {subtracted_uv:?}"
+            );
+            assert!(
+ordinary_uv_profile.total > 0 && ordinary_uv_profile.resolved > 0 && ordinary_uv_profile.failed == 0
+ && (explicit_orientation_sum_only || (ordinary_uv_profile.orientation_total > 0 && ordinary_uv_profile.orientation_resolved > 0 && ordinary_uv_profile.orientation_failed == 0)),
+                "ordinary-MUV disconnected components must pass the same non-vacuous CLI UV profile: {ordinary_uv_profile:?}"
+            );
+            assert!(
+bare_uv.total > 0 && bare_uv.resolved > 0 && bare_uv.dod_failures > 0
+ && (explicit_orientation_sum_only || (bare_uv.orientation_total > 0 && bare_uv.orientation_resolved > 0 && bare_uv.orientation_dod_failures > 0)),
+                "bare disconnected fixture must have a resolved per-orientation fit above the UV bound: {bare_uv:?}"
+            );
+
+            clean_test(&spectacles.cli_settings.state.folder);
+            clean_test(&bare.cli_settings.state.folder);
+            clean_test(&ordinary_uv.cli_settings.state.folder);
+            Ok(())
+        })?;
+        test.join()
+            .map_err(|_| eyre::eyre!("disconnected replay test thread panicked"))??;
+    }
+    Ok(())
+}
+
+#[test]
+#[serial_test::serial]
+fn consecutive_soft_components_have_exact_forest_and_cli_profile() -> Result<()> {
+    for (explicit_orientation_sum_only, project_local_4d) in
+        [(false, false), (true, false), (true, true)]
+    {
+        println!(
+            "explicit_orientation_sum_only={explicit_orientation_sum_only}, project_local_4d={project_local_4d}"
+        );
+        let test = std::thread::Builder::new()
+        .name("consecutive-soft-components".to_string())
+        .stack_size(64 * 1024 * 1024)
+        .spawn(move || -> Result<()> {
+            use gammalooprs::graph::parse::IntoGraph;
+
+            const NAME: &str = "local_consecutive_soft_scalar_bubbles";
+            const CARD: &str = "local_consecutive_soft_scalar_bubbles.toml";
+
+            let mut subtracted = local_ct_cli(CARD, NAME, false, project_local_4d, explicit_orientation_sum_only)?;
+            assert_eq!(
+                subtracted.cli_settings.global.generation.uv.orchestrator,
+                UVOrchestrator::HedgePoset
+            );
+            assert_generated_local_integrand(&subtracted, NAME, NAME, 6)?;
+
+            let classified = classified_local_spinneys(&subtracted, NAME, NAME)?;
+            let mut connected = classified
+                .iter()
+                .filter(|spinney| spinney.n_components == 1)
+                .map(|spinney| {
+                    (
+                        spinney.edge_ids.clone(),
+                        spinney.dod,
+                        spinney.scheme,
+                    )
+                })
+                .collect::<Vec<_>>();
+            connected.sort_by(|left, right| left.0.cmp(&right.0));
+            assert_eq!(
+                connected,
+                vec![
+                    (vec![0, 1], 2, ApproximationType::IR),
+                    (vec![3, 4], 2, ApproximationType::IR),
+                ],
+                "the connected carrier must contain exactly two consecutive degree-two soft bubbles"
+            );
+            let unions = classified
+                .iter()
+                .filter(|spinney| spinney.n_components == 2)
+                .collect::<Vec<_>>();
+            assert!(
+                unions.len() == 1
+                    && unions[0].edge_ids == [0, 1, 3, 4]
+                    && unions[0].scheme == ApproximationType::MUV,
+                "the two consecutive bubbles must have one neutral two-component union: {unions:?}"
+            );
+            assert_eq!(
+                classified
+                    .iter()
+                    .filter(|spinney| !spinney.edge_ids.is_empty())
+                    .count(),
+                3,
+                "the fixture must have only its two connected components and their compatible union: {classified:?}"
+            );
+
+            let process_id = subtracted
+                .state
+                .resolve_process_ref(Some(&ProcessRef::Unqualified(NAME.to_string())))?;
+            let export = subtracted.state.process_list.processes[process_id].export_uv_forest_graph(
+NAME,
+0,
+                &gammalooprs::uv::export::UVForestExportSettings {
+                    computed: true,
+                },
+            )?;
+            assert_unique_uv_forest_term_identities(&export, "consecutive soft forest");
+
+            let mut atoms_by_identity = BTreeMap::new();
+            for term in &export.node_terms {
+                let graph: gammalooprs::graph::Graph =
+                    term.dot.as_str().into_graph(&subtracted.state.model)?;
+                let identity = UVForestTermIdentity::from(term);
+                assert!(
+                    atoms_by_identity
+                        .insert(identity.clone(), graph.global_prefactor.num)
+                        .is_none(),
+                    "duplicate consecutive-soft forest identity {identity:?}"
+                );
+            }
+            let forest_indices = atoms_by_identity
+                .keys()
+                .map(|identity| identity.forest_index)
+                .collect::<BTreeSet<_>>();
+            assert_eq!(
+                forest_indices,
+                [0].into_iter().collect::<BTreeSet<_>>(),
+                "the consecutive fixture must export one HedgePoset wood"
+            );
+            let node_keys = atoms_by_identity
+                .keys()
+                .map(|identity| identity.node_key.clone())
+                .collect::<BTreeSet<_>>();
+            assert!(
+                node_keys.len() == 4
+                    && node_keys.contains("∅")
+                    && node_keys.iter().filter(|key| key.contains(',')).count() == 1,
+                "the consecutive forest must contain root, two components, and their union: {node_keys:?}"
+            );
+            for node_key in &node_keys {
+                assert!(
+                    atoms_by_identity.iter().any(|(identity, atom)| {
+                        identity.node_key == *node_key && !atom.is_zero()
+                    }),
+                    "consecutive forest node {node_key} has no nonzero final atom"
+                );
+            }
+
+            let subtracted_uv = cli_uv_profile_pass_fail(&mut subtracted, NAME, NAME)?;
+            assert!(
+subtracted_uv.total > 0 && subtracted_uv.resolved > 0 && subtracted_uv.failed == 0
+ && (explicit_orientation_sum_only || (subtracted_uv.orientation_total > 0 && subtracted_uv.orientation_resolved > 0 && subtracted_uv.orientation_failed == 0)),
+                "consecutive soft components must pass a non-vacuous CLI UV profile: {subtracted_uv:?}"
+            );
+
+            let mut bare = local_ct_cli(CARD, "local_consecutive_soft_scalar_bubbles_bare", true, project_local_4d, explicit_orientation_sum_only)?;
+            let bare_classified = classified_local_spinneys(&bare, NAME, NAME)?;
+            assert!(
+                bare_classified.iter().all(|component| {
+                    component.n_components == 0
+                        && component.edge_ids.is_empty()
+                        && component.scheme == ApproximationType::MUV
+                        && component.dod == 0
+                }),
+                "the bare consecutive fixture must not retain counterterm components: {bare_classified:?}"
+            );
+            assert_matched_local_routes(&subtracted, &bare, NAME, NAME)?;
+            let bare_uv = cli_uv_profile_pass_fail(&mut bare, NAME, NAME)?;
+            assert!(
+bare_uv.total > 0 && bare_uv.resolved > 0 && bare_uv.dod_failures > 0
+ && (explicit_orientation_sum_only || (bare_uv.orientation_total > 0 && bare_uv.orientation_resolved > 0 && bare_uv.orientation_dod_failures > 0)),
+                "bare consecutive fixture must have a resolved per-orientation fit above the UV bound: {bare_uv:?}"
+            );
+            assert_eq!(
+                subtracted_uv.profile_identity, bare_uv.profile_identity,
+                "subtracted and bare consecutive controls must profile the same UV LMBs, subsets, and orientations",
+            );
+
+            clean_test(&subtracted.cli_settings.state.folder);
+            clean_test(&bare.cli_settings.state.folder);
+            Ok(())
+        })?;
+        test.join()
+            .map_err(|_| eyre::eyre!("consecutive soft-components test thread panicked"))??;
+    }
+    Ok(())
+}
+
+#[test]
+#[serial_test::serial]
+fn sunrise_pole_part_matches_muv_inspect() -> Result<()> {
+    let process = "sunrise_scalar_1";
+    let integrand_name = "scalar_sunrise";
+    let setup = |test_name: &str, scheme| -> Result<CLIState> {
+        let mut cli = get_test_cli(
+            Some("uv/sunrise_scalar_1.toml".into()),
+            get_tests_workspace_path().join(test_name),
+            Some(test_name.to_string()),
+            true,
+        )?;
+        let uv = &mut cli.cli_settings.global.generation.uv;
+        uv.orchestrator = UVOrchestrator::Compare;
+        let prescription = &mut uv.renormalization_prescription;
+        prescription.log_divergent = scheme;
+        prescription.massive_power_divergent = scheme;
+        prescription.massless_power_divergent = scheme;
+        cli.run_command("run generate")?;
+        {
+            use gammalooprs::utils::GS;
+            use symbolica::atom::AtomView;
+
+            let ProcessCollection::Amplitudes(amplitudes) =
+                &cli.state.process_list.processes[0].collection
+            else {
+                panic!("expected the scalar Sunrise amplitude")
+            };
+            let amplitude = &amplitudes[integrand_name];
+            let [amplitude_graph] = amplitude.graphs.as_slice() else {
+                panic!("expected one scalar Sunrise graph")
+            };
+            let parameters = &amplitude_graph
+                .graph
+                .param_builder
+                .pairs
+                .additional_params
+                .params;
+            assert_eq!(parameters.len(), 21);
+            assert_eq!(
+                amplitude
+                    .integrand
+                    .as_ref()
+                    .unwrap()
+                    .get_settings()
+                    .general
+                    .additional_param_values
+                    .len(),
+                parameters.len()
+            );
+            let mut markers = std::collections::HashSet::new();
+            for expression in std::iter::once(&amplitude_graph.derived_data.all_mighty_integrand)
+                .chain(
+                    amplitude_graph
+                        .derived_data
+                        .all_mighty_numerators
+                        .iter()
+                        .map(|entry| &entry.rhs),
+                )
+            {
+                let _ = expression.replace_map(|view, _, _| {
+                    if let AtomView::Fun(function) = view
+                        && function.get_symbol() == GS.ct_marker
+                    {
+                        markers.insert(view.to_owned());
+                    }
+                });
+            }
+            assert!(
+                markers
+                    .iter()
+                    .any(|marker| marker.contains_symbol(GS.uv_integrate)),
+                "the integrated fixture must retain integrated CT markers"
+            );
+            for marker in &markers {
+                assert!(
+                    parameters.contains(marker),
+                    "unbound generated integrated CT marker: {marker}"
+                );
+            }
+        }
+        Ok(cli)
+    };
+    let mut muv = setup("sunrise_muv_inspect", ApproximationType::MUV)?;
+    let point = deterministic_uv_momentum_points(&mut muv, process, integrand_name)?.remove(0);
+    let mut pole_part = setup("sunrise_pole_part_inspect", ApproximationType::PolePart)?;
+
+    let muv_value = evaluate_momentum_sample(
+        &mut muv,
+        process,
+        integrand_name,
+        &point.point,
+        None,
+        f64::EPSILON,
+    )?
+    .value;
+    let pole_part_value = evaluate_momentum_sample(
+        &mut pole_part,
+        process,
+        integrand_name,
+        &point.point,
+        None,
+        f64::EPSILON,
+    )?
+    .value;
+
+    clean_test(&muv.cli_settings.state.folder);
+    clean_test(&pole_part.cli_settings.state.folder);
+
+    let delta = (muv_value.re - pole_part_value.re).hypot(muv_value.im - pole_part_value.im);
+    let scale = muv_value
+        .re
+        .hypot(muv_value.im)
+        .max(pole_part_value.re.hypot(pole_part_value.im))
+        .max(f64::MIN_POSITIVE);
+    assert!(
+        delta / scale <= 1.0e-10,
+        "MUV and PolePart inspect values differ: MUV={muv_value:?}, PolePart={pole_part_value:?}, relative delta={}",
+        delta / scale
+    );
+    Ok(())
+}
+
 mod slow {
     use super::*;
+
+    fn run_double_triangle_soft_ir_case(
+        card: &str,
+        name: &str,
+        external_pdgs: &[isize],
+        internal_pdgs: &[isize],
+        soft_dod: i32,
+        project_local_4d: bool,
+        explicit_orientation_sum_only: bool,
+    ) -> Result<()> {
+        use gammalooprs::cff::orientations::GraphOrientation;
+        use gammalooprs::graph::FeynmanGraph;
+
+        const POINT: [f64; 9] = [0.31, -0.27, 0.43, -0.22, 0.37, 0.19, 0.41, 0.16, -0.33];
+        const EXPECTED_ORIENTATION: &str = "orientation_delta(0,0,-1,-1,-1,1,-1,-1,1,-1)";
+
+        // Enumerating the parent CFF is cheap compared with constructing every
+        // three-loop UV forest. Keep this probe ahead of local CT generation so
+        // that the fixture's generation-time orientation can be audited against
+        // the graph rather than copied from a generated evaluator.
+        let probe_name = format!(
+            "{name}_orientation_probe_explicit_{explicit_orientation_sum_only}_project_local_4d_{project_local_4d}"
+        );
+        let mut probe = get_test_cli(
+            Some(card.into()),
+            get_tests_workspace_path().join(&probe_name),
+            Some(probe_name.clone()),
+            true,
+        )?;
+        let generation = &mut probe.cli_settings.global.generation;
+        generation.explicit_orientation_sum_only = explicit_orientation_sum_only;
+        generation.uv.local_uv_cts_from_expanded_4d_integrands = project_local_4d;
+        if explicit_orientation_sum_only {
+            generation.orientation_pattern = Default::default();
+        }
+        let setup_commands = probe
+            .run_history
+            .command_blocks
+            .iter()
+            .find(|block| block.name == "generate")
+            .ok_or_else(|| eyre::eyre!("{card} has no generate command block"))?
+            .commands
+            .iter()
+            .filter_map(|command| command.raw_string.clone())
+            .take_while(|command| !command.trim_start().starts_with("generate "))
+            .collect::<Vec<_>>();
+        for command in setup_commands {
+            probe.run_command(&command)?;
+        }
+        let probe_process_id = probe
+            .state
+            .resolve_process_ref(Some(&ProcessRef::Unqualified(name.to_string())))?;
+        let mut parent_graph =
+            match &probe.state.process_list.processes[probe_process_id].collection {
+                ProcessCollection::Amplitudes(amplitudes) => amplitudes
+                    .get(name)
+                    .unwrap_or_else(|| panic!("missing imported amplitude {name}"))
+                    .graphs[0]
+                    .graph
+                    .clone(),
+                ProcessCollection::CrossSections(_) => {
+                    return Err(eyre::eyre!("{name} must be an amplitude"));
+                }
+            };
+        let parent_tree_edges = parent_graph
+            .iter_edges_of(&parent_graph.tree_edges)
+            .filter_map(|(pair, edge, _)| pair.is_paired().then_some(edge))
+            .collect::<Vec<_>>();
+        let options = parent_graph
+            .production_cff_3d_expression_options(&probe.cli_settings.global.generation)?;
+        let parent_cff = parent_graph.generate_3d_expression_for_integrand(
+            &parent_tree_edges,
+            &parent_graph.get_esurface_canonization(&parent_graph.loop_momentum_basis),
+            &options,
+            None,
+        )?;
+        let parent_orientations = parent_cff
+            .expression
+            .orientations
+            .iter()
+            .map(|orientation| &orientation.data.orientation)
+            .collect::<Vec<_>>();
+        let orientation_signatures = parent_orientations
+            .iter()
+            .filter(|orientation| !orientation.orientation_thetas().is_one())
+            .map(|orientation| orientation.orientation_delta().to_string())
+            .collect::<BTreeSet<_>>();
+        assert!(
+            orientation_signatures.len() > 1,
+            "{name} must have a nontrivial set of valid nonzero parent-CFF orientations: {orientation_signatures:#?}"
+        );
+        assert_eq!(
+            orientation_signatures.first().map(String::as_str),
+            Some(EXPECTED_ORIENTATION),
+            "the fixture must select the deterministic first nonzero parent-CFF orientation"
+        );
+        // Keep source-map multiplicities: equal direction signatures do not
+        // identify maps with different numerator or mass sampling data.
+        let mut source_orientations = parent_orientations
+            .iter()
+            .map(|orientation| orientation.orientation_delta().to_string())
+            .collect::<Vec<_>>();
+        source_orientations.sort();
+        let expected_orientations = if explicit_orientation_sum_only {
+            source_orientations.clone()
+        } else {
+            vec![EXPECTED_ORIENTATION.to_string()]
+        };
+        let mut configured_orientations = parent_orientations
+            .iter()
+            .filter(|&&orientation| {
+                probe
+                    .cli_settings
+                    .global
+                    .generation
+                    .orientation_pattern
+                    .filter(orientation)
+            })
+            .map(|orientation| orientation.orientation_delta().to_string())
+            .collect::<Vec<_>>();
+        configured_orientations.sort();
+        assert_eq!(
+            configured_orientations, expected_orientations,
+            "the generation-time orientation pattern must retain exactly the independently audited parent-CFF inventory"
+        );
+        clean_test(&probe.cli_settings.state.folder);
+
+        let mut subtracted = local_ct_cli(
+            card,
+            name,
+            false,
+            project_local_4d,
+            explicit_orientation_sum_only,
+        )?;
+        let expected_identifier = CTIdentifier::new(
+            external_pdgs.iter().copied().collect(),
+            Some(internal_pdgs.iter().copied().collect()),
+        );
+        let classified = classified_local_spinneys(&subtracted, name, name)?;
+        let selected = classified
+            .iter()
+            .filter(|spinney| {
+                spinney.n_components == 1
+                    && spinney.scheme == ApproximationType::IR
+                    && spinney.identifier == expected_identifier
+            })
+            .collect::<Vec<_>>();
+        assert!(
+            selected.len() == 1 && selected[0].dod == soft_dod,
+            "{name} must select exactly its degree-{soft_dod} central soft self-energy: {classified:?}"
+        );
+        let child_edges = &selected[0].edge_ids;
+        assert!(
+            classified.iter().any(|spinney| {
+                spinney.n_components == 1
+                    && spinney.scheme == ApproximationType::IR
+                    && spinney.dod > 0
+                    && spinney.edge_ids.len() > child_edges.len()
+                    && child_edges
+                        .iter()
+                        .all(|edge| spinney.edge_ids.contains(edge))
+            }),
+            "{name} must use a complete soft wood for its positive-degree containing component: {classified:?}"
+        );
+
+        let process_id = subtracted
+            .state
+            .resolve_process_ref(Some(&ProcessRef::Unqualified(name.to_string())))?;
+        let integrand = subtracted
+            .state
+            .process_list
+            .get_integrand(process_id, name)?
+            .require_generated()?;
+        assert_eq!(
+            integrand.get_n_dim(),
+            9,
+            "{name} must retain its three loop integrations"
+        );
+
+        let mut bare = local_ct_cli(
+            card,
+            &format!("{name}_bare"),
+            true,
+            project_local_4d,
+            explicit_orientation_sum_only,
+        )?;
+        assert_matched_local_routes(&subtracted, &bare, name, name)?;
+        for (label, cli) in [("subtracted", &subtracted), ("bare", &bare)] {
+            let process_id = cli
+                .state
+                .resolve_process_ref(Some(&ProcessRef::Unqualified(name.to_string())))?;
+            let process = &cli.state.process_list.processes[process_id];
+            let amplitude = match &process.collection {
+                ProcessCollection::Amplitudes(amplitudes) => amplitudes
+                    .get(name)
+                    .unwrap_or_else(|| panic!("missing generated amplitude {name}")),
+                ProcessCollection::CrossSections(_) => {
+                    return Err(eyre::eyre!("{name} must be an amplitude"));
+                }
+            };
+            let mut orientations = amplitude.graphs[0]
+                .derived_data
+                .cff_expression
+                .as_ref()
+                .expect("the generated amplitude must retain its CFF orientations")
+                .expression
+                .orientations
+                .iter()
+                .map(|orientation| orientation.data.orientation.orientation_delta().to_string())
+                .collect::<Vec<_>>();
+            orientations.sort();
+            assert_eq!(
+                orientations, source_orientations,
+                "{name} {label} stored CFF must retain the full independently audited source inventory"
+            );
+            // Generation filters the evaluator's channels, while its stored
+            // source CFF remains complete for local counterterm construction.
+            let info = cli.state.get_integrand_info(
+                Some(&ProcessRef::Unqualified(name.to_string())),
+                Some(&name.to_string()),
+            )?;
+            assert!(!info.graph_groups.is_empty());
+            for group in &info.graph_groups {
+                let mut orientations = group
+                    .orientations
+                    .iter()
+                    .map(|orientation| {
+                        format!(
+                            "orientation_delta({})",
+                            orientation
+                                .signature
+                                .iter()
+                                .map(ToString::to_string)
+                                .collect::<Vec<_>>()
+                                .join(",")
+                        )
+                    })
+                    .collect::<Vec<_>>();
+                orientations.sort();
+                assert_eq!(
+                    orientations, expected_orientations,
+                    "{name} {label} evaluator must retain exactly the audited orientation inventory"
+                );
+            }
+        }
+
+        // Inspect the public, structure-only forest export without asking this
+        // 3D fixture to build a second, unused 4D representation solely for
+        // provenance metadata. The generated evaluator below is the
+        // authoritative atom for the selected orientation representation;
+        // focused operator tests independently retain U, S, and US.
+        let structural_forest = subtracted.state.process_list.processes[process_id]
+            .export_uv_forest_graph(
+                name,
+                0,
+                &gammalooprs::uv::export::UVForestExportSettings { computed: false },
+            )?;
+        let structural_node_count = structural_forest.forest_dot.matches("foata=").count();
+        assert!(
+            structural_forest.node_terms.is_empty() && structural_node_count >= 4,
+            "{name} must expose distinct root, child/parent, and nested forest families in its structure-only export; nodes={structural_node_count}"
+        );
+
+        let subtracted_floor = required_stability_accuracy_floor(&mut subtracted, name, name)?;
+        let subtracted_value =
+            evaluate_momentum_sample(&mut subtracted, name, name, &POINT, None, subtracted_floor)?;
+        let bare_classified = classified_local_spinneys(&bare, name, name)?;
+        assert!(
+            bare_classified.iter().all(|component| {
+                component.n_components == 0
+                    && component.edge_ids.is_empty()
+                    && component.scheme == ApproximationType::MUV
+                    && component.dod == 0
+            }),
+            "the bare {name} fixture must not retain a counterterm component: {bare_classified:?}"
+        );
+        let bare_floor = required_stability_accuracy_floor(&mut bare, name, name)?;
+        let bare_value = evaluate_momentum_sample(&mut bare, name, name, &POINT, None, bare_floor)?;
+
+        let delta = (subtracted_value.value.re - bare_value.value.re)
+            .hypot(subtracted_value.value.im - bare_value.value.im);
+        let scale = subtracted_value
+            .value
+            .re
+            .hypot(subtracted_value.value.im)
+            .max(bare_value.value.re.hypot(bare_value.value.im))
+            .max(f64::MIN_POSITIVE);
+        let relative_delta = delta / scale;
+        let relative_accuracy = subtracted_value
+            .relative_accuracy
+            .max(bare_value.relative_accuracy)
+            .max(f64::EPSILON);
+        assert!(
+            subtracted_value.value.re.is_finite()
+                && subtracted_value.value.im.is_finite()
+                && bare_value.value.re.is_finite()
+                && bare_value.value.im.is_finite()
+                && INSPECT_DEPENDENCE_ACCURACY_FACTOR * relative_accuracy < 1.0,
+            "{name} inspect values are not materially resolved: subtracted={:?}, bare={:?}, accuracy={relative_accuracy:.3e}",
+            subtracted_value.value,
+            bare_value.value,
+        );
+        assert!(
+            relative_delta >= INSPECT_DEPENDENCE_ACCURACY_FACTOR * relative_accuracy,
+            "{name} local counterterm is not visible above inspect accuracy: subtracted={:?}, bare={:?}, relative delta={relative_delta:.3e}, accuracy={relative_accuracy:.3e}",
+            subtracted_value.value,
+            bare_value.value,
+        );
+
+        let subtracted_uv = cli_uv_profile_pass_fail(&mut subtracted, name, name)?;
+        assert!(
+            subtracted_uv.total > 0
+                && subtracted_uv.resolved > 0
+                && subtracted_uv.failed == 0
+                && (explicit_orientation_sum_only
+                    || (subtracted_uv.orientation_total > 0
+                        && subtracted_uv.orientation_resolved > 0
+                        && subtracted_uv.orientation_failed == 0)),
+            "{name} local counterterm must pass a non-vacuous CLI UV profile: {subtracted_uv:?}"
+        );
+        let bare_uv = cli_uv_profile_pass_fail(&mut bare, name, name)?;
+        assert!(
+            bare_uv.total > 0
+                && bare_uv.resolved > 0
+                && bare_uv.dod_failures > 0
+                && (explicit_orientation_sum_only
+                    || (bare_uv.orientation_total > 0
+                        && bare_uv.orientation_resolved > 0
+                        && bare_uv.orientation_dod_failures > 0)),
+            "bare {name} must have a resolved per-orientation fit above the UV bound: {bare_uv:?}"
+        );
+        assert_eq!(
+            subtracted_uv.profile_identity, bare_uv.profile_identity,
+            "subtracted and bare {name} controls must profile the same UV LMBs, subsets, and orientations",
+        );
+
+        clean_test(&subtracted.cli_settings.state.folder);
+        clean_test(&bare.cli_settings.state.folder);
+        Ok(())
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn paper_figure_b1_massless_bubble_uses_a_complete_soft_wood() -> Result<()> {
+        for (explicit_orientation_sum_only, project_local_4d) in
+            [(false, false), (true, false), (true, true)]
+        {
+            println!(
+                "explicit_orientation_sum_only={explicit_orientation_sum_only}, project_local_4d={project_local_4d}"
+            );
+            let test = std::thread::Builder::new()
+                .name("local-ir-double-triangle".to_string())
+                .stack_size(64 * 1024 * 1024)
+                .spawn(move || {
+                    run_double_triangle_soft_ir_case(
+                        "paper_figure_b1_double_triangle_soft_ir.toml",
+                        "paper_figure_b1_double_triangle_soft_ir",
+                        &[-21, 21],
+                        &[1],
+                        2,
+                        project_local_4d,
+                        explicit_orientation_sum_only,
+                    )
+                })?;
+            test.join()
+                .map_err(|_| eyre::eyre!("local IR double-triangle test thread panicked"))??;
+        }
+        Ok(())
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn paper_figure_b1_double_triangle_is_a_non_vacuous_uv_fixture() -> Result<()> {
+        for (explicit_orientation_sum_only, project_local_4d) in
+            [(false, false), (true, false), (true, true)]
+        {
+            println!(
+                "explicit_orientation_sum_only={explicit_orientation_sum_only}, project_local_4d={project_local_4d}"
+            );
+            const NAME: &str = "paper_figure_b1_double_triangle";
+            let card = "paper_figure_b1_double_triangle.toml";
+            let mut subtracted = local_ct_cli(
+                card,
+                NAME,
+                false,
+                project_local_4d,
+                explicit_orientation_sum_only,
+            )?;
+            assert_generated_local_integrand(&subtracted, NAME, NAME, 6)?;
+            assert!(
+                classified_local_spinneys(&subtracted, NAME, NAME)?
+                    .into_iter()
+                    .any(|spinney| spinney.n_components == 1),
+                "Figure-13 B.1 must expose at least one connected UV component"
+            );
+            let subtracted_uv = cli_uv_profile_pass_fail(&mut subtracted, NAME, NAME)?;
+            assert!(
+                subtracted_uv.total > 0
+                    && subtracted_uv.resolved > 0
+                    && subtracted_uv.failed == 0
+                    && (explicit_orientation_sum_only
+                        || (subtracted_uv.orientation_total > 0
+                            && subtracted_uv.orientation_resolved > 0
+                            && subtracted_uv.orientation_failed == 0)),
+                "Figure-13 B.1 must pass a non-vacuous CLI UV profile: {subtracted_uv:?}"
+            );
+
+            let mut bare = local_ct_cli(
+                card,
+                "paper_figure_b1_double_triangle_bare",
+                true,
+                project_local_4d,
+                explicit_orientation_sum_only,
+            )?;
+            let bare_uv = cli_uv_profile_pass_fail(&mut bare, NAME, NAME)?;
+            assert!(
+                bare_uv.total > 0
+                    && bare_uv.resolved > 0
+                    && bare_uv.dod_failures > 0
+                    && (explicit_orientation_sum_only
+                        || (bare_uv.orientation_total > 0
+                            && bare_uv.orientation_resolved > 0
+                            && bare_uv.orientation_dod_failures > 0)),
+                "bare Figure-13 B.1 must have a resolved per-orientation fit above the UV bound: {bare_uv:?}"
+            );
+            assert_eq!(
+                subtracted_uv.profile_identity, bare_uv.profile_identity,
+                "subtracted and bare Figure-13 B.1 controls must profile the same UV LMBs, subsets, and orientations",
+            );
+            clean_test(&subtracted.cli_settings.state.folder);
+            clean_test(&bare.cli_settings.state.folder);
+        }
+        Ok(())
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn local_nested_soft_fixture_generates() -> Result<()> {
+        for (explicit_orientation_sum_only, project_local_4d) in
+            [(false, false), (true, false), (true, true)]
+        {
+            println!(
+                "explicit_orientation_sum_only={explicit_orientation_sum_only}, project_local_4d={project_local_4d}"
+            );
+            let test = std::thread::Builder::new()
+            .name("local-nested-soft".to_string())
+            .stack_size(128 * 1024 * 1024)
+            .spawn(move || -> Result<()> {
+        let mut nested_soft = local_ct_cli(
+            "local_nested_soft_top_self_energy.toml",
+            "local_nested_soft_top_self_energy",
+            false, project_local_4d, explicit_orientation_sum_only)?;
+        assert_eq!(
+            nested_soft.cli_settings.global.generation.uv.orchestrator,
+            UVOrchestrator::HedgePoset
+        );
+        assert_generated_local_integrand(
+            &nested_soft,
+            "local_nested_soft_top_self_energy",
+            "local_nested_soft_top_self_energy",
+            6,
+        )?;
+        assert_selected_local_identifier(
+            &nested_soft,
+            "local_nested_soft_top_self_energy",
+            "local_nested_soft_top_self_energy",
+            ApproximationType::IR,
+            [-6, 6],
+            [6, 21],
+            2,
+        )?;
+        let classified = classified_local_spinneys(
+            &nested_soft,
+            "local_nested_soft_top_self_energy",
+            "local_nested_soft_top_self_energy",
+        )?;
+        let connected = classified
+            .iter()
+            .filter(|spinney| spinney.n_components == 1)
+            .collect::<Vec<_>>();
+        let inert = classified
+            .iter()
+            .filter(|spinney| spinney.n_components == 0)
+            .collect::<Vec<_>>();
+        assert!(
+            connected.len() == 2
+                && classified.len() == connected.len() + inert.len()
+                && inert.iter().all(|component| {
+                    component.edge_ids.is_empty()
+                        && component.scheme == ApproximationType::MUV
+                        && component.dod == 0
+                })
+                && connected.iter().all(|component| {
+                    component.scheme == ApproximationType::IR && component.dod == 1
+                })
+                && connected
+                    .iter()
+                    .any(|component| component.edge_ids == [3, 4])
+                && connected
+                    .iter()
+                    .any(|component| component.edge_ids == [2, 3, 4, 5, 6]),
+            "apart from its inert empty root, the nested-soft fixture must contain exactly its d=1 H child and d=1 H parent: {classified:?}",
+        );
+        let process_id = nested_soft
+            .state
+            .resolve_process_ref(Some(&ProcessRef::Unqualified(
+                "local_nested_soft_top_self_energy".to_string(),
+            )))?;
+        let structural_forest = nested_soft.state.process_list.processes[process_id].export_uv_forest_graph(
+"local_nested_soft_top_self_energy",
+0,
+            &gammalooprs::uv::export::UVForestExportSettings { computed: false },
+        )?;
+        assert!(
+            structural_forest.node_terms.is_empty(),
+            "a structure-only nested H/H export must not construct local atoms",
+        );
+        assert_eq!(
+            structural_forest.forest_dot.matches("foata=").count(),
+            4,
+            "the nested H/H forest must contain exactly the root, two singleton operations, and their child-to-parent chain",
+        );
+        let subtracted_uv = cli_uv_profile_pass_fail(
+            &mut nested_soft,
+            "local_nested_soft_top_self_energy",
+            "local_nested_soft_top_self_energy",
+        )?;
+        assert!(
+subtracted_uv.total > 0 && subtracted_uv.resolved > 0 && subtracted_uv.failed == 0
+ && (explicit_orientation_sum_only || (subtracted_uv.orientation_total > 0 && subtracted_uv.orientation_resolved > 0 && subtracted_uv.orientation_failed == 0)),
+            "nested soft fixture must pass a non-vacuous CLI UV profile: {subtracted_uv:?}"
+        );
+
+        let mut bare = local_ct_cli(
+            "local_nested_soft_top_self_energy.toml",
+            "local_nested_soft_top_self_energy_bare",
+            true, project_local_4d, explicit_orientation_sum_only)?;
+        let bare_uv = cli_uv_profile_pass_fail(
+            &mut bare,
+            "local_nested_soft_top_self_energy",
+            "local_nested_soft_top_self_energy",
+        )?;
+        assert!(
+bare_uv.total > 0 && bare_uv.resolved > 0 && bare_uv.dod_failures > 0
+ && (explicit_orientation_sum_only || (bare_uv.orientation_total > 0 && bare_uv.orientation_resolved > 0 && bare_uv.orientation_dod_failures > 0)),
+            "bare nested fixture must have a resolved per-orientation fit above the UV bound: {bare_uv:?}"
+        );
+        assert_eq!(
+            subtracted_uv.profile_identity, bare_uv.profile_identity,
+            "subtracted and bare nested-soft controls must profile the same UV LMBs, subsets, and orientations",
+        );
+        clean_test(&nested_soft.cli_settings.state.folder);
+        clean_test(&bare.cli_settings.state.folder);
+        Ok(())
+            })?;
+            test.join()
+                .map_err(|_| eyre::eyre!("local nested soft test thread panicked"))??;
+        }
+        Ok(())
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn paper_appendix_b1_ir_specialization_generates_and_profiles() -> Result<()> {
+        for (explicit_orientation_sum_only, project_local_4d) in
+            [(false, false), (true, false), (true, true)]
+        {
+            println!(
+                "explicit_orientation_sum_only={explicit_orientation_sum_only}, project_local_4d={project_local_4d}"
+            );
+            let test = std::thread::Builder::new()
+            .name("paper-appendix-b1-soft-ir".to_string())
+            .stack_size(128 * 1024 * 1024)
+            .spawn(move || -> Result<()> {
+                const NAME: &str = "paper_appendix_b1_nested_gluon_self_energy";
+                let card = "paper_appendix_b1_nested_gluon_self_energy_ir.toml";
+                let mut subtracted = local_ct_cli(card, NAME, false, project_local_4d, explicit_orientation_sum_only)?;
+        assert_generated_local_integrand(&subtracted, NAME, "soft_ir", 6)?;
+        let expected = CTIdentifier::new(
+            [-21, 21].into_iter().collect(),
+            Some([6, 21].into_iter().collect()),
+        );
+        let appendix_components = classified_local_spinneys(&subtracted, NAME, "soft_ir")?;
+        let connected_components = appendix_components
+            .iter()
+            .filter(|spinney| spinney.n_components == 1)
+            .collect::<Vec<_>>();
+        let outer_soft_components = connected_components
+            .iter()
+            .copied()
+            .filter(|spinney| {
+                spinney.scheme == ApproximationType::IR
+                    && spinney.identifier == expected
+            })
+            .collect::<Vec<_>>();
+                assert!(
+                    connected_components.len() == 3
+                        && outer_soft_components.len() == 1
+                        && outer_soft_components[0].edge_ids == [2, 3, 4, 5, 6]
+                        && outer_soft_components[0].dod == 2
+                        && connected_components.iter().any(|component| {
+                            component.edge_ids == [3, 4]
+                                && component.scheme == ApproximationType::MUV
+                                && component.dod == 1
+                        })
+                        && connected_components.iter().any(|component| {
+                            component.edge_ids == [2, 3, 5, 6]
+                                && component.scheme == ApproximationType::MUV
+                                && component.dod == 0
+                        }),
+                    "Appendix-B.1 must contain exactly gamma_1=U_1, gamma_2=U_0, and the outer H_2 component: {appendix_components:?}"
+                );
+
+                // Keep the two nested forest pairs independently observable. With the
+                // outer component switched off, this is F_empty + F_child =
+                // (1-U_child)I. It must already improve every child-hard ray; adding
+                // the outer pair must not reintroduce that subdivergence.
+                let mut child_only = get_test_cli(
+                    Some(card.into()),
+                    get_tests_workspace_path().join(format!("paper_appendix_b1_child_only_explicit_{explicit_orientation_sum_only}_project_local_4d_{project_local_4d}")),
+                    Some(format!("paper_appendix_b1_child_only_explicit_{explicit_orientation_sum_only}_project_local_4d_{project_local_4d}")),
+                    true,
+                )?;
+            let generation = &mut child_only.cli_settings.global.generation;
+            generation.explicit_orientation_sum_only = explicit_orientation_sum_only;
+            generation.uv.final_integrand = FinalIntegrandDimension::ThreeD;
+            generation.uv.local_uv_cts_from_expanded_4d_integrands = project_local_4d;
+                let outer_rule = child_only
+                    .cli_settings
+                    .global
+                    .generation
+                    .uv
+                    .renormalization_prescription
+                    .overrides
+                    .iter_mut()
+                    .find(|rule| rule.ct_identifier == expected)
+                    .ok_or_else(|| {
+                        eyre::eyre!("Appendix-B.1 child-only control has no outer CT rule")
+                    })?;
+                assert_eq!(outer_rule.prescription, ApproximationType::IR);
+                outer_rule.prescription = ApproximationType::Unsubtracted;
+                let gamma_two = CTIdentifier::new(
+                    [-21, 21].into_iter().collect(),
+                    Some([6].into_iter().collect()),
+                );
+                child_only
+                    .cli_settings
+                    .global
+                    .generation
+                    .uv
+                    .renormalization_prescription
+                    .overrides
+                    .push(CTRenormalizationRule::new(
+                        gamma_two,
+                        ApproximationType::Unsubtracted,
+                    ));
+                child_only.run_command("run generate")?;
+                let child_only_components = classified_local_spinneys(
+                    &child_only,
+                    NAME,
+                    "soft_ir",
+                )?
+                .into_iter()
+                .filter(|spinney| spinney.n_components == 1)
+                .map(|spinney| (spinney.edge_ids, spinney.dod, spinney.scheme))
+                .collect::<Vec<_>>();
+                assert_eq!(
+                    child_only_components,
+                    vec![(vec![3, 4], 1, ApproximationType::MUV)],
+                    "the Appendix-B.1 child-only control must retain exactly the ordinary d=1 gamma_1 component",
+                );
+                assert_matched_local_routes(&subtracted, &child_only, NAME, "soft_ir")?;
+                let child_only_uv =
+                    cli_uv_profile_pass_fail(&mut child_only, NAME, "soft_ir")?;
+                assert!(
+child_only_uv.total > 0 && child_only_uv.resolved > 0
+ && (explicit_orientation_sum_only || (child_only_uv.orientation_total > 0 && child_only_uv.orientation_resolved > 0)),
+                    "Appendix-B.1 child-only control produced no resolved summed and per-orientation UV limits: {child_only_uv:?}"
+                );
+                let child_only_report: Value = serde_json::from_str(&fs::read_to_string(
+                    child_only
+                        .cli_settings
+                        .state
+                        .folder
+                        .join("local_ct_uv_profile/uv_profile.json"),
+                )?)?;
+                let child_hard_rays = child_only_report["graphs"]
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .flat_map(|graph| graph["lmbs"].as_array().into_iter().flatten())
+                    .flat_map(|lmb| lmb["subsets"].as_array().into_iter().flatten())
+                    .filter(|subset| subset["initial_dod"] == 1)
+                    .map(|subset| {
+                        let edges = |field: &str| {
+                            subset[field]
+                                .as_array()
+                                .ok_or_else(|| {
+                                    eyre::eyre!(
+                                        "Appendix-B.1 child-hard control has no {field} edge list: {subset}"
+                                    )
+                                })?
+                                .iter()
+                                .map(|edge| {
+                                    edge.as_u64().map(|edge| edge as usize).ok_or_else(|| {
+                                        eyre::eyre!(
+                                            "Appendix-B.1 child-hard control has a malformed {field} edge: {subset}"
+                                        )
+                                    })
+                                })
+                                .collect::<Result<Vec<_>>>()
+                        };
+                        let slope = subset["analysis"]["inspect_level"]["result"]["slope"]
+                            .as_f64()
+                            .ok_or_else(|| {
+                                eyre::eyre!(
+                                    "Appendix-B.1 child-hard control has no finite slope: {subset}"
+                                )
+                            })?;
+                        Ok((edges("free")?, edges("fixed")?, slope))
+                    })
+                    .collect::<Result<Vec<_>>>()?;
+                let observed_child_hard_pairs = child_hard_rays
+                    .iter()
+                    .map(|(free, fixed, _)| (free.clone(), fixed.clone()))
+                    .collect::<BTreeSet<_>>();
+                let expected_child_hard_pairs = [3, 4]
+                    .into_iter()
+                    .flat_map(|free| {
+                        [2, 5, 6]
+                            .into_iter()
+                            .map(move |fixed| (vec![free], vec![fixed]))
+                    })
+                    .collect::<BTreeSet<_>>();
+                assert_eq!(
+                    child_hard_rays.len(),
+                    expected_child_hard_pairs.len(),
+                    "the Appendix-B.1 child-only profile must contain exactly six d=1 rays: {child_hard_rays:?}",
+                );
+                assert_eq!(
+                    observed_child_hard_pairs, expected_child_hard_pairs,
+                    "the Appendix-B.1 d=1 selector must resolve exactly the six gamma_1-hard rays with free e3/e4 and fixed outer representative e2/e5/e6",
+                );
+                assert!(
+                    child_hard_rays
+                        .iter()
+                        .all(|(_, _, slope)| *slope < -0.9),
+                    "the isolated (1-U_child) Appendix-B.1 forest pair did not remove its child subdivergence: {child_hard_rays:?}"
+                );
+
+                let process_id = subtracted
+            .state
+            .resolve_process_ref(Some(&ProcessRef::Unqualified(NAME.to_string())))?;
+        let structural_forest = subtracted.state.process_list.processes[process_id].export_uv_forest_graph(
+"soft_ir",
+0,
+            &gammalooprs::uv::export::UVForestExportSettings { computed: false },
+        )?;
+        assert!(
+            structural_forest.node_terms.is_empty(),
+            "a structure-only Appendix-B.1 export must not construct local atoms",
+        );
+        assert_eq!(
+            structural_forest.forest_dot.matches("foata=").count(),
+            6,
+            "Appendix-B.1 must contain the root, three singleton operations, and the two allowed child-to-outer chains",
+        );
+
+        let computed_forest = subtracted.state.process_list.processes[process_id].export_uv_forest_graph(
+"soft_ir",
+0,
+            &gammalooprs::uv::export::UVForestExportSettings { computed: true },
+        )?;
+        assert_unique_uv_forest_term_identities(
+            &computed_forest,
+            "Appendix-B.1 direct-3D forest",
+        );
+        let exported_nodes = computed_forest
+            .node_terms
+            .iter()
+            .map(|term| (term.forest_index, term.node_key.clone()))
+            .collect::<BTreeSet<_>>();
+        assert_eq!(
+            exported_nodes.len(),
+            6,
+            "the computed Appendix-B.1 forest must retain every structural node"
+        );
+        let mut saw_nested_path = false;
+        let mut positive_degree_ir_steps = 0;
+        for term in &computed_forest.node_terms {
+            let provenance = term
+                .forest_provenance()?
+                .ok_or_else(|| {
+                    eyre::eyre!(
+                        "Appendix-B.1 computed term {} has no direct-3D provenance",
+                        term.file_name()
+                    )
+                })?;
+            let node = &provenance["node"];
+            assert!(
+                node.get("components").is_none()
+                    && node.get("local_4d_branches").is_none(),
+                "Appendix-B.1 direct-3D provenance must not expose legacy 4D fields: {node}"
+            );
+            let parent_keys = node["parent_keys"].as_array().unwrap_or_else(|| {
+                panic!("Appendix-B.1 term has malformed parent provenance: {node}")
+            });
+            if term.node_key == "∅" {
+                assert!(parent_keys.is_empty());
+            } else {
+                assert!(
+                    !parent_keys.is_empty(),
+                    "Appendix-B.1 non-root node {} has no forest parent",
+                    term.node_key
+                );
+            }
+            for parent_key in parent_keys {
+                let parent_key = parent_key.as_str().unwrap_or_else(|| {
+                    panic!("Appendix-B.1 has a non-string parent key: {node}")
+                });
+                assert!(
+                    exported_nodes.contains(&(term.forest_index, parent_key.to_string())),
+                    "Appendix-B.1 node {} refers to missing parent {parent_key:?}",
+                    term.node_key
+                );
+            }
+
+            let local = &node["local"];
+            assert_eq!(
+                local["representation"], "3d",
+                "Appendix-B.1 computed CFF terms require native direct-3D provenance"
+            );
+            assert!(
+                local.get("components").is_none()
+                    && local.get("branches").is_none()
+                    && local.get("local_4d_branches").is_none(),
+                "Appendix-B.1 direct-3D payload must not force a 4D branch construction: {local}"
+            );
+            // Only direct 3D replays record projection paths. Node identities
+            // and physical profiles remain checked in both routes.
+            if !project_local_4d {
+                let paths = local["projection_paths"].as_array().unwrap_or_else(|| {
+                    panic!("Appendix-B.1 term has malformed direct-3D paths: {local}")
+                });
+                if term.node_key == "∅" {
+                    assert!(
+                        paths.is_empty(),
+                        "the unprojected Appendix-B.1 root must have no projection history: {paths:?}"
+                    );
+                } else {
+                    assert!(
+                        !paths.is_empty(),
+                        "Appendix-B.1 non-root node {} must retain its projection paths",
+                        term.node_key
+                    );
+                    assert!(
+                        paths.iter().all(|path| path["steps"]
+                            .as_array()
+                            .is_some_and(|steps| !steps.is_empty())),
+                        "each Appendix-B.1 non-root direct-3D path must contain an actual projection: {paths:?}"
+                    );
+                }
+
+                for path in paths {
+                    let steps = path["steps"].as_array().unwrap_or_else(|| {
+                        panic!("Appendix-B.1 has a malformed projection path: {path}")
+                    });
+                    if steps.len() > 1 {
+                        saw_nested_path = true;
+                        assert!(
+                            steps.windows(2).all(|pair| {
+                                let child = pair[0]["topo_order"].as_u64().unwrap_or_else(|| {
+                                    panic!("Appendix-B.1 child step has no topology order: {}", pair[0])
+                                });
+                                let parent = pair[1]["topo_order"].as_u64().unwrap_or_else(|| {
+                                    panic!("Appendix-B.1 parent step has no topology order: {}", pair[1])
+                                });
+                                child < parent
+                            }),
+                            "Appendix-B.1 nested projection paths must be ordered child-to-parent: {path}"
+                        );
+                    }
+                    for step in steps {
+                        assert!(
+                            step["current_component"].is_string()
+                                && step["given_component"].is_string()
+                                && step["active_subgraph"].is_string()
+                                && step["rescaled_subgraph"].is_string()
+                                && step["canonical_route_loop_edges"]
+                                    .as_array()
+                                    .is_some_and(|edges| !edges.is_empty())
+                                && step["canonical_route_external_edges"].is_array()
+                                && step["canonical_route_signatures"]
+                                    .as_array()
+                                    .is_some_and(|signatures| !signatures.is_empty())
+                                && step["route_loop_edges"]
+                                    .as_array()
+                                    .is_some_and(|edges| !edges.is_empty())
+                                && step["route_external_edges"].is_array()
+                                && step["route_signatures"]
+                                    .as_array()
+                                    .is_some_and(|signatures| !signatures.is_empty()),
+                            "Appendix-B.1 projection is missing its canonical or actual local LMB: {step}"
+                        );
+                        if step["scheme"] == "IR"
+                            && step["dod"].as_i64().is_some_and(|dod| dod > 0)
+                        {
+                            positive_degree_ir_steps += 1;
+                            let branches = step["conceptual_branches"]
+                                .as_array()
+                                .unwrap_or_else(|| {
+                                    panic!("Appendix-B.1 IR step has malformed branches: {step}")
+                                })
+                                .iter()
+                                .map(|branch| {
+                                    (
+                                        branch["branch"].as_str().unwrap_or_else(|| {
+                                            panic!("Appendix-B.1 IR branch has no name: {branch}")
+                                        }),
+                                        branch["coefficient"].as_i64().unwrap_or_else(|| {
+                                            panic!("Appendix-B.1 IR branch has no sign: {branch}")
+                                        }),
+                                    )
+                                })
+                                .collect::<Vec<_>>();
+                            assert_eq!(step["dod"].as_i64(), Some(2));
+                            assert_eq!(step["materialization"], "factorized_soft");
+                            assert_eq!(branches, vec![("U", 1), ("S", 1), ("US", -1)]);
+                        }
+                    }
+                }
+            }
+        }
+        if !project_local_4d {
+            assert!(
+                saw_nested_path,
+                "Appendix-B.1 computed forest must expose a nested child-to-parent projection path"
+            );
+            assert!(
+                positive_degree_ir_steps > 0,
+                "Appendix-B.1 computed forest must expose its outer factorized H_2 projection"
+            );
+
+        }
+
+        let subtracted_uv = cli_uv_profile_pass_fail(&mut subtracted, NAME, "soft_ir")?;
+        assert!(
+subtracted_uv.total > 0 && subtracted_uv.resolved > 0 && subtracted_uv.failed == 0
+ && (explicit_orientation_sum_only || (subtracted_uv.orientation_total > 0 && subtracted_uv.orientation_resolved > 0 && subtracted_uv.orientation_failed == 0)),
+            "the Appendix-B.1 IR specialization must pass a non-vacuous CLI UV profile: {subtracted_uv:?}"
+        );
+        assert_eq!(
+            subtracted_uv.profile_identity, child_only_uv.profile_identity,
+            "the complete and child-only Appendix-B.1 forests must profile the same UV LMBs, subsets, and orientations",
+        );
+
+        let mut bare = local_ct_cli(card, "paper_appendix_b1_bare", true, project_local_4d, explicit_orientation_sum_only)?;
+        let bare_uv = cli_uv_profile_pass_fail(&mut bare, NAME, "soft_ir")?;
+        assert!(
+bare_uv.total > 0 && bare_uv.resolved > 0 && bare_uv.dod_failures > 0
+ && (explicit_orientation_sum_only || (bare_uv.orientation_total > 0 && bare_uv.orientation_resolved > 0 && bare_uv.orientation_dod_failures > 0)),
+            "the bare Appendix-B.1 topology must have a resolved per-orientation fit above the UV bound: {bare_uv:?}"
+        );
+        assert_eq!(
+            subtracted_uv.profile_identity, bare_uv.profile_identity,
+            "subtracted and bare Appendix-B.1 controls must profile the same UV LMBs, subsets, and orientations",
+        );
+        clean_test(&subtracted.cli_settings.state.folder);
+        clean_test(&child_only.cli_settings.state.folder);
+        clean_test(&bare.cli_settings.state.folder);
+        Ok(())
+    })?;
+            test.join()
+                .map_err(|_| eyre::eyre!("Appendix-B.1 soft-IR test thread panicked"))??;
+        }
+        Ok(())
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn gamma_star_ddbar_top_bubble_child_only_has_two_power_soft_improvement() -> Result<()> {
+        for (explicit_orientation_sum_only, project_local_4d) in
+            [(false, false), (true, false), (true, true)]
+        {
+            println!(
+                "explicit_orientation_sum_only={explicit_orientation_sum_only}, project_local_4d={project_local_4d}"
+            );
+            let test = std::thread::Builder::new()
+            .name("gamma-star-ddbar-top-bubble-child-only".to_string())
+            .stack_size(128 * 1024 * 1024)
+            .spawn(move || -> Result<()> {
+                const PROCESS: &str = "gamma_star_ddbar_top_bubble";
+                let mut child_uv = local_ct_cli(
+                    "gamma_star_ddbar_top_bubble_child_uv_only.toml",
+                    "gamma_star_ddbar_top_bubble_child_uv_only",
+                    false, project_local_4d, explicit_orientation_sum_only)?;
+                let mut child_h = local_ct_cli(
+                    "gamma_star_ddbar_top_bubble_child_soft_ir.toml",
+                    "gamma_star_ddbar_top_bubble_child_soft_ir",
+                    false, project_local_4d, explicit_orientation_sum_only)?;
+                let expected = CTIdentifier::new(
+                    [-21, 21].into_iter().collect(),
+                    Some([6].into_iter().collect()),
+                );
+
+                for (cli, integrand, scheme) in [
+                    (&child_uv, "child_uv_only", ApproximationType::MUV),
+                    (&child_h, "child_soft_ir", ApproximationType::IR),
+                ] {
+                    assert_generated_local_integrand(cli, PROCESS, integrand, 6)?;
+                    let classified = classified_local_spinneys(cli, PROCESS, integrand)?;
+                    let selected = classified
+                        .iter()
+                        .filter(|spinney| spinney.n_components == 1)
+                        .collect::<Vec<_>>();
+                    assert!(
+                        selected.len() == 1
+                            && selected[0].scheme == scheme
+                            && selected[0].dod == 2
+                            && selected[0].edge_ids == [7, 8]
+                            && selected[0].identifier == expected
+                            && classified.iter().all(|spinney| {
+                                spinney.n_components == 0 || std::ptr::eq(spinney, selected[0])
+                            }),
+                        "{integrand} must select exactly the massive-top child and no overall vertex counterterm: {classified:?}",
+                    );
+                }
+
+                let uv_fit = cli_soft_profile_fit(&mut child_uv, PROCESS, "child_uv_only")?;
+                let h_fit = cli_soft_profile_fit(&mut child_h, PROCESS, "child_soft_ir")?;
+                assert_eq!(
+                    uv_fit.ray_fingerprint, h_fit.ray_fingerprint,
+                    "child-only U and H controls must evaluate the identical routed soft ray",
+                );
+                assert!(
+                    uv_fit.r_squared >= 0.98 && h_fit.r_squared >= 0.98,
+                    "child-only q_g fits must be resolved: U={uv_fit:?}, H={h_fit:?}",
+                );
+                assert!(
+                    uv_fit.scaling < -1.0,
+                    "the ordinary child counterterm must retain the spurious q_g enhancement: U={}",
+                    uv_fit.scaling,
+                );
+                assert!(
+                    h_fit.scaling > -0.5,
+                    "the completed child H counterterm must restore marginal soft scaling: H={}",
+                    h_fit.scaling,
+                );
+                assert!(
+                    h_fit.scaling - uv_fit.scaling >= 1.5,
+                    "the completed child H counterterm must improve the matched q_g ray by two powers: U={}, H={}",
+                    uv_fit.scaling,
+                    h_fit.scaling,
+                );
+
+                if !explicit_orientation_sum_only {
+                let uv_orientations = cli_soft_profile_orientation_fits(
+                    &mut child_uv,
+                    PROCESS,
+                    "child_uv_only",
+                )?;
+                let h_orientations = cli_soft_profile_orientation_fits(
+                    &mut child_h,
+                    PROCESS,
+                    "child_soft_ir",
+                )?;
+                assert_eq!(
+                    uv_orientations.keys().collect::<Vec<_>>(),
+                    h_orientations.keys().collect::<Vec<_>>(),
+                    "U and H must profile the same orientation labels",
+                );
+                assert_eq!(
+                    h_orientations.len(),
+                    30,
+                    "the top-bubble fixture must retain all 30 acyclic orientations",
+                );
+                let mut divergent_u_orientations = 0;
+                for (orientation, h_orientation) in &h_orientations {
+                    let u_orientation = &uv_orientations[orientation];
+                    assert_eq!(
+                        h_orientation.ray_fingerprint, u_orientation.ray_fingerprint,
+                        "orientation {orientation} used different U/H soft rays",
+                    );
+                    assert!(
+                        h_orientation.scaling > -0.5,
+                        "orientation {orientation} retains a soft enhancement after H: {h_orientation:?}",
+                    );
+                    if u_orientation.scaling < -1.0 {
+                        divergent_u_orientations += 1;
+                        assert!(
+                            u_orientation.r_squared >= 0.98
+                                && h_orientation.r_squared >= 0.98
+                                && h_orientation.scaling - u_orientation.scaling >= 1.5,
+                            "orientation {orientation} does not exhibit the resolved two-power U-to-H improvement: U={u_orientation:?}, H={h_orientation:?}",
+                        );
+                    }
+                }
+                assert_eq!(
+                    divergent_u_orientations, 8,
+                    "the matched U control must expose the eight orientation-local soft failures",
+                );
+
+                }
+                clean_test(&child_uv.cli_settings.state.folder);
+                clean_test(&child_h.cli_settings.state.folder);
+                Ok(())
+            })?;
+            test.join()
+                .map_err(|_| eyre::eyre!("top-bubble child-only profile thread panicked"))??;
+        }
+        Ok(())
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn gamma_star_ddbar_top_bubble_has_two_power_soft_improvement() -> Result<()> {
+        for (explicit_orientation_sum_only, project_local_4d) in
+            [(false, false), (true, false), (true, true)]
+        {
+            println!(
+                "explicit_orientation_sum_only={explicit_orientation_sum_only}, project_local_4d={project_local_4d}"
+            );
+            let test = std::thread::Builder::new()
+            .name("gamma-star-ddbar-top-bubble".to_string())
+            .stack_size(128 * 1024 * 1024)
+            .spawn(move || -> Result<()> {
+                const PROCESS: &str = "gamma_star_ddbar_top_bubble";
+
+                let mut bare = local_ct_cli(
+                    "gamma_star_ddbar_top_bubble_bare.toml",
+                    "gamma_star_ddbar_top_bubble_bare",
+                    false, project_local_4d, explicit_orientation_sum_only)?;
+                let mut uv_only = local_ct_cli(
+                    "gamma_star_ddbar_top_bubble_uv_only.toml",
+                    "gamma_star_ddbar_top_bubble_uv_only",
+                    false, project_local_4d, explicit_orientation_sum_only)?;
+                let mut soft_ir = local_ct_cli(
+                    "gamma_star_ddbar_top_bubble_soft_ir.toml",
+                    "gamma_star_ddbar_top_bubble_soft_ir",
+                    false, project_local_4d, explicit_orientation_sum_only)?;
+
+                for (cli, integrand) in [
+                    (&bare, "bare"),
+                    (&uv_only, "uv_only"),
+                    (&soft_ir, "soft_ir"),
+                ] {
+                    assert_generated_local_integrand(cli, PROCESS, integrand, 6)?;
+                    assert_eq!(
+                        cli.default_runtime_settings.kinematics.e_cm, 300.0,
+                        "{integrand} must use Q=300 GeV",
+                    );
+                    for (parameter, expected_value) in [("MT", 173.0), ("WT", 0.0)] {
+                        let value = cli
+                            .state
+                            .model
+                            .get_parameter(parameter)
+                            .value
+                            .as_ref()
+                            .ok_or_else(|| {
+                                eyre::eyre!(
+                                    "{integrand} has no resolved model parameter {parameter}"
+                                )
+                            })?;
+                        assert_eq!(
+                            (value.re.0, value.im.0),
+                            (expected_value, 0.0),
+                            "{integrand} must use {parameter}={expected_value}",
+                        );
+                    }
+                    let process_id = cli.state.resolve_process_ref(Some(
+                        &ProcessRef::Unqualified(PROCESS.to_string()),
+                    ))?;
+                    let ProcessCollection::Amplitudes(amplitudes) =
+                        &cli.state.process_list.processes[process_id].collection
+                    else {
+                        return Err(eyre::eyre!("top-bubble fixture must be an amplitude"));
+                    };
+                    let color_closure = amplitudes
+                        .get(integrand)
+                        .ok_or_else(|| eyre::eyre!("missing integrand {integrand}"))?
+                        .graphs[0]
+                        .graph
+                        .global_prefactor
+                        .num
+                        .to_canonical_string();
+                    assert!(
+                        color_closure.contains("1/3")
+                            && color_closure.contains("cof(3")
+                            && color_closure.contains("dind"),
+                        "{integrand} did not import the explicit delta_i^j/N_c color closure: {color_closure}",
+                    );
+                }
+                let fixture_source = include_str!(
+                    "../resources/graphs/gamma_star_ddbar_top_bubble.dot"
+                );
+                assert!(
+                    fixture_source.contains(
+                        "num = \"1/3*spenso::g(spenso::dind(spenso::cof(3,gammalooprs::hedge(0))),spenso::cof(3,gammalooprs::hedge(1)))\""
+                    ),
+                    "the top-bubble fixture must close the external fundamental string with delta_i^j/N_c",
+                );
+                let canonical_route = |cli: &CLIState,
+                                       integrand_name: &str|
+                 -> Result<gammalooprs::graph::LoopMomentumBasis> {
+                    let process_id = cli.state.resolve_process_ref(Some(
+                        &ProcessRef::Unqualified(PROCESS.to_string()),
+                    ))?;
+                    let ProcessCollection::Amplitudes(amplitudes) =
+                        &cli.state.process_list.processes[process_id].collection
+                    else {
+                        return Err(eyre::eyre!("top-bubble fixture must be an amplitude"));
+                    };
+                    Ok(amplitudes
+                        .get(integrand_name)
+                        .ok_or_else(|| eyre::eyre!("missing integrand {integrand_name}"))?
+                        .graphs[0]
+                        .graph
+                        .loop_momentum_basis
+                        .clone())
+                };
+                let bare_route = canonical_route(&bare, "bare")?;
+                assert_eq!(
+                    bare_route
+                        .loop_edges
+                        .iter()
+                        .copied()
+                        .map(usize::from)
+                        .collect::<Vec<_>>(),
+                    vec![6, 8],
+                    "the canonical route must use q_g=e6 and the top-loop momentum e8"
+                );
+                assert_eq!(
+                    bare_route,
+                    canonical_route(&uv_only, "uv_only")?,
+                    "bare and ordinary-U variants must use the same canonical route"
+                );
+                assert_eq!(
+                    bare_route,
+                    canonical_route(&soft_ir, "soft_ir")?,
+                    "bare and soft-refined variants must use the same canonical route"
+                );
+                let expected = CTIdentifier::new(
+                    [-21, 21].into_iter().collect(),
+                    Some([6].into_iter().collect()),
+                );
+                let bare_classified = classified_local_spinneys(&bare, PROCESS, "bare")?;
+                assert!(
+                    bare_classified.iter().all(|component| {
+                        component.n_components == 0
+                            && component.edge_ids.is_empty()
+                            && component.scheme == ApproximationType::MUV
+                            && component.dod == 0
+                    }),
+                    "the top-bubble bare control must contain no local counterterm components: {bare_classified:?}",
+                );
+                let uv_only_classified =
+                    classified_local_spinneys(&uv_only, PROCESS, "uv_only")?;
+                let uv_only_components = uv_only_classified
+                    .iter()
+                    .filter(|spinney| spinney.n_components == 1)
+                    .collect::<Vec<_>>();
+                let uv_only_inert = uv_only_classified
+                    .iter()
+                    .filter(|spinney| spinney.n_components == 0)
+                    .collect::<Vec<_>>();
+                assert!(
+                    uv_only_components.len() == 2
+                        && uv_only_classified.len()
+                            == uv_only_components.len() + uv_only_inert.len()
+                        && uv_only_inert.iter().all(|component| {
+                            component.edge_ids.is_empty()
+                                && component.scheme == ApproximationType::MUV
+                                && component.dod == 0
+                        })
+                        && uv_only_components
+                            .iter()
+                            .all(|component| component.scheme == ApproximationType::MUV)
+                        && uv_only_components.iter().any(|component| {
+                            component.edge_ids == [7, 8]
+                                && component.dod == 2
+                                && component.identifier == expected
+                        })
+                        && uv_only_components.iter().any(|component| {
+                            component.edge_ids == [3, 4, 5, 6, 7, 8]
+                                && component.dod == 0
+                        }),
+                    "uv_only must contain exactly the ordinary-U top bubble and logarithmic overall vertex: {uv_only_components:?}",
+                );
+                let classified = classified_local_spinneys(&soft_ir, PROCESS, "soft_ir")?;
+                let soft_components = classified
+                    .iter()
+                    .filter(|spinney| {
+                        spinney.n_components == 1 && spinney.scheme == ApproximationType::IR
+                    })
+                    .collect::<Vec<_>>();
+                let soft_inert = classified
+                    .iter()
+                    .filter(|spinney| spinney.n_components == 0)
+                    .collect::<Vec<_>>();
+                assert!(
+                    soft_components.len() == 1
+                        && soft_components[0].identifier == expected
+                        && soft_components[0].edge_ids == [7, 8]
+                        && soft_components[0].dod == 2,
+                    "soft_ir must select exactly the degree-2 massive-top gluon self-energy: {soft_components:?}"
+                );
+                let child_edges = &soft_components[0].edge_ids;
+                let containing_muv = classified
+                    .iter()
+                    .filter(|spinney| {
+                        spinney.n_components == 1
+                            && spinney.scheme == ApproximationType::MUV
+                            && spinney.edge_ids.len() > child_edges.len()
+                            && child_edges
+                                .iter()
+                                .all(|edge| spinney.edge_ids.contains(edge))
+                    })
+                    .collect::<Vec<_>>();
+                assert!(
+                    containing_muv.len() == 1
+                        && containing_muv[0].dod == 0
+                        && containing_muv[0].edge_ids == [3, 4, 5, 6, 7, 8]
+                        && classified.len()
+                            == soft_components.len() + containing_muv.len() + soft_inert.len()
+                        && soft_inert.iter().all(|component| {
+                            component.edge_ids.is_empty()
+                                && component.scheme == ApproximationType::MUV
+                                && component.dod == 0
+                        }),
+                    "the top-bubble IR child must be strictly nested in a logarithmic ordinary-U vertex component: child={:?}, containing={containing_muv:?}",
+                    soft_components[0]
+                );
+
+                let process_id = soft_ir
+                    .state
+                    .resolve_process_ref(Some(&ProcessRef::Unqualified(PROCESS.to_string())))?;
+                let structural_forest = soft_ir.state.process_list.processes[process_id].export_uv_forest_graph(
+"soft_ir",
+0,
+                    &gammalooprs::uv::export::UVForestExportSettings { computed: false },
+                )?;
+                assert!(
+                    structural_forest.node_terms.is_empty(),
+                    "a structure-only top-bubble export must not construct local atoms",
+                );
+                assert_eq!(
+                    structural_forest.forest_dot.matches("foata=").count(),
+                    4,
+                    "the top-bubble forest must contain exactly the root, H_2 child, U_0 parent, and child-to-parent chain",
+                );
+
+                let bare_uv = cli_uv_profile_pass_fail(&mut bare, PROCESS, "bare")?;
+                assert!(
+bare_uv.total > 0 && bare_uv.resolved > 0 && bare_uv.dod_failures > 0
+ && (explicit_orientation_sum_only || (bare_uv.orientation_total > 0 && bare_uv.orientation_resolved > 0 && bare_uv.orientation_dod_failures > 0)),
+                    "bare top-bubble vertex must have a resolved per-orientation fit above the UV bound: {bare_uv:?}"
+                );
+                let uv_only_uv = cli_uv_profile_pass_fail(&mut uv_only, PROCESS, "uv_only")?;
+                assert!(
+uv_only_uv.total > 0 && uv_only_uv.resolved > 0 && uv_only_uv.failed == 0
+ && (explicit_orientation_sum_only || (uv_only_uv.orientation_total > 0 && uv_only_uv.orientation_resolved > 0 && uv_only_uv.orientation_failed == 0)),
+                    "uv_only must pass a non-vacuous CLI UV profile: {uv_only_uv:?}"
+                );
+                let soft_ir_uv = cli_uv_profile_pass_fail(&mut soft_ir, PROCESS, "soft_ir")?;
+                assert!(
+soft_ir_uv.total > 0 && soft_ir_uv.resolved > 0 && soft_ir_uv.failed == 0
+ && (explicit_orientation_sum_only || (soft_ir_uv.orientation_total > 0 && soft_ir_uv.orientation_resolved > 0 && soft_ir_uv.orientation_failed == 0)),
+                    "soft_ir must pass a non-vacuous CLI UV profile: {soft_ir_uv:?}"
+                );
+                assert_eq!(
+                    bare_uv.profile_identity, uv_only_uv.profile_identity,
+                    "bare and ordinary-U variants must profile the same UV LMBs, subsets, and orientations",
+                );
+                assert_eq!(
+                    bare_uv.profile_identity, soft_ir_uv.profile_identity,
+                    "bare and soft-refined variants must profile the same UV LMBs, subsets, and orientations",
+                );
+
+                let bare_fit = cli_soft_profile_fit(&mut bare, PROCESS, "bare")?;
+                let uv_fit = cli_soft_profile_fit(&mut uv_only, PROCESS, "uv_only")?;
+                let soft_fit = cli_soft_profile_fit(&mut soft_ir, PROCESS, "soft_ir")?;
+                assert_eq!(
+                    bare_fit.ray_fingerprint, uv_fit.ray_fingerprint,
+                    "bare and ordinary-U variants must evaluate the identical routed soft ray"
+                );
+                assert_eq!(
+                    bare_fit.ray_fingerprint, soft_fit.ray_fingerprint,
+                    "bare and soft-refined variants must evaluate the identical routed soft ray"
+                );
+                assert!(
+                    [
+                        bare_fit.r_squared,
+                        uv_fit.r_squared,
+                        soft_fit.r_squared,
+                    ]
+                        .into_iter()
+                        .all(|r_squared| r_squared >= 0.98),
+                    "top-bubble q_g fits must have R-squared >= 0.98: bare={}, U={}, H={}",
+                    bare_fit.r_squared,
+                    uv_fit.r_squared,
+                    soft_fit.r_squared,
+                );
+                assert!(
+                    uv_fit.scaling < -1.0,
+                    "the ordinary-U vertex must retain the spurious q_g enhancement: U={}",
+                    uv_fit.scaling,
+                );
+                assert!(
+                    soft_fit.scaling > -0.5,
+                    "the completed H counterterm must restore the physical marginal soft scaling; got {}",
+                    soft_fit.scaling,
+                );
+                assert!(
+                    soft_fit.scaling - uv_fit.scaling >= 1.5,
+                    "H must improve the q_g scaling by approximately two powers: U={}, H={}",
+                    uv_fit.scaling,
+                    soft_fit.scaling,
+                );
+
+                if !explicit_orientation_sum_only {
+                let uv_orientations =
+                    cli_soft_profile_orientation_fits(&mut uv_only, PROCESS, "uv_only")?;
+                let h_orientations =
+                    cli_soft_profile_orientation_fits(&mut soft_ir, PROCESS, "soft_ir")?;
+                assert_eq!(
+                    uv_orientations.keys().collect::<Vec<_>>(),
+                    h_orientations.keys().collect::<Vec<_>>(),
+                    "the nested U and H woods must profile the same orientation labels",
+                );
+                assert_eq!(
+                    h_orientations.len(),
+                    30,
+                    "the nested top-bubble fixture must retain all 30 acyclic orientations",
+                );
+                let mut divergent_u_orientations = 0;
+                for (orientation, h_orientation) in &h_orientations {
+                    let u_orientation = &uv_orientations[orientation];
+                    assert_eq!(
+                        h_orientation.ray_fingerprint, u_orientation.ray_fingerprint,
+                        "nested orientation {orientation} used different U/H soft rays",
+                    );
+                    assert!(
+                        h_orientation.scaling > -0.5,
+                        "the outer U_0 destroyed the H child's soft improvement in orientation {orientation}: {h_orientation:?}",
+                    );
+                    if u_orientation.scaling < -1.0 {
+                        divergent_u_orientations += 1;
+                        assert!(
+                            u_orientation.r_squared >= 0.98
+                                && h_orientation.r_squared >= 0.98
+                                && h_orientation.scaling - u_orientation.scaling >= 1.5,
+                            "nested orientation {orientation} does not exhibit the resolved two-power U-to-H improvement: U={u_orientation:?}, H={h_orientation:?}",
+                        );
+                    }
+                }
+                assert_eq!(
+                    divergent_u_orientations, 8,
+                    "the nested U control must expose the same eight orientation-local soft failures as the isolated child",
+                );
+
+                }
+                for cli in [&bare, &uv_only, &soft_ir] {
+                    clean_test(&cli.cli_settings.state.folder);
+                }
+                Ok(())
+            })?;
+            test.join()
+                .map_err(|_| eyre::eyre!("top-bubble profile test thread panicked"))??;
+        }
+        Ok(())
+    }
 
     #[test]
     #[serial_test::serial]
@@ -2591,65 +6911,6 @@ mod slow {
             "3L",
             &[0.11, -0.07, 0.19, -0.13, 0.05, 0.29, 0.17, -0.23, 0.31],
         )
-    }
-
-    #[test]
-    #[serial_test::serial]
-    fn sunrise_pole_part_matches_muv_inspect() -> Result<()> {
-        let process = "sunrise_scalar_1";
-        let integrand_name = "scalar_sunrise";
-        let setup = |test_name: &str, scheme| -> Result<CLIState> {
-            let mut cli = get_test_cli(
-                Some("uv/sunrise_scalar_1.toml".into()),
-                get_tests_workspace_path().join(test_name),
-                Some(test_name.to_string()),
-                true,
-            )?;
-            let uv = &mut cli.cli_settings.global.generation.uv;
-            uv.orchestrator = UVOrchestrator::Compare;
-            let prescription = &mut uv.renormalization_prescription;
-            prescription.log_divergent = scheme;
-            prescription.massive_power_divergent = scheme;
-            prescription.massless_power_divergent = scheme;
-            cli.run_command("run generate")?;
-            Ok(cli)
-        };
-        let mut muv = setup("sunrise_muv_inspect", ApproximationType::MUV)?;
-        let point = deterministic_uv_momentum_points(&mut muv, process, integrand_name)?.remove(0);
-        let mut pole_part = setup("sunrise_pole_part_inspect", ApproximationType::PolePart)?;
-
-        let muv_value = evaluate_summed_momentum_sample(
-            &mut muv,
-            process,
-            integrand_name,
-            &point.point,
-            f64::EPSILON,
-        )?
-        .value;
-        let pole_part_value = evaluate_summed_momentum_sample(
-            &mut pole_part,
-            process,
-            integrand_name,
-            &point.point,
-            f64::EPSILON,
-        )?
-        .value;
-
-        clean_test(&muv.cli_settings.state.folder);
-        clean_test(&pole_part.cli_settings.state.folder);
-
-        let delta = (muv_value.re - pole_part_value.re).hypot(muv_value.im - pole_part_value.im);
-        let scale = muv_value
-            .re
-            .hypot(muv_value.im)
-            .max(pole_part_value.re.hypot(pole_part_value.im))
-            .max(f64::MIN_POSITIVE);
-        assert!(
-            delta / scale <= 1.0e-10,
-            "MUV and PolePart inspect values differ: MUV={muv_value:?}, PolePart={pole_part_value:?}, relative delta={}",
-            delta / scale
-        );
-        Ok(())
     }
 
     macro_rules! aa_aa_2l_uv_rich_inspect_tests {
@@ -2739,32 +7000,5 @@ mod slow {
             integrated_ct_relative_error_limit: None,
             check_mu_r_dependence: true,
         });
-    }
-
-    #[test]
-    fn soft_ct_se() -> Result<()> {
-        let mut state = get_test_cli(
-            Some("dgse.toml".into()),
-            get_tests_workspace_path().join("dgse"),
-            None,
-            false,
-        )?;
-
-        let res = Profile::InfraRed(InfraRedProfile {
-            select: Some("se S(e0)".into()),
-            ..Default::default()
-        })
-        .run(&mut state.state, &state.cli_settings)?;
-
-        assert!(res.unwrap_ir().all_passed);
-
-        let res = Profile::UltraViolet(UltraVioletProfile {
-            ..Default::default()
-        })
-        .run(&mut state.state, &state.cli_settings)?;
-
-        let uv = res.unwrap_uv();
-        assert_eq!(uv.pass_fail(-0.9).failed, 0);
-        Ok(())
     }
 }

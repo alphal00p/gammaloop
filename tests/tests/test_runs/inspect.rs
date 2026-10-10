@@ -1317,146 +1317,320 @@ fn test_mass_approach_threshold_subtraction_dotted() -> Result<()> {
     Ok(())
 }
 
-mod failing {
-    use super::*;
+#[test]
+fn test_qqx_aaa_ir_tree_unprocessed_inspect() -> Result<()> {
+    let mut cli = get_test_cli(
+        Some("generate_qqx_aaa_tree_unprocessed.toml".into()),
+        get_tests_workspace_path().join("qqx_aaa_tree_unprocessed"),
+        None,
+        true,
+    )
+    .unwrap();
 
-    #[test]
-    fn scalar_sunrise_inspect() -> Result<()> {
-        symbolica::GLOBAL_SETTINGS
-            .initialize_tracing
-            .store(false, std::sync::atomic::Ordering::Relaxed);
-        let mut cli = get_test_cli(
-            Some("scalar_sunrise.toml".into()),
-            get_tests_workspace_path().join("scalar_sunrise"),
-            Some("scalar_sunrise".to_string()),
-            false,
-        )?;
+    let (_, inspect) = Inspect {
+        process: None,
+        integrand_name: None,
+        point: vec![],
+        momentum_space: false,
+        ..Default::default()
+    }
+    .run(&mut cli)
+    .unwrap();
 
-        let point = [1., 1., 1., 2., 3., 4.];
+    // Independent Weyl-matrix reference for i*GC_1^3*i^2 times the
+    // spinor chain. The two propagator phases are also checked exactly
+    // by numerator::graph::test::user_numerator_tree_fixtures_match_ufo_tree_algebra.
+    let target = Complex::new(-0.00014727604164105617, 0.0011503139369130225);
+    assert_complex_approx_eq(inspect, target, "UFO tree reference");
+    Ok(())
+}
 
-        let point = [1., 1., 1., -3., -4., -5.];
+#[test]
+fn test_qqx_aaa_ir_tree_user_numerator_unprocessed_with_momtrop_table_inspect() -> Result<()> {
+    let mut cli = get_test_cli(
+        Some("generate_qqx_aaa_tree_user_numerator_unprocessed_with_momtrop_table.toml".into()),
+        get_tests_workspace_path()
+            .join("qqx_aaa_tree_user_numerator_unprocessed_with_momtrop_table"),
+        None,
+        true,
+    )
+    .unwrap();
 
-        let point = vec![2., 3., 4., 1., 1., 1.];
-        let mut ins = Inspect {
-            point: point.clone(),
-            momentum_space: true,
-            ..Default::default()
+    let (_, inspect) = Inspect {
+        process: None,
+        integrand_name: None,
+        point: vec![],
+        momentum_space: false,
+        ..Default::default()
+    }
+    .run(&mut cli)
+    .unwrap();
+
+    // Independent Weyl-matrix reference for i*GC_1^3*i^2 times the
+    // spinor chain. The two propagator phases are also checked exactly
+    // by numerator::graph::test::user_numerator_tree_fixtures_match_ufo_tree_algebra.
+    let target = Complex::new(-0.00014727604164105617, 0.0011503139369130225);
+    assert_complex_approx_eq(inspect, target, "UFO tree reference");
+    Ok(())
+}
+
+#[test]
+fn test_qqx_aaa_ir_tree_user_numerator_inspect() -> Result<()> {
+    let mut cli = get_test_cli(
+        Some("generate_qqx_aaa_tree_user_numerator.toml".into()),
+        get_tests_workspace_path().join("qqx_aaa_tree_user_numerator"),
+        None,
+        true,
+    )
+    .unwrap();
+
+    let (_, inspect) = Inspect {
+        process: None,
+        integrand_name: None,
+        point: vec![],
+        momentum_space: false,
+        ..Default::default()
+    }
+    .run(&mut cli)
+    .unwrap();
+
+    // Independent Weyl-matrix reference for i*GC_1^3*i^2 times the
+    // spinor chain. The two propagator phases are also checked exactly
+    // by numerator::graph::test::user_numerator_tree_fixtures_match_ufo_tree_algebra.
+    let target = Complex::new(-0.00014727604164105617, 0.0011503139369130225);
+    assert_complex_approx_eq(inspect, target, "UFO tree reference");
+    Ok(())
+}
+
+#[test]
+fn scalar_sunrise_inspect() -> Result<()> {
+    symbolica::GLOBAL_SETTINGS
+        .initialize_tracing
+        .store(false, std::sync::atomic::Ordering::Relaxed);
+    let mut cli = get_test_cli(
+        Some("scalar_sunrise.toml".into()),
+        get_tests_workspace_path().join("scalar_sunrise"),
+        Some("scalar_sunrise".to_string()),
+        false,
+    )?;
+
+    // Audit the generated roots and numerator definitions before evaluating:
+    // the local-only run card must bind every retained CT marker.
+    {
+        use gammalooprs::{processes::process::ProcessCollection, utils::GS};
+        use symbolica::atom::{AtomCore, AtomView};
+
+        let ProcessCollection::Amplitudes(amplitudes) =
+            &cli.state.process_list.processes[0].collection
+        else {
+            panic!("expected the scalar Sunrise amplitude")
+        };
+        let amplitude = &amplitudes["default"];
+        let [amplitude_graph] = amplitude.graphs.as_slice() else {
+            panic!("expected one scalar Sunrise graph")
+        };
+        let parameters = &amplitude_graph
+            .graph
+            .param_builder
+            .pairs
+            .additional_params
+            .params;
+        assert_eq!(parameters.len(), 21);
+        assert_eq!(
+            amplitude
+                .integrand
+                .as_ref()
+                .unwrap()
+                .get_settings()
+                .general
+                .additional_param_values
+                .len(),
+            parameters.len()
+        );
+        let mut markers = std::collections::HashSet::new();
+        for expression in std::iter::once(&amplitude_graph.derived_data.all_mighty_integrand).chain(
+            amplitude_graph
+                .derived_data
+                .all_mighty_numerators
+                .iter()
+                .map(|entry| &entry.rhs),
+        ) {
+            assert!(!expression.contains_symbol(GS.uv_integrate));
+            let _ = expression.replace_map(|view, _, _| {
+                if let AtomView::Fun(function) = view
+                    && function.get_symbol() == GS.ct_marker
+                {
+                    markers.insert(view.to_owned());
+                }
+            });
+        }
+        assert_eq!(markers.len(), 8);
+        assert_eq!(
+            markers,
+            parameters[..8]
+                .iter()
+                .cloned()
+                .collect::<std::collections::HashSet<_>>()
+        );
+        assert!(
+            parameters[8..]
+                .iter()
+                .all(|marker| marker.contains_symbol(GS.uv_integrate))
+        );
+        for marker in &markers {
+            assert!(
+                parameters.contains(marker),
+                "unbound generated CT marker: {marker}"
+            );
+        }
+        println!(
+            "All {} generated local CT markers have runtime bindings",
+            markers.len()
+        );
+    }
+
+    let point = [1., 1., 1., 2., 3., 4.];
+
+    let point = [1., 1., 1., -3., -4., -5.];
+
+    let point = vec![2., 3., 4., 1., 1., 1.];
+    let mut ins = Inspect {
+        point: point.clone(),
+        momentum_space: true,
+        ..Default::default()
+    };
+
+    // from Kaapo: m=1 muv=5 4.37688e-03 m=2 muv=5 	2.48100e-03	 m=3 muv=5 1.07231e-03
+    cli.run_command("set model mass_scalar_1=1.0")?;
+
+    let select_local_marker =
+        |cli: &mut gammaloop_integration_tests::CLIState, index: usize| -> Result<()> {
+            assert!(index < 8);
+            let mut values = [0.0; 21];
+            values[index] = 1.0;
+            let values = serde_json::to_string(&values)?;
+            cli.run_command(&format!(
+                "set process -p 0 -i default kv general.additional_param_values={values}"
+            ))?;
+            Ok(())
         };
 
-        // from Kaapo: m=1 muv=5 4.37688e-03 m=2 muv=5 	2.48100e-03	 m=3 muv=5 1.07231e-03
-        cli.run_command("set model mass_scalar_1=1.0")?;
-
-        fn string_with_prefactor(rs: &[Complex<f64>]) -> String {
-            let mut out = String::new();
-            let prefactor = -(2. * std::f64::consts::PI).powi(6);
-            for r in rs {
-                let re = r.re * prefactor;
-                let im = r.im * prefactor;
-                writeln!(&mut out, "{re:.5e}+i{im:.5e}").unwrap();
-            }
-            out
+    fn string_with_prefactor(rs: &[Complex<f64>]) -> String {
+        let mut out = String::new();
+        // The complete literal numerator is one: L=2 and P=3 give
+        // i^L*(-1)^P=+1. Strip only the positive spatial measure.
+        let prefactor = (2. * std::f64::consts::PI).powi(6);
+        for r in rs {
+            let re = r.re * prefactor;
+            let im = r.im * prefactor;
+            writeln!(&mut out, "{re:.5e}+i{im:.5e}").unwrap();
         }
-
-        let (jac, rall_1) = ins.run(&mut cli.state)?;
-        ins.point = ins.point.iter().map(|a| a * 10.).collect_vec();
-        let (jac, rall_10) = ins.run(&mut cli.state)?;
-        ins.point = ins.point.iter().map(|a| a * 10.).collect_vec();
-        let (jac, rall_100) = ins.run(&mut cli.state)?;
-        ins.point = point.clone();
-        cli.run_command("set process -p 0 -i default kv general.additional_param_values=[1.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0]")?;
-        let (jac, r1_1) = ins.run(&mut cli.state)?;
-        ins.point = ins.point.iter().map(|a| a * 10.).collect_vec();
-        let (jac, r1_10) = ins.run(&mut cli.state)?;
-        ins.point = ins.point.iter().map(|a| a * 10.).collect_vec();
-        let (jac, r1_100) = ins.run(&mut cli.state)?;
-        ins.point = point.clone();
-        cli.run_command("set process -p 0 -i default kv general.additional_param_values=[0.0,1.0,0.0,0.0,0.0,0.0,0.0,0.0]")?;
-        let (jac, r2_1) = ins.run(&mut cli.state)?;
-        ins.point = ins.point.iter().map(|a| a * 10.).collect_vec();
-        let (jac, r2_10) = ins.run(&mut cli.state)?;
-        ins.point = ins.point.iter().map(|a| a * 10.).collect_vec();
-        let (jac, r2_100) = ins.run(&mut cli.state)?;
-        ins.point = point.clone();
-        cli.run_command("set process -p 0 -i default kv general.additional_param_values=[0.0,0.0,1.0,0.0,0.0,0.0,0.0,0.0]")?;
-        let (jac, r3_1) = ins.run(&mut cli.state)?;
-        ins.point = ins.point.iter().map(|a| a * 10.).collect_vec();
-        let (jac, r3_10) = ins.run(&mut cli.state)?;
-        ins.point = ins.point.iter().map(|a| a * 10.).collect_vec();
-        let (jac, r3_100) = ins.run(&mut cli.state)?;
-        ins.point = point.clone();
-        cli.run_command("set process -p 0 -i default kv general.additional_param_values=[0.0,0.0,0.0,1.0,0.0,0.0,0.0,0.0]")?;
-        let (jac, r4_1) = ins.run(&mut cli.state)?;
-        ins.point = ins.point.iter().map(|a| a * 10.).collect_vec();
-        let (jac, r4_10) = ins.run(&mut cli.state)?;
-        ins.point = ins.point.iter().map(|a| a * 10.).collect_vec();
-        let (jac, r4_100) = ins.run(&mut cli.state)?;
-        ins.point = point.clone();
-        cli.run_command("set process -p 0 -i default kv general.additional_param_values=[0.0,0.0,0.0,0.0,1.0,0.0,0.0,0.0]")?;
-        let (jac, r5_1) = ins.run(&mut cli.state)?;
-        ins.point = ins.point.iter().map(|a| a * 10.).collect_vec();
-        let (jac, r5_10) = ins.run(&mut cli.state)?;
-        ins.point = ins.point.iter().map(|a| a * 10.).collect_vec();
-        let (jac, r5_100) = ins.run(&mut cli.state)?;
-        ins.point = point.clone();
-        cli.run_command("set process -p 0 -i default kv general.additional_param_values=[0.0,0.0,0.0,0.0,0.0,1.0,0.0,0.0]")?;
-        let (jac, r6_1) = ins.run(&mut cli.state)?;
-        ins.point = ins.point.iter().map(|a| a * 10.).collect_vec();
-        let (jac, r6_10) = ins.run(&mut cli.state)?;
-        ins.point = ins.point.iter().map(|a| a * 10.).collect_vec();
-        let (jac, r6_100) = ins.run(&mut cli.state)?;
-
-        ins.point = point.clone();
-        cli.run_command("set process -p 0 -i default kv general.additional_param_values=[0.0,0.0,0.0,0.0,0.0,0.0,1.0,0.0]")?;
-        let (jac, r7_1) = ins.run(&mut cli.state)?;
-        ins.point = ins.point.iter().map(|a| a * 10.).collect_vec();
-        let (jac, r7_10) = ins.run(&mut cli.state)?;
-        ins.point = ins.point.iter().map(|a| a * 10.).collect_vec();
-        let (jac, r7_100) = ins.run(&mut cli.state)?;
-        ins.point = point.clone();
-        cli.run_command("set process -p 0 -i default kv general.additional_param_values=[0.0,0.0,0.0,0.0,0.0,0.0,0.0,1.0]")?;
-        let (jac, r8_1) = ins.run(&mut cli.state)?;
-        ins.point = ins.point.iter().map(|a| a * 10.).collect_vec();
-        let (jac, r8_10) = ins.run(&mut cli.state)?;
-        ins.point = ins.point.iter().map(|a| a * 10.).collect_vec();
-        let (jac, r8_100) = ins.run(&mut cli.state)?;
-
-        insta::assert_snapshot!(string_with_prefactor(&[r1_1,r2_1,r3_1,r4_1,r5_1,r6_1,r7_1,r8_1,rall_1]),@"
-        2.18603e-4+i-0.00000e0
-        -4.41097e-5+i-0.00000e0
-        -1.54032e-4+i-0.00000e0
-        -1.57503e-4+i-0.00000e0
-        -7.17631e-5+i-0.00000e0
-        4.21936e-5+i-0.00000e0
-        1.40322e-4+i-0.00000e0
-        8.50437e-5+i-0.00000e0
-        5.87544e-5+i-0.00000e0
-        ");
-        insta::assert_snapshot!(string_with_prefactor(&[r1_10,r2_10,r3_10,r4_10,r5_10,r6_10,r7_10,r8_10,rall_10]),@"
-        2.66555e-8+i-0.00000e0
-        -1.11736e-8+i-0.00000e0
-        -3.96106e-7+i-0.00000e0
-        -4.55447e-8+i-0.00000e0
-        -2.65802e-8+i-0.00000e0
-        1.11735e-8+i-0.00000e0
-        3.96096e-7+i-0.00000e0
-        4.54492e-8+i-0.00000e0
-        -3.03929e-11+i-0.00000e0
-        ");
-        insta::assert_snapshot!(string_with_prefactor(&[r1_100,r2_100,r3_100,r4_100,r5_100,r6_100,r7_100,r8_100,rall_100]),@"
-        2.67150e-12+i-0.00000e0
-        -1.13180e-12+i-0.00000e0
-        -4.46155e-11+i-0.00000e0
-        -4.62050e-12+i-0.00000e0
-        -2.67150e-12+i-0.00000e0
-        1.13180e-12+i-0.00000e0
-        4.46155e-11+i-0.00000e0
-        4.62050e-12+i-0.00000e0
-        -3.63173e-19+i-0.00000e0
-        ");
-        // clean_test(&cli.cli_settings.state.folder);
-
-        Ok(())
+        out
     }
+
+    let (jac, rall_1) = ins.run(&mut cli.state)?;
+    ins.point = ins.point.iter().map(|a| a * 10.).collect_vec();
+    let (jac, rall_10) = ins.run(&mut cli.state)?;
+    ins.point = ins.point.iter().map(|a| a * 10.).collect_vec();
+    let (jac, rall_100) = ins.run(&mut cli.state)?;
+    ins.point = point.clone();
+    select_local_marker(&mut cli, 0)?;
+    let (jac, r1_1) = ins.run(&mut cli.state)?;
+    ins.point = ins.point.iter().map(|a| a * 10.).collect_vec();
+    let (jac, r1_10) = ins.run(&mut cli.state)?;
+    ins.point = ins.point.iter().map(|a| a * 10.).collect_vec();
+    let (jac, r1_100) = ins.run(&mut cli.state)?;
+    ins.point = point.clone();
+    select_local_marker(&mut cli, 1)?;
+    let (jac, r2_1) = ins.run(&mut cli.state)?;
+    ins.point = ins.point.iter().map(|a| a * 10.).collect_vec();
+    let (jac, r2_10) = ins.run(&mut cli.state)?;
+    ins.point = ins.point.iter().map(|a| a * 10.).collect_vec();
+    let (jac, r2_100) = ins.run(&mut cli.state)?;
+    ins.point = point.clone();
+    select_local_marker(&mut cli, 2)?;
+    let (jac, r3_1) = ins.run(&mut cli.state)?;
+    ins.point = ins.point.iter().map(|a| a * 10.).collect_vec();
+    let (jac, r3_10) = ins.run(&mut cli.state)?;
+    ins.point = ins.point.iter().map(|a| a * 10.).collect_vec();
+    let (jac, r3_100) = ins.run(&mut cli.state)?;
+    ins.point = point.clone();
+    select_local_marker(&mut cli, 3)?;
+    let (jac, r4_1) = ins.run(&mut cli.state)?;
+    ins.point = ins.point.iter().map(|a| a * 10.).collect_vec();
+    let (jac, r4_10) = ins.run(&mut cli.state)?;
+    ins.point = ins.point.iter().map(|a| a * 10.).collect_vec();
+    let (jac, r4_100) = ins.run(&mut cli.state)?;
+    ins.point = point.clone();
+    select_local_marker(&mut cli, 4)?;
+    let (jac, r5_1) = ins.run(&mut cli.state)?;
+    ins.point = ins.point.iter().map(|a| a * 10.).collect_vec();
+    let (jac, r5_10) = ins.run(&mut cli.state)?;
+    ins.point = ins.point.iter().map(|a| a * 10.).collect_vec();
+    let (jac, r5_100) = ins.run(&mut cli.state)?;
+    ins.point = point.clone();
+    select_local_marker(&mut cli, 5)?;
+    let (jac, r6_1) = ins.run(&mut cli.state)?;
+    ins.point = ins.point.iter().map(|a| a * 10.).collect_vec();
+    let (jac, r6_10) = ins.run(&mut cli.state)?;
+    ins.point = ins.point.iter().map(|a| a * 10.).collect_vec();
+    let (jac, r6_100) = ins.run(&mut cli.state)?;
+
+    ins.point = point.clone();
+    select_local_marker(&mut cli, 6)?;
+    let (jac, r7_1) = ins.run(&mut cli.state)?;
+    ins.point = ins.point.iter().map(|a| a * 10.).collect_vec();
+    let (jac, r7_10) = ins.run(&mut cli.state)?;
+    ins.point = ins.point.iter().map(|a| a * 10.).collect_vec();
+    let (jac, r7_100) = ins.run(&mut cli.state)?;
+    ins.point = point.clone();
+    select_local_marker(&mut cli, 7)?;
+    let (jac, r8_1) = ins.run(&mut cli.state)?;
+    ins.point = ins.point.iter().map(|a| a * 10.).collect_vec();
+    let (jac, r8_10) = ins.run(&mut cli.state)?;
+    ins.point = ins.point.iter().map(|a| a * 10.).collect_vec();
+    let (jac, r8_100) = ins.run(&mut cli.state)?;
+
+    insta::assert_snapshot!(string_with_prefactor(&[r1_1,r2_1,r3_1,r4_1,r5_1,r6_1,r7_1,r8_1,rall_1]),@"
+        2.18603e-4+i0.00000e0
+        -4.41097e-5+i0.00000e0
+        -1.54032e-4+i0.00000e0
+        -1.57503e-4+i0.00000e0
+        -7.17631e-5+i0.00000e0
+        4.21936e-5+i0.00000e0
+        1.40322e-4+i0.00000e0
+        8.50437e-5+i0.00000e0
+        5.87544e-5+i0.00000e0
+        ");
+    insta::assert_snapshot!(string_with_prefactor(&[r1_10,r2_10,r3_10,r4_10,r5_10,r6_10,r7_10,r8_10,rall_10]),@"
+        2.66555e-8+i0.00000e0
+        -1.11736e-8+i0.00000e0
+        -3.96106e-7+i0.00000e0
+        -4.55447e-8+i0.00000e0
+        -2.65802e-8+i0.00000e0
+        1.11735e-8+i0.00000e0
+        3.96096e-7+i0.00000e0
+        4.54492e-8+i0.00000e0
+        -3.03929e-11+i0.00000e0
+        ");
+    insta::assert_snapshot!(string_with_prefactor(&[r1_100,r2_100,r3_100,r4_100,r5_100,r6_100,r7_100,r8_100,rall_100]),@"
+        2.67150e-12+i0.00000e0
+        -1.13180e-12+i0.00000e0
+        -4.46155e-11+i0.00000e0
+        -4.62050e-12+i0.00000e0
+        -2.67150e-12+i0.00000e0
+        1.13180e-12+i0.00000e0
+        4.46155e-11+i0.00000e0
+        4.62050e-12+i0.00000e0
+        -3.63173e-19+i0.00000e0
+        ");
+    // clean_test(&cli.cli_settings.state.folder);
+
+    Ok(())
+}
+
+mod failing {
+    use super::*;
 
     #[test]
     fn test_epem_tth_inspect_nlo_gl18() -> Result<()> {
@@ -1479,82 +1653,6 @@ mod failing {
         .unwrap();
 
         let target = Complex::new(-9.487984855932107e-6, 3.610476200052732e-5);
-        assert_eq!(inspect, target);
-        Ok(())
-    }
-
-    #[test]
-    fn test_qqx_aaa_ir_tree_unprocessed_inspect() -> Result<()> {
-        let mut cli = get_test_cli(
-            Some("generate_qqx_aaa_tree_unprocessed.toml".into()),
-            get_tests_workspace_path().join("qqx_aaa_tree_unprocessed"),
-            None,
-            true,
-        )
-        .unwrap();
-
-        let (_, inspect) = Inspect {
-            process: None,
-            integrand_name: None,
-            point: vec![],
-            momentum_space: false,
-            ..Default::default()
-        }
-        .run(&mut cli)
-        .unwrap();
-
-        let target = Complex::new(0.00014727604164105595, -0.001150313936913021);
-        assert_eq!(inspect, target);
-        Ok(())
-    }
-
-    #[test]
-    fn test_qqx_aaa_ir_tree_user_numerator_unprocessed_with_momtrop_table_inspect() -> Result<()> {
-        let mut cli = get_test_cli(
-            Some("generate_qqx_aaa_tree_user_numerator_unprocessed_with_momtrop_table.toml".into()),
-            get_tests_workspace_path()
-                .join("qqx_aaa_tree_user_numerator_unprocessed_with_momtrop_table"),
-            None,
-            true,
-        )
-        .unwrap();
-
-        let (_, inspect) = Inspect {
-            process: None,
-            integrand_name: None,
-            point: vec![],
-            momentum_space: false,
-            ..Default::default()
-        }
-        .run(&mut cli)
-        .unwrap();
-
-        let target = Complex::new(1.47276041641056e-4, -1.1503139369130214e-3);
-        assert_eq!(inspect, target);
-        Ok(())
-    }
-
-    #[test]
-    fn test_qqx_aaa_ir_tree_user_numerator_inspect() -> Result<()> {
-        let mut cli = get_test_cli(
-            Some("generate_qqx_aaa_tree_user_numerator.toml".into()),
-            get_tests_workspace_path().join("qqx_aaa_tree_user_numerator"),
-            None,
-            true,
-        )
-        .unwrap();
-
-        let (_, inspect) = Inspect {
-            process: None,
-            integrand_name: None,
-            point: vec![],
-            momentum_space: false,
-            ..Default::default()
-        }
-        .run(&mut cli)
-        .unwrap();
-
-        let target = Complex::new(1.47276041641056e-4, -1.1503139369130214e-3);
         assert_eq!(inspect, target);
         Ok(())
     }

@@ -1,13 +1,9 @@
 use super::utils::*;
 use super::*;
-use gammaloop_api::CLISettings;
 use gammaloop_api::commands::duplicate::DuplicateIntegrand;
-use gammaloop_api::session::CliSessionState;
-use gammaloop_api::state::{RunHistory, State};
 use gammalooprs::{
-    initialisation::initialise,
     momentum::{Dep, ExternalMomenta, Helicity, SignOrZero},
-    settings::{RuntimeSettings, runtime::kinematic::Externals},
+    settings::runtime::kinematic::Externals,
     utils::F,
 };
 use std::collections::BTreeMap;
@@ -80,10 +76,10 @@ fn benchmark_resource_path(name: &str) -> PathBuf {
         .join(name)
 }
 
-fn example_aa_aa_state_folder() -> PathBuf {
-    gammaloop_integration_tests::workspace_root().join("examples/cli/aa_aa/1L/state")
-}
-
+// The f rows use independent MSbar Feynman-parameter box integrals at mu_r=20,
+// including -GC_2^4*S'(4)/(32*pi^2), where S(D)=D(D+2)<N_rank4>.
+// Their errors cover contour/order convergence and rounding. Graph 2 is
+// spacelike and has exactly zero absorptive part. All targets store M=i*A.
 fn load_integrated_targets() -> Result<BTreeMap<(String, String, usize), IntegratedHistogramTarget>>
 {
     let mut targets = BTreeMap::new();
@@ -212,36 +208,6 @@ fn ensure_aa_aa_helicity_family(
         settings.general.mu_r = 20.0;
     }
     Ok(())
-}
-
-fn load_example_aa_aa_cli() -> Result<gammaloop_integration_tests::CLIState> {
-    initialise()?;
-    let state_folder = example_aa_aa_state_folder();
-
-    let mut state = State::load(state_folder.clone(), None, None)?;
-    state.activate_loaded_integrand_backends(true)?;
-
-    let mut cli_settings: CLISettings = toml::from_str(&std::fs::read_to_string(
-        state_folder.join("global_settings.toml"),
-    )?)?;
-    cli_settings.state.folder = state_folder.clone();
-    cli_settings.session.read_only_state = true;
-    cli_settings.global.n_cores.integrate = 1;
-    cli_settings.sync_settings()?;
-
-    let default_runtime_settings: RuntimeSettings = toml::from_str(&std::fs::read_to_string(
-        state_folder.join("default_runtime_settings.toml"),
-    )?)?;
-    let run_history = RunHistory::load(state_folder.join("run.toml"))?;
-    let mut cli = gammaloop_integration_tests::CLIState {
-        state,
-        cli_settings,
-        default_runtime_settings,
-        run_history,
-        session_state: CliSessionState::default(),
-    };
-    ensure_aa_aa_helicity_family(&mut cli, AA_AA_PROCESS, &AA_AA_HELICITIES_ALL)?;
-    Ok(cli)
 }
 
 fn set_aa_aa_kinematics(
@@ -448,89 +414,121 @@ mod important {
     }
 }
 
-mod failing {
-    use super::*;
+#[test]
+#[serial]
+fn aa_aa_integrated_graph_histogram_bins() -> Result<()> {
+    let targets = load_integrated_targets()?;
+    let mut cli = setup_aa_aa_cli("aa_aa_integrated_graph_histogram_bins_generated")?;
+    // The historical saved state was generated with SM-default parameters;
+    // its targets use aEWM1=132.507, rather than the inspection card's 137.036.
+    cli.run_command("set model aEWM1=132.507")?;
+    {
+        use symbolica::atom::{Atom, AtomCore, Symbol};
 
-    #[test]
-    #[serial]
-    fn aa_aa_integrated_graph_histogram_bins() -> Result<()> {
-        let targets = load_integrated_targets()?;
-        let mut cli = load_example_aa_aa_cli()?;
-        let workspace_root =
-            get_tests_workspace_path().join("aa_aa_integrated_graph_histogram_bins");
-
-        clean_test(&workspace_root);
-        add_graph_id_observable(&mut cli, AA_AA_PROCESS)?;
-        cli.run_command(
-            "set process -p aa_aa_all_helicities kv integrator.target_relative_accuracy=0.0 integrator.n_start=100000 integrator.n_increase=100000 integrator.n_max=1000000 integrator.seed=1337",
-        )?;
-
-        for (kinematics, integrand) in [
-            ("a", AA_AA_HELICITIES_INTEGRATED[0].0),
-            ("a", AA_AA_HELICITIES_INTEGRATED[1].0),
-            ("f", AA_AA_HELICITIES_INTEGRATED[0].0),
-            ("f", AA_AA_HELICITIES_INTEGRATED[1].0),
-        ] {
-            set_aa_aa_kinematics(&mut cli, AA_AA_PROCESS, kinematics)?;
-            let result = Integrate {
-                process: vec![ProcessRef::Unqualified(AA_AA_PROCESS.to_string())],
-                integrand_name: vec![integrand.to_string()],
-                workspace_path: Some(
-                    workspace_root.join(format!("{kinematics}_{integrand}_workspace")),
-                ),
-                n_cores: Some(1),
-                restart: true,
-                ..Default::default()
-            }
-            .run(&mut cli.state, &cli.cli_settings)?;
-
-            let slot_key = format!("{AA_AA_PROCESS}@{integrand}");
-            let bundle = result
-                .slot_observables(&slot_key)
-                .unwrap_or_else(|| panic!("missing observables bundle for slot '{slot_key}'"));
-            let real_hist = bundle
-                .histograms
-                .get("graph_id_hist_real")
-                .expect("missing graph_id_hist_real histogram");
-            let imag_hist = bundle
-                .histograms
-                .get("graph_id_hist_imag")
-                .expect("missing graph_id_hist_imag histogram");
-
-            for graph_id in 0..AA_AA_GRAPH_COUNT {
-                let target = targets
-                    .get(&(kinematics.to_string(), integrand.to_string(), graph_id))
-                    .unwrap_or_else(|| {
-                        panic!(
-                            "missing integrated target for kinematics={kinematics}, integrand={integrand}, graph_id={graph_id}"
-                        )
-                    });
-                let (actual_re_avg, actual_re_err) =
-                    discrete_histogram_bin_average_and_error(real_hist, graph_id as isize)?;
-                let (actual_im_avg, actual_im_err) =
-                    discrete_histogram_bin_average_and_error(imag_hist, graph_id as isize)?;
-                assert_histogram_estimate_compatible(
-                    actual_re_avg,
-                    actual_re_err,
-                    target.re_avg,
-                    target.re_err,
-                    &format!(
-                        "integrated real bin kinematics={kinematics}, integrand={integrand}, graph_id={graph_id}"
-                    ),
-                );
-                assert_histogram_estimate_compatible(
-                    actual_im_avg,
-                    actual_im_err,
-                    target.im_avg,
-                    target.im_err,
-                    &format!(
-                        "integrated imag bin kinematics={kinematics}, integrand={integrand}, graph_id={graph_id}"
-                    ),
-                );
-            }
-        }
-
-        clean_test(&workspace_root);
-        Ok(())
+        let ee = cli.state.model.get_parameter("ee");
+        let alpha = cli.state.model.get_parameter("aEW");
+        let inverse_alpha = cli.state.model.get_parameter("aEWM1");
+        let ee_symbol: Atom = ee.name.into();
+        let alpha_symbol: Atom = alpha.name.into();
+        let inverse_alpha_symbol: Atom = inverse_alpha.name.into();
+        // Four photon-top vertices give exactly GC_2^4 =
+        // 256*pi^2/(81*aEWM1^2), with no residual coupling phase.
+        let coupling = cli
+            .state
+            .model
+            .get_coupling("GC_2")
+            .expression
+            .replace(ee_symbol.to_pattern())
+            .with(ee.expression.as_ref().unwrap().to_pattern())
+            .replace(alpha_symbol.to_pattern())
+            .with(alpha.expression.as_ref().unwrap().to_pattern());
+        assert_eq!(
+            coupling.pow(4) * inverse_alpha_symbol.pow(2),
+            Atom::num((256, 81)) * Atom::var(Symbol::PI).pow(2),
+        );
     }
+    generate_aa_aa_helicity_family(
+        &mut cli,
+        AA_AA_PROCESS,
+        "symjit",
+        &AA_AA_HELICITIES_INTEGRATED,
+    )?;
+    let workspace_root = get_tests_workspace_path().join("aa_aa_integrated_graph_histogram_bins");
+
+    clean_test(&workspace_root);
+    add_graph_id_observable(&mut cli, AA_AA_PROCESS)?;
+    cli.run_command(
+        "set process -p aa_aa_all_helicities kv integrator.target_relative_accuracy=0.0 integrator.n_start=100000 integrator.n_increase=100000 integrator.n_max=1000000 integrator.seed=1337",
+    )?;
+
+    for (kinematics, integrand) in [
+        ("a", AA_AA_HELICITIES_INTEGRATED[0].0),
+        ("a", AA_AA_HELICITIES_INTEGRATED[1].0),
+        ("f", AA_AA_HELICITIES_INTEGRATED[0].0),
+        ("f", AA_AA_HELICITIES_INTEGRATED[1].0),
+    ] {
+        set_aa_aa_kinematics(&mut cli, AA_AA_PROCESS, kinematics)?;
+        let result = Integrate {
+            process: vec![ProcessRef::Unqualified(AA_AA_PROCESS.to_string())],
+            integrand_name: vec![integrand.to_string()],
+            workspace_path: Some(
+                workspace_root.join(format!("{kinematics}_{integrand}_workspace")),
+            ),
+            n_cores: Some(1),
+            restart: true,
+            ..Default::default()
+        }
+        .run(&mut cli.state, &cli.cli_settings)?;
+
+        let slot_key = format!("{AA_AA_PROCESS}@{integrand}");
+        let bundle = result
+            .slot_observables(&slot_key)
+            .unwrap_or_else(|| panic!("missing observables bundle for slot '{slot_key}'"));
+        let real_hist = bundle
+            .histograms
+            .get("graph_id_hist_real")
+            .expect("missing graph_id_hist_real histogram");
+        let imag_hist = bundle
+            .histograms
+            .get("graph_id_hist_imag")
+            .expect("missing graph_id_hist_imag histogram");
+
+        for graph_id in 0..AA_AA_GRAPH_COUNT {
+            let target = targets
+                .get(&(kinematics.to_string(), integrand.to_string(), graph_id))
+                .unwrap_or_else(|| {
+                    panic!(
+                        "missing integrated target for kinematics={kinematics}, integrand={integrand}, graph_id={graph_id}"
+                    )
+                });
+            let (actual_re_avg, actual_re_err) =
+                discrete_histogram_bin_average_and_error(real_hist, graph_id as isize)?;
+            let (actual_im_avg, actual_im_err) =
+                discrete_histogram_bin_average_and_error(imag_hist, graph_id as isize)?;
+            // GammaLoop returns A=-i*M; the historical targets store M.
+            // Compare i*A, rotating the component errors with their means.
+            assert_histogram_estimate_compatible(
+                -actual_im_avg,
+                actual_im_err,
+                target.re_avg,
+                target.re_err,
+                &format!(
+                    "integrated real bin kinematics={kinematics}, integrand={integrand}, graph_id={graph_id}"
+                ),
+            );
+            assert_histogram_estimate_compatible(
+                actual_re_avg,
+                actual_re_err,
+                target.im_avg,
+                target.im_err,
+                &format!(
+                    "integrated imag bin kinematics={kinematics}, integrand={integrand}, graph_id={graph_id}"
+                ),
+            );
+        }
+    }
+
+    clean_test(&workspace_root);
+    clean_test(&cli.cli_settings.state.folder);
+    Ok(())
 }
