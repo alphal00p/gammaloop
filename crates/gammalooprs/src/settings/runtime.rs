@@ -2580,3 +2580,36 @@ impl Default for HFunctionSettings {
         }
     }
 }
+
+impl HFunctionSettings {
+    /// Powers with a tabulated normalization for the polynomial profiles.
+    const NORMALIZED_POWERS: [usize; 12] = [0, 1, 3, 4, 6, 7, 9, 10, 12, 13, 15, 16];
+
+    /// Require a profile normalized to one over positive scales `t`. LU-h
+    /// sampling and Fermi-surface localization both insert it as a unit integral.
+    pub(crate) fn validate_normalized_profile(&self) -> Result<()> {
+        if !self.sigma.is_finite() || self.sigma <= 0.0 {
+            return Err(eyre::eyre!(
+                "A normalized h_function profile requires a positive finite h_function.sigma; got {}",
+                self.sigma
+            ));
+        }
+        match self.function {
+            HFunction::Exponential => Ok(()),
+            HFunction::PolyExponential | HFunction::PolyLeftRightExponential => {
+                let power = self.power.unwrap_or(0);
+                if Self::NORMALIZED_POWERS.contains(&power) {
+                    Ok(())
+                } else {
+                    Err(eyre::eyre!(
+                        "Unsupported h_function.power {power}; supported powers are {:?}",
+                        Self::NORMALIZED_POWERS
+                    ))
+                }
+            }
+            HFunction::ExponentialCT => Err(eyre::eyre!(
+                "exponential_ct is a local threshold localization, not a normalized h_function profile"
+            )),
+        }
+    }
+}

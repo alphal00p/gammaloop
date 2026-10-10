@@ -7,7 +7,7 @@ use crate::{
     initialisation::test_initialise,
     integrands::process::{MomentumSpaceEvaluationInput, ProcessIntegrand},
     processes::Amplitude,
-    settings::runtime::HFunction,
+    settings::runtime::{HFunction, HFunctionSettings},
     utils::load_generic_model,
 };
 
@@ -202,6 +202,26 @@ sampling_multichanneling = false
             shifted, value,
             "warm-up must refresh the Fermi shell chemical potential"
         );
+
+        // Localization inserts the profile as a unit scale integral.
+        for h_function in [
+            HFunctionSettings {
+                function: HFunction::ExponentialCT,
+                ..Default::default()
+            },
+            HFunctionSettings {
+                power: Some(2),
+                ..Default::default()
+            },
+            HFunctionSettings {
+                sigma: 0.0,
+                ..Default::default()
+            },
+        ] {
+            restored.get_mut_settings().lu_h_function = h_function;
+            let error = restored.warm_up(&shifted_model).unwrap_err();
+            assert!(error.to_string().contains("h_function"), "{error}");
+        }
     }
     Ok(())
 }
