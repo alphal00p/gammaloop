@@ -1,0 +1,46 @@
+# Shared scalar LU card; the suite supplies the graph, process and route.
+commands = [
+  "import model ./assets/models/json/scalars/scalars-default.json",
+  "remove processes",
+  "set global kv global.generation.explicit_orientation_sum_only=$explicit_orientation_sum_only global.generation.evaluator.compile=false global.generation.evaluator.store_atom=false global.generation.evaluator.summed=$summed global.generation.evaluator.summed_function_map=false global.generation.evaluator.iterative_orientation_optimization=false global.generation.uv.subtract_uv=true global.generation.uv.generate_integrated=true global.generation.uv.local_uv_cts_from_expanded_4d_integrands=$projected_4d global.generation.threshold_subtraction.enable_thresholds=true global.generation.threshold_subtraction.check_esurface_at_generation=false",
+  "import graphs $graph --process-spec 'scalar_1 > {scalar_0 scalar_0, scalar_0 scalar_0 scalar_1} | scalar_0 scalar_1 [{{3}}]' -p $process -i numerator",
+  "set model mass_scalar_1=1.0",
+  "generate existing -p $process -i numerator",
+  "set model mass_scalar_1=0.1",
+  "quit",
+]
+
+[cli_settings.global.n_cores]
+feyngen = 1
+generate = 1
+compile = 1
+integrate = 1
+
+[default_runtime_settings.general]
+evaluator_method = "$evaluator_method"
+enable_cache = false
+generate_events = true
+store_additional_weights_in_event = true
+mu_r = 3.0
+m_uv = 20.0
+numerator_sampling_scale = 1.0
+
+[default_runtime_settings.subtraction]
+disable_threshold_subtraction = false
+
+[default_runtime_settings.sampling]
+graphs = "summed"
+orientations = "summed"
+lmb_multichanneling = true
+lmb_channel_weight = "ose"
+lmb_channels = "summed"
+coordinate_system = "spherical"
+mapping = "linear"
+b = 1.0
+
+[default_runtime_settings.kinematics.externals]
+type = "constant"
+
+[default_runtime_settings.kinematics.externals.data]
+momenta = [[1.0, 0.0, 0.0, 0.0]]
+helicities = [0]

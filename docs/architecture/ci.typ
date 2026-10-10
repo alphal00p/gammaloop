@@ -59,6 +59,41 @@ runtime on Linux ARM reports the missing upstream wheel.
 The four NLO acceptance cases share one executable. Their assertions, workloads
 and runtime worker reservations are unchanged.
 
+== Fast tests and the full main suite
+
+The shared Nextest configuration owns test selection. Ordinary local test
+recipes and NixCI use `ci_gammaloop`: each test has a four-minute execution
+limit, and a timeout fails. Compilation is outside that limit. Tests are
+classified by measured duration, rather than excluding every `slow` module.
+The measured extended scalar matrix contributes 139 cases to this fast lane;
+the GL16 quartic case belongs to the long lane. A fast suite can still take
+longer than four minutes because the limit applies to each test.
+
+Every main push runs the supported full suite through `hydraJobsMain`.
+Non-integration package groups use `ci_full`. Integration runs its ordinary
+fast selection plus four disjoint `ci_slow` partitions, including all six
+mandatory soft-counterterm acceptance cases. These partitions reuse the
+existing optimized archives and do not introduce another feature set or
+compile each shard independently. Missing main-run license credentials fail
+the workflow rather than silently dropping licensed tests. Standard branch
+Nix jobs continue to use `hydraJobs` and do not select the long partitions.
+
+`ci_full` includes nonignored slow cases. Existing quarantines and manual
+external-backend checks remain explicit exclusions in the configuration;
+their absence from automatic coverage does not establish that they are
+unsupported. Ignored tests are not enabled wholesale.
+
+Each successful Nix runtime result retains per-package JUnit reports with
+individual case durations. GitHub Actions exports test names, statuses and
+durations to a CSV artifact. Captured test output, expressions and raw logs
+are excluded. A failed Nix derivation has no registered report output; the
+build still fails, even when there is no timing CSV to upload.
+Nextest reservations continue to protect shared
+generated-state folders and large evaluator allocations. Four shards permit
+separate workers to run long cases concurrently; they do not remove these
+protections within a worker. Partitioning by hash is deterministic but does
+not guarantee an optimal balance of measured durations.
+
 The Spenso group also runs `spynso3` unit and integration tests for typed tensor
 APIs and shared Symbolica expressions. Spynso's embedded `typst/*.typ` files are
 production inputs to its package and dependent builds. Its display integration
@@ -84,6 +119,126 @@ Synchronous dependency discovery incorporates Syd's PR \#104 suggestion while
 retaining the explicit graph. Local uploads adapt \#105 through the Just command;
 entering a shell installs no global upload hook.
 
+== Performance measurements
+
+`.github/scripts/run_performance.py` compares two normal CLI packages on one
+worker, outside cached Nix check derivations. Build each revision once; every
+measurement generates a fresh state and uses that revision's own serialized
+format. The baseline and candidate commits, fixture, point corpus and settings
+are recorded by their hashes. Both revisions receive identical settings and
+run with one worker. Model and restriction files are imported from the shared
+candidate repository and included in the workload hash; a builtin model name
+would instead select each binary's own embedded model.
+
+The Actions workflow authenticates NixCI downloads with the repository's
+`NIXCI_NETRC` secret, containing only the `cache.nix-ci.com` machine entry.
+It checks access before building, configures the Nix daemon to use that file,
+and uploads both exact normal CLI closures after realization. Hestia remains
+a read-only secondary cache. The temporary credential file has mode 0600 and
+is removed on success or failure. Compiler products are cached; measurements
+always run afresh.
+
+The single manifest in `benchmarks/performance/suite.toml` defines four workloads
+and three scalar routes, producing ten comparisons. Scalar workloads share their
+point corpus and settings. The runner renders `scalar.toml` with each workload's
+graph and route settings; `gg-hhh-gl15.toml` defines the physical workload.
+The exact rendered card and declared inputs, including scalar DOT graphs and
+shared model and restriction files, are hashed before measurement. Both
+revisions receive those same bytes.
+
+#table(
+  columns: (1fr, 1fr, 1fr),
+  table.header([Input], [Coverage], [Routes]),
+  [Physical gg → hhh GL15], [Threshold-subtracted amplitude], [One parametric route],
+  [Scalar GL04, q₁²], [Quadratic Lorentz numerator], [All three LU routes],
+  [Scalar GL16, q₇²], [A different quadratic topology], [All three LU routes],
+  [Scalar GL02, (q₁⁰)⁴], [Quartic energy numerator], [All three LU routes],
+)
+
+The scalar routes are orientation-local 3D with the summed evaluator,
+explicit-sum 3D and projected local 4D with the single parametric evaluator.
+All use local and integrated UV counterterms together with threshold
+subtraction. The small DOT inputs preserve the source graph's edge ownership,
+LMB, phases and vertex factors. Only the selected edge receives the numerator
+probe and its corresponding degree of divergence. Both revisions import the
+same candidate-side graph bytes, included in the fixture fingerprint; UV
+forests, counterterms and evaluators are generated afresh in every trial.
+These fixtures exercise numerator and route differences without relying on
+the exactly vanishing massless cuts of several Lorentz-quartic examples.
+
+Generation measures the complete import, generation and state-save command.
+For scalar cases, graph enumeration is outside this timing because the graph
+is supplied as a fixed DOT input. GL15 also runs graph enumeration.
+Numeric metadata retains the native per-graph total and the Spenso, Symbolica
+and compilation durations from `generation_summary.json`. These explain
+generation costs without changing the wall-time metric or its thresholds;
+the native total excludes CLI initialization, import and state saving.
+Runtime measures the existing `bench` command at four distinct fixed points,
+with caching disabled and evaluator compilation disabled. Each point is
+repeated within its own warmed benchmark. GL15 fixes one helicity/external
+configuration and selects one orientation and LMB channel, with stability
+rotations disabled. Scalars retain the correctness tests' rotation settings
+and sum all orientations and LMB channels at nine-dimensional points.
+`bench` disables event generation for its timed batches; selectors and
+observables are absent. This measures fixed-point integrand evaluation rather
+than a batch of changing integration points. Large scalar numerators,
+compiled evaluators and isolated cold-load cost remain outside this fast gate.
+The extended scalar correctness suite supplies timing telemetry for the
+long Lorentz-quartic cases, including GL16 q₇⁴, on main.
+The requested benchmark duration per point is five seconds for GL15 and two
+seconds for scalars. The CLI calibrates sample counts from its ten-sample
+warmup, so the actual warmed loop can be shorter than that target.
+
+Five baseline/candidate pairs alternate execution order. A suspected regression
+requires another five pairs starting in the opposite order. Generation must
+increase by more than 20% and 0.5 seconds; warmed runtime must increase by more
+than 15% and one microsecond per sample. At least four pairs must be slower,
+and the effect must exceed three times the robust paired noise estimate.
+This is a noise-screening policy, not a statistical confidence interval.
+Every physical result must be finite, nonzero and agree between revisions.
+Scalar results use relative tolerance 10⁻⁹ with no absolute allowance, because
+an absolute floor suitable for GL15 could mask changes to their smaller values.
+Each topology/route comparison, including any confirmation run, has a
+four-minute budget. The collection can take longer than four minutes.
+Compilation is outside that budget. Exceeding it yields
+an inconclusive failure rather than a claimed performance regression.
+
+The comparator exits zero for a clean comparison, one for a confirmed
+regression or changed result, and two for invalid, incomplete or inconclusive
+measurements. The public output directory contains revision/workload
+fingerprints, numeric measurements and the comparison report. Generated states
+and raw process logs stay in the private work directory.
+
+Uploading these measurements does not enforce a performance budget. A merge
+gate must run the harness freshly and require its zero exit status. The existing
+required `NixCI readiness` check aggregates the performance job together with
+configuration validation. A planned measurement must succeed; failed,
+cancelled or unexpectedly skipped measurements fail the aggregate.
+
+Automatic paired benchmarks run for non-draft, same-repository PRs marked
+`final-review` when the pinned candidate/base diff changes Rust code, model
+or calculation inputs, dependencies, build settings or the benchmark itself.
+Documentation-only and integration-test-body changes skip the measurement.
+Merge-group commits apply the same relevance test using the queue's head/base
+SHAs. Main pushes explicitly skip paired benchmarks: their full correctness
+suite and timing uploads continue independently. Ordinary feature-branch pushes
+do not trigger this workflow. Manual benchmark dispatch remains available.
+
+A relevant new commit while `final-review` remains set must rerun the gate.
+Returning to development means removing that label; PR-number concurrency
+cancels superseded work. Compiled CLI packages are reused from Nix caches, but
+the benchmark always measures fresh states. All ten cases run sequentially on
+one worker in a single runner invocation and pinned runtime shell, to avoid timing
+interference and reuse the two CLI packages built once before measurement.
+The runner gives each case separate work and output subdirectories. Every case
+must pass; a failing case does not prevent the remaining cases from recording
+their own reports. The performance manifest and cards are excluded from the
+drawing WASM source, which the CLI embeds, so changing a benchmark does not
+invalidate that compiled dependency. Runtime tools come from the pinned Nixpkgs
+input without building the full development shell.
+The signed license is scoped to the measurement step, and uploads contain
+only numeric evidence and revision/workload metadata.
+
 == Final-review readiness
 
 `nix-ci.nix` is self-contained. Its top-level `enable` boolean is manually
@@ -93,19 +248,20 @@ so either boolean is valid locally but missing/nonboolean values and scheduling
 drift fail. `dependency-discovery.enable` remains independent. Disabling remote
 NixCI does not disable local checks or cache uploads.
 
-The NixCI readiness workflow evaluates the PR head configuration without building
-the flake. Its `NixCI readiness` check requires a non-draft PR with `final-review`
+The NixCI readiness workflow first evaluates the PR head configuration.
+Its `NixCI readiness` check requires a non-draft PR with `final-review`
 and top-level `enable = true`. Draft and unlabeled PRs fail this merge gate while
 remaining usable for development and feedback. Main pushes and merge-group
 commits require enabled configuration without a label condition.
 
-GitHub Actions builds run automatically on pushes to `main`, not on PRs,
-merge groups, or feature-branch pushes. This includes Nix, Continuous integration,
+The full GitHub Actions build workflows run automatically on pushes to `main`,
+not on PRs, merge groups, or feature-branch pushes. This includes Nix, Continuous integration,
 Documentation Pages, Linnet Python WebAssembly, and Typst package mirroring.
 Existing manual dispatch, scheduled maintenance/acceptance checks, and release-tag
-publishing remain available. The lightweight NixCI readiness workflow retains
-its PR and merge-group triggers because it is required to merge. The
-`final-review` label gates readiness, not build workflows or NixCI itself; labels
+publishing remain available. The readiness workflow retains PR and merge-group
+triggers and invokes the scoped performance job described above. The
+`final-review` label gates readiness and PR performance measurements, not the
+full build workflows or NixCI itself; labels
 do not alter committed NixCI configuration or cancel already-running NixCI jobs.
 
 Agents disable NixCI during implementation unless instructed otherwise. Before

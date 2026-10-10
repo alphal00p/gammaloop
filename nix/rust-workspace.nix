@@ -148,7 +148,8 @@
   linnestWasmSrc = lib.fileset.toSource {
     root = workspaceRoot;
     fileset = lib.fileset.unions [
-      cargoSources
+      # Benchmark cards are TOML but do not affect the drawings embedded in the CLI.
+      (lib.fileset.difference cargoSources (lib.fileset.maybeMissing (workspaceRoot + "/benchmarks/performance")))
       (workspaceRoot + "/crates/clinnet/templates/figure.typ")
       (workspaceRoot + "/crates/clinnet/templates/grid.typ")
       (workspaceRoot + "/crates/clinnet/templates/layout.typ")
@@ -1423,7 +1424,6 @@
     });
 
   nextestProfile = "ci_gammaloop";
-  nextestJunitPath = "target/nextest/${nextestProfile}/junit.xml";
 
   nextestFailureSummary = pkgs.writeShellApplication {
     name = "nextest-failure-summary";
@@ -2511,8 +2511,6 @@
 
   nextestTargetTriple = pkgs.stdenv.hostPlatform.rust.rustcTargetSpec or pkgs.stdenv.hostPlatform.config;
 
-  nextestBaseExtraArgs = "--profile ${nextestProfile} --no-fail-fast --final-status-level fail --no-tests=pass";
-
   nextestPackageFilter = packages: "-E ${lib.escapeShellArg (lib.concatMapStringsSep " | " (package: "package(${package})") packages)}";
   nextestFilterFor = target:
     if target ? filter
@@ -2684,8 +2682,15 @@
     })
     checkedNextestPackageGroups);
 
-  nextestCheckFor = target:
-    pkgs.runCommand "gammaloop-nextest-${target.name}" {
+  nextestCheckFor = {
+    target,
+    profile ? nextestProfile,
+    partition ? null,
+    name ? "gammaloop-nextest-${target.name}",
+  }: let
+    junitPath = "target/nextest/${profile}/junit.xml";
+  in
+    pkgs.runCommand name {
       nativeBuildInputs = [
         ciToolchain
         pkgs.cargo-nextest
@@ -2767,32 +2772,43 @@
       fi
       export NEXTEST_TEST_THREADS=$((nextest_threads < 16 ? nextest_threads : 16))
       echo "Nextest worker budget: $NEXTEST_TEST_THREADS"
-
-      mkdir -p target/nextest
+    '' + lib.optionalString (profile == "ci_slow") ''
+      # These archive runners replace the separate soft-CT acceptance jobs.
+      # Preserve their stack allowance and retain failed generated states in
+      # the build tree, while keeping internal Rayon work within this budget.
+      export RUST_MIN_STACK=134217728
+      export RAYON_NUM_THREADS="$NEXTEST_TEST_THREADS"
+      export GAMMALOOP_TESTS_NO_CLEAN_STATE=1
+    '' + ''
+      mkdir -p target/nextest "$out"
       set +e
       status=0
       ${lib.concatMapStringsSep "\n" (package: ''
-          rm -f ${lib.escapeShellArg nextestJunitPath}
+          rm -f ${lib.escapeShellArg junitPath}
           cargo nextest run \
             --archive-file ${nextestBinarySetForTarget target}/${nextestArchiveNameFor target package} \
             --extract-to . \
             --extract-overwrite \
             --workspace-remap . \
-            ${nextestBaseExtraArgs}
+            --profile ${lib.escapeShellArg profile} \
+            --no-fail-fast --final-status-level fail --no-tests=pass \
+            ${lib.optionalString (partition != null) "--partition ${lib.escapeShellArg partition}"}
           package_status=$?
-          nextest-failure-summary ${lib.escapeShellArg nextestJunitPath} || true
+          nextest-failure-summary ${lib.escapeShellArg junitPath} || true
+          if [ -f ${lib.escapeShellArg junitPath} ]; then
+            cp ${lib.escapeShellArg junitPath} "$out/${package}.xml"
+          fi
           if [ "$package_status" -ne 0 ] && [ "$status" -eq 0 ]; then
             status="$package_status"
           fi
         '')
         target.packages}
-      mkdir -p "$out"
       exit "$status"
     '');
 
   nextestRunChecks = lib.listToAttrs (map (target: {
       name = "gammaloop-nextest-${target.name}";
-      value = nextestCheckFor target;
+      value = nextestCheckFor {inherit target;};
     })
     checkedNextestPackageGroups);
 
@@ -2930,6 +2946,32 @@
     ]
     ++ map (target: "gammaloop-nextest-binaries-${target.name}") checkedNextestPackageGroups
   );
+  # Main includes unmeasured slow tests in every package. Integration's fast
+  # check and four long-test partitions cover the same full selection while
+  # reusing its archives. Keep these results outside NixCI's fast scheduling.
+  mainTestChecks =
+    hestiaChecks
+    // lib.listToAttrs (map (target: {
+      name = "gammaloop-nextest-${target.name}";
+      value = nextestCheckFor {
+        inherit target;
+        profile = "ci_full";
+      };
+    }) (lib.filter (target: target.name != "integration") checkedNextestPackageGroups))
+    // lib.listToAttrs (map (index: let
+      name = "gammaloop-nextest-long-${toString index}";
+    in {
+      inherit name;
+      value = nextestCheckFor {
+        inherit name;
+        target =
+          lib.findFirst (target: target.name == "integration")
+          (throw "main test partitions require the integration group")
+          checkedNextestPackageGroups;
+        profile = "ci_slow";
+        partition = "hash:${toString index}/4";
+      };
+    }) [1 2 3 4]);
 in {
   inherit (documentation) docsTypst docsFontPath linnetPython alphal00pDocsCargoArtifacts
     alphal00pDocsPages alphal00pDocsSnapshotFixture;
@@ -2940,6 +2982,7 @@ in {
     cranePythonBuildArtifacts
     allChecks
     hestiaChecks
+    mainTestChecks
     gammaloop-cli
     clinnet-cli
     gammaloop-python-module
