@@ -213,7 +213,9 @@ impl ThermalWeight {
     }
 
     pub(crate) fn product(&self, rhs: &Self) -> Self {
-        debug_assert!(
+        // One generation uses one medium; a mismatch is a construction bug and
+        // must not silently keep the left-hand mode.
+        assert!(
             self.medium_mode == rhs.medium_mode
                 || self.medium_mode == MediumMode::Vacuum
                 || rhs.medium_mode == MediumMode::Vacuum,
@@ -311,7 +313,6 @@ mod tests {
         }
     }
 
-    #[cfg(debug_assertions)]
     #[test]
     #[should_panic(expected = "cannot multiply thermal weights with different equilibrium modes")]
     fn thermal_product_rejects_mixed_equilibrium_modes() {

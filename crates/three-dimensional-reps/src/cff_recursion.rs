@@ -686,6 +686,8 @@ fn cff_surface_for_vertex(parsed: &ParsedGraph, vertex: &CffVertex) -> (LinearEn
             .map(|edge| EdgeIndex(edge.edge_id))
             .collect::<Vec<_>>()
     };
+    // A surface orients its two edge sides by the thermal-numerator convention
+    // (larger side positive, edge IDs breaking ties); `sign` records the flip.
     let (sides, sign) = ThermalNumerator::from_edge_lists_canonicalized(
         virtual_ids(&vertex.outgoing),
         virtual_ids(&vertex.incoming),
