@@ -1135,6 +1135,8 @@ impl<const N: u32> SymFloatLike for VarFloat<N> {
         N
     }
 
+    fn set_precision(&mut self, _precision: u32) {}
+
     fn zero(&self) -> Self {
         Self::new_zero()
     }
@@ -1346,6 +1348,10 @@ impl SymFloatLike for QuadFloat {
 
     fn get_precision(&self) -> u32 {
         self.0.get_precision()
+    }
+
+    fn set_precision(&mut self, precision: u32) {
+        self.0.set_precision(precision);
     }
 
     fn zero(&self) -> Self {
@@ -2573,6 +2579,10 @@ impl<T: FloatLike> SymFloatLike for F<T> {
     }
     fn get_precision(&self) -> u32 {
         self.0.get_precision()
+    }
+
+    fn set_precision(&mut self, precision: u32) {
+        self.0.set_precision(precision);
     }
     fn get_epsilon(&self) -> f64 {
         self.0.get_epsilon()
