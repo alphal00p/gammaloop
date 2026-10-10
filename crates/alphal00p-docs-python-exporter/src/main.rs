@@ -120,7 +120,7 @@ fn render(
 ) -> Result<String, Box<dyn Error>> {
     match component {
         #[cfg(feature = "linnet")]
-        "linnet-py" => Ok(linnet_py::canonical_stub()?),
+        "linnet-py" => Ok(linnet_py::canonical_stub_from_module(module)),
         _ => Ok(module.to_string()),
     }
 }
@@ -237,7 +237,7 @@ fn validate_exact_surface(
 }
 
 fn gather(component: &str) -> Result<(&'static str, pyo3_stub_gen::StubInfo), Box<dyn Error>> {
-    match component {
+    let gathered: Result<_, Box<dyn Error>> = match component {
         #[cfg(feature = "gammaloop")]
         "gammaloop-python" => Ok(("gammaloop._gammaloop", gammaloop_api::python::stub_info()?)),
         #[cfg(feature = "linnet")]
@@ -252,7 +252,59 @@ fn gather(component: &str) -> Result<(&'static str, pyo3_stub_gen::StubInfo), Bo
             "component {component} is not enabled; select its matching Cargo feature"
         )
         .into()),
+    };
+    let (module_name, stub_info) = gathered?;
+    #[cfg(any(
+        feature = "gammaloop",
+        feature = "linnet",
+        feature = "spenso",
+        feature = "idenso",
+        feature = "vakint"
+    ))]
+    let stub_info = scope_symbolica_floats(stub_info);
+    Ok((module_name, stub_info))
+}
+
+#[cfg(any(
+    feature = "gammaloop",
+    feature = "linnet",
+    feature = "spenso",
+    feature = "idenso",
+    feature = "vakint"
+))]
+fn scope_symbolica_floats(mut stub_info: pyo3_stub_gen::StubInfo) -> pyo3_stub_gen::StubInfo {
+    use std::any::TypeId;
+    use symbolica::domains::float::{PythonComplexFloat, PythonFloat};
+
+    // Numerica leaves these two classes unscoped in its stub inventory.
+    // They belong to Symbolica, even when another product gathers first.
+    let float_types = [
+        TypeId::of::<PythonFloat>(),
+        TypeId::of::<PythonComplexFloat>(),
+    ];
+    let mut floats = Vec::new();
+    for (name, module) in &mut stub_info.modules {
+        if name != "symbolica" {
+            for type_id in float_types {
+                if let Some(class) = module.class.remove(&type_id) {
+                    floats.push((type_id, class));
+                }
+            }
+        }
     }
+    if !floats.is_empty() {
+        let module = stub_info
+            .modules
+            .entry("symbolica".to_owned())
+            .or_insert_with(|| pyo3_stub_gen::generate::Module {
+                name: "symbolica".to_owned(),
+                default_module_name: "symbolica".to_owned(),
+                ..Default::default()
+            });
+        module.default_module_name = "symbolica".to_owned();
+        module.class.extend(floats);
+    }
+    stub_info
 }
 
 #[cfg(test)]
@@ -461,7 +513,8 @@ def validate(runtime_module, stub_source):
     #[cfg(feature = "linnet")]
     #[test]
     fn linnet_package_and_docs_share_the_typed_stub_info_surface() {
-        let canonical = linnet_py::canonical_stub().unwrap();
+        let (module_name, stub_info) = super::gather("linnet-py").unwrap();
+        let canonical = super::render("linnet-py", &stub_info.modules[module_name]).unwrap();
         assert_eq!(canonical, include_str!("../../linnet-py/linnet_py.pyi"));
         assert_eq!(
             canonical,

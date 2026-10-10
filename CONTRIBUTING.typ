@@ -228,7 +228,7 @@ maintained in
   for an explicitly requested behavior change is permitted; otherwise ask
   before changing what a failing test asserts.
 - During development, run checks relevant to the change. Before final review,
-  run the selected full CI suite as described below.
+  prepare and upload the selected CI artifacts; NixCI runs the full suite.
 - Install `cargo-nextest` 0.9.115 or newer. The repository configuration
   enforces this minimum; update an existing installation with
   `cargo nextest self update`.
@@ -363,9 +363,10 @@ Before requesting final review:
 
 + Set top-level `enable = true` in `nix-ci.nix`.
 + On `itphlies`, reuse/download matching cache outputs through Nix substitution.
-  Run the selected full CI suite against the final code and upload successful
-  results when credentials are available, following the cache workflow below.
-+ Push the validated code, mark the PR non-draft, then apply `final-review`.
+  Run static checks and prepare/upload the selected runtime producers against
+  the final code when credentials are available, following the cache workflow
+  below. Runtime tests run in NixCI after the push.
++ Push the prepared code, mark the PR non-draft, then apply `final-review`.
 
 When returning to development, remove `final-review` and commit
 `enable = false`. The label gates merging; the committed toggle controls NixCI
@@ -387,8 +388,9 @@ remain available with NixCI disabled.
 See #link("docs/architecture/ci.typ")[CI maintenance and measurements] for the build design, measured
 results, branch migration and `just ci-report` usage.
 
-Before final review, contributors and agents must run the selected CI checks
-locally and upload successful results when cache credentials are available.
+Before final review, contributors and agents must run the selected static checks
+locally and upload compiled runtime producers when cache credentials are available.
+NixCI runs the selected runtime suite after the push.
 Ordinary development pushes require checks relevant to the change, not the full
 suite and upload cycle.
 Work from the repository root; enter `nix develop` if you need the pinned Just
@@ -414,8 +416,8 @@ updates to a PR already in final review. The host's Nix daemon is configured to
 download from the NixCI cache using its signing key and machine credentials.
 Leave substitution enabled: the Nix builds in this command automatically reuse
 local outputs or download matching cached outputs, build/check what is missing,
-then upload the selected successful outputs and producer closures. There is no
-need to download the entire cache or force rebuilds. Completing this locally
+then upload the static-check outputs, runtime launchers and producer closures.
+There is no need to download the entire cache or force rebuilds. Completing this locally
 before the push minimizes work left for NixCI.
 
 Use the same command on other hosts for the final-review pre-push workflow when
@@ -425,11 +427,14 @@ cache credentials are available:
 just ci-checks-and-upload
 ```
 
-This already runs `just ci-checks`, so there is no need to run both commands.
+This runs static checks and compiles runtime producers without running Rust or
+Python tests, doctests or the documentation publication suite. Use `just ci-checks`
+explicitly when you also want to run that suite locally.
 Wait for the command to succeed and print `CI upload completed` before pushing.
 Run it against the final code you intend to push; rerun it if that code changes.
-If you lack upload credentials, run `just ci-checks` and mention in your handoff
-or PR that the results were not uploaded.
+If you lack upload credentials, run checks relevant to the change and mention
+in your handoff or PR that the artifacts were not uploaded. NixCI builds any
+missing artifacts before running its tests.
 
 After changing dependencies or features, run `cargo hakari generate` and
 `cargo hakari verify` in `nix develop`. Commit the updated workspace-hack manifest
@@ -451,19 +456,26 @@ shell enables no upload hook. Bare Cargo builds do not populate this cache.
 An untrusted daemon may warn that it ignores `netrc-file`; the upload client
 still uses that file to authenticate with the destination cache.
 
-The upload command first requires successful checks, then realizes the outputs
-selected by `nix/ci.nix` and publishes their runtime closures. These explicit
-producer targets retain the binaries and compiler artifacts that test-result
-outputs alone would omit. Existing local outputs are published too. It does not
-select packaging, WASM, dev shells or unrelated repositories.
+The upload command realizes the build jobs selected by `nix/ci.nix` and publishes
+their runtime closures. These jobs include static checks, lightweight runtime
+launchers and the producers that retain test binaries and compiler artifacts.
+The command does not select runtime test-result checks. Existing matching build
+outputs are published too. It does not select packaging, WASM, dev shells or
+unrelated repositories.
 Required shared dependencies can still be part of the uploaded closures.
 
-Check time, publication preparation and upload time are reported separately.
+Static checks and artifact preparation share one timed build phase; upload time
+is reported separately.
 An upload failure returns a nonzero status; fix the reported problem and rerun
-`just ci-checks-and-upload`. Successful checks remain cached, so retrying does not
-require rerunning matching tests. Use plain `just ci-checks` for local benchmarks
-without publishing. Remote reuse also requires matching outputs: a macOS build,
+`just ci-checks-and-upload`. Prepared outputs remain cached, so retrying does not
+require recompiling matching inputs. Use plain `just ci-checks` for local
+benchmarks without publishing. Remote reuse also requires matching outputs: a macOS build,
 for example, does not replace a Linux build.
+
+NixCI starts each selected runtime launcher even when that launcher is cached.
+The launcher requests the corresponding Nix test-result check; a matching cached
+result can skip test execution. Uploading compiled producers prepares the inputs
+for uncached runtime checks, rather than certifying their results locally.
 
 The flake retains NixCI's substituter and signing-key settings for downloads.
 On a shared daemon, an administrator must configure the cache's trust and access

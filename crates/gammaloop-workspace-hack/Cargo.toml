@@ -88,7 +88,6 @@ serde_spanned = { version = "1" }
 smallvec = { version = "1", default-features = false, features = ["const_new", "serde"] }
 smartstring = { version = "1", features = ["serde"] }
 symbolica = { version = "3", default-features = false, features = ["bincode", "float-mpfr", "integer-gmp", "native_code_generation", "serde"] }
-syn = { version = "2", features = ["extra-traits", "fold", "full", "visit-mut"] }
 time = { version = "0.3", features = ["formatting", "local-offset", "parsing"] }
 toml_datetime = { version = "1", features = ["serde"] }
 toml_parser = { version = "1" }
@@ -134,3 +133,21 @@ features = ["std"]
 [build-dependencies.indenter]
 version = "0.3"
 features = ["std"]
+
+# Documentation and tests activate these additive features on dependencies of
+# the GammaLoop libraries. Keep their native library artifacts interchangeable.
+[dependencies.figment]
+version = "0.10"
+features = ["json", "toml"]
+
+[dependencies.derive_more]
+version = "2"
+features = ["as_ref", "deref", "deref_mut", "is_variant"]
+
+[build-dependencies.derive_more]
+version = "2"
+features = ["as_ref", "deref", "deref_mut", "is_variant"]
+
+[build-dependencies.syn]
+version = "2"
+features = ["extra-traits", "fold", "full", "visit", "visit-mut"]
