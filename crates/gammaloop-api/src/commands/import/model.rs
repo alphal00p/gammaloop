@@ -111,6 +111,22 @@ fn bridge_py_logging(py: Python<'_>) -> PyResult<()> {
     Ok(())
 }
 
+/// Releases before 1.0.0 silently discard particle chemical potentials.
+#[cfg(feature = "ufo_support")]
+fn require_chemical_potential_loader(version: &str, python: &str) -> eyre::Result<()> {
+    if version
+        .split('.')
+        .next()
+        .and_then(|major| major.parse::<u64>().ok())
+        .is_none_or(|major| major < 1)
+    {
+        return Err(eyre!(
+            "UFO import requires ufo-model-loader>=1.0.0; found {version}. Upgrade the loader in Python environment {python}."
+        ));
+    }
+    Ok(())
+}
+
 #[cfg(feature = "ufo_support")]
 pub(crate) fn load_ufo_model(
     path: &std::path::Path,
@@ -126,22 +142,21 @@ pub(crate) fn load_ufo_model(
         let exe: String = sys.getattr("prefix")?.extract()?;
         let ver: String = sys.getattr("version")?.extract()?;
 
-        let loader_version: String = py
-            .import("importlib.metadata")?
-            .call_method1("version", ("ufo-model-loader",))
-            .map_err(|e| eyre!("UFO import requires ufo-model-loader>=1.0.0: {e}\nPython: {exe}"))?
-            .extract()?;
-        // Releases before 1.0.0 silently discard particle chemical potentials.
-        if loader_version
-            .split('.')
-            .next()
-            .and_then(|major| major.parse::<u64>().ok())
-            .is_none_or(|major| major < 1)
-        {
-            return Err(eyre!(
-                "UFO import requires ufo-model-loader>=1.0.0; found {loader_version}. Upgrade the loader in Python environment {exe}."
-            ));
-        }
+        let metadata = py.import("importlib.metadata")?;
+        let loader_version: String = match metadata.call_method1("version", ("ufo-model-loader",)) {
+            Ok(version) => version.extract()?,
+            Err(e) if e.is_instance(py, &metadata.getattr("PackageNotFoundError")?) => {
+                return Err(eyre!(
+                    "UFO import requires ufo-model-loader>=1.0.0, but Python environment {exe} has no installed ufo-model-loader metadata. A source checkout on PYTHONPATH cannot be version-checked; install it, for example with `pip install -e <checkout>`."
+                ));
+            }
+            Err(e) => {
+                return Err(eyre!(
+                    "Could not read the ufo-model-loader version: {e}\nPython: {exe}"
+                ));
+            }
+        };
+        require_chemical_potential_loader(&loader_version, &exe)?;
 
         ensure_py_log_bridge(py)
             .map_err(|e| eyre::eyre!("Failed to bridge python logging to rust. Error: {}", e))?;
@@ -736,22 +751,17 @@ mod tests {
     use symbolica::domains::rational::Rational;
 
     #[test]
-    fn ufo_import_rejects_loader_without_chemical_potential_support() -> Result<()> {
-        Python::initialize();
-        Python::attach(|py| -> Result<()> {
-            let patch = py
-                .import("unittest.mock")?
-                .getattr("patch")?
-                .call1(("importlib.metadata.version",))?;
-            let version = patch.call_method0("__enter__")?;
-            version.setattr("return_value", "0.1.8")?;
-            let result = load_ufo_model(Path::new("unused"), None, true);
-            patch.call_method1("__exit__", (py.None(), py.None(), py.None()))?;
-            let error = result.unwrap_err().to_string();
+    fn ufo_import_rejects_loader_without_chemical_potential_support() {
+        for version in ["0.1.8", "dev"] {
+            let error = require_chemical_potential_loader(version, "python")
+                .unwrap_err()
+                .to_string();
             assert!(error.contains("ufo-model-loader>=1.0.0"), "{error}");
-            assert!(error.contains("0.1.8"), "{error}");
-            Ok(())
-        })
+            assert!(error.contains(version), "{error}");
+        }
+        for version in ["1.0.0", "12.3"] {
+            require_chemical_potential_loader(version, "python").unwrap();
+        }
     }
 
     #[test]
