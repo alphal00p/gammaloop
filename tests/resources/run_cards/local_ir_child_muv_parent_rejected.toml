@@ -1,0 +1,50 @@
+commands = []
+
+[[command_blocks]]
+name = "generate"
+commands = [
+  "import model scalars-default.json",
+  "remove processes",
+  "import graphs ./tests/resources/graphs/local_ir_child_muv_parent_rejected.dot -p nested_positive_degree_hu -i nested_positive_degree_hu",
+  "generate existing -p nested_positive_degree_hu -i nested_positive_degree_hu",
+]
+
+[default_runtime_settings.kinematics.externals]
+type = "constant"
+
+[default_runtime_settings.kinematics.externals.data]
+momenta = [
+  [2.0, 0.0, 0.0, 0.0],
+  "dependent",
+]
+helicities = [0, 0]
+
+[default_runtime_settings.general]
+evaluator_method = "SingleParametric"
+
+[cli_settings.global]
+logfile_directive = "off"
+display_directive = "off"
+
+[cli_settings.global.generation.uv]
+generate_integrated = false
+add_marker = false
+inner_products = true
+orchestrator = "hedge_poset"
+
+[[cli_settings.global.generation.uv.renormalization_prescription.overrides]]
+prescription = "IR"
+
+[cli_settings.global.generation.uv.renormalization_prescription.overrides.ct_identifier]
+external_pdg_set = [-1001, 1001]
+internal_pdg_set = [1002]
+
+[cli_settings.global.generation.tropical_subgraph_table]
+panic_on_fail = false
+disable_tropical_generation = true
+
+[cli_settings.global.generation.threshold_subtraction]
+enable_thresholds = false
+
+[cli_settings.global.generation.evaluator]
+iterative_orientation_optimization = false

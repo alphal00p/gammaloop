@@ -1,55 +1,102 @@
 use super::utils::*;
 use super::*;
 
+#[test]
+fn photons_1l_integrate() -> Result<()> {
+    let mut cli = get_test_cli(
+        Some("photons_eu.toml".into()),
+        get_tests_workspace_path().join("photons_eu_integrate"),
+        None,
+        true,
+    )?;
+
+    // this can be moved to the run card once we have a set model param command
+
+    cli.state
+        .model_parameters
+        .insert(UFOSymbol(symbol!("UFO::MT")), Complex::new_re(F(1500.0)));
+
+    cli.state
+        .model_parameters
+        .insert(UFOSymbol(symbol!("UFO::aEWM1")), Complex::new_re(F(128.93)));
+
+    cli.state
+        .model
+        .apply_param_card(&cli.state.model_parameters)?;
+
+    // The historical hexagon used propagators without i and a real CFF
+    // measure. Six propagator phases and the physical loop measure rotate
+    // its already sign-migrated reference by i. Gamma5 conjugation makes
+    // the closed vector-current trace invariant under the old mass sign.
+    let target = Complex::new(F(-3.94362534040412e-13), F(1.22898408452706e-13));
+
+    let integrate = Integrate {
+        process: vec![],
+        integrand_name: vec!["default".to_string()],
+        n_cores: Some(1),
+        workspace_path: Some(
+            get_tests_workspace_path().join("photons_eu_integrate/integration_workspace/"),
+        ),
+        target: vec![target.re.0.to_string(), target.im.0.to_string()],
+        restart: true,
+        ..Default::default()
+    };
+
+    let integration_result = integrate.run(&mut cli.state, &cli.cli_settings)?;
+
+    let integration_result = single_slot_integral(&integration_result);
+    assert_approx_eq(&integration_result.result.re, &target.re, &F(10e-2));
+    assert_approx_eq(&integration_result.result.im, &target.im, &F(10e-2));
+
+    clean_test(&cli.cli_settings.state.folder);
+    Ok(())
+}
+
+#[test]
+fn photons_1l_inspect() -> Result<()> {
+    let mut cli = get_test_cli(
+        Some("photons_eu.toml".into()),
+        get_tests_workspace_path().join("photons_eu_inspect"),
+        None,
+        false,
+    )?;
+
+    // this can be moved to the run card once we have a set model param command
+
+    cli.state
+        .model_parameters
+        .insert(UFOSymbol(symbol!("UFO::MT")), Complex::new_re(F(1500.0)));
+
+    cli.state
+        .model_parameters
+        .insert(UFOSymbol(symbol!("UFO::aEWM1")), Complex::new_re(F(128.93)));
+
+    cli.state
+        .model
+        .apply_param_card(&cli.state.model_parameters)?;
+
+    let (_, inspect) = Inspect {
+        process: None,
+        integrand_name: Some("default".to_string()),
+        point: vec![0.123, 0.3242, 0.4233],
+        momentum_space: false,
+        ..Default::default()
+    }
+    .run(&mut cli)?;
+
+    println!("Inspect result: {inspect:.16e}");
+
+    // The historical value uses the same e_cm=1000 chart, but omits the
+    // propagator and loop-measure phases certified by the six-pole contour.
+    assert_snapshot!(format!("{inspect:.8e}"),@"(-3.710728958614228e-12+4.236544183136418e-12i)");
+
+    clean_test(&cli.cli_settings.state.folder);
+
+    Ok(())
+}
+
 mod slow {
     use super::*;
-
-    #[test]
-    fn photons_1l_integrate() -> Result<()> {
-        let mut cli = get_test_cli(
-            Some("photons_eu.toml".into()),
-            get_tests_workspace_path().join("photons_eu_integrate"),
-            None,
-            true,
-        )?;
-
-        // this can be moved to the run card once we have a set model param command
-
-        cli.state
-            .model_parameters
-            .insert(UFOSymbol(symbol!("UFO::MT")), Complex::new_re(F(1500.0)));
-
-        cli.state
-            .model_parameters
-            .insert(UFOSymbol(symbol!("UFO::aEWM1")), Complex::new_re(F(128.93)));
-
-        cli.state
-            .model
-            .apply_param_card(&cli.state.model_parameters)?;
-
-        let target = Complex::new(F(1.22898408452706e-13), F(3.94362534040412e-13));
-
-        let integrate = Integrate {
-            process: vec![],
-            integrand_name: vec!["default".to_string()],
-            n_cores: Some(1),
-            workspace_path: Some(
-                get_tests_workspace_path().join("photons_eu_integrate/integration_workspace/"),
-            ),
-            target: vec![target.re.0.to_string(), target.im.0.to_string()],
-            restart: true,
-            ..Default::default()
-        };
-
-        let integration_result = integrate.run(&mut cli.state, &cli.cli_settings)?;
-
-        let integration_result = single_slot_integral(&integration_result);
-        assert_approx_eq(&integration_result.result.re, &target.re, &F(10e-2));
-        assert_approx_eq(&integration_result.result.im, &target.im, &F(10e-2));
-
-        clean_test(&cli.cli_settings.state.folder);
-        Ok(())
-    }
 
     #[test]
     fn photonic_amplitudes() -> Result<()> {
@@ -307,10 +354,12 @@ mod slow {
             amplitude: "1l_eu".into(),
             generation_time: Some(Duration::from_secs(7)),
             inspect_point: vec![0.123, 0.3242, 0.4233],
-            inspect_target: Some(Complex::new(4.236544183136417e-12, 3.710728958614226e-12)),
+            // A direct six-pole energy contour with explicit Dirac matrices
+            // gives (-3.710728958614232e-12, 4.236544183136425e-12).
+            inspect_target: Some(Complex::new(-3.710728958614226e-12, 4.236544183136417e-12)),
             integrated_target: Some(Complex::new(
+                F(-3.94362534040412e-13),
                 F(1.22898408452706e-13),
-                F(3.94362534040412e-13),
             )),
             nvar_bench: None,
             sample_time: Some(Duration::from_micros(61)),
@@ -324,10 +373,14 @@ mod slow {
                 .into_owned(),
             amplitude: "1l_phys".into(),
             inspect_point: vec![0.1, 0.2, 0.3],
-            inspect_target: Some(Complex::new(-4.660217572648287e-10, 6.496141401696065e-10)),
+            // Independent six-pole and four-pinch residues at the current
+            // threshold center certify this b=10 point in both evaluator modes.
+            inspect_target: Some(Complex::new(-6.496141419003126e-10, -4.660217621663406e-10)),
+            // Six propagator phases and the physical loop measure rotate the
+            // already sign-migrated integral reference by i.
             integrated_target: Some(Complex::new(
+                F(-3.683_945_762_498_705_4e-11),
                 F(9.277_595_006_874_547e-11),
-                F(3.683_945_762_498_705_4e-11),
             )),
             generation_time: Some(Duration::from_secs(7)),
             nvar_bench: None,
@@ -343,7 +396,9 @@ mod slow {
             amplitude: "2l_eu".into(),
             inspect_point: vec![0.123, 0.3242, 0.4233, 0.523, 0.314, 0.125],
             inspect_target: None,
-            integrated_target: Some(Complex::new(F(-1.8006e-15), F(-1.54335e-14))),
+            // The January reference used eight phase-free fermion propagators,
+            // a -g gluon and no loop i. Current phases multiply it by i⁸ i i² = -i.
+            integrated_target: Some(Complex::new(F(-1.54335e-14), F(1.8006e-15))),
             generation_time: Some(Duration::from_secs(60)),
             nvar_bench: None,
             sample_time: Some(Duration::from_micros(1160)),
@@ -370,111 +425,71 @@ mod slow {
     }
 }
 
-mod failing {
-    use super::*;
-
-    #[test]
-    fn photons_1l_inspect() -> Result<()> {
-        let mut cli = get_test_cli(
-            Some("photons_eu.toml".into()),
-            get_tests_workspace_path().join("photons_eu_inspect"),
-            None,
-            false,
-        )?;
-
-        // this can be moved to the run card once we have a set model param command
-
-        cli.state
-            .model_parameters
-            .insert(UFOSymbol(symbol!("UFO::MT")), Complex::new_re(F(1500.0)));
-
-        cli.state
-            .model_parameters
-            .insert(UFOSymbol(symbol!("UFO::aEWM1")), Complex::new_re(F(128.93)));
-
-        cli.state
-            .model
-            .apply_param_card(&cli.state.model_parameters)?;
-
-        let (_, inspect) = Inspect {
-            process: None,
-            integrand_name: Some("default".to_string()),
-            point: vec![0.123, 0.3242, 0.4233],
-            momentum_space: false,
-            ..Default::default()
-        }
-        .run(&mut cli)?;
-
-        println!("Inspect result: {inspect:.16e}");
-
-        // The old test at a very bad value of e_cm, so I created a new value using the example card in the old main
-        assert_snapshot!(format!("{inspect:.8e}"),@"(4.236544183136419e-12+3.710728958614228e-12i)");
-
-        clean_test(&cli.cli_settings.state.folder);
-
-        Ok(())
+#[test]
+fn photons_phys_1l_inspect() -> Result<()> {
+    let mut cli = get_test_cli(
+        Some("generate_threshold_1L_6photons.toml".into()),
+        get_tests_workspace_path().join("photons_phys_1l_inspect"),
+        None,
+        true,
+    )?;
+    let (_, inspect) = Inspect {
+        process: None,
+        integrand_name: Some("default".to_string()),
+        point: vec![0.1, 0.2, 0.3],
+        momentum_space: false,
+        ..Default::default()
     }
+    .run(&mut cli)?;
 
-    #[test]
-    fn photons_phys_1l_inspect() -> Result<()> {
-        let mut cli = get_test_cli(
-            Some("generate_threshold_1L_6photons.toml".into()),
-            get_tests_workspace_path().join("photons_phys_1l_inspect"),
-            None,
-            true,
-        )?;
-        let (_, inspect) = Inspect {
-            process: None,
-            integrand_name: Some("default".to_string()),
-            point: vec![0.1, 0.2, 0.3],
-            momentum_space: false,
-            ..Default::default()
-        }
-        .run(&mut cli)?;
+    // Propagator and loop-measure phases rotate the sign-migrated 2025
+    // reference by i. Eliminating p5 instead of p0 reverses the threshold
+    // key order and slightly shifts the finite-precision SOCP center.
+    // Direct six-pole and four-pinch residues reproduce both centers;
+    // the current one gives (-5.127347252278015e-10, 2.827365556430783e-10).
+    let target = Complex::new(-5.127347252277998e-10, 2.8273655564308247e-10);
+    assert_eq!(inspect, target);
 
-        let target = Complex::new(2.827365545920272e-10, 5.127347264133554e-10);
-        assert_eq!(inspect, target);
+    Ok(())
+}
 
-        Ok(())
+#[test]
+fn photons_2l_inspect() -> Result<()> {
+    let mut cli = get_test_cli(
+        Some("photons_eu_2l.toml".into()),
+        get_tests_workspace_path().join("photons_eu_2l_inspect"),
+        None,
+        false,
+    )?;
+
+    cli.state
+        .model_parameters
+        .insert(UFOSymbol(symbol!("UFO::MT")), Complex::new_re(F(1500.0)));
+
+    cli.state
+        .model_parameters
+        .insert(UFOSymbol(symbol!("UFO::aEWM1")), Complex::new_re(F(128.93)));
+
+    cli.state
+        .model
+        .apply_param_card(&cli.state.model_parameters)?;
+
+    let (_, inspect) = Inspect {
+        process: None,
+        integrand_name: Some("default".to_string()),
+        point: vec![0.123, 0.3242, 0.4233, 0.523, 0.314, 0.125],
+        momentum_space: false,
+        ..Default::default()
     }
+    .run(&mut cli)?;
 
-    #[test]
-    fn photons_2l_inspect() -> Result<()> {
-        let mut cli = get_test_cli(
-            Some("photons_eu_2l.toml".into()),
-            get_tests_workspace_path().join("photons_eu_2l_inspect"),
-            None,
-            false,
-        )?;
+    println!("Inspect result: {inspect:.16e}");
 
-        cli.state
-            .model_parameters
-            .insert(UFOSymbol(symbol!("UFO::MT")), Complex::new_re(F(1500.0)));
+    // The 40,320 vertex time orders with explicit Dirac matrices give
+    // (-1.811460427370091e-14, 8.840495975003205e-15) in the [13,8] chart.
+    assert_snapshot!(format!("{inspect:.8e}"),@"(-1.8114604273700888e-14+8.840495975003187e-15i)");
 
-        cli.state
-            .model_parameters
-            .insert(UFOSymbol(symbol!("UFO::aEWM1")), Complex::new_re(F(128.93)));
+    clean_test(&cli.cli_settings.state.folder);
 
-        cli.state
-            .model
-            .apply_param_card(&cli.state.model_parameters)?;
-
-        let (_, inspect) = Inspect {
-            process: None,
-            integrand_name: Some("default".to_string()),
-            point: vec![0.123, 0.3242, 0.4233, 0.523, 0.314, 0.125],
-            momentum_space: false,
-            ..Default::default()
-        }
-        .run(&mut cli)?;
-
-        println!("Inspect result: {inspect:.16e}");
-
-        // wrong result
-        assert_snapshot!(format!("{inspect:.8e}"));
-
-        clean_test(&cli.cli_settings.state.folder);
-
-        Ok(())
-    }
+    Ok(())
 }

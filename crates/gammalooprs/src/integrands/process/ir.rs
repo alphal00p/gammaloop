@@ -9,6 +9,7 @@ use eyre::eyre;
 use itertools::Itertools;
 use linnet::half_edge::involution::{EdgeIndex, Orientation};
 use rand::Rng;
+use serde::Serialize;
 use spenso::algebra::complex::Complex;
 use symbolica::numerical_integration::MonteCarloRng;
 use tabled::{builder::Builder, settings::Style};
@@ -180,6 +181,7 @@ pub struct GraphCutDefinition {
 pub struct SingleLimitReport {
     pub limit_name: String,
     pub orientation_label: Option<String>,
+    pub ray_fingerprint: Option<ProfileRayFingerprint>,
     pub passed: bool,
     pub power_law_fit: PowerLawFit,
     pub scaling: f64,
@@ -187,6 +189,15 @@ pub struct SingleLimitReport {
     pub display_only_reports: Vec<DisplayOnlyLimitReport>,
     num_soft: usize,
 }
+
+/// Stable identity of the routed spatial ray actually evaluated by an IR profile.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct ProfileRayFingerprint {
+    pub lmb_edges: Vec<usize>,
+    pub digest: String,
+}
+
+type ProfileRayPoint = (F<f64>, Vec<ThreeMomentum<F<f64>>>);
 
 pub struct CutLimitReport {
     pub cut_id: usize,
@@ -692,6 +703,7 @@ fn build_single_limit_report(
     SingleLimitReport {
         limit_name: format!("{}", ir_limit),
         orientation_label,
+        ray_fingerprint: None,
         passed: scaling > 0.0,
         power_law_fit: slope,
         scaling,
@@ -711,6 +723,7 @@ fn build_threshold_limit_report(
     SingleLimitReport {
         limit_name: format!("{}", threshold_limit),
         orientation_label,
+        ray_fingerprint: None,
         passed: scaling > 0.0,
         power_law_fit: slope,
         scaling,
@@ -1038,6 +1051,7 @@ impl AmplitudeIntegrand {
 
                 for (orientation, orientation_label) in orientations {
                     let mut limit_data = LimitData { data: Vec::new() };
+                    let mut ray_points = Vec::with_capacity(momenta.len());
 
                     for (loop_mom_id, lambda_point) in momenta.iter().cloned().enumerate() {
                         let mut loop_moms: LoopMomenta<F<_>> = (0..loop_number)
@@ -1081,6 +1095,8 @@ impl AmplitudeIntegrand {
                             &lmb,
                             &self.data.graph_terms[graph_id].graph.loop_momentum_basis,
                         );
+                        let routed_loop_momenta = sample.loop_moms().iter().cloned().collect_vec();
+                        ray_points.push((lambda_point.lambda, routed_loop_momenta.clone()));
 
                         limit_data.data.push(LambdaPointEval {
                             lambda: lambda_point.lambda,
@@ -1089,7 +1105,7 @@ impl AmplitudeIntegrand {
                                 model,
                                 graph_id,
                                 orientation,
-                                sample.loop_moms().iter().cloned().collect_vec(),
+                                routed_loop_momenta,
                                 approach_settings.show_per_cut_info,
                             )?,
                         });
@@ -1102,6 +1118,10 @@ impl AmplitudeIntegrand {
                         power_fits.total,
                         build_cut_limit_reports(ir_limit.num_soft(), power_fits.per_cut),
                     );
+                    report.ray_fingerprint = Some(profile_ray_fingerprint(
+                        lmb.loop_edges.iter().copied(),
+                        &ray_points,
+                    ));
                     report.display_only_reports =
                         build_display_only_limit_reports(power_fits.display_components);
                     reports.push(report);
@@ -1350,6 +1370,7 @@ impl CrossSectionIntegrand {
 
         for (orientation, orientation_label) in orientations {
             let mut limit_data = LimitData { data: Vec::new() };
+            let mut ray_points = Vec::with_capacity(momenta.len());
 
             for (loop_mom_id, lambda_point) in momenta.iter().cloned().enumerate() {
                 let mut loop_moms: LoopMomenta<F<_>> = (0..loop_number)
@@ -1393,6 +1414,8 @@ impl CrossSectionIntegrand {
                     &lmb,
                     &self.data.graph_terms[graph_id].graph.loop_momentum_basis,
                 );
+                let routed_loop_momenta = sample.loop_moms().iter().cloned().collect_vec();
+                ray_points.push((lambda_point.lambda, routed_loop_momenta.clone()));
 
                 limit_data.data.push(LambdaPointEval {
                     lambda: lambda_point.lambda,
@@ -1401,19 +1424,24 @@ impl CrossSectionIntegrand {
                         model,
                         graph_id,
                         orientation,
-                        sample.loop_moms().iter().cloned().collect_vec(),
+                        routed_loop_momenta,
                         approach_settings.show_per_cut_info,
                     )?,
                 });
             }
 
             let power_fits = limit_data.extract_power()?;
-            reports.push(build_single_limit_report(
+            let mut report = build_single_limit_report(
                 ir_limit,
                 orientation_label,
                 power_fits.total,
                 build_cut_limit_reports(ir_limit.num_soft(), power_fits.per_cut),
+            );
+            report.ray_fingerprint = Some(profile_ray_fingerprint(
+                lmb.loop_edges.iter().copied(),
+                &ray_points,
             ));
+            reports.push(report);
         }
 
         Ok(reports)
@@ -2211,6 +2239,7 @@ fn evaluate_profile_momentum_point_arb<I: ProcessIntegrandImpl>(
         graph_id,
         orientation,
         loop_momenta,
+        None,
         true,
     )? {
         PreciseEvaluationResult::Arb(result) => {
@@ -2271,6 +2300,40 @@ fn evaluate_profile_momentum_point_arb<I: ProcessIntegrandImpl>(
         PreciseEvaluationResult::Quad(_) => Err(eyre!(
             "IR profiling requested arbitrary precision but received a quad-precision result"
         )),
+    }
+}
+
+fn profile_ray_fingerprint(
+    lmb_edges: impl IntoIterator<Item = EdgeIndex>,
+    ray_points: &[ProfileRayPoint],
+) -> ProfileRayFingerprint {
+    let lmb_edges = lmb_edges.into_iter().map(usize::from).collect_vec();
+    let mut payload = b"gammaloop-ir-profile-ray-v1".to_vec();
+    payload.extend_from_slice(&(lmb_edges.len() as u64).to_le_bytes());
+    for edge in &lmb_edges {
+        payload.extend_from_slice(&(*edge as u64).to_le_bytes());
+    }
+    payload.extend_from_slice(&(ray_points.len() as u64).to_le_bytes());
+    for (lambda, loop_momenta) in ray_points {
+        payload.extend_from_slice(&lambda.0.to_bits().to_le_bytes());
+        payload.extend_from_slice(&(loop_momenta.len() as u64).to_le_bytes());
+        for momentum in loop_momenta {
+            for component in [momentum.px.0, momentum.py.0, momentum.pz.0] {
+                payload.extend_from_slice(&component.to_bits().to_le_bytes());
+            }
+        }
+    }
+
+    // Match the stable FNV-1a convention already used for generated-integrand fingerprints.
+    let mut hash = 0xcbf29ce484222325u64;
+    for byte in payload {
+        hash ^= u64::from(byte);
+        hash = hash.wrapping_mul(0x100000001b3);
+    }
+
+    ProfileRayFingerprint {
+        lmb_edges,
+        digest: format!("{hash:016x}"),
     }
 }
 
@@ -2431,6 +2494,12 @@ pub struct PowerLawFit {
     r_squared: f64,
 }
 
+impl PowerLawFit {
+    pub fn r_squared(&self) -> f64 {
+        self.r_squared
+    }
+}
+
 fn fit_power_law(x: Vec<F<ArbPrec>>, y: Vec<F<ArbPrec>>) -> Result<PowerLawFit> {
     if x.len() != y.len() {
         return Err(eyre!(
@@ -2485,6 +2554,49 @@ mod tests {
         let expected = "C[e1,e2,e3]C[e4,S(e5)]S(e6)S(e7)";
 
         assert_eq!(display, expected);
+    }
+
+    #[test]
+    fn routed_ir_ray_fingerprint_is_deterministic_and_serializable() {
+        let points = vec![
+            (
+                F::from_f64(1.0e-2),
+                vec![
+                    ThreeMomentum::new(F::from_f64(1.0), F::from_f64(2.0), F::from_f64(3.0)),
+                    ThreeMomentum::new(F::from_f64(-1.0), F::from_f64(0.5), F::from_f64(4.0)),
+                ],
+            ),
+            (
+                F::from_f64(1.0e-3),
+                vec![
+                    ThreeMomentum::new(F::from_f64(0.1), F::from_f64(0.2), F::from_f64(0.3)),
+                    ThreeMomentum::new(F::from_f64(-1.0), F::from_f64(0.5), F::from_f64(4.0)),
+                ],
+            ),
+        ];
+        let lmb = [EdgeIndex::from(6), EdgeIndex::from(8)];
+        let fingerprint = profile_ray_fingerprint(lmb, &points);
+
+        assert_eq!(fingerprint, profile_ray_fingerprint(lmb, &points));
+        assert_eq!(fingerprint.lmb_edges, vec![6, 8]);
+        assert_eq!(fingerprint.digest.len(), 16);
+
+        let mut changed_points = points.clone();
+        changed_points[0].1[0].px = F::from_f64(1.5);
+        assert_ne!(
+            fingerprint.digest,
+            profile_ray_fingerprint(lmb, &changed_points).digest,
+            "the digest must identify the actual routed ray, not only its seed"
+        );
+        assert_ne!(
+            fingerprint.digest,
+            profile_ray_fingerprint([EdgeIndex::from(8), EdgeIndex::from(6)], &points).digest,
+            "the LMB route is part of the ray identity"
+        );
+
+        let serialized = serde_json::to_value(&fingerprint).unwrap();
+        assert_eq!(serialized["lmb_edges"], serde_json::json!([6, 8]));
+        assert_eq!(serialized["digest"], fingerprint.digest);
     }
 
     #[test]
