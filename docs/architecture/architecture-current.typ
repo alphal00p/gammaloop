@@ -267,6 +267,87 @@ The builder persists the mode so runtime warmup can validate the current
 temperature, chemical potentials, and bosonic mass domain after loading or updating a model.
 Vacuum builders register no thermal distribution functions.
 
+`integrands::process::fermi_surface::FermiSurfaceProduct` localizes zero-temperature
+distribution derivatives. Production amplitude evaluation separates these
+distributions from the completed UV-subtracted expression before compiling
+numerical evaluators. Each positive-order
+thermal factor belongs to an independent cyclic chain: a derivative of order
+`r` represents `delta^(r-1)(E - sigma*mu)`, while the CFF coefficient retains its
+existing cyclic-chain sign and factorial. The constructor checks the selected
+edge routing and chooses a loop basis containing one momentum per factor.
+Repeated or dependent constraints within a product are malformed expressions;
+fixed external shifts do not make dependent loop directions independent.
+
+For each selected momentum, the localizer inserts a caller-supplied profile
+normalized over positive scale `t` and uses `q = t*k`, retaining the original
+spatial integration dimension. Independent energy-offset jets give the analytic
+root `t(u) = sqrt((sigma*mu + u)^2 - m^2)/|k|`. The differentiated weight includes
+the complete `h(t)*t^3/g'(t)` measure and the smooth coefficient callback.
+HyperDual Taylor coefficients are converted to ordinary mixed derivatives with
+the distribution-action signs and factorials. Empty shells contribute zero;
+degenerate onsets, invalid radial coordinates and nonfinite results are errors.
+Masses and chemical potentials are held fixed during differentiation.
+
+The callback receives momenta in the adapted basis, with all unconstrained
+coordinates held fixed. It must preserve the jets through every momentum-dependent
+factor. A future conditional Cutkosky localization can return its complete
+root- and Jacobian-dependent weight through this callback before the Fermi
+derivatives are extracted. Deltas and steps must not be differentiated
+numerically inside it; such boundary and intersection terms have to be expanded
+symbolically and validated as Fermi products first. Thermal cross sections
+and threshold subtraction remain rejected by the existing settings validation.
+
+Production sector extraction collects the tagged thermal functions while
+retaining factorized smooth coefficients and shared numerator definitions.
+It runs after vacuum subtraction and both local and integrated UV contributions
+have been assembled. Parametric orientation branches select the complete residue
+key before fixing orientation signs; explicit orientation sums are extracted
+once. Distinct signed chemical-potential supports stay separate, and the
+ordinary bulk retains its existing evaluator path. Residual zero-temperature
+steps must be independent of the localized loop directions; unsupported moving
+step boundaries are rejected instead of differentiated pointwise.
+Basis completion first retains additional independent fermion routes before
+choosing arbitrary remaining graph chords. This keeps an untouched occupation
+step independent when the input basis mixes its momentum with a localized one,
+as in a dotted sunset with a boson and an undotted fermion as its input LMB.
+
+Each sector evaluates its masses and signed chemical potentials in the current
+numerical precision using the shared parameter builder. The runtime maps the
+sample to its adapted loop basis, uses the configured positive-scale profile,
+then routes momentum jets back to the graph basis for the smooth coefficient
+evaluator. Numerical representability failures enter the existing precision
+retry path. Model refresh, evaluator backends and saved process state include
+the sectors. Standalone evaluator archives cannot encode this runtime momentum
+localization and reject processes containing Fermi sectors; saved process state
+retains the complete calculation.
+
+The tests cover analytic shell integrals, independent products, profile
+independence, the relation to raised-cut residue algebra, pointwise production
+orientation sums, model refresh and persistence. Symbolic reconstruction checks
+verify that vacuum subtraction and both UV contributions retain their Fermi
+sectors. A generated one-loop double pole is checked against an independent
+contour derivative, including its phase and spatial normalization, at fixed
+momenta inside and outside a massive Fermi sphere. A factorized two-loop graph
+checks numerical composition with local and integrated UV terms against that
+analytic cycle factor times a separately generated scalar tadpole.
+
+The cold-dense inspection card includes the bare tennis ball and fixes its
+positive-scale profile explicitly. Its ordinary Fermi delta gives a pointwise
+value of the form `B(k) + A(k)*h(t*)`; inspection checks that dependence across
+profile widths. These local values are representation dependent and are not
+integrated reference values. A one-loop convergence test integrates a massive
+fermion triple pole, including both the delta and its derivative. With unit
+local numerators its vacuum-subtracted integral is
+`i*mu/(32*pi^2*m^2*sqrt(mu^2-m^2))`. Production Monte Carlo runs with fixed sample
+budgets check this analytic target, decreasing uncertainty and independence
+of the normalized localization profile. Numerical convergence against
+multi-loop literature values remains separate work.
+
+A genuine two-loop dotted-sunset convergence test covers a raised fermion
+whose momentum is not aligned with either input loop momentum. Its independent
+reference calculation is documented in comments in
+`tests/resources/run_cards/fermi_surface_2l_integration.toml`.
+
 The shared `LinearEnergyExpr` stores exact `Rational` coefficients for indexed internal/external energies, the uniform scale and the constant term; `CFFVariant::prefactor` is also `Rational`. Arithmetic and cut handling retain that type until symbolic output converts it with `Atom::num`. Native rational serde/bincode support owns coefficient persistence; old Atom coefficient encodings are not a compatibility contract.
 
 CFF capacities belong to independently sampled denominator occurrences. Physical sources use their EMR/source-edge identities; completed UV sources additionally accept typed canonical denominator classes, which are distinct from `EdgeIndex`. LMB coordinates certify routing and fixed affine carriers. They do not authorize redistributing a physical source's energy powers or combining contours.

@@ -473,8 +473,8 @@ where
                         derivative_order,
                         thermal_sign,
                     )),
-                    // TODO: distribution derivatives with chemical potential not yet
-                    // supported at zero temperature
+                    // Zero-temperature derivatives are distributions, consumed by
+                    // production Fermi-surface localization rather than a pointwise map.
                     _ => None,
                 }
             }

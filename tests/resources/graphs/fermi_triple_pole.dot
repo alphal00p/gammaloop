@@ -1,0 +1,9 @@
+digraph fermi_triple_pole {
+    // A repeated massive fermion pole, with constant local numerators.
+    // The third-order pole produces both a Fermi delta and its derivative.
+    node [num=1];
+    edge [num=1 particle="b"];
+    A -> B [id=0 lmb_id=0];
+    B -> C [id=1];
+    C -> A [id=2];
+}
