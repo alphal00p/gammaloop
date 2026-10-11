@@ -38,7 +38,7 @@ use crate::{
         },
         expression::OrientationID,
         orientations::GraphOrientation,
-        surface::HybridSurfaceID,
+        surface::{HsurfaceID, HybridSurfaceID},
     },
     graph::{
         FeynmanGraph, Graph, GraphGroup, GraphGroupPosition, GroupId, LMBext, LmbIndex,
@@ -110,6 +110,9 @@ pub struct AmplitudeGraphTerm {
     pub orientation_filter: SubSet<OrientationID>,
     pub explicit_orientation_sum_only: bool,
     pub esurfaces: EsurfaceCollection,
+    /// Mixed-sign surfaces in the denominators of the selected orientations,
+    /// revalidated against the runtime masses and externals.
+    denominator_hsurfaces: Vec<HsurfaceID>,
     pub threshold_counterterm: AmplitudeCountertermData,
     pub multi_channeling_setup: LmbMultiChannelingSetup,
     pub lmbs: TiVec<LmbIndex, LoopMomentumBasis>,
@@ -255,20 +258,26 @@ impl AmplitudeGraphTerm {
             ));
         }
 
-        let selected_generation_esurfaces = selected_generation_orientations
+        let selected_denominators = selected_generation_orientations
             .iter()
-            .flat_map(|orientation| {
-                orientation
-                    .iter_denominator_nodes()
-                    .filter_map(|tree_node| {
-                        if let HybridSurfaceID::Esurface(esurface_id) = tree_node.data {
-                            Some(esurface_id)
-                        } else {
-                            None
-                        }
-                    })
+            .flat_map(|orientation| orientation.iter_denominator_nodes())
+            .map(|tree_node| tree_node.data)
+            .collect::<HashSet<_>>();
+        let selected_generation_esurfaces = selected_denominators
+            .iter()
+            .filter_map(|surface| match surface {
+                HybridSurfaceID::Esurface(esurface_id) => Some(*esurface_id),
+                _ => None,
             })
             .collect::<HashSet<_>>();
+        let denominator_hsurfaces = selected_denominators
+            .iter()
+            .filter_map(|surface| match surface {
+                HybridSurfaceID::Hsurface(hsurface_id) => Some(*hsurface_id),
+                _ => None,
+            })
+            .sorted()
+            .collect_vec();
         crate::debug_tags!(#generation, #profile, #compile, #graph, #summary;
             stage = "amplitude_graph_term_esurfaces_done",
             graph = %graph.graph.name,
@@ -701,6 +710,7 @@ impl AmplitudeGraphTerm {
                     .surfaces
                     .esurface_cache
                     .clone(),
+                denominator_hsurfaces,
                 param_builder,
                 real_mass_vec: None,
                 master_external_signature: graph.graph.get_external_signature(),
@@ -1225,6 +1235,11 @@ impl GraphTerm for AmplitudeGraphTerm {
         self.graph.param_builder.update_model_values(model)?;
         self.graph
             .validate_medium_parameters(model, settings.general.inverse_temperature)?;
+        self.graph.validate_denominator_hsurfaces(
+            model,
+            &externals,
+            &self.denominator_hsurfaces,
+        )?;
         if !self.fermi_surfaces.is_empty() {
             // Fermi localization inserts the h-function as a unit scale integral.
             settings.lu_h_function.validate_normalized_profile()?;
