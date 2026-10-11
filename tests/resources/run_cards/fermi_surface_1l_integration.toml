@@ -56,7 +56,7 @@ disable_threshold_subtraction = true
 [default_runtime_settings.sampling]
 graphs = "monte_carlo"
 orientations = "summed"
-lmb_multichanneling = true
+sampling_multichanneling = true
 sampling_channels = "monte_carlo"
 coordinate_system = "spherical"
 mapping = "linear"
