@@ -33,14 +33,20 @@ commands = [
     "set process -p cool_qm_eos -i NLO kv integrator.n_start=1000000 integrator.n_increase=100000 integrator.n_max=100000000",
     """integrate --process cool_qm_eos -i NLO
         --workspace-path ./examples/cli/eos/cool_qm/NLO/integration_workspace_nlo
-        --target 0.0,-0.06107718321357327
+        --target 0.0,-0.0610772376129
         --restart
     """,
 
 ]
 
+\[
+\boxed{\Delta p_{\mathrm{NLO}}=-5.71554652316.}
+\]
+
 # Targets are Minkowski amplitudes: delta_p = -i*A = Im(A), preserving the sign.
-# Imaginary target at inverse_temperature 1.0 is -5.715546311790702.
+# They follow the O(aS) pressure with quark masses of Graf, Schaffner-Bielich and
+# Fraga, Eur. Phys. J. A 52 (2016) 208, https://arxiv.org/abs/1507.08941.
+# Imaginary target at inverse_temperature 1.0 is -5.71554652316.
 
 [default_runtime_settings.general]
 evaluator_method = "SummedFunctionMap"
