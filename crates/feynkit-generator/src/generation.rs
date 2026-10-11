@@ -1578,10 +1578,8 @@ impl InteractionTemplate {
             if matches!(term, AtomView::Fun(function)
                 if function.get_symbol().get_namespace() == "feynkit_generator_template")
             {
-                **out = values
-                    .get(&term)
-                    .expect("compiled placeholder is bound")
-                    .clone();
+                let value = values.get(&term).expect("compiled placeholder is bound");
+                out.set_from_view(&value.as_view());
             }
         })
     }
@@ -1599,9 +1597,12 @@ impl InteractionTemplate {
                 BindingPlaceholder::Dummy(local) => frame.dummy(*local)?,
                 BindingPlaceholder::Momentum { slot, index } => frame.momentum(
                     frame.legs[*slot],
-                    index
-                        .as_ref()
-                        .map(|index| Self::replace(index.as_view(), &values)),
+                    index.as_ref().map(|index| {
+                        values
+                            .get(&index.as_view())
+                            .cloned()
+                            .unwrap_or_else(|| Self::replace(index.as_view(), &values))
+                    }),
                 )?,
                 BindingPlaceholder::Orientation(slot) => {
                     Atom::num(if frame.legs[*slot].flow == Flow::Source {
@@ -6861,7 +6862,8 @@ mod tests {
             "feynkit_recipe_test::f(P(3,1),idx(1,2)) \
              + feynkit_recipe_test::g(P(3,1),idx(1,2))*Gamma(3,2,1)^2 \
              + feynkit_recipe_test::f(P(3,1),idx(1,2))*feynkit_recipe_test::constant((x+y)^2,3) \
-             + feynkit_recipe_test::h(P(dummy(4),2),dummy(4))*(P(3,1)+P(3,2))",
+             + feynkit_recipe_test::h(P(dummy(4),2),dummy(4))*(P(3,1)+P(3,2)) \
+             + feynkit_recipe_test::h(P(feynkit_recipe_test::index(idx(1,2),dummy(4)),2))",
         );
         let InteractionFactor::Local(template) =
             compile_test_factor(&expression, NumeratorSector::Spin)
