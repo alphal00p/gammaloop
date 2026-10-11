@@ -114,6 +114,22 @@ fn bridge_py_logging(py: Python<'_>) -> PyResult<()> {
     Ok(())
 }
 
+/// Releases before 1.0.0 silently discard particle chemical potentials.
+#[cfg(feature = "ufo-import")]
+fn require_chemical_potential_loader(version: &str, python: &str) -> eyre::Result<()> {
+    if version
+        .split('.')
+        .next()
+        .and_then(|major| major.parse::<u64>().ok())
+        .is_none_or(|major| major < 1)
+    {
+        return Err(eyre!(
+            "UFO import requires ufo-model-loader>=1.0.0; found {version}. Upgrade the loader in Python environment {python}."
+        ));
+    }
+    Ok(())
+}
+
 #[cfg(feature = "ufo-import")]
 pub(crate) fn load_ufo_model(
     path: &std::path::Path,
@@ -129,6 +145,22 @@ pub(crate) fn load_ufo_model(
         let exe: String = sys.getattr("prefix")?.extract()?;
         let ver: String = sys.getattr("version")?.extract()?;
 
+        let metadata = py.import("importlib.metadata")?;
+        let loader_version: String = match metadata.call_method1("version", ("ufo-model-loader",)) {
+            Ok(version) => version.extract()?,
+            Err(e) if e.is_instance(py, &metadata.getattr("PackageNotFoundError")?) => {
+                return Err(eyre!(
+                    "UFO import requires ufo-model-loader>=1.0.0, but Python environment {exe} has no installed ufo-model-loader metadata. A source checkout on PYTHONPATH cannot be version-checked; install it, for example with `pip install -e <checkout>`."
+                ));
+            }
+            Err(e) => {
+                return Err(eyre!(
+                    "Could not read the ufo-model-loader version: {e}\nPython: {exe}"
+                ));
+            }
+        };
+        require_chemical_potential_loader(&loader_version, &exe)?;
+
         ensure_py_log_bridge(py)
             .map_err(|e| eyre::eyre!("Failed to bridge python logging to rust. Error: {}", e))?;
 
@@ -141,10 +173,12 @@ pub(crate) fn load_ufo_model(
         // kwargs: input_model_path, restriction_name, simplify_model
         let kwargs = PyDict::new(py);
         kwargs.set_item("input_model_path", path.to_string_lossy().as_ref())?;
-        match restriction_name.as_deref() {
-            Some(name) => kwargs.set_item("restriction_name", name)?,
-            None => kwargs.set_item("restriction_name", py.None())?,
-        }
+        // Resolution has already selected any default card. Python None would
+        // apply that default again when the user explicitly requested -full.
+        kwargs.set_item(
+            "restriction_name",
+            restriction_name.as_deref().unwrap_or("full"),
+        )?;
         kwargs.set_item("simplify_model", simplify_model)?;
         kwargs.set_item("wrap_indices_in_lorentz_structures", true)?;
 
@@ -719,6 +753,110 @@ fn canonical_dir_allow_abs_missing(p: &Path) -> Result<PathBuf> {
 #[cfg(all(test, feature = "ufo-import"))]
 mod tests {
     use super::*;
+    use gammalooprs::model::ParameterNature;
+    use spenso::algebra::complex::Complex;
+    use symbolica::domains::rational::Rational;
+
+    #[test]
+    fn ufo_import_rejects_loader_without_chemical_potential_support() {
+        for version in ["0.1.8", "dev"] {
+            let error = require_chemical_potential_loader(version, "python")
+                .unwrap_err()
+                .to_string();
+            assert!(error.contains("ufo-model-loader>=1.0.0"), "{error}");
+            assert!(error.contains(version), "{error}");
+        }
+        for version in ["1.0.0", "12.3"] {
+            require_chemical_potential_loader(version, "python").unwrap();
+        }
+    }
+
+    #[test]
+    fn ufo_and_json_restrictions_preserve_chemical_potentials() -> Result<()> {
+        gammalooprs::initialisation::test_initialise()?;
+        let assets = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/models");
+        for restriction in ["full", "default", "thermal"] {
+            let path = assets.join(format!("ufo/sm-{restriction}"));
+            let ModelSpecification::UFOModelSpecification {
+                restriction_name, ..
+            } = ModelSpecification::parse(path.to_str().unwrap())?
+            else {
+                panic!("an explicit UFO path must use the Python loader");
+            };
+            let (mut ufo, mut ufo_card) =
+                load_ufo_model(&assets.join("ufo/sm"), restriction_name, true)?;
+            let mut state = State::new_test();
+            ImportModel {
+                path: format!("sm-{restriction}").into(),
+                simplify_model: true,
+            }
+            .run(&mut state)?;
+            let mut json = state.model;
+            let mut json_card = state.model_parameters;
+            let restored = Model::from_str(serde_json::to_string(&ufo.to_serializable())?, "json")?;
+            for name in ["muB", "muQ", "muLe", "muLmu", "muLtau"] {
+                assert_eq!(
+                    ufo.get_parameter(name).nature,
+                    json.get_parameter(name).nature
+                );
+                assert_eq!(
+                    ufo.get_parameter(name).value,
+                    json.get_parameter(name).value
+                );
+            }
+            assert_eq!(ufo.particles.len(), json.particles.len());
+            for fresh in &ufo.particles {
+                let name = fresh.name.as_str();
+                let saved = json.get_particle(name);
+                assert_eq!(fresh.charge, saved.charge, "{name}");
+                assert_eq!(fresh.y_charge, saved.y_charge, "{name}");
+                assert_eq!(fresh.y_charge_right, saved.y_charge_right, "{name}");
+                assert_eq!(fresh.chemical_potential, saved.chemical_potential, "{name}");
+                let roundtrip = restored.get_particle(name);
+                assert_eq!(fresh.charge, roundtrip.charge, "{name} roundtrip");
+                assert_eq!(fresh.y_charge, roundtrip.y_charge, "{name} roundtrip");
+                assert_eq!(
+                    fresh.y_charge_right, roundtrip.y_charge_right,
+                    "{name} roundtrip"
+                );
+                assert_eq!(
+                    fresh.chemical_potential, roundtrip.chemical_potential,
+                    "{name} roundtrip"
+                );
+            }
+            assert_eq!(ufo.get_particle("u").charge, Rational::from((2, 3)));
+            assert_eq!(ufo.get_particle("H").y_charge, None);
+            if restriction == "default" {
+                assert_eq!(json.get_parameter("muB").nature, ParameterNature::Internal);
+                assert_eq!(
+                    json.get_parameter("muB").value,
+                    Some(Complex::new_re(F(0.0)))
+                );
+            } else {
+                // A zero-density comparison must not freeze later finite-density runs.
+                for mu in [0.0, 6.0] {
+                    for (model, card) in [(&mut ufo, &mut ufo_card), (&mut json, &mut json_card)] {
+                        assert_eq!(model.get_parameter("muB").nature, ParameterNature::External);
+                        card.insert("muB".into(), Complex::new_re(F(mu)));
+                        model.apply_param_card(card)?;
+                        assert_eq!(
+                            model.get_parameter("muu").value,
+                            Some(Complex::new_re(F(mu / 3.0)))
+                        );
+                        assert_eq!(
+                            model.get_parameter("minus_muu").value,
+                            Some(Complex::new_re(F(-mu / 3.0)))
+                        );
+                    }
+                }
+            }
+            if restriction == "full" {
+                assert_eq!(json.get_parameter("Me").nature, ParameterNature::External);
+                assert_eq!(ufo.get_parameter("Me").nature, ParameterNature::External);
+            }
+        }
+        Ok(())
+    }
 
     #[test]
     fn fresh_sm_ufo_preserves_virtual_gauge_and_covariant_cut_states() -> Result<()> {

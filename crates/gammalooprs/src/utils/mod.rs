@@ -3442,6 +3442,15 @@ pub(crate) fn parse_python_expression(expression: &str) -> Atom {
     parse!(processed_string)
 }
 
+#[test]
+fn python_expression_imaginary_unit_is_numeric() {
+    // The pinned Symbolica parser accepts both UFO export spellings directly.
+    for expression in ["𝑖", "1𝑖", "(𝑖)^5", "1+𝑖-1"] {
+        assert_eq!(parse_python_expression(expression), Atom::i());
+    }
+    assert_eq!(parse_python_expression("-𝑖/3"), -Atom::i() / 3);
+}
+
 /// Format a mean ± sdev as mean(sdev) with the correct number of digits.
 /// Based on the Python package gvar.
 pub fn format_uncertainty(mean: F<f64>, sdev: F<f64>) -> String {

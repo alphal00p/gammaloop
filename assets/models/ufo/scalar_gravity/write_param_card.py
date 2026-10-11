@@ -29,7 +29,7 @@ class ParamCardWriter(object):
         self.write_card(list_of_parameters)
 
     def define_not_dep_param(self, list_of_parameters):
-        """define self.dep_mass and self.dep_width in case that they are 
+        """define self.dep_mass and self.dep_width in case that they are
         requested in the param_card.dat"""
         from .particles import all_particles
 
@@ -115,9 +115,10 @@ class ParamCardWriter(object):
     def write_dep_param_block(self, lhablock):
         import cmath
         from .parameters import all_parameters
+        namespace = {'cmath': cmath}
         for parameter in all_parameters:
             try:
-                exec("%s = %s" % (parameter.name, parameter.value))
+                exec("%s = %s" % (parameter.name, parameter.value), namespace, namespace)
             except Exception:
                 pass
         text = "##  Not dependent paramater.\n"
@@ -133,7 +134,7 @@ class ParamCardWriter(object):
             prefix = "DECAY "
         for part, param in data:
             if isinstance(param.value, str):
-                value = complex(eval(param.value)).real
+                value = complex(eval(param.value, namespace, namespace)).real
             else:
                 value = param.value
 
@@ -142,7 +143,7 @@ class ParamCardWriter(object):
         self.fsock.write(text)
 
     sm_pdg = [1, 2, 3, 4, 5, 6, 11, 12, 13, 13, 14, 15, 16, 21, 22, 23, 24, 25]
-    data = """Block QNUMBERS %(pdg)d  # %(name)s 
+    data = """Block QNUMBERS %(pdg)d  # %(name)s
         1 %(charge)d  # 3 times electric charge
         2 %(spin)d  # number of spin states (2S+1)
         3 %(color)d  # colour rep (1: singlet, 3: triplet, 8: octet)

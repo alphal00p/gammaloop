@@ -2377,7 +2377,9 @@ impl ProcessDefinition {
                 // Retain their derivative flow; charged ghost partners require
                 // a separate ghost-number-preserving gauge-charge mapping.
                 if *was_left_and_right_swapped
-                    && !(particle.0.is_ghost() && particle.0.color == 8 && particle.0.charge == 0.0)
+                    && !(particle.0.is_ghost()
+                        && particle.0.color == 8
+                        && particle.0.charge.is_zero())
                 {
                     particle = particle.0.get_anti_particle(model);
                 }

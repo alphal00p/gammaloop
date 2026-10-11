@@ -459,7 +459,7 @@ requires-dist = [
     { name = "pyyaml", specifier = ">=6.0.1" },
     { name = "symbolica", specifier = ">=3.0.0" },
     { name = "typst", marker = "extra == 'typst-display'", specifier = ">=0.15,<0.16" },
-    { name = "ufo-model-loader", specifier = ">=0.1.6" },
+    { name = "ufo-model-loader", specifier = ">=1.0.0" },
 ]
 provides-extras = ["typst-display"]
 
@@ -471,7 +471,7 @@ dev = [
     { name = "pytest", specifier = ">=8.3.5,<9" },
     { name = "pyyaml", specifier = ">=6.0.1,<7" },
     { name = "symbolica", specifier = ">=3.0.0" },
-    { name = "ufo-model-loader", specifier = ">=0.1.6" },
+    { name = "ufo-model-loader", specifier = ">=1.0.0" },
 ]
 
 [[package]]
@@ -2139,14 +2139,14 @@ wheels = [
 
 [[package]]
 name = "ufo-model-loader"
-version = "0.1.7"
+version = "1.0.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "symbolica" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/91/ea/3060478303daa465572f17c0c2550bfbf5d61b6c78b0167a7bcd13b7d5bd/ufo_model_loader-0.1.7.tar.gz", hash = "sha256:79530b7bfb0b63f7c5547bf2a6309dbd162fdb7108800318cb08b93d227fbf67", size = 60941, upload-time = "2026-07-16T10:05:10.28Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/3c/6f/d7187c08bbf2e81a84767ce47bd17120448eb555e1ee57b0f6051ec3aa0a/ufo_model_loader-1.0.0.tar.gz", hash = "sha256:7051dabaffef0ea0737e8e73d8aab527d8a96192274afd53eb2230540288d332", size = 84606, upload-time = "2026-10-03T23:54:35.692Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/e8/64/eb05d1e04f8353559a10c4184a7749f42955616b146af0f6501c4e3577af/ufo_model_loader-0.1.7-py3-none-any.whl", hash = "sha256:803ae28141ec4be3189cc62469b88da17ca33907791fe99774c2fe756a45edf7", size = 74973, upload-time = "2026-07-16T10:05:09.1Z" },
+    { url = "https://files.pythonhosted.org/packages/50/97/0d69174a3679a5180cf2cdb77604710ba0ca7d5dc6755d45e425efc9ad68/ufo_model_loader-1.0.0-py3-none-any.whl", hash = "sha256:4e2e807d6a0d16034a525f80f2a80f4fe17689f7955b27b1118b7595bd56a8eb", size = 103519, upload-time = "2026-10-03T23:54:34.148Z" },
 ]
 
 [[package]]
