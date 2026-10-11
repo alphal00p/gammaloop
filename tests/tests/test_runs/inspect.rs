@@ -18,18 +18,25 @@ fn assert_inspect(
     target: Complex<f64>,
     context: &str,
 ) -> Result<()> {
-    let (_, inspect) = Inspect {
-        process: Some(ProcessRef::Id(process_id)),
-        graph_id: Some(graph_id),
-        integrand_name: Some("default".to_string()),
-        point: point.to_vec(),
-        momentum_space: true,
-        use_arb_prec: true,
-        ..Default::default()
+    for use_arb_prec in [false, true] {
+        let value = momentum_space_value(cli, process_id, graph_id, point, use_arb_prec)?;
+        if use_arb_prec {
+            assert_complex_approx_eq(value, target, format!("{context}, arb=true"));
+        } else {
+            // Some four-loop orientation bodies lose digits in Double, while Quad
+            // agrees with Arb. Check Double's declared accuracy without relaxing
+            // the existing Arb reference checks.
+            let accuracy = StabilityLevelSetting::default_double();
+            let tolerance = accuracy
+                .required_precision_for_re
+                .min(accuracy.required_precision_for_im);
+            let scale = target.re.hypot(target.im);
+            assert!(
+                complex_distance(value, target) <= tolerance * scale,
+                "{context}, arb=false: actual={value}, expected={target}, tolerance={tolerance}"
+            );
+        }
     }
-    .run(cli)?;
-
-    assert_complex_approx_eq(inspect, target, context);
     Ok(())
 }
 
@@ -1642,6 +1649,124 @@ fn thermal_chemical_potential_agrees_across_evaluators() -> Result<()> {
     Ok(())
 }
 
+/// Momentum-space value of the selected graph, with the evaluated precision
+/// checked to be the requested one.
+fn momentum_space_value(
+    cli: &mut gammaloop_integration_tests::CLIState,
+    process_id: usize,
+    graph_id: usize,
+    point: &[f64],
+    use_arb_prec: bool,
+) -> Result<Complex<f64>> {
+    let graph_name = cli
+        .state
+        .process_list
+        .get_integrand_mut(process_id, "default")?
+        .graph_name_by_id(graph_id)
+        .expect("requested graph must exist")
+        .to_string();
+    let points = ndarray::Array2::from_shape_vec((1, point.len()), point.to_vec())?;
+    let discrete_dims = ndarray::Array2::<usize>::from_shape_vec((1, 0), vec![])?;
+    let evaluation = evaluate_sample(
+        &mut cli.state,
+        &EvaluateSamples {
+            process_id: Some(process_id),
+            integrand_name: Some("default".to_string()),
+            use_arb_prec,
+            minimal_output: false,
+            return_generated_events: Some(false),
+            momentum_space: true,
+            points: points.view(),
+            integrator_weights: None,
+            discrete_dims: Some(discrete_dims.view()),
+            graph_names: Some(vec![Some(graph_name)]),
+            orientations: None,
+        },
+    )?
+    .sample
+    .evaluation;
+    let precisions = evaluation
+        .evaluation_metadata
+        .as_ref()
+        .unwrap()
+        .stability_results
+        .iter()
+        .map(|level| level.precision)
+        .collect_vec();
+    let expected = if use_arb_prec {
+        gammalooprs::settings::runtime::Precision::Arb
+    } else {
+        gammalooprs::settings::runtime::Precision::Double
+    };
+    assert_eq!(
+        precisions,
+        [expected],
+        "process={process_id}, graph={graph_id}, point={point:?}"
+    );
+    Ok(evaluation.integrand_result.map(|value| value.0))
+}
+
+/// Raw f64 evaluations of the vacuum-subtracted thermal quark sunrise keep the
+/// exponentially small UV tail at finite temperature, where the old hyperbolic
+/// bodies and numerical vacuum cancellation returned zeros or wrong signs. At zero
+/// temperature and density every occupation is an exact zero, so no rounding
+/// residue of the vacuum weight may survive anywhere.
+#[test]
+fn thermal_sunrise_f64_keeps_uv_tails_and_exact_zeros() -> Result<()> {
+    let direction = [0.3, -0.5, 0.8, -0.6, 0.2, 0.75];
+    for (mode, mu_b) in [
+        ("thermodynamic_equilibrium", 3.0),
+        ("zero_temperature_equilibrium", 0.0),
+    ] {
+        let name = format!("thermal_sunrise_f64_{mode}");
+        let mut cli = get_test_cli(
+            None,
+            get_tests_workspace_path().join(&name),
+            Some(name),
+            true,
+        )?;
+        run_commands(
+            &mut cli,
+            &[
+                "import model sm-thermal.json",
+                "import graphs ./tests/resources/graphs/sunrise_qcd_vacuum.dot -p thermal_sunrise",
+                "set model aS=1.0",
+                &format!("set model muB={mu_b}"),
+                &format!(
+                    "set global kv global.generation.medium.mode={mode} global.generation.medium.vacuum_subtraction=true global.generation.uv.subtract_uv=true global.generation.uv.generate_integrated=false global.generation.uv.softct=false global.generation.threshold_subtraction.enable_thresholds=false global.generation.tropical_subgraph_table.disable_tropical_generation=true global.generation.evaluator.compile=true global.generation.compile.compilation_mode=\"assembly\" global.generation.compile.optimization_level=\"O0\" global.generation.compile.fast_math=false global.generation.compile.unsafe_math=false"
+                ),
+                r#"set default-runtime kv general.inverse_temperature=1.0 general.enable_cache=false sampling.orientations="summed" subtraction.disable_threshold_subtraction=true stability.rotation_axis=[] stability.escalate_if_exact_zero=false"#,
+                "generate",
+            ],
+        )?;
+        let mut points = [1.0, 10.0, 20.0, 40.0, 80.0, 160.0, 320.0]
+            .map(|scale| direction.map(|component| scale * component))
+            .to_vec();
+        points.extend([
+            [0.1, 0.2, 0.3, 0.4, 0.5, 0.6],
+            [1.1, 0.2, 0.3, 0.4, 1.5, 0.6],
+        ]);
+        for point in points {
+            let double = momentum_space_value(&mut cli, 0, 0, &point, false)?;
+            let arb = momentum_space_value(&mut cli, 0, 0, &point, true)?;
+            if mode == "zero_temperature_equilibrium" {
+                assert_eq!(double, Complex::new(0.0, 0.0), "f64 at {point:?}");
+                assert_eq!(arb, Complex::new(0.0, 0.0), "Arb at {point:?}");
+                continue;
+            }
+            assert!(arb.im != 0.0, "Arb at {point:?}");
+            for (actual, reference) in [(double.re, arb.re), (double.im, arb.im)] {
+                assert!(
+                    (actual - reference).abs() <= 1e-12 * arb.im.abs(),
+                    "f64 {double:?} != Arb {arb:?} at {point:?}"
+                );
+            }
+        }
+        clean_test(&cli.cli_settings.state.folder);
+    }
+    Ok(())
+}
+
 #[test]
 fn thermal_vacuum_2l_3l_inspect() -> Result<()> {
     let mut cli = get_test_cli(
@@ -1659,7 +1784,7 @@ fn thermal_vacuum_2l_3l_inspect() -> Result<()> {
         0,
         &[0.1, 0.2, 0.3, 0.4, 0.5, 0.6],
         Complex::new(0.0, 2.888_597_299_939_403e-3),
-        "thermal sunrise inspect f64 benchmark at point 0 at muB=0.0",
+        "thermal sunrise inspect benchmark at point 0 at muB=0.0",
     )?;
 
     assert_inspect(
@@ -1668,7 +1793,7 @@ fn thermal_vacuum_2l_3l_inspect() -> Result<()> {
         0,
         &[1.1, 0.2, 0.3, 0.4, 1.5, 0.6],
         Complex::new(0.0, 2.906_724_274_545_281e-4),
-        "thermal sunrise inspect f64 benchmark at point 1 at muB=0.0",
+        "thermal sunrise inspect benchmark at point 1 at muB=0.0",
     )?;
 
     assert_inspect(
@@ -1677,7 +1802,7 @@ fn thermal_vacuum_2l_3l_inspect() -> Result<()> {
         0,
         &[0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9],
         Complex::new(0.0, 1.750_719_959_696_99e-5),
-        "thermal mercedes inspect f64 benchmark at point 0 at muB=0.0",
+        "thermal mercedes inspect benchmark at point 0 at muB=0.0",
     )?;
 
     assert_inspect(
@@ -1686,7 +1811,7 @@ fn thermal_vacuum_2l_3l_inspect() -> Result<()> {
         0,
         &[1.1, 0.2, 0.3, 0.4, 1.5, 0.6, 0.7, 0.8, 1.9],
         Complex::new(0.0, 6.126_647_366_322_035e-7),
-        "thermal mercedes inspect f64 benchmark at point 1 at muB=0.0",
+        "thermal mercedes inspect benchmark at point 1 at muB=0.0",
     )?;
 
     assert_inspect(
@@ -1695,7 +1820,7 @@ fn thermal_vacuum_2l_3l_inspect() -> Result<()> {
         0,
         &[0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9],
         Complex::new(0.0, -2.403_408_249_730_896e-5),
-        "thermal tennis ball inspect f64 benchmark at point 0 at muB=0.0",
+        "thermal tennis ball inspect benchmark at point 0 at muB=0.0",
     )?;
 
     assert_inspect(
@@ -1704,7 +1829,7 @@ fn thermal_vacuum_2l_3l_inspect() -> Result<()> {
         0,
         &[1.1, 0.2, 0.3, 0.4, 1.5, 0.6, 0.7, 0.8, 1.9],
         Complex::new(0.0, -5.482_474_260_313_583e-7),
-        "thermal tennis ball inspect f64 benchmark at point 1 at muB=0.0",
+        "thermal tennis ball inspect benchmark at point 1 at muB=0.0",
     )?;
 
     cli.run_command("set model muB=3.0")?;
@@ -1715,7 +1840,7 @@ fn thermal_vacuum_2l_3l_inspect() -> Result<()> {
         0,
         &[0.1, 0.2, 0.3, 0.4, 0.5, 0.6],
         Complex::new(0.0, 2.337_015_373_956_359e-3),
-        "thermal sunrise inspect f64 benchmark at point 0 at muB=3.0",
+        "thermal sunrise inspect benchmark at point 0 at muB=3.0",
     )?;
 
     assert_inspect(
@@ -1724,7 +1849,7 @@ fn thermal_vacuum_2l_3l_inspect() -> Result<()> {
         0,
         &[1.1, 0.2, 0.3, 0.4, 1.5, 0.6],
         Complex::new(0.0, 2.573_385_490_044_703e-4),
-        "thermal sunrise inspect f64 benchmark at point 1 at muB=3.0",
+        "thermal sunrise inspect benchmark at point 1 at muB=3.0",
     )?;
 
     assert_inspect(
@@ -1733,7 +1858,7 @@ fn thermal_vacuum_2l_3l_inspect() -> Result<()> {
         0,
         &[0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9],
         Complex::new(0.0, 6.558_647_319_025_115e-6),
-        "thermal mercedes inspect f64 benchmark at point 0 at muB=3.0",
+        "thermal mercedes inspect benchmark at point 0 at muB=3.0",
     )?;
 
     assert_inspect(
@@ -1742,7 +1867,7 @@ fn thermal_vacuum_2l_3l_inspect() -> Result<()> {
         0,
         &[1.1, 0.2, 0.3, 0.4, 1.5, 0.6, 0.7, 0.8, 1.9],
         Complex::new(0.0, 3.520_118_714_871_738e-7),
-        "thermal mercedes inspect f64 benchmark at point 1 at muB=3.0",
+        "thermal mercedes inspect benchmark at point 1 at muB=3.0",
     )?;
 
     assert_inspect(
@@ -1751,7 +1876,7 @@ fn thermal_vacuum_2l_3l_inspect() -> Result<()> {
         0,
         &[0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9],
         Complex::new(0.0, -9.425_414_745_613_589e-6),
-        "thermal tennis ball inspect f64 benchmark at point 0 at muB=3.0",
+        "thermal tennis ball inspect benchmark at point 0 at muB=3.0",
     )?;
 
     assert_inspect(
@@ -1760,7 +1885,7 @@ fn thermal_vacuum_2l_3l_inspect() -> Result<()> {
         0,
         &[1.1, 0.2, 0.3, 0.4, 1.5, 0.6, 0.7, 0.8, 1.9],
         Complex::new(0.0, -3.494_310_883_292_893e-7),
-        "thermal tennis ball inspect f64 benchmark at point 1 at muB=3.0",
+        "thermal tennis ball inspect benchmark at point 1 at muB=3.0",
     )?;
 
     Ok(())
@@ -1783,7 +1908,7 @@ fn thermal_vacuum_4l_inspect() -> Result<()> {
         0,
         &[0.1, 0.2, 0.3, 0.5, 0.4, 0.6, 0.9, 0.8, 0.7, 1.1, 1.2, 1.3],
         Complex::new(0.0, -2.838_254_343_652_266e-8),
-        "thermal bugblatter 1 inspect f64 benchmark at point 0 at muB=0.0",
+        "thermal bugblatter 1 inspect benchmark at point 0 at muB=0.0",
     )?;
 
     assert_inspect(
@@ -1792,7 +1917,7 @@ fn thermal_vacuum_4l_inspect() -> Result<()> {
         0,
         &[1.1, 0.2, 0.3, 0.5, 1.4, 0.6, 0.9, 1.8, 0.7, 1.1, 2.2, 1.3],
         Complex::new(0.0, -1.179_354_762_459_854e-9),
-        "thermal bugblatter 1 inspect f64 benchmark at point 1 at muB=0.0",
+        "thermal bugblatter 1 inspect benchmark at point 1 at muB=0.0",
     )?;
 
     assert_inspect(
@@ -1801,7 +1926,7 @@ fn thermal_vacuum_4l_inspect() -> Result<()> {
         1,
         &[0.1, 0.2, 0.3, 0.5, 0.4, 0.6, 0.9, 0.8, 0.7, 1.1, 1.2, 1.3],
         Complex::new(0.0, 2.085_535_988_771_055e-10),
-        "thermal bugblatter 2 inspect f64 benchmark at point 0 at muB=0.0",
+        "thermal bugblatter 2 inspect benchmark at point 0 at muB=0.0",
     )?;
 
     assert_inspect(
@@ -1810,7 +1935,7 @@ fn thermal_vacuum_4l_inspect() -> Result<()> {
         1,
         &[1.1, 0.2, 0.3, 0.5, 1.4, 0.6, 0.9, 1.8, 0.7, 1.1, 2.2, 1.3],
         Complex::new(0.0, 1.124_548_090_968_172e-11),
-        "thermal bugblatter 2 inspect f64 benchmark at point 1 at muB=0.0",
+        "thermal bugblatter 2 inspect benchmark at point 1 at muB=0.0",
     )?;
 
     cli.run_command("set model muB=3.0")?;
@@ -1821,7 +1946,7 @@ fn thermal_vacuum_4l_inspect() -> Result<()> {
         0,
         &[0.1, 0.2, 0.3, 0.5, 0.4, 0.6, 0.9, 0.8, 0.7, 1.1, 1.2, 1.3],
         Complex::new(0.0, -3.470_645_264_375_66e-10),
-        "thermal bugblatter 1 inspect f64 benchmark at point 0 at muB=3.0",
+        "thermal bugblatter 1 inspect benchmark at point 0 at muB=3.0",
     )?;
 
     assert_inspect(
@@ -1830,7 +1955,7 @@ fn thermal_vacuum_4l_inspect() -> Result<()> {
         0,
         &[1.1, 0.2, 0.3, 0.5, 1.4, 0.6, 0.9, 1.8, 0.7, 1.1, 2.2, 1.3],
         Complex::new(0.0, -5.666_712_273_246_035e-10),
-        "thermal bugblatter 1 inspect f64 benchmark at point 1 at muB=3.0",
+        "thermal bugblatter 1 inspect benchmark at point 1 at muB=3.0",
     )?;
 
     assert_inspect(
@@ -1839,7 +1964,7 @@ fn thermal_vacuum_4l_inspect() -> Result<()> {
         1,
         &[0.1, 0.2, 0.3, 0.5, 0.4, 0.6, 0.9, 0.8, 0.7, 1.1, 1.2, 1.3],
         Complex::new(0.0, 3.469_482_008_367_54e-10),
-        "thermal bugblatter 2 inspect f64 benchmark at point 0 at muB=3.0",
+        "thermal bugblatter 2 inspect benchmark at point 0 at muB=3.0",
     )?;
 
     assert_inspect(
@@ -1848,7 +1973,7 @@ fn thermal_vacuum_4l_inspect() -> Result<()> {
         1,
         &[1.1, 0.2, 0.3, 0.5, 1.4, 0.6, 0.9, 1.8, 0.7, 1.1, 2.2, 1.3],
         Complex::new(0.0, 1.637_733_030_600_185e-11),
-        "thermal bugblatter 2 inspect f64 benchmark at point 1 at muB=3.0",
+        "thermal bugblatter 2 inspect benchmark at point 1 at muB=3.0",
     )?;
 
     Ok(())
@@ -1869,7 +1994,7 @@ fn cold_dense_vacuum_2l_3l_inspect() -> Result<()> {
         0,
         &[1.1, 0.2, 0.3, 0.4, 0.5, 0.6],
         Complex::new(0.0, 4.310_928_789_772_213e-4),
-        "cold dense sunrise inspect f64 benchmark at point 0 at muB=3.0",
+        "cold dense sunrise inspect benchmark at point 0 at muB=3.0",
     )?;
 
     assert_inspect(
@@ -1878,7 +2003,7 @@ fn cold_dense_vacuum_2l_3l_inspect() -> Result<()> {
         0,
         &[1.1, 0.2, 0.3, 0.4, 1.5, 0.6],
         Complex::new(0.0, 1.850_837_097_150_558e-4),
-        "cold dense sunrise inspect f64 benchmark at point 1 at muB=3.0",
+        "cold dense sunrise inspect benchmark at point 1 at muB=3.0",
     )?;
 
     assert_inspect(
@@ -1887,7 +2012,7 @@ fn cold_dense_vacuum_2l_3l_inspect() -> Result<()> {
         0,
         &[0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9],
         Complex::new(0.0, -9.891_479_783_716_468e-6),
-        "cold dense mercedes inspect f64 benchmark at point 0 at muB=3.0",
+        "cold dense mercedes inspect benchmark at point 0 at muB=3.0",
     )?;
 
     assert_inspect(
@@ -1896,7 +2021,7 @@ fn cold_dense_vacuum_2l_3l_inspect() -> Result<()> {
         0,
         &[1.1, 0.2, 0.3, 0.4, 1.5, 0.6, 0.7, 0.8, 1.9],
         Complex::new(0.0, 2.452_375_990_392_057e-7),
-        "cold dense mercedes inspect f64 benchmark at point 1 at muB=3.0",
+        "cold dense mercedes inspect benchmark at point 1 at muB=3.0",
     )?;
 
     // The repeated massless quark momentum is k0 (edges 0 and 5).
@@ -1909,38 +2034,33 @@ fn cold_dense_vacuum_2l_3l_inspect() -> Result<()> {
         [1.1, 0.2, 0.3, 0.4, 1.5, 0.6, 0.7, 0.8, 1.9],
     ] {
         let t = 1.0 / point[..3].iter().map(|x| x * x).sum::<f64>().sqrt();
-        let mut probes = Vec::new();
-        for sigma in [0.7, 1.0, 1.4] {
-            cli.run_command(&format!("set process -p 2 kv h_function.sigma={sigma}"))?;
-            let (_, value) = Inspect {
-                process: Some(ProcessRef::Id(2)),
-                graph_id: Some(0),
-                integrand_name: Some("default".to_string()),
-                point: point.to_vec(),
-                momentum_space: true,
-                use_arb_prec: true,
-                ..Default::default()
+        for use_arb_prec in [false, true] {
+            let mut probes = Vec::new();
+            for sigma in [0.7, 1.0, 1.4] {
+                cli.run_command(&format!("set process -p 2 kv h_function.sigma={sigma}"))?;
+                let value = momentum_space_value(&mut cli, 2, 0, &point, use_arb_prec)?;
+                // Normalized power-zero poly-exponential, pinned in the run card.
+                let h = 2.0 / (std::f64::consts::PI.sqrt() * sigma)
+                    * (2.0 - (t / sigma).powi(2) - (sigma / t).powi(2)).exp();
+                assert!(value.re.is_finite() && value.im.is_finite());
+                probes.push((h, value));
             }
-            .run(&mut cli)?;
-            // Normalized power-zero poly-exponential, pinned in the run card.
-            let h = 2.0 / (std::f64::consts::PI.sqrt() * sigma)
-                * (2.0 - (t / sigma).powi(2) - (sigma / t).powi(2)).exp();
-            assert!(value.re.is_finite() && value.im.is_finite());
-            probes.push((h, value));
+            let [(h0, value0), (h1, value1), (h2, value2)] = probes.as_slice() else {
+                unreachable!()
+            };
+            assert!(
+                (value1.im - value0.im).abs() > 1e-8 * value0.im.abs().max(value1.im.abs()),
+                "tennis-ball Fermi contribution must respond to h(t), arb={use_arb_prec}: {probes:?}"
+            );
+            let expected = *value0 + (*value1 - *value0) * ((h2 - h0) / (h1 - h0));
+            assert_complex_approx_eq(
+                *value2,
+                expected,
+                format!(
+                    "cold dense tennis ball profile dependence at {point:?}, arb={use_arb_prec}"
+                ),
+            );
         }
-        let [(h0, value0), (h1, value1), (h2, value2)] = probes.as_slice() else {
-            unreachable!()
-        };
-        assert!(
-            (value1.im - value0.im).abs() > 1e-8 * value0.im.abs().max(value1.im.abs()),
-            "tennis-ball Fermi contribution must respond to h(t): {probes:?}"
-        );
-        let expected = *value0 + (*value1 - *value0) * ((h2 - h0) / (h1 - h0));
-        assert_complex_approx_eq(
-            *value2,
-            expected,
-            format!("cold dense tennis ball profile dependence at {point:?}"),
-        );
     }
 
     Ok(())
