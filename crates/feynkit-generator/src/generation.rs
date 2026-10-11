@@ -790,7 +790,7 @@ impl<'legs> NumeratorInstantiation<'legs> {
             };
             atom = (atom / identity).replace(dummy.to_pattern()).with(other);
         }
-        let mut representations = HashMap::<String, ColorRepresentation>::new();
+        let mut representations = HashMap::<Atom, ColorRepresentation>::new();
         for leg in self.legs {
             if let Some(representation) = ColorRepresentation::from_ufo(leg.color) {
                 let index = self.index(*leg, 1)?;
@@ -887,12 +887,8 @@ impl<'legs> NumeratorInstantiation<'legs> {
         loop {
             let mut changed = false;
             for (left, right) in &identities {
-                let left_representation = representations
-                    .get(&Self::index_key(left.as_view()))
-                    .copied();
-                let right_representation = representations
-                    .get(&Self::index_key(right.as_view()))
-                    .copied();
+                let left_representation = representations.get(left).copied();
+                let right_representation = representations.get(right).copied();
                 match (left_representation, right_representation) {
                     (Some(left_rep), Some(right_rep)) if left_rep.dual() != right_rep => {
                         return Err(self.invalid_tensor(
@@ -929,9 +925,7 @@ impl<'legs> NumeratorInstantiation<'legs> {
             }
         }
         for (left, right) in &identities {
-            if !representations.contains_key(&Self::index_key(left.as_view()))
-                || !representations.contains_key(&Self::index_key(right.as_view()))
-            {
+            if !representations.contains_key(left) || !representations.contains_key(right) {
                 return Err(self.invalid_tensor(
                     FunctionBuilder::new(symbol!("UFO::Identity"))
                         .add_arg(left)
@@ -962,8 +956,8 @@ impl<'legs> NumeratorInstantiation<'legs> {
                 .collect::<Vec<_>>();
             let lowered = match name {
                 "Identity" => self.exact_arguments(term, &arguments, 2).map(|args| {
-                    let left = representations[&Self::index_key(args[0].as_view())];
-                    let right = representations[&Self::index_key(args[1].as_view())];
+                    let left = representations[&args[0]];
+                    let right = representations[&args[1]];
                     ETS.metric(
                         left.representation().to_symbolic([args[0].clone()]),
                         right.representation().to_symbolic([args[1].clone()]),
@@ -1145,15 +1139,14 @@ impl<'legs> NumeratorInstantiation<'legs> {
 
     fn assign_color_representation(
         &self,
-        representations: &mut HashMap<String, ColorRepresentation>,
+        representations: &mut HashMap<Atom, ColorRepresentation>,
         index: AtomView<'_>,
         representation: ColorRepresentation,
     ) -> Result<(), GenerationError> {
-        let key = Self::index_key(index);
         let local_dummy = matches!(index, AtomView::Fun(function)
             if [feynkit_graph::symbols::vertex_index(), feynkit_graph::symbols::edge_index(), self.dummy_symbol()]
                 .contains(&function.get_symbol()));
-        match representations.insert(key, representation) {
+        match representations.insert(index.to_owned(), representation) {
             // A contracted fundamental index joins dual slots. External ports
             // retain the exact orientation fixed by their particle record.
             Some(previous) if previous != representation
@@ -1165,10 +1158,6 @@ impl<'legs> NumeratorInstantiation<'legs> {
             )),
             _ => Ok(()),
         }
-    }
-
-    fn index_key(index: AtomView<'_>) -> String {
-        index.to_canonical_string()
     }
 
     fn reject_residual_tensors(&self, atom: &Atom) -> Result<(), GenerationError> {
