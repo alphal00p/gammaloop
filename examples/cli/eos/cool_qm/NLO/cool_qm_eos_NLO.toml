@@ -39,10 +39,6 @@ commands = [
 
 ]
 
-\[
-\boxed{\Delta p_{\mathrm{NLO}}=-5.71554652316.}
-\]
-
 # Targets are Minkowski amplitudes: delta_p = -i*A = Im(A), preserving the sign.
 # They follow the O(aS) pressure with quark masses of Graf, Schaffner-Bielich and
 # Fraga, Eur. Phys. J. A 52 (2016) 208, https://arxiv.org/abs/1507.08941.
