@@ -15236,6 +15236,36 @@
           "possible_values": []
         },
         {
+          "id": "allow_vanishing_missing_fits",
+          "long": "allow-vanishing-missing-fits",
+          "short": null,
+          "aliases": [],
+          "action": "set_true",
+          "arity": {
+            "min": 0,
+            "max": 0
+          },
+          "takes_values": false,
+          "value_required": false,
+          "value_names": [],
+          "help": "Accept zero tails or sustained decay when no reliable power-law fit exists",
+          "required": false,
+          "positional": false,
+          "index": null,
+          "hidden": false,
+          "global": false,
+          "inherited": false,
+          "exclusive": false,
+          "require_equals": false,
+          "value_delimiter": null,
+          "value_terminator": null,
+          "conflicts_with": [],
+          "defaults": [
+            "false"
+          ],
+          "possible_values": []
+        },
+        {
           "id": "seed",
           "long": "seed",
           "short": null,
@@ -16216,6 +16246,36 @@
           "value_required": false,
           "value_names": [],
           "help": "Suppress the formatted expression summary unless orientation details are requested",
+          "required": false,
+          "positional": false,
+          "index": null,
+          "hidden": false,
+          "global": false,
+          "inherited": false,
+          "exclusive": false,
+          "require_equals": false,
+          "value_delimiter": null,
+          "value_terminator": null,
+          "conflicts_with": [],
+          "defaults": [
+            "false"
+          ],
+          "possible_values": []
+        },
+        {
+          "id": "no_numerator",
+          "long": "no-numerator",
+          "short": null,
+          "aliases": [],
+          "action": "set_true",
+          "arity": {
+            "min": 0,
+            "max": 0
+          },
+          "takes_values": false,
+          "value_required": false,
+          "value_names": [],
+          "help": "Hide the numerator in the CFF structure table",
           "required": false,
           "positional": false,
           "index": null,
@@ -17705,9 +17765,17 @@
       "possible_values": []
     },
     {
+      "path": "cli.global.generation.compile.jit_direct_translation",
+      "value_type": "boolean",
+      "description": "Skip Symbolica's tree-based analysis by translating instructions directly to SymJIT IR.\nEnabled by default to reduce JIT preparation work; disable to use the tree-based\ntranslator when comparing or diagnosing backend behavior. Also applies when JIT\nis the fallback for external artifacts. Direct translation always uses SymJIT O2,\nregardless of `optimization_level`; disable it to use JIT O0 or O1.",
+      "required": false,
+      "default": true,
+      "possible_values": []
+    },
+    {
       "path": "cli.global.generation.compile.optimization_level",
       "value_type": "CompilationOptimizationLevel",
-      "description": "Optimization level passed to the selected evaluator compiler.",
+      "description": "Optimization level for the evaluator compiler. Indirect JIT translation caps it\nat O2; direct JIT translation always uses O2, regardless of this setting.",
       "required": false,
       "default": "O2",
       "possible_values": [
@@ -17918,6 +17986,26 @@
       "possible_values": []
     },
     {
+      "path": "cli.global.generation.medium.mode",
+      "value_type": "MediumMode",
+      "description": "`vacuum`, `thermodynamic_equilibrium` at `runtime.general.inverse_temperature`, or its\n`zero_temperature_equilibrium` limit; equilibrium modes use the model's chemical potentials.",
+      "required": false,
+      "default": "vacuum",
+      "possible_values": [
+        "thermodynamic_equilibrium",
+        "vacuum",
+        "zero_temperature_equilibrium"
+      ]
+    },
+    {
+      "path": "cli.global.generation.medium.vacuum_subtraction",
+      "value_type": "boolean",
+      "description": "Subtract each medium weight's vacuum limit, keeping only the medium-dependent part;\nrequires a non-vacuum mode.",
+      "required": false,
+      "default": false,
+      "possible_values": []
+    },
+    {
       "path": "cli.global.generation.orientation_pattern.pat",
       "value_type": "null | string",
       "description": "Symbolica pattern matched against serialized causal orientations.",
@@ -18099,8 +18187,7 @@
         "MUV",
         "OS",
         "PolePart",
-        "Unsubtracted",
-        "VaccuumLimit"
+        "Unsubtracted"
       ]
     },
     {
@@ -18114,8 +18201,7 @@
         "MUV",
         "OS",
         "PolePart",
-        "Unsubtracted",
-        "VaccuumLimit"
+        "Unsubtracted"
       ]
     },
     {
@@ -18129,8 +18215,7 @@
         "MUV",
         "OS",
         "PolePart",
-        "Unsubtracted",
-        "VaccuumLimit"
+        "Unsubtracted"
       ]
     },
     {
@@ -18168,8 +18253,7 @@
         "MUV",
         "OS",
         "PolePart",
-        "Unsubtracted",
-        "VaccuumLimit"
+        "Unsubtracted"
       ]
     },
     {
@@ -18540,6 +18624,14 @@
         "none",
         "picobarn"
       ]
+    },
+    {
+      "path": "runtime.general.inverse_temperature",
+      "value_type": "number",
+      "description": "Inverse temperature used to evaluate thermal distribution functions.",
+      "required": false,
+      "default": 1.0,
+      "possible_values": []
     },
     {
       "path": "runtime.general.load_compiled_cff",

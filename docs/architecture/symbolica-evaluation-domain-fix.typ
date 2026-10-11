@@ -1,7 +1,11 @@
 = Symbolica evaluation-domain bug and fix
 
-This investigation records the original fix and its validation before the rebase
-onto Symbolica 3. Its test results are historical.
+This investigation records the callback-dispatch fix "fix symbolica callback
+resolution for numeric wrappers", authored on 2026-09-09. Its validation ran
+before the feature branch was rebased onto Symbolica 3, so the test results are
+historical. The registry records that original validation revision, which is outside
+the current branch history. The subject and callback forwarding described below identify
+the fix independently of hashes rewritten by rebasing.
 
 After replacing exponential workarounds with Symbolica's native hyperbolic
 functions, GammaLoop's interpreted evaluator could panic during thermal CFF
@@ -19,7 +23,7 @@ GammaLoop's `F<f64>`. The wrappers implemented constant conversion through
 `tanh` on a wrapper was insufficient for this dispatch path. The panic came from
 missing callback forwarding in GammaLoop and its bundled Spenso wrappers.
 
-Commit `951972fd3` adds callback resolution to the existing domain implementations:
+The fix adds callback resolution to the existing domain implementations:
 
 - `F<T>`: Unwrap arguments, resolve through `T`, and wrap the result.
 - `QuadFloat`: Delegate through Symbolica's `DoubleFloat` domain.

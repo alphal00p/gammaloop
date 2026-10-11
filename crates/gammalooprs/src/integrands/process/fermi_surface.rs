@@ -139,6 +139,9 @@ impl FermiSurfaceProduct {
             .zip(oriented_chemical_potentials)
             .enumerate()
         {
+            // Check the selected sector at its actual evaluation precision, after
+            // the empty-product return above. Binary64 warm-up can round a shell
+            // resolved by Quad/Arb to an apparent onset.
             if nu == mass {
                 return Err(eyre!(
                     "Degenerate Fermi surface on edge {} at sigma*mu = mass; the regular-shell localization does not define the onset",
