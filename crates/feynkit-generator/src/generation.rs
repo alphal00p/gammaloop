@@ -3371,8 +3371,8 @@ impl ResolvedProcess {
     /// every sewn incoming leg is exchanged with its outgoing partner, or none
     /// is. Keeping the exact external colors in each skeleton prevents graph
     /// automorphisms from swapping only a subset of the pairs. Once the
-    /// smallest skeleton is selected, the complete colored graph is rebuilt in
-    /// that canonical vertex/edge order so UFO slot matching and propagator
+    /// smallest skeleton is selected, the colored graph adopts
+    /// that canonical vertex/edge frame so UFO slot matching and propagator
     /// momenta are instantiated identically for isomorphic diagrams.
     fn canonicalize_numerator_graph(
         &self,
@@ -3508,10 +3508,6 @@ impl ResolvedProcess {
             .min_by(|left, right| (&left.0, left.1).cmp(&(&right.0, right.1)))
             .ok_or_else(|| GenerationError::GraphConstruction("no canonical graph".to_owned()))?;
 
-        let mut vertices = vec![None; graph.n_vertices()];
-        for (vertex, rule) in graph.vertices().enumerate() {
-            vertices[positions[vertex]] = Some(rule);
-        }
         // The selected global exchange is an involution. Applying it to the legs keeps each
         // physical external label attached to its original process state while adopting the
         // selected topology.
@@ -3524,7 +3520,8 @@ impl ResolvedProcess {
         };
         let mut edges = graph
             .edges()
-            .map(|edge| {
+            .enumerate()
+            .map(|(edge_id, edge)| {
                 // All external edges point into the interaction graph and internal
                 // edges point from the lower to the higher canonical vertex.
                 let flipped = edge.sink.external().is_some()
@@ -3551,6 +3548,8 @@ impl ResolvedProcess {
                         directed: edge.directed,
                     },
                     pdg_code,
+                    edge_id,
+                    flipped,
                 ))
             })
             .collect::<Result<Vec<_>, GenerationError>>()?;
@@ -3558,12 +3557,19 @@ impl ResolvedProcess {
         // also uses for internal edges. Signed PDG order is deliberately used here rather than
         // model insertion order: CP-conjugate charged lines can otherwise acquire the same
         // edge/LMB order even when their legacy canonical representatives differ.
-        edges.sort_by_key(|(edge, pdg_code)| (edge.source, edge.sink, *pdg_code));
-        Ok(GeneratedGraph::new(
-            vertices
+        edges.sort_by_key(|(edge, pdg_code, _, _)| (edge.source, edge.sink, *pdg_code));
+        Ok(graph.reframed(
+            &positions,
+            edges
                 .into_iter()
-                .map(|rule| rule.expect("canonical positions are a permutation")),
-            edges.into_iter().map(|(edge, _)| edge),
+                .map(|(edge, _, edge_id, flipped)| (edge_id, flipped, edge.particle)),
+            |external| {
+                if left_right_swapped {
+                    partner(external)
+                } else {
+                    external
+                }
+            },
         ))
     }
 
@@ -3617,13 +3623,12 @@ impl ResolvedProcess {
         if replacements.is_empty() {
             return Ok(graph);
         }
-        Ok(GeneratedGraph::new(
-            graph
-                .vertices()
-                .enumerate()
-                .map(|(vertex, rule)| replacements.get(&vertex).copied().unwrap_or(rule)),
-            graph.edges(),
-        ))
+        let rules = graph
+            .vertices()
+            .enumerate()
+            .map(|(vertex, rule)| replacements.get(&vertex).copied().unwrap_or(rule))
+            .collect::<Vec<_>>();
+        Ok(graph.with_vertex_rules(rules))
     }
 
     // Normalize every fermion chain before exposing the diagram. A chain keeps
@@ -3744,17 +3749,14 @@ impl ResolvedProcess {
                     edge.particle
                 }
             });
-            if (left, right) != ends[edge_id] {
+            let reversed = (left, right) != ends[edge_id];
+            if reversed {
                 reversed_edges.insert(EdgeId(edge_id));
             }
-            edges.push(GeneratedEdge {
-                source: nodes.endpoint(left),
-                sink: nodes.endpoint(right),
-                particle,
-                directed: edge.directed,
-            });
+            edges.push((edge_id, reversed, particle));
         }
-        let normalized_graph = GeneratedGraph::new(graph.vertices(), edges);
+        let positions = (0..graph.n_vertices()).collect::<Vec<_>>();
+        let normalized_graph = graph.reframed(&positions, edges, |external| external);
 
         let concatenated_lines = pairings
             .values()
