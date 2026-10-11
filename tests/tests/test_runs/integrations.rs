@@ -1,6 +1,33 @@
 use super::utils::*;
 use super::*;
-use gammaloop_api::commands::integrate::RendererOption;
+use gammaloop_api::commands::integrate::{IntegrationOutput, RendererOption};
+use gammalooprs::integrate::workspace_result_archive_path;
+
+/// Integrate the run card's 100k samples in 5k-sample iterations and load the
+/// estimate archived after its first 20k samples.
+fn integrate_with_20k_sample_archive(
+    cli: &mut gammaloop_integration_tests::CLIState,
+    name: &str,
+) -> Result<(
+    IntegrationOutput,
+    RuntimeIntegrationResult,
+    std::time::Duration,
+)> {
+    let started = std::time::Instant::now();
+    let output = Integrate {
+        renderer: RendererOption::Tabled,
+        show_max_weight_info: false,
+        no_stream_iterations: true,
+        no_stream_updates: true,
+        write_results_for_each_iteration: true,
+        ..default_integrate_for(name)
+    }
+    .run(&mut cli.state, &cli.cli_settings)?;
+    let elapsed = started.elapsed();
+    let partial =
+        load_integration_result(&workspace_result_archive_path(&output.workspace_path, 4))?;
+    Ok((output, partial, elapsed))
+}
 
 #[test]
 fn fermi_surface_one_loop_integration_converges_to_analytic_target() -> Result<()> {
@@ -22,23 +49,16 @@ fn fermi_surface_one_loop_integration_converges_to_analytic_target() -> Result<(
         cli.run_command(&format!(
             "set process kv h_function.function=\"{profile}\" h_function.sigma={sigma}"
         ))?;
+        // The run card integrates 100k samples in 5k-sample iterations. The
+        // estimate archived after four iterations covers the first 20k, so
+        // the convergence check repeats no samples. Check decreasing
+        // uncertainty, not monotonic central values: statistical fluctuations
+        // need not approach the target at every iteration. Early stopping is
+        // disabled in the run card.
+        let (output, partial, elapsed) = integrate_with_20k_sample_archive(&mut cli, name)?;
         let mut errors = Vec::new();
-        // Fixed seed and iteration size give identical initial samples in the
-        // two fresh runs. Check decreasing uncertainty, not monotonic central
-        // values: statistical fluctuations need not approach the target at
-        // every iteration. Early stopping is disabled in the run card.
-        for samples in [20_000, 100_000] {
-            cli.run_command(&format!("set process kv integrator.n_max={samples}"))?;
-            let started = std::time::Instant::now();
-            let output = Integrate {
-                renderer: RendererOption::Tabled,
-                show_max_weight_info: false,
-                no_stream_iterations: true,
-                no_stream_updates: true,
-                ..default_integrate_for(name)
-            }
-            .run(&mut cli.state, &cli.cli_settings)?;
-            let estimate = single_slot_integral(&output);
+        for (samples, result) in [(20_000, &partial), (100_000, &output.result)] {
+            let estimate = single_slot_integral(result);
             let (value, error) = (estimate.result.im.0, estimate.error.im.0);
             info!(
                 profile,
@@ -47,7 +67,7 @@ fn fermi_surface_one_loop_integration_converges_to_analytic_target() -> Result<(
                 value,
                 error,
                 expected,
-                elapsed = ?started.elapsed(),
+                ?elapsed,
                 "One-loop Fermi-surface integration convergence"
             );
             assert_eq!(estimate.neval, samples, "the sample budget must be fixed");
@@ -129,19 +149,12 @@ fn fermi_surface_two_loop_integration_converges_in_nonaligned_basis() -> Result<
         cli.run_command(&format!(
             "set process kv h_function.function=\"{profile}\" h_function.sigma={sigma}"
         ))?;
+        // As in the one-loop test, the 20k-sample estimate is archived by
+        // the 100k-sample run.
+        let (output, partial, elapsed) = integrate_with_20k_sample_archive(&mut cli, name)?;
         let mut errors = Vec::new();
-        for samples in [20_000, 100_000] {
-            cli.run_command(&format!("set process kv integrator.n_max={samples}"))?;
-            let started = std::time::Instant::now();
-            let output = Integrate {
-                renderer: RendererOption::Tabled,
-                show_max_weight_info: false,
-                no_stream_iterations: true,
-                no_stream_updates: true,
-                ..default_integrate_for(name)
-            }
-            .run(&mut cli.state, &cli.cli_settings)?;
-            let estimate = single_slot_integral(&output);
+        for (samples, result) in [(20_000, &partial), (100_000, &output.result)] {
+            let estimate = single_slot_integral(result);
             let (value, error) = (estimate.result.re.0, estimate.error.re.0);
             info!(
                 profile,
@@ -150,7 +163,7 @@ fn fermi_surface_two_loop_integration_converges_in_nonaligned_basis() -> Result<
                 value,
                 error,
                 expected,
-                elapsed = ?started.elapsed(),
+                ?elapsed,
                 "Non-aligned two-loop Fermi-surface integration convergence"
             );
             assert_eq!(estimate.neval, samples, "the sample budget must be fixed");

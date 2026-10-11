@@ -1225,6 +1225,10 @@ impl GraphTerm for AmplitudeGraphTerm {
         self.graph.param_builder.update_model_values(model)?;
         self.graph
             .validate_medium_parameters(model, settings.general.inverse_temperature)?;
+        if !self.fermi_surfaces.is_empty() {
+            // Fermi localization inserts the h-function as a unit scale integral.
+            settings.lu_h_function.validate_normalized_profile()?;
+        }
 
         self.param_builder = self.graph.param_builder.clone();
         self.multi_channeling_setup

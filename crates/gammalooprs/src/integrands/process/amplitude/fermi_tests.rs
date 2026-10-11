@@ -5,14 +5,23 @@ use symbolica::state::State;
 use super::*;
 use crate::{
     initialisation::test_initialise,
-    integrands::process::{MomentumSpaceEvaluationInput, ProcessIntegrand},
+    integrands::process::{
+        MomentumSpaceEvaluationInput, ProcessIntegrand,
+        evaluators::{ActiveF64Backend, EvaluatorMethod},
+    },
     processes::Amplitude,
-    settings::runtime::HFunction,
+    settings::runtime::{HFunction, HFunctionSettings},
     utils::load_generic_model,
 };
 
-#[test]
-fn production_fermi_amplitude_preserves_orientation_sum_and_saved_state() -> Result<()> {
+/// The simplified `sm-thermal` model with vacuum-subtracted zero-temperature
+/// amplitude settings; `muB` is its only nonzero chemical potential.
+fn cold_dense_setup() -> Result<(
+    Model,
+    crate::model::InputParamCard<F<f64>>,
+    GlobalSettings,
+    RuntimeSettings,
+)> {
     test_initialise()?;
     let mut model = load_generic_model("sm");
     let mut card = crate::model::InputParamCard::from_file(
@@ -20,19 +29,7 @@ fn production_fermi_amplitude_preserves_orientation_sum_and_saved_state() -> Res
             .join("../../assets/models/json/sm/restrict_thermal.json"),
     )?;
     model.simplify(&mut card)?;
-    let mass = 3.0_f64;
-    let chemical_potential = 5.0_f64;
-    card.insert("MB".into(), Complex::new_re(F(mass)));
-    card.insert("muB".into(), Complex::new_re(F(3.0 * chemical_potential)));
-    model.apply_param_card(&card)?;
-    let graphs = Graph::from_string(
-        r#"digraph fermi_vacuum_cycle {
-            node [num=1]; edge [num=1 particle="b"];
-            A -> B [id=0 lmb_id=0]; B -> A [id=1];
-        }"#,
-        &model,
-    )?;
-    let mut global: GlobalSettings = toml::from_str(
+    let global: GlobalSettings = toml::from_str(
         r#"
 [generation.medium]
 mode = "zero_temperature_equilibrium"
@@ -66,13 +63,73 @@ orientations = "summed"
 sampling_multichanneling = false
 "#,
     )?;
+    Ok((model, card, global, settings))
+}
+
+/// Vacuum and vacuum-subtracted zero-temperature energy contours of a doubled
+/// fermion propagator at spatial momentum squared `radius_squared`.
+///
+/// The clockwise energy contour of D^-1, D=q0²-E²+i0, is -Theta(E-mu)/(2E).
+/// Differentiating in m² gives D^-2 and vacuum subtraction leaves
+/// -Theta(mu-E)/(4E³) - delta(E-mu)/(4E²), while the vacuum contour is 1/(4E³).
+/// For pF=sqrt(mu²-m²), inserting the normalized radial profile localizes the
+/// delta to -h(pF/r) pF²/(4 mu r⁴).
+fn double_pole_contours(
+    mass: f64,
+    chemical_potential: f64,
+    profile: &HFunction,
+    sigma: f64,
+    radius_squared: f64,
+) -> (f64, f64) {
+    let fermi_radius_squared = chemical_potential.powi(2) - mass.powi(2);
+    let energy = (radius_squared + mass.powi(2)).sqrt();
+    let scaled = (fermi_radius_squared / radius_squared).sqrt() / sigma;
+    // Evaluate the two normalized profiles explicitly, independently
+    // of h(), h_dual(), the sector extractor and the localizer.
+    let exponent = match profile {
+        HFunction::Exponential => -scaled.powi(2),
+        HFunction::PolyExponential => 2.0 - scaled.powi(2) - scaled.powi(-2),
+        _ => unreachable!(),
+    };
+    let profile_value = 2.0 * exponent.exp() / (std::f64::consts::PI.sqrt() * sigma);
+    let bulk = if energy < chemical_potential {
+        -1.0 / (4.0 * energy.powi(3))
+    } else {
+        0.0
+    };
+    let surface =
+        -profile_value * fermi_radius_squared / (4.0 * chemical_potential * radius_squared.powi(2));
+    (1.0 / (4.0 * energy.powi(3)), bulk + surface)
+}
+
+#[test]
+fn production_fermi_amplitude_preserves_orientation_sum_and_saved_state() -> Result<()> {
+    let (mut model, mut card, mut global, settings) = cold_dense_setup()?;
+    let mass = 3.0_f64;
+    let chemical_potential = 5.0_f64;
+    card.insert("MB".into(), Complex::new_re(F(mass)));
+    card.insert("muB".into(), Complex::new_re(F(3.0 * chemical_potential)));
+    model.apply_param_card(&card)?;
+    let graphs = Graph::from_string(
+        r#"digraph fermi_vacuum_cycle {
+            node [num=1]; edge [num=1 particle="b"];
+            A -> B [id=0 lmb_id=0]; B -> A [id=1];
+        }"#,
+        &model,
+    )?;
     let pool = rayon::ThreadPoolBuilder::new()
         .num_threads(1)
         .stack_size(256 * 1024 * 1024)
         .build()?;
     let mut reference = None;
-    for explicit in [false, true] {
+    for (explicit, compile) in itertools::iproduct!([false, true], [false, true]) {
         global.generation.explicit_orientation_sum_only = explicit;
+        // Summed and iterative evaluators require the orientation catalogue.
+        let evaluator = &mut global.generation.evaluator;
+        evaluator.compile = compile;
+        evaluator.summed = !explicit;
+        evaluator.summed_function_map = !explicit;
+        evaluator.iterative_orientation_optimization = !explicit;
         let mut amplitude = Amplitude::from_graph_list("fermi_vacuum_cycle", graphs.clone())?;
         amplitude.preprocess(&model, &global.generation, &(&settings).into(), &pool)?;
         amplitude.build_integrand(
@@ -94,70 +151,82 @@ sampling_multichanneling = false
                 .generic_evaluator_count(),
             0
         );
-        // The clockwise energy contour of D^-1, D=q0²-E²+i0, is
-        // -Theta(E-mu)/(2E). Differentiating in m² gives D^-2 and
-        // vacuum subtraction leaves
-        // -Theta(mu-E)/(4E³) - delta(E-mu)/(4E²).
-        // For pF=sqrt(mu²-m²), inserting the normalized radial profile
-        // localizes the second term to -h(pF/r) pF²/(4 mu r⁴).
-        // The unit-numerator graph contributes exactly i/(2pi)³ from
-        // its single loop; no symmetry factor or spatial Jacobian is
-        // added by fixed-momentum evaluation.
-        let fermi_radius_squared = chemical_potential.powi(2) - mass.powi(2);
+        assert_eq!(
+            generated.active_f64_backend(),
+            if compile {
+                ActiveF64Backend::Symjit
+            } else {
+                ActiveF64Backend::Eager
+            }
+        );
+        let methods = if explicit {
+            &[EvaluatorMethod::SingleParametric][..]
+        } else {
+            &[
+                EvaluatorMethod::Iterative,
+                EvaluatorMethod::Summed,
+                EvaluatorMethod::SummedFunctionMap,
+                EvaluatorMethod::SingleParametric,
+            ][..]
+        };
         let mut last_point = None;
-        for (profile, sigma) in [
-            (HFunction::Exponential, 1.0_f64),
-            (HFunction::PolyExponential, 1.3_f64),
-        ] {
-            let ProcessIntegrand::Amplitude(generated) = &mut *runtime else {
-                unreachable!()
-            };
-            generated.settings.lu_h_function.function = profile.clone();
-            generated.settings.lu_h_function.sigma = sigma;
-            generated.settings.lu_h_function.power = Some(0);
-            for coordinates in [[2.0_f64, -1.0, 0.5], [3.0, 1.0, 1.0], [5.0, -2.0, 1.0]] {
-                let input = MomentumSpaceEvaluationInput {
-                    loop_momenta: vec![ThreeMomentum::new(
-                        F(coordinates[0]),
-                        F(coordinates[1]),
-                        F(coordinates[2]),
-                    )],
-                    integrator_weight: F(1.0),
-                    graph_id: Some(0),
-                    group_id: None,
-                    orientation: None,
-                    channel_id: None,
+        // Reversing mu moves the Fermi sea to the opposite orientation; the
+        // orientation sum is unchanged. Finish at mu > 0 for the round trip.
+        for (method, mu_sign) in itertools::iproduct!(methods, [-1.0, 1.0]) {
+            let mut signed_model = model.clone();
+            let mut signed_card = card.clone();
+            signed_card.insert(
+                "muB".into(),
+                Complex::new_re(F(mu_sign * 3.0 * chemical_potential)),
+            );
+            signed_model.apply_param_card(&signed_card)?;
+            runtime.warm_up(&signed_model)?;
+            for (profile, sigma) in [
+                (HFunction::Exponential, 1.0_f64),
+                (HFunction::PolyExponential, 1.3_f64),
+            ] {
+                let ProcessIntegrand::Amplitude(generated) = &mut *runtime else {
+                    unreachable!()
                 };
-                let radius_squared = coordinates.into_iter().map(|x| x * x).sum::<f64>();
-                let energy = (radius_squared + mass.powi(2)).sqrt();
-                let scale = (fermi_radius_squared / radius_squared).sqrt();
-                let scaled = scale / sigma;
-                // Evaluate the two normalized profiles explicitly, independently
-                // of h(), h_dual(), the sector extractor and the localizer.
-                let exponent = match profile {
-                    HFunction::Exponential => -scaled.powi(2),
-                    HFunction::PolyExponential => 2.0 - scaled.powi(2) - scaled.powi(-2),
-                    _ => unreachable!(),
-                };
-                let profile_value = 2.0 * exponent.exp() / (std::f64::consts::PI.sqrt() * sigma);
-                let bulk = if energy < chemical_potential {
-                    -1.0 / (4.0 * energy.powi(3))
-                } else {
-                    0.0
-                };
-                let surface = -profile_value * fermi_radius_squared
-                    / (4.0 * chemical_potential * radius_squared.powi(2));
-                let expected_imaginary = (bulk + surface) / std::f64::consts::TAU.powi(3);
-                let value = runtime
-                    .evaluate_momentum_configuration(&model, &input, false)?
-                    .integrand_result;
-                assert!(value.re.0.is_finite() && value.im.0.is_finite());
-                assert!(
-                    value.re.0.abs() < 1e-12 * expected_imaginary.abs()
-                        && (value.im.0 / expected_imaginary - 1.0).abs() < 1e-11,
-                    "explicit={explicit}, profile={profile:?}, sigma={sigma}, momentum={coordinates:?}: {value:?} != i*{expected_imaginary}"
-                );
-                last_point = Some((input, value));
+                generated.settings.general.evaluator_method = method.clone();
+                generated.settings.lu_h_function.function = profile.clone();
+                generated.settings.lu_h_function.sigma = sigma;
+                generated.settings.lu_h_function.power = Some(0);
+                for coordinates in [[2.0_f64, -1.0, 0.5], [3.0, 1.0, 1.0], [5.0, -2.0, 1.0]] {
+                    let input = MomentumSpaceEvaluationInput {
+                        loop_momenta: vec![ThreeMomentum::new(
+                            F(coordinates[0]),
+                            F(coordinates[1]),
+                            F(coordinates[2]),
+                        )],
+                        integrator_weight: F(1.0),
+                        graph_id: Some(0),
+                        group_id: None,
+                        orientation: None,
+                        channel_id: None,
+                    };
+                    let (_, medium) = double_pole_contours(
+                        mass,
+                        chemical_potential,
+                        &profile,
+                        sigma,
+                        coordinates.into_iter().map(|x| x * x).sum(),
+                    );
+                    // The unit-numerator graph contributes exactly i/(2pi)³
+                    // from its single loop; no symmetry factor or spatial
+                    // Jacobian is added by fixed-momentum evaluation.
+                    let expected_imaginary = medium / std::f64::consts::TAU.powi(3);
+                    let value = runtime
+                        .evaluate_momentum_configuration(&signed_model, &input, false)?
+                        .integrand_result;
+                    assert!(value.re.0.is_finite() && value.im.0.is_finite());
+                    assert!(
+                        value.re.0.abs() < 1e-12 * expected_imaginary.abs()
+                            && (value.im.0 / expected_imaginary - 1.0).abs() < 1e-11,
+                        "explicit={explicit}, compile={compile}, method={method:?}, mu_sign={mu_sign}, profile={profile:?}, sigma={sigma}, momentum={coordinates:?}: {value:?} != i*{expected_imaginary}"
+                    );
+                    last_point = Some((input, value));
+                }
             }
         }
         let (input, value) = last_point.unwrap();
@@ -182,6 +251,8 @@ sampling_multichanneling = false
         let (mut restored, consumed): (ProcessIntegrand, usize) =
             bincode::decode_from_slice_with_context(&bytes, bincode::config::standard(), context)?;
         assert_eq!(consumed, bytes.len());
+        // Reactivate the frozen backend exactly as a loaded process does.
+        restored.activate_runtime_backends_after_load(false)?;
         restored.warm_up(&model)?;
         assert_eq!(
             restored
@@ -201,6 +272,187 @@ sampling_multichanneling = false
         assert_ne!(
             shifted, value,
             "warm-up must refresh the Fermi shell chemical potential"
+        );
+
+        // Localization inserts the profile as a unit scale integral.
+        for h_function in [
+            HFunctionSettings {
+                function: HFunction::ExponentialCT,
+                ..Default::default()
+            },
+            HFunctionSettings {
+                power: Some(2),
+                ..Default::default()
+            },
+            HFunctionSettings {
+                sigma: 0.0,
+                ..Default::default()
+            },
+        ] {
+            restored.get_mut_settings().lu_h_function = h_function;
+            let error = restored.warm_up(&shifted_model).unwrap_err();
+            assert!(error.to_string().contains("h_function"), "{error}");
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn production_fermi_products_localize_independent_surfaces() -> Result<()> {
+    let (mut model, mut card, mut global, settings) = cold_dense_setup()?;
+    let mass = 3.0_f64;
+    let chemical_potential = 5.0_f64;
+    card.insert("MB".into(), Complex::new_re(F(mass)));
+    card.insert("muB".into(), Complex::new_re(F(3.0 * chemical_potential)));
+    model.apply_param_card(&card)?;
+    // Two doubled fermion cycles meet at one vertex, so each orientation of
+    // the product carries both Fermi deltas.
+    let graphs = Graph::from_string(
+        r#"digraph fermi_figure_eight {
+            node [num=1]; edge [num=1 particle="b"];
+            A -> B [id=0 lmb_id=0]; B -> A [id=1];
+            A -> C [id=2 lmb_id=1]; C -> A [id=3];
+        }"#,
+        &model,
+    )?;
+    let pool = rayon::ThreadPoolBuilder::new()
+        .num_threads(1)
+        .stack_size(256 * 1024 * 1024)
+        .build()?;
+    for explicit in [false, true] {
+        global.generation.explicit_orientation_sum_only = explicit;
+        let mut amplitude = Amplitude::from_graph_list("fermi_figure_eight", graphs.clone())?;
+        amplitude.preprocess(&model, &global.generation, &(&settings).into(), &pool)?;
+        amplitude.build_integrand(
+            &model,
+            "fermi_figure_eight",
+            &global,
+            (&settings).into(),
+            &pool,
+        )?;
+        let runtime = amplitude.integrand.as_mut().unwrap();
+        runtime.warm_up(&model)?;
+        for (profile, sigma) in [
+            (HFunction::Exponential, 1.0_f64),
+            (HFunction::PolyExponential, 1.3_f64),
+        ] {
+            let ProcessIntegrand::Amplitude(generated) = &mut *runtime else {
+                unreachable!()
+            };
+            generated.settings.lu_h_function.function = profile.clone();
+            generated.settings.lu_h_function.sigma = sigma;
+            generated.settings.lu_h_function.power = Some(0);
+            // Inside, inside; inside, outside; and outside, inside the Fermi sea.
+            for momenta in [
+                [[2.0_f64, -1.0, 0.5], [3.0, 1.0, 1.0]],
+                [[3.0, 1.0, 1.0], [5.0, -2.0, 1.0]],
+                [[5.0, -2.0, 1.0], [2.0, -1.0, 0.5]],
+            ] {
+                let input = MomentumSpaceEvaluationInput {
+                    loop_momenta: momenta
+                        .iter()
+                        .map(|k| ThreeMomentum::new(F(k[0]), F(k[1]), F(k[2])))
+                        .collect(),
+                    integrator_weight: F(1.0),
+                    graph_id: Some(0),
+                    group_id: None,
+                    orientation: None,
+                    channel_id: None,
+                };
+                let [(vacuum_0, medium_0), (vacuum_1, medium_1)] = momenta.map(|k| {
+                    double_pole_contours(
+                        mass,
+                        chemical_potential,
+                        &profile,
+                        sigma,
+                        k.into_iter().map(|x| x * x).sum(),
+                    )
+                });
+                // The loops factorize, each contributing i/(2pi)³. Vacuum
+                // subtraction removes only the product of the vacuum contours,
+                // retaining single-surface terms on either vacuum loop and the
+                // double-delta intersection of the two independent surfaces.
+                let expected_real = -((vacuum_0 + medium_0) * (vacuum_1 + medium_1)
+                    - vacuum_0 * vacuum_1)
+                    / std::f64::consts::TAU.powi(6);
+                let value = runtime
+                    .evaluate_momentum_configuration(&model, &input, false)?
+                    .integrand_result;
+                assert!(
+                    value.re.0.is_finite()
+                        && value.im.0.abs() < 1e-12 * expected_real.abs()
+                        && (value.re.0 / expected_real - 1.0).abs() < 1e-11,
+                    "explicit={explicit}, profile={profile:?}, sigma={sigma}, momenta={momenta:?}: {value:?} != {expected_real}"
+                );
+            }
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn zero_chemical_potentials_have_no_fermi_surface() -> Result<()> {
+    // In sm-thermal, muQ = muLe = 0 make the chemical potentials of G+ and e-
+    // vanish. Their raised lines previously failed generation (a boson) and
+    // the first sample (a degenerate massless onset).
+    let (model, _, mut global, settings) = cold_dense_setup()?;
+    let pool = rayon::ThreadPoolBuilder::new()
+        .num_threads(1)
+        .stack_size(256 * 1024 * 1024)
+        .build()?;
+    let input = MomentumSpaceEvaluationInput {
+        loop_momenta: vec![ThreeMomentum::new(F(2.0), F(-1.0), F(0.5))],
+        integrator_weight: F(1.0),
+        graph_id: Some(0),
+        group_id: None,
+        orientation: None,
+        channel_id: None,
+    };
+    for (particle, fermi_sectors) in [("G+", false), ("e-", true)] {
+        let graphs = Graph::from_string(
+            format!(
+                r#"digraph zero_mu_cycle {{
+                    node [num=1]; edge [num=1 particle="{particle}"];
+                    A -> B [id=0 lmb_id=0]; B -> A [id=1];
+                }}"#
+            ),
+            &model,
+        )?;
+        let mut values = Vec::new();
+        for vacuum_subtraction in [false, true] {
+            global.generation.medium.vacuum_subtraction = vacuum_subtraction;
+            let mut amplitude = Amplitude::from_graph_list("zero_mu_cycle", graphs.clone())?;
+            amplitude.preprocess(&model, &global.generation, &(&settings).into(), &pool)?;
+            amplitude.build_integrand(
+                &model,
+                "zero_mu_cycle",
+                &global,
+                (&settings).into(),
+                &pool,
+            )?;
+            let runtime = amplitude.integrand.as_mut().unwrap();
+            runtime.warm_up(&model)?;
+            let ProcessIntegrand::Amplitude(generated) = &*runtime else {
+                unreachable!()
+            };
+            assert_eq!(
+                !generated.data.graph_terms[0].fermi_surfaces.is_empty(),
+                fermi_sectors,
+                "{particle}"
+            );
+            values.push(
+                runtime
+                    .evaluate_momentum_configuration(&model, &input, false)?
+                    .integrand_result,
+            );
+        }
+        // Without a Fermi sea, the medium contribution is only binary64
+        // rounding of the full (vacuum) value.
+        let [full, medium] = [&values[0], &values[1]].map(|value| value.re.0.hypot(value.im.0));
+        assert!(full > 0.0, "{particle}: {values:?}");
+        assert!(
+            medium <= 8.0 * f64::EPSILON * full,
+            "{particle}: {values:?}"
         );
     }
     Ok(())

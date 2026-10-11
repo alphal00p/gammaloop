@@ -1625,7 +1625,8 @@ pub struct State {
 
 const STATE_MANIFEST_FILE: &str = "state_manifest.toml";
 const INTEGRAND_GENERATION_SUMMARY_FILE: &str = "generation_summary.json";
-// Version 13 persists the selected medium in graph parameter builders for runtime validation.
+// Version 13 persists the selected medium in graph parameter builders for runtime validation,
+// and amplitude graph terms store their zero-temperature Fermi-surface evaluators.
 // Older positional bincode layouts must be regenerated.
 // Version 12 names square roots OnShellEnergy and energy sums Esurface. Reject older
 // states before Symbolica import can assign the new meaning to an old Esurface atom.

@@ -6,6 +6,7 @@ use crate::{
     utils::{ArbPrec, h, h_dual, symbols::GS},
     uv::uv_graph::UVE,
 };
+use linnet::half_edge::involution::EdgeIndex;
 use symbolica::atom::{Atom, AtomCore};
 use three_dimensional_reps::MediumMode;
 
@@ -36,7 +37,7 @@ fn fermi_surface_derivatives_include_profile_and_spatial_jacobian() -> Result<()
                 &momenta,
                 &[F(3.0)],
                 &[F(5.0)],
-                |_, t| Ok(h_dual(t, None, None, &profile)),
+                |t| Ok(h_dual(t, None, None, &profile)),
                 |mapped| {
                     assert!((mapped.0[0].px.values[0].0 - 4.0).abs() < 2e-15);
                     assert_eq!(mapped.0[1].px.values[0], F(7.0));
@@ -106,7 +107,7 @@ fn fermi_surface_integrated_derivatives_are_profile_independent() -> Result<()> 
                         &momenta,
                         &[F(mass)],
                         &[F(nu)],
-                        |_, scale| Ok(h_dual(scale, None, None, &profile)),
+                        |scale| Ok(h_dual(scale, None, None, &profile)),
                         |mapped| {
                             let jet = &mapped.0[0].px;
                             let value = new_constant(jet, &jet.values[0].one());
@@ -182,7 +183,7 @@ fn fermi_surface_matches_integrated_finite_temperature_derivatives() -> Result<(
                 &momenta,
                 &[F(0.0)],
                 &[F(nu)],
-                |_, scale| Ok(h_dual(scale, None, None, &profile)),
+                |scale| Ok(h_dual(scale, None, None, &profile)),
                 |mapped| {
                     let jet = &mapped.0[0].px;
                     let value = new_constant(jet, &jet.values[0].one());
@@ -268,7 +269,7 @@ fn fermi_surface_independent_mixed_derivatives_commute() -> Result<()> {
             &momenta,
             &[F(0.0), F(0.0)],
             &chemical_potentials,
-            |_, scale| Ok(h_dual(scale, None, None, &profile)),
+            |scale| Ok(h_dual(scale, None, None, &profile)),
             |mapped| {
                 let (first, second) = if reversed {
                     (&mapped.0[1].px, &mapped.0[0].px)
@@ -316,7 +317,7 @@ fn fermi_surface_differentiates_a_conditional_cut_root() -> Result<()> {
         &LoopMomenta(vec![ThreeMomentum::new(F(1.0), F(0.0), F(0.0)); 2]),
         &[F(0.0)],
         &[F(1.0)],
-        |_, scale| Ok(h_dual(scale, None, None, &profile)),
+        |scale| Ok(h_dual(scale, None, None, &profile)),
         |mapped| {
             // Toy massless cut: r_cut + E_F - 4 = 0. Its localized
             // radial weight is r_cut^2 / |dg_cut/dr_cut| = (4-E_F)^2.
@@ -363,7 +364,7 @@ fn fermi_surface_preserves_arbitrary_precision() -> Result<()> {
         &[zero.from_usize(3)],
         &[zero.from_usize(5)],
         // h(t)=exp(-t) is normalized without binary64 constants.
-        |_, scale| Ok((-scale.clone()).exp()),
+        |scale| Ok((-scale.clone()).exp()),
         |mapped| {
             let jet = &mapped.0[0].px;
             let value = new_constant(jet, &jet.values[0].one());
@@ -395,28 +396,50 @@ fn fermi_surface_distinguishes_empty_support_from_invalid_shells() -> Result<()>
         }],
     )?;
     let momenta = LoopMomenta(vec![ThreeMomentum::new(F(1.0), F(0.0), F(0.0)); 2]);
-    for chemical_potential in [-5.0, 2.0] {
+    // A zero chemical potential has no Fermi sea, even for a massless fermion.
+    for (mass, chemical_potential) in [(3.0, -5.0), (3.0, 2.0), (-3.0, 2.0), (0.0, 0.0)] {
         let actual = product.localize(
             &momenta,
-            &[F(3.0)],
+            &[F(mass)],
             &[F(chemical_potential)],
-            |_, _| panic!("empty support must not evaluate the profile"),
+            |_| panic!("empty support must not evaluate the profile"),
             |_| panic!("empty support must not evaluate the coefficient"),
         )?;
         assert_eq!(actual, Complex::new_re(F(0.0)));
     }
+    // Only the squared mass enters the shell.
+    let localize_with_mass = |mass: f64| {
+        product.localize(
+            &momenta,
+            &[F(mass)],
+            &[F(5.0)],
+            |scale| Ok((-scale.clone()).exp()),
+            |mapped| {
+                Ok(HyperDual::from_values(
+                    product.shape.clone(),
+                    mapped[0.into()]
+                        .px
+                        .values
+                        .iter()
+                        .cloned()
+                        .map(Complex::new_re)
+                        .collect(),
+                ))
+            },
+        )
+    };
+    assert_eq!(localize_with_mass(-3.0)?, localize_with_mass(3.0)?);
     for (mass, nu, expected) in [
         (3.0, 3.0, "Degenerate Fermi surface"),
-        (-1.0, 3.0, "finite nonnegative mass"),
         (0.0, f64::INFINITY, "finite oriented chemical potential"),
-        (f64::NAN, 3.0, "finite nonnegative mass"),
+        (f64::NAN, 3.0, "finite mass"),
     ] {
         let error = product
             .localize(
                 &momenta,
                 &[F(mass)],
                 &[F(nu)],
-                |_, _| panic!("invalid shell must not evaluate the profile"),
+                |_| panic!("invalid shell must not evaluate the profile"),
                 |_| panic!("invalid shell must not evaluate the coefficient"),
             )
             .unwrap_err();
@@ -431,7 +454,7 @@ fn fermi_surface_distinguishes_empty_support_from_invalid_shells() -> Result<()>
                     &invalid,
                     &[F(0.0)],
                     &[F(1.0)],
-                    |_, _| panic!("invalid momentum must not evaluate the profile"),
+                    |_| panic!("invalid momentum must not evaluate the profile"),
                     |_| panic!("invalid momentum must not evaluate the coefficient"),
                 )
                 .is_err()
@@ -443,7 +466,7 @@ fn fermi_surface_distinguishes_empty_support_from_invalid_shells() -> Result<()>
                 &momenta,
                 &[],
                 &[F(1.0)],
-                |_, _| panic!("invalid dimensions must not evaluate the profile"),
+                |_| panic!("invalid dimensions must not evaluate the profile"),
                 |_| panic!("invalid dimensions must not evaluate the coefficient"),
             )
             .is_err()
@@ -472,7 +495,7 @@ fn fermi_surface_preserves_representable_fully_weighted_scales() -> Result<()> {
             ]),
             &[F(0.0)],
             &[F(nu)],
-            |_, scale| Ok((-scale.clone()).exp()),
+            |scale| Ok((-scale.clone()).exp()),
             |mapped| {
                 let projected = mapped.0[0].px.values[0].0;
                 assert!(projected > 0.0);
@@ -521,7 +544,7 @@ fn fermi_surface_balances_profile_and_geometry_for_each_complex_component() -> R
             &momenta,
             &[F(0.0)],
             &[F(1.0)],
-            |_, scale| {
+            |scale| {
                 // This positive profile has integral one on (0, infinity).
                 let one = new_constant(scale, &scale.values[0].one());
                 let denominator = scale.clone() + &one;
@@ -582,7 +605,7 @@ fn fermi_surface_products_preserve_inactive_derivative_axes() -> Result<()> {
             &momenta,
             &[F(0.0), F(0.0)],
             &[F(1.0), F(2.0)],
-            |_, scale| Ok((-scale.clone()).exp()),
+            |scale| Ok((-scale.clone()).exp()),
             |mapped| {
                 let jet = &mapped.0[0].px;
                 let value = new_constant(jet, &jet.values[0].one());

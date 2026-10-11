@@ -3438,7 +3438,7 @@ pub fn workspace_result_snapshot_path(workspace: &Path) -> PathBuf {
     workspace.join("integration_result.json")
 }
 
-fn workspace_result_archive_path(workspace: &Path, iter: usize) -> PathBuf {
+pub fn workspace_result_archive_path(workspace: &Path, iter: usize) -> PathBuf {
     workspace
         .join("results")
         .join(format!("integration_result_iter_{iter:04}.json"))
