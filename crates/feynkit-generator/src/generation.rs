@@ -804,17 +804,17 @@ impl<'legs> NumeratorInstantiation<'legs> {
 
         let mut identities = Vec::<(Atom, Atom)>::new();
         let mut error = None;
-        atom = atom.replace_map(|term, _, _| {
+        atom.visitor(&mut |term| {
             if error.is_some() {
-                return;
+                return false;
             }
             let AtomView::Fun(function) = term else {
-                return;
+                return true;
             };
             let symbol = function.get_symbol();
             let name = symbol.get_stripped_name();
             if !Self::is_model_symbol(symbol, name) {
-                return;
+                return true;
             }
             let arguments = function
                 .iter()
@@ -873,11 +873,12 @@ impl<'legs> NumeratorInstantiation<'legs> {
                 | "PSlash" => {
                     Err(self.invalid_tensor(term, "a Lorentz tensor appeared in a color structure"))
                 }
-                _ => return,
+                _ => return true,
             };
             if let Err(lowering_error) = result {
                 error = Some(lowering_error);
             }
+            error.is_none()
         });
         if let Some(error) = error {
             return Err(error);
@@ -1072,24 +1073,25 @@ impl<'legs> NumeratorInstantiation<'legs> {
     fn maximum_local_dummy(&self, atom: &Atom) -> Result<usize, GenerationError> {
         let mut maximum = 0;
         let mut error = None;
-        let _ = atom.replace_map(|term, _, _| {
+        atom.visitor(&mut |term| {
             if error.is_some() {
-                return;
+                return false;
             }
             let AtomView::Fun(function) = term else {
-                return;
+                return true;
             };
             let expected = self.dummy_symbol();
             if function.get_symbol() != expected || function.get_nargs() != 2 {
-                return;
+                return true;
             }
             let Some(local) = function.iter().nth(1) else {
-                return;
+                return true;
             };
             match usize::try_from(local) {
                 Ok(local) => maximum = maximum.max(local),
                 Err(_) => error = Some(self.invalid_index(term)),
             }
+            error.is_none()
         });
         error.map_or(Ok(maximum), Err)
     }
@@ -1171,12 +1173,12 @@ impl<'legs> NumeratorInstantiation<'legs> {
 
     fn reject_residual_tensors(&self, atom: &Atom) -> Result<(), GenerationError> {
         let mut residual = None;
-        let _ = atom.replace_map(|term, _, _| {
+        atom.visitor(&mut |term| {
             if residual.is_some() {
-                return;
+                return false;
             }
             let AtomView::Fun(function) = term else {
-                return;
+                return true;
             };
             let symbol = function.get_symbol();
             let name = symbol.get_stripped_name();
@@ -1205,6 +1207,7 @@ impl<'legs> NumeratorInstantiation<'legs> {
             {
                 residual = Some(self.unsupported_tensor(term));
             }
+            residual.is_none()
         });
         residual.map_or(Ok(()), Err)
     }
@@ -4560,10 +4563,11 @@ mod tests {
 
     fn function_count(expression: &Atom, head: symbolica::atom::Symbol) -> usize {
         let mut count = 0;
-        let _ = expression.replace_map(|term, _, _| {
+        expression.visitor(&mut |term| {
             if matches!(term, AtomView::Fun(function) if function.get_symbol() == head) {
                 count += 1;
             }
+            true
         });
         count
     }
