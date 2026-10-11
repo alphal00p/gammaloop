@@ -7456,14 +7456,10 @@ mod tests {
             // Remove the spatial measure and i to compare the signed energy
             // contour J = integral dq0/(2*pi*i), as in the vacuum test below.
             let sum = sum * (Atom::num(2) * Atom::var(GS.pi)).pow(3) / Atom::i();
-            let step = Atom::var(W_.a_);
             let mut explicit = graph
                 .make_thermal_distributions_explicit(&sum, mode, graph.iter_edge_ids())?
                 .replace(function!(GS.thermal_weight_wrapper, W_.a_))
-                .with(W_.a_)
-                // The production evaluator definition of the step.
-                .replace(function!(GS.heaviside, W_.a_))
-                .with((step.abs() + &step) / (Atom::num(2) * step.abs()));
+                .with(W_.a_);
             if fermion {
                 // Expand the model assignment so b~ actually uses minus_mub;
                 // replacing the edge's chemical-potential symbol would mask it.
@@ -7482,6 +7478,7 @@ mod tests {
             }
             let rational: ExpressionEvaluator<SymComplex<Fraction<IntegerRing>>> = explicit
                 .evaluator(&[Atom::var(GS.inverse_temperature)])
+                .function_map(graph.param_builder.fn_map.clone())
                 .build()
                 .map_err(|error| eyre::eyre!("thermal mass-cycle evaluator: {error}"))?;
             let mut evaluator: ExpressionEvaluator<Complex<F<f64>>> =

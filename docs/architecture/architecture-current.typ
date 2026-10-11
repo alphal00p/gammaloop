@@ -256,11 +256,19 @@ until orientation selection. With `x = beta*(E - sigma*mu)/2`, order zero is
 keeps the occupation separate from the vacuum weight `(1 + s)/2` and factors
 `exp(-(x + |x|))` out of it, so its exponents are nonpositive and an
 exponentially small occupation is not lost once `tanh(x)` rounds to one; `coth`
-keeps `n_B` accurate in the soft limit. Orders one and two are written in closed
-form with `sech` and `csch`; higher orders are differentiated symbolically from
-order two. The zero-temperature order zero is
+keeps `n_B` accurate in the soft limit. The function map registers every body once
+per contour offset, with `s` as a tag, so the vacuum weight folds symbolically and
+an `s = -1` body is the bare occupation. As a runtime argument, `s` would let
+evaluator optimization add the constant to an exponentially small occupation
+first. Orders one and two are written in closed form with `sech` and `csch`;
+higher orders are differentiated symbolically from order two. The
+zero-temperature order zero is
 `(1 + s)/2 - theta(sigma*mu - E)`, whose positive orders are the distributions
-localized below. Without a chemical potential it is the vacuum weight `(1 + s)/2`,
+localized below. The registered step is zero for a negative real argument and one
+for a positive argument up to rounding; at argument zero it is undefined (NaN).
+Pointwise evaluation exactly on a Fermi boundary therefore enters the numerical
+failure path, while localized distribution terms remain separate from that point value.
+Without a chemical potential it is the vacuum weight `(1 + s)/2`,
 whose derivatives vanish. Vacuum subtraction removes the value `V(W)` that a
 completed weight `W` takes when every factor is replaced by this vacuum weight.
 It does so symbolically: an order-zero factor differs from its vacuum weight by
