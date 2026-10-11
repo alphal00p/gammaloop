@@ -2426,23 +2426,18 @@ impl Generator {
             .topology_threshold_candidates(topology.topology_threshold_candidates.clone());
         // Every external state with the connection of the leg that carries it.
         let mut external_states = Vec::new();
-        let mut endpoint_slots = BTreeMap::new();
+        let mut endpoint_slots = vec![[VertexSlot(0); 2]; graph.n_edges()];
         for (vertex, rule_id) in graph.vertices().enumerate() {
             let rule = self.model.vertex_rule_by_id(rule_id)?;
             let legs = self.interaction_half_edges(graph, vertex, rule)?;
             for (slot, leg) in legs.iter().enumerate() {
-                endpoint_slots.insert((leg.edge, leg.flow), VertexSlot(slot));
+                endpoint_slots[leg.edge][usize::from(leg.flow.is_sink())] = VertexSlot(slot);
             }
             builder.add_vertex(DiagramVertex::interaction(format!("v{vertex}"), rule_id));
         }
         for (edge_index, edge) in graph.edges().enumerate() {
             let diagram_edge = DiagramEdge::new(edge.particle, edge.directed);
-            let slot = |flow| {
-                endpoint_slots
-                    .get(&(edge_index, flow))
-                    .copied()
-                    .unwrap_or(VertexSlot(0))
-            };
+            let slot = |flow: Flow| endpoint_slots[edge_index][usize::from(flow.is_sink())];
             match (edge.source, edge.sink) {
                 (Endpoint::Vertex(source), Endpoint::Vertex(sink)) => {
                     builder.add_edge_with_slots(
@@ -2521,7 +2516,8 @@ impl Generator {
         // Instantiate directly in the finalized frame. This avoids building
         // every factor in provisional indices and then translating it again.
         let mut vertices = Vec::new();
-        for (vertex, data) in diagram.vertices() {
+        let graph = diagram.underlying();
+        for (vertex, incident, data) in graph.iter_nodes() {
             let Some(rule_id) = data.interaction else {
                 continue;
             };
@@ -2530,38 +2526,27 @@ impl Generator {
             }
             let rule = self.model.vertex_rule_by_id(rule_id)?;
             let mut legs = vec![None; rule.particles.len()];
-            // Dummy edges take the slots after the interaction legs.
-            for (edge, endpoints, data) in diagram.edges().filter(|(_, _, data)| !data.is_dummy) {
-                for (attached, slot, endpoint, flow) in [
-                    (
-                        endpoints.source,
-                        data.source_slot(),
-                        DiagramEndpoint::Source,
-                        Flow::Source,
-                    ),
-                    (
-                        endpoints.target,
-                        data.target_slot(),
-                        DiagramEndpoint::Target,
-                        Flow::Sink,
-                    ),
-                ] {
-                    if attached != Some(vertex) {
-                        continue;
-                    }
-                    let particle = self.model.particle_by_id(rule.particles[slot.0])?;
-                    let hedge = diagram
-                        .half_edge_id(DiagramHalfEdge { edge, endpoint })
-                        .expect("finalized endpoint")
-                        .0;
-                    legs[slot.0] = Some(NumeratorHalfEdge {
-                        edge: edge.0,
-                        hedge,
-                        flow,
-                        spin: particle.spin,
-                        color: particle.color,
-                    });
+            // Finalization carries incidence and UFO slots into the native half-edge frame.
+            // Visit both ends of a self-loop, skipping dummy slots after the interaction legs.
+            for hedge in incident {
+                let edge = graph[&hedge];
+                let data = &graph[edge];
+                if data.is_dummy {
+                    continue;
                 }
+                let flow = graph.flow(hedge);
+                let slot = match flow {
+                    Flow::Source => data.source_slot(),
+                    Flow::Sink => data.target_slot(),
+                };
+                let particle = self.model.particle_by_id(rule.particles[slot.0])?;
+                legs[slot.0] = Some(NumeratorHalfEdge {
+                    edge: edge.0,
+                    hedge: hedge.0,
+                    flow,
+                    spin: particle.spin,
+                    color: particle.color,
+                });
             }
             let legs = legs
                 .into_iter()
@@ -2571,7 +2556,10 @@ impl Generator {
                 owner: NumeratorOwner::Vertex(vertex.0),
                 legs: &legs,
             };
-            vertices.push((vertex, self.interaction_numerator(rule_id, &instantiation)?));
+            vertices.push((
+                VertexId(vertex.0),
+                self.interaction_numerator(rule_id, &instantiation)?,
+            ));
         }
         let mut edges = Vec::new();
         for (edge, _, data) in diagram.edges().filter(|(edge, _, data)| {
@@ -3420,10 +3408,14 @@ impl ResolvedProcess {
         use_left_right_external_colors: bool,
     ) -> Result<GeneratedGraph, GenerationError> {
         let incoming_count = self.incoming.len();
-        let externals: BTreeMap<usize, ExternalNode> = graph
-            .externals()
-            .map(|(_, external, _)| (external.index, external))
-            .collect();
+        let externals: BTreeMap<usize, ExternalNode> = if include_left_right_remapping {
+            graph
+                .externals()
+                .map(|(_, external, _)| (external.index, external))
+                .collect()
+        } else {
+            BTreeMap::new()
+        };
         if include_left_right_remapping && externals.len() != 2 * incoming_count {
             return Err(GenerationError::GraphConstruction(format!(
                 "left/right canonicalization expected {} sewn external legs, found {}",
@@ -3457,47 +3449,51 @@ impl ResolvedProcess {
         };
         // External edges are colored by the particle entering the interaction graph.
         // Internal direction is omitted from the reduced skeleton but restored below.
-        let edge_colors = graph
-            .edges()
-            .map(|edge| {
-                self.numerator_colors
-                    .edge(&edge, model, exact_internal_particles)
-            })
-            .collect::<Result<Vec<_>, _>>()?;
+        // The two global left/right choices share incidence and edge colors. Prepare that
+        // skeleton once and vary only its external half-edge keys when canonizing it.
+        let mut skeleton = HedgeGraphBuilder::new();
+        let nodes: Vec<NodeIndex> = (0..graph.n_vertices())
+            .map(|_| skeleton.add_node(()))
+            .collect();
+        for edge in graph.edges() {
+            let color = self
+                .numerator_colors
+                .edge(&edge, model, exact_internal_particles)?;
+            match (edge.source, edge.sink) {
+                (Endpoint::Vertex(source), Endpoint::Vertex(sink)) => {
+                    skeleton.add_edge(nodes[source], nodes[sink], color, Orientation::Undirected)
+                }
+                (Endpoint::External(external), Endpoint::Vertex(vertex))
+                | (Endpoint::Vertex(vertex), Endpoint::External(external)) => {
+                    let normal = external_color(external)?;
+                    let swapped = if include_left_right_remapping {
+                        external_color(partner(external))?
+                    } else {
+                        normal
+                    };
+                    skeleton.add_external_edge(
+                        nodes[vertex].add_data(Some([normal, swapped])),
+                        color,
+                        Orientation::Default,
+                        Flow::Sink,
+                    )
+                }
+                (Endpoint::External(_), Endpoint::External(_)) => {
+                    unreachable!("generated edges touch an interaction vertex")
+                }
+            }
+        }
+        let skeleton: HedgeGraph<usize, (), Option<[i64; 2]>> = skeleton.build();
         let mut candidates = Vec::new();
         for swapped in [false, true] {
             if swapped && !include_left_right_remapping {
                 continue;
             }
-            let mut skeleton = HedgeGraphBuilder::new();
-            let nodes: Vec<NodeIndex> = (0..graph.n_vertices())
-                .map(|_| skeleton.add_node(()))
-                .collect();
-            for (edge, color) in graph.edges().zip(&edge_colors) {
-                match (edge.source, edge.sink) {
-                    (Endpoint::Vertex(source), Endpoint::Vertex(sink)) => skeleton.add_edge(
-                        nodes[source],
-                        nodes[sink],
-                        color,
-                        Orientation::Undirected,
-                    ),
-                    (Endpoint::External(external), Endpoint::Vertex(vertex))
-                    | (Endpoint::Vertex(vertex), Endpoint::External(external)) => {
-                        let shown = if swapped { partner(external) } else { external };
-                        skeleton.add_external_edge(
-                            nodes[vertex].add_data(Some(external_color(shown)?)),
-                            color,
-                            Orientation::Default,
-                            Flow::Sink,
-                        )
-                    }
-                    (Endpoint::External(_), Endpoint::External(_)) => {
-                        unreachable!("generated edges touch an interaction vertex")
-                    }
-                }
-            }
-            let skeleton: HedgeGraph<&usize, (), Option<i64>> = skeleton.build();
-            let canonical = skeleton.canonize_by(ignore, |color| **color, |color| *color);
+            let canonical = skeleton.canonize_by(
+                ignore,
+                |color| *color,
+                |colors| colors.map(|colors| colors[usize::from(swapped)]),
+            );
             let positions: Vec<usize> = (0..graph.n_vertices())
                 .map(|vertex| canonical.canonical_node(NodeIndex(vertex)).0)
                 .collect();
@@ -7100,6 +7096,107 @@ mod tests {
                 DiagramError::DuplicateVertexSlot { .. }
             ))
         ));
+    }
+
+    #[test]
+    fn numerator_binding_uses_ufo_slots_and_both_self_loop_ends() {
+        let generator = Generator::new(standard_model());
+        let rule = vertex(&generator.model, "V_98"); // e+, e-, a
+        let electron = particle(&generator.model, 11);
+        let photon = particle(&generator.model, 22);
+        let mut builder = FeynmanDiagramBuilder::new(Arc::clone(&generator.model), None);
+        let interaction = builder.add_vertex(DiagramVertex::interaction("v", rule));
+        let spectator = builder.add_vertex(DiagramVertex {
+            name: "spectator".into(),
+            interaction: None,
+            numerator: Atom::num(5),
+        });
+
+        // Insert slot 2 first: incidence order is not UFO leg order.
+        let mut external = DiagramEdge::new(photon, false);
+        external.external = Some(ExternalLeg {
+            name: "q0".into(),
+            index: 0,
+            state: ExternalState::Incoming,
+            connection: 0,
+        });
+        builder
+            .add_edge_with_slots(None, interaction, external, VertexSlot(0), VertexSlot(2))
+            .unwrap();
+        builder
+            .add_edge_with_slots(
+                interaction,
+                interaction,
+                DiagramEdge::new(electron, true),
+                VertexSlot(0),
+                VertexSlot(1),
+            )
+            .unwrap();
+        // A dummy occupies a slot beyond the interaction legs and must not bind one.
+        let mut dummy = DiagramEdge::new(photon, false);
+        dummy.is_dummy = true;
+        dummy.numerator = Atom::num(7);
+        builder
+            .add_edge_with_slots(interaction, spectator, dummy, VertexSlot(3), VertexSlot(0))
+            .unwrap();
+        let diagram = builder.build().unwrap();
+        let (interaction, _) = diagram
+            .vertices()
+            .find(|(_, data)| data.interaction.is_some())
+            .unwrap();
+        let (external, _, _) = diagram
+            .edges()
+            .find(|(_, _, data)| data.external.is_some())
+            .unwrap();
+        let (internal, _, _) = diagram
+            .edges()
+            .find(|(_, _, data)| data.external.is_none() && !data.is_dummy)
+            .unwrap();
+        let legs = [
+            (internal, DiagramEndpoint::Source, Flow::Source, 2),
+            (internal, DiagramEndpoint::Target, Flow::Sink, 2),
+            (external, DiagramEndpoint::Target, Flow::Sink, 3),
+        ]
+        .map(|(edge, endpoint, flow, spin)| NumeratorHalfEdge {
+            edge: edge.0,
+            hedge: diagram
+                .half_edge_id(DiagramHalfEdge { edge, endpoint })
+                .unwrap()
+                .0,
+            flow,
+            spin,
+            color: 1,
+        });
+        assert_ne!(legs[0].hedge, legs[1].hedge);
+        let expected = generator
+            .interaction_numerator(
+                rule,
+                &NumeratorInstantiation {
+                    owner: NumeratorOwner::Vertex(interaction.0),
+                    legs: &legs,
+                },
+            )
+            .unwrap();
+        let diagram = diagram.apply_feynman_rules().unwrap();
+        assert_eq!(diagram.vertex(interaction).unwrap().numerator, expected);
+        assert_eq!(
+            diagram
+                .vertices()
+                .find(|(_, data)| data.interaction.is_none())
+                .unwrap()
+                .1
+                .numerator,
+            Atom::num(5)
+        );
+        assert_eq!(
+            diagram
+                .edges()
+                .find(|(_, _, data)| data.is_dummy)
+                .unwrap()
+                .2
+                .numerator,
+            Atom::num(7)
+        );
     }
 
     #[test]
