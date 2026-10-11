@@ -2241,6 +2241,7 @@ fn evaluate_profile_momentum_point_arb<I: ProcessIntegrandImpl>(
         loop_momenta,
         None,
         true,
+        &F::<ArbPrec>::default().one(),
     )? {
         PreciseEvaluationResult::Arb(result) => {
             let zero_complex = Complex::new_re(result.integrand_result.re.zero());
