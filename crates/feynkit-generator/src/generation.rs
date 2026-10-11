@@ -1509,12 +1509,93 @@ struct InteractionTerm {
     lorentz: InteractionFactor,
 }
 
-enum CompiledInteraction {
-    Local(Atom),
+/// Graph fields read by a fully lowered interaction. Slots stay ordered: two
+/// half-edges of a self-loop can share a momentum without sharing an index.
+#[derive(Default)]
+struct InteractionDependencies {
+    owner: bool,
+    hedges: Vec<usize>,
+    momenta: Vec<usize>,
+    orientations: Vec<usize>,
+}
+
+impl InteractionDependencies {
+    fn new(expression: &Atom) -> Self {
+        let mut dependencies = Self::default();
+        expression.visitor(&mut |term| {
+            if let AtomView::Fun(function) = term {
+                let head = function.get_symbol();
+                if head.get_namespace() == "feynkit_generator_template" {
+                    let slot =
+                        usize::try_from(function.iter().next().expect("compiled local slot"))
+                            .expect("compiled local slot is nonnegative");
+                    match head.get_stripped_name() {
+                        "hedge" => dependencies.hedges.push(slot),
+                        "dummy" => dependencies.owner = true,
+                        "momentum" => dependencies.momenta.push(slot),
+                        "orientation" => dependencies.orientations.push(slot),
+                        _ => unreachable!("private interaction template head"),
+                    }
+                }
+            }
+            true
+        });
+        for slots in [
+            &mut dependencies.hedges,
+            &mut dependencies.momenta,
+            &mut dependencies.orientations,
+        ] {
+            slots.sort_unstable();
+            slots.dedup();
+        }
+        dependencies
+    }
+
+    fn key(&self, frame: &NumeratorInstantiation<'_>) -> InteractionBindingKey {
+        let mut values =
+            Vec::with_capacity(self.hedges.len() + self.momenta.len() + self.orientations.len());
+        values.extend(self.hedges.iter().map(|&slot| frame.legs[slot].hedge));
+        values.extend(self.momenta.iter().map(|&slot| frame.legs[slot].edge));
+        values.extend(
+            self.orientations
+                .iter()
+                .map(|&slot| usize::from(frame.legs[slot].flow == Flow::Source)),
+        );
+        InteractionBindingKey::Local {
+            owner: self.owner.then_some(frame.owner),
+            values,
+        }
+    }
+}
+
+#[derive(PartialEq, Eq, Hash)]
+enum InteractionBindingKey {
+    /// Values follow this compiled rule's ordered dependency lists.
+    Local {
+        owner: Option<NumeratorOwner>,
+        values: Vec<usize>,
+    },
+    /// Deferred lowering can inspect concrete aliases, representations and order.
+    Concrete {
+        owner: NumeratorOwner,
+        legs: Vec<NumeratorHalfEdge>,
+    },
+}
+
+enum InteractionExpression {
+    Local {
+        atom: Atom,
+        dependencies: InteractionDependencies,
+    },
     Mixed(Vec<InteractionTerm>),
 }
 
-impl CompiledInteraction {
+impl InteractionExpression {
+    fn local(atom: Atom) -> Self {
+        let dependencies = InteractionDependencies::new(&atom);
+        Self::Local { atom, dependencies }
+    }
+
     fn new(
         model: &Model,
         rule_id: VertexRuleId,
@@ -1558,13 +1639,13 @@ impl CompiledInteraction {
             }
         }
         if terms.is_empty() {
-            return Ok(Self::Local(Atom::one()));
+            return Ok(Self::local(Atom::one()));
         }
         if terms.iter().all(|term| {
             matches!(term.color, InteractionFactor::Local(_))
                 && matches!(term.lorentz, InteractionFactor::Local(_))
         }) {
-            Ok(Self::Local(Atom::add_many(terms.into_iter().map(|term| {
+            Ok(Self::local(Atom::add_many(terms.into_iter().map(|term| {
                 let InteractionFactor::Local(color) = term.color else {
                     unreachable!()
                 };
@@ -1580,7 +1661,7 @@ impl CompiledInteraction {
 
     fn instantiate(&self, frame: &NumeratorInstantiation<'_>) -> Result<Atom, GenerationError> {
         match self {
-            Self::Local(atom) => frame.bind_interaction(atom),
+            Self::Local { atom, .. } => frame.bind_interaction(atom),
             Self::Mixed(terms) => {
                 let mut instantiated = Vec::with_capacity(terms.len());
                 for term in terms {
@@ -1591,6 +1672,37 @@ impl CompiledInteraction {
                 Ok(Atom::add_many(instantiated))
             }
         }
+    }
+}
+
+/// One immutable rule program and the values already bound from it. Owning the
+/// cache here makes rule and color-representation identity implicit in its keys.
+struct CompiledInteraction {
+    expression: InteractionExpression,
+    bindings: RwLock<HashMap<InteractionBindingKey, Atom>>,
+}
+
+impl CompiledInteraction {
+    fn new(
+        model: &Model,
+        rule_id: VertexRuleId,
+        frame: &NumeratorInstantiation<'_>,
+    ) -> Result<Self, GenerationError> {
+        Ok(Self {
+            expression: InteractionExpression::new(model, rule_id, frame)?,
+            bindings: RwLock::default(),
+        })
+    }
+
+    fn instantiate(&self, frame: &NumeratorInstantiation<'_>) -> Result<Atom, GenerationError> {
+        let key = match &self.expression {
+            InteractionExpression::Local { dependencies, .. } => dependencies.key(frame),
+            InteractionExpression::Mixed(_) => InteractionBindingKey::Concrete {
+                owner: frame.owner,
+                legs: frame.legs.to_vec(),
+            },
+        };
+        memoised(&self.bindings, key, |_| self.expression.instantiate(frame))
     }
 }
 
@@ -1614,8 +1726,6 @@ pub(crate) struct Generator {
 /// not on the rest of the diagram. Keep them for this generator's lifetime.
 #[derive(Default)]
 struct NumeratorCache {
-    // An exact frame hit also avoids binding the compiled rule again.
-    interactions: RwLock<HashMap<InteractionNumeratorKey, Atom>>,
     interaction_rules: RwLock<HashMap<InteractionRuleKey, Arc<CompiledInteraction>>>,
     propagators: RwLock<HashMap<PropagatorNumeratorKey, Atom>>,
     /// Automatic projectors by the finalized position of every external state. Finalization
@@ -1676,13 +1786,6 @@ impl ExternalStatePosition {
             hedge: hedge.0,
         }
     }
-}
-
-#[derive(PartialEq, Eq, Hash)]
-struct InteractionNumeratorKey {
-    rule: VertexRuleId,
-    owner: NumeratorOwner,
-    legs: Vec<NumeratorHalfEdge>,
 }
 
 #[derive(PartialEq, Eq, Hash)]
@@ -2877,21 +2980,14 @@ impl Generator {
         rule_id: VertexRuleId,
         instantiation: &NumeratorInstantiation<'_>,
     ) -> Result<Atom, GenerationError> {
-        let key = InteractionNumeratorKey {
+        let key = InteractionRuleKey {
             rule: rule_id,
-            owner: instantiation.owner,
-            legs: instantiation.legs.to_vec(),
+            colors: instantiation.legs.iter().map(|leg| leg.color).collect(),
         };
-        memoised(&self.numerators.interactions, key, |_| {
-            let rule_key = InteractionRuleKey {
-                rule: rule_id,
-                colors: instantiation.legs.iter().map(|leg| leg.color).collect(),
-            };
-            let rule = memoised(&self.numerators.interaction_rules, rule_key, |_| {
-                CompiledInteraction::new(&self.model, rule_id, instantiation).map(Arc::new)
-            })?;
-            rule.instantiate(instantiation)
-        })
+        let rule = memoised(&self.numerators.interaction_rules, key, |_| {
+            CompiledInteraction::new(&self.model, rule_id, instantiation).map(Arc::new)
+        })?;
+        rule.instantiate(instantiation)
     }
 
     fn edge_numerator(
@@ -6841,7 +6937,10 @@ mod tests {
         let mut legs = tensor_test_legs();
         let first = NumeratorInstantiation::new(NumeratorOwner::Vertex(0), &legs[..3]);
         let compiled = CompiledInteraction::new(&model, rule, &first).unwrap();
-        assert!(matches!(compiled, CompiledInteraction::Mixed(_)));
+        assert!(matches!(
+            compiled.expression,
+            InteractionExpression::Mixed(_)
+        ));
         for index in [1, 257, 65_536] {
             for (slot, leg) in legs.iter_mut().enumerate() {
                 leg.edge = index + slot;
@@ -6884,8 +6983,10 @@ mod tests {
                 .collect::<Vec<_>>();
             let local = NumeratorInstantiation::new(NumeratorOwner::Vertex(0), &legs);
             compiled_count += usize::from(matches!(
-                CompiledInteraction::new(&model, rule_id, &local).unwrap(),
-                CompiledInteraction::Local(_)
+                CompiledInteraction::new(&model, rule_id, &local)
+                    .unwrap()
+                    .expression,
+                InteractionExpression::Local { .. }
             ));
             for (owner, base, loops) in [(0, 0, false), (257, 255, false), (65_537, 65_536, true)] {
                 let count = legs.len();
@@ -6915,6 +7016,159 @@ mod tests {
         assert_eq!(
             generator.numerators.interaction_rules.read().unwrap().len(),
             model.vertex_rules().len()
+        );
+    }
+
+    #[test]
+    fn interaction_binding_cache_ignores_unused_frame_fields() {
+        let model = fermion_model();
+        let rule = model.vertex_rule_id("V").unwrap();
+        let mut legs = tensor_test_legs();
+        let first = NumeratorInstantiation::new(NumeratorOwner::Vertex(7), &legs[..3]);
+        let compiled = CompiledInteraction::new(&model, rule, &first).unwrap();
+        assert!(matches!(
+            compiled.expression,
+            InteractionExpression::Local { .. }
+        ));
+        let expected = concrete_interaction_numerator(&model, rule, &first).unwrap();
+        assert_eq!(compiled.instantiate(&first).unwrap(), expected);
+        for leg in &mut legs {
+            leg.edge += 65_536;
+            leg.flow = -leg.flow;
+            leg.spin += 1;
+        }
+        let moved = NumeratorInstantiation::new(NumeratorOwner::Vertex(257), &legs[..3]);
+        assert_eq!(compiled.instantiate(&moved).unwrap(), expected);
+        assert_eq!(compiled.bindings.read().unwrap().len(), 1);
+
+        // Unlike its vertex position, a used native half-edge changes the factor.
+        legs[0].hedge = 65_537;
+        let moved = NumeratorInstantiation::new(NumeratorOwner::Vertex(257), &legs[..3]);
+        let actual = compiled.instantiate(&moved).unwrap();
+        assert_ne!(actual, expected);
+        assert_eq!(
+            actual,
+            concrete_interaction_numerator(&model, rule, &moved).unwrap()
+        );
+        assert_eq!(compiled.bindings.read().unwrap().len(), 2);
+    }
+
+    #[test]
+    fn interaction_binding_cache_preserves_momentum_ports_and_dummy_owners() {
+        let compile = |expression, sector| {
+            let InteractionFactor::Local(atom) =
+                compile_test_factor(&test_atom(expression), sector)
+            else {
+                panic!("the fixture has no deferred lowering");
+            };
+            CompiledInteraction {
+                expression: InteractionExpression::local(atom),
+                bindings: RwLock::default(),
+            }
+        };
+        let expression = test_atom("(P(3,1)-P(3,2))*Gamma(3,2,1)+P(3)");
+        let compiled = compile("(P(3,1)-P(3,2))*Gamma(3,2,1)+P(3)", NumeratorSector::Spin);
+        let mut legs = tensor_test_legs();
+        legs[0].edge = 512;
+        legs[1].edge = 512;
+        legs[0].hedge = 257;
+        legs[1].hedge = 65_536;
+        for change in 0..4 {
+            match change {
+                1 => legs[0].flow = Flow::Sink,
+                2 => legs[0].edge = 513,
+                3 => legs[0].hedge = 258,
+                _ => {}
+            }
+            let frame = NumeratorInstantiation::new(NumeratorOwner::Vertex(7), &legs);
+            assert_eq!(
+                compiled.instantiate(&frame).unwrap(),
+                frame
+                    .instantiate(&expression, NumeratorSector::Spin)
+                    .unwrap()
+            );
+        }
+        assert_eq!(compiled.bindings.read().unwrap().len(), 4);
+
+        let expression = test_atom("T(3,2,1)*f(3,-1,-2)*f(4,-2,-1)");
+        let compiled = compile("T(3,2,1)*f(3,-1,-2)*f(4,-2,-1)", NumeratorSector::Color);
+        for owner in [
+            NumeratorOwner::Vertex(7),
+            NumeratorOwner::Vertex(65_537),
+            NumeratorOwner::Edge(7),
+        ] {
+            let frame = NumeratorInstantiation::new(owner, &legs);
+            assert_eq!(
+                compiled.instantiate(&frame).unwrap(),
+                frame
+                    .instantiate(&expression, NumeratorSector::Color)
+                    .unwrap()
+            );
+        }
+        assert_eq!(compiled.bindings.read().unwrap().len(), 3);
+        #[cfg(target_pointer_width = "64")]
+        {
+            let overflow = NumeratorInstantiation::new(NumeratorOwner::Vertex(usize::MAX), &legs);
+            assert_eq!(
+                compiled.instantiate(&overflow).unwrap_err().to_string(),
+                overflow
+                    .instantiate(&expression, NumeratorSector::Color)
+                    .unwrap_err()
+                    .to_string()
+            );
+            assert_eq!(
+                compiled.bindings.read().unwrap().len(),
+                3,
+                "errors are not cached"
+            );
+        }
+
+        // Compilation can remove every slot, so even an empty frame is sufficient.
+        let constant = compile("P(3,1)-P(3,1)", NumeratorSector::Spin);
+        for owner in [NumeratorOwner::Vertex(7), NumeratorOwner::Edge(usize::MAX)] {
+            let frame = NumeratorInstantiation::new(owner, &[]);
+            assert_eq!(constant.instantiate(&frame).unwrap(), Atom::Zero);
+        }
+        assert_eq!(constant.bindings.read().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn interaction_binding_cache_preserves_deferred_errors_and_exact_frames() {
+        let mut definition: serde_json::Value =
+            serde_json::from_str(&fermion_model().to_json().unwrap()).unwrap();
+        definition["lorentz_structures"][0]["structure"] = serde_json::json!("C(1)*(P(3,1)+P(3))");
+        definition["vertex_rules"][0]["color_structures"] = serde_json::json!(["1"]);
+        definition["vertex_rules"][0]["couplings"] = serde_json::json!([["GC_LOW"]]);
+        let model = Model::from_json(&definition.to_string()).unwrap();
+        let rule = model.vertex_rule_id("V").unwrap();
+        let mut legs = tensor_test_legs();
+        let first = NumeratorInstantiation::new(NumeratorOwner::Vertex(7), &legs[..3]);
+        let compiled = CompiledInteraction::new(&model, rule, &first).unwrap();
+        assert!(matches!(
+            compiled.expression,
+            InteractionExpression::Mixed(_)
+        ));
+        for owner in [7, 257] {
+            for flow in [Flow::Source, Flow::Sink] {
+                legs[0].flow = flow;
+                let frame = NumeratorInstantiation::new(NumeratorOwner::Vertex(owner), &legs[..3]);
+                let actual = compiled.instantiate(&frame);
+                let expected = concrete_interaction_numerator(&model, rule, &frame);
+                if flow == Flow::Source {
+                    assert_eq!(actual.unwrap(), Atom::Zero);
+                    assert_eq!(expected.unwrap(), Atom::Zero);
+                } else {
+                    assert_eq!(
+                        actual.unwrap_err().to_string(),
+                        expected.unwrap_err().to_string()
+                    );
+                }
+            }
+        }
+        assert_eq!(
+            compiled.bindings.read().unwrap().len(),
+            2,
+            "each successful concrete owner is retained, and errors are not cached"
         );
     }
 
