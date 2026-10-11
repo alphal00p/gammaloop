@@ -45,7 +45,7 @@ use spenso::{
     structure::representation::{Minkowski, RepName},
 };
 use symbolica::{
-    atom::{Atom, AtomCore, AtomView, FunctionBuilder},
+    atom::{Atom, AtomCore, AtomOrView, AtomView, FunctionBuilder, Symbol},
     symbol,
 };
 use thiserror::Error;
@@ -1367,62 +1367,6 @@ impl<'legs> NumeratorInstantiation<'legs> {
         Ok(momentum.finish())
     }
 
-    /// Assign private rule slots to the finalized graph. Keep indices before
-    /// carriers: replacing a carrier skips its arguments in a top-down walk.
-    /// Half-edge slots stay distinct even when two momenta bind to a self-loop.
-    fn bind_interaction(&self, expression: &Atom) -> Result<Atom, GenerationError> {
-        let mut atom = expression.clone();
-        let mut error = None;
-        for carriers in [false, true] {
-            atom = atom.replace_map(|term, _, out| {
-                if error.is_some() {
-                    return;
-                }
-                let AtomView::Fun(function) = term else {
-                    return;
-                };
-                let head = function.get_symbol();
-                if head.get_namespace() != "feynkit_generator_template" {
-                    return;
-                }
-                let name = head.get_stripped_name();
-                if matches!(name, "momentum" | "orientation") != carriers {
-                    return;
-                }
-                let mut arguments = function.iter();
-                let slot = usize::try_from(arguments.next().expect("compiled local slot"))
-                    .expect("compiled local slot is nonnegative");
-                let value = match name {
-                    "hedge" => {
-                        let shift = i64::try_from(arguments.next().expect("compiled index shift"))
-                            .expect("compiled index shift is integral");
-                        self.index(self.legs[slot], shift)
-                    }
-                    "dummy" => {
-                        let local = usize::try_from(arguments.next().expect("compiled dummy"))
-                            .expect("compiled dummy is nonnegative");
-                        self.dummy(local)
-                    }
-                    "momentum" => self.momentum(
-                        self.legs[slot],
-                        arguments.next().map(|index| index.to_owned()),
-                    ),
-                    "orientation" => Ok(if self.legs[slot].flow == Flow::Source {
-                        -Atom::one()
-                    } else {
-                        Atom::one()
-                    }),
-                    _ => unreachable!("private interaction template head"),
-                };
-                match value {
-                    Ok(value) => **out = value,
-                    Err(failure) => error = Some(failure),
-                }
-            });
-        }
-        error.map_or(Ok(atom), Err)
-    }
-
     fn invalid_index(&self, index: AtomView<'_>) -> GenerationError {
         GenerationError::InvalidNumeratorIndex {
             owner: self.owner.to_string(),
@@ -1448,12 +1392,12 @@ struct InteractionRuleKey {
 /// Most UFO factors can be lowered before assigning graph indices. Slash dummy
 /// allocation and dummy identity contraction must instead see the concrete
 /// canonical expression order. Already graph-owned input has the same requirement.
-enum InteractionFactor {
-    Local(Atom),
+enum InteractionFactor<T> {
+    Local(T),
     Deferred(Atom, NumeratorSector),
 }
 
-impl InteractionFactor {
+impl InteractionFactor<Atom> {
     fn compile(
         expression: &Atom,
         sector: NumeratorSector,
@@ -1495,18 +1439,28 @@ impl InteractionFactor {
         Self::Deferred(expression.clone(), sector)
     }
 
+    fn into_recipe(self) -> InteractionFactor<BindingRecipe> {
+        match self {
+            Self::Local(atom) => InteractionFactor::Local(BindingRecipe::new(&atom)),
+            Self::Deferred(atom, sector) => InteractionFactor::Deferred(atom, sector),
+        }
+    }
+}
+
+impl InteractionFactor<BindingRecipe> {
     fn instantiate(&self, frame: &NumeratorInstantiation<'_>) -> Result<Atom, GenerationError> {
         match self {
-            Self::Local(atom) => frame.bind_interaction(atom),
+            Self::Local(recipe) => recipe.instantiate(frame),
             Self::Deferred(atom, sector) => frame.instantiate(atom, *sector),
         }
     }
 }
 
-struct InteractionTerm {
+// Lower and combine Atom factors first; only retained local expressions need recipes.
+struct InteractionTerm<T> {
     coupling: Atom,
-    color: InteractionFactor,
-    lorentz: InteractionFactor,
+    color: InteractionFactor<T>,
+    lorentz: InteractionFactor<T>,
 }
 
 /// Graph fields read by a fully lowered interaction. Slots stay ordered: two
@@ -1520,37 +1474,6 @@ struct InteractionDependencies {
 }
 
 impl InteractionDependencies {
-    fn new(expression: &Atom) -> Self {
-        let mut dependencies = Self::default();
-        expression.visitor(&mut |term| {
-            if let AtomView::Fun(function) = term {
-                let head = function.get_symbol();
-                if head.get_namespace() == "feynkit_generator_template" {
-                    let slot =
-                        usize::try_from(function.iter().next().expect("compiled local slot"))
-                            .expect("compiled local slot is nonnegative");
-                    match head.get_stripped_name() {
-                        "hedge" => dependencies.hedges.push(slot),
-                        "dummy" => dependencies.owner = true,
-                        "momentum" => dependencies.momenta.push(slot),
-                        "orientation" => dependencies.orientations.push(slot),
-                        _ => unreachable!("private interaction template head"),
-                    }
-                }
-            }
-            true
-        });
-        for slots in [
-            &mut dependencies.hedges,
-            &mut dependencies.momenta,
-            &mut dependencies.orientations,
-        ] {
-            slots.sort_unstable();
-            slots.dedup();
-        }
-        dependencies
-    }
-
     fn key(&self, frame: &NumeratorInstantiation<'_>) -> InteractionBindingKey {
         let mut values =
             Vec::with_capacity(self.hedges.len() + self.momenta.len() + self.orientations.len());
@@ -1565,6 +1488,176 @@ impl InteractionDependencies {
             owner: self.owner.then_some(frame.owner),
             values,
         }
+    }
+}
+
+/// A postorder program for one lowered expression. Each distinct changing subtree is
+/// evaluated once; constant subtrees are borrowed without walking their contents. The root
+/// is last, and every operand refers to an earlier node.
+struct BindingRecipe {
+    nodes: Vec<BindingNode>,
+    dependencies: InteractionDependencies,
+}
+
+enum BindingNode {
+    Constant(Atom),
+    Hedge { slot: usize, shift: i64 },
+    Dummy(usize),
+    Momentum { slot: usize, index: Option<usize> },
+    Orientation(usize),
+    Function(Symbol, Vec<usize>),
+    Sum(Vec<usize>),
+    Product(Vec<usize>),
+    Power(usize, usize),
+}
+
+impl BindingRecipe {
+    fn new(expression: &Atom) -> Self {
+        let mut recipe = Self {
+            nodes: Vec::new(),
+            dependencies: InteractionDependencies::default(),
+        };
+        recipe.compile(expression.as_view(), &mut HashMap::new());
+        for slots in [
+            &mut recipe.dependencies.hedges,
+            &mut recipe.dependencies.momenta,
+            &mut recipe.dependencies.orientations,
+        ] {
+            slots.sort_unstable();
+            slots.dedup();
+        }
+        recipe
+    }
+
+    fn compile<'a>(
+        &mut self,
+        expression: AtomView<'a>,
+        interned: &mut HashMap<AtomView<'a>, usize>,
+    ) -> usize {
+        if let Some(&node) = interned.get(&expression) {
+            return node;
+        }
+        let mut changing = false;
+        expression.visitor(&mut |term| {
+            changing |= matches!(term, AtomView::Fun(function)
+                if function.get_symbol().get_namespace() == "feynkit_generator_template");
+            !changing
+        });
+        let node = if !changing {
+            BindingNode::Constant(expression.to_owned())
+        } else {
+            match expression {
+                AtomView::Fun(function)
+                    if function.get_symbol().get_namespace() == "feynkit_generator_template" =>
+                {
+                    let mut arguments = function.iter();
+                    let slot = usize::try_from(arguments.next().expect("compiled local slot"))
+                        .expect("compiled local slot is nonnegative");
+                    match function.get_symbol().get_stripped_name() {
+                        "hedge" => {
+                            self.dependencies.hedges.push(slot);
+                            let shift =
+                                i64::try_from(arguments.next().expect("compiled index shift"))
+                                    .expect("compiled index shift is integral");
+                            BindingNode::Hedge { slot, shift }
+                        }
+                        "dummy" => {
+                            self.dependencies.owner = true;
+                            let local = usize::try_from(arguments.next().expect("compiled dummy"))
+                                .expect("compiled dummy is nonnegative");
+                            BindingNode::Dummy(local)
+                        }
+                        "momentum" => {
+                            self.dependencies.momenta.push(slot);
+                            BindingNode::Momentum {
+                                slot,
+                                // Bind a nested index before its momentum carrier. Distinct
+                                // self-loop ports can still share the carrier's edge ID.
+                                index: arguments.next().map(|index| self.compile(index, interned)),
+                            }
+                        }
+                        "orientation" => {
+                            self.dependencies.orientations.push(slot);
+                            BindingNode::Orientation(slot)
+                        }
+                        _ => unreachable!("private interaction template head"),
+                    }
+                }
+                AtomView::Fun(function) => BindingNode::Function(
+                    function.get_symbol(),
+                    function
+                        .iter()
+                        .map(|arg| self.compile(arg, interned))
+                        .collect(),
+                ),
+                AtomView::Add(sum) => BindingNode::Sum(
+                    sum.iter()
+                        .map(|term| self.compile(term, interned))
+                        .collect(),
+                ),
+                AtomView::Mul(product) => BindingNode::Product(
+                    product
+                        .iter()
+                        .map(|factor| self.compile(factor, interned))
+                        .collect(),
+                ),
+                AtomView::Pow(power) => {
+                    let (base, exponent) = power.get_base_exp();
+                    BindingNode::Power(
+                        self.compile(base, interned),
+                        self.compile(exponent, interned),
+                    )
+                }
+                _ => unreachable!("only composite expressions contain binding slots"),
+            }
+        };
+        let index = self.nodes.len();
+        self.nodes.push(node);
+        interned.insert(expression, index);
+        index
+    }
+
+    fn instantiate(&self, frame: &NumeratorInstantiation<'_>) -> Result<Atom, GenerationError> {
+        let mut values: Vec<AtomOrView<'_>> = Vec::with_capacity(self.nodes.len());
+        for node in &self.nodes {
+            let value = match node {
+                BindingNode::Constant(atom) => AtomOrView::from(atom),
+                BindingNode::Hedge { slot, shift } => {
+                    frame.index(frame.legs[*slot], *shift)?.into()
+                }
+                BindingNode::Dummy(local) => frame.dummy(*local)?.into(),
+                BindingNode::Momentum { slot, index } => frame
+                    .momentum(
+                        frame.legs[*slot],
+                        index.map(|index| values[index].as_view().to_owned()),
+                    )?
+                    .into(),
+                BindingNode::Orientation(slot) => {
+                    Atom::num(if frame.legs[*slot].flow == Flow::Source {
+                        -1
+                    } else {
+                        1
+                    })
+                    .into()
+                }
+                BindingNode::Function(head, arguments) => FunctionBuilder::new(*head)
+                    .add_args(arguments.iter().map(|&index| values[index].as_view()))
+                    .finish()
+                    .into(),
+                BindingNode::Sum(terms) => {
+                    Atom::add_many(terms.iter().map(|&index| values[index].as_view())).into()
+                }
+                BindingNode::Product(factors) => {
+                    Atom::mul_many(factors.iter().map(|&index| values[index].as_view())).into()
+                }
+                BindingNode::Power(base, exponent) => values[*base]
+                    .as_view()
+                    .pow(values[*exponent].as_view())
+                    .into(),
+            };
+            values.push(value);
+        }
+        Ok(values.pop().expect("a recipe has a root").into_owned())
     }
 }
 
@@ -1583,17 +1676,13 @@ enum InteractionBindingKey {
 }
 
 enum InteractionExpression {
-    Local {
-        atom: Atom,
-        dependencies: InteractionDependencies,
-    },
-    Mixed(Vec<InteractionTerm>),
+    Local(BindingRecipe),
+    Mixed(Vec<InteractionTerm<BindingRecipe>>),
 }
 
 impl InteractionExpression {
     fn local(atom: Atom) -> Self {
-        let dependencies = InteractionDependencies::new(&atom);
-        Self::Local { atom, dependencies }
+        Self::Local(BindingRecipe::new(&atom))
     }
 
     fn new(
@@ -1655,13 +1744,22 @@ impl InteractionExpression {
                 term.coupling * color * lorentz
             }))))
         } else {
-            Ok(Self::Mixed(terms))
+            Ok(Self::Mixed(
+                terms
+                    .into_iter()
+                    .map(|term| InteractionTerm {
+                        coupling: term.coupling,
+                        color: term.color.into_recipe(),
+                        lorentz: term.lorentz.into_recipe(),
+                    })
+                    .collect(),
+            ))
         }
     }
 
     fn instantiate(&self, frame: &NumeratorInstantiation<'_>) -> Result<Atom, GenerationError> {
         match self {
-            Self::Local { atom, .. } => frame.bind_interaction(atom),
+            Self::Local(recipe) => recipe.instantiate(frame),
             Self::Mixed(terms) => {
                 let mut instantiated = Vec::with_capacity(terms.len());
                 for term in terms {
@@ -1696,7 +1794,7 @@ impl CompiledInteraction {
 
     fn instantiate(&self, frame: &NumeratorInstantiation<'_>) -> Result<Atom, GenerationError> {
         let key = match &self.expression {
-            InteractionExpression::Local { dependencies, .. } => dependencies.key(frame),
+            InteractionExpression::Local(recipe) => recipe.dependencies.key(frame),
             InteractionExpression::Mixed(_) => InteractionBindingKey::Concrete {
                 owner: frame.owner,
                 legs: frame.legs.to_vec(),
@@ -6776,7 +6874,10 @@ mod tests {
         })
     }
 
-    fn compile_test_factor(expression: &Atom, sector: NumeratorSector) -> InteractionFactor {
+    fn compile_test_factor(
+        expression: &Atom,
+        sector: NumeratorSector,
+    ) -> InteractionFactor<BindingRecipe> {
         let legs = tensor_test_legs()
             .into_iter()
             .enumerate()
@@ -6795,6 +6896,83 @@ mod tests {
                 frame: NumeratorFrame::Interaction,
             },
         )
+        .into_recipe()
+    }
+
+    #[test]
+    fn binding_recipe_shares_subexpressions_and_matches_concrete_lowering() {
+        let expression = test_atom(
+            "feynkit_recipe_test::f(P(3,1),idx(1,2)) \
+             + feynkit_recipe_test::g(P(3,1),idx(1,2))*Gamma(3,2,1)^2 \
+             + feynkit_recipe_test::f(P(3,1),idx(1,2))*feynkit_recipe_test::constant((x+y)^2,3) \
+             + feynkit_recipe_test::h(P(dummy(4),2),dummy(4))*(P(3,1)+P(3,2))",
+        );
+        let InteractionFactor::Local(recipe) =
+            compile_test_factor(&expression, NumeratorSector::Spin)
+        else {
+            panic!("the fixture has no graph-dependent lowering");
+        };
+        assert_eq!(
+            recipe
+                .nodes
+                .iter()
+                .filter(|node| matches!(node, BindingNode::Momentum { slot: 0, .. }))
+                .count(),
+            1,
+            "repeated carriers are evaluated once per binding"
+        );
+        assert_eq!(
+            recipe
+                .nodes
+                .iter()
+                .filter(|node| matches!(node,
+                    BindingNode::Function(head, _) if *head == symbol!("feynkit_recipe_test::f")
+                ))
+                .count(),
+            1,
+            "repeated changing subexpressions share a node"
+        );
+        let constant = test_atom("feynkit_recipe_test::constant((x+y)^2,3)");
+        assert!(
+            recipe.nodes.iter().any(|node| matches!(node,
+                BindingNode::Constant(atom) if *atom == constant
+            )),
+            "a constant subtree stays whole"
+        );
+        assert!(
+            recipe
+                .nodes
+                .iter()
+                .enumerate()
+                .any(|(node, operation)| matches!(operation,
+                    BindingNode::Momentum { index: Some(index), .. } if *index < node
+                )),
+            "nested indices bind before their momentum carrier"
+        );
+
+        let mut legs = tensor_test_legs();
+        for (owner, base, self_loop) in [
+            (NumeratorOwner::Vertex(7), 255, false),
+            (NumeratorOwner::Vertex(65_537), 65_536, true),
+            (NumeratorOwner::Edge(257), 512, true),
+        ] {
+            for (slot, leg) in legs.iter_mut().enumerate() {
+                leg.edge = base + if self_loop { slot / 2 } else { slot };
+                leg.hedge = base + 11 - slot;
+            }
+            for flow in [Flow::Source, Flow::Sink] {
+                legs[0].flow = flow;
+                legs[1].flow = -flow;
+                let frame = NumeratorInstantiation::new(owner, &legs);
+                assert_eq!(
+                    recipe.instantiate(&frame).unwrap(),
+                    frame
+                        .instantiate(&expression, NumeratorSector::Spin)
+                        .unwrap(),
+                    "owner {owner}, base {base}, self-loop {self_loop}, flow {flow:?}"
+                );
+            }
+        }
     }
 
     #[test]
@@ -6986,7 +7164,7 @@ mod tests {
                 CompiledInteraction::new(&model, rule_id, &local)
                     .unwrap()
                     .expression,
-                InteractionExpression::Local { .. }
+                InteractionExpression::Local(_)
             ));
             for (owner, base, loops) in [(0, 0, false), (257, 255, false), (65_537, 65_536, true)] {
                 let count = legs.len();
@@ -7028,7 +7206,7 @@ mod tests {
         let compiled = CompiledInteraction::new(&model, rule, &first).unwrap();
         assert!(matches!(
             compiled.expression,
-            InteractionExpression::Local { .. }
+            InteractionExpression::Local(_)
         ));
         let expected = concrete_interaction_numerator(&model, rule, &first).unwrap();
         assert_eq!(compiled.instantiate(&first).unwrap(), expected);
@@ -7056,13 +7234,13 @@ mod tests {
     #[test]
     fn interaction_binding_cache_preserves_momentum_ports_and_dummy_owners() {
         let compile = |expression, sector| {
-            let InteractionFactor::Local(atom) =
+            let InteractionFactor::Local(recipe) =
                 compile_test_factor(&test_atom(expression), sector)
             else {
                 panic!("the fixture has no deferred lowering");
             };
             CompiledInteraction {
-                expression: InteractionExpression::local(atom),
+                expression: InteractionExpression::Local(recipe),
                 bindings: RwLock::default(),
             }
         };
