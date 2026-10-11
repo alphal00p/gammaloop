@@ -27,7 +27,7 @@ use three_dimensional_reps::{MediumMode, ThermalDistributionFactor};
 use typed_index_collections::TiVec;
 
 use crate::{
-    cff::generation::ShiftRewrite,
+    cff::{generation::ShiftRewrite, surface::HsurfaceID},
     integrands::process::param_builder::{FnMapEntry, ParamBuilderGraph, SplitPolarizations},
     model::{ArcParticle, Model, UFOSymbol},
     momentum::sample::{ExternalFourMomenta, ExternalIndex, LoopMomenta},
@@ -290,6 +290,44 @@ impl Graph {
                     mass.re
                 ));
             }
+        }
+        Ok(())
+    }
+
+    /// Reject mixed-sign denominator surfaces that vanish for every loop momentum,
+    /// since they divide by zero at every sample. Generation replaces coinciding poles
+    /// by derivatives only for edges sharing a mass parameter and momentum routing, so
+    /// distinct mass parameters with equal values, or exceptional external momenta,
+    /// leave such a surface behind. Check after refreshing model parameter slots.
+    pub(crate) fn validate_denominator_hsurfaces(
+        &self,
+        model: &Model,
+        externals: &ExternalFourMomenta<F<f64>>,
+        denominators: &[HsurfaceID],
+    ) -> eyre::Result<()> {
+        let masses = self.new_edgevec(|edge, _, _| {
+            edge.mass_value::<f64>(model, &self.param_builder)
+                .or_else(|| edge.mass_atom().is_zero().then(|| Complex::new_re(F(0.0))))
+        });
+        for &id in denominators {
+            let surface = &self.surface_cache.hsurface_cache[id];
+            if !surface.vanishes_identically(&self.loop_momentum_basis, &masses, externals)? {
+                continue;
+            }
+            let edges = surface
+                .positive_energies
+                .iter()
+                .chain(&surface.negative_energies)
+                .map(|&edge| match masses[edge] {
+                    Some(mass) => format!("{edge}: {} = {mass}", self[edge].mass_atom()),
+                    None => format!("{edge}: {}", self[edge].mass_atom()),
+                })
+                .join(", ");
+            return Err(eyre::eyre!(
+                "Graph '{}' divides by the surface {} ({edges}), which vanishes for every loop momentum at the current masses and external momenta: its on-shell energies cancel between edges of equal mass and spatial momentum, and its external energy shift is zero. Generation replaces such coinciding poles by derivatives only for edges sharing a mass parameter and momentum routing; give these edges distinct masses or external momenta, or regenerate with a shared mass parameter.",
+                self.name,
+                surface.to_atom(&[])
+            ));
         }
         Ok(())
     }
@@ -1235,6 +1273,97 @@ mod tests {
                 "mass override MT+1 with MT={mass}, mu={mu}"
             );
         }
+        Ok(())
+    }
+
+    #[test]
+    fn thermal_denominators_reject_poles_that_coincide_at_runtime() -> eyre::Result<()> {
+        use crate::cff::surface::HybridSurfaceID;
+        use crate::momentum::FourMomentum;
+
+        test_initialise()?;
+        let mut model = load_generic_model("sm");
+        let [top, w] = ["MT", "MW"]
+            .map(|name| Atom::var(model.get_parameter(name).name.0).to_canonical_string());
+        let thermal_denominators = |graph: &mut Graph| -> eyre::Result<Vec<HsurfaceID>> {
+            let mut options = graph.denominator_only_cff_3d_expression_options();
+            options.medium_mode = MediumMode::ThermodynamicEquilibrium;
+            let generated =
+                graph.generate_3d_expression_for_integrand(&[], &None, &options, None)?;
+            let denominators = generated
+                .expression
+                .orientations
+                .iter()
+                .flat_map(|orientation| orientation.iter_denominator_nodes())
+                .filter_map(|node| match node.data {
+                    HybridSurfaceID::Hsurface(id) => Some(id),
+                    _ => None,
+                })
+                .sorted()
+                .dedup()
+                .collect_vec();
+            assert!(!denominators.is_empty());
+            Ok(denominators)
+        };
+        let set_masses = |model: &mut Model, graph: &mut Graph, masses: [f64; 2]| {
+            for (name, mass) in ["MT", "MW"].into_iter().zip(masses) {
+                model.get_parameter_mut(name)?.value = Some(Complex::new_re(F(mass)));
+            }
+            graph.param_builder.update_model_values(model)
+        };
+        let degenerate = |result: eyre::Result<()>| {
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("vanishes for every loop momentum")
+        };
+
+        // Distinct mass parameters keep the cycle as a divided difference.
+        let mut cycle: Graph = format!(
+            r#"digraph thermal_cycle {{
+                node [num=1]; edge [num=1];
+                A -> B [particle="G+" mass="{top}"];
+                B -> A [particle="G+" mass="{w}"];
+            }}"#
+        )
+        .into_graph(&model)?;
+        let denominators = thermal_denominators(&mut cycle)?;
+        let no_externals = ExternalFourMomenta::default();
+        set_masses(&mut model, &mut cycle, [2.0, 3.0])?;
+        cycle.validate_denominator_hsurfaces(&model, &no_externals, &denominators)?;
+        set_masses(&mut model, &mut cycle, [2.0, 2.0])?;
+        assert!(degenerate(cycle.validate_denominator_hsurfaces(
+            &model,
+            &no_externals,
+            &denominators
+        )));
+
+        // A shared mass parameter on k and k + p degenerates only at p = 0.
+        let mut bubble: Graph = format!(
+            r#"digraph thermal_bubble {{
+                node [num=1]; edge [num=1];
+                incoming [style=invis]; outgoing [style=invis];
+                incoming -> A [particle="H"];
+                B -> outgoing [particle="H"];
+                A -> B [particle="G+" mass="{top}"];
+                B -> A [particle="G+" mass="{top}"];
+            }}"#
+        )
+        .into_graph(&model)?;
+        let denominators = thermal_denominators(&mut bubble)?;
+        set_masses(&mut model, &mut bubble, [2.0, 3.0])?;
+        let externals = |energy: f64, pz: f64| -> ExternalFourMomenta<F<f64>> {
+            let p = FourMomentum::from_args(F(energy), F(0.0), F(0.0), F(pz));
+            [p, p].into_iter().collect()
+        };
+        for moving in [externals(0.5, 0.0), externals(0.0, 0.5)] {
+            bubble.validate_denominator_hsurfaces(&model, &moving, &denominators)?;
+        }
+        assert!(degenerate(bubble.validate_denominator_hsurfaces(
+            &model,
+            &externals(0.0, 0.0),
+            &denominators
+        )));
         Ok(())
     }
 

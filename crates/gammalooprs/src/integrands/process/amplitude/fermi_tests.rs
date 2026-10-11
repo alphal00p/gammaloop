@@ -306,21 +306,10 @@ fn zero_chemical_potentials_have_no_fermi_surface() -> Result<()> {
     Ok(())
 }
 
-#[test]
-fn thermal_amplitude_roundtrip_revalidates_runtime_and_model() -> Result<()> {
-    use three_dimensional_reps::MediumMode;
-
-    test_initialise()?;
-    let mut model = load_generic_model("sm");
-    model.get_parameter_mut("MW")?.value = Some(Complex::new_re(F(2.0)));
-    model.get_parameter_mut("muG")?.value = Some(Complex::new_re(F(1.0)));
-    let graphs = Graph::from_string(
-        r#"digraph thermal_boson {
-            node [num=1]; edge [num=1 particle="G+"];
-            A -> A [id=0];
-        }"#,
-        &model,
-    )?;
+/// The finite-temperature amplitude of `dot`, with interpreted evaluators and
+/// neither UV nor threshold subtraction, built for `inverse_temperature = 1`.
+fn thermal_amplitude(model: &Model, name: &str, dot: &str) -> Result<Amplitude> {
+    let graphs = Graph::from_string(dot, model)?;
     let global: GlobalSettings = toml::from_str(
         r#"
 [generation.medium]
@@ -361,9 +350,28 @@ sampling_multichanneling = false
         .num_threads(1)
         .stack_size(256 * 1024 * 1024)
         .build()?;
-    let mut amplitude = Amplitude::from_graph_list("thermal_boson", graphs)?;
-    amplitude.preprocess(&model, &global.generation, &(&settings).into(), &pool)?;
-    amplitude.build_integrand(&model, "thermal_boson", &global, (&settings).into(), &pool)?;
+    let mut amplitude = Amplitude::from_graph_list(name, graphs)?;
+    amplitude.preprocess(model, &global.generation, &(&settings).into(), &pool)?;
+    amplitude.build_integrand(model, name, &global, (&settings).into(), &pool)?;
+    Ok(amplitude)
+}
+
+#[test]
+fn thermal_amplitude_roundtrip_revalidates_runtime_and_model() -> Result<()> {
+    use three_dimensional_reps::MediumMode;
+
+    test_initialise()?;
+    let mut model = load_generic_model("sm");
+    model.get_parameter_mut("MW")?.value = Some(Complex::new_re(F(2.0)));
+    model.get_parameter_mut("muG")?.value = Some(Complex::new_re(F(1.0)));
+    let mut amplitude = thermal_amplitude(
+        &model,
+        "thermal_boson",
+        r#"digraph thermal_boson {
+            node [num=1]; edge [num=1 particle="G+"];
+            A -> A [id=0];
+        }"#,
+    )?;
     let runtime = amplitude.integrand.as_mut().unwrap();
     runtime.warm_up(&model)?;
     let input = MomentumSpaceEvaluationInput {
@@ -431,6 +439,52 @@ sampling_multichanneling = false
             .evaluate_momentum_configuration(&model, &input, false)?
             .integrand_result,
         expected,
+    );
+    Ok(())
+}
+
+#[test]
+fn thermal_amplitude_warm_up_rejects_cycle_poles_with_equal_masses() -> Result<()> {
+    test_initialise()?;
+    let mut model = load_generic_model("sm");
+    let [top, w] =
+        ["MT", "MW"].map(|name| Atom::var(model.get_parameter(name).name.0).to_canonical_string());
+    model.get_parameter_mut("MT")?.value = Some(Complex::new_re(F(2.0)));
+    model.get_parameter_mut("MW")?.value = Some(Complex::new_re(F(3.0)));
+    // Distinct mass parameters generate the cycle as a divided difference.
+    let mut amplitude = thermal_amplitude(
+        &model,
+        "thermal_cycle",
+        &format!(
+            r#"digraph thermal_cycle {{
+                node [num=1]; edge [num=1];
+                A -> B [particle="G+" mass="{top}"];
+                B -> A [particle="G+" mass="{w}"];
+            }}"#
+        ),
+    )?;
+    let runtime = amplitude.integrand.as_mut().unwrap();
+    runtime.warm_up(&model)?;
+    let input = MomentumSpaceEvaluationInput {
+        loop_momenta: vec![ThreeMomentum::new(F(1.0), F(0.25), F(0.5))],
+        integrator_weight: F(1.0),
+        graph_id: Some(0),
+        group_id: None,
+        orientation: None,
+        channel_id: None,
+    };
+    let result = runtime
+        .evaluate_momentum_configuration(&model, &input, false)?
+        .integrand_result;
+    assert!(result.re.0.is_finite() && result.im.0.is_finite());
+
+    model.get_parameter_mut("MW")?.value = Some(Complex::new_re(F(2.0)));
+    let error = runtime.warm_up(&model).unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("vanishes for every loop momentum"),
+        "{error}"
     );
     Ok(())
 }

@@ -1,9 +1,13 @@
 use crate::cff::VertexSet;
-use crate::utils::{cut_energy, external_energy_atom_from_index, ose_atom_from_index};
+use crate::graph::LoopMomentumBasis;
+use crate::momentum::sample::{ExternalFourMomenta, ExternalThreeMomenta};
+use crate::utils::{F, cut_energy, external_energy_atom_from_index, ose_atom_from_index};
 use bincode_trait_derive::{Decode, Encode};
 use itertools::Itertools;
-use linnet::half_edge::involution::EdgeIndex;
+use linnet::half_edge::involution::{EdgeIndex, EdgeVec};
+use rug::Rational;
 use serde::{Deserialize, Serialize};
+use spenso::algebra::complex::Complex;
 use symbolica::atom::Atom;
 use tracing::warn;
 use typed_index_collections::TiVec;
@@ -68,6 +72,61 @@ impl Hsurface {
             .fold(Atom::new(), |sum, e| sum + e);
 
         symbolic_sum_positive_energies - &symbolic_sum_negative_energies + &symbolic_shift
+    }
+
+    /// Whether the surface vanishes for every loop momentum, so that a denominator
+    /// built from it divides by zero at every sample. On-shell energies of different
+    /// spatial routings or masses are independent functions of the loop momenta, so
+    /// this happens exactly when the positive and negative energies pair up into edges
+    /// of equal mass carrying the same spatial momentum up to sign, and the external
+    /// energy shift is zero. All comparisons are exact: a near coincidence stays
+    /// finite in some precision and is left to the stability checks.
+    pub(crate) fn vanishes_identically(
+        &self,
+        lmb: &LoopMomentumBasis,
+        masses: &EdgeVec<Option<Complex<F<f64>>>>,
+        externals: &ExternalFourMomenta<F<f64>>,
+    ) -> eyre::Result<bool> {
+        let spatial_externals: ExternalThreeMomenta<F<f64>> =
+            externals.iter().map(|momentum| momentum.spatial).collect();
+        let mut unpaired = self.negative_energies.clone();
+        for &positive in &self.positive_energies {
+            let mut partner = None;
+            for (position, &negative) in unpaired.iter().enumerate() {
+                // An edge without a mass value never pairs.
+                if masses[positive].is_some()
+                    && masses[positive] == masses[negative]
+                    && lmb.edge_signatures[positive].spatial_equality_up_to_sign(
+                        &lmb.edge_signatures[negative],
+                        &spatial_externals,
+                    )?
+                {
+                    partner = Some(position);
+                    break;
+                }
+            }
+            let Some(position) = partner else {
+                return Ok(false);
+            };
+            unpaired.swap_remove(position);
+        }
+        if !unpaired.is_empty() {
+            return Ok(false);
+        }
+        let mut shift = Rational::new();
+        for (edge, sign) in &self.external_shift {
+            let signature = lmb.edge_signatures[*edge].external.to_momtrop_format();
+            for (coefficient, momentum) in signature.into_iter().zip(externals) {
+                if coefficient != 0 {
+                    let energy =
+                        Rational::from_f64(momentum.temporal.value.0).ok_or_else(|| {
+                            eyre::eyre!("nonfinite external energy {}", momentum.temporal.value)
+                        })?;
+                    shift += energy * (sign * coefficient as i64);
+                }
+            }
+        }
+        Ok(shift == 0)
     }
 
     #[allow(dead_code)]
@@ -161,6 +220,88 @@ mod tests {
             hsurface
                 .equality_under_energy_conservation(&other, &[&constraint])
                 .unwrap()
+        );
+    }
+
+    #[test]
+    fn surfaces_vanish_identically_only_for_paired_energies_without_energy_shift() {
+        use linnet::half_edge::subgraph::{SuBitGraph, SubSetLike};
+        use spenso::algebra::complex::Complex;
+
+        use crate::{
+            graph::LoopMomentumBasis,
+            momentum::{
+                FourMomentum,
+                sample::{ExternalFourMomenta, ExternalIndex},
+                signature::LoopExtSignature,
+            },
+            utils::{F, test_utils::dummy_hedge_graph},
+        };
+
+        // Edges 0 and 4 carry k, edge 1 carries k + p, and edges 2 and 3 are the
+        // incoming and outgoing external p.
+        let graph = dummy_hedge_graph(5);
+        let edge_signatures = graph
+            .new_edgevec_from_iter(
+                [
+                    (vec![1], vec![0, 0]),
+                    (vec![1], vec![1, 0]),
+                    (vec![0], vec![1, 0]),
+                    (vec![0], vec![0, 1]),
+                    (vec![1], vec![0, 0]),
+                ]
+                .map(LoopExtSignature::from),
+            )
+            .unwrap();
+        let lmb = LoopMomentumBasis {
+            tree: SuBitGraph::empty(0),
+            loop_edges: vec![EdgeIndex(0)].into(),
+            ext_edges: vec![EdgeIndex(2), EdgeIndex(3)].into(),
+            edge_signatures,
+        };
+        let surface = |positive: &[usize], negative: &[usize], external_shift| Hsurface {
+            positive_energies: positive.iter().copied().map(EdgeIndex).collect(),
+            negative_energies: negative.iter().copied().map(EdgeIndex).collect(),
+            external_shift,
+            vertex_set: VertexSet::dummy(),
+        };
+        let masses = |values: [Option<f64>; 5]| {
+            graph
+                .new_edgevec_from_iter(values.map(|mass| mass.map(|m| Complex::new_re(F(m)))))
+                .unwrap()
+        };
+        let externals = |energy: f64, py: f64| -> ExternalFourMomenta<F<f64>> {
+            let p = FourMomentum::from_args(F(energy), F(0.0), F(py), F(0.0));
+            [p, p].into_iter().collect()
+        };
+        let equal = masses([Some(1.0), Some(1.0), None, None, Some(1.0)]);
+        let rest = externals(0.0, 0.0);
+
+        // A divided difference over distinct mass parameters with equal values.
+        let cycle = surface(&[4], &[0], vec![]);
+        assert!(cycle.vanishes_identically(&lmb, &equal, &rest).unwrap());
+        let split = masses([Some(1.0), Some(1.0), None, None, Some(2.0)]);
+        assert!(!cycle.vanishes_identically(&lmb, &split, &rest).unwrap());
+        let unknown = masses([Some(1.0), Some(1.0), None, None, None]);
+        assert!(!cycle.vanishes_identically(&lmb, &unknown, &rest).unwrap());
+        let unpaired = surface(&[0, 1], &[4], vec![]);
+        assert!(!unpaired.vanishes_identically(&lmb, &equal, &rest).unwrap());
+
+        // The bubble E(k + p) - E(k) - p0 vanishes only at p = 0. A spatial momentum
+        // splits the energies, and an energy alone leaves the constant -p0.
+        let bubble = surface(&[1], &[0], vec![(EdgeIndex(2), -1)]);
+        assert!(bubble.vanishes_identically(&lmb, &equal, &rest).unwrap());
+        for moving in [externals(0.0, 0.5), externals(0.5, 0.0)] {
+            assert!(!bubble.vanishes_identically(&lmb, &equal, &moving).unwrap());
+        }
+        let heavy = masses([Some(1.0), Some(2.0), None, None, Some(1.0)]);
+        assert!(!bubble.vanishes_identically(&lmb, &heavy, &rest).unwrap());
+        let mut nonfinite = rest.clone();
+        nonfinite[ExternalIndex(0)].temporal.value = F(f64::NAN);
+        assert!(
+            bubble
+                .vanishes_identically(&lmb, &equal, &nonfinite)
+                .is_err()
         );
     }
 
