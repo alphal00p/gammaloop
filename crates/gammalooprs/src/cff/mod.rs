@@ -7373,15 +7373,35 @@ mod tests {
 
     #[test]
     fn thermal_mass_cycles_match_partial_fraction_contours() -> Result<()> {
-        use crate::integrands::process::param_builder::ParamBuilderGraph;
+        use crate::{integrands::process::param_builder::ParamBuilderGraph, uv::uv_graph::UVE};
         use three_dimensional_reps::MediumMode;
 
         test_initialise()?;
-        let model = crate::utils::load_generic_model("scalars");
-        for masses in [&[1_i64][..], &[1, 2], &[1, 2, 3], &[1, 1, 2]] {
-            let mut dot = String::from(
-                "digraph thermal_mass_cycle { params=\"m1;m2;m3\"; \
-                 edge [num=1]; node [num=1];",
+        // Scalars at mu = 0 cannot distinguish the orientation of sigma*mu.
+        // Fermion cycles with mu = +-3/2 do, at finite and zero temperature;
+        // |mu| lies above the m = 1 shell and below the heavier ones.
+        let scalars = crate::utils::load_generic_model("scalars");
+        let sm = crate::utils::load_generic_model("sm");
+        let b = "particle=\"b\"";
+        let media = [
+            (&scalars, "", MediumMode::ThermodynamicEquilibrium, (0, 1)),
+            (&sm, b, MediumMode::ThermodynamicEquilibrium, (3, 2)),
+            (&sm, b, MediumMode::ThermodynamicEquilibrium, (-3, 2)),
+            (&sm, b, MediumMode::ZeroTemperatureEquilibrium, (3, 2)),
+            (&sm, b, MediumMode::ZeroTemperatureEquilibrium, (-3, 2)),
+        ];
+        for ((model, particle, mode, mu), masses) in
+            itertools::iproduct!(media, [&[1_i64][..], &[1, 2], &[1, 2, 3], &[1, 1, 2]])
+        {
+            if !mode.is_finite_temperature() && masses == [1, 1, 2] {
+                // Zero-temperature derivatives are Fermi deltas, which only
+                // production localization evaluates.
+                continue;
+            }
+            let fermion = !particle.is_empty();
+            let mut dot = format!(
+                "digraph thermal_mass_cycle {{ params=\"m1;m2;m3\"; \
+                 edge [num=1 {particle}]; node [num=1];",
             );
             for (edge, mass) in masses.iter().enumerate() {
                 write!(
@@ -7391,9 +7411,9 @@ mod tests {
                 )?;
             }
             dot.push('}');
-            let mut graph: Graph = dot.into_graph(&model)?;
+            let mut graph: Graph = dot.into_graph(model)?;
             let mut options = graph.denominator_only_cff_3d_expression_options();
-            options.medium_mode = three_dimensional_reps::MediumMode::ThermodynamicEquilibrium;
+            options.medium_mode = mode;
             let canonization = graph.get_esurface_canonization(&graph.loop_momentum_basis);
             let production = graph.generate_3d_expression_for_integrand(
                 &[],
@@ -7415,14 +7435,17 @@ mod tests {
             // Remove the spatial measure and i to compare the signed energy
             // contour J = integral dq0/(2*pi*i), as in the vacuum test below.
             let sum = sum * (Atom::num(2) * Atom::var(GS.pi)).pow(3) / Atom::i();
+            let step = Atom::var(W_.a_);
             let mut explicit = graph
-                .make_thermal_distributions_explicit(
-                    &sum,
-                    MediumMode::ThermodynamicEquilibrium,
-                    graph.iter_edge_ids(),
-                )?
+                .make_thermal_distributions_explicit(&sum, mode, graph.iter_edge_ids())?
                 .replace(function!(GS.thermal_weight_wrapper, W_.a_))
-                .with(W_.a_);
+                .with(W_.a_)
+                // The production evaluator definition of the step.
+                .replace(function!(GS.heaviside, W_.a_))
+                .with((step.abs() + &step) / (Atom::num(2) * step.abs()));
+            if let Some(chemical_potential) = graph[EdgeIndex(0)].chemical_potential_atom() {
+                explicit = explicit.replace(chemical_potential).with(Atom::num(mu));
+            }
             for (edge, mass) in masses.iter().enumerate() {
                 // Distinct mass symbols receive distinct values. Every line
                 // carries the same spatial momentum, with |k| = 3/5.
@@ -7437,39 +7460,75 @@ mod tests {
                 rational.map_coeff(&|coefficient| {
                     Complex::new(F::from(&coefficient.re), F::from(&coefficient.im))
                 });
-            for beta in [0.7_f64, 2.0] {
-                let tadpole = |mass: i64| {
+            let mu = mu.0 as f64 / mu.1 as f64;
+            let betas = if mode.is_finite_temperature() {
+                &[0.7_f64, 2.0][..]
+            } else {
+                &[f64::INFINITY][..]
+            };
+            for &beta in betas {
+                // The signed contour of 1/D and its derivative in m^2.
+                let medium = |mass: i64| {
                     let energy = ((mass * mass) as f64 + 0.36).sqrt();
-                    -1.0 / (2.0 * energy * (beta * energy / 2.0).tanh())
+                    if !fermion {
+                        let arg = beta * energy / 2.0;
+                        return (
+                            -1.0 / (2.0 * energy * arg.tanh()),
+                            1.0 / (4.0 * energy.powi(3) * arg.tanh())
+                                + beta / (8.0 * energy.powi(2) * arg.sinh().powi(2)),
+                        );
+                    }
+                    if beta.is_infinite() {
+                        // Particles or antiparticles below |mu| fill the Fermi
+                        // sea. The derivative is a delta and is never sampled.
+                        let open = energy > mu.abs();
+                        return (if open { -1.0 / (2.0 * energy) } else { 0.0 }, f64::NAN);
+                    }
+                    // Particles and antiparticles occupy E -/+ mu.
+                    let occupation = |x: f64| 1.0 / ((beta * x).exp() + 1.0);
+                    let [particles, antiparticles] =
+                        [occupation(energy - mu), occupation(energy + mu)];
+                    let vacant = 1.0 - particles - antiparticles;
+                    let slope = vacant / (2.0 * energy.powi(2))
+                        - beta
+                            * (particles * (1.0 - particles)
+                                + antiparticles * (1.0 - antiparticles))
+                            / (2.0 * energy);
+                    (-vacant / (2.0 * energy), slope / (2.0 * energy))
+                };
+                let vacuum = |mass: i64| {
+                    let energy = ((mass * mass) as f64 + 0.36).sqrt();
+                    (-1.0 / (2.0 * energy), 1.0 / (4.0 * energy.powi(3)))
                 };
                 // Partial fraction the original quadratic propagators. This
                 // oracle does not use CFF contractions or distribution weights.
-                let expected = if masses == [1, 1, 2] {
-                    let energy = 1.36_f64.sqrt();
-                    let arg = beta * energy / 2.0;
-                    let derivative = 1.0 / (4.0 * energy.powi(3) * arg.tanh())
-                        + beta / (8.0 * energy.powi(2) * arg.sinh().powi(2));
-                    // Differentiating the first mass squared creates its
-                    // second propagator occurrence: d(1/D)/d(m^2) = 1/D^2.
-                    (derivative * (1.0 - 4.0) - (tadpole(1) - tadpole(2))) / 9.0
-                } else {
-                    masses
-                        .iter()
-                        .map(|&mass| {
-                            tadpole(mass)
-                                / masses
-                                    .iter()
-                                    .filter(|&&other| other != mass)
-                                    .map(|&other| (mass * mass - other * other) as f64)
-                                    .product::<f64>()
-                        })
-                        .sum()
+                let partial_fractions = |contour: &dyn Fn(i64) -> (f64, f64)| {
+                    if masses == [1, 1, 2] {
+                        // Differentiating the first mass squared creates its
+                        // second propagator occurrence: d(1/D)/d(m^2) = 1/D^2.
+                        (contour(1).1 * (1.0 - 4.0) - (contour(1).0 - contour(2).0)) / 9.0
+                    } else {
+                        masses
+                            .iter()
+                            .map(|&mass| {
+                                contour(mass).0
+                                    / masses
+                                        .iter()
+                                        .filter(|&&other| other != mass)
+                                        .map(|&other| (mass * mass - other * other) as f64)
+                                        .product::<f64>()
+                            })
+                            .sum()
+                    }
                 };
+                let expected = partial_fractions(&medium);
+                // A filled Fermi sea can cancel the contour exactly, so compare
+                // on the scale of the vacuum contour.
+                let scale = expected.abs().max(partial_fractions(&vacuum).abs());
                 let actual = evaluator.evaluate_single(&[Complex::new(F(beta), F(0.0))]);
                 assert!(
-                    actual.im.0.abs() < 1.0e-13
-                        && (actual.re.0 - expected).abs() < 1.0e-11 * expected.abs(),
-                    "masses={masses:?}, beta={beta}: signed CFF={actual}, partial fractions={expected}"
+                    actual.im.0.abs() < 1.0e-13 && (actual.re.0 - expected).abs() < 1.0e-11 * scale,
+                    "{mode:?}, {particle}, mu={mu}, masses={masses:?}, beta={beta}: signed CFF={actual}, partial fractions={expected}"
                 );
             }
         }
