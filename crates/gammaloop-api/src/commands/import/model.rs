@@ -775,7 +775,7 @@ mod tests {
     fn ufo_and_json_restrictions_preserve_chemical_potentials() -> Result<()> {
         gammalooprs::initialisation::test_initialise()?;
         let assets = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/models");
-        for restriction in ["full", "default", "thermal"] {
+        for restriction in ["full", "default", "thermal", "thermal_s_mass"] {
             let path = assets.join(format!("ufo/sm-{restriction}"));
             let ModelSpecification::UFOModelSpecification {
                 restriction_name, ..
@@ -853,6 +853,22 @@ mod tests {
             if restriction == "full" {
                 assert_eq!(json.get_parameter("Me").nature, ParameterNature::External);
                 assert_eq!(ufo.get_parameter("Me").nature, ParameterNature::External);
+            }
+            if restriction.starts_with("thermal") {
+                // Only the strange-mass card keeps a massive, adjustable strange quark.
+                let (nature, ms) = if restriction == "thermal_s_mass" {
+                    (ParameterNature::External, 0.095)
+                } else {
+                    (ParameterNature::Internal, 0.0)
+                };
+                for model in [&ufo, &json] {
+                    assert_eq!(model.get_parameter("MS").nature, nature, "{restriction}");
+                    assert_eq!(
+                        model.get_parameter("MS").value,
+                        Some(Complex::new_re(F(ms))),
+                        "{restriction}"
+                    );
+                }
             }
         }
         Ok(())

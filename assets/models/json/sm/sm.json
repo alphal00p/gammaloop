@@ -975,6 +975,14 @@
   }, {
     "expression": null,
     "lhablock": "MASS",
+    "lhacode": [3],
+    "name": "MS",
+    "nature": "external",
+    "parameter_type": "real",
+    "value": [0.0, 0.0]
+  }, {
+    "expression": null,
+    "lhablock": "MASS",
     "lhacode": [4],
     "name": "MC",
     "nature": "external",
@@ -2205,7 +2213,7 @@
     "color": 3,
     "ghost_number": 0,
     "lepton_number": 0,
-    "mass": "ZERO",
+    "mass": "MS",
     "name": "s",
     "pdg_code": 3,
     "spin": 2,
@@ -2221,7 +2229,7 @@
     "color": -3,
     "ghost_number": 0,
     "lepton_number": 0,
-    "mass": "ZERO",
+    "mass": "MS",
     "name": "s~",
     "pdg_code": -3,
     "spin": 2,
@@ -2571,14 +2579,14 @@
     "numerator": "-1𝑖*UFO::{}::PSlash(UFO::{}::idx(1,1),UFO::{}::idx(1,2))",
     "particle": "d~"
   }, {
-    "denominator": "(UFO::{}::P(UFO::{}::idx(1,1)))^2",
+    "denominator": "(UFO::{}::P(UFO::{}::idx(1,1)))^2+-1*UFO::{}::MS^2",
     "name": "s_propFeynman",
-    "numerator": "1𝑖*UFO::{}::PSlash(UFO::{}::idx(1,2),UFO::{}::idx(1,1))",
+    "numerator": "(UFO::{}::Identity(UFO::{}::idx(1,2),UFO::{}::idx(1,1))*UFO::{}::MS+UFO::{}::PSlash(UFO::{}::idx(1,2),UFO::{}::idx(1,1)))*1𝑖",
     "particle": "s"
   }, {
-    "denominator": "(UFO::{}::P(UFO::{}::idx(1,1)))^2",
+    "denominator": "(UFO::{}::P(UFO::{}::idx(1,1)))^2+-1*UFO::{}::MS^2",
     "name": "s~_propFeynman",
-    "numerator": "-1𝑖*UFO::{}::PSlash(UFO::{}::idx(1,1),UFO::{}::idx(1,2))",
+    "numerator": "(-1*UFO::{}::PSlash(UFO::{}::idx(1,1),UFO::{}::idx(1,2))+UFO::{}::Identity(UFO::{}::idx(1,1),UFO::{}::idx(1,2))*UFO::{}::MS)*1𝑖",
     "particle": "s~"
   }, {
     "denominator": "(UFO::{}::P(UFO::{}::idx(1,1)))^2+-1*UFO::{}::MB^2",

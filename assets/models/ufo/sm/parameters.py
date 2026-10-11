@@ -128,6 +128,14 @@ MZ = Parameter(name='MZ',
                lhablock='MASS',
                lhacode=[23])
 
+MS = Parameter(name='MS',
+               nature='external',
+               type='real',
+               value=0.095,
+               texname='\\text{MS}',
+               lhablock='MASS',
+               lhacode=[3])
+
 MC = Parameter(name='MC',
                nature='external',
                type='real',
