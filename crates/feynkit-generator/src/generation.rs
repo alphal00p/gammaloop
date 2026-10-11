@@ -1681,9 +1681,9 @@ impl Generator {
         if !options.forced_cuts.is_empty() {
             let mut matched = vec![false; options.forced_cuts.len()];
             let mut retained = Vec::new();
-            for mut pair in diagram_pairs {
+            for pair in diagram_pairs {
                 let cuts = pair
-                    .comparison
+                    .comparison()
                     .cuts()
                     .iter()
                     .filter(|cut| {
@@ -1707,13 +1707,7 @@ impl Generator {
                     .cloned()
                     .collect::<Vec<_>>();
                 if !cuts.is_empty() {
-                    pair.comparison = pair.comparison.with_cuts(cuts)?;
-                    let partitions =
-                        transport_cut_metadata(pair.comparison.cuts(), &pair.reversed_edges)
-                            .into_iter()
-                            .map(|cut| (cut.left.half_edges, cut.right.half_edges))
-                            .collect();
-                    pair.representative = pair.representative.with_cut_partitions(partitions)?;
+                    let pair = pair.with_cuts(cuts)?;
                     retained.push(pair);
                 }
             }
@@ -1736,14 +1730,13 @@ impl Generator {
                 diagram_pairs.len().saturating_sub(1).to_string().len(),
             )),
         };
-        let mut comparison_diagrams = Vec::with_capacity(diagram_pairs.len());
-        let mut representatives = Vec::with_capacity(diagram_pairs.len());
+        let mut selected = Vec::with_capacity(diagram_pairs.len());
         for (index, mut pair) in diagram_pairs.into_iter().enumerate() {
             let name = naming.map(|(prefix, width)| format!("{prefix}{index:0width$}"));
             let selected_by_id = match &options.selected_diagram_ids {
                 Some(selected) if !selected.is_empty() => {
-                    selected.contains(&pair.comparison.id()?)
-                        || selected.contains(&pair.representative.id()?)
+                    selected.contains(&pair.comparison().id()?)
+                        || selected.contains(&pair.representative().id()?)
                 }
                 _ => false,
             };
@@ -1758,10 +1751,12 @@ impl Generator {
                 options.selected_diagram_ids.is_some() || options.selected_diagram_names.is_some();
             if (has_selection && !selected_by_id && !selected_by_name)
                 || (!options.vetoed_diagram_ids.is_empty()
-                    && (options.vetoed_diagram_ids.contains(&pair.comparison.id()?)
+                    && (options
+                        .vetoed_diagram_ids
+                        .contains(&pair.comparison().id()?)
                         || options
                             .vetoed_diagram_ids
-                            .contains(&pair.representative.id()?)))
+                            .contains(&pair.representative().id()?)))
                 || name
                     .as_ref()
                     .is_some_and(|name| options.vetoed_diagram_names.contains(name))
@@ -1769,27 +1764,26 @@ impl Generator {
                 continue;
             }
             if let Some(name) = &name {
-                pair.comparison = pair.comparison.with_name(name);
-                pair.representative = pair.representative.with_name(name);
+                pair = pair.with_name(name);
             }
             let by_id = if options.loop_momentum_bases.is_empty() {
                 None
-            } else if let Some(edges) = options.loop_momentum_bases.get(&pair.representative.id()?)
+            } else if let Some(edges) = options
+                .loop_momentum_bases
+                .get(&pair.representative().id()?)
             {
                 Some(edges)
             } else {
-                options.loop_momentum_bases.get(&pair.comparison.id()?)
+                options.loop_momentum_bases.get(&pair.comparison().id()?)
             };
             let requested_basis = by_id.or_else(|| {
                 name.as_ref()
                     .and_then(|name| options.named_loop_momentum_bases.get(name))
             });
             if let Some(edges) = requested_basis {
-                pair.comparison = pair.comparison.with_loop_momentum_edges(edges)?;
-                pair.representative = pair.representative.with_loop_momentum_edges(edges)?;
+                pair = pair.with_loop_momentum_edges(edges)?;
             }
-            comparison_diagrams.push(pair.comparison);
-            representatives.push((pair.representative, pair.reversed_edges));
+            selected.push(pair);
         }
         let grouping = if options.cancellation_requested() {
             completed = false;
@@ -1799,7 +1793,7 @@ impl Generator {
         };
         let group = || {
             grouping::group_diagrams(
-                comparison_diagrams,
+                selected,
                 &self.model,
                 grouping,
                 options.symmetrizes_left_right(),
@@ -1814,100 +1808,12 @@ impl Generator {
             completed = false;
         }
 
-        // Numerator-aware grouping must use the canonical comparison graphs:
-        // normalizing their charged flows changes the momentum convention and
-        // prevents mirror representatives from collapsing.  Runtime exposure,
-        // however, uses the normalized representative selected by each group.
-        // Transport the merged canonical cut inventories into that
-        // representative's orientation and retain the comparison-derived
-        // grouping factor and routing choice.
         let zero_numerator_count = grouped.zero_numerator_count;
-        let mut groups = grouped.groups;
+        let groups = grouped.groups;
+        let diagrams = grouped.diagrams;
         let total = groups.len();
         options.report_progress_with_zero_count("grouping", 0, Some(total), zero_numerator_count);
-        let mut diagrams = Vec::with_capacity(grouped.diagrams.len());
-        for (output_index, (comparison_master, group)) in grouped
-            .diagrams
-            .into_iter()
-            .zip(groups.iter_mut())
-            .enumerate()
-        {
-            if group.master != output_index {
-                return Err(GenerationError::InvalidGroups(format!(
-                    "group {output_index} points to unexpected master {}",
-                    group.master
-                )));
-            }
-            let source_diagram = group
-                .members
-                .first()
-                .ok_or_else(|| {
-                    GenerationError::InvalidGroups(format!(
-                        "group {output_index} has no representative member"
-                    ))
-                })?
-                .source_diagram;
-            let (source_representative, reversed_edges) =
-                representatives.get(source_diagram).ok_or_else(|| {
-                    GenerationError::InvalidGroups(format!(
-                        "group {output_index} references unknown source diagram {source_diagram}"
-                    ))
-                })?;
-            let cuts = transport_cut_metadata(comparison_master.cuts(), reversed_edges);
-            let thresholds = transport_threshold_candidate_metadata(
-                comparison_master.topology_threshold_candidates(),
-                reversed_edges,
-            );
-            let mut representative = source_representative.clone();
-            if cuts != representative.cuts() {
-                representative = representative.with_cut_partitions(
-                    cuts.into_iter()
-                        .map(|cut| (cut.left.half_edges, cut.right.half_edges))
-                        .collect(),
-                )?;
-            }
-            if thresholds != representative.topology_threshold_candidates() {
-                representative = representative.with_topology_threshold_partitions(
-                    thresholds
-                        .into_iter()
-                        .map(|candidate| (candidate.left, candidate.right))
-                        .collect(),
-                )?;
-            }
-            if representative.loop_momentum_basis().loop_edges
-                != comparison_master.loop_momentum_basis().loop_edges
-            {
-                representative = representative.with_loop_momentum_edges(
-                    &comparison_master.loop_momentum_basis().loop_edges,
-                )?;
-            }
-            if let Some(name) = comparison_master.name() {
-                representative = representative.with_name(name);
-            }
-            representative =
-                representative.with_overall_factor(comparison_master.overall_factor().clone());
-            diagrams.push(representative);
-
-            for member in &mut group.members {
-                let (source, _) = representatives.get(member.source_diagram).ok_or_else(|| {
-                    GenerationError::InvalidGroups(format!(
-                        "group {output_index} references unknown source diagram {}",
-                        member.source_diagram
-                    ))
-                })?;
-                if matches!(options.output, GenerationOutput::Named { .. }) {
-                    let name = source.name().ok_or_else(|| {
-                        GenerationError::InvalidGroups(format!(
-                            "named source {} has no name",
-                            member.source_diagram
-                        ))
-                    })?;
-                    member.source_identity = Some(SourceIdentity {
-                        id: source.id()?,
-                        name: name.to_owned(),
-                    });
-                }
-            }
+        for output_index in 0..total {
             options.report_progress_with_zero_count(
                 "grouping",
                 output_index + 1,
@@ -2043,18 +1949,17 @@ impl Generator {
             multiplicity,
             options,
         )?;
-        let representative = if identical {
-            comparison.clone()
-        } else {
-            self.to_diagram(
-                name,
-                generation_type,
-                representative,
-                signs,
-                multiplicity,
-                options,
-            )?
-        };
+        if identical {
+            return Ok(DiagramPair::Shared(comparison));
+        }
+        let representative = self.to_diagram(
+            name,
+            generation_type,
+            representative,
+            signs,
+            multiplicity,
+            options,
+        )?;
         // Finalization orders external carriers before the internal edges, which keep the
         // canonical order. Transport the comparison-to-representative reversals into that
         // finalized edge frame; process flow fixes all external carriers.
@@ -2064,9 +1969,9 @@ impl Generator {
             .zip(internal_reversals)
             .filter_map(|((edge, _, _), reversed)| reversed.then_some(edge))
             .collect();
-        Ok(DiagramPair {
+        Ok(DiagramPair::Distinct {
             comparison,
-            representative,
+            representative: Box::new(representative),
             reversed_edges,
         })
     }
@@ -2890,10 +2795,146 @@ impl DiagramInput {
     }
 }
 
-struct DiagramPair {
-    comparison: FeynmanDiagram,
-    representative: FeynmanDiagram,
-    reversed_edges: BTreeSet<EdgeId>,
+/// Equal comparison and physical frames have one owner all the way to the output.
+pub(crate) enum DiagramPair {
+    Shared(FeynmanDiagram),
+    Distinct {
+        comparison: FeynmanDiagram,
+        representative: Box<FeynmanDiagram>,
+        reversed_edges: BTreeSet<EdgeId>,
+    },
+}
+
+impl DiagramPair {
+    pub(crate) fn comparison(&self) -> &FeynmanDiagram {
+        match self {
+            Self::Shared(diagram)
+            | Self::Distinct {
+                comparison: diagram,
+                ..
+            } => diagram,
+        }
+    }
+
+    fn representative(&self) -> &FeynmanDiagram {
+        match self {
+            Self::Shared(diagram) => diagram,
+            Self::Distinct { representative, .. } => representative,
+        }
+    }
+
+    fn with_name(self, name: &str) -> Self {
+        match self {
+            Self::Shared(diagram) => Self::Shared(diagram.with_name(name)),
+            Self::Distinct {
+                comparison,
+                representative,
+                reversed_edges,
+            } => Self::Distinct {
+                comparison: comparison.with_name(name),
+                representative: Box::new((*representative).with_name(name)),
+                reversed_edges,
+            },
+        }
+    }
+
+    fn with_loop_momentum_edges(self, edges: &[EdgeId]) -> Result<Self, DiagramError> {
+        match self {
+            Self::Shared(diagram) => Ok(Self::Shared(diagram.with_loop_momentum_edges(edges)?)),
+            Self::Distinct {
+                comparison,
+                representative,
+                reversed_edges,
+            } => Ok(Self::Distinct {
+                comparison: comparison.with_loop_momentum_edges(edges)?,
+                representative: Box::new((*representative).with_loop_momentum_edges(edges)?),
+                reversed_edges,
+            }),
+        }
+    }
+
+    fn with_cuts(self, cuts: Vec<DiagramCut>) -> Result<Self, DiagramError> {
+        match self {
+            Self::Shared(diagram) => Ok(Self::Shared(diagram.with_cuts(cuts)?)),
+            Self::Distinct {
+                comparison,
+                representative,
+                reversed_edges,
+            } => {
+                let comparison = comparison.with_cuts(cuts)?;
+                let partitions = transport_cut_metadata(comparison.cuts(), &reversed_edges)
+                    .into_iter()
+                    .map(|cut| (cut.left.half_edges, cut.right.half_edges))
+                    .collect();
+                Ok(Self::Distinct {
+                    comparison,
+                    representative: Box::new((*representative).with_cut_partitions(partitions)?),
+                    reversed_edges,
+                })
+            }
+        }
+    }
+
+    /// Read surviving physical source identities before merged partitions change their IDs.
+    pub(crate) fn source_identity(
+        &self,
+        output: &GenerationOutput,
+    ) -> Result<Option<SourceIdentity>, GenerationError> {
+        if matches!(output, GenerationOutput::Minimal) {
+            return Ok(None);
+        }
+        let source = self.representative();
+        let name = source
+            .name()
+            .ok_or_else(|| GenerationError::InvalidGroups("named source has no name".into()))?;
+        Ok(Some(SourceIdentity {
+            id: source.id()?,
+            name: name.to_owned(),
+        }))
+    }
+
+    /// Grouping compares canonical charged flows. Move the physical owner to the output,
+    /// transporting the comparison master's merged partitions, factor and routing onto it.
+    pub(crate) fn into_representative(self) -> Result<FeynmanDiagram, DiagramError> {
+        let (comparison, mut representative, reversed_edges) = match self {
+            Self::Shared(diagram) => return Ok(diagram),
+            Self::Distinct {
+                comparison,
+                representative,
+                reversed_edges,
+            } => (comparison, *representative, reversed_edges),
+        };
+        let cuts = transport_cut_metadata(comparison.cuts(), &reversed_edges);
+        let thresholds = transport_threshold_candidate_metadata(
+            comparison.topology_threshold_candidates(),
+            &reversed_edges,
+        );
+        if cuts != representative.cuts() {
+            representative = representative.with_cut_partitions(
+                cuts.into_iter()
+                    .map(|cut| (cut.left.half_edges, cut.right.half_edges))
+                    .collect(),
+            )?;
+        }
+        if thresholds != representative.topology_threshold_candidates() {
+            representative = representative.with_topology_threshold_partitions(
+                thresholds
+                    .into_iter()
+                    .map(|candidate| (candidate.left, candidate.right))
+                    .collect(),
+            )?;
+        }
+        if representative.loop_momentum_basis().loop_edges
+            != comparison.loop_momentum_basis().loop_edges
+        {
+            representative = representative
+                .with_loop_momentum_edges(&comparison.loop_momentum_basis().loop_edges)?;
+        }
+        if let Some(name) = comparison.name() {
+            representative = representative.with_name(name);
+        }
+        Ok(representative.with_overall_factor(comparison.overall_factor().clone()))
+    }
 }
 
 #[derive(Default)]

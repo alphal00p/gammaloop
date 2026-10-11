@@ -71,7 +71,8 @@ use thiserror::Error;
 use rayon::prelude::*;
 
 use crate::{
-    DiagramGroup, GenerationOptions, GraphGroupingOptions, GroupMember, NumeratorGrouping,
+    DiagramGroup, GenerationError, GenerationOptions, GraphGroupingOptions, GroupMember,
+    NumeratorGrouping, generation::DiagramPair,
 };
 
 #[derive(Debug, Error)]
@@ -306,6 +307,38 @@ pub(crate) struct GroupingOutcome {
     pub zero_numerator_count: usize,
 }
 
+impl GroupingOutcome {
+    fn ungrouped(
+        diagrams: Vec<DiagramPair>,
+        source_diagrams: &[usize],
+        zero_numerator_count: usize,
+        options: &GenerationOptions,
+    ) -> Result<Self, GenerationError> {
+        let mut masters = Vec::with_capacity(diagrams.len());
+        let mut groups = Vec::with_capacity(diagrams.len());
+        for (index, (pair, &source_diagram)) in
+            diagrams.into_iter().zip(source_diagrams).enumerate()
+        {
+            groups.push(DiagramGroup {
+                master: index,
+                members: vec![GroupMember {
+                    source_diagram,
+                    source_identity: pair.source_identity(&options.output)?,
+                    diagram: index,
+                    ratio: Atom::one(),
+                    overall_factor: pair.comparison().overall_factor().clone(),
+                }],
+            });
+            masters.push(pair.into_representative()?);
+        }
+        Ok(Self {
+            diagrams: masters,
+            groups,
+            zero_numerator_count,
+        })
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 enum InternalParticleColor {
     MassAndSpin { mass: ParameterId, spin: i64 },
@@ -355,21 +388,17 @@ enum ComparisonMode {
 }
 
 pub(crate) fn group_diagrams(
-    diagrams: Vec<FeynmanDiagram>,
+    diagrams: Vec<DiagramPair>,
     model: &Model,
     grouping: &NumeratorGrouping,
     symmetrize_left_right: bool,
     generation_options: &GenerationOptions,
-) -> Result<GroupingOutcome, GroupingError> {
+) -> Result<GroupingOutcome, GenerationError> {
     if generation_options.cancellation_requested()
         || (matches!(grouping, NumeratorGrouping::None) && !generation_options.filter_zero_color)
     {
-        let groups = singleton_groups(&diagrams, &(0..diagrams.len()).collect::<Vec<_>>());
-        return Ok(GroupingOutcome {
-            diagrams,
-            groups,
-            zero_numerator_count: 0,
-        });
+        let source_diagrams = (0..diagrams.len()).collect::<Vec<_>>();
+        return GroupingOutcome::ungrouped(diagrams, &source_diagrams, 0, generation_options);
     }
 
     let total = diagrams.len();
@@ -409,12 +438,12 @@ pub(crate) fn group_diagrams(
         .with_representation_payloads(true, true);
     let preparations = diagrams
         .enumerate()
-        .map(|(source_diagram, diagram)| {
+        .map(|(source_diagram, pair)| {
             if generation_options.cancellation_requested() {
                 // Keep unchecked inputs on cancellation. Their preparation is
                 // unused: the incomplete result below contains singleton groups.
                 return Ok(Some((
-                    diagram,
+                    pair,
                     source_diagram,
                     PreparedNumerator {
                         exact: Atom::one(),
@@ -423,6 +452,7 @@ pub(crate) fn group_diagrams(
                     },
                 )));
             }
+            let diagram = pair.comparison();
             let raw_complete = model.expand_couplings(
                 &(diagram.numerator() * diagram.numerator_prefactor() * diagram.projector()),
             );
@@ -518,7 +548,7 @@ pub(crate) fn group_diagrams(
                 // Keep symbolic color dimensions for exact rescaling ratios. Tensor
                 // samples substitute concrete color values at their own boundary.
                 let complete = cooking.uncook(simplified.as_view());
-                normalize_momentum_routing(&diagram, complete)
+                normalize_momentum_routing(diagram, complete)
             } else {
                 Atom::one()
             };
@@ -534,12 +564,12 @@ pub(crate) fn group_diagrams(
                 };
                 exact_source
                     .canonize(GroupingIndex::Dummy)
-                    .map_err(|error| tensor_evaluation_error(&diagram, 0, error))?
+                    .map_err(|error| tensor_evaluation_error(diagram, 0, error))?
             } else {
                 Atom::one()
             };
             Ok(Some((
-                diagram,
+                pair,
                 source_diagram,
                 PreparedNumerator {
                     exact,
@@ -582,11 +612,12 @@ pub(crate) fn group_diagrams(
         NumeratorGrouping::UpToSign(options) => (options, ComparisonMode::UpToSign),
         NumeratorGrouping::UpToScalar(options) => (options, ComparisonMode::UpToScalar),
         NumeratorGrouping::None => {
-            return Ok(GroupingOutcome {
-                groups: singleton_groups(&retained, &source_diagrams),
-                diagrams: retained,
+            return GroupingOutcome::ungrouped(
+                retained,
+                &source_diagrams,
                 zero_numerator_count,
-            });
+                generation_options,
+            );
         }
     };
     let scalar_names = scalar_names(model);
@@ -599,7 +630,8 @@ pub(crate) fn group_diagrams(
     );
     let mut buckets = BTreeMap::<TopologyKey, Vec<usize>>::new();
     let mut canonical_frames = Vec::with_capacity(retained.len());
-    for (index, (diagram, numerator)) in retained.iter().zip(&mut prepared).enumerate() {
+    for (index, (pair, numerator)) in retained.iter().zip(&mut prepared).enumerate() {
+        let diagram = pair.comparison();
         if matches!(mode, ComparisonMode::UpToScalar) {
             numerator.exact = numerator.exact.collect_factors();
         }
@@ -650,8 +682,11 @@ pub(crate) fn group_diagrams(
                     &scalar_names,
                 )
                 .map_err(|source| GroupingError::NumeratorComparison {
-                    candidate: retained[diagram].name().map(str::to_owned),
-                    master: retained[group.master].name().map(str::to_owned),
+                    candidate: retained[diagram].comparison().name().map(str::to_owned),
+                    master: retained[group.master]
+                        .comparison()
+                        .name()
+                        .map(str::to_owned),
                     source,
                 })? {
                     matching_group = Some((group_index, ratio));
@@ -664,7 +699,7 @@ pub(crate) fn group_diagrams(
                     source_identity: None,
                     diagram,
                     ratio,
-                    overall_factor: retained[diagram].overall_factor().clone(),
+                    overall_factor: retained[diagram].comparison().overall_factor().clone(),
                 });
             } else {
                 bucket_groups.push(DiagramGroup {
@@ -674,7 +709,7 @@ pub(crate) fn group_diagrams(
                         source_identity: None,
                         diagram,
                         ratio: Atom::one(),
-                        overall_factor: retained[diagram].overall_factor().clone(),
+                        overall_factor: retained[diagram].comparison().overall_factor().clone(),
                     }],
                 });
             }
@@ -691,7 +726,8 @@ pub(crate) fn group_diagrams(
     groups.sort_by_key(|group| group.master);
 
     generation_options.report_progress_with_zero_count("grouping", 0, None, zero_numerator_count);
-    let (diagrams, groups) = collapse_groups(retained, &canonical_frames, groups)?;
+    let (diagrams, groups) =
+        collapse_groups(retained, &canonical_frames, groups, generation_options)?;
     Ok(GroupingOutcome {
         diagrams,
         groups,
@@ -930,109 +966,119 @@ fn remap_partitions(
 }
 
 fn collapse_groups(
-    diagrams: Vec<FeynmanDiagram>,
+    diagrams: Vec<DiagramPair>,
     canonical_frames: &[CanonicalTopology],
     groups: Vec<DiagramGroup>,
-) -> Result<(Vec<FeynmanDiagram>, Vec<DiagramGroup>), GroupingError> {
-    let mut masters = Vec::with_capacity(groups.len());
-    let mut collapsed_groups = Vec::with_capacity(groups.len());
-    for group in groups {
+    options: &GenerationOptions,
+) -> Result<(Vec<FeynmanDiagram>, Vec<DiagramGroup>), GenerationError> {
+    // Compute merged partitions and read surviving source identities while all inputs are
+    // borrowed. Afterwards each sorted master has one consumer; nonmasters can be dropped.
+    let plans = groups
+        .into_iter()
+        .map(|mut group| {
+            let topology_master = diagrams[group.master].comparison();
+            let master_frame = &canonical_frames[group.master];
+            let mut cut_partitions = Vec::new();
+            let mut threshold_partitions = Vec::new();
+            let mut members = Vec::with_capacity(group.members.len());
+            for member in &mut group.members {
+                let pair = &diagrams[member.diagram];
+                let source = pair.comparison();
+                let source_frame = &canonical_frames[member.diagram];
+                member.source_identity = pair.source_identity(&options.output)?;
+                members.push(source.name().map(str::to_owned));
+                for cut in source.cuts() {
+                    cut_partitions.push(remap_partitions(
+                        source,
+                        source_frame,
+                        topology_master,
+                        master_frame,
+                        &cut.left.half_edges,
+                        &cut.right.half_edges,
+                    )?);
+                }
+                for candidate in source.topology_threshold_candidates() {
+                    threshold_partitions.push(remap_partitions(
+                        source,
+                        source_frame,
+                        topology_master,
+                        master_frame,
+                        &candidate.left,
+                        &candidate.right,
+                    )?);
+                }
+            }
+            cut_partitions.sort();
+            cut_partitions.dedup();
+            threshold_partitions.sort();
+            threshold_partitions.dedup();
+            let factor = if group.members.len() == 1 {
+                topology_master.overall_factor().clone()
+            } else {
+                let mut factor = Atom::Zero;
+                for member in &group.members {
+                    let source_diagram = i64::try_from(member.source_diagram).map_err(|_| {
+                        GroupingError::SourceDiagramIndexOverflow(member.source_diagram)
+                    })?;
+                    factor += function!(
+                        symbol!("feynkit_generator_factor::NumeratorDependentGrouping"),
+                        Atom::num(source_diagram),
+                        member.ratio.clone(),
+                        member.overall_factor.clone()
+                    );
+                }
+                factor
+            };
+            Ok::<_, GenerationError>((group, cut_partitions, threshold_partitions, factor, members))
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+
+    let mut masters = Vec::with_capacity(plans.len());
+    let mut collapsed_groups = Vec::with_capacity(plans.len());
+    let mut inputs = diagrams.into_iter().enumerate();
+    for (group, cut_partitions, threshold_partitions, factor, members) in plans {
+        let (_, pair) = inputs
+            .find(|(index, _)| *index == group.master)
+            .expect("group masters are unique and sorted by input index");
+        let merge = |mut master: FeynmanDiagram| -> Result<_, GroupingError> {
+            if !cut_partitions.is_empty() || !master.cuts().is_empty() {
+                let master_name = master.name().map(str::to_owned);
+                master = master
+                    .with_cut_partitions(cut_partitions)
+                    .map_err(|source| GroupingError::CutMerge {
+                        master: master_name,
+                        members: members.clone(),
+                        source: Box::new(source),
+                    })?;
+            }
+            if !threshold_partitions.is_empty()
+                || !master.topology_threshold_candidates().is_empty()
+            {
+                let master_name = master.name().map(str::to_owned);
+                master = master
+                    .with_topology_threshold_partitions(threshold_partitions)
+                    .map_err(|source| GroupingError::ThresholdCandidateMerge {
+                        master: master_name,
+                        members,
+                        source: Box::new(source),
+                    })?;
+            }
+            Ok(master.with_overall_factor(factor))
+        };
+        let pair = match pair {
+            DiagramPair::Shared(master) => DiagramPair::Shared(merge(master)?),
+            DiagramPair::Distinct {
+                comparison,
+                representative,
+                reversed_edges,
+            } => DiagramPair::Distinct {
+                comparison: merge(comparison)?,
+                representative,
+                reversed_edges,
+            },
+        };
         let output_index = masters.len();
-        let topology_master = &diagrams[group.master];
-        let master_frame = &canonical_frames[group.master];
-        let master = topology_master.clone();
-        // Numerator grouping is intentionally based on the denominator
-        // topology. Stable half-edge IDs are local to each input diagram, so
-        // transport the member's vertex partition through the canonical
-        // topology frame before rebuilding cut endpoints on the master.
-        let mut cut_partitions = Vec::new();
-        for member in &group.members {
-            let source = &diagrams[member.diagram];
-            let source_frame = &canonical_frames[member.diagram];
-            for cut in source.cuts() {
-                cut_partitions.push(remap_partitions(
-                    source,
-                    source_frame,
-                    topology_master,
-                    master_frame,
-                    &cut.left.half_edges,
-                    &cut.right.half_edges,
-                )?);
-            }
-        }
-        cut_partitions.sort();
-        cut_partitions.dedup();
-        let master = if !cut_partitions.is_empty() || !master.cuts().is_empty() {
-            let members = group
-                .members
-                .iter()
-                .map(|member| diagrams[member.diagram].name().map(str::to_owned))
-                .collect::<Vec<_>>();
-            let master_name = master.name().map(str::to_owned);
-            master
-                .with_cut_partitions(cut_partitions)
-                .map_err(|source| GroupingError::CutMerge {
-                    master: master_name,
-                    members,
-                    source: Box::new(source),
-                })?
-        } else {
-            master
-        };
-        let mut threshold_partitions = Vec::new();
-        for member in &group.members {
-            let source = &diagrams[member.diagram];
-            let source_frame = &canonical_frames[member.diagram];
-            for candidate in source.topology_threshold_candidates() {
-                threshold_partitions.push(remap_partitions(
-                    source,
-                    source_frame,
-                    topology_master,
-                    master_frame,
-                    &candidate.left,
-                    &candidate.right,
-                )?);
-            }
-        }
-        threshold_partitions.sort();
-        threshold_partitions.dedup();
-        let master = if !threshold_partitions.is_empty()
-            || !master.topology_threshold_candidates().is_empty()
-        {
-            let members = group
-                .members
-                .iter()
-                .map(|member| diagrams[member.diagram].name().map(str::to_owned))
-                .collect::<Vec<_>>();
-            let master_name = master.name().map(str::to_owned);
-            master
-                .with_topology_threshold_partitions(threshold_partitions)
-                .map_err(|source| GroupingError::ThresholdCandidateMerge {
-                    master: master_name,
-                    members,
-                    source: Box::new(source),
-                })?
-        } else {
-            master
-        };
-        let factor = if group.members.len() == 1 {
-            master.overall_factor().clone()
-        } else {
-            let mut factor = Atom::Zero;
-            for member in &group.members {
-                let source_diagram = i64::try_from(member.source_diagram).map_err(|_| {
-                    GroupingError::SourceDiagramIndexOverflow(member.source_diagram)
-                })?;
-                factor += function!(
-                    symbol!("feynkit_generator_factor::NumeratorDependentGrouping"),
-                    Atom::num(source_diagram),
-                    member.ratio.clone(),
-                    member.overall_factor.clone()
-                );
-            }
-            factor
-        };
-        masters.push(master.with_overall_factor(factor));
+        masters.push(pair.into_representative()?);
         collapsed_groups.push(DiagramGroup {
             master: output_index,
             members: group
@@ -1046,24 +1092,6 @@ fn collapse_groups(
         });
     }
     Ok((masters, collapsed_groups))
-}
-
-fn singleton_groups(diagrams: &[FeynmanDiagram], source_diagrams: &[usize]) -> Vec<DiagramGroup> {
-    diagrams
-        .iter()
-        .zip(source_diagrams.iter().copied())
-        .enumerate()
-        .map(|(diagram, (source, source_diagram))| DiagramGroup {
-            master: diagram,
-            members: vec![GroupMember {
-                source_diagram,
-                source_identity: None,
-                diagram,
-                ratio: Atom::one(),
-                overall_factor: source.overall_factor().clone(),
-            }],
-        })
-        .collect()
 }
 
 fn scalar_names(model: &Model) -> BTreeSet<String> {
@@ -2218,7 +2246,10 @@ mod tests {
                 diagram(&model, "g0", "x+y", 25, 25),
                 diagram(&model, "g1", "y+x", 25, 25),
                 diagram(&model, "g2", "0", 25, 25),
-            ],
+            ]
+            .into_iter()
+            .map(DiagramPair::Shared)
+            .collect(),
             &model,
             &NumeratorGrouping::Identical(exact_options()),
             false,
@@ -2282,7 +2313,7 @@ mod tests {
         let grouped = pool
             .install(|| {
                 group_diagrams(
-                    inputs,
+                    inputs.into_iter().map(DiagramPair::Shared).collect(),
                     &model,
                     &NumeratorGrouping::Identical(exact_options()),
                     false,
@@ -2321,13 +2352,86 @@ mod tests {
     }
 
     #[test]
+    fn shared_finalized_masters_move_through_grouping() {
+        let model = Arc::new(model());
+        for grouping in [
+            NumeratorGrouping::None,
+            NumeratorGrouping::Identical(exact_options()),
+        ] {
+            let first = diagram(&model, "first", "1", 25, 25);
+            let allocation = first.vertices().next().unwrap().1 as *const DiagramVertex;
+            let second = diagram(&model, "second", "1", 25, 25);
+            let grouped = group_diagrams(
+                vec![DiagramPair::Shared(first), DiagramPair::Shared(second)],
+                &model,
+                &grouping,
+                false,
+                &GenerationOptions::default().output(crate::GenerationOutput::Minimal),
+            )
+            .unwrap();
+            assert_eq!(
+                grouped.diagrams[0].vertices().next().unwrap().1 as *const DiagramVertex,
+                allocation,
+                "the retained master must keep its owned graph allocation",
+            );
+            assert!(
+                grouped
+                    .groups
+                    .iter()
+                    .flat_map(|group| &group.members)
+                    .all(|member| member.source_identity.is_none())
+            );
+            assert_eq!(grouped.diagrams[0].numerator(), &Atom::one());
+        }
+    }
+
+    #[test]
+    fn cancelled_grouping_moves_the_distinct_physical_owner() {
+        let model = Arc::new(model());
+        let comparison = diagram(&model, "source", "0", 25, 25);
+        let representative = diagram(&model, "source", "x+y", 25, 25);
+        let expected = representative.to_json().unwrap();
+        let allocation = representative.vertices().next().unwrap().1 as *const DiagramVertex;
+        let source_id = representative.id().unwrap();
+        let grouped = group_diagrams(
+            vec![DiagramPair::Distinct {
+                comparison,
+                representative: Box::new(representative),
+                reversed_edges: BTreeSet::new(),
+            }],
+            &model,
+            &NumeratorGrouping::Identical(exact_options()),
+            false,
+            &GenerationOptions::default().cancellation_check(|| true),
+        )
+        .unwrap();
+        assert_eq!(grouped.zero_numerator_count, 0);
+        assert_eq!(grouped.diagrams.len(), 1);
+        assert_eq!(grouped.diagrams[0].to_json().unwrap(), expected);
+        assert_eq!(
+            grouped.diagrams[0].vertices().next().unwrap().1 as *const DiagramVertex,
+            allocation
+        );
+        assert_eq!(
+            grouped.groups[0].members[0].source_identity,
+            Some(crate::SourceIdentity {
+                id: source_id,
+                name: "source".into(),
+            })
+        );
+    }
+
+    #[test]
     fn groups_identical_numerators() {
         let model = Arc::new(model());
         let grouped = group_diagrams(
             vec![
                 diagram(&model, "g0", "x+y", 25, 25),
                 diagram(&model, "g1", "y+x", 25, 25),
-            ],
+            ]
+            .into_iter()
+            .map(DiagramPair::Shared)
+            .collect(),
             &model,
             &NumeratorGrouping::Identical(exact_options()),
             false,
@@ -2358,7 +2462,10 @@ mod tests {
         );
         assert_ne!(external_first.projector(), internal_first.projector());
         let grouped = group_diagrams(
-            vec![external_first, internal_first],
+            vec![external_first, internal_first]
+                .into_iter()
+                .map(DiagramPair::Shared)
+                .collect(),
             &model,
             &NumeratorGrouping::Identical(GraphGroupingOptions {
                 check_canonical_numerator: false,
@@ -2381,7 +2488,10 @@ mod tests {
             vec![
                 diagram(&model, "g0", "x+y", 25, 25),
                 diagram(&model, "g1", "-x-y", 25, 25),
-            ],
+            ]
+            .into_iter()
+            .map(DiagramPair::Shared)
+            .collect(),
             &model,
             &NumeratorGrouping::UpToSign(exact_options()),
             false,
@@ -2399,7 +2509,10 @@ mod tests {
             vec![
                 diagram(&model, "g0", "x+y", 25, 25),
                 diagram(&model, "g1", "2*x+2*y", 25, 25),
-            ],
+            ]
+            .into_iter()
+            .map(DiagramPair::Shared)
+            .collect(),
             &model,
             &NumeratorGrouping::UpToScalar(exact_options()),
             false,
@@ -2455,7 +2568,11 @@ mod tests {
             diagram(&model, "g3", "1", 25, 35),
         ];
         let grouped = group_diagrams(
-            diagrams.clone(),
+            diagrams
+                .clone()
+                .into_iter()
+                .map(DiagramPair::Shared)
+                .collect(),
             &model,
             &NumeratorGrouping::Identical(exact_options()),
             false,
@@ -2482,7 +2599,7 @@ mod tests {
             ..exact_options()
         };
         let grouped = group_diagrams(
-            diagrams,
+            diagrams.into_iter().map(DiagramPair::Shared).collect(),
             &model,
             &NumeratorGrouping::Identical(exact_species),
             false,
@@ -2496,12 +2613,19 @@ mod tests {
     fn distinct_cut_metadata_is_merged_into_the_denominator_master() {
         let model = Arc::new(model());
         let diagrams = vec![cut_diagram(&model, false), cut_diagram(&model, true)];
+        let identities = diagrams
+            .iter()
+            .map(|diagram| crate::SourceIdentity {
+                id: diagram.id().unwrap(),
+                name: diagram.name().unwrap().to_owned(),
+            })
+            .collect::<Vec<_>>();
         let source_cuts = diagrams
             .iter()
             .flat_map(|diagram| diagram.cuts().iter().cloned())
             .collect::<BTreeSet<_>>();
         let grouped = group_diagrams(
-            diagrams,
+            diagrams.into_iter().map(DiagramPair::Shared).collect(),
             &model,
             &NumeratorGrouping::Identical(exact_options()),
             false,
@@ -2512,6 +2636,20 @@ mod tests {
         assert_eq!(grouped.groups.len(), 1);
         assert_eq!(grouped.groups[0].members.len(), 2);
         assert_eq!(grouped.diagrams.len(), 1);
+        assert_eq!(
+            grouped.groups[0]
+                .members
+                .iter()
+                .map(|member| member.source_identity.clone().unwrap())
+                .collect::<Vec<_>>(),
+            identities,
+            "source IDs must be read before the master's merged cuts change its identity",
+        );
+        assert!(
+            identities
+                .iter()
+                .all(|source| source.id != grouped.diagrams[0].id().unwrap())
+        );
         grouped.diagrams[0].validate().unwrap();
         assert_eq!(
             grouped.diagrams[0]
@@ -2538,7 +2676,10 @@ mod tests {
         let expected_candidates = master.topology_threshold_candidates().to_vec();
 
         let grouped = group_diagrams(
-            vec![master, member],
+            vec![master, member]
+                .into_iter()
+                .map(DiagramPair::Shared)
+                .collect(),
             &model,
             &NumeratorGrouping::Identical(exact_options()),
             false,
@@ -2565,7 +2706,10 @@ mod tests {
         let expected_candidates = master.topology_threshold_candidates().to_vec();
 
         let grouped = group_diagrams(
-            vec![master, member],
+            vec![master, member]
+                .into_iter()
+                .map(DiagramPair::Shared)
+                .collect(),
             &model,
             &NumeratorGrouping::Identical(exact_options()),
             true,
@@ -2592,7 +2736,10 @@ mod tests {
         let partial = left_right_diagram(&model, LeftRightAttachment::PartialSwap);
 
         let grouped = group_diagrams(
-            vec![identity.clone(), global],
+            vec![identity.clone(), global]
+                .into_iter()
+                .map(DiagramPair::Shared)
+                .collect(),
             &model,
             &NumeratorGrouping::Identical(exact_options()),
             true,
@@ -2603,7 +2750,10 @@ mod tests {
         assert_eq!(grouped.groups[0].members.len(), 2);
 
         let grouped = group_diagrams(
-            vec![identity, partial],
+            vec![identity, partial]
+                .into_iter()
+                .map(DiagramPair::Shared)
+                .collect(),
             &model,
             &NumeratorGrouping::Identical(exact_options()),
             true,
@@ -2620,7 +2770,10 @@ mod tests {
             vec![
                 diagram(&model, "g0", "x-x", 25, 25),
                 diagram(&model, "g1", "1", 25, 25),
-            ],
+            ]
+            .into_iter()
+            .map(DiagramPair::Shared)
+            .collect(),
             &model,
             &NumeratorGrouping::None,
             false,
@@ -2632,6 +2785,13 @@ mod tests {
         assert_eq!(grouped.groups[0].members[0].diagram, 0);
         assert_eq!(grouped.groups[0].members[0].source_diagram, 1);
         assert_eq!(grouped.diagrams[0].name(), Some("g1"));
+        assert_eq!(
+            grouped.groups[0].members[0].source_identity,
+            Some(crate::SourceIdentity {
+                id: grouped.diagrams[0].id().unwrap(),
+                name: "g1".into(),
+            })
+        );
     }
 
     #[test]
@@ -2641,7 +2801,7 @@ mod tests {
         let numerator = input.numerator().clone();
         assert!(!numerator.is_zero());
         let grouped = group_diagrams(
-            vec![input],
+            vec![input].into_iter().map(DiagramPair::Shared).collect(),
             &model,
             &NumeratorGrouping::None,
             false,
@@ -2658,7 +2818,10 @@ mod tests {
     fn zero_projectors_are_removed_before_grouping() {
         let model = Arc::new(model());
         let grouped = group_diagrams(
-            vec![diagram_with_projector(&model, "zero", "1", "0", 25, 25)],
+            vec![diagram_with_projector(&model, "zero", "1", "0", 25, 25)]
+                .into_iter()
+                .map(DiagramPair::Shared)
+                .collect(),
             &model,
             &NumeratorGrouping::None,
             false,
@@ -2675,7 +2838,10 @@ mod tests {
     fn coupling_definitions_are_applied_before_zero_detection() {
         let model = Arc::new(model());
         let grouped = group_diagrams(
-            vec![diagram(&model, "coupling-zero", "UFO::GC-1", 25, 25)],
+            vec![diagram(&model, "coupling-zero", "UFO::GC-1", 25, 25)]
+                .into_iter()
+                .map(DiagramPair::Shared)
+                .collect(),
             &model,
             &NumeratorGrouping::None,
             false,
@@ -2706,7 +2872,11 @@ mod tests {
             .map(|diagram| diagram.numerator().clone())
             .collect::<Vec<_>>();
         let unfiltered = group_diagrams(
-            inputs.clone(),
+            inputs
+                .clone()
+                .into_iter()
+                .map(DiagramPair::Shared)
+                .collect(),
             &model,
             &NumeratorGrouping::None,
             false,
@@ -2719,7 +2889,7 @@ mod tests {
             assert_eq!(original.to_json().unwrap(), retained.to_json().unwrap());
         }
         let grouped = group_diagrams(
-            inputs,
+            inputs.into_iter().map(DiagramPair::Shared).collect(),
             &model,
             &NumeratorGrouping::None,
             false,
@@ -2778,7 +2948,7 @@ mod tests {
             diagram_with_atoms(&model, "nonzero", nonzero.clone(), Atom::one(), 25, 25),
         ];
         let grouped = group_diagrams(
-            inputs,
+            inputs.into_iter().map(DiagramPair::Shared).collect(),
             &model,
             &NumeratorGrouping::None,
             false,
@@ -2823,7 +2993,11 @@ mod tests {
             let grouped = pool
                 .install(|| {
                     group_diagrams(
-                        inputs.clone(),
+                        inputs
+                            .clone()
+                            .into_iter()
+                            .map(DiagramPair::Shared)
+                            .collect(),
                         &model,
                         &NumeratorGrouping::None,
                         false,
