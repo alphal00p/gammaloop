@@ -80,7 +80,7 @@ not change the shared compiler interpreter or compiled test archives. The locked
 Symbolica Python wheels support Linux on x86-64 and macOS on ARM. Requesting this
 runtime on Linux ARM reports the missing upstream wheel.
 
-The four NLO acceptance cases share one executable. Their assertions, workloads
+The NLO acceptance cases share one executable. Their assertions, workloads
 and runtime worker reservations are unchanged.
 
 == Fast tests and the full main suite
