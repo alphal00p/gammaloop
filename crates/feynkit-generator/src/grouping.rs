@@ -873,6 +873,9 @@ fn partition_vertices(
         .collect()
 }
 
+/// Grouping compares denominator topologies, but half-edge IDs belong to each input graph.
+/// Transport the member's vertex partition through the canonical topology frame before
+/// rebuilding its half-edges on the master.
 fn remap_partition(
     member: &FeynmanDiagram,
     member_frame: &CanonicalTopology,

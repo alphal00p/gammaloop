@@ -378,12 +378,46 @@ impl fmt::Display for NumeratorOwner {
     }
 }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum NumeratorFrame {
+    Diagram,
+    Interaction,
+}
+
 struct NumeratorInstantiation<'a> {
     owner: NumeratorOwner,
     legs: &'a [NumeratorHalfEdge],
+    frame: NumeratorFrame,
 }
 
-impl NumeratorInstantiation<'_> {
+impl<'legs> NumeratorInstantiation<'legs> {
+    fn new(owner: NumeratorOwner, legs: &'legs [NumeratorHalfEdge]) -> Self {
+        Self {
+            owner,
+            legs,
+            frame: NumeratorFrame::Diagram,
+        }
+    }
+
+    fn dummy_symbol(&self) -> symbolica::atom::Symbol {
+        if self.frame == NumeratorFrame::Interaction {
+            symbol!("feynkit_generator_template::dummy")
+        } else {
+            match self.owner {
+                NumeratorOwner::Vertex(_) => feynkit_graph::symbols::vertex_index(),
+                NumeratorOwner::Edge(_) => feynkit_graph::symbols::edge_index(),
+            }
+        }
+    }
+
+    fn momentum_symbol(&self) -> symbolica::atom::Symbol {
+        if self.frame == NumeratorFrame::Interaction {
+            symbol!("feynkit_generator_template::momentum")
+        } else {
+            momentum_symbol()
+        }
+    }
+
     // UFO `idx(shift, leg)` and `dummy(index)` values are local to one
     // propagator or interaction. Localize them before exposing the annotation
     // so equal endpoint indices contract and unrelated dummy indices cannot.
@@ -449,7 +483,10 @@ impl NumeratorInstantiation<'_> {
                             self.momentum(leg, Some(self.localize_index_argument(*index)?))?;
                         // The UFO all-incoming convention reverses momentum on
                         // the source half-edge of an interaction.
-                        if leg.flow == Flow::Source {
+                        if self.frame == NumeratorFrame::Interaction {
+                            symbol!("feynkit_generator_template::orientation").call((leg.edge,))
+                                * momentum
+                        } else if leg.flow == Flow::Source {
                             -momentum
                         } else {
                             momentum
@@ -673,7 +710,7 @@ impl NumeratorInstantiation<'_> {
             let AtomView::Fun(function) = term else {
                 return;
             };
-            if function.get_symbol() != momentum_symbol() || function.get_nargs() != 2 {
+            if function.get_symbol() != self.momentum_symbol() || function.get_nargs() != 2 {
                 return;
             }
             let mut arguments = function.iter();
@@ -682,7 +719,7 @@ impl NumeratorInstantiation<'_> {
             if Self::is_representation(index, "mink") {
                 return;
             }
-            **out = FunctionBuilder::new(momentum_symbol())
+            **out = FunctionBuilder::new(self.momentum_symbol())
                 .add_arg(edge)
                 .add_arg(self.minkowski(index.to_owned()))
                 .finish();
@@ -699,10 +736,7 @@ impl NumeratorInstantiation<'_> {
                 Ok(sum + self.lower_color(term.to_owned())?)
             });
         }
-        let dummy_symbol = match self.owner {
-            NumeratorOwner::Vertex(_) => feynkit_graph::symbols::vertex_index(),
-            NumeratorOwner::Edge(_) => feynkit_graph::symbols::edge_index(),
-        };
+        let dummy_symbol = self.dummy_symbol();
         // Contract identities touching a local dummy before assigning oriented
         // slots. Each step removes one identity, including chains of identities;
         // the remaining tensors or external legs determine its representation.
@@ -1045,10 +1079,7 @@ impl NumeratorInstantiation<'_> {
             let AtomView::Fun(function) = term else {
                 return;
             };
-            let expected = match self.owner {
-                NumeratorOwner::Vertex(_) => feynkit_graph::symbols::vertex_index(),
-                NumeratorOwner::Edge(_) => feynkit_graph::symbols::edge_index(),
-            };
+            let expected = self.dummy_symbol();
             if function.get_symbol() != expected || function.get_nargs() != 2 {
                 return;
             }
@@ -1083,10 +1114,10 @@ impl NumeratorInstantiation<'_> {
         let AtomView::Fun(function) = momentum else {
             return Err(self.invalid_tensor(momentum, "expected a localized momentum"));
         };
-        if function.get_symbol() != momentum_symbol() || function.get_nargs() != 1 {
+        if function.get_symbol() != self.momentum_symbol() || function.get_nargs() != 1 {
             return Err(self.invalid_tensor(momentum, "expected a rank-one localized momentum"));
         }
-        Ok(FunctionBuilder::new(momentum_symbol())
+        Ok(FunctionBuilder::new(self.momentum_symbol())
             .add_arg(function.iter().next().expect("the arity was checked"))
             .add_arg(index)
             .finish())
@@ -1118,7 +1149,7 @@ impl NumeratorInstantiation<'_> {
     ) -> Result<(), GenerationError> {
         let key = Self::index_key(index);
         let local_dummy = matches!(index, AtomView::Fun(function)
-            if [feynkit_graph::symbols::vertex_index(), feynkit_graph::symbols::edge_index()]
+            if [feynkit_graph::symbols::vertex_index(), feynkit_graph::symbols::edge_index(), self.dummy_symbol()]
                 .contains(&function.get_symbol()));
         match representations.insert(key, representation) {
             // A contracted fundamental index joins dual slots. External ports
@@ -1298,7 +1329,12 @@ impl NumeratorInstantiation<'_> {
     fn index(&self, leg: NumeratorHalfEdge, shift: i64) -> Result<Atom, GenerationError> {
         let hedge = i64::try_from(leg.hedge)
             .map_err(|_| GenerationError::ArithmeticOverflow("a symbolic half-edge identifier"))?;
-        Ok(feynkit_graph::symbols::hedge_index().call((hedge, shift)))
+        let symbol = if self.frame == NumeratorFrame::Interaction {
+            symbol!("feynkit_generator_template::hedge")
+        } else {
+            feynkit_graph::symbols::hedge_index()
+        };
+        Ok(symbol.call((hedge, shift)))
     }
 
     fn dummy(&self, local: usize) -> Result<Atom, GenerationError> {
@@ -1310,7 +1346,11 @@ impl NumeratorInstantiation<'_> {
             .map_err(|_| GenerationError::ArithmeticOverflow("a symbolic numerator owner"))?;
         let local = i64::try_from(local)
             .map_err(|_| GenerationError::ArithmeticOverflow("a symbolic dummy index"))?;
-        Ok(symbol.call((owner, local)))
+        if self.frame == NumeratorFrame::Interaction {
+            Ok(self.dummy_symbol().call((0, local)))
+        } else {
+            Ok(symbol.call((owner, local)))
+        }
     }
 
     fn momentum(
@@ -1320,11 +1360,67 @@ impl NumeratorInstantiation<'_> {
     ) -> Result<Atom, GenerationError> {
         let edge = i64::try_from(leg.edge)
             .map_err(|_| GenerationError::ArithmeticOverflow("a symbolic edge identifier"))?;
-        let mut momentum = FunctionBuilder::new(momentum_symbol()).add_arg(edge);
+        let mut momentum = FunctionBuilder::new(self.momentum_symbol()).add_arg(edge);
         if let Some(index) = index {
             momentum = momentum.add_arg(index);
         }
         Ok(momentum.finish())
+    }
+
+    /// Assign private rule slots to the finalized graph. Keep indices before
+    /// carriers: replacing a carrier skips its arguments in a top-down walk.
+    /// Half-edge slots stay distinct even when two momenta bind to a self-loop.
+    fn bind_interaction(&self, expression: &Atom) -> Result<Atom, GenerationError> {
+        let mut atom = expression.clone();
+        let mut error = None;
+        for carriers in [false, true] {
+            atom = atom.replace_map(|term, _, out| {
+                if error.is_some() {
+                    return;
+                }
+                let AtomView::Fun(function) = term else {
+                    return;
+                };
+                let head = function.get_symbol();
+                if head.get_namespace() != "feynkit_generator_template" {
+                    return;
+                }
+                let name = head.get_stripped_name();
+                if matches!(name, "momentum" | "orientation") != carriers {
+                    return;
+                }
+                let mut arguments = function.iter();
+                let slot = usize::try_from(arguments.next().expect("compiled local slot"))
+                    .expect("compiled local slot is nonnegative");
+                let value = match name {
+                    "hedge" => {
+                        let shift = i64::try_from(arguments.next().expect("compiled index shift"))
+                            .expect("compiled index shift is integral");
+                        self.index(self.legs[slot], shift)
+                    }
+                    "dummy" => {
+                        let local = usize::try_from(arguments.next().expect("compiled dummy"))
+                            .expect("compiled dummy is nonnegative");
+                        self.dummy(local)
+                    }
+                    "momentum" => self.momentum(
+                        self.legs[slot],
+                        arguments.next().map(|index| index.to_owned()),
+                    ),
+                    "orientation" => Ok(if self.legs[slot].flow == Flow::Source {
+                        -Atom::one()
+                    } else {
+                        Atom::one()
+                    }),
+                    _ => unreachable!("private interaction template head"),
+                };
+                match value {
+                    Ok(value) => **out = value,
+                    Err(failure) => error = Some(failure),
+                }
+            });
+        }
+        error.map_or(Ok(atom), Err)
     }
 
     fn invalid_index(&self, index: AtomView<'_>) -> GenerationError {
@@ -1339,6 +1435,162 @@ impl NumeratorInstantiation<'_> {
             && (symbol.get_namespace() == "feynkit_generator_numerator"
                 || symbol.get_namespace() == "UFO"
                 || symbol.get_namespace().starts_with("UFO::"))
+    }
+}
+
+/// A rule's representation data is independent of graph positions and momentum flow.
+#[derive(PartialEq, Eq, Hash)]
+struct InteractionRuleKey {
+    rule: VertexRuleId,
+    colors: Vec<i64>,
+}
+
+/// Most UFO factors can be lowered before assigning graph indices. Slash dummy
+/// allocation and dummy identity contraction must instead see the concrete
+/// canonical expression order. Already graph-owned input has the same requirement.
+enum InteractionFactor {
+    Local(Atom),
+    Deferred(Atom, NumeratorSector),
+}
+
+impl InteractionFactor {
+    fn compile(
+        expression: &Atom,
+        sector: NumeratorSector,
+        local: &NumeratorInstantiation<'_>,
+    ) -> Self {
+        let mut concrete = false;
+        let mut identity = false;
+        let mut dummy = false;
+        expression.visitor(&mut |term| {
+            dummy |= i64::try_from(term).is_ok_and(|index| index < 0);
+            if let AtomView::Fun(function) = term {
+                let head = function.get_symbol();
+                let name = head.get_stripped_name();
+                concrete |= [
+                    feynkit_graph::symbols::hedge_index(),
+                    feynkit_graph::symbols::vertex_index(),
+                    feynkit_graph::symbols::edge_index(),
+                    momentum_symbol(),
+                ]
+                .contains(&head)
+                    || head.get_namespace() == "feynkit_generator_template";
+                if NumeratorInstantiation::is_model_symbol(head, name) {
+                    concrete |= name == "PSlash"
+                        || (sector == NumeratorSector::Color && matches!(name, "P" | "Slash"));
+                    identity |= name == "Identity";
+                    dummy |= name == "dummy";
+                }
+            }
+            true
+        });
+        concrete |= sector == NumeratorSector::Color && identity && dummy;
+        if !concrete {
+            // A malformed local factor can disappear after concrete momenta
+            // coincide. Keep its validation at that concrete boundary too.
+            if let Ok(atom) = local.instantiate(expression, sector) {
+                return Self::Local(atom);
+            }
+        }
+        Self::Deferred(expression.clone(), sector)
+    }
+
+    fn instantiate(&self, frame: &NumeratorInstantiation<'_>) -> Result<Atom, GenerationError> {
+        match self {
+            Self::Local(atom) => frame.bind_interaction(atom),
+            Self::Deferred(atom, sector) => frame.instantiate(atom, *sector),
+        }
+    }
+}
+
+struct InteractionTerm {
+    coupling: Atom,
+    color: InteractionFactor,
+    lorentz: InteractionFactor,
+}
+
+enum CompiledInteraction {
+    Local(Atom),
+    Mixed(Vec<InteractionTerm>),
+}
+
+impl CompiledInteraction {
+    fn new(
+        model: &Model,
+        rule_id: VertexRuleId,
+        frame: &NumeratorInstantiation<'_>,
+    ) -> Result<Self, GenerationError> {
+        let rule = model.vertex_rule_by_id(rule_id)?;
+        let legs = frame
+            .legs
+            .iter()
+            .enumerate()
+            .map(|(slot, leg)| NumeratorHalfEdge {
+                edge: slot,
+                hedge: slot,
+                ..*leg
+            })
+            .collect::<Vec<_>>();
+        let local = NumeratorInstantiation {
+            owner: frame.owner,
+            legs: &legs,
+            frame: NumeratorFrame::Interaction,
+        };
+        let mut terms = Vec::new();
+        for (color_index, color) in rule.color_structures.iter().enumerate() {
+            for (lorentz_index, lorentz_id) in rule.lorentz_structures.iter().enumerate() {
+                let Some(coupling) = rule
+                    .couplings
+                    .get(color_index)
+                    .and_then(|row| row.get(lorentz_index))
+                    .and_then(Option::as_ref)
+                else {
+                    continue;
+                };
+                let coupling = model.coupling_by_id(*coupling)?;
+                let coupling = Atom::var(symbol!(&format!("UFO::{}", coupling.name)));
+                let lorentz = &model.lorentz_structure_by_id(*lorentz_id)?.structure;
+                terms.push(InteractionTerm {
+                    coupling,
+                    color: InteractionFactor::compile(color, NumeratorSector::Color, &local),
+                    lorentz: InteractionFactor::compile(lorentz, NumeratorSector::Spin, &local),
+                });
+            }
+        }
+        if terms.is_empty() {
+            return Ok(Self::Local(Atom::one()));
+        }
+        if terms.iter().all(|term| {
+            matches!(term.color, InteractionFactor::Local(_))
+                && matches!(term.lorentz, InteractionFactor::Local(_))
+        }) {
+            Ok(Self::Local(Atom::add_many(terms.into_iter().map(|term| {
+                let InteractionFactor::Local(color) = term.color else {
+                    unreachable!()
+                };
+                let InteractionFactor::Local(lorentz) = term.lorentz else {
+                    unreachable!()
+                };
+                term.coupling * color * lorentz
+            }))))
+        } else {
+            Ok(Self::Mixed(terms))
+        }
+    }
+
+    fn instantiate(&self, frame: &NumeratorInstantiation<'_>) -> Result<Atom, GenerationError> {
+        match self {
+            Self::Local(atom) => frame.bind_interaction(atom),
+            Self::Mixed(terms) => {
+                let mut instantiated = Vec::with_capacity(terms.len());
+                for term in terms {
+                    let color = term.color.instantiate(frame)?;
+                    let lorentz = term.lorentz.instantiate(frame)?;
+                    instantiated.push(&term.coupling * color * lorentz);
+                }
+                Ok(Atom::add_many(instantiated))
+            }
+        }
     }
 }
 
@@ -1362,7 +1614,9 @@ pub(crate) struct Generator {
 /// not on the rest of the diagram. Keep them for this generator's lifetime.
 #[derive(Default)]
 struct NumeratorCache {
+    // An exact frame hit also avoids binding the compiled rule again.
     interactions: RwLock<HashMap<InteractionNumeratorKey, Atom>>,
+    interaction_rules: RwLock<HashMap<InteractionRuleKey, Arc<CompiledInteraction>>>,
     propagators: RwLock<HashMap<PropagatorNumeratorKey, Atom>>,
     /// Automatic projectors by the finalized position of every external state. Finalization
     /// numbers the external legs first, so all diagrams of an amplitude share one entry. A cross
@@ -1371,18 +1625,18 @@ struct NumeratorCache {
     projectors: RwLock<HashMap<Vec<ExternalStatePosition>, Atom>>,
 }
 
-/// The atom cached under `key`, computed and stored on first use.
-fn memoised<K: Eq + Hash>(
-    cache: &RwLock<HashMap<K, Atom>>,
+/// The value cached under `key`, computed and stored on first use.
+fn memoised<K: Eq + Hash, V: Clone>(
+    cache: &RwLock<HashMap<K, V>>,
     key: K,
-    compute: impl FnOnce(&K) -> Result<Atom, GenerationError>,
-) -> Result<Atom, GenerationError> {
-    if let Some(atom) = cache.read().unwrap().get(&key) {
-        return Ok(atom.clone());
+    compute: impl FnOnce(&K) -> Result<V, GenerationError>,
+) -> Result<V, GenerationError> {
+    if let Some(value) = cache.read().unwrap().get(&key) {
+        return Ok(value.clone());
     }
-    let atom = compute(&key)?;
-    cache.write().unwrap().insert(key, atom.clone());
-    Ok(atom)
+    let value = compute(&key)?;
+    cache.write().unwrap().insert(key, value.clone());
+    Ok(value)
 }
 
 /// An external state at its position in a diagram: the edge that carries it and the half-edge
@@ -2457,10 +2711,8 @@ impl Generator {
                 .into_iter()
                 .map(|leg| leg.expect("assigned interaction slot"))
                 .collect::<Vec<_>>();
-            let instantiation = NumeratorInstantiation {
-                owner: NumeratorOwner::Vertex(vertex.0),
-                legs: &legs,
-            };
+            let instantiation =
+                NumeratorInstantiation::new(NumeratorOwner::Vertex(vertex.0), &legs);
             vertices.push((
                 VertexId(vertex.0),
                 self.interaction_numerator(rule_id, &instantiation)?,
@@ -2631,30 +2883,14 @@ impl Generator {
             legs: instantiation.legs.to_vec(),
         };
         memoised(&self.numerators.interactions, key, |_| {
-            let rule = self.model.vertex_rule_by_id(rule_id)?;
-            let mut terms = Vec::new();
-            for (color_index, color) in rule.color_structures.iter().enumerate() {
-                for (lorentz_index, lorentz_name) in rule.lorentz_structures.iter().enumerate() {
-                    if let Some(coupling) = rule
-                        .couplings
-                        .get(color_index)
-                        .and_then(|row| row.get(lorentz_index))
-                        .and_then(Option::as_ref)
-                    {
-                        let coupling = self.model.coupling_by_id(*coupling)?;
-                        let coupling = Atom::var(symbol!(&format!("UFO::{}", coupling.name)));
-                        let lorentz = &self.model.lorentz_structure_by_id(*lorentz_name)?.structure;
-                        let color = instantiation.instantiate(color, NumeratorSector::Color)?;
-                        let lorentz = instantiation.instantiate(lorentz, NumeratorSector::Spin)?;
-                        terms.push(coupling * color * lorentz);
-                    }
-                }
-            }
-            Ok(if terms.is_empty() {
-                Atom::one()
-            } else {
-                Atom::add_many(terms)
-            })
+            let rule_key = InteractionRuleKey {
+                rule: rule_id,
+                colors: instantiation.legs.iter().map(|leg| leg.color).collect(),
+            };
+            let rule = memoised(&self.numerators.interaction_rules, rule_key, |_| {
+                CompiledInteraction::new(&self.model, rule_id, instantiation).map(Arc::new)
+            })?;
+            rule.instantiate(instantiation)
         })
     }
 
@@ -2684,10 +2920,7 @@ impl Generator {
                 spin: particle.spin,
                 color: particle.color,
             });
-            let instantiation = NumeratorInstantiation {
-                owner: NumeratorOwner::Edge(edge),
-                legs: &legs,
-            };
+            let instantiation = NumeratorInstantiation::new(NumeratorOwner::Edge(edge), &legs);
             let spin = instantiation.instantiate(&propagator, NumeratorSector::Spin)?;
             Ok(match instantiation.edge_color_identity(particle.color)? {
                 None => spin,
@@ -6128,12 +6361,9 @@ mod tests {
                 color: 1,
             },
         ];
-        let localized = NumeratorInstantiation {
-            owner: NumeratorOwner::Edge(internal_edge),
-            legs: &legs,
-        }
-        .instantiate(&propagator, NumeratorSector::Spin)
-        .unwrap();
+        let localized = NumeratorInstantiation::new(NumeratorOwner::Edge(internal_edge), &legs)
+            .instantiate(&propagator, NumeratorSector::Spin)
+            .unwrap();
         assert_eq!(function_count(&localized, symbol!("gammalooprs::Q")), 1);
     }
 
@@ -6321,12 +6551,9 @@ mod tests {
                 spin: 2,
                 color: 1,
             });
-            NumeratorInstantiation {
-                owner: NumeratorOwner::Edge(0),
-                legs: &legs,
-            }
-            .instantiate(propagator, NumeratorSector::Spin)
-            .unwrap()
+            NumeratorInstantiation::new(NumeratorOwner::Edge(0), &legs)
+                .instantiate(propagator, NumeratorSector::Spin)
+                .unwrap()
         };
         let native = |expression: Atom| {
             let source = diagram
@@ -6422,15 +6649,281 @@ mod tests {
         );
     }
 
+    fn concrete_interaction_numerator(
+        model: &Model,
+        rule: VertexRuleId,
+        frame: &NumeratorInstantiation<'_>,
+    ) -> Result<Atom, GenerationError> {
+        let rule = model.vertex_rule_by_id(rule)?;
+        let mut terms = Vec::new();
+        for (color_index, color) in rule.color_structures.iter().enumerate() {
+            for (lorentz_index, lorentz) in rule.lorentz_structures.iter().enumerate() {
+                if let Some(coupling) = rule
+                    .couplings
+                    .get(color_index)
+                    .and_then(|row| row.get(lorentz_index))
+                    .and_then(Option::as_ref)
+                {
+                    let coupling = model.coupling_by_id(*coupling)?;
+                    let coupling = Atom::var(symbol!(&format!("UFO::{}", coupling.name)));
+                    let lorentz = &model.lorentz_structure_by_id(*lorentz)?.structure;
+                    let color = frame.instantiate(color, NumeratorSector::Color)?;
+                    let lorentz = frame.instantiate(lorentz, NumeratorSector::Spin)?;
+                    terms.push(coupling * color * lorentz);
+                }
+            }
+        }
+        Ok(if terms.is_empty() {
+            Atom::one()
+        } else {
+            Atom::add_many(terms)
+        })
+    }
+
+    fn compile_test_factor(expression: &Atom, sector: NumeratorSector) -> InteractionFactor {
+        let legs = tensor_test_legs()
+            .into_iter()
+            .enumerate()
+            .map(|(slot, leg)| NumeratorHalfEdge {
+                edge: slot,
+                hedge: slot,
+                ..leg
+            })
+            .collect::<Vec<_>>();
+        InteractionFactor::compile(
+            expression,
+            sector,
+            &NumeratorInstantiation {
+                owner: NumeratorOwner::Vertex(0),
+                legs: &legs,
+                frame: NumeratorFrame::Interaction,
+            },
+        )
+    }
+
+    #[test]
+    fn compiled_interaction_slots_preserve_flow_and_self_loop_ports() {
+        let mut legs = tensor_test_legs();
+        // Sparse native hedge IDs are independent of edge IDs. Both ports of
+        // this loop have one momentum, but remain different tensor indices.
+        legs[0].edge = 512;
+        legs[1].edge = 512;
+        legs[0].hedge = 257;
+        legs[1].hedge = 65_536;
+        legs[2].edge = 255;
+        legs[2].hedge = 256;
+        let spin = test_atom("(P(3,1)-P(3,2))*Gamma(3,2,1)+P(3)+P()");
+        let color = test_atom("T(3,2,1)*f(3,-1,-2)*f(4,-2,-1)");
+        for (expression, sector) in [
+            (spin, NumeratorSector::Spin),
+            (color, NumeratorSector::Color),
+        ] {
+            let compiled = compile_test_factor(&expression, sector);
+            assert!(matches!(compiled, InteractionFactor::Local(_)));
+            for source in [true, false] {
+                legs[0].flow = if source { Flow::Source } else { Flow::Sink };
+                let frame = NumeratorInstantiation::new(NumeratorOwner::Vertex(65_537), &legs);
+                assert_eq!(
+                    compiled.instantiate(&frame).unwrap(),
+                    frame.instantiate(&expression, sector).unwrap()
+                );
+            }
+        }
+        let expression = test_atom("P(3,1)+P(3)");
+        let compiled = compile_test_factor(&expression, NumeratorSector::Spin);
+        legs[0].flow = Flow::Source;
+        let frame = NumeratorInstantiation::new(NumeratorOwner::Vertex(99), &legs);
+        assert_eq!(
+            compiled.instantiate(&frame).unwrap(),
+            Atom::Zero,
+            "only the explicitly selected momentum receives the incoming-flow sign"
+        );
+        let gamma = compile_test_factor(&test_atom("Gamma(3,2,1)"), NumeratorSector::Spin)
+            .instantiate(&frame)
+            .unwrap()
+            .to_plain_string();
+        assert!(gamma.contains("hedge(257,1)"));
+        assert!(gamma.contains("hedge(65536,1)"));
+    }
+
+    #[test]
+    fn interaction_templates_defer_concrete_walks_and_literal_owners() {
+        let mut legs = tensor_test_legs();
+        legs[0].edge = 257;
+        legs[1].edge = 512;
+        legs[0].hedge = 65_536;
+        legs[1].hedge = 256;
+        for (expression, sector) in [
+            (
+                "PSlash(1,2,1)+PSlash(1,2,2)+Metric(dummy(4),dummy(4))",
+                NumeratorSector::Spin,
+            ),
+            (
+                "Identity(1,-1)*Identity(-1,-2)*T(3,2,-2)",
+                NumeratorSector::Color,
+            ),
+            (
+                "Gamma(3,2,1)*gammalooprs::Q(257,spenso::mink(4,gammalooprs::vertex(7,4)))",
+                NumeratorSector::Spin,
+            ),
+            (
+                "gammalooprs::hedge(256,1)*gammalooprs::edge(512,1)",
+                NumeratorSector::Spin,
+            ),
+        ] {
+            let expression = test_atom(expression);
+            let compiled = compile_test_factor(&expression, sector);
+            assert!(matches!(compiled, InteractionFactor::Deferred(_, _)));
+            for owner in [7, 256, 65_536] {
+                let frame = NumeratorInstantiation::new(NumeratorOwner::Vertex(owner), &legs);
+                assert_eq!(
+                    compiled.instantiate(&frame).unwrap(),
+                    frame.instantiate(&expression, sector).unwrap()
+                );
+            }
+        }
+        // A momentum used as a color index can acquire a representation
+        // conflict only after the two self-loop carriers become equal.
+        let aliased_color = test_atom("T(-P(1,1),P(1,2),-1)");
+        let compiled = compile_test_factor(&aliased_color, NumeratorSector::Color);
+        assert!(matches!(compiled, InteractionFactor::Deferred(_, _)));
+        legs[1].edge = legs[0].edge;
+        let frame = NumeratorInstantiation::new(NumeratorOwner::Vertex(257), &legs);
+        assert_eq!(
+            compiled.instantiate(&frame).unwrap_err().to_string(),
+            frame
+                .instantiate(&aliased_color, NumeratorSector::Color)
+                .unwrap_err()
+                .to_string()
+        );
+        let cancelled_error = test_atom("C(1)*(P(3,1)+P(3))");
+        let compiled = compile_test_factor(&cancelled_error, NumeratorSector::Spin);
+        assert!(matches!(compiled, InteractionFactor::Deferred(_, _)));
+        legs[0].flow = Flow::Source;
+        let frame = NumeratorInstantiation::new(NumeratorOwner::Vertex(257), &legs);
+        assert_eq!(compiled.instantiate(&frame).unwrap(), Atom::Zero);
+        legs[0].flow = Flow::Sink;
+        let frame = NumeratorInstantiation::new(NumeratorOwner::Vertex(257), &legs);
+        assert_eq!(
+            compiled.instantiate(&frame).unwrap_err().to_string(),
+            frame
+                .instantiate(&cancelled_error, NumeratorSector::Spin)
+                .unwrap_err()
+                .to_string()
+        );
+        let malformed = test_atom("C(1)");
+        let compiled = compile_test_factor(&malformed, NumeratorSector::Spin);
+        let frame = NumeratorInstantiation::new(NumeratorOwner::Vertex(257), &legs);
+        assert_eq!(
+            compiled.instantiate(&frame).unwrap_err().to_string(),
+            frame
+                .instantiate(&malformed, NumeratorSector::Spin)
+                .unwrap_err()
+                .to_string()
+        );
+    }
+
+    #[test]
+    fn compiled_interactions_mix_required_operations_and_ignore_unused_factors() {
+        let mut definition: serde_json::Value =
+            serde_json::from_str(&fermion_model().to_json().unwrap()).unwrap();
+        definition["lorentz_structures"].as_array_mut().unwrap().extend([
+            serde_json::json!({"name":"FFSlash","spins":[2,2,3],"structure":"PSlash(2,1,1)+PSlash(2,1,2)"}),
+            serde_json::json!({"name":"Unused","spins":[2,2,3],"structure":"C(1)"}),
+        ]);
+        definition["vertex_rules"][0]["lorentz_structures"] =
+            serde_json::json!(["FFV", "FFSlash", "Unused"]);
+        definition["vertex_rules"][0]["couplings"] =
+            serde_json::json!([["GC_LOW", null, null], [null, "GC_HIGH", null]]);
+        let model = Model::from_json(&definition.to_string()).unwrap();
+        let generator = Generator::new(model.clone());
+        let rule = model.vertex_rule_id("V").unwrap();
+        let mut legs = tensor_test_legs();
+        let first = NumeratorInstantiation::new(NumeratorOwner::Vertex(0), &legs[..3]);
+        let compiled = CompiledInteraction::new(&model, rule, &first).unwrap();
+        assert!(matches!(compiled, CompiledInteraction::Mixed(_)));
+        for index in [1, 257, 65_536] {
+            for (slot, leg) in legs.iter_mut().enumerate() {
+                leg.edge = index + slot;
+                leg.hedge = index + 11 - slot;
+            }
+            let frame = NumeratorInstantiation::new(NumeratorOwner::Vertex(index), &legs[..3]);
+            assert_eq!(
+                generator.interaction_numerator(rule, &frame).unwrap(),
+                concrete_interaction_numerator(&model, rule, &frame).unwrap()
+            );
+        }
+        assert_eq!(
+            generator.numerators.interaction_rules.read().unwrap().len(),
+            1,
+            "graph positions and momentum flow do not create another compiled rule"
+        );
+    }
+
+    #[test]
+    fn compiled_standard_model_rules_match_concrete_numerators() {
+        let model = standard_model();
+        let generator = Generator::new(model.clone());
+        let mut compiled_count = 0;
+        for (rule_index, rule) in model.vertex_rules().iter().enumerate() {
+            let rule_id = model.vertex_rule_id_at(rule_index).unwrap();
+            let mut legs = rule
+                .particles
+                .iter()
+                .enumerate()
+                .map(|(slot, particle)| {
+                    let particle = model.particle_by_id(*particle).unwrap();
+                    NumeratorHalfEdge {
+                        edge: slot,
+                        hedge: slot,
+                        flow: Flow::Sink,
+                        spin: particle.spin,
+                        color: particle.color,
+                    }
+                })
+                .collect::<Vec<_>>();
+            let local = NumeratorInstantiation::new(NumeratorOwner::Vertex(0), &legs);
+            compiled_count += usize::from(matches!(
+                CompiledInteraction::new(&model, rule_id, &local).unwrap(),
+                CompiledInteraction::Local(_)
+            ));
+            for (owner, base, loops) in [(0, 0, false), (257, 255, false), (65_537, 65_536, true)] {
+                let count = legs.len();
+                for (slot, leg) in legs.iter_mut().enumerate() {
+                    leg.edge = base + if loops { slot / 2 } else { slot };
+                    leg.hedge = base + count - slot;
+                    leg.flow = if slot % 2 == 0 {
+                        Flow::Source
+                    } else {
+                        Flow::Sink
+                    };
+                }
+                let frame = NumeratorInstantiation::new(NumeratorOwner::Vertex(owner), &legs);
+                assert_eq!(
+                    generator.interaction_numerator(rule_id, &frame).unwrap(),
+                    concrete_interaction_numerator(&model, rule_id, &frame).unwrap(),
+                    "rule {} in owner {owner}, base {base}, loops {loops}",
+                    rule.name
+                );
+            }
+        }
+        assert_eq!(
+            compiled_count,
+            model.vertex_rules().len(),
+            "the standard-model rules have no graph-dependent lowering operations"
+        );
+        assert_eq!(
+            generator.numerators.interaction_rules.read().unwrap().len(),
+            model.vertex_rules().len()
+        );
+    }
+
     #[test]
     fn interaction_numerator_keeps_named_couplings_and_lowers_tensors() {
         let model = fermion_model();
         let generator = Generator::new(model.clone());
         let legs = tensor_test_legs();
-        let instantiation = NumeratorInstantiation {
-            owner: NumeratorOwner::Vertex(7),
-            legs: &legs[..3],
-        };
+        let instantiation = NumeratorInstantiation::new(NumeratorOwner::Vertex(7), &legs[..3]);
         let numerator = generator
             .interaction_numerator(model.vertex_rule_id("V").unwrap(), &instantiation)
             .unwrap();
@@ -6449,10 +6942,7 @@ mod tests {
     #[test]
     fn lowers_ufo_lorentz_tensors_to_spenso_structures() {
         let legs = tensor_test_legs();
-        let instantiation = NumeratorInstantiation {
-            owner: NumeratorOwner::Vertex(7),
-            legs: &legs,
-        };
+        let instantiation = NumeratorInstantiation::new(NumeratorOwner::Vertex(7), &legs);
         let gamma = instantiation
             .instantiate(&test_atom("Gamma(3,2,1)"), NumeratorSector::Spin)
             .unwrap();
@@ -6490,10 +6980,7 @@ mod tests {
         use spenso::structure::abstract_index::AbstractIndex;
 
         let legs = tensor_test_legs();
-        let instantiation = NumeratorInstantiation {
-            owner: NumeratorOwner::Edge(30),
-            legs: &legs[2..],
-        };
+        let instantiation = NumeratorInstantiation::new(NumeratorOwner::Edge(30), &legs[2..]);
         let numerator = instantiation
             .instantiate(
                 &test_atom(
@@ -6530,10 +7017,7 @@ mod tests {
     #[test]
     fn lowers_ufo_charge_conjugation_and_rejects_invalid_arity() {
         let legs = tensor_test_legs();
-        let instantiation = NumeratorInstantiation {
-            owner: NumeratorOwner::Vertex(7),
-            legs: &legs,
-        };
+        let instantiation = NumeratorInstantiation::new(NumeratorOwner::Vertex(7), &legs);
         let charge_conjugation = instantiation
             .instantiate(&test_atom("C(1,2)"), NumeratorSector::Spin)
             .unwrap();
@@ -6565,10 +7049,7 @@ mod tests {
     #[test]
     fn lowers_ufo_color_tensors_with_dual_representations() {
         let legs = tensor_test_legs();
-        let instantiation = NumeratorInstantiation {
-            owner: NumeratorOwner::Vertex(7),
-            legs: &legs,
-        };
+        let instantiation = NumeratorInstantiation::new(NumeratorOwner::Vertex(7), &legs);
         let tensors = instantiation
             .instantiate(
                 &test_atom("Identity(1,2)*T(3,2,1)*f(3,-1,-2)"),
@@ -6599,10 +7080,7 @@ mod tests {
                 color: 3,
             },
         ];
-        let instantiation = NumeratorInstantiation {
-            owner: NumeratorOwner::Edge(5),
-            legs: &legs,
-        };
+        let instantiation = NumeratorInstantiation::new(NumeratorOwner::Edge(5), &legs);
         let slash = instantiation
             .instantiate(
                 &test_atom("PSlash(2,1)*Metric(dummy(4),dummy(4))"),
@@ -6648,10 +7126,7 @@ mod tests {
             spin: 1,
             color: 8,
         });
-        let instantiation = NumeratorInstantiation {
-            owner: NumeratorOwner::Vertex(0),
-            legs: &legs,
-        };
+        let instantiation = NumeratorInstantiation::new(NumeratorOwner::Vertex(0), &legs);
         let tensor = instantiation
             .instantiate(&test_atom("d(1,2,3)"), NumeratorSector::Color)
             .unwrap();
@@ -6687,10 +7162,7 @@ mod tests {
             Atom::Zero
         );
         legs[0].color = 3;
-        let incompatible = NumeratorInstantiation {
-            owner: NumeratorOwner::Vertex(0),
-            legs: &legs,
-        };
+        let incompatible = NumeratorInstantiation::new(NumeratorOwner::Vertex(0), &legs);
         assert!(
             incompatible
                 .instantiate(&test_atom("d(1,2,3)"), NumeratorSector::Color)
@@ -6723,10 +7195,7 @@ mod tests {
                 spin: 1,
                 color,
             });
-            let instantiation = NumeratorInstantiation {
-                owner: NumeratorOwner::Vertex(0),
-                legs: &legs,
-            };
+            let instantiation = NumeratorInstantiation::new(NumeratorOwner::Vertex(0), &legs);
             let tensor = instantiation
                 .instantiate(
                     &test_atom(&format!("{name}(1,2,3)")),
@@ -6775,10 +7244,7 @@ mod tests {
                 .unwrap();
             assert_eq!(sum, Atom::num(2) * tensor);
         }
-        let closed = NumeratorInstantiation {
-            owner: NumeratorOwner::Vertex(3),
-            legs: &[],
-        };
+        let closed = NumeratorInstantiation::new(NumeratorOwner::Vertex(3), &[]);
         assert_eq!(
             simplify(
                 closed
@@ -6813,10 +7279,7 @@ mod tests {
             spin: 1,
             color: 8,
         });
-        let instantiation = NumeratorInstantiation {
-            owner: NumeratorOwner::Vertex(2),
-            legs: &legs,
-        };
+        let instantiation = NumeratorInstantiation::new(NumeratorOwner::Vertex(2), &legs);
         let trace = instantiation
             .instantiate(&test_atom("T(1,-1,-2)*T(2,-2,-1)"), NumeratorSector::Color)
             .unwrap();
@@ -6867,10 +7330,7 @@ mod tests {
                 color: 1,
             },
         ];
-        let instantiation = NumeratorInstantiation {
-            owner: NumeratorOwner::Vertex(9),
-            legs: &legs,
-        };
+        let instantiation = NumeratorInstantiation::new(NumeratorOwner::Vertex(9), &legs);
         let numerator = generator
             .interaction_numerator(model.vertex_rule_id("V_78").unwrap(), &instantiation)
             .unwrap();
@@ -7212,10 +7672,7 @@ mod tests {
         let expected = generator
             .interaction_numerator(
                 rule,
-                &NumeratorInstantiation {
-                    owner: NumeratorOwner::Vertex(interaction.0),
-                    legs: &legs,
-                },
+                &NumeratorInstantiation::new(NumeratorOwner::Vertex(interaction.0), &legs),
             )
             .unwrap();
         let diagram = diagram.apply_feynman_rules().unwrap();
