@@ -267,14 +267,21 @@ impl fmt::Display for CompilationMode {
     }
 }
 
-#[derive(
-    Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq, Eq, JsonSchema, Default,
-)]
+#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq, Eq, JsonSchema)]
 #[cfg_attr(feature = "python", pyo3::pyclass(from_py_object, get_all, set_all))]
 #[serde(default, deny_unknown_fields)]
-pub struct ExternalCompilationOptionsSnapshot {
+pub struct CompilationOptionsSnapshot {
+    /// Optimization level for the evaluator compiler. Indirect JIT translation caps it
+    /// at O2; direct JIT translation always uses O2, regardless of this setting.
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub optimization_level: CompilationOptimizationLevel,
+    /// Skip Symbolica's tree-based analysis by translating instructions directly to SymJIT IR.
+    /// Enabled by default to reduce JIT preparation work; disable to use the tree-based
+    /// translator when comparing or diagnosing backend behavior. Also applies when JIT
+    /// is the fallback for external artifacts. Direct translation always uses SymJIT O2,
+    /// regardless of `optimization_level`; disable it to use JIT O0 or O1.
+    #[serde(skip_serializing_if = "is_true")]
+    pub jit_direct_translation: bool,
     #[serde(skip_serializing_if = "is_true")]
     pub fast_math: bool,
     #[serde(skip_serializing_if = "is_true")]
@@ -285,7 +292,13 @@ pub struct ExternalCompilationOptionsSnapshot {
     pub custom: Vec<String>,
 }
 
-impl fmt::Display for ExternalCompilationOptionsSnapshot {
+impl Default for CompilationOptionsSnapshot {
+    fn default() -> Self {
+        GammaloopCompileOptions::default().options_snapshot()
+    }
+}
+
+impl fmt::Display for CompilationOptionsSnapshot {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
@@ -306,9 +319,9 @@ impl fmt::Display for ExternalCompilationOptionsSnapshot {
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq, Eq, JsonSchema)]
 pub enum FrozenCompilationMode {
     Eager,
-    Symjit(CompilationOptimizationLevel),
-    Cpp(ExternalCompilationOptionsSnapshot),
-    Assembly(ExternalCompilationOptionsSnapshot),
+    Symjit(CompilationOptionsSnapshot),
+    Cpp(CompilationOptionsSnapshot),
+    Assembly(CompilationOptionsSnapshot),
 }
 
 impl FrozenCompilationMode {
@@ -325,7 +338,7 @@ impl FrozenCompilationMode {
         }
     }
 
-    pub fn external_options(&self) -> Option<&ExternalCompilationOptionsSnapshot> {
+    pub fn external_options(&self) -> Option<&CompilationOptionsSnapshot> {
         match self {
             FrozenCompilationMode::Cpp(options) | FrozenCompilationMode::Assembly(options) => {
                 Some(options)
@@ -367,7 +380,11 @@ impl fmt::Display for FrozenCompilationMode {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             FrozenCompilationMode::Eager => f.write_str("eager"),
-            FrozenCompilationMode::Symjit(level) => write!(f, "symjit ({level})"),
+            FrozenCompilationMode::Symjit(options) => write!(
+                f,
+                "symjit ({}, jit_direct_translation={})",
+                options.optimization_level, options.jit_direct_translation,
+            ),
             FrozenCompilationMode::Cpp(options) => write!(f, "c++ ({options})"),
             FrozenCompilationMode::Assembly(options) => write!(f, "assembly ({options})"),
         }
@@ -382,9 +399,18 @@ pub struct GammaloopCompileOptions {
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub compilation_mode: CompilationMode,
 
-    /// Optimization level passed to the selected evaluator compiler.
+    /// Optimization level for the evaluator compiler. Indirect JIT translation caps it
+    /// at O2; direct JIT translation always uses O2, regardless of this setting.
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub optimization_level: CompilationOptimizationLevel,
+
+    /// Skip Symbolica's tree-based analysis by translating instructions directly to SymJIT IR.
+    /// Enabled by default to reduce JIT preparation work; disable to use the tree-based
+    /// translator when comparing or diagnosing backend behavior. Also applies when JIT
+    /// is the fallback for external artifacts. Direct translation always uses SymJIT O2,
+    /// regardless of `optimization_level`; disable it to use JIT O0 or O1.
+    #[serde(skip_serializing_if = "is_true")]
+    pub jit_direct_translation: bool,
 
     /// Permit algebraic floating-point transformations that ignore strict IEEE ordering.
     #[serde(skip_serializing_if = "is_true")]
@@ -407,6 +433,7 @@ impl Default for GammaloopCompileOptions {
         Self {
             compilation_mode: CompilationMode::Symjit,
             optimization_level: CompilationOptimizationLevel::O2,
+            jit_direct_translation: true,
             fast_math: true,
             unsafe_math: true,
             compiler: default_external_compiler_owned(),
@@ -416,9 +443,10 @@ impl Default for GammaloopCompileOptions {
 }
 
 impl GammaloopCompileOptions {
-    pub fn external_options_snapshot(&self) -> ExternalCompilationOptionsSnapshot {
-        ExternalCompilationOptionsSnapshot {
+    pub fn options_snapshot(&self) -> CompilationOptionsSnapshot {
+        CompilationOptionsSnapshot {
             optimization_level: self.optimization_level,
+            jit_direct_translation: self.jit_direct_translation,
             fast_math: self.fast_math,
             unsafe_math: self.unsafe_math,
             compiler: self.compiler.clone(),
@@ -438,12 +466,11 @@ impl GammaloopCompileOptions {
             return FrozenCompilationMode::Eager;
         }
 
+        let options = self.options_snapshot();
         match self.compilation_mode {
-            CompilationMode::Cpp => FrozenCompilationMode::Cpp(self.external_options_snapshot()),
-            CompilationMode::Assembly => {
-                FrozenCompilationMode::Assembly(self.external_options_snapshot())
-            }
-            CompilationMode::Symjit => FrozenCompilationMode::Symjit(self.optimization_level),
+            CompilationMode::Cpp => FrozenCompilationMode::Cpp(options),
+            CompilationMode::Assembly => FrozenCompilationMode::Assembly(options),
+            CompilationMode::Symjit => FrozenCompilationMode::Symjit(options),
         }
     }
 
