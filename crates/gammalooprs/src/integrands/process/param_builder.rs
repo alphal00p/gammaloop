@@ -2011,14 +2011,18 @@ mod tests {
             };
             // Both chemical-potential metadata and its absence use only the
             // ordinary order-zero function at zero temperature.
+            // Every order is registered once per contour offset.
             for edge in graph.iter_edge_ids() {
                 assert_eq!(
                     calls
                         .iter()
                         .filter(|call| call.edge == edge)
-                        .map(|call| call.derivative_order)
+                        .map(|call| (call.derivative_order, call.thermal_sign.clone()))
                         .collect_vec(),
-                    expected_orders,
+                    expected_orders
+                        .iter()
+                        .flat_map(|&order| [-1, 0, 1].map(|contour| (order, Atom::num(contour))))
+                        .collect_vec(),
                 );
             }
             graph.set_medium_mode(mode).unwrap();
@@ -2183,6 +2187,206 @@ mod tests {
                 .unwrap()
                 .map_coeff(&|coefficient| coefficient.re.to_f64());
             assert_eq!(evaluator.evaluate_single(&[1.25]), 0.25);
+        }
+    }
+
+    /// Production evaluators must stay within rounding of an Arb oracle from the
+    /// bulk to occupations near binary64 underflow. This needs occupations free of
+    /// cancellation, a vacuum constant cancelled symbolically and contour offsets
+    /// folded into each body. At zero temperature, weights outside the Fermi sea
+    /// must vanish exactly.
+    #[test]
+    fn vacuum_subtracted_thermal_weights_keep_uv_tails_and_exact_zeros() {
+        use three_dimensional_reps::{
+            ThermalDistributionFactor,
+            thermal::{ThermalNumerator, ThermalWeight, VACUUM_SUBTRACTION},
+        };
+
+        use symbolica::evaluate::OptimizationSettings;
+
+        use crate::{
+            integrands::process::{GenericEvaluator, GenericEvaluatorFloat},
+            processes::EvaluatorSettings,
+            settings::global::GammaloopCompileOptions,
+            utils::f128,
+        };
+
+        test_initialise().unwrap();
+        let mut graph: Graph = dot!(digraph thermal_sunrise {
+            node [num=1]
+            edge [num=1]
+            A -> B [particle="d"]
+            B -> A [particle="d"]
+            A -> B [particle="g"]
+        })
+        .unwrap();
+        // Order the edges as quark, quark, gluon; DOT import assigns the indices.
+        let mut edges = graph.iter_edge_ids().collect_vec();
+        edges.sort_by_key(|&edge| !graph[edge].is_fermion());
+        let edges: [EdgeIndex; 3] = edges.try_into().unwrap();
+        assert!(graph[edges[2]].chemical_potential_atom().is_none());
+        let orientations = [1, -1, 1];
+        let params = edges
+            .map(|edge| GS.ose(edge))
+            .into_iter()
+            .chain([
+                Atom::var(GS.inverse_temperature),
+                graph[edges[0]].chemical_potential_atom().unwrap(),
+            ])
+            .collect_vec();
+        // With beta = 2, edge e has a = E - sigma*mu = scale * shifts[e], so its
+        // occupation is about exp(-2a); the largest one stays a normal binary64.
+        let (beta, mu) = (2.0, 0.5);
+        let shifts = [1.0, 1.05, 1.1];
+        let scales = [0.5, 2.0, 5.0, 10.0, 20.0, 40.0, 80.0, 160.0, 300.0];
+        let inputs = |shifted: [f64; 3]| {
+            let mut input = (0..3)
+                .map(|e| {
+                    let chemical_shift = if e < 2 {
+                        f64::from(orientations[e]) * mu
+                    } else {
+                        0.0
+                    };
+                    shifted[e] + chemical_shift
+                })
+                .collect_vec();
+            input.extend([beta, mu]);
+            input
+        };
+        for medium_mode in [
+            MediumMode::ThermodynamicEquilibrium,
+            MediumMode::ZeroTemperatureEquilibrium,
+        ] {
+            graph.set_medium_mode(medium_mode).unwrap();
+            // Both weights have a nonzero vacuum value, so their vacuum-subtracted
+            // forms are exponentially small once every occupation is.
+            let expressions = [
+                ThermalWeight {
+                    medium_mode,
+                    numerators: vec![ThermalNumerator {
+                        positive_energies: edges.to_vec(),
+                        negative_energies: vec![],
+                    }],
+                    distributions: vec![],
+                },
+                ThermalWeight {
+                    medium_mode,
+                    numerators: vec![ThermalNumerator {
+                        positive_energies: vec![edges[0], edges[1]],
+                        negative_energies: vec![],
+                    }],
+                    distributions: vec![ThermalDistributionFactor {
+                        edge_id: edges[2],
+                        sign: 0,
+                        derivative_order: 0,
+                    }],
+                },
+            ]
+            .map(|weight| {
+                edges.into_iter().zip(orientations).fold(
+                    weight.to_atom().replace_multiple(&*VACUUM_SUBTRACTION),
+                    |atom, (edge, orientation)| {
+                        atom.replace(GS.sign(edge)).with(Atom::num(orientation))
+                    },
+                )
+            });
+            let build = || {
+                GenericEvaluator::new_from_raw_params(
+                    expressions.clone(),
+                    &params,
+                    &graph.param_builder.fn_map,
+                    vec![],
+                    OptimizationSettings::default(),
+                    None,
+                    &EvaluatorSettings::default(),
+                )
+                .unwrap()
+            };
+            let mut eager = build();
+            let mut symjit = build();
+            symjit
+                .activate_symjit(&GammaloopCompileOptions::default().options_snapshot())
+                .unwrap();
+            let mut precise = build();
+            let evaluate_f64 = |evaluator: &mut GenericEvaluator, input: &[f64]| {
+                let input = input.iter().map(|v| Complex::new_re(F(*v))).collect_vec();
+                f64::get_evaluator(evaluator)(&input)
+                    .into_iter()
+                    .map(|value| value.unwrap_real())
+                    .collect_vec()
+            };
+            let mut points = scales
+                .map(|scale| shifts.map(|shift| scale * shift))
+                .to_vec();
+            // Inside the Fermi sea of edge 0 the occupations are of order one.
+            points.push([-0.3, 0.7, 0.9]);
+            for shifted in points {
+                let input = inputs(shifted);
+                let arb = ArbPrec::get_evaluator(&mut precise)(
+                    &input
+                        .iter()
+                        .map(|v| Complex::new_re(F(ArbPrec::from_f64_exact_binary(*v))))
+                        .collect_vec(),
+                )
+                .into_iter()
+                .map(|value| value.unwrap_real())
+                .collect_vec();
+                let quad = f128::get_evaluator(&mut eager)(
+                    &input
+                        .iter()
+                        .map(|v| Complex::new_re(F(f128::from_f64_exact_binary(*v))))
+                        .collect_vec(),
+                )
+                .into_iter()
+                .map(|value| value.unwrap_real())
+                .collect_vec();
+                let results = [
+                    ("eager f64", evaluate_f64(&mut eager, &input)),
+                    ("symjit f64", evaluate_f64(&mut symjit, &input)),
+                ];
+                for (index, reference) in arb.iter().enumerate() {
+                    let context = format!("{medium_mode:?}, weight {index}, a={shifted:?}");
+                    let outside_fermi_sea = shifted.iter().all(|a| *a > 0.0);
+                    if medium_mode == MediumMode::ZeroTemperatureEquilibrium && outside_fermi_sea {
+                        // Every occupation is an exact zero, so no residue may survive.
+                        assert!(
+                            reference.re.is_zero() && reference.im.is_zero(),
+                            "Arb {context}"
+                        );
+                        assert!(
+                            quad[index].re.is_zero() && quad[index].im.is_zero(),
+                            "Quad {context}"
+                        );
+                        for (backend, result) in &results {
+                            assert_eq!(
+                                result[index],
+                                Complex::new_re(F(0.0)),
+                                "{backend} {context}"
+                            );
+                        }
+                        continue;
+                    }
+                    let reference_re = reference.re.into_ff64().0;
+                    assert!(reference_re != 0.0, "Arb {context}");
+                    let quad_error = ((&quad[index].re.to_arb_exact().unwrap() - &reference.re)
+                        / &reference.re)
+                        .into_ff64()
+                        .0
+                        .abs();
+                    assert!(
+                        quad_error < 1e-28,
+                        "Quad {context}: relative error {quad_error:e}"
+                    );
+                    for (backend, result) in &results {
+                        let error = ((result[index].re.0 - reference_re) / reference_re).abs();
+                        assert!(
+                            error < 1e-13,
+                            "{backend} {context}: relative error {error:e}"
+                        );
+                        assert_eq!(result[index].im.0, 0.0, "{backend} {context}");
+                    }
+                }
+            }
         }
     }
 

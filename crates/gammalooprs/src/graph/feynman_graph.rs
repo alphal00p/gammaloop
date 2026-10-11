@@ -144,22 +144,29 @@ impl Graph {
                     let Some(body) = body else {
                         continue;
                     };
-                    entries.push(FnMapEntry {
-                        lhs: GS.thermal_distribution(
-                            edge.0 as i64,
-                            derivative_order as i64,
-                            temperature_flag.clone(),
-                            thermal_sign,
-                            orientation_sign,
-                        ),
-                        rhs: body.clone(),
-                        args: vec![thermal_sign.into(), orientation_sign.into()],
-                        tags: vec![
-                            Atom::num(edge.0 as i64),
-                            Atom::num(derivative_order as i64),
-                            temperature_flag.clone(),
-                        ],
-                    });
+                    // The contour offset is a tag, so each body folds its vacuum
+                    // weight symbolically and the s = -1 body is the bare occupation.
+                    // As a runtime argument, evaluator optimization may add the
+                    // constant to an exponentially small occupation before s.
+                    for contour in [-1, 0, 1] {
+                        entries.push(FnMapEntry {
+                            lhs: GS.thermal_distribution(
+                                edge.0 as i64,
+                                derivative_order as i64,
+                                temperature_flag.clone(),
+                                contour,
+                                orientation_sign,
+                            ),
+                            rhs: body.replace(thermal_sign).with(Atom::num(contour)),
+                            args: vec![orientation_sign.into()],
+                            tags: vec![
+                                Atom::num(edge.0 as i64),
+                                Atom::num(derivative_order as i64),
+                                temperature_flag.clone(),
+                                Atom::num(contour),
+                            ],
+                        });
+                    }
                     previous_body = Some(body);
                 }
             }
@@ -1765,6 +1772,95 @@ mod tests {
                             }
                         }
                     }
+                }
+            }
+        }
+        std::fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[test]
+    fn zero_temperature_steps_are_exact_outside_the_fermi_sea() {
+        use symbolica::domains::float::Complex as SymComplex;
+
+        test_initialise().unwrap();
+        let mut graph: Graph = dot!(digraph zero_temperature_step {
+            node [num=1]
+            edge [num=1]
+            A -> B [particle="d"]
+            B -> A [particle="d"]
+        })
+        .unwrap();
+        graph
+            .set_medium_mode(MediumMode::ZeroTemperatureEquilibrium)
+            .unwrap();
+        let edge = EdgeIndex(0);
+        let chemical_potential = graph[edge].chemical_potential_atom().unwrap();
+        let energy = symbol!("zero_temperature_test_energy").to_atom();
+        let mu = symbol!("zero_temperature_test_mu").to_atom();
+        let mu_value = 0.5;
+        let directory = std::env::temp_dir().join(format!(
+            "gammaloop-zero-temperature-step-{}",
+            std::process::id()
+        ));
+        std::fs::create_dir_all(&directory).unwrap();
+        // Vacuum subtraction relies on exact vacuum weights outside the Fermi sea.
+        // For about a fifth of these full-mantissa energies y*inv(y) != 1 in each
+        // backend, so a step written as theta(E - sigma*mu) would leave one-ulp
+        // residues that survive the subtraction as noise times the vacuum integrand.
+        let shifted_energies =
+            (1..=64).map(|k| 1.0 + 997.0 * (f64::from(k) * 0.618_033_988_749_894_9).fract());
+        for orientation in [-1, 1] {
+            for thermal_sign in [-1, 0, 1] {
+                let expression = graph
+                    .explicit_thermal_distribution_atom(
+                        edge,
+                        0,
+                        Atom::num(thermal_sign),
+                        Atom::num(orientation),
+                        MediumMode::ZeroTemperatureEquilibrium,
+                    )
+                    .unwrap()
+                    .replace(ose_atom_from_index(edge))
+                    .with(energy.clone())
+                    .replace(chemical_potential.clone())
+                    .with(mu.clone());
+                let evaluator = expression
+                    .as_view()
+                    .to_evaluation_tree(&graph.param_builder.fn_map, &[energy.clone(), mu.clone()])
+                    .unwrap()
+                    .linearize(&OptimizationSettings::default());
+                let mut double = evaluator.clone().map_coeff(&|c| F::<f64>::from(&c.re));
+                let mut complex = evaluator
+                    .clone()
+                    .map_coeff(&|c| SymComplex::new(c.re.to_f64(), c.im.to_f64()));
+                let mut precise = evaluator.clone().map_coeff(&|c| F::<ArbPrec>::from(&c.re));
+                let path = directory.join(format!("step_{}_{}", orientation + 1, thermal_sign + 1));
+                let mut compiled = evaluator
+                    .export_cpp::<f64>(path.with_extension("cpp"), "step", ExportSettings::new())
+                    .unwrap()
+                    .compile(path.with_extension("so"), CompileOptions::default())
+                    .unwrap()
+                    .load()
+                    .unwrap();
+                let vacuum = f64::from(1 + thermal_sign) / 2.0;
+                for x in shifted_energies.clone() {
+                    let input = [x + f64::from(orientation) * mu_value, mu_value];
+                    let context = format!("x={x}, orientation={orientation}, s={thermal_sign}");
+                    assert_eq!(double.evaluate_single(&input.map(F)).0, vacuum, "{context}");
+                    let complex_result =
+                        complex.evaluate_single(&input.map(|value| SymComplex::new(value, 0.0)));
+                    assert_eq!(complex_result.re, vacuum, "complex {context}");
+                    assert_eq!(complex_result.im, 0.0, "complex {context}");
+                    let mut output = [0.0];
+                    compiled.evaluate(&input, &mut output);
+                    assert_eq!(output[0], vacuum, "compiled {context}");
+                    // Compare in Arb itself: rounding to f64 would hide a 2^-1000 residue.
+                    let precise_input = input.map(|value| F(ArbPrec::from_f64_exact_binary(value)));
+                    assert!(
+                        precise.evaluate_single(&precise_input)
+                            == F(ArbPrec::from_f64_exact_binary(vacuum)),
+                        "Arb {context}"
+                    );
                 }
             }
         }

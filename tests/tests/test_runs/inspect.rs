@@ -1642,6 +1642,111 @@ fn thermal_chemical_potential_agrees_across_evaluators() -> Result<()> {
     Ok(())
 }
 
+/// Momentum-space value of the imported sunrise graph, with the evaluated
+/// precision checked to be the requested one.
+fn thermal_sunrise_value(
+    cli: &mut gammaloop_integration_tests::CLIState,
+    point: &[f64],
+    use_arb_prec: bool,
+) -> Result<Complex<f64>> {
+    let points = ndarray::Array2::from_shape_vec((1, point.len()), point.to_vec())?;
+    let discrete_dims = ndarray::Array2::<usize>::from_shape_vec((1, 0), vec![])?;
+    let evaluation = evaluate_sample(
+        &mut cli.state,
+        &EvaluateSamples {
+            process_id: Some(0),
+            integrand_name: Some("default".to_string()),
+            use_arb_prec,
+            minimal_output: false,
+            return_generated_events: Some(false),
+            momentum_space: true,
+            points: points.view(),
+            integrator_weights: None,
+            discrete_dims: Some(discrete_dims.view()),
+            graph_names: Some(vec![Some("GL0".to_string())]),
+            orientations: None,
+        },
+    )?
+    .sample
+    .evaluation;
+    let precisions = evaluation
+        .evaluation_metadata
+        .as_ref()
+        .unwrap()
+        .stability_results
+        .iter()
+        .map(|level| level.precision)
+        .collect_vec();
+    let expected = if use_arb_prec {
+        gammalooprs::settings::runtime::Precision::Arb
+    } else {
+        gammalooprs::settings::runtime::Precision::Double
+    };
+    assert_eq!(precisions, [expected], "point {point:?}");
+    Ok(evaluation.integrand_result.map(|value| value.0))
+}
+
+/// Raw f64 evaluations of the vacuum-subtracted thermal quark sunrise keep the
+/// exponentially small UV tail at finite temperature, where the old hyperbolic
+/// bodies and numerical vacuum cancellation returned zeros or wrong signs. At zero
+/// temperature and density every occupation is an exact zero, so no rounding
+/// residue of the vacuum weight may survive anywhere.
+#[test]
+fn thermal_sunrise_f64_keeps_uv_tails_and_exact_zeros() -> Result<()> {
+    let direction = [0.3, -0.5, 0.8, -0.6, 0.2, 0.75];
+    for (mode, mu_b) in [
+        ("thermodynamic_equilibrium", 3.0),
+        ("zero_temperature_equilibrium", 0.0),
+    ] {
+        let name = format!("thermal_sunrise_f64_{mode}");
+        let mut cli = get_test_cli(
+            None,
+            get_tests_workspace_path().join(&name),
+            Some(name),
+            true,
+        )?;
+        run_commands(
+            &mut cli,
+            &[
+                "import model sm-thermal.json",
+                "import graphs ./tests/resources/graphs/sunrise_qcd_vacuum.dot -p thermal_sunrise",
+                "set model aS=1.0",
+                &format!("set model muB={mu_b}"),
+                &format!(
+                    "set global kv global.generation.medium.mode={mode} global.generation.medium.vacuum_subtraction=true global.generation.uv.subtract_uv=true global.generation.uv.generate_integrated=false global.generation.uv.softct=false global.generation.threshold_subtraction.enable_thresholds=false global.generation.tropical_subgraph_table.disable_tropical_generation=true global.generation.evaluator.compile=true global.generation.compile.compilation_mode=\"assembly\" global.generation.compile.optimization_level=\"O0\" global.generation.compile.fast_math=false global.generation.compile.unsafe_math=false"
+                ),
+                r#"set default-runtime kv general.inverse_temperature=1.0 general.enable_cache=false sampling.orientations="summed" subtraction.disable_threshold_subtraction=true stability.rotation_axis=[] stability.escalate_if_exact_zero=false"#,
+                "generate",
+            ],
+        )?;
+        let mut points = [1.0, 10.0, 20.0, 40.0, 80.0, 160.0, 320.0]
+            .map(|scale| direction.map(|component| scale * component))
+            .to_vec();
+        points.extend([
+            [0.1, 0.2, 0.3, 0.4, 0.5, 0.6],
+            [1.1, 0.2, 0.3, 0.4, 1.5, 0.6],
+        ]);
+        for point in points {
+            let double = thermal_sunrise_value(&mut cli, &point, false)?;
+            let arb = thermal_sunrise_value(&mut cli, &point, true)?;
+            if mode == "zero_temperature_equilibrium" {
+                assert_eq!(double, Complex::new(0.0, 0.0), "f64 at {point:?}");
+                assert_eq!(arb, Complex::new(0.0, 0.0), "Arb at {point:?}");
+                continue;
+            }
+            assert!(arb.im != 0.0, "Arb at {point:?}");
+            for (actual, reference) in [(double.re, arb.re), (double.im, arb.im)] {
+                assert!(
+                    (actual - reference).abs() <= 1e-12 * arb.im.abs(),
+                    "f64 {double:?} != Arb {arb:?} at {point:?}"
+                );
+            }
+        }
+        clean_test(&cli.cli_settings.state.folder);
+    }
+    Ok(())
+}
+
 #[test]
 fn thermal_vacuum_2l_3l_inspect() -> Result<()> {
     let mut cli = get_test_cli(
