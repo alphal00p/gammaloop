@@ -186,11 +186,7 @@ impl SamplingExpressionEvaluator {
         profile: &SamplingRadialProfile,
         h: &HFunctionSettings,
     ) -> Result<Self> {
-        if !h.sigma.is_finite() || h.sigma <= 0.0 {
-            return Err(eyre!(
-                "LU-h sampling requires a positive finite h_function.sigma"
-            ));
-        }
+        h.validate_normalized_profile()?;
         if !profile.broad_fraction.is_finite()
             || !(0.0..=1.0).contains(&profile.broad_fraction)
             || [profile.scale, profile.shape]
@@ -205,11 +201,6 @@ impl SamplingExpressionEvaluator {
         let power = h.power.unwrap_or(0);
         let (log_scale, shape) = match h.function {
             HFunction::PolyExponential | HFunction::PolyLeftRightExponential => {
-                if ![0, 1, 3, 4, 6, 7, 9, 10, 12, 13, 15, 16].contains(&power) {
-                    return Err(eyre!(
-                        "unsupported LU h-function power {power}; supported powers are 0,1,3,4,6,7,9,10,12,13,15,16"
-                    ));
-                }
                 let a = if matches!(h.function, HFunction::PolyExponential) {
                     2
                 } else {
@@ -224,11 +215,7 @@ impl SamplingExpressionEvaluator {
                 )
             }
             HFunction::Exponential => (format!("log({}/2)", h.sigma), "1".to_owned()),
-            HFunction::ExponentialCT => {
-                return Err(eyre!(
-                    "exponential_ct is a local threshold localization, not a normalized auxiliary LU h-function"
-                ));
-            }
+            HFunction::ExponentialCT => unreachable!("validated as a normalized profile"),
         };
         let log_scale = profile
             .scale

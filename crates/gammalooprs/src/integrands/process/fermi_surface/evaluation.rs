@@ -155,7 +155,7 @@ impl FermiSurfaceEvaluator {
             adapted.loop_moms(),
             &masses,
             &chemical_potentials,
-            |_, scale| Ok(h_dual(scale, None, None, &settings.lu_h_function)),
+            |scale| Ok(h_dual(scale, None, None, &settings.lu_h_function)),
             |momenta| {
                 let mut projected = adapted.clone();
                 projected.sample.loop_moms = LoopMomenta::from_iter(
@@ -365,7 +365,7 @@ mod tests {
                     &momenta,
                     &[F(0.0)],
                     &[F(1.0)],
-                    |_, _| Err(eyre!("original user callback error")),
+                    |_| Err(eyre!("original user callback error")),
                     |_| unreachable!(),
                 )
                 .unwrap_err();
