@@ -9,10 +9,12 @@ use symbolica::{
     atom::{Atom, AtomCore, AtomView, Symbol},
     function, symbol,
 };
+use three_dimensional_reps::MediumMode;
 
 use crate::{
     debug_tags,
     graph::{LMBext, LmbError, LoopMomentumBasis},
+    integrands::process::param_builder::ParamBuilderGraph,
     numerator::symbolica_ext::NumeratorAtomExt,
     utils::{GS, W_},
     uv::{
@@ -377,6 +379,23 @@ pub(super) fn apply_taylor<S: ForestNodeLike>(
     for mass in physical_masses {
         numerator = numerator.replace(mass.clone()).with(mass * &mass_scope);
     }
+    // Every local UV kernel starts from the vacuum-explicit reduced graph, including
+    // thermal runs; the medium dependence lives in the unreduced observable.
+    // Replacements recurse into thermal_weight(...). Keep surviving N calls in
+    // edge-ID form so the retained wrapper stays independent of the Taylor variable.
+    let vacuum_integrands;
+    let integrands = if orientation.cff_options()?.medium_mode == MediumMode::Vacuum {
+        integrands
+    } else {
+        vacuum_integrands = integrands.map_expressions(|atom| {
+            ctx.graph.make_thermal_distributions_explicit(
+                atom,
+                MediumMode::Vacuum,
+                ctx.graph.iter_edges_of(&reduced).map(|(_, edge, _)| edge),
+            )
+        })?;
+        &vacuum_integrands
+    };
     let scope = DirectResidueBranches::numerator_scope();
     let integrands = integrands.multiply_key_mapped(orientation, ctx.graph, &numerator, scope)?;
     debug_tags!(#generation, #profile, #uv, #local, #direct, #trace;
@@ -446,7 +465,6 @@ pub(super) fn apply_taylor<S: ForestNodeLike>(
             )?;
             soft.zip_add(&uv_remainder)
         }
-        ApproximationType::VaccuumLimit => Err(eyre!("Not yet implemented VaccuumLimit")),
         ApproximationType::OS => unimplemented!(
             "local on-shell counterterms are deferred until local counterterms can be derived from the 4D expanded representation"
         ),

@@ -1625,6 +1625,8 @@ pub struct State {
 
 const STATE_MANIFEST_FILE: &str = "state_manifest.toml";
 const INTEGRAND_GENERATION_SUMMARY_FILE: &str = "generation_summary.json";
+// Version 13 persists the selected medium in graph parameter builders for runtime validation.
+// Older positional bincode layouts must be regenerated.
 // Version 12 names square roots OnShellEnergy and energy sums Esurface. Reject older
 // states before Symbolica import can assign the new meaning to an old Esurface atom.
 // Version 11 persists function inlining policies and caller-scope alias metadata.
@@ -1644,7 +1646,7 @@ const INTEGRAND_GENERATION_SUMMARY_FILE: &str = "generation_summary.json";
 // regenerated rather than decoded as the new expression type.
 // Local UV forest contributions remain compatible with this layout because
 // they are combined into one persisted integrand before evaluator construction.
-const CURRENT_STATE_MANIFEST_VERSION: u32 = 12;
+const CURRENT_STATE_MANIFEST_VERSION: u32 = 13;
 const GENERATION_THREAD_STACK_SIZE_BYTES: usize = 32 * 1024 * 1024;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -3657,7 +3659,7 @@ mod tests {
                 let saved_values = params.values.clone();
                 assert_eq!(saved_values.len(), 3);
                 assert!(!params.pairs.model_parameters.params.is_empty());
-                params.update_model_values(&state.model);
+                params.update_model_values(&state.model).unwrap();
                 for (actual, expected) in params.values.iter().zip(&saved_values) {
                     for (actual, expected) in actual.iter().zip(expected) {
                         for (actual, expected) in
@@ -3673,7 +3675,7 @@ mod tests {
                 let mut model = state.model.clone();
                 model.get_parameter_mut("aS").unwrap().value = Some(Complex::new_re(F(1.0)));
                 model.recompute_dependents().unwrap();
-                params.update_model_values(&model);
+                params.update_model_values(&model).unwrap();
                 let coupling = model.get_coupling("GC_12");
                 let position = params.pairs.model_parameters.value_range.start
                     + params

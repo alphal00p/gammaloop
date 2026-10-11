@@ -284,7 +284,7 @@ fn physical_full_h_scalar_cancellation_certificates() -> Result<()> {
         &generation.orientation_pattern,
         true,
     );
-    let wood = Wood::new(CutStructure::empty(&graph), &graph, &generation.uv)?;
+    let wood = Wood::new(CutStructure::empty(&graph), &graph, &generation)?;
     let soft_components = wood
         .graph
         .iter_nodes()

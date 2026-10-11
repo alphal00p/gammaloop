@@ -1,6 +1,6 @@
 use super::{ArbPrec, Complex, F, QuadFloat};
 use symbolica::{
-    atom::{Atom, EvaluationInfo},
+    atom::{Atom, AtomCore, EvaluationInfo},
     domains::{
         float::{DoubleFloat, Float, Real},
         rational::Rational,
@@ -163,5 +163,57 @@ fn native_hyperbolic_evaluators_support_complex_wrappers() {
             assert!((result.re - expected.re).abs().0 < 1e-14);
             assert!((result.im - expected.im).abs().0 < 1e-14);
         }
+    }
+}
+
+#[test]
+fn native_tanh_remains_finite_at_uv_scales_and_preserves_derivatives() {
+    use symbolica::{
+        domains::dual::HyperDual,
+        prelude::{Complex as SymComplex, Dualizer},
+    };
+
+    crate::initialisation::test_initialise().unwrap();
+    let argument = Atom::var(symbol!("native_tanh_argument"));
+    // Native tanh must preserve real and complex values at UV scales, with
+    // analytic derivatives at x=0.
+    let evaluator = symbolica::transcendental::tanh()
+        .call_args([argument.clone()])
+        .evaluator(std::slice::from_ref(&argument))
+        .build()
+        .unwrap();
+    let mut real = evaluator
+        .clone()
+        .map_coeff(&|coefficient| coefficient.re.to_f64());
+    let dualizer = Dualizer::new(
+        HyperDual::<SymComplex<Rational>>::new(
+            crate::utils::hyperdual_utils::simple_n_deriv_shape(2),
+        ),
+        vec![],
+    );
+    let mut dual = evaluator
+        .clone()
+        .vectorize(&dualizer)
+        .unwrap()
+        .map_coeff(&|coefficient| coefficient.re.to_f64());
+    for value in [-1e12_f64, -1000., -1., 0., 1., 1000., 1e12] {
+        let tanh = value.tanh();
+        let first_derivative = 1. - tanh * tanh;
+        let expected = [tanh, first_derivative, -tanh * first_derivative];
+        assert!((real.evaluate_single(&[value]) - tanh).abs() < 1e-14);
+        let mut actual = [0.; 3];
+        dual.evaluate(&[value, 1., 0.], &mut actual);
+        for (actual, expected) in actual.into_iter().zip(expected) {
+            assert!((actual - expected).abs() < 1e-14, "tanh at {value}");
+        }
+    }
+
+    let mut complex = evaluator.map_coeff(&|coefficient| {
+        SymComplex::new(coefficient.re.to_f64(), coefficient.im.to_f64())
+    });
+    for value in [-1e12_f64, 1e12] {
+        let actual = complex.evaluate_single(&[SymComplex::new(value, 1.)]);
+        assert_eq!(actual.re, value.signum());
+        assert_eq!(actual.im, 0.);
     }
 }

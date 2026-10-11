@@ -786,6 +786,12 @@ impl ProcessList {
         locked_runtime_settings: &LockedRuntimeSettings,
         thread_pool: &ThreadPool,
     ) -> Result<Vec<GeneratedGraphReport>> {
+        // Reject unsupported settings before any process changes its graphs or history.
+        for process in &self.processes {
+            settings
+                .generation
+                .validate_for_process(process.definition.generation_type)?;
+        }
         let mut reports = Vec::new();
         for process in self.processes.iter_mut() {
             reports.extend(process.preprocess(

@@ -6,10 +6,12 @@ use linnet::half_edge::involution::{EdgeVec, Orientation};
 use schemars::JsonSchema;
 use serde::{Deserialize, Deserializer, Serialize};
 use symbolica::prelude::*;
+pub use three_dimensional_reps::MediumMode;
 
 use crate::{
     GammaLoopContext,
     cff::{expression::OrientationSelector, orientations::GraphOrientation},
+    feyngen::GenerationType,
     processes::EvaluatorSettings,
     utils::{
         DEFAULT_ESURFACE_EXISTENCE_THRESHOLD, GS, W_,
@@ -66,10 +68,35 @@ pub struct GenerationSettings {
     /// Sum all generated residue branches explicitly, removing runtime orientation selectors.
     #[serde(skip_serializing_if = "is_false")]
     pub explicit_orientation_sum_only: bool,
+    /// Medium for amplitude generation; non-vacuum modes require local 3D UV subtraction
+    /// and disabled threshold subtraction.
+    #[serde(skip_serializing_if = "IsDefault::is_default")]
+    pub medium: MediumSettings,
 }
 
 impl GenerationSettings {
-    pub(crate) fn validate_explicit_orientation_sum_options(&self) -> EyreResult<()> {
+    pub fn validate_for_process(&self, generation_type: GenerationType) -> EyreResult<()> {
+        if self.medium.mode == MediumMode::Vacuum && self.medium.vacuum_subtraction {
+            return Err(eyre!(
+                "`global.generation.medium.vacuum_subtraction = true` requires a medium mode other than `vacuum`"
+            ));
+        }
+
+        if generation_type == GenerationType::CrossSection && self.medium.mode != MediumMode::Vacuum
+        {
+            return Err(eyre!(
+                "Cross-section (`xs`) generation is not supported in thermal modes or with vacuum subtraction"
+            ));
+        }
+
+        if self.medium.mode != MediumMode::Vacuum && self.threshold_subtraction.enable_thresholds {
+            return Err(eyre!(
+                "Threshold subtraction is not supported in thermal modes; set `global.generation.threshold_subtraction.enable_thresholds = false`"
+            ));
+        }
+
+        self.validate_medium_uv_compatibility()?;
+
         if self.uv.local_uv_cts_from_expanded_4d_integrands && !self.explicit_orientation_sum_only {
             return Err(eyre!(
                 "`global.generation.uv.local_uv_cts_from_expanded_4d_integrands = true` requires `global.generation.explicit_orientation_sum_only = true` because projected 4D counterterms have term-local CFF orientation sums"
@@ -84,11 +111,127 @@ impl GenerationSettings {
 
         Ok(())
     }
+
+    pub(crate) fn validate_medium_uv_compatibility(&self) -> EyreResult<()> {
+        if (self.medium.mode != MediumMode::Vacuum || self.medium.vacuum_subtraction)
+            && self.uv.local_uv_cts_from_expanded_4d_integrands
+        {
+            return Err(eyre!(
+                "`global.generation.uv.local_uv_cts_from_expanded_4d_integrands = true` is unsupported for finite-medium modes or vacuum subtraction; use local 3D subtraction instead"
+            ));
+        }
+
+        Ok(())
+    }
 }
 
 #[cfg(test)]
 mod generation_settings_tests {
-    use super::{GenerationSettings, OrientationPattern};
+    use super::{GenerationSettings, GenerationType, MediumMode, OrientationPattern};
+
+    #[test]
+    fn cross_sections_require_vacuum_mode_without_vacuum_subtraction() {
+        let mut settings = GenerationSettings::default();
+        settings
+            .validate_for_process(GenerationType::CrossSection)
+            .unwrap();
+
+        settings
+            .validate_for_process(GenerationType::Amplitude)
+            .unwrap();
+
+        settings.threshold_subtraction.enable_thresholds = false;
+        for mode in [
+            MediumMode::ThermodynamicEquilibrium,
+            MediumMode::ZeroTemperatureEquilibrium,
+        ] {
+            for vacuum_subtraction in [false, true] {
+                settings.medium.mode = mode;
+                settings.medium.vacuum_subtraction = vacuum_subtraction;
+                settings
+                    .validate_for_process(GenerationType::Amplitude)
+                    .unwrap();
+                let error = settings
+                    .validate_for_process(GenerationType::CrossSection)
+                    .unwrap_err();
+                assert!(error.to_string().contains("`xs`"));
+                assert!(error.to_string().contains("not supported"));
+            }
+        }
+    }
+
+    #[test]
+    fn thermal_modes_require_threshold_subtraction_disabled() {
+        for mode in [
+            MediumMode::ThermodynamicEquilibrium,
+            MediumMode::ZeroTemperatureEquilibrium,
+        ] {
+            for vacuum_subtraction in [false, true] {
+                let mut settings = GenerationSettings::default();
+                settings.medium.mode = mode;
+                settings.medium.vacuum_subtraction = vacuum_subtraction;
+
+                let error = settings
+                    .validate_for_process(GenerationType::Amplitude)
+                    .unwrap_err();
+                assert!(
+                    error
+                        .to_string()
+                        .contains("Threshold subtraction is not supported")
+                );
+                assert!(
+                    error.to_string().contains(
+                        "global.generation.threshold_subtraction.enable_thresholds = false"
+                    )
+                );
+
+                settings.threshold_subtraction.enable_thresholds = false;
+                settings
+                    .validate_for_process(GenerationType::Amplitude)
+                    .unwrap();
+            }
+        }
+    }
+
+    #[test]
+    fn vacuum_subtraction_requires_a_medium_mode() {
+        let mut settings = GenerationSettings::default();
+        settings.medium.vacuum_subtraction = true;
+        for generation_type in [GenerationType::Amplitude, GenerationType::CrossSection] {
+            let error = settings.validate_for_process(generation_type).unwrap_err();
+            assert!(error.to_string().contains("vacuum_subtraction = true"));
+            assert!(error.to_string().contains("other than `vacuum`"));
+        }
+    }
+
+    #[test]
+    fn finite_medium_supports_only_local_3d_subtraction() {
+        for (mode, vacuum_subtraction) in [
+            (MediumMode::ThermodynamicEquilibrium, false),
+            (MediumMode::ZeroTemperatureEquilibrium, false),
+            (MediumMode::ThermodynamicEquilibrium, true),
+            (MediumMode::ZeroTemperatureEquilibrium, true),
+        ] {
+            let mut settings = GenerationSettings::default();
+            settings.medium.mode = mode;
+            settings.medium.vacuum_subtraction = vacuum_subtraction;
+            settings.threshold_subtraction.enable_thresholds = false;
+            settings
+                .validate_for_process(GenerationType::Amplitude)
+                .unwrap();
+
+            settings.explicit_orientation_sum_only = true;
+            settings.uv.local_uv_cts_from_expanded_4d_integrands = true;
+            let error = settings
+                .validate_for_process(GenerationType::Amplitude)
+                .unwrap_err();
+            assert!(
+                error
+                    .to_string()
+                    .contains("use local 3D subtraction instead")
+            );
+        }
+    }
 
     #[test]
     fn projected_4d_cff_requires_an_unfiltered_explicit_orientation_sum() {
@@ -96,7 +239,7 @@ mod generation_settings_tests {
         settings.uv.local_uv_cts_from_expanded_4d_integrands = true;
 
         let error = settings
-            .validate_explicit_orientation_sum_options()
+            .validate_for_process(GenerationType::Amplitude)
             .unwrap_err();
         assert!(
             error
@@ -106,12 +249,12 @@ mod generation_settings_tests {
 
         settings.explicit_orientation_sum_only = true;
         settings
-            .validate_explicit_orientation_sum_options()
+            .validate_for_process(GenerationType::Amplitude)
             .unwrap();
 
         settings.orientation_pattern = OrientationPattern::from_user_pattern("(+,-)").unwrap();
         let error = settings
-            .validate_explicit_orientation_sum_options()
+            .validate_for_process(GenerationType::Amplitude)
             .unwrap_err();
         assert!(
             error
@@ -302,8 +445,9 @@ impl fmt::Display for CompilationOptionsSnapshot {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "{} fast_math={} unsafe_math={} compiler={} custom={}",
+            "{} jit_direct_translation={} fast_math={} unsafe_math={} compiler={} custom={}",
             self.optimization_level,
+            self.jit_direct_translation,
             self.fast_math,
             self.unsafe_math,
             self.compiler,
@@ -789,6 +933,33 @@ impl Default for Parallelisation {
             generate: 1,
             compile: 1,
             integrate: 1,
+        }
+    }
+}
+
+#[cfg_attr(
+    feature = "python_api",
+    pyo3::pyclass(from_py_object, get_all, set_all)
+)]
+#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
+#[trait_decode(trait = GammaLoopContext)]
+#[serde(default, deny_unknown_fields)]
+pub struct MediumSettings {
+    /// `vacuum`, `thermodynamic_equilibrium` at `runtime.general.inverse_temperature`, or its
+    /// `zero_temperature_equilibrium` limit; equilibrium modes use the model's chemical potentials.
+    #[serde(skip_serializing_if = "IsDefault::is_default")]
+    pub mode: MediumMode,
+    /// Subtract each medium weight's vacuum limit, keeping only the medium-dependent part;
+    /// requires a non-vacuum mode.
+    #[serde(skip_serializing_if = "is_false")]
+    pub vacuum_subtraction: bool,
+}
+
+impl Default for MediumSettings {
+    fn default() -> Self {
+        Self {
+            mode: MediumMode::Vacuum,
+            vacuum_subtraction: false,
         }
     }
 }

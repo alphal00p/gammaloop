@@ -57,7 +57,7 @@ impl<'a> Localizer<'a> {
         let contract_subgraph = to_contract
             .union(&graph.tree_edges)
             .subtract(&graph.initial_state_cut);
-        let mut options = self.orientation.cff_options()?;
+        let mut options = self.orientation.cff_options()?.clone();
         options.cff_generation_context = generation_context;
         Ok((contract_subgraph, options))
     }
@@ -121,7 +121,10 @@ impl<'a> Localizer<'a> {
         };
         self.orientation
             .record_energy_degree_bound_report(&cff.energy_degree_bound_report);
-        Ok((cff, contract_subgraph))
+        Ok((
+            cff.with_vacuum_subtraction(self.orientation.vacuum_subtraction),
+            contract_subgraph,
+        ))
     }
 
     #[cfg(test)]
@@ -558,13 +561,15 @@ impl<'a> Localizer<'a> {
             &canonization,
             &initial_cut_edges,
         )?;
-        let cff = graph.cff_from_generated_expression(
-            generated,
-            &contract_subgraph,
-            self.cutset,
-            &OrientationPattern::default(),
-            &options,
-        )?;
+        let cff = graph
+            .cff_from_generated_expression(
+                generated,
+                &contract_subgraph,
+                self.cutset,
+                &OrientationPattern::default(),
+                &options,
+            )?
+            .with_vacuum_subtraction(self.orientation.vacuum_subtraction);
         self.orientation
             .record_energy_degree_bound_report(&cff.energy_degree_bound_report);
         let projected = self.project_cff(graph, to_contract, cff, contract_subgraph)?;

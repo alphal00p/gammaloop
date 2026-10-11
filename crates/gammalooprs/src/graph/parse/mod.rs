@@ -814,7 +814,7 @@ impl Graph {
             model,
             &g.loop_momentum_basis,
             initial_data.additional_params,
-        );
+        )?;
 
         debug!(
             "Updated param builder with LMB: {}\n{}",
@@ -1131,7 +1131,7 @@ impl Graph {
 
         let polarizations = global_prefactor.polarizations();
         let param_builder =
-            ParamBuilder::new(&(&polarizations, graph), model, &graph.lmb(), params);
+            ParamBuilder::new(&(&polarizations, graph), model, &graph.lmb(), params)?;
 
         Ok((global_prefactor, param_builder))
     }

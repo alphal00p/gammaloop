@@ -197,7 +197,7 @@ impl Localizer<'_> {
         // connected, nonrepeated, full-rank terminal residue basis does it avoid
         // reopening equivalent closures: one deterministic Below representative
         // is then the complete integral.
-        let mut options = self.orientation.cff_options()?;
+        let mut options = self.orientation.cff_options()?.clone();
         options.cff_generation_context = CffGenerationContext::EmbeddedCffFactor;
         let excluded_report_owners = graph
             .iter_edges_of(&graph.initial_state_cut)

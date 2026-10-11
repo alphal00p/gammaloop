@@ -1,0 +1,12 @@
+digraph GL0{
+  num = "1";
+  overall_factor = "(AutG(2))^(-1)*ExternalFermionOrderingSign(1)*InternalFermionLoopSign(-1)";
+  overall_factor_evaluated = "-1/2";
+  projector = "1";
+  0[int_id="V_135"];
+  1[int_id="V_135"];
+
+  1:0   -> 0:1   [id=0  lmb_id="0" lmb_rep="K(0,a___)" particle="u"];
+  0:2   -> 1:3   [id=1  lmb_id="1" lmb_rep="K(1,a___)" particle="u"];
+  0:4   -> 1:5   [id=2 dir=none  lmb_rep="-1*K(1,a___)+K(0,a___)" particle="g"];
+}

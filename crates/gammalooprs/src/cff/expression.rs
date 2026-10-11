@@ -18,7 +18,10 @@ use symbolica::{
     id::Replacement,
 };
 
-use super::{esurface::Esurface, hsurface::Hsurface, surface::GammaLoopLinearEnergyExpr};
+use super::{
+    esurface::Esurface, hsurface::Hsurface, orientations::GraphOrientation,
+    surface::GammaLoopLinearEnergyExpr,
+};
 use crate::{
     graph::Graph,
     utils::{GS, W_, ose_atom_from_index},
@@ -109,6 +112,7 @@ impl GammaLoopCFFVariant for CFFVariant {
             .unwrap_or_else(|| Atom::num(1));
 
         Atom::num(self.prefactor.clone())
+            * self.thermal_weight.to_atom()
             * half_edge_factor
             * scale_factor
             * numerator_surface_factor
@@ -123,11 +127,15 @@ pub trait GammaLoopOrientationExpression {
 
 impl GammaLoopOrientationExpression for OrientationExpression {
     fn to_atom_gs(&self) -> Atom {
-        self.variants
+        let expression = self
+            .variants
             .iter()
             .map(GammaLoopCFFVariant::to_atom_gs)
             .reduce(|acc, atom| acc + atom)
-            .unwrap_or_else(Atom::new)
+            .unwrap_or_else(Atom::new);
+        // Each coefficient must carry its own chemical-potential orientation
+        // before an explicit sum removes the residue-map selectors.
+        self.data.orientation.select(expression)
     }
 
     fn energy_replacements_gs(&self, graph: &Graph) -> Vec<Replacement> {
@@ -218,12 +226,119 @@ pub(crate) fn energy_map_replacements_gs(
 #[cfg(test)]
 mod tests {
     use linnet::half_edge::involution::{EdgeVec, Orientation};
+    use three_dimensional_reps::MediumMode;
 
     use super::*;
     use crate::{
         cff::surface::LinearEnergyExpr, dot, graph::parse::from_dot::IntoGraph,
         initialisation::test_initialise, utils::external_energy_atom_from_index,
     };
+
+    #[test]
+    fn vacuum_subtraction_reaches_root_and_unit_cographs() -> color_eyre::Result<()> {
+        use crate::{
+            graph::cuts::CutSet, integrands::process::param_builder::ParamBuilderGraph,
+            settings::global::OrientationPattern,
+        };
+        test_initialise()?;
+        let mut graph: Graph = dot!(digraph G {
+            edge [particle="scalar_1"]; node [num=1];
+            v1 -> v2; v1 -> v2; v1 -> v2;
+        }, "scalars")?;
+        for medium in [
+            MediumMode::ThermodynamicEquilibrium,
+            MediumMode::ZeroTemperatureEquilibrium,
+        ] {
+            let mut options = graph.denominator_only_cff_3d_expression_options();
+            options.medium_mode = medium;
+            let production =
+                graph.generate_3d_expression_for_integrand(&[], &None, &options, None)?;
+            let cutset = CutSet::empty(graph.n_hedges());
+            let pattern = OrientationPattern::default();
+            let raw = graph
+                .cff_from_production_expression(&production, &cutset, &pattern)?
+                .expression_with_selectors();
+            let actual = graph
+                .cff_from_production_expression(&production, &cutset, &pattern)?
+                .with_vacuum_subtraction(true)
+                .expression_with_selectors();
+            assert_eq!(raw.iter().count(), actual.iter().count());
+            for ((raw_key, raw), (actual_key, actual)) in raw.iter().zip(actual.iter()) {
+                assert_eq!(raw_key, actual_key);
+                let vacuum = graph.make_thermal_distributions_explicit(
+                    raw,
+                    MediumMode::Vacuum,
+                    graph.iter_edges().map(|(_, edge, _)| edge),
+                )?;
+                assert!(raw.is_zero() || raw.contains_symbol(GS.thermal_weight_wrapper));
+                assert!(actual.is_zero() || actual.contains_symbol(GS.thermal_weight_wrapper));
+                // Unwrap only the diagnostic copy when comparing the two algebraic forms.
+                let difference = (actual - (raw - vacuum))
+                    .replace(function!(GS.thermal_weight_wrapper, W_.a_))
+                    .with(W_.a_);
+                assert!(difference.expand().is_zero());
+            }
+            let full = graph.full_filter();
+            let unit = graph
+                .cff(&full, &cutset, &pattern, &options, None)?
+                .with_vacuum_subtraction(true)
+                .expression_with_selectors();
+            assert!(
+                unit.iter().all(|(_, atom)| atom.is_zero()),
+                "the fully contracted cograph must subtract its empty weight"
+            );
+            assert!(
+                !graph
+                    .cff(&full, &cutset, &pattern, &options, None)?
+                    .expression_with_selectors()
+                    .iter()
+                    .all(|(_, atom)| atom.is_zero())
+            );
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn thermal_surface_conversion_preserves_distribution_atoms() -> color_eyre::Result<()> {
+        test_initialise()?;
+        let graph: Graph = dot!(digraph thermal_triangle {
+            edge [num=1 mass=0]
+            node [num=1]
+            ext [style=invis]
+            ext -> a [id=3]
+            ext -> b [id=4]
+            c -> ext [id=5]
+            c -> a [id=0 lmb_id=0]
+            a -> b [id=1]
+            b -> c [id=2]
+        })?;
+        for medium_mode in [
+            MediumMode::ThermodynamicEquilibrium,
+            MediumMode::ZeroTemperatureEquilibrium,
+        ] {
+            let mut graph = graph.clone();
+            let mut options = graph.denominator_only_cff_3d_expression_options();
+            options.medium_mode = medium_mode;
+            let expression = graph
+                .generate_3d_expression_for_integrand(&[], &None, &options, None)?
+                .expression;
+            let atom = expression
+                .orientations
+                .iter()
+                .map(GammaLoopOrientationExpression::to_atom_gs)
+                .fold(Atom::Zero, |sum, orientation| sum + orientation);
+            assert_eq!(atom, expression.to_atom(AllOrientations));
+            assert!(!atom.contains_symbol(GS.sign));
+
+            // Typed weights emit distributions directly; surface conversion must preserve them.
+            let substituted = expression.surfaces.substitute_energies(&atom, &[]);
+            assert!(
+                substituted.contains_symbol(GS.thermal_distribution),
+                "{medium_mode:?} CFF lost its thermal distributions: {substituted}"
+            );
+        }
+        Ok(())
+    }
 
     #[test]
     fn affine_energy_map_keeps_two_numerator_factors_under_one_map() -> color_eyre::Result<()> {

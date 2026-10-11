@@ -1,6 +1,6 @@
 use std::{
     borrow::Cow,
-    collections::HashMap,
+    collections::{BTreeSet, HashMap},
     fmt::Display,
     ops::{Deref, Range},
 };
@@ -26,6 +26,7 @@ use symbolica::prelude::{
     ReplaceWith, Replacement, Symbol, parse_lit, symbol,
 };
 use tabled::{Table, settings::Style};
+use three_dimensional_reps::MediumMode;
 use tracing::debug;
 use tracing::warn;
 
@@ -99,13 +100,128 @@ pub trait SplitPolarizations {
     fn polarizations(&self) -> Vec<Atom>;
 }
 
+/// The tagged arguments of an N call, before physical orientations are resolved.
+pub(crate) struct ThermalDistributionCall {
+    pub edge: EdgeIndex,
+    pub derivative_order: usize,
+    pub temperature_flag: Atom,
+    pub thermal_sign: Atom,
+    pub orientation_sign: Atom,
+}
+
+impl TryFrom<AtomView<'_>> for ThermalDistributionCall {
+    type Error = color_eyre::Report;
+
+    fn try_from(atom: AtomView<'_>) -> Result<Self> {
+        let [
+            edge,
+            derivative_order,
+            temperature_flag,
+            thermal_sign,
+            orientation_sign,
+        ] = match atom {
+            AtomView::Fun(function) if function.get_symbol() == GS.thermal_distribution => {
+                <[_; 5]>::try_from(function.iter().collect::<Vec<_>>()).ok()
+            }
+            _ => None,
+        }
+        .ok_or_else(|| {
+            color_eyre::eyre::eyre!(
+                "Thermal distribution must be an N call with five arguments, got {atom}"
+            )
+        })?;
+        let edge = usize::try_from(edge).map_err(|_| {
+            color_eyre::eyre::eyre!(
+                "Thermal distribution edge must be a non-negative integer, got {edge}"
+            )
+        })?;
+        let derivative_order = usize::try_from(derivative_order).map_err(|_| color_eyre::eyre::eyre!(
+            "Thermal distribution derivative order must be a non-negative integer, got {derivative_order}"
+        ))?;
+        Ok(Self {
+            edge: EdgeIndex(edge),
+            derivative_order,
+            temperature_flag: temperature_flag.to_owned(),
+            thermal_sign: thermal_sign.to_owned(),
+            orientation_sign: orientation_sign.to_owned(),
+        })
+    }
+}
+
 pub trait ParamBuilderGraph {
     fn get_external_energy_atoms(&self) -> Vec<Atom>;
     fn iter_edge_ids(&self) -> impl Iterator<Item = EdgeIndex> + '_;
     fn external_spatial_params(&self) -> Vec<Atom>;
     fn loop_mom_params(&self, lmb: &LoopMomentumBasis) -> Vec<Atom>;
     fn explicit_ose_atom(&self, edge: EdgeIndex) -> Atom;
-    // fn explicit_meduium_numerato(&self,edge)
+    /// Expand the medium numerator weight at the requested temperature limit.
+    /// Derivatives are with respect to positive on-shell energy, holding temperature,
+    /// chemical potential, and orientation fixed; cyclic-chain signs belong to CFF reduction.
+    fn explicit_thermal_distribution_atom(
+        &self,
+        edge: EdgeIndex,
+        derivative_order: usize,
+        thermal_sign: Atom,
+        orientation_sign: Atom,
+        limit: MediumMode,
+    ) -> Option<Atom>;
+    fn make_thermal_distributions_explicit(
+        &self,
+        atom: &Atom,
+        limit: MediumMode,
+        edges: impl IntoIterator<Item = EdgeIndex>,
+    ) -> Result<Atom> {
+        let edges = edges.into_iter().collect::<BTreeSet<_>>();
+        let mut error = None;
+        let explicit = atom.replace_map(|term, _, out| {
+            if error.is_some() {
+                return;
+            }
+
+            let AtomView::Fun(function) = term else {
+                return;
+            };
+            if function.get_symbol() != GS.thermal_distribution {
+                return;
+            }
+            let call = match ThermalDistributionCall::try_from(term) {
+                Ok(call) => call,
+                Err(parse_error) => {
+                    error = Some(parse_error);
+                    return;
+                }
+            };
+            let ThermalDistributionCall {
+                edge,
+                derivative_order,
+                thermal_sign,
+                orientation_sign,
+                ..
+            } = call;
+            if !edges.contains(&edge) {
+                return;
+            }
+            let Some(replacement) = self.explicit_thermal_distribution_atom(
+                edge,
+                derivative_order,
+                thermal_sign,
+                orientation_sign,
+                limit,
+            ) else {
+                error = Some(color_eyre::eyre::eyre!(
+                    "Thermal distribution for edge {edge}, derivative order {derivative_order}, \
+                     and limit {limit:?} is unsupported"
+                ));
+                return;
+            };
+            **out = replacement;
+        });
+
+        match error {
+            Some(error) => Err(error),
+            None => Ok(explicit),
+        }
+    }
     fn get_ose_replacements(&self) -> Vec<Replacement>;
 }
 
@@ -180,6 +296,7 @@ define_gamma_loop_pairs! {
     uv_damp_minus_right,
     radius_right,
     radius_star_right,
+    inverse_temperature,
     pub additional_params,
 }
 
@@ -235,6 +352,8 @@ impl GammaLoopPairs {
         debug!("Validating radius_star");
         self.radius_star_left.validate();
         self.radius_star_right.validate();
+        debug!("Validating inverse_temperature");
+        self.inverse_temperature.validate();
     }
 
     pub(crate) fn new<
@@ -275,6 +394,7 @@ impl GammaLoopPairs {
             uv_damp_plus_right: ParamValuePairs::default_from_symbol(GS.uv_damp_plus_right),
             uv_damp_minus_left: ParamValuePairs::default_from_symbol(GS.uv_damp_minus_left),
             uv_damp_minus_right: ParamValuePairs::default_from_symbol(GS.uv_damp_minus_right),
+            inverse_temperature: ParamValuePairs::default_from_symbol(GS.inverse_temperature),
             additional_params: additional_params.into_iter().collect(),
             ..Default::default()
         };
@@ -644,6 +764,7 @@ impl<C, T: FloatLike + Decode<C>> Decode<C> for ParamCache<T> {
 
 #[derive(Clone, bincode_trait_derive::Encode)]
 pub struct ParamBuilder<T: FloatLike = f64> {
+    pub(crate) medium_mode: MediumMode,
     pub values: Vec<Vec<Complex<F<T>>>>,
     pub pairs: GammaLoopPairs,
     pub polarization_cache: ParamCache<T>,
@@ -658,6 +779,7 @@ impl<C: GammaLoopContext, T: FloatLike + Decode<C>> Decode<C> for ParamBuilder<T
     fn decode<D: bincode::de::Decoder<Context = C>>(
         decoder: &mut D,
     ) -> Result<Self, bincode::error::DecodeError> {
+        let medium_mode = Decode::decode(decoder)?;
         let values = Decode::decode(decoder)?;
         let pairs = Decode::decode(decoder)?;
         let polarization_cache = Decode::decode(decoder)?;
@@ -672,6 +794,7 @@ impl<C: GammaLoopContext, T: FloatLike + Decode<C>> Decode<C> for ParamBuilder<T
                 .map_err(bincode::error::DecodeError::OtherString)?;
         }
         Ok(Self {
+            medium_mode,
             values,
             pairs,
             polarization_cache,
@@ -1218,6 +1341,7 @@ impl<T: FloatLike> ParamBuilder<T> {
 
     pub(crate) fn new_empty() -> Self {
         Self {
+            medium_mode: MediumMode::Vacuum,
             polarization_cache: ParamCache::default(),
 
             fn_map: FunctionMap::default(),
@@ -1237,7 +1361,7 @@ impl<T: FloatLike> ParamBuilder<T> {
         model: &Model,
         lmb: &LoopMomentumBasis,
         additional_params: P,
-    ) -> Self {
+    ) -> Result<Self> {
         let (pairs, len) = GammaLoopPairs::new(model, graph, lmb, additional_params);
 
         let mut new = Self {
@@ -1246,8 +1370,10 @@ impl<T: FloatLike> ParamBuilder<T> {
         };
 
         let arg = symbol!("argument");
-        new.add_function(GS.tree_denom_wrapper, vec![arg], Atom::var(arg))
-            .unwrap();
+        for wrapper in [GS.tree_denom_wrapper, GS.thermal_weight_wrapper] {
+            new.add_function(wrapper, vec![arg], Atom::var(arg))
+                .unwrap();
+        }
         // Compile the energy definition once at the evaluator boundary. The
         // integrand keeps a semantic function with visible momentum dependence.
         let invariant = symbol!("energy_invariant");
@@ -1343,6 +1469,13 @@ impl<T: FloatLike> ParamBuilder<T> {
             symbol!("x").to_atom(),
         )
         .unwrap();
+        new.add_function(
+            GS.heaviside,
+            vec![symbol!("x")],
+            parse_lit!((abs(x) + x) / (2 * abs(x))),
+        )
+        .unwrap();
+
         // new.fn_map.add_conditional(GS.orientation_if);
         new.add_constant(CS.cf.into(), Rational::new(4, 3).into());
         new.add_constant(CS.ca.into(), Rational::new(3, 1).into());
@@ -1350,9 +1483,9 @@ impl<T: FloatLike> ParamBuilder<T> {
         new.add_constant(CS.tr.into(), Rational::new(1, 2).into());
 
         new.values = vec![vec![Complex::new_re(F(T::from_f64(0.))); len]];
-        new.update_model_values(model);
+        new.update_model_values(model)?;
         //panic!();
-        new
+        Ok(new)
     }
 
     #[inline]
@@ -1416,8 +1549,17 @@ impl<T: FloatLike> ParamBuilder<T> {
         }
     }
 
+    pub(crate) fn inverse_temperature_value(&mut self, inverse_temperature: Complex<F<T>>) {
+        debug_assert!(self.pairs.inverse_temperature.value_range.len() == 1);
+        for (index, values) in self.values.iter_mut().enumerate() {
+            let multiplicative_offset = index + 1;
+            values[self.pairs.inverse_temperature.value_range.start * multiplicative_offset] =
+                inverse_temperature.clone();
+        }
+    }
+
     /// Refresh model-dependent parameter slots while preserving the builder's graph layout.
-    pub fn update_model_values(&mut self, model: &Model) {
+    pub fn update_model_values(&mut self, model: &Model) -> Result<()> {
         // Importing symbols can change model iteration order. The evaluator
         // still expects the parameter order recorded in this builder.
         let model_values: HashMap<Atom, Complex<F<T>>> = model
@@ -1437,23 +1579,29 @@ impl<T: FloatLike> ParamBuilder<T> {
                 })
             }))
             .collect();
-        for (param, position) in self
+        let required_values = self
             .pairs
             .model_parameters
             .params
             .iter()
+            .map(|param| {
+                model_values.get(param).ok_or_else(|| {
+                    color_eyre::eyre::eyre!(
+                        "Model parameter {param} has no value in model {}",
+                        model.name
+                    )
+                })
+            })
+            .collect::<Result<Vec<_>>>()?;
+        for (value, position) in required_values
+            .into_iter()
             .zip_eq(self.pairs.model_parameters.value_range.clone())
         {
-            let value = model_values.get(param).unwrap_or_else(|| {
-                panic!(
-                    "Model parameter {param} has no value in model {}",
-                    model.name
-                )
-            });
             for (value_index, values) in self.values.iter_mut().enumerate() {
                 values[position * (value_index + 1)] = value.clone();
             }
         }
+        Ok(())
     }
 
     pub(crate) fn add_external_four_mom(
@@ -1823,7 +1971,8 @@ mod tests {
         graph::parse::from_dot::IntoGraph,
         initialisation::test_initialise,
         momentum::sample::{BareMomentumSample, LoopMomenta},
-        utils::{ArbPrec, SamplingFloat},
+        utils::{ArbPrec, SamplingFloat, load_generic_model},
+        uv::uv_graph::UVE,
     };
 
     #[test]
@@ -1952,7 +2101,7 @@ mod tests {
                 .get_mut(&CouplingName(coupling))
                 .unwrap()
                 .value = Some(coupling_value);
-            builder.update_model_values(&model);
+            builder.update_model_values(&model).unwrap();
             for (buffer_index, values) in builder.values.iter().enumerate() {
                 let stride = buffer_index + 1;
                 for (position, value) in values.iter().enumerate() {
@@ -2080,6 +2229,244 @@ mod tests {
 
         param_builder.initialize_duals(4);
         assert_eq!(param_builder.values.len(), 4);
+    }
+
+    #[test]
+    fn model_parameter_refresh_fails_without_changing_slots() {
+        test_initialise().unwrap();
+        let mut model = load_generic_model("sm");
+        let mut builder = ParamBuilder::<f64>::new_empty();
+        builder.pairs.model_parameters = ParamValuePairs {
+            params: vec![
+                model.get_parameter("MT").name.into(),
+                model.get_parameter("aS").name.into(),
+            ],
+            value_range: 0..2,
+        };
+        builder.values = vec![
+            vec![Complex::new_re(F(3.0)), Complex::new_re(F(5.0))],
+            vec![
+                Complex::new_re(F(3.0)),
+                Complex::new_re(F(7.0)),
+                Complex::new_re(F(5.0)),
+                Complex::new_re(F(11.0)),
+            ],
+        ];
+        let previous = builder.values.clone();
+        model.get_parameter_mut("MT").unwrap().value = Some(Complex::new_re(F(13.0)));
+        model.get_parameter_mut("aS").unwrap().value = None;
+        let error = builder.update_model_values(&model).unwrap_err().to_string();
+        assert!(error.contains("aS"), "{error}");
+        assert_eq!(builder.values, previous);
+        model.get_parameter_mut("aS").unwrap().value = Some(Complex::new_re(F(17.0)));
+        builder.update_model_values(&model).unwrap();
+        assert_eq!(
+            builder.values,
+            vec![
+                vec![Complex::new_re(F(13.0)), Complex::new_re(F(17.0))],
+                vec![
+                    Complex::new_re(F(13.0)),
+                    Complex::new_re(F(7.0)),
+                    Complex::new_re(F(17.0)),
+                    Complex::new_re(F(11.0))
+                ],
+            ]
+        );
+    }
+
+    #[test]
+    fn thermal_function_registration_follows_the_selected_medium() {
+        test_initialise().unwrap();
+        let mut graph: Graph = dot!(digraph thermal {
+            node [num=1]; edge [num=1 particle="d"];
+            A -> B; B -> A [particle="g"];
+        })
+        .unwrap();
+        let alias = symbolica::function!(symbol!("thermal_mode_test_alias"), 7);
+        graph
+            .param_builder
+            .add_constant(alias.clone(), Rational::from(5).into());
+        let vacuum_entries = graph.param_builder.reps.clone();
+        assert!(
+            !vacuum_entries
+                .iter()
+                .any(|entry| entry.lhs.contains_symbol(GS.thermal_distribution))
+        );
+        for mode in [
+            MediumMode::ThermodynamicEquilibrium,
+            MediumMode::ZeroTemperatureEquilibrium,
+        ] {
+            graph.set_medium_mode(mode).unwrap();
+            let entries = graph.param_builder.reps.clone();
+            let calls = entries
+                .iter()
+                .filter_map(|entry| ThermalDistributionCall::try_from(entry.lhs.as_view()).ok())
+                .collect_vec();
+            assert!(!calls.is_empty());
+            assert!(
+                calls.iter().all(|call| call.temperature_flag
+                    == Atom::num(i64::from(mode.is_finite_temperature())))
+            );
+            let expected_orders = if mode.is_finite_temperature() {
+                vec![0, 1, 2]
+            } else {
+                vec![0]
+            };
+            // Both chemical-potential metadata and its absence use only the
+            // ordinary order-zero function at zero temperature.
+            for edge in graph.iter_edge_ids() {
+                assert_eq!(
+                    calls
+                        .iter()
+                        .filter(|call| call.edge == edge)
+                        .map(|call| call.derivative_order)
+                        .collect_vec(),
+                    expected_orders,
+                );
+            }
+            graph.set_medium_mode(mode).unwrap();
+            assert_eq!(graph.param_builder.reps, entries);
+            assert_eq!(
+                alias
+                    .evaluator(&[] as &[Atom])
+                    .function_map(graph.param_builder.fn_map.clone())
+                    .build()
+                    .unwrap()
+                    .map_coeff(&|coefficient| coefficient.re.to_f64())
+                    .evaluate_single(&[]),
+                5.0,
+            );
+        }
+        graph.set_medium_mode(MediumMode::Vacuum).unwrap();
+        assert_eq!(graph.param_builder.reps, vacuum_entries);
+    }
+
+    #[test]
+    fn thermal_function_map_uses_explicit_orientation_for_all_derivatives() {
+        test_initialise().unwrap();
+        let model = load_generic_model("sm");
+        for particle in ["d", "g"] {
+            let mut graph: Graph = format!(
+                r#"digraph thermal_cycle {{
+                    node [num=1]; edge [num=1 particle="{particle}"];
+                    A -> B; B -> C; C -> D; D -> E; E -> A;
+                }}"#
+            )
+            .into_graph(&model)
+            .unwrap();
+            let edge = EdgeIndex(0);
+            // Concrete orientation calls must not depend on a global sign slot.
+            let mut params = vec![GS.ose(edge), GS.inverse_temperature.to_atom()];
+            let mut input = vec![1.0, 2.0];
+            if let Some(mu) = graph[edge]
+                .chemical_potential_atom()
+                .filter(|mu| !mu.is_zero())
+            {
+                params.push(mu);
+                input.push(1.5);
+            }
+            for limit in [
+                MediumMode::ThermodynamicEquilibrium,
+                MediumMode::ZeroTemperatureEquilibrium,
+            ] {
+                graph.set_medium_mode(limit).unwrap();
+                let orders = match limit {
+                    MediumMode::ThermodynamicEquilibrium => 0..=4,
+                    _ => 0..=0,
+                };
+                for order in orders {
+                    for thermal_sign in [-1, 1] {
+                        for orientation_sign in [-1, 1] {
+                            let expressions = [
+                                GS.thermal_distribution(
+                                    0,
+                                    order,
+                                    Atom::num(i64::from(limit.is_finite_temperature())),
+                                    thermal_sign,
+                                    orientation_sign,
+                                ),
+                                graph
+                                    .explicit_thermal_distribution_atom(
+                                        edge,
+                                        order as usize,
+                                        Atom::num(thermal_sign),
+                                        Atom::num(orientation_sign),
+                                        limit,
+                                    )
+                                    .unwrap(),
+                            ];
+                            let [registered, explicit] = expressions.map(|expression| {
+                                expression
+                                    .evaluator(&params)
+                                    .function_map(graph.param_builder.fn_map.clone())
+                                    .build()
+                                    .unwrap()
+                                    .map_coeff(&|coefficient| coefficient.re.to_f64())
+                                    .evaluate_single(&input)
+                            });
+                            assert!(
+                                (registered - explicit).abs() < 1e-13,
+                                "{particle}: {limit:?}, order {order}, thermal sign {thermal_sign}, orientation {orientation_sign}"
+                            );
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn thermal_weight_wrapper_survives_partial_vacuum_limits_and_evaluates() {
+        test_initialise().unwrap();
+        let graph: Graph = dot!(digraph G {
+            edge [particle="scalar_1"]; node [num=1];
+            v1 -> v2; v1 -> v2;
+        }, "scalars")
+        .unwrap();
+        let weight = symbolica::function!(
+            GS.thermal_weight_wrapper,
+            GS.thermal_distribution(0, 0, 1, 1, GS.sign(EdgeIndex(0)))
+                * GS.thermal_distribution(1, 0, 1, 1, GS.sign(EdgeIndex(1)))
+                - 1
+        );
+        let partial = graph
+            .make_thermal_distributions_explicit(&weight, MediumMode::Vacuum, [EdgeIndex(0)])
+            .unwrap();
+        assert_eq!(
+            partial,
+            symbolica::function!(
+                GS.thermal_weight_wrapper,
+                GS.thermal_distribution(1, 0, 1, 1, GS.sign(EdgeIndex(1))) - 1
+            )
+        );
+        assert!(
+            graph
+                .make_thermal_distributions_explicit(&partial, MediumMode::Vacuum, [EdgeIndex(1)],)
+                .unwrap()
+                .is_zero()
+        );
+
+        let params = [GS.thermal_distribution(1, 0, 1, 1, GS.sign(EdgeIndex(1)))];
+        let replacements = graph
+            .param_builder
+            .reps
+            .iter()
+            .map(FnMapEntry::replacement)
+            .collect::<Vec<_>>();
+        for explicit_replacements in [false, true] {
+            let expression = if explicit_replacements {
+                partial.replace_multiple(&replacements)
+            } else {
+                partial.clone()
+            };
+            let mut evaluator = expression
+                .evaluator(&params)
+                .function_map(graph.param_builder.fn_map.clone())
+                .build()
+                .unwrap()
+                .map_coeff(&|coefficient| coefficient.re.to_f64());
+            assert_eq!(evaluator.evaluate_single(&[1.25]), 0.25);
+        }
     }
 
     #[test]
