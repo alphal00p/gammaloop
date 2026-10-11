@@ -383,8 +383,8 @@ fn check_backend<T: FloatLike>(
     ));
     let expected_backend = match &mode {
         FrozenCompilationMode::Eager => ActiveF64Backend::Eager,
-        FrozenCompilationMode::Symjit(level) => {
-            evaluator.activate_symjit(*level).unwrap();
+        FrozenCompilationMode::Symjit(options) => {
+            evaluator.activate_symjit(options).unwrap();
             ActiveF64Backend::Symjit
         }
         FrozenCompilationMode::Cpp(_) => {
@@ -650,7 +650,7 @@ mod failing {
         };
         check_backend(
             ArgumentDomain::Complex,
-            FrozenCompilationMode::Cpp(options.external_options_snapshot()),
+            FrozenCompilationMode::Cpp(options.options_snapshot()),
             53,
             |x| F(x.to_f64()),
         );
@@ -662,7 +662,7 @@ mod failing {
         let options = GammaloopCompileOptions::default();
         check_backend(
             ArgumentDomain::Complex,
-            FrozenCompilationMode::Cpp(options.external_options_snapshot()),
+            FrozenCompilationMode::Cpp(options.options_snapshot()),
             53,
             |x| F(x.to_f64()),
         );
@@ -671,9 +671,14 @@ mod failing {
     #[test]
     #[ignore = "stable enough for current purpose; passing eager Arb is the final stability level"]
     fn hyperbolic_symjit_o0() {
+        let options = GammaloopCompileOptions {
+            optimization_level: CompilationOptimizationLevel::O0,
+            jit_direct_translation: false,
+            ..Default::default()
+        };
         check_backend(
             ArgumentDomain::Complex,
-            FrozenCompilationMode::Symjit(CompilationOptimizationLevel::O0),
+            FrozenCompilationMode::Symjit(options.options_snapshot()),
             53,
             |x| F(x.to_f64()),
         );
@@ -682,9 +687,14 @@ mod failing {
     #[test]
     #[ignore = "stable enough for current purpose; passing eager Arb is the final stability level"]
     fn hyperbolic_symjit_o2() {
+        let options = GammaloopCompileOptions {
+            optimization_level: CompilationOptimizationLevel::O2,
+            jit_direct_translation: true,
+            ..Default::default()
+        };
         check_backend(
             ArgumentDomain::Complex,
-            FrozenCompilationMode::Symjit(CompilationOptimizationLevel::O2),
+            FrozenCompilationMode::Symjit(options.options_snapshot()),
             53,
             |x| F(x.to_f64()),
         );
@@ -722,7 +732,7 @@ mod failing {
         };
         check_backend(
             ArgumentDomain::Real,
-            FrozenCompilationMode::Cpp(options.external_options_snapshot()),
+            FrozenCompilationMode::Cpp(options.options_snapshot()),
             53,
             |x| F(x.to_f64()),
         );
@@ -734,7 +744,7 @@ mod failing {
         let options = GammaloopCompileOptions::default();
         check_backend(
             ArgumentDomain::Real,
-            FrozenCompilationMode::Cpp(options.external_options_snapshot()),
+            FrozenCompilationMode::Cpp(options.options_snapshot()),
             53,
             |x| F(x.to_f64()),
         );
@@ -743,9 +753,14 @@ mod failing {
     #[test]
     #[ignore = "stable enough for current purpose; passing eager Arb is the final stability level"]
     fn hyperbolic_real_symjit_o0() {
+        let options = GammaloopCompileOptions {
+            optimization_level: CompilationOptimizationLevel::O0,
+            jit_direct_translation: false,
+            ..Default::default()
+        };
         check_backend(
             ArgumentDomain::Real,
-            FrozenCompilationMode::Symjit(CompilationOptimizationLevel::O0),
+            FrozenCompilationMode::Symjit(options.options_snapshot()),
             53,
             |x| F(x.to_f64()),
         );
@@ -754,9 +769,14 @@ mod failing {
     #[test]
     #[ignore = "stable enough for current purpose; passing eager Arb is the final stability level"]
     fn hyperbolic_real_symjit_o2() {
+        let options = GammaloopCompileOptions {
+            optimization_level: CompilationOptimizationLevel::O2,
+            jit_direct_translation: true,
+            ..Default::default()
+        };
         check_backend(
             ArgumentDomain::Real,
-            FrozenCompilationMode::Symjit(CompilationOptimizationLevel::O2),
+            FrozenCompilationMode::Symjit(options.options_snapshot()),
             53,
             |x| F(x.to_f64()),
         );

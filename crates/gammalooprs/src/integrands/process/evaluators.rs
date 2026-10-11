@@ -81,7 +81,7 @@ use crate::{
     },
     settings::{
         RuntimeSettings,
-        global::{CompilationOptimizationLevel, FrozenCompilationMode},
+        global::{CompilationOptionsSnapshot, FrozenCompilationMode},
     },
     utils::{
         ArbPrec, F, FUN_LIB, FloatLike, GS, Length, RuntimeCache, SamplingFloat, TENSORLIB, W_,
@@ -2832,10 +2832,7 @@ impl GenericEvaluator {
         self.active_f64_backend.set(ActiveF64Backend::Eager);
     }
 
-    pub(crate) fn activate_symjit(
-        &mut self,
-        optimization_level: CompilationOptimizationLevel,
-    ) -> Result<()> {
+    pub(crate) fn activate_symjit(&mut self, options: &CompilationOptionsSnapshot) -> Result<()> {
         if self.is_eager_only() {
             self.activate_eager_only();
             return Ok(());
@@ -2843,17 +2840,19 @@ impl GenericEvaluator {
 
         // Use the same numeric program as eager and external compilation. Rational
         // constant slots (such as pi) remain placeholders until domain mapping.
-        // SymJIT 2.21 supports optimization levels up to O2 and cannot compact some complex
-        // temporary layouts. Its function-result cache crosses inactive branches,
-        // and optimization can drop stores that later calls still read. Disable
-        // that cache; Symbolica already shares expressions in this numeric program.
+        // SymJIT cannot compact some complex temporary layouts. Direct translation
+        // emits real branches and forces O2. The configured level (capped at O2)
+        // and cse=false only affect indirect translation: its function-result cache
+        // crosses inactive branches, and optimization can drop stores that later
+        // calls still read. Symbolica already shares expressions in this program.
         let evaluator = self
             .f64_eager
             .clone()
             .map_coeff(&|c| SymComplex::new(c.re.0, c.im.0))
             .jit_compile(
                 JITCompilationSettings::new()
-                    .optimization_level(usize::from(optimization_level).min(2) as u8)
+                    .direct_translation(options.jit_direct_translation)
+                    .optimization_level(usize::from(options.optimization_level).min(2) as u8)
                     .with_option("compact", "false")
                     .with_option("cse", "false"),
             )
@@ -3564,6 +3563,7 @@ mod tests {
     use crate::{
         GammaLoopContextContainer, initialisation::test_initialise,
         integrands::process::param_builder::ParamValuePairs, model::Model,
+        settings::global::CompilationOptimizationLevel,
     };
 
     use super::*;
@@ -3710,7 +3710,10 @@ mod tests {
                 for compiled in [false, true] {
                     if compiled {
                         shared
-                            .activate_symjit(CompilationOptimizationLevel::O2)
+                            .activate_symjit(&CompilationOptionsSnapshot {
+                                optimization_level: CompilationOptimizationLevel::O2,
+                                ..Default::default()
+                            })
                             .unwrap();
                     }
                     let actual =
@@ -3916,7 +3919,10 @@ mod tests {
         for compile in [false, true] {
             if compile {
                 evaluator
-                    .activate_symjit(CompilationOptimizationLevel::O0)
+                    .activate_symjit(&CompilationOptionsSnapshot {
+                        optimization_level: CompilationOptimizationLevel::O0,
+                        ..Default::default()
+                    })
                     .unwrap();
                 assert_eq!(evaluator.active_f64_backend(), ActiveF64Backend::Symjit);
             }
@@ -4252,7 +4258,10 @@ mod tests {
         for compile in [false, true] {
             if compile {
                 evaluator
-                    .activate_symjit(CompilationOptimizationLevel::O0)
+                    .activate_symjit(&CompilationOptionsSnapshot {
+                        optimization_level: CompilationOptimizationLevel::O0,
+                        ..Default::default()
+                    })
                     .unwrap();
                 assert_eq!(evaluator.active_f64_backend(), ActiveF64Backend::Symjit);
             }
@@ -5085,7 +5094,10 @@ mod tests {
                     let compile_started = std::time::Instant::now();
                     stack
                         .single_parametric
-                        .activate_symjit(CompilationOptimizationLevel::O0)
+                        .activate_symjit(&CompilationOptionsSnapshot {
+                            optimization_level: CompilationOptimizationLevel::O0,
+                            ..Default::default()
+                        })
                         .unwrap();
                     let compile_ms = compile_started.elapsed().as_secs_f64() * 1000.0;
                     assert_eq!(
@@ -6144,7 +6156,10 @@ mod tests {
                     }
                     if !store_atom && !do_fn_map_replacements && dual_shape.is_none() {
                         retained
-                            .activate_symjit(CompilationOptimizationLevel::O0)
+                            .activate_symjit(&CompilationOptionsSnapshot {
+                                optimization_level: CompilationOptimizationLevel::O0,
+                                ..Default::default()
+                            })
                             .unwrap();
                         let actual =
                             <f64 as GenericEvaluatorFloat>::get_evaluator(&mut retained)(&values);
@@ -6191,7 +6206,10 @@ mod tests {
             for compiled in [false, true] {
                 if compiled {
                     evaluator
-                        .activate_symjit(CompilationOptimizationLevel::O0)
+                        .activate_symjit(&CompilationOptionsSnapshot {
+                            optimization_level: CompilationOptimizationLevel::O0,
+                            ..Default::default()
+                        })
                         .unwrap();
                 }
                 for (input, expected) in [(0.0, 7.0), (2.0, 0.5)] {
@@ -7048,10 +7066,14 @@ mod tests {
             &EvaluatorSettings::default(),
         )
         .unwrap();
-        for compiled in [false, true] {
-            if compiled {
+        for jit_direct_translation in [None, Some(false), Some(true)] {
+            if let Some(jit_direct_translation) = jit_direct_translation {
                 evaluator
-                    .activate_symjit(CompilationOptimizationLevel::O2)
+                    .activate_symjit(&CompilationOptionsSnapshot {
+                        optimization_level: CompilationOptimizationLevel::O2,
+                        jit_direct_translation,
+                        ..Default::default()
+                    })
                     .unwrap();
             }
             for (inputs, expected) in [
@@ -7066,7 +7088,7 @@ mod tests {
                 assert_eq!(
                     actual,
                     Complex::new_re(F(expected)),
-                    "compiled={compiled}, inputs={inputs:?}"
+                    "jit_direct_translation={jit_direct_translation:?}, inputs={inputs:?}"
                 );
             }
         }
@@ -7114,10 +7136,14 @@ mod tests {
             &EvaluatorSettings::default(),
         )
         .unwrap();
-        for compiled in [false, true] {
-            if compiled {
+        for jit_direct_translation in [None, Some(false), Some(true)] {
+            if let Some(jit_direct_translation) = jit_direct_translation {
                 evaluator
-                    .activate_symjit(CompilationOptimizationLevel::O2)
+                    .activate_symjit(&CompilationOptionsSnapshot {
+                        optimization_level: CompilationOptimizationLevel::O2,
+                        jit_direct_translation,
+                        ..Default::default()
+                    })
                     .unwrap();
             }
             for (inputs, expected) in [
@@ -7132,7 +7158,7 @@ mod tests {
                 assert_eq!(
                     actual,
                     Complex::new_re(F(expected)),
-                    "compiled={compiled}, inputs={inputs:?}"
+                    "jit_direct_translation={jit_direct_translation:?}, inputs={inputs:?}"
                 );
             }
         }
@@ -7167,10 +7193,14 @@ mod tests {
                 &EvaluatorSettings::default(),
             )
             .unwrap();
-            for compiled in [false, true] {
-                if compiled {
+            for jit_direct_translation in [None, Some(false), Some(true)] {
+                if let Some(jit_direct_translation) = jit_direct_translation {
                     evaluator
-                        .activate_symjit(CompilationOptimizationLevel::O2)
+                        .activate_symjit(&CompilationOptionsSnapshot {
+                            optimization_level: CompilationOptimizationLevel::O2,
+                            jit_direct_translation,
+                            ..Default::default()
+                        })
                         .unwrap();
                 } else {
                     evaluator.activate_eager();
@@ -7187,7 +7217,7 @@ mod tests {
                     assert_eq!(
                         actual,
                         Complex::new_re(F(expected)),
-                        "retained={retained}, compiled={compiled}, inputs={inputs:?}"
+                        "retained={retained}, jit_direct_translation={jit_direct_translation:?}, inputs={inputs:?}"
                     );
                 }
             }
@@ -7213,13 +7243,21 @@ mod tests {
             &EvaluatorSettings::default(),
         )
         .unwrap();
-        for level in [
+        for compilation in [
             None,
-            Some(CompilationOptimizationLevel::O0),
-            Some(CompilationOptimizationLevel::O2),
+            Some((CompilationOptimizationLevel::O0, false)),
+            Some((CompilationOptimizationLevel::O0, true)),
+            Some((CompilationOptimizationLevel::O2, false)),
+            Some((CompilationOptimizationLevel::O2, true)),
         ] {
-            if let Some(level) = level {
-                evaluator.activate_symjit(level).unwrap();
+            if let Some((optimization_level, jit_direct_translation)) = compilation {
+                evaluator
+                    .activate_symjit(&CompilationOptionsSnapshot {
+                        optimization_level,
+                        jit_direct_translation,
+                        ..Default::default()
+                    })
+                    .unwrap();
             } else {
                 evaluator.activate_eager();
             }
@@ -7252,11 +7290,76 @@ mod tests {
                         assert!(actual.re.0.is_finite() && actual.im.0.is_finite());
                         assert!(
                             difference <= 1e-12 * scale,
-                            "level={level:?}, q={q:?}, guards={guards:?}, actual={actual:?}, expected={expected:?}"
+                            "compilation={compilation:?}, q={q:?}, guards={guards:?}, actual={actual:?}, expected={expected:?}"
                         );
                     }
                 }
             }
+        }
+    }
+
+    #[test]
+    fn symjit_direct_translation_survives_reload() {
+        use crate::settings::global::GammaloopCompileOptions;
+
+        test_initialise().unwrap();
+        let parameter = Atom::var(symbol!("jit_direct_translation_parameter"));
+        for jit_direct_translation in [true, false] {
+            let settings = EvaluatorSettings {
+                compile: true,
+                ..Default::default()
+            };
+            let compilation = GammaloopCompileOptions {
+                jit_direct_translation,
+                ..Default::default()
+            }
+            .frozen_mode(&settings);
+            let evaluator = GenericEvaluator::new_from_raw_params(
+                [&parameter * &parameter + Atom::num(3)],
+                std::slice::from_ref(&parameter),
+                &FunctionMap::default(),
+                vec![],
+                settings.optimization_settings(),
+                None,
+                &settings,
+            )
+            .unwrap();
+            let encoded =
+                bincode::encode_to_vec((&evaluator, &compilation), bincode::config::standard())
+                    .unwrap();
+            let mut state = Vec::new();
+            State::export(&mut state).unwrap();
+            let state_map = State::import(&mut Cursor::new(state), None).unwrap();
+            let model = Model::default();
+            let ((mut decoded, decoded_compilation), _): (
+                (GenericEvaluator, FrozenCompilationMode),
+                _,
+            ) = bincode::decode_from_slice_with_context(
+                &encoded,
+                bincode::config::standard(),
+                GammaLoopContextContainer {
+                    state_map: &state_map,
+                    model: &model,
+                },
+            )
+            .unwrap();
+            assert_eq!(decoded_compilation, compilation);
+            let FrozenCompilationMode::Symjit(options) = decoded_compilation else {
+                panic!("expected frozen JIT compilation settings");
+            };
+            decoded.activate_symjit(&options).unwrap();
+            assert_eq!(decoded.active_f64_backend(), ActiveF64Backend::Symjit);
+            // Symbolica serializes the compiled instance as (external functions,
+            // IR, settings); inspect those settings to test actual forwarding.
+            let compiled = serde_json::to_value(&decoded.symjit_f64.as_ref().unwrap().0).unwrap();
+            assert_eq!(
+                compiled[2]["direct_translation"].as_bool(),
+                Some(jit_direct_translation)
+            );
+            let actual = <f64 as GenericEvaluatorFloat>::get_evaluator_single(&mut decoded)(&[
+                Complex::new(F(2.0), F(1.0)),
+            ]);
+            assert_eq!(actual, Complex::new(F(6.0), F(4.0)));
         }
     }
 
@@ -7282,21 +7385,29 @@ mod tests {
             let eager = scalar_value(<f64 as GenericEvaluatorFloat>::get_evaluator(
                 &mut evaluator,
             )(&[]));
-            for level in [
-                CompilationOptimizationLevel::O0,
-                CompilationOptimizationLevel::O3,
-            ] {
-                evaluator.activate_symjit(level).unwrap();
-                let jit = scalar_value(<f64 as GenericEvaluatorFloat>::get_evaluator(
-                    &mut evaluator,
-                )(&[]));
-                for actual in [eager, jit] {
-                    assert!(actual.re.0.is_finite() && actual.im.0.is_finite());
-                    assert!(
-                        (actual.re.0 - expected).abs() <= 4.0 * f64::EPSILON * expected.abs(),
-                        "level={level}, actual={actual:?}, expected={expected}"
-                    );
-                    assert_eq!(actual.im.0, 0.0);
+            for jit_direct_translation in [false, true] {
+                for level in [
+                    CompilationOptimizationLevel::O0,
+                    CompilationOptimizationLevel::O3,
+                ] {
+                    evaluator
+                        .activate_symjit(&CompilationOptionsSnapshot {
+                            optimization_level: level,
+                            jit_direct_translation,
+                            ..Default::default()
+                        })
+                        .unwrap();
+                    let jit = scalar_value(<f64 as GenericEvaluatorFloat>::get_evaluator(
+                        &mut evaluator,
+                    )(&[]));
+                    for actual in [eager, jit] {
+                        assert!(actual.re.0.is_finite() && actual.im.0.is_finite());
+                        assert!(
+                            (actual.re.0 - expected).abs() <= 4.0 * f64::EPSILON * expected.abs(),
+                            "level={level}, jit_direct_translation={jit_direct_translation}, actual={actual:?}, expected={expected}"
+                        );
+                        assert_eq!(actual.im.0, 0.0);
+                    }
                 }
             }
         }

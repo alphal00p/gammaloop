@@ -1539,7 +1539,9 @@ mod tests {
         },
         settings::{
             RuntimeSettings,
-            global::{CompilationOptimizationLevel, FrozenCompilationMode},
+            global::{
+                CompilationOptimizationLevel, CompilationOptionsSnapshot, FrozenCompilationMode,
+            },
         },
         utils::{ArbPrec, f128, load_generic_model},
     };
@@ -2167,7 +2169,10 @@ mod tests {
 
             let generic = decoded.evaluators_mut()[0].generic_evaluator_mut();
             generic
-                .activate_symjit(CompilationOptimizationLevel::O2)
+                .activate_symjit(&CompilationOptionsSnapshot {
+                    optimization_level: CompilationOptimizationLevel::O2,
+                    ..Default::default()
+                })
                 .unwrap();
             assert_eq!(generic.active_f64_backend(), ActiveF64Backend::Eager);
             generic

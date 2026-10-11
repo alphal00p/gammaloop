@@ -247,7 +247,12 @@
         "fast_math": {
           "type": "boolean"
         },
+        "jit_direct_translation": {
+          "description": "Skip Symbolica's tree-based analysis by translating instructions directly to SymJIT IR.\nEnabled by default to reduce JIT preparation work; disable to use the tree-based\ntranslator when comparing or diagnosing backend behavior. Also applies when JIT\nis the fallback for external artifacts. Direct translation always uses SymJIT O2,\nregardless of `optimization_level`; disable it to use JIT O0 or O1.",
+          "type": "boolean"
+        },
         "optimization_level": {
+          "description": "Optimization level for the evaluator compiler. Indirect JIT translation caps it\nat O2; direct JIT translation always uses O2, regardless of this setting.",
           "$ref": "#/$defs/CompilationOptimizationLevel"
         },
         "unsafe_math": {
