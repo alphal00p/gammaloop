@@ -1,6 +1,6 @@
 # Runtime selection and resource policy for local tests, NixCI and main.
 # Package/archive/shard callers select a profile; they must not repeat these lists.
-nextest-version = "0.9.115"
+nextest-version = "0.9.137"
 
 # Existing quarantine, pending a dedicated assertion/reference audit. These are
 # not established unsupported physics cases and are not counted as passed.
