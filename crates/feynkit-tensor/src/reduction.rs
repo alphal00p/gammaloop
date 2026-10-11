@@ -273,6 +273,7 @@ impl TensorReduction {
     /// }
     /// ```
     pub fn expression(&self) -> Atom {
+        // Binary addition preserves repeated factored summands; add_many flattens them.
         self.terms
             .iter()
             .fold(Atom::Zero, |sum, term| sum + term.expression())
@@ -739,9 +740,7 @@ impl TensorReducer {
         }
 
         Ok(TensorMonomial {
-            scalar: scalar_factors
-                .into_iter()
-                .fold(Atom::one(), |product, factor| product * factor),
+            scalar: Atom::mul_many(scalar_factors),
             integrated,
             outside,
         })
@@ -1729,11 +1728,11 @@ fn outside_pairing_atoms(
 }
 
 fn outside_pairing_atom(outside: &[Outside], pairing: &[usize]) -> Atom {
-    (0..pairing.len())
-        .filter(|left| *left < pairing[*left])
-        .fold(Atom::one(), |product, left| {
-            product * outside_pair(&outside[left], &outside[pairing[left]])
-        })
+    Atom::mul_many(
+        (0..pairing.len())
+            .filter(|left| *left < pairing[*left])
+            .map(|left| outside_pair(&outside[left], &outside[pairing[left]])),
+    )
 }
 
 fn coset_key_from_parts(parts: &[usize]) -> u64 {
@@ -2859,6 +2858,26 @@ mod tests {
             / dimension;
         assert_eq!(result.expression(), expected);
         assert!(result.is_fully_contracted());
+    }
+
+    #[test]
+    fn reduction_keeps_repeated_factored_summands() {
+        let (k, _, p, _) = vectors();
+        let dimension = Atom::var(symbol!("feynkit_tensor_test::D_repeated_summands"));
+        let spectator = Atom::var(symbol!("feynkit_tensor_test::repeated_a"))
+            + Atom::var(symbol!("feynkit_tensor_test::repeated_b"));
+        let kc = compact(k, 1, &dimension);
+        let pc = compact(p, 1, &dimension);
+        // The rank-two row reduces to the same factored scalar as the constant row.
+        let input = &spectator
+            * (Atom::one() + &dimension * dot(&kc, &pc).pow(2) / (dot(&kc, &kc) * dot(&pc, &pc)));
+        let result = TensorReducer::new(dimension)
+            .with_integrated_head(k)
+            .reduce(input.as_view())
+            .unwrap();
+        let expected = Atom::num(2) * spectator;
+        assert_eq!(result.expression(), expected);
+        assert_eq!(result.into_expression(), expected);
     }
 
     #[test]
