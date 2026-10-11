@@ -325,12 +325,17 @@ For accepted tails, tables label the sparse terminal-zero evidence as `zero tail
   disconnected UV wood until their combined integrated policy is implemented.
   Components that cannot occur together in a wood do not trigger this rejection.
 - Local `OS` dispatch remains deferred, and requesting integrated OS is rejected
-  before forest computation. `Unsubtracted` is
-  expected to be filtered out before these operations. These checks are skipped
-  when UV subtraction itself is disabled.
+  before forest computation. `Unsubtracted` is expected to be filtered out
+  before these operations. These checks are skipped when UV subtraction itself
+  is disabled.
 - Parametric integrand generation currently supports final 3D output
   only. `FourD` is used by integrated renormalization internally but is
   rejected by the parametric orchestrator.
+- The parametric orchestrator receives the full generation settings so
+  wood construction can see the medium. It rejects
+  `local_uv_cts_from_expanded_4d_integrands` for medium modes and vacuum
+  subtraction; their thermal-weight ownership is documented in
+  #link("architecture-current.typ#3-2-cff-production-and-numerator-energy-ownership")[the current architecture].
 - The legacy DAG executor constructs union-shaped nodes but does not
   execute multi-parent unions. Disconnected generation therefore
   requires the hedge-poset backend.

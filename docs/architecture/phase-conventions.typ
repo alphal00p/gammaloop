@@ -18,6 +18,21 @@ $ I_M = i^L \( - 1 \)^P I_E . $
 
 Thus absence of thresholds does not make all scalar topology integrals real. Their phase can alternate with loop count. In four-point quartic topologies $P = 2 L$, the sequence is $1 \, i \, - 1 \, - i \, 1 \, dots.h$. A full UFO amplitude also contains its vertex and propagator factors. Ultraviolet subtraction can change the sign of a finite real coefficient; absence of a threshold alone is not a positivity theorem for a renormalized amplitude.
 
+== Connected vacuum amplitudes and pressure
+<connected-vacuum-amplitudes-and-pressure>
+For complete connected equilibrium vacuum graphs, GammaLoop returns the sum
+$A_Gamma$ with all model factors included and the overall spacetime volume
+stripped. Under $t = -i tau$, that single volume factor becomes $-i beta V$, so
+
+$ delta ln Z_E = -i beta V A_Gamma, quad delta p = frac(delta ln Z_E, beta V) = -i A_Gamma. $
+
+This argument is independent of loop order and particle content for consistently
+continued theories within GammaLoop's supported equilibrium setup. Apply $-i$
+once to the complete renormalized sum; vacuum subtraction preserves the relation.
+Stripped scalar integrals and arbitrary numerator replacements instead require
+their own conversion. See #link("https://arxiv.org/pdf/1701.01554")[Laine--Vuorinen,
+section 3.1] for the connected-vacuum expansion of the thermodynamic potential.
+
 == The right side is an inverse-process graph
 <the-right-side-is-an-inverse-process-graph>
 Conjugating an independently constructed amplitude is necessary. Conjugating the raw right-hand numerator of a forward graph again generally acts on the wrong object.

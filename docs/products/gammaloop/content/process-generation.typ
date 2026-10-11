@@ -25,6 +25,8 @@ generate help xs
 ordinary amplitudes. Their final-state lists therefore have different meanings even when the
 printed particle syntax is identical. Use the #link("guides/dot-input/")[GammaLoop DOT input guide] when preparing or reviewing imported graph files. Use `generate help <mode>` inside the stateful CLI to see
 the flags supported by your installed version.
+Amplitudes can also be generated in an equilibrium medium; see
+#link("guides/thermal-and-dense-media/")[thermal and dense media].
 
 == Process specification grammar
 

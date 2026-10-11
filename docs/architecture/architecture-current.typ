@@ -214,10 +214,15 @@ contraction numerators, and distribution derivatives separately from rational
 coefficients, keeping physical distributions outside Laurent interpolation.
 Distribution derivatives are ordinary energy derivatives at fixed temperature,
 chemical potential, and orientation. An m-edge cyclic chain has a common pole when
-all of its edges share the loop-momentum signature up to sign and the same symbolic
-mass key. Reducing it contributes `(-1)^(m-1)/(m-1)!` to the CFF coefficient and a
+all of its edges share the full momentum signature (loop and external) up to sign and the same
+symbolic mass key. Reducing it contributes `(-1)^(m-1)/(m-1)!` to the CFF coefficient and a
 distribution derivative of order `m-1` on the chain's lowest edge ID. Equal routing
 with distinct mass keys is not a common pole and stays a divided difference.
+Amplitude warm-up calls `Graph::validate_denominator_hsurfaces` to reject
+selected-orientation denominator H-surfaces that vanish identically at the current masses
+and external momenta, including distinct mass parameters with values equal up to sign.
+These comparisons use exact equality; the check does not cover UV-counterterm expressions
+or cross sections.
 Ordinary thermal contractions require a connected virtual complement. Sources
 and sinks take priority; a mixed vertex needs at least three virtual boundary
 edges, or one incoming and one outgoing virtual edge with external attachments
@@ -351,8 +356,13 @@ the complete `h(t)*t^3/g'(t)` measure and the smooth coefficient callback.
 HyperDual Taylor coefficients are converted to ordinary mixed derivatives with
 the distribution-action signs and factorials. Only the squared mass enters the
 shell. Empty shells, including a zero oriented chemical potential for a massless
-fermion, contribute zero; degenerate onsets `sigma*mu = m > 0`, invalid radial
+fermion, contribute zero; degenerate onsets `sigma*mu = |m| > 0`, invalid radial
 coordinates and nonfinite results are errors.
+The onset check runs on selected sectors during sample evaluation, after the
+empty-product check, using native shell parameters at that evaluation's precision.
+Binary64 warm-up cannot decide this for every later precision: a near-onset mass
+expression may round to equality in binary64 while retaining a regular shell in
+Quad or Arb. Ordinary order-zero steps do not enter this localization check.
 Masses and chemical potentials are held fixed during differentiation.
 
 The callback receives momenta in the adapted basis, with all unconstrained
@@ -709,7 +719,9 @@ Every evaluator receives the auxiliary numerator sampling scale `M` as an input,
 
 Binary64 reporting may round exponentially suppressed, fully weighted components
 to zero. Numerical factors are combined before this rounding so a compensating
-factor cannot hide a meaningful contribution. For an averaged stability result,
+factor cannot hide a meaningful contribution. UV profiling applies its scaling
+measure after native evaluation, so stability bounds include that measure as part
+of the full weight. For an averaged stability result,
 the mean absolute fully weighted probe value can establish underflow below the
 smallest normal binary64 value. This bound stays separate for each component and
 observable; an imaginary scale cannot excuse a meaningful real discrepancy.
