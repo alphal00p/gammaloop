@@ -45,7 +45,8 @@ use spenso::{
     structure::representation::{Minkowski, RepName},
 };
 use symbolica::{
-    atom::{Atom, AtomCore, AtomView, FunctionBuilder},
+    atom::{Atom, AtomCore, AtomView, FunctionBuilder, Symbol},
+    id::Pattern,
     symbol,
 };
 use thiserror::Error;
@@ -1491,29 +1492,32 @@ impl InteractionDependencies {
     }
 }
 
-/// Keep the normalized expression and bind each distinct private placeholder once.
-/// Symbolica owns traversal and reconstruction of the surrounding expression.
+/// Bind distinct private placeholders, then let Symbolica instantiate its compiled
+/// pattern. Constant subexpressions remain literals owned by the library.
 struct InteractionTemplate {
-    expression: Atom,
-    placeholders: Vec<(Atom, BindingPlaceholder)>,
+    expression: Pattern,
+    placeholders: Vec<(Symbol, BindingPlaceholder)>,
     dependencies: InteractionDependencies,
 }
 
 enum BindingPlaceholder {
     Hedge { slot: usize, shift: i64 },
     Dummy(usize),
-    Momentum { slot: usize, index: Option<Atom> },
+    Momentum { slot: usize, index: Option<Pattern> },
     Orientation(usize),
 }
 
 impl InteractionTemplate {
     fn new(expression: &Atom) -> Self {
+        let mut symbols = expression.get_all_symbols(true).into_iter().collect();
         let mut template = Self {
-            expression: expression.clone(),
+            expression: Pattern::Literal(expression.clone()),
             placeholders: Vec::new(),
             dependencies: InteractionDependencies::default(),
         };
-        template.collect(expression.as_view(), &mut HashSet::new());
+        let mut markers = HashMap::new();
+        template.collect(expression.as_view(), &mut markers, &mut symbols);
+        template.expression = Self::pattern(expression.as_view(), &markers);
         for slots in [
             &mut template.dependencies.hedges,
             &mut template.dependencies.momenta,
@@ -1525,7 +1529,23 @@ impl InteractionTemplate {
         template
     }
 
-    fn collect(&mut self, expression: AtomView<'_>, seen: &mut HashSet<Atom>) {
+    fn fresh_symbol(symbols: &mut HashSet<Symbol>) -> Symbol {
+        let mut index = 0;
+        loop {
+            let symbol = symbol!(&format!("feynkit_generator_binding::slot{index}_"));
+            if symbols.insert(symbol) {
+                return symbol;
+            }
+            index += 1;
+        }
+    }
+
+    fn collect(
+        &mut self,
+        expression: AtomView<'_>,
+        markers: &mut HashMap<Atom, Symbol>,
+        symbols: &mut HashSet<Symbol>,
+    ) {
         expression.visitor(&mut |term| {
             let AtomView::Fun(function) = term else {
                 return true;
@@ -1533,9 +1553,11 @@ impl InteractionTemplate {
             if function.get_symbol().get_namespace() != "feynkit_generator_template" {
                 return true;
             }
-            if !seen.insert(term.to_owned()) {
+            if markers.contains_key(&term.to_owned()) {
                 return false;
             }
+            let symbol = Self::fresh_symbol(symbols);
+            markers.insert(term.to_owned(), symbol);
             let mut arguments = function.iter();
             let slot = usize::try_from(arguments.next().expect("compiled local slot"))
                 .expect("compiled local slot is nonnegative");
@@ -1555,10 +1577,9 @@ impl InteractionTemplate {
                 "momentum" => {
                     self.dependencies.momenta.push(slot);
                     let index = arguments.next().map(|index| {
-                        // A top-down replacement skips the inserted value. Collect its
-                        // index first so the whole momentum can be bound in advance.
-                        self.collect(index, seen);
-                        index.to_owned()
+                        // Bind the index before the whole momentum value is substituted.
+                        self.collect(index, markers, symbols);
+                        Self::pattern(index, markers)
                     });
                     BindingPlaceholder::Momentum { slot, index }
                 }
@@ -1568,28 +1589,69 @@ impl InteractionTemplate {
                 }
                 _ => unreachable!("private interaction template head"),
             };
-            self.placeholders.push((term.to_owned(), placeholder));
+            self.placeholders.push((symbol, placeholder));
             false
         });
     }
 
-    fn replace(expression: AtomView<'_>, values: &HashMap<AtomView<'_>, Atom>) -> Atom {
-        expression.replace_map(|term, _, out| {
-            if matches!(term, AtomView::Fun(function)
-                if function.get_symbol().get_namespace() == "feynkit_generator_template")
+    fn pattern(expression: AtomView<'_>, markers: &HashMap<Atom, Symbol>) -> Pattern {
+        let mut changing = false;
+        expression.visitor(&mut |term| {
+            changing |= matches!(term, AtomView::Fun(function)
+                if function.get_symbol().get_namespace() == "feynkit_generator_template");
+            !changing
+        });
+        if !changing {
+            return Pattern::Literal(expression.to_owned());
+        }
+        // Construct Pattern directly: normalizing an intermediate Atom with
+        // wildcard arguments could prematurely invoke a model's custom normalizer.
+        match expression {
+            AtomView::Fun(function)
+                if function.get_symbol().get_namespace() == "feynkit_generator_template" =>
             {
-                let value = values.get(&term).expect("compiled placeholder is bound");
-                out.set_from_view(&value.as_view());
+                Pattern::Wildcard(
+                    *markers
+                        .get(&expression.to_owned())
+                        .expect("compiled placeholder"),
+                    false,
+                )
             }
-        })
+            AtomView::Fun(function) => Pattern::Fn(
+                function.get_symbol(),
+                function
+                    .iter()
+                    .map(|arg| Self::pattern(arg, markers))
+                    .collect(),
+            ),
+            AtomView::Pow(power) => {
+                let (base, exponent) = power.get_base_exp();
+                Pattern::Pow(Box::new([
+                    Self::pattern(base, markers),
+                    Self::pattern(exponent, markers),
+                ]))
+            }
+            AtomView::Mul(product) => Pattern::Mul(
+                product
+                    .iter()
+                    .map(|term| Self::pattern(term, markers))
+                    .collect(),
+            ),
+            AtomView::Add(sum) => Pattern::Add(
+                sum.iter()
+                    .map(|term| Self::pattern(term, markers))
+                    .collect(),
+            ),
+            _ => unreachable!("only composite expressions contain binding slots"),
+        }
     }
 
     fn instantiate(&self, frame: &NumeratorInstantiation<'_>) -> Result<Atom, GenerationError> {
-        if self.placeholders.is_empty() {
-            return Ok(self.expression.clone());
-        }
-        let mut values = HashMap::with_capacity(self.placeholders.len());
-        for (marker, placeholder) in &self.placeholders {
+        // The hasher is inferred from Symbolica's public API; no extra map crate
+        // or conversion is needed at this boundary.
+        let mut values =
+            HashMap::with_capacity_and_hasher(self.placeholders.len(), Default::default());
+        for (symbol, placeholder) in &self.placeholders {
             let value = match placeholder {
                 BindingPlaceholder::Hedge { slot, shift } => {
                     frame.index(frame.legs[*slot], *shift)?
@@ -1598,10 +1660,9 @@ impl InteractionTemplate {
                 BindingPlaceholder::Momentum { slot, index } => frame.momentum(
                     frame.legs[*slot],
                     index.as_ref().map(|index| {
-                        values
-                            .get(&index.as_view())
-                            .cloned()
-                            .unwrap_or_else(|| Self::replace(index.as_view(), &values))
+                        index
+                            .replace_wildcards(&values)
+                            .expect("literal binding pattern")
                     }),
                 )?,
                 BindingPlaceholder::Orientation(slot) => {
@@ -1612,9 +1673,12 @@ impl InteractionTemplate {
                     })
                 }
             };
-            values.insert(marker.as_view(), value);
+            values.insert(*symbol, value);
         }
-        Ok(Self::replace(self.expression.as_view(), &values))
+        Ok(self
+            .expression
+            .replace_wildcards(&values)
+            .expect("literal binding pattern"))
     }
 }
 
@@ -6912,6 +6976,66 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn binding_patterns_preserve_model_wildcards_and_literal_pattern_operators() {
+        let model_variable = symbol!("feynkit_generator_binding::slot0_");
+        let model_function = symbol!("feynkit_generator_binding::slot1_");
+        let index = Symbol::ALT.call((Symbol::OPT.call((model_variable,)), test_atom("idx(1,2)")));
+        let expression = model_function.call((
+            index.clone(),
+            symbol!("UFO::P").call((index, 2)),
+            symbol!("feynkit_pattern_test::f_").call((test_atom("idx(2,1)"),)),
+            model_variable,
+        ));
+        let compiled = compile_test_factor(&expression, NumeratorSector::Spin);
+        assert!(matches!(compiled, InteractionFactor::Local(_)));
+        let mut legs = tensor_test_legs();
+        legs[0].edge = 512;
+        legs[1].edge = 512;
+        legs[0].hedge = 257;
+        legs[1].hedge = 65_536;
+        for owner in [NumeratorOwner::Vertex(65_537), NumeratorOwner::Edge(257)] {
+            for flow in [Flow::Source, Flow::Sink] {
+                legs[1].flow = flow;
+                let frame = NumeratorInstantiation::new(owner, &legs);
+                let actual = compiled.instantiate(&frame).unwrap();
+                let expected = frame
+                    .instantiate(&expression, NumeratorSector::Spin)
+                    .unwrap();
+                assert_eq!(actual, expected, "owner {owner}, flow {flow:?}");
+                assert!(function_count(&actual, Symbol::ALT) > 0);
+                assert!(function_count(&actual, Symbol::OPT) > 0);
+                assert_eq!(actual.get_symbol(), Some(model_function));
+            }
+        }
+    }
+
+    #[test]
+    fn binding_patterns_defer_custom_normalization_until_values_are_bound() {
+        let head = symbol!(
+            "feynkit_pattern_normalizer_test::f",
+            norm = |term, out| {
+                if let AtomView::Fun(function) = term
+                    && function
+                        .iter()
+                        .any(|argument| matches!(argument, AtomView::Var(_)))
+                {
+                    out.to_num(0);
+                }
+            }
+        );
+        let expression = head.call((test_atom("idx(1,1)"),));
+        let compiled = compile_test_factor(&expression, NumeratorSector::Spin);
+        assert!(matches!(compiled, InteractionFactor::Local(_)));
+        let legs = tensor_test_legs();
+        let frame = NumeratorInstantiation::new(NumeratorOwner::Vertex(7), &legs);
+        let expected = frame
+            .instantiate(&expression, NumeratorSector::Spin)
+            .unwrap();
+        assert!(!expected.is_zero());
+        assert_eq!(compiled.instantiate(&frame).unwrap(), expected);
     }
 
     #[test]
