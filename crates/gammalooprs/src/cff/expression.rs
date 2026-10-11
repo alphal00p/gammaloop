@@ -227,7 +227,7 @@ pub(crate) fn energy_map_replacements_gs(
 #[cfg(test)]
 mod tests {
     use linnet::half_edge::involution::{EdgeVec, Orientation};
-    use three_dimensional_reps::MediumMode;
+    use three_dimensional_reps::{MediumMode, thermal::OCCUPATION_FORM};
 
     use super::*;
     use crate::{
@@ -276,7 +276,8 @@ mod tests {
                 // Unwrap only the diagnostic copy when comparing the two algebraic forms.
                 let difference = (actual - (raw - vacuum))
                     .replace(function!(GS.thermal_weight_wrapper, W_.a_))
-                    .with(W_.a_);
+                    .with(W_.a_)
+                    .replace_multiple(&*OCCUPATION_FORM);
                 assert!(difference.expand().is_zero());
             }
             let full = graph.full_filter();

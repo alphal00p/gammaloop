@@ -1,6 +1,7 @@
 use color_eyre::Result;
 use spenso::algebra::complex::Complex;
 use symbolica::atom::AtomCore;
+use three_dimensional_reps::thermal::OCCUPATION_FORM;
 
 use crate::{
     dot,
@@ -101,7 +102,9 @@ fn fermi_sectors_retain_vacuum_subtraction_and_both_uv_contributions() -> Result
         MediumMode::Vacuum,
         original.graph.iter_edge_ids(),
     )?;
-    let difference = (&generated[1] - (raw - vacuum)).unwrap_function(GS.thermal_weight_wrapper);
+    let difference = (&generated[1] - (raw - vacuum))
+        .unwrap_function(GS.thermal_weight_wrapper)
+        .replace_multiple(&*OCCUPATION_FORM);
     assert!(
         difference.expand().is_zero(),
         "vacuum subtraction must act on the complete distribution weight: {difference}"

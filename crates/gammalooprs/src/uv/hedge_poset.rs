@@ -1651,6 +1651,7 @@ mod tests {
         use crate::{
             integrands::process::param_builder::ParamBuilderGraph, settings::global::MediumMode,
         };
+        use three_dimensional_reps::thermal::OCCUPATION_FORM;
         test_initialise()?;
         let graphs: Vec<Graph> = dot!(
             digraph nested {
@@ -1727,7 +1728,8 @@ mod tests {
                             // Resolve the identity only for this scalar comparison.
                             let difference = (actual - (raw - vacuum))
                                 .replace(function!(GS.thermal_weight_wrapper, W_.a_))
-                                .with(W_.a_);
+                                .with(W_.a_)
+                                .replace_multiple(&*OCCUPATION_FORM);
                             assert!(
                                 difference.expand().is_zero(),
                                 "{}: {medium:?}, integrated={generate_integrated}, residue={late_key:?}: {difference}",
