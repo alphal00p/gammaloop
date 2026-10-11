@@ -1174,6 +1174,16 @@ impl FeynmanDiagram {
         self.with_numerator_fragments(vertices, edges)
     }
 
+    /// Replace the global numerator multiplier in the finalized index frame.
+    ///
+    /// Local numerator fragments, their aggregate, topology and routing remain
+    /// unchanged. This replaces the previous multiplier without multiplying it
+    /// into the local fragments.
+    pub fn with_numerator_prefactor(mut self, prefactor: Atom) -> Self {
+        self.numerator_prefactor = prefactor;
+        self
+    }
+
     /// Return this diagram with a replacement external-state projector.
     ///
     /// The projector is numerator payload and therefore does not alter the
@@ -3844,6 +3854,59 @@ mod tests {
         ));
         updated.validate().unwrap();
         original.validate().unwrap();
+    }
+
+    #[test]
+    fn numerator_prefactor_replacement_preserves_native_diagram() {
+        let original = one_loop()
+            .with_numerator(Atom::num(7))
+            .unwrap()
+            .with_projector(Atom::num(11))
+            .with_overall_factor(Atom::num(13));
+        original.validate().unwrap();
+        let prefactor = Atom::parse("g*(a+b)", "prefactor_test", ParseSettings::default()).unwrap();
+        let replacement = original
+            .clone()
+            .with_numerator_prefactor(Atom::num(3))
+            .with_numerator_prefactor(prefactor.clone());
+        replacement.validate().unwrap();
+        assert_eq!(replacement.numerator_prefactor(), &prefactor);
+        assert_eq!(original.numerator_prefactor(), &Atom::one());
+        assert!(Arc::ptr_eq(&replacement.model_arc(), &original.model_arc()));
+        assert_eq!(
+            replacement.loop_momentum_basis(),
+            original.loop_momentum_basis()
+        );
+        // Native serialization inventories fragments, aggregate, global weights,
+        // stable IDs and physical cuts. Only the requested field may change.
+        let mut expected = original.serde_view();
+        expected.numerator_prefactor = prefactor.to_canonical_string();
+        assert_eq!(
+            replacement.to_json().unwrap(),
+            serde_json::to_string_pretty(&expected).unwrap()
+        );
+        let restored =
+            FeynmanDiagram::from_json(original.model_arc(), &replacement.to_json().unwrap())
+                .unwrap();
+        assert_eq!(restored.numerator_prefactor(), &prefactor);
+    }
+
+    #[test]
+    fn numerator_prefactor_keeps_zero_and_native_precision() {
+        let original = one_loop();
+        let high = Atom::num(
+            symbolica::domains::float::Float::parse(
+                "0.1000000000000000000000000000000000000001",
+                Some(192),
+            )
+            .unwrap(),
+        );
+        let replacement = original.clone().with_numerator_prefactor(high.clone());
+        assert_eq!(replacement.numerator_prefactor(), &high);
+        let zero = replacement.with_numerator_prefactor(Atom::zero());
+        assert_eq!(zero.numerator_prefactor(), &Atom::zero());
+        assert_eq!(zero.numerator(), original.numerator());
+        zero.validate().unwrap();
     }
 
     #[test]
