@@ -7373,13 +7373,13 @@ mod tests {
 
     #[test]
     fn thermal_mass_cycles_match_partial_fraction_contours() -> Result<()> {
-        use crate::{integrands::process::param_builder::ParamBuilderGraph, uv::uv_graph::UVE};
+        use crate::integrands::process::param_builder::ParamBuilderGraph;
         use three_dimensional_reps::MediumMode;
 
         test_initialise()?;
-        // Scalars at mu = 0 cannot distinguish the orientation of sigma*mu.
-        // Fermion cycles with mu = +-3/2 do, at finite and zero temperature;
-        // |mu| lies above the m = 1 shell and below the heavier ones.
+        // Unit numerators check per-orientation consistency and evenness in mu.
+        // The convergent two-mass energy moment also pins the particle versus
+        // antiparticle sign. |mu| = 3/2 lies between the two energy shells.
         let scalars = crate::utils::load_generic_model("scalars");
         let sm = crate::utils::load_generic_model("sm");
         let b = "particle=\"b\"";
@@ -7390,9 +7390,22 @@ mod tests {
             (&sm, b, MediumMode::ZeroTemperatureEquilibrium, (3, 2)),
             (&sm, b, MediumMode::ZeroTemperatureEquilibrium, (-3, 2)),
         ];
-        for ((model, particle, mode, mu), masses) in
+        let even_cases =
             itertools::iproduct!(media, [&[1_i64][..], &[1, 2], &[1, 2, 3], &[1, 1, 2]])
-        {
+                .map(|(medium, masses)| (medium, masses, false, false));
+        let odd_cases = itertools::iproduct!(
+            [b, "particle=\"b~\""],
+            [
+                MediumMode::ThermodynamicEquilibrium,
+                MediumMode::ZeroTemperatureEquilibrium,
+            ],
+            [(0, 1), (3, 2), (-3, 2)],
+            [false, true]
+        )
+        .map(|(particle, mode, mu, reversed)| {
+            ((&sm, particle, mode, mu), &[1_i64, 2][..], true, reversed)
+        });
+        for ((model, particle, mode, mu), masses, odd, reversed) in even_cases.chain(odd_cases) {
             if !mode.is_finite_temperature() && masses == [1, 1, 2] {
                 // Zero-temperature derivatives are Fermi deltas, which only
                 // production localization evaluates.
@@ -7404,14 +7417,20 @@ mod tests {
                  edge [num=1 {particle}]; node [num=1];",
             );
             for (edge, mass) in masses.iter().enumerate() {
-                write!(
-                    dot,
-                    "v{edge} -> v{} [id={edge} mass=\"m{mass}\"];",
-                    (edge + 1) % masses.len(),
-                )?;
+                let next = (edge + 1) % masses.len();
+                let (source, sink) = if reversed { (next, edge) } else { (edge, next) };
+                write!(dot, "v{source} -> v{sink} [id={edge} mass=\"m{mass}\"];")?;
             }
             dot.push('}');
             let mut graph: Graph = dot.into_graph(model)?;
+            let numerator = if odd {
+                // Hold the reference momentum direction fixed when reversing
+                // the DOT arrows: the raw edge energy then changes sign.
+                let energy = GS.emr_mom(EdgeIndex(0), GS.cind(0));
+                if reversed { -energy } else { energy }
+            } else {
+                Atom::one()
+            };
             let mut options = graph.denominator_only_cff_3d_expression_options();
             options.medium_mode = mode;
             let canonization = graph.get_esurface_canonization(&graph.loop_momentum_basis);
@@ -7419,19 +7438,21 @@ mod tests {
                 &[],
                 &canonization,
                 &options,
-                Some(&Atom::one()),
+                Some(&numerator),
             )?;
             let cff = graph.cff_from_production_expression(
                 &production,
                 &CutSet::empty(graph.n_hedges()),
                 &OrientationPattern::default(),
             )?;
-            let sum = cff
-                .terms
-                .values()
-                .flat_map(|term| &term.orientations)
-                .fold(Atom::zero(), |sum, term| sum + &term.expression)
-                * Atom::num(cff.production_prefactor_factor());
+            let sum = cff.terms.values().flat_map(|term| &term.orientations).fold(
+                Atom::zero(),
+                |sum, term| {
+                    sum + &term.expression
+                        * numerator
+                            .replace_multiple(term.orientation.energy_replacements_gs(&graph))
+                },
+            ) * Atom::num(cff.production_prefactor_factor());
             // Remove the spatial measure and i to compare the signed energy
             // contour J = integral dq0/(2*pi*i), as in the vacuum test below.
             let sum = sum * (Atom::num(2) * Atom::var(GS.pi)).pow(3) / Atom::i();
@@ -7443,8 +7464,15 @@ mod tests {
                 // The production evaluator definition of the step.
                 .replace(function!(GS.heaviside, W_.a_))
                 .with((step.abs() + &step) / (Atom::num(2) * step.abs()));
-            if let Some(chemical_potential) = graph[EdgeIndex(0)].chemical_potential_atom() {
-                explicit = explicit.replace(chemical_potential).with(Atom::num(mu));
+            if fermion {
+                // Expand the model assignment so b~ actually uses minus_mub;
+                // replacing the edge's chemical-potential symbol would mask it.
+                explicit = model
+                    .apply_parameter_replacement_rules(&explicit)
+                    .replace(Atom::from(model.get_parameter("muB").name))
+                    .with(Atom::num(3) * Atom::num(mu))
+                    .replace(Atom::from(model.get_parameter("muQ").name))
+                    .with(Atom::zero());
             }
             for (edge, mass) in masses.iter().enumerate() {
                 // Distinct mass symbols receive distinct values. Every line
@@ -7467,7 +7495,8 @@ mod tests {
                 &[f64::INFINITY][..]
             };
             for &beta in betas {
-                // The signed contour of 1/D and its derivative in m^2.
+                // The signed contour of 1/D and its derivative in m^2, or the
+                // odd moment q0/D used in a convergent partial-fraction sum.
                 let medium = |mass: i64| {
                     let energy = ((mass * mass) as f64 + 0.36).sqrt();
                     if !fermion {
@@ -7478,16 +7507,27 @@ mod tests {
                                 + beta / (8.0 * energy.powi(2) * arg.sinh().powi(2)),
                         );
                     }
+                    // Particles and antiparticles occupy E -/+ mu.
+                    let occupation = |x: f64| {
+                        if beta.is_infinite() {
+                            if x < 0.0 { 1.0 } else { 0.0 }
+                        } else {
+                            1.0 / ((beta * x).exp() + 1.0)
+                        }
+                    };
+                    let [particles, antiparticles] =
+                        [occupation(energy - mu), occupation(energy + mu)];
+                    if odd {
+                        let charge = if particle == b { 1.0 } else { -1.0 };
+                        let axis = if reversed { -1.0 } else { 1.0 };
+                        return (charge * axis * (particles - antiparticles) / 2.0, f64::NAN);
+                    }
                     if beta.is_infinite() {
                         // Particles or antiparticles below |mu| fill the Fermi
                         // sea. The derivative is a delta and is never sampled.
                         let open = energy > mu.abs();
                         return (if open { -1.0 / (2.0 * energy) } else { 0.0 }, f64::NAN);
                     }
-                    // Particles and antiparticles occupy E -/+ mu.
-                    let occupation = |x: f64| 1.0 / ((beta * x).exp() + 1.0);
-                    let [particles, antiparticles] =
-                        [occupation(energy - mu), occupation(energy + mu)];
                     let vacant = 1.0 - particles - antiparticles;
                     let slope = vacant / (2.0 * energy.powi(2))
                         - beta
@@ -7522,13 +7562,19 @@ mod tests {
                     }
                 };
                 let expected = partial_fractions(&medium);
-                // A filled Fermi sea can cancel the contour exactly, so compare
-                // on the scale of the vacuum contour.
-                let scale = expected.abs().max(partial_fractions(&vacuum).abs());
+                // The odd moment vanishes at mu=0; its two single-pole moments
+                // each have absolute bound 1/2, giving 1/3 after partial fractions.
+                // For even moments a filled sea can cancel the contour, so keep
+                // the vacuum contour as the comparison scale.
+                let scale = if odd {
+                    1.0 / 3.0
+                } else {
+                    expected.abs().max(partial_fractions(&vacuum).abs())
+                };
                 let actual = evaluator.evaluate_single(&[Complex::new(F(beta), F(0.0))]);
                 assert!(
                     actual.im.0.abs() < 1.0e-13 && (actual.re.0 - expected).abs() < 1.0e-11 * scale,
-                    "{mode:?}, {particle}, mu={mu}, masses={masses:?}, beta={beta}: signed CFF={actual}, partial fractions={expected}"
+                    "{mode:?}, {particle}, mu={mu}, masses={masses:?}, beta={beta}, odd={odd}, reversed={reversed}: signed CFF={actual}, partial fractions={expected}"
                 );
             }
         }
