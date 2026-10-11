@@ -1218,7 +1218,6 @@
   nextestPython = pkgs.python313.withPackages (pythonPackages: [
     pythonPackages.numpy
   ]);
-
   nextestUfoPython = pkgs.python313.withPackages (pythonPackages: let
     packages = (builtins.fromTOML (builtins.readFile (workspaceRoot + "/uv.lock"))).package;
     symbolica = lib.findFirst (package: package.name == "symbolica") null packages;
@@ -1251,14 +1250,6 @@
       format = "wheel";
       src = pkgs.fetchurl {inherit (loaderWheel) url hash;};
       dependencies = [pythonSymbolica];
-      postInstall = ''
-        # Symbolica 3 canonicalizes sqrt and half-powers to the same atom.
-        # Repeating this identity rewrite never terminates; one pass retains
-        # nested roots. Use the renamed, equivalent traversal bounds as well.
-        substituteInPlace "$out/${pythonSitePackages}/ufo_model_loader/symbolica_processing.py" \
-          --replace-fail "'x__^(1/2)'), repeat=True)" "'x__^(1/2)'), repeat=False)" \
-          --replace-fail "level_range=(0,0)" "min_level=0, max_level=0"
-      '';
       doCheck = false;
       dontUsePythonImportsCheck = true;
     };
@@ -2553,7 +2544,7 @@
   # The extension is imported by the Python tests at runtime; compiling their
   # Rust harness needs the interpreter but does not need the extension build.
   nextestUsesPythonModule = target: target.runtimePythonModule or false;
-  nextestUsesUfoSupport = target: builtins.elem "gammaloop-api" target.packages;
+  nextestUsesUfoSupport = target: target.runtimeUfoLoader or false;
   nextestSourcePackagesFor = target: (nextestContextFor target).sourcePackages;
   nextestSrcFor = target:
     workspacePackageSrcForSourcePackages {
@@ -2863,7 +2854,8 @@
       {
         runnerAttr = "nix-ci-check-gammaloop-nextest";
         checkAttr = "gammaloop-nextest";
-        inputs = builtins.attrValues nextestBinarySets ++ [gammaloop-python-module nextestUfoPython];
+        inputs = builtins.attrValues nextestBinarySets ++ [gammaloop-python-module]
+          ++ lib.optional (builtins.any nextestUsesUfoSupport checkedNextestPackageGroups) nextestUfoPython;
       }
     ]
     ++ map (target: {
