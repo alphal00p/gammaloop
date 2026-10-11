@@ -1872,6 +1872,94 @@ fn thermal_vacuum_2l_3l_inspect() -> Result<()> {
 }
 
 #[test]
+fn thermal_vacuum_4l_inspect() -> Result<()> {
+    let mut cli = get_test_cli(
+        Some("thermal_vacuum_4l_inspect.toml".into()),
+        get_tests_workspace_path().join("thermal_vacuum_4l_inspect"),
+        None,
+        true,
+    )?;
+
+    cli.run_command("set model muB=0.0")?;
+
+    assert_inspect(
+        &mut cli,
+        0,
+        0,
+        &[0.1, 0.2, 0.3, 0.5, 0.4, 0.6, 0.9, 0.8, 0.7, 1.1, 1.2, 1.3],
+        Complex::new(0.0, -2.838_254_343_652_266e-8),
+        "thermal bugblatter 1 inspect f64 benchmark at point 0 at muB=0.0",
+    )?;
+
+    assert_inspect(
+        &mut cli,
+        0,
+        0,
+        &[1.1, 0.2, 0.3, 0.5, 1.4, 0.6, 0.9, 1.8, 0.7, 1.1, 2.2, 1.3],
+        Complex::new(0.0, -1.179_354_762_459_854e-9),
+        "thermal bugblatter 1 inspect f64 benchmark at point 1 at muB=0.0",
+    )?;
+
+    assert_inspect(
+        &mut cli,
+        0,
+        1,
+        &[0.1, 0.2, 0.3, 0.5, 0.4, 0.6, 0.9, 0.8, 0.7, 1.1, 1.2, 1.3],
+        Complex::new(0.0, 2.085_535_988_771_055e-10),
+        "thermal bugblatter 2 inspect f64 benchmark at point 0 at muB=0.0",
+    )?;
+
+    assert_inspect(
+        &mut cli,
+        0,
+        1,
+        &[1.1, 0.2, 0.3, 0.5, 1.4, 0.6, 0.9, 1.8, 0.7, 1.1, 2.2, 1.3],
+        Complex::new(0.0, 1.124_548_090_968_172e-11),
+        "thermal bugblatter 2 inspect f64 benchmark at point 1 at muB=0.0",
+    )?;
+
+    cli.run_command("set model muB=3.0")?;
+
+    assert_inspect(
+        &mut cli,
+        0,
+        0,
+        &[0.1, 0.2, 0.3, 0.5, 0.4, 0.6, 0.9, 0.8, 0.7, 1.1, 1.2, 1.3],
+        Complex::new(0.0, -3.470_645_264_375_66e-10),
+        "thermal bugblatter 1 inspect f64 benchmark at point 0 at muB=3.0",
+    )?;
+
+    assert_inspect(
+        &mut cli,
+        0,
+        0,
+        &[1.1, 0.2, 0.3, 0.5, 1.4, 0.6, 0.9, 1.8, 0.7, 1.1, 2.2, 1.3],
+        Complex::new(0.0, -5.666_712_273_246_035e-10),
+        "thermal bugblatter 1 inspect f64 benchmark at point 1 at muB=3.0",
+    )?;
+
+    assert_inspect(
+        &mut cli,
+        0,
+        1,
+        &[0.1, 0.2, 0.3, 0.5, 0.4, 0.6, 0.9, 0.8, 0.7, 1.1, 1.2, 1.3],
+        Complex::new(0.0, 3.469_482_008_367_54e-10),
+        "thermal bugblatter 2 inspect f64 benchmark at point 0 at muB=3.0",
+    )?;
+
+    assert_inspect(
+        &mut cli,
+        0,
+        1,
+        &[1.1, 0.2, 0.3, 0.5, 1.4, 0.6, 0.9, 1.8, 0.7, 1.1, 2.2, 1.3],
+        Complex::new(0.0, 1.637_733_030_600_185e-11),
+        "thermal bugblatter 2 inspect f64 benchmark at point 1 at muB=3.0",
+    )?;
+
+    Ok(())
+}
+
+#[test]
 fn cold_dense_vacuum_2l_3l_inspect() -> Result<()> {
     let mut cli = get_test_cli(
         Some("cold_dense_vacuum_2l_3l_inspect.toml".into()),
@@ -2231,94 +2319,6 @@ mod slow {
 
         let target = Complex::new(-2.3159767780905335e-1, 1.8547720156633686e-4);
         assert_eq!(inspect, target);
-        Ok(())
-    }
-
-    #[test]
-    fn thermal_vacuum_4l_inspect() -> Result<()> {
-        let mut cli = get_test_cli(
-            Some("thermal_vacuum_4l_inspect.toml".into()),
-            get_tests_workspace_path().join("thermal_vacuum_4l_inspect"),
-            None,
-            true,
-        )?;
-
-        cli.run_command("set model muB=0.0")?;
-
-        assert_inspect(
-            &mut cli,
-            0,
-            0,
-            &[0.1, 0.2, 0.3, 0.5, 0.4, 0.6, 0.9, 0.8, 0.7, 1.1, 1.2, 1.3],
-            Complex::new(0.0, -2.838_254_343_652_266e-8),
-            "thermal bugblatter 1 inspect f64 benchmark at point 0 at muB=0.0",
-        )?;
-
-        assert_inspect(
-            &mut cli,
-            0,
-            0,
-            &[1.1, 0.2, 0.3, 0.5, 1.4, 0.6, 0.9, 1.8, 0.7, 1.1, 2.2, 1.3],
-            Complex::new(0.0, -1.179_354_762_459_854e-9),
-            "thermal bugblatter 1 inspect f64 benchmark at point 1 at muB=0.0",
-        )?;
-
-        assert_inspect(
-            &mut cli,
-            0,
-            1,
-            &[0.1, 0.2, 0.3, 0.5, 0.4, 0.6, 0.9, 0.8, 0.7, 1.1, 1.2, 1.3],
-            Complex::new(0.0, 2.085_535_988_771_055e-10),
-            "thermal bugblatter 2 inspect f64 benchmark at point 0 at muB=0.0",
-        )?;
-
-        assert_inspect(
-            &mut cli,
-            0,
-            1,
-            &[1.1, 0.2, 0.3, 0.5, 1.4, 0.6, 0.9, 1.8, 0.7, 1.1, 2.2, 1.3],
-            Complex::new(0.0, 1.124_548_090_968_172e-11),
-            "thermal bugblatter 2 inspect f64 benchmark at point 1 at muB=0.0",
-        )?;
-
-        cli.run_command("set model muB=3.0")?;
-
-        assert_inspect(
-            &mut cli,
-            0,
-            0,
-            &[0.1, 0.2, 0.3, 0.5, 0.4, 0.6, 0.9, 0.8, 0.7, 1.1, 1.2, 1.3],
-            Complex::new(0.0, -3.470_645_264_375_66e-10),
-            "thermal bugblatter 1 inspect f64 benchmark at point 0 at muB=3.0",
-        )?;
-
-        assert_inspect(
-            &mut cli,
-            0,
-            0,
-            &[1.1, 0.2, 0.3, 0.5, 1.4, 0.6, 0.9, 1.8, 0.7, 1.1, 2.2, 1.3],
-            Complex::new(0.0, -5.666_712_273_246_035e-10),
-            "thermal bugblatter 1 inspect f64 benchmark at point 1 at muB=3.0",
-        )?;
-
-        assert_inspect(
-            &mut cli,
-            0,
-            1,
-            &[0.1, 0.2, 0.3, 0.5, 0.4, 0.6, 0.9, 0.8, 0.7, 1.1, 1.2, 1.3],
-            Complex::new(0.0, 3.469_482_008_367_54e-10),
-            "thermal bugblatter 2 inspect f64 benchmark at point 0 at muB=3.0",
-        )?;
-
-        assert_inspect(
-            &mut cli,
-            0,
-            1,
-            &[1.1, 0.2, 0.3, 0.5, 1.4, 0.6, 0.9, 1.8, 0.7, 1.1, 2.2, 1.3],
-            Complex::new(0.0, 1.637_733_030_600_185e-11),
-            "thermal bugblatter 2 inspect f64 benchmark at point 1 at muB=3.0",
-        )?;
-
         Ok(())
     }
 }
