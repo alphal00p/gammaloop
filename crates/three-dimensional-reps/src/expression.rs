@@ -22,6 +22,7 @@ use symbolica::{
 use typed_index_collections::TiVec;
 
 use crate::{
+    MediumMode, ThermalWeight,
     graph_io::EnergyEdgeIndexMap,
     surface::{EsurfaceID, HybridSurfaceID, LinearEnergyExpr, SurfaceCache},
     symbols::{
@@ -265,7 +266,7 @@ pub struct CFFVariant {
     pub origin: Option<String>,
     pub prefactor: Rational,
     #[serde(default)]
-    pub thermal_weight: crate::ThermalWeight,
+    pub thermal_weight: ThermalWeight,
     pub half_edges: Vec<EdgeIndex>,
     pub denominator_edges: Vec<EdgeIndex>,
     /// Product of denominator-orientation signs already absorbed in
@@ -436,7 +437,7 @@ impl ResidualDenominator {
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 struct VariantFusionKey {
-    thermal_weight: crate::ThermalWeight,
+    thermal_weight: ThermalWeight,
     prefactor: Rational,
     origin: Option<String>,
     half_edges: Vec<usize>,
@@ -449,7 +450,7 @@ struct VariantFusionKey {
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 struct VariantChainKey {
-    thermal_weight: crate::ThermalWeight,
+    thermal_weight: ThermalWeight,
     origin: Option<String>,
     half_edges: Vec<usize>,
     denominator_edges: Vec<usize>,
@@ -485,7 +486,7 @@ impl OrientationExpression {
             loop_energy_map: Vec::new(),
             edge_energy_map,
             variants: vec![CFFVariant {
-                thermal_weight: crate::ThermalWeight::default(),
+                thermal_weight: ThermalWeight::default(),
                 origin: Some("lower_sector_unit".to_string()),
                 prefactor: Rational::one(),
                 half_edges: Vec::new(),
@@ -506,9 +507,17 @@ impl OrientationExpression {
             .map(CFFVariant::to_atom)
             .reduce(|acc, atom| acc + atom)
             .unwrap_or_else(Atom::new);
-        // Bind thermal distribution arguments before combining different
-        // orientations into one explicit expression.
-        self.data.select(expression)
+        if self
+            .variants
+            .iter()
+            .any(|variant| variant.thermal_weight.medium_mode != MediumMode::Vacuum)
+        {
+            // Bind thermal distribution arguments before combining different
+            // orientations into one explicit expression.
+            self.data.select(expression)
+        } else {
+            expression
+        }
     }
 
     pub fn iter_denominator_nodes(&self) -> impl Iterator<Item = &TreeNode<HybridSurfaceID>> {
@@ -1290,7 +1299,7 @@ mod tests {
 
     fn cut_variant(denominator_edges: &[usize], support_signs: &[(&[usize], i64)]) -> CFFVariant {
         CFFVariant {
-            thermal_weight: crate::ThermalWeight::default(),
+            thermal_weight: ThermalWeight::default(),
             origin: Some("cut_support_test".to_string()),
             prefactor: Rational::one(),
             half_edges: Vec::new(),

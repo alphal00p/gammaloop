@@ -17,6 +17,7 @@ use symbolica::{
     function,
     id::Replacement,
 };
+use three_dimensional_reps::MediumMode;
 
 use super::{
     esurface::Esurface, hsurface::Hsurface, orientations::GraphOrientation,
@@ -133,9 +134,17 @@ impl GammaLoopOrientationExpression for OrientationExpression {
             .map(GammaLoopCFFVariant::to_atom_gs)
             .reduce(|acc, atom| acc + atom)
             .unwrap_or_else(Atom::new);
-        // Each coefficient must carry its own chemical-potential orientation
-        // before an explicit sum removes the residue-map selectors.
-        self.data.orientation.select(expression)
+        if self
+            .variants
+            .iter()
+            .any(|variant| variant.thermal_weight.medium_mode != MediumMode::Vacuum)
+        {
+            // Each coefficient must carry its own chemical-potential orientation
+            // before an explicit sum removes the residue-map selectors.
+            self.data.orientation.select(expression)
+        } else {
+            expression
+        }
     }
 
     fn energy_replacements_gs(&self, graph: &Graph) -> Vec<Replacement> {
@@ -226,7 +235,7 @@ pub(crate) fn energy_map_replacements_gs(
 #[cfg(test)]
 mod tests {
     use linnet::half_edge::involution::{EdgeVec, Orientation};
-    use three_dimensional_reps::MediumMode;
+    use three_dimensional_reps::thermal::OCCUPATION_FORM;
 
     use super::*;
     use crate::{
@@ -275,7 +284,8 @@ mod tests {
                 // Unwrap only the diagnostic copy when comparing the two algebraic forms.
                 let difference = (actual - (raw - vacuum))
                     .replace(function!(GS.thermal_weight_wrapper, W_.a_))
-                    .with(W_.a_);
+                    .with(W_.a_)
+                    .replace_multiple(&*OCCUPATION_FORM);
                 assert!(difference.expand().is_zero());
             }
             let full = graph.full_filter();

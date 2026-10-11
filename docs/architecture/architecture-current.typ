@@ -261,10 +261,17 @@ form with `sech` and `csch`; higher orders are differentiated symbolically from
 order two. The zero-temperature order zero is
 `(1 + s)/2 - theta(sigma*mu - E)`, whose positive orders are the distributions
 localized below. Without a chemical potential it is the vacuum weight `(1 + s)/2`,
-whose derivatives vanish. Vacuum subtraction replaces every factor by this
-vacuum weight before subtracting. At zero density, the zero-temperature tadpole weights
-reduce to the corresponding vacuum prescription; occupied fermionic states
-retain their finite-density contribution at zero temperature.
+whose derivatives vanish. Vacuum subtraction removes the value `V(W)` that a
+completed weight `W` takes when every factor is replaced by this vacuum weight.
+It does so symbolically: an order-zero factor differs from its vacuum weight by
+its occupation, `N(s) - (1 + s)/2 = N(-1)`, and products follow the product rule
+`D(a b) = D(a) V(b) + a D(b)`. Every term of `W - V(W)` thus keeps an occupation
+or a derivative, so the vacuum constant never cancels in floating point against
+occupations that round away, and the result stays linear in the number of
+factors. Weights with `V(W) = 0` are left unchanged. At zero density, the
+zero-temperature tadpole weights reduce to the corresponding vacuum
+prescription; occupied fermionic states retain their finite-density
+contribution at zero temperature.
 
 The bounded and known-factor numerator builders share occurrence sampling and
 polynomial reduction across all medium modes. Every resulting scalar sector,

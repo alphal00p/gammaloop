@@ -13,7 +13,8 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::{
-    OrientationData, OrientationExpression, OrientationID, ParsedGraph, ThreeDExpression,
+    MediumMode, OrientationData, OrientationExpression, OrientationID, ParsedGraph, ThermalWeight,
+    ThreeDExpression,
     cff_recursion::enumerate_cff_surface_chains,
     cut_structure::{ContourClosure, energy_residues},
     energy_bounds::normalize_energy_degree_bounds,
@@ -82,7 +83,7 @@ pub struct Generate3DExpressionOptions {
     #[serde(default)]
     pub representation: RepresentationMode,
     #[serde(default)]
-    pub medium_mode: crate::MediumMode,
+    pub medium_mode: MediumMode,
     #[serde(default)]
     pub cff_generation_context: CffGenerationContext,
     /// `None` keeps the legacy numerator class, which is affine in every EMR
@@ -102,7 +103,7 @@ impl Default for Generate3DExpressionOptions {
     fn default() -> Self {
         Self {
             representation: RepresentationMode::Cff,
-            medium_mode: crate::MediumMode::Vacuum,
+            medium_mode: MediumMode::Vacuum,
             cff_generation_context: CffGenerationContext::Standalone,
             energy_degree_bounds: None,
             numerator_sampling_scale: NumeratorSamplingScaleMode::None,
@@ -391,7 +392,7 @@ pub enum GenerationError {
         "no admissible CFF vertex in {medium_mode:?} for orientation {edge_signs:?}; remaining vertex sets: {vertices:?}"
     )]
     NoAdmissibleCffVertex {
-        medium_mode: crate::MediumMode,
+        medium_mode: MediumMode,
         edge_signs: Vec<i32>,
         vertices: Vec<Vec<usize>>,
     },
@@ -777,7 +778,7 @@ fn build_expression_preserving_internal_edges(
 fn expression_with_only_preserved_edges(
     parsed: &ParsedGraph,
     preserved: &BTreeSet<usize>,
-    medium_mode: crate::MediumMode,
+    medium_mode: MediumMode,
 ) -> Result<GeneratedThreeDExpression> {
     if !parsed.loop_names.is_empty() {
         return Err(GenerationError::SingularBasis);
@@ -797,7 +798,7 @@ fn expression_with_only_preserved_edges(
         loop_energy_map: Vec::new(),
         edge_energy_map,
         variants: vec![crate::expression::CFFVariant {
-            thermal_weight: crate::ThermalWeight {
+            thermal_weight: ThermalWeight {
                 medium_mode,
                 ..Default::default()
             },
@@ -1359,7 +1360,7 @@ fn lift_component_expression_product(
         loop_energy_map: vec![LinearEnergyExpr::zero(); parsed.loop_names.len()],
         edge_energy_map: vec![LinearEnergyExpr::zero(); parsed.internal_edges.len()],
         variants: vec![crate::expression::CFFVariant {
-            thermal_weight: crate::ThermalWeight::default(),
+            thermal_weight: ThermalWeight::default(),
             origin: Some("component_product_identity".to_string()),
             prefactor: Rational::one(),
             half_edges: Vec::new(),
@@ -1503,7 +1504,7 @@ fn product_denominator_trees(
 
 fn generate_pure_cff_expression_from_parsed(
     parsed: &ParsedGraph,
-    medium_mode: crate::MediumMode,
+    medium_mode: MediumMode,
     preferred_tadpole_poles: &BTreeMap<usize, i32>,
 ) -> Result<ThreeDExpression<OrientationID>> {
     let signatures = parsed.signatures();
@@ -1555,8 +1556,7 @@ fn generate_pure_cff_expression_from_parsed(
             }
         }));
         let data = OrientationData::new(orientation);
-        let mut groups =
-            BTreeMap::<(crate::ThermalWeight, Rational), Vec<Vec<HybridSurfaceID>>>::new();
+        let mut groups = BTreeMap::<(ThermalWeight, Rational), Vec<Vec<HybridSurfaceID>>>::new();
         for chain in surface_chains {
             let denominators = chain
                 .surfaces
@@ -2308,7 +2308,7 @@ struct BoundedCffBuilder<'a> {
     // Every recursive scalar base retains this original source convention.
     source_prefactor: Rational,
     bounds: Vec<usize>,
-    medium_mode: crate::MediumMode,
+    medium_mode: MediumMode,
     context: CffGenerationContext,
     inherited_contour_rows: Vec<Vec<i32>>,
     sampling_scale_mode: NumeratorSamplingScaleMode,
@@ -2330,11 +2330,7 @@ impl<'a> BoundedCffBuilder<'a> {
         Ok(builder)
     }
 
-    fn for_bounds(
-        parsed: &'a ParsedGraph,
-        bounds: Vec<usize>,
-        medium_mode: crate::MediumMode,
-    ) -> Self {
+    fn for_bounds(parsed: &'a ParsedGraph, bounds: Vec<usize>, medium_mode: MediumMode) -> Self {
         // CFF acts on independent numerator occurrences, including serial
         // copies of the same physical denominator. Preserve their individual
         // bounds: restricting them to a common interpolation variable would
@@ -2970,7 +2966,7 @@ struct KnownFactorCffBuilder<'a> {
     original: &'a ParsedGraph,
     source_prefactor: Rational,
     bounds: Vec<usize>,
-    medium_mode: crate::MediumMode,
+    medium_mode: MediumMode,
     sampling_scale_mode: NumeratorSamplingScaleMode,
     // Enabled only for complete output, never a private child base.
     normalize_public_output: bool,
@@ -2985,7 +2981,7 @@ impl<'a> KnownFactorCffBuilder<'a> {
         original: &'a ParsedGraph,
         bounds: Vec<usize>,
         sampling_scale_mode: NumeratorSamplingScaleMode,
-        medium_mode: crate::MediumMode,
+        medium_mode: MediumMode,
     ) -> Self {
         Self {
             original,
@@ -4205,7 +4201,7 @@ fn trim_poly(mut poly: Vec<Rational>) -> Vec<Rational> {
 
 struct LowerSectorCffBuilder<'a> {
     parsed: &'a ParsedGraph,
-    medium_mode: crate::MediumMode,
+    medium_mode: MediumMode,
     // None exposes the native CFF; Some embeds it in J = source_prefactor * raw.
     source_prefactor: Option<Rational>,
     context: CffGenerationContext,
@@ -4215,7 +4211,7 @@ struct LowerSectorCffBuilder<'a> {
 }
 
 impl<'a> LowerSectorCffBuilder<'a> {
-    fn new(parsed: &'a ParsedGraph, medium_mode: crate::MediumMode) -> Self {
+    fn new(parsed: &'a ParsedGraph, medium_mode: MediumMode) -> Self {
         Self {
             parsed,
             medium_mode,
@@ -5081,6 +5077,7 @@ mod representation_tests {
 #[cfg(test)]
 mod causal_generation_tests {
     use super::*;
+    use crate::ThermalDistributionFactor;
 
     #[test]
     fn scalar_sectors_preserve_parent_contours_and_thermal_units() {
@@ -5097,8 +5094,8 @@ mod causal_generation_tests {
         parsed.external_names.clear();
         let energy = crate::symbols::ose_atom_from_index(EdgeIndex(0));
         for medium in [
-            crate::MediumMode::ThermodynamicEquilibrium,
-            crate::MediumMode::ZeroTemperatureEquilibrium,
+            MediumMode::ThermodynamicEquilibrium,
+            MediumMode::ZeroTemperatureEquilibrium,
         ] {
             for (context, rows) in [
                 CffGenerationContext::Standalone,
@@ -5112,7 +5109,7 @@ mod causal_generation_tests {
                     |row| row[0],
                 );
                 let weight = [1, -1].map(|sign| {
-                    crate::ThermalDistributionFactor {
+                    ThermalDistributionFactor {
                         edge_id: EdgeIndex(0),
                         sign: sign * preferred,
                         derivative_order: 0,
@@ -5171,10 +5168,10 @@ mod causal_generation_tests {
         scalar.numerator_surfaces = vec![source];
         scalar.denominator_surface_signs = BTreeMap::from([(source, -1)]);
         scalar.denominator_edge_support_signs = BTreeMap::from([(vec![EdgeIndex(1)], -1)]);
-        scalar.thermal_weight = crate::ThermalWeight {
-            medium_mode: crate::MediumMode::ThermodynamicEquilibrium,
+        scalar.thermal_weight = ThermalWeight {
+            medium_mode: MediumMode::ThermodynamicEquilibrium,
             numerators: Vec::new(),
-            distributions: vec![crate::ThermalDistributionFactor {
+            distributions: vec![ThermalDistributionFactor {
                 edge_id: EdgeIndex(1),
                 sign: -1,
                 derivative_order: 2,
@@ -5207,7 +5204,7 @@ mod causal_generation_tests {
         );
         assert_eq!(
             lifted.thermal_weight.distributions,
-            vec![crate::ThermalDistributionFactor {
+            vec![ThermalDistributionFactor {
                 edge_id: EdgeIndex(4),
                 sign: -1,
                 derivative_order: 2,
@@ -5360,7 +5357,7 @@ mod causal_generation_tests {
         }
         for rows in [vec![vec![1]], vec![vec![-1]], vec![vec![1], vec![-1]]] {
             let preferred = rows.last().unwrap()[0];
-            let mut lower = LowerSectorCffBuilder::new(&parsed, crate::MediumMode::Vacuum);
+            let mut lower = LowerSectorCffBuilder::new(&parsed, MediumMode::Vacuum);
             lower.source_prefactor = Some(Rational::from(-1));
             lower.inherited_contour_rows = rows;
             let expression = lower.build().unwrap();
@@ -5376,7 +5373,7 @@ mod causal_generation_tests {
                     .is_zero()
             );
         }
-        let mut direct = LowerSectorCffBuilder::new(&parsed, crate::MediumMode::Vacuum);
+        let mut direct = LowerSectorCffBuilder::new(&parsed, MediumMode::Vacuum);
         direct.source_prefactor = Some(Rational::from(-1));
         direct.occurrence_normal_form_consumed = true;
         let direct = direct.build().unwrap();
@@ -5635,7 +5632,7 @@ mod causal_generation_tests {
             external_names: vec!["P".to_string()],
             node_name_to_internal: (0..5).map(|node| (format!("v{node}"), node)).collect(),
         };
-        let builder = BoundedCffBuilder::for_bounds(&parent, vec![0; 7], crate::MediumMode::Vacuum);
+        let builder = BoundedCffBuilder::for_bounds(&parent, vec![0; 7], MediumMode::Vacuum);
         let (without_3, map_without_3) = builder.project_parsed_edges(&[3]);
         let (without_8, map_without_8) = builder.project_parsed_edges(&[6]);
         let generate = |parsed: &ParsedGraph, bounds| {
@@ -7251,7 +7248,7 @@ mod causal_generation_tests {
         let (lower, lower_to_orig) = BoundedCffBuilder::for_bounds(
             &parsed,
             vec![0; parsed.internal_edges.len()],
-            crate::MediumMode::Vacuum,
+            MediumMode::Vacuum,
         )
         .project_parsed_edges(&[2]);
         let lower_scalar =
@@ -7279,7 +7276,7 @@ mod causal_generation_tests {
         let unit_scalar =
             generate_3d_expression(&unit_parent, &Generate3DExpressionOptions::default()).unwrap();
         let (unit_lower, unit_lower_to_orig) =
-            BoundedCffBuilder::for_bounds(&unit_parent, vec![0; 3], crate::MediumMode::Vacuum)
+            BoundedCffBuilder::for_bounds(&unit_parent, vec![0; 3], MediumMode::Vacuum)
                 .project_parsed_edges(&[0]);
         let unit_lower_scalar =
             generate_3d_expression(&unit_lower, &Generate3DExpressionOptions::default()).unwrap();
@@ -8988,9 +8985,9 @@ mod cff_tests {
 
         for (medium_mode, sampling_mode) in itertools::iproduct!(
             [
-                crate::MediumMode::Vacuum,
-                crate::MediumMode::ThermodynamicEquilibrium,
-                crate::MediumMode::ZeroTemperatureEquilibrium,
+                MediumMode::Vacuum,
+                MediumMode::ThermodynamicEquilibrium,
+                MediumMode::ZeroTemperatureEquilibrium,
             ],
             [
                 NumeratorSamplingScaleMode::None,
@@ -9067,7 +9064,7 @@ mod cff_tests {
             }
             assert_eq!(
                 thermal_edges,
-                if medium_mode == crate::MediumMode::Vacuum {
+                if medium_mode == MediumMode::Vacuum {
                     BTreeSet::new()
                 } else {
                     BTreeSet::from([EdgeIndex(1), EdgeIndex(2), EdgeIndex(3)])
@@ -9092,7 +9089,7 @@ mod cff_tests {
             function,
         };
 
-        use crate::{MediumMode, symbols::S, thermal::VACUUM_SUBTRACTION};
+        use crate::{symbols::S, thermal::VACUUM_SUBTRACTION};
 
         let parsed = crate::graph_io::test_graphs::pure_tree_graph();
         for medium_mode in [
@@ -9796,10 +9793,7 @@ mod cff_tests {
         merged_endpoints.internal_edges[2].head = 1;
         merged_endpoints.internal_edges[3].tail = 1;
         merged_endpoints.external_edges.clear();
-        for medium_mode in [
-            crate::MediumMode::Vacuum,
-            crate::MediumMode::ThermodynamicEquilibrium,
-        ] {
+        for medium_mode in [MediumMode::Vacuum, MediumMode::ThermodynamicEquilibrium] {
             let error = generate_3d_expression(
                 &merged_endpoints,
                 &Generate3DExpressionOptions {
@@ -10464,7 +10458,7 @@ mod cff_tests {
         let expression = generate_3d_expression_from_parsed(
             &parsed,
             &Generate3DExpressionOptions {
-                medium_mode: crate::MediumMode::Vacuum,
+                medium_mode: MediumMode::Vacuum,
                 representation: RepresentationMode::Cff,
                 cff_generation_context: CffGenerationContext::Standalone,
                 energy_degree_bounds: Some(vec![(0, 1), (1, 1), (3, 4)]),
