@@ -63,6 +63,50 @@ impl Kinematics {
         self.dimension
     }
 
+    /// Declared formal momentum names, including those without assumptions.
+    ///
+    /// Iteration follows native Atom ordering, not a portable serialization order.
+    pub fn momenta(&self) -> impl ExactSizeIterator<Item = &Atom> {
+        self.momenta.iter()
+    }
+
+    /// Every stored scalar-product key and its value, including metric aliases.
+    ///
+    /// Values are borrowed verbatim: no substitution or arithmetic is performed.
+    /// Iteration follows native Atom ordering, not a portable serialization order.
+    pub fn scalar_assumptions(&self) -> impl ExactSizeIterator<Item = (&Atom, &Atom)> {
+        self.products.iter()
+    }
+
+    /// Transform scalar assumption values while retaining all keys and momenta.
+    ///
+    /// The callback runs once per structurally distinct original value, in native
+    /// Atom order. Its result is reused for every occurrence, so equal values
+    /// and dot/metric aliases remain equal even with a stateful callback. Results
+    /// are stored verbatim, without recursive substitution or simplification.
+    /// Dimension and formal momentum names are unchanged. Failure returns no
+    /// partial owner and leaves `self` unchanged; callback side effects are not
+    /// rolled back. An arbitrary mapping does not certify physical equivalence.
+    pub fn try_map_scalar_values<E>(
+        &self,
+        mut map: impl FnMut(&Atom) -> Result<Atom, E>,
+    ) -> Result<Self, E> {
+        let values = self.products.values().collect::<BTreeSet<_>>();
+        let mapped = values
+            .into_iter()
+            .map(|value| map(value).map(|mapped| (value, mapped)))
+            .collect::<Result<BTreeMap<_, _>, E>>()?;
+        Ok(Self {
+            dimension: self.dimension,
+            momenta: self.momenta.clone(),
+            products: self
+                .products
+                .iter()
+                .map(|(key, value)| (key.clone(), mapped[value].clone()))
+                .collect(),
+        })
+    }
+
     /// Start with no assumptions in a symbolic or nonnegative integer dimension.
     ///
     /// Use a symbol such as `D` during dimensional regularization, then
@@ -334,6 +378,170 @@ impl Kinematics {
 mod tests {
     use super::*;
     use symbolica::parse;
+
+    #[test]
+    fn scalar_value_mapping_preserves_all_roles_and_equal_assumptions() {
+        let [p, q, auxiliary, unassigned] = [
+            parse!("scalar_map::p"),
+            parse!("scalar_map::q"),
+            parse!("scalar_map::auxiliary"),
+            parse!("scalar_map::unassigned"),
+        ];
+        let dimension = parse!("scalar_map::D");
+        let original = Kinematics::in_dimension(&dimension)
+            .unwrap()
+            .with_momenta([unassigned.clone()])
+            .unwrap()
+            .with_scalar_product(&p, &q, parse!("scalar_map::s"))
+            .unwrap()
+            .with_mass_squared(&auxiliary, parse!("scalar_map::s"))
+            .unwrap()
+            .with_scalar_product(&p, &auxiliary, parse!("scalar_map::t"))
+            .unwrap();
+        let mut calls = Vec::new();
+        let mapped = original
+            .try_map_scalar_values(|value| {
+                calls.push(value.clone());
+                Ok::<_, ()>(Atom::num(calls.len() as i64))
+            })
+            .unwrap();
+        let unique = original.products.values().cloned().collect::<BTreeSet<_>>();
+        assert_eq!(calls, unique.into_iter().collect::<Vec<_>>());
+        assert_eq!(calls.len(), 2);
+        assert_eq!(mapped.dimension(), original.dimension());
+        assert_eq!(
+            mapped.momenta().collect::<Vec<_>>(),
+            original.momenta().collect::<Vec<_>>()
+        );
+        assert!(mapped.momenta().any(|momentum| momentum == &unassigned));
+        assert_eq!(
+            mapped.products.keys().collect::<Vec<_>>(),
+            original.products.keys().collect::<Vec<_>>()
+        );
+        assert_eq!(mapped.scalar_assumptions().len(), 6);
+        let pq = mapped.scalar_product(&p, &q).unwrap();
+        assert_eq!(pq, mapped.scalar_product(&q, &p).unwrap());
+        assert_eq!(pq, mapped.scalar_product(&auxiliary, &auxiliary).unwrap());
+        let rep = Minkowski {}.new_rep(original.dimension());
+        let metric = function!(
+            ETS.metric,
+            rep.vector(p.as_view(), []),
+            rep.vector(q.as_view(), [])
+        );
+        assert_eq!(mapped.apply(&metric), pq);
+        assert_eq!(
+            original.scalar_product(&p, &q).unwrap(),
+            parse!("scalar_map::s")
+        );
+        // Declarations without assumptions still govern symbolic linear terms.
+        assert!(mapped.linear_terms(&(&p + &unassigned)).is_ok());
+        let foreign = parse!("scalar_map::undeclared");
+        assert!(mapped.linear_terms(&(&p + &foreign)).is_err());
+    }
+
+    #[test]
+    fn scalar_value_mapping_failure_leaves_original_owner_intact() {
+        let [p, q] = [
+            parse!("scalar_map_failure::p"),
+            parse!("scalar_map_failure::q"),
+        ];
+        let original = Kinematics::new()
+            .with_mass_squared(&p, Atom::num(3))
+            .unwrap()
+            .with_mass_squared(&q, Atom::num(5))
+            .unwrap();
+        let before = original.clone();
+        let mut calls = 0;
+        let result = original.try_map_scalar_values(|_| {
+            calls += 1;
+            if calls == 2 {
+                Err("conversion refused")
+            } else {
+                Ok(Atom::Zero)
+            }
+        });
+        assert!(matches!(result, Err("conversion refused")));
+        assert_eq!(calls, 2);
+        assert_eq!(original.dimension, before.dimension);
+        assert_eq!(original.momenta, before.momenta);
+        assert_eq!(original.products, before.products);
+        let retry = original
+            .try_map_scalar_values(|value| Ok::<_, ()>(value.clone()))
+            .unwrap();
+        assert_eq!(retry.products, before.products);
+    }
+
+    #[test]
+    fn scalar_value_mapping_preserves_original_float_precision_verbatim() {
+        use numerica::domains::{float::Float, rational::Rational};
+        let high = Float::parse("0.1000000000000000000000000000000000000001", Some(192)).unwrap();
+        let low = Float::with_val(53, 0.1f64);
+        assert_ne!(
+            high.try_to_rational().unwrap(),
+            low.try_to_rational().unwrap()
+        );
+        let half_low = Atom::num(Float::with_val(53, 0.5));
+        let half_high = Atom::num(Float::with_val(192, 0.5));
+        assert_ne!(half_low, half_high);
+        let values = [
+            Atom::num(high),
+            Atom::num(low),
+            Atom::num(f64::from_bits(1)),
+            half_low,
+            half_high,
+        ];
+        let mut original = Kinematics::new();
+        for (index, value) in values.iter().enumerate() {
+            let momentum = function!(
+                symbolica::symbol!("scalar_map_float::p"),
+                Atom::num(index as i64)
+            );
+            original = original
+                .with_mass_squared(&momentum, value.clone())
+                .unwrap();
+        }
+        let mut seen = BTreeSet::new();
+        let identity = original
+            .try_map_scalar_values(|value| {
+                seen.insert(value.clone());
+                Ok::<_, ()>(value.clone())
+            })
+            .unwrap();
+        assert_eq!(seen, values.into_iter().collect::<BTreeSet<_>>());
+        assert_eq!(identity.products, original.products);
+        assert!(
+            original
+                .scalar_assumptions()
+                .all(|(_, value)| Rational::try_from(value.as_view()).is_err())
+        );
+    }
+
+    #[test]
+    fn scalar_value_mapping_is_simultaneous_and_allows_collapsed_values() {
+        let [p, q] = [
+            parse!("scalar_map_simultaneous::p"),
+            parse!("scalar_map_simultaneous::q"),
+        ];
+        let rep = Minkowski {}.new_rep(4);
+        let pp = rep.inner_product(&p, &p);
+        let qq = rep.inner_product(&q, &q);
+        let original = Kinematics::new()
+            .with_mass_squared(&p, Atom::num(3))
+            .unwrap()
+            .with_mass_squared(&q, Atom::num(5))
+            .unwrap();
+        let mapped = original
+            .try_map_scalar_values(|_| Ok::<_, ()>(qq.clone()))
+            .unwrap();
+        assert_eq!(mapped.apply(&pp), qq);
+        assert_eq!(mapped.scalar_product(&p, &p).unwrap(), qq);
+        assert_eq!(mapped.scalar_product(&q, &q).unwrap(), qq);
+        let empty = Kinematics::new()
+            .try_map_scalar_values(|_| -> Result<Atom, ()> { panic!("empty context") })
+            .unwrap();
+        assert_eq!(empty.scalar_assumptions().len(), 0);
+        assert_eq!(empty.momenta().len(), 0);
+    }
 
     #[test]
     fn two_body_measure_has_physical_normalization_and_mass_symmetry() {
