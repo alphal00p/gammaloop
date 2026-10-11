@@ -390,12 +390,45 @@ mod tests {
     use super::{
         Analysis, FitResult, InspectAnalysis, InspectFitStatus, InspectResult,
         OrientationInspectAnalysis, OrientationInspectSamples, SubsetOrientationInput,
-        UV_PROFILE_ASYMPTOTIC_MIN_R_SQUARED, UV_PROFILE_RETRY_MIN_R_SQUARED, UVLimitSelection,
-        UVProfile, UVProfileAnalysis, UVProfileFailure, UVProfileFixedRay, UVProfileGraphAnalysis,
-        UVProfileLmbAnalysis, UVProfilePassFail, UVProfileSubsetAnalysis, UVSamplingResult,
-        analytic_integrand_for_orientation, inspect_results_need_arbprec_retry, log_log_slope,
+        UV_PROFILE_ASYMPTOTIC_MIN_R_SQUARED, UV_PROFILE_MAX_DOD, UV_PROFILE_RETRY_MIN_R_SQUARED,
+        UVLimitSelection, UVProfile, UVProfileAnalysis, UVProfileFailure, UVProfileFixedRay,
+        UVProfileGraphAnalysis, UVProfileLmbAnalysis, UVProfilePassFail, UVProfileSubsetAnalysis,
+        UVSamplingResult, analyse_inspect_results, analytic_integrand_for_orientation,
+        inspect_failure_reason, inspect_results_need_arbprec_retry, log_log_slope, logspace,
         sum_orientation_inspect_samples,
     };
+
+    /// Real inspect samples with magnitudes `10^y` in Arb; `None` is an exact zero.
+    fn inspect_samples(
+        log_magnitudes: impl IntoIterator<Item = Option<f64>>,
+    ) -> Vec<InspectResult> {
+        let ten = F::<ArbPrec>::default().from_usize(10);
+        log_magnitudes
+            .into_iter()
+            .map(|log_magnitude| InspectResult {
+                result: Complex::new_re(log_magnitude.map_or_else(
+                    || ten.zero(),
+                    |log_magnitude| ten.powf(&F::from_f64(log_magnitude)),
+                )),
+                evaluation_metadata: EvaluationMetaData::new_empty(),
+            })
+            .collect()
+    }
+
+    /// Final verdict of one sampled ray.
+    fn uv_ray_verdict(
+        log_magnitudes: &[Option<f64>],
+        scales: &[f64],
+        allow_vanishing_missing_fits: bool,
+    ) -> Option<&'static str> {
+        let samples = inspect_samples(log_magnitudes.iter().copied());
+        inspect_failure_reason(
+            analyse_inspect_results(&samples, scales, false).as_ref(),
+            InspectFitStatus::from_results(&samples, scales),
+            UV_PROFILE_MAX_DOD,
+            allow_vanishing_missing_fits,
+        )
+    }
 
     static THETA_GRAPH: OnceLock<(Graph, TiVec<LmbIndex, LoopMomentumBasis>)> = OnceLock::new();
 
@@ -768,12 +801,13 @@ mod tests {
             vec![(None, Some("dod_exceeds_threshold")), (Some("+-"), None)]
         );
 
+        let scales = (1..=5).map(|power| 10.0_f64.powi(power)).collect_vec();
+        let status = |log_magnitudes: [Option<f64>; 5]| {
+            InspectFitStatus::from_results(&inspect_samples(log_magnitudes), &scales)
+        };
         let mut vanishing = subset.clone();
         vanishing.inspect_level = None;
-        vanishing.inspect_fit_status = InspectFitStatus {
-            finite_samples: 5,
-            positive_finite_samples: 0,
-        };
+        vanishing.inspect_fit_status = status([None; 5]);
         assert!(
             vanishing
                 .inspect_verdicts(-0.9, true)
@@ -792,66 +826,69 @@ mod tests {
             let subset = &mut invalid_analysis.graphs[0].lmbs[0].subsets[0].analysis;
             subset.inspect_level = None;
             subset.per_orientation_inspect = None;
-            subset.inspect_fit_status = InspectFitStatus::from_results(&samples);
+            subset.inspect_fit_status = InspectFitStatus::from_results(&samples, &scales);
             let report = invalid_analysis.pass_fail(-0.9);
             assert_eq!(report.failed, 1);
             assert_eq!(report.failures[0].reason, "missing_fit");
         }
 
-        // Both tables must distinguish accepted vanishing samples from missing
-        // fits that fail the effective policy, including an empty sample set.
-        for (status, vanishing) in [
-            (InspectFitStatus::default(), false),
-            (
-                InspectFitStatus {
-                    finite_samples: 5,
-                    positive_finite_samples: 0,
-                },
-                true,
-            ),
-            (
-                InspectFitStatus {
-                    finite_samples: 5,
-                    positive_finite_samples: 1,
-                },
-                true,
-            ),
-            (
-                InspectFitStatus {
-                    finite_samples: 5,
-                    positive_finite_samples: 2,
-                },
-                false,
-            ),
-        ] {
-            for allow in [false, true] {
-                let mut displayed = analysis.clone();
-                displayed.allow_vanishing_missing_fits = allow;
-                let subset = &mut displayed.graphs[0].lmbs[0].subsets[0].analysis;
-                subset.inspect_level = None;
-                subset.inspect_fit_status = status;
-                let orientation = &mut subset.per_orientation_inspect.as_mut().unwrap()[0];
-                orientation.analysis = None;
-                orientation.inspect_fit_status = status;
-                let accepted = allow && vanishing;
-                assert_eq!(
-                    displayed.pass_fail(-0.9).failed,
-                    if accepted { 0 } else { 2 }
-                );
-                let tables = displayed.tables_per_graph(-0.9).into_iter().chain(
-                    displayed
-                        .per_orientation_tables_per_graph(-0.9)
-                        .into_iter()
-                        .flatten(),
-                );
-                for table in tables {
-                    let rendered = table.to_string();
-                    assert_eq!(rendered.contains("-∞"), accepted);
-                    assert_eq!(rendered.contains("missing_fit"), !accepted);
-                    assert_eq!(rendered.contains("vanishing"), vanishing);
+        // Both tables must distinguish accepted vanishing samples from missing or
+        // unstable fits that fail the effective policy, including an empty sample set.
+        let mut unstable = fit(-3.0e8, -300_000_000);
+        unstable.result.r_squared = 0.9;
+        for (fitted, failure) in [(None, "missing_fit"), (Some(unstable), "unstable_fit")] {
+            for (status, vanishing) in [
+                (InspectFitStatus::default(), false),
+                (status([None; 5]), true),
+                (status([Some(-3.0), None, None, None, None]), true),
+                (status([Some(-3.0), Some(-30.0), None, None, None]), true),
+                // Two nonzero samples which do not decay are no vanishing tail.
+                (status([Some(-3.0), Some(-3.0), None, None, None]), false),
+                (status([Some(-3.0), None, None, None, Some(-30.0)]), false),
+            ] {
+                for allow in [false, true] {
+                    let mut displayed = analysis.clone();
+                    displayed.allow_vanishing_missing_fits = allow;
+                    let subset = &mut displayed.graphs[0].lmbs[0].subsets[0].analysis;
+                    subset.inspect_level = fitted.clone();
+                    subset.inspect_fit_status = status;
+                    let orientation = &mut subset.per_orientation_inspect.as_mut().unwrap()[0];
+                    orientation.analysis = fitted.clone();
+                    orientation.inspect_fit_status = status;
+                    let accepted = allow && vanishing;
+                    assert_eq!(
+                        displayed.pass_fail(-0.9).failed,
+                        if accepted { 0 } else { 2 }
+                    );
+                    let tables = displayed.tables_per_graph(-0.9).into_iter().chain(
+                        displayed
+                            .per_orientation_tables_per_graph(-0.9)
+                            .into_iter()
+                            .flatten(),
+                    );
+                    for table in tables {
+                        let rendered = table.to_string();
+                        assert_eq!(rendered.contains("-∞"), accepted);
+                        assert_eq!(rendered.contains(failure), !accepted);
+                        assert_eq!(rendered.contains("vanishing"), vanishing);
+                    }
                 }
             }
         }
+
+        // An asymptotic power law takes precedence over a decaying envelope.
+        let mut power_law = analysis.clone();
+        let subset = &mut power_law.graphs[0].lmbs[0].subsets[0].analysis;
+        subset.inspect_level = Some(fit(-3.0, -3));
+        subset.inspect_fit_status = InspectFitStatus {
+            decay_slope: Some(-3.0),
+        };
+        subset.per_orientation_inspect = None;
+        assert_eq!(power_law.pass_fail(-0.9).failed, 0);
+        let rendered = power_law.tables_per_graph(-0.9)[0].to_string();
+        assert!(rendered.contains("-3.000000"));
+        assert!(!rendered.contains("-∞"));
+        assert!(!rendered.contains("vanishing"));
 
         // Rounded DOD -1 is not sufficient: the unrounded slope and fit quality
         // determine the verdict, and precision-retry provenance remains visible.
@@ -1103,11 +1140,12 @@ mod tests {
                 assert!((fit.slope - f64::from(slope)).abs() < 1.0e-10);
                 assert!(fit.r_squared > 0.999);
                 assert_eq!(fit.points.len(), scales.len());
-                assert_eq!(
-                    InspectFitStatus::from_results(&samples).positive_finite_samples,
-                    scales.len()
+                // No magnitude may be mistaken for an exact zero.
+                assert!(
+                    InspectFitStatus::from_results(&samples, &scales)
+                        .decay_slope
+                        .is_none_or(f64::is_finite)
                 );
-                assert!(!InspectFitStatus::from_results(&samples).missing_fit_is_vanishing());
                 assert_eq!(
                     inspect_results_need_arbprec_retry(&samples, &scales),
                     slope > 0
@@ -1157,9 +1195,170 @@ mod tests {
                 .is_none()
         );
         assert!(
-            !InspectFitStatus::from_results(&sum_orientation_inspect_samples(&orientations))
-                .missing_fit_is_vanishing()
+            InspectFitStatus::from_results(&sum_orientation_inspect_samples(&orientations), &[1.0])
+                .decay_slope
+                .is_none()
         );
+    }
+
+    // Arb's default exponent range ends at 2^(1 - 2^30).
+    const ARB_LOG10_MIN: f64 = -1_073_741_823.0 * std::f64::consts::LOG10_2;
+
+    /// `log10(λ^2 exp(-cλ))` along a ray, with exact zeros where Arb underflows.
+    fn exponential_tail(scales: &[f64], c: f64) -> Vec<Option<f64>> {
+        scales
+            .iter()
+            .map(|scale| {
+                let log_magnitude = 2.0 * scale.log10() - c * scale / std::f64::consts::LN_10;
+                (log_magnitude > ARB_LOG10_MIN).then_some(log_magnitude)
+            })
+            .collect()
+    }
+
+    #[test]
+    fn uv_profile_accepts_superpolynomially_decaying_rays_as_vanishing() {
+        let default_scales = logspace(3.0, 6.0, 20, 10.0);
+        let test_scales = logspace(8.0, 12.0, 33, 10.0);
+        // Arb evaluations of the vacuum-subtracted thermal sunrise, both scaled loops on one
+        // orientation. Its leading occupation cancels; Arb leaves a remainder about 2^-1000
+        // below it, except at the dips where the cancellation is exact and the smaller, true
+        // occupation shows. The high-scale ray then underflows.
+        let thermal_sunrise_default = [
+            -899.227516,
+            -1170.753779,
+            -1556.011907,
+            -2109.854372,
+            -3872.079841,
+            -4053.166454,
+            -8022.751403,
+            -11545.281750,
+            -11489.702032,
+            -16399.893364,
+            -23464.327260,
+            -33626.231335,
+            -48243.088624,
+            -69269.163662,
+            -99515.050667,
+            -143021.156329,
+            -205603.701363,
+            -295625.753875,
+            -425117.913175,
+            -907059.249793,
+        ]
+        .map(Some);
+        let thermal_sunrise_test = [
+            -90707996.511144,
+            -81492191.133152,
+            -108671490.984227,
+            -144915669.453068,
+            -286843931.683495,
+            -257700336.248771,
+        ]
+        .into_iter()
+        .map(Some)
+        .pad_using(test_scales.len(), |_| None)
+        .collect_vec();
+
+        for (log_magnitudes, scales, zeros) in [
+            (exponential_tail(&default_scales, 1.0), &default_scales, 0),
+            (exponential_tail(&default_scales, 0.01), &default_scales, 0),
+            // Underflow beyond the minimal asymptotic window, and inside it.
+            (exponential_tail(&test_scales, 1.0), &test_scales, 26),
+            (exponential_tail(&test_scales, 0.03), &test_scales, 13),
+            (thermal_sunrise_default.to_vec(), &default_scales, 0),
+            (thermal_sunrise_test.clone(), &test_scales, 27),
+        ] {
+            assert_eq!(
+                log_magnitudes
+                    .iter()
+                    .filter(|value| value.is_none())
+                    .count(),
+                zeros
+            );
+            let samples = inspect_samples(log_magnitudes.iter().copied());
+            let fit = analyse_inspect_results(&samples, scales, true).unwrap();
+            assert!(!fit.result.is_asymptotic());
+            assert!(inspect_results_need_arbprec_retry(&samples, scales));
+            assert_eq!(
+                uv_ray_verdict(&log_magnitudes, scales, false),
+                Some("unstable_fit")
+            );
+            assert_eq!(uv_ray_verdict(&log_magnitudes, scales, true), None);
+        }
+
+        // Exact zeros still settle a rising last step of the noisy ray. Without them, that step
+        // could begin a tail which flattens or diverges, so the ray stays unresolved.
+        let truncated = &thermal_sunrise_test[..6];
+        assert_eq!(
+            uv_ray_verdict(truncated, &test_scales[..6], true),
+            Some("unstable_fit")
+        );
+    }
+
+    #[test]
+    fn uv_profile_vanishing_requires_superpolynomial_decay() {
+        let scales = logspace(3.0, 6.0, 20, 10.0);
+        let log_scales = scales.iter().map(|scale| scale.log10()).collect_vec();
+        let power_law = |power: f64| {
+            log_scales
+                .iter()
+                .map(|log_scale| Some(power * log_scale - 5.0))
+                .collect_vec()
+        };
+        let alternating = |values: Vec<Option<f64>>| {
+            values
+                .into_iter()
+                .enumerate()
+                .map(|(i, value)| value.map(|value| value + if i % 2 == 0 { 0.3 } else { -0.3 }))
+                .collect_vec()
+        };
+        // A tail dominated at high scales by `floor + power * log10(λ)`.
+        let tail_into = |power: f64, floor: f64| {
+            exponential_tail(&scales, 1.0)
+                .into_iter()
+                .zip(&log_scales)
+                .map(|(tail, log_scale)| {
+                    let (tail, power_law) = (tail.unwrap(), floor + power * log_scale);
+                    let leading = tail.max(power_law);
+                    Some(leading + (1.0 + 10.0_f64.powf(-(tail - power_law).abs())).log10())
+                })
+                .collect_vec()
+        };
+        let status = |log_magnitudes: &[Option<f64>]| {
+            InspectFitStatus::from_results(
+                &inspect_samples(log_magnitudes.iter().copied()),
+                &scales,
+            )
+        };
+
+        // Power laws are fitted, never accepted as vanishing samples.
+        for (power, failure) in [
+            (1.0, Some("dod_exceeds_threshold")),
+            (-0.5, Some("dod_exceeds_threshold")),
+            (0.0, Some("unstable_fit")),
+            (-3.0, None),
+        ] {
+            let log_magnitudes = power_law(power);
+            assert_eq!(uv_ray_verdict(&log_magnitudes, &scales, true), failure);
+            assert_eq!(uv_ray_verdict(&log_magnitudes, &scales, false), failure);
+        }
+
+        let mut misplaced_zero = exponential_tail(&scales, 1.0);
+        misplaced_zero[15] = None;
+        for log_magnitudes in [
+            // Noise around a flat or divergent trend.
+            alternating(power_law(0.0)),
+            alternating(power_law(-0.5)),
+            // Decay which turns into a divergence or a noise floor at high scales.
+            tail_into(1.0, -20_000.0),
+            tail_into(-0.5, -20_000.0),
+            alternating(tail_into(0.0, -20_000.0)),
+            // A zero inside the asymptotic window is no underflow unless only zeros follow it.
+            misplaced_zero,
+        ] {
+            assert!(!status(&log_magnitudes).vanishes_without_power_law(None, UV_PROFILE_MAX_DOD));
+            assert!(uv_ray_verdict(&log_magnitudes, &scales, true).is_some());
+        }
     }
 
     #[test]
@@ -1956,6 +2155,13 @@ struct FitResult {
     full_range_r_squared: f64,
 }
 
+impl FitResult {
+    /// Whether the reported slope comes from a linear high-scale suffix.
+    fn is_asymptotic(&self) -> bool {
+        self.r_squared.is_finite() && self.r_squared >= UV_PROFILE_ASYMPTOTIC_MIN_R_SQUARED
+    }
+}
+
 impl UVProfileAnalysis {
     pub fn tables_per_graph(&self, max_dod: f64) -> Vec<Table> {
         self.graphs
@@ -1966,46 +2172,12 @@ impl UVProfileAnalysis {
                     .iter()
                     .flat_map(|lmb| {
                         lmb.subsets.iter().map(|subset| {
-                            let failure = inspect_failure_reason(
+                            let [slope, r_squared, estimated_dod, inspect] = inspect_cells(
                                 subset.analysis.inspect_level.as_ref(),
                                 subset.analysis.inspect_fit_status,
                                 max_dod,
                                 self.allow_vanishing_missing_fits,
                             );
-                            let vanishing = subset
-                                .analysis
-                                .inspect_fit_status
-                                .missing_fit_is_vanishing();
-                            let (slope, r_squared, estimated_dod) =
-                                match &subset.analysis.inspect_level {
-                                    Some(analysis) => {
-                                        let r2_text = format!("{:.3}", analysis.result.r_squared);
-                                        let r2_text = if analysis.result.r_squared.is_finite()
-                                            && analysis.result.r_squared
-                                                >= UV_PROFILE_ASYMPTOTIC_MIN_R_SQUARED
-                                        {
-                                            r2_text.green()
-                                        } else {
-                                            r2_text.red()
-                                        }
-                                        .to_string();
-
-                                        let dod = analysis.estimated_dod;
-                                        let dod_text = dod.to_string();
-                                        let dod_text = if failure.is_none() {
-                                            dod_text.green()
-                                        } else {
-                                            dod_text.red()
-                                        }
-                                        .to_string();
-
-                                        (format!("{:.6}", analysis.result.slope), r2_text, dod_text)
-                                    }
-                                    None if vanishing && failure.is_none() => {
-                                        ("-".to_string(), "-".to_string(), "-∞".green().to_string())
-                                    }
-                                    None => ("-".to_string(), "-".to_string(), "-".to_string()),
-                                };
 
                             UVProfileSubsetRow {
                                 fixed: format!(
@@ -2024,11 +2196,7 @@ impl UVProfileAnalysis {
                                 } else {
                                     subset.initial_dod.to_string().green().to_string()
                                 },
-                                inspect: inspect_label(
-                                    subset.analysis.inspect_level.as_ref(),
-                                    failure,
-                                    vanishing,
-                                ),
+                                inspect,
                             }
                         })
                     })
@@ -2136,50 +2304,12 @@ impl UVProfileAnalysis {
                                 .iter()
                                 .flatten()
                                 .map(|entry| {
-                                    let failure = inspect_failure_reason(
+                                    let [slope, r_squared, estimated_dod, inspect] = inspect_cells(
                                         entry.analysis.as_ref(),
                                         entry.inspect_fit_status,
                                         max_dod,
                                         self.allow_vanishing_missing_fits,
                                     );
-                                    let vanishing =
-                                        entry.inspect_fit_status.missing_fit_is_vanishing();
-                                    let (slope, r_squared, estimated_dod) = match &entry.analysis {
-                                        Some(analysis) => {
-                                            let r2_text =
-                                                format!("{:.3}", analysis.result.r_squared);
-                                            let r2_text = if analysis.result.r_squared.is_finite()
-                                                && analysis.result.r_squared
-                                                    >= UV_PROFILE_ASYMPTOTIC_MIN_R_SQUARED
-                                            {
-                                                r2_text.green()
-                                            } else {
-                                                r2_text.red()
-                                            }
-                                            .to_string();
-
-                                            let dod = analysis.estimated_dod;
-                                            let dod_text = dod.to_string();
-                                            let dod_text = if failure.is_none() {
-                                                dod_text.green()
-                                            } else {
-                                                dod_text.red()
-                                            }
-                                            .to_string();
-
-                                            (
-                                                format!("{:.6}", analysis.result.slope),
-                                                r2_text,
-                                                dod_text,
-                                            )
-                                        }
-                                        None if vanishing && failure.is_none() => (
-                                            "-".to_string(),
-                                            "-".to_string(),
-                                            "-∞".green().to_string(),
-                                        ),
-                                        None => ("-".to_string(), "-".to_string(), "-".to_string()),
-                                    };
 
                                     UVProfileOrientationSubsetRow {
                                         fixed: format!(
@@ -2199,11 +2329,7 @@ impl UVProfileAnalysis {
                                         } else {
                                             subset.initial_dod.to_string().green().to_string()
                                         },
-                                        inspect: inspect_label(
-                                            entry.analysis.as_ref(),
-                                            failure,
-                                            vanishing,
-                                        ),
+                                        inspect,
                                     }
                                 })
                                 .collect::<Vec<_>>()
@@ -2278,19 +2404,58 @@ fn inspect_failure_reason(
     max_dod: f64,
     allow_vanishing_missing_fits: bool,
 ) -> Option<&'static str> {
+    if allow_vanishing_missing_fits && fit_status.vanishes_without_power_law(analysis, max_dod) {
+        return None;
+    }
     match analysis {
-        None if allow_vanishing_missing_fits && fit_status.missing_fit_is_vanishing() => None,
         None => Some("missing_fit"),
-        Some(analysis)
-            if !analysis.result.r_squared.is_finite()
-                || analysis.result.r_squared < UV_PROFILE_ASYMPTOTIC_MIN_R_SQUARED =>
-        {
-            Some("unstable_fit")
-        }
+        Some(analysis) if !analysis.result.is_asymptotic() => Some("unstable_fit"),
         Some(analysis) if analysis.result.slope > max_dod || analysis.result.slope.is_nan() => {
             Some("dod_exceeds_threshold")
         }
-        _ => None,
+        Some(_) => None,
+    }
+}
+
+/// Slope, r², DOD and status cells of one sampled ray.
+fn inspect_cells(
+    analysis: Option<&InspectAnalysis>,
+    fit_status: InspectFitStatus,
+    max_dod: f64,
+    allow_vanishing_missing_fits: bool,
+) -> [String; 4] {
+    let failure =
+        inspect_failure_reason(analysis, fit_status, max_dod, allow_vanishing_missing_fits);
+    let vanishing = fit_status.vanishes_without_power_law(analysis, max_dod);
+    let status = inspect_label(analysis, failure, vanishing);
+    match analysis {
+        _ if vanishing && failure.is_none() => [
+            "-".to_string(),
+            "-".to_string(),
+            "-∞".green().to_string(),
+            status,
+        ],
+        Some(analysis) => {
+            let r2_text = format!("{:.3}", analysis.result.r_squared);
+            let r2_text = if analysis.result.is_asymptotic() {
+                r2_text.green()
+            } else {
+                r2_text.red()
+            };
+            let dod_text = analysis.estimated_dod.to_string();
+            let dod_text = if failure.is_none() {
+                dod_text.green()
+            } else {
+                dod_text.red()
+            };
+            [
+                format!("{:.6}", analysis.result.slope),
+                r2_text.to_string(),
+                dod_text.to_string(),
+                status,
+            ]
+        }
+        None => ["-".to_string(), "-".to_string(), "-".to_string(), status],
     }
 }
 
@@ -2984,7 +3149,7 @@ impl SubSetResult {
     pub fn analyse(&self, scales: &[f64]) -> Analysis {
         Analysis {
             inspect_level: self.analyse_inspect(scales),
-            inspect_fit_status: InspectFitStatus::from_results(&self.inspect.summed),
+            inspect_fit_status: InspectFitStatus::from_results(&self.inspect.summed, scales),
             per_orientation_inspect: (!self.inspect.per_orientation.is_empty()).then(|| {
                 self.inspect
                     .per_orientation
@@ -2996,7 +3161,10 @@ impl SubSetResult {
                             scales,
                             orientation.used_arb_prec_retry,
                         ),
-                        inspect_fit_status: InspectFitStatus::from_results(&orientation.inspect),
+                        inspect_fit_status: InspectFitStatus::from_results(
+                            &orientation.inspect,
+                            scales,
+                        ),
                     })
                     .collect()
             }),
@@ -3075,14 +3243,19 @@ fn inspect_results_need_arbprec_retry(inspect: &[InspectResult], scales: &[f64])
         Some(analysis) => {
             analysis.result.slope.is_nan()
                 || analysis.result.slope > UV_PROFILE_MAX_DOD
-                || !analysis.result.r_squared.is_finite()
-                || analysis.result.r_squared < UV_PROFILE_ASYMPTOTIC_MIN_R_SQUARED
+                || !analysis.result.is_asymptotic()
                 || analysis.result.full_range_slope.is_nan()
                 || analysis.result.full_range_slope > UV_PROFILE_MAX_DOD
                 || !analysis.result.full_range_r_squared.is_finite()
                 || analysis.result.full_range_r_squared < UV_PROFILE_RETRY_MIN_R_SQUARED
         }
     }
+}
+
+/// Shortest high-scale suffix of `len` samples which may represent the asymptotic regime: at
+/// least half of the samples, and at least the minimum ray length whenever the ray provides it.
+fn asymptotic_suffix_len(len: usize) -> usize {
+    len.min(UV_PROFILE_MIN_POINTS.max(len.div_ceil(2)))
 }
 
 fn log_log_slope(inspect: &[InspectResult], scales: &[f64]) -> Option<FitResult> {
@@ -3144,11 +3317,8 @@ fn log_log_slope(inspect: &[InspectResult], scales: &[f64]) -> Option<FitResult>
 
     let full_range_fit = fit(&valid_samples)?;
     // UV power counting is asymptotic. Retain the longest high-scale suffix which is already
-    // linear, dropping only a pre-asymptotic prefix. At least five points are kept whenever the
-    // sampling range provides them.
-    let minimum_suffix_len = valid_samples
-        .len()
-        .min(5.max(valid_samples.len().div_ceil(2)));
+    // linear, dropping only a pre-asymptotic prefix.
+    let minimum_suffix_len = asymptotic_suffix_len(valid_samples.len());
     let (fit_start, (slope, intercept, r_squared)) = (0..=valid_samples.len() - minimum_suffix_len)
         .find_map(|start| {
             let candidate = fit(&valid_samples[start..])?;
@@ -3274,16 +3444,19 @@ impl InspectResult {
     }
 }
 
+/// Evidence that a sampled ray vanishes instead of following a power law.
 #[derive(Debug, Clone, Copy, Default)]
 struct InspectFitStatus {
-    finite_samples: usize,
-    positive_finite_samples: usize,
+    /// Smallest initial slope of a concave log-log majorant which bounds a high-scale window of
+    /// the samples to its end; `-∞` for a window of exact zeros with at most one nonzero sample.
+    /// `None` if no window has such a majorant or any sample is invalid.
+    decay_slope: Option<f64>,
 }
 
 impl InspectFitStatus {
-    fn from_results(inspect: &[InspectResult]) -> Self {
-        let mut status = Self::default();
-        for result in inspect {
+    fn from_results(inspect: &[InspectResult], scales: &[f64]) -> Self {
+        let mut samples = Vec::with_capacity(inspect.len());
+        for (result, scale) in inspect.iter().zip(scales) {
             let Some(norm) = result.magnitude() else {
                 return Self::default();
             };
@@ -3291,16 +3464,61 @@ impl InspectFitStatus {
                 // An invalid sample cannot certify an inactive, vanishing LU ray.
                 return Self::default();
             }
-            status.finite_samples += 1;
-            if norm > norm.zero() {
-                status.positive_finite_samples += 1;
-            }
+            let log_magnitude = (norm > norm.zero()).then(|| norm.log10().into_ff64().0);
+            samples.push((scale.log10(), log_magnitude));
         }
-        status
+        // As for the power-law fit, a pre-asymptotic prefix of at most half the ray is ignored.
+        let window_len = asymptotic_suffix_len(samples.len());
+        Self {
+            decay_slope: (0..=samples.len() - window_len)
+                .filter_map(|start| Self::window_decay_slope(&samples[start..]))
+                .min_by(f64::total_cmp),
+        }
     }
 
-    fn missing_fit_is_vanishing(self) -> bool {
-        self.finite_samples > self.positive_finite_samples && self.positive_finite_samples < 2
+    /// Initial, hence shallowest, slope of the least concave majorant of the window's nonzero
+    /// `(log λ, log |f|)` samples, provided the samples follow it to their end. The majorant
+    /// bridges isolated dips, such as an exact cancellation resolved by Arb, but its final segment
+    /// must be the final sampled step: a tail which flattens or rises leaves it. Exact zeros may
+    /// only trail the nonzero samples, as underflow does, and then replace that requirement.
+    fn window_decay_slope(window: &[(f64, Option<f64>)]) -> Option<f64> {
+        let nonzero = window
+            .iter()
+            .filter_map(|&(log_scale, log_magnitude)| Some((log_scale, log_magnitude?)))
+            .collect_vec();
+        let [earlier @ .., penultimate, last] = nonzero.as_slice() else {
+            // Exact zeros dominate the window, as for an inactive LU ray.
+            return (window.len() > nonzero.len()).then_some(f64::NEG_INFINITY);
+        };
+        let trailing_zeros = window
+            .iter()
+            .rev()
+            .take_while(|(_, log_magnitude)| log_magnitude.is_none())
+            .count();
+        if nonzero.len() + trailing_zeros < window.len() {
+            return None;
+        }
+        let slope = |(x0, y0): (f64, f64), (x1, y1): (f64, f64)| (y1 - y0) / (x1 - x0);
+        let final_slope = slope(*penultimate, *last);
+        if trailing_zeros == 0
+            && !earlier
+                .iter()
+                .all(|point| final_slope <= slope(*point, *penultimate))
+        {
+            return None;
+        }
+        nonzero[1..]
+            .iter()
+            .map(|point| slope(nonzero[0], *point))
+            .max_by(f64::total_cmp)
+    }
+
+    /// Whether the samples vanish where no asymptotic power law describes them: a high-scale
+    /// window decays faster than `max_dod` along a concave log-log majorant, which also bounds
+    /// its asymptotic slope.
+    fn vanishes_without_power_law(self, analysis: Option<&InspectAnalysis>, max_dod: f64) -> bool {
+        !analysis.is_some_and(|analysis| analysis.result.is_asymptotic())
+            && self.decay_slope.is_some_and(|slope| slope <= max_dod)
     }
 }
 
