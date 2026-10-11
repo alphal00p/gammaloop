@@ -33,12 +33,10 @@ use crate::{
     utils::{F, FloatLike, Length, hyperdual_utils::new_constant},
 };
 
-mod boundary;
 mod evaluation;
 mod routing;
 mod sectors;
 
-pub use boundary::ThermalBoundaryTerm;
 pub(crate) use evaluation::FermiSurfaceEvaluator;
 pub(crate) use sectors::FermiSurfaceSector;
 
@@ -48,7 +46,7 @@ pub(crate) use sectors::FermiSurfaceSector;
 /// shifts are retained in the basis routing, so the selected coordinates are
 /// the actual edge momenta about which the Fermi spheres are centred.
 #[derive(Clone, Debug, Encode, Decode)]
-pub struct FermiSurfaceProduct {
+pub(crate) struct FermiSurfaceProduct {
     factors: Vec<ThermalDistributionFactor>,
     lmb: LoopMomentumBasis,
     derivative_orders: Vec<usize>,
@@ -70,10 +68,10 @@ impl FermiSurfaceProduct {
     /// coefficient callback. Its root and Jacobian must retain their dependence
     /// on all shell-offset jets before the Fermi derivatives are extracted.
     /// No delta or discontinuous step function may be numerically differentiated
-    /// inside this smooth callback. Use [`ThermalBoundaryTerm`] to expand such
-    /// derivatives symbolically first, and validate any generated intersection
-    /// together with its host surface using `FermiSurfaceProduct::new`.
-    pub fn localize<T: FloatLike>(
+    /// inside this smooth callback. Expand such derivatives symbolically first,
+    /// and validate any generated intersection together with its host surface
+    /// using `FermiSurfaceProduct::new`.
+    pub(crate) fn localize<T: FloatLike>(
         &self,
         loop_momenta: &LoopMomenta<F<T>>,
         masses: &[F<T>],

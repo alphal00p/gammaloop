@@ -16,7 +16,7 @@ impl FermiSurfaceProduct {
     /// Choose a graph basis whose first loop momenta are the selected fermion
     /// momenta. Independent internal routes extend to a unimodular graph basis;
     /// its complete edge signatures retain the original external shifts.
-    pub fn new(graph: &Graph, factors: &[ThermalDistributionFactor]) -> Result<Self> {
+    pub(crate) fn new(graph: &Graph, factors: &[ThermalDistributionFactor]) -> Result<Self> {
         ensure!(
             !factors.is_empty(),
             "Fermi-surface product must not be empty"
@@ -157,11 +157,11 @@ impl FermiSurfaceProduct {
         })
     }
 
-    pub fn lmb(&self) -> &LoopMomentumBasis {
+    pub(crate) fn lmb(&self) -> &LoopMomentumBasis {
         &self.lmb
     }
 
-    pub fn factors(&self) -> &[ThermalDistributionFactor] {
+    pub(crate) fn factors(&self) -> &[ThermalDistributionFactor] {
         &self.factors
     }
 }

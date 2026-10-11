@@ -319,23 +319,14 @@ fermion, contribute zero; degenerate onsets `sigma*mu = m > 0`, invalid radial
 coordinates and nonfinite results are errors.
 Masses and chemical potentials are held fixed during differentiation.
 
-`ThermalBoundaryTerm` keeps a smooth symbolic coefficient and explicit thermal
-factors together. Its ordinary derivative applies the product and chain rules,
-including derivatives of the supplied energy maps: an order-zero step becomes
-an order-one delta factor, and further derivatives raise its distribution order.
-Equal factor products are collected, retaining both single-surface boundary
-terms and intersections of independent surfaces. Newly active products are
-validated using the same routing checks as numerical localization. When taking
-a host delta's normal derivative, callers differentiate only its coefficient
-and residual thermal factors, then include the host in the final intersection
-validation. This algebra stays separate from production expression assembly.
-
 The callback receives momenta in the adapted basis, with all unconstrained
 coordinates held fixed. It must preserve the jets through every momentum-dependent
 factor. A future conditional Cutkosky localization can return its complete
 root- and Jacobian-dependent weight through this callback before the Fermi
-derivatives are extracted. Thermal cross sections and threshold subtraction
-remain rejected by the existing settings validation.
+derivatives are extracted. Deltas and steps must not be differentiated
+numerically inside it; such boundary and intersection terms have to be expanded
+symbolically and validated as Fermi products first. Thermal cross sections
+and threshold subtraction remain rejected by the existing settings validation.
 
 Production sector extraction collects the tagged thermal functions while
 retaining factorized smooth coefficients and shared numerator definitions.
