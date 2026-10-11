@@ -4,7 +4,7 @@ use bincode::{Decode, Encode};
 use linnet::half_edge::involution::EdgeIndex;
 use serde::{Deserialize, Serialize};
 use symbolica::{
-    atom::{Atom, AtomCore},
+    atom::{Atom, AtomCore, AtomView},
     function,
     id::Replacement,
     symbol,
@@ -231,6 +231,92 @@ impl ThermalWeight {
         result.canonicalize();
         result
     }
+
+    /// The vacuum value of a completed weight atom: every order-zero factor takes
+    /// its vacuum weight `(1 + s)/2` and every derivative vanishes.
+    fn vacuum_value(weight: AtomView) -> Atom {
+        let (edge, derivative, temperature, sign, orientation) = symbol!(
+            "edge_",
+            "derivative_",
+            "temperature_",
+            "sign_",
+            "orientation_"
+        );
+        weight
+            .replace(function!(
+                S.thermal_distribution,
+                edge,
+                0,
+                temperature,
+                sign,
+                orientation
+            ))
+            .with(ThermalDistributionFactor::vacuum_atom(0, Atom::var(sign)))
+            .replace(function!(
+                S.thermal_distribution,
+                edge,
+                derivative,
+                temperature,
+                sign,
+                orientation
+            ))
+            // All remaining factors have positive derivative order.
+            .with(ThermalDistributionFactor::vacuum_atom(1, Atom::var(sign)))
+    }
+
+    /// `weight - vacuum`, written so that every term keeps a factor whose vacuum
+    /// value is zero. An order-zero factor differs from its vacuum weight by its
+    /// occupation, `N(s) - (1 + s)/2 = N(-1)`, and products follow the product rule
+    /// `D(a*b) = D(a)*vac(b) + a*D(b)`. The vacuum constant thus cancels exactly,
+    /// instead of in floating point against occupations that round away, while the
+    /// result stays linear in the number of factors. Weights whose vacuum value
+    /// is already zero are returned unchanged, which makes the map idempotent.
+    fn vacuum_difference(weight: AtomView) -> Atom {
+        if Self::vacuum_value(weight).is_zero() {
+            return weight.to_owned();
+        }
+        match weight {
+            AtomView::Num(_) => Atom::Zero,
+            AtomView::Fun(function) if function.get_symbol() == S.thermal_distribution => {
+                // Only order zero has a nonzero vacuum value.
+                let arguments = function.iter().collect::<Vec<_>>();
+                function!(
+                    S.thermal_distribution,
+                    arguments[0],
+                    arguments[1],
+                    arguments[2],
+                    -1,
+                    arguments[4]
+                )
+            }
+            AtomView::Add(sum) => sum.iter().map(Self::vacuum_difference).sum(),
+            AtomView::Mul(product) => {
+                Self::product_vacuum_difference(&product.iter().collect::<Vec<_>>())
+            }
+            AtomView::Pow(power) => {
+                let (base, exponent) = power.get_base_exp();
+                let exponent = usize::try_from(exponent)
+                    .unwrap_or_else(|_| panic!("thermal weight power must be positive: {weight}"));
+                Self::product_vacuum_difference(&vec![base; exponent])
+            }
+            _ => panic!("thermal weight must contain only distributions and numbers: {weight}"),
+        }
+    }
+
+    fn product_vacuum_difference(factors: &[AtomView]) -> Atom {
+        let (first, rest) = factors
+            .split_first()
+            .expect("a product has at least one factor");
+        if rest.is_empty() {
+            return Self::vacuum_difference(*first);
+        }
+        let rest_vacuum: Atom = rest
+            .iter()
+            .map(|&factor| Self::vacuum_value(factor))
+            .product();
+        Self::vacuum_difference(*first) * rest_vacuum
+            + first.to_owned() * Self::product_vacuum_difference(rest)
+    }
 }
 
 /// Replace each completed thermal coefficient `W` by `W - V(W)`, where `V`
@@ -238,40 +324,45 @@ impl ThermalWeight {
 /// Retain the wrapper through UV subtraction; only evaluator construction unwraps it.
 /// This replacement is used once at the CFF-to-integrand boundary.
 pub static VACUUM_SUBTRACTION: LazyLock<[Replacement; 1]> = LazyLock::new(|| {
-    let (weight, edge, derivative, temperature, sign, orientation) = symbol!(
-        "weight_",
-        "edge_",
-        "derivative_",
-        "temperature_",
-        "sign_",
-        "orientation_"
-    );
+    let weight = symbol!("weight_");
     [function!(S.thermal_weight_wrapper, weight)
         .to_pattern()
         .replace_with_map(move |matched| {
             let weight = matched.get(weight).unwrap().to_atom();
-            let vacuum = weight
-                .replace(function!(
-                    S.thermal_distribution,
-                    edge,
-                    0,
-                    temperature,
-                    sign,
-                    orientation
-                ))
-                .with(ThermalDistributionFactor::vacuum_atom(0, Atom::var(sign)))
-                .replace(function!(
-                    S.thermal_distribution,
-                    edge,
-                    derivative,
-                    temperature,
-                    sign,
-                    orientation
-                ))
-                // All remaining factors have positive derivative order.
-                .with(ThermalDistributionFactor::vacuum_atom(1, Atom::var(sign)));
-            function!(S.thermal_weight_wrapper, weight - vacuum)
+            function!(
+                S.thermal_weight_wrapper,
+                ThermalWeight::vacuum_difference(weight.as_view())
+            )
         })]
+});
+
+/// Rewrite every order-zero factor as its vacuum weight plus its occupation,
+/// `N(s) = (1 + s)/2 + N(-1)`. Vacuum subtraction relies on this identity, so a
+/// subtracted weight equals `weight - vacuum` once both are rewritten.
+pub static OCCUPATION_FORM: LazyLock<[Replacement; 1]> = LazyLock::new(|| {
+    let (edge, temperature, sign, orientation) =
+        symbol!("edge_", "temperature_", "sign_", "orientation_");
+    [function!(
+        S.thermal_distribution,
+        edge,
+        0,
+        temperature,
+        sign,
+        orientation
+    )
+    .to_pattern()
+    .replace_with(
+        (ThermalDistributionFactor::vacuum_atom(0, Atom::var(sign))
+            + function!(
+                S.thermal_distribution,
+                edge,
+                0,
+                temperature,
+                -1,
+                orientation
+            ))
+        .to_pattern(),
+    )]
 });
 
 #[cfg(test)]
@@ -280,6 +371,22 @@ mod tests {
 
     use super::*;
     use crate::{Generate3DExpressionOptions, expression::AllOrientations, generate_3d_expression};
+
+    fn unwrapped(atom: &Atom) -> Atom {
+        let weight = symbol!("unwrapped_weight_");
+        atom.replace(function!(S.thermal_weight_wrapper, weight))
+            .with(weight)
+    }
+
+    /// No term cancels a nonzero vacuum constant in floating point.
+    fn keeps_vanishing_factor(atom: AtomView) -> bool {
+        match atom {
+            AtomView::Add(sum) => sum.iter().all(keeps_vanishing_factor),
+            AtomView::Mul(product) => product.iter().any(keeps_vanishing_factor),
+            AtomView::Pow(power) => keeps_vanishing_factor(power.get_base_exp().0),
+            _ => ThermalWeight::vacuum_value(atom).is_zero(),
+        }
+    }
 
     #[test]
     fn thermal_numerator_keeps_sign_and_distribution_structure() {
@@ -359,14 +466,14 @@ mod tests {
                 subtracted.replace_multiple(&*VACUUM_SUBTRACTION),
                 subtracted
             );
-            assert_eq!(
-                product.to_atom().replace_multiple(&*VACUUM_SUBTRACTION),
-                function!(
-                    S.thermal_weight_wrapper,
-                    left.numerators[0].to_atom(medium_mode.is_finite_temperature())
-                        * right.distributions[0].to_atom(medium_mode.is_finite_temperature())
-                        - Atom::one()
-                )
+            // The constant cancels symbolically, so every term keeps an occupation.
+            let difference = unwrapped(&subtracted);
+            assert!(keeps_vanishing_factor(difference.as_view()), "{difference}");
+            assert!(
+                (difference - unwrapped(&product.to_atom()) + 1)
+                    .replace_multiple(&*OCCUPATION_FORM)
+                    .expand()
+                    .is_zero()
             );
             assert_ne!(
                 product.to_atom().replace_multiple(&*VACUUM_SUBTRACTION),
@@ -385,7 +492,8 @@ mod tests {
                 Atom::Zero
             );
 
-            // A symmetric terminal contributes half of each directed vacuum weight.
+            // A symmetric terminal contributes half of each directed vacuum weight,
+            // so it differs from it by the occupation.
             let symmetric = ThermalWeight {
                 medium_mode,
                 distributions: vec![ThermalDistributionFactor {
@@ -395,12 +503,15 @@ mod tests {
                 }],
                 ..Default::default()
             };
+            let occupation = ThermalDistributionFactor {
+                sign: -1,
+                ..symmetric.distributions[0]
+            };
             assert_eq!(
                 symmetric.to_atom().replace_multiple(&*VACUUM_SUBTRACTION),
                 function!(
                     S.thermal_weight_wrapper,
-                    symmetric.distributions[0].to_atom(medium_mode.is_finite_temperature())
-                        - Atom::one() / Atom::num(2)
+                    occupation.to_atom(medium_mode.is_finite_temperature())
                 )
             );
             // A derivative or a negative contour offset has zero vacuum weight.
@@ -416,8 +527,10 @@ mod tests {
                     weighted.to_atom()
                 );
             }
-            // The UV replacement on a proper subset commutes with the full projection.
+            // The UV replacement on a proper subset, which sets each of its calls to
+            // the vacuum weight, commutes with the full projection.
             let flag = i64::from(medium_mode.is_finite_temperature());
+            let contour = symbol!("contour_");
             let partial = product
                 .to_atom()
                 .replace_multiple(&*VACUUM_SUBTRACTION)
@@ -426,10 +539,13 @@ mod tests {
                     2,
                     0,
                     flag,
-                    1,
+                    contour,
                     sign(EdgeIndex(2))
                 ))
-                .with(Atom::one());
+                .with(ThermalDistributionFactor::vacuum_atom(
+                    0,
+                    Atom::var(contour),
+                ));
             assert_eq!(
                 partial,
                 left.to_atom().replace_multiple(&*VACUUM_SUBTRACTION)

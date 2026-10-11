@@ -1898,8 +1898,15 @@ mod tests {
     #[test]
     fn vacuum_subtraction_commutes_with_local_and_integrated_forests() -> Result<()> {
         use crate::{
-            integrands::process::param_builder::ParamBuilderGraph, settings::global::MediumMode,
+            integrands::process::param_builder::ParamBuilderGraph,
+            numerator::{
+                soft_energy_certificate::{EnergyZeroOutcome, SoftEnergyAlgebra},
+                symbolica_ext::NumeratorAtomExt,
+            },
+            settings::global::MediumMode,
         };
+        use symbolica::atom::AtomView;
+        use three_dimensional_reps::thermal::OCCUPATION_FORM;
         test_initialise()?;
         let graphs: Vec<Graph> = dot!(
             digraph nested {
@@ -1972,16 +1979,37 @@ mod tests {
                                 actual.is_zero()
                                     || actual.contains_symbol(GS.thermal_weight_wrapper)
                             );
-                            // The production expression retains each whole coefficient.
-                            // Resolve the identity only for this scalar comparison.
+                            // Resolve only this scalar comparison. Final energy factors can
+                            // group as E^-5 or E^-1/P^2, with E^2 = P, after the two routes.
                             let difference = (actual - (raw - vacuum))
                                 .replace(function!(GS.thermal_weight_wrapper, W_.a_))
-                                .with(W_.a_);
-                            assert!(
-                                difference.expand().is_zero(),
-                                "{}: {medium:?}, integrated={generate_integrated}, residue={late_key:?}: {difference}",
-                                graph.name
-                            );
+                                .with(W_.a_)
+                                .replace_multiple(&*OCCUPATION_FORM)
+                                .expand();
+                            // Certify each occupation coefficient separately so unrelated
+                            // energy denominators do not multiply the proof's term budget.
+                            let mut occupations = BTreeSet::new();
+                            difference.visitor(&mut |view| {
+                                if let AtomView::Fun(call) = view
+                                    && call.get_symbol() == GS.thermal_distribution
+                                {
+                                    occupations.insert(view.to_owned());
+                                    return false;
+                                }
+                                true
+                            });
+                            let coefficients = difference
+                                .coefficient_list_exact(&occupations.into_iter().collect_vec())
+                                .expect("scalar difference must be polynomial in occupations");
+                            for (occupation, coefficient) in coefficients {
+                                let certificate =
+                                    SoftEnergyAlgebra::default().scalar_zero(&coefficient)?;
+                                assert!(
+                                    matches!(certificate, EnergyZeroOutcome::Zero(_)),
+                                    "{}: {medium:?}, integrated={generate_integrated}, residue={late_key:?}, occupation={occupation}: {certificate:?}: {coefficient}",
+                                    graph.name
+                                );
+                            }
                         }
                     }
                 }
