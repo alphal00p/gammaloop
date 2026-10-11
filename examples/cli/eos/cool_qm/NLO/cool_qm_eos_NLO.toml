@@ -8,10 +8,10 @@ name = "cool_qm_eos_NLO"
 [[command_blocks]]
 name = "generate"
 commands = [
-    "import model sm-thermal.json",
+    "import model sm-thermal_s_mass.json",
 
     "remove processes",
-    """generate amp {} > {} | u u~ d d~ b b~ g ghG ghG~ [{2}]
+    """generate amp {} > {} | u u~ d d~ s s~ g ghG ghG~ [{2}]
             --numerator-grouping group_identical_graphs_up_to_scalar_rescaling
             --max-n-bridges 0
             --number-of-factorized-loop-subtopologies -1 -1
@@ -60,7 +60,7 @@ mu_r = 2.0
 [default_runtime_settings.model]
 aS = [1.0, 0.0]
 muB = [3.0, 0.0]
-MB = [0.2, 0.0]
+MS = [0.2, 0.0]
 
 [default_runtime_settings.kinematics]
 e_cm = 1.0

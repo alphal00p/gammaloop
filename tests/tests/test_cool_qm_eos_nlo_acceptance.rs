@@ -14,7 +14,7 @@ fn cool_qm_eos_nlo_matches_example_target() -> Result<()> {
     const INTEGRAND: &str = "NLO";
     // O(aS) pressure with quark masses of Graf, Schaffner-Bielich and Fraga,
     // Eur. Phys. J. A 52 (2016) 208, https://arxiv.org/abs/1507.08941, at
-    // beta=10, muB=3, MB=0.2, aS=1, m_uv=mu_r=localization_scale=2. The example
+    // beta=10, muB=3, MS=0.2, aS=1, m_uv=mu_r=localization_scale=2. The example
     // card examples/cli/eos/cool_qm/NLO/cool_qm_eos_NLO.toml uses the same target.
     const TARGET: f64 = -0.0610772376129;
     const N_SAMPLES: usize = 750_000;
