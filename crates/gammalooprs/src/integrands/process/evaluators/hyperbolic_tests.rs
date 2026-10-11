@@ -362,8 +362,8 @@ fn check_backend<T: FloatLike>(
         &FunctionMap::default(),
         vec![],
         OptimizationSettings::default(),
-        // Symbolic derivatives work independently of the currently unsupported
-        // native hyperbolic hyperdual-vectorization callbacks.
+        // Outputs already contain symbolic derivatives so each component can be
+        // compared directly with its MPC reference.
         None,
         &EvaluatorSettings::default(),
     )

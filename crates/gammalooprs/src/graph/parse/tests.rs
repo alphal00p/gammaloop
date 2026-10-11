@@ -1530,7 +1530,7 @@ fn xs_glueing() {
           "0":8	-> "1":9	 [id=2 dir=none  dod="-2" dod_autogen="true" lmb_rep="-1*K(0,a___)+P(0,a___)" name="e2" name_autogen="true" num="-𝑖*spenso::g(spenso::mink(4,hedge(8)),spenso::mink(4,hedge(9)))" num_autogen="true" particle="W-"];
           "2":10	-> "3":11	 [id=3 dir=none  dod="-2" dod_autogen="true" lmb_rep="-1*P(0,a___)+K(0,a___)" name="e3" name_autogen="true" num="-𝑖*spenso::g(spenso::mink(4,hedge(10)),spenso::mink(4,hedge(11)))" num_autogen="true" particle="W+"];
           "0":4	-> "2":5	 [id=4  dod="-1" dod_autogen="true" lmb_id="0" lmb_rep="K(0,a___)" name="e4" name_autogen="true" num="Q(4,spenso::mink(4,edge(4,1)))*spenso::g(spenso::cof(3,hedge(4)),spenso::dind(spenso::cof(3,hedge(5))))*spenso::gamma(spenso::bis(4,hedge(5)),spenso::bis(4,hedge(4)),spenso::mink(4,edge(4,1)))*𝑖" num_autogen="true" particle="u"];
-          "1":6	-> "3":7	 [id=5  dod="-1" dod_autogen="true" lmb_rep="-1*K(0,a___)+P(0,a___)+P(1,a___)" name="e5" name_autogen="true" num="Q(5,spenso::mink(4,edge(5,1)))*spenso::g(spenso::cof(3,hedge(6)),spenso::dind(spenso::cof(3,hedge(7))))*spenso::gamma(spenso::bis(4,hedge(7)),spenso::bis(4,hedge(6)),spenso::mink(4,edge(5,1)))*𝑖" num_autogen="true" particle="s"];
+          "1":6	-> "3":7	 [id=5  dod="-1" dod_autogen="true" lmb_rep="-1*K(0,a___)+P(0,a___)+P(1,a___)" name="e5" name_autogen="true" num="(Q(5,spenso::mink(4,edge(5,1)))*spenso::gamma(spenso::bis(4,hedge(7)),spenso::bis(4,hedge(6)),spenso::mink(4,edge(5,1)))+UFO::MS*spenso::g(spenso::bis(4,hedge(6)),spenso::bis(4,hedge(7))))*spenso::g(spenso::cof(3,hedge(6)),spenso::dind(spenso::cof(3,hedge(7))))*𝑖" num_autogen="true" particle="s"];
         }
         "#);
 

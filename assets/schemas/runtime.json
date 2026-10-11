@@ -470,6 +470,11 @@
         "integral_unit": {
           "$ref": "#/$defs/IntegralUnit"
         },
+        "inverse_temperature": {
+          "description": "Inverse temperature used to evaluate thermal distribution functions.",
+          "type": "number",
+          "format": "double"
+        },
         "load_compiled_cff": {
           "type": "boolean"
         },

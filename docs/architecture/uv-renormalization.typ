@@ -321,7 +321,7 @@ Each finite-precision ray is first fitted over its complete scale range. A missi
   disconnected UV wood until their combined integrated policy is implemented.
   Components that cannot occur together in a wood do not trigger this rejection.
 - Local `OS` dispatch remains deferred, and requesting integrated OS is rejected
-  before forest computation. `VaccuumLimit` is unsupported; `Unsubtracted` is
+  before forest computation. `Unsubtracted` is
   expected to be filtered out before these operations. These checks are skipped
   when UV subtraction itself is disabled.
 - Parametric integrand generation currently supports final 3D output

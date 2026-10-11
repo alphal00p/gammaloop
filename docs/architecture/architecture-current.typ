@@ -205,6 +205,68 @@ residue maps. In-memory diagnostics and disk exports use that same boundary.
 <cff-production-and-numerator-energy-ownership>
 GammaLoop owns production graph/source construction, UV orchestration, exact source mapping, and evaluator preparation. The `three-dimensional-reps` crate owns the shared CFF algebra. The `3Drep` command and feature-gated eager evaluator are diagnostic tools, not production contracts: GammaLoop may prepare their inputs, factors, and expressions differently.
 
+Finite-temperature and zero-temperature equilibrium share `MediumMode`, the
+structural CFF recursion, and bounded polynomial numerator reduction in
+`three-dimensional-reps`. Numerator reduction includes denominator-cancelling
+contact terms; each surviving denominator sector generates its own
+`CFFVariant::thermal_weight`. These weights retain cyclic orientations, thermal
+contraction numerators, and distribution derivatives separately from rational
+coefficients, keeping physical distributions outside Laurent interpolation.
+Distribution derivatives are ordinary energy derivatives at fixed temperature,
+chemical potential, and orientation. Reducing an m-edge cyclic chain with a common pole contributes
+`(-1)^(m-1)/(m-1)!` to the CFF coefficient and a distribution derivative of order `m-1`.
+Ordinary thermal contractions require a connected virtual complement. Sources
+and sinks take priority; a mixed vertex needs at least three virtual boundary
+edges, or one incoming and one outgoing virtual edge with external attachments
+on both sides. External multiplicity alone cannot make a vertex eligible.
+Detachable chains with unequal poles use divided-difference contractions,
+leaving coincident-pole child cycles to the derivative reduction. An orientation
+with no admissible contraction or chain reduction fails generation explicitly.
+These weights survive serialization, variant fusion, source-edge remapping, and
+products of disconnected components. Initial-state cuts remain external energy
+aliases and never acquire thermal distribution factors. GammaLoop's graph and
+parameter layer expands the symbolic weights using particle statistics,
+chemical potentials, and inverse temperature; the shared generator does not
+own the physics model. Thermal terminal sectors retain their full distribution
+weights rather than applying the vacuum contour-closure normalization.
+
+The bounded and known-factor numerator builders share occurrence sampling and
+polynomial reduction across all medium modes. Every resulting scalar sector,
+including a contact, a terminal residue basis, or the zero-edge unit, goes
+through `LowerSectorCffBuilder`. That boundary owns duplicate parity, component
+factorization, terminal closure selection, and conversion into the immutable
+source convention. Thermal sectors discard inherited vacuum closure rows and
+retain both weighted poles. Variant lifting remaps thermal weights, energy IDs,
+surface IDs, and sign provenance together before attaching numerator factors;
+it applies no further medium-dependent normalization.
+
+Medium modes use direct local 3D UV subtraction. Their local UV kernels take the
+vacuum limit while the surrounding observable retains its medium dependence;
+CFF conversion wraps each completed medium coefficient as `thermal_weight(W)`;
+optional vacuum subtraction replaces it with `thermal_weight(W - V(W))` before
+local UV operations. The wrapper survives UV subtraction and final assembly,
+then the evaluator function map resolves it as the identity. Only
+`thermal_weight(0)` normalizes immediately, so vanishing branches are pruned.
+With vacuum subtraction enabled, the spinney covering all loop edges is excluded
+before both 4D and 3D counterterm computation, including when bridges remain in the
+graph; there are no separate vacuum-subtraction forest branches.
+Vacuum mode emits a plain unit without a thermal wrapper. Generation validation
+rejects combining vacuum mode with vacuum subtraction and rejects
+`local_uv_cts_from_expanded_4d_integrands` for either medium mode.
+The diagnostic `3Drep build` command forwards the
+configured medium and records it alongside the serialized expression. Its
+model-free standalone eager evaluator rejects thermal expressions because it
+does not accept distribution inputs; production evaluation remains owned by
+GammaLoop.
+
+Process generation configures the graph's parameter builder with its selected medium and
+registers only that mode's distribution functions. Finite-temperature energy derivatives
+are built incrementally. Zero-temperature registration contains only order zero; positive-order
+factors are removed or localized before ordinary evaluator construction, as described below.
+The builder persists the mode so runtime warmup can validate the current
+temperature, chemical potentials, and bosonic mass domain after loading or updating a model.
+Vacuum builders register no thermal distribution functions.
+
 The shared `LinearEnergyExpr` stores exact `Rational` coefficients for indexed internal/external energies, the uniform scale and the constant term; `CFFVariant::prefactor` is also `Rational`. Arithmetic and cut handling retain that type until symbolic output converts it with `Atom::num`. Native rational serde/bincode support owns coefficient persistence; old Atom coefficient encodings are not a compatibility contract.
 
 CFF capacities belong to independently sampled denominator occurrences. Physical sources use their EMR/source-edge identities; completed UV sources additionally accept typed canonical denominator classes, which are distinct from `EdgeIndex`. LMB coordinates certify routing and fixed affine carriers. They do not authorize redistributing a physical source's energy powers or combining contours.
@@ -895,7 +957,9 @@ performance-heavy data.
 
 === Persistence Compatibility Contract
 <persistence-compatibility-contract>
-- State format is versioned with `state_manifest.toml` (`version = 12` currently).
+- State format is versioned with `state_manifest.toml` (`version = 13` currently).
+- Version 13 stores the selected medium in graph parameter builders. Earlier states
+  use a different positional layout and must be regenerated.
 - Version 12 names the square-root primitive `OnShellEnergy` and the CFF surface
   sum `Esurface`. Older states used `Esurface` for the square root and must be
   regenerated: importing those atoms with the new callbacks would change their

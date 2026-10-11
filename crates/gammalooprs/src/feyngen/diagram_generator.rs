@@ -4451,7 +4451,7 @@ impl ProcessDefinition {
                         model,
                         &graph.loop_momentum_basis,
                         vec![],
-                    );
+                    )?;
                 }
             }
         }

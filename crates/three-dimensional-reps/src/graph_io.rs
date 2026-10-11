@@ -44,6 +44,13 @@ pub struct ParsedGraph {
 }
 
 impl ParsedGraph {
+    pub(crate) fn signatures(&self) -> Vec<MomentumSignature> {
+        self.internal_edges
+            .iter()
+            .map(|edge| edge.signature.clone())
+            .collect()
+    }
+
     pub fn initial_state_cut_edge(
         &self,
         edge_id: usize,

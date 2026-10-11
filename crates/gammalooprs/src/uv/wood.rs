@@ -1,7 +1,8 @@
 use crate::{
     debug_tags,
     graph::{Graph, LoopMomentumBasis},
-    uv::{Spinney, UVgenerationSettings, approx::CutStructure, forest::CutForests},
+    settings::global::GenerationSettings,
+    uv::{Spinney, approx::CutStructure, forest::CutForests},
 };
 use color_eyre::Result;
 use eyre::WrapErr;
@@ -33,7 +34,7 @@ impl CutWoods {
     pub(crate) fn new(
         cuts: CutStructure,
         graph: &Graph,
-        settings: &UVgenerationSettings,
+        settings: &GenerationSettings,
     ) -> Result<Self> {
         let mut woods = vec![];
         let mut vakint_settings = vec![];
@@ -42,14 +43,15 @@ impl CutWoods {
             subgraph.subtract_with(&graph.initial_state_cut.left);
             subgraph.subtract_with(&cut.union);
 
-            let spinneys = graph
-                .classified_spinneys(&subgraph, settings, &graph.loop_momentum_basis)
+            let mut spinneys = graph
+                .classified_spinneys(&subgraph, &settings.uv, &graph.loop_momentum_basis)
                 .wrap_err_with(|| {
                     format!(
                         "graph '{}' cut {cut_index}: failed to classify UV counterterm components",
                         graph.name
                     )
                 })?;
+            graph.remove_full_observable_spinney(&mut spinneys, &settings.medium);
 
             for spinney in spinneys.iter() {
                 debug_tags!(#uv, #graph, #spinney,#generation;
@@ -62,9 +64,9 @@ impl CutWoods {
 
             let wood = Wood::from_spinneys(spinneys, graph);
 
-            let mut lvk_settings = settings.vakint.true_settings();
+            let mut lvk_settings = settings.uv.vakint.true_settings();
             lvk_settings.project_onto_tensor_integrals =
-                settings.project_integrated_uv_cts_onto_tensor_integrals;
+                settings.uv.project_integrated_uv_cts_onto_tensor_integrals;
             // Keep the legacy wood path aligned with the hedge-poset path:
             // the downstream integrand builder extracts the epsilon^0 term, so
             // Vakint must provide one term beyond the maximal pole order.

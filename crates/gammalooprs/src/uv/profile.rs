@@ -239,6 +239,7 @@ pub struct ProfileSettings {
     pub seed: u64,
     pub use_f128: bool,
     pub analyse_analytically: bool,
+    pub allow_vanishing_missing_fits: bool,
     pub orientation_mode: OrientationProfileMode,
     pub fixed_uv_ray: Option<UVProfileFixedRay>,
     pub graph_id: Option<usize>,
@@ -256,6 +257,7 @@ impl Default for ProfileSettings {
             seed: 42,
             analyse_analytically: false,
             use_f128: false,
+            allow_vanishing_missing_fits: false,
             orientation_mode: OrientationProfileMode::Summed,
             fixed_uv_ray: None,
             graph_id: None,
@@ -783,6 +785,96 @@ mod tests {
             let report = invalid_analysis.pass_fail(-0.9);
             assert_eq!(report.failed, 1);
             assert_eq!(report.failures[0].reason, "missing_fit");
+        }
+
+        // Both tables must distinguish accepted vanishing samples from missing
+        // fits that fail the effective policy, including an empty sample set.
+        for (status, vanishing) in [
+            (InspectFitStatus::default(), false),
+            (
+                InspectFitStatus {
+                    finite_samples: 5,
+                    positive_finite_samples: 0,
+                },
+                true,
+            ),
+            (
+                InspectFitStatus {
+                    finite_samples: 5,
+                    positive_finite_samples: 1,
+                },
+                true,
+            ),
+            (
+                InspectFitStatus {
+                    finite_samples: 5,
+                    positive_finite_samples: 2,
+                },
+                false,
+            ),
+        ] {
+            for allow in [false, true] {
+                let mut displayed = analysis.clone();
+                displayed.allow_vanishing_missing_fits = allow;
+                let subset = &mut displayed.graphs[0].lmbs[0].subsets[0].analysis;
+                subset.inspect_level = None;
+                subset.inspect_fit_status = status;
+                let orientation = &mut subset.per_orientation_inspect.as_mut().unwrap()[0];
+                orientation.analysis = None;
+                orientation.inspect_fit_status = status;
+                let accepted = allow && vanishing;
+                assert_eq!(
+                    displayed.pass_fail(-0.9).failed,
+                    if accepted { 0 } else { 2 }
+                );
+                let tables = displayed.tables_per_graph(-0.9).into_iter().chain(
+                    displayed
+                        .per_orientation_tables_per_graph(-0.9)
+                        .into_iter()
+                        .flatten(),
+                );
+                for table in tables {
+                    let rendered = table.to_string();
+                    assert_eq!(rendered.contains("-∞"), accepted);
+                    assert_eq!(rendered.contains("missing_fit"), !accepted);
+                    assert_eq!(rendered.contains("vanishing"), vanishing);
+                }
+            }
+        }
+
+        // Rounded DOD -1 is not sufficient: the unrounded slope and fit quality
+        // determine the verdict, and precision-retry provenance remains visible.
+        for (slope, r_squared, failure) in [
+            (-0.8, 1.0, Some("dod_exceeds_threshold")),
+            (-1.0, 1.0, None),
+            (-1.0, 0.98, Some("unstable_fit")),
+            (-1.0, f64::INFINITY, Some("unstable_fit")),
+        ] {
+            let mut displayed = analysis.clone();
+            let subset = &mut displayed.graphs[0].lmbs[0].subsets[0].analysis;
+            let mut fitted = fit(slope, -1);
+            fitted.result.r_squared = r_squared;
+            fitted.used_arb_prec_retry = true;
+            subset.inspect_level = Some(fitted.clone());
+            subset.per_orientation_inspect.as_mut().unwrap()[0].analysis = Some(fitted);
+            let report = displayed.pass_fail(-0.9);
+            assert_eq!(report.failed, if failure.is_some() { 2 } else { 0 });
+            let tables = displayed.tables_per_graph(-0.9).into_iter().chain(
+                displayed
+                    .per_orientation_tables_per_graph(-0.9)
+                    .into_iter()
+                    .flatten(),
+            );
+            for table in tables {
+                let rendered = table.to_string();
+                assert!(rendered.contains("arb retry"));
+                if let Some(reason) = failure {
+                    assert!(rendered.contains(reason));
+                } else {
+                    assert!(!rendered.contains("unstable_fit"));
+                    assert!(!rendered.contains("dod_exceeds_threshold"));
+                }
+            }
         }
     }
 
@@ -1405,7 +1497,7 @@ impl UVProfileable for Amplitude {
             stopped_early: runner.stopped.load(Ordering::Relaxed),
             per_graph,
             scales,
-            allow_vanishing_missing_fits: false,
+            allow_vanishing_missing_fits: profile_settings.allow_vanishing_missing_fits,
         })
         // results.push((inspect_res, analytic_res));
     }
@@ -2005,11 +2097,24 @@ impl UVProfileAnalysis {
                     .iter()
                     .flat_map(|lmb| {
                         lmb.subsets.iter().map(|subset| {
+                            let failure = inspect_failure_reason(
+                                subset.analysis.inspect_level.as_ref(),
+                                subset.analysis.inspect_fit_status,
+                                max_dod,
+                                self.allow_vanishing_missing_fits,
+                            );
+                            let vanishing = subset
+                                .analysis
+                                .inspect_fit_status
+                                .missing_fit_is_vanishing();
                             let (slope, r_squared, estimated_dod) =
                                 match &subset.analysis.inspect_level {
                                     Some(analysis) => {
                                         let r2_text = format!("{:.3}", analysis.result.r_squared);
-                                        let r2_text = if analysis.result.r_squared >= 0.99 {
+                                        let r2_text = if analysis.result.r_squared.is_finite()
+                                            && analysis.result.r_squared
+                                                >= UV_PROFILE_ASYMPTOTIC_MIN_R_SQUARED
+                                        {
                                             r2_text.green()
                                         } else {
                                             r2_text.red()
@@ -2018,7 +2123,7 @@ impl UVProfileAnalysis {
 
                                         let dod = analysis.estimated_dod;
                                         let dod_text = dod.to_string();
-                                        let dod_text = if (dod as f64) <= max_dod {
+                                        let dod_text = if failure.is_none() {
                                             dod_text.green()
                                         } else {
                                             dod_text.red()
@@ -2026,6 +2131,9 @@ impl UVProfileAnalysis {
                                         .to_string();
 
                                         (format!("{:.6}", analysis.result.slope), r2_text, dod_text)
+                                    }
+                                    None if vanishing && failure.is_none() => {
+                                        ("-".to_string(), "-".to_string(), "-∞".green().to_string())
                                     }
                                     None => ("-".to_string(), "-".to_string(), "-".to_string()),
                                 };
@@ -2047,8 +2155,10 @@ impl UVProfileAnalysis {
                                 } else {
                                     subset.initial_dod.to_string().green().to_string()
                                 },
-                                inspect: inspect_retry_label(
+                                inspect: inspect_label(
                                     subset.analysis.inspect_level.as_ref(),
+                                    failure,
+                                    vanishing,
                                 ),
                             }
                         })
@@ -2152,15 +2262,27 @@ impl UVProfileAnalysis {
                     .flat_map(|lmb| {
                         lmb.subsets.iter().flat_map(|subset| {
                             subset
-                                .per_orientation_inspect_entries
+                                .analysis
+                                .per_orientation_inspect
                                 .iter()
                                 .flatten()
                                 .map(|entry| {
+                                    let failure = inspect_failure_reason(
+                                        entry.analysis.as_ref(),
+                                        entry.inspect_fit_status,
+                                        max_dod,
+                                        self.allow_vanishing_missing_fits,
+                                    );
+                                    let vanishing =
+                                        entry.inspect_fit_status.missing_fit_is_vanishing();
                                     let (slope, r_squared, estimated_dod) = match &entry.analysis {
                                         Some(analysis) => {
                                             let r2_text =
                                                 format!("{:.3}", analysis.result.r_squared);
-                                            let r2_text = if analysis.result.r_squared >= 0.99 {
+                                            let r2_text = if analysis.result.r_squared.is_finite()
+                                                && analysis.result.r_squared
+                                                    >= UV_PROFILE_ASYMPTOTIC_MIN_R_SQUARED
+                                            {
                                                 r2_text.green()
                                             } else {
                                                 r2_text.red()
@@ -2169,7 +2291,7 @@ impl UVProfileAnalysis {
 
                                             let dod = analysis.estimated_dod;
                                             let dod_text = dod.to_string();
-                                            let dod_text = if (dod as f64) <= max_dod {
+                                            let dod_text = if failure.is_none() {
                                                 dod_text.green()
                                             } else {
                                                 dod_text.red()
@@ -2182,6 +2304,11 @@ impl UVProfileAnalysis {
                                                 dod_text,
                                             )
                                         }
+                                        None if vanishing && failure.is_none() => (
+                                            "-".to_string(),
+                                            "-".to_string(),
+                                            "-∞".green().to_string(),
+                                        ),
                                         None => ("-".to_string(), "-".to_string(), "-".to_string()),
                                     };
 
@@ -2203,7 +2330,11 @@ impl UVProfileAnalysis {
                                         } else {
                                             subset.initial_dod.to_string().green().to_string()
                                         },
-                                        inspect: inspect_retry_label(entry.analysis.as_ref()),
+                                        inspect: inspect_label(
+                                            entry.analysis.as_ref(),
+                                            failure,
+                                            vanishing,
+                                        ),
                                     }
                                 })
                                 .collect::<Vec<_>>()
@@ -2714,7 +2845,11 @@ impl<'a> UVProfileRunner<'a> {
             if self.profile_settings.fail_fast
                 && res
                     .analyse(self.scales)
-                    .inspect_verdicts(UV_PROFILE_MAX_DOD, compatible_cuts.is_some())
+                    .inspect_verdicts(
+                        UV_PROFILE_MAX_DOD,
+                        compatible_cuts.is_some()
+                            || self.profile_settings.allow_vanishing_missing_fits,
+                    )
                     .any(|(_, reason)| reason.is_some())
             {
                 // Retain the completed limit (including all requested
@@ -3186,11 +3321,26 @@ fn log_log_slope(inspect: &[InspectResult], scales: &[f64]) -> Option<FitResult>
     })
 }
 
-fn inspect_retry_label(analysis: Option<&InspectAnalysis>) -> String {
-    match analysis {
-        Some(analysis) if analysis.used_arb_prec_retry => "arb retry".yellow().to_string(),
-        Some(_) => String::new(),
-        None => "-".to_string(),
+fn inspect_label(
+    analysis: Option<&InspectAnalysis>,
+    failure: Option<&str>,
+    vanishing: bool,
+) -> String {
+    let status = match failure {
+        Some(reason) if vanishing => format!("{reason} (vanishing samples)").red().to_string(),
+        Some(reason) => reason.red().to_string(),
+        None if vanishing => "vanishing".to_string(),
+        None => String::new(),
+    };
+    if analysis.is_some_and(|analysis| analysis.used_arb_prec_retry) {
+        let retry = "arb retry".yellow();
+        if status.is_empty() {
+            retry.to_string()
+        } else {
+            format!("{status}, {retry}")
+        }
+    } else {
+        status
     }
 }
 

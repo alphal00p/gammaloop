@@ -44,8 +44,6 @@ pub enum ApproximationType {
     IR,
     #[serde(rename = "Unsubtracted", alias = "unsubtracted")]
     Unsubtracted,
-    #[serde(rename = "VaccuumLimit", alias = "vaccuum_limit")]
-    VaccuumLimit,
 }
 
 impl Display for ApproximationType {
@@ -56,7 +54,6 @@ impl Display for ApproximationType {
             ApproximationType::OS => write!(f, "OS"),
             ApproximationType::IR => write!(f, "IR"),
             ApproximationType::Unsubtracted => write!(f, "Unsubtracted"),
-            ApproximationType::VaccuumLimit => write!(f, "VaccuumLimit"),
         }
     }
 }
