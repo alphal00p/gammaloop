@@ -1257,29 +1257,6 @@ pub static GS, GS_INNER: GammaloopSymbols = || GammaloopSymbols {
 }
 
 impl GammaloopSymbols {
-    pub fn integrand<O: GraphOrientation>(
-        &self,
-        i: usize,
-        residue_map_id: three_dimensional_reps::expression::OrientationID,
-        orientation: &O,
-    ) -> Atom {
-        let args = orientation
-            .orientation()
-            .iter()
-            .map(|(_, ori)| match ori {
-                Orientation::Default => Atom::num(1),
-                Orientation::Reversed => Atom::num(-1),
-                Orientation::Undirected => Atom::num(0),
-            })
-            .collect_vec();
-
-        FunctionBuilder::new(self.integrand)
-            .add_arg(i)
-            .add_arg(residue_map_id.0)
-            .add_args(&args)
-            .finish()
-    }
-
     pub fn wrap_tree_denoms<'a>(&self, arg: impl Into<AtomOrView<'a>>) -> Atom {
         self.tree_denom_wrapper.call_args([arg.into().as_view()])
     }

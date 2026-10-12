@@ -594,140 +594,49 @@ impl EvaluatorStack {
         let _progress_guard = crate::processes::enter_detailed_progress_span(
             "Generating Summed Function Map Evaluator",
         );
-        let first_orientation = orientations.first().ok_or_else(|| {
-            eyre!("summed function-map evaluator requires at least one residue-map orientation")
-        })?;
-        let params: Vec<Atom> = (&param_builder.pairs)
-            .into_iter()
-            .flat_map(|p| p.params.clone())
-            .collect();
-        let mut fn_map = param_builder.fn_map.clone();
-
-        // The exact residue-map key is an argument independent of physical
-        // edge signs: I(map_id, sign(1), sign(2), ...).
-        let residue_map_id_arg = symbol!("residue_map_id_arg");
-
-        let mut alias_entries = Vec::new();
-        let entries: Vec<FnMapEntry> = atoms
+        if orientations.is_empty() {
+            return Err(eyre!(
+                "summed function-map evaluator requires at least one residue-map orientation"
+            ));
+        }
+        // Select each residue-map entry symbolically, as the summed evaluator
+        // does, and keep it behind the argument-free alias integrand(i, map_id).
+        // Passing the selector and signs as call arguments bound them only
+        // during linearization, so no downstream call simplified and the
+        // program grew by orders of magnitude before common-subexpression
+        // elimination.
+        let sum = atoms
             .iter()
             .enumerate()
-            .map(|(i, a)| {
-                let mut args = vec![];
-                let mut lhs = FunctionBuilder::new(GS.integrand);
-                lhs = lhs.add_arg(i);
-                lhs = lhs.add_arg(residue_map_id_arg);
-                args.push(residue_map_id_arg.into());
-                for (e, _) in first_orientation {
-                    lhs = lhs.add_arg(GS.sign(e));
-                    args.push(Indeterminate::try_from(GS.sign(e)).unwrap());
-                }
-                // Explicit arguments keep alias bodies in scope when the
-                // integrand call is replaced by its body before compilation.
-                let alias_calls = a
-                    .get_aliases()
-                    .keys()
-                    .map(|alias| {
-                        let call = FunctionBuilder::from_atom(alias)
-                            .add_args(args.iter().cloned().map(Atom::from))
-                            .finish();
-                        (alias.clone(), call)
-                    })
-                    .collect::<HashMap<_, _>>();
-                // Handles are literal keys: look each subexpression up once
-                // instead of matching one pattern per alias at every node.
-                let max_handle_bytes = alias_calls
-                    .keys()
-                    .map(|alias| alias.as_view().get_data().len())
-                    .max()
-                    .unwrap_or(0);
-                let call_aliases = |atom: &Atom| {
-                    atom.replace_map(|view, _, out| {
-                        if view.get_data().len() <= max_handle_bytes
-                            && let Some(call) = alias_calls.get(view.get_data())
-                        {
-                            out.set_from_view(&call.as_view());
-                        }
-                    })
-                };
-                let map = |atom: &Atom| {
-                    call_aliases(&GS.collect_orientation_if(
-                        Self::parametrize_residue_map_selectors(
-                            atom,
-                            Atom::var(residue_map_id_arg),
-                        ),
-                    ))
-                };
-                let param_integrand = map(a.get_root());
-                for (alias, body) in a.get_aliases() {
-                    let rhs = map(body);
-                    let function = alias.as_fun_view().unwrap();
-                    let tags = function
-                        .iter()
-                        .map(|arg| arg.to_owned())
-                        .collect::<Vec<_>>();
-                    fn_map
-                        .add_tagged_function(
-                            function.get_symbol(),
-                            tags.clone(),
-                            args.clone(),
-                            rhs.clone(),
-                        )
-                        .map_err(|e| eyre!(e))?;
-                    if settings.store_atom {
-                        alias_entries.push(FnMapEntry {
-                            inlining: InliningPolicy::Always,
-                            is_alias: false,
-                            lhs: call_aliases(alias),
-                            rhs,
-                            tags,
-                            args: args.clone(),
-                        });
+            .map(|(i, atom)| {
+                let mut summed = AliasedAtom::default();
+                let mut calls = Vec::with_capacity(orientations.len());
+                for (orientation, production_id) in
+                    orientations.iter().zip(production_orientation_ids)
+                {
+                    let (root, aliases) =
+                        Self::select_orientation(atom, orientation, *production_id)
+                            .into_inner_with_aliases();
+                    let call = FunctionBuilder::new(GS.integrand)
+                        .add_arg(i)
+                        .add_arg(production_id.0)
+                        .finish();
+                    summed.register_alias(call.clone(), root);
+                    for (alias, body) in aliases {
+                        summed.register_alias(alias, body);
                     }
+                    calls.push(call);
                 }
-                fn_map
-                    .add_tagged_function(
-                        GS.integrand,
-                        vec![Atom::num(i)],
-                        args.clone(),
-                        param_integrand.clone(),
-                    )
-                    .map_err(|a| eyre!(a))?;
-                Ok(FnMapEntry {
-                    inlining: InliningPolicy::Always,
-                    is_alias: false,
-                    lhs: lhs.finish(),
-                    rhs: param_integrand,
-                    tags: vec![Atom::num(i)],
-                    args,
-                })
-            })
-            .collect::<Result<_>>()?;
-
-        // Summed evaluators contain concrete orientation calls; runtime orientation
-        // selection stays in the single-parametric evaluator.
-        let sum = (0..entries.len())
-            .map(|i| {
-                orientations
-                    .iter()
-                    .zip(production_orientation_ids)
-                    .map(|(orientation, production_id)| {
-                        GS.integrand(i, *production_id, orientation)
-                    })
-                    .fold(Atom::Zero, |acc, n| acc + n)
+                summed.map_root(|_| Atom::add_many(calls))
             })
             .collect::<Vec<_>>();
-        let entries = param_builder.reps.iter().cloned().chain(entries).collect();
-        let mut evaluator = GenericEvaluator::new_from_raw_params(
+        GenericEvaluator::new_from_builder(
             sum,
-            &params,
-            &fn_map,
-            entries,
+            param_builder,
+            dual_shape.clone(),
             settings.optimization_settings(),
-            dual_shape.clone().map(|shape| (shape, Vec::new())),
             settings,
-        )?;
-        evaluator.fn_map_entries.extend(alias_entries);
-        Ok(evaluator)
+        )
     }
 
     /// Specialize the selected alias DAG from its root. Alias handles remain
