@@ -61,6 +61,10 @@
 //! the oldest subtree, up to its first diagram, and further steps buffer one diagram per subtree
 //! until the first is emitted, so the first graph does not wait for a step of the whole window.
 //!
+//! Partial topologies also propagate any uniquely compatible labels on their existing edges and
+//! self-loops. A contradiction prunes the topology; ambiguous labels and open stubs stay unknown.
+//! These temporary assignments do not change the topology or the subsequent dressing order.
+//!
 //! ## Filtering
 //!
 //! [`GraphGenerator::filter`] prunes both searches. It sees each search state as a [`GraphView`]:
@@ -356,7 +360,9 @@ pub struct Progress {
 
 #[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
 pub enum GenerationError {
-    #[error("bound the loop order or the number of vertices (vertices of degree two or less always need a vertex bound)")]
+    #[error(
+        "bound the loop order or the number of vertices (vertices of degree two or less always need a vertex bound)"
+    )]
     Unbounded,
     #[error("signatures need between 1 and 15 stubs, found {0}")]
     UnsupportedDegree(usize),

@@ -43,7 +43,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use ahash::AHashSet;
 
 use super::{
-    model::{Legs, Model},
+    model::{Legs, Model, VertexState},
     view::{Prune, State as View, VertexSet},
     AbortCheck,
 };
@@ -925,6 +925,8 @@ pub(crate) struct Buffers {
     edges: Vec<[u32; 3]>,
     orbits: Orbits,
     bridges: BridgeScratch,
+    signature_states: Vec<VertexState>,
+    signature_edges: Vec<[u8; 2]>,
 }
 
 impl Buffers {
@@ -1097,6 +1099,13 @@ impl Search {
                             continue;
                         }
                     }
+                    if mode != Mode::Label && !self.signatures_admit(cx.model) {
+                        if cx.stopped() {
+                            self.state = State::Done;
+                            return false;
+                        }
+                        continue;
+                    }
                     if let Some(filter) = cx.filter {
                         self.buf.levels[child].vetoed = self.buf.levels[depth].vetoed;
                         if !self.filter_keeps(filter, child) {
@@ -1115,6 +1124,69 @@ impl Search {
                     self.prepare(cx, child);
                     self.state = State::At(child);
                 }
+            }
+        }
+    }
+
+    /// Propagate only labels forced by the present connections. Open stubs and ambiguous edges
+    /// remain unconstrained, so every completion survives. A canonical deletion removes edge
+    /// constraints without changing degrees or attached stubs; ancestors of valid diagrams pass.
+    fn signatures_admit(&mut self, model: &Model) -> bool {
+        if model.single_diagram() {
+            return true;
+        }
+        let t = &self.topology;
+        let states = &mut self.buf.signature_states;
+        let edges = &mut self.buf.signature_edges;
+        states.clear();
+        edges.clear();
+        for u in 0..t.n {
+            let vertex = t.vertices[u];
+            let Some(state) = model.leg_state(vertex.degree, vertex.legs) else {
+                return false;
+            };
+            states.push(state);
+            edges.extend(std::iter::repeat_n(
+                [u as u8, u as u8],
+                vertex.loops as usize,
+            ));
+            for v in u + 1..t.n {
+                edges.extend(std::iter::repeat_n(
+                    [u as u8, v as u8],
+                    t.multiplicity(u, v) as usize,
+                ));
+            }
+        }
+        loop {
+            let before = edges.len();
+            let mut e = 0;
+            while e < edges.len() {
+                let [u, v] = edges[e].map(usize::from);
+                let mut fitting = if u == v {
+                    model.fitting_loops(states[u], 0)
+                } else {
+                    model.fitting([states[u], states[v]], 0)
+                };
+                let Some(label) = fitting.next() else {
+                    return false;
+                };
+                if fitting.next().is_some() {
+                    e += 1;
+                    continue;
+                }
+                if u == v {
+                    states[u] = model.add_loop(states[u], label);
+                } else {
+                    let [a, b] = model.add_label([states[u], states[v]], label);
+                    states[u] = a;
+                    states[v] = b;
+                }
+                // Each occurrence is consumed once, including parallel edges. No ordering
+                // constraint from the later dressing search applies to these existential labels.
+                edges.swap_remove(e);
+            }
+            if edges.len() == before {
+                return true;
             }
         }
     }
@@ -1754,8 +1826,74 @@ impl Search {
 
 #[cfg(test)]
 mod tests {
-    use super::{Corolla, Legs, Limits, Model, OpenStubs, Pendants, Topology};
+    use super::{Buffers, Corolla, Legs, Limits, Model, OpenStubs, Pendants, Search, Topology};
     use crate::half_edge::generate::budget::Request;
+
+    #[test]
+    fn forced_loop_labels_reject_an_incompatible_partial_topology() {
+        // One undirected slot and a directed pair per vertex. A self-loop consumes the pair,
+        // forcing the edge to its neighbour to be undirected.
+        let model = Model::new(2, &[vec![0, 4, 5]], &[], &Request::default()).unwrap();
+        let limits = Limits::new(&model, 4, 4, None, true, true);
+        let mut topology = Topology::empty(&model, &limits);
+        topology.push(
+            &Corolla {
+                degree: 3,
+                free: 3,
+                ..Corolla::default()
+            },
+            &[],
+        );
+        let looped = Corolla {
+            degree: 3,
+            loops: 1,
+            free: 1,
+            ..Corolla::default()
+        };
+        topology.push(&looped, &[1]);
+        let mut search = Search::new(&model, topology, Buffers::default());
+        assert!(search.signatures_admit(&model));
+        search.topology.push(&looped, &[1, 0]);
+        // The centre still has an open stub, but its two forced undirected edges already
+        // contradict every signature. No complete field assignment needs to be searched.
+        assert_eq!(search.topology.vertices[0].open, 1);
+        assert!(!search.signatures_admit(&model));
+        search.topology.swap(0, 2);
+        assert!(!search.signatures_admit(&model));
+    }
+
+    #[test]
+    fn signature_propagation_keeps_valid_loops_and_parallel_orientations() {
+        let model = Model::new(2, &[vec![0, 4, 5]], &[], &Request::default()).unwrap();
+        let limits = Limits::new(&model, 2, 2, None, true, true);
+        let looped = Corolla {
+            degree: 3,
+            loops: 1,
+            free: 1,
+            ..Corolla::default()
+        };
+        let mut topology = Topology::empty(&model, &limits);
+        topology.push(&looped, &[]);
+        topology.push(&looped, &[1]);
+        assert!(topology.is_complete());
+        assert!(Search::new(&model, topology, Buffers::default()).signatures_admit(&model));
+
+        let model = Model::new(2, &[vec![0, 4, 5]], &[(0, 1); 2], &Request::default()).unwrap();
+        let limits = Limits::new(&model, 2, 2, None, true, true);
+        let vertex = |slot| Corolla {
+            degree: 3,
+            legs: model.slots.one(slot),
+            labelled: model.labelled(model.slots.one(slot)),
+            n_legs: 1,
+            free: 2,
+            ..Corolla::default()
+        };
+        let mut topology = Topology::empty(&model, &limits);
+        topology.push(&vertex(0), &[]);
+        topology.push(&vertex(1), &[2]);
+        assert!(topology.is_complete());
+        assert!(Search::new(&model, topology, Buffers::default()).signatures_admit(&model));
+    }
 
     #[test]
     fn twins_have_equal_corollas_and_neighbours() {
