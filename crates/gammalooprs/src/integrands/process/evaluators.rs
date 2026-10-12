@@ -552,16 +552,18 @@ impl EvaluatorStack {
                             // physical sector; eliminating it afterwards is too
                             // late because Symbolica has already formed
                             // infinity.
-                            let map = |atom: &Atom| {
-                                GS.collect_orientation_if(
-                                    orientation.select(production_id.select(atom)),
-                                )
-                            };
-                            let mut selected = AliasedAtom::from(map(atom.get_root()));
-                            for (alias, body) in atom.get_aliases() {
-                                selected.register_alias(alias.clone(), map(body));
-                            }
-                            selected.prune();
+                            // Each orientation is a separate output, so handles
+                            // keep their names. Only bodies still reached after
+                            // selection are specialized and retained.
+                            let selected = Self::select_reachable(
+                                atom,
+                                |atom| {
+                                    GS.collect_orientation_if(
+                                        orientation.select(production_id.select(atom)),
+                                    )
+                                },
+                                Atom::clone,
+                            );
                             debug!(
                                 "Selected iterative residue-map branch {}: {}",
                                 production_id.0,
@@ -628,15 +630,32 @@ impl EvaluatorStack {
                         let call = FunctionBuilder::from_atom(alias)
                             .add_args(args.iter().cloned().map(Atom::from))
                             .finish();
-                        Replacement::new(alias.to_pattern(), call)
+                        (alias.clone(), call)
                     })
-                    .collect::<Vec<_>>();
+                    .collect::<HashMap<_, _>>();
+                // Handles are literal keys: look each subexpression up once
+                // instead of matching one pattern per alias at every node.
+                let max_handle_bytes = alias_calls
+                    .keys()
+                    .map(|alias| alias.as_view().get_data().len())
+                    .max()
+                    .unwrap_or(0);
+                let call_aliases = |atom: &Atom| {
+                    atom.replace_map(|view, _, out| {
+                        if view.get_data().len() <= max_handle_bytes
+                            && let Some(call) = alias_calls.get(view.get_data())
+                        {
+                            out.set_from_view(&call.as_view());
+                        }
+                    })
+                };
                 let map = |atom: &Atom| {
-                    GS.collect_orientation_if(Self::parametrize_residue_map_selectors(
-                        atom,
-                        Atom::var(residue_map_id_arg),
+                    call_aliases(&GS.collect_orientation_if(
+                        Self::parametrize_residue_map_selectors(
+                            atom,
+                            Atom::var(residue_map_id_arg),
+                        ),
                     ))
-                    .replace_multiple(&alias_calls)
                 };
                 let param_integrand = map(a.get_root());
                 for (alias, body) in a.get_aliases() {
@@ -658,7 +677,7 @@ impl EvaluatorStack {
                         alias_entries.push(FnMapEntry {
                             inlining: InliningPolicy::Always,
                             is_alias: false,
-                            lhs: alias.replace_multiple(&alias_calls),
+                            lhs: call_aliases(alias),
                             rhs,
                             tags,
                             args: args.clone(),
@@ -719,6 +738,27 @@ impl EvaluatorStack {
         orientation: &EdgeVec<Orientation>,
         production_id: OrientationID,
     ) -> AliasedAtom {
+        Self::select_reachable(
+            atom,
+            |expression| orientation.select(production_id.select(expression)),
+            |alias| {
+                let function = alias.as_fun_view().unwrap();
+                FunctionBuilder::new(function.get_symbol())
+                    .add_args(function.iter())
+                    .add_arg(production_id.0)
+                    .finish()
+            },
+        )
+    }
+
+    /// Apply `select` to the root and to each alias body reached from it after
+    /// selection, renaming every reached handle with the injective `scope`.
+    /// Unreached aliases are neither selected nor retained.
+    fn select_reachable(
+        atom: &AliasedAtom,
+        select: impl Fn(&Atom) -> Atom,
+        scope: impl Fn(&Atom) -> Atom,
+    ) -> AliasedAtom {
         let aliases = atom.get_aliases();
         let max_handle_bytes = aliases
             .keys()
@@ -727,31 +767,26 @@ impl EvaluatorStack {
             .unwrap_or(0);
         let mut renames = HashMap::<Atom, Atom>::new();
         let mut pending = Vec::new();
-        let select =
+        let specialize =
             |expression: &Atom, renames: &mut HashMap<Atom, Atom>, pending: &mut Vec<Atom>| {
-                orientation
-                    .select(production_id.select(expression))
-                    .replace_map(|view, _, out| {
-                        if view.get_data().len() <= max_handle_bytes
-                            && let Some((alias, _)) = aliases.get_key_value(view.get_data())
-                        {
-                            let scoped = renames.entry(alias.clone()).or_insert_with(|| {
-                                // Register before traversing the body: shared
-                                // dependencies are visited once, including cycles.
-                                pending.push(alias.clone());
-                                let function = alias.as_fun_view().unwrap();
-                                FunctionBuilder::new(function.get_symbol())
-                                    .add_args(function.iter())
-                                    .add_arg(production_id.0)
-                                    .finish()
-                            });
-                            out.set_from_view(&scoped.as_view());
-                        }
-                    })
+                select(expression).replace_map(|view, _, out| {
+                    if view.get_data().len() <= max_handle_bytes
+                        && let Some((alias, _)) = aliases.get_key_value(view.get_data())
+                    {
+                        let scoped = renames.entry(alias.clone()).or_insert_with(|| {
+                            // Register before traversing the body: shared
+                            // dependencies are visited once, including cycles.
+                            pending.push(alias.clone());
+                            scope(alias)
+                        });
+                        out.set_from_view(&scoped.as_view());
+                    }
+                })
             };
-        let mut selected = AliasedAtom::from(select(atom.get_root(), &mut renames, &mut pending));
+        let mut selected =
+            AliasedAtom::from(specialize(atom.get_root(), &mut renames, &mut pending));
         while let Some(alias) = pending.pop() {
-            let body = select(&aliases[&alias], &mut renames, &mut pending);
+            let body = specialize(&aliases[&alias], &mut renames, &mut pending);
             selected.register_alias(renames[&alias].clone(), body);
         }
         selected
@@ -5643,6 +5678,24 @@ mod tests {
         assert_eq!(selected.into_inner(), ((&x + 1) * (&y + 2) + 1).pow(2));
         // Selection owns a separate DAG; the original inactive body survives.
         assert_eq!(source.get_aliases().len(), 4);
+
+        // Iterative outputs keep their handles. Unlike AliasedAtom::prune, which
+        // would keep `dead` for its occurrence inside the opaque key, the
+        // inactive body selected to 0^-1 is not retained.
+        let orientation = EdgeVec::from_iter([Orientation::Default]);
+        let iterative = EvaluatorStack::select_reachable(
+            &source,
+            |atom| GS.collect_orientation_if(orientation.select(selected_id.select(atom))),
+            Atom::clone,
+        );
+        assert_eq!(iterative.get_aliases().len(), 3);
+        assert!(!iterative.get_aliases().contains_key(&function!(head, 2)));
+        assert!(
+            iterative
+                .get_aliases()
+                .contains_key(&function!(head, function!(head, 2)))
+        );
+        assert_eq!(iterative.into_inner(), ((&x + 1) * (&y + 2) + 1).pow(2));
     }
 
     #[test]
