@@ -88,7 +88,11 @@ fn photons_1l_inspect() -> Result<()> {
 
     // The historical value uses the same e_cm=1000 chart, but omits the
     // propagator and loop-measure phases certified by the six-pole contour.
-    assert_snapshot!(format!("{inspect:.8e}"),@"(-3.71072896e-12+4.23654418e-12i)");
+    assert_complex_approx_eq(
+        inspect,
+        Complex::new(-3.710728958614228e-12, 4.236544183136418e-12),
+        "one-loop photon inspect reference",
+    );
 
     clean_test(&cli.cli_settings.state.folder);
 
@@ -487,7 +491,11 @@ fn photons_2l_inspect() -> Result<()> {
 
     // The 40,320 vertex time orders with explicit Dirac matrices give
     // (-1.811460427370091e-14, 8.840495975003205e-15) in the [13,8] chart.
-    assert_snapshot!(format!("{inspect:.8e}"),@"(-1.81146043e-14+8.84049598e-15i)");
+    assert_complex_approx_eq(
+        inspect,
+        Complex::new(-1.8114604273700888e-14, 8.840495975003187e-15),
+        "two-loop photon inspect reference",
+    );
 
     clean_test(&cli.cli_settings.state.folder);
 
