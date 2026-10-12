@@ -218,7 +218,22 @@ def export(
     artifacts = []
     if docs:
         import marimo as mo
+        from marimo._server.templates.api import _get_html_template
         from marimo._session.notebook.loader import load_notebook
+
+        # Islands omit the full-page helper used by marimo.iframe(). Keep the
+        # pinned upstream implementation, without its unrelated mount config.
+        resize_scripts = [
+            script
+            for script in re.findall(
+                r'<script data-marimo="true">.*?</script>',
+                _get_html_template(),
+                re.DOTALL,
+            )
+            if re.search(r"\bfunction\s+__resizeIframe\s*\(", script)
+        ]
+        if len(resize_scripts) != 1:
+            raise RuntimeError("Expected one Marimo iframe resize support script")
 
         generators = []
         # Islands omit PEP 723 metadata. Install the staged wheel explicitly and
@@ -356,7 +371,7 @@ def export(
             artifact.write_text(
                 json.dumps(
                     {
-                        "head": generator.render_head(),
+                        "head": resize_scripts[0] + "\n" + generator.render_head(),
                         "body": body,
                         "wheel": "public/wheels/" + wheel.name,
                         "dependency_wheel": next(

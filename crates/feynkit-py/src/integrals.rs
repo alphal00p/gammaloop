@@ -33,7 +33,7 @@ use crate::{error, graph::PyFeynmanDiagram, kinematics::PyKinematics};
 /// examples below reuse this family and its symbols.
 ///
 /// >>> from symbolica import S, E
-/// >>> from symbolica.community import hepkit as hep
+/// >>> from symbolica.community import hepkit as hep, graph
 /// >>> D, k, p, s = S("D", "k", "p", "s")
 /// >>> d1, d2, x1, x2 = S("d1", "d2", "x1", "x2")
 /// >>> kin = hep.Kinematics(D, momenta=[k, p]).with_scalar_product(p, p, s)
@@ -80,10 +80,10 @@ impl PyIntegralFamily {
     /// Examples
     /// --------
     /// >>> from symbolica import S, E
-    /// >>> from symbolica.community import hepkit as hep
+    /// >>> from symbolica.community import hepkit as hep, graph
     /// >>> model = hep.Model.phi4()
     /// >>> process = model.process(["phi", "phi"], ["phi", "phi"])
-    /// >>> result = process.generate_diagrams(loops=1)
+    /// >>> result = process.amplitude(loops=hep.Loops.total(1), topology=hep.TopologyRules(bridges=graph.Bridges.one_pi_in_loops(), self_energies=hep.Veto.all(), tadpoles=hep.Veto.all(), snails=hep.Veto.massless())).generate().build(hep.NumeratorOptions(naming=hep.Naming.named("D")))
     /// >>> diagram = result.diagrams[0]
     /// >>> family = hep.IntegralFamily.from_diagram(diagram)
     /// >>> assert family.is_complete
@@ -127,7 +127,7 @@ impl PyIntegralFamily {
     /// Examples
     /// --------
     /// >>> from symbolica import S, E
-    /// >>> from symbolica.community import hepkit as hep
+    /// >>> from symbolica.community import hepkit as hep, graph
     /// >>> D, k, p, s = S("D", "k", "p", "s")
     /// >>> d1, d2, x1, x2 = S("d1", "d2", "x1", "x2")
     /// >>> kin = hep.Kinematics(D, momenta=[k, p]).with_scalar_product(p, p, s)
@@ -864,7 +864,7 @@ impl PyIntegralFamily {
 /// Examples
 /// --------
 /// >>> from symbolica import S, E
-/// >>> from symbolica.community import hepkit as hep
+/// >>> from symbolica.community import hepkit as hep, graph
 /// >>> D, k, p, s = S("D", "k", "p", "s")
 /// >>> d1, d2, x1, x2 = S("d1", "d2", "x1", "x2")
 /// >>> kin = hep.Kinematics(D, momenta=[k, p]).with_scalar_product(p, p, s)
@@ -968,7 +968,7 @@ impl PyIntegralMapping {
 /// Examples
 /// --------
 /// >>> from symbolica import S, E
-/// >>> from symbolica.community import hepkit as hep
+/// >>> from symbolica.community import hepkit as hep, graph
 /// >>> D, k, p, s = S("D", "k", "p", "s")
 /// >>> d1, d2, x1, x2 = S("d1", "d2", "x1", "x2")
 /// >>> kin = hep.Kinematics(D, momenta=[k, p]).with_scalar_product(p, p, s)

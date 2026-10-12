@@ -35,10 +35,10 @@ use crate::{error, graph::PyFeynmanDiagram};
 /// Examples
 /// --------
 /// >>> from symbolica import S, E
-/// >>> from symbolica.community import hepkit as hep
+/// >>> from symbolica.community import hepkit as hep, graph
 /// >>> model = hep.Model.phi4()
 /// >>> process = model.process(["phi", "phi"], ["phi", "phi"])
-/// >>> result = process.generate_diagrams(loops=1)
+/// >>> result = process.amplitude(loops=hep.Loops.total(1), topology=hep.TopologyRules(bridges=graph.Bridges.one_pi_in_loops(), self_energies=hep.Veto.all(), tadpoles=hep.Veto.all(), snails=hep.Veto.massless())).generate().build(hep.NumeratorOptions(naming=hep.Naming.named("D")))
 /// >>> diagram = result.diagrams[0]
 /// >>> result = diagram.build_cff()
 /// >>> surface = result.surfaces[0]
@@ -237,10 +237,10 @@ impl PyCffSurface {
 /// Examples
 /// --------
 /// >>> from symbolica import S, E
-/// >>> from symbolica.community import hepkit as hep
+/// >>> from symbolica.community import hepkit as hep, graph
 /// >>> model = hep.Model.phi4()
 /// >>> process = model.process(["phi", "phi"], ["phi", "phi"])
-/// >>> result = process.generate_diagrams(loops=1)
+/// >>> result = process.amplitude(loops=hep.Loops.total(1), topology=hep.TopologyRules(bridges=graph.Bridges.one_pi_in_loops(), self_energies=hep.Veto.all(), tadpoles=hep.Veto.all(), snails=hep.Veto.massless())).generate().build(hep.NumeratorOptions(naming=hep.Naming.named("D")))
 /// >>> diagram = result.diagrams[0]
 /// >>> result = diagram.build_cff()
 /// >>> orientation = result.orientations[0]
@@ -331,10 +331,10 @@ impl PyCffOrientation {
 /// Examples
 /// --------
 /// >>> from symbolica import S, E
-/// >>> from symbolica.community import hepkit as hep
+/// >>> from symbolica.community import hepkit as hep, graph
 /// >>> model = hep.Model.phi4()
 /// >>> process = model.process(["phi", "phi"], ["phi", "phi"])
-/// >>> result = process.generate_diagrams(loops=1)
+/// >>> result = process.amplitude(loops=hep.Loops.total(1), topology=hep.TopologyRules(bridges=graph.Bridges.one_pi_in_loops(), self_energies=hep.Veto.all(), tadpoles=hep.Veto.all(), snails=hep.Veto.massless())).generate().build(hep.NumeratorOptions(naming=hep.Naming.named("D")))
 /// >>> diagram = result.diagrams[0]
 /// >>> result = diagram.build_cff()
 /// >>> report = result.report
@@ -478,10 +478,10 @@ impl PyCffReport {
 /// Examples
 /// --------
 /// >>> from symbolica import S, E
-/// >>> from symbolica.community import hepkit as hep
+/// >>> from symbolica.community import hepkit as hep, graph
 /// >>> model = hep.Model.phi4()
 /// >>> process = model.process(["phi", "phi"], ["phi", "phi"])
-/// >>> result = process.generate_diagrams(loops=1)
+/// >>> result = process.amplitude(loops=hep.Loops.total(1), topology=hep.TopologyRules(bridges=graph.Bridges.one_pi_in_loops(), self_energies=hep.Veto.all(), tadpoles=hep.Veto.all(), snails=hep.Veto.massless())).generate().build(hep.NumeratorOptions(naming=hep.Naming.named("D")))
 /// >>> diagram = result.diagrams[0]
 /// >>> result = diagram.build_cff()
 /// >>> expression = result.to_expression()
@@ -896,10 +896,10 @@ impl PyCffResult {
 /// Examples
 /// --------
 /// >>> from symbolica import S, E
-/// >>> from symbolica.community import hepkit as hep
+/// >>> from symbolica.community import hepkit as hep, graph
 /// >>> model = hep.Model.phi4()
 /// >>> process = model.process(["phi", "phi"], ["phi", "phi"])
-/// >>> result = process.generate_diagrams(loops=1)
+/// >>> result = process.amplitude(loops=hep.Loops.total(1), topology=hep.TopologyRules(bridges=graph.Bridges.one_pi_in_loops(), self_energies=hep.Veto.all(), tadpoles=hep.Veto.all(), snails=hep.Veto.massless())).generate().build(hep.NumeratorOptions(naming=hep.Naming.named("D")))
 /// >>> diagram = result.diagrams[0]
 /// >>> generator = hep.CffGenerator(max_orientations=1000)
 /// >>> result = generator.generate(diagram)
@@ -1153,10 +1153,10 @@ impl PyCffResult {
 /// Examples
 /// --------
 /// >>> from symbolica import S, E
-/// >>> from symbolica.community import hepkit as hep
+/// >>> from symbolica.community import hepkit as hep, graph
 /// >>> model = hep.Model.phi4()
 /// >>> process = model.process(["phi", "phi"], ["phi", "phi"])
-/// >>> result = process.generate_diagrams(loops=1)
+/// >>> result = process.amplitude(loops=hep.Loops.total(1), topology=hep.TopologyRules(bridges=graph.Bridges.one_pi_in_loops(), self_energies=hep.Veto.all(), tadpoles=hep.Veto.all(), snails=hep.Veto.massless())).generate().build(hep.NumeratorOptions(naming=hep.Naming.named("D")))
 /// >>> diagram = result.diagrams[0]
 /// >>> result = diagram.build_cff()
 /// >>> group = result.raised_surface_groups()[0]
@@ -1225,7 +1225,7 @@ fn expression_variable(value: ConvertibleToExpression) -> PyResult<Symbol> {
 /// Examples
 /// --------
 /// >>> from symbolica import S, E
-/// >>> from symbolica.community import hepkit as hep
+/// >>> from symbolica.community import hepkit as hep, graph
 /// >>> q0, energy = S("q0", "energy")
 /// >>> cut = hep.CutPropagator(q0, energy, power=2)
 /// >>> residue = cut.apply(q0**2, q0)

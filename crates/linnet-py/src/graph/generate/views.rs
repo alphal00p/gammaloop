@@ -287,14 +287,20 @@ macro_rules! typed_view {
 
             /// Materialize the current state, omitting open slots and using None for unknown keys.
             fn graph(&self, py: Python<'_>) -> PyResult<PyGraph> {
-                self.with(|view| self.objects()?.graph(py, &view.graph(), |&field| field))
+                self.with(|view| {
+                    let objects = self.objects()?;
+                    objects.check_graph_snapshots()?;
+                    objects.graph(py, &view.graph(), |&field| field)
+                })
             }
 
             /// Materialize a fully assigned graph; None before the Complete stage.
             fn complete_graph(&self, py: Python<'_>) -> PyResult<Option<PyGraph>> {
                 self.with(|view| {
+                    let objects = self.objects()?;
+                    objects.check_graph_snapshots()?;
                     view.complete_graph()
-                        .map(|graph| self.objects()?.graph(py, graph, |&field| Some(field)))
+                        .map(|graph| objects.graph(py, graph, |&field| Some(field)))
                         .transpose()
                 })
             }

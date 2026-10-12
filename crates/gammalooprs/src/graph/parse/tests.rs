@@ -765,48 +765,59 @@ fn native_runtime_conversion_preserves_dangling_dummy_product_acceptance() {
 
 #[test]
 fn native_amplitude_runtime_enrichment_preserves_every_graph_coordinate() {
-    use feynkit_generator::{GenerationOptions, Process};
+    use feynkit_generator::{Loops, Naming, NumeratorOptions, Process, Run, TopologyRules};
     test_initialise().unwrap();
     let model = std::sync::Arc::new(crate::utils::load_generic_model("scalars"));
+    let run = Run::default().threads(1);
     let generated = Process::new(["scalar_1"], ["scalar_1"])
-        .generate_diagrams(
-            model,
-            &GenerationOptions::default()
-                .with_loop_count(1, 1)
-                .unwrap()
-                .threads(1)
-                .max_vertices(2),
+        .amplitude(Loops::total(1..=1))
+        .with_topology(
+            TopologyRules::new()
+                .with_self_loops(false)
+                .with_max_vertices(2),
+        )
+        .generate(model, &run)
+        .unwrap()
+        .build(
+            &NumeratorOptions::default().with_naming(Naming::prefix("D")),
+            &run,
         )
         .unwrap();
-    assert!(!generated.diagrams.is_empty());
-    for diagram in generated.diagrams {
-        assert_native_runtime_parity(&diagram);
+    assert!(!generated.is_empty());
+    for diagram in generated.iter() {
+        assert_native_runtime_parity(diagram);
     }
 }
 
 #[test]
 fn native_cross_section_runtime_enrichment_preserves_cuts_and_positive_external_flow() {
-    use feynkit_generator::{GenerationOptions, Process};
+    use feynkit_generator::{Cuts, Loops, Naming, NumeratorOptions, Process, Run, TopologyRules};
     test_initialise().unwrap();
     let model = std::sync::Arc::new(crate::utils::load_generic_model("scalars"));
+    let run = Run::default().threads(1);
     let generated = Process::new(["scalar_1"], ["scalar_1", "scalar_1"])
-        .generate_cross_section(
-            model,
-            &GenerationOptions::default()
-                .with_loop_count(1, 1)
-                .unwrap()
-                .threads(1)
-                .max_vertices(2),
+        .cross_section(Loops::forward(1..=1))
+        .with_cuts(Cuts::new().with_blobs(1..=1).with_spectators(0..=0))
+        .with_topology(
+            TopologyRules::new()
+                .with_self_loops(false)
+                .with_max_vertices(2),
+        )
+        .generate(model, &run)
+        .unwrap()
+        .build(
+            &NumeratorOptions::default().with_naming(Naming::prefix("D")),
+            &run,
         )
         .unwrap();
-    assert!(!generated.diagrams.is_empty());
-    for diagram in generated.diagrams {
+    assert!(!generated.is_empty());
+    for diagram in generated.iter() {
         assert!(!diagram.cuts().is_empty());
-        let mut changed = super::ParseGraph::from_feynkit_diagram(&diagram).unwrap();
+        let mut changed = super::ParseGraph::from_feynkit_diagram(diagram).unwrap();
         let vertex = changed.graph.iter_nodes().next().unwrap().2.clone();
         changed.graph.add_node(vertex);
         assert!(
-            Graph::from_feynkit_parse_graph(&diagram, changed)
+            Graph::from_feynkit_parse_graph(diagram, changed)
                 .err()
                 .expect("runtime conversion must reject the changed diagram")
                 .to_string()
@@ -825,13 +836,15 @@ fn native_cross_section_runtime_enrichment_preserves_cuts_and_positive_external_
                 Some(feynkit_kinematics::SignOrZero::Plus)
             );
         }
-        assert_native_runtime_parity(&diagram);
+        assert_native_runtime_parity(diagram);
     }
 }
 
 #[test]
 fn native_compton_runtime_enrichment_preserves_sewn_fermions() {
-    use feynkit_generator::{GenerationFilter, GenerationOptions, Process};
+    use feynkit_generator::{
+        Cuts, Loops, Naming, NumeratorOptions, Process, Restrict, Run, TopologyRules,
+    };
     test_initialise().unwrap();
     let model = std::sync::Arc::new(
         feynkit_model::Model::from_json(include_str!(
@@ -840,21 +853,27 @@ fn native_compton_runtime_enrichment_preserves_sewn_fermions() {
         .unwrap(),
     );
 
+    let run = Run::default().threads(1);
     for pdg in [11_i64, -11] {
         let generated = Process::new([pdg, 22], [pdg, 22])
-            .generate_cross_section(
-                model.clone(),
-                &GenerationOptions::default()
-                    .with_loop_count(1, 1)
-                    .unwrap()
-                    .threads(1)
-                    .max_vertices(4)
-                    .with_graph_filter(GenerationFilter::VertexAllow(vec!["V_98".into()])),
+            .cross_section(Loops::forward(1..=1))
+            .with_cuts(Cuts::new().with_blobs(1..=1).with_spectators(0..=0))
+            .with_topology(
+                TopologyRules::new()
+                    .with_self_loops(false)
+                    .with_max_vertices(4),
+            )
+            .with_restrict(Restrict::new().only_vertices(["V_98"]))
+            .generate(model.clone(), &run)
+            .unwrap()
+            .build(
+                &NumeratorOptions::default().with_naming(Naming::prefix("D")),
+                &run,
             )
             .unwrap();
-        assert_eq!(generated.diagrams.len(), 4);
-        for diagram in generated.diagrams {
-            assert_native_runtime_parity(&diagram);
+        assert_eq!(generated.len(), 4);
+        for diagram in generated.iter() {
+            assert_native_runtime_parity(diagram);
         }
     }
 }

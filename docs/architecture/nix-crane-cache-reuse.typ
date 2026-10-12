@@ -2,7 +2,8 @@
 <nixcrane-cargo-artifact-reuse>
 #quote(block: true)[
 #strong[Status:] Historical Rust CI investigation and current documentation
-cache record, reviewed 2026-09-14 against PR 108 and the documentation stack.
+cache record. The experiment retains its PR 108 context; the documentation
+source and consumer contracts were reviewed 2026-10-12.
 
 The Rust CI experiments below are historical. Uses of “now” or “current”
 describe the surrounding experiment, not the final implementation. See
@@ -1442,7 +1443,7 @@ cache.
 Documentation publishing uses one reusable real-workspace Cargo artifact
 producer. It retains the generic catalogue exporter, each isolated
 Python inventory exporter, the content-test dependency contexts, the
-documentation builder, the Linnet extension, Rustdoc, and a combined
+documentation builder, Rustdoc, and a combined
 GammaLoop/Vakint reference-catalogue context. Stable dummy content
 primes the test dependencies without admitting prose into the producer
 key; the terminal derivation still compiles and runs the real
@@ -1450,7 +1451,11 @@ content-sensitive test targets. The combined context is last because
 Cargo retains only one active feature fingerprint for each workspace
 unit and it is also the terminal consumer\'s first context. The Python
 inventories remain separate because PyO3 stub registration uses a
-process-wide inventory.
+process-wide inventory. The producer enumerates the exporter crate's
+non-default Cargo features once each, rather than product identifiers:
+Idenso shares Spenso's Python binding owner. The terminal consumer builds
+the combined Community wheel; there is no separate standalone Linnet
+extension build in the reusable producer.
 
 The terminal source set also carries Spenso's packaged tensor stub alongside
 its documentation snapshot, so the isolated exporter validates both copies.
@@ -1469,16 +1474,17 @@ change the reusable Cargo artifact. Checks whose Rust source is
 generated from the manuals remain in the terminal Pages derivation so
 they still validate the content being published.
 
-The terminal documentation derivation tests Python `linnet` in a virtual
-environment based on a Nix-composed Python that includes `typst-py`
-0.15.0. System site packages keep that wheel dependency available to
-the offline installer. The `linnet` extension embeds its pinned CeTZ and oxifmt
-package trees and passes the staged copy to its in-process compiler, so
-its graph renderer never requires a network fetch or the documentation
-package cache. The terminal Python environment uses the same pinned docs
-package set to satisfy Python `linnet`'s exact `typst==0.15.0` dependency. Both
-Cargo and uv dependency resolution run offline; a mismatched Python package
-must fail locally instead of attempting a download inside the Nix sandbox.
+The terminal documentation derivation builds the combined Symbolica
+Community wheel from `examples/notebooks/symbolica-host/Cargo.toml`,
+installs it offline without dependency resolution, and discovers every
+`test_*.py` in `crates/linnet-py/tests`. Its graph surface is
+`symbolica.community.graph`; the canonical component is `linnet-graph`.
+The shared typed-stub regression checks that the package and documentation
+use the same owner. The wheel embeds the graph renderer and its pinned
+drawing packages, so the renderer does not require the old standalone
+wheel's `typst-py` dependency or a network fetch. The virtual environment
+still exposes the Nix-composed system packages, and Cargo and uv run
+offline.
 The broader documentation renderer still receives the package tree from
 `docsTypst` for MiTeX and other authored assets. These
 embedded package trees are compile-time `RustEmbed` inputs, so they
@@ -1613,7 +1619,7 @@ their normalized form when immutability is checked.
 
 Revisions with live notebook support add a publication step after the Nix build. The Pages
 workflow copies the static site into writable staging, then exports Marimo notebook assets
-with a Linnet Python WebAssembly wheel built from the documented revision. That wheel has a
+with a combined Symbolica Community WebAssembly wheel built from the documented revision. That wheel has a
 separate cache keyed by the exact source commit and pinned cibuildwheel version; the export
 uses pinned Marimo and the source commit's timestamp. This step leaves the Nix Cargo producer
 boundary unchanged. Notebook assets live inside the selected product version and participate
@@ -1819,6 +1825,28 @@ the interpreter to resolve when the shared object is loaded. Building the
 `--lib` excludes the CLI without changing the extension's dependency or
 feature identity. The ordinary CLI remains in the separate Rust package
 artifact family, where it is linked with its normal feature context.
+
+== Follow-up: Community packages and explicit non-Rust inputs
+<follow-up-community-source-inputs>
+The documentation source set carries the Community graph stub, the
+`hepkit` wrapper and stub, and the host graph and tensor mirrors. It
+includes the full Linnet Python test directory, matching discovery in
+the terminal consumer. The explicit documentation input list drops
+`crates/linnet-py/pyproject.toml` and its `uv.lock`; Cargo manifests and
+shared stubs remain inputs through their owning source sets. Both the dependency manifest source
+set and the documentation Cargo source set include `localCargoPatchSources`,
+so a local Cargo patch is available in an isolated build and changes its
+own dependency input identity.
+
+The package source map retains separate production, compile-time test,
+and runtime owners. Production inputs now include interactive SVG and
+collection CSS/JavaScript, UFO parameter-label code, the Linnet Typst
+tree, layout Wasm plugins with their license files, and renderer fonts.
+Embedded Python rendering tests and graph/layout fixtures enter their
+own compile-time test slice, including the Community graph stub used by
+the exporter regression. Nauty driver and answer files enter Linnet's
+runtime slice. These declarations follow the actual include/read owner;
+they do not turn a crate's test fixtures into unrelated production inputs.
 
 == Remaining caveats
 <remaining-caveats-1>

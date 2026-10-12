@@ -9,6 +9,19 @@
   presenting development documentation as a complete release history.
 ])
 
+== Explicit generation requests
+
+Generation now requires explicit loops for amplitudes, vacuum graphs, and forward cross
+sections. The CLI uses the same `Request` grammar and squared-order semantics as FeynKit.
+Topology restrictions, physical cuts, numerator construction, selection, and grouping have
+separate owners, and omitted settings use minimal defaults. Existing repository run cards
+state their previous filters and grouping explicitly. The obsolete scaleless-only flags and
+negative numeric sentinels are removed.
+
+Saved state manifests are version 10. Process definitions persist the request and the build,
+selection, and grouping settings, with runtime controls kept outside the file. Regenerate
+older states from their run cards.
+
 == Components and version sources
 
 - Repository revision: #link("https://github.com/alphal00p/gammaloop/tags")[GammaLoop tags and releases].

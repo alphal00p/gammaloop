@@ -39,10 +39,15 @@ def calculate(names, photon_position, gluon_position, fermion_ports):
             sorted(["b", "b~", "g"]),
         ]
     ]
-    generated = model.process(
-        names[:2], names[2:], vertex_allow=allowed
-    ).generate_diagrams(
-        max_vertices=2, maximum_bridges=None, numerator_grouping=None, progress=None
+    generated = (
+        model.process(names[:2], names[2:])
+        .amplitude(
+            loops=hep.Loops.total(0),
+            restrict=hep.Restrict().only_vertices(allowed),
+            topology=hep.TopologyRules(max_vertices=2),
+        )
+        .generate()
+        .build(hep.NumeratorOptions(naming=hep.Naming.named("D")))
     )
     assert len(generated.diagrams) == 2
     ports = S(

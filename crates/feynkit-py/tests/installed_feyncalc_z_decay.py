@@ -65,8 +65,11 @@ for pdg, mass, weak_isospin, electric_charge in (
     assert particle.mass == mass
     assert particle.weak_isospin == weak_isospin
     assert particle.charge == electric_charge
-    generated = model.process([23], [pdg, -pdg]).generate_diagrams(
-        max_vertices=1, numerator_grouping=None, progress=None
+    generated = (
+        model.process([23], [pdg, -pdg])
+        .amplitude(loops=fk.Loops.total(0), topology=fk.TopologyRules(max_vertices=1))
+        .generate()
+        .build(fk.NumeratorOptions(naming=fk.Naming.named("D")))
     )
     assert len(generated.diagrams) == 1
     diagram = generated.diagrams[0]

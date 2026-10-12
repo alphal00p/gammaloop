@@ -27,9 +27,11 @@ pub use cff::{
     PyCutPropagator,
 };
 pub use generation::{
-    PyCancellationToken, PyDiagramGroup, PyGenerationProgress, PyGenerationReport,
-    PyGenerationResult, PyGroupMember, PyNumeratorGrouping, PyParticleSelector, PyProcess,
-    PySelfEnergyFilterOptions, PySnailFilterOptions, PyTadpoleFilterOptions,
+    PyAmplitudeOptions, PyBuiltDiagramSet, PyCancellationToken, PyCounts, PyCutAmplitude, PyCuts,
+    PyDiagramGroup, PyDiagramSet, PyGenerationProgress, PyGenerationReport, PyGroupMember,
+    PyGrouping, PyLoopCounts, PyLoops, PyNaming, PyNumeratorOptions, PyOrders, PyParticleSelector,
+    PyPreparedDiagram, PyProcess, PyRange, PyRequest, PyRestrict, PyRun, PySelection, PySkeleton,
+    PyStage, PySymmetrize, PyTopologyRules, PyVeto,
 };
 pub use graph::{
     PyDiagramCut, PyDiagramCutSide, PyDiagramEdge, PyDiagramThresholdCandidate, PyDiagramVertex,
@@ -203,10 +205,7 @@ pub fn stub_info() -> pyo3_stub_gen::Result<pyo3_stub_gen::StubInfo> {
                 "FeynKit did not contribute a symbolica.community.hepkit stub module",
             )
         })?;
-    // Type overrides preserve Rust default expressions verbatim in stubgen.
-    // Render the automatic policy sentinel as its Python Ellipsis spelling,
-    // automatic notebook progress as a Python string literal, and empty
-    // tensor selector sequences as Python tuples.
+    // Render empty tensor selector defaults as Python tuples.
     for class in module.class.values_mut() {
         for method in class.methods.values_mut().flatten() {
             if class.name == "TensorReducer" && method.name == "__new__" {
@@ -217,27 +216,47 @@ pub fn stub_info() -> pyo3_stub_gen::Result<pyo3_stub_gen::StubInfo> {
                     }
                 }
             }
-            if matches!(
-                method.name,
-                "generate_diagrams"
-                    | "generate_amplitude"
-                    | "generate_cross_section"
-                    | "with_filters"
-            ) {
-                for parameter in &mut method.parameters.keyword_only {
-                    if parameter.type_info.name.contains("types.EllipsisType") {
-                        parameter.default =
-                            pyo3_stub_gen::generate::ParameterDefault::Expr("...".to_owned());
-                    } else if parameter.name == "progress" {
-                        parameter.default =
-                            pyo3_stub_gen::generate::ParameterDefault::Expr("'auto'".to_owned());
-                    }
-                }
-            }
         }
     }
     validate_stub_documentation(&module.to_string())?;
     Ok(info)
+}
+
+/// Render the same FeynKit surface for the package stub and API documentation.
+#[cfg(feature = "python_stubgen")]
+pub fn stub_source(module: &pyo3_stub_gen::generate::Module) -> String {
+    normalize_stub_source(&module.to_string())
+}
+
+#[cfg(feature = "python_stubgen")]
+fn normalize_stub_source(source: &str) -> String {
+    let mut lines = source
+        .lines()
+        .map(|line| {
+            let line = line.trim_end_matches([' ', '\t']);
+            // These shared runtime classes are public reexports, whereas other
+            // graph imports are only used in annotations. Same-name aliases
+            // make that distinction explicit to Python type checkers.
+            if let Some(imports) = line.strip_prefix("from symbolica.community.graph import ") {
+                let imports = imports
+                    .split(", ")
+                    .map(|name| match name {
+                        "Bridges" => "Bridges as Bridges",
+                        "Classes" => "Classes as Classes",
+                        _ => name,
+                    })
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                format!("from symbolica.community.graph import {imports}")
+            } else {
+                line.to_owned()
+            }
+        })
+        .collect::<Vec<_>>();
+    while lines.last().is_some_and(|line| line.is_empty()) {
+        lines.pop();
+    }
+    lines.join("\n") + "\n"
 }
 
 #[cfg(feature = "python_stubgen")]
@@ -406,25 +425,51 @@ mod tests {
 
     #[cfg(feature = "python_stubgen")]
     #[test]
+    fn normalizes_trailing_whitespace_and_end_of_file() {
+        assert_eq!(
+            normalize_stub_source("class Example:  \n    ...\t\n   \n\n"),
+            "class Example:\n    ...\n"
+        );
+    }
+
+    #[cfg(feature = "python_stubgen")]
+    #[test]
+    fn shared_graph_reexports_are_explicit_and_idempotent() {
+        let source = concat!(
+            "from symbolica.community.graph import Bridges, Classes, DiagramRender, RenderSettings  \n",
+            "from other import Bridges, Classes\n",
+            "class Example:\n",
+            "    from symbolica.community.graph import Bridges, Classes\n",
+        );
+        let expected = source.replace(
+            "import Bridges, Classes, DiagramRender, RenderSettings  ",
+            "import Bridges as Bridges, Classes as Classes, DiagramRender, RenderSettings",
+        );
+        assert_eq!(normalize_stub_source(source), expected);
+        assert_eq!(normalize_stub_source(&expected), expected);
+    }
+
+    #[cfg(feature = "python_stubgen")]
+    #[test]
     fn generated_stub_covers_every_registered_native_class() {
         Python::initialize();
         Python::attach(|py| {
             let module = registered_module(py);
             let info = stub_info().unwrap();
-            let source = info
-                .modules
-                .get("symbolica.community.hepkit")
-                .unwrap()
-                .to_string();
+            let source = stub_source(info.modules.get("symbolica.community.hepkit").unwrap());
+            let graph = PyModule::new(py, "symbolica.community.graph").unwrap();
+            linnet_py::register(&graph).unwrap();
             let locals = PyDict::new(py);
             locals.set_item("fk", module).unwrap();
+            locals.set_item("graph", graph).unwrap();
             locals.set_item("source", source).unwrap();
             let code = CString::new(
                 r#"
 import ast
 
+tree = ast.parse(source)
 stub_classes = {
-    node.name for node in ast.walk(ast.parse(source))
+    node.name for node in ast.walk(tree)
     if isinstance(node, ast.ClassDef)
 }
 runtime_classes = {
@@ -433,6 +478,22 @@ runtime_classes = {
 }
 missing = sorted(runtime_classes - stub_classes)
 assert not missing, f"native classes missing from the generated stub: {missing}"
+
+shared_imports = {
+    alias.name: alias.asname
+    for node in tree.body
+    if isinstance(node, ast.ImportFrom) and node.module == graph.__name__
+    for alias in node.names
+    if alias.name in {"Bridges", "Classes"}
+}
+runtime_shared = {
+    name: value for name, value in vars(fk).items()
+    if name in {"Bridges", "Classes"} and isinstance(value, type)
+}
+assert "Bridges" in runtime_shared
+assert shared_imports == {name: name for name in runtime_shared}
+for name, value in runtime_shared.items():
+    assert value is getattr(graph, name), f"{name} is not the shared graph class"
 "#,
             )
             .unwrap();
@@ -481,6 +542,9 @@ assert not missing, f"native classes missing from the generated stub: {missing}"
             let module = registered_module(py);
             let locals = PyDict::new(py);
             locals.set_item("fk", &module).unwrap();
+            let graph_module = PyModule::new(py, "symbolica.community.graph").unwrap();
+            linnet_py::register(&graph_module).unwrap();
+            locals.set_item("graph", &graph_module).unwrap();
             locals
                 .set_item("MODEL_JSON", NORMALIZED_SCALAR_MODEL)
                 .unwrap();
@@ -499,23 +563,20 @@ assert scalar.antiparticle.name == "scalar_0"
 model = fk.Model.from_json(model.to_json(pretty=False))
 
 scalar = model.particle("scalar_0")
-process = model.process([scalar], [1000, scalar.antiparticle], vertex_allow=["V_3_SCALAR_000"], particle_veto=[model.particle("scalar_1"), 1002])
+process = model.process([scalar], [1000, scalar.antiparticle])
 assert isinstance(process, fk.Process)
 assert not hasattr(process, "loop_count")
-
-generation_arguments = dict(
-    max_vertices=3,
-    allow_self_loops=True,
-    coupling_orders={"QCD": (0, None)},
-    fermion_loop_count_range=(0, 0),
-    factorized_loop_topologies_count_range=(0, 1),
-)
-generated = process.generate_diagrams(loops=(0, 1), **generation_arguments)
+restriction = fk.Restrict().only_vertices(["V_3_SCALAR_000"]).exclude_particles([model.particle("scalar_1"),1002])
+topology = fk.TopologyRules(max_vertices=3, bridges=graph.Bridges.one_pi_in_loops(), self_loops=True,
+    self_energies=fk.Veto.all(), tadpoles=fk.Veto.all(), snails=fk.Veto.massless(),
+    fermion_loops=fk.Range.exact(0), factorized_loops=fk.Range.between(0,1))
+request = process.amplitude(loops=fk.Loops.total((0,1)), restrict=restriction, orders=fk.Orders().min("QCD",0), topology=topology)
+generated = request.generate().build(fk.NumeratorOptions(naming=fk.Naming.named("D")))
 assert len(generated) > 0
 assert generated[0].name == next(iter(generated)).name
 assert generated.report.completed
 generation_html = generated._repr_html_()
-assert "Generation result" in generation_html
+assert "Built diagrams" in generation_html
 assert "retained diagrams" in generated.report._repr_html_()
 assert "particles" in model._repr_html_()
 
@@ -605,6 +666,9 @@ assert "_gammaloop" not in sys.modules
             let module = registered_module(py);
             let locals = PyDict::new(py);
             locals.set_item("fk", &module).unwrap();
+            let graph_module = PyModule::new(py, "symbolica.community.graph").unwrap();
+            linnet_py::register(&graph_module).unwrap();
+            locals.set_item("graph", &graph_module).unwrap();
             let code = CString::new(
                 r#"
 import sys
@@ -637,91 +701,77 @@ assert_feynkit_error(
 )
 
 
-filter_arguments = dict(
-    self_energy=fk.SelfEnergyFilterOptions(veto_massive=False),
-    tadpoles=fk.TadpoleFilterOptions(veto_attached_to_massive=False),
-    zero_snails=fk.SnailFilterOptions(
-        veto_attached_to_massive=True, veto_attached_to_massless=False,
-    ),
-    coupling_orders={"QCD": (0, None)},
-    fermion_loop_count_range=(0, 1),
-    factorized_loop_topologies_count_range=(0, 1),
-)
+topology = fk.TopologyRules(max_vertices=3, bridges=graph.Bridges.one_pi_in_loops(),
+    self_energies=fk.Veto.massless(), tadpoles=fk.Veto.massless(), snails=fk.Veto.massive(),
+    fermion_loops=fk.Range.between(0,1), factorized_loops=fk.Range.between(0,1))
 grouping_arguments = dict(
-    numerical_sample_seed=7,
-    number_of_numerical_samples=11,
-    differentiate_particle_masses_only=False,
-    fully_numerical_substitution=True,
-    check_canonical_numerator=True,
-    symmetric_polarizations=True,
+    numerical_sample_seed=7, number_of_numerical_samples=11,
+    differentiate_particle_masses_only=False, fully_numerical_substitution=True,
+    check_canonical_numerator=True, symmetric_polarizations=True,
 )
 assert not hasattr(fk, "GenerationOptions")
-
-amplitude = model.process(["scalar_0"], ["scalar_0", "scalar_0"], vertex_allow=["V_3_SCALAR_000"])
-assert amplitude.generate_diagrams(max_vertices=3, **filter_arguments).report.completed
-for mode in ("none", "identical", "up_to_sign", "up_to_scalar"):
-    grouping = fk.NumeratorGrouping(mode, **grouping_arguments)
-    assert amplitude.generate_diagrams(max_vertices=3, numerator_grouping=grouping).report.completed
-
-for invalid_arguments in (
-    dict(self_energy=fk.SelfEnergyFilterOptions(only_scaleless=True)),
-    dict(tadpoles=fk.TadpoleFilterOptions(only_scaleless=True)),
-    dict(zero_snails=fk.SnailFilterOptions(only_scaleless=True)),
-    dict(fermion_loop_count_range=(2, 1)),
-    dict(factorized_loop_topologies_count_range=(2, 1)),
-    dict(blob_range=(0, 1)),
-    dict(spectator_range=(0, 1)),
-    dict(cut_amplitude_coupling_orders={"QCD": (0, None)}),
-    dict(cut_amplitude_loop_count_range=(0, 1)),
+assert not hasattr(fk, "GenerationSettings")
+amplitude = model.process(["scalar_0"],["scalar_0","scalar_0"])
+restriction = fk.Restrict().only_vertices(["V_3_SCALAR_000"])
+request = amplitude.amplitude(loops=fk.Loops.total(0), restrict=restriction, topology=topology, orders=fk.Orders().min("QCD",0))
+assert request.generate().report.completed
+for mode in ("none","identical","up_to_sign","up_to_scalar"):
+    assert request.generate().build().group(fk.Grouping(mode,**grouping_arguments)).report.completed
+# Contradictory constraints remain explicit empty requests, rather than clearing filters.
+for empty_topology in (
+    fk.TopologyRules(max_vertices=3, fermion_loops=fk.Range.between(2,1)),
+    fk.TopologyRules(max_vertices=3, factorized_loops=fk.Range.between(2,1)),
 ):
-    assert_feynkit_error(
-        fk.GenerationError,
-        lambda: amplitude.generate_diagrams(max_vertices=3, **invalid_arguments),
-    )
-
-for invalid_arguments in (
-    dict(coupling_orders={"QCD": (2, 1)}),
-    dict(loops=(2, 1)),
-    dict(loops=(0, None)),
+    assert len(amplitude.amplitude(loops=fk.Loops.total(0),restrict=restriction,topology=empty_topology).generate()) == 0
+for cuts in (
+    fk.Cuts(blobs=fk.Range.between(0,1)), fk.Cuts(spectators=fk.Range.between(0,1)),
+    fk.Cuts(amplitude=fk.CutAmplitude(orders=fk.Orders().min("QCD",0))),
+    fk.Cuts(amplitude=fk.CutAmplitude(loops=fk.Range.between(0,1))),
 ):
+    # Amplitude Process has no cuts argument; the typed request prevents this misuse.
     try:
-        model.process(["scalar_0"], ["scalar_0", "scalar_0"]).generate_diagrams(**invalid_arguments)
+        amplitude.amplitude(loops=fk.Loops.total(0),cuts=cuts)
+    except TypeError:
+        pass
+    else:
+        raise AssertionError("amplitude accepted cross-section cut options")
+for loop_range in ((2,1),(0,None)):
+    try:
+        fk.Loops.total(loop_range)
     except ValueError:
         pass
     else:
-        raise AssertionError("invalid generation range was accepted")
-
-# Process generation accepts reusable exact/ranged orders.
-kwargs = dict(max_vertices=3, coupling_orders={"QCD": 1})
-exact = amplitude.generate_diagrams(**kwargs)
-ranged = model.process(["scalar_0"], ["scalar_0", "scalar_0"], vertex_allow=["V_3_SCALAR_000"]).generate_diagrams(**dict(kwargs, coupling_orders={"QCD": (1, 1)}))
+        raise AssertionError("invalid loop range was accepted")
+exact_orders = fk.Orders().exact("QCD",1)
+exact = amplitude.amplitude(loops=fk.Loops.total(0),restrict=restriction,orders=exact_orders).generate().build()
+ranged = amplitude.amplitude(loops=fk.Loops.total(0),restrict=restriction,orders=fk.Orders(plain={"QCD":fk.Range.between(1,1)})).generate().build()
 assert len(exact) > 0
 assert [d.id for d in exact] == [d.id for d in ranged]
-assert [d.id for d in amplitude.generate_diagrams(**kwargs)] == [d.id for d in exact]
-assert kwargs["coupling_orders"] == {"QCD": 1}
-assert len(amplitude.generate_diagrams(**dict(kwargs, coupling_orders={"QCD": 0}))) == 0
-assert len(amplitude.with_filters(particle_veto=["scalar_0"]).generate_diagrams(**kwargs)) == 0
-assert len(amplitude.with_filters(vertex_veto=["V_3_SCALAR_000"]).generate_diagrams(**kwargs)) == 0
-assert len(amplitude.generate_diagrams(select_diagrams=[exact[0]], **kwargs)) == 1
-assert len(amplitude.generate_diagrams(veto_diagrams=[d.id for d in exact], **kwargs)) == 0
-
-for invalid_arguments in (dict(options=None), dict(coupling_order={"QCD": 0}), dict(coupling_orders={"QCD": True})):
+assert [d.id for d in amplitude.amplitude(loops=fk.Loops.total(0),restrict=restriction,orders=exact_orders).generate().build()] == [d.id for d in exact]
+assert len(amplitude.amplitude(loops=fk.Loops.total(0),restrict=restriction,orders=fk.Orders().exact("QCD",0)).generate()) == 0
+assert len(amplitude.amplitude(loops=fk.Loops.total(0),restrict=restriction.exclude_particles(["scalar_0"])).generate()) == 0
+assert len(amplitude.amplitude(loops=fk.Loops.total(0),restrict=restriction.exclude_vertices(["V_3_SCALAR_000"])).generate()) == 0
+assert len(exact.select(fk.Selection(select=[exact[0]]))) == 1
+assert len(exact.select(fk.Selection(veto=[d.id for d in exact]))) == 0
+for make in (
+    lambda: amplitude.amplitude(loops=fk.Loops.total(0),options=None),
+    lambda: amplitude.amplitude(loops=fk.Loops.total(0),coupling_order={"QCD":0}),
+    lambda: fk.Orders().exact("QCD",True),
+    lambda: fk.Range.exact(True),
+):
     try:
-        amplitude.generate_diagrams(**invalid_arguments)
+        make()
     except TypeError:
         pass
     else:
         raise AssertionError("invalid generation keyword/type was accepted")
-
+assert_feynkit_error(fk.GenerationError,lambda: amplitude.amplitude(loops=fk.Loops.total(0),orders=fk.Orders().perturbative("QCD",1)))
 token = fk.CancellationToken()
 token.cancel()
-assert not amplitude.generate_diagrams(cancellation_token=token, **kwargs).report.completed
-
-diagram = amplitude.with_filters(vertex_allow=["V_3_SCALAR_000"]).generate_diagrams(loops=1, max_vertices=3).diagrams[0]
-assert_feynkit_error(
-    fk.CffError,
-    lambda: fk.CffGenerator(max_orientations=0).generate(diagram),
-)
+assert not request.generate(run=fk.Run(cancellation=token)).report.completed
+loop_topology=fk.TopologyRules(max_vertices=3,bridges=graph.Bridges.one_pi_in_loops(),self_energies=fk.Veto.all(),tadpoles=fk.Veto.all(),snails=fk.Veto.massless())
+diagram = amplitude.amplitude(loops=fk.Loops.total(1),restrict=restriction,topology=loop_topology).generate().build()[0]
+assert_feynkit_error(fk.CffError,lambda:fk.CffGenerator(max_orientations=0).generate(diagram))
 
 assert "_gammaloop" not in sys.modules
 "#,
@@ -745,7 +795,7 @@ class Diagram:
 
     Examples
     --------
-    >>> diagram = model.process([], []).generate_diagrams().diagrams[0]
+    >>> diagram = model.process([], []).amplitude(loops=hep.Loops.total(2)).generate().build()[0]
     """
 
     @property

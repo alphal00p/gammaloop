@@ -1,5 +1,5 @@
-//! Calling-thread dispatch. The Python loop owns one call per batch; every predicate receives
-//! one typed view, validates its bool immediately, and expires that view in a finally block.
+//! Scoped, batched Python dispatch. Every predicate receives one typed view, validates
+//! its bool immediately, and expires that view in a finally block.
 
 use std::sync::{atomic::AtomicBool, Arc};
 
@@ -128,7 +128,11 @@ impl View {
     }
 }
 
-#[pyclass(unsendable)]
+// Exception tracebacks can retain this owned request after its callback worker exits.
+// Like the typed views, its native snapshots and Python handles are safe to release
+// on the thread that later collects that traceback. PyO3 enforces its normal
+// thread-safety bounds.
+#[pyclass]
 struct Pending {
     request: Option<Arc<Request<u32, u32>>>,
     view: Option<View>,
@@ -276,12 +280,13 @@ pub(super) fn dispatch(
         .map(Some)
 }
 
-/// Calling-thread transport shared with eager physics generation. Keep this Rust owner local
+/// Scoped transport shared with eager physics generation. Keep this Rust owner local
 /// to the invocation; its ordinary Py reference owns the GC-visible callable holder.
 #[doc(hidden)]
 pub struct GenerationCallbacks {
     hooks: Py<Hooks>,
     mask: HookMask,
+    calling_thread: std::thread::ThreadId,
 }
 
 impl GenerationCallbacks {
@@ -303,7 +308,11 @@ impl GenerationCallbacks {
             )?,
         };
         let mask = hooks.borrow(py).mask();
-        Ok(Self { hooks, mask })
+        Ok(Self {
+            hooks,
+            mask,
+            calling_thread: std::thread::current().id(),
+        })
     }
 
     pub fn mask(&self) -> HookMask {
@@ -321,6 +330,7 @@ impl GenerationCallbacks {
         let objects = Objects {
             fields: fields.clone().unbind(),
             labels: labels.clone().unbind(),
+            graph_thread: Some(self.calling_thread),
         };
         dispatch(py, requests, &objects, &self.hooks, cancelled)
     }

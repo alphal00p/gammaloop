@@ -15,12 +15,20 @@ from symbolica.community.hepkit import oneloop
 from symbolica.community.tensor import TensorExpression
 
 model = fk.Model(Path(__file__).parents[2] / "feynkit-model/tests/fixtures/sm.json")
-generated = model.process([22], [22], vertex_allow=["V_98"]).generate_diagrams(
-    loops=1,
-    max_vertices=2,
-    maximum_bridges=None,
-    numerator_grouping=None,
-    progress=None,
+generated = (
+    model.process([22], [22])
+    .amplitude(
+        loops=fk.Loops.total(1),
+        restrict=fk.Restrict().only_vertices(["V_98"]),
+        topology=fk.TopologyRules(
+            max_vertices=2,
+            self_energies=fk.Veto.all(),
+            tadpoles=fk.Veto.all(),
+            snails=fk.Veto.massless(),
+        ),
+    )
+    .generate()
+    .build(fk.NumeratorOptions(naming=fk.Naming.named("D")))
 )
 assert len(generated.diagrams) == 1
 diagram = generated.diagrams[0]

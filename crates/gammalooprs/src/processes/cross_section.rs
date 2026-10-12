@@ -1034,8 +1034,9 @@ impl CrossSection {
                 base_external_cache_id: 0,
                 rotations: None,
                 symmetrize_left_right_states: process_definition
-                    .generation_options
-                    .symmetrizes_left_right(),
+                    .request
+                    .cuts()
+                    .symmetrize_left_right,
                 name: self.name.clone(),
                 external_connections: self.external_connections.clone(),
                 n_incoming: self.n_incmoming,
@@ -1222,8 +1223,7 @@ impl FinalizedCut {
                 .collect_vec();
 
             let covariant_states = process.covariant_cut_states(model)?;
-            let unresolved =
-                feynkit_generator::unresolved_cut_content(model, &process.generation_options)?;
+            let unresolved = feynkit_generator::unresolved_cut_content(model, &process.request)?;
             let any_pdg_list_passes = covariant_states
                 .iter()
                 .map(|x| {
@@ -1275,17 +1275,8 @@ impl FinalizedCut {
                 return Ok(false);
             }
 
-            let amplitude_loop_count = process
-                .generation_options
-                .filters(feynkit_generator::FilterScope::CutAmplitude)
-                .iter()
-                .find_map(|filter| match filter {
-                    feynkit_generator::GenerationFilter::LoopCountRange(range) => Some(*range),
-                    _ => None,
-                });
-
-            if let Some((min_loop, max_loop)) = amplitude_loop_count {
-                let loop_range = min_loop..=max_loop;
+            let loop_range = process.request.cuts().amplitude.loops;
+            if loop_range != feynkit_generator::Range::Unrestricted {
                 let left_internal_subgraph = InternalSubGraph::cleaned_filter_pessimist(
                     self.left.clone(),
                     &cross_section_graph.graph.underlying,
@@ -1308,7 +1299,7 @@ impl FinalizedCut {
 
                 let total_loops = left_loop + right_loop;
 
-                if !loop_range.contains(&total_loops) {
+                if !loop_range.contains(total_loops) {
                     debug!("incorrect loop count");
                     return Ok(false);
                 }

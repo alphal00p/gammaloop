@@ -130,7 +130,7 @@ min_samples_for_update = 1000
 seed = 7331
 '"#,
             &format!(
-                "generate xs a a > t t~ | a t t~ g ghG ghG~ QED^2==4 [{{{{1}}}} QCD=0] --numerator-grouping no_grouping --symmetrize-initial-states false --symmetrize-final-states false {generation_options} -p aa_ttx -i LO"
+                "generate xs a a > t t~ | a t t~ g ghG ghG~ QED^2==4 [{{{{1}}}} QCD=0] --numerator-grouping no_grouping --symmetrize-initial-states false --symmetrize-final-states false {generation_options} -p aa_ttx -i LO --filter-selfenergies true --filter-snails true --filter-tadpoles true --n-cut-blobs 1 1 --n-cut-spectators 0 0"
             ),
         ],
     )?;

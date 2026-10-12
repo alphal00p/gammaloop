@@ -43,18 +43,45 @@ def _(mo):
 
 @app.cell
 def _():
-    from symbolica.community.hepkit import Model
+    from symbolica.community.graph import Bridges
+    from symbolica.community.hepkit import (
+        Loops,
+        Model,
+        Naming,
+        NumeratorOptions,
+        TopologyRules,
+        Veto,
+    )
     from symbolica import S
 
     model = Model.phi3()
-    return (Model, S, model)
+    return (
+        Bridges,
+        Loops,
+        Model,
+        Naming,
+        NumeratorOptions,
+        S,
+        TopologyRules,
+        Veto,
+        model,
+    )
 
 
 @app.cell
-def _(mo, model, table):
-    _generated = model.process(["phi"], [9000001, "phi"]).generate_diagrams(
-        loops=(0, 1), max_vertices=3, allow_self_loops=True
+def _(Bridges, Loops, Naming, NumeratorOptions, TopologyRules, Veto, mo, model, table):
+    _request = model.process(["phi"], [9000001, "phi"]).amplitude(
+        loops=Loops.total((0, 1)),
+        topology=TopologyRules(
+            max_vertices=3,
+            self_loops=True,
+            bridges=Bridges.one_pi_in_loops(),
+            self_energies=Veto.all(),
+            tadpoles=Veto.all(),
+            snails=Veto.massless(),
+        ),
     )
+    _generated = _request.generate().build(NumeratorOptions(naming=Naming.named("D")))
 
     diagram = next(
         item

@@ -1,6 +1,6 @@
 use brotli::CompressorWriter;
 use feynkit_generator::{
-    GenerationFilter, GenerationOptions, NumeratorGrouping, Process, VertexSelector,
+    Loops, Naming, NumeratorOptions, Process, Restrict, Run, TopologyRules, VertexSelector,
 };
 use idenso::{dirac::GammaSimplifier, representations::Bispinor};
 use insta::assert_snapshot;
@@ -920,32 +920,36 @@ fn one_loop_lbl_concretize() {
 fn dumb_four_gluon() {
     let model = load_generic_model("sm");
     let process = Process::new(Vec::<i64>::new(), Vec::<i64>::new());
-    let options = GenerationOptions::default().with_loop_count(2, 2)
+    let request = process
+        .amplitude(Loops::total(2..=2))
+        .with_topology(
+            TopologyRules::new()
+                .with_self_loops(true)
+                .with_max_vertices(1),
+        )
+        .with_restrict(Restrict::new().only_vertices([VertexSelector::Name("V_37".to_owned())]));
+    let generated = request
+        .generate(Arc::new(model.clone()), &Run::default())
         .unwrap()
-        .allow_self_loops(true)
-        .max_vertices(1)
-        .numerator_grouping(NumeratorGrouping::None)
-        .with_graph_filter(GenerationFilter::VertexAllow(vec![VertexSelector::Name(
-            "V_37".to_owned(),
-        )]));
-    let generated = process.generate_diagrams(Arc::new(model.clone()), &options)
+        .build(
+            &NumeratorOptions::default().with_naming(Naming::prefix("D")),
+            &Run::default(),
+        )
         .unwrap();
     let diagram = generated
-        .diagrams
-        .into_iter()
+        .diagrams()
+        .iter()
         .find(|diagram| {
             diagram.vertices().count() == 1
                 && diagram.edges().count() == 2
                 && diagram.vertices().all(|(_, vertex)| {
-                    vertex.interaction.is_some_and(|rule| {
-                        model.vertex_rule_by_id(rule).unwrap().name == "V_37"
-                    })
+                    vertex
+                        .interaction
+                        .is_some_and(|rule| model.vertex_rule_by_id(rule).unwrap().name == "V_37")
                 })
         })
         .expect("canonical generation should produce the two-loop four-gluon vacuum graph");
-    let graph = diagram
-        .to_gamma_loop_graph(None, true)
-        .unwrap();
+    let graph = diagram.to_gamma_loop_graph(None, true).unwrap();
 
     let num = Numerator::default().from_graph(&graph, &GlobalPrefactor::default());
     // println!("{}", num.state.color);
@@ -976,7 +980,6 @@ fn dumb_four_gluon() {
     assert_snapshot!(expanded.to_canonical_string());
 }
 
-
 mod failing {
     use super::*;
 
@@ -991,7 +994,8 @@ mod failing {
             .join("GL_OUTPUT");
 
         let model = Model::from_file(String::from(
-            Path::new(env!("CARGO_MANIFEST_DIR")).join("src/test_resources")
+            Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("src/test_resources")
                 .join("gammaloop_models/sm.yaml")
                 .to_str()
                 .unwrap(),
@@ -1062,7 +1066,7 @@ mod failing {
                 ExternalMomenta::Independent([F(592.625), F(0.), F(0.), F(566.8116)]), // 1
                 ExternalMomenta::Independent([F(579.375), F(0.), F(0.), F(-566.8116)]), // 2
                 ExternalMomenta::Independent([F(592.625), F(125.7463), F(504.2705), F(-226.2178)]), // 3
-                ExternalMomenta::Dependent(Dep::Dep),                                  // 4
+                ExternalMomenta::Dependent(Dep::Dep), // 4
             ],
             helicities: vec![
                 Helicity::MINUS,

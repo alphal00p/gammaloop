@@ -31,7 +31,7 @@ use std::{collections::BTreeSet, process::Command};
 
 use cases::{CASES, Case, REFERENCE};
 use census::{Census, Scope, Summary};
-use feynkit_generator::{GenerationOutput, NumeratorGrouping};
+use feynkit_generator::{Grouping, Naming, NumeratorOptions, Run, Selection};
 use feynkit_graph::FeynmanDiagram;
 use feynkit_model::Model;
 use symbolica::domains::rational::Rational;
@@ -43,16 +43,19 @@ fn threads() -> Vec<usize> {
 }
 
 fn census(case: &Case, threads: usize) -> Census {
-    census_with_output(case, threads, GenerationOutput::default())
+    census_with_naming(case, threads, Naming::prefix("D"))
 }
 
-fn census_with_output(case: &Case, threads: usize, output: GenerationOutput) -> Census {
+fn census_with_naming(case: &Case, threads: usize, naming: Naming) -> Census {
     let model = case.model();
-    let options = case.options(&model, threads).output(output);
-    let result = case
-        .generate_with(model, &options)
+    let request = case.request(&model);
+    let run = Run::default().threads(threads);
+    let result = request
+        .generate(model.into(), &run)
+        .and_then(|prepared| prepared.build(&NumeratorOptions::default().with_naming(naming), &run))
+        .and_then(|built| built.group(&case.grouping(), &run))
         .unwrap_or_else(|error| panic!("{}: {error}", case.name));
-    assert!(result.report.completed, "{} did not complete", case.name);
+    assert!(result.report().completed, "{} did not complete", case.name);
     Census::of(&result)
 }
 
@@ -95,7 +98,7 @@ fn check(name: &str, tier: &str, row: Row) {
     let mut threads = threads().into_iter();
     let first = threads.next().expect("a thread count");
     let reference = census(case, first);
-    let minimal = census_with_output(case, first, GenerationOutput::Minimal);
+    let minimal = census_with_naming(case, first, Naming::None);
     reference.assert_minimal(&minimal, name);
     for count in threads {
         let other = census(case, count);
@@ -105,7 +108,7 @@ fn check(name: &str, tier: &str, row: Row) {
             &format!("{name}: Named {first} vs {count} threads"),
         );
         drop(other);
-        let other = census_with_output(case, count, GenerationOutput::Minimal);
+        let other = census_with_naming(case, count, Naming::None);
         minimal.assert_same(
             &other,
             Scope::Exact,
@@ -117,26 +120,28 @@ fn check(name: &str, tier: &str, row: Row) {
     // Bind Named identities to full physical sources; the policy comparison above
     // requires Minimal to preserve the same request-local indices, ratios and factors.
     let model = case.model();
-    let options = case.options(&model, first);
+    let request = case.request(&model);
+    let run = Run::default().threads(first);
+    let numerators = NumeratorOptions::default().with_naming(Naming::prefix("D"));
     // The source name/index assertion is specific to these selector-free fixtures.
-    let serialized = serde_json::to_value(&options).unwrap();
+    let serialized = serde_json::to_value(&numerators).unwrap();
     assert_eq!(
-        serialized["output"],
+        serialized["naming"],
         serde_json::json!({"named": {"prefix": "D"}})
     );
+    let serialized = serde_json::to_value(Selection::new()).unwrap();
     for field in ["selected_diagram_ids", "selected_diagram_names"] {
         assert!(serialized.get(field).unwrap().is_null(), "{name}: {field}");
     }
     for field in ["vetoed_diagram_ids", "vetoed_diagram_names"] {
         assert_eq!(serialized[field], serde_json::json!([]), "{name}: {field}");
     }
-    let ungrouped = case
-        .generate_with(
-            model.clone(),
-            &options
-                .numerator_grouping(NumeratorGrouping::None)
-                .filter_zero_color(false),
-        )
+    let ungrouped = request
+        .generate(model.into(), &run)
+        .unwrap()
+        .build(&numerators.with_zero_color_filter(false), &run)
+        .unwrap()
+        .group(&Grouping::None, &run)
         .unwrap();
     reference.assert_group_sources(&Census::of(&ungrouped), name);
     drop(ungrouped);
@@ -179,10 +184,20 @@ const NON_SELF_DUAL_POWER: &[&str] = &[
 fn fails(name: &str, error: &[&str]) {
     let case = Case::named(name);
     for count in threads() {
-        for output in [GenerationOutput::default(), GenerationOutput::Minimal] {
+        for output in [Naming::prefix("D"), Naming::None] {
             let model = case.model();
-            let options = case.options(&model, count).output(output.clone());
-            match case.generate_with(model, &options) {
+            let run = Run::default().threads(count);
+            let result = case
+                .request(&model)
+                .generate(model.into(), &run)
+                .and_then(|prepared| {
+                    prepared.build(
+                        &NumeratorOptions::default().with_naming(output.clone()),
+                        &run,
+                    )
+                })
+                .and_then(|built| built.group(&case.grouping(), &run));
+            match result {
                 Ok(_) => panic!(
                     "{name} generates at {count} threads ({output:?}): record its oracle row"
                 ),
@@ -251,7 +266,7 @@ oracle! {
     heavy phi34_2pt_L5: Row { diagrams: 84749, topologies: 84749, assignments: 84749, inverse_symmetry: (6869123, 576), weights: (6869123, 576), symmetry_factors: &[(1, 727), (2, 5060), (4, 15053), (6, 145), (8, 23639), (12, 1092), (16, 21069), (24, 2619), (32, 10408), (36, 27), (48, 2146), (64, 2057), (72, 115), (96, 296), (128, 108), (144, 22), (192, 130), (256, 22), (288, 7), (384, 7)], content: 0xad6afc0df417f26b, numerators: 0x3687bef3749d414c, named: 0x2ba64003a44a5415, ids: 0xf00b07bbc0263ebf };
     fast phi3_2pt_L1: Row { diagrams: 1, topologies: 1, assignments: 1, inverse_symmetry: (1, 2), weights: (1, 2), symmetry_factors: &[(2, 1)], content: 0x55e64ff2da4d1e0f, numerators: 0x316859ad4f714f0a, named: 0x284ca460b3985cfe, ids: 0x957a7b87ebcffb36 };
     fast phi3_2pt_tad_L2: Row { diagrams: 10, topologies: 10, assignments: 10, inverse_symmetry: (25, 8), weights: (25, 8), symmetry_factors: &[(2, 3), (4, 6), (8, 1)], content: 0x545153d6589cc2b7, numerators: 0x305722691bab7a7f, named: 0xd9e84d3bf9cee51c, ids: 0xba30d92e49c4b2fa };
-    fast phi34_2pt_identical_L3: Row { diagrams: 72, topologies: 72, assignments: 72, inverse_symmetry: (71, 3), weights: (71, 3), symmetry_factors: &[(1, 2), (2, 24), (4, 32), (6, 1), (8, 10), (12, 3)], content: 0x6454c5db351b672c, numerators: 0xe64b2d72fd7c2e4e, named: 0x4a42dbba4affe049, ids: 0xee56a211744f234e };
+    fast phi34_2pt_identical_L3: Row { diagrams: 72, topologies: 72, assignments: 72, inverse_symmetry: (71, 3), weights: (71, 3), symmetry_factors: &[(1, 2), (2, 24), (4, 32), (6, 1), (8, 10), (12, 3)], content: 0x6454c5db351b672c, numerators: 0xe64b2d72fd7c2e4e, named: 0x175ac2b33292f99f, ids: 0xee56a211744f234e };
     fast qed_eemm_L1: Row { diagrams: 17, topologies: 10, assignments: 17, inverse_symmetry: (17, 1), weights: (1, 1), symmetry_factors: &[(1, 17)], content: 0x67015758ee0dfcf5, numerators: 0x21ff907ef41e3790, named: 0x92ff7810a94d1ff7, ids: 0x1dc5ec5f97f654ff };
     fast qed_eemm_L2: Row { diagrams: 357, topologies: 116, assignments: 357, inverse_symmetry: (357, 1), weights: (57, 1), symmetry_factors: &[(1, 357)], content: 0xb41eb8293f39b714, numerators: 0x8459c2e5cff56b07, named: 0x04ccbdf50c929329, ids: 0x566e38b1fd985ea0 };
     heavy qed_eemm_L3: Row { diagrams: 8724, topologies: 1245, assignments: 8724, inverse_symmetry: (8724, 1), weights: (-282, 1), symmetry_factors: &[(1, 8724)], content: 0xb687808b888a00cc, numerators: 0xee51106cc3fe4d1f, named: 0x661d07aebc62dae1, ids: 0xb51f888639fdfb91 };
@@ -260,12 +275,12 @@ oracle! {
     heavy qed_ee4f_L2: Row { diagrams: 8460, topologies: 7909, assignments: 8460, inverse_symmetry: (8460, 1), weights: (828, 1), symmetry_factors: &[(1, 8460)], content: 0x963dbcf6ba7b1c88, numerators: 0x62286f983894e5f0, named: 0x9ffdbc9c8b5864e4, ids: 0xea62a12dfd838cd6 };
     fast qed_eeaaa_L1: Row { diagrams: 384, topologies: 120, assignments: 384, inverse_symmetry: (384, 1), weights: (264, 1), symmetry_factors: &[(1, 384)], content: 0x0fb43c5f515a232f, numerators: 0x044cde5d497d3648, named: 0xd2334763314c3f01, ids: 0x045b832925723c15 };
     heavy qed_eeaaa_L2: Row { diagrams: 16344, topologies: 1581, assignments: 16344, inverse_symmetry: (16344, 1), weights: (-4356, 1), symmetry_factors: &[(1, 16344)], content: 0x98091302c044d5cf, numerators: 0x7a44d325ff935352, named: 0x5d5f16e150dd124d, ids: 0x6939a25e707794a1 };
-    fast qed_eeaa_identical_L1: Row { diagrams: 60, topologies: 20, assignments: 66, inverse_symmetry: (60, 1), weights: (42, 1), symmetry_factors: &[(1, 60)], content: 0xc2f14084d3c16139, numerators: 0xd27676fa0c37edb5, named: 0x8e7e16a5e6214aa4, ids: 0xaa53fdeb847997d1 };
-    fast qed_eeaa_sign_L1: Row { diagrams: 58, topologies: 20, assignments: 66, inverse_symmetry: (58, 1), weights: (36, 1), symmetry_factors: &[(1, 58)], content: 0xd5ee97232124fe0c, numerators: 0x0193aaeff8c4a870, named: 0xb0aca5b8a7de17e0, ids: 0x1aa25011dcad45d8 };
-    fast qed_eeaa_scalar_L1: Row { diagrams: 57, topologies: 20, assignments: 66, inverse_symmetry: (57, 1), weights: (36, 1), symmetry_factors: &[(1, 57)], content: 0x28e8c26fd53fa6bb, numerators: 0xd1995d9a29a96d4f, named: 0xf370e1cb7c88e2c1, ids: 0x6a4ac394ef4f0517 };
-    fast qed_ee4f_identical_L1: Row { diagrams: 228, topologies: 304, assignments: 242, inverse_symmetry: (228, 1), weights: (10, 1), symmetry_factors: &[(1, 228)], content: 0xac6a16e86141b488, numerators: 0xedd1b0058d7da78c, named: 0x51770c1b6d8c4003, ids: 0xa6c48dc40eff752b };
-    fast qed_ee4f_sign_L1: Row { diagrams: 226, topologies: 304, assignments: 242, inverse_symmetry: (226, 1), weights: (4, 1), symmetry_factors: &[(1, 226)], content: 0x17b789011e6ec656, numerators: 0x83dc420a2d46c1cd, named: 0xae8a66f5b8d4e946, ids: 0x661bd847a204d56a };
-    fast qed_ee4f_scalar_L1: Row { diagrams: 225, topologies: 304, assignments: 242, inverse_symmetry: (225, 1), weights: (4, 1), symmetry_factors: &[(1, 225)], content: 0x5ef890dc71487c0a, numerators: 0x599d7c9c1a1dbe29, named: 0x4419b71fdfc0ce0c, ids: 0x434a39f9679bff73 };
+    fast qed_eeaa_identical_L1: Row { diagrams: 60, topologies: 20, assignments: 66, inverse_symmetry: (60, 1), weights: (42, 1), symmetry_factors: &[(1, 60)], content: 0xd8af8cc8c1181ac4, numerators: 0xd27676fa0c37edb5, named: 0x2e03f86c7ba4cf5e, ids: 0xaa53fdeb847997d1 };
+    fast qed_eeaa_sign_L1: Row { diagrams: 58, topologies: 20, assignments: 66, inverse_symmetry: (58, 1), weights: (36, 1), symmetry_factors: &[(1, 58)], content: 0x874f9cfeb57000f0, numerators: 0x0193aaeff8c4a870, named: 0x3318b474a47f5a60, ids: 0x1aa25011dcad45d8 };
+    fast qed_eeaa_scalar_L1: Row { diagrams: 57, topologies: 20, assignments: 66, inverse_symmetry: (57, 1), weights: (36, 1), symmetry_factors: &[(1, 57)], content: 0x683674e2ce98df18, numerators: 0xd1995d9a29a96d4f, named: 0xbf39dbcddc354839, ids: 0x6a4ac394ef4f0517 };
+    fast qed_ee4f_identical_L1: Row { diagrams: 228, topologies: 304, assignments: 242, inverse_symmetry: (228, 1), weights: (10, 1), symmetry_factors: &[(1, 228)], content: 0x8412b54ce0b9f353, numerators: 0xedd1b0058d7da78c, named: 0xa5a7b7d4760b0cae, ids: 0xa6c48dc40eff752b };
+    fast qed_ee4f_sign_L1: Row { diagrams: 226, topologies: 304, assignments: 242, inverse_symmetry: (226, 1), weights: (4, 1), symmetry_factors: &[(1, 226)], content: 0x440d8a01bfcedf9b, numerators: 0x83dc420a2d46c1cd, named: 0x1bc3575f1bb4812b, ids: 0x661bd847a204d56a };
+    fast qed_ee4f_scalar_L1: Row { diagrams: 225, topologies: 304, assignments: 242, inverse_symmetry: (225, 1), weights: (4, 1), symmetry_factors: &[(1, 225)], content: 0x86fe23463cbda23f, numerators: 0x599d7c9c1a1dbe29, named: 0x35fd2a3477b5bd55, ids: 0x434a39f9679bff73 };
     failing qed_eemm_identical_L2: SCALED_TENSOR;
     failing qed_eemm_sign_L2: SCALED_TENSOR;
     failing qed_eemm_scalar_L2: SCALED_TENSOR;
@@ -343,9 +358,9 @@ oracle! {
     fast xs_qed_eemm_L1: Row { diagrams: 1, topologies: 17, assignments: 34, inverse_symmetry: (1, 1), weights: (-1, 1), symmetry_factors: &[(1, 1)], content: 0x831ae534b022fd0f, numerators: 0xe134f67914689408, named: 0xf40bfdc791015105, ids: 0xedd739fe2aef9d55 };
     fast xs_qed_eemm_L2: Row { diagrams: 30, topologies: 157, assignments: 714, inverse_symmetry: (30, 1), weights: (4, 1), symmetry_factors: &[(1, 30)], content: 0x3ce6c5b6af8ba125, numerators: 0xda1650e44404e0fc, named: 0x0b41c948729c87ec, ids: 0xc6537de685c0ec01 };
     fast xs_qed_eemm_L3: Row { diagrams: 824, topologies: 1536, assignments: 17448, inverse_symmetry: (824, 1), weights: (94, 1), symmetry_factors: &[(1, 824)], content: 0x362776deabca39da, numerators: 0x943ab33171ec7737, named: 0xb5205b5cda3bf8ff, ids: 0xc3905035e4cb6566 };
-    fast xs_qed_eemm_identical_L2: Row { diagrams: 28, topologies: 157, assignments: 714, inverse_symmetry: (28, 1), weights: (4, 1), symmetry_factors: &[(1, 28)], content: 0x44c6a2185761acd8, numerators: 0x09c7fc2ec0007936, named: 0x3dd6bf8a6993a599, ids: 0x92036d905b3178ba };
-    fast xs_qed_eemm_sign_L2: Row { diagrams: 28, topologies: 157, assignments: 714, inverse_symmetry: (28, 1), weights: (4, 1), symmetry_factors: &[(1, 28)], content: 0x44c6a2185761acd8, numerators: 0x09c7fc2ec0007936, named: 0x3dd6bf8a6993a599, ids: 0x92036d905b3178ba };
-    fast xs_qed_eemm_scalar_L2: Row { diagrams: 28, topologies: 157, assignments: 714, inverse_symmetry: (28, 1), weights: (4, 1), symmetry_factors: &[(1, 28)], content: 0x44c6a2185761acd8, numerators: 0x09c7fc2ec0007936, named: 0x3dd6bf8a6993a599, ids: 0x92036d905b3178ba };
+    fast xs_qed_eemm_identical_L2: Row { diagrams: 28, topologies: 157, assignments: 714, inverse_symmetry: (28, 1), weights: (4, 1), symmetry_factors: &[(1, 28)], content: 0x809e3347aecfb7f5, numerators: 0x09c7fc2ec0007936, named: 0x154b3a7c958df4a4, ids: 0x92036d905b3178ba };
+    fast xs_qed_eemm_sign_L2: Row { diagrams: 28, topologies: 157, assignments: 714, inverse_symmetry: (28, 1), weights: (4, 1), symmetry_factors: &[(1, 28)], content: 0x809e3347aecfb7f5, numerators: 0x09c7fc2ec0007936, named: 0x154b3a7c958df4a4, ids: 0x92036d905b3178ba };
+    fast xs_qed_eemm_scalar_L2: Row { diagrams: 28, topologies: 157, assignments: 714, inverse_symmetry: (28, 1), weights: (4, 1), symmetry_factors: &[(1, 28)], content: 0x809e3347aecfb7f5, numerators: 0x09c7fc2ec0007936, named: 0x154b3a7c958df4a4, ids: 0x92036d905b3178ba };
     fast xs_qed_eedd_L1: Row { diagrams: 1, topologies: 17, assignments: 34, inverse_symmetry: (1, 1), weights: (-1, 1), symmetry_factors: &[(1, 1)], content: 0xb467d6be7a12aefa, numerators: 0x52ae30868db3c38d, named: 0xdd30b2e206f30267, ids: 0x58ebcb07ba6255d3 };
     fast xs_qed_eedd_L2: Row { diagrams: 30, topologies: 157, assignments: 714, inverse_symmetry: (30, 1), weights: (4, 1), symmetry_factors: &[(1, 30)], content: 0x1a55cd5c769f869a, numerators: 0x649671e7e59d982c, named: 0x368a1cfe1b96c3be, ids: 0xfba0be1b20d86887 };
     fast xs_qed_eeaa_L2: Row { diagrams: 96, topologies: 157, assignments: 714, inverse_symmetry: (96, 1), weights: (-48, 1), symmetry_factors: &[(1, 96)], content: 0xb38bf88ee71b032b, numerators: 0x8c6fd49a5d2b9331, named: 0xe67ffcbf30548e8b, ids: 0x9d68f748335a7cfd };
@@ -421,8 +436,19 @@ fn ids_do_not_depend_on_threads_or_symbol_registration() {
         for name in RUN {
             let case = Case::named(name);
             let model = case.model();
-            let options = case.options(&model, threads.parse().unwrap());
-            for diagram in case.generate_with(model, &options).unwrap().diagrams {
+            let run = Run::default().threads(threads.parse().unwrap());
+            let result = case
+                .request(&model)
+                .generate(model.into(), &run)
+                .unwrap()
+                .build(
+                    &NumeratorOptions::default().with_naming(Naming::prefix("D")),
+                    &run,
+                )
+                .unwrap()
+                .group(&case.grouping(), &run)
+                .unwrap();
+            for diagram in result.iter() {
                 println!(
                     "{CHILD} {name} {} {}",
                     diagram.name().expect("named oracle output"),
@@ -463,15 +489,24 @@ fn ids_do_not_depend_on_threads_or_symbol_registration() {
 fn in_flight_filters_select_like_vetoes_and_post_filtering() {
     let case = Case::named("qcd_gggg_L1");
     let model = case.model();
-    let options = case.options(&model, 1);
-    let all = case.generate_with(model.clone(), &options).unwrap();
+    let run = Run::default().threads(1);
+    let all = case
+        .request(&model)
+        .generate(model.clone().into(), &run)
+        .unwrap()
+        .build(
+            &NumeratorOptions::default().with_naming(Naming::prefix("D")),
+            &run,
+        )
+        .unwrap()
+        .group(&case.grouping(), &run)
+        .unwrap();
     let ghost_free: BTreeSet<_> = all
-        .diagrams
         .iter()
         .filter(|diagram| !is_ghost(&model, diagram))
         .map(|diagram| diagram.id().unwrap())
         .collect();
-    assert!(ghost_free.len() < all.diagrams.len());
+    assert!(ghost_free.len() < all.len());
     let expected = Census::of(&all).restricted(|entry| ghost_free.contains(&entry.id));
     let filtered = census(Case::named("qcd_gggg_ghost_filter_L1"), 1);
     let vetoed = census(Case::named("qcd_gggg_ghost_veto_L1"), 1);
@@ -506,13 +541,20 @@ fn counterterm_copies_weight_every_rule_choice() {
             .collect();
         let case = Case::named(base);
         let model = case.model();
-        let options = case.options(&model, 1);
+        let run = Run::default().threads(1);
         let mut expected = Rational::zero();
-        for diagram in case
-            .generate_with(model.clone(), &options)
+        let generated = case
+            .request(&model)
+            .generate(model.clone().into(), &run)
             .unwrap()
-            .diagrams
-        {
+            .build(
+                &NumeratorOptions::default().with_naming(Naming::prefix("D")),
+                &run,
+            )
+            .unwrap()
+            .group(&case.grouping(), &run)
+            .unwrap();
+        for diagram in generated.iter() {
             let k = diagram
                 .vertices()
                 .filter(|(_, vertex)| {
@@ -551,14 +593,21 @@ fn counterterm_orders_select_rule_choices_by_count() {
             .collect();
         let case = Case::named(base);
         let model = case.model();
-        let options = case.options(&model, 1);
+        let run = Run::default().threads(1);
         let binomial = |m: u64, k: u64| (0..k).fold(1, |c, i| c * (m - i) / (i + 1));
         let mut expected = Rational::zero();
-        for diagram in case
-            .generate_with(model.clone(), &options)
+        let generated = case
+            .request(&model)
+            .generate(model.clone().into(), &run)
             .unwrap()
-            .diagrams
-        {
+            .build(
+                &NumeratorOptions::default().with_naming(Naming::prefix("D")),
+                &run,
+            )
+            .unwrap()
+            .group(&case.grouping(), &run)
+            .unwrap();
+        for diagram in generated.iter() {
             let m = diagram
                 .vertices()
                 .filter(|(_, vertex)| {
@@ -569,7 +618,7 @@ fn counterterm_orders_select_rule_choices_by_count() {
                 })
                 .count() as u64;
             for k in range.clone().filter(|&k| k <= m) {
-                expected += Rational::from((binomial(m, k), diagram.symmetry_factor()));
+                expected += Rational::from((u128::from(binomial(m, k)), diagram.symmetry_factor()));
             }
         }
         let actual = census(counterterms, 1).summary().inverse_symmetry;

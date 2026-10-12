@@ -5,16 +5,16 @@ import builtins
 import collections.abc
 import decimal
 import enum
+import fractions
 import os
 import pathlib
 import symbolica
 import symbolica.community.graph
 import symbolica.community.hepkit.sector_decomposition
 import symbolica.community.tensor
-import types
 import typing
 from symbolica import ComplexFloat, Float
-from symbolica.community.graph import DiagramRender, RenderSettings
+from symbolica.community.graph import Bridges as Bridges, DiagramRender, Graph, PlanReport, RenderSettings
 from symbolica.community.tensor import DisplaySettings, Slot, TensorExpression, TensorName
 from symbolica.core import Expression
 
@@ -27,7 +27,9 @@ class Amplitude:
     couplings are expanded; model-declared real parameters and physical momenta
     are real under conjugation. Complex parameters remain complex. Quadratic
     denominators use the graph convention without widths or an i0 prescription.
-    Already-sewn forward diagrams are rejected.
+    Already-sewn forward diagrams are rejected. Convert a generated BuiltDiagramSet with
+    ``into_amplitude()`` to preserve its allowed interference pairs. Constructing
+    ``Amplitude`` from a plain diagram sequence explicitly uses unrestricted pairing.
 
     Examples
     --------
@@ -35,9 +37,9 @@ class Amplitude:
     >>> from symbolica.community import hepkit as hep
     >>> model = hep.Model.phi4()
     >>> process = model.process(["phi", "phi"], ["phi", "phi"])
-    >>> generated = process.generate_diagrams()
+    >>> generated = process.amplitude(loops=hep.Loops.total(0)).generate().build(hep.NumeratorOptions(naming=hep.Naming.named("D")))
     >>> diagram = generated.diagrams[0]
-    >>> amplitude = hep.Amplitude(generated.diagrams)
+    >>> amplitude = generated.into_amplitude()
     >>> operator = amplitude.expression()
     >>> adjoint = amplitude.conjugate().expression()
     >>> squared = amplitude.squared().sum_spins(average_initial=True).sum_colors()
@@ -98,7 +100,7 @@ class Amplitude:
         --------
         Using the setup in the ``Amplitude`` class example:
 
-        >>> amplitude = hep.Amplitude(generated.diagrams)
+        >>> amplitude = hep.Amplitude(list(generated))
 
         Parameters
         ----------
@@ -234,9 +236,9 @@ class AmplitudeLeg:
     >>> from symbolica.community import hepkit as hep
     >>> model = hep.Model.phi4()
     >>> process = model.process(["phi", "phi"], ["phi", "phi"])
-    >>> generated = process.generate_diagrams()
+    >>> generated = process.amplitude(loops=hep.Loops.total(0)).generate().build(hep.NumeratorOptions(naming=hep.Naming.named("D")))
     >>> diagram = generated.diagrams[0]
-    >>> amplitude = hep.Amplitude(generated.diagrams)
+    >>> amplitude = generated.into_amplitude()
     >>> leg = amplitude.legs[0]
     >>> state = (leg.index, leg.particle.name, leg.state)
     >>> spin_sum = leg.particle.spin_sum(leg.momentum, leg.tensor_index, S("conjugate_index"))
@@ -320,6 +322,57 @@ class AmplitudeLeg:
         """
 
 @typing.final
+class AmplitudeOptions:
+    r"""
+    Lorentz dimension and additional reality assumptions for amplitude construction.
+
+    Examples
+    --------
+    >>> from symbolica.community import hepkit as hep
+    >>> from symbolica import S
+    >>> mass = S("mass")
+    >>> options = hep.AmplitudeOptions(dimension=4, real=[mass])
+    >>> assert options.real == [mass]
+    """
+    @property
+    def real(self) -> builtins.list[Expression]:
+        r"""
+        Additional expressions treated as real.
+
+        Examples
+        --------
+        >>> from symbolica import S
+        >>> mass = S("mass")
+        >>> assert hep.AmplitudeOptions(real=[mass]).real == [mass]
+        """
+    def __new__(cls, *, dimension: typing.Optional[Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal]] = None, real: typing.Optional[typing.Sequence[Expression]] = None) -> AmplitudeOptions:
+        r"""
+        Set amplitude dimension and symbols treated as real.
+
+        Examples
+        --------
+        >>> from symbolica import S
+        >>> mass = S("mass")
+        >>> options = hep.AmplitudeOptions(dimension=4, real=[mass])
+        >>> assert options.real == [mass]
+
+        Parameters
+        ----------
+        dimension : int | Expression | None
+            Positive integer or symbol used as the Lorentz dimension; None uses the native default.
+        real : sequence[Expression] | None
+            Additional expressions treated as real under conjugation.
+        """
+    def __repr__(self) -> builtins.str:
+        r"""
+        Return a compact representation of the configured options.
+
+        Examples
+        --------
+        >>> assert "AmplitudeOptions" in repr(hep.AmplitudeOptions())
+        """
+
+@typing.final
 class Boost:
     r"""
     A proper Lorentz boost specified by a three-velocity ``beta``.
@@ -399,37 +452,241 @@ class Boost:
         """
 
 @typing.final
+class BuiltDiagramIterator:
+    r"""
+    An owning iterator returned by iter(built); its backing result remains alive while the iterator is retained.
+
+    Examples
+    --------
+    >>> from symbolica.community import hepkit as hep
+    >>> model = hep.Model.standard_model()
+    >>> request = model.process([11, -11], [22, 22]).amplitude(loops=hep.Loops.total(0))
+    >>> discovered = request.generate()
+    >>> built = discovered.build()
+    >>> iterator = iter(built)
+    >>> first = next(iterator)
+    """
+    def __iter__(self) -> BuiltDiagramIterator:
+        r"""
+        Return this iterator without resetting its position.
+
+        Examples
+        --------
+        Using the setup in this class example:
+
+        >>> assert iter(iterator) is iterator
+        """
+    def __next__(self) -> typing.Optional[FeynmanDiagram]:
+        r"""
+        Return the next retained item, or raise StopIteration at exhaustion.
+
+        Examples
+        --------
+        Using the setup in this class example:
+
+        >>> iterator = iter(built)
+        >>> first = next(iterator)
+        """
+
+@typing.final
+class BuiltDiagramSet:
+    r"""
+    Explicitly constructed Feynman diagrams with provenance and retained squared-order interference policy. Obtain it through DiagramSet.build().
+
+    Examples
+    --------
+    >>> from symbolica.community import hepkit as hep
+    >>> model = hep.Model.standard_model()
+    >>> request = model.process([11, -11], [22, 22]).amplitude(loops=hep.Loops.total(0))
+    >>> discovered = request.generate()
+    >>> built = discovered.build()
+    >>> assert len(built) == len(discovered)
+    >>> built.validate_groups()
+    """
+    @property
+    def diagrams(self) -> BuiltDiagramSet:
+        r"""
+        Shared sequence view of constructed diagrams, without an eager Python list.
+
+        Examples
+        --------
+        Using the setup in this class example:
+
+        >>> assert len(built.diagrams) == len(built)
+        """
+    @property
+    def groups(self) -> builtins.list[DiagramGroup]:
+        r"""
+        Numerator-equivalence groups and their member weights.
+
+        Examples
+        --------
+        Using the setup in this class example:
+
+        >>> grouped = built.group(hep.Grouping("identical"))
+        >>> grouped.validate_groups()
+        >>> groups = grouped.groups
+        """
+    @property
+    def report(self) -> GenerationReport:
+        r"""
+        Owned report from construction, selection, or grouping.
+
+        Examples
+        --------
+        Using the setup in this class example:
+
+        >>> assert built.report.completed
+        """
+    def __len__(self) -> builtins.int:
+        r"""
+        Number of retained items in this shared sequence.
+
+        Examples
+        --------
+        Using the setup in this class example:
+
+        >>> assert len(built) > 0
+        """
+    def __getitem__(self, index: builtins.int) -> FeynmanDiagram:
+        r"""
+        Access one retained item by index. Negative indices count from the end; invalid indices raise IndexError.
+
+        Examples
+        --------
+        Using the setup in this class example:
+
+        >>> first = built[0]
+        >>> last = built[-1]
+        >>> assert len(built) > 0
+
+        Parameters
+        ----------
+        index : int
+            Sequence index, with Python negative-index semantics.
+        """
+    def __iter__(self) -> BuiltDiagramIterator:
+        r"""
+        Iterate the retained sequence without an eager Python list.
+
+        Examples
+        --------
+        Using the setup in this class example:
+
+        >>> assert sum(1 for item in built) == len(built)
+        """
+    def select(self, selection: Selection, *, run: typing.Optional[Run] = None) -> BuiltDiagramSet:
+        r"""
+        Return the subset selected by IDs, names, vetoes, and forced cuts.
+
+        Examples
+        --------
+        Using the setup in this class example:
+
+        >>> empty = built.select(hep.Selection(select=[]))
+        >>> assert len(empty) == 0
+
+        Parameters
+        ----------
+        selection : Selection
+            Selection policy; explicit empty inclusion retains no diagrams.
+        run : Run | None
+            Execution settings, cancellation, and progress callback for selection.
+        """
+    def group(self, grouping: Grouping, *, run: typing.Optional[Run] = None) -> BuiltDiagramSet:
+        r"""
+        Return numerator-equivalence groups under the requested comparison relation.
+
+        Examples
+        --------
+        Using the setup in this class example:
+
+        >>> grouped = built.group(hep.Grouping("identical"))
+        >>> grouped.validate_groups()
+
+        Parameters
+        ----------
+        grouping : Grouping
+            Numerator equivalence relation and comparison settings.
+        run : Run | None
+            Execution settings, cancellation, and progress callback for grouping.
+        """
+    def validate_groups(self) -> None:
+        r"""
+        Check that group masters, members, and weights obey native invariants; raise on inconsistency.
+
+        Examples
+        --------
+        Using the setup in this class example:
+
+        >>> grouped = built.group(hep.Grouping("up_to_sign"))
+        >>> grouped.validate_groups()
+        """
+    def into_amplitude(self, options: typing.Optional[AmplitudeOptions] = None) -> Amplitude:
+        r"""
+        Construct an amplitude while preserving resolved allowed interference pairs.
+
+        Examples
+        --------
+        Using the setup in this class example:
+
+        >>> amplitude = built.into_amplitude(hep.AmplitudeOptions(dimension=4))
+        >>> squared = amplitude.squared()
+
+        Parameters
+        ----------
+        options : AmplitudeOptions | None
+            Lorentz dimension and additional real expressions.
+        """
+    def __repr__(self) -> builtins.str:
+        r"""
+        Describe diagram count, group count, and completion state.
+
+        Examples
+        --------
+        Using the setup in this class example:
+
+        >>> assert "BuiltDiagramSet" in repr(built)
+        """
+    def _repr_html_(self) -> builtins.str:
+        r"""
+        Render a notebook preview of the constructed diagram collection.
+
+        Examples
+        --------
+        Using the setup in this class example:
+
+        >>> assert "Built diagrams" in built._repr_html_()
+        """
+
+@typing.final
 class CancellationToken:
     r"""
-    A thread-safe signal for cancelling a long diagram-generation job.
-
-    Pass one token as ``cancellation_token`` and call ``cancel`` from a
-    controlling thread when a large topology search should stop early.
+    Shared cancellation flag, independent of request criteria.
 
     Examples
     --------
     >>> from symbolica.community import hepkit as hep
     >>> token = hep.CancellationToken()
-    >>> token.is_cancelled
-    False
+    >>> run = hep.Run(cancellation=token)
+    >>> token.cancel()
+    >>> assert run.cancellation.is_cancelled
     """
     @property
     def is_cancelled(self) -> builtins.bool:
         r"""
-        Report whether cancellation has been requested.
+        Whether cancellation has been requested.
 
         Examples
         --------
         Using the setup in the ``CancellationToken`` class example:
 
-        >>> token = hep.CancellationToken()
         >>> token.cancel()
-        >>> token.is_cancelled
-        True
+        >>> assert token.is_cancelled
         """
     def __new__(cls) -> CancellationToken:
         r"""
-        Create an independent token that can cancel a generation request.
+        Create an uncancelled shared token.
 
         Examples
         --------
@@ -439,13 +696,14 @@ class CancellationToken:
         """
     def cancel(self) -> None:
         r"""
-        Mark this token as cancelled for all generation requests using it.
+        Request cooperative cancellation.
 
         Examples
         --------
         Using the setup in the ``CancellationToken`` class example:
 
         >>> token.cancel()
+        >>> assert token.is_cancelled
         """
 
 class CffError(FeynkitError):
@@ -458,7 +716,7 @@ class CffError(FeynkitError):
     >>> from symbolica.community import hepkit as hep
     >>> model = hep.Model.phi4()
     >>> process = model.process(["phi", "phi"], ["phi", "phi"])
-    >>> result = process.generate_diagrams(loops=1)
+    >>> result = process.amplitude(loops=hep.Loops.total(1)).generate().build()
     >>> diagram = result.diagrams[0]
     >>> try:
     ...     diagram.build_cff(contracted_edges=[999999])
@@ -478,10 +736,10 @@ class CffGenerator:
     Examples
     --------
     >>> from symbolica import S, E
-    >>> from symbolica.community import hepkit as hep
+    >>> from symbolica.community import hepkit as hep, graph
     >>> model = hep.Model.phi4()
     >>> process = model.process(["phi", "phi"], ["phi", "phi"])
-    >>> result = process.generate_diagrams(loops=1)
+    >>> result = process.amplitude(loops=hep.Loops.total(1), topology=hep.TopologyRules(bridges=graph.Bridges.one_pi_in_loops(), self_energies=hep.Veto.all(), tadpoles=hep.Veto.all(), snails=hep.Veto.massless())).generate().build(hep.NumeratorOptions(naming=hep.Naming.named("D")))
     >>> diagram = result.diagrams[0]
     >>> generator = hep.CffGenerator(max_orientations=1000)
     >>> result = generator.generate(diagram)
@@ -589,10 +847,10 @@ class CffOrientation:
     Examples
     --------
     >>> from symbolica import S, E
-    >>> from symbolica.community import hepkit as hep
+    >>> from symbolica.community import hepkit as hep, graph
     >>> model = hep.Model.phi4()
     >>> process = model.process(["phi", "phi"], ["phi", "phi"])
-    >>> result = process.generate_diagrams(loops=1)
+    >>> result = process.amplitude(loops=hep.Loops.total(1), topology=hep.TopologyRules(bridges=graph.Bridges.one_pi_in_loops(), self_energies=hep.Veto.all(), tadpoles=hep.Veto.all(), snails=hep.Veto.massless())).generate().build(hep.NumeratorOptions(naming=hep.Naming.named("D")))
     >>> diagram = result.diagrams[0]
     >>> result = diagram.build_cff()
     >>> orientation = result.orientations[0]
@@ -646,10 +904,10 @@ class CffReport:
     Examples
     --------
     >>> from symbolica import S, E
-    >>> from symbolica.community import hepkit as hep
+    >>> from symbolica.community import hepkit as hep, graph
     >>> model = hep.Model.phi4()
     >>> process = model.process(["phi", "phi"], ["phi", "phi"])
-    >>> result = process.generate_diagrams(loops=1)
+    >>> result = process.amplitude(loops=hep.Loops.total(1), topology=hep.TopologyRules(bridges=graph.Bridges.one_pi_in_loops(), self_energies=hep.Veto.all(), tadpoles=hep.Veto.all(), snails=hep.Veto.massless())).generate().build(hep.NumeratorOptions(naming=hep.Naming.named("D")))
     >>> diagram = result.diagrams[0]
     >>> result = diagram.build_cff()
     >>> report = result.report
@@ -750,10 +1008,10 @@ class CffResult:
     Examples
     --------
     >>> from symbolica import S, E
-    >>> from symbolica.community import hepkit as hep
+    >>> from symbolica.community import hepkit as hep, graph
     >>> model = hep.Model.phi4()
     >>> process = model.process(["phi", "phi"], ["phi", "phi"])
-    >>> result = process.generate_diagrams(loops=1)
+    >>> result = process.amplitude(loops=hep.Loops.total(1), topology=hep.TopologyRules(bridges=graph.Bridges.one_pi_in_loops(), self_energies=hep.Veto.all(), tadpoles=hep.Veto.all(), snails=hep.Veto.massless())).generate().build(hep.NumeratorOptions(naming=hep.Naming.named("D")))
     >>> diagram = result.diagrams[0]
     >>> result = diagram.build_cff()
     >>> expression = result.to_expression()
@@ -990,10 +1248,10 @@ class CffSurface:
     Examples
     --------
     >>> from symbolica import S, E
-    >>> from symbolica.community import hepkit as hep
+    >>> from symbolica.community import hepkit as hep, graph
     >>> model = hep.Model.phi4()
     >>> process = model.process(["phi", "phi"], ["phi", "phi"])
-    >>> result = process.generate_diagrams(loops=1)
+    >>> result = process.amplitude(loops=hep.Loops.total(1), topology=hep.TopologyRules(bridges=graph.Bridges.one_pi_in_loops(), self_energies=hep.Veto.all(), tadpoles=hep.Veto.all(), snails=hep.Veto.massless())).generate().build(hep.NumeratorOptions(naming=hep.Naming.named("D")))
     >>> diagram = result.diagrams[0]
     >>> result = diagram.build_cff()
     >>> surface = result.surfaces[0]
@@ -1103,10 +1361,10 @@ class CffSurfaceGroup:
     Examples
     --------
     >>> from symbolica import S, E
-    >>> from symbolica.community import hepkit as hep
+    >>> from symbolica.community import hepkit as hep, graph
     >>> model = hep.Model.phi4()
     >>> process = model.process(["phi", "phi"], ["phi", "phi"])
-    >>> result = process.generate_diagrams(loops=1)
+    >>> result = process.amplitude(loops=hep.Loops.total(1), topology=hep.TopologyRules(bridges=graph.Bridges.one_pi_in_loops(), self_energies=hep.Veto.all(), tadpoles=hep.Veto.all(), snails=hep.Veto.massless())).generate().build(hep.NumeratorOptions(naming=hep.Naming.named("D")))
     >>> diagram = result.diagrams[0]
     >>> result = diagram.build_cff()
     >>> group = result.raised_surface_groups()[0]
@@ -1247,6 +1505,99 @@ class ClusteringResult:
         """
 
 @typing.final
+class Counts:
+    r"""
+    Exact discovery totals returned by Request.count(), before numerator construction. Integers have arbitrary precision; sum_inv_aut and physical_weight are exact fractions. Interrupted prefixes have complete=False.
+
+    Examples
+    --------
+    >>> from symbolica.community import hepkit as hep
+    >>> model = hep.Model.standard_model()
+    >>> request = model.process([11, -11], [22, 22]).amplitude(loops=hep.Loops.total(0))
+    >>> counts = request.count()
+    >>> assert counts.complete and counts.diagrams > 0
+    >>> assert counts.sum_inv_aut > 0
+    """
+    @property
+    def skeletons(self) -> builtins.int:
+        r"""
+        Number of complete untyped skeletons accepted by enumeration.
+
+        Examples
+        --------
+        Using the setup in this class example:
+
+        >>> assert counts.skeletons > 0
+        """
+    @property
+    def dressings(self) -> builtins.int:
+        r"""
+        Number of complete field and interaction assignments visited before physical preparation filters.
+
+        Examples
+        --------
+        Using the setup in this class example:
+
+        >>> assert counts.dressings > 0
+        """
+    @property
+    def diagrams(self) -> builtins.int:
+        r"""
+        Number of physically prepared assignments retained before numerator construction.
+
+        Examples
+        --------
+        Using the setup in this class example:
+
+        >>> assert counts.diagrams > 0
+        """
+    @property
+    def sum_inv_aut(self) -> fractions.Fraction:
+        r"""
+        Exact sum of inverse automorphism orders of retained prepared diagrams.
+
+        Examples
+        --------
+        Using the setup in this class example:
+
+        >>> assert counts.sum_inv_aut > 0
+        """
+    @property
+    def physical_weight(self) -> fractions.Fraction:
+        r"""
+        Exact physical weight including signed process factors; distinct from the unsigned inverse-automorphism sum.
+
+        Examples
+        --------
+        Using the setup in this class example:
+
+        >>> weight = counts.physical_weight
+        >>> assert weight.denominator > 0
+        """
+    @property
+    def complete(self) -> builtins.bool:
+        r"""
+        Whether enumeration finished without cancellation.
+
+        Examples
+        --------
+        Using the setup in this class example:
+
+        >>> assert counts.complete
+        """
+    @property
+    def per_loop(self) -> dict[int, LoopCounts]:
+        r"""
+        Loop order to exact totals mapping for the observed search.
+
+        Examples
+        --------
+        Using the setup in this class example:
+
+        >>> assert sum(c.diagrams for c in counts.per_loop.values()) == counts.diagrams
+        """
+
+@typing.final
 class Coupling:
     r"""
     A coupling coefficient associated with interaction vertices.
@@ -1364,6 +1715,61 @@ class Coupling:
         """
 
 @typing.final
+class CutAmplitude:
+    r"""
+    Order and loop constraints applied to each amplitude on a physical cut.
+
+    Examples
+    --------
+    >>> from symbolica.community import hepkit as hep
+    >>> side = hep.CutAmplitude(loops=hep.Range.exact(0))
+    >>> assert 0 in side.loops and 1 not in side.loops
+    """
+    @property
+    def orders(self) -> Orders:
+        r"""
+        Coupling-order constraints for each cut amplitude.
+
+        Examples
+        --------
+        >>> side = hep.CutAmplitude(orders=hep.Orders().min("QED", 3).max("QED", 2))
+        >>> assert side.orders.is_empty()
+        """
+    @property
+    def loops(self) -> Range:
+        r"""
+        Allowed loops in each cut amplitude.
+
+        Examples
+        --------
+        >>> assert 1 not in hep.CutAmplitude(loops=hep.Range.exact(0)).loops
+        """
+    def __new__(cls, *, orders: typing.Optional[Orders] = None, loops: typing.Optional[Range] = None) -> CutAmplitude:
+        r"""
+        Constrain each amplitude separated by a physical cut.
+
+        Examples
+        --------
+        >>> side = hep.CutAmplitude(orders=hep.Orders().max("QED", 2), loops=hep.Range.exact(0))
+        >>> assert not side.orders.is_empty()
+
+        Parameters
+        ----------
+        orders : Orders | None
+            Coupling-order constraints for each cut amplitude.
+        loops : Range | None
+            Loop interval for each cut amplitude; None is unrestricted.
+        """
+    def __repr__(self) -> builtins.str:
+        r"""
+        Return a compact representation of the configured options.
+
+        Examples
+        --------
+        >>> assert "CutAmplitude" in repr(hep.CutAmplitude())
+        """
+
+@typing.final
 class CutPartition:
     r"""
     A separating topology partition, independent of physical final-state cuts.
@@ -1425,7 +1831,7 @@ class CutPropagator:
     Examples
     --------
     >>> from symbolica import S, E
-    >>> from symbolica.community import hepkit as hep
+    >>> from symbolica.community import hepkit as hep, graph
     >>> q0, energy = S("q0", "energy")
     >>> cut = hep.CutPropagator(q0, energy, power=2)
     >>> residue = cut.apply(q0**2, q0)
@@ -1492,6 +1898,93 @@ class CutPropagator:
         """
 
 @typing.final
+class Cuts:
+    r"""
+    Physical cut constraints. Use Selection for forced-cut selection after building.
+
+    Examples
+    --------
+    >>> from symbolica.community import hepkit as hep
+    >>> cuts = hep.Cuts(amplitude=hep.CutAmplitude(loops=hep.Range.exact(0)))
+    >>> assert 1 not in cuts.amplitude.loops
+    """
+    @property
+    def amplitude(self) -> CutAmplitude:
+        r"""
+        Constraints on each amplitude separated by the cut.
+
+        Examples
+        --------
+        >>> assert 1 not in hep.Cuts(amplitude=hep.CutAmplitude(loops=hep.Range.exact(0))).amplitude.loops
+        """
+    @property
+    def blobs(self) -> Range:
+        r"""
+        Allowed number of cut blobs; None is unrestricted.
+
+        Examples
+        --------
+        >>> assert 3 in hep.Cuts().blobs
+        """
+    @property
+    def spectators(self) -> Range:
+        r"""
+        Allowed spectator count; None is unrestricted.
+
+        Examples
+        --------
+        >>> assert 1 not in hep.Cuts(spectators=hep.Range.exact(0)).spectators
+        """
+    @property
+    def sewn_tadpoles(self) -> builtins.bool:
+        r"""
+        Allow sewn tadpole contributions.
+
+        Examples
+        --------
+        >>> assert not hep.Cuts().sewn_tadpoles
+        """
+    @property
+    def symmetrize_left_right(self) -> builtins.bool:
+        r"""
+        Identify equivalent left-right cut assignments.
+
+        Examples
+        --------
+        >>> assert hep.Cuts(symmetrize_left_right=True).symmetrize_left_right
+        """
+    def __new__(cls, *, amplitude: typing.Optional[CutAmplitude] = None, blobs: typing.Optional[Range] = None, spectators: typing.Optional[Range] = None, sewn_tadpoles: builtins.bool = False, symmetrize_left_right: builtins.bool = False) -> Cuts:
+        r"""
+        Configure physical cut discovery.
+
+        Examples
+        --------
+        >>> cuts = hep.Cuts(spectators=hep.Range.exact(0), symmetrize_left_right=True)
+        >>> assert 1 not in cuts.spectators and cuts.symmetrize_left_right
+
+        Parameters
+        ----------
+        amplitude : CutAmplitude | None
+            Constraints on each amplitude separated by the cut.
+        blobs : Range | None
+            Allowed number of cut blobs; None is unrestricted.
+        spectators : Range | None
+            Allowed spectator count; None is unrestricted.
+        sewn_tadpoles : bool
+            Allow sewn tadpole contributions.
+        symmetrize_left_right : bool
+            Identify equivalent left-right cut assignments.
+        """
+    def __repr__(self) -> builtins.str:
+        r"""
+        Return a compact representation of the configured options.
+
+        Examples
+        --------
+        >>> assert "Cuts" in repr(hep.Cuts())
+        """
+
+@typing.final
 class DiagramCut:
     r"""
     A generated physical final-state cut; each side retains its physics metadata.
@@ -1499,10 +1992,10 @@ class DiagramCut:
     Examples
     --------
     >>> from symbolica import S, E
-    >>> from symbolica.community import hepkit as hep
+    >>> from symbolica.community import hepkit as hep, graph
     >>> model = hep.Model.phi4()
     >>> process = model.process(["phi", "phi"], ["phi", "phi"])
-    >>> result = process.generate_cross_section(loops=1)
+    >>> result = process.cross_section(loops=hep.Loops.forward(1), topology=hep.TopologyRules(self_energies=hep.Veto.all(), tadpoles=hep.Veto.all(), snails=hep.Veto.massless()), cuts=hep.Cuts(blobs=hep.Range.exact(1), spectators=hep.Range.exact(0))).generate().build(hep.NumeratorOptions(naming=hep.Naming.named("D")))
     >>> diagram = result.diagrams[0]
     >>> cut = diagram.cuts[0]
     >>> factors = cut.propagators()
@@ -1621,10 +2114,10 @@ class DiagramCutSide:
     Examples
     --------
     >>> from symbolica import S, E
-    >>> from symbolica.community import hepkit as hep
+    >>> from symbolica.community import hepkit as hep, graph
     >>> model = hep.Model.phi4()
     >>> process = model.process(["phi", "phi"], ["phi", "phi"])
-    >>> result = process.generate_cross_section(loops=1)
+    >>> result = process.cross_section(loops=hep.Loops.forward(1), topology=hep.TopologyRules(self_energies=hep.Veto.all(), tadpoles=hep.Veto.all(), snails=hep.Veto.massless()), cuts=hep.Cuts(blobs=hep.Range.exact(1), spectators=hep.Range.exact(0))).generate().build(hep.NumeratorOptions(naming=hep.Naming.named("D")))
     >>> diagram = result.diagrams[0]
     >>> cut = diagram.cuts[0]
     >>> side = cut.left
@@ -1675,10 +2168,10 @@ class DiagramEdge:
     Examples
     --------
     >>> from symbolica import S, E
-    >>> from symbolica.community import hepkit as hep
+    >>> from symbolica.community import hepkit as hep, graph
     >>> model = hep.Model.phi4()
     >>> process = model.process(["phi", "phi"], ["phi", "phi"])
-    >>> result = process.generate_diagrams(loops=1)
+    >>> result = process.amplitude(loops=hep.Loops.total(1), topology=hep.TopologyRules(bridges=graph.Bridges.one_pi_in_loops(), self_energies=hep.Veto.all(), tadpoles=hep.Veto.all(), snails=hep.Veto.massless())).generate().build(hep.NumeratorOptions(naming=hep.Naming.named("D")))
     >>> diagram = result.diagrams[0]
     >>> edge = diagram.internal_edges[0]
     >>> endpoints = (edge.source, edge.target)
@@ -2002,7 +2495,7 @@ class DiagramError(FeynkitError):
     >>> from symbolica.community import hepkit as hep
     >>> model = hep.Model.phi4()
     >>> process = model.process(["phi", "phi"], ["phi", "phi"])
-    >>> result = process.generate_diagrams(loops=1)
+    >>> result = process.amplitude(loops=hep.Loops.total(1)).generate().build()
     >>> diagram = result.diagrams[0]
     >>> try:
     ...     diagram.with_loop_momentum_edges([])
@@ -2025,7 +2518,7 @@ class DiagramGroup:
     >>> from symbolica.community import hepkit as hep
     >>> model = hep.Model.phi4()
     >>> process = model.process(["phi", "phi"], ["phi", "phi"])
-    >>> result = process.generate_diagrams(loops=1)
+    >>> result = process.amplitude(loops=hep.Loops.total(1)).generate().build()
     >>> diagram = result.diagrams[0]
     >>> group = result.groups[0]
     >>> master_diagram = result.diagrams[group.master]
@@ -2100,6 +2593,153 @@ class DiagramHalfEdge:
         Examples
         --------
         >>> incoming = [half.id for half in diagram.half_edges if half.flow == "sink"]
+        """
+
+@typing.final
+class DiagramIterator:
+    r"""
+    An owning iterator returned by iter(discovered); its backing result remains alive while the iterator is retained.
+
+    Examples
+    --------
+    >>> from symbolica.community import hepkit as hep
+    >>> model = hep.Model.standard_model()
+    >>> request = model.process([11, -11], [22, 22]).amplitude(loops=hep.Loops.total(0))
+    >>> discovered = request.generate()
+    >>> iterator = iter(discovered)
+    >>> assert next(iterator).loops == 0
+    """
+    def __iter__(self) -> DiagramIterator:
+        r"""
+        Return this iterator without resetting its position.
+
+        Examples
+        --------
+        Using the setup in this class example:
+
+        >>> assert iter(iterator) is iterator
+        """
+    def __next__(self) -> typing.Optional[PreparedDiagram]:
+        r"""
+        Return the next retained item, or raise StopIteration at exhaustion.
+
+        Examples
+        --------
+        Using the setup in this class example:
+
+        >>> iterator = iter(discovered)
+        >>> assert next(iterator).loops == 0
+        """
+
+@typing.final
+class DiagramSet:
+    r"""
+    Compact physical discoveries returned by Request.generate(). Iteration does not construct Feynman diagrams; build() explicitly constructs numerators.
+
+    Examples
+    --------
+    >>> from symbolica.community import hepkit as hep
+    >>> model = hep.Model.standard_model()
+    >>> request = model.process([11, -11], [22, 22]).amplitude(loops=hep.Loops.total(0))
+    >>> discovered = request.generate()
+    >>> assert discovered.report.completed
+    >>> assert all(diagram.loops == 0 for diagram in discovered)
+    """
+    @property
+    def report(self) -> GenerationReport:
+        r"""
+        Owned discovery report, including completion and retained counts.
+
+        Examples
+        --------
+        Using the setup in this class example:
+
+        >>> assert discovered.report.retained_count == len(discovered)
+        """
+    @property
+    def skeletons(self) -> Skeletons:
+        r"""
+        Shared sequence of retained skeleton snapshots.
+
+        Examples
+        --------
+        Using the setup in this class example:
+
+        >>> assert all(skeleton.loops == 0 for skeleton in discovered.skeletons)
+        """
+    def __len__(self) -> builtins.int:
+        r"""
+        Number of retained items in this shared sequence.
+
+        Examples
+        --------
+        Using the setup in this class example:
+
+        >>> assert len(discovered) > 0
+        """
+    def __getitem__(self, index: builtins.int) -> PreparedDiagram:
+        r"""
+        Access one retained item by index. Negative indices count from the end; invalid indices raise IndexError.
+
+        Examples
+        --------
+        Using the setup in this class example:
+
+        >>> assert discovered[0].loops == 0
+
+        Parameters
+        ----------
+        index : int
+            Sequence index, with Python negative-index semantics.
+        """
+    def __iter__(self) -> DiagramIterator:
+        r"""
+        Iterate the retained sequence without an eager Python list.
+
+        Examples
+        --------
+        Using the setup in this class example:
+
+        >>> assert sum(1 for item in discovered) == len(discovered)
+        """
+    def build(self, options: typing.Optional[NumeratorOptions] = None, *, run: typing.Optional[Run] = None) -> BuiltDiagramSet:
+        r"""
+        Construct Feynman diagrams and numerators from these compact discoveries.
+
+        Examples
+        --------
+        Using the setup in this class example:
+
+        >>> built = discovered.build(hep.NumeratorOptions(naming=hep.Naming.named("sample")))
+        >>> assert len(built) == len(discovered)
+
+        Parameters
+        ----------
+        options : NumeratorOptions | None
+            Numerator, naming, zero-color filtering, and loop-momentum-basis settings.
+        run : Run | None
+            Execution settings, cancellation, and progress callback for this build.
+        """
+    def _repr_html_(self) -> builtins.str:
+        r"""
+        Render discovery counts and completion without constructing diagrams or numerators.
+
+        Examples
+        --------
+        Using the setup in this class example:
+
+        >>> html = discovered._repr_html_()
+        >>> assert "retained diagrams" in html
+        """
+    def __repr__(self) -> builtins.str:
+        r"""
+        Describe the compact result count and completion state.
+
+        Examples
+        --------
+        Using the setup in this class example:
+
+        >>> assert "completed=true" in repr(discovered)
         """
 
 @typing.final
@@ -2230,10 +2870,10 @@ class DiagramThresholdCandidate:
     physical final-state cuts are available separately through ``diagram.cuts``.
 
     >>> from symbolica import S, E
-    >>> from symbolica.community import hepkit as hep
+    >>> from symbolica.community import hepkit as hep, graph
     >>> model = hep.Model.phi4()
     >>> process = model.process(["phi", "phi"], ["phi", "phi"])
-    >>> result = process.generate_cross_section(loops=1)
+    >>> result = process.cross_section(loops=hep.Loops.forward(1), topology=hep.TopologyRules(self_energies=hep.Veto.all(), tadpoles=hep.Veto.all(), snails=hep.Veto.massless()), cuts=hep.Cuts(blobs=hep.Range.exact(1), spectators=hep.Range.exact(0))).generate().build(hep.NumeratorOptions(naming=hep.Naming.named("D")))
     >>> diagram = result.diagrams[0]
     >>> cut = diagram.cuts[0]
     >>> thresholds = diagram.topology_threshold_candidates
@@ -2296,10 +2936,10 @@ class DiagramVertex:
     Examples
     --------
     >>> from symbolica import S, E
-    >>> from symbolica.community import hepkit as hep
+    >>> from symbolica.community import hepkit as hep, graph
     >>> model = hep.Model.phi4()
     >>> process = model.process(["phi", "phi"], ["phi", "phi"])
-    >>> result = process.generate_diagrams(loops=1)
+    >>> result = process.amplitude(loops=hep.Loops.total(1), topology=hep.TopologyRules(bridges=graph.Bridges.one_pi_in_loops(), self_energies=hep.Veto.all(), tadpoles=hep.Veto.all(), snails=hep.Veto.massless())).generate().build(hep.NumeratorOptions(naming=hep.Naming.named("D")))
     >>> diagram = result.diagrams[0]
     >>> vertex = diagram.vertices[0]
     >>> interaction = model.vertex_rule(vertex.interaction)
@@ -2565,7 +3205,7 @@ class FeynmanDiagram:
     r"""
     A generated or imported Feynman diagram, with particles, momenta and Feynman rules.
 
-    Obtain diagrams from ``Model.process(...).generate_diagrams().diagrams``;
+    Obtain diagrams from ``Model.process(...).amplitude(loops=hep.Loops.total(0)).generate().build(hep.NumeratorOptions(naming=hep.Naming.named("D"))).diagrams``;
     use ``from_json`` or ``from_dot`` to restore a saved diagram with its model.
     There is no direct Python constructor. ``internal_edges`` are propagators,
     whereas ``external_edges`` carry the scattering or decay states.
@@ -2583,10 +3223,10 @@ class FeynmanDiagram:
     renders the graph. The methods below reuse this setup.
 
     >>> from symbolica import S, E
-    >>> from symbolica.community import hepkit as hep
+    >>> from symbolica.community import hepkit as hep, graph
     >>> model = hep.Model.phi4()
     >>> process = model.process(["phi", "phi"], ["phi", "phi"])
-    >>> result = process.generate_diagrams(loops=1)
+    >>> result = process.amplitude(loops=hep.Loops.total(1), topology=hep.TopologyRules(bridges=graph.Bridges.one_pi_in_loops(), self_energies=hep.Veto.all(), tadpoles=hep.Veto.all(), snails=hep.Veto.massless())).generate().build(hep.NumeratorOptions(naming=hep.Naming.named("D")))
     >>> diagram = result.diagrams[0]
     >>> diagram.validate()
     >>> assert diagram.loop_count == 1
@@ -2627,7 +3267,7 @@ class FeynmanDiagram:
         --------
         Using the setup in the ``FeynmanDiagram`` class example:
 
-        >>> selected = process.generate_diagrams(loops=1, select_diagrams=[diagram.id])
+        >>> selected = process.amplitude(loops=hep.Loops.total(1), topology=hep.TopologyRules(bridges=graph.Bridges.one_pi_in_loops(), self_energies=hep.Veto.all(), tadpoles=hep.Veto.all(), snails=hep.Veto.massless())).generate().build(hep.NumeratorOptions(naming=hep.Naming.named("D"))).select(hep.Selection(select=[diagram.id]))
         >>> assert len(selected.diagrams) == 1
         """
     @property
@@ -3027,7 +3667,7 @@ class FeynmanDiagram:
 
         Examples
         --------
-        >>> from symbolica.community import hepkit as hep
+        >>> from symbolica.community import hepkit as hep, graph
         >>> model = hep.Model.phi4()
         >>> diagram = hep.FeynmanDiagram.from_dot(model, '''digraph sunrise {
         ...     ext [style=invis];
@@ -3333,9 +3973,9 @@ class FeynmanDiagram:
         Reduce a vacuum graph after explicitly selecting its integrated momentum head:
 
         >>> from symbolica import S, E
-        >>> from symbolica.community import hepkit as hep
+        >>> from symbolica.community import hepkit as hep, graph
         >>> model = hep.Model.phi4()
-        >>> vacuum_diagram = model.process([], []).generate_diagrams(loops=2, factorized_loop_topologies_count_range=None).diagrams[0]
+        >>> vacuum_diagram = model.process([], []).amplitude(loops=hep.Loops.total(2)).generate().build().diagrams[0]
         >>> reducer = hep.TensorReducer(E("4"), integrated=[E("gammalooprs::Q")])
         >>> scalar_numerator = vacuum_diagram.reduce_tensor_numerator(reducer)
 
@@ -3364,9 +4004,9 @@ class FeynmanDiagram:
         Construct scalar numerator graphs for a vacuum diagram:
 
         >>> from symbolica import S, E
-        >>> from symbolica.community import hepkit as hep
+        >>> from symbolica.community import hepkit as hep, graph
         >>> model = hep.Model.phi4()
-        >>> vacuum_diagram = model.process([], []).generate_diagrams(loops=2, factorized_loop_topologies_count_range=None).diagrams[0]
+        >>> vacuum_diagram = model.process([], []).amplitude(loops=hep.Loops.total(2)).generate().build().diagrams[0]
         >>> reducer = hep.TensorReducer(E("4"), integrated=[E("gammalooprs::Q")])
         >>> scalar_graphs = vacuum_diagram.reduce_tensor_graphs(reducer)
 
@@ -4236,7 +4876,7 @@ class GenerationError(FeynkitError):
     >>> model = hep.Model.phi4()
     >>> process = model.process(["phi", "phi"], ["phi", "phi"])
     >>> try:
-    ...     process.generate_diagrams(self_energy=hep.SelfEnergyFilterOptions(only_scaleless=True))
+    ...     process.amplitude(loops=hep.Loops.forward(1))
     ... except hep.GenerationError as error:
     ...     message = str(error)
     """
@@ -4245,330 +4885,153 @@ class GenerationError(FeynkitError):
 @typing.final
 class GenerationProgress:
     r"""
-    A progress snapshot delivered on the Python thread running generation.
-
-    Counts restart at each stage and measure processed work, not retained diagrams.
-    ``total`` is None when the amount of work is not yet known.
+    An owned progress snapshot delivered to Run.progress. It remains readable after the callback returns.
 
     Examples
     --------
-    >>> from symbolica import S, E
     >>> from symbolica.community import hepkit as hep
-    >>> model = hep.Model.phi4()
-    >>> process = model.process(["phi", "phi"], ["phi", "phi"])
-    >>> snapshots = []
-    >>> def report(progress):
-    ...     snapshots.append((progress.stage, progress.completed, progress.total))
-    >>> result = process.generate_diagrams(loops=1, progress=report)
-    >>> assert result.report.completed
+    >>> model = hep.Model.standard_model()
+    >>> request = model.process([11, -11], [22, 22]).amplitude(loops=hep.Loops.total(0))
+    >>> events = []
+    >>> run = hep.Run(progress=lambda event: events.append(event) or True)
+    >>> counts = request.count(run=run)
+    >>> assert counts.complete and events
+    >>> assert all(event.completed >= 0 for event in events)
     """
-    @property
-    def stage(self) -> builtins.str:
-        r"""
-        Pipeline stage: topologies (diagram enumeration),
-        interaction_filters, numerators, selection, filter_zero_color, grouping_preparation,
-        grouping_samples, grouping_comparison, grouping, complete or cancelled.
-
-        Examples
-        --------
-        Using the setup in the ``GenerationProgress`` class example:
-
-        >>> stages = []
-        >>> def report(progress):
-        ...     stages.append(progress.stage)
-        >>> result = process.generate_diagrams(progress=report)
-        """
     @property
     def completed(self) -> builtins.int:
         r"""
-        Work items processed within this stage.
+        Exact number of completed items in this progress stage.
 
         Examples
         --------
-        Using the setup in the ``GenerationProgress`` class example:
+        Using the setup in this class example:
 
-        >>> counts = []
-        >>> def report(progress):
-        ...     counts.append((progress.stage, progress.completed))
-        >>> result = process.generate_diagrams(progress=report)
-        """
-    @property
-    def total(self) -> typing.Optional[builtins.int]:
-        r"""
-        Stage total, or None while the amount of work is unknown.
-
-        Examples
-        --------
-        Using the setup in the ``GenerationProgress`` class example:
-
-        >>> totals = []
-        >>> def report(progress):
-        ...     totals.append((progress.stage, progress.total))
-        >>> result = process.generate_diagrams(progress=report)
+        >>> assert all(event.completed >= 0 for event in events)
         """
     @property
     def zero_numerator_count(self) -> builtins.int:
         r"""
-        Zero numerators filtered so far in this generation run.
+        Exact number of zero numerators reported removed so far.
 
         Examples
         --------
-        Using the setup in the ``GenerationProgress`` class example:
+        Using the setup in this class example:
 
-        >>> zeroes = []
-        >>> result = process.generate_diagrams(
-        ...     filter_zero_color=True,
-        ...     progress=lambda progress: zeroes.append(progress.zero_numerator_count))
-        >>> assert zeroes[-1] == result.report.zero_numerator_count
+        >>> assert all(event.zero_numerator_count == 0 for event in events)
+        """
+    @property
+    def stage(self) -> Stage:
+        r"""
+        Stage that produced this snapshot.
+
+        Examples
+        --------
+        Using the setup in this class example:
+
+        >>> assert any(event.stage == hep.Stage.Skeletons for event in events)
+        """
+    @property
+    def total(self) -> int | None:
+        r"""
+        Expected stage total when known, otherwise None.
+
+        Examples
+        --------
+        Using the setup in this class example:
+
+        >>> known_totals = [event.total for event in events if event.total is not None]
+        >>> assert all(total >= 0 for total in known_totals)
         """
 
 @typing.final
 class GenerationReport:
     r"""
-    Counts and completion status from a diagram-generation run.
-
-    The report distinguishes explored topologies and interaction assignments
-    from the physical diagrams retained after numerator checks.
+    An owned report from a discovered or built diagram set. A cancelled run returns completed=False.
 
     Examples
     --------
-    >>> from symbolica import S, E
     >>> from symbolica.community import hepkit as hep
-    >>> model = hep.Model.phi4()
-    >>> process = model.process(["phi", "phi"], ["phi", "phi"])
-    >>> result = process.generate_diagrams(loops=1)
-    >>> diagram = result.diagrams[0]
-    >>> report = result.report
-    >>> assert report.completed
-    >>> assert report.retained_count == len(result.diagrams)
+    >>> model = hep.Model.standard_model()
+    >>> request = model.process([11, -11], [22, 22]).amplitude(loops=hep.Loops.total(0))
+    >>> discovered = request.generate()
+    >>> report = discovered.report
+    >>> assert report.completed and report.retained_count == len(discovered)
     """
     @property
     def topology_count(self) -> builtins.int:
         r"""
-        Return the number of complete untyped topologies enumerated during generation.
-        Loop orders that the coupling orders rule out, and requests with external
-        charges that no vertex balances or with an empty coupling-order or fermion-loop
-        range, are not enumerated and add none.
+        Complete untyped topologies accepted during enumeration; infeasible loop partitions contribute none.
 
         Examples
         --------
-        Using the setup in the ``GenerationReport`` class example:
+        Using the setup in this class example:
 
-        >>> assert report.topology_count >= 1
+        >>> assert report.topology_count > 0
         """
     @property
     def interaction_assignment_count(self) -> builtins.int:
         r"""
-        Return the number of interaction assignments examined.
+        Complete assignments before cut and charge-conjugation filters.
 
         Examples
         --------
-        Using the setup in the ``GenerationReport`` class example:
+        Using the setup in this class example:
 
-        >>> assignments_tested = report.interaction_assignment_count
+        >>> assert report.interaction_assignment_count > 0
         """
     @property
     def retained_count(self) -> builtins.int:
         r"""
-        Return the number of diagrams retained after removing zero numerators.
+        Diagrams retained at the stage that produced this report.
 
         Examples
         --------
-        Using the setup in the ``GenerationReport`` class example:
+        Using the setup in this class example:
 
-        >>> assert report.retained_count == len(result.diagrams)
+        >>> assert report.retained_count > 0
         """
     @property
     def zero_numerator_count(self) -> builtins.int:
         r"""
-        Return the number of diagrams removed for having an exact zero numerator.
+        Exact number of zero numerators removed by the reported operation.
 
         Examples
         --------
-        Using the setup in the ``GenerationReport`` class example:
+        Using the setup in this class example:
 
-        >>> removed_zeroes = report.zero_numerator_count
+        >>> assert report.zero_numerator_count == 0
         """
     @property
     def completed(self) -> builtins.bool:
         r"""
-        Report whether generation finished without cancellation.
+        Whether the reported operation completed without cancellation.
 
         Examples
         --------
-        Using the setup in the ``GenerationReport`` class example:
+        Using the setup in this class example:
 
-        >>> assert report.completed  # False means generation was cancelled
+        >>> assert report.completed
         """
     def __repr__(self) -> builtins.str:
         r"""
-        Return a concise constructor-style generation summary.
+        Return the report counters as a compact diagnostic.
 
         Examples
         --------
-        Using the setup in the ``GenerationReport`` class example:
+        Using the setup in this class example:
 
-        >>> print(result.report)
+        >>> assert "retained_count" in repr(report)
         """
     def _repr_html_(self) -> builtins.str:
         r"""
-        Render generation statistics as a compact HTML table.
+        Render the report counters as a notebook table.
 
         Examples
         --------
-        Using the setup in the ``GenerationReport`` class example:
+        Using the setup in this class example:
 
-        >>> from IPython.display import display
-        >>> display(report)
-        """
-    def _repr_pretty_(self, pretty: typing.Any, cycle: builtins.bool) -> None:
-        r"""
-        Write a concise generation summary to an IPython pretty printer.
-
-        Examples
-        --------
-        Using the setup in the ``GenerationReport`` class example:
-
-        >>> from IPython.lib.pretty import pretty
-        >>> text = pretty(report)
-
-        Parameters
-        ----------
-        pretty : object
-            The IPython pretty-printer object.
-        cycle : bool
-            Whether this object is part of a recursive formatting cycle.
-        """
-
-@typing.final
-class GenerationResult:
-    r"""
-    Feynman diagrams and diagnostics produced for one process.
-
-    The result retains generated diagrams in deterministic order and may also
-    contain numerator-equivalence groups for efficient downstream evaluation.
-
-    Examples
-    --------
-    >>> from symbolica import S, E
-    >>> from symbolica.community import hepkit as hep
-    >>> model = hep.Model.phi4()
-    >>> process = model.process(["phi", "phi"], ["phi", "phi"])
-    >>> result = process.generate_diagrams(loops=1)
-    >>> diagram = result.diagrams[0]
-    >>> diagrams = result.diagrams
-    >>> assert result.report.retained_count == len(diagrams)
-    """
-    @property
-    def diagrams(self) -> builtins.list[FeynmanDiagram]:
-        r"""
-        Return every retained diagram in generated order.
-
-        Examples
-        --------
-        Using the setup in the ``GenerationResult`` class example:
-
-        >>> numerators = [diagram.numerator_expression() for diagram in result.diagrams]
-        """
-    @property
-    def groups(self) -> builtins.list[DiagramGroup]:
-        r"""
-        Return the numerator groups in deterministic master-index order.
-
-        Examples
-        --------
-        Using the setup in the ``GenerationResult`` class example:
-
-        >>> masters = [result.diagrams[group.master] for group in result.groups]
-        """
-    @property
-    def report(self) -> GenerationReport:
-        r"""
-        Return generation counts and completion status.
-
-        Examples
-        --------
-        Using the setup in the ``GenerationResult`` class example:
-
-        >>> assert result.report.completed
-        """
-    def __len__(self) -> builtins.int:
-        r"""
-        Return the number of retained diagrams.
-
-        Examples
-        --------
-        Using the setup in the ``GenerationResult`` class example:
-
-        >>> number_of_diagrams = len(result)
-        """
-    def __getitem__(self, index: builtins.int) -> FeynmanDiagram:
-        r"""
-        Return one retained diagram by generated-order index.
-
-        Examples
-        --------
-        Using the setup in the ``GenerationResult`` class example:
-
-        >>> first_diagram = result[0]
-
-        Parameters
-        ----------
-        index : int
-            Zero-based index; negative indices count from the end.
-        """
-    def __iter__(self) -> collections.abc.Iterator[FeynmanDiagram]:
-        r"""
-        Iterate over retained diagrams in deterministic generated order.
-
-        Examples
-        --------
-        Using the setup in the ``GenerationResult`` class example:
-
-        >>> one_loop = [diagram for diagram in result if diagram.loop_count == 1]
-        """
-    def __repr__(self) -> builtins.str:
-        r"""
-        Return a concise summary of the retained diagrams and groups.
-
-        Examples
-        --------
-        Using the setup in the ``GenerationResult`` class example:
-
-        >>> print(result)
-        """
-    def _repr_html_(self) -> builtins.str:
-        r"""
-        Render a thumbnail strip and one shared interactive diagram viewer.
-
-        At most six diagrams are rendered so that displaying a large generation
-        result remains responsive. Access ``result.diagrams`` to inspect the
-        complete collection.
-
-        Examples
-        --------
-        Using the setup in the ``GenerationResult`` class example:
-
-        >>> from IPython.display import display
-        >>> display(result)
-        """
-    def _repr_pretty_(self, pretty: typing.Any, cycle: builtins.bool) -> None:
-        r"""
-        Write a concise result summary to an IPython pretty printer.
-
-        Examples
-        --------
-        Using the setup in the ``GenerationResult`` class example:
-
-        >>> from IPython.lib.pretty import pretty
-        >>> text = pretty(result)
-
-        Parameters
-        ----------
-        pretty : object
-            The IPython pretty-printer object.
-        cycle : bool
-            Whether this object is part of a recursive formatting cycle.
+        >>> assert "<table>" in report._repr_html_()
         """
 
 @typing.final
@@ -4576,7 +5039,7 @@ class GroupMember:
     r"""
     One diagram and its numerator ratio inside a grouped result.
 
-    A group member points into ``GenerationResult.diagrams`` and expresses its
+    A group member points into ``BuiltDiagramSet.diagrams`` and expresses its
     numerator relative to the group's master diagram.
 
     Examples
@@ -4585,7 +5048,7 @@ class GroupMember:
     >>> from symbolica.community import hepkit as hep
     >>> model = hep.Model.phi4()
     >>> process = model.process(["phi", "phi"], ["phi", "phi"])
-    >>> result = process.generate_diagrams(loops=1)
+    >>> result = process.amplitude(loops=hep.Loops.total(1)).generate().build()
     >>> diagram = result.diagrams[0]
     >>> group = result.groups[0]
     >>> member = group.members[0]
@@ -4628,7 +5091,7 @@ class GroupMember:
     @property
     def diagram(self) -> builtins.int:
         r"""
-        Return the collapsed master index in ``GenerationResult.diagrams``.
+        Return the collapsed master index in ``BuiltDiagramSet.diagrams``.
 
         Examples
         --------
@@ -4672,6 +5135,51 @@ class GroupMember:
         ...                  * member.ratio_expression()
         ...                  * master.numerator_expression())
         >>> reconstructed
+        """
+
+@typing.final
+class Grouping:
+    r"""
+    Compare completed numerators exactly, up to a sign, or up to a scalar.
+
+    Examples
+    --------
+    >>> from symbolica.community import hepkit as hep
+    >>> grouping = hep.Grouping("up_to_sign", number_of_numerical_samples=7)
+    >>> assert "UpToSign" in repr(grouping)
+    """
+    def __new__(cls, mode: builtins.str = 'none', *, numerical_sample_seed: builtins.int = 3, number_of_numerical_samples: builtins.int = 5, differentiate_particle_masses_only: builtins.bool = True, fully_numerical_substitution: builtins.bool = False, check_canonical_numerator: builtins.bool = False, symmetric_polarizations: builtins.bool = False) -> Grouping:
+        r"""
+        Select the numerator equivalence relation and comparison settings.
+
+        Examples
+        --------
+        >>> assert "Identical" in repr(hep.Grouping("identical"))
+
+        Parameters
+        ----------
+        mode : str
+            One of none, identical, up_to_sign, or up_to_scalar.
+        numerical_sample_seed : int
+            Seed for deterministic numerical comparison samples.
+        number_of_numerical_samples : int
+            Number of comparison samples.
+        differentiate_particle_masses_only : bool
+            Distinguish particle masses while sharing other substitutions.
+        fully_numerical_substitution : bool
+            Substitute all supported numerator variables numerically.
+        check_canonical_numerator : bool
+            Also compare canonicalized numerators.
+        symmetric_polarizations : bool
+            Use symmetric external polarization treatment during comparison.
+        """
+    def __repr__(self) -> builtins.str:
+        r"""
+        Return a compact representation of the configured options.
+
+        Examples
+        --------
+        >>> assert "Grouping" in repr(hep.Grouping())
         """
 
 @typing.final
@@ -4832,7 +5340,7 @@ class IntegralFamily:
     examples below reuse this family and its symbols.
 
     >>> from symbolica import S, E
-    >>> from symbolica.community import hepkit as hep
+    >>> from symbolica.community import hepkit as hep, graph
     >>> D, k, p, s = S("D", "k", "p", "s")
     >>> d1, d2, x1, x2 = S("d1", "d2", "x1", "x2")
     >>> kin = hep.Kinematics(D, momenta=[k, p]).with_scalar_product(p, p, s)
@@ -4951,10 +5459,10 @@ class IntegralFamily:
         Examples
         --------
         >>> from symbolica import S, E
-        >>> from symbolica.community import hepkit as hep
+        >>> from symbolica.community import hepkit as hep, graph
         >>> model = hep.Model.phi4()
         >>> process = model.process(["phi", "phi"], ["phi", "phi"])
-        >>> result = process.generate_diagrams(loops=1)
+        >>> result = process.amplitude(loops=hep.Loops.total(1), topology=hep.TopologyRules(bridges=graph.Bridges.one_pi_in_loops(), self_energies=hep.Veto.all(), tadpoles=hep.Veto.all(), snails=hep.Veto.massless())).generate().build(hep.NumeratorOptions(naming=hep.Naming.named("D")))
         >>> diagram = result.diagrams[0]
         >>> family = hep.IntegralFamily.from_diagram(diagram)
         >>> assert family.is_complete
@@ -4977,7 +5485,7 @@ class IntegralFamily:
         Examples
         --------
         >>> from symbolica import S, E
-        >>> from symbolica.community import hepkit as hep
+        >>> from symbolica.community import hepkit as hep, graph
         >>> D, k, p, s = S("D", "k", "p", "s")
         >>> d1, d2, x1, x2 = S("d1", "d2", "x1", "x2")
         >>> kin = hep.Kinematics(D, momenta=[k, p]).with_scalar_product(p, p, s)
@@ -5442,7 +5950,7 @@ class IntegralMapping:
     Examples
     --------
     >>> from symbolica import S, E
-    >>> from symbolica.community import hepkit as hep
+    >>> from symbolica.community import hepkit as hep, graph
     >>> D, k, p, s = S("D", "k", "p", "s")
     >>> d1, d2, x1, x2 = S("d1", "d2", "x1", "x2")
     >>> kin = hep.Kinematics(D, momenta=[k, p]).with_scalar_product(p, p, s)
@@ -6183,6 +6691,77 @@ class LoadedModel:
         """
 
 @typing.final
+class LoopCounts:
+    r"""
+    Exact discovery totals for a single loop order, obtained from Counts.per_loop.
+
+    Examples
+    --------
+    >>> from symbolica.community import hepkit as hep
+    >>> model = hep.Model.standard_model()
+    >>> request = model.process([11, -11], [22, 22]).amplitude(loops=hep.Loops.total(0))
+    >>> counts = request.count()
+    >>> loop_counts = counts.per_loop[0]
+    >>> assert loop_counts.diagrams == counts.diagrams
+    """
+    @property
+    def skeletons(self) -> builtins.int:
+        r"""
+        Number of complete untyped skeletons accepted by enumeration.
+
+        Examples
+        --------
+        Using the setup in this class example:
+
+        >>> assert loop_counts.skeletons > 0
+        """
+    @property
+    def dressings(self) -> builtins.int:
+        r"""
+        Number of complete field and interaction assignments visited before physical preparation filters.
+
+        Examples
+        --------
+        Using the setup in this class example:
+
+        >>> assert loop_counts.dressings > 0
+        """
+    @property
+    def diagrams(self) -> builtins.int:
+        r"""
+        Number of physically prepared assignments retained before numerator construction.
+
+        Examples
+        --------
+        Using the setup in this class example:
+
+        >>> assert loop_counts.diagrams > 0
+        """
+    @property
+    def sum_inv_aut(self) -> fractions.Fraction:
+        r"""
+        Exact sum of inverse automorphism orders of retained prepared diagrams.
+
+        Examples
+        --------
+        Using the setup in this class example:
+
+        >>> assert loop_counts.sum_inv_aut > 0
+        """
+    @property
+    def physical_weight(self) -> fractions.Fraction:
+        r"""
+        Exact physical weight including signed process factors; distinct from the unsigned inverse-automorphism sum.
+
+        Examples
+        --------
+        Using the setup in this class example:
+
+        >>> weight = loop_counts.physical_weight
+        >>> assert weight.denominator > 0
+        """
+
+@typing.final
 class LoopMomentumBasis:
     r"""
     A consistent routing of independent loop and external momenta.
@@ -6193,10 +6772,10 @@ class LoopMomentumBasis:
     Examples
     --------
     >>> from symbolica import S, E
-    >>> from symbolica.community import hepkit as hep
+    >>> from symbolica.community import hepkit as hep, graph
     >>> model = hep.Model.phi4()
     >>> process = model.process(["phi", "phi"], ["phi", "phi"])
-    >>> result = process.generate_diagrams(loops=1)
+    >>> result = process.amplitude(loops=hep.Loops.total(1), topology=hep.TopologyRules(bridges=graph.Bridges.one_pi_in_loops(), self_energies=hep.Veto.all(), tadpoles=hep.Veto.all(), snails=hep.Veto.massless())).generate().build(hep.NumeratorOptions(naming=hep.Naming.named("D")))
     >>> diagram = result.diagrams[0]
     >>> basis = diagram.loop_momentum_basis
     >>> assert len(basis.loop_edges) == diagram.loop_count
@@ -6410,6 +6989,74 @@ class LoopMomentumBasis:
         """
 
 @typing.final
+class Loops:
+    r"""
+    A finite loop interval with an explicit amplitude or forward-graph domain.
+
+    Examples
+    --------
+    >>> from symbolica.community import hepkit as hep
+    >>> loops = hep.Loops.total((0, 2))
+    >>> assert loops.minimum == 0 and loops.maximum == 2
+    """
+    @property
+    def minimum(self) -> builtins.int:
+        r"""
+        Inclusive minimum loop count.
+
+        Examples
+        --------
+        >>> assert hep.Loops.total((0, 2)).minimum == 0
+        """
+    @property
+    def maximum(self) -> builtins.int:
+        r"""
+        Inclusive maximum loop count.
+
+        Examples
+        --------
+        >>> assert hep.Loops.total((0, 2)).maximum == 2
+        """
+    @staticmethod
+    def total(range: builtins.int | tuple[builtins.int, builtins.int]) -> Loops:
+        r"""
+        Specify total amplitude loops, including vacuum amplitudes.
+
+        Examples
+        --------
+        >>> loops = hep.Loops.total((0, 2))
+        >>> assert loops.minimum == 0 and loops.maximum == 2
+
+        Parameters
+        ----------
+        range : int | tuple[int, int]
+            Exact loop count or finite inclusive bounds.
+        """
+    @staticmethod
+    def forward(range: builtins.int | tuple[builtins.int, builtins.int]) -> Loops:
+        r"""
+        Specify loops of the sewn forward graph for a cross section.
+
+        Examples
+        --------
+        >>> loops = hep.Loops.forward((0, 2))
+        >>> assert loops.minimum == 0 and loops.maximum == 2
+
+        Parameters
+        ----------
+        range : int | tuple[int, int]
+            Exact loop count or finite inclusive bounds.
+        """
+    def __repr__(self) -> builtins.str:
+        r"""
+        Return a compact representation of the configured options.
+
+        Examples
+        --------
+        >>> assert "Loops" in repr(hep.Loops.total(0))
+        """
+
+@typing.final
 class LorentzStructure:
     r"""
     A reusable spin-dependent tensor structure in an interaction rule.
@@ -6522,7 +7169,7 @@ class Model:
     >>> model = hep.Model.standard_model()
     >>> photon = model.particle("a")
     >>> process = model.process(["e-", "e+"], ["mu-", "mu+"])
-    >>> result = process.generate_diagrams()
+    >>> result = process.amplitude(loops=hep.Loops.total(0)).generate().build(hep.NumeratorOptions(naming=hep.Naming.named("D")))
     >>> assert result.report.completed
     >>> scalar_model = hep.Model.phi4()
     >>> assert scalar_model.particle("phi").spin == 1
@@ -6803,34 +7450,23 @@ class Model:
         json : str
             Serialized model object.
         """
-    def process(self, incoming: typing.Sequence[Particle | ParticleSelector | builtins.str | builtins.int], outgoing: typing.Sequence[Particle | ParticleSelector | builtins.str | builtins.int], *, particle_veto: typing.Optional[typing.Sequence[Particle | ParticleSelector | builtins.str | builtins.int]] = None, particle_selection: typing.Optional[typing.Sequence[Particle | ParticleSelector | builtins.str | builtins.int]] = None, vertex_allow: typing.Optional[typing.Sequence[VertexRule | builtins.str]] = None, vertex_veto: typing.Optional[typing.Sequence[VertexRule | builtins.str]] = None) -> Process:
+    def process(self, incoming: typing.Sequence[Particle | ParticleSelector | builtins.str | builtins.int], outgoing: typing.Sequence[Particle | ParticleSelector | builtins.str | builtins.int]) -> Process:
         r"""
-        Define a process with model-validated external states and sector restrictions.
-        The returned process is immutable; loops and other calculation choices are
-        arguments to its generate_diagrams, generate_amplitude and generate_cross_section methods.
+        Define model-validated external states. Restrictions belong to a Request.
 
         Examples
         --------
         Using the setup in the ``Model`` class example:
 
         >>> process = model.process(["e-", "e+"], ["a", "a"])
-        >>> amplitude = process.generate_amplitude(loops=0)
+        >>> request = process.amplitude(loops=hep.Loops.total(0))
 
         Parameters
         ----------
         incoming : sequence[Particle | ParticleSelector | str | int]
-            Ordered incoming external states.
+            Incoming states, validated against this model.
         outgoing : sequence[Particle | ParticleSelector | str | int]
-            Ordered outgoing external states.
-        particle_veto : sequence[Particle | ParticleSelector | str | int] or None, optional
-            Excluded species, including their antiparticles.
-        particle_selection : sequence[Particle | ParticleSelector | str | int] or None, optional
-            Allowed species, including their antiparticles. None allows all; an
-            empty list allows none. Mutually exclusive with particle_veto.
-        vertex_allow : sequence[VertexRule | str] or None, optional
-            Allowed interactions. None allows all; an empty list allows none.
-        vertex_veto : sequence[VertexRule | str] or None, optional
-            Excluded interactions.
+            Outgoing states, validated against this model.
         """
     def particle(self, name: builtins.str) -> Particle:
         r"""
@@ -7352,10 +7988,10 @@ class MomentumSignature:
     Examples
     --------
     >>> from symbolica import S, E
-    >>> from symbolica.community import hepkit as hep
+    >>> from symbolica.community import hepkit as hep, graph
     >>> model = hep.Model.phi4()
     >>> process = model.process(["phi", "phi"], ["phi", "phi"])
-    >>> result = process.generate_diagrams(loops=1)
+    >>> result = process.amplitude(loops=hep.Loops.total(1), topology=hep.TopologyRules(bridges=graph.Bridges.one_pi_in_loops(), self_energies=hep.Veto.all(), tadpoles=hep.Veto.all(), snails=hep.Veto.massless())).generate().build(hep.NumeratorOptions(naming=hep.Naming.named("D")))
     >>> diagram = result.diagrams[0]
     >>> basis = diagram.loop_momentum_basis
     >>> edge_id = basis.loop_edges[0]
@@ -7451,63 +8087,299 @@ class MomentumSignature:
         """
 
 @typing.final
-class NumeratorGrouping:
+class Naming:
     r"""
-    Choose cross-diagram numerator grouping.
+    An explicit naming demand for built diagrams. Discovery and default builds do not compute names.
 
     Examples
     --------
-    >>> from symbolica import S, E
     >>> from symbolica.community import hepkit as hep
-    >>> hep.NumeratorGrouping("identical", number_of_numerical_samples=7)
-
-    Parameters
-    ----------
-    mode : {"none", "identical", "up_to_sign", "up_to_scalar"}
-        Disable grouping, or compare numerators exactly, up to a sign, or up
-        to a scalar factor. To remove diagrams with vanishing color without
-        comparing numerators, pass ``filter_zero_color=True`` to generation.
-    numerical_sample_seed : int, optional
-        Deterministic seed used to choose numerical substitution values.
-    number_of_numerical_samples : int, optional
-        Number of independent substitutions used to compare numerators.
-    differentiate_particle_masses_only : bool, optional
-        Treat internal species with equal mass and spin as interchangeable.
-    fully_numerical_substitution : bool, optional
-        Substitute scalar parameters as well as nonscalar indeterminates.
-    check_canonical_numerator : bool, optional
-        Try an exact canonical comparison before numerical sampling.
-    symmetric_polarizations : bool, optional
-        Reuse wavefunction samples across the two sides of a sewn external state.
+    >>> assert repr(hep.Naming.none()) == "Naming.none()"
+    >>> assert "sample" in repr(hep.Naming.named("sample"))
     """
-    def __new__(cls, mode: builtins.str, *, numerical_sample_seed: builtins.int = 3, number_of_numerical_samples: builtins.int = 5, differentiate_particle_masses_only: builtins.bool = True, fully_numerical_substitution: builtins.bool = False, check_canonical_numerator: builtins.bool = False, symmetric_polarizations: builtins.bool = False) -> NumeratorGrouping:
+    @staticmethod
+    def none() -> Naming:
         r"""
-        Choose cross-diagram numerator grouping.
+        Leave built graph names unrequested.
 
         Examples
         --------
-        Using the setup in the ``NumeratorGrouping`` class example:
+        >>> assert repr(hep.Naming.none()) == "Naming.none()"
+        """
+    @staticmethod
+    def named(prefix: builtins.str = 'GL') -> Naming:
+        r"""
+        Request built diagram names with the supplied prefix.
 
-        >>> hep.NumeratorGrouping("identical", number_of_numerical_samples=7)
+        Examples
+        --------
+        >>> assert "sample" in repr(hep.Naming.named("sample"))
 
         Parameters
         ----------
-        mode : {"none", "identical", "up_to_sign", "up_to_scalar"}
-            Disable grouping, or compare numerators exactly, up to a sign, or up
-            to a scalar factor. To remove diagrams with vanishing color without
-            comparing numerators, pass ``filter_zero_color=True`` to generation.
-        numerical_sample_seed : int, optional
-            Deterministic seed used to choose numerical substitution values.
-        number_of_numerical_samples : int, optional
-            Number of independent substitutions used to compare numerators.
-        differentiate_particle_masses_only : bool, optional
-            Treat internal species with equal mass and spin as interchangeable.
-        fully_numerical_substitution : bool, optional
-            Substitute scalar parameters as well as nonscalar indeterminates.
-        check_canonical_numerator : bool, optional
-            Try an exact canonical comparison before numerical sampling.
-        symmetric_polarizations : bool, optional
-            Reuse wavefunction samples across the two sides of a sewn external state.
+        prefix : str
+            Prefix for deterministic generated names.
+        """
+    def __repr__(self) -> builtins.str:
+        r"""
+        Return a compact representation of the configured options.
+
+        Examples
+        --------
+        >>> assert "Naming" in repr(hep.Naming.named("sample"))
+        """
+
+@typing.final
+class NumeratorOptions:
+    r"""
+    Options for the explicit numerator-build stage. These do not construct graphs during discovery.
+
+    Examples
+    --------
+    >>> from symbolica.community import hepkit as hep
+    >>> options = hep.NumeratorOptions(naming=hep.Naming.named("sample"))
+    >>> assert options.prefactor == 1 and "sample" in repr(options.naming)
+    """
+    @property
+    def prefactor(self) -> Expression:
+        r"""
+        Global numerator prefactor; None uses one.
+
+        Examples
+        --------
+        >>> assert hep.NumeratorOptions().prefactor == 1
+        """
+    @property
+    def projector(self) -> typing.Optional[Expression]:
+        r"""
+        Optional numerator projector.
+
+        Examples
+        --------
+        >>> assert hep.NumeratorOptions().projector is None
+        """
+    @property
+    def naming(self) -> Naming:
+        r"""
+        Explicit graph naming policy; None requests no names.
+
+        Examples
+        --------
+        >>> assert repr(hep.NumeratorOptions().naming) == "Naming.none()"
+        """
+    @property
+    def filter_zero_color(self) -> builtins.bool:
+        r"""
+        Remove diagrams whose constructed color numerator vanishes.
+
+        Examples
+        --------
+        >>> assert hep.NumeratorOptions(filter_zero_color=True).filter_zero_color
+        """
+    def __new__(cls, *, prefactor: typing.Optional[Expression] = None, projector: typing.Optional[Expression] = None, naming: typing.Optional[Naming] = None, filter_zero_color: builtins.bool = False, loop_momentum_bases: typing.Optional[typing.Sequence[tuple[FeynmanDiagram | builtins.str, typing.Sequence[builtins.int]]]] = None) -> NumeratorOptions:
+        r"""
+        Set numerator, naming, color filtering, and loop-momentum-basis demands.
+
+        Examples
+        --------
+        >>> from symbolica import S
+        >>> factor = S("factor")
+        >>> options = hep.NumeratorOptions(prefactor=factor)
+        >>> assert options.prefactor == factor
+
+        Parameters
+        ----------
+        prefactor : Expression | None
+            Global numerator prefactor; None uses one.
+        projector : Expression | None
+            Optional numerator projector.
+        naming : Naming | None
+            Explicit graph naming policy; None requests no names.
+        filter_zero_color : bool
+            Remove diagrams whose constructed color numerator vanishes.
+        loop_momentum_bases : sequence[tuple[FeynmanDiagram | str, sequence[int]]] | None
+            Loop-momentum edge indices keyed by a diagram, stable ID string, or explicit name.
+        """
+    def __repr__(self) -> builtins.str:
+        r"""
+        Return a compact representation of the configured options.
+
+        Examples
+        --------
+        >>> assert "NumeratorOptions" in repr(hep.NumeratorOptions())
+        """
+
+@typing.final
+class Orders:
+    r"""
+    Immutable coupling-order constraints. Plain and squared bounds intersect; contradictory intervals remain empty.
+
+    Examples
+    --------
+    >>> from symbolica.community import hepkit as hep
+    >>> orders = hep.Orders().min("QED", 3).max("QED", 2)
+    >>> assert orders.is_empty()
+    """
+    def __new__(cls, *, plain: typing.Optional[typing.Mapping[builtins.str, Range]] = None, squared: typing.Optional[typing.Mapping[builtins.str, Range]] = None, perturbative: typing.Optional[typing.Mapping[builtins.str, builtins.int]] = None) -> Orders:
+        r"""
+        Construct coupling-order bounds for discovery and resolved interference.
+
+        Examples
+        --------
+        >>> orders = hep.Orders(plain={"QED": hep.Range.exact(2)})
+        >>> assert not orders.is_empty()
+
+        Parameters
+        ----------
+        plain : dict[str, Range] | None
+            Bounds on coupling powers of each amplitude or generated diagram.
+        squared : dict[str, Range] | None
+            Bounds on summed coupling powers of interfering amplitude pairs.
+        perturbative : dict[str, int] | None
+            Perturbative expansion powers for cross-section cut-content resolution.
+        """
+    def max(self, name: builtins.str, maximum: builtins.int) -> Orders:
+        r"""
+        Return a specification with an inclusive upper bound intersected into the named coupling constraint.
+
+        Examples
+        --------
+        >>> orders = hep.Orders().max("QED", 2)
+        >>> assert orders.min("QED", 3).max("QED", 2).is_empty()
+
+        Parameters
+        ----------
+        name : str
+            Coupling-order label from the model.
+        maximum : int
+            Nonnegative coupling power.
+        """
+    def min(self, name: builtins.str, minimum: builtins.int) -> Orders:
+        r"""
+        Return a specification with an inclusive lower bound intersected into the named coupling constraint.
+
+        Examples
+        --------
+        >>> orders = hep.Orders().min("QED", 2)
+        >>> assert orders.min("QED", 3).max("QED", 2).is_empty()
+
+        Parameters
+        ----------
+        name : str
+            Coupling-order label from the model.
+        minimum : int
+            Nonnegative coupling power.
+        """
+    def exact(self, name: builtins.str, value: builtins.int) -> Orders:
+        r"""
+        Return a specification with an exact power intersected into the named coupling constraint.
+
+        Examples
+        --------
+        >>> orders = hep.Orders().exact("QED", 2)
+        >>> assert orders.min("QED", 3).max("QED", 2).is_empty()
+
+        Parameters
+        ----------
+        name : str
+            Coupling-order label from the model.
+        value : int
+            Nonnegative coupling power.
+        """
+    def squared_max(self, name: builtins.str, maximum: builtins.int) -> Orders:
+        r"""
+        Return a specification with an inclusive upper bound on pair powers intersected into the named coupling constraint.
+
+        Examples
+        --------
+        >>> orders = hep.Orders().squared_max("QED", 2)
+        >>> assert orders.squared_min("QED", 3).squared_max("QED", 2).is_empty()
+
+        Parameters
+        ----------
+        name : str
+            Coupling-order label from the model.
+        maximum : int
+            Nonnegative coupling power.
+        """
+    def squared_min(self, name: builtins.str, minimum: builtins.int) -> Orders:
+        r"""
+        Return a specification with an inclusive lower bound on pair powers intersected into the named coupling constraint.
+
+        Examples
+        --------
+        >>> orders = hep.Orders().squared_min("QED", 2)
+        >>> assert orders.squared_min("QED", 3).squared_max("QED", 2).is_empty()
+
+        Parameters
+        ----------
+        name : str
+            Coupling-order label from the model.
+        minimum : int
+            Nonnegative coupling power.
+        """
+    def squared_exact(self, name: builtins.str, value: builtins.int) -> Orders:
+        r"""
+        Return a specification with an exact pair power intersected into the named coupling constraint.
+
+        Examples
+        --------
+        >>> orders = hep.Orders().squared_exact("QED", 2)
+        >>> assert orders.squared_min("QED", 3).squared_max("QED", 2).is_empty()
+
+        Parameters
+        ----------
+        name : str
+            Coupling-order label from the model.
+        value : int
+            Nonnegative coupling power.
+        """
+    def perturbative(self, name: builtins.str, power: builtins.int) -> Orders:
+        r"""
+        Set a perturbative expansion power for cross-section cut-content resolution. Amplitude requests reject this constraint.
+
+        Examples
+        --------
+        >>> orders = hep.Orders().perturbative("QCD", 1)
+        >>> model = hep.Model.standard_model()
+        >>> request = model.process([21, 21], [21, 21]).cross_section(loops=hep.Loops.forward(1), orders=orders)
+
+        Parameters
+        ----------
+        name : str
+            Coupling-order label from the model.
+        power : int
+            Nonnegative perturbative expansion power.
+        """
+    def merge(self, other: Orders) -> Orders:
+        r"""
+        Intersect ordinary bounds and keep the stricter perturbative power for each shared label.
+
+        Examples
+        --------
+        >>> orders = hep.Orders().min("QED", 3).merge(hep.Orders().max("QED", 2))
+        >>> assert orders.is_empty()
+
+        Parameters
+        ----------
+        other : Orders
+            Additional order constraints.
+        """
+    def is_empty(self) -> builtins.bool:
+        r"""
+        Report contradictory plain or squared coupling bounds.
+
+        Examples
+        --------
+        >>> assert hep.Orders().min("QED", 3).max("QED", 2).is_empty()
+        """
+    def __repr__(self) -> builtins.str:
+        r"""
+        Return a compact representation of the configured options.
+
+        Examples
+        --------
+        >>> assert "Orders" in repr(hep.Orders())
         """
 
 @typing.final
@@ -8270,7 +9142,7 @@ class Particle:
         >>> from symbolica import S, E
         >>> from symbolica.community import hepkit as hep
         >>> model = hep.Model.standard_model()
-        >>> diagram = model.process(["e-", "e+"], ["mu-", "mu+"]).generate_diagrams().diagrams[0]
+        >>> diagram = model.process(["e-", "e+"], ["mu-", "mu+"]).amplitude(loops=hep.Loops.total(0)).generate().build(hep.NumeratorOptions(naming=hep.Naming.named("D"))).diagrams[0]
         >>> electron = model.particle("e-")
         >>> projector = diagram.projector_expression()
         >>> spin_summed = electron.sum_spins(projector, S("gammalooprs::P")(1), edge=1)
@@ -8350,16 +9222,13 @@ class Particle:
 @typing.final
 class ParticleSelector:
     r"""
-    A model-independent way to identify an external particle.
-
-    Selectors may use a UFO particle name or a signed PDG code, making process
-    definitions convenient while deferring validation to a concrete model.
+    Select one model particle by name, signed PDG code, or stable model ID.
 
     Examples
     --------
     >>> from symbolica.community import hepkit as hep
-    >>> electron = hep.ParticleSelector.by_pdg(11)
-    >>> positron = hep.ParticleSelector.by_name("e+")
+    >>> selector = hep.ParticleSelector.by_name("e-")
+    >>> assert selector.name == "e-"
     """
     @property
     def name(self) -> builtins.str:
@@ -8411,6 +9280,19 @@ class ParticleSelector:
 
         >>> assert hep.ParticleSelector.by_pdg(11).is_pdg
         """
+    @property
+    def is_id(self) -> builtins.bool:
+        r"""
+        Whether this selector retains an exact model fingerprint and particle ID.
+
+        Examples
+        --------
+        Using the setup in the ``ParticleSelector`` class example:
+
+        >>> model = hep.Model.standard_model()
+        >>> selector = model.process([model.particle("e-")], []).incoming[0]
+        >>> assert selector.is_id
+        """
     @staticmethod
     def by_name(name: builtins.str) -> ParticleSelector:
         r"""
@@ -8444,6 +9326,22 @@ class ParticleSelector:
         ----------
         pdg : int
             Signed PDG code of the particle.
+        """
+    def resolve(self, model: Model) -> Particle:
+        r"""
+        Resolve this selector in a model, validating any stored model identity.
+
+        Examples
+        --------
+        Using the setup in the ``ParticleSelector`` class example:
+
+        >>> model = hep.Model.standard_model()
+        >>> assert electron.resolve(model).pdg_code == 11
+
+        Parameters
+        ----------
+        model : Model
+            Model in which to resolve and validate the selector.
         """
     def __str__(self) -> builtins.str:
         r"""
@@ -8484,112 +9382,289 @@ class ParticleSelector:
         """
 
 @typing.final
-class Process:
+class PreparedDiagram:
     r"""
-    A scattering or decay process to pass to the diagram generator.
-
-    A process records its incoming and outgoing particles and model-sector restrictions. External states accept loaded
-    :class:`Particle` objects as well as names, signed PDG codes, and explicit
-    :class:`ParticleSelector` objects.
+    A physically prepared assignment without numerators, names, or canonical diagram IDs. Obtained by indexing or iterating DiagramSet.
 
     Examples
     --------
-    >>> from symbolica import S, E
     >>> from symbolica.community import hepkit as hep
     >>> model = hep.Model.standard_model()
-    >>> process = model.process(["e-", "e+"], ["mu-", "mu+"])
-    >>> result = process.generate_diagrams(loops=0)
-    >>> assert result.report.completed
+    >>> request = model.process([11, -11], [22, 22]).amplitude(loops=hep.Loops.total(0))
+    >>> discovered = request.generate()
+    >>> diagram = discovered[0]
+    >>> assert diagram.loops == 0 and diagram.aut >= 1
+    >>> assert len(diagram.legs) == 4
+    """
+    @property
+    def loops(self) -> builtins.int:
+        r"""
+        Loop order of the prepared diagram.
+
+        Examples
+        --------
+        Using the setup in this class example:
+
+        >>> assert diagram.loops == 0
+        """
+    @property
+    def aut(self) -> builtins.int:
+        r"""
+        Automorphism-group order of this field and interaction assignment.
+
+        Examples
+        --------
+        Using the setup in this class example:
+
+        >>> from fractions import Fraction
+        >>> assert Fraction(1, diagram.aut) > 0
+        """
+    @property
+    def rules(self) -> builtins.list[VertexRule]:
+        r"""
+        Assigned model vertex rules in native vertex order.
+
+        Examples
+        --------
+        Using the setup in this class example:
+
+        >>> assert len(diagram.rules) == diagram.graph.n_nodes
+        """
+    @property
+    def edges(self) -> builtins.list[PreparedEdge]:
+        r"""
+        Compact edge records in native edge order.
+
+        Examples
+        --------
+        Using the setup in this class example:
+
+        >>> assert len(diagram.edges) == diagram.graph.n_edges
+        """
+    @property
+    def legs(self) -> builtins.list[tuple[builtins.int, PreparedLeg, builtins.int]]:
+        r"""
+        Attachment vertex, physical external-state record, and edge index tuples in native order.
+
+        Examples
+        --------
+        Using the setup in this class example:
+
+        >>> assert len(diagram.legs) == 4
+        >>> assert all(0 <= edge < len(diagram.edges) for vertex, leg, edge in diagram.legs)
+        """
+    @property
+    def orders(self) -> builtins.dict[builtins.str, builtins.int]:
+        r"""
+        Coupling powers of the assigned interaction rules.
+
+        Examples
+        --------
+        Using the setup in this class example:
+
+        >>> assert diagram.orders["QED"] == 2
+        """
+    @property
+    def skeleton(self) -> Skeleton:
+        r"""
+        Shared skeleton snapshot backing this assignment.
+
+        Examples
+        --------
+        Using the setup in this class example:
+
+        >>> assert diagram.skeleton.loops == diagram.loops
+        """
+    @property
+    def graph(self) -> Graph:
+        r"""
+        Materialize an independent Graph with actual model rules and particles. Mutating that graph cannot alter this compact result.
+
+        Examples
+        --------
+        Using the setup in this class example:
+
+        >>> graph = diagram.graph
+        >>> assert graph.n_edges == len(diagram.edges)
+        """
+    def __repr__(self) -> builtins.str:
+        r"""
+        Describe the loop count and automorphism order.
+
+        Examples
+        --------
+        Using the setup in this class example:
+
+        >>> assert "loops=0" in repr(diagram)
+        """
+
+@typing.final
+class PreparedEdge:
+    r"""
+    A compact edge from PreparedDiagram.edges. Endpoints are vertex indices or PreparedLeg records.
+
+    Examples
+    --------
+    >>> from symbolica.community import hepkit as hep
+    >>> model = hep.Model.standard_model()
+    >>> request = model.process([11, -11], [22, 22]).amplitude(loops=hep.Loops.total(0))
+    >>> discovered = request.generate()
+    >>> diagram = discovered[0]
+    >>> edge = diagram.edges[0]
+    >>> assert abs(edge.particle.pdg_code) in {11, 22}
+    """
+    @property
+    def source(self) -> int | PreparedLeg:
+        r"""
+        The source endpoint: an internal vertex index or an external leg.
+
+        Examples
+        --------
+        Using the setup in this class example:
+
+        >>> endpoints = [(edge.source, edge.sink) for edge in diagram.edges]
+        >>> assert len(endpoints) == len(diagram.edges)
+        """
+    @property
+    def sink(self) -> int | PreparedLeg:
+        r"""
+        The sink endpoint: an internal vertex index or an external leg.
+
+        Examples
+        --------
+        Using the setup in this class example:
+
+        >>> endpoints = [(edge.source, edge.sink) for edge in diagram.edges]
+        >>> assert len(endpoints) == len(diagram.edges)
+        """
+    @property
+    def particle(self) -> Particle:
+        r"""
+        Particle species assigned to this edge.
+
+        Examples
+        --------
+        Using the setup in this class example:
+
+        >>> assert abs(edge.particle.pdg_code) in {11, 22}
+        """
+    @property
+    def directed(self) -> builtins.bool:
+        r"""
+        Whether the particle assignment orients the edge.
+
+        Examples
+        --------
+        Using the setup in this class example:
+
+        >>> directed_particles = [edge.particle.pdg_code for edge in diagram.edges if edge.directed]
+        >>> assert all(abs(pdg) == 11 for pdg in directed_particles)
+        """
+
+@typing.final
+class PreparedLeg:
+    r"""
+    An external state from a prepared diagram. Obtain records from PreparedDiagram.legs or external edge endpoints.
+
+    Examples
+    --------
+    >>> from symbolica.community import hepkit as hep
+    >>> model = hep.Model.standard_model()
+    >>> request = model.process([11, -11], [22, 22]).amplitude(loops=hep.Loops.total(0))
+    >>> discovered = request.generate()
+    >>> diagram = discovered[0]
+    >>> attachment, leg, edge_index = diagram.legs[0]
+    >>> assert leg.index >= 0 and leg.particle.name
+    """
+    @property
+    def index(self) -> builtins.int:
+        r"""
+        External-state index retained by the physical process.
+
+        Examples
+        --------
+        Using the setup in this class example:
+
+        >>> assert leg.index >= 0
+        """
+    @property
+    def state(self) -> builtins.str:
+        r"""
+        External-state role, such as incoming or outgoing.
+
+        Examples
+        --------
+        Using the setup in this class example:
+
+        >>> assert leg.state in {"incoming", "outgoing"}
+        """
+    @property
+    def particle(self) -> Particle:
+        r"""
+        Particle record from the originating interaction model.
+
+        Examples
+        --------
+        Using the setup in this class example:
+
+        >>> assert abs(leg.particle.pdg_code) in {11, 22}
+        """
+
+@typing.final
+class Process:
+    r"""
+    Validated external states. Physics restrictions belong to a Request.
+
+    Examples
+    --------
+    >>> from symbolica.community import hepkit as hep
+    >>> model = hep.Model.standard_model()
+    >>> process = model.process(["e-", "e+"], ["a", "a"])
+    >>> request = process.amplitude(loops=hep.Loops.total(0))
+    >>> assert request.count().complete
     """
     @property
     def model(self) -> Model:
         r"""
-        The particle model supplying this process's Feynman rules.
+        Model owning these external states.
 
         Examples
         --------
         Using the setup in the ``Process`` class example:
 
-        >>> electron = process.model.particle("e-")
-        """
-    @property
-    def particle_veto(self) -> builtins.list[ParticleSelector]:
-        r"""
-        The excluded particle selectors, shared by every generation operation.
-
-        Examples
-        --------
-        Using the setup in the ``Process`` class example:
-
-        >>> excluded_particles = process.particle_veto
-        """
-    @property
-    def particle_selection(self) -> typing.Optional[builtins.list[ParticleSelector]]:
-        r"""
-        Allowed species, including their antiparticles. None allows all;
-        an empty list allows none. Shared by every generation operation.
-
-        Examples
-        --------
-        Using the setup in the ``Process`` class example:
-
-        >>> qed = model.process(["e-", "e+"], ["a", "a"], particle_selection=["e-", "a"])
-        >>> allowed_particles = qed.particle_selection
-        """
-    @property
-    def vertex_allow(self) -> typing.Optional[builtins.list[VertexRule]]:
-        r"""
-        Allowed model vertex rules; None permits every interaction.
-
-        Examples
-        --------
-        Using the setup in the ``Process`` class example:
-
-        >>> allowed_interactions = process.vertex_allow
-        """
-    @property
-    def vertex_veto(self) -> builtins.list[VertexRule]:
-        r"""
-        Excluded model vertex rules.
-
-        Examples
-        --------
-        Using the setup in the ``Process`` class example:
-
-        >>> excluded_interactions = process.vertex_veto
+        >>> assert process.model.name == model.name
         """
     @property
     def incoming(self) -> builtins.list[ParticleSelector]:
         r"""
-        Return the ordered incoming-particle selectors.
+        Incoming particle selectors.
 
         Examples
         --------
         Using the setup in the ``Process`` class example:
 
-        >>> assert [selector.name for selector in process.incoming] == ["e-", "e+"]
+        >>> particles = [selector.resolve(model) for selector in process.incoming]
         """
     @property
     def outgoing_alternatives(self) -> builtins.list[builtins.list[ParticleSelector]]:
         r"""
-        Return every allowed ordered final-state alternative.
+        Accepted outgoing particle lists.
 
         Examples
         --------
         Using the setup in the ``Process`` class example:
 
-        >>> alternatives = process.outgoing_alternatives
+        >>> states = [[selector.resolve(model).name for selector in state] for state in process.outgoing_alternatives]
         """
     def __repr__(self) -> builtins.str:
         r"""
-        Format the external states, model, and active particle/vertex restrictions.
+        Describe the current value.
 
         Examples
         --------
         Using the setup in the ``Process`` class example:
 
-        >>> repr(process)
-        'Process("sm": [e-, e+] -> [mu-, mu+])'
+        >>> print(process)
         """
     def render(self, *, config: typing.Optional[RenderSettings] = None, style: typing.Optional[DiagramStyle] = None) -> DiagramRender:
         r"""
@@ -8651,432 +9726,68 @@ class Process:
         alternatives : sequence[sequence[Particle | ParticleSelector | str | int]]
             Allowed outgoing particle lists.
         """
-    def with_filters(self, *, particle_veto: typing.Sequence[Particle | ParticleSelector | str | int] | types.EllipsisType | None = ..., particle_selection: typing.Sequence[Particle | ParticleSelector | str | int] | types.EllipsisType | None = ..., vertex_allow: typing.Sequence[VertexRule | str] | types.EllipsisType | None = ..., vertex_veto: typing.Sequence[VertexRule | str] | types.EllipsisType | None = ...) -> Process:
+    def amplitude(self, *, loops: Loops, orders: typing.Optional[Orders] = None, restrict: typing.Optional[Restrict] = None, topology: typing.Optional[TopologyRules] = None, symmetrize: typing.Optional[Symmetrize] = None, prune_skeletons: typing.Optional[typing.Any] = None, prune_dressings: typing.Optional[typing.Any] = None, select: typing.Optional[typing.Any] = None) -> Request:
         r"""
-        Return a process with updated particle and vertex restrictions.
-        Omitted fields are preserved; None clears a field. An empty vertex_allow
-        list permits no interactions, whereas None permits every interaction.
+        Create an amplitude (including vacuum) discovery request with explicit total loops.
 
         Examples
         --------
         Using the setup in the ``Process`` class example:
 
-        >>> qed = process.with_filters(vertex_allow=["V_98"])
-        >>> unrestricted = qed.with_filters(vertex_allow=None)
+        >>> request = process.amplitude(loops=hep.Loops.total(0))
+        >>> compact = request.generate()
 
         Parameters
         ----------
-        particle_veto : sequence[Particle | ParticleSelector | str | int] or None, optional
-            Replace the excluded species, including their antiparticles.
-        particle_selection : sequence[Particle | ParticleSelector | str | int] or None, optional
-            Replace the allowed species, including their antiparticles. An empty
-            list allows none. Clear particle_veto with None when switching modes.
-        vertex_allow : sequence[VertexRule | str] or None, optional
-            Replace the allowed interaction rules.
-        vertex_veto : sequence[VertexRule | str] or None, optional
-            Replace the excluded interaction rules.
+        loops : Loops
+            Required finite total loop range for amplitudes or forward loop range for cross sections.
+        orders : Orders or None, optional
+            Plain, squared, and applicable perturbative order constraints.
+        restrict : Restrict or None, optional
+            Model-validated particle and vertex restrictions.
+        topology : TopologyRules or None, optional
+            Explicit topology criteria; None keeps minimal unrestricted defaults.
+        symmetrize : Symmetrize or None, optional
+            External-label permutation symmetries, disabled by default.
+        prune_skeletons : callable or None, optional
+            Hereditary bool predicate receiving a scoped graph.SkeletonView.
+        prune_dressings : callable or None, optional
+            Hereditary bool predicate receiving a scoped graph.DressingView.
+        select : callable or None, optional
+            Arbitrary bool predicate receiving a complete graph.DiagramView.
         """
-    def generate_diagrams(self, *, loops: builtins.int | tuple[builtins.int, builtins.int] = 0, symmetrize_initial: builtins.bool = False, symmetrize_final: builtins.bool = False, symmetrize_left_right: builtins.bool = False, symmetrize_external_fermions: builtins.bool = False, threads: typing.Optional[builtins.int] = None, max_vertices: typing.Optional[builtins.int] = None, allow_self_loops: builtins.bool = True, allow_zero_flow_edges: builtins.bool = False, graph_prefix: typing.Optional[builtins.str] = None, output: typing.Literal['named', 'minimal'] = "named", maximum_bridges: int | None | types.EllipsisType = ..., self_energy: SelfEnergyFilterOptions | types.EllipsisType | None = ..., tadpoles: TadpoleFilterOptions | types.EllipsisType | None = ..., zero_snails: SnailFilterOptions | types.EllipsisType | None = ..., coupling_orders: typing.Optional[typing.Mapping[builtins.str, builtins.int | tuple[builtins.int, typing.Optional[builtins.int]]]] = None, fermion_loop_count_range: typing.Optional[tuple[builtins.int, builtins.int]] = None, factorized_loop_topologies_count_range: tuple[int, int] | types.EllipsisType | None = ..., blob_range: tuple[int, int] | types.EllipsisType | None = ..., spectator_range: tuple[int, int] | types.EllipsisType | None = ..., perturbative_orders: typing.Optional[typing.Mapping[builtins.str, builtins.int]] = None, sewn_tadpoles: typing.Optional[builtins.bool] = None, cut_amplitude_coupling_orders: typing.Optional[typing.Mapping[builtins.str, builtins.int | tuple[builtins.int, typing.Optional[builtins.int]]]] = None, cut_amplitude_loop_count_range: typing.Optional[tuple[builtins.int, builtins.int]] = None, select_diagrams: typing.Optional[typing.Sequence[FeynmanDiagram | builtins.str]] = None, veto_diagrams: typing.Optional[typing.Sequence[FeynmanDiagram | builtins.str]] = None, loop_momentum_bases: typing.Optional[typing.Sequence[tuple[FeynmanDiagram | builtins.str, typing.Sequence[builtins.int]]]] = None, numerator_prefactor: typing.Optional[Expression] = None, projector: typing.Optional[Expression] = None, numerator_grouping: typing.Optional[NumeratorGrouping] = None, filter_zero_color: builtins.bool = False, cancellation_token: typing.Optional[CancellationToken] = None, progress: typing.Literal['auto'] | collections.abc.Callable[[GenerationProgress], None] | None = 'auto', filter: collections.abc.Callable[[symbolica.community.graph.Graph, str], bool] | None = None) -> GenerationResult:
+    def cross_section(self, *, loops: Loops, orders: typing.Optional[Orders] = None, restrict: typing.Optional[Restrict] = None, topology: typing.Optional[TopologyRules] = None, cuts: typing.Optional[Cuts] = None, symmetrize: typing.Optional[Symmetrize] = None, prune_skeletons: typing.Optional[typing.Any] = None, prune_dressings: typing.Optional[typing.Any] = None, select: typing.Optional[typing.Any] = None) -> Request:
         r"""
-        Generate and optionally group all diagrams matching a process.
-
-        Model Feynman rules are instantiated into each returned diagram: inspect
-        ``vertex.numerator_expression()`` and ``edge.numerator_expression()`` for
-        individual factors, or ``diagram.numerator_expression()`` for their
-        combined numerator.
+        Create a cross-section discovery request with explicit forward loops.
 
         Examples
         --------
         Using the setup in the ``Process`` class example:
 
-        >>> result = process.generate_diagrams(max_vertices=6)
-        >>> combined_numerator = result.diagrams[0].numerator_expression()
+        >>> forward = process.cross_section(loops=hep.Loops.forward(1),
+        ...     cuts=hep.Cuts(blobs=hep.Range.exact(1), spectators=hep.Range.exact(0)))
+        >>> compact = forward.generate()
 
         Parameters
         ----------
-        loops : int or tuple[int, int], optional
-            Exact order or inclusive range for this call, default zero. Cross sections count
-            loops in the sewn forward graph; two-particle tree cuts need loops=1.
-        symmetrize_initial : bool, optional
-            Identify graphs related by permutations of identical incoming particles; default
-            False. Their legs become unlabelled: each diagram carries the inverse automorphism
-            count of the unlabelled graph, and the caller sums over the leg permutations.
-        symmetrize_final : bool, optional
-            Identify graphs related by permutations of identical outgoing particles in the
-            same way; default False.
-        symmetrize_left_right : bool, optional
-            Identify cross-section graphs related by exchanging amplitude sides.
-        symmetrize_external_fermions : bool, optional
-            Include amplitude fermions in enabled external-state symmetry classes.
-        threads : int or None, optional
-            Number of worker threads; None uses the generator default.
-        max_vertices : int or None, optional
-            Maximum interaction vertices; None applies no override.
-        allow_self_loops : bool, optional
-            Permit propagators that start and end on the same vertex; defaults to True.
-        allow_zero_flow_edges : bool, optional
-            Permit internal edges with identically zero momentum flow.
-        graph_prefix : str or None, optional
-            Prefix assigned to generated diagram names; None uses "D" (diagram).
-        output : {"named", "minimal"}, optional
-            Named (default) requests names and source identities. Minimal omits both;
-            name selectors, named momentum bases and graph_prefix then require named output.
-            Diagram IDs remain available on explicit access or persistence.
-        maximum_bridges : int, None, or Ellipsis, optional
-            Omission or Ellipsis requires one-particle irreducibility only for diagrams
-            with loops; tree exchanges are allowed, including in mixed loop ranges.
-            An integer limits internal bridges at every loop order; None disables it.
-        self_energy : SelfEnergyFilterOptions or None, optional
-            Reject self-energy subgraphs. Omission enables the default filter for
-            non-vacuum processes; explicit None disables it. Ellipsis selects automatic defaults.
-        tadpoles : TadpoleFilterOptions or None, optional
-            Reject tadpole subgraphs. Omission enables the default filter for
-            non-vacuum processes; explicit None disables it. Ellipsis selects automatic defaults.
-        zero_snails : SnailFilterOptions or None, optional
-            Reject zero-snail subgraphs. Omission enables the default filter for
-            non-vacuum processes; explicit None disables it. Ellipsis selects automatic defaults.
-        coupling_orders : dict[str, int | tuple[int, int or None]] or None, optional
-            Exact coupling powers or inclusive ranges; an upper None is unbounded.
-        fermion_loop_count_range : tuple[int, int] or None, optional
-            Inclusive range of closed fermion loops.
-        factorized_loop_topologies_count_range : tuple[int, int] or None, optional
-            Inclusive range of factorized loop-topology components. Defaults to
-            ``(1, 1)`` for vacuum processes; ``None`` disables the restriction.
-        blob_range : tuple[int, int] or None, optional
-            Inclusive cross-section blob-count range. Defaults to ``(1, 1)`` for
-            cross sections; ``None`` disables the restriction.
-        spectator_range : tuple[int, int] or None, optional
-            Inclusive cross-section spectator-count range. Defaults to ``(0, 0)`` for
-            cross sections; ``None`` disables the restriction.
-        perturbative_orders : dict[str, int] or None, optional
-            Exact perturbative powers required for cross-section graphs.
-        sewn_tadpoles : bool or None, optional
-            Reject tadpoles revealed by sewing cross-section sides; None applies no filter.
-        cut_amplitude_coupling_orders : dict[str, int | tuple[int, int or None]] or None, optional
-            Coupling-order bounds applied independently within every cut amplitude.
-        cut_amplitude_loop_count_range : tuple[int, int] or None, optional
-            Inclusive combined loop count across both sides of every cut.
-        select_diagrams : sequence[FeynmanDiagram | str] or None, optional
-            Retain only these diagram objects, content-derived IDs, or finalized names.
-            Strings of exactly 32 hexadecimal digits denote IDs; other strings denote names.
-        veto_diagrams : sequence[FeynmanDiagram | str] or None, optional
-            Remove these diagram objects, content-derived IDs, or finalized names.
-        loop_momentum_bases : sequence[tuple[FeynmanDiagram | str, sequence[int]]] or None, optional
-            Diagram selectors paired with ordered stable edge IDs for independent loop momenta.
-        numerator_prefactor : Expression or None, optional
-            Scalar multiplier retained on every finalized diagram numerator.
-        projector : Expression or None, optional
-            Override external-state contraction; S("1") disables external wavefunctions.
-        numerator_grouping : NumeratorGrouping or None, optional
-            Defaults to None: no numerator comparison or grouping. Diagrams still
-            contain numerators. Pass NumeratorGrouping to compare and group them.
-        filter_zero_color : bool, optional
-            Discard diagrams whose color algebra proves the numerator is zero,
-            before numerator grouping. Defaults to False, independently of grouping.
-        progress : {"auto"}, Callable[[GenerationProgress], None] or None, optional
-            Defaults to "auto": show progress when marimo.running_in_notebook()
-            is true, with stage, counts, and elapsed time. None disables progress.
-            Known totals use a progress bar; unknown totals use a spinner.
-            The display closes on completion, cancellation, or error.
-            Observe stage changes and coalesced counts on the calling Python thread.
-            Callback exceptions propagate and stop generation.
-        filter : Callable[[symbolica.community.graph.Graph, str], bool] or None, optional
-            Prune the diagram search. The callback receives every search state with its
-            stage: "topology" for untyped topologies, partial or complete, "fields" for
-            partial field assignments of a complete topology, and "complete" for complete
-            diagrams. Partial field assignments whose bounds on the coupling orders or the
-            fermion loops already miss their ranges are dropped without a call. False drops
-            the state with everything that completes it, so the verdict must be hereditary
-            within each stage. Edge data is the PDG code of the particle of the line,
-            directed along its flow, or None before its field is assigned. External legs
-            are dangling half-edges whose data is the pair
-            (state, index), with index None for amplitude legs symmetrized within their state.
-            Cross-section legs keep their index; with ``symmetrize_initial``, diagrams related
-            by exchanging identical beams are identified after the search, so verdicts should
-            not depend on which beam carries which index. A "complete"-stage callback can add
-            vetoes to the built-in filters, for example a different self-energy definition.
-            Node data is None. Mutating the snapshot does not change enumeration. Keep
-            callbacks cheap: each snapshot is a new Python graph.
-        cancellation_token : CancellationToken or None, optional
-            Shared token for cancelling a running generation task. Token cancellation
-            returns an incomplete result; Python signal-handler exceptions, including
-            KeyboardInterrupt, stop generation and propagate to the caller.
-        """
-    def generate_amplitude(self, *, dimension: typing.Optional[Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal]] = None, real: typing.Optional[typing.Sequence[Expression]] = None, loops: builtins.int | tuple[builtins.int, builtins.int] = 0, symmetrize_initial: builtins.bool = False, symmetrize_final: builtins.bool = False, symmetrize_left_right: builtins.bool = False, symmetrize_external_fermions: builtins.bool = False, threads: typing.Optional[builtins.int] = None, max_vertices: typing.Optional[builtins.int] = None, allow_self_loops: builtins.bool = True, allow_zero_flow_edges: builtins.bool = False, graph_prefix: typing.Optional[builtins.str] = None, output: typing.Literal['named', 'minimal'] = "named", maximum_bridges: int | None | types.EllipsisType = ..., self_energy: SelfEnergyFilterOptions | types.EllipsisType | None = ..., tadpoles: TadpoleFilterOptions | types.EllipsisType | None = ..., zero_snails: SnailFilterOptions | types.EllipsisType | None = ..., coupling_orders: typing.Optional[typing.Mapping[builtins.str, builtins.int | tuple[builtins.int, typing.Optional[builtins.int]]]] = None, fermion_loop_count_range: typing.Optional[tuple[builtins.int, builtins.int]] = None, factorized_loop_topologies_count_range: tuple[int, int] | types.EllipsisType | None = ..., blob_range: tuple[int, int] | types.EllipsisType | None = ..., spectator_range: tuple[int, int] | types.EllipsisType | None = ..., perturbative_orders: typing.Optional[typing.Mapping[builtins.str, builtins.int]] = None, sewn_tadpoles: typing.Optional[builtins.bool] = None, cut_amplitude_coupling_orders: typing.Optional[typing.Mapping[builtins.str, builtins.int | tuple[builtins.int, typing.Optional[builtins.int]]]] = None, cut_amplitude_loop_count_range: typing.Optional[tuple[builtins.int, builtins.int]] = None, select_diagrams: typing.Optional[typing.Sequence[FeynmanDiagram | builtins.str]] = None, veto_diagrams: typing.Optional[typing.Sequence[FeynmanDiagram | builtins.str]] = None, loop_momentum_bases: typing.Optional[typing.Sequence[tuple[FeynmanDiagram | builtins.str, typing.Sequence[builtins.int]]]] = None, numerator_prefactor: typing.Optional[Expression] = None, projector: typing.Optional[Expression] = None, numerator_grouping: typing.Optional[NumeratorGrouping] = None, filter_zero_color: builtins.bool = False, cancellation_token: typing.Optional[CancellationToken] = None, progress: typing.Literal['auto'] | collections.abc.Callable[[GenerationProgress], None] | None = 'auto', filter: collections.abc.Callable[[symbolica.community.graph.Graph, str], bool] | None = None) -> Amplitude:
-        r"""
-        Generate a coherent symbolic amplitude for this process.
-        Cancelled or empty generation cannot produce an amplitude.
-
-        Model Feynman rules are instantiated into each returned diagram: inspect
-        ``vertex.numerator_expression()`` and ``edge.numerator_expression()`` for
-        individual factors, or ``diagram.numerator_expression()`` for their
-        combined numerator.
-
-        Examples
-        --------
-        Using the setup in the ``Process`` class example:
-
-        >>> result = process.generate_amplitude(max_vertices=6)
-        >>> operator = result.expression()
-
-        Parameters
-        ----------
-        dimension : int or Expression, optional
-            Lorentz dimension of the amplitude; default four.
-        real : list[Expression] or None, optional
-            Additional scalars assumed real under conjugation.
-        loops : int or tuple[int, int], optional
-            Exact order or inclusive range for this call, default zero. Cross sections count
-            loops in the sewn forward graph; two-particle tree cuts need loops=1.
-        symmetrize_initial : bool, optional
-            Identify graphs related by permutations of identical incoming particles; default
-            False. Their legs become unlabelled: each diagram carries the inverse automorphism
-            count of the unlabelled graph, and the caller sums over the leg permutations.
-        symmetrize_final : bool, optional
-            Identify graphs related by permutations of identical outgoing particles in the
-            same way; default False.
-        symmetrize_left_right : bool, optional
-            Identify cross-section graphs related by exchanging amplitude sides.
-        symmetrize_external_fermions : bool, optional
-            Include amplitude fermions in enabled external-state symmetry classes.
-        threads : int or None, optional
-            Number of worker threads; None uses the generator default.
-        max_vertices : int or None, optional
-            Maximum interaction vertices; None applies no override.
-        allow_self_loops : bool, optional
-            Permit propagators that start and end on the same vertex; defaults to True.
-        allow_zero_flow_edges : bool, optional
-            Permit internal edges with identically zero momentum flow.
-        graph_prefix : str or None, optional
-            Prefix assigned to generated diagram names; None uses "D" (diagram).
-        output : {"named", "minimal"}, optional
-            Named (default) requests names and source identities. Minimal omits both;
-            name selectors, named momentum bases and graph_prefix then require named output.
-            Diagram IDs remain available on explicit access or persistence.
-        maximum_bridges : int, None, or Ellipsis, optional
-            Omission or Ellipsis requires one-particle irreducibility only for diagrams
-            with loops; tree exchanges are allowed, including in mixed loop ranges.
-            An integer limits internal bridges at every loop order; None disables it.
-        self_energy : SelfEnergyFilterOptions or None, optional
-            Reject self-energy subgraphs. Omission enables the default filter for
-            non-vacuum processes; explicit None disables it. Ellipsis selects automatic defaults.
-        tadpoles : TadpoleFilterOptions or None, optional
-            Reject tadpole subgraphs. Omission enables the default filter for
-            non-vacuum processes; explicit None disables it. Ellipsis selects automatic defaults.
-        zero_snails : SnailFilterOptions or None, optional
-            Reject zero-snail subgraphs. Omission enables the default filter for
-            non-vacuum processes; explicit None disables it. Ellipsis selects automatic defaults.
-        coupling_orders : dict[str, int | tuple[int, int or None]] or None, optional
-            Exact coupling powers or inclusive ranges; an upper None is unbounded.
-        fermion_loop_count_range : tuple[int, int] or None, optional
-            Inclusive range of closed fermion loops.
-        factorized_loop_topologies_count_range : tuple[int, int] or None, optional
-            Inclusive range of factorized loop-topology components. Defaults to
-            ``(1, 1)`` for vacuum processes; ``None`` disables the restriction.
-        blob_range : tuple[int, int] or None, optional
-            Inclusive cross-section blob-count range. Defaults to ``(1, 1)`` for
-            cross sections; ``None`` disables the restriction.
-        spectator_range : tuple[int, int] or None, optional
-            Inclusive cross-section spectator-count range. Defaults to ``(0, 0)`` for
-            cross sections; ``None`` disables the restriction.
-        perturbative_orders : dict[str, int] or None, optional
-            Exact perturbative powers required for cross-section graphs.
-        sewn_tadpoles : bool or None, optional
-            Reject tadpoles revealed by sewing cross-section sides; None applies no filter.
-        cut_amplitude_coupling_orders : dict[str, int | tuple[int, int or None]] or None, optional
-            Coupling-order bounds applied independently within every cut amplitude.
-        cut_amplitude_loop_count_range : tuple[int, int] or None, optional
-            Inclusive combined loop count across both sides of every cut.
-        select_diagrams : sequence[FeynmanDiagram | str] or None, optional
-            Retain only these diagram objects, content-derived IDs, or finalized names.
-            Strings of exactly 32 hexadecimal digits denote IDs; other strings denote names.
-        veto_diagrams : sequence[FeynmanDiagram | str] or None, optional
-            Remove these diagram objects, content-derived IDs, or finalized names.
-        loop_momentum_bases : sequence[tuple[FeynmanDiagram | str, sequence[int]]] or None, optional
-            Diagram selectors paired with ordered stable edge IDs for independent loop momenta.
-        numerator_prefactor : Expression or None, optional
-            Scalar multiplier retained on every finalized diagram numerator.
-        projector : Expression or None, optional
-            Override external-state contraction; S("1") disables external wavefunctions.
-        numerator_grouping : NumeratorGrouping or None, optional
-            Defaults to None: no numerator comparison or grouping. Diagrams still
-            contain numerators. Pass NumeratorGrouping to compare and group them.
-        filter_zero_color : bool, optional
-            Discard diagrams whose color algebra proves the numerator is zero,
-            before numerator grouping. Defaults to False, independently of grouping.
-        progress : {"auto"}, Callable[[GenerationProgress], None] or None, optional
-            Defaults to "auto": show progress when marimo.running_in_notebook()
-            is true, with stage, counts, and elapsed time. None disables progress.
-            Known totals use a progress bar; unknown totals use a spinner.
-            The display closes on completion, cancellation, or error.
-            Observe stage changes and coalesced counts on the calling Python thread.
-            Callback exceptions propagate and stop generation.
-        filter : Callable[[symbolica.community.graph.Graph, str], bool] or None, optional
-            Prune the diagram search. The callback receives every search state with its
-            stage: "topology" for untyped topologies, partial or complete, "fields" for
-            partial field assignments of a complete topology, and "complete" for complete
-            diagrams. Partial field assignments whose bounds on the coupling orders or the
-            fermion loops already miss their ranges are dropped without a call. False drops
-            the state with everything that completes it, so the verdict must be hereditary
-            within each stage. Edge data is the PDG code of the particle of the line,
-            directed along its flow, or None before its field is assigned. External legs
-            are dangling half-edges whose data is the pair
-            (state, index), with index None for amplitude legs symmetrized within their state.
-            Cross-section legs keep their index; with ``symmetrize_initial``, diagrams related
-            by exchanging identical beams are identified after the search, so verdicts should
-            not depend on which beam carries which index. A "complete"-stage callback can add
-            vetoes to the built-in filters, for example a different self-energy definition.
-            Node data is None. Mutating the snapshot does not change enumeration. Keep
-            callbacks cheap: each snapshot is a new Python graph.
-        cancellation_token : CancellationToken or None, optional
-            Shared token for cancelling a running generation task. Token cancellation
-            returns an incomplete result; Python signal-handler exceptions, including
-            KeyboardInterrupt, stop generation and propagate to the caller.
-        """
-    def generate_cross_section(self, *, loops: builtins.int | tuple[builtins.int, builtins.int] = 0, symmetrize_initial: builtins.bool = False, symmetrize_left_right: builtins.bool = False, symmetrize_external_fermions: builtins.bool = False, threads: typing.Optional[builtins.int] = None, max_vertices: typing.Optional[builtins.int] = None, allow_self_loops: builtins.bool = True, allow_zero_flow_edges: builtins.bool = False, graph_prefix: typing.Optional[builtins.str] = None, output: typing.Literal['named', 'minimal'] = "named", maximum_bridges: int | None | types.EllipsisType = ..., self_energy: SelfEnergyFilterOptions | types.EllipsisType | None = ..., tadpoles: TadpoleFilterOptions | types.EllipsisType | None = ..., zero_snails: SnailFilterOptions | types.EllipsisType | None = ..., coupling_orders: typing.Optional[typing.Mapping[builtins.str, builtins.int | tuple[builtins.int, typing.Optional[builtins.int]]]] = None, fermion_loop_count_range: typing.Optional[tuple[builtins.int, builtins.int]] = None, factorized_loop_topologies_count_range: tuple[int, int] | types.EllipsisType | None = ..., blob_range: tuple[int, int] | types.EllipsisType | None = ..., spectator_range: tuple[int, int] | types.EllipsisType | None = ..., perturbative_orders: typing.Optional[typing.Mapping[builtins.str, builtins.int]] = None, sewn_tadpoles: typing.Optional[builtins.bool] = None, cut_amplitude_coupling_orders: typing.Optional[typing.Mapping[builtins.str, builtins.int | tuple[builtins.int, typing.Optional[builtins.int]]]] = None, cut_amplitude_loop_count_range: typing.Optional[tuple[builtins.int, builtins.int]] = None, select_diagrams: typing.Optional[typing.Sequence[FeynmanDiagram | builtins.str]] = None, veto_diagrams: typing.Optional[typing.Sequence[FeynmanDiagram | builtins.str]] = None, loop_momentum_bases: typing.Optional[typing.Sequence[tuple[FeynmanDiagram | builtins.str, typing.Sequence[builtins.int]]]] = None, numerator_prefactor: typing.Optional[Expression] = None, projector: typing.Optional[Expression] = None, numerator_grouping: typing.Optional[NumeratorGrouping] = None, filter_zero_color: builtins.bool = False, cancellation_token: typing.Optional[CancellationToken] = None, progress: typing.Literal['auto'] | collections.abc.Callable[[GenerationProgress], None] | None = 'auto', filter: collections.abc.Callable[[symbolica.community.graph.Graph, str], bool] | None = None) -> GenerationResult:
-        r"""
-        Generate sewn forward diagrams and their physical final-state cuts.
-        The result contains diagrams and cut metadata, before phase-space integration.
-
-        Model Feynman rules are instantiated into each returned diagram: inspect
-        ``vertex.numerator_expression()`` and ``edge.numerator_expression()`` for
-        individual factors, or ``diagram.numerator_expression()`` for their
-        combined numerator.
-
-        Examples
-        --------
-        A two-particle tree cut has one loop after the amplitude sides are sewn:
-
-        >>> from symbolica import S, E
-        >>> from symbolica.community import hepkit as hep
-        >>> model = hep.Model.phi4()
-        >>> process = model.process(["phi", "phi"], ["phi", "phi"])
-        >>> result = process.generate_cross_section(loops=1)
-        >>> assert result.diagrams[0].cuts
-        >>> combined_numerator = result.diagrams[0].numerator_expression()
-
-        Parameters
-        ----------
-        loops : int or tuple[int, int], optional
-            Exact order or inclusive range for this call, default zero. Cross sections count
-            loops in the sewn forward graph; two-particle tree cuts need loops=1.
-        symmetrize_initial : bool, optional
-            Keep one forward graph for each exchange of two identical beams, each sewn copy
-            moving with its incoming leg; default False. The overall factor of the kept graph
-            counts the graphs it stands for, so the factors still add up to the exact total,
-            unless symmetrize_left_right is also set: the total then inherits its deviations
-            and can differ from the left/right total too. Evaluating the kept graph alone is
-            exact after integration only if the exchange is a symmetry of everything else:
-            observables and selectors invariant under the beam exchange (signed rapidities
-            are not), beam helicities summed or equal (opposite fixed helicities only in a
-            parity-invariant model with parity-even observables and selectors), and a
-            polarization gauge that moves with the beams. Graphs that the exchange maps to
-            themselves are exact unconditionally. The kept graph carries its
-            orbit's weight on one side of the exchange, so the integration error can grow: for
-            Z Z -> e+ e- it was 19 times larger at equal sample counts. Identical beams among
-            more than two incoming particles raise an error. Identical final-state particles
-            need no option: they are cut edges, already counted by the graph automorphisms.
-        symmetrize_left_right : bool, optional
-            Identify cross-section graphs related by exchanging amplitude sides, which assumes
-            CP symmetry. A graph and a distinct mirror image become one diagram whose overall
-            factor counts both. The physical cuts are searched in one of the two frames; from
-            two loops on they can depend on the frame, so the total can differ from the
-            unsymmetrized one.
-        symmetrize_external_fermions : bool, optional
-            Include amplitude fermions in enabled external-state symmetry classes.
-        threads : int or None, optional
-            Number of worker threads; None uses the generator default.
-        max_vertices : int or None, optional
-            Maximum interaction vertices; None applies no override.
-        allow_self_loops : bool, optional
-            Permit propagators that start and end on the same vertex; defaults to True.
-        allow_zero_flow_edges : bool, optional
-            Permit internal edges with identically zero momentum flow.
-        graph_prefix : str or None, optional
-            Prefix assigned to generated diagram names; None uses "D" (diagram).
-        output : {"named", "minimal"}, optional
-            Named (default) requests names and source identities. Minimal omits both;
-            name selectors, named momentum bases and graph_prefix then require named output.
-            Diagram IDs remain available on explicit access or persistence.
-        maximum_bridges : int, None, or Ellipsis, optional
-            Omission or Ellipsis applies no bridge filter: it would act on the unsewn forward
-            graph, where every s-channel propagator is a bridge. An integer limits the internal
-            bridges of the forward graph at every loop order; None disables it.
-        self_energy : SelfEnergyFilterOptions or None, optional
-            Reject self-energy subgraphs. Omission enables the default filter for
-            non-vacuum processes; explicit None disables it. Ellipsis selects automatic defaults.
-        tadpoles : TadpoleFilterOptions or None, optional
-            Reject tadpole subgraphs. Omission enables the default filter for
-            non-vacuum processes; explicit None disables it. Ellipsis selects automatic defaults.
-        zero_snails : SnailFilterOptions or None, optional
-            Reject zero-snail subgraphs. Omission enables the default filter for
-            non-vacuum processes; explicit None disables it. Ellipsis selects automatic defaults.
-        coupling_orders : dict[str, int | tuple[int, int or None]] or None, optional
-            Exact coupling powers or inclusive ranges; an upper None is unbounded.
-        fermion_loop_count_range : tuple[int, int] or None, optional
-            Inclusive range of closed fermion loops.
-        factorized_loop_topologies_count_range : tuple[int, int] or None, optional
-            Inclusive range of factorized loop-topology components. Defaults to
-            ``(1, 1)`` for vacuum processes; ``None`` disables the restriction.
-        blob_range : tuple[int, int] or None, optional
-            Inclusive cross-section blob-count range. Defaults to ``(1, 1)`` for
-            cross sections; ``None`` disables the restriction.
-        spectator_range : tuple[int, int] or None, optional
-            Inclusive cross-section spectator-count range. Defaults to ``(0, 0)`` for
-            cross sections; ``None`` disables the restriction.
-        perturbative_orders : dict[str, int] or None, optional
-            Exact perturbative powers required for cross-section graphs.
-        sewn_tadpoles : bool or None, optional
-            Reject tadpoles revealed by sewing cross-section sides; None applies no filter.
-        cut_amplitude_coupling_orders : dict[str, int | tuple[int, int or None]] or None, optional
-            Coupling-order bounds applied independently within every cut amplitude.
-        cut_amplitude_loop_count_range : tuple[int, int] or None, optional
-            Inclusive combined loop count across both sides of every cut.
-        select_diagrams : sequence[FeynmanDiagram | str] or None, optional
-            Retain only these diagram objects, content-derived IDs, or finalized names.
-            Strings of exactly 32 hexadecimal digits denote IDs; other strings denote names.
-        veto_diagrams : sequence[FeynmanDiagram | str] or None, optional
-            Remove these diagram objects, content-derived IDs, or finalized names.
-        loop_momentum_bases : sequence[tuple[FeynmanDiagram | str, sequence[int]]] or None, optional
-            Diagram selectors paired with ordered stable edge IDs for independent loop momenta.
-        numerator_prefactor : Expression or None, optional
-            Scalar multiplier retained on every finalized diagram numerator.
-        projector : Expression or None, optional
-            Override external-state contraction; S("1") disables external wavefunctions.
-        numerator_grouping : NumeratorGrouping or None, optional
-            Defaults to None: no numerator comparison or grouping. Diagrams still
-            contain numerators. Pass NumeratorGrouping to compare and group them.
-        filter_zero_color : bool, optional
-            Discard diagrams whose color algebra proves the numerator is zero,
-            before numerator grouping. Defaults to False, independently of grouping.
-        progress : {"auto"}, Callable[[GenerationProgress], None] or None, optional
-            Defaults to "auto": show progress when marimo.running_in_notebook()
-            is true, with stage, counts, and elapsed time. None disables progress.
-            Known totals use a progress bar; unknown totals use a spinner.
-            The display closes on completion, cancellation, or error.
-            Observe stage changes and coalesced counts on the calling Python thread.
-            Callback exceptions propagate and stop generation.
-        filter : Callable[[symbolica.community.graph.Graph, str], bool] or None, optional
-            Prune the diagram search. The callback receives every search state with its
-            stage: "topology" for untyped topologies, partial or complete, "fields" for
-            partial field assignments of a complete topology, and "complete" for complete
-            diagrams. Partial field assignments whose bounds on the coupling orders or the
-            fermion loops already miss their ranges are dropped without a call. False drops
-            the state with everything that completes it, so the verdict must be hereditary
-            within each stage. Edge data is the PDG code of the particle of the line,
-            directed along its flow, or None before its field is assigned. External legs
-            are dangling half-edges whose data is the pair
-            (state, index), with index None for amplitude legs symmetrized within their state.
-            Cross-section legs keep their index; with ``symmetrize_initial``, diagrams related
-            by exchanging identical beams are identified after the search, so verdicts should
-            not depend on which beam carries which index. A "complete"-stage callback can add
-            vetoes to the built-in filters, for example a different self-energy definition.
-            Node data is None. Mutating the snapshot does not change enumeration. Keep
-            callbacks cheap: each snapshot is a new Python graph.
-        cancellation_token : CancellationToken or None, optional
-            Shared token for cancelling a running generation task. Token cancellation
-            returns an incomplete result; Python signal-handler exceptions, including
-            KeyboardInterrupt, stop generation and propagate to the caller.
+        loops : Loops
+            Required finite total loop range for amplitudes or forward loop range for cross sections.
+        orders : Orders or None, optional
+            Plain, squared, and applicable perturbative order constraints.
+        restrict : Restrict or None, optional
+            Model-validated particle and vertex restrictions.
+        topology : TopologyRules or None, optional
+            Explicit topology criteria; None keeps minimal unrestricted defaults.
+        cuts : Cuts or None, optional
+            Physical cut content and ranges; blobs and spectators default unrestricted.
+        symmetrize : Symmetrize or None, optional
+            External-label permutation symmetries, disabled by default.
+        prune_skeletons : callable or None, optional
+            Hereditary bool predicate receiving a scoped graph.SkeletonView.
+        prune_dressings : callable or None, optional
+            Hereditary bool predicate receiving a scoped graph.DressingView.
+        select : callable or None, optional
+            Arbitrary bool predicate receiving a complete graph.DiagramView.
         """
 
 @typing.final
@@ -9192,7 +9903,7 @@ class PropagatorMapping:
     Examples
     --------
     >>> from symbolica import S, E
-    >>> from symbolica.community import hepkit as hep
+    >>> from symbolica.community import hepkit as hep, graph
     >>> D, k, p, s = S("D", "k", "p", "s")
     >>> d1, d2, x1, x2 = S("d1", "d2", "x1", "x2")
     >>> kin = hep.Kinematics(D, momenta=[k, p]).with_scalar_product(p, p, s)
@@ -9233,6 +9944,504 @@ class PropagatorMapping:
         ----------
         powers : list[int]
             One signed power per source denominator.
+        """
+
+@typing.final
+class Range:
+    r"""
+    An inclusive nonnegative count interval. Unrestricted ranges have no upper bound; conflicting bounds retain an empty interval.
+
+    Examples
+    --------
+    >>> from symbolica.community import hepkit as hep
+    >>> bounds = hep.Range.between(1, 3)
+    >>> assert 2 in bounds and 4 not in bounds
+    """
+    @property
+    def minimum(self) -> builtins.int:
+        r"""
+        Smallest count allowed by the lower bound.
+
+        Examples
+        --------
+        >>> assert hep.Range.at_least(2).minimum == 2
+        """
+    @property
+    def maximum(self) -> typing.Optional[builtins.int]:
+        r"""
+        Inclusive upper bound, or None for an unbounded interval.
+
+        Examples
+        --------
+        >>> assert hep.Range.unrestricted().maximum is None
+        >>> assert hep.Range.exact(2).maximum == 2
+        """
+    @staticmethod
+    def unrestricted() -> Range:
+        r"""
+        Allow every nonnegative count.
+
+        Examples
+        --------
+        >>> bounds = hep.Range.unrestricted()
+        >>> assert 100 in bounds
+        """
+    @staticmethod
+    def exact(value: builtins.int) -> Range:
+        r"""
+        Accept exactly one count.
+
+        Examples
+        --------
+        >>> bounds = hep.Range.exact(2)
+        >>> assert 2 in bounds and 3 not in bounds
+
+        Parameters
+        ----------
+        value : int
+            Required nonnegative count.
+        """
+    @staticmethod
+    def at_most(maximum: builtins.int) -> Range:
+        r"""
+        Bound the count from above, inclusively.
+
+        Examples
+        --------
+        >>> bounds = hep.Range.at_most(2)
+        >>> assert 0 in bounds and 3 not in bounds
+
+        Parameters
+        ----------
+        maximum : int
+            Largest accepted count.
+        """
+    @staticmethod
+    def at_least(minimum: builtins.int) -> Range:
+        r"""
+        Bound the count from below, inclusively.
+
+        Examples
+        --------
+        >>> bounds = hep.Range.at_least(2)
+        >>> assert 2 in bounds and 1 not in bounds
+
+        Parameters
+        ----------
+        minimum : int
+            Smallest accepted count.
+        """
+    @staticmethod
+    def between(minimum: builtins.int, maximum: builtins.int) -> Range:
+        r"""
+        Set both inclusive bounds, preserving contradictory bounds as empty.
+
+        Examples
+        --------
+        >>> bounds = hep.Range.between(3, 1)
+        >>> assert bounds.is_empty()
+
+        Parameters
+        ----------
+        minimum : int
+            Smallest accepted count.
+        maximum : int
+            Largest accepted count.
+        """
+    def is_empty(self) -> builtins.bool:
+        r"""
+        Report whether the bounds exclude every count.
+
+        Examples
+        --------
+        >>> assert hep.Range.between(3, 1).is_empty()
+        """
+    def intersect(self, other: Range) -> Range:
+        r"""
+        Return the common interval without changing either operand.
+
+        Examples
+        --------
+        >>> bounds = hep.Range.at_least(2).intersect(hep.Range.at_most(4))
+        >>> assert bounds.minimum == 2 and bounds.maximum == 4
+
+        Parameters
+        ----------
+        other : Range
+            Interval to intersect.
+        """
+    def __contains__(self, value: builtins.int) -> builtins.bool:
+        r"""
+        Test membership in the inclusive interval.
+
+        Examples
+        --------
+        >>> assert 2 in hep.Range.between(1, 3)
+
+        Parameters
+        ----------
+        value : int
+            Nonnegative count to test.
+        """
+    def __repr__(self) -> builtins.str:
+        r"""
+        Return a compact representation of the configured options.
+
+        Examples
+        --------
+        >>> assert "Range" in repr(hep.Range.exact(2))
+        """
+
+@typing.final
+class Request:
+    r"""
+    Immutable physics discovery criteria with replaceable scoped Python predicates.
+    Register hooks as decorators or constructor arguments; registering a hook again
+    replaces its previous callable and worker permission. The callable is returned unchanged.
+
+    Examples
+    --------
+    >>> from symbolica.community import hepkit as hep
+    >>> model = hep.Model.standard_model()
+    >>> process = model.process(["e-", "e+"], ["a", "a"])
+    >>> request = process.amplitude(loops=hep.Loops.total(0))
+    >>> discovered = request.generate(run=hep.Run(threads=1))
+    >>> assert discovered.report.completed and len(discovered) > 0
+    """
+    @property
+    def check_heredity(self) -> builtins.bool:
+        r"""
+        Enable native hereditary-pruning checks for this Python request.
+        Either this preference or ``Run(check_heredity=True)`` enables checking; False
+        never disables an explicitly enabled Run. This preference is not persisted.
+
+        Examples
+        --------
+        Using the setup in the ``Request`` class example:
+
+        >>> request.check_heredity = True
+        >>> assert request.check_heredity and request.count().complete
+        """
+    @check_heredity.setter
+    def check_heredity(self, value: builtins.bool) -> None:
+        r"""
+        Set the request-local preference for native hereditary-pruning checks.
+
+        Examples
+        --------
+        Using the setup in the ``Request`` class example:
+
+        >>> request.check_heredity = True
+        >>> checked = request.count(run=hep.Run(threads=1))
+        >>> assert checked.complete
+
+        Parameters
+        ----------
+        value : bool
+            Enable checking for this request; False does not override an enabled Run.
+        """
+    @property
+    def process(self) -> Process:
+        r"""
+        Validated external-state definition.
+
+        Examples
+        --------
+        Using the setup in the ``Request`` class example:
+
+        >>> assert request.process.incoming == process.incoming
+        """
+    @property
+    def loops(self) -> Loops:
+        r"""
+        Required loop domain and inclusive limits.
+
+        Examples
+        --------
+        Using the setup in the ``Request`` class example:
+
+        >>> bounds = request.loops
+        """
+    @property
+    def orders(self) -> Orders:
+        r"""
+        Coupling-order constraints.
+
+        Examples
+        --------
+        Using the setup in the ``Request`` class example:
+
+        >>> criteria = request.orders
+        """
+    @property
+    def restrict(self) -> Restrict:
+        r"""
+        Particle and interaction restrictions.
+
+        Examples
+        --------
+        Using the setup in the ``Request`` class example:
+
+        >>> species = request.restrict
+        """
+    @property
+    def topology(self) -> TopologyRules:
+        r"""
+        Topology criteria.
+
+        Examples
+        --------
+        Using the setup in the ``Request`` class example:
+
+        >>> assert request.topology.self_loops
+        """
+    @property
+    def cuts(self) -> Cuts:
+        r"""
+        Physical cut criteria.
+
+        Examples
+        --------
+        Using the setup in the ``Request`` class example:
+
+        >>> assert request.cuts.blobs.maximum is None
+        """
+    @property
+    def symmetrize(self) -> Symmetrize:
+        r"""
+        External-state symmetry choices.
+
+        Examples
+        --------
+        Using the setup in the ``Request`` class example:
+
+        >>> symmetry = request.symmetrize
+        """
+    def prune_skeletons(self, callback: typing.Optional[typing.Any] = None, *, thread_safe: builtins.bool = False) -> typing.Any:
+        r"""
+        Register a hereditary topology predicate and return the original callable.
+
+        Use ``@request.prune_skeletons`` or ``@request.prune_skeletons(thread_safe=True)``.
+        Registration replaces the previous topology hook. Worker permission applies only
+        to this hook; unmarked hooks and progress stay on the invoking thread.
+
+        Examples
+        --------
+        Using the setup in the ``Request`` class example:
+
+        >>> @request.prune_skeletons
+        ... def no_self_edges(view):
+        ...     return all(view.self_loops(v) == 0 for v in range(view.n_vertices))
+        >>> assert request.count().complete
+
+        Parameters
+        ----------
+        callback : callable or None
+            Receives a scoped SkeletonView. None returns a parameterized decorator.
+        thread_safe : bool
+            Permit the existing predicate worker; mutable graph snapshots require False.
+        """
+    def prune_dressings(self, callback: typing.Optional[typing.Any] = None, *, thread_safe: builtins.bool = False) -> typing.Any:
+        r"""
+        Register a hereditary field-assignment predicate and return the original callable.
+
+        Use ``@request.prune_dressings`` or ``@request.prune_dressings(thread_safe=True)``.
+        Registration replaces the previous dressing hook. The scoped DressingView expires
+        after each call; retain an explicit graph snapshot only on the invoking thread.
+
+        Examples
+        --------
+        Using the setup in the ``Request`` class example:
+
+        >>> @request.prune_dressings(thread_safe=True)
+        ... def no_gluon_ghosts(view):
+        ...     return all(abs(stub.data.pdg_code) != 9000005
+        ...                for _, _, stub in view.edges() if stub is not None)
+        >>> assert request.count(run=hep.Run(threads=1)).complete
+
+        Parameters
+        ----------
+        callback : callable or None
+            Receives a scoped DressingView. None returns a parameterized decorator.
+        thread_safe : bool
+            Permit this hook to run on the existing predicate worker.
+        """
+    def select(self, callback: typing.Optional[typing.Any] = None, *, thread_safe: builtins.bool = False) -> typing.Any:
+        r"""
+        Register a complete-assignment predicate and return the original callable.
+
+        Use ``@request.select`` or ``@request.select(thread_safe=True)``. Registration
+        replaces the previous selection hook. This terminal predicate need not be hereditary.
+
+        Examples
+        --------
+        Using the setup in the ``Request`` class example:
+
+        >>> @request.select
+        ... def two_vertices(view):
+        ...     return view.n_vertices == 2
+        >>> selected = request.generate()
+        >>> assert all(len(diagram.rules) == 2 for diagram in selected)
+
+        Parameters
+        ----------
+        callback : callable or None
+            Receives a scoped DiagramView. None returns a parameterized decorator.
+        thread_safe : bool
+            Permit this hook to run on the existing predicate worker.
+        """
+    def generate(self, *, run: typing.Optional[Run] = None) -> DiagramSet:
+        r"""
+        Discover compact physical diagrams without numerators.
+
+        Examples
+        --------
+        Using the setup in the ``Request`` class example:
+
+        >>> compact = request.generate(run=hep.Run(threads=1))
+        >>> assert len(compact) == request.count().diagrams
+
+        Parameters
+        ----------
+        run : Run or None, optional
+            Execution controls; None uses Run defaults.
+        """
+    def count(self, *, run: typing.Optional[Run] = None) -> Counts:
+        r"""
+        Count physical assignments and exact weights without constructing diagrams.
+
+        Examples
+        --------
+        Using the setup in the ``Request`` class example:
+
+        >>> counts = request.count(run=hep.Run(threads=1))
+        >>> exact_weight = counts.sum_inv_aut
+
+        Parameters
+        ----------
+        run : Run or None, optional
+            Execution controls; no FeynmanDiagram or numerator is constructed.
+        """
+    def explain(self) -> PlanReport:
+        r"""
+        Explain active criteria without searching.
+
+        Examples
+        --------
+        Using the setup in the ``Request`` class example:
+
+        >>> report = request.explain()
+        >>> criteria = report.criteria
+        """
+    def __repr__(self) -> builtins.str:
+        r"""
+        Describe the current value.
+
+        Examples
+        --------
+        Using the setup in the ``Request`` class example:
+
+        >>> print(request)
+        """
+
+@typing.final
+class Restrict:
+    r"""
+    Particle-species and vertex restrictions resolved in the request model. Allow clauses intersect; exclusions unite. An explicit empty allow selects nothing.
+
+    Examples
+    --------
+    >>> from symbolica.community import hepkit as hep
+    >>> model = hep.Model.standard_model()
+    >>> restriction = hep.Restrict().only_particles([11, 22])
+    >>> request = model.process([11, -11], [22, 22]).amplitude(loops=hep.Loops.total(0), restrict=restriction)
+    """
+    def __new__(cls) -> Restrict:
+        r"""
+        Start with unrestricted particles and vertices.
+
+        Examples
+        --------
+        >>> restriction = hep.Restrict()
+        >>> request = model.process([11, -11], [22, 22]).amplitude(loops=hep.Loops.total(0), restrict=restriction)
+        """
+    def only_particles(self, particles: typing.Sequence[Particle | ParticleSelector | builtins.str | builtins.int]) -> Restrict:
+        r"""
+        Intersect the allowed particle species with this clause. Return a new restriction.
+
+        Examples
+        --------
+        >>> restriction = hep.Restrict().only_particles([11, 22])
+        >>> request = model.process([11, -11], [22, 22]).amplitude(loops=hep.Loops.total(0), restrict=restriction)
+
+        Parameters
+        ----------
+        particles : sequence[Particle | ParticleSelector | str | int]
+            Model-bound records or selectors to resolve in the request model.
+        """
+    def exclude_particles(self, particles: typing.Sequence[Particle | ParticleSelector | builtins.str | builtins.int]) -> Restrict:
+        r"""
+        Exclude the selected particle species. Return a new restriction.
+
+        Examples
+        --------
+        >>> restriction = hep.Restrict().exclude_particles([11, 22])
+        >>> request = model.process([11, -11], [22, 22]).amplitude(loops=hep.Loops.total(0), restrict=restriction)
+
+        Parameters
+        ----------
+        particles : sequence[Particle | ParticleSelector | str | int]
+            Model-bound records or selectors to resolve in the request model.
+        """
+    def only_vertices(self, vertices: typing.Sequence[VertexRule | builtins.str]) -> Restrict:
+        r"""
+        Intersect the allowed vertex rules with this clause. Return a new restriction.
+
+        Examples
+        --------
+        >>> restriction = hep.Restrict().only_vertices([])
+        >>> request = model.process([11, -11], [22, 22]).amplitude(loops=hep.Loops.total(0), restrict=restriction)
+
+        Parameters
+        ----------
+        vertices : sequence[VertexRule | str]
+            Model-bound records or selectors to resolve in the request model.
+        """
+    def exclude_vertices(self, vertices: typing.Sequence[VertexRule | builtins.str]) -> Restrict:
+        r"""
+        Exclude the selected vertex rules. Return a new restriction.
+
+        Examples
+        --------
+        >>> restriction = hep.Restrict().exclude_vertices([])
+        >>> request = model.process([11, -11], [22, 22]).amplitude(loops=hep.Loops.total(0), restrict=restriction)
+
+        Parameters
+        ----------
+        vertices : sequence[VertexRule | str]
+            Model-bound records or selectors to resolve in the request model.
+        """
+    def merge(self, other: Restrict) -> Restrict:
+        r"""
+        Combine restrictions by intersecting allow clauses and uniting exclusions.
+
+        Examples
+        --------
+        >>> restriction = hep.Restrict().only_particles([11, 22]).merge(hep.Restrict().exclude_particles([13]))
+        >>> request = model.process([11, -11], [22, 22]).amplitude(loops=hep.Loops.total(0), restrict=restriction)
+
+        Parameters
+        ----------
+        other : Restrict
+            Additional restrictions.
+        """
+    def __repr__(self) -> builtins.str:
+        r"""
+        Return a compact representation of the configured options.
+
+        Examples
+        --------
+        >>> assert "Restrict" in repr(hep.Restrict())
         """
 
 @typing.final
@@ -9362,83 +10571,269 @@ class Rotation:
         """
 
 @typing.final
-class SelfEnergyFilterOptions:
+class Run:
     r"""
-    Configure rejection of self-energy subgraphs by mass category.
+    Execution controls and an optional invoking-thread progress callback.
+    ``thread_safe=True`` permits typed predicates to run on one reused callback worker.
+    Worker predicates may inspect typed fields, but ``graph()`` and ``complete_graph()``
+    raise ``RuntimeError`` because mutable Graph snapshots require the calling thread.
+    Progress remains on the invoking thread; WebAssembly always runs callbacks inline.
+    This permission makes no parallel acceleration guarantee. Progress accepts None or
+    True to continue and False to cancel; other return values raise TypeError.
 
     Examples
     --------
-    >>> from symbolica import S, E
     >>> from symbolica.community import hepkit as hep
-    >>> hep.SelfEnergyFilterOptions(veto_massive=True, veto_massless=True)
-
-    Parameters
-    ----------
-    veto_massive : bool, optional
-        Reject self energies carried by massive particles.
-    veto_massless : bool, optional
-        Reject self energies carried by massless particles.
-    only_scaleless : bool, optional
-        Currently unsupported; ``True`` makes generation return an error.
+    >>> run = hep.Run(threads=1)
+    >>> process = hep.Model.standard_model().process(["e-", "e+"], ["a", "a"])
+    >>> counts = process.amplitude(loops=hep.Loops.total(0)).count(run=run)
     """
-    def __new__(cls, *, veto_massive: builtins.bool = True, veto_massless: builtins.bool = True, only_scaleless: builtins.bool = False) -> SelfEnergyFilterOptions:
+    @property
+    def cancellation(self) -> CancellationToken:
         r"""
-        Configure rejection of self-energy subgraphs by mass category.
+        Shared cancellation token used by these controls.
 
         Examples
         --------
-        Using the setup in the ``SelfEnergyFilterOptions`` class example:
+        Using the setup in the ``Run`` class example:
 
-        >>> hep.SelfEnergyFilterOptions(veto_massive=True, veto_massless=True)
+        >>> run.cancellation.cancel()
+        >>> assert run.cancellation.is_cancelled
+        """
+    def __new__(cls, *, threads: typing.Optional[builtins.int] = None, parallel: builtins.bool = True, check_heredity: builtins.bool = False, cancellation: typing.Optional[CancellationToken] = None, progress: typing.Optional[typing.Any] = None, thread_safe: builtins.bool = False) -> Run:
+        r"""
+        Construct execution controls.
+
+        Examples
+        --------
+        Using the setup in the ``Run`` class example:
+
+        >>> run = hep.Run(threads=1, progress=lambda update: None)
 
         Parameters
         ----------
-        veto_massive : bool, optional
-            Reject self energies carried by massive particles.
-        veto_massless : bool, optional
-            Reject self energies carried by massless particles.
-        only_scaleless : bool, optional
-            Currently unsupported; ``True`` makes generation return an error.
+        threads : int or None, optional
+            Positive native worker limit; None uses the native default.
+        parallel : bool, optional
+            Permit native parallel search, default True; WebAssembly runs inline.
+        check_heredity : bool, optional
+            Check that pruning callbacks preserve hereditary rejection.
+        cancellation : CancellationToken or None, optional
+            Shared cancellation flag; None creates an execution control token.
+        progress : callable, str or None, optional
+            Calling-thread progress observer, "auto" for notebook display, or None.
+        thread_safe : bool, optional
+            Opt into one reused predicate worker; Graph snapshots require False.
+        """
+    def __repr__(self) -> builtins.str:
+        r"""
+        Describe the current value.
+
+        Examples
+        --------
+        Using the setup in the ``Run`` class example:
+
+        >>> print(run)
         """
 
 @typing.final
-class SnailFilterOptions:
+class Selection:
     r"""
-    Configure rejection of zero-momentum snail subgraphs.
+    Selection after numerator construction. None leaves selection unrestricted; an explicit empty selection keeps no diagrams. Mixed stable-ID and name selectors form a union.
 
     Examples
     --------
-    >>> from symbolica import S, E
     >>> from symbolica.community import hepkit as hep
-    >>> hep.SnailFilterOptions(veto_attached_to_massless=True)
-
-    Parameters
-    ----------
-    veto_attached_to_massive : bool, optional
-        Reject zero-momentum snails attached through a massive particle.
-    veto_attached_to_massless : bool, optional
-        Reject zero-momentum snails attached through a massless particle.
-    only_scaleless : bool, optional
-        Currently unsupported; ``True`` makes generation return an error.
+    >>> selection = hep.Selection(select=[])
+    >>> assert "Selection" in repr(selection)
     """
-    def __new__(cls, *, veto_attached_to_massive: builtins.bool = False, veto_attached_to_massless: builtins.bool = True, only_scaleless: builtins.bool = False) -> SnailFilterOptions:
+    def __new__(cls, *, select: typing.Optional[typing.Sequence[FeynmanDiagram | builtins.str]] = None, veto: typing.Optional[typing.Sequence[FeynmanDiagram | builtins.str]] = None, forced_cuts: typing.Optional[typing.Sequence[typing.Sequence[builtins.int]]] = None) -> Selection:
         r"""
-        Configure rejection of zero-momentum snail subgraphs.
+        Specify diagram inclusion, vetoes, and optional forced cuts.
 
         Examples
         --------
-        Using the setup in the ``SnailFilterOptions`` class example:
-
-        >>> hep.SnailFilterOptions(veto_attached_to_massless=True)
+        >>> selection = hep.Selection(select=["sample_0"], veto=["sample_1"])
+        >>> assert "sample_0" in repr(selection)
 
         Parameters
         ----------
-        veto_attached_to_massive : bool, optional
-            Reject zero-momentum snails attached through a massive particle.
-        veto_attached_to_massless : bool, optional
-            Reject zero-momentum snails attached through a massless particle.
-        only_scaleless : bool, optional
-            Currently unsupported; ``True`` makes generation return an error.
+        select : sequence[FeynmanDiagram | str] | None
+            Diagrams, stable IDs, or explicit names to retain; None retains all and [] retains none.
+        veto : sequence[FeynmanDiagram | str] | None
+            Diagrams, stable IDs, or names to exclude.
+        forced_cuts : sequence[sequence[int]] | None
+            Accepted cuts represented by edge indices.
+        """
+    def __repr__(self) -> builtins.str:
+        r"""
+        Return a compact representation of the configured options.
+
+        Examples
+        --------
+        >>> assert "Selection" in repr(hep.Selection())
+        """
+
+@typing.final
+class Skeleton:
+    r"""
+    A shared skeleton snapshot independent of an active search. Obtain it from a prepared diagram or DiagramSet.skeletons.
+
+    Examples
+    --------
+    >>> from symbolica.community import hepkit as hep
+    >>> model = hep.Model.standard_model()
+    >>> request = model.process([11, -11], [22, 22]).amplitude(loops=hep.Loops.total(0))
+    >>> discovered = request.generate()
+    >>> diagram = discovered[0]
+    >>> skeleton = diagram.skeleton
+    >>> assert skeleton.loops == 0
+    >>> identities = {skeleton.id}
+    >>> assert skeleton.id in identities
+    """
+    @property
+    def id(self) -> tuple:
+        r"""
+        Hashable native canonical key, including model identity and complete key tables. This is a skeleton key, not a built Feynman-diagram identifier.
+
+        Examples
+        --------
+        Using the setup in this class example:
+
+        >>> identities = {skeleton.id}
+        >>> assert diagram.skeleton.id in identities
+        """
+    @property
+    def loops(self) -> builtins.int:
+        r"""
+        Loop order of this skeleton.
+
+        Examples
+        --------
+        Using the setup in this class example:
+
+        >>> assert skeleton.loops == 0
+        """
+    @property
+    def automorphisms(self) -> builtins.int:
+        r"""
+        Exact skeleton automorphism-group order. Raises OverflowError if the native order exceeds u128.
+
+        Examples
+        --------
+        Using the setup in this class example:
+
+        >>> assert skeleton.automorphisms >= 1
+        """
+    @property
+    def graph(self) -> Graph:
+        r"""
+        Materialize an independent graph. Nodes carry optional engine signature ranks; assigned edges carry Particle objects and external labels retain state and index.
+
+        Examples
+        --------
+        Using the setup in this class example:
+
+        >>> graph = skeleton.graph
+        >>> assert graph.n_edges > 0
+        """
+    def __repr__(self) -> builtins.str:
+        r"""
+        Describe the loop and vertex counts.
+
+        Examples
+        --------
+        Using the setup in this class example:
+
+        >>> assert "loops=0" in repr(skeleton)
+        """
+
+@typing.final
+class SkeletonIterator:
+    r"""
+    An owning iterator returned by iter(skeletons); its backing result remains alive while the iterator is retained.
+
+    Examples
+    --------
+    >>> from symbolica.community import hepkit as hep
+    >>> model = hep.Model.standard_model()
+    >>> request = model.process([11, -11], [22, 22]).amplitude(loops=hep.Loops.total(0))
+    >>> discovered = request.generate()
+    >>> skeletons = discovered.skeletons
+    >>> iterator = iter(skeletons)
+    >>> assert next(iterator).loops == 0
+    """
+    def __iter__(self) -> SkeletonIterator:
+        r"""
+        Return this iterator without resetting its position.
+
+        Examples
+        --------
+        Using the setup in this class example:
+
+        >>> assert iter(iterator) is iterator
+        """
+    def __next__(self) -> typing.Optional[Skeleton]:
+        r"""
+        Return the next retained item, or raise StopIteration at exhaustion.
+
+        Examples
+        --------
+        Using the setup in this class example:
+
+        >>> iterator = iter(skeletons)
+        >>> assert next(iterator).loops == 0
+        """
+
+@typing.final
+class Skeletons:
+    r"""
+    A shared sequence of skeleton snapshots obtained from DiagramSet.skeletons.
+
+    Examples
+    --------
+    >>> from symbolica.community import hepkit as hep
+    >>> model = hep.Model.standard_model()
+    >>> request = model.process([11, -11], [22, 22]).amplitude(loops=hep.Loops.total(0))
+    >>> discovered = request.generate()
+    >>> skeletons = discovered.skeletons
+    >>> assert len(skeletons) > 0
+    >>> assert all(skeleton.loops == 0 for skeleton in skeletons)
+    """
+    def __len__(self) -> builtins.int:
+        r"""
+        Number of retained items in this shared sequence.
+
+        Examples
+        --------
+        Using the setup in this class example:
+
+        >>> assert len(skeletons) > 0
+        """
+    def __getitem__(self, index: builtins.int) -> Skeleton:
+        r"""
+        Access one retained item by index. Negative indices count from the end; invalid indices raise IndexError.
+
+        Examples
+        --------
+        Using the setup in this class example:
+
+        >>> assert skeletons[0].loops == 0
+
+        Parameters
+        ----------
+        index : int
+            Sequence index, with Python negative-index semantics.
+        """
+    def __iter__(self) -> SkeletonIterator:
+        r"""
+        Iterate the retained sequence without an eager Python list.
+
+        Examples
+        --------
+        Using the setup in this class example:
+
+        >>> assert sum(1 for item in skeletons) == len(skeletons)
         """
 
 @typing.final
@@ -9455,9 +10850,9 @@ class SquaredAmplitude:
     >>> from symbolica.community import hepkit as hep
     >>> model = hep.Model.phi4()
     >>> process = model.process(["phi", "phi"], ["phi", "phi"])
-    >>> generated = process.generate_diagrams()
+    >>> generated = process.amplitude(loops=hep.Loops.total(0)).generate().build(hep.NumeratorOptions(naming=hep.Naming.named("D")))
     >>> diagram = generated.diagrams[0]
-    >>> amplitude = hep.Amplitude(generated.diagrams)
+    >>> amplitude = generated.into_amplitude()
     >>> squared = amplitude.squared()
     >>> unpolarized = squared.sum_spins(average_initial=True).sum_colors(average_initial=True)
     >>> tensor = unpolarized.expression()
@@ -9605,10 +11000,10 @@ class Subgraph(FeynmanDiagram):
     Examples
     --------
     >>> from symbolica import S, E
-    >>> from symbolica.community import hepkit as hep
+    >>> from symbolica.community import hepkit as hep, graph
     >>> model = hep.Model.phi4()
     >>> process = model.process(["phi", "phi"], ["phi", "phi"])
-    >>> result = process.generate_diagrams(loops=1)
+    >>> result = process.amplitude(loops=hep.Loops.total(1), topology=hep.TopologyRules(bridges=graph.Bridges.one_pi_in_loops(), self_energies=hep.Veto.all(), tadpoles=hep.Veto.all(), snails=hep.Veto.massless())).generate().build(hep.NumeratorOptions(naming=hep.Naming.named("D")))
     >>> diagram = result.diagrams[0]
     >>> region = diagram.filter(edge=lambda edge: not edge.is_external)
     >>> left = diagram.subgraph(nodes=[0])
@@ -9891,43 +11286,106 @@ class Symbols:
         """
 
 @typing.final
-class TadpoleFilterOptions:
+class Symmetrize:
     r"""
-    Configure rejection of tadpoles by the mass of their attachment.
+    Independent external-state symmetrizations, combined with the | operator.
 
     Examples
     --------
-    >>> from symbolica import S, E
     >>> from symbolica.community import hepkit as hep
-    >>> hep.TadpoleFilterOptions(veto_attached_to_massless=True)
-
-    Parameters
-    ----------
-    veto_attached_to_massive : bool, optional
-        Reject tadpoles attached through a massive particle.
-    veto_attached_to_massless : bool, optional
-        Reject tadpoles attached through a massless particle.
-    only_scaleless : bool, optional
-        Currently unsupported; ``True`` makes generation return an error.
+    >>> symmetry = hep.Symmetrize.INITIAL | hep.Symmetrize.FINAL
+    >>> assert symmetry.initial and symmetry.final_state
     """
-    def __new__(cls, *, veto_attached_to_massive: builtins.bool = True, veto_attached_to_massless: builtins.bool = True, only_scaleless: builtins.bool = False) -> TadpoleFilterOptions:
+    INITIAL: Symmetrize
+    r"""
+    Enable only the initial symmetry.
+
+    Examples
+    --------
+    >>> assert hep.Symmetrize.INITIAL.initial
+    """
+    FINAL: Symmetrize
+    r"""
+    Enable only the final state symmetry.
+
+    Examples
+    --------
+    >>> assert hep.Symmetrize.FINAL.final_state
+    """
+    EXTERNAL_FERMIONS: Symmetrize
+    r"""
+    Enable only the external fermions symmetry.
+
+    Examples
+    --------
+    >>> assert hep.Symmetrize.EXTERNAL_FERMIONS.external_fermions
+    """
+    @property
+    def initial(self) -> builtins.bool:
         r"""
-        Configure rejection of tadpoles by the mass of their attachment.
+        Whether initial symmetrization is enabled.
 
         Examples
         --------
-        Using the setup in the ``TadpoleFilterOptions`` class example:
+        >>> assert hep.Symmetrize(initial=True).initial
+        """
+    @property
+    def final_state(self) -> builtins.bool:
+        r"""
+        Whether final state symmetrization is enabled.
 
-        >>> hep.TadpoleFilterOptions(veto_attached_to_massless=True)
+        Examples
+        --------
+        >>> assert hep.Symmetrize(final_state=True).final_state
+        """
+    @property
+    def external_fermions(self) -> builtins.bool:
+        r"""
+        Whether external fermions symmetrization is enabled.
+
+        Examples
+        --------
+        >>> assert hep.Symmetrize(external_fermions=True).external_fermions
+        """
+    def __new__(cls, *, initial: builtins.bool = False, final_state: builtins.bool = False, external_fermions: builtins.bool = False) -> Symmetrize:
+        r"""
+        Choose independent external-state symmetries.
+
+        Examples
+        --------
+        >>> symmetry = hep.Symmetrize(initial=True)
+        >>> assert symmetry.initial and not symmetry.final_state
 
         Parameters
         ----------
-        veto_attached_to_massive : bool, optional
-            Reject tadpoles attached through a massive particle.
-        veto_attached_to_massless : bool, optional
-            Reject tadpoles attached through a massless particle.
-        only_scaleless : bool, optional
-            Currently unsupported; ``True`` makes generation return an error.
+        initial : bool
+            Symmetrize incoming external states.
+        final_state : bool
+            Symmetrize outgoing external states.
+        external_fermions : bool
+            Apply external-fermion symmetrization.
+        """
+    def __or__(self, other: Symmetrize) -> Symmetrize:
+        r"""
+        Combine enabled symmetry flags.
+
+        Examples
+        --------
+        >>> symmetry = hep.Symmetrize.INITIAL | hep.Symmetrize.FINAL
+        >>> assert symmetry.initial and symmetry.final_state
+
+        Parameters
+        ----------
+        other : Symmetrize
+            Additional flags to enable.
+        """
+    def __repr__(self) -> builtins.str:
+        r"""
+        Return a compact representation of the configured options.
+
+        Examples
+        --------
+        >>> assert "Symmetrize" in repr(hep.Symmetrize())
         """
 
 @typing.final
@@ -10025,7 +11483,7 @@ class TensorReducer:
         >>> from symbolica import S, E
         >>> from symbolica.community import hepkit as hep
         >>> model = hep.Model.phi4()
-        >>> vacuum_diagram = model.process([], []).generate_diagrams(loops=2, factorized_loop_topologies_count_range=None).diagrams[0]
+        >>> vacuum_diagram = model.process([], []).amplitude(loops=hep.Loops.total(2)).generate().build().diagrams[0]
         >>> reducer = hep.TensorReducer(E("4"), integrated=[E("gammalooprs::Q")])
         >>> reduced = reducer.reduce(vacuum_diagram.numerator_expression().to_expression())
 
@@ -10504,6 +11962,139 @@ class ThreeMomentum:
             The IPython pretty-printer object.
         cycle : bool
             Whether this object is part of a recursive formatting cycle.
+        """
+
+@typing.final
+class TopologyRules:
+    r"""
+    Topology constraints with shared native defaults and no process-dependent presets.
+
+    Examples
+    --------
+    >>> from symbolica.community import hepkit as hep
+    >>> rules = hep.TopologyRules(self_loops=False, tadpoles=hep.Veto.all())
+    >>> assert not rules.self_loops and rules.tadpoles.enabled()
+    """
+    @property
+    def bridges(self) -> Bridges:
+        r"""
+        Bridge constraints from symbolica.community.graph; None uses native unrestricted defaults.
+
+        Examples
+        --------
+        >>> from symbolica.community import graph
+        >>> rules = hep.TopologyRules(bridges=graph.Bridges.any())
+        >>> assert repr(rules.bridges) == repr(graph.Bridges.any())
+        """
+    @property
+    def self_loops(self) -> builtins.bool:
+        r"""
+        Allow graph edges joining a vertex to itself.
+
+        Examples
+        --------
+        >>> assert not hep.TopologyRules(self_loops=False).self_loops
+        """
+    @property
+    def zero_flow_edges(self) -> builtins.bool:
+        r"""
+        Allow edges carrying identically zero momentum.
+
+        Examples
+        --------
+        >>> assert not hep.TopologyRules().zero_flow_edges
+        """
+    @property
+    def max_vertices(self) -> typing.Optional[builtins.int]:
+        r"""
+        Optional upper bound on the number of internal vertices.
+
+        Examples
+        --------
+        >>> assert hep.TopologyRules(max_vertices=4).max_vertices == 4
+        """
+    @property
+    def self_energies(self) -> Veto:
+        r"""
+        Mass-qualified self-energy veto; None disables it.
+
+        Examples
+        --------
+        >>> assert not hep.TopologyRules().self_energies.enabled()
+        """
+    @property
+    def tadpoles(self) -> Veto:
+        r"""
+        Mass-qualified tadpole veto; None disables it.
+
+        Examples
+        --------
+        >>> assert hep.TopologyRules(tadpoles=hep.Veto.all()).tadpoles.enabled()
+        """
+    @property
+    def snails(self) -> Veto:
+        r"""
+        Mass-qualified snail veto; None disables it.
+
+        Examples
+        --------
+        >>> assert not hep.TopologyRules().snails.enabled()
+        """
+    @property
+    def fermion_loops(self) -> Range:
+        r"""
+        Allowed number of closed fermion loops; None is unrestricted.
+
+        Examples
+        --------
+        >>> assert 2 in hep.TopologyRules().fermion_loops
+        """
+    @property
+    def factorized_loops(self) -> Range:
+        r"""
+        Allowed number of factorized loops; None is unrestricted.
+
+        Examples
+        --------
+        >>> assert 1 not in hep.TopologyRules(factorized_loops=hep.Range.exact(0)).factorized_loops
+        """
+    def __new__(cls, *, bridges: typing.Optional[Bridges] = None, self_loops: builtins.bool = True, zero_flow_edges: builtins.bool = False, max_vertices: typing.Optional[builtins.int] = None, self_energies: typing.Optional[Veto] = None, tadpoles: typing.Optional[Veto] = None, snails: typing.Optional[Veto] = None, fermion_loops: typing.Optional[Range] = None, factorized_loops: typing.Optional[Range] = None) -> TopologyRules:
+        r"""
+        Set independent topology constraints for discovery.
+
+        Examples
+        --------
+        >>> rules = hep.TopologyRules(max_vertices=4, fermion_loops=hep.Range.exact(0))
+        >>> assert rules.max_vertices == 4 and 1 not in rules.fermion_loops
+
+        Parameters
+        ----------
+        bridges : Bridges | None
+            Bridge constraints from symbolica.community.graph; None uses native unrestricted defaults.
+        self_loops : bool
+            Allow graph edges joining a vertex to itself.
+        zero_flow_edges : bool
+            Allow edges carrying identically zero momentum.
+        max_vertices : int | None
+            Optional upper bound on the number of internal vertices.
+        self_energies : Veto | None
+            Mass-qualified self-energy veto; None disables it.
+        tadpoles : Veto | None
+            Mass-qualified tadpole veto; None disables it.
+        snails : Veto | None
+            Mass-qualified snail veto; None disables it.
+        fermion_loops : Range | None
+            Allowed number of closed fermion loops; None is unrestricted.
+        factorized_loops : Range | None
+            Allowed number of factorized loops; None is unrestricted.
+        """
+    def __repr__(self) -> builtins.str:
+        r"""
+        Return a compact representation of the configured options.
+
+        Examples
+        --------
+        >>> assert "TopologyRules" in repr(hep.TopologyRules())
         """
 
 @typing.final
@@ -11059,6 +12650,77 @@ class VertexRule:
         """
 
 @typing.final
+class Veto:
+    r"""
+    Mass qualifiers for an opt-in topology veto. Both qualifiers are disabled by default.
+
+    Examples
+    --------
+    >>> from symbolica.community import hepkit as hep
+    >>> assert not hep.Veto().enabled()
+    >>> assert hep.Veto.massless().enabled()
+    """
+    def __new__(cls, *, massive: builtins.bool = False, massless: builtins.bool = False) -> Veto:
+        r"""
+        Choose the mass categories to reject.
+
+        Examples
+        --------
+        >>> assert hep.Veto(massive=True).enabled()
+
+        Parameters
+        ----------
+        massive : bool
+            Reject massive instances of this topology.
+        massless : bool
+            Reject massless instances of this topology.
+        """
+    @staticmethod
+    def all() -> Veto:
+        r"""
+        Reject both massive and massless instances.
+
+        Examples
+        --------
+        >>> assert hep.Veto.all().enabled()
+        """
+    @staticmethod
+    def massive() -> Veto:
+        r"""
+        Reject massive instances only.
+
+        Examples
+        --------
+        >>> assert hep.Veto.massive().enabled()
+        """
+    @staticmethod
+    def massless() -> Veto:
+        r"""
+        Reject massless instances only.
+
+        Examples
+        --------
+        >>> assert hep.Veto.massless().enabled()
+        """
+    def enabled(self) -> builtins.bool:
+        r"""
+        Report whether either mass category is vetoed.
+
+        Examples
+        --------
+        >>> assert not hep.Veto().enabled()
+        >>> assert hep.Veto.all().enabled()
+        """
+    def __repr__(self) -> builtins.str:
+        r"""
+        Return a compact representation of the configured options.
+
+        Examples
+        --------
+        >>> assert "Veto" in repr(hep.Veto())
+        """
+
+@typing.final
 class Wavefunction:
     r"""
     A fixed numerical external state in GammaLoop's MadGraph phase convention.
@@ -11212,3 +12874,31 @@ class ParameterType(enum.Enum):
     """
     REAL = ...
     COMPLEX = ...
+
+@typing.final
+class Stage(enum.Enum):
+    r"""
+    A stage in the physics discovery, construction, selection, or grouping pipeline.
+
+    Examples
+    --------
+    >>> from symbolica.community import hepkit as hep
+    >>> model = hep.Model.standard_model()
+    >>> request = model.process([11, -11], [22, 22]).amplitude(loops=hep.Loops.total(0))
+    >>> events = []
+    >>> run = hep.Run(progress=lambda event: events.append(event) or True)
+    >>> counts = request.count(run=run)
+    >>> assert counts.complete and events
+    >>> assert any(event.stage == hep.Stage.Skeletons for event in events)
+    """
+    Skeletons = ...
+    Dressing = ...
+    Prepare = ...
+    Numerators = ...
+    Selection = ...
+    ZeroColor = ...
+    GroupingPreparation = ...
+    GroupingSamples = ...
+    GroupingComparison = ...
+    Grouping = ...
+    Done = ...

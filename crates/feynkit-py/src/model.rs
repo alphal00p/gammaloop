@@ -23,7 +23,7 @@ use pyo3_stub_gen::{
 use crate::{
     display::{escape_html, model_expression_html, model_record_html},
     error,
-    generation::{PyProcess, SelectorInput, VertexInput},
+    generation::{PyProcess, SelectorInput},
 };
 use spynso3::{display::DisplaySettings, expression::TensorExpression};
 use symbolica::{
@@ -79,8 +79,11 @@ impl PyParticle {
         self.model.particle_by_id(self.id).unwrap()
     }
 
-    pub(crate) fn signed_pdg(&self) -> i64 {
-        self.inner().pdg_code
+    pub(crate) fn selector(&self) -> feynkit_generator::ParticleSelector {
+        feynkit_generator::ParticleSelector::Id {
+            particle: self.id,
+            model: self.model.fingerprint(),
+        }
     }
 }
 
@@ -256,7 +259,7 @@ impl PyParticle {
     /// >>> from symbolica import S, E
     /// >>> from symbolica.community import hepkit as hep
     /// >>> model = hep.Model.standard_model()
-    /// >>> diagram = model.process(["e-", "e+"], ["mu-", "mu+"]).generate_diagrams().diagrams[0]
+    /// >>> diagram = model.process(["e-", "e+"], ["mu-", "mu+"]).amplitude(loops=hep.Loops.total(0)).generate().build(hep.NumeratorOptions(naming=hep.Naming.named("D"))).diagrams[0]
     /// >>> electron = model.particle("e-")
     /// >>> projector = diagram.projector_expression()
     /// >>> spin_summed = electron.sum_spins(projector, S("gammalooprs::P")(1), edge=1)
@@ -1288,8 +1291,11 @@ impl PyVertexRule {
         self.model.vertex_rule_by_id(self.id).unwrap()
     }
 
-    pub(crate) fn vertex_rule_name(&self) -> &str {
-        &self.inner().name
+    pub(crate) fn selector(&self) -> feynkit_generator::VertexSelector {
+        feynkit_generator::VertexSelector::Id {
+            vertex: self.id,
+            model: self.model.fingerprint(),
+        }
     }
 }
 
@@ -2742,7 +2748,7 @@ impl PyParameterCard {
 /// >>> model = hep.Model.standard_model()
 /// >>> photon = model.particle("a")
 /// >>> process = model.process(["e-", "e+"], ["mu-", "mu+"])
-/// >>> result = process.generate_diagrams()
+/// >>> result = process.amplitude(loops=hep.Loops.total(0)).generate().build(hep.NumeratorOptions(naming=hep.Naming.named("D")))
 /// >>> assert result.report.completed
 /// >>> scalar_model = hep.Model.phi4()
 /// >>> assert scalar_model.particle("phi").spin == 1
@@ -2968,51 +2974,28 @@ impl PyModel {
         Model::from_json(json).map(Self::from).map_err(error::model)
     }
 
-    /// Define a process with model-validated external states and sector restrictions.
-    /// The returned process is immutable; loops and other calculation choices are
-    /// arguments to its generate_diagrams, generate_amplitude and generate_cross_section methods.
+    /// Define model-validated external states. Restrictions belong to a Request.
     ///
     /// Examples
     /// --------
     /// Using the setup in the ``Model`` class example:
     ///
     /// >>> process = model.process(["e-", "e+"], ["a", "a"])
-    /// >>> amplitude = process.generate_amplitude(loops=0)
+    /// >>> request = process.amplitude(loops=hep.Loops.total(0))
     ///
     /// Parameters
     /// ----------
     /// incoming : sequence[Particle | ParticleSelector | str | int]
-    ///     Ordered incoming external states.
+    ///     Incoming states, validated against this model.
     /// outgoing : sequence[Particle | ParticleSelector | str | int]
-    ///     Ordered outgoing external states.
-    /// particle_veto : sequence[Particle | ParticleSelector | str | int] or None, optional
-    ///     Excluded species, including their antiparticles.
-    /// particle_selection : sequence[Particle | ParticleSelector | str | int] or None, optional
-    ///     Allowed species, including their antiparticles. None allows all; an
-    ///     empty list allows none. Mutually exclusive with particle_veto.
-    /// vertex_allow : sequence[VertexRule | str] or None, optional
-    ///     Allowed interactions. None allows all; an empty list allows none.
-    /// vertex_veto : sequence[VertexRule | str] or None, optional
-    ///     Excluded interactions.
-    #[pyo3(signature = (incoming, outgoing, *, particle_veto=None, particle_selection=None, vertex_allow=None, vertex_veto=None))]
+    ///     Outgoing states, validated against this model.
+    #[pyo3(signature = (incoming, outgoing))]
     fn process(
         &self,
         incoming: Vec<SelectorInput>,
         outgoing: Vec<SelectorInput>,
-        particle_veto: Option<Vec<SelectorInput>>,
-        particle_selection: Option<Vec<SelectorInput>>,
-        vertex_allow: Option<Vec<VertexInput>>,
-        vertex_veto: Option<Vec<VertexInput>>,
     ) -> PyResult<PyProcess> {
-        PyProcess::from_model(
-            self,
-            incoming,
-            outgoing,
-            particle_veto,
-            particle_selection,
-            vertex_allow,
-            vertex_veto,
-        )
+        PyProcess::from_model(self, incoming, outgoing)
     }
 
     /// Return the model name.

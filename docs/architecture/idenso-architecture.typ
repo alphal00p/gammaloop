@@ -2,7 +2,7 @@
 
 #quote(block: true)[
 #strong[Status:] Current implementation architecture, audited against the Idenso source on
-2026-09-29.
+2026-10-12 for the changed source scopes.
 
 This note covers the `idenso` Rust crate: representation-aware Symbolica transformations built
 on Spenso's tensor syntax and network parser. It does not describe concrete tensor-component
@@ -177,6 +177,15 @@ domain scheduler. Their settings are independent: structural permissions and
 connection filters belong to contraction, while identity families, conventions
 and algebraic output forms belong to algebra reduction. An enabled identity
 authorizes its required contractions without enabling unrelated identities.
+`AlgebraContraction` selects additional structural work: `Fully` (the default),
+`Dots`, `Minimal`, a `Selected` representation list, or `None`. Enabled identities
+still authorize their own prerequisites. `Minimal` and `ContractSettings.expand = false`
+retain independent sum alternatives while allowing existing-branch substitutions;
+they do not suppress distribution required by an enabled identity. Exact generated
+coefficients are collected by default, independently of expanding unrelated input sums.
+Both settings types have an optional `max_passes`; `None` is unlimited. Completion
+is relative to the requested policy.
+
 Each family retains its internal kernel:
 
 - `IndexTooling` parses enough structure to canonicalize tensor indices, list dangling slots,
@@ -193,6 +202,8 @@ Each family retains its internal kernel:
 - the epsilon kernel owns epsilon contractions and reductions;
 - `Cookable` replaces selected functions or representation-index payloads with compact symbols,
   either as readable flattened names or reversible Symbolica `UserData::Atom` encodings.
+  Repeated representation-index payloads share one cooked symbol within an expression,
+  preserving their identity across tensor ports and leaving unselected spectators alone.
 
 Settings objects are part of the semantics. Gamma ordering and trace evaluation, color Fierz and
 invariant substitutions, contraction budgets, and cooking source/tag filters can all
@@ -250,6 +261,16 @@ scope rules. Public `ReductionStatus` distinguishes `Complete`, `Deferred` and
 when its inputs change; an exhausted frontier is retained exactly. Neither
 state is certified complete merely because its algebraic output is valid.
 
+A producer may certify a terminal polynomial region without enumerating every
+leaf. That proof retains surviving ports and pending dot notation; arbitrary
+collector predicates still inspect unknown leaves. Composing new connections or
+crossing a callback boundary invalidates unsupported facts. Exact syntax
+observations are shared across regional updates, and changed representations
+conservatively identify identity families that must run again. A certified color
+fixed point survives another intrinsic or notation-only rewrite only when the
+retained head counts prove that it introduces no color work. Each settled-region cache
+limits retained entries to 64 MiB; that bounds memoization, not reduction or frontier work.
+
 Epsilon simplification uses the same selected collector. It exposes epsilon
 bodies and their incident metric/vector factors. Unrelated factors and
 callback-sensitive templates remain opaque.
@@ -289,9 +310,10 @@ simplify contraction boundaries selectively. These two modes are intentionally d
 expansion exposes topology but can grow expressions, while opaque inference preserves compact
 syntax and validates its declared boundary.
 
-Compact inner products may retain explicit spectator ports. The shared slot
+Metric inner products may retain explicit spectator ports. The shared slot
 matcher identifies the contracted implicit axis in each operand; both ordered
-and partial inference retain the other ports. Gamma chain assembly exposes only
+and partial inference retain the other ports. Scalar `dot` syntax instead
+requires two compatible compact rank-one operands with no spectator ports. Gamma chain assembly exposes only
 inner products containing a selected gamma or chain endpoint, through Spenso's
 existing shorthand materializer. Scalar dot coefficients and unrelated sectors
 remain opaque.
@@ -304,7 +326,12 @@ same-spelled dummy names must not contract.
 Index canonicalization reconstructs the admitted operation graph without
 executing tensor algebra. Closed scalar inverse powers keep their own dummy
 scope while their interior indices are canonicalized. These preparation and
-conjugation operations remain orthogonal to the reduction planner.
+conjugation operations remain orthogonal to the reduction planner. Admitted
+index labels remain literal even when their spelling resembles a wildcard.
+Canonicalization uses literal replacements; adjoint construction reserves the
+parser-materialized channels and shares one collision-free dummy allocator.
+Color reduction temporarily substitutes fresh private symbols for wildcard-like
+labels so antisymmetric normalization works, then restores the original labels.
 
 The shared concrete syntax and which crate owns each rewrite are specified in the
 #link("spenso-symbolica-syntax-and-rewrites.typ")[Spenso/Idenso Symbolica syntax note].

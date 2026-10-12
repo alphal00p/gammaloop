@@ -8,10 +8,15 @@ from symbolica.community import hepkit as hep
 from symbolica.community.tensor import TensorExpression
 
 model = hep.Model.standard_model()
-generated = model.process(
-    ["e-", "e+"], ["a", "a"], vertex_allow=["V_98"]
-).generate_diagrams(
-    max_vertices=2, maximum_bridges=None, numerator_grouping=None, progress=None
+generated = (
+    model.process(["e-", "e+"], ["a", "a"])
+    .amplitude(
+        loops=hep.Loops.total(0),
+        restrict=hep.Restrict().only_vertices(["V_98"]),
+        topology=hep.TopologyRules(max_vertices=2),
+    )
+    .generate()
+    .build(hep.NumeratorOptions(naming=hep.Naming.named("D")))
 )
 amplitude = hep.Amplitude(generated.diagrams)
 assert len(amplitude.diagrams) == len(amplitude.terms) == 2

@@ -50,13 +50,16 @@ assert "expression=" in repr(model.couplings[0])
 assert "structure=" in repr(model.lorentz_structures[0])
 assert "numerator=" in repr(model.propagators[0])
 
-process = model.process(["e-", "e+"], ["a", "a"], vertex_allow=[vertex])
+process = model.process(["e-", "e+"], ["a", "a"])
 svg = process.render().to_svg()
 root = ET.fromstring(svg)
 assert root.tag == "{http://www.w3.org/2000/svg}svg"
 assert list(root.iter("{http://www.w3.org/2000/svg}path"))
 assert "prefers-color-scheme:dark" in svg
-assert "vertex_allow=[V_98]" in html.unescape(process._repr_html_())
+assert "Process(" in html.unescape(process._repr_html_())
+assert "e-" in html.unescape(process._repr_html_()) and "a" in html.unescape(
+    process._repr_html_()
+)
 assert ET.fromstring(process._repr_svg_()).tag == root.tag
 assert (
     ET.fromstring(process.render(config=render.RenderSettings()).to_svg()).tag
@@ -117,7 +120,13 @@ for other in (
     assert ET.fromstring(other.render().to_svg()).tag == root.tag
 
 # The same asset preparation must preserve existing diagram rendering.
-diagram = process.generate_diagrams(progress=None)[0]
+diagram = (
+    process.amplitude(
+        loops=hep.Loops.total(0), restrict=hep.Restrict().only_vertices([vertex])
+    )
+    .generate()
+    .build(hep.NumeratorOptions(naming=hep.Naming.named("D")))[0]
+)
 assert ET.fromstring(diagram.render().to_svg()).tag == root.tag
 
 # User model metadata is escaped before being inserted into rich output.

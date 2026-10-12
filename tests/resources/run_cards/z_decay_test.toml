@@ -1,6 +1,6 @@
 commands = [
 "import model sm",
-"generate xs z > d d~",
+"generate xs z > d d~ [{{1}}] --filter-selfenergies true --filter-snails true --filter-tadpoles true --n-cut-blobs 1 1 --n-cut-spectators 0 0 --numerator-grouping group_identical_graphs_up_to_scalar_rescaling",
 ]
 
 [default_runtime_settings.kinematics]

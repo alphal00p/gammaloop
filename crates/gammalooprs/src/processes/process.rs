@@ -33,7 +33,8 @@ use crate::{
 };
 use eyre::{Context, eyre};
 use feynkit_generator::{
-    FilterScope, GenerationOptions, GenerationType, Process as GenerationProcess,
+    GenerationType, Grouping, Loops, Naming, NumeratorOptions, Process as GenerationProcess, Range,
+    Request, Restrict, Selection,
 };
 
 use crate::{graph::Graph, model::Model, settings::global::GenerationSettings};
@@ -120,170 +121,97 @@ fn saved_child_dirs(root: &Path, expected_binary: &str, kind: &str) -> Result<Ve
     Ok(saved_dirs)
 }
 
+const PROCESS_DEFINITION_MAGIC: &[u8] = b"GLPROC\x02\0";
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, bincode::Encode, bincode::Decode)]
 pub struct ProcessDefinition {
-    pub generation_type: GenerationType,
-    pub process: GenerationProcess,
-    pub generation_options: GenerationOptions,
+    pub request: Request,
+    pub numerators: NumeratorOptions,
+    pub selection: Selection,
+    pub grouping: Grouping,
     pub folder_name: String,
     pub process_id: usize,
 }
 
 impl fmt::Display for ProcessDefinition {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "Process #{}: '{}'\nGeneration type: {}{}{}\nInitial PDGs: {:?}{}\nFinal PDGs: {}{}\nLoop count: {}\nAmplitude filters:{}{}\nCross-section filters:{}{}",
+            "Process #{}: '{}'\nGeneration type: {}\nInitial: {:?}\nFinal: {:?}\nLoops: {:?}\nRestrictions: {:?}\nOrders: {:?}\nTopology: {:?}\nCuts: {:?}\nSymmetrization: {:?}\nNumerators: {:?}\nSelection: {:?}\nGrouping: {:?}",
             self.process_id,
             self.folder_name,
-            self.generation_type,
-            if self.generation_options.symmetrizes_left_right() {
-                " (left-right symmetrized)"
-            } else {
-                ""
-            },
-            if self.generation_options.symmetrizes_external_fermions()
-                && self.generation_type == GenerationType::Amplitude
-                && (self.generation_options.symmetrizes_initial()
-                    || self.generation_options.symmetrizes_final()
-                    || self.generation_options.symmetrizes_left_right())
-            {
-                " (allowing fermion symmetrization)"
-            } else {
-                ""
-            },
-            self.process.incoming(),
-            if self.generation_options.symmetrizes_initial() {
-                " (symmetrized)"
-            } else {
-                ""
-            },
-            if self.process.outgoing_alternatives().len() == 1 {
-                format!("{:?}", self.process.outgoing_alternatives()[0])
-            } else {
-                format!(
-                    "[ {} ]",
-                    self.process
-                        .outgoing_alternatives()
-                        .iter()
-                        .map(|pdgs| format!("{:?}", pdgs))
-                        .join(" | ")
-                )
-            },
-            if self.generation_options.symmetrizes_final() {
-                " (symmetrized)"
-            } else {
-                ""
-            },
-            if self.generation_options.loop_count().start()
-                == self.generation_options.loop_count().end()
-            {
-                format!("{}", self.generation_options.loop_count().start())
-            } else {
-                format!("{:?}", self.generation_options.loop_count())
-            },
-            if self
-                .generation_options
-                .filters(FilterScope::CutAmplitude)
-                .is_empty()
-            {
-                " None"
-            } else {
-                "\n"
-            },
-            if self
-                .generation_options
-                .filters(FilterScope::CutAmplitude)
-                .is_empty()
-            {
-                "".into()
-            } else {
-                self.generation_options
-                    .filters(FilterScope::CutAmplitude)
-                    .iter()
-                    .map(|f| format!(" > {}", f))
-                    .collect::<Vec<String>>()
-                    .join("\n")
-            },
-            if self
-                .generation_options
-                .filters(FilterScope::Graph)
-                .is_empty()
-            {
-                " None"
-            } else {
-                "\n"
-            },
-            if self
-                .generation_options
-                .filters(FilterScope::Graph)
-                .is_empty()
-            {
-                "".into()
-            } else {
-                self.generation_options
-                    .filters(FilterScope::Graph)
-                    .iter()
-                    .map(|f| format!(" > {}", f))
-                    .collect::<Vec<String>>()
-                    .join("\n")
-            }
+            self.request.kind(),
+            self.request.process().incoming(),
+            self.request.process().outgoing_alternatives(),
+            self.request.loops(),
+            self.request.restrictions(),
+            self.request.orders(),
+            self.request.topology(),
+            self.request.cuts(),
+            self.request.symmetrization(),
+            self.numerators,
+            self.selection,
+            self.grouping
         )
     }
 }
 
-impl Default for ProcessDefinition {
-    fn default() -> Self {
+impl ProcessDefinition {
+    /// Persisted phase settings for an explicit physical request. Runtime controls stay separate.
+    pub fn new(request: Request) -> Self {
         Self {
-            generation_type: GenerationType::Amplitude,
-            process: GenerationProcess::new(Vec::<i64>::new(), Vec::<i64>::new()),
-            generation_options: GenerationOptions::default()
-                .output(feynkit_generator::GenerationOutput::Named {
-                    prefix: "GL".into(),
-                })
-                .with_loop_count(1, 1)
-                .expect("the default loop range is valid"),
-            folder_name: "undefined_process".to_string(),
+            request,
+            numerators: NumeratorOptions::default().with_naming(Naming::named()),
+            selection: Selection::default(),
+            grouping: Grouping::None,
+            folder_name: "undefined_process".into(),
             process_id: 0,
         }
     }
-}
 
-impl ProcessDefinition {
-    /// Decode the definition saved in the process folder `path`, refusing options that its
-    /// generation type no longer accepts, since the saved graphs were generated under them.
     fn load(path: &Path, context: GammaLoopContextContainer) -> Result<Self> {
         let binary = fs::read(path.join("def.bin"))
             .with_context(|| format!("Error reading def.bin in {}", path.display()))?;
-        let (definition, _): (Self, _) =
-            bincode::decode_from_slice_with_context(&binary, bincode::config::standard(), context)
+        let payload = binary.strip_prefix(PROCESS_DEFINITION_MAGIC).ok_or_else(|| eyre!(
+            "The process saved in {} uses an unsupported generation definition; regenerate it",
+            path.display()))?;
+        let (definition, consumed): (Self, _) =
+            bincode::decode_from_slice_with_context(payload, bincode::config::standard(), context)
                 .context("Error decoding process definition")?;
+        if consumed != payload.len() {
+            return Err(eyre!("Trailing data in saved process definition"));
+        }
         definition
-            .generation_options
-            .validate_for(definition.generation_type)
+            .request
+            .validate_in(context.model)
             .with_context(|| {
                 format!(
-                    "The process saved in {} was generated with options that are no longer accepted; regenerate it",
+                    "The process saved in {} has invalid generation settings; regenerate it",
                     path.display()
                 )
             })?;
         Ok(definition)
     }
 
+    fn save(&self, path: &Path) -> Result<()> {
+        let mut binary = PROCESS_DEFINITION_MAGIC.to_vec();
+        binary.extend(bincode::encode_to_vec(self, bincode::config::standard())?);
+        fs::write(path.join("def.bin"), binary)?;
+        Ok(())
+    }
+
     pub(crate) fn covariant_cut_states(&self, model: &Model) -> Result<Vec<Vec<i64>>> {
-        self.process.validate_covariant_cut_filters(
-            model,
-            &self.generation_options,
-            self.generation_type,
-        )?;
+        self.request.validate_in(model)?;
         Ok(self
-            .process
-            .covariant_cut_states(model, self.generation_type)?)
+            .request
+            .process()
+            .covariant_cut_states(model, self.request.kind())?)
     }
 
     pub(crate) fn covariant_cut_representatives(&self, model: &Model) -> BTreeMap<isize, isize> {
-        self.process
-            .covariant_cut_representatives(model, self.generation_type)
+        self.request
+            .process()
+            .covariant_cut_representatives(model, self.request.kind())
             .expect("process selectors were validated against the graph model")
             .into_iter()
             .map(|(member, physical)| (member as isize, physical as isize))
@@ -291,18 +219,20 @@ impl ProcessDefinition {
     }
 
     pub fn may_filter_covariant_partners(&self, model: &Model) -> bool {
+        let cuts = self.request.cuts();
+        let topology = self.request.topology();
         !self.covariant_cut_representatives(model).is_empty()
-            && [FilterScope::Graph, FilterScope::CutAmplitude]
-                .into_iter()
-                .any(|scope| {
-                    self.generation_options.filters(scope).iter().any(|filter| {
-                        !matches!(
-                            filter,
-                            feynkit_generator::GenerationFilter::CouplingOrders(_)
-                                | feynkit_generator::GenerationFilter::PerturbativeOrders(_)
-                        )
-                    })
-                })
+            && (self.request.restrictions() != &Restrict::default()
+                || topology.bridges != feynkit_generator::Bridges::Any
+                || topology.self_energies.enabled()
+                || topology.tadpoles.enabled()
+                || topology.snails.enabled()
+                || topology.fermion_loops != Range::Unrestricted
+                || topology.factorized_loops != Range::Unrestricted
+                || cuts.amplitude.loops != Range::Unrestricted
+                || cuts.blobs != Range::Unrestricted
+                || cuts.spectators != Range::Unrestricted
+                || cuts.sewn_tadpoles)
     }
 
     // Best attempt at creating what process definition matches the given graphs
@@ -410,7 +340,7 @@ impl ProcessDefinition {
         }
 
         let final_pdgs_lists = final_states.into_iter().sorted().collect_vec();
-        let mut min_loop_count = usize::MAX;
+        let mut min_loop_count = if graphs.is_empty() { 0 } else { usize::MAX };
         let mut max_loop_count = 0usize;
 
         for g in graphs {
@@ -424,6 +354,9 @@ impl ProcessDefinition {
             }
         }
 
+        if generation_type == GenerationType::Amplitude && final_pdgs_lists.len() > 1 {
+            return Err(feynkit_generator::ProcessError::MultipleAmplitudeFinalStates.into());
+        }
         let first_final = final_pdgs_lists.first().cloned().unwrap_or_default();
         let process = match generation_type {
             GenerationType::Amplitude => GenerationProcess::new(initial_pdgs, first_final),
@@ -432,15 +365,15 @@ impl ProcessDefinition {
                 .map_err(|error| eyre!(error))?,
         };
 
-        Ok(Self {
-            generation_type,
-            process,
-            generation_options: Self::default()
-                .generation_options
-                .with_loop_count(min_loop_count, max_loop_count)
-                .map_err(|error| eyre!(error))?,
-            ..Self::default()
-        })
+        let request = match generation_type {
+            GenerationType::Amplitude => {
+                Request::amplitude(process, Loops::total(min_loop_count..=max_loop_count))
+            }
+            GenerationType::CrossSection => {
+                Request::cross_section(process, Loops::forward(min_loop_count..=max_loop_count))
+            }
+        };
+        Ok(Self::new(request))
     }
 }
 
@@ -548,8 +481,7 @@ impl Process {
                     r?;
                 }
 
-                let binary = bincode::encode_to_vec(&self.definition, bincode::config::standard())?;
-                fs::write(p.join("def.bin"), binary)?;
+                self.definition.save(&p)?;
 
                 for amp in a.values_mut() {
                     amp.save(&p, override_existing)?;
@@ -571,8 +503,7 @@ impl Process {
                     r?;
                 }
 
-                let binary = bincode::encode_to_vec(&self.definition, bincode::config::standard())?;
-                fs::write(p.join("def.bin"), binary)?;
+                self.definition.save(&p)?;
 
                 for cs in cs.values_mut() {
                     cs.save(&p, override_existing)?;
@@ -960,9 +891,17 @@ impl Process {
         generation_type: GenerationType,
         definition: Option<ProcessDefinition>,
         sub_classes: Option<Vec<Vec<String>>>,
-        _model: &Model,
+        model: &Model,
     ) -> Result<Self> {
-        let mut proc_definition = definition.unwrap_or_default();
+        let mut proc_definition = match definition {
+            Some(definition) => definition,
+            None => ProcessDefinition::from_graph_list(&graphs, generation_type, model)?,
+        };
+        if proc_definition.request.kind() != generation_type {
+            return Err(eyre!(
+                "The process request and graph collection have different generation kinds"
+            ));
+        }
         proc_definition.folder_name = process_name;
         match generation_type {
             GenerationType::Amplitude => {
@@ -973,7 +912,6 @@ impl Process {
                 } else {
                     collection.add_amplitude(Amplitude::from_graph_list(integrand_name, graphs)?);
 
-                    // TODO: construct a better default definition from graph (i.e. at least the external IDs)
                     Ok(Self {
                         settings_history: None,
                         definition: proc_definition,
@@ -989,7 +927,6 @@ impl Process {
                 } else {
                     collection
                         .add_cross_section(CrossSection::from_graph_list(integrand_name, graphs)?);
-                    // TODO: construct a better default definition from graph (i.e. at least the external IDs)
                     Ok(Self {
                         settings_history: None,
                         definition: proc_definition,
@@ -1312,7 +1249,7 @@ mod tests {
     #[test]
     fn saved_cross_sections_with_final_state_symmetrization_are_rejected() {
         use super::{Process, ProcessDefinition};
-        use feynkit_generator::GenerationOptions;
+        use feynkit_generator::{Loops, Process as GenerationProcess, Request, Symmetrize};
 
         crate::initialisation::test_initialise().unwrap();
         let model = load_generic_model("sm");
@@ -1326,13 +1263,15 @@ mod tests {
         };
         let temp = fresh_temp_dir("final-state-symmetrized-definition");
         let save = |generation_type| {
-            let definition = ProcessDefinition {
-                generation_type,
-                generation_options: GenerationOptions::default().symmetrize_final(true),
-                ..ProcessDefinition::default()
-            };
-            let binary = bincode::encode_to_vec(&definition, bincode::config::standard()).unwrap();
-            fs::write(temp.join("def.bin"), binary).unwrap();
+            let process = GenerationProcess::new(Vec::<i64>::new(), Vec::<i64>::new());
+            let request = match generation_type {
+                GenerationType::Amplitude => Request::amplitude(process, Loops::total(0..=0)),
+                GenerationType::CrossSection => {
+                    Request::cross_section(process, Loops::forward(0..=0))
+                }
+            }
+            .with_symmetrize(Symmetrize::FINAL);
+            ProcessDefinition::new(request).save(&temp).unwrap();
         };
         save(GenerationType::Amplitude);
         assert!(Process::load_amplitude(&temp, context).is_ok());
@@ -1346,6 +1285,14 @@ mod tests {
             error.contains("symmetrize_final does not apply to cross sections"),
             "{error}"
         );
+        // Legacy positional definitions have no new-layout envelope and must never be decoded.
+        fs::write(temp.join("def.bin"), [0_u8; 128]).unwrap();
+        let error = format!("{:?}", ProcessDefinition::load(&temp, context).unwrap_err());
+        assert!(
+            error.contains("unsupported generation definition"),
+            "{error}"
+        );
+        assert!(error.contains("regenerate it"), "{error}");
         fs::remove_dir_all(temp).unwrap();
     }
 
@@ -1828,7 +1775,11 @@ mod tests {
 
         #[test]
         fn test_proc_definition_encode() {
-            let def = crate::processes::ProcessDefinition::default();
+            let def =
+                crate::processes::ProcessDefinition::new(feynkit_generator::Request::amplitude(
+                    feynkit_generator::Process::new(Vec::<i64>::new(), Vec::<i64>::new()),
+                    feynkit_generator::Loops::total(1..=1),
+                ));
             let encoded = bincode::encode_to_vec(&def, bincode::config::standard()).unwrap();
             let model_sm = load_generic_model("sm");
 

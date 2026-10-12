@@ -35,14 +35,15 @@ expected = (
 )
 
 for pdg in (11, -11):
-    generated = model.process(
-        [pdg, 22], [pdg, 22], vertex_allow=["V_98"]
-    ).generate_diagrams(
-        loops=0,
-        max_vertices=2,
-        maximum_bridges=None,
-        numerator_grouping=None,
-        progress=None,
+    generated = (
+        model.process([pdg, 22], [pdg, 22])
+        .amplitude(
+            loops=fk.Loops.total(0),
+            restrict=fk.Restrict().only_vertices(["V_98"]),
+            topology=fk.TopologyRules(max_vertices=2),
+        )
+        .generate()
+        .build(fk.NumeratorOptions(naming=fk.Naming.named("D")))
     )
     assert len(generated.diagrams) == 2
     amplitude = E("0")

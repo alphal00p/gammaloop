@@ -11,6 +11,7 @@ from math import prod
 from symbolica import E, Expression, Matrix, Replacement, S, Symbol
 from symbolica.community import hepkit as hep
 from symbolica.community.tensor import TensorExpression, TensorName
+from symbolica.community.graph import Bridges
 
 d, mass_squared, p_squared, eps, coupling = S(
     "ibp_phi4::d",
@@ -75,15 +76,14 @@ assert family.is_complete and family.is_independent
 # shared graph UV expansion. The supplied integrands are independent checks.
 model = hep.Model.phi4()
 particle = model.particle("phi")
-generated = model.process([particle], [particle]).generate_diagrams(
-    loops=2,
-    max_vertices=2,
-    maximum_bridges=0,
-    self_energy=None,
-    tadpoles=None,
-    zero_snails=None,
-    numerator_grouping=None,
-    progress=None,
+generated = (
+    model.process([particle], [particle])
+    .amplitude(
+        loops=hep.Loops.total(2),
+        topology=hep.TopologyRules(max_vertices=2, bridges=Bridges.at_most(0)),
+    )
+    .generate()
+    .build(hep.NumeratorOptions(naming=hep.Naming.named("D")))
 )
 assert len(generated.diagrams) == 2
 K, P, dim = S("gammalooprs::K", "gammalooprs::P", "gammalooprs::dim")
@@ -316,16 +316,17 @@ ct_diagrams = {}
 ct_integral, ct_coordinate = S("ibp_phi4::J", "ibp_phi4::y")
 ct_input, tree_ct = zero, zero
 for loops, ct_order in [(1, 1), (0, 2)]:
-    result = ct_model.process([particle.name], [particle.name]).generate_diagrams(
-        loops=loops,
-        max_vertices=2 if loops else 1,
-        coupling_orders={"CT": ct_order},
-        maximum_bridges=0,
-        self_energy=None,
-        tadpoles=None,
-        zero_snails=None,
-        numerator_grouping=None,
-        progress=None,
+    result = (
+        ct_model.process([particle.name], [particle.name])
+        .amplitude(
+            loops=hep.Loops.total(loops),
+            topology=hep.TopologyRules(
+                max_vertices=2 if loops else 1, bridges=Bridges.at_most(0)
+            ),
+            orders=hep.Orders(plain={"CT": hep.Range.exact(ct_order)}),
+        )
+        .generate()
+        .build(hep.NumeratorOptions(naming=hep.Naming.named("D")))
     )
     assert len(result.diagrams) == (3 if loops else 2)
     ct_diagrams[loops] = result.diagrams
@@ -445,16 +446,12 @@ print(
 # the vacuum family, symmetry maps, counterterm model and field constant.
 vertex_diagrams = (
     model.process([particle] * 2, [particle] * 2)
-    .generate_diagrams(
-        loops=2,
-        max_vertices=3,
-        maximum_bridges=0,
-        self_energy=None,
-        tadpoles=None,
-        zero_snails=None,
-        numerator_grouping=None,
-        progress=None,
+    .amplitude(
+        loops=hep.Loops.total(2),
+        topology=hep.TopologyRules(max_vertices=3, bridges=Bridges.at_most(0)),
     )
+    .generate()
+    .build(hep.NumeratorOptions(naming=hep.Naming.named("D")))
     .diagrams
 )
 assert len(vertex_diagrams) == 12
@@ -554,18 +551,17 @@ vertex_ct_diagrams = {}
 vertex_ct_input, vertex_tree_ct = zero, zero
 external_index = S("ibp_phi4::external_")
 for loops, order in [(1, 1), (0, 2)]:
-    result = ct_model.process(
-        [particle.name] * 2, [particle.name] * 2
-    ).generate_diagrams(
-        loops=loops,
-        max_vertices=3 if loops else 1,
-        coupling_orders={"CT": order},
-        maximum_bridges=0,
-        self_energy=None,
-        tadpoles=None,
-        zero_snails=None,
-        numerator_grouping=None,
-        progress=None,
+    result = (
+        ct_model.process([particle.name] * 2, [particle.name] * 2)
+        .amplitude(
+            loops=hep.Loops.total(loops),
+            topology=hep.TopologyRules(
+                max_vertices=3 if loops else 1, bridges=Bridges.at_most(0)
+            ),
+            orders=hep.Orders(plain={"CT": hep.Range.exact(order)}),
+        )
+        .generate()
+        .build(hep.NumeratorOptions(naming=hep.Naming.named("D")))
     )
     vertex_ct_diagrams[loops] = result.diagrams
     assert len(result.diagrams) == (12 if loops else 1)

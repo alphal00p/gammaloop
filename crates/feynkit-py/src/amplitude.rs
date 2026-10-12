@@ -23,9 +23,9 @@ use crate::{error, graph::PyFeynmanDiagram, model::PyParticle};
 /// >>> from symbolica.community import hepkit as hep
 /// >>> model = hep.Model.phi4()
 /// >>> process = model.process(["phi", "phi"], ["phi", "phi"])
-/// >>> generated = process.generate_diagrams()
+/// >>> generated = process.amplitude(loops=hep.Loops.total(0)).generate().build(hep.NumeratorOptions(naming=hep.Naming.named("D")))
 /// >>> diagram = generated.diagrams[0]
-/// >>> amplitude = hep.Amplitude(generated.diagrams)
+/// >>> amplitude = generated.into_amplitude()
 /// >>> leg = amplitude.legs[0]
 /// >>> state = (leg.index, leg.particle.name, leg.state)
 /// >>> spin_sum = leg.particle.spin_sum(leg.momentum, leg.tensor_index, S("conjugate_index"))
@@ -147,7 +147,9 @@ impl PyAmplitudeLeg {
 /// couplings are expanded; model-declared real parameters and physical momenta
 /// are real under conjugation. Complex parameters remain complex. Quadratic
 /// denominators use the graph convention without widths or an i0 prescription.
-/// Already-sewn forward diagrams are rejected.
+/// Already-sewn forward diagrams are rejected. Convert a generated BuiltDiagramSet with
+/// ``into_amplitude()`` to preserve its allowed interference pairs. Constructing
+/// ``Amplitude`` from a plain diagram sequence explicitly uses unrestricted pairing.
 ///
 /// Examples
 /// --------
@@ -155,9 +157,9 @@ impl PyAmplitudeLeg {
 /// >>> from symbolica.community import hepkit as hep
 /// >>> model = hep.Model.phi4()
 /// >>> process = model.process(["phi", "phi"], ["phi", "phi"])
-/// >>> generated = process.generate_diagrams()
+/// >>> generated = process.amplitude(loops=hep.Loops.total(0)).generate().build(hep.NumeratorOptions(naming=hep.Naming.named("D")))
 /// >>> diagram = generated.diagrams[0]
-/// >>> amplitude = hep.Amplitude(generated.diagrams)
+/// >>> amplitude = generated.into_amplitude()
 /// >>> operator = amplitude.expression()
 /// >>> adjoint = amplitude.conjugate().expression()
 /// >>> squared = amplitude.squared().sum_spins(average_initial=True).sum_colors()
@@ -185,7 +187,7 @@ impl PyAmplitude {
     /// --------
     /// Using the setup in the ``Amplitude`` class example:
     ///
-    /// >>> amplitude = hep.Amplitude(generated.diagrams)
+    /// >>> amplitude = hep.Amplitude(list(generated))
     ///
     /// Parameters
     /// ----------
@@ -468,9 +470,9 @@ impl PyAmplitude {
 /// >>> from symbolica.community import hepkit as hep
 /// >>> model = hep.Model.phi4()
 /// >>> process = model.process(["phi", "phi"], ["phi", "phi"])
-/// >>> generated = process.generate_diagrams()
+/// >>> generated = process.amplitude(loops=hep.Loops.total(0)).generate().build(hep.NumeratorOptions(naming=hep.Naming.named("D")))
 /// >>> diagram = generated.diagrams[0]
-/// >>> amplitude = hep.Amplitude(generated.diagrams)
+/// >>> amplitude = generated.into_amplitude()
 /// >>> squared = amplitude.squared()
 /// >>> unpolarized = squared.sum_spins(average_initial=True).sum_colors(average_initial=True)
 /// >>> tensor = unpolarized.expression()

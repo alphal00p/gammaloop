@@ -14,7 +14,7 @@ commands = [
       --numerator-grouping group_identical_graphs_up_to_scalar_rescaling
       --symmetrize-left-right-states false
       -p epem_a_tth -i NLO
-      --only-diagrams
+      --only-diagrams --filter-selfenergies true --filter-snails true --filter-tadpoles true --n-cut-blobs 1 1 --n-cut-spectators 0 0
   """,
   "select -p epem_a_tth -i NLO --with-graph-names GL38",
   "generate existing -p epem_a_tth -i NLO",

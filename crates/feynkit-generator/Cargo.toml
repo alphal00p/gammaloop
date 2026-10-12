@@ -15,8 +15,11 @@ bincode = { workspace = true, features = ["serde"] }
 feynkit-graph = { version = "0.1.0", path = "../feynkit-graph", default-features = false }
 feynkit-model = { version = "0.1.0", path = "../feynkit-model" }
 idenso = { workspace = true }
-linnet = { workspace = true, features = ["symbolica"] }
+num-bigint = { version = "0.4.6", features = ["serde"] }
+num-rational = "0.4.2"
+linnet = { workspace = true, features = ["symbolica", "serde", "bincode"] }
 rayon = { workspace = true }
+regex = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 spenso = { workspace = true, features = ["shadowing"] }
 spenso-hep-lib = { workspace = true }

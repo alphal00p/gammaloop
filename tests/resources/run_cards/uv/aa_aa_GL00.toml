@@ -8,7 +8,7 @@ commands = [
         --numerator-grouping group_identical_graphs_up_to_scalar_rescaling
         --symmetrize-initial-states=true --symmetrize-final-states=true
         --select-graphs GL00
-        -p aa_aa -i 2L""",
+        -p aa_aa -i 2L --filter-selfenergies true --filter-snails true --filter-tadpoles true""",
 ]
 
 [cli_settings]

@@ -241,6 +241,13 @@ impl<F, L> Diagram<F, L> {
         self.skeleton.view()
     }
 
+    /// Retain the same immutable skeleton independently of this diagram and its originating run.
+    pub fn skeleton_snapshot(&self) -> SkeletonSnapshot<F, L> {
+        SkeletonSnapshot {
+            data: Arc::clone(&self.skeleton),
+        }
+    }
+
     /// Signature indices in native vertex order, without materializing the graph.
     pub fn rules(&self) -> &[u32] {
         &self.rules

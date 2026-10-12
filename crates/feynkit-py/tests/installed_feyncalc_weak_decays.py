@@ -40,8 +40,11 @@ for label, pdgs, masses, ckm_name in [
     ("Top", (6, 5, 24), (mt, mb, mw), "CKM3x3"),
     ("Antitop", (-6, -5, -24), (mt, mb, mw), "CKM3x3"),
 ]:
-    generated = model.process([pdgs[0]], list(pdgs[1:])).generate_diagrams(
-        max_vertices=1, numerator_grouping=None, progress=None
+    generated = (
+        model.process([pdgs[0]], list(pdgs[1:]))
+        .amplitude(loops=hep.Loops.total(0), topology=hep.TopologyRules(max_vertices=1))
+        .generate()
+        .build(hep.NumeratorOptions(naming=hep.Naming.named("D")))
     )
     assert len(generated.diagrams) == 1
     diagram = generated.diagrams[0]

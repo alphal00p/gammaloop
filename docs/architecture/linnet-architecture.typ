@@ -2,7 +2,7 @@
 
 #quote(block: true)[
 #strong[Status:] Current implementation architecture, audited against the Linnet source on
-2026-08-28.
+2026-10-12.
 
 This note covers the `linnet` Rust crate. `clinnet` is a separate command-line renderer and
 `linnest` owns Typst layout and drawing; neither is part of Linnet's graph core.
@@ -16,7 +16,7 @@ data `V`, per-half-edge data `H`, and a `Topology` implementation `N`. The crate
 into four layers:
 
 - `half_edge`: topology, typed indexes, graph mutation, subgraph views, traversal, cuts, cycles,
-  and directed-acyclic-graph algorithms;
+  canonicalization, constrained graph generation, and directed-acyclic-graph algorithms;
 - `parser`: DOT parsing and serialization, including graph-, node-, edge-, half-edge-, and port
   attributes;
 - `permutation`, `union_find`, and `tree`: reusable index-reordering and connectivity machinery
@@ -117,6 +117,26 @@ the platform cannot represent before enumeration. Tadpole classification similar
 canonicalizes a non-empty terminal set, compares components against every terminal-incident edge,
 and returns deduplicated structural results. These guards make malformed input return errors and
 keep retained node-identification history on canonical structural paths instead of panic paths.
+
+Connectivity counts use one union-find pass over the nodes touched by a subgraph's half-edges.
+Dangling and split edges touch a node without joining components; internal edges determine the
+component count and independent cycle rank. Spanning-forest enumeration lives in
+`half_edge::spanning_forests`: it borrows the involution and rolls branch identifications back
+on a private checkpointed topology.
+
+`all_cuts` enumerates whole-node partitions in which every component on each side contains a
+terminal of that side. Empty or overlapping terminal regions and live isolated nodes produce
+no partitions. Dangling half-edges stay with their node; disconnected terminal-rooted regions
+can have an empty boundary. Results are sorted by the source-side mask.
+
+`half_edge::canon` computes canonical forms and automorphisms from caller-supplied node, edge,
+and half-edge keys, respecting physical orientation. Payloads omitted from those keys do not
+distinguish graphs; canonical forms are comparable within one canonizer version.
+`half_edge::generate` separates a checked `Plan` built from `Theory`, `Legs`, and `Query` from
+execution controls in `Run`. It generates topologies, then decorates them with fields and vertex
+rules. Pruning must reject every refinement of a rejected state; final selection may be arbitrary.
+Accepted diagrams retain compact data and materialize graphs and canonical forms on demand.
+Parallel execution preserves the serial search order.
 
 DOT interchange follows a separate adapter path:
 

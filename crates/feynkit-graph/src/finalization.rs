@@ -195,6 +195,37 @@ impl IndexOwners {
     }
 }
 
+impl FeynmanDiagram {
+    /// Relabel an expression between explicit index frames without expanding its factors.
+    /// Map entries are indexed by the old vertex, edge and half-edge; an edge's boolean
+    /// negates its momentum, but not its edge index or external-state carrier.
+    #[doc(hidden)]
+    pub fn relabel_expression(
+        atom: &Atom,
+        vertices: &[usize],
+        edges: &[(usize, bool)],
+        half_edges: &[usize],
+    ) -> Result<Atom, DiagramError> {
+        let owners = IndexOwners::new();
+        if !owners.contains(atom) {
+            return Ok(atom.clone());
+        }
+        owners
+            .relabel(atom, |owner, index| match owner {
+                IndexOwner::Vertex => vertices.get(index).map(|&index| (index, false)),
+                IndexOwner::HalfEdge => half_edges.get(index).map(|&index| (index, false)),
+                IndexOwner::Momentum => edges.get(index).copied(),
+                IndexOwner::Edge | IndexOwner::ExternalState => {
+                    edges.get(index).map(|&(edge, _)| (edge, false))
+                }
+            })
+            .map_err(|message| DiagramError::Invariant {
+                operation: "relabeling an expression frame",
+                message,
+            })
+    }
+}
+
 impl DiagramHalfEdge {
     /// The index of a builder half-edge in the provisional expressions of a generated
     /// diagram: twice its edge, plus one at its target.

@@ -323,7 +323,9 @@
       "feynkit-model": [],
       "idenso": [],
       "linnet": [
+        "bincode",
         "rayon",
+        "serde",
         "symbolica"
       ],
       "spenso": [
@@ -1607,7 +1609,9 @@
       "feynkit-model": [],
       "idenso": [],
       "linnet": [
+        "bincode",
         "rayon",
+        "serde",
         "symbolica"
       ],
       "spenso": [

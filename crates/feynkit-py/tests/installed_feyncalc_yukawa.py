@@ -12,6 +12,7 @@ from symbolica import E, Matrix, Replacement, S, Symbol
 from symbolica.community import hepkit as hep
 from symbolica.community.hepkit import oneloop
 from symbolica.community.tensor import TensorExpression
+from symbolica.community.graph import Bridges
 
 # Reuse the built-in quartic scalar and Standard Model Dirac propagators.
 # The only extra interaction is -g phi psibar psi, or -i g phi psibar gamma5 psi.
@@ -73,14 +74,6 @@ master = master_reduction.terms[0][1].to_expression(one)
 master_pole = oneloop.get_expression(master, coefficient=-1)
 assert master_pole == M
 reducer = hep.TensorReducer(D, integrated=[K(0, mink(D))])
-options = {
-    "maximum_bridges": 0,
-    "self_energy": None,
-    "tadpoles": None,
-    "zero_snails": None,
-    "numerator_grouping": None,
-    "progress": None,
-}
 h, dpsi, dm, dphi, dM, dg, dlam = S(
     "yukawa::h",
     "yukawa::dpsi",
@@ -190,11 +183,20 @@ for variant, lorentz, local_coupling in [
             ("vertex", [fermion], [scalar, fermion], 1, 1),
             ("quartic", [scalar] * 2, [scalar] * 2, 9, 1),
         ]:
-            generated = stage_model.process(incoming, outgoing).generate_diagrams(
-                loops=loops,
-                max_vertices=len(incoming) + len(outgoing) if loops else 1,
-                coupling_orders={"CT": 1} if not loops else None,
-                **options,
+            generated = (
+                stage_model.process(incoming, outgoing)
+                .amplitude(
+                    loops=hep.Loops.total(loops),
+                    topology=hep.TopologyRules(
+                        max_vertices=len(incoming) + len(outgoing) if loops else 1,
+                        bridges=Bridges.at_most(0),
+                    ),
+                    orders=hep.Orders(
+                        plain=({"CT": hep.Range.exact(1)} if not loops else None)
+                    ),
+                )
+                .generate()
+                .build(hep.NumeratorOptions(naming=hep.Naming.named("D")))
             )
             diagrams[kind] = generated.diagrams
             assert len(generated.diagrams) == (bare_count if loops else ct_count), (

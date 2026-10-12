@@ -16,6 +16,7 @@ from symbolica.community import graph as render
 from symbolica.community import hepkit as hep
 from symbolica.community import tensor as spenso
 from symbolica.core import S
+from symbolica.community.graph import Bridges
 
 assert symbolica.community.graph is render
 
@@ -184,7 +185,20 @@ try:
             xs, ys = zip(*tips)
             assert min(xs) < cx < max(xs) and min(ys) < cy < max(ys)
     ET.fromstring(model.process([], []).render().to_svg())
-    amplitude = process.generate_amplitude(loops=2, progress=None)
+    amplitude = (
+        process.amplitude(
+            loops=hep.Loops.total(2),
+            topology=hep.TopologyRules(
+                bridges=Bridges.one_pi_in_loops(),
+                self_energies=hep.Veto.all(),
+                tadpoles=hep.Veto.all(),
+                snails=hep.Veto.massless(),
+            ),
+        )
+        .generate()
+        .build(hep.NumeratorOptions(naming=hep.Naming.named("D")))
+        .into_amplitude()
+    )
     assert len(amplitude.diagrams) == 48
     assert "<svg" in amplitude._repr_html_()
     for name in ("DiagramRender", "LayoutSettings", "Stroke", "RenderSettings"):
@@ -266,11 +280,29 @@ try:
     )
     assert "#image(bytes(" in network.to_linnest()
     scalar = hep.Model.phi3()
-    cross = scalar.process(["phi"], ["phi", "phi"]).generate_cross_section(
-        loops=1, max_vertices=2, allow_self_loops=True, progress=None
-    )[0]
+    cross = (
+        scalar.process(["phi"], ["phi", "phi"])
+        .cross_section(
+            loops=hep.Loops.forward(1),
+            topology=hep.TopologyRules(
+                max_vertices=2,
+                self_loops=True,
+                self_energies=hep.Veto.all(),
+                tadpoles=hep.Veto.all(),
+                snails=hep.Veto.massless(),
+            ),
+            cuts=hep.Cuts(blobs=hep.Range.exact(1), spectators=hep.Range.exact(0)),
+        )
+        .generate()
+        .build(hep.NumeratorOptions(naming=hep.Naming.named("D")))[0]
+    )
     original = cross.to_json()
-    tree = scalar.process(["phi"], ["phi", "phi"]).generate_diagrams(progress=None)[0]
+    tree = (
+        scalar.process(["phi"], ["phi", "phi"])
+        .amplitude(loops=hep.Loops.total(0))
+        .generate()
+        .build(hep.NumeratorOptions(naming=hep.Naming.named("D")))[0]
+    )
     exported = [cross, tree]
     restored = hep.FeynmanDiagram.from_dot_set(
         scalar, "\n".join(item.to_dot() for item in exported)
@@ -427,9 +459,19 @@ try:
     tadpole = (
         hep.Model.phi4()
         .process(["phi"], ["phi"])
-        .generate_diagrams(
-            loops=1, max_vertices=1, allow_self_loops=True, progress=None
-        )[0]
+        .amplitude(
+            loops=hep.Loops.total(1),
+            topology=hep.TopologyRules(
+                max_vertices=1,
+                self_loops=True,
+                bridges=Bridges.one_pi_in_loops(),
+                self_energies=hep.Veto.all(),
+                tadpoles=hep.Veto.all(),
+                snails=hep.Veto.massless(),
+            ),
+        )
+        .generate()
+        .build(hep.NumeratorOptions(naming=hep.Naming.named("D")))[0]
     )
     assert len(tadpole.cycle_basis()[0]) == 1
     for traverse in (tadpole.depth_first_traverse, tadpole.breadth_first_traverse):

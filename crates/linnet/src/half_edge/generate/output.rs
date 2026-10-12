@@ -140,6 +140,15 @@ pub struct SkeletonSnapshot<F, L> {
     pub(super) data: Arc<SkeletonData<F, L>>,
 }
 
+impl<F, L> SkeletonSnapshot<F, L> {
+    /// Identity of this shared allocation, valid only while an owning snapshot is retained.
+    /// This is an execution-local storage key, never a canonical identifier or persisted ID.
+    #[doc(hidden)]
+    pub fn storage_id(&self) -> usize {
+        Arc::as_ptr(&self.data) as usize
+    }
+}
+
 impl<F, L> Clone for SkeletonSnapshot<F, L> {
     fn clone(&self) -> Self {
         Self {

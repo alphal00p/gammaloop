@@ -15,8 +15,8 @@ already stored in the active state:
 
 // docs-example: syntax
 ```text
-generate xs INITIAL > FINAL ...
-generate amp INITIAL > FINAL ...
+generate xs INITIAL > FINAL [{{1}}] ...
+generate amp INITIAL > FINAL [{0}] ...
 generate existing ...
 generate help xs
 ```
@@ -33,9 +33,9 @@ Braces express alternatives in a cross-section final state, while `{}` denotes a
 
 // docs-example: syntax
 ```text
-e+ e- > mu+ mu-
-e+ e- > { Z Z, a a, H H }
-{} > {}
+e+ e- > mu+ mu- [{0}]
+e+ e- > { Z Z, a a, H H } [{{1}}]
+{} > {} [{2}]
 ```
 
 The empty-initial-state form is generation grammar, not evidence that the default
@@ -48,31 +48,35 @@ active model's coupling-order name:
 
 // docs-example: syntax
 ```text
-e+ e- > d d~ g / u c QED==2 QCD>=2 QCD<=4
-e+ e- > mu+ mu- | g ghG QED==2 QCD>=2
+e+ e- > d d~ g / u c QED==2 QCD>=2 QCD<=4 [{1}]
+e+ e- > mu+ mu- | g ghG QED==2 QCD>=2 [{1}]
 ```
 
-#callout("Powered and unpowered constraints are not interchangeable", [
-  An unpowered spelling such as `QCD==2` builds an amplitude-side coupling-order filter. A
-  powered spelling such as `QCD^2==2` builds a cross-section-side coupling-order filter, but
-  the parsed exponent is currently discarded. Substituting one spelling for the other changes
-  which filter container is used and still does not define a squared amplitude or a complete
-  cross-section order. Production work therefore needs a scientifically reviewed selector set;
-  do not infer one from the spelling alone.
-])
+Plain orders constrain each amplitude diagram; in a cross section they constrain each cut
+amplitude. Squared orders retain their exponent: `QED^2==4` constrains the summed forward-graph
+order for a cross section. For an amplitude, an order class survives only when a partner class
+satisfies all squared constraints together. Thus QED classes 1 and 3 can pair, as can 2 and 2.
+The resolved pair relation survives selection and grouping; squaring a converted amplitude
+uses only those pairs. Removing a partner does not authorize a different interference term.
+Repeated bounds intersect. Powers other than `^2` are rejected.
+
+Every request requires an explicit loop count, including vacuum requests. Amplitudes use
+`[{n}]`; cross sections require `[{{n}}]` for the forward graph. There is no implicit one-loop
+request. Empty allow-lists select nothing, and repeated allow-lists intersect after resolving
+model aliases.
 
 The bracketed perturbative block is intentionally distinct from ordinary flags. For `amp`,
 `{n}` fixes the amplitude graph's loop count; for `xs`, it fixes the sum of loop counts on the
 two cut sides. `{{n}}` fixes the forward graph's loop count. On a cross-section process,
 bracketed `QCD=n` or the shorthand `QCD` resolves the model's unresolved-particle set and permits
 at most the summed requested count of additional cut particles from those sets; it is not an
-exact graph coupling power. No corresponding amplitude-side selection effect has yet been
-established for that bracketed named-order spelling:
+exact graph coupling power. That named-order spelling is rejected for
+amplitudes; use ordinary or squared coupling constraints there:
 
 // docs-example: syntax
 ```text
 e+ e- > Z [ {1} {{2}} QCD=2 QED=1 ]
-e+ e- > Z [ QCD ]
+e+ e- > Z [ {{1}} QCD ]
 ```
 
 These selectors are generation filters, not universal definitions of LO, NLO, or NNLO. Record
@@ -87,6 +91,22 @@ distinguish that calculation definition from the formal perturbative reach of Lo
 ])
 
 == Filters, grouping, and multiplicity
+
+Defaults impose no bridge limit, tadpole/snail/self-energy veto, blob or spectator bound,
+symmetrization, or numerator grouping. Graph-theoretic self-loops are allowed; zero-flow edges
+are excluded. Request additional restrictions explicitly. In particular, an existing
+cross-section card that used the former cut defaults should add `--n-cut-blobs 1 1
+--n-cut-spectators 0 0`. Existing cards in this repository state their former filters and
+grouping explicitly. Numeric bounds are nonnegative; omitting a bound means unrestricted.
+The unsupported `--veto-only-scaleless-*` flags have been removed.
+
+The shared native API separates the calculation into `Request.generate`, `DiagramSet.build`,
+`BuiltDiagramSet.select`, and `BuiltDiagramSet.group`. `Request.count` returns exact physical
+counts without constructing numerators. `Run` owns threads, progress, and cancellation;
+`NumeratorOptions`, `Selection`, and `Grouping` own their corresponding stages. The CLI stores
+these persistent settings separately and creates runtime controls for each invocation. It
+requests names with the `GL` prefix; standalone generation is unnamed until naming is requested.
+
 
 Generation flags control topology filters, loop ranges, cut blobs and spectators,
 symmetrization, and numerator-aware grouping. These choices are physics-significant. In
@@ -121,7 +141,7 @@ name = "manual_bubble"
 name = "generate"
 commands = [
   "import model scalars-default.json",
-  "generate amp scalar_1 > scalar_1 [{1}] --allowed-vertex-interactions V_3_SCALAR_122 -p bubble -i scalar_bubble",
+  "generate amp scalar_1 > scalar_1 [{1}] --allowed-vertex-interactions V_3_SCALAR_122 --filter-selfenergies true --filter-snails true --filter-tadpoles true --numerator-grouping group_identical_graphs_up_to_scalar_rescaling -p bubble -i scalar_bubble",
   "generate",
   "save state -o",
 ]
@@ -141,6 +161,10 @@ the #source-link("examples/cli/scalar_topologies/bubble.toml", label: "scalar bu
   specification or generation filters. A generated process that disappears after restart means
   `save state -o` did not complete or the resumed `-s` path differs from `cli_settings.state.folder`.
 ])
+
+Saved GammaLoop states from the previous generation API must be regenerated from their run
+cards. The manifest and process-definition formats changed together; older files receive a
+clear regeneration error instead of being interpreted as the new settings.
 
 == From generation to evaluation
 

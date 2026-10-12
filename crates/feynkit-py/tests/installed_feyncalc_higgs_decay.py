@@ -57,8 +57,11 @@ for pdgs, mass, yukawa, yukawa_mass in (
     ((-24, 24), mw, None, None),
     ((23, 23), mz, None, None),
 ):
-    generated = model.process([25], list(pdgs)).generate_diagrams(
-        max_vertices=1, numerator_grouping=None, progress=None
+    generated = (
+        model.process([25], list(pdgs))
+        .amplitude(loops=fk.Loops.total(0), topology=fk.TopologyRules(max_vertices=1))
+        .generate()
+        .build(fk.NumeratorOptions(naming=fk.Naming.named("D")))
     )
     assert len(generated.diagrams) == 1
     diagram = generated.diagrams[0]

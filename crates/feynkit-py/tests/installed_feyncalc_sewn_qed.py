@@ -42,14 +42,21 @@ for name, incoming, outgoing in [
         else [me**2, mm**2, me**2, mm**2]
     )
     kin = fk.Kinematics.mandelstam([P(0), P(1), k1, k2], masses, [s, t, u])
-    result = model.process(
-        incoming, outgoing, vertex_allow=vertices
-    ).generate_cross_section(
-        loops=1,
-        max_vertices=4,
-        maximum_bridges=None,
-        numerator_grouping=None,
-        progress=None,
+    result = (
+        model.process(incoming, outgoing)
+        .cross_section(
+            loops=fk.Loops.forward(1),
+            restrict=fk.Restrict().only_vertices(vertices),
+            topology=fk.TopologyRules(
+                max_vertices=4,
+                self_energies=fk.Veto.all(),
+                tadpoles=fk.Veto.all(),
+                snails=fk.Veto.massless(),
+            ),
+            cuts=fk.Cuts(blobs=fk.Range.exact(1), spectators=fk.Range.exact(0)),
+        )
+        .generate()
+        .build(fk.NumeratorOptions(naming=fk.Naming.named("D")))
     )
     assert len(result.diagrams) == (4 if compton else 1)
     if compton:

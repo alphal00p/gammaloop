@@ -163,7 +163,7 @@ fn add_duplicate_integrand(
 fn populate_generated_scalar_box_process(cli: &mut SharedCli<'_>) -> Result<()> {
     cli.run_command("import model scalars-default.json")?;
     cli.run_command(
-        "generate amp scalar_0 scalar_0 > scalar_0 scalar_0 [{1}] --allowed-vertex-interactions V_3_SCALAR_022 -p box -i scalar_box --select-graphs GL0",
+        "generate amp scalar_0 scalar_0 > scalar_0 scalar_0 [{1}] --allowed-vertex-interactions V_3_SCALAR_022 -p box -i scalar_box --select-graphs GL0 --filter-selfenergies true --filter-snails true --filter-tadpoles true --numerator-grouping group_identical_graphs_up_to_scalar_rescaling",
     )?;
     cli.run_command("generate")?;
     cli.save_state()?;

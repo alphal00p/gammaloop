@@ -1,9 +1,6 @@
-use std::{
-    collections::{BTreeMap, BTreeSet},
-    fmt,
-    str::FromStr,
-    sync::Arc,
-};
+use std::{collections::BTreeMap, fmt, str::FromStr};
+#[cfg(test)]
+use std::{collections::BTreeSet, sync::Arc};
 
 use feynkit_model::{Model, ModelError, ModelFingerprint, ParticleId, VertexRuleId};
 use serde::{Deserialize, Serialize};
@@ -236,23 +233,16 @@ impl FromStr for GenerationType {
     bincode_trait_derive::Encode,
     bincode_trait_derive::Decode,
 )]
-/// External states and particle/vertex restrictions, independent of calculation kind and order.
+/// External states, independent of calculation kind, order, and query restrictions.
 pub struct Process {
     incoming: Vec<ParticleSelector>,
     outgoing_alternatives: Vec<Vec<ParticleSelector>>,
-    particle_veto: Option<Vec<ParticleSelector>>,
-    #[serde(default)]
-    particle_selection: Option<Vec<ParticleSelector>>,
-    vertex_allow: Option<Vec<VertexSelector>>,
-    vertex_veto: Vec<VertexSelector>,
 }
 
 bincode::impl_borrow_decode!(Process);
 
 #[derive(Debug, Clone, Error, PartialEq, Eq)]
 pub enum ProcessError {
-    #[error("particle_selection and particle_veto are mutually exclusive")]
-    ConflictingParticleFilters,
     #[error("invalid generation type '{0}'")]
     InvalidGenerationType(String),
     #[error("a process must specify at least one final-state alternative")]
@@ -272,38 +262,14 @@ pub enum ProcessError {
 }
 
 impl Process {
-    /// Generate unsewn diagrams for this process.
-    pub fn generate_diagrams(
-        &self,
-        model: impl Into<Arc<Model>>,
-        options: &crate::GenerationOptions,
-    ) -> Result<crate::GenerationResult, crate::GenerationError> {
-        crate::generation::Generator::new(model).generate(self, options, GenerationType::Amplitude)
+    /// Request unsewn compact diagrams with an explicit total loop range.
+    pub fn amplitude(self, loops: crate::Loops) -> crate::Request {
+        crate::Request::amplitude(self, loops)
     }
 
-    /// Generate a coherent symbolic amplitude from complete, unsewn diagrams.
-    pub fn generate_amplitude(
-        &self,
-        model: impl Into<Arc<Model>>,
-        options: &crate::GenerationOptions,
-        amplitude_options: feynkit_amplitude::AmplitudeOptions,
-    ) -> Result<feynkit_amplitude::Amplitude, crate::GenerationError> {
-        self.generate_diagrams(model, options)?
-            .into_amplitude(amplitude_options)
-    }
-
-    /// Generate sewn forward diagrams with physical final-state cuts.
-    /// The loop range counts loops in the forward graph, not in each amplitude.
-    pub fn generate_cross_section(
-        &self,
-        model: impl Into<Arc<Model>>,
-        options: &crate::GenerationOptions,
-    ) -> Result<crate::GenerationResult, crate::GenerationError> {
-        crate::generation::Generator::new(model).generate(
-            self,
-            options,
-            GenerationType::CrossSection,
-        )
+    /// Request sewn forward compact diagrams with an explicit forward loop range.
+    pub fn cross_section(self, loops: crate::Loops) -> crate::Request {
+        crate::Request::cross_section(self, loops)
     }
 
     pub fn new<I, O, PI, PO>(incoming: I, outgoing: O) -> Self
@@ -316,10 +282,6 @@ impl Process {
         Self {
             incoming: incoming.into_iter().map(Into::into).collect(),
             outgoing_alternatives: vec![outgoing.into_iter().map(Into::into).collect()],
-            particle_veto: None,
-            particle_selection: None,
-            vertex_allow: None,
-            vertex_veto: Vec::new(),
         }
     }
 
@@ -343,107 +305,17 @@ impl Process {
         Ok(self)
     }
 
-    /// Replace veto and vertex restrictions, clearing any particle selection.
-    /// This preserves the original Rust API; an empty veto means no restriction.
-    pub fn with_filters(
-        mut self,
-        particle_veto: Vec<ParticleSelector>,
-        vertex_allow: Option<Vec<VertexSelector>>,
-        vertex_veto: Vec<VertexSelector>,
-    ) -> Self {
-        self.particle_veto = (!particle_veto.is_empty()).then_some(particle_veto);
-        self.particle_selection = None;
-        self.vertex_allow = vertex_allow;
-        self.vertex_veto = vertex_veto;
-        self
-    }
-
-    /// Replace the model-sector restrictions without changing the external states.
-    pub fn with_particle_filters(
-        mut self,
-        particle_veto: Option<Vec<ParticleSelector>>,
-        particle_selection: Option<Vec<ParticleSelector>>,
-        vertex_allow: Option<Vec<VertexSelector>>,
-        vertex_veto: Vec<VertexSelector>,
-    ) -> Result<Self, ProcessError> {
-        self.particle_veto = particle_veto;
-        self.particle_selection = particle_selection;
-        self.vertex_allow = vertex_allow;
-        self.vertex_veto = vertex_veto;
-        self.validate()?;
-        Ok(self)
-    }
-
-    pub fn particle_veto(&self) -> Option<&[ParticleSelector]> {
-        self.particle_veto.as_deref()
-    }
-    /// None allows every species; an empty selection allows none. Antiparticles
-    /// are included automatically, matching the species semantics of the veto.
-    pub fn particle_selection(&self) -> Option<&[ParticleSelector]> {
-        self.particle_selection.as_deref()
-    }
-    /// None allows every interaction; an empty list allows no interaction.
-    pub fn vertex_allow(&self) -> Option<&[VertexSelector]> {
-        self.vertex_allow.as_deref()
-    }
-    pub fn vertex_veto(&self) -> &[VertexSelector] {
-        &self.vertex_veto
-    }
-
-    /// Validate external states and restrictions against one concrete model.
+    /// Validate every external selector against one concrete model.
     pub fn validate_in(&self, model: &Model) -> Result<(), crate::GenerationError> {
         self.validate()?;
         for selector in self
             .incoming
             .iter()
             .chain(self.outgoing_alternatives.iter().flatten())
-            .chain(self.particle_veto.iter().flatten())
-            .chain(self.particle_selection.iter().flatten())
         {
             selector.resolve(model)?;
         }
-        for selector in self.vertex_allow.iter().flatten().chain(&self.vertex_veto) {
-            selector.resolve(model)?;
-        }
         Ok(())
-    }
-
-    /// Apply immutable process restrictions before resolving generation settings.
-    pub(crate) fn restrict_options(
-        &self,
-        model: &Model,
-        options: &crate::GenerationOptions,
-    ) -> Result<crate::GenerationOptions, crate::GenerationError> {
-        let mut options = options.clone();
-        if let Some(selection) = &self.particle_selection {
-            // Resolve a whitelist to the complementary species veto once, so
-            // topology pruning and covariant cut validation share one path.
-            let selected = selection
-                .iter()
-                .map(|selector| selector.resolve(model))
-                .collect::<Result<BTreeSet<_>, _>>()?;
-            let mut vetoes = Vec::new();
-            for (index, particle) in model.particles().iter().enumerate() {
-                let id = model.particle_id_at(index)?;
-                if !selected.contains(&id) && !selected.contains(&particle.antiparticle) {
-                    vetoes.push(ParticleSelector::by_id(model, id)?);
-                }
-            }
-            options = options.with_graph_filter(crate::GenerationFilter::ParticleVeto(vetoes));
-        } else if let Some(vetoes) = &self.particle_veto {
-            options =
-                options.with_graph_filter(crate::GenerationFilter::ParticleVeto(vetoes.clone()));
-        }
-        if let Some(allowed) = &self.vertex_allow {
-            options =
-                options.with_graph_filter(crate::GenerationFilter::VertexAllow(allowed.clone()));
-        }
-        if !self.vertex_veto.is_empty() {
-            options = options.with_graph_filter(crate::GenerationFilter::VertexVeto(
-                self.vertex_veto.clone(),
-            ));
-        }
-        Ok(options)
     }
 
     pub fn incoming(&self) -> &[ParticleSelector] {
@@ -486,28 +358,19 @@ impl Process {
             .collect())
     }
 
-    /// Validate that generation filters retain every declared covariant partner.
-    pub fn validate_covariant_cut_filters(
+    /// Restrictions on a physical cross section must retain each declared covariant partner.
+    pub fn validate_covariant_cut_restrictions(
         &self,
         model: &Model,
-        options: &crate::GenerationOptions,
-        generation_type: GenerationType,
+        restrictions: &crate::Restrict,
+        kind: GenerationType,
     ) -> Result<(), crate::GenerationError> {
-        let representatives = self.covariant_cut_representatives(model, generation_type)?;
-        let option_vetoes = [crate::FilterScope::Graph, crate::FilterScope::CutAmplitude]
-            .into_iter()
-            .flat_map(|scope| options.filters(scope))
-            .filter_map(|filter| match filter {
-                crate::GenerationFilter::ParticleVeto(vetoes) => Some(vetoes.iter()),
-                _ => None,
-            })
-            .flatten();
-        for selector in self.particle_veto.iter().flatten().chain(option_vetoes) {
-            let particle = model.particle_by_id(selector.resolve(model)?)?;
-            for member in [particle.pdg_code, model.antiparticle(particle)?.pdg_code] {
-                if let Some(&physical) = representatives.get(&member) {
-                    return Err(ProcessError::CovariantCutVeto { physical, member }.into());
-                }
+        let representatives = self.covariant_cut_representatives(model, kind)?;
+        let restrictions = restrictions.resolve(model)?;
+        for (member, physical) in representatives {
+            let id = model.particle_id_by_pdg(member)?;
+            if !restrictions.particle(id) {
+                return Err(ProcessError::CovariantCutVeto { physical, member }.into());
             }
         }
         Ok(())
@@ -534,9 +397,6 @@ impl Process {
     }
 
     pub fn validate(&self) -> Result<(), ProcessError> {
-        if self.particle_veto.is_some() && self.particle_selection.is_some() {
-            return Err(ProcessError::ConflictingParticleFilters);
-        }
         if self.outgoing_alternatives.is_empty() {
             return Err(ProcessError::MissingFinalState);
         }
@@ -582,76 +442,69 @@ mod tests {
 
     #[test]
     fn particle_selection_is_the_complementary_species_veto() {
-        let model =
-            Model::from_json(include_str!("../../feynkit-model/tests/fixtures/sm.json")).unwrap();
+        use crate::{BuiltDiagramSet, Loops, NumeratorOptions, Restrict, Run, TopologyRules};
+        let model = Arc::new(
+            Model::from_json(include_str!("../../feynkit-model/tests/fixtures/sm.json")).unwrap(),
+        );
         let process = model.process(["e-", "e+"], ["a", "a"]).unwrap();
-        let selected = process
-            .clone()
-            .with_particle_filters(None, Some(vec!["e-".into(), 22_i64.into()]), None, vec![])
-            .unwrap();
+        let request = process
+            .amplitude(Loops::total(0..=0))
+            .with_topology(TopologyRules::new().with_self_loops(false));
+        let selected = request.clone().with_restrict(
+            Restrict::new().only_particles([ParticleSelector::from("e-"), 22_i64.into()]),
+        );
         selected.validate_in(&model).unwrap();
-        let options = crate::GenerationOptions::default();
-        let restricted = selected.restrict_options(&model, &options).unwrap();
-        let vetoes = restricted
-            .filters(crate::FilterScope::Graph)
+        let allowed = selected.restrictions().resolve(&model).unwrap();
+        let vetoes = model
+            .particles()
             .iter()
-            .find_map(|filter| match filter {
-                crate::GenerationFilter::ParticleVeto(vetoes) => Some(vetoes.clone()),
-                _ => None,
-            })
-            .unwrap();
-        let vetoed = process
+            .map(|particle| model.particle_id(&particle.name).unwrap())
+            .filter(|&particle| !allowed.particle(particle))
+            .map(|particle| ParticleSelector::by_id(&model, particle).unwrap())
+            .collect::<Vec<_>>();
+        let vetoed = request
             .clone()
-            .with_particle_filters(Some(vetoes), None, None, vec![])
+            .with_restrict(Restrict::new().exclude_particles(vetoes));
+        let run = Run::default();
+        let generated = selected
+            .generate(model.clone(), &run)
+            .unwrap()
+            .build(&NumeratorOptions::default(), &run)
             .unwrap();
-        let generated = selected.generate_diagrams(model.clone(), &options).unwrap();
-        assert_eq!(generated.diagrams.len(), 2);
-        let ids = |result: crate::GenerationResult| {
+        assert_eq!(generated.len(), 2);
+        let ids = |result: BuiltDiagramSet| {
             result
-                .diagrams
-                .into_iter()
+                .iter()
                 .map(|diagram| diagram.id().unwrap())
                 .collect::<BTreeSet<_>>()
         };
         assert_eq!(
             ids(generated),
-            ids(vetoed.generate_diagrams(model.clone(), &options).unwrap())
+            ids(vetoed
+                .generate(model.clone(), &run)
+                .unwrap()
+                .build(&NumeratorOptions::default(), &run)
+                .unwrap())
         );
-        let restored: Process =
+        let restored: crate::Request =
             serde_json::from_str(&serde_json::to_string(&selected).unwrap()).unwrap();
         assert_eq!(restored, selected);
-        assert!(
-            process
-                .clone()
-                .with_particle_filters(Some(vec![]), Some(vec![]), None, vec![])
-                .is_err()
+        // Restriction clauses now intersect: an explicit empty allow-list permits none,
+        // including when it is combined with an empty exclusion list.
+        let empty = request.clone().with_restrict(
+            Restrict::new()
+                .only_particles(Vec::<ParticleSelector>::new())
+                .exclude_particles(Vec::<ParticleSelector>::new()),
         );
-        let empty = process
+        assert!(empty.generate(model.clone(), &run).unwrap().is_empty());
+        let empty = request
             .clone()
-            .with_particle_filters(None, Some(vec![]), None, vec![])
-            .unwrap();
+            .with_restrict(Restrict::new().only_particles(Vec::<ParticleSelector>::new()));
+        assert!(empty.generate(model.clone(), &run).unwrap().is_empty());
+        assert_eq!(request.generate(model.clone(), &run).unwrap().len(), 2);
         assert!(
-            empty
-                .generate_diagrams(model.clone(), &options)
-                .unwrap()
-                .diagrams
-                .is_empty()
-        );
-        let unrestricted = empty
-            .with_particle_filters(None, None, None, vec![])
-            .unwrap();
-        assert_eq!(
-            unrestricted
-                .generate_diagrams(model.clone(), &options)
-                .unwrap()
-                .diagrams
-                .len(),
-            2
-        );
-        assert!(
-            process
-                .with_particle_filters(None, Some(vec!["missing".into()]), None, vec![])
-                .unwrap()
+            request
+                .with_restrict(Restrict::new().only_particles(["missing"]))
                 .validate_in(&model)
                 .is_err()
         );
@@ -659,14 +512,21 @@ mod tests {
 
     #[test]
     fn model_process_validates_references_and_round_trips_only_process_state() {
+        use crate::{Loops, Restrict};
         let model =
             Model::from_json(include_str!("../../feynkit-model/tests/fixtures/sm.json")).unwrap();
         assert!(model.process(["missing"], ["a"]).is_err());
-        let process = model
-            .process(["e-", "e+"], ["a", "a"])
-            .unwrap()
-            .with_filters(vec!["t".into()], Some(vec!["V_98".into()]), vec![]);
+        let process = model.process(["e-", "e+"], ["a", "a"]).unwrap();
         process.validate_in(&model).unwrap();
+        let request = process
+            .clone()
+            .amplitude(Loops::total(0..=0))
+            .with_restrict(
+                Restrict::new()
+                    .exclude_particles(["t"])
+                    .only_vertices(["V_98"]),
+            );
+        request.validate_in(&model).unwrap();
         let definition = serde_json::to_value(&process).unwrap();
         assert!(definition.get("loop_count").is_none());
         assert!(definition.get("symmetrize_final").is_none());
@@ -676,9 +536,8 @@ mod tests {
         );
         assert!(
             process
-                .clone()
-                .with_particle_filters(None, None, Some(vec!["missing".into()]), vec![])
-                .unwrap()
+                .amplitude(Loops::total(0..=0))
+                .with_restrict(Restrict::new().only_vertices(["missing"]))
                 .validate_in(&model)
                 .is_err()
         );
@@ -686,21 +545,15 @@ mod tests {
 
     #[test]
     fn process_veto_cannot_remove_a_physical_covariant_partner() {
+        use crate::{Loops, Restrict};
         let model =
             Model::from_json(include_str!("../../feynkit-model/tests/fixtures/sm.json")).unwrap();
-        let process = model
-            .process(["H"], ["W+", "W-"])
-            .unwrap()
-            .with_particle_filters(Some(vec!["ghWp".into()]), None, None, vec![])
-            .unwrap();
+        let process = model.process(["H"], ["W+", "W-"]).unwrap();
         process.validate_in(&model).unwrap();
-        let error = process
-            .validate_covariant_cut_filters(
-                &model,
-                &crate::GenerationOptions::default(),
-                GenerationType::CrossSection,
-            )
-            .unwrap_err();
+        let request = process
+            .cross_section(Loops::forward(1..=1))
+            .with_restrict(Restrict::new().exclude_particles(["ghWp"]));
+        let error = request.validate_in(&model).unwrap_err();
         assert!(matches!(
             error,
             crate::GenerationError::Process(ProcessError::CovariantCutVeto { .. })

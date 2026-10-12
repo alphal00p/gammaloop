@@ -13,12 +13,20 @@ from symbolica.community.tensor import TensorExpression
 model = fk.Model(Path(__file__).parents[2] / "feynkit-model/tests/fixtures/sm.json")
 # A sewn tree x tree graph has one loop and its two muon lines form the cut.
 process = model.process([11, -11], [13, -13])
-result = process.with_filters(vertex_allow=["V_98", "V_99"]).generate_cross_section(
-    loops=1,
-    max_vertices=4,
-    maximum_bridges=None,
-    numerator_grouping=None,
-    progress=None,
+result = (
+    process.cross_section(
+        restrict=fk.Restrict().only_vertices(["V_98", "V_99"]),
+        loops=fk.Loops.forward(1),
+        topology=fk.TopologyRules(
+            max_vertices=4,
+            self_energies=fk.Veto.all(),
+            tadpoles=fk.Veto.all(),
+            snails=fk.Veto.massless(),
+        ),
+        cuts=fk.Cuts(blobs=fk.Range.exact(1), spectators=fk.Range.exact(0)),
+    )
+    .generate()
+    .build(fk.NumeratorOptions(naming=fk.Naming.named("D")))
 )
 assert len(result.diagrams) == 1
 diagram = result.diagrams[0]

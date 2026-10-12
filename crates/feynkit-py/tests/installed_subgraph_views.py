@@ -8,17 +8,27 @@ from symbolica.community import graph as linnet
 from symbolica.community.tensor import TensorExpression
 
 from symbolica.community import hepkit as fk
+from symbolica.community.graph import Bridges
 
 model = fk.Model(Path(__file__).parent / "fixtures/scalars_2p_3p.json")
 diagram = next(
     candidate
-    for candidate in model.process(
-        ["scalar_0"], ["scalar_0", "scalar_0"], vertex_allow=["V_3_SCALAR_000"]
+    for candidate in model.process(["scalar_0"], ["scalar_0", "scalar_0"])
+    .amplitude(
+        loops=fk.Loops.total(1),
+        restrict=fk.Restrict().only_vertices(["V_3_SCALAR_000"]),
+        topology=fk.TopologyRules(
+            max_vertices=3,
+            self_loops=False,
+            bridges=Bridges.one_pi_in_loops(),
+            self_energies=fk.Veto.all(),
+            tadpoles=fk.Veto.all(),
+            snails=fk.Veto.massless(),
+        ),
     )
-    .generate_diagrams(
-        loops=1,
-        max_vertices=3,
-        allow_self_loops=False,
+    .generate(run=fk.Run(progress="auto"))
+    .build(
+        fk.NumeratorOptions(naming=fk.Naming.named("D")), run=fk.Run(progress="auto")
     )
     .diagrams
     if len(

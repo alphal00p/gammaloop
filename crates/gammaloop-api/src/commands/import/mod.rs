@@ -269,7 +269,7 @@ impl GraphImportSource {
 mod tests {
     use std::{fs, sync::Arc};
 
-    use feynkit_generator::{GenerationOptions, Process};
+    use feynkit_generator::{Cuts, Loops, Naming, NumeratorOptions, Process, Run, TopologyRules};
     use feynkit_graph::FeynmanDiagram;
 
     use super::*;
@@ -280,16 +280,21 @@ mod tests {
             "../../../../../assets/models/json/scalars/scalars_2p_3p.json"
         ))?;
         let generated = Process::new(["scalar_1"], ["scalar_1", "scalar_1"])
-            .generate_cross_section(
-                Arc::new(model.clone()),
-                &GenerationOptions::default()
-                    .with_loop_count(1, 1)?
-                    .threads(1)
-                    .max_vertices(4),
+            .cross_section(Loops::forward(1..=1))
+            .with_cuts(Cuts::new().with_blobs(1..=1).with_spectators(0..=0))
+            .with_topology(
+                TopologyRules::new()
+                    .with_self_loops(false)
+                    .with_max_vertices(4),
+            )
+            .generate(Arc::new(model.clone()), &Run::default().threads(1))?
+            .build(
+                &NumeratorOptions::default().with_naming(Naming::prefix("D")),
+                &Run::default().threads(1),
             )?;
-        assert!(!generated.diagrams.is_empty());
+        assert!(!generated.diagrams().is_empty());
         let dot = generated
-            .diagrams
+            .diagrams()
             .iter()
             .map(FeynmanDiagram::to_dot)
             .collect::<Result<Vec<_>, _>>()?
@@ -300,9 +305,9 @@ mod tests {
 
         let imported = Graph::from_dot_path(&path, &model)?;
 
-        assert_eq!(imported.len(), generated.diagrams.len());
+        assert_eq!(imported.len(), generated.diagrams().len());
         // The canonical cuts are exactly the generated ones.
-        for (graph, diagram) in imported.iter().zip(&generated.diagrams) {
+        for (graph, diagram) in imported.iter().zip(generated.diagrams()) {
             assert!(!graph.finalized_cuts.is_empty());
             assert_eq!(graph.finalized_cuts.len(), diagram.cuts().len());
         }

@@ -54,7 +54,7 @@ momenta = [[0.5,0.0,0.0,0.5],[0.5,0.0,0.0,-0.5],[0.5,0.5,0.0,0.0],"dependent"]
 helicities = [0,0,0,0]
 '"#,
                 &format!(
-                    "generate amp scalar_0 scalar_0 > {final_states} [{{0}}] --allowed-vertex-interactions {vertices} -p tree -i scalar",
+                    "generate amp scalar_0 scalar_0 > {final_states} [{{0}}] --allowed-vertex-interactions {vertices} -p tree -i scalar --filter-selfenergies true --filter-snails true --filter-tadpoles true --numerator-grouping group_identical_graphs_up_to_scalar_rescaling",
                 ),
             ],
         )?;
@@ -327,7 +327,7 @@ min_samples_for_update = 1000
 seed = 7331
 target_relative_accuracy = 0.01
 '"#,
-            "generate amp scalar_2 > scalar_2 [{1}] --allowed-vertex-interactions V_3_SCALAR_112 -p bubble -i causal",
+            "generate amp scalar_2 > scalar_2 [{1}] --allowed-vertex-interactions V_3_SCALAR_112 -p bubble -i causal --filter-selfenergies true --filter-snails true --filter-tadpoles true --numerator-grouping group_identical_graphs_up_to_scalar_rescaling",
         ],
     )?;
     let ProcessCollection::Amplitudes(amplitudes) = &cli.state.process_list.processes[0].collection

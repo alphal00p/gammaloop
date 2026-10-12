@@ -30,7 +30,7 @@ commands = [
                                            * gammalooprs::ϵ(1,spenso::mink(4,gammalooprs::hedge(1,1)))
                                            * (1/8)*spenso::g(spenso::coad(8,gammalooprs::hedge(0,1)),spenso::coad(8,gammalooprs::hedge(1,1)))'
            -p gg_hhh
-           -i 2L
+           -i 2L --filter-selfenergies true --filter-snails true --filter-tadpoles true
     """,
     "generate",
     "save dot",

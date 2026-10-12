@@ -1767,12 +1767,18 @@ impl SiteBuilder {
                 source.display(),
                 typst.display()
             );
-            // Preserve the versioned upstream package verbatim. This vendor-owned
-            // changelog is not an editable repository documentation source.
-            if source
-                == Path::new(
-                    "crates/linnet-py/vendor/typst-packages/preview/mitex/0.2.6/CHANGELOG.md",
-                )
+            // Preserve upstream metadata/legal assets and the executable browser
+            // playground verbatim. Only these exact files are non-prose assets;
+            // neighboring Markdown/HTML still passes through the prose gate.
+            if [
+                "crates/linnet-py/vendor/typst-packages/preview/mitex/0.2.6/CHANGELOG.md",
+                "vendor/clarabel/CHANGELOG.md",
+                "vendor/clarabel/LICENSE.md",
+                "vendor/clarabel/html/rustdocs-header.html",
+                "examples/layout/impred/playground.html",
+            ]
+            .iter()
+            .any(|asset| source == Path::new(asset))
             {
                 continue;
             }
@@ -10469,6 +10475,61 @@ mod tests {
         builder.legacy_prose.source.clear();
         fs::write(temporary.path().join("new-note.typ"), "= New prose").unwrap();
         assert!(builder.check_prose_sources().is_err());
+    }
+
+    #[test]
+    fn prose_source_gate_distinguishes_exact_assets_from_nearby_prose() {
+        let temporary = tempfile::tempdir().unwrap();
+        for source in [
+            "crates/linnet-py/vendor/typst-packages/preview/mitex/0.2.6/CHANGELOG.md",
+            "vendor/clarabel/CHANGELOG.md",
+            "vendor/clarabel/LICENSE.md",
+            "vendor/clarabel/html/rustdocs-header.html",
+            "examples/layout/impred/playground.html",
+        ] {
+            let path = temporary.path().join(source);
+            fs::create_dir_all(path.parent().unwrap()).unwrap();
+            fs::write(path, "Non-prose asset").unwrap();
+        }
+        let mut builder = SiteBuilder::discover().unwrap();
+        builder.root = temporary.path().to_path_buf();
+        builder.legacy_prose = LegacyProseConfig {
+            schema: LEGACY_PROSE_SCHEMA_VERSION,
+            source: Vec::new(),
+        };
+        builder.check_prose_sources().unwrap();
+
+        for source in [
+            "vendor/clarabel/notes.md",
+            "vendor/clarabel/html/notes.html",
+            "examples/layout/impred/notes.html",
+            "crates/linnet-py/vendor/typst-packages/preview/mitex/0.2.6/notes.md",
+        ] {
+            let path = temporary.path().join(source);
+            fs::write(&path, "New prose").unwrap();
+            let error = builder.check_prose_sources().unwrap_err();
+            assert!(
+                error
+                    .to_string()
+                    .contains("Markdown/HTML sources differ from the shrinking legacy inventory"),
+                "{error}"
+            );
+            fs::remove_file(path).unwrap();
+        }
+
+        fs::write(
+            temporary
+                .path()
+                .join("examples/layout/impred/playground.typ"),
+            "= Parallel editable source",
+        )
+        .unwrap();
+        let error = builder.check_prose_sources().unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("parallel editable documentation")
+        );
     }
 
     #[test]

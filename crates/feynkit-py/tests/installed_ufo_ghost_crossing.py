@@ -13,6 +13,7 @@ from pathlib import Path
 from symbolica import E, S
 from symbolica.community import hepkit as hep
 from symbolica.community.tensor import TensorExpression
+from symbolica.community.graph import Bridges
 
 model = hep.Model(Path(__file__).parents[2] / "feynkit-model/tests/fixtures/sm.json")
 specification = json.loads(model.to_json())
@@ -94,14 +95,14 @@ for name, (particles, coupling_name) in vertices.items():
         ),
     ):
         diagrams = (
-            model.process(incoming, outgoing, vertex_allow=[name])
-            .generate_diagrams(
-                loops=0,
-                max_vertices=1,
-                maximum_bridges=0,
-                numerator_grouping=None,
-                progress=None,
+            model.process(incoming, outgoing)
+            .amplitude(
+                loops=hep.Loops.total(0),
+                restrict=hep.Restrict().only_vertices([name]),
+                topology=hep.TopologyRules(max_vertices=1, bridges=Bridges.at_most(0)),
             )
+            .generate()
+            .build(hep.NumeratorOptions(naming=hep.Naming.named("D")))
             .diagrams
         )
         assert len(diagrams) == 1, (name, slots)
@@ -170,14 +171,14 @@ for label, tensor in (
         (["g"], ["ghG~", "ghG"], "V_35"),
     ):
         diagrams = (
-            probe_model.process(incoming, outgoing, vertex_allow=[name])
-            .generate_diagrams(
-                loops=0,
-                max_vertices=1,
-                maximum_bridges=0,
-                numerator_grouping=None,
-                progress=None,
+            probe_model.process(incoming, outgoing)
+            .amplitude(
+                loops=hep.Loops.total(0),
+                restrict=hep.Restrict().only_vertices([name]),
+                topology=hep.TopologyRules(max_vertices=1, bridges=Bridges.at_most(0)),
             )
+            .generate()
+            .build(hep.NumeratorOptions(naming=hep.Naming.named("D")))
             .diagrams
         )
         assert len(diagrams) == 1, (name, label)

@@ -1599,7 +1599,8 @@ const INTEGRAND_GENERATION_SUMMARY_FILE: &str = "generation_summary.json";
 // Version 8 stores the canonical FeynKit model alongside runtime graph identities.
 // Version 9 weights identical-beam cross-section graphs by their beam-exchange orbit;
 // older symmetrized identical-beam states carry halved weights that nothing in them reveals.
-const CURRENT_STATE_MANIFEST_VERSION: u32 = 9;
+// Version 10 persists Request and separate numerator/selection/grouping settings, with u128 symmetry orders.
+const CURRENT_STATE_MANIFEST_VERSION: u32 = 10;
 const GENERATION_THREAD_STACK_SIZE_BYTES: usize = 32 * 1024 * 1024;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -3071,10 +3072,10 @@ impl State {
         } = options;
         let generation_type = Self::infer_graph_list_generation_type(&graphs)?;
         if let Some(definition) = &process_definition {
-            if definition.generation_type != generation_type {
+            if definition.request.kind() != generation_type {
                 return Err(eyre!(
                     "--process-spec describes a {} process, but the imported graph list is {}",
-                    definition.generation_type,
+                    definition.request.kind(),
                     generation_type
                 ));
             }
@@ -4836,7 +4837,9 @@ commands = ["quit -n"]
         .unwrap();
 
         let err = load_state_manifest(temp.path()).unwrap_err();
-        assert!(format!("{err}").contains("Regenerate this state"));
+        let message = err.to_string();
+        assert!(message.contains("cannot be migrated"));
+        assert!(message.contains("regenerate the saved state"));
     }
 
     #[test]

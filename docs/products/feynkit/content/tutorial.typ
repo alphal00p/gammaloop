@@ -34,137 +34,164 @@ evaluation is an explicit boundary. Python callers can pass an evaluator to
 and returns `EvaluatedValues`; incomplete results raise `ModelError` without publishing a
 partially updated model.
 
-Python accepts generation settings directly as keyword arguments. Exact coupling orders use
-integers; pairs specify inclusive bounds, with `None` for an unbounded coupling maximum.
-Filter objects specify which subgraphs to reject. Python permits self-loops,
-rejects zero-flow edges, and follows GammaLoop's defaults for subgraph rejection: non-vacuum
-processes filter self-energies, tadpoles and zero-momentum snails. Vacuum processes leave
-those filters off and require one factorized loop topology. Cross sections default to one
-cut blob, no spectators, and no bridge filter.
+Create an immutable request from `model.process(...)`. Every physics request requires
+explicit finite loops: `fk.Loops.total(0)` or `fk.Loops.total((0, 1))` for amplitudes,
+including vacuum amplitudes; `fk.Loops.forward(...)` counts sewn forward-graph loops.
+Use `Orders().exact("QCD", 2)` or inclusive `Range` values for coupling constraints.
+Repeated bounds intersect; conflicting bounds describe an empty request.
 
-For amplitudes, the default `maximum_bridges=...` retains tree-level exchange channels and
-requires one-particle irreducibility for each diagram with loops. This decision uses the
-individual diagram's loop count, including when requesting a mixed range such as
-`loops=(0, 1)`. External legs do not count as bridges. An explicit integer, including
-`maximum_bridges=0`, limits bridges at every loop order; `maximum_bridges=None` disables the
-restriction. One-particle-reducible loop corrections are therefore opt-in when assembling a
-complete scattering amplitude. Rust exposes the same loop-only policy as
-`GenerationFilter::LoopOneParticleIrreducible`. Cross sections leave it off by default: the
-filter acts on the unsewn forward graph, where every s-channel propagator is a bridge, so it
-would discard physical contributions such as $e^+ e^- -> mu^+ mu^-$. An explicit integer
-still applies to the forward graph.
-Numerator comparison is disabled by default; pass `NumeratorGrouping` explicitly to enable it. Diagrams still contain their vertex, propagator and aggregate
-numerators. As in the current GammaLoop `--only-diagrams` path, generation does not construct
-an evaluable integrand. Numerator validation first checks identical factored expressions;
-it expands only when needed to compare differing representations.
+`Restrict` owns particle and vertex clauses. `TopologyRules` owns bridge and cyclic-subgraph
+constraints; `Cuts` owns physical cut content. These defaults are shared and unrestricted:
+there is no automatic non-vacuum or vacuum preset. Self-loops are allowed, zero-flow edges
+are rejected, and all external symmetrizations are disabled. Optional count ranges default
+to unrestricted, including factorized loops, cut blobs, and spectators.
 
-For process-dependent filters and grouping, `...` in the signature means automatic defaults.
-Pass an options object to customize a filter, or `None` to disable it. The same distinction
-applies to factorized-loop, cut-blob and spectator ranges.
+The shared `graph.Bridges` constructors distinguish `any()`, `at_most(n)`, `one_pi()`, and
+`one_pi_in_loops()`. The last retains tree exchange channels and requires one-particle
+irreducibility only for graphs with loops, even in a mixed loop interval. External legs
+do not count as bridges. A bridge limit on a cross-section request acts on the forward
+graph and can remove physical s-channel contributions, so choose it explicitly.
+
+This example preserves a filtered one-loop gluon two-point search by specifying the
+cyclic vetoes and loop-only bridge policy that it needs:
 
 // docs-example: compile
 ```python
+from symbolica.community import graph
 import symbolica.community.hepkit as fk
 
-result = model.process(['g'], ['g'], particle_veto=['c', 't', 's', 'u', 'd']).generate_diagrams(loops=1, coupling_orders={'QCD': 2, 'QED': 0}, zero_snails=fk.SnailFilterOptions(veto_attached_to_massless=True), threads=4)
+request = model.process(["g"], ["g"]).amplitude(
+    loops=fk.Loops.total(1),
+    restrict=fk.Restrict().exclude_particles(["c", "t", "s", "u", "d"]),
+    orders=fk.Orders().exact("QCD", 2).exact("QED", 0),
+    topology=fk.TopologyRules(
+        bridges=graph.Bridges.one_pi_in_loops(),
+        self_energies=fk.Veto.all(),
+        tadpoles=fk.Veto.all(),
+        snails=fk.Veto.massless(),
+    ),
+)
+compact = request.generate(run=fk.Run(threads=4))
+result = compact.build()
 ```
 
-Reuse keyword settings with a Python dictionary and `**kwargs`; each call constructs a fresh
-Rust configuration. A process can also be configured independently of generation:
+Reuse the specification objects directly. A request can explain or count its discovery
+without constructing Feynman diagrams or numerators:
 
 // docs-example: compile
 ```python
-import symbolica.community.hepkit as fk
-
 process = model.process(["e-", "e+"], ["mu-", "mu+"])
-result = process.generate_diagrams(loops=1, max_vertices=6, maximum_bridges=None)
+request = process.amplitude(
+    loops=fk.Loops.total(1),
+    topology=fk.TopologyRules(
+        max_vertices=6,
+        self_energies=fk.Veto.all(),
+        tadpoles=fk.Veto.all(),
+        snails=fk.Veto.massless(),
+    ),
+)
+print(request.explain())
+counts = request.count()
+assert counts.complete
+compact = request.generate()
+assert len(compact) == counts.diagrams
+result = compact.build()
 ```
+
+Counts distinguish skeletons, complete dressings, and physically retained diagrams.
+`sum_inv_aut` is an exact `fractions.Fraction`; `physical_weight` also includes signed
+process factors. `per_loop` holds the exact totals at each loop order. Compact results
+own their model, prepared assignments, and shared skeletons independently of the request.
+Accessing their metadata or iterating does not construct numerators, names, or diagram IDs.
 
 The same process can produce a symbolic amplitude or sewn cross-section diagrams:
 
 // docs-example: compile
 ```python
 process = model.process(["e-", "e+"], ["a", "a"])
-amplitude = process.generate_amplitude()
+amplitude = process.amplitude(loops=fk.Loops.total(0)).generate().build().into_amplitude()
 squared = amplitude.squared().sum_spins(average_initial=True)
-forward = process.generate_cross_section(loops=1)
+forward = process.cross_section(
+    loops=fk.Loops.forward(1),
+    topology=fk.TopologyRules(
+        self_energies=fk.Veto.all(),
+        tadpoles=fk.Veto.all(),
+        snails=fk.Veto.massless(),
+    ),
+    cuts=fk.Cuts(blobs=fk.Range.exact(1), spectators=fk.Range.exact(0)),
+).generate().build()
 ```
 
-`generate_cross_section` returns a `GenerationResult` containing sewn forward diagrams and
-cut metadata; phase-space integration is a later operation. Its loop order counts loops in
-the forward graph, so a two-particle tree cut requires one loop. `generate_amplitude` rejects
-empty or cancelled generation rather than presenting an incomplete coherent sum.
-Neither method changes the process; loop order and symmetrization belong to each call.
+The cross-section result contains sewn forward diagrams and cut metadata; phase-space
+integration is a later operation. A two-particle tree cut requires one forward loop.
+The example explicitly preserves a one-blob, zero-spectator cut policy; these restrictions
+are not defaults. `into_amplitude()` rejects incomplete or empty output rather than
+presenting an incomplete coherent sum. It also rejects already-sewn forward diagrams.
 
-Identical final-state particles of a cross section are cut edges, already counted by the graph
-automorphisms, so `generate_cross_section` has no `symmetrize_final`. With
-`symmetrize_initial=True` it keeps one forward graph for each exchange of two identical beams,
-and the overall factor of the kept graph counts the graphs it stands for, so the factors add
-up to the unsymmetrized total. `symmetrize_left_right=True` searches the physical cuts of each
-graph in one of its two mirror frames, and from two loops on the cuts can depend on the frame,
-so its total can differ from the unsymmetrized one; with both options the total inherits those
-deviations and can differ from the left/right total too. Evaluating only the kept graphs is
-exact after integration when observables and selectors are invariant under the beam exchange
-and the beam helicities are summed or equal; graphs that the exchange maps to themselves are
-exact in every event. Fewer graphs need not mean a cheaper result: each kept graph carries its
-orbit's weight on one side of the exchange, so the integration error can grow. For
-$Z Z -> e^+ e^-$ it was 19 times larger at equal sample counts. For amplitudes, both options
-make identical legs unlabelled, and the caller sums over their permutations.
+Identical final-state particles of a cross section are cut edges, already counted by graph
+automorphisms, so cross-section requests reject `Symmetrize.FINAL`.
+`Symmetrize.INITIAL` retains one graph per exchange of identical beams and multiplies its
+overall factor by the represented orbit size. `Cuts(symmetrize_left_right=True)` identifies
+forward graphs related by a global exchange of the amplitude sides and sums their
+multiplicities. Cut enumeration is independent of the mirror frame, including when
+combined with `Symmetrize.INITIAL`.
+Evaluating only retained graphs is exact after integration when observables and selectors
+respect beam exchange and beam helicities are summed or equal; exchange-fixed graphs are
+exact in every event. Fewer graphs need not lower the integration error: for
+$Z Z -> e^+ e^-$ it was 19 times larger at equal sample counts. For amplitudes,
+`Symmetrize.INITIAL` and `Symmetrize.FINAL` make the corresponding identical legs unlabelled,
+and the caller sums their permutations.
 
-Here `model` must provide those particles. Allowed interactions and particle vetoes are
-process restrictions, validated at construction. `process.with_filters(...)` returns a copy
-with changed restrictions; omitted fields are kept and `None` clears them. An empty
-`vertex_allow=[]` permits no interactions. Loop ranges, vertex bounds, coupling orders, and
-numerator grouping are specified for each generation call. An
-empty result can therefore mean the chosen constraints admit no graph. This is a completed
-`GenerationResult` with zero retained diagrams, not a configuration error. Inspect the generation
-report and relax a specific constraint before enlarging the search indiscriminately.
+External states are validated in `Model.process`. Request restrictions resolve against the
+same model: allow clauses intersect, exclusions unite, and `.only_vertices([])` permits no
+interactions. A completed empty discovery can mean no graph satisfies the constraints;
+inspect `request.explain()` and the result report before enlarging the search. A cancelled
+count has `complete=False`; cancelled discovered or built output has `report.completed=False`.
 
-Generation defaults to `output="named"`, with names prefixed by `D` or the supplied
-`graph_prefix`. Use `output="minimal"` to omit names and group-member source identities;
-the returned diagrams, source indices and physical factors remain available. An unnamed
-diagram has `name is None`. Name selectors, named momentum-basis overrides and an explicit
-`graph_prefix` require named output. ID selectors and ID-keyed momentum bases work in either
-mode and compute IDs when needed. In selectors and momentum-basis keys, strings of exactly
-32 hexadecimal digits denote IDs; other strings denote names. `select_diagrams=[]` selects no
-diagrams; omitting the selection retains all diagrams that pass the other requested filters.
+Names are absent by default. Build with `fk.NumeratorOptions(naming=fk.Naming.named("D"))`
+when names are required; the no-argument named constructor uses prefix `GL`. Name selection
+and named momentum-basis overrides require that build demand. Stable IDs are computed only
+when requested. Selector strings of exactly 32 hexadecimal digits denote IDs; other strings
+denote names. `built.select(fk.Selection(select=[]))` keeps no diagrams. Optional numerator
+comparison is a later `built.group(fk.Grouping("identical"))` operation, not a discovery
+setting. Grouping checks equal factored expressions first and expands only when comparison
+requires it. Graph generation and construction do not create an evaluable integrand.
 
-All three Process generation methods check Python signals while they run. Ctrl-C or a notebook
-interrupt stops generation and raises `KeyboardInterrupt`; exceptions from custom Python
-signal handlers also propagate. Cancelling an explicit `CancellationToken` instead returns
-an incomplete result, preserving that API's existing partial-result behavior.
+Pass `Run` to each execution stage, including `built.select(selection, run=run)`, for
+threads, cancellation, progress, and hereditary checks. Selection reports the number of
+input diagrams scanned, including vetoed diagrams. Cancellation returns an incomplete
+subset; unmatched forced cuts are diagnosed only after a complete scan. Python signals are checked during execution: Ctrl-C raises `KeyboardInterrupt`, and
+custom signal-handler exceptions propagate. An explicit `CancellationToken` instead returns
+an incomplete result. Request criteria and stored compact discoveries can be reused with
+independent runs.
 
 == Observe progress and prune partial topologies
 
-Both generation methods default to `progress="auto"`. In Marimo, they check
-`marimo.running_in_notebook()` and maintain one status display showing the current stage,
-processed counts, and elapsed time. Known totals use a progress bar; unknown or empty
-totals use a spinner. Counts reset for each stage. The display closes
-on completion, cancellation, or error. Outside a running notebook, automatic progress
-stays quiet and does not import Marimo. Pass `progress=None` to disable it.
+Progress is disabled by default. Pass `fk.Run(progress="auto")` for a Marimo status display
+or `fk.Run(progress=callback)` for custom reporting. Automatic progress checks
+`marimo.running_in_notebook()` and stays quiet outside a running notebook. Known totals use
+a progress bar; unknown or empty totals use a spinner. The display closes on completion,
+cancellation, or error.
 
-For custom reporting, pass `progress=callback`. The callback receives an immutable
-`GenerationProgress` with `stage`, `completed`, and `total`. Counts restart at each stage;
-`total is None` means the amount of work is unknown, so show a spinner instead of a
-percentage. Topology enumeration counts discovered unique graphs, not every explored branch.
-Later stages count processed inputs, which may be rejected. `complete` reports the final
-retained count; `cancelled` marks a partial result. The stages are `topologies`,
-`topology_filters`, `interactions`, `interaction_filters`, `numerators`, `selection`,
-`grouping_preparation`, `grouping_samples`, `grouping_comparison`, `grouping`, and
-the terminal stage. The first three grouping phases count input diagrams while
-preparing symbolic numerators, evaluating numerical samples, and comparing them.
-The final grouping phase merges and finalizes the retained diagram groups.
+A custom callback receives an immutable `GenerationProgress` with typed `Stage`, exact
+`completed`, optional `total`, and `zero_numerator_count` values. Return `True` to continue
+or `False` to cancel. Counters restart at each stage: `Skeletons` counts complete untyped
+topologies, `Dressing` counts complete interaction assignments, and `Prepare` counts inputs
+processed by physical preparation. Later stages are `Numerators`, `Selection`, `ZeroColor`,
+`GroupingPreparation`, `GroupingSamples`, `GroupingComparison`, `Grouping`, and `Done`.
+The grouping preparation, sample, and comparison phases count processed input diagrams;
+`Done` reports retained output. Check the result's completion flag to distinguish cancellation.
 
-Native workers publish snapshots; Python callbacks run on the thread that called generation,
-so Marimo keeps its cell context. Updates within a stage are coalesced to about 150 ms;
-stage transitions and completion are delivered promptly. The automatic display explicitly
-flushes these updates so Marimo's own refresh throttle cannot hide a stage transition.
-Browser kernels invoke callbacks on their calling thread; flushing output alone does not
-yield execution to the browser for painting.
+Native workers publish snapshots; Python callbacks run on the thread invoking the operation,
+including browser kernels. Marimo updates retain the calling cell context. Output flushing
+alone does not yield to the browser for painting.
 
 // docs-example: compile
 ```python
-result = model.process(["e-", "e+"], ["mu-", "mu+"]).generate_diagrams(loops=1, maximum_bridges=None)
+events = []
+run = fk.Run(progress=lambda update: events.append(update) or True)
+compact = request.generate(run=run)
+assert compact.report.completed
 ```
 
 Use `prune_skeletons` for hereditary pruning of untyped topologies and
@@ -177,13 +204,22 @@ receives only complete assignments and may apply an arbitrary predicate.
 def no_self_edges(view):
     return all(view.self_loops(vertex) == 0 for vertex in range(view.n_vertices))
 
-result = model.process(["e-", "e+"], ["mu-", "mu+"]).generate_diagrams(loops=1, allow_self_loops=True, maximum_bridges=None, prune_skeletons=no_self_edges)
+request = model.process(["e-", "e+"], ["mu-", "mu+"]).amplitude(
+    loops=fk.Loops.total(1),
+    topology=fk.TopologyRules(
+        self_energies=fk.Veto.all(),
+        tadpoles=fk.Veto.all(),
+        snails=fk.Veto.massless(),
+    ),
+    prune_skeletons=no_self_edges,
+)
+result = request.generate().build()
 ```
 
 This example illustrates the callback contract; for this particular condition, prefer the
-built-in `allow_self_loops=False` option to avoid Python callback overhead.
+built-in `TopologyRules(self_loops=False)` option to avoid Python callback overhead.
 
-Hooks receive read-only `SkeletonView`, `DressingView` or `DiagramView` values. They
+Hooks receive read-only `graph.SkeletonView`, `graph.DressingView` or `graph.DiagramView` values. They
 provide degrees, open stubs, loops, edges, external legs, rules, field domains and
 coupling-order bounds without building a graph. Assigned fields are `Particle`
 objects; external labels are `(state, index)` pairs. Use `view.graph()` or
@@ -195,6 +231,19 @@ The search batches independent pending predicates and calls Python on the callin
 thread after the native workers return. Every predicate must return a `bool`.
 Exceptions propagate unchanged, and cancellation stops the remaining callbacks.
 
+Register or replace a hook using `@request.prune_skeletons`,
+`@request.prune_dressings` or `@request.select`; each decorator returns the original
+callable. `@request.prune_dressings(thread_safe=True)` permits only that hook on the
+existing predicate worker. Unmarked hooks and progress stay on the invoking thread;
+`Run(thread_safe=True)` explicitly permits all hooks. WebAssembly runs them inline.
+Registering the same hook again replaces both its callable and worker permission.
+
+Set `request.check_heredity = True` to debug hereditary pruning. Either this request
+preference or `Run(check_heredity=True)` enables the native check; neither can disable
+an explicitly enabled check on the other. The request preference is not persisted.
+`print(request)` shows physical defaults, active hooks, worker permissions and this
+preference.
+
 == Assemble and square amplitudes
 
 `Amplitude` owns a coherent collection of finalized diagrams, aligning external tensor
@@ -204,9 +253,7 @@ exactly once; the diagnostic automorphism order is not a second symmetry factor.
 
 // docs-example: compile
 ```python
-from symbolica.community.hepkit import Amplitude
-
-amplitude = Amplitude(generated.diagrams)
+amplitude = result.into_amplitude(fk.AmplitudeOptions(dimension=4))
 operator = amplitude.expression()
 adjoint = amplitude.conjugate().expression()
 squared = amplitude.squared()
@@ -220,11 +267,18 @@ spin/color ports until explicitly summed. `legs` exposes each physical particle,
 incoming/outgoing state, momentum, and bare tensor index. `terms` exposes individual
 `TensorExpression` operators. Conjugation uses Idenso's physical-leg Dirac adjoint and
 color conjugation. Model-declared real parameters and physical momenta are real;
-additional assumptions can be supplied with `real=[...]`. Other scalar symbols,
+additional assumptions can be supplied with `AmplitudeOptions(real=[...])`. Other scalar symbols,
 including complex couplings, retain their conjugation. Named model couplings are expanded
 into their analytic parameter expressions before conjugation.
 
-Squaring includes all interferences. Ket and bra indices remain separate, as do their
+Without squared-order constraints, squaring includes every interference. With
+`Orders().squared_exact(...)` or other squared bounds, an amplitude contribution needs one
+common partner satisfying every bound jointly. The resolved class-pair relation is retained
+through selection, zero removal, and grouping. `built.into_amplitude()` transfers it so that
+squaring includes only permitted pairs. Constructing `Amplitude(list(built))` explicitly
+starts an unrestricted amplitude and loses that request policy.
+
+Ket and bra indices remain separate, as do their
 loop integration variables. `sum_spins([0, 1], average_initial=True)` closes selected
 legs; omitting the labels selects all remaining legs. An explicitly repeated sum raises
 an error, preventing repeated averaging. Vector `references={leg: momentum}` and Dirac
@@ -232,7 +286,7 @@ an error, preventing repeated averaging. Vector `references={leg: momentum}` and
 reference chooses the covariant sum, which assumes a gauge-invariant amplitude.
 Color sums close the actual dual representations of the open ports.
 
-The Lorentz dimension defaults to four and can be set with `dimension=D`; bispinor
+The Lorentz dimension defaults to four and can be set with `AmplitudeOptions(dimension=D)`; bispinor
 spaces retain dimension four. Denominators follow the diagram's quadratic convention,
 without widths or an imaginary prescription. Flux, identical-final-state factors, loop
 measures, and phase-space integration are not supplied by `SquaredAmplitude`.
@@ -422,7 +476,7 @@ The host notebook
 #link("https://github.com/symbolica-dev/symbolica-community/blob/main/examples/hep/odd_photons.py")[hep/odd_photons.py]
 uses typed particles and interaction rules to generate the one-, three- and
 five-photon electron loops. Keep the one-point topology by relaxing the bridge
-and tadpole filters explicitly:
+and tadpole constraints. The staged defaults impose neither; permit zero-flow edges explicitly:
 
 // docs-example: compile
 ```python
@@ -432,7 +486,11 @@ vertices = [
     if sorted(vertex.particles) == sorted([electron.name, electron.antiname, photon.name])
 ]
 photon_count = 3
-result = model.process([photon], [photon] * (photon_count - 1), vertex_allow=vertices).generate_diagrams(loops=1, max_vertices=photon_count, maximum_bridges=None, allow_self_loops=True, allow_zero_flow_edges=True, self_energy=None, tadpoles=None, zero_snails=None, numerator_grouping=None)
+result = model.process([photon], [photon] * (photon_count - 1)).amplitude(
+    loops=fk.Loops.total(1),
+    restrict=fk.Restrict().only_vertices(vertices),
+    topology=fk.TopologyRules(max_vertices=photon_count, zero_flow_edges=True),
+).generate().build()
 ```
 
 Contract the external Lorentz slots with independent symbolic probe vectors,
@@ -492,7 +550,17 @@ allowed_particles = [
     sorted([top.antiname, top.name, gluon.name]),
 ]
 vertices = [v for v in model.vertex_rules if sorted(v.particles) in allowed_particles]
-result = model.process([higgs], [gluon, gluon], vertex_allow=vertices).generate_diagrams(loops=1, max_vertices=3, maximum_bridges=0, numerator_grouping=None)
+result = model.process([higgs], [gluon, gluon]).amplitude(
+    loops=fk.Loops.total(1),
+    restrict=fk.Restrict().only_vertices(vertices),
+    topology=fk.TopologyRules(
+        max_vertices=3,
+        bridges=graph.Bridges.at_most(0),
+        self_energies=fk.Veto.all(),
+        tadpoles=fk.Veto.all(),
+        snails=fk.Veto.massless(),
+    ),
+).generate().build()
 ```
 
 Keep both orientations and each diagram's complete weight. Promote Lorentz slots
@@ -525,7 +593,12 @@ the existing typed generation interface:
 
 // docs-example: compile
 ```python
-counterterms = ct_model.process([ct_electron], [ct_electron], vertex_allow=ct_vertices).generate_diagrams(loops=0, max_vertices=1, coupling_orders={"QED": 2, "CT": 1}, maximum_bridges=None, self_energy=None, tadpoles=None, zero_snails=None, numerator_grouping=None)
+counterterms = ct_model.process([ct_electron], [ct_electron]).amplitude(
+    loops=fk.Loops.total(0),
+    restrict=fk.Restrict().only_vertices(ct_vertices),
+    orders=fk.Orders().exact("QED", 2).exact("CT", 1),
+    topology=fk.TopologyRules(max_vertices=1),
+).generate().build()
 ```
 
 The loop count describes topology; the `CT` order describes perturbative
@@ -597,11 +670,14 @@ generated counterterm matching separately from scalar-integral reduction.
 
 == Use finalized output
 
-Generation performs topology expansion, interaction assignment, filters, fermion flow,
-numerator and projector construction, routing, zero detection, and grouping. Canonical
-forms and IDs are computed when an operation needs them. Output order and names are
-deterministic across thread counts, but names can change between revisions; use names from
-the current generation result when selecting diagrams.
+Discovery performs topology expansion, interaction assignment, pruning, and physical
+preparation, including cuts, signs, and process weights. Count-only execution includes those
+same decisions. Building then constructs numerator fragments, projectors, and routing;
+zero-color removal is requested through `NumeratorOptions`. Selection and grouping are
+explicit subsequent operations. Canonical diagram IDs and names are computed only when
+an operation requests them. Compact traversal is deterministic, while grouping retains its
+canonical comparison order. Requested names can change between revisions; select using
+names from the current built result.
 
 The returned diagrams retain vertex/edge numerator fragments, an external projector and
 separate scalar prefactors. A generated aggregate numerator is built and cached on first use;

@@ -144,6 +144,14 @@
         if (!notebookRuntime) {
           const head = new DOMParser().parseFromString(payload.head, "text/html");
           head.querySelectorAll("link").forEach((link) => document.head.append(link));
+          // DOMParser scripts are inert; install Marimo's own classic support
+          // script before its module starts producing iframe outputs.
+          head.querySelectorAll('script[data-marimo="true"]').forEach((source) => {
+            const script = document.createElement("script");
+            script.dataset.marimo = "true";
+            script.textContent = source.textContent;
+            document.head.append(script);
+          });
           notebookRuntime = import(head.querySelector('script[type="module"]').src);
         }
         await notebookRuntime;

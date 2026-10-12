@@ -63,7 +63,7 @@ commands = [
   """generate amp a a > a a | a t t~ g ghG ghG~ QCD==4 QED==4 [{3}]
         --numerator-grouping no_grouping
         --symmetrize-initial-states=true --symmetrize-final-states=true
-        -p aa_aa -i 3L --only-diagrams""",
+        -p aa_aa -i 3L --only-diagrams --filter-selfenergies true --filter-snails true --filter-tadpoles true""",
   "save dot ./examples/cli/aa_aa/3L/graphs",
 ]
 

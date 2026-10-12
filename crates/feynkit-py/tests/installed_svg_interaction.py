@@ -9,17 +9,27 @@ from IPython.core.formatters import DisplayFormatter
 from marimo._output.formatting import try_format
 from symbolica.community import graph as rendering
 from symbolica.community import hepkit as fk
+from symbolica.community.graph import Bridges
 
 model = fk.Model(Path(__file__).parent / "fixtures/scalars_2p_3p.json")
 diagram = next(
     candidate
-    for candidate in model.process(
-        ["scalar_0"], ["scalar_0", "scalar_0"], vertex_allow=["V_3_SCALAR_000"]
+    for candidate in model.process(["scalar_0"], ["scalar_0", "scalar_0"])
+    .amplitude(
+        loops=fk.Loops.total(1),
+        restrict=fk.Restrict().only_vertices(["V_3_SCALAR_000"]),
+        topology=fk.TopologyRules(
+            max_vertices=3,
+            self_loops=True,
+            bridges=Bridges.one_pi_in_loops(),
+            self_energies=fk.Veto.all(),
+            tadpoles=fk.Veto.all(),
+            snails=fk.Veto.massless(),
+        ),
     )
-    .generate_diagrams(
-        loops=1,
-        max_vertices=3,
-        allow_self_loops=True,
+    .generate(run=fk.Run(progress="auto"))
+    .build(
+        fk.NumeratorOptions(naming=fk.Naming.named("D")), run=fk.Run(progress="auto")
     )
     .diagrams
     if len(
@@ -107,10 +117,23 @@ print("installed FeynmanDiagram and Subgraph SVG interaction checks passed")
 # stubs must still inspect and select the same edge in the canonical diagram.
 
 cross_section = (
-    model.process(
-        ["scalar_0"], ["scalar_0", "scalar_0"], vertex_allow=["V_3_SCALAR_000"]
+    model.process(["scalar_0"], ["scalar_0", "scalar_0"])
+    .cross_section(
+        loops=fk.Loops.forward(1),
+        restrict=fk.Restrict().only_vertices(["V_3_SCALAR_000"]),
+        topology=fk.TopologyRules(
+            max_vertices=2,
+            self_loops=True,
+            self_energies=fk.Veto.all(),
+            tadpoles=fk.Veto.all(),
+            snails=fk.Veto.massless(),
+        ),
+        cuts=fk.Cuts(blobs=fk.Range.exact(1), spectators=fk.Range.exact(0)),
     )
-    .generate_cross_section(loops=1, max_vertices=2, allow_self_loops=True)
+    .generate(run=fk.Run(progress="auto"))
+    .build(
+        fk.NumeratorOptions(naming=fk.Naming.named("D")), run=fk.Run(progress="auto")
+    )
     .diagrams[0]
 )
 snapshot = cross_section.to_json()

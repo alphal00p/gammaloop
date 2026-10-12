@@ -22,12 +22,11 @@ for particle in source["particles"]:
 source["vertex_rules"] = [v for v in source["vertex_rules"] if v["name"] == "V_9"]
 source["vertex_rules"][0]["color_structures"] = ["d(1,2,3)"]
 model = fk.Model.from_json(json.dumps(source))
-generated = model.process([25, 25], [25]).generate_diagrams(
-    loops=0,
-    max_vertices=1,
-    maximum_bridges=None,
-    numerator_grouping=None,
-    progress=None,
+generated = (
+    model.process([25, 25], [25])
+    .amplitude(loops=fk.Loops.total(0), topology=fk.TopologyRules(max_vertices=1))
+    .generate()
+    .build(fk.NumeratorOptions(naming=fk.Naming.named("D")))
 )
 assert len(generated.diagrams) == 1
 diagram = generated.diagrams[0]

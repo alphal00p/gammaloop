@@ -70,9 +70,7 @@ use thiserror::Error;
 #[cfg(not(target_arch = "wasm32"))]
 use rayon::prelude::*;
 
-use crate::{
-    DiagramGroup, GenerationOptions, GraphGroupingOptions, GroupMember, NumeratorGrouping,
-};
+use crate::{DiagramGroup, GraphGroupingOptions, GroupMember, Grouping, Run};
 
 #[derive(Debug, Error)]
 pub enum GroupingError {
@@ -357,14 +355,21 @@ enum ComparisonMode {
 pub(crate) fn group_diagrams(
     diagrams: Vec<FeynmanDiagram>,
     model: &Model,
-    grouping: &NumeratorGrouping,
+    grouping: &Grouping,
     symmetrize_left_right: bool,
-    generation_options: &GenerationOptions,
+    generation_options: &Run,
+    filter_zero_color: bool,
+    classes: Option<&[usize]>,
+    source_indices: Option<&[usize]>,
 ) -> Result<GroupingOutcome, GroupingError> {
+    let source_index = |index: usize| source_indices.map_or(index, |indices| indices[index]);
     if generation_options.cancellation_requested()
-        || (matches!(grouping, NumeratorGrouping::None) && !generation_options.filter_zero_color)
+        || (matches!(grouping, Grouping::None) && !filter_zero_color)
     {
-        let groups = singleton_groups(&diagrams, &(0..diagrams.len()).collect::<Vec<_>>());
+        let groups = singleton_groups(
+            &diagrams,
+            &(0..diagrams.len()).map(source_index).collect::<Vec<_>>(),
+        );
         return Ok(GroupingOutcome {
             diagrams,
             groups,
@@ -375,31 +380,29 @@ pub(crate) fn group_diagrams(
     let total = diagrams.len();
     // Numerator comparisons reuse the same color reduction; enabling the
     // standalone filter never adds a second color-algebra pass.
-    let preparation_stage = if generation_options.filter_zero_color {
-        "filter_zero_color"
+    let preparation_stage = if filter_zero_color {
+        crate::Stage::ZeroColor
     } else {
-        "grouping_preparation"
+        crate::Stage::GroupingPreparation
     };
-    generation_options.report_progress(preparation_stage, 0, Some(total));
+    generation_options.report_progress(preparation_stage, 0usize, Some(total));
     let compares_numerators = matches!(
         grouping,
-        NumeratorGrouping::Identical(_)
-            | NumeratorGrouping::UpToSign(_)
-            | NumeratorGrouping::UpToScalar(_)
+        Grouping::Identical(_) | Grouping::UpToSign(_) | Grouping::UpToScalar(_)
     );
     let compares_canonical_numerators = match grouping {
-        NumeratorGrouping::Identical(options)
-        | NumeratorGrouping::UpToSign(options)
-        | NumeratorGrouping::UpToScalar(options) => options.check_canonical_numerator,
-        NumeratorGrouping::None => false,
+        Grouping::Identical(options)
+        | Grouping::UpToSign(options)
+        | Grouping::UpToScalar(options) => options.check_canonical_numerator,
+        Grouping::None => false,
     };
     let symmetric_polarizations = match grouping {
-        NumeratorGrouping::Identical(options)
-        | NumeratorGrouping::UpToSign(options)
-        | NumeratorGrouping::UpToScalar(options) => options.symmetric_polarizations,
-        NumeratorGrouping::None => false,
+        Grouping::Identical(options)
+        | Grouping::UpToSign(options)
+        | Grouping::UpToScalar(options) => options.symmetric_polarizations,
+        Grouping::None => false,
     };
-    let progress = Mutex::new((0, 0));
+    let progress = Mutex::new((0usize, 0usize));
     #[cfg(target_arch = "wasm32")]
     let diagrams = diagrams.into_iter();
     #[cfg(not(target_arch = "wasm32"))]
@@ -573,17 +576,24 @@ pub(crate) fn group_diagrams(
     let mut zero_numerator_count = total - retained.len();
 
     let grouping = if generation_options.cancellation_requested() {
-        &NumeratorGrouping::None
+        &Grouping::None
     } else {
         grouping
     };
     let (options, mode) = match grouping {
-        NumeratorGrouping::Identical(options) => (options, ComparisonMode::Identical),
-        NumeratorGrouping::UpToSign(options) => (options, ComparisonMode::UpToSign),
-        NumeratorGrouping::UpToScalar(options) => (options, ComparisonMode::UpToScalar),
-        NumeratorGrouping::None => {
+        Grouping::Identical(options) => (options, ComparisonMode::Identical),
+        Grouping::UpToSign(options) => (options, ComparisonMode::UpToSign),
+        Grouping::UpToScalar(options) => (options, ComparisonMode::UpToScalar),
+        Grouping::None => {
             return Ok(GroupingOutcome {
-                groups: singleton_groups(&retained, &source_diagrams),
+                groups: singleton_groups(
+                    &retained,
+                    &source_diagrams
+                        .iter()
+                        .copied()
+                        .map(source_index)
+                        .collect::<Vec<_>>(),
+                ),
                 diagrams: retained,
                 zero_numerator_count,
             });
@@ -592,12 +602,12 @@ pub(crate) fn group_diagrams(
     let scalar_names = scalar_names(model);
     let total = retained.len();
     generation_options.report_progress_with_zero_count(
-        "grouping_samples",
-        0,
+        crate::Stage::GroupingSamples,
+        0usize,
         Some(total),
         zero_numerator_count,
     );
-    let mut buckets = BTreeMap::<TopologyKey, Vec<usize>>::new();
+    let mut buckets = BTreeMap::<(Option<usize>, TopologyKey), Vec<usize>>::new();
     let mut canonical_frames = Vec::with_capacity(retained.len());
     for (index, (diagram, numerator)) in retained.iter().zip(&mut prepared).enumerate() {
         if matches!(mode, ComparisonMode::UpToScalar) {
@@ -619,19 +629,22 @@ pub(crate) fn group_diagrams(
         if zero_samples {
             zero_numerator_count += 1;
         } else {
-            buckets.entry(key).or_default().push(index);
+            buckets
+                .entry((classes.map(|classes| classes[source_diagrams[index]]), key))
+                .or_default()
+                .push(index);
         }
         generation_options.report_progress_with_zero_count(
-            "grouping_samples",
+            crate::Stage::GroupingSamples,
             index + 1,
             Some(total),
             zero_numerator_count,
         );
     }
     let total = buckets.values().map(Vec::len).sum();
-    let mut completed = 0;
+    let mut completed = 0usize;
     generation_options.report_progress_with_zero_count(
-        "grouping_comparison",
+        crate::Stage::GroupingComparison,
         completed,
         Some(total),
         zero_numerator_count,
@@ -660,7 +673,7 @@ pub(crate) fn group_diagrams(
             }
             if let Some((group_index, ratio)) = matching_group {
                 bucket_groups[group_index].members.push(GroupMember {
-                    source_diagram: source_diagrams[diagram],
+                    source_diagram: source_index(source_diagrams[diagram]),
                     source_identity: None,
                     diagram,
                     ratio,
@@ -670,7 +683,7 @@ pub(crate) fn group_diagrams(
                 bucket_groups.push(DiagramGroup {
                     master: diagram,
                     members: vec![GroupMember {
-                        source_diagram: source_diagrams[diagram],
+                        source_diagram: source_index(source_diagrams[diagram]),
                         source_identity: None,
                         diagram,
                         ratio: Atom::one(),
@@ -680,7 +693,7 @@ pub(crate) fn group_diagrams(
             }
             completed += 1;
             generation_options.report_progress_with_zero_count(
-                "grouping_comparison",
+                crate::Stage::GroupingComparison,
                 completed,
                 Some(total),
                 zero_numerator_count,
@@ -690,7 +703,12 @@ pub(crate) fn group_diagrams(
     }
     groups.sort_by_key(|group| group.master);
 
-    generation_options.report_progress_with_zero_count("grouping", 0, None, zero_numerator_count);
+    generation_options.report_progress_with_zero_count(
+        crate::Stage::Grouping,
+        0usize,
+        None,
+        zero_numerator_count,
+    );
     let (diagrams, groups) = collapse_groups(retained, &canonical_frames, groups)?;
     Ok(GroupingOutcome {
         diagrams,
@@ -2209,7 +2227,7 @@ mod tests {
         let model = Arc::new(model());
         let updates = Arc::new(std::sync::Mutex::new(Vec::new()));
         let captured = updates.clone();
-        let options = GenerationOptions::default().progress(move |snapshot| {
+        let options = Run::default().progress(move |snapshot| {
             captured.lock().unwrap().push(snapshot);
             crate::GenerationControl::Continue
         });
@@ -2220,30 +2238,38 @@ mod tests {
                 diagram(&model, "g2", "0", 25, 25),
             ],
             &model,
-            &NumeratorGrouping::Identical(exact_options()),
+            &Grouping::Identical(exact_options()),
             false,
             &options,
+            false,
+            None,
+            None,
         )
         .unwrap();
         assert_eq!(grouped.groups.len(), 1);
         assert_eq!(grouped.zero_numerator_count, 1);
         let updates = updates.lock().unwrap();
         for (stage, total) in [
-            ("grouping_preparation", 3),
-            ("grouping_samples", 2),
-            ("grouping_comparison", 2),
+            (crate::Stage::GroupingPreparation, 3),
+            (crate::Stage::GroupingSamples, 2),
+            (crate::Stage::GroupingComparison, 2),
         ] {
             let counts = updates
                 .iter()
                 .filter(|snapshot| snapshot.stage == stage)
-                .map(|snapshot| (snapshot.completed, snapshot.total))
+                .map(|snapshot| {
+                    (
+                        usize::try_from(&snapshot.completed).unwrap(),
+                        snapshot.total.as_ref().map(|n| usize::try_from(n).unwrap()),
+                    )
+                })
                 .collect::<Vec<_>>();
             assert_eq!(
                 counts,
                 (0..=total).map(|n| (n, Some(total))).collect::<Vec<_>>()
             );
         }
-        assert_eq!(updates.last().unwrap().stage, "grouping");
+        assert_eq!(updates.last().unwrap().stage, crate::Stage::Grouping);
     }
 
     #[cfg(not(target_arch = "wasm32"))]
@@ -2265,11 +2291,10 @@ mod tests {
         let poll = signal.clone();
         let stages = Arc::new(Mutex::new(Vec::new()));
         let observed = stages.clone();
-        let options = GenerationOptions::default()
-            .filter_zero_color(true)
+        let options = Run::default()
             .progress(move |update| {
                 observed.lock().unwrap().push(update.stage);
-                if update.stage == "filter_zero_color" && update.completed == 0 {
+                if update.stage == crate::Stage::ZeroColor && update.completed == 0usize.into() {
                     arm.store(true, Ordering::Release);
                 }
                 crate::GenerationControl::Continue
@@ -2284,9 +2309,12 @@ mod tests {
                 group_diagrams(
                     inputs,
                     &model,
-                    &NumeratorGrouping::Identical(exact_options()),
+                    &Grouping::Identical(exact_options()),
                     false,
                     &options,
+                    true,
+                    None,
+                    None,
                 )
             })
             .unwrap();
@@ -2316,7 +2344,7 @@ mod tests {
                 .lock()
                 .unwrap()
                 .iter()
-                .all(|&stage| stage == "filter_zero_color")
+                .all(|&stage| stage == crate::Stage::ZeroColor)
         );
     }
 
@@ -2329,9 +2357,12 @@ mod tests {
                 diagram(&model, "g1", "y+x", 25, 25),
             ],
             &model,
-            &NumeratorGrouping::Identical(exact_options()),
+            &Grouping::Identical(exact_options()),
             false,
-            &GenerationOptions::default(),
+            &Run::default(),
+            false,
+            None,
+            None,
         )
         .unwrap();
         assert_eq!(grouped.groups.len(), 1);
@@ -2360,13 +2391,16 @@ mod tests {
         let grouped = group_diagrams(
             vec![external_first, internal_first],
             &model,
-            &NumeratorGrouping::Identical(GraphGroupingOptions {
+            &Grouping::Identical(GraphGroupingOptions {
                 check_canonical_numerator: false,
                 number_of_numerical_samples: 2,
                 ..GraphGroupingOptions::default()
             }),
             false,
-            &GenerationOptions::default(),
+            &Run::default(),
+            false,
+            None,
+            None,
         )
         .unwrap();
 
@@ -2383,9 +2417,12 @@ mod tests {
                 diagram(&model, "g1", "-x-y", 25, 25),
             ],
             &model,
-            &NumeratorGrouping::UpToSign(exact_options()),
+            &Grouping::UpToSign(exact_options()),
             false,
-            &GenerationOptions::default(),
+            &Run::default(),
+            false,
+            None,
+            None,
         )
         .unwrap();
         assert_eq!(grouped.groups.len(), 1);
@@ -2401,9 +2438,12 @@ mod tests {
                 diagram(&model, "g1", "2*x+2*y", 25, 25),
             ],
             &model,
-            &NumeratorGrouping::UpToScalar(exact_options()),
+            &Grouping::UpToScalar(exact_options()),
             false,
-            &GenerationOptions::default(),
+            &Run::default(),
+            false,
+            None,
+            None,
         )
         .unwrap();
         assert_eq!(grouped.groups.len(), 1);
@@ -2457,9 +2497,12 @@ mod tests {
         let grouped = group_diagrams(
             diagrams.clone(),
             &model,
-            &NumeratorGrouping::Identical(exact_options()),
+            &Grouping::Identical(exact_options()),
             false,
-            &GenerationOptions::default(),
+            &Run::default(),
+            false,
+            None,
+            None,
         )
         .unwrap();
         assert_eq!(
@@ -2484,9 +2527,12 @@ mod tests {
         let grouped = group_diagrams(
             diagrams,
             &model,
-            &NumeratorGrouping::Identical(exact_species),
+            &Grouping::Identical(exact_species),
             false,
-            &GenerationOptions::default(),
+            &Run::default(),
+            false,
+            None,
+            None,
         )
         .unwrap();
         assert_eq!(grouped.groups.len(), 4);
@@ -2503,9 +2549,12 @@ mod tests {
         let grouped = group_diagrams(
             diagrams,
             &model,
-            &NumeratorGrouping::Identical(exact_options()),
+            &Grouping::Identical(exact_options()),
             false,
-            &GenerationOptions::default(),
+            &Run::default(),
+            false,
+            None,
+            None,
         )
         .unwrap();
 
@@ -2540,9 +2589,12 @@ mod tests {
         let grouped = group_diagrams(
             vec![master, member],
             &model,
-            &NumeratorGrouping::Identical(exact_options()),
+            &Grouping::Identical(exact_options()),
             false,
-            &GenerationOptions::default(),
+            &Run::default(),
+            false,
+            None,
+            None,
         )
         .unwrap();
 
@@ -2567,9 +2619,12 @@ mod tests {
         let grouped = group_diagrams(
             vec![master, member],
             &model,
-            &NumeratorGrouping::Identical(exact_options()),
+            &Grouping::Identical(exact_options()),
             true,
-            &GenerationOptions::default(),
+            &Run::default(),
+            false,
+            None,
+            None,
         )
         .unwrap();
 
@@ -2594,9 +2649,12 @@ mod tests {
         let grouped = group_diagrams(
             vec![identity.clone(), global],
             &model,
-            &NumeratorGrouping::Identical(exact_options()),
+            &Grouping::Identical(exact_options()),
             true,
-            &GenerationOptions::default(),
+            &Run::default(),
+            false,
+            None,
+            None,
         )
         .unwrap();
         assert_eq!(grouped.groups.len(), 1);
@@ -2605,9 +2663,12 @@ mod tests {
         let grouped = group_diagrams(
             vec![identity, partial],
             &model,
-            &NumeratorGrouping::Identical(exact_options()),
+            &Grouping::Identical(exact_options()),
             true,
-            &GenerationOptions::default(),
+            &Run::default(),
+            false,
+            None,
+            None,
         )
         .unwrap();
         assert_eq!(grouped.groups.len(), 2);
@@ -2622,9 +2683,12 @@ mod tests {
                 diagram(&model, "g1", "1", 25, 25),
             ],
             &model,
-            &NumeratorGrouping::None,
+            &Grouping::None,
             false,
-            &GenerationOptions::default().filter_zero_color(true),
+            &Run::default(),
+            true,
+            None,
+            None,
         )
         .unwrap();
         assert_eq!(grouped.zero_numerator_count, 1);
@@ -2643,9 +2707,12 @@ mod tests {
         let grouped = group_diagrams(
             vec![input],
             &model,
-            &NumeratorGrouping::None,
+            &Grouping::None,
             false,
-            &GenerationOptions::default().filter_zero_color(true),
+            &Run::default(),
+            true,
+            None,
+            None,
         )
         .unwrap();
         assert_eq!(grouped.zero_numerator_count, 0);
@@ -2660,9 +2727,12 @@ mod tests {
         let grouped = group_diagrams(
             vec![diagram_with_projector(&model, "zero", "1", "0", 25, 25)],
             &model,
-            &NumeratorGrouping::None,
+            &Grouping::None,
             false,
-            &GenerationOptions::default().filter_zero_color(true),
+            &Run::default(),
+            true,
+            None,
+            None,
         )
         .unwrap();
 
@@ -2677,9 +2747,12 @@ mod tests {
         let grouped = group_diagrams(
             vec![diagram(&model, "coupling-zero", "UFO::GC-1", 25, 25)],
             &model,
-            &NumeratorGrouping::None,
+            &Grouping::None,
             false,
-            &GenerationOptions::default().filter_zero_color(true),
+            &Run::default(),
+            true,
+            None,
+            None,
         )
         .unwrap();
 
@@ -2708,9 +2781,12 @@ mod tests {
         let unfiltered = group_diagrams(
             inputs.clone(),
             &model,
-            &NumeratorGrouping::None,
+            &Grouping::None,
             false,
-            &GenerationOptions::default(),
+            &Run::default(),
+            false,
+            None,
+            None,
         )
         .unwrap();
         assert_eq!(unfiltered.zero_numerator_count, 0);
@@ -2721,9 +2797,12 @@ mod tests {
         let grouped = group_diagrams(
             inputs,
             &model,
-            &NumeratorGrouping::None,
+            &Grouping::None,
             false,
-            &GenerationOptions::default().filter_zero_color(true),
+            &Run::default(),
+            true,
+            None,
+            None,
         )
         .unwrap();
         assert_eq!(grouped.zero_numerator_count, 1);
@@ -2780,9 +2859,12 @@ mod tests {
         let grouped = group_diagrams(
             inputs,
             &model,
-            &NumeratorGrouping::None,
+            &Grouping::None,
             false,
-            &GenerationOptions::default().filter_zero_color(true),
+            &Run::default(),
+            true,
+            None,
+            None,
         )
         .unwrap();
         assert_eq!(grouped.zero_numerator_count, 3);
@@ -2810,12 +2892,10 @@ mod tests {
         for threads in [1, 4] {
             let updates = Arc::new(Mutex::new(Vec::new()));
             let captured = updates.clone();
-            let options = GenerationOptions::default()
-                .filter_zero_color(true)
-                .progress(move |snapshot| {
-                    captured.lock().unwrap().push(snapshot);
-                    crate::GenerationControl::Continue
-                });
+            let options = Run::default().progress(move |snapshot| {
+                captured.lock().unwrap().push(snapshot);
+                crate::GenerationControl::Continue
+            });
             let pool = rayon::ThreadPoolBuilder::new()
                 .num_threads(threads)
                 .build()
@@ -2825,9 +2905,12 @@ mod tests {
                     group_diagrams(
                         inputs.clone(),
                         &model,
-                        &NumeratorGrouping::None,
+                        &Grouping::None,
                         false,
                         &options,
+                        true,
+                        None,
+                        None,
                     )
                 })
                 .unwrap();
@@ -2849,10 +2932,14 @@ mod tests {
                     .lock()
                     .unwrap()
                     .iter()
-                    .map(|progress| (progress.stage, progress.completed, progress.total))
+                    .map(|progress| (
+                        progress.stage,
+                        usize::try_from(&progress.completed).unwrap(),
+                        progress.total.as_ref().map(|n| usize::try_from(n).unwrap())
+                    ))
                     .collect::<Vec<_>>(),
                 (0..=32)
-                    .map(|count| ("filter_zero_color", count, Some(32)))
+                    .map(|count| (crate::Stage::ZeroColor, count, Some(32)))
                     .collect::<Vec<_>>()
             );
         }

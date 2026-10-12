@@ -195,6 +195,8 @@ impl<F, L> Legs<F, L> {
 
 /// One home for bridge restrictions; dangling external legs are never bridges.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "bincode", derive(bincode::Encode, bincode::Decode))]
 pub enum Bridges {
     #[default]
     Any,
@@ -411,6 +413,8 @@ pub enum PlanStage {
     Dressing,
     Rules,
     Selection,
+    /// Domain-specific preparation after the native assignment search.
+    Preparation,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

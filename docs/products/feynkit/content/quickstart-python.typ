@@ -22,10 +22,17 @@ integral-evaluation backend.
 import symbolica.community.hepkit as fk
 
 model = fk.Model("crates/feynkit-model/tests/fixtures/scalars_2p_3p.json")
-result = model.process(["scalar_0"], ["scalar_0", "scalar_0"]).generate_diagrams(loops=0, max_vertices=3)
-assert result.diagrams
+request = model.process(["scalar_0"], ["scalar_0", "scalar_0"]).amplitude(
+    loops=fk.Loops.total(0),
+    topology=fk.TopologyRules(max_vertices=3),
+)
+counts = request.count()
+assert counts.complete and counts.diagrams > 0
+compact = request.generate()
+assert len(compact) == counts.diagrams
+result = compact.build()
 
-diagram = result.diagrams[0]
+diagram = result[0]
 diagram.validate()
 assert diagram.loop_count == 0
 restored = fk.FeynmanDiagram.from_json(model, diagram.to_json())
@@ -36,20 +43,31 @@ cff = diagram.build_cff()
 print(cff.to_expression())
 ```
 
-`model.process(incoming, outgoing)` binds external states and particle/vertex restrictions
-to the model. Use `particle_veto`, `vertex_allow`, and `vertex_veto` at construction, or
-`process.with_filters(...)` to create a restricted copy. Omitted filters are preserved;
-`None` clears a filter, while `vertex_allow=[]` allows no interactions.
-Use `process.generate_diagrams()` for a `GenerationResult`, `process.generate_amplitude()`
-for an `Amplitude`, and `process.generate_cross_section()` for sewn diagrams and their cuts.
-All three accept loop order (`loops=0` by default), coupling orders, symmetrization,
-topology filters, and execution settings as keywords. These settings belong to each call. Particle names, PDG codes, and particles
-obtained from that model can select external states.
+`model.process(incoming, outgoing)` validates external states against the model. Particle
+names, PDG codes, and particles obtained from that model can select those states.
+Restrictions belong to the request: pass `restrict=fk.Restrict().only_vertices([...])`
+or `.exclude_particles([...])` to `process.amplitude(...)` or `process.cross_section(...)`.
+Allow clauses intersect and exclusions unite; `.only_vertices([])` permits no interactions.
+
+Every physics request requires a finite loop interval: `fk.Loops.total(0)` for a tree
+amplitude, or `fk.Loops.forward(1)` for a forward graph with a two-particle tree cut.
+`request.explain()` describes planning constraints; `request.count()` returns exact discovery
+totals without constructing numerators. `request.generate()` returns a compact `DiagramSet`,
+whose indexing and iteration expose prepared assignments. `compact.build(fk.NumeratorOptions(...))`
+constructs a `BuiltDiagramSet`; use its `select`, `group`, and `into_amplitude` methods for
+those later operations. Threading, cancellation, and progress belong to `fk.Run(...)` passed
+to the operation. None of these calls changes the process or request.
+
+Shared defaults apply no particle, coupling-order, bridge, or cyclic-subgraph restriction.
+Self-loops are allowed and zero-flow edges are rejected. Names are not computed by default:
+pass `fk.NumeratorOptions(naming=fk.Naming.named("D"))` to `build` when names are needed.
+The example above leaves `diagram.name` as `None`, including after serialization.
 
 In notebooks, displaying a `Process` draws the external states around a central blob.
 `process.render()` returns a displayable `DiagramRender` and accepts typed settings,
-for example `process.render(config=fk.RenderSettings(node_radius=5))`.
-Use `help(fk.RenderSettings)` to discover the options.
+for example `process.render(config=graph.RenderSettings(drawing=graph.DrawOptions(node_radius=5)))`
+after importing `graph` from `symbolica.community`. Use `help(graph.RenderSettings)`
+to discover the options.
 Use the result's `to_svg()` to export the schematic as text. Alternative final
 states are drawn separately.
 

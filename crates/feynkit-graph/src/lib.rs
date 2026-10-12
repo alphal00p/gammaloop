@@ -548,7 +548,7 @@ struct DiagramSerde {
     vertices: Vec<DiagramVertexSerde>,
     edges: Vec<(EdgeEndpoints, DiagramEdgeSerde)>,
     half_edge_order: Vec<DiagramHalfEdge>,
-    symmetry_factor: u64,
+    symmetry_factor: u128,
     overall_factor: String,
     numerator: String,
     numerator_prefactor: String,
@@ -599,7 +599,7 @@ pub struct FeynmanDiagram {
     id: OnceCell<DiagramId>,
     name: Option<String>,
     graph: HedgeGraph<DiagramEdge, DiagramVertex>,
-    symmetry_factor: u64,
+    symmetry_factor: u128,
     overall_factor: Atom,
     numerator: DiagramNumerator,
     numerator_prefactor: Atom,
@@ -652,7 +652,7 @@ impl FeynmanDiagram {
     /// This value is diagnostic only. [`Self::overall_factor`] is the
     /// authoritative symbolic weight and may also include grouping or fermion
     /// signs, so runtime consumers must not apply the symmetry factor again.
-    pub fn symmetry_factor(&self) -> u64 {
+    pub fn symmetry_factor(&self) -> u128 {
         self.symmetry_factor
     }
 
@@ -2502,7 +2502,7 @@ pub struct FeynmanDiagramBuilder {
     edges: Vec<(EdgeEndpoints, DiagramEdge)>,
     half_edge_order: Option<Vec<DiagramHalfEdge>>,
     edge_orientations: Option<Vec<Orientation>>,
-    symmetry_factor: u64,
+    symmetry_factor: u128,
     overall_factor: Atom,
     numerator: Option<Atom>,
     numerator_prefactor: Atom,
@@ -2539,7 +2539,7 @@ impl FeynmanDiagramBuilder {
     /// Record the raw automorphism order as diagnostic provenance.
     ///
     /// The builder does not fold it into the authoritative `overall_factor`.
-    pub fn symmetry_factor(mut self, symmetry_factor: u64) -> Self {
+    pub fn symmetry_factor(mut self, symmetry_factor: u128) -> Self {
         self.symmetry_factor = symmetry_factor;
         self
     }

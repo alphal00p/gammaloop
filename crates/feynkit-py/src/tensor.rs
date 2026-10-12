@@ -149,7 +149,7 @@ impl PyTensorReducer {
     /// >>> from symbolica import S, E
     /// >>> from symbolica.community import hepkit as hep
     /// >>> model = hep.Model.phi4()
-    /// >>> vacuum_diagram = model.process([], []).generate_diagrams(loops=2, factorized_loop_topologies_count_range=None).diagrams[0]
+    /// >>> vacuum_diagram = model.process([], []).amplitude(loops=hep.Loops.total(2)).generate().build().diagrams[0]
     /// >>> reducer = hep.TensorReducer(E("4"), integrated=[E("gammalooprs::Q")])
     /// >>> reduced = reducer.reduce(vacuum_diagram.numerator_expression().to_expression())
     ///

@@ -1,7 +1,9 @@
 //! The amplitude boundary consumes finalized diagrams, not generator state.
 
 use feynkit_amplitude::{Amplitude, AmplitudeError, AmplitudeOptions};
-use feynkit_generator::{GenerationFilter, GenerationOptions, NumeratorGrouping, Process};
+use feynkit_generator::{
+    Cuts, Loops, Naming, NumeratorOptions, Process, Restrict, Run, TopologyRules,
+};
 use feynkit_model::Model;
 use idenso::{
     CookMode, CookSettings, IndexTooling,
@@ -49,16 +51,24 @@ fn photons() -> Vec<Arc<feynkit_graph::FeynmanDiagram>> {
     let model =
         Model::from_json(include_str!("../../feynkit-model/tests/fixtures/sm.json")).unwrap();
     let process = Process::new(["e-", "e+"], ["a", "a"]);
-    let options = GenerationOptions::default()
-        .with_loop_count(0, 0)
+    let run = Run::default().threads(1);
+    let generated = process
+        .amplitude(Loops::total(0..=0))
+        .with_topology(
+            TopologyRules::new()
+                .with_self_loops(false)
+                .with_max_vertices(2),
+        )
+        .with_restrict(Restrict::new().only_vertices(["V_98"]))
+        .generate(model.into(), &run)
         .unwrap()
-        .threads(1)
-        .max_vertices(2)
-        .numerator_grouping(NumeratorGrouping::None)
-        .with_graph_filter(GenerationFilter::VertexAllow(vec!["V_98".into()]));
-    let generated = process.generate_diagrams(model, &options).unwrap();
-    assert_eq!(generated.diagrams.len(), 2);
-    generated.diagrams.into_iter().map(Arc::new).collect()
+        .build(
+            &NumeratorOptions::default().with_naming(Naming::prefix("D")),
+            &run,
+        )
+        .unwrap();
+    assert_eq!(generated.len(), 2);
+    generated.iter().cloned().map(Arc::new).collect()
 }
 
 #[test]
@@ -232,18 +242,29 @@ fn colored_fermion_interference_preserves_physical_leg_pairings() {
             particles.sort();
             particles == species
         })
-        .map(|rule| rule.name.clone().into())
-        .collect();
+        .map(|rule| rule.name.clone())
+        .collect::<Vec<_>>();
     let process = Process::new(["b", "b"], ["b", "b"]);
-    let options = GenerationOptions::default()
-        .with_loop_count(0, 0)
+    let run = Run::default().threads(1);
+    let generated = process
+        .amplitude(Loops::total(0..=0))
+        .with_topology(
+            TopologyRules::new()
+                .with_self_loops(false)
+                .with_max_vertices(2),
+        )
+        .with_restrict(Restrict::new().only_vertices(vertices))
+        .generate(model.into(), &run)
         .unwrap()
-        .threads(1)
-        .max_vertices(2)
-        .with_graph_filter(GenerationFilter::VertexAllow(vertices));
-    let generated = process.generate_diagrams(model, &options).unwrap();
-    assert_eq!(generated.diagrams.len(), 2);
-    let amplitude = Amplitude::from_diagrams(generated.diagrams.into_iter().map(Arc::new)).unwrap();
+        .build(
+            &NumeratorOptions::default().with_naming(Naming::prefix("D")),
+            &run,
+        )
+        .unwrap();
+    assert_eq!(generated.len(), 2);
+    let amplitude = generated
+        .into_amplitude(AmplitudeOptions::default())
+        .unwrap();
     assert!(amplitude.legs().iter().all(|leg| leg.slots.len() == 2));
     let squared = amplitude.squared().unwrap();
     assert_eq!(
@@ -310,38 +331,65 @@ fn one_process_generates_diagrams_amplitudes_and_cross_sections() {
         Model::from_json(include_str!("../../feynkit-model/tests/fixtures/sm.json")).unwrap(),
     );
     let process = Process::new(["e-", "e+"], ["a", "a"]);
-    let options = GenerationOptions::default().threads(1).max_vertices(4);
-    let diagrams = process.generate_diagrams(model.clone(), &options).unwrap();
-    assert_eq!(diagrams.diagrams.len(), 2);
-    let amplitude = process
-        .generate_amplitude(model.clone(), &options, AmplitudeOptions::default())
+    let request = process
+        .clone()
+        .amplitude(Loops::total(0..=0))
+        .with_topology(
+            TopologyRules::new()
+                .with_self_loops(false)
+                .with_max_vertices(4),
+        );
+    let run = Run::default().threads(1);
+    let numerators = NumeratorOptions::default().with_naming(Naming::prefix("D"));
+    let diagrams = request
+        .generate(model.clone(), &run)
+        .unwrap()
+        .build(&numerators, &run)
         .unwrap();
-    assert_eq!(amplitude.diagrams().len(), diagrams.diagrams.len());
+    assert_eq!(diagrams.len(), 2);
+    let amplitude = request
+        .generate(model.clone(), &run)
+        .unwrap()
+        .build(&numerators, &run)
+        .unwrap()
+        .into_amplitude(AmplitudeOptions::default())
+        .unwrap();
+    assert_eq!(amplitude.diagrams().len(), diagrams.len());
     assert_eq!(
         amplitude.expression(),
-        Amplitude::from_diagrams(diagrams.diagrams.into_iter().map(Arc::new))
+        Amplitude::from_diagrams(diagrams.iter().cloned().map(Arc::new))
             .unwrap()
             .expression()
     );
     let forward = process
-        .generate_cross_section(
-            model.clone(),
-            &options.clone().with_loop_count(1, 1).unwrap(),
+        .cross_section(Loops::forward(1..=1))
+        .with_cuts(Cuts::new().with_blobs(1..=1).with_spectators(0..=0))
+        .with_topology(
+            TopologyRules::new()
+                .with_self_loops(false)
+                .with_max_vertices(4),
         )
+        .generate(model.clone(), &run)
+        .unwrap()
+        .build(&numerators, &run)
         .unwrap();
-    assert!(!forward.diagrams.is_empty());
+    assert!(!forward.is_empty());
     assert!(
         forward
-            .diagrams
             .iter()
             .all(|diagram| diagram.loop_count() == 1 && !diagram.cuts().is_empty())
     );
-    assert_eq!(options.loop_count(), 0..=0);
+    assert_eq!(request.loops().range(), 0..=0);
     let token = feynkit_generator::CancellationToken::new();
     token.cancel();
-    let cancelled = options.cancellation_token(token);
+    let cancelled = run.cancellation_token(token);
     assert!(matches!(
-        process.generate_amplitude(model, &cancelled, AmplitudeOptions::default()),
+        request
+            .generate(model, &cancelled)
+            .unwrap()
+            .build(&numerators, &cancelled)
+            .unwrap()
+            .into_amplitude(AmplitudeOptions::default()),
         Err(feynkit_generator::GenerationError::IncompleteAmplitude)
     ));
 }

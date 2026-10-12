@@ -13,11 +13,7 @@
 //! they are decided: bridges and special topologies on untyped topologies, and the special
 //! topologies again with the masses of complete graphs.
 
-use std::{
-    cmp::Ordering,
-    collections::{BTreeMap, BTreeSet},
-    ops::Bound,
-};
+use std::{cmp::Ordering, collections::BTreeMap, ops::Bound};
 
 use feynkit_graph::ExternalState;
 use feynkit_model::{Model, Particle, ParticleId, VertexRuleId};
@@ -40,7 +36,8 @@ use super::{
     graph::{Endpoint, ExternalNode, GeneratedEdge, GeneratedGraph},
     special_topologies::{PlainGraph, SpecialTopologyVetoes},
 };
-use crate::{GenerationFilter, GenerationOptions, ParticleSelector, VertexSelector};
+use crate::Request;
+use crate::options::ResolvedRestrictions;
 
 /// The label of an external leg during generation. Legs with equal labels and stubs are
 /// interchangeable: symmetrized legs of one state share a label, all others are exact.
@@ -83,27 +80,8 @@ impl VertexSignatures {
     /// The rules allowed by the vertex selections, the particle vetoes and the coupling-order
     /// upper bounds: coupling powers are nonnegative, so a vertex exceeding a graph-wide upper
     /// bound cannot occur in an accepted graph.
-    pub(crate) fn new(model: &Model, options: &GenerationOptions) -> Result<Self, GenerationError> {
-        let vertex_selection = |veto: bool| {
-            {
-                options
-                    .graph_filters
-                    .iter()
-                    .find_map(|filter| match filter {
-                        GenerationFilter::VertexAllow(selectors) if !veto => Some(selectors),
-                        GenerationFilter::VertexVeto(selectors) if veto => Some(selectors),
-                        _ => None,
-                    })
-            }
-            .map(|selectors| {
-                selectors
-                    .iter()
-                    .map(resolved_vertex)
-                    .collect::<BTreeSet<_>>()
-            })
-        };
-        let (allowed, vetoed) = (vertex_selection(false), vertex_selection(true));
-        let particle_vetoes = particle_vetoes(options);
+    pub(crate) fn new(model: &Model, options: &Request) -> Result<Self, GenerationError> {
+        let restrictions = options.restrictions.resolve(model)?;
         let bounds = CouplingBounds::new(options);
         let mut signatures = Self {
             rules: vec![],
@@ -111,13 +89,7 @@ impl VertexSignatures {
         };
         for (rule_index, rule) in model.vertex_rules().iter().enumerate() {
             let rule_id = model.vertex_rule_id_at(rule_index)?;
-            if allowed
-                .as_ref()
-                .is_some_and(|allowed| !allowed.contains(&rule_id))
-                || vetoed
-                    .as_ref()
-                    .is_some_and(|vetoed| vetoed.contains(&rule_id))
-            {
+            if !restrictions.vertex(rule_id) {
                 continue;
             }
             if bounds.exceeded_by(&rule.coupling_orders(model)) {
@@ -128,12 +100,11 @@ impl VertexSignatures {
                 .iter()
                 .map(|particle| model.particle_by_id(*particle))
                 .collect::<Result<Vec<_>, _>>()?;
-            if particles.iter().any(|particle| {
-                particle_vetoes.as_ref().is_some_and(|vetoed| {
-                    vetoed.contains(&model.particle_id(&particle.name).expect("a model particle"))
-                        || vetoed.contains(&particle.antiparticle)
-                })
-            }) {
+            if rule
+                .particles
+                .iter()
+                .any(|&particle| !restrictions.particle(particle))
+            {
                 continue;
             }
             signatures.rules.push(rule_id);
@@ -154,10 +125,10 @@ impl VertexSignatures {
         &self,
         model: &Model,
         externals: &ProcessExternals,
-        options: &GenerationOptions,
+        options: &Request,
         skeletons: impl Fn(&GenerationSkeletonView<'_>) -> bool + Send + Sync + 'static,
         dressings: impl Fn(&GenerationDressingView<'_>) -> bool + Send + Sync + 'static,
-    ) -> Result<Option<Plan<ParticleId, ExternalLabel>>, GenerationError> {
+    ) -> Result<Plan<ParticleId, ExternalLabel>, GenerationError> {
         let bounds = CouplingBounds::new(options);
         let mut columns = Vec::new();
         for (name, ..) in &bounds.0 {
@@ -186,24 +157,27 @@ impl VertexSignatures {
             .legs()
             .fold(Legs::new(), |legs, (label, stub)| legs.leg(label, stub));
         let structure = Structure {
-            self_loops: options.allow_self_loops,
-            zero_flow_edges: options.allow_zero_flow_edges,
-            max_vertices: options.max_vertices,
-            bridges: options
-                .max_bridges(*options.loop_count().start())
-                .map_or(Bridges::Any, Bridges::AtMost),
+            self_loops: options.topology.self_loops,
+            zero_flow_edges: options.topology.zero_flow_edges,
+            max_vertices: options.topology.max_vertices,
+            bridges: options.topology.bridges,
         };
         let mut query = Query::new(&legs)
-            .loops(options.loop_count())
+            .loops(options.loops.range())
             .structure(structure)
             .prune_skeletons(skeletons)
             .prune_dressings(dressings);
         // Repeated constraints on one declared order must all hold.
-        let bound = |order: usize| i32::try_from(order).unwrap_or(i32::MAX);
+        let bound = |order: usize| {
+            i32::try_from(order)
+                .map_err(|_| GenerationError::ArithmeticOverflow("a coupling-order bound"))
+        };
         for (name, minimum, maximum) in &bounds.0 {
-            let maximum =
-                maximum.map_or(Bound::Unbounded, |maximum| Bound::Included(bound(maximum)));
-            query = query.weight(name, (Bound::Included(bound(*minimum)), maximum));
+            let maximum = maximum
+                .map(|maximum| bound(maximum).map(Bound::Included))
+                .transpose()?
+                .unwrap_or(Bound::Unbounded);
+            query = query.weight(name, (Bound::Included(bound(*minimum)?), maximum));
         }
         // Fermion loops are closed lines of fermions; ghost loops do not count.
         let fermions = || {
@@ -216,10 +190,15 @@ impl VertexSignatures {
                 })
                 .collect()
         };
-        for filter in &options.graph_filters {
-            if let GenerationFilter::FermionLoopCountRange((minimum, maximum)) = filter {
-                query = query.count(Countable::ClosedLines(fermions()), *minimum..=*maximum);
-            }
+        let (minimum, maximum) = options.topology.fermion_loops.bounds();
+        if minimum != 0 || maximum.is_some() {
+            query = query.count(
+                Countable::ClosedLines(fermions()),
+                (
+                    Bound::Included(minimum),
+                    maximum.map_or(Bound::Unbounded, Bound::Included),
+                ),
+            );
         }
         if let Some(select) = options.select.clone() {
             query = query.select(move |view| select(view));
@@ -227,56 +206,32 @@ impl VertexSignatures {
         if let Some((mask, _)) = &options.deferred_hooks {
             query = query.deferred_hooks(*mask);
         }
-        match Plan::new(&theory, &query) {
-            Ok(plan) => Ok(Some(plan)),
-            Err(linnet::half_edge::generate::GenerationError::Infeasible(_)) => Ok(None),
-            Err(error) => Err(error.into()),
-        }
+        Plan::new(&theory, &query).map_err(Into::into)
     }
-}
-
-pub(crate) fn resolved_vertex(selector: &VertexSelector) -> VertexRuleId {
-    match selector {
-        VertexSelector::Id { vertex, .. } => *vertex,
-        VertexSelector::Name(_) => unreachable!("generation selectors are resolved before use"),
-    }
-}
-
-fn particle_vetoes(options: &GenerationOptions) -> Option<BTreeSet<ParticleId>> {
-    options
-        .graph_filters
-        .iter()
-        .find_map(|filter| match filter {
-            GenerationFilter::ParticleVeto(selectors) => Some(
-                selectors
-                    .iter()
-                    .map(|selector| match selector {
-                        ParticleSelector::Id { particle, .. } => *particle,
-                        ParticleSelector::Name(_) | ParticleSelector::Pdg(_) => {
-                            unreachable!("generation selectors are resolved before use")
-                        }
-                    })
-                    .collect(),
-            ),
-            _ => None,
-        })
 }
 
 /// The graph-wide coupling-order bounds `(name, minimum, maximum)`.
 struct CouplingBounds(Vec<(String, usize, Option<usize>)>);
 
 impl CouplingBounds {
-    fn new(options: &GenerationOptions) -> Self {
+    fn new(options: &Request) -> Self {
+        let mut bounds = options.orders.plain.clone();
+        // Squared constraints on a forward graph apply directly to its summed order.
+        if options.kind == crate::GenerationType::CrossSection {
+            for (name, range) in &options.orders.squared {
+                bounds
+                    .entry(name.clone())
+                    .and_modify(|old| *old = old.intersect(*range))
+                    .or_insert(*range);
+            }
+        }
         Self(
-            options
-                .graph_filters
-                .iter()
-                .filter_map(|filter| match filter {
-                    GenerationFilter::CouplingOrders(required) => Some(required),
-                    _ => None,
+            bounds
+                .into_iter()
+                .map(|(name, range)| {
+                    let (min, max) = range.bounds();
+                    (name, min, max)
                 })
-                .flatten()
-                .map(|(name, (minimum, maximum))| (name.clone(), *minimum, *maximum))
                 .collect(),
         )
     }
@@ -373,14 +328,10 @@ impl ProcessExternals {
     }
 
     /// Whether a particle veto excludes an external leg, which excludes every graph.
-    pub(crate) fn vetoed(&self, model: &Model, options: &GenerationOptions) -> bool {
-        let vetoes = particle_vetoes(options).unwrap_or_default();
-        self.legs.iter().any(|(_, stub)| {
-            vetoes.contains(&stub.field)
-                || model
-                    .particle_by_id(stub.field)
-                    .is_ok_and(|particle| vetoes.contains(&particle.antiparticle))
-        })
+    pub(crate) fn vetoed(&self, restrictions: &ResolvedRestrictions) -> bool {
+        self.legs
+            .iter()
+            .any(|(_, stub)| !restrictions.particle(stub.field))
     }
 
     /// The generated diagram with its vertex rules and external momenta. Interchangeable legs
@@ -545,41 +496,19 @@ pub(crate) struct Pruner {
 }
 
 impl Pruner {
-    pub(crate) fn new(model: &Model, options: &GenerationOptions) -> Self {
+    pub(crate) fn new(model: &Model, options: &Request) -> Self {
+        let topology = &options.topology;
         let vetoes = SpecialTopologyVetoes {
-            self_energy: options
-                .graph_filters
-                .iter()
-                .find_map(|filter| match filter {
-                    GenerationFilter::SelfEnergy(options) => Some(*options),
-                    _ => None,
-                }),
-            tadpoles: options
-                .graph_filters
-                .iter()
-                .find_map(|filter| match filter {
-                    GenerationFilter::Tadpoles(options) => Some(*options),
-                    _ => None,
-                }),
-            snails: options
-                .graph_filters
-                .iter()
-                .find_map(|filter| match filter {
-                    GenerationFilter::ZeroSnails(options) => Some(*options),
-                    _ => None,
-                }),
-            factorized_loop_range: options
-                .graph_filters
-                .iter()
-                .find_map(|filter| match filter {
-                    GenerationFilter::FactorizedLoopTopologiesCountRange(range) => Some(*range),
-                    _ => None,
-                }),
+            self_energy: topology
+                .self_energies
+                .enabled()
+                .then_some(topology.self_energies),
+            tadpoles: topology.tadpoles.enabled().then_some(topology.tadpoles),
+            snails: topology.snails.enabled().then_some(topology.snails),
+            factorized_loop_range: topology.factorized_loops,
         };
         Self {
-            one_particle_irreducible_loops: options
-                .graph_filters
-                .contains(&GenerationFilter::LoopOneParticleIrreducible),
+            one_particle_irreducible_loops: matches!(topology.bridges, Bridges::OnePIInLoops),
             vetoes,
             massless: (0..model.particles().len())
                 .map(|index| model.particle_is_massless(ParticleId::from_index(index)))
@@ -730,13 +659,7 @@ mod tests {
                 plan,
                 ..
             } = generator
-                .search(
-                    &case.process(),
-                    &case.options(&generator.model, 1),
-                    case.kind,
-                    |_, _| {},
-                    |_, _| {},
-                )
+                .search(&case.request(&generator.model), |_, _| {}, |_, _| {})
                 .unwrap();
             let mut count = 0;
             let run = linnet::half_edge::generate::Run::default();

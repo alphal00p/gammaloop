@@ -13,13 +13,27 @@ from symbolica.community import graph as linnet
 from symbolica.community.tensor import TensorExpression
 
 from symbolica.community import hepkit as fk
+from symbolica.community.graph import Bridges
 
 model = fk.Model(Path(__file__).parent / "fixtures/scalars_2p_3p.json")
 diagrams = (
-    model.process(
-        ["scalar_0"], ["scalar_0", "scalar_0"], vertex_allow=["V_3_SCALAR_000"]
+    model.process(["scalar_0"], ["scalar_0", "scalar_0"])
+    .amplitude(
+        loops=fk.Loops.total(1),
+        restrict=fk.Restrict().only_vertices(["V_3_SCALAR_000"]),
+        topology=fk.TopologyRules(
+            max_vertices=3,
+            self_loops=True,
+            bridges=Bridges.one_pi_in_loops(),
+            self_energies=fk.Veto.all(),
+            tadpoles=fk.Veto.all(),
+            snails=fk.Veto.massless(),
+        ),
     )
-    .generate_diagrams(loops=1, max_vertices=3, allow_self_loops=True)
+    .generate(run=fk.Run(progress="auto"))
+    .build(
+        fk.NumeratorOptions(naming=fk.Naming.named("D")), run=fk.Run(progress="auto")
+    )
     .diagrams
 )
 diagram = next(
@@ -131,10 +145,13 @@ assert from_dot.to_json() == diagram.to_json()
 
 # Minimal output retains genuine name absence through every native graph view.
 minimal = (
-    model.process(
-        ["scalar_0"], ["scalar_0", "scalar_0"], vertex_allow=["V_3_SCALAR_000"]
+    model.process(["scalar_0"], ["scalar_0", "scalar_0"])
+    .amplitude(
+        loops=fk.Loops.total(0),
+        restrict=fk.Restrict().only_vertices(["V_3_SCALAR_000"]),
     )
-    .generate_diagrams(loops=0, output="minimal")
+    .generate(run=fk.Run(progress="auto"))
+    .build(run=fk.Run(progress="auto"))
     .diagrams[0]
 )
 assert minimal.name is None
@@ -190,10 +207,23 @@ assert (
 )
 
 cross_section = (
-    model.process(
-        ["scalar_0"], ["scalar_0", "scalar_0"], vertex_allow=["V_3_SCALAR_000"]
+    model.process(["scalar_0"], ["scalar_0", "scalar_0"])
+    .cross_section(
+        loops=fk.Loops.forward(1),
+        restrict=fk.Restrict().only_vertices(["V_3_SCALAR_000"]),
+        topology=fk.TopologyRules(
+            max_vertices=2,
+            self_loops=True,
+            self_energies=fk.Veto.all(),
+            tadpoles=fk.Veto.all(),
+            snails=fk.Veto.massless(),
+        ),
+        cuts=fk.Cuts(blobs=fk.Range.exact(1), spectators=fk.Range.exact(0)),
     )
-    .generate_cross_section(loops=1, max_vertices=2, allow_self_loops=True)
+    .generate(run=fk.Run(progress="auto"))
+    .build(
+        fk.NumeratorOptions(naming=fk.Naming.named("D")), run=fk.Run(progress="auto")
+    )
     .diagrams[0]
 )
 assert len(cross_section.vertices) == 2

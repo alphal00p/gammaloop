@@ -1,6 +1,9 @@
 //! The generated diagram before finalization.
 
-use std::hash::{Hash, Hasher};
+use std::{
+    hash::{Hash, Hasher},
+    sync::Arc,
+};
 
 use feynkit_graph::ExternalState;
 use feynkit_model::{ParticleId, VertexRuleId};
@@ -21,7 +24,7 @@ pub struct ExternalNode {
 
 /// An end of a [`GeneratedEdge`]: an interaction vertex or an external leg.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub(crate) enum Endpoint {
+pub enum Endpoint {
     Vertex(usize),
     External(ExternalNode),
 }
@@ -39,11 +42,11 @@ impl Endpoint {
 /// sink; an undirected edge carries a self-conjugate particle and keeps its endpoint order only
 /// as a frame for half-edge references.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub(crate) struct GeneratedEdge {
-    pub(crate) source: Endpoint,
-    pub(crate) sink: Endpoint,
-    pub(crate) particle: ParticleId,
-    pub(crate) directed: bool,
+pub struct GeneratedEdge {
+    pub source: Endpoint,
+    pub sink: Endpoint,
+    pub particle: ParticleId,
+    pub directed: bool,
 }
 
 impl GeneratedEdge {
@@ -60,7 +63,7 @@ impl GeneratedEdge {
 /// [`GeneratedEdge::source`] and [`GeneratedEdge::sink`]; a leg is the half-edge at its vertex.
 #[derive(Debug, Clone)]
 pub(crate) struct GeneratedGraph {
-    graph: HedgeGraph<ParticleId, VertexRuleId, Option<ExternalNode>>,
+    graph: Arc<HedgeGraph<ParticleId, VertexRuleId, Option<ExternalNode>>>,
 }
 
 /// Equal vertex rules and edges in identifier order.
@@ -81,6 +84,10 @@ impl Hash for GeneratedGraph {
 }
 
 impl GeneratedGraph {
+    pub(crate) fn graph(&self) -> &HedgeGraph<ParticleId, VertexRuleId, Option<ExternalNode>> {
+        &self.graph
+    }
+
     /// Build a graph from its vertex rules and its edges, in identifier order.
     ///
     /// # Panics
@@ -124,7 +131,7 @@ impl GeneratedGraph {
             }
         }
         Self {
-            graph: builder.build(),
+            graph: Arc::new(builder.build()),
         }
     }
 
@@ -137,11 +144,11 @@ impl GeneratedGraph {
     }
 
     /// The vertex rules in vertex order.
-    pub(crate) fn vertices(&self) -> impl Iterator<Item = VertexRuleId> + '_ {
+    pub(crate) fn vertices(&self) -> impl ExactSizeIterator<Item = VertexRuleId> + '_ {
         (0..self.n_vertices()).map(|vertex| self.graph[NodeIndex(vertex)])
     }
 
-    pub(crate) fn edges(&self) -> impl Iterator<Item = GeneratedEdge> + '_ {
+    pub(crate) fn edges(&self) -> impl ExactSizeIterator<Item = GeneratedEdge> + '_ {
         (0..self.n_edges()).map(|edge| self.edge(edge))
     }
 

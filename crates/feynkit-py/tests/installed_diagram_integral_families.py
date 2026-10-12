@@ -5,11 +5,27 @@ from pathlib import Path
 from symbolica import E, S
 
 from symbolica.community import hepkit as fk
+from symbolica.community.graph import Bridges
 
 model = fk.Model(Path(__file__).parent / "fixtures/scalars_2p_3p.json")
 diagrams = (
-    model.process(["scalar_0"], ["scalar_0"], vertex_allow=["V_3_SCALAR_000"])
-    .generate_diagrams(loops=1, max_vertices=2, allow_self_loops=False)
+    model.process(["scalar_0"], ["scalar_0"])
+    .amplitude(
+        loops=fk.Loops.total(1),
+        restrict=fk.Restrict().only_vertices(["V_3_SCALAR_000"]),
+        topology=fk.TopologyRules(
+            max_vertices=2,
+            self_loops=False,
+            bridges=Bridges.one_pi_in_loops(),
+            self_energies=fk.Veto.all(),
+            tadpoles=fk.Veto.all(),
+            snails=fk.Veto.massless(),
+        ),
+    )
+    .generate(run=fk.Run(progress="auto"))
+    .build(
+        fk.NumeratorOptions(naming=fk.Naming.named("D")), run=fk.Run(progress="auto")
+    )
     .diagrams
 )
 assert len(diagrams) == 1
@@ -80,10 +96,16 @@ else:
     raise AssertionError("nonlinear auxiliary product was accepted")
 
 contact = (
-    model.process(
-        ["scalar_0"], ["scalar_0", "scalar_0"], vertex_allow=["V_3_SCALAR_000"]
+    model.process(["scalar_0"], ["scalar_0", "scalar_0"])
+    .amplitude(
+        loops=fk.Loops.total(0),
+        restrict=fk.Restrict().only_vertices(["V_3_SCALAR_000"]),
+        topology=fk.TopologyRules(max_vertices=1),
     )
-    .generate_diagrams(loops=0, max_vertices=1)
+    .generate(run=fk.Run(progress="auto"))
+    .build(
+        fk.NumeratorOptions(naming=fk.Naming.named("D")), run=fk.Run(progress="auto")
+    )
     .diagrams[0]
 )
 for construct in (

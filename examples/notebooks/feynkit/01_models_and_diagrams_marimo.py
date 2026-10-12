@@ -44,10 +44,33 @@ def _(mo):
 
 @app.cell
 def _():
-    from symbolica.community.hepkit import FeynmanDiagram, Model, ModelError
+    from symbolica.community.graph import Bridges
+    from symbolica.community.hepkit import (
+        FeynmanDiagram,
+        Loops,
+        Model,
+        ModelError,
+        Naming,
+        NumeratorOptions,
+        Run,
+        TopologyRules,
+        Veto,
+    )
 
     model = Model.phi_3_4()
-    return (FeynmanDiagram, Model, ModelError, model)
+    return (
+        Bridges,
+        FeynmanDiagram,
+        Loops,
+        Model,
+        ModelError,
+        Naming,
+        NumeratorOptions,
+        Run,
+        TopologyRules,
+        Veto,
+        model,
+    )
 
 
 @app.cell(hide_code=True)
@@ -120,11 +143,12 @@ def _(mo):
     mo.md(r"""
     ## Model-owned generation and inclusive loop ranges
 
-    `Model.generate_diagrams` is the main entry point. External states may use
-    `Particle` objects directly, avoiding a second lookup or a hand-written PDG
-    code. Set `kind="cross_section"` to construct cross-section graph
-    structures; this does not numerically integrate phase space. Loop bounds
-    are inclusive.
+    `Model.process(...).amplitude(loops=Loops.total(...))` defines the request.
+    External states may use `Particle` objects from that model directly.
+    A cross-section request instead uses `.cross_section(loops=Loops.forward(...))`;
+    it constructs sewn graphs without integrating phase space. Loop bounds are
+    inclusive. `generate()` retains compact prepared assignments; `build()`
+    explicitly constructs diagrams and numerator fragments.
     """)
     return
 
@@ -153,16 +177,29 @@ def _(model, table):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    Pass generation settings directly as keyword arguments. Use an integer
-    for an exact loop or coupling order, or a pair for an inclusive range.
-    Reuse a configuration with a dictionary and `**kwargs`; each call constructs
-    fresh settings, so rerunning a cell does not accumulate filters.
+    Reuse immutable `Loops`, `Orders`, and `TopologyRules` specifications.
+    Execution settings and progress belong to `Run`. This example explicitly
+    retains its loop-only bridge policy and cyclic-subgraph vetoes. Naming is
+    requested at build time for displayed diagrams; it is absent by default.
     """)
     return
 
 
 @app.cell
-def _(incoming_particles, mo, model, outgoing_particles, table):
+def _(
+    Bridges,
+    Loops,
+    Naming,
+    NumeratorOptions,
+    Run,
+    TopologyRules,
+    Veto,
+    incoming_particles,
+    mo,
+    model,
+    outgoing_particles,
+    table,
+):
     with mo.status.spinner(title="Generating diagrams") as _status:
 
         def _report(progress):
@@ -170,16 +207,25 @@ def _(incoming_particles, mo, model, outgoing_particles, table):
             if progress.total is not None:
                 _count += f" / {progress.total:,}"
             _status.update(
-                title=progress.stage.replace("_", " ").title(), subtitle=_count
+                title=str(progress.stage).removeprefix("Stage."), subtitle=_count
             )
+            return True
 
-        generated = model.generate_diagrams(
-            incoming=incoming_particles,
-            outgoing=outgoing_particles,
-            loops=(0, 1),
-            progress=_report,
-            max_vertices=3,
-            allow_self_loops=True,
+        _request = model.process(incoming_particles, outgoing_particles).amplitude(
+            loops=Loops.total((0, 1)),
+            topology=TopologyRules(
+                max_vertices=3,
+                self_loops=True,
+                bridges=Bridges.one_pi_in_loops(),
+                self_energies=Veto.all(),
+                tadpoles=Veto.all(),
+                snails=Veto.massless(),
+            ),
+        )
+        _run = Run(progress=_report)
+        generated = _request.generate(run=_run).build(
+            NumeratorOptions(naming=Naming.named("D")),
+            run=_run,
         )
 
     table(

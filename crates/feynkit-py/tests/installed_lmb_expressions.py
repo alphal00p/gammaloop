@@ -10,13 +10,27 @@ from symbolica import E, Expression, S
 from symbolica.community.tensor import Representation, TensorExpression, TensorName, dot
 
 from symbolica.community import hepkit as fk
+from symbolica.community.graph import Bridges
 
 model = fk.Model(Path(__file__).parent / "fixtures/scalars_2p_3p.json")
 diagrams = (
-    model.process(
-        ["scalar_0"], ["scalar_0", "scalar_0"], vertex_allow=["V_3_SCALAR_000"]
+    model.process(["scalar_0"], ["scalar_0", "scalar_0"])
+    .amplitude(
+        loops=fk.Loops.total(1),
+        restrict=fk.Restrict().only_vertices(["V_3_SCALAR_000"]),
+        topology=fk.TopologyRules(
+            max_vertices=3,
+            self_loops=True,
+            bridges=Bridges.one_pi_in_loops(),
+            self_energies=fk.Veto.all(),
+            tadpoles=fk.Veto.all(),
+            snails=fk.Veto.massless(),
+        ),
     )
-    .generate_diagrams(loops=1, max_vertices=3, allow_self_loops=True)
+    .generate(run=fk.Run(progress="auto"))
+    .build(
+        fk.NumeratorOptions(naming=fk.Naming.named("D")), run=fk.Run(progress="auto")
+    )
     .diagrams
 )
 diagram = next(
@@ -241,11 +255,14 @@ for expression in (
 # parameter value, and must agree with the diagram-level denominator.
 massive = next(
     iter(
-        model.process(
-            ["scalar_1", "scalar_1"],
-            ["scalar_1", "scalar_1"],
-            vertex_allow=["V_3_SCALAR_111"],
-        ).generate_diagrams(loops=0, max_vertices=2, progress=None)
+        model.process(["scalar_1", "scalar_1"], ["scalar_1", "scalar_1"])
+        .amplitude(
+            loops=fk.Loops.total(0),
+            restrict=fk.Restrict().only_vertices(["V_3_SCALAR_111"]),
+            topology=fk.TopologyRules(max_vertices=2),
+        )
+        .generate()
+        .build(fk.NumeratorOptions(naming=fk.Naming.named("D")))
     )
 )
 edge = massive.internal_edges[0]
@@ -275,21 +292,16 @@ assert edge.denominator_expression(in_lmb=True) == denominator
 # It must still be a vector, so it can participate in subsequent contractions.
 tadpole = next(
     iter(
-        model.process(
-            ["scalar_0"],
-            [],
-            vertex_allow=["V_3_SCALAR_000"],
-        ).generate_diagrams(
-            loops=1,
-            max_vertices=1,
-            allow_self_loops=True,
-            allow_zero_flow_edges=True,
-            tadpoles=None,
-            zero_snails=None,
-            self_energy=None,
-            maximum_bridges=None,
-            progress=None,
+        model.process(["scalar_0"], [])
+        .amplitude(
+            loops=fk.Loops.total(1),
+            restrict=fk.Restrict().only_vertices(["V_3_SCALAR_000"]),
+            topology=fk.TopologyRules(
+                max_vertices=1, self_loops=True, zero_flow_edges=True
+            ),
         )
+        .generate()
+        .build(fk.NumeratorOptions(naming=fk.Naming.named("D")))
     )
 )
 zero_momentum = tadpole.external_edges[0].momentum_expression(in_lmb=True)
@@ -300,11 +312,21 @@ assert not zero_momentum and zero_momentum.rank == 1
 # Exercise multiple loops, alternate bases, indexed vectors, and compact dots.
 two_loop = next(
     iter(
-        model.process(
-            ["scalar_0"], ["scalar_0"], vertex_allow=["V_3_SCALAR_000"]
-        ).generate_diagrams(
-            loops=2, max_vertices=4, allow_self_loops=False, progress=None
+        model.process(["scalar_0"], ["scalar_0"])
+        .amplitude(
+            loops=fk.Loops.total(2),
+            restrict=fk.Restrict().only_vertices(["V_3_SCALAR_000"]),
+            topology=fk.TopologyRules(
+                max_vertices=4,
+                self_loops=False,
+                bridges=Bridges.one_pi_in_loops(),
+                self_energies=fk.Veto.all(),
+                tadpoles=fk.Veto.all(),
+                snails=fk.Veto.massless(),
+            ),
         )
+        .generate()
+        .build(fk.NumeratorOptions(naming=fk.Naming.named("D")))
     )
 )
 for selected_basis in (basis, alternate, two_loop.loop_momentum_basis):

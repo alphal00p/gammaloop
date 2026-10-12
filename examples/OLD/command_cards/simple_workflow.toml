@@ -12,10 +12,10 @@ commands = [
     "display processes",
 
     # Generate a simple tree-level decay process
-    "generate xs z > d d~ --only-diagrams",
+    "generate xs z > d d~ [{{1}}] --only-diagrams --filter-selfenergies true --filter-snails true --filter-tadpoles true --n-cut-blobs 1 1 --n-cut-spectators 0 0 --numerator-grouping group_identical_graphs_up_to_scalar_rescaling",
 
     # Generate another simple decay process
-    "generate xs z > b b~ --only-diagrams",
+    "generate xs z > b b~ [{{1}}] --only-diagrams --filter-selfenergies true --filter-snails true --filter-tadpoles true --n-cut-blobs 1 1 --n-cut-spectators 0 0 --numerator-grouping group_identical_graphs_up_to_scalar_rescaling",
 
     # Display all processes again
     "display processes",

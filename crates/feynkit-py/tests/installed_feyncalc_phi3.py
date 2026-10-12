@@ -13,6 +13,7 @@ from symbolica import E, Matrix, Replacement, S, Symbol
 from symbolica.community import hepkit as hep
 from symbolica.community.hepkit import oneloop
 from symbolica.community.tensor import TensorExpression
+from symbolica.community.graph import Bridges
 
 model = hep.Model.phi3()
 particle = model.particle("phi")
@@ -37,24 +38,23 @@ family = hep.IntegralFamily(
 ibp = hep.IBPFamily(family, name="phi3_tadpole")
 recurrence = ibp.solve_parametric([True], max_depth=1)
 assert recurrence.rules
-options = {
-    "maximum_bridges": 0,
-    "self_energy": None,
-    "tadpoles": None,
-    "zero_snails": None,
-    "numerator_grouping": None,
-    "progress": None,
-}
 diagrams, inputs, coefficients = {}, {}, {}
 for label, incoming, outgoing, loops in [
     ("self_energy", 1, 1, 1),
     ("vertex", 2, 1, 1),
     ("tree", 2, 1, 0),
 ]:
-    generated = model.process(
-        [particle] * incoming, [particle] * outgoing
-    ).generate_diagrams(
-        loops=loops, max_vertices=incoming + outgoing if loops else 1, **options
+    generated = (
+        model.process([particle] * incoming, [particle] * outgoing)
+        .amplitude(
+            loops=hep.Loops.total(loops),
+            topology=hep.TopologyRules(
+                max_vertices=incoming + outgoing if loops else 1,
+                bridges=Bridges.at_most(0),
+            ),
+        )
+        .generate()
+        .build(hep.NumeratorOptions(naming=hep.Naming.named("D")))
     )
     assert len(generated.diagrams) == 1
     diagram = generated.diagrams[0]
@@ -204,9 +204,16 @@ ct_model = hep.Model.from_json(json.dumps(specification))
 ct_diagrams, counterterms = {}, {}
 self_kinematics = hep.Kinematics().with_scalar_product(P(0), P(0), p2)
 for label, incoming, count in [("self_energy", 1, 2), ("vertex", 2, 1)]:
-    generated = ct_model.process(
-        [particle.name] * incoming, [particle.name]
-    ).generate_diagrams(loops=0, max_vertices=1, coupling_orders={"CT": 1}, **options)
+    generated = (
+        ct_model.process([particle.name] * incoming, [particle.name])
+        .amplitude(
+            loops=hep.Loops.total(0),
+            topology=hep.TopologyRules(max_vertices=1, bridges=Bridges.at_most(0)),
+            orders=hep.Orders(plain={"CT": hep.Range.exact(1)}),
+        )
+        .generate()
+        .build(hep.NumeratorOptions(naming=hep.Naming.named("D")))
+    )
     ct_diagrams[label] = generated.diagrams
     assert len(generated.diagrams) == count
     amplitude = zero

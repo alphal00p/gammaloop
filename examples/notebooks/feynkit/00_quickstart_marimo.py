@@ -56,9 +56,17 @@ def _(mo):
 
 @app.cell
 def _():
-    from symbolica.community.hepkit import Model
+    from symbolica.community.graph import Bridges
+    from symbolica.community.hepkit import (
+        Loops,
+        Model,
+        Naming,
+        NumeratorOptions,
+        TopologyRules,
+        Veto,
+    )
 
-    return (Model,)
+    return Bridges, Loops, Model, Naming, NumeratorOptions, TopologyRules, Veto
 
 
 @app.cell(hide_code=True)
@@ -96,23 +104,29 @@ def _(mo):
     ## Describe and generate an amplitude
 
     Particle selectors may be names such as `"phi"`, PDG codes, or
-    explicit `ParticleSelector` objects. Here `loops=1` requests exactly one
-    loop. Self-loops are allowed, while the default topology filters reject
-    self-energies, tadpoles and zero-momentum snails. Below, we select the first
+    explicit `ParticleSelector` objects. Here `Loops.total(1)` requests exactly
+    one loop. We explicitly keep the loop-only one-particle-irreducible policy
+    and veto self-energies, tadpoles and massless-attachment snails. Self-loops
+    are allowed. These are this example's criteria, not shared defaults. Below, we select the first
     diagram without a self-edge for a particularly clear visualization.
     """)
     return
 
 
 @app.cell
-def _(model, table):
-    generated = model.generate_diagrams(
-        incoming=["phi"],
-        outgoing=["phi", "phi"],
-        loops=1,
-        max_vertices=3,
-        allow_self_loops=True,
+def _(Bridges, Loops, Naming, NumeratorOptions, TopologyRules, Veto, model, table):
+    request = model.process(["phi"], ["phi", "phi"]).amplitude(
+        loops=Loops.total(1),
+        topology=TopologyRules(
+            max_vertices=3,
+            self_loops=True,
+            bridges=Bridges.one_pi_in_loops(),
+            self_energies=Veto.all(),
+            tadpoles=Veto.all(),
+            snails=Veto.massless(),
+        ),
     )
+    generated = request.generate().build(NumeratorOptions(naming=Naming.named("D")))
 
     table(
         [

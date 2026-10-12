@@ -13,6 +13,7 @@ from symbolica import E, Replacement, S
 from symbolica.community import hepkit as hep
 from symbolica.community.hepkit import oneloop
 from symbolica.community.tensor import TensorExpression
+from symbolica.community.graph import Bridges
 
 model = hep.Model(Path(__file__).parents[2] / "feynkit-model/tests/fixtures/sm.json")
 d, s, mass_squared, uv_mass, eps, log_mass, log_4pi, flavors, coupling = S(
@@ -70,17 +71,14 @@ reducer = hep.TensorReducer(d, integrated=[k(0, mink(d)), k(1, mink(d))])
 # Native amplitudes additionally order external fields by leg ID: [0,1] rather
 # than the conventional kernel order [antifermion,fermion]=[1,0].
 one_loop = (
-    model.process([11], [11], vertex_allow=["V_98"])
-    .generate_diagrams(
-        loops=1,
-        max_vertices=2,
-        maximum_bridges=0,
-        self_energy=None,
-        tadpoles=None,
-        zero_snails=None,
-        numerator_grouping=None,
-        progress=None,
+    model.process([11], [11])
+    .amplitude(
+        loops=hep.Loops.total(1),
+        restrict=hep.Restrict().only_vertices(["V_98"]),
+        topology=hep.TopologyRules(max_vertices=2, bridges=Bridges.at_most(0)),
     )
+    .generate()
+    .build(hep.NumeratorOptions(naming=hep.Naming.named("D")))
     .diagrams[0]
 )
 assert one_loop.overall_factor_expression().matches(ordering(-1))
@@ -131,15 +129,15 @@ assert abs(complex(oneloop.b0(-1.0, 0.0, 0.0, 1.0)[1]) - 1) < 1e-12
 # Thus the normalized one-loop kernel has +i*a4*slash(p)/eps and deltaZpsi=-1/eps.
 zpsi_one = -one / eps
 
-result = model.process([11], [11], vertex_allow=["V_98"]).generate_diagrams(
-    loops=2,
-    max_vertices=4,
-    maximum_bridges=0,
-    self_energy=None,
-    tadpoles=None,
-    zero_snails=None,
-    numerator_grouping=None,
-    progress=None,
+result = (
+    model.process([11], [11])
+    .amplitude(
+        loops=hep.Loops.total(2),
+        restrict=hep.Restrict().only_vertices(["V_98"]),
+        topology=hep.TopologyRules(max_vertices=4, bridges=Bridges.at_most(0)),
+    )
+    .generate()
+    .build(hep.NumeratorOptions(naming=hep.Naming.named("D")))
 )
 assert len(result.diagrams) == 3
 targets, diagram_integrals, flavor_weights = set(), [], []

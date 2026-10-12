@@ -10,16 +10,18 @@ mod projector_equivalence;
 #[cfg(test)]
 mod search_census;
 mod special_topologies;
+mod staged;
+pub use staged::{BuiltDiagramSet, Counts, DiagramSet, LoopCounts, PreparedDiagram};
+
+#[cfg(test)]
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 use std::{
     collections::{BTreeMap, BTreeSet, HashMap},
     fmt,
     hash::Hash,
     ops::ControlFlow,
-    sync::{
-        Arc, Mutex, RwLock,
-        atomic::{AtomicBool, AtomicUsize, Ordering},
-    },
+    sync::{Arc, Mutex, RwLock},
 };
 
 use feynkit_graph::{
@@ -33,13 +35,13 @@ use linnet::half_edge::{
     HedgeGraph, NodeIndex,
     builder::HedgeGraphBuilder,
     canon::ignore,
-    generate::{Plan, Run, batch},
+    generate::{Diagram as CompactDiagram, Plan, Run as EngineRun, SkeletonSnapshot, batch},
     involution::{Flow, Orientation},
     subgraph::{InternalSubGraph, SuBitGraph, SubSetLike},
 };
 use rayon::ThreadPoolBuildError;
 #[cfg(not(target_arch = "wasm32"))]
-use rayon::{ThreadPoolBuilder, prelude::*};
+use rayon::ThreadPoolBuilder;
 use serde::{Deserialize, Serialize};
 use spenso::{
     network::library::symbolic::ETS,
@@ -53,20 +55,21 @@ use thiserror::Error;
 
 use feynkit_amplitude::ColorRepresentation;
 
+use crate::options::ResolvedRestrictions;
 use crate::{
-    FilterScope, GenerationFilter, GenerationFilterKind, GenerationOptions, GenerationOutput,
-    GenerationType, GroupingError, NumeratorGrouping, ParticleSelector, Process, ProcessError,
-    SelectorError, SewnFilterOptions, grouping, momentum_symbol,
+    GenerationType, Grouping, GroupingError, Naming, NumeratorOptions, ParticleSelector, Process,
+    ProcessError, Request, Run, Selection, SelectorError, Stage, grouping, momentum_symbol,
 };
 pub use enumeration::{
     ExternalLabel, GenerationDiagramView, GenerationDressingView, GenerationSkeletonView,
 };
 use enumeration::{
     ParticleStub, ProcessExternals, Pruner, VertexSignatures, closed_loops, incoming_stub,
-    resolved_vertex,
 };
-pub use graph::ExternalNode;
+pub use graph::{Endpoint as PreparedEndpoint, ExternalNode, GeneratedEdge as PreparedEdge};
 use graph::{Endpoint, GeneratedEdge, GeneratedGraph, PlainNodes, PlainVertex};
+use num_bigint::{BigInt, BigUint};
+use num_rational::BigRational;
 
 #[derive(Debug, Error)]
 pub enum GenerationError {
@@ -86,36 +89,12 @@ pub enum GenerationError {
     Diagram(#[from] DiagramError),
     #[error("failed to build generation thread pool: {0}")]
     ThreadPool(#[from] ThreadPoolBuildError),
-    #[error("graph automorphism factor cannot be represented by u64")]
+    #[error("graph automorphism factor cannot be represented by u128")]
     SymmetryFactor,
     #[error(transparent)]
     Enumeration(#[from] linnet::half_edge::generate::GenerationError),
-    #[error("option {option} for filter {filter} in the {scope} scope is not implemented")]
-    UnsupportedFilterOption {
-        scope: FilterScope,
-        filter: GenerationFilterKind,
-        option: &'static str,
-    },
-    #[error("filter {filter} is not valid in the {scope} scope for {generation_type:?} generation")]
-    InvalidFilterScope {
-        scope: FilterScope,
-        filter: GenerationFilterKind,
-        generation_type: GenerationType,
-    },
-    #[error("duplicate filter {filter} in the {scope} scope")]
-    DuplicateFilter {
-        scope: FilterScope,
-        filter: GenerationFilterKind,
-    },
-    #[error(
-        "filter {filter} in the {scope} scope has an invalid range: {minimum} is greater than {maximum}"
-    )]
-    InvalidFilterRange {
-        scope: FilterScope,
-        filter: GenerationFilterKind,
-        minimum: usize,
-        maximum: usize,
-    },
+    #[error("invalid generation request: {0}")]
+    InvalidRequest(String),
     #[error(
         "symmetrize_final does not apply to cross sections: identical final-state particles are cut edges, already counted by the graph automorphisms; remove the option"
     )]
@@ -211,7 +190,7 @@ pub struct GroupMember {
     pub source_diagram: usize,
     /// Requested source identity; absent for minimal output.
     pub source_identity: Option<SourceIdentity>,
-    /// Index into [`GenerationResult::diagrams`] after zero-numerator removal.
+    /// Index into [`BuiltDiagramSet::diagrams`] after zero-numerator removal.
     pub diagram: usize,
     /// The numerator of this member divided by the numerator of the master.
     pub ratio: Atom,
@@ -233,75 +212,14 @@ pub struct GenerationReport {
     /// orders rule out (no multiset of vertex rules has the degrees and orders they need), and
     /// requests with external charges or parities that no vertex rule balances or with an empty
     /// coupling-order or fermion-loop range, are not enumerated and add none.
-    pub topology_count: usize,
+    pub topology_count: BigUint,
     /// Enumerated diagrams: topologies with fields and vertex rules, before the cut and
     /// charge-conjugation filters that need their canonical frame.
-    pub interaction_assignment_count: usize,
+    pub interaction_assignment_count: BigUint,
     /// Number of diagrams retained after exact zero-numerator removal.
-    pub retained_count: usize,
-    pub zero_numerator_count: usize,
+    pub retained_count: BigUint,
+    pub zero_numerator_count: BigUint,
     pub completed: bool,
-}
-
-#[derive(Debug, Clone)]
-pub struct GenerationResult {
-    /// Final retained master diagrams in deterministic order.
-    pub diagrams: Vec<FeynmanDiagram>,
-    pub groups: Vec<DiagramGroup>,
-    pub report: GenerationReport,
-}
-
-impl GenerationResult {
-    /// Convert complete unsewn diagrams into a coherent symbolic amplitude.
-    pub fn into_amplitude(
-        self,
-        options: feynkit_amplitude::AmplitudeOptions,
-    ) -> Result<feynkit_amplitude::Amplitude, GenerationError> {
-        if !self.report.completed {
-            return Err(GenerationError::IncompleteAmplitude);
-        }
-        Ok(
-            feynkit_amplitude::Amplitude::new(self.diagrams.into_iter().map(Arc::new), options)
-                .map_err(Box::new)?,
-        )
-    }
-
-    /// Validate collapsed group provenance against the finalized master list.
-    pub fn validate_groups(&self) -> Result<(), GenerationError> {
-        if self.groups.len() != self.diagrams.len() {
-            return Err(GenerationError::InvalidGroups(format!(
-                "{} groups do not cover {} collapsed diagrams",
-                self.groups.len(),
-                self.diagrams.len()
-            )));
-        }
-        let mut masters = BTreeSet::new();
-        for (group_index, group) in self.groups.iter().enumerate() {
-            if group.master >= self.diagrams.len() || !masters.insert(group.master) {
-                return Err(GenerationError::InvalidGroups(format!(
-                    "group {group_index} has invalid or duplicate master {}",
-                    group.master
-                )));
-            }
-            if group.members.is_empty()
-                || group
-                    .members
-                    .iter()
-                    .any(|member| member.diagram != group.master)
-            {
-                return Err(GenerationError::InvalidGroups(format!(
-                    "group {group_index} has no members or a member assigned to another master"
-                )));
-            }
-            self.diagrams[group.master].validate()?;
-        }
-        if masters != (0..self.diagrams.len()).collect::<BTreeSet<_>>() {
-            return Err(GenerationError::InvalidGroups(
-                "collapsed diagram masters are not covered exactly once".to_owned(),
-            ));
-        }
-        Ok(())
-    }
 }
 
 /// Extra massless particles allowed by perturbative unresolved-cut selection.
@@ -314,18 +232,12 @@ pub struct UnresolvedCutContent {
 /// Resolve the canonical unresolved-cut policy stored in generation options.
 pub fn unresolved_cut_content(
     model: &Model,
-    options: &GenerationOptions,
+    options: &Request,
 ) -> Result<Option<UnresolvedCutContent>, GenerationError> {
-    let Some(required) = options
-        .graph_filters
-        .iter()
-        .find_map(|filter| match filter {
-            GenerationFilter::PerturbativeOrders(required) => Some(required),
-            _ => None,
-        })
-    else {
+    let required = &options.orders.perturbative;
+    if required.is_empty() {
         return Ok(None);
-    };
+    }
     let mut particles = BTreeSet::new();
     for rule in model.vertex_rules() {
         let orders = rule.coupling_orders(model);
@@ -1348,11 +1260,13 @@ impl NumeratorInstantiation<'_> {
 /// Resolved process inputs and their one shared search builder. The search census and
 /// projector oracle use the same pruning and budget construction as ordinary generation.
 struct PreparedSearch {
-    options: GenerationOptions,
+    request: Request,
+    restrictions: ResolvedRestrictions,
     resolved: ResolvedProcess,
     signatures: VertexSignatures,
     externals: ProcessExternals,
     plan: Option<Plan<ParticleId, ExternalLabel>>,
+    report: linnet::half_edge::generate::PlanReport,
 }
 
 #[derive(Clone)]
@@ -1497,501 +1411,65 @@ impl Generator {
 
     fn search(
         &self,
-        process: &Process,
-        options: &GenerationOptions,
-        generation_type: GenerationType,
+        request: &Request,
         observe_skeleton: impl Fn(&GenerationSkeletonView<'_>, bool) + Send + Sync + 'static,
         observe_dressing: impl Fn(&GenerationDressingView<'_>, bool) + Send + Sync + 'static,
     ) -> Result<PreparedSearch, GenerationError> {
-        process.validate()?;
-        if generation_type == GenerationType::Amplitude
-            && process.outgoing_alternatives().len() != 1
-        {
-            return Err(ProcessError::MultipleAmplitudeFinalStates.into());
-        }
-        process.validate_in(&self.model)?;
-        let options = process
-            .restrict_options(&self.model, options)?
-            .resolve_selectors(&self.model)?;
-        self.validate_options(generation_type, &options)?;
-        process.validate_covariant_cut_filters(&self.model, &options, generation_type)?;
-        let expanded_process = process.clone().with_final_state_alternatives(
-            process.covariant_cut_states(&self.model, generation_type)?,
+        request.validate_in(&self.model)?;
+        let restrictions = request.restrictions.resolve(&self.model)?;
+        let expanded = request.process.clone().with_final_state_alternatives(
+            request
+                .process
+                .covariant_cut_states(&self.model, request.kind)?,
         )?;
-        let process = &expanded_process;
-        let resolved = ResolvedProcess::new(&self.model, process, generation_type, &options)?;
-        let signatures = VertexSignatures::new(&self.model, &options)?;
+        let resolved = ResolvedProcess::new(&self.model, &expanded, request.kind, request)?;
+        let signatures = VertexSignatures::new(&self.model, request)?;
         let externals = resolved.externals(&self.model)?;
-        let pruner = Arc::new(Pruner::new(&self.model, &options));
+        let pruner = Arc::new(Pruner::new(&self.model, request));
         let skeleton_pruner = Arc::clone(&pruner);
-        // Census observers describe scalar decisions, not the native half of a deferred
-        // verdict. Deferred runs are observed only after binding resolution by their driver.
-        let observe = options.deferred_hooks.is_none();
-        let skeleton_hook = options.prune_skeletons.clone();
-        let dressing_hook = options.prune_dressings.clone();
-        let plan = signatures.plan(
+        let observe = request.deferred_hooks.is_none();
+        let skeleton_hook = request.prune_skeletons.clone();
+        let dressing_hook = request.prune_dressings.clone();
+        let planned = signatures.plan(
             &self.model,
             &externals,
-            &options,
+            request,
             move |view| {
-                let kept = skeleton_pruner.keeps_skeleton(view)
-                    && skeleton_hook.as_ref().is_none_or(|hook| hook(view));
+                let keep = skeleton_pruner.keeps_skeleton(view)
+                    && skeleton_hook.as_ref().is_none_or(|f| f(view));
                 if observe {
-                    observe_skeleton(view, kept);
+                    observe_skeleton(view, keep)
                 }
-                kept
+                keep
             },
             move |view| {
-                let kept = pruner.keeps_dressing(view)
-                    && dressing_hook.as_ref().is_none_or(|hook| hook(view));
+                let keep =
+                    pruner.keeps_dressing(view) && dressing_hook.as_ref().is_none_or(|f| f(view));
                 if observe {
-                    observe_dressing(view, kept);
+                    observe_dressing(view, keep)
                 }
-                kept
+                keep
             },
-        )?;
-        Ok(PreparedSearch {
-            options,
-            resolved,
-            signatures,
-            externals,
-            plan,
-        })
-    }
-
-    pub fn generate(
-        &self,
-        process: &Process,
-        options: &GenerationOptions,
-        generation_type: GenerationType,
-    ) -> Result<GenerationResult, GenerationError> {
-        let PreparedSearch {
-            options,
-            resolved,
-            signatures,
-            externals,
-            plan,
-        } = self.search(process, options, generation_type, |_, _| {}, |_, _| {})?;
-        let options = &options;
-
-        options.report_progress("topologies", 0, None);
-        let topologies = AtomicUsize::new(0);
-        let overflow = AtomicBool::new(false);
-        let run = Run::default()
-            .progress(|progress| {
-                let Ok(count) = usize::try_from(&progress.topologies) else {
-                    overflow.store(true, Ordering::Relaxed);
-                    return ControlFlow::Break(());
-                };
-                topologies.store(count, Ordering::Relaxed);
-                options.report_progress("topologies", count, None);
-                if options.cancellation_requested() {
-                    ControlFlow::Break(())
-                } else {
-                    ControlFlow::Continue(())
-                }
-            })
-            .abort_check(|| overflow.load(Ordering::Relaxed) || options.cancellation_requested());
-        #[cfg(not(target_arch = "wasm32"))]
-        let run = run.parallel(true);
-        let enumerate = || {
-            let Some(plan) = &plan else {
-                return Ok(Vec::new());
-            };
-            let Some((_, dispatch)) = &options.deferred_hooks else {
-                return plan
-                    .diagrams(&run)
-                    .map(|diagrams| diagrams.collect::<Vec<_>>());
-            };
-            let mut driver = plan.batched(&run, batch::Output::Diagrams)?;
-            let mut diagrams = Vec::new();
-            loop {
-                match driver.poll()? {
-                    batch::Event::Batch(requests) => match dispatch(requests) {
-                        ControlFlow::Continue(replies) => driver.resolve(&replies)?,
-                        ControlFlow::Break(()) => {
-                            options.cancellation.cancel();
-                            driver.abort();
-                        }
-                    },
-                    batch::Event::Diagram(diagram) => diagrams.push(diagram),
-                    batch::Event::Yield | batch::Event::Progress(_) => {
-                        if options.cancellation_requested() {
-                            driver.abort();
-                        }
-                    }
-                    batch::Event::Done => break,
-                    batch::Event::Skeleton(_) => unreachable!("diagram output was requested"),
-                }
-            }
-            Ok(diagrams)
-        };
-        #[cfg(not(target_arch = "wasm32"))]
-        let pool = {
-            let mut pool = ThreadPoolBuilder::new();
-            // Respect an explicit thread count; otherwise Rayon uses its default
-            // logical-CPU count. Browser kernels process the same graphs serially.
-            if let Some(threads) = options.threads {
-                pool = pool.num_threads(threads);
-            }
-            pool.build()?
-        };
-        let mut generated = if externals.vetoed(&self.model, options) {
-            Vec::new()
-        } else {
-            #[cfg(target_arch = "wasm32")]
-            let generated = enumerate()?;
-            #[cfg(not(target_arch = "wasm32"))]
-            let generated = pool.install(enumerate)?;
-            generated
-        };
-        if overflow.load(Ordering::Relaxed) {
-            return Err(GenerationError::ArithmeticOverflow("the topology count"));
-        }
-        let mut completed = !options.cancellation_requested();
-        // Numerator grouping keeps the first representative, so preserve its canonical
-        // encounter order. Ungrouped output retains Linnet's deterministic search order
-        // without demanding canonical forms merely for naming.
-        if !matches!(options.numerator_grouping, NumeratorGrouping::None) {
-            generated.sort_by(|a, b| a.canonical_form().cmp(b.canonical_form()));
-        }
-        let topology_count = topologies.load(Ordering::Relaxed);
-        let interaction_assignment_count = generated.len();
-
-        let prepared_count = Mutex::new(0);
-        options.report_progress("interaction_filters", 0, Some(interaction_assignment_count));
-        let prepare = || {
-            #[cfg(target_arch = "wasm32")]
-            let diagrams = generated.iter();
-            #[cfg(not(target_arch = "wasm32"))]
-            let diagrams = generated.par_iter();
-            diagrams
-                .map(|diagram| {
-                    if options.cancellation_requested() {
-                        return Ok(None);
-                    }
-                    // Diagrams related by permuting sewn pairs are kept once, weighted by
-                    // their number.
-                    let input = match externals.sewn_pair_orbit(diagram) {
-                        None => None,
-                        Some(multiplicity) => {
-                            let graph = externals.graph(diagram, &signatures);
-                            let symmetry = diagram
-                                .automorphism_count
-                                .and_then(|count| u64::try_from(count).ok())
-                                .ok_or(GenerationError::SymmetryFactor)?;
-                            self.diagram_input(&resolved, graph, symmetry, multiplicity, options)?
-                        }
-                    };
-                    let mut count = prepared_count.lock().unwrap();
-                    *count += 1;
-                    options.report_progress(
-                        "interaction_filters",
-                        *count,
-                        Some(interaction_assignment_count),
-                    );
-                    Ok(input)
-                })
-                .collect::<Result<Vec<_>, GenerationError>>()
-        };
-        #[cfg(target_arch = "wasm32")]
-        let diagram_inputs = prepare()?;
-        #[cfg(not(target_arch = "wasm32"))]
-        let diagram_inputs = pool.install(prepare)?;
-        let mut diagram_inputs = diagram_inputs.into_iter().flatten().collect::<Vec<_>>();
-        if resolved.identifies_mirror_images() {
-            diagram_inputs = DiagramInput::merge_identical(diagram_inputs);
-        }
-        if options.cancellation_requested() {
-            completed = false;
-        }
-        let total = diagram_inputs.len();
-        options.report_progress("numerators", 0, Some(total));
-        let constructed = Mutex::new(0);
-        let construct = || {
-            #[cfg(target_arch = "wasm32")]
-            let inputs = diagram_inputs.into_iter();
-            #[cfg(not(target_arch = "wasm32"))]
-            let inputs = diagram_inputs.into_par_iter();
-            inputs
-                .map(|input| {
-                    if options.cancellation_requested() {
-                        return Ok::<_, GenerationError>(None);
-                    }
-                    let pair = self.diagram_pair(None, generation_type, input, options)?;
-                    let mut count = constructed.lock().unwrap();
-                    *count += 1;
-                    options.report_progress("numerators", *count, Some(total));
-                    Ok(Some(pair))
-                })
-                .collect::<Result<Vec<_>, _>>()
-        };
-        #[cfg(target_arch = "wasm32")]
-        let diagram_pairs = construct()?;
-        #[cfg(not(target_arch = "wasm32"))]
-        let diagram_pairs = pool.install(construct)?;
-        let mut diagram_pairs = diagram_pairs.into_iter().flatten().collect::<Vec<_>>();
-        if options.cancellation_requested() {
-            completed = false;
-        }
-        options.report_progress("selection", 0, None);
-        if !options.forced_cuts.is_empty() {
-            let mut matched = vec![false; options.forced_cuts.len()];
-            let mut retained = Vec::new();
-            for mut pair in diagram_pairs {
-                let cuts = pair
-                    .comparison
-                    .cuts()
-                    .iter()
-                    .filter(|cut| {
-                        let edges = cut
-                            .cut
-                            .iter()
-                            .map(|half_edge| half_edge.edge)
-                            .collect::<BTreeSet<_>>();
-                        let keep = options
-                            .forced_cuts
-                            .iter()
-                            .enumerate()
-                            .filter(|(_, requested)| **requested == edges)
-                            .map(|(index, _)| index)
-                            .collect::<Vec<_>>();
-                        for index in keep {
-                            matched[index] = true;
-                        }
-                        options.forced_cuts.contains(&edges)
-                    })
-                    .cloned()
-                    .collect::<Vec<_>>();
-                if !cuts.is_empty() {
-                    pair.comparison = pair.comparison.with_cuts(cuts)?;
-                    let partitions =
-                        transport_cut_metadata(pair.comparison.cuts(), &pair.reversed_edges)
-                            .into_iter()
-                            .map(|cut| (cut.left.half_edges, cut.right.half_edges))
-                            .collect();
-                    pair.representative = pair.representative.with_cut_partitions(partitions)?;
-                    retained.push(pair);
-                }
-            }
-            diagram_pairs = retained;
-            if let Some((_, missing)) = options
-                .forced_cuts
-                .iter()
-                .enumerate()
-                .find(|(index, _)| !matched[*index])
-            {
-                return Err(GenerationError::UnknownForcedCut {
-                    edges: missing.iter().map(|edge| edge.0).collect(),
-                });
-            }
-        }
-        let naming = match &options.output {
-            GenerationOutput::Minimal => None,
-            GenerationOutput::Named { prefix } => Some((
-                prefix,
-                diagram_pairs.len().saturating_sub(1).to_string().len(),
-            )),
-        };
-        let mut comparison_diagrams = Vec::with_capacity(diagram_pairs.len());
-        let mut representatives = Vec::with_capacity(diagram_pairs.len());
-        for (index, mut pair) in diagram_pairs.into_iter().enumerate() {
-            let name = naming.map(|(prefix, width)| format!("{prefix}{index:0width$}"));
-            let selected_by_id = match &options.selected_diagram_ids {
-                Some(selected) if !selected.is_empty() => {
-                    selected.contains(&pair.comparison.id()?)
-                        || selected.contains(&pair.representative.id()?)
-                }
-                _ => false,
-            };
-            let selected_by_name = name.as_ref().is_some_and(|name| {
-                options
-                    .selected_diagram_names
-                    .as_ref()
-                    .is_some_and(|selected| selected.contains(name))
-            });
-            // A present empty selection still selects nothing, without demanding an ID.
-            let has_selection =
-                options.selected_diagram_ids.is_some() || options.selected_diagram_names.is_some();
-            if (has_selection && !selected_by_id && !selected_by_name)
-                || (!options.vetoed_diagram_ids.is_empty()
-                    && (options.vetoed_diagram_ids.contains(&pair.comparison.id()?)
-                        || options
-                            .vetoed_diagram_ids
-                            .contains(&pair.representative.id()?)))
-                || name
-                    .as_ref()
-                    .is_some_and(|name| options.vetoed_diagram_names.contains(name))
-            {
-                continue;
-            }
-            if let Some(name) = &name {
-                pair.comparison = pair.comparison.with_name(name);
-                pair.representative = pair.representative.with_name(name);
-            }
-            let by_id = if options.loop_momentum_bases.is_empty() {
-                None
-            } else if let Some(edges) = options.loop_momentum_bases.get(&pair.representative.id()?)
-            {
-                Some(edges)
-            } else {
-                options.loop_momentum_bases.get(&pair.comparison.id()?)
-            };
-            let requested_basis = by_id.or_else(|| {
-                name.as_ref()
-                    .and_then(|name| options.named_loop_momentum_bases.get(name))
-            });
-            if let Some(edges) = requested_basis {
-                pair.comparison = pair.comparison.with_loop_momentum_edges(edges)?;
-                pair.representative = pair.representative.with_loop_momentum_edges(edges)?;
-            }
-            comparison_diagrams.push(pair.comparison);
-            representatives.push((pair.representative, pair.reversed_edges));
-        }
-        let grouping = if options.cancellation_requested() {
-            completed = false;
-            &NumeratorGrouping::None
-        } else {
-            &options.numerator_grouping
-        };
-        let group = || {
-            grouping::group_diagrams(
-                comparison_diagrams,
-                &self.model,
-                grouping,
-                options.symmetrizes_left_right(),
-                options,
-            )
-        };
-        #[cfg(target_arch = "wasm32")]
-        let grouped = group()?;
-        #[cfg(not(target_arch = "wasm32"))]
-        let grouped = pool.install(group)?;
-        if options.cancellation_requested() {
-            completed = false;
-        }
-
-        // Numerator-aware grouping must use the canonical comparison graphs:
-        // normalizing their charged flows changes the momentum convention and
-        // prevents mirror representatives from collapsing.  Runtime exposure,
-        // however, uses the normalized representative selected by each group.
-        // Transport the merged canonical cut inventories into that
-        // representative's orientation and retain the comparison-derived
-        // grouping factor and routing choice.
-        let zero_numerator_count = grouped.zero_numerator_count;
-        let mut groups = grouped.groups;
-        let total = groups.len();
-        options.report_progress_with_zero_count("grouping", 0, Some(total), zero_numerator_count);
-        let mut diagrams = Vec::with_capacity(grouped.diagrams.len());
-        for (output_index, (comparison_master, group)) in grouped
-            .diagrams
-            .into_iter()
-            .zip(groups.iter_mut())
-            .enumerate()
-        {
-            if group.master != output_index {
-                return Err(GenerationError::InvalidGroups(format!(
-                    "group {output_index} points to unexpected master {}",
-                    group.master
-                )));
-            }
-            let source_diagram = group
-                .members
-                .first()
-                .ok_or_else(|| {
-                    GenerationError::InvalidGroups(format!(
-                        "group {output_index} has no representative member"
-                    ))
-                })?
-                .source_diagram;
-            let (source_representative, reversed_edges) =
-                representatives.get(source_diagram).ok_or_else(|| {
-                    GenerationError::InvalidGroups(format!(
-                        "group {output_index} references unknown source diagram {source_diagram}"
-                    ))
-                })?;
-            let cuts = transport_cut_metadata(comparison_master.cuts(), reversed_edges);
-            let thresholds = transport_threshold_candidate_metadata(
-                comparison_master.topology_threshold_candidates(),
-                reversed_edges,
-            );
-            let mut representative = source_representative.clone();
-            if cuts != representative.cuts() {
-                representative = representative.with_cut_partitions(
-                    cuts.into_iter()
-                        .map(|cut| (cut.left.half_edges, cut.right.half_edges))
-                        .collect(),
-                )?;
-            }
-            if thresholds != representative.topology_threshold_candidates() {
-                representative = representative.with_topology_threshold_partitions(
-                    thresholds
-                        .into_iter()
-                        .map(|candidate| (candidate.left, candidate.right))
-                        .collect(),
-                )?;
-            }
-            if representative.loop_momentum_basis().loop_edges
-                != comparison_master.loop_momentum_basis().loop_edges
-            {
-                representative = representative.with_loop_momentum_edges(
-                    &comparison_master.loop_momentum_basis().loop_edges,
-                )?;
-            }
-            if let Some(name) = comparison_master.name() {
-                representative = representative.with_name(name);
-            }
-            representative =
-                representative.with_overall_factor(comparison_master.overall_factor().clone());
-            diagrams.push(representative);
-
-            for member in &mut group.members {
-                let (source, _) = representatives.get(member.source_diagram).ok_or_else(|| {
-                    GenerationError::InvalidGroups(format!(
-                        "group {output_index} references unknown source diagram {}",
-                        member.source_diagram
-                    ))
-                })?;
-                if matches!(options.output, GenerationOutput::Named { .. }) {
-                    let name = source.name().ok_or_else(|| {
-                        GenerationError::InvalidGroups(format!(
-                            "named source {} has no name",
-                            member.source_diagram
-                        ))
-                    })?;
-                    member.source_identity = Some(SourceIdentity {
-                        id: source.id()?,
-                        name: name.to_owned(),
-                    });
-                }
-            }
-            options.report_progress_with_zero_count(
-                "grouping",
-                output_index + 1,
-                Some(total),
-                zero_numerator_count,
-            );
-        }
-
-        let result = GenerationResult {
-            report: GenerationReport {
-                topology_count,
-                interaction_assignment_count,
-                retained_count: diagrams.len(),
-                zero_numerator_count,
-                completed,
-            },
-            diagrams,
-            groups,
-        };
-        result.validate_groups()?;
-        options.report_progress_with_zero_count(
-            if completed { "complete" } else { "cancelled" },
-            result.diagrams.len(),
-            Some(result.diagrams.len()),
-            zero_numerator_count,
         );
-        Ok(result)
+        let (plan, report) = match planned {
+            Ok(plan) => {
+                let report = plan.explain().clone();
+                (Some(plan), report)
+            }
+            Err(GenerationError::Enumeration(
+                linnet::half_edge::generate::GenerationError::Infeasible(report),
+            )) => (None, report),
+            Err(error) => return Err(error),
+        };
+        Ok(PreparedSearch {
+            request: request.clone(),
+            restrictions,
+            resolved,
+            signatures,
+            externals,
+            plan,
+            report,
+        })
     }
 
     /// Canonicalize a generated diagram, apply the cut and interaction filters that need its
@@ -2000,16 +1478,15 @@ impl Generator {
         &self,
         resolved: &ResolvedProcess,
         graph: GeneratedGraph,
-        symmetry: u64,
+        symmetry: u128,
         multiplicity: u64,
-        options: &GenerationOptions,
+        options: &Request,
+        grouping: &Grouping,
     ) -> Result<Option<DiagramInput>, GenerationError> {
+        let (graph, mut source_frame) =
+            resolved.canonicalize_with_edge_map(&graph, &self.model, grouping)?;
         let mut topology = ColoredTopology {
-            graph: resolved.canonicalize_numerator_graph(
-                &graph,
-                &self.model,
-                &options.numerator_grouping,
-            )?,
+            graph,
             symmetry,
             cut_partitions: Vec::new(),
             topology_threshold_candidates: Vec::new(),
@@ -2026,7 +1503,7 @@ impl Generator {
             }
         }
         topology.graph = ResolvedProcess::repair_cp_interaction_rules(topology.graph, &self.model)?;
-        if !self.passes_vertex_selection(&topology.graph, options) {
+        if !self.passes_vertex_selection(&topology.graph, options)? {
             return Ok(None);
         }
         let grassmann_loop_count = self.closed_fermion_loop_count(&topology.graph, true)?;
@@ -2037,6 +1514,10 @@ impl Generator {
         // only cut metadata that needs transport is the source/target
         // endpoint attached to each half-edge.
         let normalized = resolved.normalize_fermion_flows(&topology.graph, &self.model)?;
+        let mut representative_frame = source_frame.clone();
+        for (edge, reversed) in &mut representative_frame.edges {
+            *reversed ^= normalized.reversed_edges.contains(&EdgeId(*edge));
+        }
         let representative = ColoredTopology {
             graph: normalized.graph,
             symmetry,
@@ -2051,13 +1532,15 @@ impl Generator {
         };
         // Without numerator comparisons, the normalized physical graph is
         // already the representative.
-        let (comparison, reversed_edges) =
-            if matches!(options.numerator_grouping, NumeratorGrouping::None) {
-                (representative.clone(), BTreeSet::new())
-            } else {
-                (topology, normalized.reversed_edges)
-            };
+        let (comparison, reversed_edges) = if matches!(*grouping, Grouping::None) {
+            source_frame = representative_frame.clone();
+            (representative.clone(), BTreeSet::new())
+        } else {
+            (topology, normalized.reversed_edges)
+        };
         Ok(Some(DiagramInput {
+            source_frame,
+            representative_frame,
             comparison,
             representative,
             signs: FermionSigns {
@@ -2075,16 +1558,20 @@ impl Generator {
         name: Option<String>,
         generation_type: GenerationType,
         input: DiagramInput,
-        options: &GenerationOptions,
+        options: (&NumeratorOptions, &NumeratorOptions),
     ) -> Result<DiagramPair, GenerationError> {
         let DiagramInput {
+            source_frame: _,
+            representative_frame: _,
             comparison,
             representative,
             signs,
             reversed_edges,
             multiplicity,
         } = input;
-        let identical = comparison == representative;
+        let identical = comparison == representative
+            && options.0.prefactor == options.1.prefactor
+            && options.0.projector == options.1.projector;
         let internal_reversals = comparison
             .graph
             .edges()
@@ -2098,7 +1585,7 @@ impl Generator {
             comparison,
             signs,
             multiplicity,
-            options,
+            options.0,
         )?;
         let representative = if identical {
             comparison.clone()
@@ -2109,7 +1596,7 @@ impl Generator {
                 representative,
                 signs,
                 multiplicity,
-                options,
+                options.1,
             )?
         };
         // Finalization orders external carriers before the internal edges, which keep the
@@ -2128,275 +1615,37 @@ impl Generator {
         })
     }
 
-    fn validate_options(
+    /// Recheck allowed rules after charge-conjugation repair.
+    fn passes_vertex_selection(
         &self,
-        generation_type: GenerationType,
-        options: &GenerationOptions,
-    ) -> Result<(), GenerationError> {
-        if options.threads == Some(0) {
-            return Err(GenerationError::InvalidThreadCount(0));
-        }
-        options.validate_for(generation_type)?;
-        if matches!(
-            &options.numerator_grouping,
-            NumeratorGrouping::Identical(options)
-                | NumeratorGrouping::UpToSign(options)
-                | NumeratorGrouping::UpToScalar(options)
-                if options.number_of_numerical_samples == 0
-        ) {
-            return Err(GenerationError::InvalidNumericalSampleCount);
-        }
-        self.validate_filters(FilterScope::Graph, generation_type, &options.graph_filters)?;
-        self.validate_filters(
-            FilterScope::CutAmplitude,
-            generation_type,
-            &options.cut_amplitude_filters,
-        )
-    }
-
-    fn validate_filters(
-        &self,
-        scope: FilterScope,
-        generation_type: GenerationType,
-        filters: &[GenerationFilter],
-    ) -> Result<(), GenerationError> {
-        let mut seen = BTreeSet::new();
-        for filter in filters {
-            let kind = filter.kind();
-            if !seen.insert(kind) {
-                return Err(GenerationError::DuplicateFilter {
-                    scope,
-                    filter: kind,
-                });
-            }
-
-            match scope {
-                FilterScope::Graph => match filter {
-                    GenerationFilter::SelfEnergy(options) => {
-                        if options.only_scaleless {
-                            return Err(GenerationError::UnsupportedFilterOption {
-                                scope,
-                                filter: kind,
-                                option: "only_scaleless",
-                            });
-                        }
-                    }
-                    GenerationFilter::Tadpoles(options) => {
-                        if options.only_scaleless {
-                            return Err(GenerationError::UnsupportedFilterOption {
-                                scope,
-                                filter: kind,
-                                option: "only_scaleless",
-                            });
-                        }
-                    }
-                    GenerationFilter::ZeroSnails(options) => {
-                        if options.only_scaleless {
-                            return Err(GenerationError::UnsupportedFilterOption {
-                                scope,
-                                filter: kind,
-                                option: "only_scaleless",
-                            });
-                        }
-                    }
-                    GenerationFilter::ParticleVeto(_)
-                    | GenerationFilter::VertexAllow(_)
-                    | GenerationFilter::VertexVeto(_)
-                    | GenerationFilter::MaxNumberOfBridges(_)
-                    | GenerationFilter::LoopOneParticleIrreducible
-                    | GenerationFilter::CouplingOrders(_)
-                    | GenerationFilter::LoopCountRange(_)
-                    | GenerationFilter::FermionLoopCountRange(_)
-                    | GenerationFilter::FactorizedLoopTopologiesCountRange(_) => {}
-                    GenerationFilter::BlobRange(_) | GenerationFilter::SpectatorRange(_)
-                        if generation_type == GenerationType::CrossSection => {}
-                    GenerationFilter::BlobRange(_) | GenerationFilter::SpectatorRange(_) => {
-                        return Err(GenerationError::InvalidFilterScope {
-                            scope,
-                            filter: kind,
-                            generation_type,
-                        });
-                    }
-                    GenerationFilter::PerturbativeOrders(_) | GenerationFilter::Sewn(_)
-                        if generation_type == GenerationType::CrossSection => {}
-                    GenerationFilter::PerturbativeOrders(_) | GenerationFilter::Sewn(_) => {
-                        return Err(GenerationError::InvalidFilterScope {
-                            scope,
-                            filter: kind,
-                            generation_type,
-                        });
-                    }
-                },
-                FilterScope::CutAmplitude => {
-                    if generation_type != GenerationType::CrossSection {
-                        return Err(GenerationError::InvalidFilterScope {
-                            scope,
-                            filter: kind,
-                            generation_type,
-                        });
-                    }
-                    match filter {
-                        GenerationFilter::CouplingOrders(_)
-                        | GenerationFilter::LoopCountRange(_) => {}
-                        GenerationFilter::SelfEnergy(_)
-                        | GenerationFilter::Tadpoles(_)
-                        | GenerationFilter::ZeroSnails(_)
-                        | GenerationFilter::Sewn(_)
-                        | GenerationFilter::ParticleVeto(_)
-                        | GenerationFilter::VertexAllow(_)
-                        | GenerationFilter::VertexVeto(_)
-                        | GenerationFilter::MaxNumberOfBridges(_)
-                        | GenerationFilter::LoopOneParticleIrreducible
-                        | GenerationFilter::BlobRange(_)
-                        | GenerationFilter::SpectatorRange(_)
-                        | GenerationFilter::PerturbativeOrders(_)
-                        | GenerationFilter::FermionLoopCountRange(_)
-                        | GenerationFilter::FactorizedLoopTopologiesCountRange(_) => {
-                            return Err(GenerationError::InvalidFilterScope {
-                                scope,
-                                filter: kind,
-                                generation_type,
-                            });
-                        }
-                    }
-                }
-            }
-
-            self.validate_filter_range(scope, filter)?;
-            match filter {
-                GenerationFilter::ParticleVeto(selectors) => {
-                    for selector in selectors {
-                        selector.resolve(&self.model)?;
-                    }
-                }
-                GenerationFilter::VertexAllow(selectors)
-                | GenerationFilter::VertexVeto(selectors) => {
-                    for selector in selectors {
-                        selector.resolve(&self.model)?;
-                    }
-                }
-                GenerationFilter::CouplingOrders(required) => {
-                    for name in required.keys() {
-                        self.model.order(name)?;
-                    }
-                }
-                GenerationFilter::PerturbativeOrders(required) => {
-                    for name in required.keys() {
-                        self.model.order(name)?;
-                    }
-                }
-                GenerationFilter::SelfEnergy(_)
-                | GenerationFilter::Tadpoles(_)
-                | GenerationFilter::ZeroSnails(_)
-                | GenerationFilter::Sewn(_)
-                | GenerationFilter::MaxNumberOfBridges(_)
-                | GenerationFilter::LoopOneParticleIrreducible
-                | GenerationFilter::LoopCountRange(_)
-                | GenerationFilter::BlobRange(_)
-                | GenerationFilter::SpectatorRange(_)
-                | GenerationFilter::FermionLoopCountRange(_)
-                | GenerationFilter::FactorizedLoopTopologiesCountRange(_) => {}
-            }
-        }
-        Ok(())
-    }
-
-    fn validate_filter_range(
-        &self,
-        scope: FilterScope,
-        filter: &GenerationFilter,
-    ) -> Result<(), GenerationError> {
-        let invalid = match filter {
-            GenerationFilter::CouplingOrders(required) => {
-                required
-                    .values()
-                    .find_map(|(minimum, maximum)| match maximum {
-                        Some(maximum) if minimum > maximum => Some((*minimum, *maximum)),
-                        _ => None,
-                    })
-            }
-            GenerationFilter::LoopCountRange((minimum, maximum))
-            | GenerationFilter::FermionLoopCountRange((minimum, maximum))
-            | GenerationFilter::FactorizedLoopTopologiesCountRange((minimum, maximum)) => {
-                (minimum > maximum).then_some((*minimum, *maximum))
-            }
-            GenerationFilter::BlobRange(range) | GenerationFilter::SpectatorRange(range) => {
-                (range.start() > range.end()).then_some((*range.start(), *range.end()))
-            }
-            GenerationFilter::SelfEnergy(_)
-            | GenerationFilter::Tadpoles(_)
-            | GenerationFilter::ZeroSnails(_)
-            | GenerationFilter::Sewn(_)
-            | GenerationFilter::ParticleVeto(_)
-            | GenerationFilter::VertexAllow(_)
-            | GenerationFilter::VertexVeto(_)
-            | GenerationFilter::MaxNumberOfBridges(_)
-            | GenerationFilter::LoopOneParticleIrreducible
-            | GenerationFilter::PerturbativeOrders(_) => None,
-        };
-        if let Some((minimum, maximum)) = invalid {
-            return Err(GenerationError::InvalidFilterRange {
-                scope,
-                filter: filter.kind(),
-                minimum,
-                maximum,
-            });
-        }
-        Ok(())
-    }
-
-    /// The vertex selections, rechecked after charge-conjugation repair: the generator only
-    /// offers selected rules, but a repaired rule may be excluded.
-    fn passes_vertex_selection(&self, graph: &GeneratedGraph, options: &GenerationOptions) -> bool {
-        options.graph_filters.iter().all(|filter| match filter {
-            GenerationFilter::VertexAllow(selectors) => graph.vertices().all(|rule| {
-                selectors
-                    .iter()
-                    .any(|selector| resolved_vertex(selector) == rule)
-            }),
-            GenerationFilter::VertexVeto(selectors) => graph.vertices().all(|rule| {
-                !selectors
-                    .iter()
-                    .any(|selector| resolved_vertex(selector) == rule)
-            }),
-            _ => true,
-        })
+        graph: &GeneratedGraph,
+        request: &Request,
+    ) -> Result<bool, GenerationError> {
+        let restrictions = request.restrictions.resolve(&self.model)?;
+        Ok(graph.vertices().all(|rule| restrictions.vertex(rule)))
     }
 
     fn retain_cut_amplitude_partitions(
         &self,
         topology: &mut ColoredTopology,
-        options: &GenerationOptions,
+        request: &Request,
     ) -> Result<bool, GenerationError> {
+        let required = &request.cuts.amplitude;
         let mut retained = Vec::with_capacity(topology.cut_partitions.len());
         for partition in topology.cut_partitions.drain(..) {
-            let mut passes = true;
-            for filter in &options.cut_amplitude_filters {
-                passes &= match filter {
-                    GenerationFilter::CouplingOrders(required) => {
-                        [&partition.left, &partition.right].iter().all(|side| {
-                            required.iter().all(|(name, (minimum, maximum))| {
-                                let value = side.coupling_orders.get(name).copied().unwrap_or(0);
-                                value >= *minimum && maximum.is_none_or(|maximum| value <= maximum)
-                            })
-                        })
-                    }
-                    // The amplitude loop filter constrains the sum of the loop
-                    // counts on both sides of the cut, matching GammaLoop's
-                    // cross-section generation semantics.
-                    GenerationFilter::LoopCountRange((minimum, maximum)) => (*minimum..=*maximum)
-                        .contains(&(partition.left.loop_count + partition.right.loop_count)),
-                    _ => {
-                        return Err(GenerationError::InvalidFilterScope {
-                            scope: FilterScope::CutAmplitude,
-                            filter: filter.kind(),
-                            generation_type: GenerationType::CrossSection,
-                        });
-                    }
-                };
-            }
+            let total_loops = partition
+                .left
+                .loop_count
+                .checked_add(partition.right.loop_count)
+                .ok_or(GenerationError::ArithmeticOverflow("cut-amplitude loops"))?;
+            let passes = required.loops.contains(total_loops)
+                && [&partition.left, &partition.right].into_iter().all(|side| {
+                    required.orders.plain.iter().all(|(name, range)| {
+                        range.contains(side.coupling_orders.get(name).copied().unwrap_or(0))
+                    })
+                });
             if passes {
-                retained.push(partition);
+                retained.push(partition)
             }
         }
         topology.cut_partitions = retained;
@@ -2433,7 +1682,7 @@ impl Generator {
         topology: ColoredTopology,
         fermion_signs: FermionSigns,
         multiplicity: u64,
-        options: &GenerationOptions,
+        options: &NumeratorOptions,
     ) -> Result<FeynmanDiagram, GenerationError> {
         // The automorphism count of the rule-coloured graph is a denominator
         // in the overall multiplier.
@@ -2478,7 +1727,7 @@ impl Generator {
             .canonical_loop_momentum_basis()
             .symmetry_factor(topology.symmetry)
             .overall_factor(overall_factor)
-            .numerator_prefactor(options.numerator_prefactor.clone())
+            .numerator_prefactor(options.prefactor.clone())
             .cuts(topology.cut_partitions.clone())
             .topology_threshold_candidates(topology.topology_threshold_candidates.clone());
         // Every external state with the connection of the leg that carries it.
@@ -2909,54 +2158,80 @@ fn vertex_rule_signature(
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 struct ColoredTopology {
     graph: GeneratedGraph,
-    symmetry: u64,
+    symmetry: u128,
     cut_partitions: Vec<DiagramCut>,
     topology_threshold_candidates: Vec<DiagramThresholdCandidate>,
+}
+
+/// A bijection from one provisional generated frame to another. A reversed edge exchanges
+/// its two provisional half-edges and negates its momentum; rule repair never changes IDs.
+#[derive(Clone)]
+struct GeneratedFrame {
+    vertices: Vec<usize>,
+    edges: Vec<(usize, bool)>,
+}
+impl GeneratedFrame {
+    fn then(&self, next: &Self) -> Self {
+        Self {
+            vertices: self.vertices.iter().map(|&v| next.vertices[v]).collect(),
+            edges: self
+                .edges
+                .iter()
+                .map(|&(edge, flip)| {
+                    let (edge, next_flip) = next.edges[edge];
+                    (edge, flip ^ next_flip)
+                })
+                .collect(),
+        }
+    }
+    fn relative_to(&self, target: &Self) -> Self {
+        let mut vertices = vec![0; self.vertices.len()];
+        for (source, &old) in self.vertices.iter().enumerate() {
+            vertices[old] = target.vertices[source];
+        }
+        let mut edges = vec![(0, false); self.edges.len()];
+        for (source, &(old, flip)) in self.edges.iter().enumerate() {
+            let (new, target_flip) = target.edges[source];
+            edges[old] = (new, flip ^ target_flip);
+        }
+        Self { vertices, edges }
+    }
+    fn options(&self, options: &NumeratorOptions) -> Result<NumeratorOptions, GenerationError> {
+        let hedges = self
+            .edges
+            .iter()
+            .flat_map(|&(edge, flip)| {
+                if flip {
+                    [2 * edge + 1, 2 * edge]
+                } else {
+                    [2 * edge, 2 * edge + 1]
+                }
+            })
+            .collect::<Vec<_>>();
+        let relabel = |atom: &Atom| {
+            FeynmanDiagram::relabel_expression(atom, &self.vertices, &self.edges, &hedges)
+        };
+        let mut result = options.clone();
+        result.prefactor = relabel(&options.prefactor)?;
+        result.projector = options.projector.as_ref().map(relabel).transpose()?;
+        Ok(result)
+    }
 }
 
 /// A canonicalized diagram ready for finalization: the frame used for numerator comparisons,
 /// the physical representative with normalized fermion flows, and the edges reversed between
 /// them.
+#[derive(Clone)]
 struct DiagramInput {
+    /// Exact provisional frames of the same original assignment.
+    source_frame: GeneratedFrame,
+    representative_frame: GeneratedFrame,
     comparison: ColoredTopology,
     representative: ColoredTopology,
     signs: FermionSigns,
     reversed_edges: BTreeSet<EdgeId>,
     /// The number of exactly labelled generated diagrams the representative stands for.
     multiplicity: u64,
-}
-
-impl DiagramInput {
-    /// Merge the inputs with equal representatives and fermion signs into the first of them,
-    /// adding up their multiplicities.
-    ///
-    /// Left/right symmetrization canonicalizes a sewn graph and its mirror image to the same
-    /// representative. Kept apart, they would be two diagrams with one [`DiagramId`].
-    fn merge_identical(inputs: Vec<Self>) -> Vec<Self> {
-        let mut firsts = HashMap::with_capacity(inputs.len());
-        let first = inputs
-            .iter()
-            .enumerate()
-            .map(|(index, input)| {
-                *firsts
-                    .entry((&input.representative, input.signs))
-                    .or_insert(index)
-            })
-            .collect::<Vec<_>>();
-        let mut multiplicity = vec![0; inputs.len()];
-        for (input, &first) in inputs.iter().zip(&first) {
-            multiplicity[first] += input.multiplicity;
-        }
-        inputs
-            .into_iter()
-            .enumerate()
-            .filter(|&(index, _)| first[index] == index)
-            .map(|(index, input)| Self {
-                multiplicity: multiplicity[index],
-                ..input
-            })
-            .collect()
-    }
 }
 
 struct DiagramPair {
@@ -3299,7 +2574,7 @@ impl ResolvedProcess {
         model: &Model,
         process: &Process,
         generation_type: GenerationType,
-        options: &GenerationOptions,
+        options: &Request,
     ) -> Result<Self, GenerationError> {
         let resolve = |selector: &ParticleSelector| -> Result<Particle, GenerationError> {
             Ok(model.particle_by_id(selector.resolve(model)?)?.clone())
@@ -3317,10 +2592,10 @@ impl ResolvedProcess {
                 .iter()
                 .map(|alternative| alternative.iter().map(resolve).collect())
                 .collect::<Result<_, _>>()?,
-            symmetrize_initial: options.symmetrizes_initial(),
-            symmetrize_final: options.symmetrizes_final(),
-            symmetrize_left_right: options.symmetrizes_left_right(),
-            symmetrize_external_fermions: options.symmetrizes_external_fermions(),
+            symmetrize_initial: options.symmetrization.initial,
+            symmetrize_final: options.symmetrization.final_state,
+            symmetrize_left_right: options.cuts.symmetrize_left_right,
+            symmetrize_external_fermions: options.symmetrization.external_fermions,
         })
     }
 
@@ -3431,41 +2706,52 @@ impl ResolvedProcess {
     /// smallest skeleton is selected, the complete colored graph is rebuilt in
     /// that canonical vertex/edge order so UFO slot matching and propagator
     /// momenta are instantiated identically for isomorphic diagrams.
+    #[cfg(test)]
     fn canonicalize_numerator_graph(
         &self,
         graph: &GeneratedGraph,
         model: &Model,
-        grouping: &NumeratorGrouping,
+        grouping: &Grouping,
     ) -> Result<GeneratedGraph, GenerationError> {
+        self.canonicalize_with_edge_map(graph, model, grouping)
+            .map(|(graph, _)| graph)
+    }
+
+    fn canonicalize_with_edge_map(
+        &self,
+        graph: &GeneratedGraph,
+        model: &Model,
+        grouping: &Grouping,
+    ) -> Result<(GeneratedGraph, GeneratedFrame), GenerationError> {
         let grouping_options = match grouping {
-            NumeratorGrouping::Identical(options)
-            | NumeratorGrouping::UpToSign(options)
-            | NumeratorGrouping::UpToScalar(options) => Some(options),
-            NumeratorGrouping::None => None,
+            Grouping::Identical(options)
+            | Grouping::UpToSign(options)
+            | Grouping::UpToScalar(options) => Some(options),
+            Grouping::None => None,
         };
         let include_left_right = self.identifies_mirror_images();
         let exact_internal_particles =
             grouping_options.is_some_and(|options| !options.differentiate_particle_masses_only);
 
-        let selected = self.canonicalize_numerator_graph_pass(
+        let (selected, first) = self.canonicalize_numerator_graph_pass(
             graph,
             model,
             exact_internal_particles,
             include_left_right,
             include_left_right,
         )?;
-        let canonical = if include_left_right {
-            self.canonicalize_numerator_graph_pass(
+        if include_left_right {
+            let (canonical, second) = self.canonicalize_numerator_graph_pass(
                 &selected,
                 model,
                 exact_internal_particles,
                 false,
                 true,
-            )?
+            )?;
+            Ok((canonical, first.then(&second)))
         } else {
-            selected
-        };
-        Ok(canonical)
+            Ok((selected, first))
+        }
     }
 
     fn canonicalize_numerator_graph_pass(
@@ -3475,7 +2761,7 @@ impl ResolvedProcess {
         exact_internal_particles: bool,
         include_left_right_remapping: bool,
         use_left_right_external_colors: bool,
-    ) -> Result<GeneratedGraph, GenerationError> {
+    ) -> Result<(GeneratedGraph, GeneratedFrame), GenerationError> {
         let incoming_count = self.incoming.len();
         let externals: BTreeMap<usize, ExternalNode> = graph
             .externals()
@@ -3581,7 +2867,8 @@ impl ResolvedProcess {
         };
         let mut edges = graph
             .edges()
-            .map(|edge| {
+            .enumerate()
+            .map(|(original, edge)| {
                 // All external edges point into the interaction graph and internal
                 // edges point from the lower to the higher canonical vertex.
                 let flipped = edge.sink.external().is_some()
@@ -3608,6 +2895,8 @@ impl ResolvedProcess {
                         directed: edge.directed,
                     },
                     pdg_code,
+                    original,
+                    flipped,
                 ))
             })
             .collect::<Result<Vec<_>, GenerationError>>()?;
@@ -3615,12 +2904,22 @@ impl ResolvedProcess {
         // also uses for internal edges. Signed PDG order is deliberately used here rather than
         // model insertion order: CP-conjugate charged lines can otherwise acquire the same
         // edge/LMB order even when their legacy canonical representatives differ.
-        edges.sort_by_key(|(edge, pdg_code)| (edge.source, edge.sink, *pdg_code));
-        Ok(GeneratedGraph::new(
-            vertices
-                .into_iter()
-                .map(|rule| rule.expect("canonical positions are a permutation")),
-            edges.into_iter().map(|(edge, _)| edge),
+        edges.sort_by_key(|(edge, pdg_code, _, _)| (edge.source, edge.sink, *pdg_code));
+        let mut edge_map = vec![(0, false); edges.len()];
+        for (current, (_, _, original, flipped)) in edges.iter().enumerate() {
+            edge_map[*original] = (current, *flipped);
+        }
+        Ok((
+            GeneratedGraph::new(
+                vertices
+                    .into_iter()
+                    .map(|rule| rule.expect("canonical positions are a permutation")),
+                edges.into_iter().map(|(edge, _, _, _)| edge),
+            ),
+            GeneratedFrame {
+                vertices: positions,
+                edges: edge_map,
+            },
         ))
     }
 
@@ -3908,7 +3207,7 @@ impl ResolvedProcess {
         &self,
         graph: &GeneratedGraph,
         model: &Model,
-        options: &GenerationOptions,
+        options: &Request,
     ) -> Result<CutPartitionInventory, GenerationError> {
         let unresolved = unresolved_cut_content(model, options)?;
         let targets: Vec<Vec<ParticleId>> = self
@@ -3965,24 +3264,8 @@ impl ResolvedProcess {
             .filter_map(|(edge, data)| data.is_external().then_some(EdgeId(edge)))
             .collect::<BTreeSet<_>>();
 
-        let default_blob_range = 1..=1;
-        let default_spectator_range = 0..=0;
-        let blob_range = options
-            .graph_filters
-            .iter()
-            .find_map(|filter| match filter {
-                GenerationFilter::BlobRange(range) => Some(range),
-                _ => None,
-            })
-            .unwrap_or(&default_blob_range);
-        let spectator_range = options
-            .graph_filters
-            .iter()
-            .find_map(|filter| match filter {
-                GenerationFilter::SpectatorRange(range) => Some(range),
-                _ => None,
-            })
-            .unwrap_or(&default_spectator_range);
+        let blob_range = options.cuts.blobs;
+        let spectator_range = options.cuts.spectators;
 
         let validate_connectivity = |subgraph: &SuBitGraph| {
             let mut blobs = 0;
@@ -3996,7 +3279,7 @@ impl ResolvedProcess {
                     spectators += 1;
                 }
             }
-            blob_range.contains(&blobs) && spectator_range.contains(&spectators)
+            blob_range.contains(blobs) && spectator_range.contains(spectators)
         };
 
         let stable_half_edges = |subgraph: &SuBitGraph| {
@@ -4120,19 +3403,10 @@ impl ResolvedProcess {
             })
     }
 
-    fn passes_sewn_filter(&self, graph: &GeneratedGraph, options: &GenerationOptions) -> bool {
-        let Some(SewnFilterOptions {
-            filter_tadpoles: true,
-        }) = options
-            .graph_filters
-            .iter()
-            .find_map(|filter| match filter {
-                GenerationFilter::Sewn(options) => Some(*options),
-                _ => None,
-            })
-        else {
+    fn passes_sewn_filter(&self, graph: &GeneratedGraph, options: &Request) -> bool {
+        if !options.cuts.sewn_tadpoles {
             return true;
-        };
+        }
 
         let mut graph = graph.with_external_vertices();
         let external_nodes: Vec<_> = graph
@@ -4173,7 +3447,10 @@ impl ResolvedProcess {
 
 #[cfg(test)]
 mod tests {
-    use crate::{CancellationToken, GraphGroupingOptions, NumeratorGrouping, VertexSelector};
+    use crate::{
+        Bridges, CancellationToken, CutAmplitude, Cuts, GraphGroupingOptions, Grouping, Loops,
+        Orders, Range, Restrict, Symmetrize, TopologyRules, VertexSelector,
+    };
     use feynkit_model::Model;
     use symbolica::parser::ParseSettings;
 
@@ -4498,33 +3775,82 @@ mod tests {
     fn loop_one_particle_irreducibility_preserves_trees_in_mixed_ranges() {
         let generator = Generator::new(scalar_model());
         let process = Process::new(["phi", "phi"], ["phi", "phi"]);
-        let options = GenerationOptions::default()
-            .with_loop_count(0, 1)
-            .unwrap()
-            .threads(1)
-            .max_vertices(4);
-        let automatic = options
+        let automatic = process
             .clone()
-            .with_graph_filter(GenerationFilter::LoopOneParticleIrreducible);
-        assert_eq!(automatic.max_bridges(0), None);
-        assert_eq!(automatic.max_bridges(1), Some(0));
+            .amplitude(Loops::total(0..=1))
+            .with_topology(
+                TopologyRules::new()
+                    .with_self_loops(false)
+                    .with_max_vertices(4)
+                    .with_bridges(Bridges::OnePIInLoops),
+            );
+        assert_eq!(automatic.topology().bridges, Bridges::OnePIInLoops);
 
-        let all = generator
-            .generate(&process, &options, GenerationType::Amplitude)
-            .unwrap();
-        let filtered = generator
-            .generate(&process, &automatic, GenerationType::Amplitude)
-            .unwrap();
-        let strict = generator
-            .generate(
-                &process,
-                &options.with_graph_filter(GenerationFilter::MaxNumberOfBridges(0)),
-                GenerationType::Amplitude,
-            )
-            .unwrap();
-        let ids = |result: &GenerationResult, loops| {
+        let all = {
+            let run = Run::default().threads(1);
+            let request = (process)
+                .clone()
+                .amplitude(Loops::total(0..=1))
+                .with_topology(
+                    TopologyRules::new()
+                        .with_self_loops(false)
+                        .with_max_vertices(4),
+                );
+            request
+                .generate(generator.model.clone(), &run)
+                .and_then(|prepared| {
+                    prepared.build(
+                        &NumeratorOptions::default().with_naming(Naming::prefix("D")),
+                        &run,
+                    )
+                })
+        }
+        .unwrap();
+        let filtered = {
+            let run = Run::default().threads(1);
+            let request = (process)
+                .clone()
+                .amplitude(Loops::total(0..=1))
+                .with_topology(
+                    TopologyRules::new()
+                        .with_self_loops(false)
+                        .with_max_vertices(4)
+                        .with_bridges(Bridges::OnePIInLoops),
+                );
+            request
+                .generate(generator.model.clone(), &run)
+                .and_then(|prepared| {
+                    prepared.build(
+                        &NumeratorOptions::default().with_naming(Naming::prefix("D")),
+                        &run,
+                    )
+                })
+        }
+        .unwrap();
+        let strict = {
+            let run = Run::default().threads(1);
+            let request = (process)
+                .clone()
+                .amplitude(Loops::total(0..=1))
+                .with_topology(
+                    TopologyRules::new()
+                        .with_self_loops(false)
+                        .with_max_vertices(4)
+                        .with_bridges(Bridges::AtMost(0)),
+                );
+            request
+                .generate(generator.model.clone(), &run)
+                .and_then(|prepared| {
+                    prepared.build(
+                        &NumeratorOptions::default().with_naming(Naming::prefix("D")),
+                        &run,
+                    )
+                })
+        }
+        .unwrap();
+        let ids = |result: &BuiltDiagramSet, loops| {
             result
-                .diagrams
+                .diagrams()
                 .iter()
                 .filter(|diagram| diagram.loop_count() == loops)
                 .map(|diagram| diagram.id().unwrap())
@@ -4547,13 +3873,27 @@ mod tests {
             "1PR loop diagrams are removed"
         );
 
-        let loops_only = generator
-            .generate(
-                &process,
-                &automatic.with_loop_count(1, 1).unwrap(),
-                GenerationType::Amplitude,
-            )
-            .unwrap();
+        let loops_only = {
+            let run = Run::default().threads(1);
+            let request = (process)
+                .clone()
+                .amplitude(Loops::total(1..=1))
+                .with_topology(
+                    TopologyRules::new()
+                        .with_self_loops(false)
+                        .with_max_vertices(4)
+                        .with_bridges(Bridges::OnePIInLoops),
+                );
+            request
+                .generate(generator.model.clone(), &run)
+                .and_then(|prepared| {
+                    prepared.build(
+                        &NumeratorOptions::default().with_naming(Naming::prefix("D")),
+                        &run,
+                    )
+                })
+        }
+        .unwrap();
         assert_eq!(
             ids(&loops_only, 1),
             ids(&filtered, 1),
@@ -4565,21 +3905,27 @@ mod tests {
     fn generates_tree_and_one_loop_diagrams() {
         let generator = Generator::new(scalar_model());
         let process = Process::new(["phi"], ["phi", "phi"]);
-        let generated = generator
-            .generate(
-                &process,
-                &GenerationOptions::default()
-                    .with_loop_count(0, 1)
-                    .unwrap()
-                    .allow_self_loops(true),
-                GenerationType::Amplitude,
-            )
-            .unwrap();
-        assert!(!generated.diagrams.is_empty());
-        assert!(generated.report.completed);
+        let generated = {
+            let run = Run::default();
+            let request = (process)
+                .clone()
+                .amplitude(Loops::total(0..=1))
+                .with_topology(TopologyRules::new().with_self_loops(true));
+            request
+                .generate(generator.model.clone(), &run)
+                .and_then(|prepared| {
+                    prepared.build(
+                        &NumeratorOptions::default().with_naming(Naming::prefix("D")),
+                        &run,
+                    )
+                })
+        }
+        .unwrap();
+        assert!(!generated.diagrams().is_empty());
+        assert!(generated.report().completed);
         assert!(
             generated
-                .diagrams
+                .diagrams()
                 .iter()
                 .all(|diagram| !diagram.numerator().is_zero())
         );
@@ -4589,16 +3935,29 @@ mod tests {
     fn finalizes_external_fermion_projectors_unless_explicitly_overridden() {
         let generator = Generator::new(fermion_model());
         let process = Process::new([1_i64, -1], [1_i64, -1]);
-        let options = GenerationOptions::default()
-            .with_loop_count(0, 0)
-            .unwrap()
-            .threads(1)
-            .max_vertices(2);
-        let generated = generator
-            .generate(&process, &options, GenerationType::Amplitude)
-            .unwrap();
-        assert!(!generated.diagrams.is_empty());
-        for diagram in &generated.diagrams {
+
+        let generated = {
+            let run = Run::default().threads(1);
+            let request = (process)
+                .clone()
+                .amplitude(Loops::total(0..=0))
+                .with_topology(
+                    TopologyRules::new()
+                        .with_self_loops(false)
+                        .with_max_vertices(2),
+                );
+            request
+                .generate(generator.model.clone(), &run)
+                .and_then(|prepared| {
+                    prepared.build(
+                        &NumeratorOptions::default().with_naming(Naming::prefix("D")),
+                        &run,
+                    )
+                })
+        }
+        .unwrap();
+        assert!(!generated.diagrams().is_empty());
+        for diagram in generated.diagrams() {
             for wavefunction in [
                 feynkit_graph::symbols::u(),
                 feynkit_graph::symbols::ubar(),
@@ -4613,16 +3972,31 @@ mod tests {
             );
         }
 
-        let explicit = generator
-            .generate(
-                &process,
-                &options.projector(Atom::one()),
-                GenerationType::Amplitude,
-            )
-            .unwrap();
+        let explicit = {
+            let run = Run::default().threads(1);
+            let request = (process)
+                .clone()
+                .amplitude(Loops::total(0..=0))
+                .with_topology(
+                    TopologyRules::new()
+                        .with_self_loops(false)
+                        .with_max_vertices(2),
+                );
+            request
+                .generate(generator.model.clone(), &run)
+                .and_then(|prepared| {
+                    prepared.build(
+                        &NumeratorOptions::default()
+                            .with_naming(Naming::prefix("D"))
+                            .with_projector(Atom::one()),
+                        &run,
+                    )
+                })
+        }
+        .unwrap();
         assert!(
             explicit
-                .diagrams
+                .diagrams()
                 .iter()
                 .all(|diagram| diagram.projector() == &Atom::one())
         );
@@ -4633,19 +4007,29 @@ mod tests {
         let generator = Generator::new(fermion_model());
         for pdg in [1_i64, -1] {
             let process = Process::new([pdg, 22], [pdg, 22]);
-            let generated = generator
-                .generate(
-                    &process,
-                    &GenerationOptions::default()
-                        .with_loop_count(1, 1)
-                        .unwrap()
-                        .threads(1)
-                        .max_vertices(4),
-                    GenerationType::CrossSection,
-                )
-                .unwrap();
-            assert!(!generated.diagrams.is_empty());
-            for diagram in generated.diagrams {
+            let generated = {
+                let run = Run::default().threads(1);
+                let request = (process)
+                    .clone()
+                    .cross_section(Loops::forward(1..=1))
+                    .with_cuts(Cuts::new().with_blobs(1..=1).with_spectators(0..=0))
+                    .with_topology(
+                        TopologyRules::new()
+                            .with_self_loops(false)
+                            .with_max_vertices(4),
+                    );
+                request
+                    .generate(generator.model.clone(), &run)
+                    .and_then(|prepared| {
+                        prepared.build(
+                            &NumeratorOptions::default().with_naming(Naming::prefix("D")),
+                            &run,
+                        )
+                    })
+            }
+            .unwrap();
+            assert!(!generated.diagrams().is_empty());
+            for diagram in generated.diagrams() {
                 assert!(!diagram.cuts().is_empty());
                 for cut in diagram.cuts() {
                     let mut particles = diagram
@@ -4678,19 +4062,29 @@ mod tests {
         let generator = Generator::new(model);
         for pdg in [1_i64, -1] {
             let process = Process::new([pdg, 22], [pdg, 22]);
-            let generated = generator
-                .generate(
-                    &process,
-                    &GenerationOptions::default()
-                        .with_loop_count(1, 1)
-                        .unwrap()
-                        .threads(1)
-                        .max_vertices(4),
-                    GenerationType::CrossSection,
-                )
-                .unwrap();
-            assert!(!generated.diagrams.is_empty());
-            for diagram in generated.diagrams {
+            let generated = {
+                let run = Run::default().threads(1);
+                let request = (process)
+                    .clone()
+                    .cross_section(Loops::forward(1..=1))
+                    .with_cuts(Cuts::new().with_blobs(1..=1).with_spectators(0..=0))
+                    .with_topology(
+                        TopologyRules::new()
+                            .with_self_loops(false)
+                            .with_max_vertices(4),
+                    );
+                request
+                    .generate(generator.model.clone(), &run)
+                    .and_then(|prepared| {
+                        prepared.build(
+                            &NumeratorOptions::default().with_naming(Naming::prefix("D")),
+                            &run,
+                        )
+                    })
+            }
+            .unwrap();
+            assert!(!generated.diagrams().is_empty());
+            for diagram in generated.diagrams() {
                 // One external chain closes into one cycle without exchanging
                 // any external fermions. Its ordering sign must be positive.
                 let positive = symbolica::function!(
@@ -4706,20 +4100,30 @@ mod tests {
     fn normalized_cross_section_fermion_chains_keep_valid_cuts() {
         let generator = Generator::new(fermion_model());
         let process = Process::new([1_i64, -1], [22_i64]);
-        let generated = generator
-            .generate(
-                &process,
-                &GenerationOptions::default()
-                    .with_loop_count(0, 1)
-                    .unwrap()
-                    .threads(1)
-                    .max_vertices(4),
-                GenerationType::CrossSection,
-            )
-            .unwrap();
-        assert!(!generated.diagrams.is_empty());
+        let generated = {
+            let run = Run::default().threads(1);
+            let request = (process)
+                .clone()
+                .cross_section(Loops::forward(0..=1))
+                .with_cuts(Cuts::new().with_blobs(1..=1).with_spectators(0..=0))
+                .with_topology(
+                    TopologyRules::new()
+                        .with_self_loops(false)
+                        .with_max_vertices(4),
+                );
+            request
+                .generate(generator.model.clone(), &run)
+                .and_then(|prepared| {
+                    prepared.build(
+                        &NumeratorOptions::default().with_naming(Naming::prefix("D")),
+                        &run,
+                    )
+                })
+        }
+        .unwrap();
+        assert!(!generated.diagrams().is_empty());
 
-        for diagram in &generated.diagrams {
+        for diagram in generated.diagrams() {
             diagram.validate().unwrap();
             assert!(!diagram.cuts().is_empty());
 
@@ -4816,7 +4220,11 @@ mod tests {
             &model,
             &Process::new([22_i64, 22], [22_i64, 22]),
             GenerationType::CrossSection,
-            &GenerationOptions::default(),
+            &(Process::new([22_i64, 22], [22_i64, 22]))
+                .clone()
+                .cross_section(Loops::forward(0..=0))
+                .with_cuts(Cuts::new().with_blobs(1..=1).with_spectators(0..=0))
+                .with_topology(TopologyRules::new().with_self_loops(false)),
         )
         .unwrap();
         let mut graph = Graph::new();
@@ -4883,7 +4291,15 @@ mod tests {
         );
 
         let inventory = resolved
-            .cut_partitions(&graph.build(), &model, &GenerationOptions::default())
+            .cut_partitions(
+                &graph.build(),
+                &model,
+                &(Process::new([22_i64, 22], [22_i64, 22]))
+                    .clone()
+                    .cross_section(Loops::forward(0..=0))
+                    .with_cuts(Cuts::new().with_blobs(1..=1).with_spectators(0..=0))
+                    .with_topology(TopologyRules::new().with_self_loops(false)),
+            )
             .unwrap();
         assert_eq!(inventory.topology_threshold_candidates.len(), 1);
         let crossing = inventory.topology_threshold_candidates[0]
@@ -5024,30 +4440,34 @@ mod tests {
             (["e+", "e-"], ["a", "a"], &qed[..], 2),
             (["a", "a"], ["t", "t~"], &["a", "t", "t~", "g"][..], 2),
         ] {
-            let process = Process::new(incoming, outgoing)
-                .with_particle_filters(
-                    None,
-                    Some(selection.iter().map(|&name| name.into()).collect()),
-                    None,
-                    Vec::new(),
-                )
-                .unwrap();
+            let process = Process::new(incoming, outgoing);
             for symmetrize in [false, true] {
-                let options = GenerationOptions::default()
-                    .with_loop_count(loops, loops)
+                let run = Run::default().threads(1);
+                let request = process
+                    .clone()
+                    .cross_section(Loops::forward(loops..=loops))
+                    .with_topology(TopologyRules::new().with_self_loops(false))
+                    .with_restrict(Restrict::new().only_particles(selection.iter().copied()))
+                    .with_symmetrize(Symmetrize {
+                        initial: symmetrize,
+                        ..Symmetrize::default()
+                    })
+                    .with_cuts(Cuts::new().with_blobs(1..=1).with_spectators(0..=0));
+                let result = request
+                    .generate(model.clone().into(), &run)
                     .unwrap()
-                    .threads(1)
-                    .symmetrize_initial(symmetrize);
-                let result = process
-                    .generate_cross_section(model.clone(), &options)
+                    .build(
+                        &NumeratorOptions::default().with_naming(Naming::prefix("D")),
+                        &run,
+                    )
                     .unwrap();
-                assert!(!result.diagrams.is_empty(), "{incoming:?} > {outgoing:?}");
+                assert!(!result.diagrams().is_empty(), "{incoming:?} > {outgoing:?}");
                 let several_cuts = result
-                    .diagrams
+                    .diagrams()
                     .iter()
                     .any(|diagram| diagram.cuts().len() > 1);
                 assert_eq!(several_cuts, loops > 1, "{incoming:?} > {outgoing:?}");
-                for diagram in &result.diagrams {
+                for diagram in result.diagrams() {
                     for cut in diagram.cuts() {
                         for half_edge in &cut.cut {
                             let momentum =
@@ -5069,15 +4489,24 @@ mod tests {
 
     #[test]
     fn finalizes_vector_projectors_and_leaves_scalar_states_trivial() {
-        let options = GenerationOptions::default()
-            .with_loop_count(1, 1)
-            .unwrap()
-            .threads(1);
-        let vectors = Generator::new(fermion_model())
-            .generate(&photon_process(), &options, GenerationType::Amplitude)
-            .unwrap();
-        assert!(!vectors.diagrams.is_empty());
-        for diagram in &vectors.diagrams {
+        let vectors = {
+            let run = Run::default().threads(1);
+            let request = (photon_process())
+                .clone()
+                .amplitude(Loops::total(1..=1))
+                .with_topology(TopologyRules::new().with_self_loops(false));
+            request
+                .generate((fermion_model()).into(), &run)
+                .and_then(|prepared| {
+                    prepared.build(
+                        &NumeratorOptions::default().with_naming(Naming::prefix("D")),
+                        &run,
+                    )
+                })
+        }
+        .unwrap();
+        assert!(!vectors.diagrams().is_empty());
+        for diagram in vectors.diagrams() {
             for (head, count) in [
                 (feynkit_graph::symbols::epsilon(), 1),
                 (feynkit_graph::symbols::epsilonbar(), 1),
@@ -5087,17 +4516,26 @@ mod tests {
             }
         }
 
-        let scalars = Generator::new(scalar_model())
-            .generate(
-                &Process::new(["phi"], ["phi"]),
-                &options,
-                GenerationType::Amplitude,
-            )
-            .unwrap();
-        assert!(!scalars.diagrams.is_empty());
+        let scalars = {
+            let run = Run::default().threads(1);
+            let request = (Process::new(["phi"], ["phi"]))
+                .clone()
+                .amplitude(Loops::total(1..=1))
+                .with_topology(TopologyRules::new().with_self_loops(false));
+            request
+                .generate((scalar_model()).into(), &run)
+                .and_then(|prepared| {
+                    prepared.build(
+                        &NumeratorOptions::default().with_naming(Naming::prefix("D")),
+                        &run,
+                    )
+                })
+        }
+        .unwrap();
+        assert!(!scalars.diagrams().is_empty());
         assert!(
             scalars
-                .diagrams
+                .diagrams()
                 .iter()
                 .all(|diagram| diagram.projector() == &Atom::one())
         );
@@ -5107,16 +4545,30 @@ mod tests {
     fn forced_cuts_retain_only_the_requested_typed_edge_set() {
         let generator = Generator::new(scalar_model());
         let process = scalar_cross_section_process();
-        let options = GenerationOptions::default()
-            .with_loop_count(1, 1)
-            .unwrap()
-            .threads(1)
-            .max_vertices(4);
-        let generated = generator
-            .generate(&process, &options, GenerationType::CrossSection)
-            .unwrap();
+
+        let generated = {
+            let run = Run::default().threads(1);
+            let request = (process)
+                .clone()
+                .cross_section(Loops::forward(1..=1))
+                .with_cuts(Cuts::new().with_blobs(1..=1).with_spectators(0..=0))
+                .with_topology(
+                    TopologyRules::new()
+                        .with_self_loops(false)
+                        .with_max_vertices(4),
+                );
+            request
+                .generate(generator.model.clone(), &run)
+                .and_then(|prepared| {
+                    prepared.build(
+                        &NumeratorOptions::default().with_naming(Naming::prefix("D")),
+                        &run,
+                    )
+                })
+        }
+        .unwrap();
         let requested: BTreeSet<EdgeId> = generated
-            .diagrams
+            .diagrams()
             .iter()
             .flat_map(|diagram| diagram.cuts())
             .next()
@@ -5126,16 +4578,36 @@ mod tests {
             .map(|half_edge| half_edge.edge)
             .collect();
 
-        let forced = generator
-            .generate(
-                &process,
-                &options.clone().forced_cuts([requested.clone()]),
-                GenerationType::CrossSection,
-            )
-            .unwrap();
+        let forced = {
+            let run = Run::default().threads(1);
+            let request = (process)
+                .clone()
+                .cross_section(Loops::forward(1..=1))
+                .with_cuts(Cuts::new().with_blobs(1..=1).with_spectators(0..=0))
+                .with_topology(
+                    TopologyRules::new()
+                        .with_self_loops(false)
+                        .with_max_vertices(4),
+                );
+            request
+                .generate(generator.model.clone(), &run)
+                .and_then(|prepared| {
+                    prepared.build(
+                        &NumeratorOptions::default().with_naming(Naming::prefix("D")),
+                        &run,
+                    )
+                })
+                .and_then(|built| {
+                    built.select(
+                        &Selection::new().with_forced_cuts([requested.clone()]),
+                        &run,
+                    )
+                })
+        }
+        .unwrap();
 
-        assert!(!forced.diagrams.is_empty());
-        assert!(forced.diagrams.iter().all(|diagram| {
+        assert!(!forced.diagrams().is_empty());
+        assert!(forced.diagrams().iter().all(|diagram| {
             !diagram.cuts().is_empty()
                 && diagram.cuts().iter().all(|cut| {
                     cut.cut
@@ -5150,16 +4622,27 @@ mod tests {
     #[test]
     fn unknown_forced_cut_reports_the_typed_edge_set() {
         let unknown = BTreeSet::from([EdgeId(usize::MAX)]);
-        let result = Generator::new(scalar_model()).generate(
-            &scalar_cross_section_process(),
-            &GenerationOptions::default()
-                .with_loop_count(1, 1)
-                .unwrap()
-                .threads(1)
-                .max_vertices(4)
-                .forced_cuts([unknown]),
-            GenerationType::CrossSection,
-        );
+        let result = {
+            let run = Run::default().threads(1);
+            let request = (scalar_cross_section_process())
+                .clone()
+                .cross_section(Loops::forward(1..=1))
+                .with_cuts(Cuts::new().with_blobs(1..=1).with_spectators(0..=0))
+                .with_topology(
+                    TopologyRules::new()
+                        .with_self_loops(false)
+                        .with_max_vertices(4),
+                );
+            request
+                .generate((scalar_model()).into(), &run)
+                .and_then(|prepared| {
+                    prepared.build(
+                        &NumeratorOptions::default().with_naming(Naming::prefix("D")),
+                        &run,
+                    )
+                })
+                .and_then(|built| built.select(&Selection::new().with_forced_cuts([unknown]), &run))
+        };
 
         assert!(matches!(
             result,
@@ -5172,16 +4655,30 @@ mod tests {
     fn forced_cut_filtering_precedes_numerator_grouping() {
         let generator = Generator::new(scalar_model());
         let process = scalar_cross_section_process();
-        let options = GenerationOptions::default()
-            .with_loop_count(1, 1)
-            .unwrap()
-            .threads(1)
-            .max_vertices(4);
-        let generated = generator
-            .generate(&process, &options, GenerationType::CrossSection)
-            .unwrap();
+
+        let generated = {
+            let run = Run::default().threads(1);
+            let request = (process)
+                .clone()
+                .cross_section(Loops::forward(1..=1))
+                .with_cuts(Cuts::new().with_blobs(1..=1).with_spectators(0..=0))
+                .with_topology(
+                    TopologyRules::new()
+                        .with_self_loops(false)
+                        .with_max_vertices(4),
+                );
+            request
+                .generate(generator.model.clone(), &run)
+                .and_then(|prepared| {
+                    prepared.build(
+                        &NumeratorOptions::default().with_naming(Naming::prefix("D")),
+                        &run,
+                    )
+                })
+        }
+        .unwrap();
         let cut_sets = generated
-            .diagrams
+            .diagrams()
             .iter()
             .flat_map(|diagram| diagram.cuts())
             .map(|cut| {
@@ -5197,19 +4694,40 @@ mod tests {
         );
         let requested = cut_sets.into_iter().next().unwrap();
 
-        let grouped = generator
-            .generate(
-                &process,
-                &options.forced_cuts([requested.clone()]).numerator_grouping(
-                    NumeratorGrouping::Identical(GraphGroupingOptions::default()),
-                ),
-                GenerationType::CrossSection,
-            )
-            .unwrap();
+        let grouped = {
+            let run = Run::default().threads(1);
+            let request = (process)
+                .clone()
+                .cross_section(Loops::forward(1..=1))
+                .with_cuts(Cuts::new().with_blobs(1..=1).with_spectators(0..=0))
+                .with_topology(
+                    TopologyRules::new()
+                        .with_self_loops(false)
+                        .with_max_vertices(4),
+                );
+            request
+                .generate(generator.model.clone(), &run)
+                .and_then(|prepared| {
+                    prepared.build(
+                        &NumeratorOptions::default().with_naming(Naming::prefix("D")),
+                        &run,
+                    )
+                })
+                .and_then(|built| {
+                    built.select(
+                        &Selection::new().with_forced_cuts([requested.clone()]),
+                        &run,
+                    )
+                })
+                .and_then(|built| {
+                    built.group(&Grouping::Identical(GraphGroupingOptions::default()), &run)
+                })
+        }
+        .unwrap();
 
         grouped.validate_groups().unwrap();
-        assert!(!grouped.groups.is_empty());
-        assert!(grouped.diagrams.iter().all(|diagram| {
+        assert!(!grouped.groups().is_empty());
+        assert!(grouped.diagrams().iter().all(|diagram| {
             !diagram.cuts().is_empty()
                 && diagram.cuts().iter().all(|cut| {
                     cut.cut
@@ -5234,11 +4752,21 @@ mod tests {
             ParticleSelector::by_id(&source, source.particle_id("phi").unwrap()).unwrap();
         let process = Process::new([foreign_particle.clone()], ["phi"]);
         assert!(matches!(
-            Generator::new(target.clone()).generate(
-                &process,
-                &GenerationOptions::default(),
-                GenerationType::Amplitude
-            ),
+            {
+                let run = Run::default();
+                let request = (process)
+                    .clone()
+                    .amplitude(Loops::total(0..=0))
+                    .with_topology(TopologyRules::new().with_self_loops(false));
+                request
+                    .generate((target.clone()).into(), &run)
+                    .and_then(|prepared| {
+                        prepared.build(
+                            &NumeratorOptions::default().with_naming(Naming::prefix("D")),
+                            &run,
+                        )
+                    })
+            },
             Err(GenerationError::Selector(SelectorError::ModelMismatch {
                 kind: "particle",
                 ..
@@ -5248,16 +4776,14 @@ mod tests {
         let foreign_vertex =
             VertexSelector::by_id(&source, source.vertex_rule_id("V1").unwrap()).unwrap();
         for filter in [
-            GenerationFilter::ParticleVeto(vec![foreign_particle]),
-            GenerationFilter::VertexAllow(vec![foreign_vertex]),
+            Restrict::new().exclude_particles([foreign_particle]),
+            Restrict::new().only_vertices([foreign_vertex]),
         ] {
-            let options = GenerationOptions::default().with_graph_filter(filter);
+            let request = Process::new(["phi"], ["phi", "phi"])
+                .amplitude(Loops::total(0..=0))
+                .with_restrict(filter);
             assert!(matches!(
-                Generator::new(target.clone()).generate(
-                    &Process::new(["phi"], ["phi", "phi"]),
-                    &options,
-                    GenerationType::Amplitude
-                ),
+                request.generate(target.clone().into(), &Run::default()),
                 Err(GenerationError::Selector(
                     SelectorError::ModelMismatch { .. }
                 ))
@@ -5271,10 +4797,9 @@ mod tests {
         let skeletons = Arc::new(AtomicUsize::new(0));
         let dressings = Arc::new(AtomicUsize::new(0));
         let selections = Arc::new(AtomicUsize::new(0));
-        let options = GenerationOptions::default()
-            .with_loop_count(0, 0)
-            .unwrap()
-            .threads(1)
+        let request = Process::new(["phi", "phi"], ["phi", "phi"])
+            .amplitude(Loops::total(0..=0))
+            .with_topology(TopologyRules::new().with_self_loops(false))
             .prune_skeletons({
                 let count = Arc::clone(&skeletons);
                 move |view| {
@@ -5297,15 +4822,17 @@ mod tests {
                     false
                 }
             });
-        let result = generator
-            .generate(
-                &Process::new(["phi", "phi"], ["phi", "phi"]),
-                &options,
-                GenerationType::Amplitude,
+        let run = Run::default().threads(1);
+        let result = request
+            .generate(generator.model.clone(), &run)
+            .unwrap()
+            .build(
+                &NumeratorOptions::default().with_naming(Naming::prefix("D")),
+                &run,
             )
             .unwrap();
-        assert!(result.report.completed);
-        assert!(result.diagrams.is_empty());
+        assert!(result.report().completed);
+        assert!(result.diagrams().is_empty());
         assert!(skeletons.load(Ordering::Relaxed) > 0);
         assert!(dressings.load(Ordering::Relaxed) > 0);
         assert_eq!(
@@ -5318,16 +4845,29 @@ mod tests {
     fn deferred_typed_hooks_preserve_outputs_and_cancel_without_worker_replies() {
         let generator = Generator::new(scalar_model());
         let process = Process::new(["phi", "phi"], ["phi", "phi", "phi"]);
-        let options = GenerationOptions::default()
-            .with_loop_count(0, 0)
-            .unwrap()
-            .threads(1);
-        let expected = generator
-            .generate(&process, &options, GenerationType::Amplitude)
-            .unwrap();
-        let json = |result: &GenerationResult| {
+        let request = process
+            .clone()
+            .amplitude(Loops::total(0..=0))
+            .with_topology(TopologyRules::new().with_self_loops(false));
+        let expected = {
+            let run = Run::default().threads(1);
+            let request = (process)
+                .clone()
+                .amplitude(Loops::total(0..=0))
+                .with_topology(TopologyRules::new().with_self_loops(false));
+            request
+                .generate(generator.model.clone(), &run)
+                .and_then(|prepared| {
+                    prepared.build(
+                        &NumeratorOptions::default().with_naming(Naming::prefix("D")),
+                        &run,
+                    )
+                })
+        }
+        .unwrap();
+        let json = |result: &BuiltDiagramSet| {
             result
-                .diagrams
+                .diagrams()
                 .iter()
                 .map(|diagram| diagram.to_json().unwrap())
                 .collect::<Vec<_>>()
@@ -5340,75 +4880,102 @@ mod tests {
         for threads in [1, 4] {
             let observed = Arc::new(Mutex::new([0usize; 3]));
             let callbacks = Arc::clone(&observed);
-            let deferred = options
-                .clone()
-                .threads(threads)
-                .deferred_hooks(mask, move |requests| {
-                    let mut observed = callbacks.lock().unwrap();
-                    ControlFlow::Continue(
-                        requests
-                            .into_iter()
-                            .map(|request| {
-                                match request.hook() {
-                                    batch::Hook::Skeleton => {
-                                        assert!(request.skeleton().is_some());
-                                        assert!(request.dressing().is_none());
-                                        observed[0] += 1;
-                                    }
-                                    batch::Hook::Dressing => {
-                                        let view = request.dressing().unwrap();
-                                        observed[1] += usize::from(view.is_complete());
-                                    }
-                                    batch::Hook::Select => {
-                                        assert!(request.diagram().unwrap().is_complete());
-                                        observed[2] += 1;
-                                    }
+            let run = Run::default().threads(threads);
+            let deferred = request.clone().deferred_hooks(mask, move |requests| {
+                let mut observed = callbacks.lock().unwrap();
+                ControlFlow::Continue(
+                    requests
+                        .into_iter()
+                        .map(|request| {
+                            match request.hook() {
+                                batch::Hook::Skeleton => {
+                                    assert!(request.skeleton().is_some());
+                                    assert!(request.dressing().is_none());
+                                    observed[0] += 1;
                                 }
-                                request.reply(true)
-                            })
-                            .collect(),
-                    )
-                });
-            let actual = generator
-                .generate(&process, &deferred, GenerationType::Amplitude)
+                                batch::Hook::Dressing => {
+                                    let view = request.dressing().unwrap();
+                                    observed[1] += usize::from(view.is_complete());
+                                }
+                                batch::Hook::Select => {
+                                    assert!(request.diagram().unwrap().is_complete());
+                                    observed[2] += 1;
+                                }
+                            }
+                            request.reply(true)
+                        })
+                        .collect(),
+                )
+            });
+            let actual = deferred
+                .generate(generator.model.clone(), &run)
+                .unwrap()
+                .build(
+                    &NumeratorOptions::default().with_naming(Naming::prefix("D")),
+                    &run,
+                )
                 .unwrap();
-            assert!(actual.report.completed);
+            assert!(actual.report().completed);
             assert_eq!(json(&actual), json(&expected), "{threads} threads");
-            assert_eq!(actual.report.topology_count, expected.report.topology_count);
+            assert_eq!(
+                actual.report().topology_count,
+                expected.report().topology_count
+            );
             let observed = observed.lock().unwrap();
             assert!(observed.iter().all(|&count| count > 0));
             assert_eq!(observed[1], observed[2]);
         }
-        let cancelled = generator
-            .generate(
-                &process,
-                &options.deferred_hooks(mask, |_| ControlFlow::Break(())),
-                GenerationType::Amplitude,
-            )
-            .unwrap();
-        assert!(!cancelled.report.completed);
-        assert!(cancelled.diagrams.is_empty());
+        let cancelled = {
+            let run = Run::default().threads(1);
+            let request = (process)
+                .clone()
+                .amplitude(Loops::total(0..=0))
+                .with_topology(TopologyRules::new().with_self_loops(false))
+                .deferred_hooks(mask, |_| ControlFlow::Break(()));
+            request
+                .generate(generator.model.clone(), &run)
+                .and_then(|prepared| {
+                    prepared.build(
+                        &NumeratorOptions::default().with_naming(Naming::prefix("D")),
+                        &run,
+                    )
+                })
+        }
+        .unwrap();
+        assert!(!cancelled.report().completed);
+        assert!(cancelled.diagrams().is_empty());
     }
 
     #[test]
     fn empty_generation_returns_a_completed_result() {
         let generator = Generator::new(scalar_model());
         let process = Process::new(["phi"], ["phi", "phi"]);
-        for options in [
-            GenerationOptions::default().max_vertices(0),
-            GenerationOptions::default().with_graph_filter(GenerationFilter::ParticleVeto(vec![
-                ParticleSelector::Name("phi".to_owned()),
-            ])),
+        let request = process
+            .amplitude(Loops::total(0..=0))
+            .with_topology(TopologyRules::new().with_self_loops(false));
+        for request in [
+            request.clone().with_topology(
+                TopologyRules::new()
+                    .with_self_loops(false)
+                    .with_max_vertices(0),
+            ),
+            request.with_restrict(Restrict::new().exclude_particles(["phi"])),
         ] {
-            let result = generator
-                .generate(&process, &options, GenerationType::Amplitude)
+            let run = Run::default();
+            let result = request
+                .generate(generator.model.clone(), &run)
+                .unwrap()
+                .build(
+                    &NumeratorOptions::default().with_naming(Naming::prefix("D")),
+                    &run,
+                )
                 .unwrap();
-            assert!(result.report.completed);
-            assert!(result.diagrams.is_empty());
-            assert!(result.groups.is_empty());
-            assert_eq!(result.report.topology_count, 0);
-            assert_eq!(result.report.interaction_assignment_count, 0);
-            assert_eq!(result.report.retained_count, 0);
+            assert!(result.report().completed);
+            assert!(result.diagrams().is_empty());
+            assert!(result.groups().is_empty());
+            assert_eq!(result.report().topology_count, 0usize.into());
+            assert_eq!(result.report().interaction_assignment_count, 0usize.into());
+            assert_eq!(result.report().retained_count, 0usize.into());
         }
     }
 
@@ -5416,16 +4983,25 @@ mod tests {
     fn cancelled_generation_returns_an_incomplete_result() {
         let cancellation = CancellationToken::new();
         cancellation.cancel();
-        let generated = Generator::new(scalar_model())
-            .generate(
-                &Process::new(["phi"], ["phi", "phi"]),
-                &GenerationOptions::default().cancellation_token(cancellation),
-                GenerationType::Amplitude,
-            )
-            .unwrap();
+        let generated = {
+            let run = Run::default().cancellation_token(cancellation);
+            let request = (Process::new(["phi"], ["phi", "phi"]))
+                .clone()
+                .amplitude(Loops::total(0..=0))
+                .with_topology(TopologyRules::new().with_self_loops(false));
+            request
+                .generate((scalar_model()).into(), &run)
+                .and_then(|prepared| {
+                    prepared.build(
+                        &NumeratorOptions::default().with_naming(Naming::prefix("D")),
+                        &run,
+                    )
+                })
+        }
+        .unwrap();
 
-        assert!(!generated.report.completed);
-        assert!(generated.diagrams.is_empty());
+        assert!(!generated.report().completed);
+        assert!(generated.diagrams().is_empty());
     }
 
     /// The overall factor with the generator's symbolic factors replaced by their arguments.
@@ -5450,20 +5026,26 @@ mod tests {
         counterterm["name"] = serde_json::json!("V1_CT");
         rules.push(counterterm);
         let model: Model = serde_json::from_value(definition).unwrap();
-        let generated = Generator::new(model.clone())
-            .generate(
-                &Process::new(["phi"], ["phi"]),
-                &GenerationOptions::default()
-                    .with_loop_count(1, 1)
-                    .unwrap()
-                    .threads(1),
-                GenerationType::Amplitude,
-            )
-            .unwrap();
+        let generated = {
+            let run = Run::default().threads(1);
+            let request = (Process::new(["phi"], ["phi"]))
+                .clone()
+                .amplitude(Loops::total(1..=1))
+                .with_topology(TopologyRules::new().with_self_loops(false));
+            request
+                .generate((model.clone()).into(), &run)
+                .and_then(|prepared| {
+                    prepared.build(
+                        &NumeratorOptions::default().with_naming(Naming::prefix("D")),
+                        &run,
+                    )
+                })
+        }
+        .unwrap();
         // The bubble with either rule at either vertex: the legs distinguish the vertices, and
         // the two internal lines are interchangeable.
         let mut rules = generated
-            .diagrams
+            .diagrams()
             .iter()
             .map(|diagram| {
                 assert_eq!(diagram.symmetry_factor(), 2);
@@ -5499,31 +5081,41 @@ mod tests {
     fn symmetrized_external_momenta_are_assigned_canonically() {
         let generator = Generator::new(Model::qcd());
         let process = Process::new(["g", "g"], ["g", "g"]);
-        let options = GenerationOptions::default()
-            .with_loop_count(0, 0)
-            .unwrap()
-            .symmetrize_initial(true)
-            .symmetrize_final(true);
+
         let ids = |threads| {
-            generator
-                .generate(
-                    &process,
-                    &options.clone().threads(threads),
-                    GenerationType::Amplitude,
-                )
-                .unwrap()
-                .diagrams
-                .iter()
-                .map(|diagram| {
-                    let mut legs = diagram
-                        .edges()
-                        .filter_map(|(_, _, edge)| edge.external.as_ref().map(|leg| leg.index))
-                        .collect::<Vec<_>>();
-                    legs.sort();
-                    assert_eq!(legs, [0, 1, 2, 3]);
-                    diagram.id().unwrap()
-                })
-                .collect::<Vec<_>>()
+            {
+                let run = Run::default().threads(threads);
+                let request = (process)
+                    .clone()
+                    .amplitude(Loops::total(0..=0))
+                    .with_topology(TopologyRules::new().with_self_loops(false))
+                    .with_symmetrize(Symmetrize {
+                        initial: true,
+                        final_state: true,
+                        ..Symmetrize::default()
+                    });
+                request
+                    .generate(generator.model.clone(), &run)
+                    .and_then(|prepared| {
+                        prepared.build(
+                            &NumeratorOptions::default().with_naming(Naming::prefix("D")),
+                            &run,
+                        )
+                    })
+            }
+            .unwrap()
+            .diagrams()
+            .iter()
+            .map(|diagram| {
+                let mut legs = diagram
+                    .edges()
+                    .filter_map(|(_, _, edge)| edge.external.as_ref().map(|leg| leg.index))
+                    .collect::<Vec<_>>();
+                legs.sort();
+                assert_eq!(legs, [0, 1, 2, 3]);
+                diagram.id().unwrap()
+            })
+            .collect::<Vec<_>>()
         };
         let serial = ids(1);
         // s channel, t channel (the u channel exchanges the final gluons) and the contact vertex
@@ -5535,61 +5127,60 @@ mod tests {
     fn output_metadata_and_explicit_selection_are_independent() {
         let model = Model::qed();
         let process = Process::new(["e-", "e+"], ["a", "a"]);
-        let minimal = GenerationOptions::default().output(GenerationOutput::Minimal);
-        let all = process.generate_diagrams(model.clone(), &minimal).unwrap();
-        assert_eq!(all.diagrams.len(), 2);
-        assert!(all.diagrams.iter().all(|diagram| diagram.name().is_none()));
+        let run = Run::default();
+        let prepared = process
+            .amplitude(Loops::total(0..=0))
+            .with_topology(TopologyRules::new().with_self_loops(false))
+            .generate(model.into(), &run)
+            .unwrap();
+        let minimal = NumeratorOptions::default();
+        let all = prepared.build(&minimal, &run).unwrap();
+        assert_eq!(all.diagrams().len(), 2);
         assert!(
-            all.groups
+            all.diagrams()
+                .iter()
+                .all(|diagram| diagram.name().is_none())
+        );
+        assert!(
+            all.groups()
                 .iter()
                 .flat_map(|group| &group.members)
                 .all(|member| member.source_identity.is_none())
         );
-        let chosen = all.diagrams[0].id().unwrap();
-        let selected = process
-            .generate_diagrams(model.clone(), &minimal.clone().select_diagram_ids([chosen]))
+        let chosen = all.diagrams()[0].id().unwrap();
+        let selected = all
+            .select(&Selection::new().select_ids([chosen]), &run)
             .unwrap();
-        assert_eq!(selected.diagrams.len(), 1);
-        assert_eq!(selected.diagrams[0].id().unwrap(), chosen);
-        assert!(selected.diagrams[0].name().is_none());
-        let vetoed = process
-            .generate_diagrams(model.clone(), &minimal.clone().veto_diagram_ids([chosen]))
+        assert_eq!(selected.diagrams().len(), 1);
+        assert_eq!(selected.diagrams()[0].id().unwrap(), chosen);
+        assert!(selected.diagrams()[0].name().is_none());
+        let vetoed = all
+            .select(&Selection::new().veto_ids([chosen]), &run)
             .unwrap();
-        assert_eq!(vetoed.diagrams.len(), 1);
-        assert_ne!(vetoed.diagrams[0].id().unwrap(), chosen);
+        assert_eq!(vetoed.diagrams().len(), 1);
+        assert_ne!(vetoed.diagrams()[0].id().unwrap(), chosen);
         for empty in [
-            minimal.clone().select_diagram_ids([]),
-            minimal.clone().select_diagrams(Vec::<String>::new()),
+            Selection::new().select_ids([]),
+            Selection::new().select_names(Vec::<String>::new()),
         ] {
-            assert!(
-                process
-                    .generate_diagrams(model.clone(), &empty)
-                    .unwrap()
-                    .diagrams
-                    .is_empty()
-            );
+            assert!(all.select(&empty, &run).unwrap().diagrams().is_empty());
         }
-        let named = minimal.clone().output(GenerationOutput::Named {
+        let named = minimal.clone().with_naming(Naming::Named {
             prefix: "test_".into(),
         });
-        let selected = process
-            .generate_diagrams(model.clone(), &named.clone().select_diagrams(["test_0"]))
+        let selected = prepared
+            .build(&named, &run)
+            .unwrap()
+            .select(&Selection::new().select_names(["test_0".to_owned()]), &run)
             .unwrap();
-        assert_eq!(selected.diagrams.len(), 1);
-        assert_eq!(selected.diagrams[0].name(), Some("test_0"));
-        assert_eq!(selected.diagrams[0].id().unwrap(), chosen);
+        assert_eq!(selected.diagrams().len(), 1);
+        assert_eq!(selected.diagrams()[0].name(), Some("test_0"));
+        assert_eq!(selected.diagrams()[0].id().unwrap(), chosen);
         // Both requests match: ID routing takes precedence over the invalid name map.
         let routed = named
             .with_loop_momentum_basis(chosen, [])
             .with_named_loop_momentum_basis("test_0", [EdgeId(usize::MAX)]);
-        assert_eq!(
-            process
-                .generate_diagrams(model, &routed)
-                .unwrap()
-                .diagrams
-                .len(),
-            2
-        );
+        assert_eq!(prepared.build(&routed, &run).unwrap().diagrams().len(), 2);
     }
 
     #[test]
@@ -5679,55 +5270,70 @@ mod tests {
     #[test]
     fn thread_counts_preserve_diagrams_and_progress_order() {
         let generator = Generator::new(Model::qcd());
-        let process = Process::new(["g"], ["g"])
-            .with_particle_filters(
-                Some(
-                    ["u", "d", "c", "s", "t"]
-                        .into_iter()
-                        .map(Into::into)
-                        .collect(),
-                ),
-                None,
-                None,
-                vec![],
-            )
-            .unwrap();
-        let options = GenerationOptions::default()
-            .with_loop_count(2, 2)
-            .unwrap()
-            .with_graph_filter(GenerationFilter::MaxNumberOfBridges(0));
-        let serial = generator
-            .generate(
-                &process,
-                &options.clone().threads(1),
-                GenerationType::Amplitude,
-            )
-            .unwrap();
+        let process = Process::new(["g"], ["g"]);
+
+        let serial = {
+            let run = Run::default().threads(1);
+            let request = (process)
+                .clone()
+                .amplitude(Loops::total(2..=2))
+                .with_restrict(Restrict::new().exclude_particles(["u", "d", "c", "s", "t"]))
+                .with_topology(
+                    TopologyRules::new()
+                        .with_self_loops(false)
+                        .with_bridges(Bridges::AtMost(0)),
+                );
+            request
+                .generate(generator.model.clone(), &run)
+                .and_then(|prepared| {
+                    prepared.build(
+                        &NumeratorOptions::default().with_naming(Naming::prefix("D")),
+                        &run,
+                    )
+                })
+        }
+        .unwrap();
         let progress = Arc::new(Mutex::new(Vec::new()));
         let progress_sink = Arc::clone(&progress);
-        let parallel = generator
-            .generate(
-                &process,
-                &options.threads(4).progress(move |update| {
-                    if update.stage == "numerators" {
-                        progress_sink.lock().unwrap().push(update.completed);
-                    }
-                    crate::GenerationControl::Continue
-                }),
-                GenerationType::Amplitude,
-            )
-            .unwrap();
-        assert!(!serial.diagrams.is_empty());
-        assert_eq!(serial.report, parallel.report);
+        let parallel = {
+            let run = Run::default().threads(4).progress(move |update| {
+                if update.stage == Stage::Numerators {
+                    progress_sink.lock().unwrap().push(update.completed);
+                }
+                crate::GenerationControl::Continue
+            });
+            let request = (process)
+                .clone()
+                .amplitude(Loops::total(2..=2))
+                .with_restrict(Restrict::new().exclude_particles(["u", "d", "c", "s", "t"]))
+                .with_topology(
+                    TopologyRules::new()
+                        .with_self_loops(false)
+                        .with_bridges(Bridges::AtMost(0)),
+                );
+            request
+                .generate(generator.model.clone(), &run)
+                .and_then(|prepared| {
+                    prepared.build(
+                        &NumeratorOptions::default().with_naming(Naming::prefix("D")),
+                        &run,
+                    )
+                })
+        }
+        .unwrap();
+        assert!(!serial.diagrams().is_empty());
+        assert_eq!(serial.report(), parallel.report());
         assert_eq!(
             *progress.lock().unwrap(),
-            (0..=parallel.diagrams.len()).collect::<Vec<_>>()
+            (0..=parallel.diagrams().len())
+                .map(BigUint::from)
+                .collect::<Vec<_>>()
         );
-        for (serial, parallel) in serial.diagrams.iter().zip(&parallel.diagrams) {
+        for (serial, parallel) in serial.diagrams().iter().zip(parallel.diagrams()) {
             assert_eq!(serial.to_json().unwrap(), parallel.to_json().unwrap());
         }
-        assert_eq!(serial.groups.len(), parallel.groups.len());
-        for (serial, parallel) in serial.groups.iter().zip(&parallel.groups) {
+        assert_eq!(serial.groups().len(), parallel.groups().len());
+        for (serial, parallel) in serial.groups().iter().zip(parallel.groups()) {
             assert_eq!(serial.master, parallel.master);
             assert_eq!(serial.members.len(), parallel.members.len());
             for (serial, parallel) in serial.members.iter().zip(&parallel.members) {
@@ -5743,67 +5349,73 @@ mod tests {
     fn zero_color_filter_is_opt_in_for_generated_qcd_tadpoles() {
         let model = Arc::new(Model::qcd());
         let process = Process::new([] as [&str; 0], ["g"]);
-        let options = GenerationOptions::default()
-            .with_loop_count(1, 1)
-            .unwrap()
-            .max_vertices(1)
-            .allow_self_loops(true)
-            .allow_zero_flow_edges(true)
-            .threads(1);
-        let unfiltered = process.generate_diagrams(model.clone(), &options).unwrap();
-        assert!(unfiltered.report.completed);
-        assert!(!unfiltered.diagrams.is_empty());
-        assert_eq!(unfiltered.report.zero_numerator_count, 0);
+        let request = process.amplitude(Loops::total(1..=1)).with_topology(
+            TopologyRules::new()
+                .with_max_vertices(1)
+                .with_self_loops(true)
+                .with_zero_flow_edges(true),
+        );
+        let run = Run::default().threads(1);
+        let numerators = NumeratorOptions::default().with_naming(Naming::prefix("D"));
+        let prepared = request.generate(model, &run).unwrap();
+        let unfiltered = prepared.build(&numerators, &run).unwrap();
+        assert!(unfiltered.report().completed);
+        assert!(!unfiltered.diagrams().is_empty());
+        assert_eq!(unfiltered.report().zero_numerator_count, 0usize.into());
         assert!(
             unfiltered
-                .diagrams
+                .diagrams()
                 .iter()
                 .any(|diagram| !diagram.numerator().is_zero())
         );
 
         let updates = Arc::new(Mutex::new(Vec::new()));
         let captured = updates.clone();
-        let filtered_options = options
-            .clone()
-            .filter_zero_color(true)
-            .progress(move |update| {
-                if update.stage == "filter_zero_color" {
-                    captured.lock().unwrap().push(update);
-                }
-                crate::GenerationControl::Continue
-            });
-        let filtered = process
-            .generate_diagrams(model.clone(), &filtered_options)
+        let filtered_run = run.clone().progress(move |update| {
+            if update.stage == Stage::ZeroColor {
+                captured.lock().unwrap().push(update);
+            }
+            crate::GenerationControl::Continue
+        });
+        let filtered = prepared
+            .build(
+                &numerators.clone().with_zero_color_filter(true),
+                &filtered_run,
+            )
             .unwrap();
-        assert!(filtered.report.completed);
-        assert!(filtered.diagrams.is_empty());
+        assert!(filtered.report().completed);
+        assert!(filtered.diagrams().is_empty());
         assert_eq!(
-            filtered.report.zero_numerator_count,
-            unfiltered.diagrams.len()
+            filtered.report().zero_numerator_count,
+            unfiltered.diagrams().len().into()
         );
         filtered.validate_groups().unwrap();
         let updates = updates.lock().unwrap();
         assert_eq!(
             updates
                 .iter()
-                .map(|update| (update.completed, update.zero_numerator_count))
+                .map(|update| (
+                    update.completed.clone(),
+                    update.zero_numerator_count.clone()
+                ))
                 .collect::<Vec<_>>(),
-            (0..=unfiltered.diagrams.len())
-                .map(|count| (count, count))
+            (0..=unfiltered.diagrams().len())
+                .map(|count| (BigUint::from(count), BigUint::from(count)))
                 .collect::<Vec<_>>()
         );
         assert!(
             updates
                 .iter()
-                .all(|update| update.total == Some(unfiltered.diagrams.len()))
+                .all(|update| update.total == Some(unfiltered.diagrams().len().into()))
         );
 
-        let amplitude = process
-            .generate_amplitude(model.clone(), &options, Default::default())
+        let amplitude = unfiltered
+            .clone()
+            .into_amplitude(Default::default())
             .unwrap();
-        assert_eq!(amplitude.diagrams().len(), unfiltered.diagrams.len());
+        assert_eq!(amplitude.diagrams().len(), unfiltered.diagrams().len());
         assert!(matches!(
-            process.generate_amplitude(model, &options.filter_zero_color(true), Default::default()),
+            prepared.build(&numerators.with_zero_color_filter(true), &run).unwrap().into_amplitude(Default::default()),
             Err(GenerationError::Amplitude(error)) if matches!(*error, feynkit_amplitude::AmplitudeError::Empty)
         ));
     }
@@ -5811,29 +5423,33 @@ mod tests {
     #[test]
     fn zero_color_filter_progress_can_cancel_algebra() {
         let process = Process::new([] as [&str; 0], ["g"]);
+        let run = Run::default().threads(1).progress(|update| {
+            if update.stage == Stage::ZeroColor && update.completed == 1usize.into() {
+                crate::GenerationControl::Cancel
+            } else {
+                crate::GenerationControl::Continue
+            }
+        });
         let result = process
-            .generate_diagrams(
-                Model::qcd(),
-                &GenerationOptions::default()
-                    .with_loop_count(1, 1)
-                    .unwrap()
-                    .max_vertices(1)
-                    .allow_self_loops(true)
-                    .allow_zero_flow_edges(true)
-                    .threads(1)
-                    .filter_zero_color(true)
-                    .progress(|update| {
-                        if update.stage == "filter_zero_color" && update.completed == 1 {
-                            crate::GenerationControl::Cancel
-                        } else {
-                            crate::GenerationControl::Continue
-                        }
-                    }),
+            .amplitude(Loops::total(1..=1))
+            .with_topology(
+                TopologyRules::new()
+                    .with_max_vertices(1)
+                    .with_self_loops(true)
+                    .with_zero_flow_edges(true),
+            )
+            .generate(Model::qcd().into(), &run)
+            .unwrap()
+            .build(
+                &NumeratorOptions::default()
+                    .with_naming(Naming::prefix("D"))
+                    .with_zero_color_filter(true),
+                &run,
             )
             .unwrap();
-        assert!(!result.report.completed);
-        assert_eq!(result.report.zero_numerator_count, 1);
-        assert!(!result.diagrams.is_empty());
+        assert!(!result.report().completed);
+        assert_eq!(result.report().zero_numerator_count, 1usize.into());
+        assert!(!result.diagrams().is_empty());
         result.validate_groups().unwrap();
     }
 
@@ -5843,25 +5459,25 @@ mod tests {
         for threads in [1, 4] {
             let observed = Arc::new(Mutex::new(Vec::new()));
             let sink = observed.clone();
-            let options = GenerationOptions::default()
-                .with_loop_count(1, 1)
+            let run = Run::default().threads(threads).progress(move |progress| {
+                if progress.stage == Stage::ZeroColor && progress.completed > 0usize.into() {
+                    sink.lock().unwrap().push(rayon::current_num_threads());
+                }
+                crate::GenerationControl::Continue
+            });
+            let generated = Process::new(["g"], ["g"])
+                .amplitude(Loops::total(1..=1))
+                .with_topology(TopologyRules::new().with_self_loops(false))
+                .generate(Model::yang_mills().into(), &run)
                 .unwrap()
-                .threads(threads)
-                .filter_zero_color(true)
-                .progress(move |progress| {
-                    if progress.stage == "filter_zero_color" && progress.completed > 0 {
-                        sink.lock().unwrap().push(rayon::current_num_threads());
-                    }
-                    crate::GenerationControl::Continue
-                });
-            let generated = Generator::new(Model::yang_mills())
-                .generate(
-                    &Process::new(["g"], ["g"]),
-                    &options,
-                    GenerationType::Amplitude,
+                .build(
+                    &NumeratorOptions::default()
+                        .with_naming(Naming::prefix("D"))
+                        .with_zero_color_filter(true),
+                    &run,
                 )
                 .unwrap();
-            assert!(generated.report.completed);
+            assert!(generated.report().completed);
             let observed = observed.lock().unwrap();
             assert!(!observed.is_empty());
             assert!(observed.iter().all(|&actual| actual == threads));
@@ -5870,51 +5486,65 @@ mod tests {
 
     #[test]
     fn numerator_progress_can_cancel_construction() {
-        let generated = Generator::new(Model::yang_mills())
-            .generate(
-                &Process::new(["g"], ["g"]),
-                &GenerationOptions::default()
-                    .with_loop_count(2, 2)
-                    .unwrap()
-                    .threads(4)
-                    .progress(|update| {
-                        if update.stage == "numerators" && update.completed == 2 {
-                            crate::GenerationControl::Cancel
-                        } else {
-                            crate::GenerationControl::Continue
-                        }
-                    }),
-                GenerationType::Amplitude,
-            )
-            .unwrap();
-        assert!(!generated.report.completed);
-        assert!(!generated.diagrams.is_empty());
-        assert!(generated.report.retained_count < generated.report.interaction_assignment_count);
+        let generated = {
+            let run = Run::default().threads(4).progress(|update| {
+                if update.stage == Stage::Numerators && update.completed == 2usize.into() {
+                    crate::GenerationControl::Cancel
+                } else {
+                    crate::GenerationControl::Continue
+                }
+            });
+            let request = (Process::new(["g"], ["g"]))
+                .clone()
+                .amplitude(Loops::total(2..=2))
+                .with_topology(TopologyRules::new().with_self_loops(false));
+            request
+                .generate((Model::yang_mills()).into(), &run)
+                .and_then(|prepared| {
+                    prepared.build(
+                        &NumeratorOptions::default().with_naming(Naming::prefix("D")),
+                        &run,
+                    )
+                })
+        }
+        .unwrap();
+        assert!(!generated.report().completed);
+        assert!(!generated.diagrams().is_empty());
+        assert!(
+            generated.report().retained_count < generated.report().interaction_assignment_count
+        );
         generated.validate_groups().unwrap();
     }
 
     #[test]
     fn cancellation_callback_returns_an_incomplete_result() {
-        let generated = Generator::new(scalar_model())
-            .generate(
-                &Process::new(["phi"], ["phi", "phi"]),
-                &GenerationOptions::default().cancellation_check(|| true),
-                GenerationType::Amplitude,
-            )
-            .unwrap();
+        let generated = {
+            let run = Run::default().cancellation_check(|| true);
+            let request = (Process::new(["phi"], ["phi", "phi"]))
+                .clone()
+                .amplitude(Loops::total(0..=0))
+                .with_topology(TopologyRules::new().with_self_loops(false));
+            request
+                .generate((scalar_model()).into(), &run)
+                .and_then(|prepared| {
+                    prepared.build(
+                        &NumeratorOptions::default().with_naming(Naming::prefix("D")),
+                        &run,
+                    )
+                })
+        }
+        .unwrap();
 
-        assert!(!generated.report.completed);
-        assert!(generated.diagrams.is_empty());
+        assert!(!generated.report().completed);
+        assert!(generated.diagrams().is_empty());
     }
 
     #[test]
     fn vertex_signatures_present_ufo_particles_as_incoming_stubs() {
         let model = fermion_model();
-        let options =
-            GenerationOptions::default().with_graph_filter(GenerationFilter::VertexAllow(vec![
-                VertexSelector::Name("V".to_owned()),
-            ]));
-        let options = options.resolve_selectors(&model).unwrap();
+        let options = photon_process()
+            .amplitude(Loops::total(0..=0))
+            .with_restrict(Restrict::new().only_vertices(["V"]));
         let signatures = VertexSignatures::new(&model, &options).unwrap();
         assert_eq!(signatures.rules, [vertex(&model, "V")]);
         // UFO particles enter the vertex: the antifermion f~ is an outgoing f.
@@ -5935,7 +5565,10 @@ mod tests {
             &model,
             &Process::new([1_i64, -1], Vec::<i64>::new()),
             GenerationType::Amplitude,
-            &GenerationOptions::default(),
+            &(Process::new([1_i64, -1], Vec::<i64>::new()))
+                .clone()
+                .amplitude(Loops::total(0..=0))
+                .with_topology(TopologyRules::new().with_self_loops(false)),
         )
         .unwrap();
         let mut graph = Graph::new();
@@ -5984,9 +5617,15 @@ mod tests {
             &model,
             &Process::new([1_i64, -1], Vec::<i64>::new()),
             GenerationType::Amplitude,
-            &GenerationOptions::default()
-                .symmetrize_initial(true)
-                .symmetrize_external_fermions(true),
+            &(Process::new([1_i64, -1], Vec::<i64>::new()))
+                .clone()
+                .amplitude(Loops::total(0..=0))
+                .with_topology(TopologyRules::new().with_self_loops(false))
+                .with_symmetrize(Symmetrize {
+                    initial: true,
+                    external_fermions: true,
+                    ..Symmetrize::default()
+                }),
         )
         .unwrap()
         .normalize_fermion_flows(&graph.build(), &model)
@@ -6018,7 +5657,10 @@ mod tests {
             &model,
             &Process::new([1_i64, -1], Vec::<i64>::new()),
             GenerationType::Amplitude,
-            &GenerationOptions::default(),
+            &(Process::new([1_i64, -1], Vec::<i64>::new()))
+                .clone()
+                .amplitude(Loops::total(0..=0))
+                .with_topology(TopologyRules::new().with_self_loops(false)),
         )
         .unwrap();
         let mut graph = Graph::new();
@@ -6133,21 +5775,24 @@ mod tests {
                 &model,
                 &Process::new([1000_i64], [1000_i64, 1000, 1000]),
                 GenerationType::CrossSection,
-                &GenerationOptions::default()
-                    .with_loop_count(3, 3)
-                    .unwrap()
-                    .symmetrize_left_right(enabled),
+                &(Process::new([1000_i64], [1000_i64, 1000, 1000]))
+                    .clone()
+                    .cross_section(Loops::forward(3..=3))
+                    .with_cuts(Cuts::new().with_blobs(1..=1).with_spectators(0..=0))
+                    .with_topology(TopologyRules::new().with_self_loops(false))
+                    .with_cuts(
+                        Cuts::new()
+                            .with_blobs(1..=1)
+                            .with_spectators(0..=0)
+                            .with_symmetrize_left_right(enabled),
+                    ),
             )
             .unwrap();
             let canonical = graphs
                 .iter()
                 .map(|graph| {
                     process
-                        .canonicalize_numerator_graph(
-                            &graph.build(),
-                            &model,
-                            &NumeratorGrouping::None,
-                        )
+                        .canonicalize_numerator_graph(&graph.build(), &model, &Grouping::None)
                         .unwrap()
                 })
                 .collect::<Vec<_>>();
@@ -6162,7 +5807,17 @@ mod tests {
             &model,
             &Process::new([1_i64, -1], [22_i64]),
             GenerationType::CrossSection,
-            &GenerationOptions::default().symmetrize_left_right(true),
+            &(Process::new([1_i64, -1], [22_i64]))
+                .clone()
+                .cross_section(Loops::forward(0..=0))
+                .with_cuts(Cuts::new().with_blobs(1..=1).with_spectators(0..=0))
+                .with_topology(TopologyRules::new().with_self_loops(false))
+                .with_cuts(
+                    Cuts::new()
+                        .with_blobs(1..=1)
+                        .with_spectators(0..=0)
+                        .with_symmetrize_left_right(true),
+                ),
         )
         .unwrap();
         let mut graph = Graph::new();
@@ -6220,7 +5875,7 @@ mod tests {
                 .unwrap();
         }
 
-        let grouping = NumeratorGrouping::UpToScalar(GraphGroupingOptions::default());
+        let grouping = Grouping::UpToScalar(GraphGroupingOptions::default());
         let canonical = process
             .canonicalize_numerator_graph(&graph.build(), &model, &grouping)
             .unwrap();
@@ -6287,10 +5942,13 @@ mod tests {
             &model,
             &photon_process(),
             GenerationType::Amplitude,
-            &GenerationOptions::default(),
+            &(photon_process())
+                .clone()
+                .amplitude(Loops::total(0..=0))
+                .with_topology(TopologyRules::new().with_self_loops(false)),
         )
         .unwrap();
-        let grouping = NumeratorGrouping::UpToSign(GraphGroupingOptions::default());
+        let grouping = Grouping::UpToSign(GraphGroupingOptions::default());
 
         for particles in [[-4_i64, 251_i64], [4_i64, -251_i64]] {
             let mut graph = Graph::new();
@@ -6359,36 +6017,33 @@ mod tests {
         let repaired = ResolvedProcess::repair_cp_interaction_rules(graph.build(), &model).unwrap();
         assert_eq!(repaired.vertices().next().unwrap(), vertex(&model, "V_117"));
 
-        let resolved_options = |filter| {
-            GenerationOptions::default()
-                .with_graph_filter(filter)
-                .resolve_selectors(&model)
-                .unwrap()
-        };
-        let allow_original =
-            resolved_options(GenerationFilter::VertexAllow(vec![VertexSelector::from(
-                "V_82",
-            )]));
-        let veto_repaired =
-            resolved_options(GenerationFilter::VertexVeto(vec![VertexSelector::from(
-                "V_117",
-            )]));
-        let allow_repaired =
-            resolved_options(GenerationFilter::VertexAllow(vec![VertexSelector::from(
-                "V_117",
-            )]));
+        let request =
+            Process::new([-4_i64, 1, 251], Vec::<i64>::new()).amplitude(Loops::total(0..=0));
+        let allow_original = request
+            .clone()
+            .with_restrict(Restrict::new().only_vertices(["V_82"]));
+        let veto_repaired = request
+            .clone()
+            .with_restrict(Restrict::new().exclude_vertices(["V_117"]));
+        let allow_repaired = request.with_restrict(Restrict::new().only_vertices(["V_117"]));
         let generator = Generator::new(model);
 
         assert!(
-            !generator.passes_vertex_selection(&repaired, &allow_original),
+            !generator
+                .passes_vertex_selection(&repaired, &allow_original)
+                .unwrap(),
             "a CP repair must not bypass an allow-list"
         );
         assert!(
-            !generator.passes_vertex_selection(&repaired, &veto_repaired),
+            !generator
+                .passes_vertex_selection(&repaired, &veto_repaired)
+                .unwrap(),
             "a CP repair must not bypass a veto-list"
         );
         assert!(
-            generator.passes_vertex_selection(&repaired, &allow_repaired),
+            generator
+                .passes_vertex_selection(&repaired, &allow_repaired)
+                .unwrap(),
             "the finalized CP rule should pass when explicitly allowed"
         );
     }
@@ -6439,7 +6094,7 @@ mod tests {
                     ..FermionSigns::default()
                 },
                 1,
-                &GenerationOptions::default(),
+                &NumeratorOptions::default(),
             )
             .unwrap();
         let (actual_edge, _, actual_data) = diagram
@@ -7029,12 +6684,9 @@ mod tests {
     #[test]
     fn coupling_upper_bounds_prune_vertex_signatures_without_applying_lower_bounds() {
         let model = standard_model();
-        let options = GenerationOptions::default().with_graph_filter(
-            GenerationFilter::CouplingOrders(BTreeMap::from([
-                ("QCD".to_owned(), (6, Some(6))),
-                ("QED".to_owned(), (0, Some(0))),
-            ])),
-        );
+        let options = photon_process()
+            .amplitude(Loops::total(0..=0))
+            .with_orders(Orders::new().exact("QCD", 6).exact("QED", 0));
         let signatures = VertexSignatures::new(&model, &options).unwrap();
         let rules: BTreeSet<_> = signatures.rules.iter().copied().collect();
         assert!(!rules.is_empty());
@@ -7051,33 +6703,47 @@ mod tests {
     #[test]
     fn generated_qcd_loop_numerators_are_spenso_ready() {
         let model = standard_model();
-        let options = GenerationOptions::default()
-            .with_loop_count(1, 1)
-            .unwrap()
-            .threads(1)
-            .max_vertices(2)
-            .with_graph_filter(GenerationFilter::CouplingOrders(BTreeMap::from([
-                ("QCD".to_owned(), (2, Some(2))),
-                ("QED".to_owned(), (0, Some(0))),
-            ])))
-            .with_graph_filter(GenerationFilter::ParticleVeto(
-                vec![-6, -4, -3, -2, -1, 1, 2, 3, 4, 6]
+
+        let generated = {
+            let run = Run::default().threads(1);
+            let request = (Process::new(["g"], ["g"]))
+                .clone()
+                .amplitude(Loops::total(1..=1))
+                .with_topology(
+                    TopologyRules::new()
+                        .with_self_loops(false)
+                        .with_max_vertices(2),
+                )
+                .with_restrict(
+                    Restrict::new().exclude_particles(
+                        vec![-6, -4, -3, -2, -1, 1, 2, 3, 4, 6]
+                            .into_iter()
+                            .map(ParticleSelector::Pdg),
+                    ),
+                )
+                .with_orders(Orders {
+                    plain: BTreeMap::from([
+                        ("QCD".to_owned(), (2, Some(2))),
+                        ("QED".to_owned(), (0, Some(0))),
+                    ])
                     .into_iter()
-                    .map(ParticleSelector::Pdg)
+                    .map(|(name, (min, max))| (name, Range::Inclusive { min, max }))
                     .collect(),
-            ));
-        let generated = Generator::new(model)
-            .generate(
-                &Process::new(["g"], ["g"]),
-                &options,
-                GenerationType::Amplitude,
-            )
-            .unwrap();
-        assert_eq!(generated.diagrams.len(), 3);
-        assert_eq!(generated.report.retained_count, 3);
+                    ..Orders::new()
+                });
+            request.generate((model).into(), &run).and_then(|prepared| {
+                prepared.build(
+                    &NumeratorOptions::default().with_naming(Naming::prefix("D")),
+                    &run,
+                )
+            })
+        }
+        .unwrap();
+        assert_eq!(generated.diagrams().len(), 3);
+        assert_eq!(generated.report().retained_count, 3usize.into());
         assert_eq!(
             generated
-                .diagrams
+                .diagrams()
                 .iter()
                 .map(FeynmanDiagram::canonical_key)
                 .collect::<Result<BTreeSet<_>, _>>()
@@ -7096,7 +6762,7 @@ mod tests {
             "UFO::f(",
         ];
         let mut combined = String::new();
-        for diagram in &generated.diagrams {
+        for diagram in generated.diagrams() {
             combined.push_str(&diagram.numerator().to_plain_string());
             for (_, vertex) in diagram.vertices() {
                 combined.push_str(&vertex.numerator.to_plain_string());
@@ -7285,23 +6951,38 @@ mod tests {
     #[test]
     fn apply_feynman_rules_matches_generated_local_factors() {
         let generator = Generator::new(standard_model());
-        let generated = generator
-            .generate(
-                &Process::new(["g"], ["g"]),
-                &GenerationOptions::default()
-                    .with_loop_count(1, 1)
-                    .unwrap()
-                    .threads(1)
-                    .max_vertices(2)
-                    .with_graph_filter(GenerationFilter::CouplingOrders(BTreeMap::from([
+        let generated = {
+            let run = Run::default().threads(1);
+            let request = (Process::new(["g"], ["g"]))
+                .clone()
+                .amplitude(Loops::total(1..=1))
+                .with_topology(
+                    TopologyRules::new()
+                        .with_self_loops(false)
+                        .with_max_vertices(2),
+                )
+                .with_orders(Orders {
+                    plain: BTreeMap::from([
                         ("QCD".to_owned(), (2, Some(2))),
                         ("QED".to_owned(), (0, Some(0))),
-                    ]))),
-                GenerationType::Amplitude,
-            )
-            .unwrap();
-        assert!(!generated.diagrams.is_empty());
-        for diagram in generated.diagrams {
+                    ])
+                    .into_iter()
+                    .map(|(name, (min, max))| (name, Range::Inclusive { min, max }))
+                    .collect(),
+                    ..Orders::new()
+                });
+            request
+                .generate(generator.model.clone(), &run)
+                .and_then(|prepared| {
+                    prepared.build(
+                        &NumeratorOptions::default().with_naming(Naming::prefix("D")),
+                        &run,
+                    )
+                })
+        }
+        .unwrap();
+        assert!(!generated.diagrams().is_empty());
+        for diagram in generated.diagrams() {
             let topology = diagram.clone().with_numerator(Atom::one()).unwrap();
             let restored = topology.apply_feynman_rules().unwrap();
             assert_eq!(restored.to_json().unwrap(), diagram.to_json().unwrap());
@@ -7351,7 +7032,7 @@ mod tests {
                     ..FermionSigns::default()
                 },
                 1,
-                &GenerationOptions::default(),
+                &NumeratorOptions::default(),
             )
             .unwrap();
         assert_eq!(
@@ -7367,7 +7048,10 @@ mod tests {
             &model,
             &Process::new([9000005_i64, 9000005], [9000005_i64, 9000005]),
             GenerationType::Amplitude,
-            &GenerationOptions::default(),
+            &(Process::new([9000005_i64, 9000005], [9000005_i64, 9000005]))
+                .clone()
+                .amplitude(Loops::total(0..=0))
+                .with_topology(TopologyRules::new().with_self_loops(false)),
         )
         .unwrap();
         let mut signs = Vec::new();
@@ -7415,22 +7099,31 @@ mod tests {
     #[test]
     fn closed_ghost_loops_contribute_a_grassmann_minus_sign() {
         let generator = Generator::new(standard_model());
-        let generated = generator
-            .generate(
-                &Process::new(["g"], ["g"]),
-                &GenerationOptions::default()
-                    .with_loop_count(1, 1)
-                    .unwrap()
-                    .threads(1)
-                    .max_vertices(2)
-                    .with_graph_filter(GenerationFilter::VertexAllow(vec![VertexSelector::Name(
-                        "V_35".to_owned(),
-                    )])),
-                GenerationType::Amplitude,
-            )
-            .unwrap();
-        assert_eq!(generated.diagrams.len(), 1);
-        let diagram = &generated.diagrams[0];
+        let generated = {
+            let run = Run::default().threads(1);
+            let request = (Process::new(["g"], ["g"]))
+                .clone()
+                .amplitude(Loops::total(1..=1))
+                .with_topology(
+                    TopologyRules::new()
+                        .with_self_loops(false)
+                        .with_max_vertices(2),
+                )
+                .with_restrict(
+                    Restrict::new().only_vertices(vec![VertexSelector::Name("V_35".to_owned())]),
+                );
+            request
+                .generate(generator.model.clone(), &run)
+                .and_then(|prepared| {
+                    prepared.build(
+                        &NumeratorOptions::default().with_naming(Naming::prefix("D")),
+                        &run,
+                    )
+                })
+        }
+        .unwrap();
+        assert_eq!(generated.diagrams().len(), 1);
+        let diagram = &generated.diagrams()[0];
         assert_eq!(
             diagram
                 .edges()
@@ -7619,25 +7312,32 @@ mod tests {
     fn fermion_loop_filter_excludes_ghost_loops() {
         let generator = Generator::new(standard_model());
         for (fermion_loops, expected_diagrams) in [(0, 1), (1, 0)] {
-            let generated = generator
-                .generate(
-                    &Process::new(["g"], ["g"]),
-                    &GenerationOptions::default()
-                        .with_loop_count(1, 1)
-                        .unwrap()
-                        .threads(1)
-                        .max_vertices(2)
-                        .with_graph_filter(GenerationFilter::VertexAllow(vec![
-                            VertexSelector::Name("V_35".to_owned()),
-                        ]))
-                        .with_graph_filter(GenerationFilter::FermionLoopCountRange((
-                            fermion_loops,
-                            fermion_loops,
-                        ))),
-                    GenerationType::Amplitude,
-                )
-                .unwrap();
-            assert_eq!(generated.diagrams.len(), expected_diagrams);
+            let generated = {
+                let run = Run::default().threads(1);
+                let request = (Process::new(["g"], ["g"]))
+                    .clone()
+                    .amplitude(Loops::total(1..=1))
+                    .with_topology(
+                        TopologyRules::new()
+                            .with_self_loops(false)
+                            .with_max_vertices(2)
+                            .with_fermion_loops(fermion_loops..=fermion_loops),
+                    )
+                    .with_restrict(
+                        Restrict::new()
+                            .only_vertices(vec![VertexSelector::Name("V_35".to_owned())]),
+                    );
+                request
+                    .generate(generator.model.clone(), &run)
+                    .and_then(|prepared| {
+                        prepared.build(
+                            &NumeratorOptions::default().with_naming(Naming::prefix("D")),
+                            &run,
+                        )
+                    })
+            }
+            .unwrap();
+            assert_eq!(generated.diagrams().len(), expected_diagrams);
         }
     }
 
@@ -7662,7 +7362,7 @@ mod tests {
                     antifermion_spin_sum_negative: false,
                 },
                 1,
-                &GenerationOptions::default(),
+                &NumeratorOptions::default(),
             )
             .unwrap();
         assert_eq!(
@@ -7694,117 +7394,71 @@ mod tests {
 
     #[test]
     fn filters_are_scoped_and_validated_before_generation() {
-        let generator = Generator::new(fermion_model());
+        let model = fermion_model();
         let process = photon_process();
-
-        let unsupported = GenerationOptions::default().with_graph_filter(
-            GenerationFilter::SelfEnergy(crate::SelfEnergyFilterOptions {
-                only_scaleless: true,
-                ..crate::SelfEnergyFilterOptions::default()
-            }),
-        );
-        assert!(matches!(
-            generator.generate(&process, &unsupported, GenerationType::Amplitude),
-            Err(GenerationError::UnsupportedFilterOption {
-                scope: FilterScope::Graph,
-                filter: GenerationFilterKind::SelfEnergy,
-                option: "only_scaleless"
-            })
-        ));
-
-        let perturbative_filter =
-            GenerationFilter::PerturbativeOrders(BTreeMap::from([("QED".to_owned(), 1)]));
-        generator
-            .validate_filters(
-                FilterScope::Graph,
-                GenerationType::CrossSection,
-                std::slice::from_ref(&perturbative_filter),
-            )
+        let amplitude = process.clone().amplitude(Loops::total(0..=0));
+        let cross_section = process.clone().cross_section(Loops::forward(0..=0));
+        let perturbative = Orders::new().perturbative("QED", 1);
+        cross_section
+            .clone()
+            .with_orders(perturbative.clone())
+            .validate_in(&model)
             .unwrap();
-        let perturbative = GenerationOptions::default().with_graph_filter(perturbative_filter);
-        assert!(matches!(
-            generator.generate(&process, &perturbative, GenerationType::Amplitude),
-            Err(GenerationError::InvalidFilterScope {
-                scope: FilterScope::Graph,
-                filter: GenerationFilterKind::PerturbativeOrders,
-                generation_type: GenerationType::Amplitude
-            })
-        ));
-
-        let sewn_filter = GenerationFilter::Sewn(SewnFilterOptions::default());
-        generator
-            .validate_filters(
-                FilterScope::Graph,
-                GenerationType::CrossSection,
-                std::slice::from_ref(&sewn_filter),
-            )
-            .unwrap();
-        assert!(matches!(
-            generator.generate(
-                &process,
-                &GenerationOptions::default().with_graph_filter(sewn_filter),
-                GenerationType::Amplitude
-            ),
-            Err(GenerationError::InvalidFilterScope {
-                scope: FilterScope::Graph,
-                filter: GenerationFilterKind::Sewn,
-                generation_type: GenerationType::Amplitude
-            })
-        ));
-
-        let duplicate = GenerationOptions::default()
-            .with_graph_filter(GenerationFilter::LoopCountRange((0, 0)))
-            .with_graph_filter(GenerationFilter::LoopCountRange((0, 1)));
-        assert!(matches!(
-            generator.generate(&process, &duplicate, GenerationType::Amplitude),
-            Err(GenerationError::DuplicateFilter {
-                scope: FilterScope::Graph,
-                filter: GenerationFilterKind::LoopCountRange
-            })
-        ));
-
-        let invalid = GenerationOptions::default()
-            .with_graph_filter(GenerationFilter::LoopCountRange((2, 1)));
-        assert!(matches!(
-            generator.generate(&process, &invalid, GenerationType::Amplitude),
-            Err(GenerationError::InvalidFilterRange {
-                scope: FilterScope::Graph,
-                filter: GenerationFilterKind::LoopCountRange,
-                minimum: 2,
-                maximum: 1
-            })
-        ));
-
-        let invalid_scope = GenerationOptions::default().with_cut_amplitude_filter(
-            GenerationFilter::ParticleVeto(vec![ParticleSelector::Pdg(1)]),
+        assert!(
+            matches!(amplitude.clone().with_orders(perturbative).validate_in(&model),
+            Err(GenerationError::InvalidRequest(message)) if message.contains("require a cross section"))
         );
-        assert!(matches!(
-            generator.generate(&process, &invalid_scope, GenerationType::Amplitude),
-            Err(GenerationError::InvalidFilterScope {
-                scope: FilterScope::CutAmplitude,
-                filter: GenerationFilterKind::ParticleVeto,
-                generation_type: GenerationType::Amplitude
-            })
-        ));
+        let sewn = Cuts::new().with_sewn_tadpoles(true);
+        cross_section
+            .clone()
+            .with_cuts(sewn.clone())
+            .validate_in(&model)
+            .unwrap();
+        assert!(
+            matches!(amplitude.clone().with_cuts(sewn).validate_in(&model),
+            Err(GenerationError::InvalidRequest(message)) if message.contains("require a cross section"))
+        );
+        // A request has one explicit loop domain. Duplicate loop filters and cut-scoped
+        // particle selectors are unrepresentable; reject a mismatched domain instead.
+        assert!(
+            matches!(Request::amplitude(process.clone(), Loops::forward(0..=1)).validate_in(&model),
+            Err(GenerationError::InvalidRequest(message)) if message.contains("loop domain"))
+        );
+        assert!(
+            matches!(Request::amplitude(process, Loops::total(std::ops::RangeInclusive::new(2, 1))).validate_in(&model),
+            Err(GenerationError::InvalidRequest(message)) if message.contains("loop range is empty"))
+        );
+        for orders in [
+            Orders::new().squared_exact("QED", 2),
+            Orders::new().perturbative("QED", 1),
+        ] {
+            assert!(
+                matches!(cross_section.clone().with_cuts(Cuts::new().with_cut_amplitude(CutAmplitude {
+                orders, ..CutAmplitude::default()
+            })).validate_in(&model), Err(GenerationError::InvalidRequest(message)) if message.contains("plain bounds only"))
+            );
+        }
     }
 
     #[test]
     fn grouping_options_are_validated() {
-        let generator = Generator::new(fermion_model());
-
-        let grouping = GenerationOptions::default().filter_zero_color(true);
-        generator
-            .validate_options(GenerationType::Amplitude, &grouping)
+        let run = Run::default().threads(1);
+        let built = Process::new(["phi", "phi"], ["phi", "phi"])
+            .amplitude(Loops::total(0..=0))
+            .with_topology(TopologyRules::new().with_self_loops(false))
+            .generate(scalar_model().into(), &run)
+            .unwrap()
+            .build(
+                &NumeratorOptions::default().with_zero_color_filter(true),
+                &run,
+            )
             .unwrap();
-
-        let invalid = GenerationOptions::default().numerator_grouping(
-            NumeratorGrouping::Identical(GraphGroupingOptions {
-                number_of_numerical_samples: 0,
-                ..GraphGroupingOptions::default()
-            }),
-        );
+        let invalid = Grouping::Identical(GraphGroupingOptions {
+            number_of_numerical_samples: 0,
+            ..GraphGroupingOptions::default()
+        });
         assert!(matches!(
-            generator.validate_options(GenerationType::Amplitude, &invalid),
+            built.group(&invalid, &run),
             Err(GenerationError::InvalidNumericalSampleCount)
         ));
     }
@@ -7812,10 +7466,13 @@ mod tests {
     #[test]
     fn public_limits_report_arithmetic_overflow() {
         let model = fermion_model();
-        let options =
-            GenerationOptions::default().with_graph_filter(GenerationFilter::PerturbativeOrders(
-                BTreeMap::from([("QED".to_owned(), usize::MAX), ("QCD".to_owned(), 1)]),
-            ));
+        let options = photon_process()
+            .cross_section(Loops::forward(0..=0))
+            .with_orders(
+                Orders::new()
+                    .perturbative("QED", usize::MAX)
+                    .perturbative("QCD", 1),
+            );
         assert!(matches!(
             unresolved_cut_content(&model, &options),
             Err(GenerationError::ArithmeticOverflow(
@@ -7827,9 +7484,9 @@ mod tests {
     #[test]
     fn perturbative_orders_allow_only_derived_massless_cut_content() {
         let model = fermion_model();
-        let options = GenerationOptions::default().with_graph_filter(
-            GenerationFilter::PerturbativeOrders(BTreeMap::from([("QED".to_owned(), 1)])),
-        );
+        let options = photon_process()
+            .cross_section(Loops::forward(0..=0))
+            .with_orders(Orders::new().perturbative("QED", 1));
         let unresolved = unresolved_cut_content(&model, &options).unwrap().unwrap();
         assert_eq!(unresolved.maximum_multiplicity, 1);
         assert_eq!(
@@ -7939,20 +7596,21 @@ mod tests {
             &model,
             &Process::new([-11_i64, 11], [5_i64, -5, 25]),
             GenerationType::CrossSection,
-            &GenerationOptions::default(),
+            &(Process::new([-11_i64, 11], [5_i64, -5, 25]))
+                .clone()
+                .cross_section(Loops::forward(0..=0))
+                .with_cuts(Cuts::new().with_blobs(1..=1).with_spectators(0..=0))
+                .with_topology(TopologyRules::new().with_self_loops(false)),
         )
         .unwrap();
         // These graphs contain the requested species, but neither has an
         // s-channel cut with the exact final-state multiset after allowing only
         // the configured unresolved QCD content.
         for (graph, qcd_order) in [(three_loop, 1), (four_loop, 2)] {
-            let options = GenerationOptions::default()
-                .with_graph_filter(GenerationFilter::PerturbativeOrders(BTreeMap::from([(
-                    "QCD".to_owned(),
-                    qcd_order,
-                )])))
-                .with_graph_filter(GenerationFilter::BlobRange(1..=1))
-                .with_graph_filter(GenerationFilter::SpectatorRange(0..=0));
+            let options = Process::new([-11_i64, 11], [5_i64, -5, 25])
+                .cross_section(Loops::forward(0..=0))
+                .with_orders(Orders::new().perturbative("QCD", qcd_order))
+                .with_cuts(Cuts::new().with_blobs(1..=1).with_spectators(0..=0));
             assert!(
                 resolved
                     .cut_partitions(&graph.build(), &model, &options)
@@ -7970,7 +7628,11 @@ mod tests {
             &model,
             &Process::new([22_i64, 22], [22_i64]),
             GenerationType::CrossSection,
-            &GenerationOptions::default(),
+            &(Process::new([22_i64, 22], [22_i64]))
+                .clone()
+                .cross_section(Loops::forward(0..=0))
+                .with_cuts(Cuts::new().with_blobs(1..=1).with_spectators(0..=0))
+                .with_topology(TopologyRules::new().with_self_loops(false)),
         )
         .unwrap();
         let mut graph = Graph::new();
@@ -7993,8 +7655,14 @@ mod tests {
             graph.add_edge(*external, center, false, photon).unwrap();
         }
 
-        let options = GenerationOptions::default()
-            .with_graph_filter(GenerationFilter::Sewn(SewnFilterOptions::default()));
+        let options = Process::new([22_i64, 22], [22_i64])
+            .cross_section(Loops::forward(0..=0))
+            .with_cuts(
+                Cuts::new()
+                    .with_blobs(1..=1)
+                    .with_spectators(0..=0)
+                    .with_sewn_tadpoles(true),
+            );
         assert!(process.passes_sewn_filter(&graph.build(), &options));
 
         let mut factorized = Graph::new();
@@ -8021,38 +7689,53 @@ mod tests {
         }
         factorized.add_edge(left, right, false, photon).unwrap();
         assert!(!process.passes_sewn_filter(&factorized.build(), &options));
-        assert!(process.passes_sewn_filter(
-            &factorized.build(),
-            &GenerationOptions::default().with_graph_filter(GenerationFilter::Sewn(
-                SewnFilterOptions {
-                    filter_tadpoles: false,
-                }
-            ))
-        ));
+        assert!(
+            process.passes_sewn_filter(
+                &factorized.build(),
+                &(Process::new([22_i64, 22], [22_i64]))
+                    .clone()
+                    .cross_section(Loops::forward(0..=0))
+                    .with_cuts(Cuts::new().with_blobs(1..=1).with_spectators(0..=0))
+                    .with_topology(TopologyRules::new().with_self_loops(false))
+                    .with_cuts(
+                        Cuts::new()
+                            .with_blobs(1..=1)
+                            .with_spectators(0..=0)
+                            .with_sewn_tadpoles(false)
+                    )
+            )
+        );
     }
 
     /// The cross sections of `g g -> u u~` at one loop: their IDs, the sum of their evaluated
     /// overall factors, and the boxes among them as
     /// `(sewn copies on adjacent vertices, evaluated overall factor)`.
     fn gluon_fusion_boxes(symmetrize_initial: bool) -> (Vec<DiagramId>, Atom, Vec<(bool, Atom)>) {
-        let process = Process::new(["g", "g"], ["u", "u~"])
-            .with_particle_filters(
-                Some(["d", "c", "s", "t"].into_iter().map(Into::into).collect()),
-                None,
-                None,
-                vec![],
-            )
-            .unwrap();
-        let options = GenerationOptions::default()
-            .with_loop_count(1, 1)
-            .unwrap()
-            .threads(1)
-            .symmetrize_initial(symmetrize_initial);
-        let result = Generator::new(Model::qcd())
-            .generate(&process, &options, GenerationType::CrossSection)
-            .unwrap();
+        let process = Process::new(["g", "g"], ["u", "u~"]);
+        let result = {
+            let run = Run::default().threads(1);
+            let request = (process)
+                .clone()
+                .cross_section(Loops::forward(1..=1))
+                .with_restrict(Restrict::new().exclude_particles(["d", "c", "s", "t"]))
+                .with_cuts(Cuts::new().with_blobs(1..=1).with_spectators(0..=0))
+                .with_topology(TopologyRules::new().with_self_loops(false))
+                .with_symmetrize(Symmetrize {
+                    initial: symmetrize_initial,
+                    ..Symmetrize::default()
+                });
+            request
+                .generate((Model::qcd()).into(), &run)
+                .and_then(|prepared| {
+                    prepared.build(
+                        &NumeratorOptions::default().with_naming(Naming::prefix("D")),
+                        &run,
+                    )
+                })
+        }
+        .unwrap();
         let mut boxes = vec![];
-        for diagram in &result.diagrams {
+        for diagram in result.diagrams() {
             let mut internal = BTreeSet::new();
             let mut sewn = vec![];
             for (_, ends, edge) in diagram.edges() {
@@ -8077,11 +7760,11 @@ mod tests {
         boxes.sort();
         (
             result
-                .diagrams
+                .diagrams()
                 .iter()
                 .map(|diagram| diagram.id().unwrap())
                 .collect(),
-            Atom::add_many(result.diagrams.iter().map(evaluated_overall_factor)),
+            Atom::add_many(result.diagrams().iter().map(evaluated_overall_factor)),
             boxes,
         )
     }
@@ -8118,20 +7801,28 @@ mod tests {
     /// a `2 -> 2` process.
     fn born_cross_section_factors(
         model: &Model,
-        process: &Process,
+        request: &Request,
         symmetrize_initial: bool,
     ) -> Result<Vec<Atom>, GenerationError> {
-        let options = GenerationOptions::default()
-            .with_loop_count(1, 1)
-            .unwrap()
-            .threads(1)
-            .symmetrize_initial(symmetrize_initial);
-        let mut factors = Generator::new(model.clone())
-            .generate(process, &options, GenerationType::CrossSection)?
-            .diagrams
-            .iter()
-            .map(evaluated_overall_factor)
-            .collect::<Vec<_>>();
+        let mut factors = {
+            let run = Run::default().threads(1);
+            let request = request.clone().with_symmetrize(Symmetrize {
+                initial: symmetrize_initial,
+                ..Symmetrize::default()
+            });
+            request
+                .generate((model.clone()).into(), &run)
+                .and_then(|prepared| {
+                    prepared.build(
+                        &NumeratorOptions::default().with_naming(Naming::prefix("D")),
+                        &run,
+                    )
+                })
+        }?
+        .diagrams()
+        .iter()
+        .map(evaluated_overall_factor)
+        .collect::<Vec<_>>();
         factors.sort();
         Ok(factors)
     }
@@ -8144,13 +7835,10 @@ mod tests {
         );
         let process = |incoming: [&str; 2], outgoing: [&str; 2], vertices: &[&str]| {
             Process::new(incoming, outgoing)
-                .with_particle_filters(
-                    None,
-                    None,
-                    Some(vertices.iter().map(|&vertex| vertex.into()).collect()),
-                    vec![],
-                )
-                .unwrap()
+                .cross_section(Loops::forward(1..=1))
+                .with_topology(TopologyRules::new().with_self_loops(false))
+                .with_cuts(Cuts::new().with_blobs(1..=1).with_spectators(0..=0))
+                .with_restrict(Restrict::new().only_vertices(vertices.iter().copied()))
         };
         let factors = |values: &[(i64, i64)]| {
             values
@@ -8222,7 +7910,10 @@ mod tests {
         };
         // Møller scattering through photon exchange: the squared and the interference graph,
         // each its own beam exchange, with the relative Fermi sign.
-        let moller = Process::new(["e-", "e-"], ["e-", "e-"]);
+        let moller = Process::new(["e-", "e-"], ["e-", "e-"])
+            .cross_section(Loops::forward(1..=1))
+            .with_topology(TopologyRules::new().with_self_loops(false))
+            .with_cuts(Cuts::new().with_blobs(1..=1).with_spectators(0..=0));
         for symmetrize_initial in [false, true] {
             assert_eq!(
                 born_cross_section_factors(&Model::qed(), &moller, symmetrize_initial).unwrap(),
@@ -8232,8 +7923,10 @@ mod tests {
         // a a -> t t~: |M_t|^2 and |M_u|^2 form one exchange orbit, M_t M_u* and M_u M_t* the
         // other.
         let photon_fusion = Process::new(["a", "a"], ["t", "t~"])
-            .with_particle_filters(None, Some(vec!["a".into(), "t".into()]), None, vec![])
-            .unwrap();
+            .cross_section(Loops::forward(1..=1))
+            .with_topology(TopologyRules::new().with_self_loops(false))
+            .with_cuts(Cuts::new().with_blobs(1..=1).with_spectators(0..=0))
+            .with_restrict(Restrict::new().only_particles(["a", "t"]));
         let model = Model::standard_model();
         assert_eq!(
             born_cross_section_factors(&model, &photon_fusion, false).unwrap(),
@@ -8278,38 +7971,81 @@ mod tests {
         ] {
             let mut exact_weights = None;
             for symmetrize_initial in [false, true] {
-                let options = GenerationOptions::default()
-                    .with_loop_count(loops, loops)
-                    .unwrap()
-                    .threads(1)
-                    .symmetrize_initial(symmetrize_initial)
-                    .symmetrize_left_right(false);
-                let all = generator
-                    .generate(&process, &options, GenerationType::CrossSection)
-                    .unwrap();
-                assert!(all.report.completed);
+                let all = {
+                    let run = Run::default().threads(1);
+                    let request = (process)
+                        .clone()
+                        .cross_section(Loops::forward(loops..=loops))
+                        .with_cuts(Cuts::new().with_blobs(1..=1).with_spectators(0..=0))
+                        .with_topology(TopologyRules::new().with_self_loops(false))
+                        .with_cuts(
+                            Cuts::new()
+                                .with_blobs(1..=1)
+                                .with_spectators(0..=0)
+                                .with_symmetrize_left_right(false),
+                        )
+                        .with_symmetrize(Symmetrize {
+                            initial: symmetrize_initial,
+                            ..Symmetrize::default()
+                        });
+                    request
+                        .generate(generator.model.clone(), &run)
+                        .and_then(|prepared| {
+                            prepared.build(
+                                &NumeratorOptions::default().with_naming(Naming::prefix("D")),
+                                &run,
+                            )
+                        })
+                }
+                .unwrap();
+                assert!(all.report().completed);
                 let mut expected = all
-                    .diagrams
+                    .diagrams()
                     .iter()
                     .filter(|diagram| selected(diagram))
                     .map(snapshot)
                     .collect::<Vec<_>>();
                 assert!(!expected.is_empty(), "no QCD^2 diagrams at {loops} loops");
                 assert!(
-                    expected.len() < all.diagrams.len(),
+                    expected.len() < all.diagrams().len(),
                     "the budget must reject diagrams"
                 );
-                let filtered = generator
-                    .generate(
-                        &process,
-                        &options.with_graph_filter(GenerationFilter::CouplingOrders(
-                            BTreeMap::from([("QCD".to_owned(), (2, Some(2)))]),
-                        )),
-                        GenerationType::CrossSection,
-                    )
-                    .unwrap();
-                assert!(filtered.report.completed);
-                let mut actual = filtered.diagrams.iter().map(snapshot).collect::<Vec<_>>();
+                let filtered = {
+                    let run = Run::default().threads(1);
+                    let request = (process)
+                        .clone()
+                        .cross_section(Loops::forward(loops..=loops))
+                        .with_cuts(Cuts::new().with_blobs(1..=1).with_spectators(0..=0))
+                        .with_topology(TopologyRules::new().with_self_loops(false))
+                        .with_orders(Orders {
+                            plain: BTreeMap::from([("QCD".to_owned(), (2, Some(2)))])
+                                .into_iter()
+                                .map(|(name, (min, max))| (name, Range::Inclusive { min, max }))
+                                .collect(),
+                            ..Orders::new()
+                        })
+                        .with_cuts(
+                            Cuts::new()
+                                .with_blobs(1..=1)
+                                .with_spectators(0..=0)
+                                .with_symmetrize_left_right(false),
+                        )
+                        .with_symmetrize(Symmetrize {
+                            initial: symmetrize_initial,
+                            ..Symmetrize::default()
+                        });
+                    request
+                        .generate(generator.model.clone(), &run)
+                        .and_then(|prepared| {
+                            prepared.build(
+                                &NumeratorOptions::default().with_naming(Naming::prefix("D")),
+                                &run,
+                            )
+                        })
+                }
+                .unwrap();
+                assert!(filtered.report().completed);
+                let mut actual = filtered.diagrams().iter().map(snapshot).collect::<Vec<_>>();
                 expected.sort();
                 actual.sort();
                 assert_eq!(
@@ -8319,7 +8055,7 @@ mod tests {
 
                 // Compare each order class separately: signed totals across classes can cancel.
                 let mut weights = BTreeMap::new();
-                for diagram in &all.diagrams {
+                for diagram in all.diagrams() {
                     *weights.entry(orders(diagram)).or_insert_with(Atom::zero) +=
                         evaluated_overall_factor(diagram);
                 }
@@ -8327,7 +8063,7 @@ mod tests {
                     assert_eq!(Some(weights), exact_weights, "{loops} loops");
                     // Two beams have only singleton and size-two orbits. Require the
                     // budgeted cases to exercise a size-two orbit, beyond fixed points.
-                    nontrivial_orbit |= filtered.diagrams.iter().any(|diagram| {
+                    nontrivial_orbit |= filtered.diagrams().iter().any(|diagram| {
                         let multiplicity = evaluated_overall_factor(diagram)
                             * Atom::num(i64::try_from(diagram.symmetry_factor()).unwrap());
                         multiplicity == Atom::num(2) || multiplicity == Atom::num(-2)
@@ -8346,17 +8082,18 @@ mod tests {
     #[test]
     fn cross_sections_reject_final_state_and_multi_beam_symmetrization() {
         let model = Model::qed();
-        let options = GenerationOptions::default()
-            .with_loop_count(1, 1)
-            .unwrap()
-            .threads(1);
-        let generate = |process: Process, options: &GenerationOptions| {
-            Generator::new(model.clone()).generate(&process, options, GenerationType::CrossSection)
+        let generate = |process: Process, symmetrization: Symmetrize| {
+            process
+                .cross_section(Loops::forward(1..=1))
+                .with_topology(TopologyRules::new().with_self_loops(false))
+                .with_cuts(Cuts::new().with_blobs(1..=1).with_spectators(0..=0))
+                .with_symmetrize(symmetrization)
+                .generate(model.clone().into(), &Run::default().threads(1))
         };
         assert!(matches!(
             generate(
                 Process::new(["e-", "e+"], ["mu-", "mu+"]),
-                &options.clone().symmetrize_final(true)
+                Symmetrize::FINAL
             ),
             Err(GenerationError::CrossSectionFinalStateSymmetrization)
         ));
@@ -8364,10 +8101,7 @@ mod tests {
         // a Lorentz transformation realizes.
         for incoming in [["a", "a", "a"], ["a", "a", "e-"]] {
             assert!(matches!(
-                generate(
-                    Process::new(incoming, ["e-", "e+"]),
-                    &options.clone().symmetrize_initial(true)
-                ),
+                generate(Process::new(incoming, ["e-", "e+"]), Symmetrize::INITIAL),
                 Err(GenerationError::UnsupportedBeamSymmetrization { incoming: 3 })
             ));
         }
@@ -8377,18 +8111,31 @@ mod tests {
     fn left_right_mirror_images_merge_into_one_diagram() {
         let process = Process::new(["e-", "e+"], ["mu-", "mu+"]);
         let generate = |left_right| {
-            Generator::new(Model::qed())
-                .generate(
-                    &process,
-                    &GenerationOptions::default()
-                        .with_loop_count(2, 2)
-                        .unwrap()
-                        .threads(1)
-                        .symmetrize_left_right(left_right),
-                    GenerationType::CrossSection,
-                )
-                .unwrap()
-                .diagrams
+            {
+                let run = Run::default().threads(1);
+                let request = (process)
+                    .clone()
+                    .cross_section(Loops::forward(2..=2))
+                    .with_cuts(Cuts::new().with_blobs(1..=1).with_spectators(0..=0))
+                    .with_topology(TopologyRules::new().with_self_loops(false))
+                    .with_cuts(
+                        Cuts::new()
+                            .with_blobs(1..=1)
+                            .with_spectators(0..=0)
+                            .with_symmetrize_left_right(left_right),
+                    );
+                request
+                    .generate((Model::qed()).into(), &run)
+                    .and_then(|prepared| {
+                        prepared.build(
+                            &NumeratorOptions::default().with_naming(Naming::prefix("D")),
+                            &run,
+                        )
+                    })
+            }
+            .unwrap()
+            .diagrams()
+            .to_vec()
         };
         let (exact, symmetrized) = (generate(false), generate(true));
         let ids = symmetrized
@@ -8406,20 +8153,29 @@ mod tests {
     #[test]
     fn one_particle_irreducibility_keeps_one_point_loop_graphs() {
         // the only 1PI two-loop scalar tadpole: the leg vertex joined to both ends of a bubble
-        let options = GenerationOptions::default()
-            .with_loop_count(2, 2)
-            .unwrap()
-            .threads(1)
-            .with_graph_filter(GenerationFilter::LoopOneParticleIrreducible);
-        let result = Generator::new(scalar_model())
-            .generate(
-                &Process::new(["phi"], Vec::<&str>::new()),
-                &options,
-                GenerationType::Amplitude,
-            )
-            .unwrap();
-        assert_eq!(result.diagrams.len(), 1);
-        let diagram = &result.diagrams[0];
+
+        let result = {
+            let run = Run::default().threads(1);
+            let request = (Process::new(["phi"], Vec::<&str>::new()))
+                .clone()
+                .amplitude(Loops::total(2..=2))
+                .with_topology(
+                    TopologyRules::new()
+                        .with_self_loops(false)
+                        .with_bridges(Bridges::OnePIInLoops),
+                );
+            request
+                .generate((scalar_model()).into(), &run)
+                .and_then(|prepared| {
+                    prepared.build(
+                        &NumeratorOptions::default().with_naming(Naming::prefix("D")),
+                        &run,
+                    )
+                })
+        }
+        .unwrap();
+        assert_eq!(result.diagrams().len(), 1);
+        let diagram = &result.diagrams()[0];
         assert_eq!(diagram.vertices().count(), 3);
         let mut lines = BTreeMap::<_, usize>::new();
         for (_, ends, edge) in diagram.edges() {
@@ -8436,8 +8192,8 @@ mod tests {
     #[test]
     fn external_canonical_classes_keep_global_left_right_symmetry_out_of_raw_generation() {
         let model = fermion_model();
-        let classes = |process: Process, generation_type, options: GenerationOptions| {
-            ResolvedProcess::new(&model, &process, generation_type, &options)
+        let classes = |request: Request| {
+            ResolvedProcess::new(&model, request.process(), request.kind(), &request)
                 .unwrap()
                 .externals(&model)
                 .unwrap()
@@ -8448,9 +8204,10 @@ mod tests {
         let process = Process::new([1_i64, -1, 22], Vec::<i64>::new());
         assert_eq!(
             classes(
-                process.clone(),
-                GenerationType::Amplitude,
-                GenerationOptions::default().symmetrize_initial(true)
+                process
+                    .clone()
+                    .amplitude(Loops::total(0..=0))
+                    .with_symmetrize(Symmetrize::INITIAL)
             ),
             vec![
                 ExternalLabel::Exact {
@@ -8466,11 +8223,9 @@ mod tests {
         );
         assert_eq!(
             classes(
-                process,
-                GenerationType::Amplitude,
-                GenerationOptions::default()
-                    .symmetrize_initial(true)
-                    .symmetrize_external_fermions(true)
+                process
+                    .amplitude(Loops::total(0..=0))
+                    .with_symmetrize(Symmetrize::INITIAL | Symmetrize::EXTERNAL_FERMIONS)
             ),
             vec![
                 ExternalLabel::WithinState(ExternalState::Incoming),
@@ -8483,9 +8238,10 @@ mod tests {
         let cross_section = Process::new([1_i64, -1], [22_i64]);
         assert_eq!(
             classes(
-                cross_section,
-                GenerationType::CrossSection,
-                GenerationOptions::default().symmetrize_initial(true)
+                cross_section
+                    .cross_section(Loops::forward(0..=0))
+                    .with_symmetrize(Symmetrize::INITIAL)
+                    .with_cuts(Cuts::new().with_blobs(1..=1).with_spectators(0..=0))
             ),
             vec![
                 ExternalLabel::Exact {
@@ -8510,9 +8266,12 @@ mod tests {
         let left_right = Process::new([1_i64, -1], [22_i64]);
         assert_eq!(
             classes(
-                left_right,
-                GenerationType::CrossSection,
-                GenerationOptions::default().symmetrize_left_right(true)
+                left_right.cross_section(Loops::forward(0..=0)).with_cuts(
+                    Cuts::new()
+                        .with_blobs(1..=1)
+                        .with_spectators(0..=0)
+                        .with_symmetrize_left_right(true)
+                )
             ),
             vec![
                 ExternalLabel::Exact {
@@ -8592,7 +8351,7 @@ mod tests {
                     ..FermionSigns::default()
                 },
                 1,
-                &GenerationOptions::default(),
+                &NumeratorOptions::default(),
             )
             .unwrap();
         let internal_numerator = diagram

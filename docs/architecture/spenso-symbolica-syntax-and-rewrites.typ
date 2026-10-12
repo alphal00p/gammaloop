@@ -1,7 +1,7 @@
 = Spenso Symbolica Syntax And Rewrite Idioms
 
 #quote(block: true)[
-#strong[Status:] Implemented reference; audited against Spenso and Idenso on 2026-09-14
+#strong[Status:] Implemented reference; changed source scopes audited against Spenso and Idenso on 2026-10-12
 
 The surface forms are owned by
 #link("../../crates/spenso/src/network/parsing/mod.rs")[Spenso parsing and materialization], while the
@@ -193,7 +193,10 @@ and what to use when matching it in a replacement rule.
 ]
 
 `dot` is a two-argument shorthand. A three-argument spelling such as
-`dot(rep, p, q)` is not parser syntax.
+`dot(rep, p, q)` is not parser syntax. Its two operands must have compatible
+compact axes and no remaining spectator ports. A metric inner product may
+retain spectators while contracting the unique compact axis; use that boundary
+or an explicit contraction for a partial tensor product.
 
 For compact vector arguments, `g(p(rep), q(rep.dual()))` and
 `dot(p(rep), q(rep.dual()))` materialize to the same expanded tensor product:
@@ -538,3 +541,9 @@ are scoped independently and restored after labeling. `wrap_indices` uses
 `spenso::index_scope(header, index)` to keep wrapped indices valid. Dirac-adjoint
 construction reverses and conjugates matrix words while preserving external
 ports; it does not implicitly request unrelated algebra reduction.
+
+The selected index parser owns admitted label syntax, including labels whose
+spelling resembles Symbolica wildcards. Canonicalization and adjoint relabeling
+use literal replacements. The adjoint reserves both original indices and channels
+materialized by the parser before sharing one fresh-index allocator across its
+boundary and matrix conjugations. Index payloads are not rewrite patterns.

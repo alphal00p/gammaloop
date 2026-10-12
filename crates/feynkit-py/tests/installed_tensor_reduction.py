@@ -6,11 +6,25 @@ from symbolica import E
 from symbolica.community.tensor import TensorExpression
 
 from symbolica.community import hepkit as fk
+from symbolica.community.graph import Bridges
 
 diagrams = (
     fk.Model.qcd()
-    .process(["g"], ["g"], particle_veto=["u", "c", "s", "t", "b"])
-    .generate_diagrams(loops=4)
+    .process(["g"], ["g"])
+    .amplitude(
+        loops=fk.Loops.total(4),
+        restrict=fk.Restrict().exclude_particles(["u", "c", "s", "t", "b"]),
+        topology=fk.TopologyRules(
+            bridges=Bridges.one_pi_in_loops(),
+            self_energies=fk.Veto.all(),
+            tadpoles=fk.Veto.all(),
+            snails=fk.Veto.massless(),
+        ),
+    )
+    .generate(run=fk.Run(progress="auto"))
+    .build(
+        fk.NumeratorOptions(naming=fk.Naming.named("D")), run=fk.Run(progress="auto")
+    )
     .diagrams
 )
 gluons = [

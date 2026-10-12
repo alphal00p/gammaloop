@@ -69,7 +69,7 @@ commands = [
       --numerator-grouping group_identical_graphs_up_to_scalar_rescaling
       --symmetrize-left-right-states false
       -p epem_a_ddx -i NLO
-      --select-graphs GL0
+      --select-graphs GL0 --filter-selfenergies true --filter-snails true --filter-tadpoles true --n-cut-blobs 1 1 --n-cut-spectators 0 0
       """,
   "save standalone --json",
 ]

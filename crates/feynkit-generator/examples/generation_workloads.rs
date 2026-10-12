@@ -7,8 +7,9 @@
 //!
 //! - `full CASE` runs the whole pipeline: enumeration, interaction filters, numerators,
 //!   selection and grouping, with Named output.
-//! - `generation CASE` explicitly requests Minimal output and cancels at the first progress
-//!   report after enumeration, retaining the compact search results without canonical forms.
+//! - `generation CASE` completes the physical request and retains its compact diagrams without
+//!   building numerators, names or canonical IDs. This includes compact physics preparation;
+//!   its timing boundary differs from the former enumeration-only cancellation gate.
 //! - `list [reference]` prints the case names.
 //!
 //! Both runs use one generation thread and print one `RESULT` line with the report counts. The
@@ -18,7 +19,7 @@
 mod cases;
 
 use cases::{CASES, Case, REFERENCE};
-use feynkit_generator::{GenerationControl, GenerationOutput};
+use feynkit_generator::{Naming, NumeratorOptions, Run};
 
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -36,22 +37,24 @@ fn main() {
 
 fn run(case: &Case, generation_only: bool) {
     let model = case.model();
-    let mut options = case.options(&model, 1);
-    if generation_only {
-        options = options
-            .output(GenerationOutput::Minimal)
-            .progress(|progress| {
-                if progress.stage == "topologies" {
-                    GenerationControl::Continue
-                } else {
-                    GenerationControl::Cancel
-                }
-            });
-    }
-    let report = case
-        .generate_with(model, &options)
-        .unwrap_or_else(|error| panic!("{}: {error}", case.name))
-        .report;
+    let run = Run::default().threads(1);
+    let prepared = case
+        .request(&model)
+        .generate(model.into(), &run)
+        .unwrap_or_else(|error| panic!("{}: {error}", case.name));
+    let report = if generation_only {
+        prepared.report().clone()
+    } else {
+        prepared
+            .build(
+                &NumeratorOptions::default().with_naming(Naming::prefix("D")),
+                &run,
+            )
+            .and_then(|built| built.group(&case.grouping(), &run))
+            .unwrap_or_else(|error| panic!("{}: {error}", case.name))
+            .report()
+            .clone()
+    };
     println!(
         "RESULT case={} mode={} topologies={} assignments={} retained={} completed={}",
         case.name,

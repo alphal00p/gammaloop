@@ -5,7 +5,9 @@
 //! the reference through the new shared implementation.
 
 use crate::{graph::Graph, uv::UltravioletGraph};
-use feynkit_generator::{GenerationOptions, GenerationType, Process};
+use feynkit_generator::{
+    Cuts, GenerationType, Loops, Naming, NumeratorOptions, Process, Request, Run, TopologyRules,
+};
 use linnet::half_edge::{
     involution::Hedge,
     subgraph::{SuBitGraph, SubSetLike},
@@ -93,19 +95,29 @@ fn finalized_graph_matches_gammaloop_reference() {
     let mut result = serde_json::Map::new();
     for (name, model, generation_type, process, loops) in cases {
         let model = std::sync::Arc::new(crate::utils::load_generic_model(model));
-        let options = GenerationOptions::default()
-            .with_loop_count(loops, loops)
-            .unwrap()
-            .threads(1)
-            .max_vertices(2);
-        let generated = match generation_type {
-            GenerationType::Amplitude => process.generate_diagrams(model.clone(), &options),
-            GenerationType::CrossSection => process.generate_cross_section(model.clone(), &options),
+        let request = match generation_type {
+            GenerationType::Amplitude => Request::amplitude(process, Loops::total(loops..=loops)),
+            GenerationType::CrossSection => {
+                Request::cross_section(process, Loops::forward(loops..=loops))
+                    .with_cuts(Cuts::new().with_blobs(1..=1).with_spectators(0..=0))
+            }
         }
-        .unwrap();
-        assert!(!generated.diagrams.is_empty(), "{name}");
+        .with_topology(
+            TopologyRules::new()
+                .with_self_loops(false)
+                .with_max_vertices(2),
+        );
+        let run = Run::default().threads(1);
+        let generated = request
+            .generate(model.clone(), &run)
+            .unwrap()
+            .build(
+                &NumeratorOptions::default().with_naming(Naming::prefix("D")),
+                &run,
+            )
+            .unwrap();
+        assert!(!generated.is_empty(), "{name}");
         let snapshots = generated
-            .diagrams
             .iter()
             .map(|diagram| snapshot(&Graph::from_feynkit(diagram, None, true).unwrap(), &model))
             .collect::<Vec<_>>();

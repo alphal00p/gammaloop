@@ -46,19 +46,19 @@ define_exception!(
     DiagramError,
     FeynkitError,
     pyo3_stub_gen::TypeInfo::unqualified("FeynkitError"),
-    "Invalid Feynman-diagram topology, annotation, or model reference.\n\nExamples\n--------\n>>> from symbolica import S, E\n>>> from symbolica.community import hepkit as hep\n>>> model = hep.Model.phi4()\n>>> process = model.process([\"phi\", \"phi\"], [\"phi\", \"phi\"])\n>>> result = process.generate_diagrams(loops=1)\n>>> diagram = result.diagrams[0]\n>>> try:\n...     diagram.with_loop_momentum_edges([])\n... except hep.DiagramError as error:\n...     message = str(error)"
+    "Invalid Feynman-diagram topology, annotation, or model reference.\n\nExamples\n--------\n>>> from symbolica import S, E\n>>> from symbolica.community import hepkit as hep\n>>> model = hep.Model.phi4()\n>>> process = model.process([\"phi\", \"phi\"], [\"phi\", \"phi\"])\n>>> result = process.amplitude(loops=hep.Loops.total(1)).generate().build()\n>>> diagram = result.diagrams[0]\n>>> try:\n...     diagram.with_loop_momentum_edges([])\n... except hep.DiagramError as error:\n...     message = str(error)"
 );
 define_exception!(
     GenerationError,
     FeynkitError,
     pyo3_stub_gen::TypeInfo::unqualified("FeynkitError"),
-    "Invalid process configuration or Feynman-diagram generation failure.\n\nExamples\n--------\n>>> from symbolica import S, E\n>>> from symbolica.community import hepkit as hep\n>>> model = hep.Model.phi4()\n>>> process = model.process([\"phi\", \"phi\"], [\"phi\", \"phi\"])\n>>> try:\n...     process.generate_diagrams(self_energy=hep.SelfEnergyFilterOptions(only_scaleless=True))\n... except hep.GenerationError as error:\n...     message = str(error)"
+    "Invalid process configuration or Feynman-diagram generation failure.\n\nExamples\n--------\n>>> from symbolica import S, E\n>>> from symbolica.community import hepkit as hep\n>>> model = hep.Model.phi4()\n>>> process = model.process([\"phi\", \"phi\"], [\"phi\", \"phi\"])\n>>> try:\n...     process.amplitude(loops=hep.Loops.forward(1))\n... except hep.GenerationError as error:\n...     message = str(error)"
 );
 define_exception!(
     CffError,
     FeynkitError,
     pyo3_stub_gen::TypeInfo::unqualified("FeynkitError"),
-    "Failure while constructing a Cross-Free Family representation.\n\nExamples\n--------\n>>> from symbolica import S, E\n>>> from symbolica.community import hepkit as hep\n>>> model = hep.Model.phi4()\n>>> process = model.process([\"phi\", \"phi\"], [\"phi\", \"phi\"])\n>>> result = process.generate_diagrams(loops=1)\n>>> diagram = result.diagrams[0]\n>>> try:\n...     diagram.build_cff(contracted_edges=[999999])\n... except hep.CffError as error:\n...     message = str(error)"
+    "Failure while constructing a Cross-Free Family representation.\n\nExamples\n--------\n>>> from symbolica import S, E\n>>> from symbolica.community import hepkit as hep\n>>> model = hep.Model.phi4()\n>>> process = model.process([\"phi\", \"phi\"], [\"phi\", \"phi\"])\n>>> result = process.amplitude(loops=hep.Loops.total(1)).generate().build()\n>>> diagram = result.diagrams[0]\n>>> try:\n...     diagram.build_cff(contracted_edges=[999999])\n... except hep.CffError as error:\n...     message = str(error)"
 );
 define_exception!(
     KinematicsError,

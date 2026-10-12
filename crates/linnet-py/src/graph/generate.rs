@@ -16,6 +16,8 @@ use super::*;
 mod callbacks;
 pub use callbacks::{CancelCheck, GenerationCallbacks};
 mod reports;
+#[doc(hidden)]
+pub use reports::PyPlanReport;
 mod views;
 
 /// A field and its direction at a vertex: outgoing True, incoming False, undirected None.
@@ -94,12 +96,26 @@ fn cleared() -> PyErr {
 struct Objects {
     fields: Py<PyTuple>,
     labels: Py<PyTuple>,
+    graph_thread: Option<std::thread::ThreadId>,
 }
 impl Objects {
     fn clone_ref(&self, py: Python<'_>) -> Self {
         Self {
             fields: self.fields.clone_ref(py),
             labels: self.labels.clone_ref(py),
+            graph_thread: self.graph_thread,
+        }
+    }
+    fn check_graph_snapshots(&self) -> PyResult<()> {
+        if self
+            .graph_thread
+            .is_none_or(|thread| thread == std::thread::current().id())
+        {
+            Ok(())
+        } else {
+            Err(pyo3::exceptions::PyRuntimeError::new_err(
+                "Graph snapshots require the calling thread; use Run(thread_safe=False)",
+            ))
         }
     }
     fn field(&self, py: Python<'_>, rank: u32) -> PyResult<Py<PyAny>> {
@@ -297,7 +313,20 @@ impl PyLegs {
 #[cfg_attr(feature = "community", pyo3(module = "symbolica.community.graph"))]
 #[cfg_attr(not(feature = "community"), pyo3(module = "linnet_py"))]
 #[derive(Clone)]
-pub(crate) struct PyBridges(generate::Bridges);
+#[doc(hidden)]
+pub struct PyBridges(generate::Bridges);
+
+impl From<generate::Bridges> for PyBridges {
+    fn from(value: generate::Bridges) -> Self {
+        Self(value)
+    }
+}
+
+impl From<PyBridges> for generate::Bridges {
+    fn from(value: PyBridges) -> Self {
+        value.0
+    }
+}
 #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
 #[pymethods]
 impl PyBridges {
@@ -879,6 +908,7 @@ impl PyPlan {
             objects: Some(Objects {
                 fields: fields.clone_ref(py),
                 labels,
+                graph_thread: None,
             }),
         })
     }

@@ -61,6 +61,8 @@ pub enum AmplitudeError {
     AlreadySummed { kind: &'static str, index: usize },
     #[error("invalid tensor expression: {0}")]
     Tensor(String),
+    #[error("invalid squared-amplitude pairing: {0}")]
+    InvalidPairing(String),
     #[error(transparent)]
     Diagram(#[from] DiagramError),
     #[error(transparent)]
@@ -85,6 +87,77 @@ impl Default for AmplitudeOptions {
             dimension: Dimension::Concrete(4),
             real: Vec::new(),
         }
+    }
+}
+
+/// Resolved class relation for a constrained amplitude square.
+///
+/// Classes identify already-selected, weighted terms; they do not infer orders from symbolic
+/// expressions. Ordered pairs include both orientations of every off-diagonal interference.
+/// Class identifiers remain stable when selection removes every term of a class: that class
+/// contributes zero, and its surviving partner does not become unrestricted.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SquaredPairing {
+    class_count: usize,
+    term_classes: Vec<usize>,
+    allowed: BTreeSet<(usize, usize)>,
+}
+
+impl SquaredPairing {
+    /// Validate class references and symmetry. Duplicate pairs denote the same relation entry
+    /// and are counted once. The amplitude constructor separately checks the number of terms.
+    pub fn new(
+        class_count: usize,
+        term_classes: impl IntoIterator<Item = usize>,
+        allowed_ordered_pairs: impl IntoIterator<Item = (usize, usize)>,
+    ) -> Result<Self, AmplitudeError> {
+        let term_classes: Vec<_> = term_classes.into_iter().collect();
+        if let Some(&class) = term_classes.iter().find(|&&class| class >= class_count) {
+            return Err(AmplitudeError::InvalidPairing(format!(
+                "term class {class} is outside {class_count} classes"
+            )));
+        }
+        let allowed: BTreeSet<_> = allowed_ordered_pairs.into_iter().collect();
+        for &(left, right) in &allowed {
+            if left >= class_count || right >= class_count {
+                return Err(AmplitudeError::InvalidPairing(format!(
+                    "pair ({left}, {right}) is outside {class_count} classes"
+                )));
+            }
+            if !allowed.contains(&(right, left)) {
+                return Err(AmplitudeError::InvalidPairing(format!(
+                    "pair ({left}, {right}) has no reverse pair"
+                )));
+            }
+        }
+        Ok(Self {
+            class_count,
+            term_classes,
+            allowed,
+        })
+    }
+
+    pub fn class_count(&self) -> usize {
+        self.class_count
+    }
+
+    pub fn term_classes(&self) -> &[usize] {
+        &self.term_classes
+    }
+
+    pub fn allowed_pairs(&self) -> &BTreeSet<(usize, usize)> {
+        &self.allowed
+    }
+
+    fn class_sums(&self, terms: &[Atom]) -> BTreeMap<usize, Atom> {
+        let mut classes = BTreeMap::<usize, Vec<&Atom>>::new();
+        for (&class, term) in self.term_classes.iter().zip(terms) {
+            classes.entry(class).or_default().push(term);
+        }
+        classes
+            .into_iter()
+            .map(|(class, terms)| (class, Atom::add_many(terms)))
+            .collect()
     }
 }
 
@@ -128,6 +201,7 @@ pub struct Amplitude {
     legs: Vec<AmplitudeLeg>,
     options: AmplitudeOptions,
     conjugated: bool,
+    pairing: Option<SquaredPairing>,
 }
 
 impl Amplitude {
@@ -175,7 +249,26 @@ impl Amplitude {
             legs,
             options,
             conjugated: false,
+            pairing: None,
         })
+    }
+
+    /// Attach a resolved collection policy. Raw-list constructors remain unrestricted.
+    /// Terms and their classes must have the same order after selection or grouping.
+    pub fn with_pairing(mut self, pairing: SquaredPairing) -> Result<Self, AmplitudeError> {
+        if pairing.term_classes.len() != self.terms.len() {
+            return Err(AmplitudeError::InvalidPairing(format!(
+                "{} term classes for {} amplitude terms",
+                pairing.term_classes.len(),
+                self.terms.len()
+            )));
+        }
+        self.pairing = Some(pairing);
+        Ok(self)
+    }
+
+    pub fn pairing(&self) -> Option<&SquaredPairing> {
+        self.pairing.as_ref()
     }
 
     pub fn diagrams(&self) -> &[Arc<FeynmanDiagram>] {
@@ -197,6 +290,7 @@ impl Amplitude {
         self.conjugated
     }
 
+    /// The coherent retained amplitude. A transferred pairing constrains only its square.
     pub fn expression(&self) -> Atom {
         Atom::add_many(&self.terms)
     }
@@ -270,16 +364,34 @@ impl Amplitude {
         // Loop variables in two independent loop integrals must not be identified.
         let loop_index = symbol!("feynkit_amplitude::loop_");
         let args = symbol!("feynkit_amplitude::loop_args___");
-        let bra = adjoint
-            .expression()
-            .wrap_indices(Self::bra())
-            .replace(function!(symbols::loop_momentum(), loop_index, args))
-            .with(function!(
-                symbols::loop_momentum(),
-                Self::bra().call(loop_index),
-                args
-            ));
-        let expression = amplitude.expression() * bra;
+        let bra = |expression: Atom| {
+            expression
+                .wrap_indices(Self::bra())
+                .replace(function!(symbols::loop_momentum(), loop_index, args))
+                .with(function!(
+                    symbols::loop_momentum(),
+                    Self::bra().call(loop_index),
+                    args
+                ))
+        };
+        let expression = if let Some(pairing) = &amplitude.pairing {
+            // Terms already include their overall factors. Sum each class before multiplying,
+            // and retain both ordered cross terms rather than assuming a real interference.
+            let ket = pairing.class_sums(&amplitude.terms);
+            let bra: BTreeMap<_, _> = pairing
+                .class_sums(&adjoint.terms)
+                .into_iter()
+                .map(|(class, expression)| (class, bra(expression)))
+                .collect();
+            Atom::add_many(
+                pairing
+                    .allowed
+                    .iter()
+                    .filter_map(|(left, right)| Some(ket.get(left)? * bra.get(right)?)),
+            )
+        } else {
+            amplitude.expression() * bra(adjoint.expression())
+        };
         Ok(SquaredAmplitude {
             amplitude,
             expression,
@@ -434,7 +546,8 @@ impl Amplitude {
     }
 }
 
-/// A coherent amplitude times its adjoint, with independent tensor ports.
+/// The resolved allowed interference of an amplitude and its adjoint, with independent ports.
+/// Without a pairing policy this is the full coherent product.
 #[derive(Clone, Debug)]
 pub struct SquaredAmplitude {
     amplitude: Amplitude,
@@ -541,5 +654,177 @@ impl SquaredAmplitude {
             .iter()
             .find(|l| l.index == index)
             .ok_or(AmplitudeError::UnknownLeg(index))
+    }
+}
+
+#[cfg(test)]
+mod pairing_tests {
+    use super::*;
+    use symbolica::parse;
+
+    // Reuse the scalar DOT boundary from the existing generator amplitude tests. Each source
+    // numerator stays factorized; only derived scalar squares are expanded for exact comparison.
+    fn scalars(terms: &[(&str, i64)]) -> Amplitude {
+        let model = Arc::new(
+            Model::from_json(include_str!("../../feynkit-model/tests/fixtures/sm.json")).unwrap(),
+        );
+        Amplitude::from_diagrams(terms.iter().map(|(term, factor)| {
+            Arc::new(
+                FeynmanDiagram::from_dot(
+                    Arc::clone(&model),
+                    &format!(
+                        r#"digraph {{
+                        a [num="amplitude_pairing_test::{term}"];
+                        ext [style=invis];
+                        ext -> a [particle="H"];
+                        a -> ext [particle="H"];
+                        a -> ext [particle="H"];
+                    }}"#
+                    ),
+                )
+                .unwrap()
+                .with_overall_factor(Atom::num(*factor)),
+            )
+        }))
+        .unwrap()
+    }
+
+    #[test]
+    fn pairing_validates_references_symmetry_and_term_count() {
+        for invalid in [
+            SquaredPairing::new(2, [2], []),
+            SquaredPairing::new(2, [0], [(0, 2), (2, 0)]),
+            SquaredPairing::new(2, [0, 1], [(0, 1)]),
+            SquaredPairing::new(0, [0], []),
+        ] {
+            assert!(matches!(invalid, Err(AmplitudeError::InvalidPairing(_))));
+        }
+        let pairing = SquaredPairing::new(2, [0, 1], [(0, 1), (1, 0), (0, 1)]).unwrap();
+        assert_eq!(pairing.class_count(), 2);
+        assert_eq!(pairing.term_classes(), &[0, 1]);
+        assert_eq!(pairing.allowed_pairs().len(), 2);
+        assert!(matches!(
+            scalars(&[("a", 1)]).with_pairing(pairing),
+            Err(AmplitudeError::InvalidPairing(_))
+        ));
+        assert!(SquaredPairing::new(0, [], []).is_ok());
+        // The existing empty-amplitude error remains independent of the pairing relation.
+        assert!(matches!(
+            Amplitude::from_diagrams([]),
+            Err(AmplitudeError::Empty)
+        ));
+    }
+
+    #[test]
+    fn constrained_square_preserves_oriented_complex_interference_and_class_sums() {
+        // The two a occurrences and b share one class; c is its partner. Two d occurrences
+        // share a diagonal class. Every overall factor and ordered interference occurs once.
+        let amplitude = scalars(&[("a", 2), ("a", 5), ("b", 3), ("c", 7), ("d", 11), ("d", 2)])
+            .with_pairing(
+                SquaredPairing::new(4, [1, 1, 1, 3, 2, 2], [(1, 3), (3, 1), (2, 2)]).unwrap(),
+            )
+            .unwrap();
+        let expected = parse!(
+            "49*amplitude_pairing_test::a*spenso::conj(amplitude_pairing_test::c)\
+             +21*amplitude_pairing_test::b*spenso::conj(amplitude_pairing_test::c)\
+             +49*amplitude_pairing_test::c*spenso::conj(amplitude_pairing_test::a)\
+             +21*amplitude_pairing_test::c*spenso::conj(amplitude_pairing_test::b)\
+             +169*amplitude_pairing_test::d*spenso::conj(amplitude_pairing_test::d)"
+        );
+        let square = amplitude.squared().unwrap();
+        assert!(
+            (square.expression() - &expected).expand().is_zero(),
+            "every scalar coefficient, including forbidden diagonals, must agree exactly"
+        );
+        assert_eq!(square.amplitude().pairing(), amplitude.pairing());
+        let coherent = parse!(
+            "7*amplitude_pairing_test::a+3*amplitude_pairing_test::b\
+             +7*amplitude_pairing_test::c+13*amplitude_pairing_test::d"
+        );
+        assert_eq!(amplitude.expression(), coherent);
+        let adjoint = amplitude.conjugate().unwrap();
+        assert_eq!(adjoint.pairing(), amplitude.pairing());
+        assert_eq!(adjoint.clone().pairing(), amplitude.pairing());
+        assert_eq!(adjoint.conjugate().unwrap().expression(), coherent);
+        assert!(
+            (adjoint.squared().unwrap().expression() - &expected)
+                .expand()
+                .is_zero()
+        );
+    }
+
+    #[test]
+    fn a_removed_partner_contributes_zero_without_restoring_unrestricted_pairing() {
+        let relation = [(1, 3), (3, 1)];
+        let amplitude = scalars(&[("a", 2)])
+            .with_pairing(SquaredPairing::new(4, [1], relation).unwrap())
+            .unwrap();
+        assert!(!amplitude.expression().is_zero());
+        assert!(amplitude.squared().unwrap().expression().is_zero());
+        assert_eq!(amplitude.pairing().unwrap().allowed_pairs().len(), 2);
+        let empty_relation = scalars(&[("a", 2)])
+            .with_pairing(SquaredPairing::new(1, [0], []).unwrap())
+            .unwrap();
+        assert!(empty_relation.squared().unwrap().expression().is_zero());
+    }
+
+    #[test]
+    fn raw_lists_remain_unrestricted_and_keep_full_interference() {
+        let amplitude = scalars(&[("a", 2), ("b", 3)]);
+        assert!(amplitude.pairing().is_none());
+        let expected = parse!(
+            "(2*amplitude_pairing_test::a+3*amplitude_pairing_test::b)\
+             *(2*spenso::conj(amplitude_pairing_test::a)\
+             +3*spenso::conj(amplitude_pairing_test::b))"
+        );
+        assert!(
+            (amplitude.squared().unwrap().expression() - &expected)
+                .expand()
+                .is_zero()
+        );
+        let constrained = amplitude
+            .with_pairing(SquaredPairing::new(2, [0, 1], [(0, 0), (0, 1), (1, 0), (1, 1)]).unwrap())
+            .unwrap();
+        assert!(
+            (constrained.squared().unwrap().expression() - &expected)
+                .expand()
+                .is_zero()
+        );
+    }
+
+    #[test]
+    fn constrained_bra_uses_the_existing_independent_loop_scope() {
+        let model = Arc::new(
+            Model::from_json(include_str!("../../feynkit-model/tests/fixtures/sm.json")).unwrap(),
+        );
+        let diagram = FeynmanDiagram::from_dot(
+            model,
+            r#"digraph triangle {
+            ext [style=invis];
+            ext -> a [id=0, particle="H"];
+            b -> ext [id=1, particle="H"];
+            c -> ext [id=2, particle="H"];
+            a -> b [id=3, particle="H", lmb_id=0];
+            b -> c [id=4, particle="H"];
+            c -> a [id=5, particle="H"];
+        }"#,
+        )
+        .unwrap();
+        let amplitude = Amplitude::from_diagram(diagram).unwrap();
+        let unrestricted = amplitude.squared().unwrap();
+        let constrained = amplitude
+            .with_pairing(SquaredPairing::new(1, [0], [(0, 0)]).unwrap())
+            .unwrap()
+            .squared()
+            .unwrap();
+        assert_eq!(constrained.expression(), unrestricted.expression());
+        assert!(
+            constrained
+                .expression()
+                .contains(parse!("gammalooprs::K(0,spenso::mink(4))"))
+        );
+        assert!(constrained.expression().contains(parse!(
+            "gammalooprs::K(feynkit_amplitude::bra(0),spenso::mink(4))"
+        )));
     }
 }

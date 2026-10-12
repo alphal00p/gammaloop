@@ -26,15 +26,35 @@ assignments. Python fields are `Particle` objects, and views expire when their c
 returns. Explicit graph snapshots remain usable. Batched callbacks run on the calling
 thread and stop immediately on cancellation or an exception.
 
-Generation now exposes `output="minimal"` in Python and `GenerationOutput::Minimal` in Rust.
-This omits diagram names and group-member source identities while retaining physical graphs,
-source indices and grouping factors. Named output remains the default. Ungrouped generation
-now assigns names in deterministic search order; numerator grouping keeps canonical ordering
-to preserve its representatives. Regenerate names used in selections. Name selectors, named
-momentum bases and `graph_prefix` require named
-output; ID selectors and ID-keyed momentum bases compute IDs on demand in either mode.
-Python's `select_diagrams=[]` now selects nothing. Python selectors recognize IDs as exactly
-32 hexadecimal digits, so short hexadecimal names such as `D0` work as names.
+Physics generation now separates an immutable `Request` from execution and output stages.
+`Model.process(...)` defines external states; `.amplitude(loops=Loops.total(...))` and
+`.cross_section(loops=Loops.forward(...))` require explicit finite loop ranges.
+`Restrict`, `Orders`, `TopologyRules`, `Cuts`, and `Symmetrize` own discovery criteria;
+`Run` owns threads, cancellation, and progress. Shared defaults are minimal and unrestricted,
+without implicit GammaLoop CLI presets.
+
+`Request.explain()` reports planning criteria and infeasible partitions. `count()` returns
+exact integer counts and rational inverse-automorphism and signed physical-weight totals;
+`generate()` returns compact prepared diagrams. `DiagramSet.build(NumeratorOptions(...))`
+constructs numerators, with `Naming.none()` as the default. Explicit `Naming.named()` uses
+the shared `GL` prefix, or a supplied prefix. Name selection and named momentum bases require
+that naming demand; stable-ID selection and keyed bases compute IDs when needed.
+
+`BuiltDiagramSet.select(Selection(...), run=run)`, `.group(Grouping(...))`, and `.into_amplitude(...)`
+are explicit later stages. `Selection(select=[])` selects nothing; an omitted selection
+retains all diagrams. Strings of exactly 32 hexadecimal digits denote IDs, so a short
+hexadecimal name such as `D0` remains a name. Grouping preserves source indices and physical
+factors, including when no names were requested.
+
+Names and source indices are assigned during `build` and retained by later selection and
+grouping. Grouped names can therefore differ from the former eager API, while diagram IDs
+and physical contributions stay the same; grouping bookkeeping retains the build-stage
+source indices.
+
+Amplitude squared-order constraints require one common partner satisfying every bound.
+The resolved relation survives selection, zero removal, grouping, and `into_amplitude()`;
+squaring includes only allowed class pairs. Constructing a new `Amplitude` from a raw diagram
+list has no request policy, so use `into_amplitude()` to retain that relation.
 
 A diagram name is optional (`None` for unnamed diagrams); JSON and annotated DOT distinguish
 it from an empty name. Rust's `FeynmanDiagram::id()` now returns a `Result`, computing and
@@ -69,12 +89,12 @@ more than two incoming particles now return an error naming `general.disable_flu
 Cross sections with identical beams, such as $g g$, $gamma gamma$ or $e^- e^-$, no longer come
 out divided by the beam permutations. The CLI and Python defaults symmetrized cross-section final
 states, which kept one forward graph per beam exchange without counting the graphs it stood
-for. `symmetrize_final` now applies to amplitudes only: cross-section generation rejects it.
+for. `Symmetrize.FINAL` applies to amplitudes only: cross-section requests reject it.
 GammaLoop state version 9 refuses every state saved before this change, so regenerate them.
-`symmetrize_initial` keeps one forward graph per exchange of two identical beams and multiplies
+`Symmetrize.INITIAL` keeps one forward graph per exchange of two identical beams and multiplies
 its overall factor by the number of graphs it stands for, so without left/right symmetrization
 the factors add up to the unsymmetrized total; `symmetry_factor` is the automorphism count of
-the kept graph. Python's `generate_cross_section` no longer takes `symmetrize_final` and, like
+the kept graph. Python's `process.cross_section(...)` rejects final-state symmetrization and, like
 the CLI, applies no bridge filter by default. Left/right symmetrization merges a forward graph
 with an identical mirror representative into one diagram whose factor counts both, so every
 diagram id appears once.

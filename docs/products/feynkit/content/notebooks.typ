@@ -6,15 +6,21 @@
 Displaying an `Amplitude` shows compact rows pairing each diagram with its
 weighted tensor contribution. Open a row to inspect the graph with Linnet's
 pan, zoom, selection, and hover controls. `amplitude.expression()` remains the
-full symbolic operator and uses Spenso's tensor printer.
+full symbolic operator and uses Spenso's tensor printer. Convert a built collection with
+`built.into_amplitude()` to preserve any resolved squared-order partner policy through
+later grouping and squaring.
 
-Generated collections use a thumbnail strip and one shared graph viewer.
-For `process.generate_cross_section(...)`, these are the actual cut
-forward-scattering diagrams. Selecting a thumbnail changes the inspected graph;
+Built collections use a thumbnail strip and one shared graph viewer. Construct them with
+`process.amplitude(loops=hepkit.Loops.total(...)).generate().build()` or
+`process.cross_section(loops=hepkit.Loops.forward(...)).generate().build()`.
+In the latter case these are the actual cut forward-scattering diagrams. Selecting a thumbnail changes the inspected graph;
 it does not alter the diagrams or their momentum routing. Expanded collection
 graphs keep a fixed viewport height, with hover previews overlaid and click-to-pin
 details. Displays preview at most six diagrams; `.diagrams` exposes the full
-collection. Single-diagram SVG and Typst exports remain available independently.
+collection. Compact `DiagramSet` results expose prepared assignments and skeletons before
+numerator construction; call `build()` explicitly for the physics diagram display. Names
+remain absent unless the build requests `NumeratorOptions(naming=Naming.named(...))`.
+Single-diagram SVG and Typst exports remain available independently.
 
 
 For complete executable examples, open the #link("guides/showcases/")[FeynKit showcase gallery].

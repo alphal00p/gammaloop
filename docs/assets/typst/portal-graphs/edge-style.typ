@@ -1,8 +1,9 @@
 #import "../../../../assets/embedded/drawing/templates/physics-edge-style.typ": (
-  coil, dashed, dotted, fermion-arrow-mark, massive, massless, mi, sink-stroke,
+  coil, dashed, dotted, fermion-arrow-mark, massive, massless, sink-stroke,
   source-stroke, style, wave, zigzag,
 )
 #import "../theme.typ": palette
+#import "@preview/mitex:0.2.6": mi
 
 // The weights first used for website hero diagrams are now GammaLoop's shared
 // physics defaults. Website-specific colors still follow the light/dark theme.

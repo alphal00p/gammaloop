@@ -94,7 +94,7 @@ fn epem_a_ddx_nlo_is_alpha_s_over_pi_times_lo_in_all_local_uv_routes() -> Result
         r#"generate xs e+ e- > d d~ | e+ e- d d~ g ghG ghG~ a QCD^2==0 QED^2==4 [{{1}} QCD=0]
             --numerator-grouping group_identical_graphs_up_to_scalar_rescaling
             --symmetrize-left-right-states true
-            -p epem_a_ddx_lo -i LO --only-diagrams"#,
+            -p epem_a_ddx_lo -i LO --only-diagrams --filter-selfenergies true --filter-snails true --filter-tadpoles true --n-cut-blobs 1 1 --n-cut-spectators 0 0"#,
     )?;
     cli.run_command("generate existing -p epem_a_ddx_lo -i LO")?;
 
@@ -109,7 +109,7 @@ fn epem_a_ddx_nlo_is_alpha_s_over_pi_times_lo_in_all_local_uv_routes() -> Result
                 r#"generate xs e+ e- > d d~ | e+ e- d d~ g ghG ghG~ a QCD^2==2 QED^2==4 [{{{{2}}}} QCD=1]
                 --numerator-grouping group_identical_graphs_up_to_scalar_rescaling
                 --symmetrize-left-right-states true
-                -p {process} -i NLO --only-diagrams"#,
+                -p {process} -i NLO --only-diagrams --filter-selfenergies true --filter-snails true --filter-tadpoles true --n-cut-blobs 1 1 --n-cut-spectators 0 0"#,
             ),
         )?;
         cli.run_command(&format!("generate existing -p {process} -i NLO"))?;
@@ -274,7 +274,7 @@ fn epem_a_ddx_nlo_is_alpha_s_over_pi_times_lo_in_all_local_uv_routes() -> Result
         r#"generate xs e+ e- > d d~ | e+ e- d d~ g ghG ghG~ a QCD^2==2 QED^2==4 [{{{{2}}}} QCD=1]
             --numerator-grouping group_identical_graphs_up_to_scalar_rescaling
             --symmetrize-left-right-states true
-            -p {EXPLICIT_3D_PROCESS} -i NLO --only-diagrams"#,
+            -p {EXPLICIT_3D_PROCESS} -i NLO --only-diagrams --filter-selfenergies true --filter-snails true --filter-tadpoles true --n-cut-blobs 1 1 --n-cut-spectators 0 0"#,
     ))?;
     cli.run_command(&format!(
         "generate existing -p {EXPLICIT_3D_PROCESS} -i NLO"
@@ -294,7 +294,7 @@ fn epem_a_ddx_nlo_is_alpha_s_over_pi_times_lo_in_all_local_uv_routes() -> Result
             r#"generate xs e+ e- > d d~ | e+ e- d d~ g ghG ghG~ a QCD^2==2 QED^2==4 [{{{{2}}}} QCD=1]
                 --numerator-grouping group_identical_graphs_up_to_scalar_rescaling
                 --symmetrize-left-right-states true
-                -p {process} -i NLO --only-diagrams"#,
+                -p {process} -i NLO --only-diagrams --filter-selfenergies true --filter-snails true --filter-tadpoles true --n-cut-blobs 1 1 --n-cut-spectators 0 0"#,
         ))?;
         cli.run_command(&format!("generate existing -p {process} -i NLO"))?;
 

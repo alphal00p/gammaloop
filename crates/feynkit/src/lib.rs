@@ -12,7 +12,7 @@ pub use feynkit_amplitude as amplitude;
 #[cfg(feature = "amplitude")]
 pub use feynkit_amplitude::{
     Amplitude, AmplitudeError, AmplitudeLeg, AmplitudeOptions, AxialReference, ColorRepresentation,
-    ColorSum, ColorSumError, SpinSum, SpinSumError, SquaredAmplitude,
+    ColorSum, ColorSumError, SpinSum, SpinSumError, SquaredAmplitude, SquaredPairing,
 };
 #[cfg(feature = "cff")]
 pub use feynkit_cff as cff;
@@ -33,8 +33,11 @@ pub use feynkit_ufo as ufo;
 pub use feynkit_cff::{CffGenerator, CffOptions, CffResult};
 #[cfg(feature = "generator")]
 pub use feynkit_generator::{
-    FeynmanDiagramRulesExt, GenerationOptions, GenerationResult, ModelProcessExt, ParticleSelector,
-    Process,
+    Bridges, BuiltDiagramSet, CancellationToken, Counts, CutAmplitude, Cuts, DiagramSet,
+    FeynmanDiagramRulesExt, GenerationControl, GenerationProgress, GenerationReport,
+    GenerationType, Grouping, Loops, ModelProcessExt, Naming, NumeratorOptions, Orders,
+    ParticleSelector, Process, Range, Request, RequestParseError, Restrict, Run, Selection, Stage,
+    Symmetrize, TopologyRules, VertexSelector, Veto,
 };
 #[cfg(feature = "graph")]
 pub use feynkit_graph::{

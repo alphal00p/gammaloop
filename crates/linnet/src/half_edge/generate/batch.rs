@@ -463,6 +463,43 @@ impl<'a, F: Clone + Ord + Send + Sync, L: Clone + Ord + Send + Sync> Driver<'a, 
             return Ok(event);
         }
         self.discard_finished();
+        // Emit the ready prefix before advancing another callback wave. Draining completed
+        // front slots lets independent searches enter the bounded window sooner.
+        if let Some(item) = self
+            .slots
+            .front_mut()
+            .and_then(|slot| slot.state.outputs.pop_front())
+        {
+            let loops = self.progress.loops;
+            self.alone = false;
+            let aut = match &item {
+                Item::Diagram(d) => Some(d.automorphism_count),
+                Item::Count(n) => Some(*n),
+                Item::Skeleton(_) => None,
+            };
+            if let Some(aut) = aut {
+                if let Err(error) = self.counts.diagram(loops, aut) {
+                    self.count_overflow = true;
+                    if self.output == Output::Count {
+                        self.abort();
+                        return Err(error);
+                    }
+                    self.counts.diagrams += 1u8;
+                    self.counts.per_loop.entry(loops).or_default().diagrams += 1u8;
+                }
+                self.progress.diagrams += 1u8;
+            }
+            super::report(self.run.progress.as_deref(), &self.progress, &self.stop);
+            if self.aborted() {
+                self.abort();
+                return Ok(Self::event(item));
+            }
+            if self.run.deferred_progress {
+                self.ready = Some(item);
+                return Ok(Event::Progress(self.progress.clone()));
+            }
+            return Ok(Self::event(item));
+        }
         if self.slots.is_empty() {
             let Some((loops, limits)) = self.orders.pop_front() else {
                 self.finished = true;
@@ -521,7 +558,6 @@ impl<'a, F: Clone + Ord + Send + Sync, L: Clone + Ord + Send + Sync> Driver<'a, 
         if let Some(event) = self.notify_topologies() {
             return Ok(event);
         }
-        let loops = self.progress.loops;
         if self.aborted() {
             self.abort();
             return Ok(Event::Done);
@@ -550,40 +586,6 @@ impl<'a, F: Clone + Ord + Send + Sync, L: Clone + Ord + Send + Sync> Driver<'a, 
             return Ok(Event::Batch(requests));
         }
         self.discard_finished();
-        if let Some(item) = self
-            .slots
-            .front_mut()
-            .and_then(|slot| slot.state.outputs.pop_front())
-        {
-            self.alone = false;
-            let aut = match &item {
-                Item::Diagram(d) => Some(d.automorphism_count),
-                Item::Count(n) => Some(*n),
-                Item::Skeleton(_) => None,
-            };
-            if let Some(aut) = aut {
-                if let Err(error) = self.counts.diagram(loops, aut) {
-                    self.count_overflow = true;
-                    if self.output == Output::Count {
-                        self.abort();
-                        return Err(error);
-                    }
-                    self.counts.diagrams += 1u8;
-                    self.counts.per_loop.entry(loops).or_default().diagrams += 1u8;
-                }
-                self.progress.diagrams += 1u8;
-            }
-            super::report(self.run.progress.as_deref(), &self.progress, &self.stop);
-            if self.aborted() {
-                self.abort();
-                return Ok(Self::event(item));
-            }
-            if self.run.deferred_progress {
-                self.ready = Some(item);
-                return Ok(Event::Progress(self.progress.clone()));
-            }
-            return Ok(Self::event(item));
-        }
         Ok(Event::Yield)
     }
 
@@ -1006,6 +1008,75 @@ mod tests {
 
     fn node_pointer(graph: &HedgeGraph<u8, usize, Option<u8>>) -> usize {
         &graph[NodeIndex(0)] as *const usize as usize
+    }
+
+    #[test]
+    fn buffered_diagram_reaches_cancellation_before_later_hooks() {
+        let (theory, _) = input(2);
+        let query = Query::<u8, u8>::new(&Legs::new())
+            .loops(3..=3)
+            .structure(super::super::Structure {
+                self_loops: true,
+                zero_flow_edges: true,
+                ..super::super::Structure::default()
+            })
+            .deferred_hooks(HookMask {
+                skeletons: true,
+                dressings: true,
+                ..HookMask::default()
+            });
+        let plan = Plan::new(&theory, &query).unwrap();
+        let run = Run::default().parallel(true).deferred_progress(true);
+        let mut driver = plan.batched(&run, Output::Diagrams).unwrap();
+        let expected = loop {
+            match driver.poll().unwrap() {
+                Event::Batch(requests) => {
+                    driver
+                        .resolve(&requests.iter().map(|r| r.reply(true)).collect::<Vec<_>>())
+                        .unwrap();
+                    // Observe a naturally reached ordering boundary without editing scheduler
+                    // state: an earlier accepted diagram is ready while later work can ask for
+                    // another predicate. The consumer must be able to stop at that diagram.
+                    let ready = driver
+                        .slots
+                        .front()
+                        .and_then(|slot| slot.state.outputs.front());
+                    let later_work = driver
+                        .slots
+                        .iter()
+                        .skip(1)
+                        .any(|slot| !slot.state.done && matches!(slot.job, Job::Cursor(_)));
+                    if later_work {
+                        if let Some(Item::Diagram(diagram)) = ready {
+                            break diagram.canonical_form().clone();
+                        }
+                    }
+                }
+                Event::Diagram(_) | Event::Progress(_) | Event::Yield => {}
+                Event::Done => panic!("fixture must reach a buffered diagram with later work"),
+                Event::Skeleton(_) => unreachable!(),
+            }
+        };
+        let before = driver.counts().unwrap().diagrams.clone();
+        loop {
+            match driver.poll().unwrap() {
+                Event::Progress(progress) if progress.diagrams > before => {
+                    assert_eq!(progress.diagrams, &before + 1u8);
+                    driver.stop_after_progress();
+                    break;
+                }
+                Event::Progress(_) | Event::Yield => {}
+                Event::Batch(_) => panic!("a later hook ran before the ready diagram's stop point"),
+                _ => panic!("the ready diagram must notify progress before delivery"),
+            }
+        }
+        let Event::Diagram(diagram) = driver.poll().unwrap() else {
+            panic!("progress cancellation must retain its already-counted diagram")
+        };
+        assert_eq!(diagram.canonical_form(), &expected);
+        assert_eq!(driver.counts().unwrap().diagrams, before + 1u8);
+        assert!(!driver.counts().unwrap().complete);
+        assert!(matches!(driver.poll().unwrap(), Event::Done));
     }
 
     #[test]

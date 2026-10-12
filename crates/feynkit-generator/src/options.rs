@@ -1,27 +1,26 @@
+use crate::{
+    ExternalLabel, GenerationDiagramView, GenerationDressingView, GenerationError,
+    GenerationSkeletonView, GenerationType, ParticleSelector, Process, VertexSelector,
+};
+use feynkit_graph::{DiagramId, EdgeId};
+use feynkit_model::{Model, ParticleId, VertexRuleId};
+pub use linnet::half_edge::generate::Bridges;
+use linnet::half_edge::generate::batch;
+use num_bigint::BigUint;
+use serde::{Deserialize, Serialize};
 use std::{
     collections::{BTreeMap, BTreeSet},
     fmt,
-    ops::{ControlFlow, RangeInclusive},
+    ops::{BitOr, ControlFlow, RangeInclusive},
     sync::{
         Arc,
         atomic::{AtomicBool, Ordering},
     },
 };
-
-use feynkit_graph::{DiagramId, EdgeId};
-use feynkit_model::{Model, ParticleId};
-use linnet::half_edge::generate::batch;
-use serde::{Deserialize, Serialize};
 use symbolica::{
     atom::{Atom, AtomCore},
     parser::ParseSettings,
 };
-
-use crate::{
-    ExternalLabel, GenerationDiagramView, GenerationDressingView, GenerationError,
-    GenerationSkeletonView, GenerationType, ParticleSelector, SelectorError, VertexSelector,
-};
-
 #[derive(
     Debug,
     Clone,
@@ -67,18 +66,21 @@ impl Default for GraphGroupingOptions {
     bincode_trait_derive::Decode,
 )]
 #[serde(rename_all = "snake_case")]
-pub enum NumeratorGrouping {
+pub enum Grouping {
     #[default]
     None,
     Identical(GraphGroupingOptions),
     UpToSign(GraphGroupingOptions),
     UpToScalar(GraphGroupingOptions),
 }
+bincode::impl_borrow_decode!(Grouping);
 
+/// An explicit unrestricted or inclusive interval. A missing upper bound means infinity.
 #[derive(
     Debug,
     Clone,
     Copy,
+    Default,
     PartialEq,
     Eq,
     Serialize,
@@ -86,99 +88,67 @@ pub enum NumeratorGrouping {
     bincode_trait_derive::Encode,
     bincode_trait_derive::Decode,
 )]
-pub struct SelfEnergyFilterOptions {
-    pub veto_massive: bool,
-    pub veto_massless: bool,
-    pub only_scaleless: bool,
+#[serde(rename_all = "snake_case")]
+pub enum Range {
+    #[default]
+    Unrestricted,
+    Inclusive {
+        min: usize,
+        max: Option<usize>,
+    },
 }
-
-impl Default for SelfEnergyFilterOptions {
-    fn default() -> Self {
-        Self {
-            veto_massive: true,
-            veto_massless: true,
-            only_scaleless: false,
+impl Range {
+    pub const fn exact(value: usize) -> Self {
+        Self::Inclusive {
+            min: value,
+            max: Some(value),
+        }
+    }
+    pub const fn at_least(min: usize) -> Self {
+        Self::Inclusive { min, max: None }
+    }
+    pub const fn at_most(max: usize) -> Self {
+        Self::Inclusive {
+            min: 0,
+            max: Some(max),
+        }
+    }
+    pub fn contains(&self, value: usize) -> bool {
+        let (min, max) = self.bounds();
+        value >= min && max.is_none_or(|max| value <= max)
+    }
+    pub fn bounds(&self) -> (usize, Option<usize>) {
+        match *self {
+            Self::Unrestricted => (0, None),
+            Self::Inclusive { min, max } => (min, max),
+        }
+    }
+    pub fn is_empty(&self) -> bool {
+        let (min, max) = self.bounds();
+        max.is_some_and(|max| min > max)
+    }
+    pub fn intersect(self, other: Self) -> Self {
+        let (a, b) = self.bounds();
+        let (c, d) = other.bounds();
+        Self::Inclusive {
+            min: a.max(c),
+            max: match (b, d) {
+                (Some(x), Some(y)) => Some(x.min(y)),
+                (x, None) | (None, x) => x,
+            },
+        }
+    }
+}
+impl From<RangeInclusive<usize>> for Range {
+    fn from(v: RangeInclusive<usize>) -> Self {
+        Self::Inclusive {
+            min: *v.start(),
+            max: Some(*v.end()),
         }
     }
 }
 
-#[derive(
-    Debug,
-    Clone,
-    Copy,
-    PartialEq,
-    Eq,
-    Serialize,
-    Deserialize,
-    bincode_trait_derive::Encode,
-    bincode_trait_derive::Decode,
-)]
-pub struct SnailFilterOptions {
-    pub veto_attached_to_massive: bool,
-    pub veto_attached_to_massless: bool,
-    pub only_scaleless: bool,
-}
-
-impl Default for SnailFilterOptions {
-    fn default() -> Self {
-        Self {
-            veto_attached_to_massive: false,
-            veto_attached_to_massless: true,
-            only_scaleless: false,
-        }
-    }
-}
-
-#[derive(
-    Debug,
-    Clone,
-    Copy,
-    PartialEq,
-    Eq,
-    Serialize,
-    Deserialize,
-    bincode_trait_derive::Encode,
-    bincode_trait_derive::Decode,
-)]
-pub struct TadpoleFilterOptions {
-    pub veto_attached_to_massive: bool,
-    pub veto_attached_to_massless: bool,
-    pub only_scaleless: bool,
-}
-
-#[derive(
-    Debug,
-    Clone,
-    Copy,
-    PartialEq,
-    Eq,
-    Serialize,
-    Deserialize,
-    bincode_trait_derive::Encode,
-    bincode_trait_derive::Decode,
-)]
-pub struct SewnFilterOptions {
-    pub filter_tadpoles: bool,
-}
-
-impl Default for SewnFilterOptions {
-    fn default() -> Self {
-        Self {
-            filter_tadpoles: true,
-        }
-    }
-}
-
-impl Default for TadpoleFilterOptions {
-    fn default() -> Self {
-        Self {
-            veto_attached_to_massive: true,
-            veto_attached_to_massless: true,
-            only_scaleless: false,
-        }
-    }
-}
-
+/// Total amplitude loops or loops of the sewn forward graph. Every request supplies one.
 #[derive(
     Debug,
     Clone,
@@ -190,157 +160,445 @@ impl Default for TadpoleFilterOptions {
     bincode_trait_derive::Decode,
 )]
 #[serde(rename_all = "snake_case")]
-pub enum GenerationFilter {
-    SelfEnergy(SelfEnergyFilterOptions),
-    Tadpoles(TadpoleFilterOptions),
-    ZeroSnails(SnailFilterOptions),
-    Sewn(SewnFilterOptions),
-    ParticleVeto(Vec<ParticleSelector>),
-    VertexAllow(Vec<VertexSelector>),
-    VertexVeto(Vec<VertexSelector>),
-    MaxNumberOfBridges(usize),
-    CouplingOrders(BTreeMap<String, (usize, Option<usize>)>),
-    LoopCountRange((usize, usize)),
-    BlobRange(RangeInclusive<usize>),
-    SpectatorRange(RangeInclusive<usize>),
-    PerturbativeOrders(BTreeMap<String, usize>),
-    FermionLoopCountRange((usize, usize)),
-    FactorizedLoopTopologiesCountRange((usize, usize)),
-    /// Require positive-loop diagrams to be one-particle irreducible. Tree
-    /// exchange diagrams are retained; external legs never count as bridges.
-    LoopOneParticleIrreducible,
+pub enum Loops {
+    Total(RangeInclusive<usize>),
+    Forward(RangeInclusive<usize>),
 }
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum FilterScope {
-    Graph,
-    CutAmplitude,
-}
-
-impl fmt::Display for FilterScope {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.write_str(match self {
-            Self::Graph => "graph",
-            Self::CutAmplitude => "cut amplitude",
-        })
+impl Loops {
+    pub fn total(range: RangeInclusive<usize>) -> Self {
+        Self::Total(range)
     }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum GenerationFilterKind {
-    SelfEnergy,
-    Tadpoles,
-    ZeroSnails,
-    Sewn,
-    ParticleVeto,
-    VertexAllow,
-    VertexVeto,
-    MaxNumberOfBridges,
-    CouplingOrders,
-    LoopCountRange,
-    BlobRange,
-    SpectatorRange,
-    PerturbativeOrders,
-    FermionLoopCountRange,
-    FactorizedLoopTopologiesCountRange,
-    LoopOneParticleIrreducible,
-}
-
-impl fmt::Display for GenerationFilterKind {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.write_str(match self {
-            Self::SelfEnergy => "self_energy",
-            Self::Tadpoles => "tadpoles",
-            Self::ZeroSnails => "zero_snails",
-            Self::Sewn => "sewn",
-            Self::ParticleVeto => "particle_veto",
-            Self::VertexAllow => "vertex_allow",
-            Self::VertexVeto => "vertex_veto",
-            Self::MaxNumberOfBridges => "max_number_of_bridges",
-            Self::LoopOneParticleIrreducible => "loop_one_particle_irreducible",
-            Self::CouplingOrders => "coupling_orders",
-            Self::LoopCountRange => "loop_count_range",
-            Self::BlobRange => "blob_range",
-            Self::SpectatorRange => "spectator_range",
-            Self::PerturbativeOrders => "perturbative_orders",
-            Self::FermionLoopCountRange => "fermion_loop_count_range",
-            Self::FactorizedLoopTopologiesCountRange => "factorized_loop_topologies_count_range",
-        })
+    pub fn forward(range: RangeInclusive<usize>) -> Self {
+        Self::Forward(range)
     }
-}
-
-impl GenerationFilter {
-    pub const fn kind(&self) -> GenerationFilterKind {
+    pub fn range(&self) -> RangeInclusive<usize> {
         match self {
-            Self::SelfEnergy(_) => GenerationFilterKind::SelfEnergy,
-            Self::Tadpoles(_) => GenerationFilterKind::Tadpoles,
-            Self::ZeroSnails(_) => GenerationFilterKind::ZeroSnails,
-            Self::Sewn(_) => GenerationFilterKind::Sewn,
-            Self::ParticleVeto(_) => GenerationFilterKind::ParticleVeto,
-            Self::VertexAllow(_) => GenerationFilterKind::VertexAllow,
-            Self::VertexVeto(_) => GenerationFilterKind::VertexVeto,
-            Self::MaxNumberOfBridges(_) => GenerationFilterKind::MaxNumberOfBridges,
-            Self::LoopOneParticleIrreducible => GenerationFilterKind::LoopOneParticleIrreducible,
-            Self::CouplingOrders(_) => GenerationFilterKind::CouplingOrders,
-            Self::LoopCountRange(_) => GenerationFilterKind::LoopCountRange,
-            Self::BlobRange(_) => GenerationFilterKind::BlobRange,
-            Self::SpectatorRange(_) => GenerationFilterKind::SpectatorRange,
-            Self::PerturbativeOrders(_) => GenerationFilterKind::PerturbativeOrders,
-            Self::FermionLoopCountRange(_) => GenerationFilterKind::FermionLoopCountRange,
-            Self::FactorizedLoopTopologiesCountRange(_) => {
-                GenerationFilterKind::FactorizedLoopTopologiesCountRange
-            }
+            Self::Total(r) | Self::Forward(r) => r.clone(),
         }
     }
 }
 
-impl fmt::Display for GenerationFilter {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(formatter, "{self:?}")
-    }
+/// Plain bounds constrain one graph; squared bounds constrain an allowed pair of amplitudes.
+#[derive(
+    Debug,
+    Clone,
+    Default,
+    PartialEq,
+    Eq,
+    Serialize,
+    Deserialize,
+    bincode_trait_derive::Encode,
+    bincode_trait_derive::Decode,
+)]
+pub struct Orders {
+    pub plain: BTreeMap<String, Range>,
+    pub squared: BTreeMap<String, Range>,
+    pub perturbative: BTreeMap<String, usize>,
 }
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct GenerationProgress {
-    /// Stable pipeline stage; counts restart at each stage.
-    pub stage: &'static str,
-    /// Work items processed in this stage, not the number retained.
-    pub completed: usize,
-    /// Unknown while enumerating topologies or merging diagram groups;
-    /// numerator preparation, sampling, and comparison count input diagrams.
-    pub total: Option<usize>,
-    /// Cumulative zero numerators removed so far in this generation run.
-    pub zero_numerator_count: usize,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum GenerationControl {
-    Continue,
-    Cancel,
-}
-
-/// Cloneable cancellation state that can be shared with another thread.
-#[derive(Debug, Clone, Default)]
-pub struct CancellationToken(Arc<AtomicBool>);
-
-impl CancellationToken {
+impl Orders {
     pub fn new() -> Self {
         Self::default()
     }
-
-    pub fn cancel(&self) {
-        self.0.store(true, Ordering::Release);
+    fn add(mut self, name: impl Into<String>, range: Range, squared: bool) -> Self {
+        let table = if squared {
+            &mut self.squared
+        } else {
+            &mut self.plain
+        };
+        table
+            .entry(name.into())
+            .and_modify(|old| *old = old.intersect(range))
+            .or_insert(range);
+        self
     }
-
-    pub fn is_cancelled(&self) -> bool {
-        self.0.load(Ordering::Acquire)
+    pub fn max(self, name: impl Into<String>, max: usize) -> Self {
+        self.add(name, Range::at_most(max), false)
+    }
+    pub fn min(self, name: impl Into<String>, min: usize) -> Self {
+        self.add(name, Range::at_least(min), false)
+    }
+    pub fn exact(self, name: impl Into<String>, value: usize) -> Self {
+        self.add(name, Range::exact(value), false)
+    }
+    pub fn squared_max(self, name: impl Into<String>, max: usize) -> Self {
+        self.add(name, Range::at_most(max), true)
+    }
+    pub fn squared_min(self, name: impl Into<String>, min: usize) -> Self {
+        self.add(name, Range::at_least(min), true)
+    }
+    pub fn squared_exact(self, name: impl Into<String>, value: usize) -> Self {
+        self.add(name, Range::exact(value), true)
+    }
+    pub fn perturbative(mut self, name: impl Into<String>, power: usize) -> Self {
+        self.perturbative.insert(name.into(), power);
+        self
+    }
+    pub fn merge(mut self, other: Self) -> Self {
+        for (n, r) in other.plain {
+            self = self.add(n, r, false)
+        }
+        for (n, r) in other.squared {
+            self = self.add(n, r, true)
+        }
+        for (n, p) in other.perturbative {
+            self.perturbative
+                .entry(n)
+                .and_modify(|old| *old = (*old).min(p))
+                .or_insert(p);
+        }
+        self
+    }
+    pub fn is_empty(&self) -> bool {
+        self.plain
+            .values()
+            .chain(self.squared.values())
+            .any(Range::is_empty)
     }
 }
 
-type ProgressCallback =
-    Arc<dyn Fn(GenerationProgress) -> GenerationControl + Send + Sync + 'static>;
+/// Allow clauses intersect after model resolution; exclusions unite. An empty clause allows none.
+#[derive(
+    Debug,
+    Clone,
+    Default,
+    PartialEq,
+    Eq,
+    Serialize,
+    Deserialize,
+    bincode_trait_derive::Encode,
+    bincode_trait_derive::Decode,
+)]
+pub struct Restrict {
+    pub particle_allow: Vec<BTreeSet<ParticleSelector>>,
+    pub particle_exclude: BTreeSet<ParticleSelector>,
+    pub vertex_allow: Vec<BTreeSet<VertexSelector>>,
+    pub vertex_exclude: BTreeSet<VertexSelector>,
+}
+impl Restrict {
+    pub fn new() -> Self {
+        Self::default()
+    }
+    pub fn only_particles<I, P>(mut self, items: I) -> Self
+    where
+        I: IntoIterator<Item = P>,
+        P: Into<ParticleSelector>,
+    {
+        self.particle_allow
+            .push(items.into_iter().map(Into::into).collect());
+        self
+    }
+    pub fn exclude_particles<I, P>(mut self, items: I) -> Self
+    where
+        I: IntoIterator<Item = P>,
+        P: Into<ParticleSelector>,
+    {
+        self.particle_exclude
+            .extend(items.into_iter().map(Into::into));
+        self
+    }
+    pub fn only_vertices<I, V>(mut self, items: I) -> Self
+    where
+        I: IntoIterator<Item = V>,
+        V: Into<VertexSelector>,
+    {
+        self.vertex_allow
+            .push(items.into_iter().map(Into::into).collect());
+        self
+    }
+    pub fn exclude_vertices<I, V>(mut self, items: I) -> Self
+    where
+        I: IntoIterator<Item = V>,
+        V: Into<VertexSelector>,
+    {
+        self.vertex_exclude
+            .extend(items.into_iter().map(Into::into));
+        self
+    }
+    pub fn merge(mut self, other: Self) -> Self {
+        self.particle_allow.extend(other.particle_allow);
+        self.particle_exclude.extend(other.particle_exclude);
+        self.vertex_allow.extend(other.vertex_allow);
+        self.vertex_exclude.extend(other.vertex_exclude);
+        self
+    }
+    pub(crate) fn resolve(&self, model: &Model) -> Result<ResolvedRestrictions, GenerationError> {
+        let species = |selectors: &BTreeSet<ParticleSelector>| -> Result<BTreeSet<ParticleId>, GenerationError> {
+            let mut ids = BTreeSet::new();
+            for selector in selectors {
+                let id = selector.resolve(model)?;
+                ids.insert(id);
+                ids.insert(model.particle_by_id(id)?.antiparticle);
+            }
+            Ok(ids)
+        };
+        let mut particles = None;
+        for clause in &self.particle_allow {
+            let set = species(clause)?;
+            particles = Some(match particles {
+                None => set,
+                Some(old) => set.intersection(&old).copied().collect(),
+            });
+        }
+        let mut vertices = None;
+        for clause in &self.vertex_allow {
+            let set = clause
+                .iter()
+                .map(|s| s.resolve(model))
+                .collect::<Result<BTreeSet<_>, _>>()?;
+            vertices = Some(match vertices {
+                None => set,
+                Some(old) => set.intersection(&old).copied().collect(),
+            });
+        }
+        Ok(ResolvedRestrictions {
+            particles,
+            particle_veto: species(&self.particle_exclude)?,
+            vertices,
+            vertex_veto: self
+                .vertex_exclude
+                .iter()
+                .map(|s| s.resolve(model))
+                .collect::<Result<_, _>>()?,
+        })
+    }
+}
+#[derive(Debug, Clone)]
+pub(crate) struct ResolvedRestrictions {
+    pub particles: Option<BTreeSet<ParticleId>>,
+    pub particle_veto: BTreeSet<ParticleId>,
+    pub vertices: Option<BTreeSet<VertexRuleId>>,
+    pub vertex_veto: BTreeSet<VertexRuleId>,
+}
+impl ResolvedRestrictions {
+    pub fn particle(&self, p: ParticleId) -> bool {
+        self.particles.as_ref().is_none_or(|set| set.contains(&p))
+            && !self.particle_veto.contains(&p)
+    }
+    pub fn vertex(&self, v: VertexRuleId) -> bool {
+        self.vertices.as_ref().is_none_or(|set| set.contains(&v)) && !self.vertex_veto.contains(&v)
+    }
+}
+
+/// Mass qualifiers for an opt-in topology veto. No veto is the shared default.
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    Default,
+    PartialEq,
+    Eq,
+    Serialize,
+    Deserialize,
+    bincode_trait_derive::Encode,
+    bincode_trait_derive::Decode,
+)]
+pub struct Veto {
+    pub massive: bool,
+    pub massless: bool,
+}
+impl Veto {
+    pub const fn all() -> Self {
+        Self {
+            massive: true,
+            massless: true,
+        }
+    }
+    pub const fn massive() -> Self {
+        Self {
+            massive: true,
+            massless: false,
+        }
+    }
+    pub const fn massless() -> Self {
+        Self {
+            massive: false,
+            massless: true,
+        }
+    }
+    pub fn enabled(self) -> bool {
+        self.massive || self.massless
+    }
+}
+#[derive(
+    Debug,
+    Clone,
+    PartialEq,
+    Eq,
+    Serialize,
+    Deserialize,
+    bincode_trait_derive::Encode,
+    bincode_trait_derive::Decode,
+)]
+pub struct TopologyRules {
+    pub bridges: Bridges,
+    pub self_loops: bool,
+    pub zero_flow_edges: bool,
+    pub max_vertices: Option<usize>,
+    pub self_energies: Veto,
+    pub tadpoles: Veto,
+    pub snails: Veto,
+    pub fermion_loops: Range,
+    pub factorized_loops: Range,
+}
+impl Default for TopologyRules {
+    fn default() -> Self {
+        Self {
+            bridges: Bridges::Any,
+            self_loops: true,
+            zero_flow_edges: false,
+            max_vertices: None,
+            self_energies: Veto::default(),
+            tadpoles: Veto::default(),
+            snails: Veto::default(),
+            fermion_loops: Range::Unrestricted,
+            factorized_loops: Range::Unrestricted,
+        }
+    }
+}
+impl TopologyRules {
+    pub fn new() -> Self {
+        Self::default()
+    }
+    pub fn with_bridges(mut self, v: Bridges) -> Self {
+        self.bridges = v;
+        self
+    }
+    pub fn with_self_loops(mut self, v: bool) -> Self {
+        self.self_loops = v;
+        self
+    }
+    pub fn with_zero_flow_edges(mut self, v: bool) -> Self {
+        self.zero_flow_edges = v;
+        self
+    }
+    pub fn with_max_vertices(mut self, v: usize) -> Self {
+        self.max_vertices = Some(v);
+        self
+    }
+    pub fn with_self_energies(mut self, v: Veto) -> Self {
+        self.self_energies = v;
+        self
+    }
+    pub fn with_tadpoles(mut self, v: Veto) -> Self {
+        self.tadpoles = v;
+        self
+    }
+    pub fn with_snails(mut self, v: Veto) -> Self {
+        self.snails = v;
+        self
+    }
+    pub fn with_fermion_loops(mut self, v: impl Into<Range>) -> Self {
+        self.fermion_loops = v.into();
+        self
+    }
+    pub fn with_factorized_loops(mut self, v: impl Into<Range>) -> Self {
+        self.factorized_loops = v.into();
+        self
+    }
+}
+#[derive(
+    Debug,
+    Clone,
+    Default,
+    PartialEq,
+    Eq,
+    Serialize,
+    Deserialize,
+    bincode_trait_derive::Encode,
+    bincode_trait_derive::Decode,
+)]
+pub struct CutAmplitude {
+    pub orders: Orders,
+    pub loops: Range,
+}
+#[derive(
+    Debug,
+    Clone,
+    Default,
+    PartialEq,
+    Eq,
+    Serialize,
+    Deserialize,
+    bincode_trait_derive::Encode,
+    bincode_trait_derive::Decode,
+)]
+pub struct Cuts {
+    pub amplitude: CutAmplitude,
+    pub blobs: Range,
+    pub spectators: Range,
+    pub sewn_tadpoles: bool,
+    pub symmetrize_left_right: bool,
+}
+impl Cuts {
+    pub fn new() -> Self {
+        Self::default()
+    }
+    pub fn with_cut_amplitude(mut self, v: CutAmplitude) -> Self {
+        self.amplitude = v;
+        self
+    }
+    pub fn with_blobs(mut self, v: impl Into<Range>) -> Self {
+        self.blobs = v.into();
+        self
+    }
+    pub fn with_spectators(mut self, v: impl Into<Range>) -> Self {
+        self.spectators = v.into();
+        self
+    }
+    pub fn with_sewn_tadpoles(mut self, v: bool) -> Self {
+        self.sewn_tadpoles = v;
+        self
+    }
+    pub fn with_symmetrize_left_right(mut self, v: bool) -> Self {
+        self.symmetrize_left_right = v;
+        self
+    }
+}
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    Default,
+    PartialEq,
+    Eq,
+    Serialize,
+    Deserialize,
+    bincode_trait_derive::Encode,
+    bincode_trait_derive::Decode,
+)]
+pub struct Symmetrize {
+    pub initial: bool,
+    pub final_state: bool,
+    pub external_fermions: bool,
+}
+impl Symmetrize {
+    pub const INITIAL: Self = Self {
+        initial: true,
+        final_state: false,
+        external_fermions: false,
+    };
+    pub const FINAL: Self = Self {
+        initial: false,
+        final_state: true,
+        external_fermions: false,
+    };
+    pub const EXTERNAL_FERMIONS: Self = Self {
+        initial: false,
+        final_state: false,
+        external_fermions: true,
+    };
+}
+impl BitOr for Symmetrize {
+    type Output = Self;
+    fn bitor(self, rhs: Self) -> Self {
+        Self {
+            initial: self.initial || rhs.initial,
+            final_state: self.final_state || rhs.final_state,
+            external_fermions: self.external_fermions || rhs.external_fermions,
+        }
+    }
+}
+
 type SkeletonCallback = Arc<dyn Fn(&GenerationSkeletonView<'_>) -> bool + Send + Sync + 'static>;
 type DressingCallback = Arc<dyn Fn(&GenerationDressingView<'_>) -> bool + Send + Sync + 'static>;
 type SelectionCallback = Arc<dyn Fn(&GenerationDiagramView<'_>) -> bool + Send + Sync + 'static>;
@@ -350,729 +608,114 @@ type DeferredDispatch = Arc<
         + Sync
         + 'static,
 >;
-type CancellationCheck = Arc<dyn Fn() -> bool + Send + Sync + 'static>;
-
-/// Metadata requested from generation, independently of progress and cancellation.
-/// Minimal output retains graphs and physical grouping factors without names or source IDs.
-#[derive(
-    Debug,
-    Clone,
-    PartialEq,
-    Eq,
-    Serialize,
-    Deserialize,
-    bincode_trait_derive::Encode,
-    bincode_trait_derive::Decode,
-)]
-#[serde(rename_all = "snake_case")]
-pub enum GenerationOutput {
-    Minimal,
-    Named { prefix: String },
-}
-
-impl Default for GenerationOutput {
-    fn default() -> Self {
-        Self::Named {
-            prefix: "D".to_owned(),
-        }
-    }
-}
-
-#[derive(Clone)]
-pub struct GenerationOptions {
-    pub(crate) threads: Option<usize>,
-    pub(crate) max_vertices: Option<usize>,
-    symmetrize_initial: bool,
-    symmetrize_final: bool,
-    symmetrize_left_right: bool,
-    symmetrize_external_fermions: bool,
-
-    pub(crate) allow_self_loops: bool,
-    pub(crate) allow_zero_flow_edges: bool,
-    pub(crate) graph_filters: Vec<GenerationFilter>,
-    pub(crate) cut_amplitude_filters: Vec<GenerationFilter>,
-    pub(crate) numerator_grouping: NumeratorGrouping,
-    pub(crate) filter_zero_color: bool,
-    pub(crate) output: GenerationOutput,
-    pub(crate) selected_diagram_ids: Option<BTreeSet<DiagramId>>,
-    pub(crate) selected_diagram_names: Option<BTreeSet<String>>,
-    pub(crate) vetoed_diagram_ids: BTreeSet<DiagramId>,
-    pub(crate) vetoed_diagram_names: BTreeSet<String>,
-    pub(crate) loop_momentum_bases: BTreeMap<DiagramId, Vec<EdgeId>>,
-    pub(crate) named_loop_momentum_bases: BTreeMap<String, Vec<EdgeId>>,
-    pub(crate) forced_cuts: Vec<BTreeSet<EdgeId>>,
-    pub(crate) numerator_prefactor: Atom,
-    pub(crate) projector: Option<Atom>,
-    pub(crate) cancellation: CancellationToken,
-    pub(crate) cancellation_check: Option<CancellationCheck>,
-    pub(crate) progress: Option<ProgressCallback>,
+/// Persisted physical request. Callable hooks are deliberately omitted from serialization.
+#[derive(Clone, Serialize, Deserialize)]
+pub struct Request {
+    pub(crate) process: Process,
+    pub(crate) kind: GenerationType,
+    pub(crate) loops: Loops,
+    pub(crate) restrictions: Restrict,
+    pub(crate) orders: Orders,
+    pub(crate) topology: TopologyRules,
+    pub(crate) cuts: Cuts,
+    pub(crate) symmetrization: Symmetrize,
+    #[serde(skip)]
     pub(crate) prune_skeletons: Option<SkeletonCallback>,
+    #[serde(skip)]
     pub(crate) prune_dressings: Option<DressingCallback>,
+    #[serde(skip)]
     pub(crate) select: Option<SelectionCallback>,
+    #[serde(skip)]
     pub(crate) deferred_hooks: Option<(batch::HookMask, DeferredDispatch)>,
 }
-
-/// Stable persistent portion of [`GenerationOptions`]. Callbacks and
-/// cancellation state are deliberately runtime-only and are restored to their
-/// defaults after deserialization.
-#[derive(
-    Serialize,
-    Deserialize,
-    PartialEq,
-    Eq,
-    bincode_trait_derive::Encode,
-    bincode_trait_derive::Decode,
-)]
-struct GenerationOptionsPersistent {
-    threads: Option<usize>,
-    max_vertices: Option<usize>,
-    symmetrize_initial: bool,
-    symmetrize_final: bool,
-    symmetrize_left_right: bool,
-    symmetrize_external_fermions: bool,
-
-    allow_self_loops: bool,
-    allow_zero_flow_edges: bool,
-    graph_filters: Vec<GenerationFilter>,
-    cut_amplitude_filters: Vec<GenerationFilter>,
-    numerator_grouping: NumeratorGrouping,
-    #[serde(default)]
-    filter_zero_color: bool,
-    output: GenerationOutput,
-    selected_diagram_ids: Option<BTreeSet<u128>>,
-    selected_diagram_names: Option<BTreeSet<String>>,
-    vetoed_diagram_ids: BTreeSet<u128>,
-    vetoed_diagram_names: BTreeSet<String>,
-    loop_momentum_bases: BTreeMap<u128, Vec<usize>>,
-    named_loop_momentum_bases: BTreeMap<String, Vec<usize>>,
-    forced_cuts: Vec<BTreeSet<usize>>,
-    numerator_prefactor: String,
-    projector: Option<String>,
-}
-
-impl From<&GenerationOptions> for GenerationOptionsPersistent {
-    fn from(options: &GenerationOptions) -> Self {
+impl Request {
+    fn new(process: Process, kind: GenerationType, loops: Loops) -> Self {
         Self {
-            threads: options.threads,
-            max_vertices: options.max_vertices,
-            symmetrize_initial: options.symmetrize_initial,
-            symmetrize_final: options.symmetrize_final,
-            symmetrize_left_right: options.symmetrize_left_right,
-            symmetrize_external_fermions: options.symmetrize_external_fermions,
-
-            allow_self_loops: options.allow_self_loops,
-            allow_zero_flow_edges: options.allow_zero_flow_edges,
-            graph_filters: options.graph_filters.clone(),
-            cut_amplitude_filters: options.cut_amplitude_filters.clone(),
-            numerator_grouping: options.numerator_grouping.clone(),
-            filter_zero_color: options.filter_zero_color,
-            output: options.output.clone(),
-            selected_diagram_ids: options
-                .selected_diagram_ids
-                .as_ref()
-                .map(|ids| ids.iter().map(|id| id.0).collect()),
-            selected_diagram_names: options.selected_diagram_names.clone(),
-            vetoed_diagram_ids: options.vetoed_diagram_ids.iter().map(|id| id.0).collect(),
-            vetoed_diagram_names: options.vetoed_diagram_names.clone(),
-            loop_momentum_bases: options
-                .loop_momentum_bases
-                .iter()
-                .map(|(id, edges)| (id.0, edges.iter().map(|edge| edge.0).collect()))
-                .collect(),
-            named_loop_momentum_bases: options
-                .named_loop_momentum_bases
-                .iter()
-                .map(|(name, edges)| {
-                    (
-                        name.clone(),
-                        edges.iter().map(|edge| edge.0).collect::<Vec<_>>(),
-                    )
-                })
-                .collect(),
-            forced_cuts: options
-                .forced_cuts
-                .iter()
-                .map(|cut| cut.iter().map(|edge| edge.0).collect())
-                .collect(),
-            numerator_prefactor: options.numerator_prefactor.to_canonical_string(),
-            projector: options
-                .projector
-                .as_ref()
-                .map(AtomCore::to_canonical_string),
-        }
-    }
-}
-
-impl Serialize for GenerationOptions {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        GenerationOptionsPersistent::from(self).serialize(serializer)
-    }
-}
-
-impl<'de> Deserialize<'de> for GenerationOptions {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        Self::from_persistent(GenerationOptionsPersistent::deserialize(deserializer)?)
-            .map_err(serde::de::Error::custom)
-    }
-}
-
-impl bincode::Encode for GenerationOptions {
-    fn encode<E: bincode::enc::Encoder>(
-        &self,
-        encoder: &mut E,
-    ) -> Result<(), bincode::error::EncodeError> {
-        bincode::Encode::encode(&GenerationOptionsPersistent::from(self), encoder)
-    }
-}
-
-impl<Context> bincode::Decode<Context> for GenerationOptions {
-    fn decode<D: bincode::de::Decoder<Context = Context>>(
-        decoder: &mut D,
-    ) -> Result<Self, bincode::error::DecodeError> {
-        Self::from_persistent(bincode::Decode::decode(decoder)?)
-            .map_err(bincode::error::DecodeError::OtherString)
-    }
-}
-
-bincode::impl_borrow_decode!(GenerationOptions);
-
-impl PartialEq for GenerationOptions {
-    fn eq(&self, other: &Self) -> bool {
-        GenerationOptionsPersistent::from(self) == GenerationOptionsPersistent::from(other)
-    }
-}
-
-impl Eq for GenerationOptions {}
-
-impl Default for GenerationOptions {
-    fn default() -> Self {
-        Self {
-            threads: None,
-            max_vertices: None,
-            symmetrize_initial: false,
-            symmetrize_final: false,
-            symmetrize_left_right: false,
-            symmetrize_external_fermions: false,
-
-            allow_self_loops: false,
-            allow_zero_flow_edges: false,
-            graph_filters: Vec::new(),
-            cut_amplitude_filters: Vec::new(),
-            numerator_grouping: NumeratorGrouping::None,
-            filter_zero_color: false,
-            output: GenerationOutput::default(),
-            selected_diagram_ids: None,
-            selected_diagram_names: None,
-            vetoed_diagram_ids: BTreeSet::new(),
-            vetoed_diagram_names: BTreeSet::new(),
-            loop_momentum_bases: BTreeMap::new(),
-            named_loop_momentum_bases: BTreeMap::new(),
-            forced_cuts: Vec::new(),
-            numerator_prefactor: Atom::one(),
-            projector: None,
-            cancellation: CancellationToken::new(),
-            cancellation_check: None,
-            progress: None,
+            process,
+            kind,
+            loops,
+            restrictions: Restrict::new(),
+            orders: Orders::new(),
+            topology: TopologyRules::default(),
+            cuts: Cuts::new(),
+            symmetrization: Symmetrize::default(),
             prune_skeletons: None,
             prune_dressings: None,
             select: None,
             deferred_hooks: None,
         }
     }
-}
-
-impl GenerationOptions {
-    pub fn with_loop_count(
-        mut self,
-        minimum: usize,
-        maximum: usize,
-    ) -> Result<Self, crate::ProcessError> {
-        if minimum > maximum {
-            return Err(crate::ProcessError::InvalidLoopRange { minimum, maximum });
-        }
-        self.graph_filters
-            .retain(|filter| !matches!(filter, GenerationFilter::LoopCountRange(_)));
-        self.graph_filters
-            .push(GenerationFilter::LoopCountRange((minimum, maximum)));
-        Ok(self)
+    pub fn amplitude(process: Process, loops: Loops) -> Self {
+        Self::new(process, GenerationType::Amplitude, loops)
     }
-
-    /// Identify diagrams related by permutations of identical incoming particles.
-    ///
-    /// For an amplitude the identical incoming legs are unlabelled: each diagram carries the
-    /// inverse automorphism count of the unlabelled graph, and the caller sums over the leg
-    /// permutations.
-    ///
-    /// For a cross section this exchanges the two identical beams of a `2 -> X` process, each
-    /// sewn copy moving with its incoming leg. One forward graph of every exchange orbit is
-    /// kept, and its overall factor carries the orbit size as
-    /// `NumeratorIndependentSymmetryGrouping`, so the factors add up to the exact total.
-    /// With [`Self::symmetrize_left_right`] they need not: the total inherits the left/right
-    /// deviations and can also differ from the left/right total, because the orbit is counted
-    /// before the mirror frame decides which of its members have physical cuts.
-    /// Evaluating the representative alone is exact after integration only if the exchange
-    /// is a symmetry of everything else: observables and selectors invariant under the beam
-    /// exchange (signed rapidities are not), beam helicities summed or equal (opposite fixed
-    /// helicities only in a parity-invariant model with parity-even observables and
-    /// selectors), and a polarization gauge that moves with the beams. Graphs that the
-    /// exchange maps to themselves are exact unconditionally. Identical beams among more
-    /// than two incoming particles are an error, since no Lorentz transformation permutes
-    /// them.
-    ///
-    /// Fewer graphs need not make a target precision cheaper: the kept graph puts its orbit's
-    /// weight on one side of the exchange, so the integrand is less symmetric and the
-    /// integration error can grow. For `Z Z -> e+ e-` it was 19 times larger at
-    /// equal sample counts (3.3% against 0.17%).
-    pub fn symmetrize_initial(mut self, enabled: bool) -> Self {
-        self.symmetrize_initial = enabled;
+    pub fn cross_section(process: Process, loops: Loops) -> Self {
+        Self::new(process, GenerationType::CrossSection, loops)
+    }
+    pub fn process(&self) -> &Process {
+        &self.process
+    }
+    pub fn kind(&self) -> GenerationType {
+        self.kind
+    }
+    pub fn loops(&self) -> &Loops {
+        &self.loops
+    }
+    pub fn orders(&self) -> &Orders {
+        &self.orders
+    }
+    pub fn restrictions(&self) -> &Restrict {
+        &self.restrictions
+    }
+    pub fn topology(&self) -> &TopologyRules {
+        &self.topology
+    }
+    pub fn cuts(&self) -> &Cuts {
+        &self.cuts
+    }
+    pub fn symmetrization(&self) -> Symmetrize {
+        self.symmetrization
+    }
+    pub fn with_orders(mut self, v: Orders) -> Self {
+        self.orders = self.orders.merge(v);
         self
     }
-
-    /// Identify amplitude diagrams related by permutations of identical outgoing particles,
-    /// which become unlabelled legs as for [`Self::symmetrize_initial`].
-    ///
-    /// Cross sections reject this option: their final states are cut edges, whose
-    /// identical-particle factor the graph automorphisms already contain.
-    pub fn symmetrize_final(mut self, enabled: bool) -> Self {
-        self.symmetrize_final = enabled;
+    pub fn with_restrict(mut self, v: Restrict) -> Self {
+        self.restrictions = self.restrictions.merge(v);
         self
     }
-
-    /// Identify every cross-section forward graph with its mirror image, which exchanges the
-    /// two amplitude sides of its cuts; this assumes CP symmetry. A graph and a distinct mirror
-    /// image become one diagram whose overall factor counts both through
-    /// `NumeratorIndependentSymmetryGrouping`. Amplitudes ignore this option.
-    ///
-    /// The cut search and the cut filters run in the canonical one of the two frames. From two
-    /// loops on their verdict can depend on the frame (a snail on an external leg can leave
-    /// one frame without a physical cut), and the unsymmetrized graphs need not come in mirror
-    /// pairs, so the total can differ from the unsymmetrized one.
-    pub fn symmetrize_left_right(mut self, enabled: bool) -> Self {
-        self.symmetrize_left_right = enabled;
+    pub fn with_topology(mut self, v: TopologyRules) -> Self {
+        self.topology = v;
         self
     }
-
-    /// Include amplitude fermions in enabled external-state symmetry classes.
-    ///
-    /// This is disabled by default. Cross-section symmetry is unchanged by
-    /// this amplitude-specific policy switch.
-    pub fn symmetrize_external_fermions(mut self, enabled: bool) -> Self {
-        self.symmetrize_external_fermions = enabled;
+    pub fn with_cuts(mut self, v: Cuts) -> Self {
+        self.cuts = v;
         self
     }
-
-    pub fn loop_count(&self) -> RangeInclusive<usize> {
-        self.graph_filters
-            .iter()
-            .find_map(|filter| match filter {
-                GenerationFilter::LoopCountRange((minimum, maximum)) => Some(*minimum..=*maximum),
-                _ => None,
-            })
-            .unwrap_or(0..=0)
-    }
-
-    pub fn symmetrizes_initial(&self) -> bool {
-        self.symmetrize_initial
-    }
-
-    pub fn symmetrizes_final(&self) -> bool {
-        self.symmetrize_final
-    }
-
-    pub fn symmetrizes_left_right(&self) -> bool {
-        self.symmetrize_left_right
-    }
-
-    pub fn symmetrizes_external_fermions(&self) -> bool {
-        self.symmetrize_external_fermions
-    }
-
-    /// Reject the options that a `generation_type` run does not accept: final-state
-    /// symmetrization of a cross section.
-    ///
-    /// Generation checks this, and loaders of saved definitions should too: their diagrams
-    /// were generated under these options.
-    pub fn validate_for(&self, generation_type: GenerationType) -> Result<(), GenerationError> {
-        if generation_type == GenerationType::CrossSection && self.symmetrize_final {
-            return Err(GenerationError::CrossSectionFinalStateSymmetrization);
-        }
-        if matches!(self.output, GenerationOutput::Minimal)
-            && (self
-                .selected_diagram_names
-                .as_ref()
-                .is_some_and(|names| !names.is_empty())
-                || !self.vetoed_diagram_names.is_empty()
-                || !self.named_loop_momentum_bases.is_empty())
-        {
-            return Err(GenerationError::NamesRequireNamedOutput);
-        }
-        Ok(())
-    }
-
-    fn from_persistent(persistent: GenerationOptionsPersistent) -> Result<Self, String> {
-        let parse = |expression: String, field: &str| {
-            Atom::parse(
-                &expression,
-                "feynkit_generation_options",
-                ParseSettings::default(),
-            )
-            .map_err(|message| format!("failed to parse {field} '{expression}': {message}"))
-        };
-        Ok(Self {
-            threads: persistent.threads,
-            max_vertices: persistent.max_vertices,
-            symmetrize_initial: persistent.symmetrize_initial,
-            symmetrize_final: persistent.symmetrize_final,
-            symmetrize_left_right: persistent.symmetrize_left_right,
-            symmetrize_external_fermions: persistent.symmetrize_external_fermions,
-
-            allow_self_loops: persistent.allow_self_loops,
-            allow_zero_flow_edges: persistent.allow_zero_flow_edges,
-            graph_filters: persistent.graph_filters,
-            cut_amplitude_filters: persistent.cut_amplitude_filters,
-            numerator_grouping: persistent.numerator_grouping,
-            filter_zero_color: persistent.filter_zero_color,
-            output: persistent.output,
-            selected_diagram_ids: persistent
-                .selected_diagram_ids
-                .map(|ids| ids.into_iter().map(DiagramId).collect()),
-            selected_diagram_names: persistent.selected_diagram_names,
-            vetoed_diagram_ids: persistent
-                .vetoed_diagram_ids
-                .into_iter()
-                .map(DiagramId)
-                .collect(),
-            vetoed_diagram_names: persistent.vetoed_diagram_names,
-            loop_momentum_bases: persistent
-                .loop_momentum_bases
-                .into_iter()
-                .map(|(id, edges)| {
-                    (
-                        DiagramId(id),
-                        edges.into_iter().map(EdgeId).collect::<Vec<_>>(),
-                    )
-                })
-                .collect(),
-            named_loop_momentum_bases: persistent
-                .named_loop_momentum_bases
-                .into_iter()
-                .map(|(name, edges)| (name, edges.into_iter().map(EdgeId).collect()))
-                .collect(),
-            forced_cuts: persistent
-                .forced_cuts
-                .into_iter()
-                .map(|cut| cut.into_iter().map(EdgeId).collect())
-                .collect(),
-            numerator_prefactor: parse(persistent.numerator_prefactor, "numerator prefactor")?,
-            projector: persistent
-                .projector
-                .map(|projector| parse(projector, "projector"))
-                .transpose()?,
-            cancellation: CancellationToken::new(),
-            cancellation_check: None,
-            progress: None,
-            prune_skeletons: None,
-            prune_dressings: None,
-            select: None,
-            deferred_hooks: None,
-        })
-    }
-
-    /// Resolve all boundary selectors to stable model IDs exactly once.
-    pub(crate) fn resolve_selectors(&self, model: &Model) -> Result<Self, SelectorError> {
-        fn resolve_filter(
-            filter: &GenerationFilter,
-            model: &Model,
-        ) -> Result<GenerationFilter, SelectorError> {
-            Ok(match filter {
-                GenerationFilter::ParticleVeto(selectors) => GenerationFilter::ParticleVeto(
-                    selectors
-                        .iter()
-                        .map(|selector| ParticleSelector::by_id(model, selector.resolve(model)?))
-                        .collect::<Result<_, _>>()?,
-                ),
-                GenerationFilter::VertexAllow(selectors) => GenerationFilter::VertexAllow(
-                    selectors
-                        .iter()
-                        .map(|selector| VertexSelector::by_id(model, selector.resolve(model)?))
-                        .collect::<Result<_, _>>()?,
-                ),
-                GenerationFilter::VertexVeto(selectors) => GenerationFilter::VertexVeto(
-                    selectors
-                        .iter()
-                        .map(|selector| VertexSelector::by_id(model, selector.resolve(model)?))
-                        .collect::<Result<_, _>>()?,
-                ),
-                other => other.clone(),
-            })
-        }
-
-        let mut resolved = self.clone();
-        resolved.graph_filters = self
-            .graph_filters
-            .iter()
-            .map(|filter| resolve_filter(filter, model))
-            .collect::<Result<_, _>>()?;
-        resolved.cut_amplitude_filters = self
-            .cut_amplitude_filters
-            .iter()
-            .map(|filter| resolve_filter(filter, model))
-            .collect::<Result<_, _>>()?;
-        Ok(resolved)
-    }
-}
-
-impl fmt::Debug for GenerationOptions {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter
-            .debug_struct("GenerationOptions")
-            .field("threads", &self.threads)
-            .field("max_vertices", &self.max_vertices)
-            .field("allow_self_loops", &self.allow_self_loops)
-            .field("allow_zero_flow_edges", &self.allow_zero_flow_edges)
-            .field("graph_filters", &self.graph_filters)
-            .field("cut_amplitude_filters", &self.cut_amplitude_filters)
-            .field("numerator_grouping", &self.numerator_grouping)
-            .field("filter_zero_color", &self.filter_zero_color)
-            .field("output", &self.output)
-            .field("selected_diagram_ids", &self.selected_diagram_ids)
-            .field("selected_diagram_names", &self.selected_diagram_names)
-            .field("vetoed_diagram_ids", &self.vetoed_diagram_ids)
-            .field("vetoed_diagram_names", &self.vetoed_diagram_names)
-            .field("loop_momentum_bases", &self.loop_momentum_bases)
-            .field("named_loop_momentum_bases", &self.named_loop_momentum_bases)
-            .field("forced_cuts", &self.forced_cuts)
-            .field("numerator_prefactor", &self.numerator_prefactor)
-            .field("projector", &self.projector)
-            .field("cancelled", &self.cancellation.is_cancelled())
-            .field("cancellation_check", &self.cancellation_check.is_some())
-            .field("progress", &self.progress.is_some())
-            .field("prune_skeletons", &self.prune_skeletons.is_some())
-            .field("prune_dressings", &self.prune_dressings.is_some())
-            .field("select", &self.select.is_some())
-            .field("deferred_hooks", &self.deferred_hooks.is_some())
-            .finish()
-    }
-}
-
-impl GenerationOptions {
-    pub fn threads(mut self, threads: usize) -> Self {
-        self.threads = Some(threads);
+    pub fn with_symmetrize(mut self, v: Symmetrize) -> Self {
+        self.symmetrization = v;
         self
     }
-
-    pub fn max_vertices(mut self, max_vertices: usize) -> Self {
-        self.max_vertices = Some(max_vertices);
-        self
-    }
-
-    pub fn allow_self_loops(mut self, allow: bool) -> Self {
-        self.allow_self_loops = allow;
-        self
-    }
-
-    pub fn allow_zero_flow_edges(mut self, allow: bool) -> Self {
-        self.allow_zero_flow_edges = allow;
-        self
-    }
-
-    pub fn with_graph_filter(mut self, filter: GenerationFilter) -> Self {
-        self.graph_filters.push(filter);
-        self
-    }
-
-    pub fn with_cut_amplitude_filter(mut self, filter: GenerationFilter) -> Self {
-        self.cut_amplitude_filters.push(filter);
-        self
-    }
-
-    pub fn with_scoped_filter(self, scope: FilterScope, filter: GenerationFilter) -> Self {
-        match scope {
-            FilterScope::Graph => self.with_graph_filter(filter),
-            FilterScope::CutAmplitude => self.with_cut_amplitude_filter(filter),
-        }
-    }
-
-    pub fn filters(&self, scope: FilterScope) -> &[GenerationFilter] {
-        match scope {
-            FilterScope::Graph => &self.graph_filters,
-            FilterScope::CutAmplitude => &self.cut_amplitude_filters,
-        }
-    }
-
-    pub fn numerator_grouping(mut self, grouping: NumeratorGrouping) -> Self {
-        self.numerator_grouping = grouping;
-        self
-    }
-
-    /// Remove diagrams whose numerators vanish under color algebra.
-    /// Disabled by default; unproved zeros are retained.
-    pub fn filter_zero_color(mut self, enabled: bool) -> Self {
-        self.filter_zero_color = enabled;
-        self
-    }
-
-    /// Choose whether names and source identities are produced. Nonempty name selectors
-    /// and named momentum-basis maps require `GenerationOutput::Named`.
-    pub fn output(mut self, output: GenerationOutput) -> Self {
-        self.output = output;
-        self
-    }
-
-    /// Retain only diagrams with one of the finalized deterministic names.
-    pub fn select_diagrams<I, S>(mut self, names: I) -> Self
-    where
-        I: IntoIterator<Item = S>,
-        S: Into<String>,
-    {
-        self.selected_diagram_names = Some(names.into_iter().map(Into::into).collect());
-        self
-    }
-
-    /// Retain only diagrams with one of the stable content-derived IDs.
-    pub fn select_diagram_ids<I>(mut self, ids: I) -> Self
-    where
-        I: IntoIterator<Item = DiagramId>,
-    {
-        self.selected_diagram_ids = Some(ids.into_iter().collect());
-        self
-    }
-
-    /// Remove diagrams with one of the finalized deterministic names.
-    pub fn veto_diagrams<I, S>(mut self, names: I) -> Self
-    where
-        I: IntoIterator<Item = S>,
-        S: Into<String>,
-    {
-        self.vetoed_diagram_names = names.into_iter().map(Into::into).collect();
-        self
-    }
-
-    /// Remove diagrams with one of the stable content-derived IDs.
-    pub fn veto_diagram_ids<I>(mut self, ids: I) -> Self
-    where
-        I: IntoIterator<Item = DiagramId>,
-    {
-        self.vetoed_diagram_ids = ids.into_iter().collect();
-        self
-    }
-
-    /// Select the ordered independent edges for one finalized diagram.
-    pub fn with_loop_momentum_basis<I>(mut self, diagram: DiagramId, edges: I) -> Self
-    where
-        I: IntoIterator<Item = EdgeId>,
-    {
-        self.loop_momentum_bases
-            .insert(diagram, edges.into_iter().collect());
-        self
-    }
-
-    /// Select a routing using the display name convenience key.
-    pub fn with_named_loop_momentum_basis<I>(mut self, diagram: impl Into<String>, edges: I) -> Self
-    where
-        I: IntoIterator<Item = EdgeId>,
-    {
-        self.named_loop_momentum_bases
-            .insert(diagram.into(), edges.into_iter().collect());
-        self
-    }
-
-    /// Retain only the listed physical cut-edge sets before diagram grouping.
-    pub fn forced_cuts<I, C>(mut self, cuts: I) -> Self
-    where
-        I: IntoIterator<Item = C>,
-        C: IntoIterator<Item = EdgeId>,
-    {
-        self.forced_cuts = cuts
-            .into_iter()
-            .map(|cut| cut.into_iter().collect())
-            .collect();
-        self
-    }
-
-    /// Multiply every generated numerator by an application-independent factor.
-    pub fn numerator_prefactor(mut self, prefactor: Atom) -> Self {
-        self.numerator_prefactor = prefactor;
-        self
-    }
-
-    /// Override the automatically generated external-state projector.
-    ///
-    /// Passing `1` explicitly disables external wavefunctions; leaving the
-    /// option unset generates the physical wavefunction for every external leg.
-    pub fn projector(mut self, projector: Atom) -> Self {
-        self.projector = Some(projector);
-        self
-    }
-
-    /// Shared cancellation state, including cancellation initiated inside a callback.
-    pub fn cancellation(&self) -> &CancellationToken {
-        &self.cancellation
-    }
-
-    pub fn cancellation_token(mut self, token: CancellationToken) -> Self {
-        self.cancellation = token;
-        self
-    }
-
-    /// Poll an application-owned cancellation source during every generation stage.
-    pub fn cancellation_check(mut self, check: impl Fn() -> bool + Send + Sync + 'static) -> Self {
-        self.cancellation_check = Some(Arc::new(check));
-        self
-    }
-
-    pub fn progress(
-        mut self,
-        callback: impl Fn(GenerationProgress) -> GenerationControl + Send + Sync + 'static,
-    ) -> Self {
-        self.progress = Some(Arc::new(callback));
-        self
-    }
-
-    /// Prune partial and complete untyped process topologies. A rejection must also reject
-    /// every refinement. Built-in topology restrictions run before this callback.
-    ///
-    /// Cross-section legs retain their indices. With initial-state symmetrization, verdicts
-    /// must be invariant under exchanging interchangeable beams.
     pub fn prune_skeletons(
         mut self,
-        callback: impl Fn(&GenerationSkeletonView<'_>) -> bool + Send + Sync + 'static,
+        v: impl Fn(&GenerationSkeletonView<'_>) -> bool + Send + Sync + 'static,
     ) -> Self {
-        self.prune_skeletons = Some(Arc::new(callback));
+        self.prune_skeletons = Some(Arc::new(v));
         self
     }
-
-    /// Prune partial and complete field/rule assignments on complete topologies. A rejection
-    /// must also reject every refinement. Coupling and fermion-loop budgets run first; their
-    /// bounds can still admit partial assignments with no completion. Complete assignments
-    /// also pass the mass-dependent process filters before this callback.
-    /// Verdicts must respect any requested interchangeable-beam symmetry.
     pub fn prune_dressings(
         mut self,
-        callback: impl Fn(&GenerationDressingView<'_>) -> bool + Send + Sync + 'static,
+        v: impl Fn(&GenerationDressingView<'_>) -> bool + Send + Sync + 'static,
     ) -> Self {
-        self.prune_dressings = Some(Arc::new(callback));
+        self.prune_dressings = Some(Arc::new(v));
         self
     }
-
-    /// Select fully assigned diagrams after dressing pruning. This predicate need not be
-    /// hereditary; it must respect any requested interchangeable-beam symmetry.
     pub fn select(
         mut self,
-        callback: impl Fn(&GenerationDiagramView<'_>) -> bool + Send + Sync + 'static,
+        v: impl Fn(&GenerationDiagramView<'_>) -> bool + Send + Sync + 'static,
     ) -> Self {
-        self.select = Some(Arc::new(callback));
+        self.select = Some(Arc::new(v));
         self
     }
-
-    /// Binding transport for the same typed hooks. A whole native wave completes before the
-    /// calling coordinator dispatches it; a break aborts this run through ordinary cancellation.
     #[doc(hidden)]
     pub fn deferred_hooks(
         mut self,
@@ -1087,261 +730,643 @@ impl GenerationOptions {
         self.deferred_hooks = Some((mask, Arc::new(dispatch)));
         self
     }
-
-    pub(crate) fn report_progress(
-        &self,
-        stage: &'static str,
-        completed: usize,
-        total: Option<usize>,
-    ) {
-        self.report_progress_with_zero_count(stage, completed, total, 0);
-    }
-
-    pub(crate) fn report_progress_with_zero_count(
-        &self,
-        stage: &'static str,
-        completed: usize,
-        total: Option<usize>,
-        zero_numerator_count: usize,
-    ) {
-        if self.progress.as_ref().is_some_and(|callback| {
-            callback(GenerationProgress {
-                stage,
-                completed,
-                total,
-                zero_numerator_count,
-            }) == GenerationControl::Cancel
-        }) {
-            self.cancellation.cancel();
+    /// Validate persisted semantics and model selectors without compiling a search plan.
+    pub fn validate_in(&self, model: &Model) -> Result<(), GenerationError> {
+        self.validate()?;
+        self.process.validate_in(model)?;
+        if self.kind == GenerationType::Amplitude && !self.orders.perturbative.is_empty() {
+            return Err(GenerationError::InvalidRequest(
+                "perturbative unresolved-cut orders require a cross section".into(),
+            ));
         }
-    }
-
-    pub(crate) fn max_bridges(&self, minimum_loops: usize) -> Option<usize> {
-        // Early enumeration pruning is safe only if the requested range excludes
-        // trees. Mixed ranges apply the loop-only policy to each finished graph.
-        self.graph_filters
-            .iter()
-            .filter_map(|filter| match filter {
-                GenerationFilter::MaxNumberOfBridges(maximum) => Some(*maximum),
-                GenerationFilter::LoopOneParticleIrreducible if minimum_loops > 0 => Some(0),
-                _ => None,
-            })
-            .min()
-    }
-
-    pub(crate) fn cancellation_requested(&self) -> bool {
-        if !self.cancellation.is_cancelled()
-            && self
-                .cancellation_check
-                .as_ref()
-                .is_some_and(|check| check())
+        self.restrictions.resolve(model)?;
+        for name in self
+            .orders
+            .plain
+            .keys()
+            .chain(self.orders.squared.keys())
+            .chain(self.orders.perturbative.keys())
+            .chain(self.cuts.amplitude.orders.plain.keys())
         {
-            // Work skipped after a transient application signal must never be
-            // treated as completed if a later poll clears that signal.
-            self.cancellation.cancel();
+            model.order(name)?;
         }
-        self.cancellation.is_cancelled()
+        if !self.cuts.amplitude.orders.squared.is_empty()
+            || !self.cuts.amplitude.orders.perturbative.is_empty()
+        {
+            return Err(GenerationError::InvalidRequest(
+                "cut-amplitude orders accept plain bounds only".into(),
+            ));
+        }
+        if self.kind == GenerationType::Amplitude && self.cuts != Cuts::default() {
+            return Err(GenerationError::InvalidRequest(
+                "physical cut options require a cross section".into(),
+            ));
+        }
+        self.process
+            .validate_covariant_cut_restrictions(model, &self.restrictions, self.kind)
+    }
+    pub(crate) fn validate(&self) -> Result<(), GenerationError> {
+        self.process.validate()?;
+        let correct = matches!(
+            (self.kind, &self.loops),
+            (GenerationType::Amplitude, Loops::Total(_))
+                | (GenerationType::CrossSection, Loops::Forward(_))
+        );
+        if !correct {
+            return Err(GenerationError::InvalidRequest(
+                "loop domain must be total for amplitudes and forward for cross sections".into(),
+            ));
+        }
+        if self.loops.range().is_empty() {
+            return Err(GenerationError::InvalidRequest(
+                "loop range is empty".into(),
+            ));
+        }
+        if self.kind == GenerationType::CrossSection && self.symmetrization.final_state {
+            return Err(GenerationError::CrossSectionFinalStateSymmetrization);
+        }
+        if self.kind == GenerationType::Amplitude && self.process.outgoing_alternatives().len() != 1
+        {
+            return Err(crate::ProcessError::MultipleAmplitudeFinalStates.into());
+        }
+        Ok(())
+    }
+}
+impl fmt::Debug for Request {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Request")
+            .field("process", &self.process)
+            .field("kind", &self.kind)
+            .field("loops", &self.loops)
+            .field("restrictions", &self.restrictions)
+            .field("orders", &self.orders)
+            .field("topology", &self.topology)
+            .field("cuts", &self.cuts)
+            .field("symmetrization", &self.symmetrization)
+            .field("prune_skeletons", &self.prune_skeletons.is_some())
+            .field("prune_dressings", &self.prune_dressings.is_some())
+            .field("select", &self.select.is_some())
+            .finish()
+    }
+}
+impl PartialEq for Request {
+    fn eq(&self, other: &Self) -> bool {
+        self.process == other.process
+            && self.kind == other.kind
+            && self.loops == other.loops
+            && self.restrictions == other.restrictions
+            && self.orders == other.orders
+            && self.topology == other.topology
+            && self.cuts == other.cuts
+            && self.symmetrization == other.symmetrization
+    }
+}
+impl Eq for Request {}
+// Native field encoding deliberately excludes callable handles, including deferred transport.
+impl bincode::Encode for Request {
+    fn encode<E: bincode::enc::Encoder>(
+        &self,
+        e: &mut E,
+    ) -> Result<(), bincode::error::EncodeError> {
+        bincode::Encode::encode(
+            &(
+                &self.process,
+                &self.kind,
+                &self.loops,
+                &self.restrictions,
+                &self.orders,
+                &self.topology,
+                &self.cuts,
+                &self.symmetrization,
+            ),
+            e,
+        )
+    }
+}
+impl<C> bincode::Decode<C> for Request {
+    fn decode<D: bincode::de::Decoder<Context = C>>(
+        d: &mut D,
+    ) -> Result<Self, bincode::error::DecodeError> {
+        let (process, kind, loops, restrictions, orders, topology, cuts, symmetrization) =
+            bincode::Decode::decode(d)?;
+        Ok(Self {
+            process,
+            kind,
+            loops,
+            restrictions,
+            orders,
+            topology,
+            cuts,
+            symmetrization,
+            prune_skeletons: None,
+            prune_dressings: None,
+            select: None,
+            deferred_hooks: None,
+        })
+    }
+}
+bincode::impl_borrow_decode!(Request);
+
+/// Explicit naming demand; iteration and compact generation never introduce names.
+#[derive(
+    Debug,
+    Clone,
+    Default,
+    PartialEq,
+    Eq,
+    Serialize,
+    Deserialize,
+    bincode_trait_derive::Encode,
+    bincode_trait_derive::Decode,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum Naming {
+    #[default]
+    None,
+    Named {
+        prefix: String,
+    },
+}
+impl Naming {
+    pub fn prefix(prefix: impl Into<String>) -> Self {
+        Self::Named {
+            prefix: prefix.into(),
+        }
+    }
+    pub fn named() -> Self {
+        Self::prefix("GL")
+    }
+}
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NumeratorOptions {
+    pub prefactor: Atom,
+    pub projector: Option<Atom>,
+    pub naming: Naming,
+    pub filter_zero_color: bool,
+    pub loop_momentum_bases: BTreeMap<DiagramId, Vec<EdgeId>>,
+    pub named_loop_momentum_bases: BTreeMap<String, Vec<EdgeId>>,
+}
+impl Default for NumeratorOptions {
+    fn default() -> Self {
+        Self {
+            prefactor: Atom::one(),
+            projector: None,
+            naming: Naming::None,
+            filter_zero_color: false,
+            loop_momentum_bases: BTreeMap::new(),
+            named_loop_momentum_bases: BTreeMap::new(),
+        }
+    }
+}
+impl NumeratorOptions {
+    pub fn with_prefactor(mut self, v: Atom) -> Self {
+        self.prefactor = v;
+        self
+    }
+    pub fn with_projector(mut self, v: Atom) -> Self {
+        self.projector = Some(v);
+        self
+    }
+    pub fn with_naming(mut self, v: Naming) -> Self {
+        self.naming = v;
+        self
+    }
+    pub fn with_zero_color_filter(mut self, v: bool) -> Self {
+        self.filter_zero_color = v;
+        self
+    }
+    pub fn with_loop_momentum_basis(
+        mut self,
+        id: DiagramId,
+        edges: impl IntoIterator<Item = EdgeId>,
+    ) -> Self {
+        self.loop_momentum_bases
+            .insert(id, edges.into_iter().collect());
+        self
+    }
+    pub fn with_named_loop_momentum_basis(
+        mut self,
+        name: impl Into<String>,
+        edges: impl IntoIterator<Item = EdgeId>,
+    ) -> Self {
+        self.named_loop_momentum_bases
+            .insert(name.into(), edges.into_iter().collect());
+        self
+    }
+}
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Selection {
+    pub selected_diagram_ids: Option<BTreeSet<DiagramId>>,
+    pub selected_diagram_names: Option<BTreeSet<String>>,
+    pub vetoed_diagram_ids: BTreeSet<DiagramId>,
+    pub vetoed_diagram_names: BTreeSet<String>,
+    pub forced_cuts: Vec<BTreeSet<EdgeId>>,
+}
+impl Selection {
+    pub fn new() -> Self {
+        Self::default()
+    }
+    pub fn select_names<S: Into<String>>(mut self, v: impl IntoIterator<Item = S>) -> Self {
+        self.selected_diagram_names = Some(v.into_iter().map(Into::into).collect());
+        self
+    }
+    pub fn select_ids(mut self, v: impl IntoIterator<Item = DiagramId>) -> Self {
+        self.selected_diagram_ids = Some(v.into_iter().collect());
+        self
+    }
+    pub fn veto_names<S: Into<String>>(mut self, v: impl IntoIterator<Item = S>) -> Self {
+        self.vetoed_diagram_names
+            .extend(v.into_iter().map(Into::into));
+        self
+    }
+    pub fn veto_ids(mut self, v: impl IntoIterator<Item = DiagramId>) -> Self {
+        self.vetoed_diagram_ids.extend(v);
+        self
+    }
+    pub fn with_forced_cuts<I, C>(mut self, v: I) -> Self
+    where
+        I: IntoIterator<Item = C>,
+        C: IntoIterator<Item = EdgeId>,
+    {
+        self.forced_cuts = v.into_iter().map(|cut| cut.into_iter().collect()).collect();
+        self
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Stage {
+    Skeletons,
+    Dressing,
+    Prepare,
+    Numerators,
+    Selection,
+    ZeroColor,
+    GroupingPreparation,
+    GroupingSamples,
+    GroupingComparison,
+    Grouping,
+    Done,
+}
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GenerationProgress {
+    pub stage: Stage,
+    pub completed: BigUint,
+    pub total: Option<BigUint>,
+    pub zero_numerator_count: BigUint,
+}
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum GenerationControl {
+    Continue,
+    Cancel,
+}
+#[derive(Debug, Clone, Default)]
+pub struct CancellationToken(Arc<AtomicBool>);
+impl CancellationToken {
+    pub fn new() -> Self {
+        Self::default()
+    }
+    pub fn cancel(&self) {
+        self.0.store(true, Ordering::Release)
+    }
+    pub fn is_cancelled(&self) -> bool {
+        self.0.load(Ordering::Acquire)
+    }
+}
+type ProgressCallback =
+    Arc<dyn Fn(GenerationProgress) -> GenerationControl + Send + Sync + 'static>;
+type CancellationCheck = Arc<dyn Fn() -> bool + Send + Sync + 'static>;
+/// Execution state is never serialized. Clones share cancellation, not progress snapshots.
+#[derive(Clone)]
+pub struct Run {
+    pub(crate) threads: Option<usize>,
+    pub(crate) parallel: bool,
+    pub(crate) check_heredity: bool,
+    pub(crate) cancellation: CancellationToken,
+    pub(crate) cancellation_check: Option<CancellationCheck>,
+    pub(crate) progress: Option<ProgressCallback>,
+}
+impl Default for Run {
+    fn default() -> Self {
+        Self {
+            threads: None,
+            parallel: true,
+            check_heredity: false,
+            cancellation: CancellationToken::new(),
+            cancellation_check: None,
+            progress: None,
+        }
+    }
+}
+impl fmt::Debug for Run {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Run")
+            .field("threads", &self.threads)
+            .field("parallel", &self.parallel)
+            .field("check_heredity", &self.check_heredity)
+            .field("cancelled", &self.cancellation.is_cancelled())
+            .finish()
+    }
+}
+impl Run {
+    pub fn threads(mut self, v: usize) -> Self {
+        self.threads = Some(v);
+        self
+    }
+    pub fn parallel(mut self, v: bool) -> Self {
+        self.parallel = v;
+        self
+    }
+    pub fn check_heredity(mut self, v: bool) -> Self {
+        self.check_heredity = v;
+        self
+    }
+    pub fn cancellation(&self) -> &CancellationToken {
+        &self.cancellation
+    }
+    pub fn cancellation_token(mut self, v: CancellationToken) -> Self {
+        self.cancellation = v;
+        self
+    }
+    pub fn cancellation_check(mut self, v: impl Fn() -> bool + Send + Sync + 'static) -> Self {
+        self.cancellation_check = Some(Arc::new(v));
+        self
+    }
+    pub fn progress(
+        mut self,
+        v: impl Fn(GenerationProgress) -> GenerationControl + Send + Sync + 'static,
+    ) -> Self {
+        self.progress = Some(Arc::new(v));
+        self
+    }
+    pub fn cancellation_requested(&self) -> bool {
+        if !self.cancellation.is_cancelled()
+            && self.cancellation_check.as_ref().is_some_and(|v| v())
+        {
+            self.cancellation.cancel()
+        }
+        self.cancellation.is_cancelled()
+    }
+    pub(crate) fn report_progress(
+        &self,
+        stage: Stage,
+        completed: impl Into<BigUint>,
+        total: Option<usize>,
+    ) {
+        self.report_progress_with_zero_count(stage, completed, total, 0usize)
+    }
+    pub(crate) fn report_progress_with_zero_count(
+        &self,
+        stage: Stage,
+        completed: impl Into<BigUint>,
+        total: Option<usize>,
+        zero: impl Into<BigUint>,
+    ) {
+        if self.progress.as_ref().is_some_and(|cb| {
+            cb(GenerationProgress {
+                stage,
+                completed: completed.into(),
+                total: total.map(Into::into),
+                zero_numerator_count: zero.into(),
+            }) == GenerationControl::Cancel
+        }) {
+            self.cancellation.cancel()
+        }
+    }
+}
+
+impl bincode::Encode for Selection {
+    fn encode<E: bincode::enc::Encoder>(
+        &self,
+        e: &mut E,
+    ) -> Result<(), bincode::error::EncodeError> {
+        let selected = self
+            .selected_diagram_ids
+            .as_ref()
+            .map(|s| s.iter().map(|i| i.0).collect::<BTreeSet<_>>());
+        let vetoed = self
+            .vetoed_diagram_ids
+            .iter()
+            .map(|i| i.0)
+            .collect::<BTreeSet<_>>();
+        let cuts = self
+            .forced_cuts
+            .iter()
+            .map(|s| s.iter().map(|i| i.0).collect::<BTreeSet<_>>())
+            .collect::<Vec<_>>();
+        bincode::Encode::encode(
+            &(
+                selected,
+                &self.selected_diagram_names,
+                vetoed,
+                &self.vetoed_diagram_names,
+                cuts,
+            ),
+            e,
+        )
+    }
+}
+impl<C> bincode::Decode<C> for Selection {
+    fn decode<D: bincode::de::Decoder<Context = C>>(
+        d: &mut D,
+    ) -> Result<Self, bincode::error::DecodeError> {
+        let (selected, selected_diagram_names, vetoed, vetoed_diagram_names, cuts): (
+            Option<BTreeSet<u128>>,
+            _,
+            BTreeSet<u128>,
+            _,
+            Vec<BTreeSet<usize>>,
+        ) = bincode::Decode::decode(d)?;
+        Ok(Self {
+            selected_diagram_ids: selected.map(|s| s.into_iter().map(DiagramId).collect()),
+            selected_diagram_names,
+            vetoed_diagram_ids: vetoed.into_iter().map(DiagramId).collect(),
+            vetoed_diagram_names,
+            forced_cuts: cuts
+                .into_iter()
+                .map(|s| s.into_iter().map(EdgeId).collect())
+                .collect(),
+        })
+    }
+}
+bincode::impl_borrow_decode!(Selection);
+
+#[derive(Serialize, Deserialize, bincode_trait_derive::Encode, bincode_trait_derive::Decode)]
+struct NumeratorData {
+    prefactor: String,
+    projector: Option<String>,
+    naming: Naming,
+    filter_zero_color: bool,
+    loop_momentum_bases: BTreeMap<u128, Vec<usize>>,
+    named_loop_momentum_bases: BTreeMap<String, Vec<usize>>,
+}
+impl From<&NumeratorOptions> for NumeratorData {
+    fn from(v: &NumeratorOptions) -> Self {
+        Self {
+            prefactor: v.prefactor.to_canonical_string(),
+            projector: v.projector.as_ref().map(AtomCore::to_canonical_string),
+            naming: v.naming.clone(),
+            filter_zero_color: v.filter_zero_color,
+            loop_momentum_bases: v
+                .loop_momentum_bases
+                .iter()
+                .map(|(id, edges)| (id.0, edges.iter().map(|e| e.0).collect()))
+                .collect(),
+            named_loop_momentum_bases: v
+                .named_loop_momentum_bases
+                .iter()
+                .map(|(name, edges)| (name.clone(), edges.iter().map(|e| e.0).collect()))
+                .collect(),
+        }
+    }
+}
+impl TryFrom<NumeratorData> for NumeratorOptions {
+    type Error = String;
+    fn try_from(v: NumeratorData) -> Result<Self, Self::Error> {
+        let parse = |text: &str| {
+            Atom::parse(text, "feynkit_generation_options", ParseSettings::default())
+                .map_err(|e| e.to_string())
+        };
+        Ok(Self {
+            prefactor: parse(&v.prefactor)?,
+            projector: v.projector.as_deref().map(parse).transpose()?,
+            naming: v.naming,
+            filter_zero_color: v.filter_zero_color,
+            loop_momentum_bases: v
+                .loop_momentum_bases
+                .into_iter()
+                .map(|(id, edges)| (DiagramId(id), edges.into_iter().map(EdgeId).collect()))
+                .collect(),
+            named_loop_momentum_bases: v
+                .named_loop_momentum_bases
+                .into_iter()
+                .map(|(name, edges)| (name, edges.into_iter().map(EdgeId).collect()))
+                .collect(),
+        })
+    }
+}
+impl Serialize for NumeratorOptions {
+    fn serialize<S: serde::Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        NumeratorData::from(self).serialize(s)
+    }
+}
+impl<'de> Deserialize<'de> for NumeratorOptions {
+    fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        NumeratorData::deserialize(d)?
+            .try_into()
+            .map_err(serde::de::Error::custom)
+    }
+}
+impl bincode::Encode for NumeratorOptions {
+    fn encode<E: bincode::enc::Encoder>(
+        &self,
+        e: &mut E,
+    ) -> Result<(), bincode::error::EncodeError> {
+        bincode::Encode::encode(&NumeratorData::from(self), e)
+    }
+}
+impl<C> bincode::Decode<C> for NumeratorOptions {
+    fn decode<D: bincode::de::Decoder<Context = C>>(
+        d: &mut D,
+    ) -> Result<Self, bincode::error::DecodeError> {
+        NumeratorData::decode(d)?
+            .try_into()
+            .map_err(bincode::error::DecodeError::OtherString)
+    }
+}
+bincode::impl_borrow_decode!(NumeratorOptions);
+
 #[cfg(test)]
 mod tests {
-    #[test]
-    fn output_policy_roundtrips_and_rejects_only_actual_name_requirements() {
-        use super::{GenerationOutput, GenerationType};
-        for output in [
-            GenerationOutput::Minimal,
-            GenerationOutput::Named {
-                prefix: "graph_".into(),
-            },
-        ] {
-            let options = GenerationOptions::default().output(output);
-            let json = serde_json::to_string(&options).unwrap();
-            assert_eq!(
-                serde_json::from_str::<GenerationOptions>(&json).unwrap(),
-                options
-            );
-            let bytes = bincode::encode_to_vec(&options, bincode::config::standard()).unwrap();
-            let (decoded, consumed): (GenerationOptions, usize) =
-                bincode::decode_from_slice(&bytes, bincode::config::standard()).unwrap();
-            assert_eq!(consumed, bytes.len());
-            assert_eq!(decoded, options);
-        }
-        let minimal = GenerationOptions::default().output(GenerationOutput::Minimal);
-        for options in [
-            minimal.clone(),
-            minimal.clone().select_diagrams(Vec::<String>::new()),
-            minimal.clone().veto_diagrams(Vec::<String>::new()),
-            minimal.clone().select_diagram_ids([DiagramId(1)]),
-            minimal.clone().veto_diagram_ids([DiagramId(1)]),
-            minimal.clone().with_loop_momentum_basis(DiagramId(1), []),
-        ] {
-            options.validate_for(GenerationType::Amplitude).unwrap();
-        }
-        for options in [
-            minimal.clone().select_diagrams(["D0"]),
-            minimal.clone().veto_diagrams(["D0"]),
-            minimal.with_named_loop_momentum_basis("D0", []),
-        ] {
-            assert!(matches!(
-                options.validate_for(GenerationType::Amplitude),
-                Err(crate::GenerationError::NamesRequireNamedOutput)
-            ));
-        }
+    use super::*;
+    fn model() -> Model {
+        Model::from_json(include_str!(
+            "../../feynkit-model/tests/fixtures/scalars_2p_3p.json"
+        ))
+        .unwrap()
     }
-
     #[test]
-    fn application_cancellation_remains_latched_after_the_signal_clears() {
-        use std::sync::{
-            Arc,
-            atomic::{AtomicBool, Ordering},
-        };
-
-        let signal = Arc::new(AtomicBool::new(true));
-        let checked = signal.clone();
-        let options = GenerationOptions::default()
-            .cancellation_check(move || checked.swap(false, Ordering::AcqRel));
-        assert!(options.cancellation_requested());
-        assert!(!signal.load(Ordering::Acquire));
-        assert!(options.cancellation_requested());
+    fn grouped_bounds_and_restrictions_intersect_after_alias_resolution() {
+        let model = model();
+        let id = model.particle_id("scalar_0").unwrap();
+        let restriction = Restrict::new()
+            .only_particles(["scalar_0"])
+            .merge(Restrict::new().only_particles([ParticleSelector::by_id(&model, id).unwrap()]));
+        assert!(restriction.resolve(&model).unwrap().particle(id));
+        assert!(
+            !restriction
+                .merge(Restrict::new().exclude_particles([1000i64]))
+                .resolve(&model)
+                .unwrap()
+                .particle(id)
+        );
+        assert!(
+            !Restrict::new()
+                .only_particles(std::iter::empty::<&str>())
+                .resolve(&model)
+                .unwrap()
+                .particle(id)
+        );
+        let orders = Orders::new()
+            .min("QCD", 3)
+            .merge(Orders::new().max("QCD", 1));
+        assert!(orders.plain["QCD"].is_empty());
+        assert!(Range::Unrestricted.contains(usize::MAX));
     }
-
     #[test]
-    fn cp_symmetrization_is_an_explicit_serialized_opt_in() {
-        let options = GenerationOptions::default();
-        assert!(!options.symmetrizes_left_right());
-        for enabled in [false, true] {
-            let options = options.clone().symmetrize_left_right(enabled);
-            let definition = serde_json::to_value(&options).unwrap();
-            assert_eq!(definition["symmetrize_left_right"], enabled);
-            let decoded: GenerationOptions = serde_json::from_value(definition).unwrap();
-            assert_eq!(decoded.symmetrizes_left_right(), enabled);
-        }
-    }
-
-    use symbolica::atom::Atom;
-
-    use super::{GenerationFilter, GenerationOptions, GraphGroupingOptions, NumeratorGrouping};
-    use crate::{ParticleSelector, VertexSelector};
-    use feynkit_graph::{DiagramId, EdgeId};
-
-    #[test]
-    fn zero_color_filter_is_an_explicit_serialized_opt_in() {
-        let defaults = GenerationOptions::default();
-        assert!(!defaults.filter_zero_color);
-        let enabled = defaults.clone().filter_zero_color(true);
-        assert_ne!(defaults, enabled);
-        assert!(format!("{enabled:?}").contains("filter_zero_color: true"));
-        for enabled in [false, true] {
-            let options = defaults.clone().filter_zero_color(enabled);
-            let definition = serde_json::to_value(&options).unwrap();
-            assert_eq!(definition["filter_zero_color"], enabled);
-            let decoded: GenerationOptions = serde_json::from_value(definition).unwrap();
-            assert_eq!(decoded, options);
-        }
-        let mut definition = serde_json::to_value(&enabled).unwrap();
-        definition
-            .as_object_mut()
-            .unwrap()
-            .remove("filter_zero_color");
-        let decoded: GenerationOptions = serde_json::from_value(definition).unwrap();
-        assert_eq!(decoded, defaults);
-    }
-
-    #[test]
-    fn zero_count_progress_preserves_callback_cancellation() {
-        use std::sync::{Arc, Mutex};
-
-        let updates = Arc::new(Mutex::new(Vec::new()));
-        let captured = Arc::clone(&updates);
-        let options = GenerationOptions::default().progress(move |progress| {
-            captured.lock().unwrap().push(progress);
-            if progress.zero_numerator_count == 2 {
-                super::GenerationControl::Cancel
-            } else {
-                super::GenerationControl::Continue
-            }
-        });
-        options.report_progress("numerators", 4, Some(4));
-        options.report_progress_with_zero_count("filter_zero_color", 1, Some(4), 1);
-        assert!(!options.cancellation_requested());
-        options.report_progress_with_zero_count("filter_zero_color", 3, Some(4), 2);
-        assert!(options.cancellation_requested());
-        let updates = updates.lock().unwrap();
-        assert_eq!(updates[0].zero_numerator_count, 0);
-        assert_eq!(updates[1].zero_numerator_count, 1);
-        assert_eq!(updates[2].zero_numerator_count, 2);
-        assert_eq!(updates[2].completed, 3);
-        assert_eq!(updates[2].total, Some(4));
-    }
-
-    #[test]
-    fn runtime_callbacks_are_not_serialized() {
-        let options = GenerationOptions::default()
-            .prune_skeletons(|_| false)
-            .prune_dressings(|_| false)
-            .select(|_| false)
-            .deferred_hooks(
-                linnet::half_edge::generate::batch::HookMask::default(),
-                |_| std::ops::ControlFlow::Break(()),
-            )
-            .progress(|_| super::GenerationControl::Cancel);
-        let encoded = bincode::encode_to_vec(&options, bincode::config::standard()).unwrap();
-        let (decoded, _): (GenerationOptions, usize) =
+    fn persisted_request_and_build_options_drop_execution_hooks_only() {
+        let request = Process::new(["scalar_0"], ["scalar_0"])
+            .amplitude(Loops::total(0..=2))
+            .with_restrict(Restrict::new().only_vertices(["V_3_SCALAR_000"]))
+            .with_topology(TopologyRules::default().with_bridges(Bridges::OnePIInLoops))
+            .prune_skeletons(|_| true)
+            .select(|_| false);
+        let decoded: Request =
+            serde_json::from_str(&serde_json::to_string(&request).unwrap()).unwrap();
+        assert_eq!(decoded, request);
+        assert!(decoded.prune_skeletons.is_none() && decoded.select.is_none());
+        let encoded = bincode::encode_to_vec(&request, bincode::config::standard()).unwrap();
+        let (decoded, n): (Request, usize) =
             bincode::decode_from_slice(&encoded, bincode::config::standard()).unwrap();
-        assert_eq!(decoded, options);
+        assert_eq!(n, encoded.len());
+        assert_eq!(decoded, request);
         assert!(decoded.prune_skeletons.is_none());
-        assert!(decoded.prune_dressings.is_none());
-        assert!(decoded.select.is_none());
-        assert!(decoded.deferred_hooks.is_none());
-        assert!(decoded.progress.is_none());
-    }
-
-    #[test]
-    fn projector_serde_distinguishes_automatic_from_explicit_one() {
-        let automatic = GenerationOptions::default();
-        let automatic_json = serde_json::to_string(&automatic).unwrap();
-        assert!(automatic_json.contains(r#""projector":null"#));
-        let automatic_roundtrip: GenerationOptions = serde_json::from_str(&automatic_json).unwrap();
-        assert!(automatic_roundtrip.projector.is_none());
-
-        let explicit = GenerationOptions::default().projector(Atom::one());
-        let explicit_json = serde_json::to_string(&explicit).unwrap();
-        assert!(explicit_json.contains(r#""projector":"1""#));
-        let explicit_roundtrip: GenerationOptions = serde_json::from_str(&explicit_json).unwrap();
-        assert_eq!(explicit_roundtrip.projector, Some(Atom::one()));
-    }
-
-    #[test]
-    fn bincode_roundtrip_uses_native_enum_encoding() {
-        let options = GenerationOptions::default()
-            .threads(3)
-            .filter_zero_color(true)
-            .with_graph_filter(GenerationFilter::ParticleVeto(vec![
-                ParticleSelector::from("g"),
-                ParticleSelector::from(5_i64),
-            ]))
-            .with_cut_amplitude_filter(GenerationFilter::VertexAllow(vec![VertexSelector::from(
-                "V_42",
-            )]))
-            .numerator_grouping(NumeratorGrouping::UpToScalar(
-                GraphGroupingOptions::default(),
-            ))
-            .select_diagram_ids([DiagramId(17)])
-            .veto_diagram_ids([DiagramId(23)])
-            .with_loop_momentum_basis(DiagramId(17), [EdgeId(2), EdgeId(7)])
-            .with_named_loop_momentum_basis("D0", [EdgeId(3), EdgeId(5)])
-            .forced_cuts([[EdgeId(1), EdgeId(4)]])
-            .projector(Atom::one());
-
-        let encoded = bincode::encode_to_vec(&options, bincode::config::standard()).unwrap();
-        let (decoded, consumed): (GenerationOptions, usize) =
-            bincode::decode_from_slice(&encoded, bincode::config::standard()).unwrap();
-
-        assert_eq!(consumed, encoded.len());
+        let atom = Atom::parse("(x+y)^3", "P7_wire", ParseSettings::default()).unwrap();
+        let options = NumeratorOptions::default()
+            .with_prefactor(atom.clone())
+            .with_projector(atom)
+            .with_naming(Naming::named())
+            .with_loop_momentum_basis(DiagramId(u128::MAX), [EdgeId(9)]);
+        let bytes = bincode::encode_to_vec(&options, bincode::config::standard()).unwrap();
+        let (decoded, n): (NumeratorOptions, usize) =
+            bincode::decode_from_slice(&bytes, bincode::config::standard()).unwrap();
+        assert_eq!(n, bytes.len());
         assert_eq!(decoded, options);
-        assert!(!decoded.cancellation.is_cancelled());
-        assert!(decoded.cancellation_check.is_none());
-        assert!(decoded.progress.is_none());
+        let decoded: NumeratorOptions =
+            serde_json::from_str(&serde_json::to_string(&options).unwrap()).unwrap();
+        assert_eq!(decoded, options);
+    }
+    #[test]
+    fn domains_are_explicit_and_perturbative_orders_remain_cross_section_only() {
+        let model = model();
+        let process = Process::new(["scalar_0"], ["scalar_0"]);
+        assert!(
+            process
+                .clone()
+                .amplitude(Loops::forward(1..=1))
+                .validate_in(&model)
+                .is_err()
+        );
+        assert!(
+            process
+                .clone()
+                .cross_section(Loops::total(1..=1))
+                .validate_in(&model)
+                .is_err()
+        );
+        let request = process
+            .amplitude(Loops::total(0..=0))
+            .with_orders(Orders::new().perturbative("QCD", 2));
+        assert!(request.validate_in(&model).is_err());
     }
 }

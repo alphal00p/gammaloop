@@ -25,25 +25,20 @@ fn provisional_projector(generator: &Generator, graph: &GeneratedGraph) -> Atom 
     generator.external_state_projector(&positions).unwrap()
 }
 
-/// The diagram inputs of `case` as [`Generator::generate`] prepares them, from a sequential
+/// The diagram inputs of `case` as [`Request::generate`] prepares them, from a sequential
 /// search, with the resolved options they were prepared with.
-fn diagram_inputs(generator: &Generator, case: &Case) -> (GenerationOptions, Vec<DiagramInput>) {
+fn diagram_inputs(generator: &Generator, case: &Case) -> (NumeratorOptions, Vec<DiagramInput>) {
     let PreparedSearch {
-        options,
+        request,
         resolved,
         signatures,
         externals,
         plan,
+        ..
     } = generator
-        .search(
-            &case.process(),
-            &case.options(&generator.model, 1),
-            case.kind,
-            |_, _| {},
-            |_, _| {},
-        )
+        .search(&case.request(&generator.model), |_, _| {}, |_, _| {})
         .unwrap();
-    let run = Run::default();
+    let run = EngineRun::default();
     let inputs = plan
         .as_ref()
         .unwrap()
@@ -52,13 +47,20 @@ fn diagram_inputs(generator: &Generator, case: &Case) -> (GenerationOptions, Vec
         .filter_map(|diagram| {
             let multiplicity = externals.sewn_pair_orbit(&diagram)?;
             let graph = externals.graph(&diagram, &signatures);
-            let symmetry = u64::try_from(diagram.automorphism_count.unwrap()).unwrap();
+            let symmetry = diagram.symmetry_factor().unwrap();
             generator
-                .diagram_input(&resolved, graph, symmetry, multiplicity, &options)
+                .diagram_input(
+                    &resolved,
+                    graph,
+                    symmetry,
+                    multiplicity,
+                    &request,
+                    &case.grouping(),
+                )
                 .unwrap()
         })
         .collect();
-    (options, inputs)
+    (NumeratorOptions::default(), inputs)
 }
 
 /// The atoms of a diagram: numerator, prefactor, projector, overall factor and fragments.
@@ -87,7 +89,7 @@ fn check(name: &str) -> usize {
     for (index, input) in inputs.into_iter().enumerate() {
         let context = format!("{name}_{index}");
         for topology in [input.comparison, input.representative] {
-            let diagram = |options: &GenerationOptions| {
+            let diagram = |options: &NumeratorOptions| {
                 generator
                     .to_diagram(
                         Some(context.clone()),
@@ -101,7 +103,7 @@ fn check(name: &str) -> usize {
             };
             let projector = provisional_projector(&generator, &topology.graph);
             let automatic = diagram(&options);
-            let provisional = diagram(&options.clone().projector(projector));
+            let provisional = diagram(&options.clone().with_projector(projector));
             assert_ne!(automatic.projector(), &Atom::one(), "{context}");
             assert_eq!(automatic.projector(), provisional.projector(), "{context}");
             assert_eq!(atoms(&automatic), atoms(&provisional), "{context}");

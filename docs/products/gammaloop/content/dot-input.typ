@@ -187,7 +187,7 @@ example `graph [final_state="mu-,mu+"]`. FeynKit keeps the cuts separating the i
 outgoing initial-state legs whose cut edges carry exactly these particles, and refuses a graph
 without any. Without `final_state`, every separating cut is physical. `import graphs
 --process-spec '<process>'` then keeps only the cuts matching that process definition, for
-example `--process-spec 'e+ e- > mu+ mu-'`.
+example `--process-spec 'e+ e- > mu+ mu- [{{1}}]'`.
 
 `just draw` renders compact DOT directly, without this physics import or sewing. The notebook
 instead imports compact DOT with FeynKit and selects physical cuts using `final_state`. Both renderers give incoming legs one shared, movable X coordinate on the left and outgoing legs

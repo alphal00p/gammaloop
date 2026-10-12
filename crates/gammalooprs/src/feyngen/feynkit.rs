@@ -5,7 +5,7 @@
 
 use std::sync::Arc;
 
-use feynkit_generator::{GenerationControl, GenerationReport, GenerationResult, GenerationType};
+use feynkit_generator::{BuiltDiagramSet, GenerationControl, GenerationReport, Run};
 use feynkit_graph::{EdgeId, FeynmanDiagram};
 use thiserror::Error;
 
@@ -62,18 +62,18 @@ impl FeynmanDiagramGammaLoopExt for FeynmanDiagram {
 }
 
 /// Atomic GammaLoop enrichment for a canonical collapsed generation result.
-pub trait GenerationResultGammaLoopExt {
+pub trait BuiltDiagramSetGammaLoopExt {
     fn to_gamma_loop_graphs(&self) -> Result<Vec<Graph>, FeynkitRuntimeError>;
 }
 
-impl GenerationResultGammaLoopExt for GenerationResult {
+impl BuiltDiagramSetGammaLoopExt for BuiltDiagramSet {
     fn to_gamma_loop_graphs(&self) -> Result<Vec<Graph>, FeynkitRuntimeError> {
         self.validate_groups()?;
-        let mut group_ids = vec![None; self.diagrams.len()];
-        for (group_index, group) in self.groups.iter().enumerate() {
+        let mut group_ids = vec![None; self.diagrams().len()];
+        for (group_index, group) in self.groups().iter().enumerate() {
             group_ids[group.master] = Some(GroupId(group_index));
         }
-        self.diagrams
+        self.diagrams()
             .iter()
             .enumerate()
             .map(|(index, diagram)| diagram.to_gamma_loop_graph(group_ids[index], true))
@@ -111,11 +111,8 @@ impl ProcessDefinition {
                         .collect::<Result<Vec<_>, _>>()
                 })
                 .collect::<Result<Vec<_>, _>>()?;
-            let options = self
-                .generation_options
-                .clone()
+            let run = Run::default()
                 .threads(settings.n_cores.feyngen)
-                .forced_cuts(forced_cuts)
                 .cancellation_check(crate::is_interrupt_requested)
                 .progress(|_| {
                     if crate::is_interrupt_requested() {
@@ -124,19 +121,22 @@ impl ProcessDefinition {
                         GenerationControl::Continue
                     }
                 });
-            let generated = match self.generation_type {
-                GenerationType::Amplitude => self
-                    .process
-                    .generate_diagrams(Arc::new(model.clone()), &options)?,
-                GenerationType::CrossSection => self
-                    .process
-                    .generate_cross_section(Arc::new(model.clone()), &options)?,
+            let selection = if forced_cuts.is_empty() {
+                self.selection.clone()
+            } else {
+                self.selection.clone().with_forced_cuts(forced_cuts)
             };
-            if !generated.report.completed || crate::is_interrupt_requested() {
+            let generated = self
+                .request
+                .generate(Arc::new(model.clone()), &run)?
+                .build(&self.numerators, &run)?
+                .select(&selection, &run)?
+                .group(&self.grouping, &run)?;
+            if !generated.report().completed || crate::is_interrupt_requested() {
                 return Err(FeynkitRuntimeError::Interrupted);
             }
             let graphs = generated.to_gamma_loop_graphs()?;
-            Ok((graphs, generated.report))
+            Ok((graphs, generated.report().clone()))
         })();
         crate::clear_interrupt_request();
         result
@@ -156,7 +156,9 @@ impl ProcessDefinition {
 
 #[cfg(test)]
 mod tests {
-    use feynkit_generator::{GenerationOptions, Process};
+    use feynkit_generator::{
+        Cuts, Loops, Naming, NumeratorOptions, Process, Request, TopologyRules,
+    };
     use feynkit_graph::{
         DiagramCut, DiagramCutSide, DiagramEdge, DiagramEndpoint, DiagramHalfEdge, DiagramVertex,
         EdgeId, ExternalLeg, ExternalState, FeynmanDiagram, LoopMomentumBasis, VertexSlot,
@@ -739,42 +741,44 @@ mod tests {
     fn canonical_cross_section_generation_survives_runtime_enrichment_and_consumption() {
         let model = model();
         let process = Process::new(["phi"], ["phi", "phi"]);
-        let options = GenerationOptions::default()
-            .with_loop_count(1, 1)
+        let request = Request::cross_section(process, Loops::forward(1..=1))
+            .with_topology(
+                TopologyRules::default()
+                    .with_self_loops(false)
+                    .with_max_vertices(2),
+            )
+            .with_cuts(Cuts::default().with_blobs(1..=1).with_spectators(0..=0));
+        let numerators = NumeratorOptions::default().with_naming(Naming::prefix("D"));
+        let run = Run::default().threads(1);
+        let generated = request
+            .generate(Arc::clone(&model), &run)
             .unwrap()
-            .threads(1)
-            .max_vertices(2);
-        let generated = process
-            .generate_cross_section(Arc::clone(&model), &options)
+            .build(&numerators, &run)
             .unwrap();
 
-        assert!(generated.report.completed);
-        assert!(!generated.diagrams.is_empty());
+        assert!(generated.report().completed);
+        assert!(!generated.diagrams().is_empty());
         assert!(
             generated
-                .diagrams
+                .diagrams()
                 .iter()
                 .all(|diagram| !diagram.cuts().is_empty())
         );
         assert!(
             generated
-                .diagrams
+                .diagrams()
                 .iter()
                 .all(|diagram| !diagram.topology_threshold_candidates().is_empty())
         );
 
         let runtime_graphs = generated.to_gamma_loop_graphs().unwrap();
-        assert_eq!(runtime_graphs.len(), generated.diagrams.len());
-        let process_definition = ProcessDefinition {
-            generation_type: GenerationType::CrossSection,
-            process,
-            generation_options: options,
-            folder_name: "canonical_cross_section_bridge".to_owned(),
-            process_id: 0,
-        };
+        assert_eq!(runtime_graphs.len(), generated.diagrams().len());
+        let mut process_definition = ProcessDefinition::new(request);
+        process_definition.numerators = numerators;
+        process_definition.folder_name = "canonical_cross_section_bridge".into();
         let settings = GenerationSettings::default();
 
-        for (diagram, runtime) in generated.diagrams.iter().zip(runtime_graphs) {
+        for (diagram, runtime) in generated.diagrams().iter().zip(runtime_graphs) {
             assert_eq!(runtime.finalized_cuts.len(), diagram.cuts().len());
             assert_eq!(
                 runtime.finalized_topology_threshold_candidates.len(),

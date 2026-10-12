@@ -523,7 +523,7 @@ fn generate_graph_command(
     final_states: &str,
 ) -> String {
     format!(
-        "generate xs scalar_1 > {final_states} | scalar_0 scalar_1 [{{{{3}}}}] --allowed-vertex-interactions V_3_SCALAR_001 V_3_SCALAR_000 -p {process} -i {integrand} -o --select-graphs {graph}"
+        "generate xs scalar_1 > {final_states} | scalar_0 scalar_1 [{{{{3}}}}] --allowed-vertex-interactions V_3_SCALAR_001 V_3_SCALAR_000 -p {process} -i {integrand} -o --select-graphs {graph} --filter-selfenergies true --filter-snails true --filter-tadpoles true --n-cut-blobs 1 1 --n-cut-spectators 0 0 --numerator-grouping group_identical_graphs_up_to_scalar_rescaling"
     )
 }
 

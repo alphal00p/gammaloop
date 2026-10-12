@@ -6,7 +6,7 @@ commands = [
   # "import graphs ./tests/resources/graphs/epem_dd_dt.dot",
   # "generate",
   # "save dot",
-  "generate xs e+ e- > d~ d | d~ d g e+ e- a QCD^2>=2 QED^2>=2 [{{2}}] --select-graphs GL2 --clear-existing-processes --only-diagrams",
+  "generate xs e+ e- > d~ d | d~ d g e+ e- a QCD^2>=2 QED^2>=2 [{{2}}] --select-graphs GL2 --clear-existing-processes --only-diagrams --filter-selfenergies true --filter-snails true --filter-tadpoles true --n-cut-blobs 1 1 --n-cut-spectators 0 0 --numerator-grouping group_identical_graphs_up_to_scalar_rescaling",
   "save dot",
   "generate"
   # "integrate"

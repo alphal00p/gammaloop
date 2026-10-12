@@ -1,7 +1,7 @@
 //! Search census of the reference generation workloads: how many states each search stage keeps,
 //! and how many of them lead nowhere.
 //!
-//! [`Generator::generate`] searches in parallel. The census instead follows the same plan
+//! [`crate::Request::generate`] searches in parallel. The census instead follows the same plan
 //! sequentially so each callback lies on one depth-first path. Vertices keep their numbers
 //! in every extension of a stage-1 state and stage 2 types one edge per step, so the parent of a
 //! state is the nearest earlier state on the depth-first path that it extends.
@@ -18,7 +18,7 @@ use super::{
     cases::Case,
     enumeration::{GenerationDressingView, GenerationSkeletonView},
 };
-use crate::{GenerationControl, GenerationError};
+use crate::GenerationError;
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 struct SearchCensus {
@@ -193,25 +193,22 @@ impl Tracker {
 }
 
 impl SearchCensus {
-    /// The census of `case` with one thread, from the generator that [`Generator::generate`]
+    /// The census of `case` with one thread, from the generator that [`crate::Request::generate`]
     /// builds for it, searched sequentially; the diagram and topology counts are checked
-    /// against [`Generator::generate`] cancelled after enumeration.
+    /// against the raw-assignment owner used by [`crate::Request::generate`].
     fn of(case: &Case) -> Result<Self, GenerationError> {
         let model = case.model();
-        let options = case.options(&model, 1);
+        let request = case.request(&model);
         let generator = Generator::new(model);
-        let model = &generator.model;
         let tracker = Arc::new(Mutex::new(Tracker::default()));
         let skeleton_recorder = Arc::clone(&tracker);
         let dressing_recorder = Arc::clone(&tracker);
         let prepared = generator.search(
-            &case.process(),
-            &options,
-            case.kind,
+            &request,
             move |view, kept| skeleton_recorder.lock().unwrap().skeleton(view, kept),
             move |view, kept| dressing_recorder.lock().unwrap().dressing(view, kept),
         )?;
-        assert!(!prepared.externals.vetoed(model, &prepared.options));
+        assert!(!prepared.externals.vetoed(&prepared.restrictions));
         let run = Run::default();
         let diagrams = prepared
             .plan
@@ -227,18 +224,16 @@ impl SearchCensus {
             .finish();
         assert_eq!(census.diagrams, diagrams);
 
-        let enumeration = case
-            .options(model, 1)
-            .progress(|progress| match progress.stage {
-                "topologies" => GenerationControl::Continue,
-                _ => GenerationControl::Cancel,
-            });
-        let report = generator
-            .generate(&case.process(), &enumeration, case.kind)?
-            .report;
+        // Reuse production's raw-assignment execution owner without preparing physical
+        // graphs or numerators. The independent traversal above remains scalar.
+        let production = generator.search(&request, |_, _| {}, |_, _| {})?;
+        let (report, _) = production.enumerate(&crate::Run::default().threads(1), |_| Ok(()))?;
         assert_eq!(
             (census.topologies, census.diagrams),
-            (report.topology_count, report.interaction_assignment_count),
+            (
+                usize::try_from(report.topology_count).unwrap(),
+                usize::try_from(report.interaction_assignment_count).unwrap()
+            ),
             "{}: the sequential search differs from generation",
             case.name
         );

@@ -158,7 +158,7 @@ target_relative_accuracy = 0.025
 '"#
             ),
             &format!(
-                "generate xs {initial} > {} [{{{{{}}}}}] --allowed-vertex-interactions {} -p born -i LO",
+                "generate xs {initial} > {} [{{{{{}}}}}] --allowed-vertex-interactions {} -p born -i LO --filter-selfenergies true --filter-snails true --filter-tadpoles true --n-cut-blobs 1 1 --n-cut-spectators 0 0 --numerator-grouping group_identical_graphs_up_to_scalar_rescaling",
                 vec![final_particle; multiplicity].join(" "),
                 multiplicity - 1,
                 beams.vertex(multiplicity),
@@ -482,7 +482,7 @@ fn scalar_born_exchange_tree_matches_squared_amplitude() -> Result<()> {
             "remove processes",
             "set model mass_scalar_1=2.0",
             &format!(
-                "import graphs --inline-dot \"\"\"{DOT}\"\"\" --process-spec 'scalar_2 > scalar_0 scalar_0 scalar_0' -p born -i LO -o"
+                "import graphs --inline-dot \"\"\"{DOT}\"\"\" --process-spec 'scalar_2 > scalar_0 scalar_0 scalar_0 [{{{{2}}}}]' -p born -i LO -o"
             ),
             "generate existing -p born -i LO",
         ],

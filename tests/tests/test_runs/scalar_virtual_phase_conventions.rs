@@ -123,7 +123,7 @@ target_relative_accuracy = 0.02
                         !above_threshold
                     ),
                     &format!(
-                        "import graphs --inline-dot \"\"\"{dot}\"\"\" --process-spec 'scalar_2 > scalar_0 scalar_0' -p interference -i virtual -o"
+                        "import graphs --inline-dot \"\"\"{dot}\"\"\" --process-spec 'scalar_2 > scalar_0 scalar_0 [{{{{2}}}}]' -p interference -i virtual -o"
                     ),
                     "generate existing -p interference -i virtual",
                 ],

@@ -14,6 +14,7 @@ from pathlib import Path
 from symbolica import E, S, Symbol
 from symbolica.community import hepkit as hep
 from symbolica.community.tensor import Representation, TensorExpression
+from symbolica.community.graph import Bridges
 
 model = hep.Model(Path(__file__).parents[2] / "feynkit-model/tests/fixtures/sm.json")
 spec = json.loads(model.to_json())
@@ -78,17 +79,17 @@ for pdg in (9000005, -9000005):
         ("self", [pdg], 1, 1),
     ):
         diagrams = (
-            model.process([pdg], outgoing, vertex_allow=["V_35", "V_36"])
-            .generate_diagrams(
-                loops=loops,
-                max_vertices=len(outgoing) - 1 + 2 * loops,
-                maximum_bridges=0,
-                self_energy=None,
-                tadpoles=None,
-                zero_snails=None,
-                numerator_grouping=None,
-                progress=None,
+            model.process([pdg], outgoing)
+            .amplitude(
+                loops=hep.Loops.total(loops),
+                restrict=hep.Restrict().only_vertices(["V_35", "V_36"]),
+                topology=hep.TopologyRules(
+                    max_vertices=len(outgoing) - 1 + 2 * loops,
+                    bridges=Bridges.at_most(0),
+                ),
             )
+            .generate()
+            .build(hep.NumeratorOptions(naming=hep.Naming.named("D")))
             .diagrams
         )
         assert len(diagrams) == count, (pdg, kind, len(diagrams))

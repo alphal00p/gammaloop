@@ -193,8 +193,8 @@ pub(super) fn setup_scalar_topologies_cli(
         &[
             "import model scalars-default.json",
             "remove processes",
-            "generate amp scalar_1 > scalar_0 scalar_0 [{1}] --allowed-vertex-interactions V_3_SCALAR_022 V_3_SCALAR_122 -p triangle -i scalar_tri",
-            "generate amp scalar_0 scalar_0 > scalar_0 scalar_0 [{1}] --allowed-vertex-interactions V_3_SCALAR_022 -p box -i scalar_box --select-graphs GL0",
+            "generate amp scalar_1 > scalar_0 scalar_0 [{1}] --allowed-vertex-interactions V_3_SCALAR_022 V_3_SCALAR_122 -p triangle -i scalar_tri --filter-selfenergies true --filter-snails true --filter-tadpoles true --numerator-grouping group_identical_graphs_up_to_scalar_rescaling",
+            "generate amp scalar_0 scalar_0 > scalar_0 scalar_0 [{1}] --allowed-vertex-interactions V_3_SCALAR_022 -p box -i scalar_box --select-graphs GL0 --filter-selfenergies true --filter-snails true --filter-tadpoles true --numerator-grouping group_identical_graphs_up_to_scalar_rescaling",
             "generate",
             "set model mass_scalar_2=2.0",
             "set model mass_scalar_1=1.0",
@@ -274,7 +274,7 @@ disable_threshold_subtraction = false
                 --global-prefactor-num '1𝑖*(1/8)*spenso::g(spenso::coad(8,FeynKit::SourceIndex(5,1)),
                                                            spenso::coad(8,FeynKit::SourceIndex(6,1)))'
                 -p gg_hhh
-                -i 1L"#,
+                -i 1L --filter-selfenergies true --filter-snails true --filter-tadpoles true"#,
             "generate",
             "set model MT=173.0",
             "set model WT=0.0",
@@ -704,7 +704,7 @@ disable_threshold_subtraction = true
     ] {
         set_default_incoming_helicities(&mut cli, helicities)?;
         cli.run_command(&format!(
-            "generate xs e+ e- > t t~ h | e+ e- g t t~ h ghG ghG~ a QCD^2==0 QED^2==6 [{{{{2}}}} QCD=0] --numerator-grouping group_identical_graphs_up_to_scalar_rescaling --symmetrize-left-right-states true -p {process} -i LO"
+            "generate xs e+ e- > t t~ h | e+ e- g t t~ h ghG ghG~ a QCD^2==0 QED^2==6 [{{{{2}}}} QCD=0] --numerator-grouping group_identical_graphs_up_to_scalar_rescaling --symmetrize-left-right-states true -p {process} -i LO --filter-selfenergies true --filter-snails true --filter-tadpoles true --n-cut-blobs 1 1 --n-cut-spectators 0 0"
         ))?;
         cli.run_command("generate")?;
     }
@@ -764,7 +764,7 @@ disable_threshold_subtraction = true
     ] {
         set_default_incoming_helicities(&mut cli, helicities)?;
         cli.run_command(&format!(
-            "generate xs a a > t t~ | a t t~ g ghG ghG~ QED^2==4 [{{{{1}}}} QCD=0] --numerator-grouping group_identical_graphs_up_to_scalar_rescaling --symmetrize-left-right-states true -p {process} -i LO"
+            "generate xs a a > t t~ | a t t~ g ghG ghG~ QED^2==4 [{{{{1}}}} QCD=0] --numerator-grouping group_identical_graphs_up_to_scalar_rescaling --symmetrize-left-right-states true -p {process} -i LO --filter-selfenergies true --filter-snails true --filter-tadpoles true --n-cut-blobs 1 1 --n-cut-spectators 0 0"
         ))?;
         cli.run_command("generate")?;
     }

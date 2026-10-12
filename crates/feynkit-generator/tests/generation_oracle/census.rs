@@ -21,7 +21,7 @@ use std::{
     sync::Arc,
 };
 
-use feynkit_generator::{GenerationReport, GenerationResult, SourceIdentity};
+use feynkit_generator::{BuiltDiagramSet, GenerationReport, SourceIdentity};
 use feynkit_graph::{
     CanonicalDiagramKey, DiagramId, FeynmanDiagram, LoopMomentumBasis,
     expressions::evaluate_overall_factor,
@@ -44,7 +44,7 @@ pub struct Entry {
     payload: Arc<Value>,
     pub id: DiagramId,
     pub name: Option<String>,
-    pub symmetry_factor: u64,
+    pub symmetry_factor: u128,
     pub overall_factor: String,
     /// The overall factor with its bookkeeping heads evaluated: `1 / |Aut|` with the fermion
     /// signs and the number of diagrams that symmetrization or grouping identified with this one.
@@ -244,9 +244,9 @@ impl Entry {
 }
 
 impl Census {
-    pub fn of(result: &GenerationResult) -> Census {
+    pub fn of(result: &BuiltDiagramSet) -> Census {
         let groups = result
-            .groups
+            .groups()
             .iter()
             .map(|group| Group {
                 master: group.master,
@@ -263,8 +263,8 @@ impl Census {
             })
             .collect();
         Census {
-            report: result.report.clone(),
-            diagrams: result.diagrams.iter().map(Entry::of).collect(),
+            report: result.report().clone(),
+            diagrams: result.iter().map(Entry::of).collect(),
             groups,
         }
     }
@@ -299,12 +299,20 @@ impl Census {
         for d in &self.diagrams {
             inverse_symmetry += Rational::from((1, d.symmetry_factor));
             weights += &d.weight;
-            *histogram.entry(d.symmetry_factor).or_default() += 1;
+            *histogram
+                .entry(
+                    u64::try_from(d.symmetry_factor)
+                        .expect("recorded oracle symmetry factor fits u64"),
+                )
+                .or_default() += 1;
         }
         let content = self.diagrams.iter().map(|d| {
             Digest::new()
                 .number(d.key)
-                .number(d.symmetry_factor)
+                .number(
+                    u64::try_from(d.symmetry_factor)
+                        .expect("recorded oracle symmetry factor fits u64"),
+                )
                 .text(&d.overall_factor)
                 .number(d.frame)
                 .0
@@ -340,8 +348,10 @@ impl Census {
         assert_eq!(distinct.len(), self.diagrams.len(), "duplicate diagram ids");
         Summary {
             diagrams: self.diagrams.len(),
-            topologies: self.report.topology_count,
-            assignments: self.report.interaction_assignment_count,
+            topologies: usize::try_from(&self.report.topology_count)
+                .expect("oracle topology count fits usize"),
+            assignments: usize::try_from(&self.report.interaction_assignment_count)
+                .expect("oracle assignment count fits usize"),
             inverse_symmetry,
             weights,
             symmetry_factors: histogram.into_iter().collect(),

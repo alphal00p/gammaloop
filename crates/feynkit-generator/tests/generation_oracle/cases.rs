@@ -10,15 +10,13 @@
 //! proportional, `sym` symmetrizes identical external states and `lr` identifies cross-section
 //! mirror images.
 
-use std::collections::BTreeMap;
-
 use feynkit_generator::{
-    GenerationError, GenerationFilter, GenerationOptions, GenerationResult, GenerationType,
-    GraphGroupingOptions, NumeratorGrouping, ParticleSelector, Process,
+    Bridges, Cuts, GenerationType, GraphGroupingOptions, Grouping, Loops, Orders, ParticleSelector,
+    Process, Range, Request, Restrict, Symmetrize, TopologyRules,
 };
 use feynkit_model::{Model, Particle};
 
-type Configure = fn(&Model, GenerationOptions) -> GenerationOptions;
+type Configure = fn(&Model, Request) -> Request;
 
 pub struct Case {
     pub name: &'static str,
@@ -26,8 +24,9 @@ pub struct Case {
     model: fn() -> Model,
     incoming: &'static [&'static str],
     outgoing: &'static [&'static str],
-    loops: usize,
+    loops: (usize, usize),
     configure: Configure,
+    grouping: Option<fn(GraphGroupingOptions) -> Grouping>,
 }
 
 /// The reference workloads of the instruction gate: gg->gg L3, gg->ggg L2, uu~->gg L3, the
@@ -60,24 +59,34 @@ impl Case {
         Process::new(self.incoming.iter().copied(), self.outgoing.iter().copied())
     }
 
-    /// The case's options with an explicit thread count.
-    pub fn options(&self, model: &Model, threads: usize) -> GenerationOptions {
-        let options = GenerationOptions::default()
-            .with_loop_count(self.loops, self.loops)
-            .unwrap()
-            .threads(threads);
-        (self.configure)(model, options)
+    /// The case's physical request; execution and numerator construction are separate.
+    pub fn request(&self, model: &Model) -> Request {
+        let (minimum, maximum) = self.loops;
+        let request = match self.kind {
+            GenerationType::Amplitude => self.process().amplitude(Loops::total(minimum..=maximum)),
+            GenerationType::CrossSection => self
+                .process()
+                .cross_section(Loops::forward(minimum..=maximum))
+                .with_cuts(Cuts::new().with_blobs(1..=1).with_spectators(0..=0)),
+        }
+        .with_topology(TopologyRules::new().with_self_loops(false));
+        (self.configure)(model, request)
     }
 
-    pub fn generate_with(
-        &self,
-        model: Model,
-        options: &GenerationOptions,
-    ) -> Result<GenerationResult, GenerationError> {
-        match self.kind {
-            GenerationType::Amplitude => self.process().generate_diagrams(model, options),
-            GenerationType::CrossSection => self.process().generate_cross_section(model, options),
-        }
+    pub fn grouping(&self) -> Grouping {
+        self.grouping.map_or(Grouping::None, |group| {
+            group(GraphGroupingOptions::default())
+        })
+    }
+
+    const fn with_grouping(mut self, grouping: fn(GraphGroupingOptions) -> Grouping) -> Self {
+        self.grouping = Some(grouping);
+        self
+    }
+
+    const fn with_loop_range(mut self, minimum: usize, maximum: usize) -> Self {
+        self.loops = (minimum, maximum);
+        self
     }
 }
 
@@ -95,8 +104,9 @@ const fn amplitude(
         model,
         incoming,
         outgoing,
-        loops,
+        loops: (loops, loops),
         configure,
+        grouping: None,
     }
 }
 
@@ -115,188 +125,168 @@ const fn cross_section(
     }
 }
 
-fn plain(_: &Model, options: GenerationOptions) -> GenerationOptions {
-    options
+fn plain(_: &Model, request: Request) -> Request {
+    request
 }
 
-fn one_pi(_: &Model, options: GenerationOptions) -> GenerationOptions {
-    options.with_graph_filter(GenerationFilter::MaxNumberOfBridges(0))
+fn one_pi(_: &Model, request: Request) -> Request {
+    let topology = request.topology().clone().with_bridges(Bridges::AtMost(0));
+    request.with_topology(topology)
 }
 
-fn tadpoles(_: &Model, options: GenerationOptions) -> GenerationOptions {
-    options.allow_self_loops(true).allow_zero_flow_edges(true)
+fn tadpoles(_: &Model, request: Request) -> Request {
+    let topology = request
+        .topology()
+        .clone()
+        .with_self_loops(true)
+        .with_zero_flow_edges(true);
+    request.with_topology(topology)
 }
 
-fn one_pi_tadpoles(model: &Model, options: GenerationOptions) -> GenerationOptions {
-    one_pi(model, tadpoles(model, options))
+fn one_pi_tadpoles(model: &Model, request: Request) -> Request {
+    one_pi(model, tadpoles(model, request))
 }
 
-fn loop_one_pi(_: &Model, options: GenerationOptions) -> GenerationOptions {
-    options.with_graph_filter(GenerationFilter::LoopOneParticleIrreducible)
+fn loop_one_pi(_: &Model, request: Request) -> Request {
+    let topology = request
+        .topology()
+        .clone()
+        .with_bridges(Bridges::OnePIInLoops);
+    request.with_topology(topology)
 }
 
-fn order_at_most(options: GenerationOptions, order: &str, maximum: usize) -> GenerationOptions {
-    options.with_graph_filter(GenerationFilter::CouplingOrders(BTreeMap::from([(
-        order.to_owned(),
-        (0, Some(maximum)),
-    )])))
+fn order_at_most(request: Request, order: &str, maximum: usize) -> Request {
+    request.with_orders(Orders::new().max(order, maximum))
 }
 
-fn no_qcd(_: &Model, options: GenerationOptions) -> GenerationOptions {
-    order_at_most(options, "QCD", 0)
+fn no_qcd(_: &Model, request: Request) -> Request {
+    order_at_most(request, "QCD", 0)
 }
 
-fn qed_at_most_two(_: &Model, options: GenerationOptions) -> GenerationOptions {
-    order_at_most(options, "QED", 2)
+fn qed_at_most_two(_: &Model, request: Request) -> Request {
+    order_at_most(request, "QED", 2)
 }
 
-fn orders(
-    options: GenerationOptions,
-    required: &[(&str, usize, Option<usize>)],
-) -> GenerationOptions {
-    options.with_graph_filter(GenerationFilter::CouplingOrders(
-        required
+fn orders(request: Request, required: &[(&str, usize, Option<usize>)]) -> Request {
+    request.with_orders(Orders {
+        plain: required
             .iter()
-            .map(|&(order, minimum, maximum)| (order.to_owned(), (minimum, maximum)))
+            .map(|&(name, min, max)| (name.to_owned(), Range::Inclusive { min, max }))
             .collect(),
-    ))
+        ..Orders::new()
+    })
 }
 
 /// Mixed QCD and electroweak corrections: both orders exactly two.
-fn qcd2_qed2(_: &Model, options: GenerationOptions) -> GenerationOptions {
-    orders(options, &[("QCD", 2, Some(2)), ("QED", 2, Some(2))])
+fn qcd2_qed2(_: &Model, request: Request) -> Request {
+    orders(request, &[("QCD", 2, Some(2)), ("QED", 2, Some(2))])
 }
 
 /// A lower bound only.
-fn qcd_at_least_three(_: &Model, options: GenerationOptions) -> GenerationOptions {
-    orders(options, &[("QCD", 3, None)])
+fn qcd_at_least_three(_: &Model, request: Request) -> Request {
+    orders(request, &[("QCD", 3, None)])
 }
 
-fn one_counterterm(_: &Model, options: GenerationOptions) -> GenerationOptions {
-    orders(options, &[("CT", 1, Some(1))])
+fn one_counterterm(_: &Model, request: Request) -> Request {
+    orders(request, &[("CT", 1, Some(1))])
 }
 
-fn two_counterterms(model: &Model, options: GenerationOptions) -> GenerationOptions {
-    orders(tadpoles(model, options), &[("CT", 2, Some(2))])
+fn two_counterterms(model: &Model, request: Request) -> Request {
+    orders(tadpoles(model, request), &[("CT", 2, Some(2))])
 }
 
-fn at_most_one_counterterm(model: &Model, options: GenerationOptions) -> GenerationOptions {
-    order_at_most(tadpoles(model, options), "CT", 1)
+fn at_most_one_counterterm(model: &Model, request: Request) -> Request {
+    order_at_most(tadpoles(model, request), "CT", 1)
 }
 
-fn fermion_loops(options: GenerationOptions, minimum: usize, maximum: usize) -> GenerationOptions {
-    options.with_graph_filter(GenerationFilter::FermionLoopCountRange((minimum, maximum)))
+fn fermion_loops(request: Request, minimum: usize, maximum: usize) -> Request {
+    let topology = request
+        .topology()
+        .clone()
+        .with_fermion_loops(minimum..=maximum);
+    request.with_topology(topology)
 }
 
-fn no_fermion_loops(_: &Model, options: GenerationOptions) -> GenerationOptions {
-    fermion_loops(options, 0, 0)
+fn no_fermion_loops(_: &Model, request: Request) -> Request {
+    fermion_loops(request, 0, 0)
 }
 
-fn one_fermion_loop(_: &Model, options: GenerationOptions) -> GenerationOptions {
-    fermion_loops(options, 1, 1)
+fn one_fermion_loop(_: &Model, request: Request) -> Request {
+    fermion_loops(request, 1, 1)
 }
 
-fn two_fermion_loops_one_pi(model: &Model, options: GenerationOptions) -> GenerationOptions {
-    fermion_loops(one_pi(model, options), 2, 2)
+fn two_fermion_loops_one_pi(model: &Model, request: Request) -> Request {
+    fermion_loops(one_pi(model, request), 2, 2)
 }
 
 /// QED order four at tree level and one loop: trees have order two, so the tree level is proven
 /// empty and its topologies are not enumerated.
-fn qed4_up_to_one_loop(_: &Model, options: GenerationOptions) -> GenerationOptions {
-    let options = options.with_loop_count(0, 1).unwrap();
-    orders(options, &[("QED", 4, Some(4))])
+fn qed4_up_to_one_loop(_: &Model, request: Request) -> Request {
+    orders(request, &[("QED", 4, Some(4))])
 }
 
-fn symmetrized(_: &Model, options: GenerationOptions) -> GenerationOptions {
-    options.symmetrize_initial(true).symmetrize_final(true)
+fn symmetrized(_: &Model, request: Request) -> Request {
+    request.with_symmetrize(Symmetrize::INITIAL | Symmetrize::FINAL)
 }
 
 /// The exchange of identical beams; cross sections reject final-state symmetrization.
-fn beam_exchange(_: &Model, options: GenerationOptions) -> GenerationOptions {
-    options.symmetrize_initial(true)
+fn beam_exchange(_: &Model, request: Request) -> Request {
+    request.with_symmetrize(Symmetrize::INITIAL)
 }
 
 /// Cross-section forward graphs identified with their mirror images.
-fn left_right(_: &Model, options: GenerationOptions) -> GenerationOptions {
-    options.symmetrize_left_right(true)
+fn left_right(_: &Model, request: Request) -> Request {
+    let cuts = request.cuts().clone().with_symmetrize_left_right(true);
+    request.with_cuts(cuts)
 }
 
-fn beam_exchange_left_right(model: &Model, options: GenerationOptions) -> GenerationOptions {
-    left_right(model, beam_exchange(model, options))
-}
-
-fn identical_numerators(_: &Model, options: GenerationOptions) -> GenerationOptions {
-    options.numerator_grouping(NumeratorGrouping::Identical(GraphGroupingOptions::default()))
-}
-
-fn numerators_up_to_sign(_: &Model, options: GenerationOptions) -> GenerationOptions {
-    options.numerator_grouping(NumeratorGrouping::UpToSign(GraphGroupingOptions::default()))
-}
-
-fn numerators_up_to_scalar(_: &Model, options: GenerationOptions) -> GenerationOptions {
-    options.numerator_grouping(NumeratorGrouping::UpToScalar(
-        GraphGroupingOptions::default(),
-    ))
+fn beam_exchange_left_right(model: &Model, request: Request) -> Request {
+    left_right(model, beam_exchange(model, request))
 }
 
 /// The `rejected` particles rejected in flight by a user filter, as the Python dressing callback
 /// does.
-fn filtered(
-    model: &Model,
-    options: GenerationOptions,
-    rejected: impl Fn(&Particle) -> bool,
-) -> GenerationOptions {
+fn filtered(model: &Model, request: Request, rejected: impl Fn(&Particle) -> bool) -> Request {
     let rejected: Vec<_> = model
         .particles()
         .iter()
         .filter(|particle| rejected(particle))
         .map(|particle| model.particle_id(&particle.name).unwrap())
         .collect();
-    options.prune_dressings(move |view| {
+    request.prune_dressings(move |view| {
         view.edges()
             .all(|edge| edge.stub.is_none_or(|stub| !rejected.contains(stub.field)))
     })
 }
 
-fn ghosts_filtered(model: &Model, options: GenerationOptions) -> GenerationOptions {
-    filtered(model, options, Particle::is_ghost)
+fn ghosts_filtered(model: &Model, request: Request) -> Request {
+    filtered(model, request, Particle::is_ghost)
 }
 
 /// One fermion loop, with the quarks of PDG code `pdg` rejected in flight by a user filter: it
 /// rejects field assignments of the fermions that the fermion-loop budget follows.
-fn one_fermion_loop_without(
-    model: &Model,
-    options: GenerationOptions,
-    pdg: i64,
-) -> GenerationOptions {
-    filtered(model, fermion_loops(options, 1, 1), |particle| {
+fn one_fermion_loop_without(model: &Model, request: Request, pdg: i64) -> Request {
+    filtered(model, fermion_loops(request, 1, 1), |particle| {
         particle.pdg_code.abs() == pdg
     })
 }
 
-fn one_fermion_loop_without_down_quarks(
-    model: &Model,
-    options: GenerationOptions,
-) -> GenerationOptions {
-    one_fermion_loop_without(model, options, 1)
+fn one_fermion_loop_without_down_quarks(model: &Model, request: Request) -> Request {
+    one_fermion_loop_without(model, request, 1)
 }
 
-fn one_fermion_loop_without_top_quarks(
-    model: &Model,
-    options: GenerationOptions,
-) -> GenerationOptions {
-    one_fermion_loop_without(model, options, 6)
+fn one_fermion_loop_without_top_quarks(model: &Model, request: Request) -> Request {
+    one_fermion_loop_without(model, request, 6)
 }
 
 /// Ghost fields removed by the process's particle veto.
-fn ghosts_vetoed(model: &Model, options: GenerationOptions) -> GenerationOptions {
+fn ghosts_vetoed(model: &Model, request: Request) -> Request {
     let ghosts = model
         .particles()
         .iter()
         .filter(|particle| particle.is_ghost())
-        .map(|particle| ParticleSelector::from(particle.name.as_str()))
-        .collect();
-    options.with_graph_filter(GenerationFilter::ParticleVeto(ghosts))
+        .map(|particle| ParticleSelector::from(particle.name.as_str()));
+    request.with_restrict(Restrict::new().exclude_particles(ghosts))
 }
 
 /// `model` with a copy of every vertex rule `duplicate` selects by its field content, named with
@@ -428,14 +418,8 @@ pub const CASES: &[Case] = &[
     amplitude("phi34_2pt_L5", Model::phi_3_4, PHI, PHI, 5, tadpoles),
     amplitude("phi3_2pt_L1", Model::phi3, PHI, PHI, 1, plain),
     amplitude("phi3_2pt_tad_L2", Model::phi3, PHI, PHI, 2, tadpoles),
-    amplitude(
-        "phi34_2pt_identical_L3",
-        Model::phi_3_4,
-        PHI,
-        PHI,
-        3,
-        identical_numerators,
-    ),
+    amplitude("phi34_2pt_identical_L3", Model::phi_3_4, PHI, PHI, 3, plain)
+        .with_grouping(Grouping::Identical),
     // QED: the photon and all charged fermions.
     amplitude("qed_eemm_L1", Model::qed, EE, MUMU, 1, plain),
     amplitude("qed_eemm_L2", Model::qed, EE, MUMU, 2, plain),
@@ -451,96 +435,44 @@ pub const CASES: &[Case] = &[
         EE,
         &["a", "a"],
         1,
-        identical_numerators,
-    ),
-    amplitude(
-        "qed_eeaa_sign_L1",
-        Model::qed,
-        EE,
-        &["a", "a"],
-        1,
-        numerators_up_to_sign,
-    ),
-    amplitude(
-        "qed_eeaa_scalar_L1",
-        Model::qed,
-        EE,
-        &["a", "a"],
-        1,
-        numerators_up_to_scalar,
-    ),
+        plain,
+    )
+    .with_grouping(Grouping::Identical),
+    amplitude("qed_eeaa_sign_L1", Model::qed, EE, &["a", "a"], 1, plain)
+        .with_grouping(Grouping::UpToSign),
+    amplitude("qed_eeaa_scalar_L1", Model::qed, EE, &["a", "a"], 1, plain)
+        .with_grouping(Grouping::UpToScalar),
     amplitude(
         "qed_ee4f_identical_L1",
         Model::qed,
         EE,
         FOUR_LEPTONS,
         1,
-        identical_numerators,
-    ),
-    amplitude(
-        "qed_ee4f_sign_L1",
-        Model::qed,
-        EE,
-        FOUR_LEPTONS,
-        1,
-        numerators_up_to_sign,
-    ),
-    amplitude(
-        "qed_ee4f_scalar_L1",
-        Model::qed,
-        EE,
-        FOUR_LEPTONS,
-        1,
-        numerators_up_to_scalar,
-    ),
-    amplitude(
-        "qed_eemm_identical_L2",
-        Model::qed,
-        EE,
-        MUMU,
-        2,
-        identical_numerators,
-    ),
-    amplitude(
-        "qed_eemm_sign_L2",
-        Model::qed,
-        EE,
-        MUMU,
-        2,
-        numerators_up_to_sign,
-    ),
-    amplitude(
-        "qed_eemm_scalar_L2",
-        Model::qed,
-        EE,
-        MUMU,
-        2,
-        numerators_up_to_scalar,
-    ),
+        plain,
+    )
+    .with_grouping(Grouping::Identical),
+    amplitude("qed_ee4f_sign_L1", Model::qed, EE, FOUR_LEPTONS, 1, plain)
+        .with_grouping(Grouping::UpToSign),
+    amplitude("qed_ee4f_scalar_L1", Model::qed, EE, FOUR_LEPTONS, 1, plain)
+        .with_grouping(Grouping::UpToScalar),
+    amplitude("qed_eemm_identical_L2", Model::qed, EE, MUMU, 2, plain)
+        .with_grouping(Grouping::Identical),
+    amplitude("qed_eemm_sign_L2", Model::qed, EE, MUMU, 2, plain).with_grouping(Grouping::UpToSign),
+    amplitude("qed_eemm_scalar_L2", Model::qed, EE, MUMU, 2, plain)
+        .with_grouping(Grouping::UpToScalar),
     amplitude(
         "qed_eeaa_identical_L2",
         Model::qed,
         EE,
         &["a", "a"],
         2,
-        identical_numerators,
-    ),
-    amplitude(
-        "qed_eeaa_sign_L2",
-        Model::qed,
-        EE,
-        &["a", "a"],
-        2,
-        numerators_up_to_sign,
-    ),
-    amplitude(
-        "qed_eeaa_scalar_L2",
-        Model::qed,
-        EE,
-        &["a", "a"],
-        2,
-        numerators_up_to_scalar,
-    ),
+        plain,
+    )
+    .with_grouping(Grouping::Identical),
+    amplitude("qed_eeaa_sign_L2", Model::qed, EE, &["a", "a"], 2, plain)
+        .with_grouping(Grouping::UpToSign),
+    amplitude("qed_eeaa_scalar_L2", Model::qed, EE, &["a", "a"], 2, plain)
+        .with_grouping(Grouping::UpToScalar),
     amplitude("qed_ase_L3", Model::qed, A, A, 3, one_pi),
     amplitude("qed_ase_L4", Model::qed, A, A, 4, one_pi),
     amplitude("qed_ase_L5", Model::qed, A, A, 5, one_pi),
@@ -568,30 +500,11 @@ pub const CASES: &[Case] = &[
     amplitude("qcd_vac1pi_L4", Model::qcd, NONE, NONE, 4, one_pi_tadpoles),
     amplitude("qcd_vac1pi_L5", Model::qcd, NONE, NONE, 5, one_pi_tadpoles),
     amplitude("qcd_gggg_sym_L1", Model::qcd, GG, GG, 1, symmetrized),
-    amplitude(
-        "qcd_gggg_identical_L1",
-        Model::qcd,
-        GG,
-        GG,
-        1,
-        identical_numerators,
-    ),
-    amplitude(
-        "qcd_gggg_sign_L1",
-        Model::qcd,
-        GG,
-        GG,
-        1,
-        numerators_up_to_sign,
-    ),
-    amplitude(
-        "qcd_gggg_scalar_L1",
-        Model::qcd,
-        GG,
-        GG,
-        1,
-        numerators_up_to_scalar,
-    ),
+    amplitude("qcd_gggg_identical_L1", Model::qcd, GG, GG, 1, plain)
+        .with_grouping(Grouping::Identical),
+    amplitude("qcd_gggg_sign_L1", Model::qcd, GG, GG, 1, plain).with_grouping(Grouping::UpToSign),
+    amplitude("qcd_gggg_scalar_L1", Model::qcd, GG, GG, 1, plain)
+        .with_grouping(Grouping::UpToScalar),
     amplitude(
         "qcd_gggg_ghost_filter_L1",
         Model::qcd,
@@ -625,24 +538,20 @@ pub const CASES: &[Case] = &[
         EE,
         MUMU,
         1,
-        identical_numerators,
-    ),
-    amplitude(
-        "sm_eemm_sign_L1",
-        Model::standard_model,
-        EE,
-        MUMU,
-        1,
-        numerators_up_to_sign,
-    ),
+        plain,
+    )
+    .with_grouping(Grouping::Identical),
+    amplitude("sm_eemm_sign_L1", Model::standard_model, EE, MUMU, 1, plain)
+        .with_grouping(Grouping::UpToSign),
     amplitude(
         "sm_eemm_scalar_L1",
         Model::standard_model,
         EE,
         MUMU,
         1,
-        numerators_up_to_scalar,
-    ),
+        plain,
+    )
+    .with_grouping(Grouping::UpToScalar),
     amplitude(
         "sm_ee4f_L0",
         Model::standard_model,
@@ -773,7 +682,8 @@ pub const CASES: &[Case] = &[
         MUMU,
         1,
         qed4_up_to_one_loop,
-    ),
+    )
+    .with_loop_range(0, 1),
     amplitude(
         "sm_eemm_floop0_L1",
         Model::standard_model,
@@ -864,30 +774,12 @@ pub const CASES: &[Case] = &[
     cross_section("xs_qed_eemm_L1", Model::qed, EE, MUMU, 1, plain),
     cross_section("xs_qed_eemm_L2", Model::qed, EE, MUMU, 2, plain),
     cross_section("xs_qed_eemm_L3", Model::qed, EE, MUMU, 3, plain),
-    cross_section(
-        "xs_qed_eemm_identical_L2",
-        Model::qed,
-        EE,
-        MUMU,
-        2,
-        identical_numerators,
-    ),
-    cross_section(
-        "xs_qed_eemm_sign_L2",
-        Model::qed,
-        EE,
-        MUMU,
-        2,
-        numerators_up_to_sign,
-    ),
-    cross_section(
-        "xs_qed_eemm_scalar_L2",
-        Model::qed,
-        EE,
-        MUMU,
-        2,
-        numerators_up_to_scalar,
-    ),
+    cross_section("xs_qed_eemm_identical_L2", Model::qed, EE, MUMU, 2, plain)
+        .with_grouping(Grouping::Identical),
+    cross_section("xs_qed_eemm_sign_L2", Model::qed, EE, MUMU, 2, plain)
+        .with_grouping(Grouping::UpToSign),
+    cross_section("xs_qed_eemm_scalar_L2", Model::qed, EE, MUMU, 2, plain)
+        .with_grouping(Grouping::UpToScalar),
     cross_section("xs_qed_eedd_L1", Model::qed, EE, DD, 1, plain),
     cross_section("xs_qed_eedd_L2", Model::qed, EE, DD, 2, plain),
     cross_section("xs_qed_eeaa_L2", Model::qed, EE, &["a", "a"], 2, plain),

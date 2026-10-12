@@ -121,7 +121,7 @@ fn gamma_star_ddx_msbar_nlo_matches_the_published_graph_cross_sections() -> Resu
         r#"generate xs a > d d~ | a d d~ g ghG ghG~ QCD^2==0 QED^2==2 [{{{{1}}}} QCD=0]
             --numerator-grouping group_identical_graphs_up_to_scalar_rescaling
             --symmetrize-left-right-states true
-            -p {LO_PROCESS} -i {LO} --global-prefactor-num "1/2" --only-diagrams"#,
+            -p {LO_PROCESS} -i {LO} --global-prefactor-num --filter-selfenergies true --filter-snails true --filter-tadpoles true --n-cut-blobs 1 1 --n-cut-spectators 0 0 "1/2" --only-diagrams"#,
     ))?;
     cli.run_command(&format!("generate existing -p {LO_PROCESS} -i {LO}"))?;
 
@@ -137,7 +137,7 @@ fn gamma_star_ddx_msbar_nlo_matches_the_published_graph_cross_sections() -> Resu
             r#"generate xs a > d d~ | a d d~ g ghG ghG~ QCD^2==2 QED^2==2 [{{{{2}}}} QCD=1]
                 --numerator-grouping group_identical_graphs_up_to_scalar_rescaling
                 --symmetrize-left-right-states true
-                -p {process} -i {NLO} --global-prefactor-num "1/2" --only-diagrams"#,
+                -p {process} -i {NLO} --global-prefactor-num --filter-selfenergies true --filter-snails true --filter-tadpoles true --n-cut-blobs 1 1 --n-cut-spectators 0 0 "1/2" --only-diagrams"#,
         ))?;
         cli.run_command(&format!("generate existing -p {process} -i {NLO}"))?;
 

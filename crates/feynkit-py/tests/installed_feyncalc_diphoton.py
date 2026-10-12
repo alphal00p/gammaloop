@@ -19,12 +19,15 @@ t, u, mass, charge = S("diphoton::t", "diphoton::u", "UFO::Me", "UFO::ee")
 kin = fk.Kinematics.mandelstam(
     [P(0), P(1), P(2), P(3)], [mass**2, mass**2, E("0"), E("0")], [s, t, u]
 )
-generated = model.process([11, -11], [22, 22], vertex_allow=["V_98"]).generate_diagrams(
-    loops=0,
-    max_vertices=2,
-    maximum_bridges=None,
-    numerator_grouping=None,
-    progress=None,
+generated = (
+    model.process([11, -11], [22, 22])
+    .amplitude(
+        loops=fk.Loops.total(0),
+        restrict=fk.Restrict().only_vertices(["V_98"]),
+        topology=fk.TopologyRules(max_vertices=2),
+    )
+    .generate()
+    .build(fk.NumeratorOptions(naming=fk.Naming.named("D")))
 )
 assert len(generated.diagrams) == 2
 ports = S(

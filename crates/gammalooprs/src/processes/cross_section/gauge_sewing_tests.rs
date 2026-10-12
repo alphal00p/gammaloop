@@ -2,7 +2,8 @@
 //! polarizations. Component contraction never expands a physical numerator.
 
 use feynkit_generator::{
-    GenerationFilter, GenerationOptions, GenerationType, Process as GenerationProcess,
+    Cuts, GenerationType, Loops, Naming, Orders, Process as GenerationProcess, Restrict,
+    TopologyRules,
 };
 use std::collections::BTreeMap;
 
@@ -42,11 +43,10 @@ fn declared_covariant_cut_states_preserve_multisets_and_physical_labels() -> eyr
     test_initialise()?;
     let model = load_generic_model("sm");
     for (state, count) in [(vec![24, -24], 16), (vec![23, 23], 10)] {
-        let process = ProcessDefinition {
-            generation_type: feynkit_generator::GenerationType::CrossSection,
-            process: GenerationProcess::new(Vec::<i64>::new(), state.clone()),
-            ..Default::default()
-        };
+        let process = ProcessDefinition::new(
+            GenerationProcess::new(Vec::<i64>::new(), state.clone())
+                .cross_section(Loops::forward(1..=1)),
+        );
         let closure = process.covariant_cut_states(&model)?;
         assert_eq!(closure.len(), count);
         assert_eq!(model.covariant_cut_states(&closure)?, closure);
@@ -62,23 +62,23 @@ fn declared_covariant_cut_states_preserve_multisets_and_physical_labels() -> eyr
             );
         }
     }
-    let diagnostic = ProcessDefinition {
-        generation_type: feynkit_generator::GenerationType::CrossSection,
-        process: GenerationProcess::new(Vec::<i64>::new(), [250_i64, 250]),
-        ..Default::default()
-    };
+    let diagnostic = ProcessDefinition::new(
+        GenerationProcess::new(Vec::<i64>::new(), [250_i64, 250])
+            .cross_section(Loops::forward(1..=1)),
+    );
     assert!(diagnostic.covariant_cut_representatives(&model).is_empty());
     assert_eq!(
         diagnostic.covariant_cut_states(&model)?,
-        diagnostic.process.outgoing_pdgs(&model)?
+        diagnostic.request.process().outgoing_pdgs(&model)?
     );
-    let mixed = ProcessDefinition {
-        process: diagnostic
-            .process
+    let mixed = ProcessDefinition::new(
+        diagnostic
+            .request
+            .process()
             .clone()
-            .with_final_state_alternatives([vec![23_i64, 23], vec![250, 25]])?,
-        ..diagnostic.clone()
-    };
+            .with_final_state_alternatives([vec![23_i64, 23], vec![250, 25]])?
+            .cross_section(Loops::forward(1..=1)),
+    );
     assert!(
         mixed
             .covariant_cut_states(&model)
@@ -87,9 +87,10 @@ fn declared_covariant_cut_states_preserve_multisets_and_physical_labels() -> eyr
             .contains("observable labels remain unambiguous")
     );
     let unresolved = ProcessDefinition {
-        generation_options: GenerationOptions::default().with_graph_filter(
-            GenerationFilter::PerturbativeOrders([("QED".into(), 1)].into_iter().collect()),
-        ),
+        request: diagnostic
+            .request
+            .clone()
+            .with_orders(Orders::new().perturbative("QED", 1)),
         ..diagnostic
     };
     let mut unresolved_model = model.clone();
@@ -100,13 +101,11 @@ fn declared_covariant_cut_states_preserve_multisets_and_physical_labels() -> eyr
     unresolved_model.apply_parameter_card(&card)?;
     assert!(unresolved.covariant_cut_states(&unresolved_model).is_err());
 
-    let incomplete = ProcessDefinition {
-        generation_type: feynkit_generator::GenerationType::CrossSection,
-        process: GenerationProcess::new(Vec::<i64>::new(), [24_i64, -24]),
-        generation_options: GenerationOptions::default()
-            .with_graph_filter(GenerationFilter::ParticleVeto(vec![251_i64.into()])),
-        ..Default::default()
-    };
+    let incomplete = ProcessDefinition::new(
+        GenerationProcess::new(Vec::<i64>::new(), [24_i64, -24])
+            .cross_section(Loops::forward(1..=1))
+            .with_restrict(Restrict::new().exclude_particles([251_i64])),
+    );
     assert!(
         incomplete
             .covariant_cut_states(&model)
@@ -150,34 +149,33 @@ fn generated_higgs_covariant_cuts_equal_three_physical_vector_polarizations() ->
         (vec![24, -24], Atom::num(3), 6, Atom::one()),
         (vec![23, 23], Atom::num((15, 4)), 4, Atom::num((1, 2))),
     ] {
-        let process = ProcessDefinition {
-            generation_type: feynkit_generator::GenerationType::CrossSection,
-            process: GenerationProcess::new([25_i64], physical),
-            generation_options: GenerationOptions::default()
-                .with_loop_count(1, 1)?
-                .with_graph_filter(GenerationFilter::CouplingOrders(
-                    [("QED".into(), (2, Some(2)))].into_iter().collect(),
-                )),
-            ..Default::default()
-        };
+        let mut process = ProcessDefinition::new(
+            GenerationProcess::new([25_i64], physical)
+                .cross_section(Loops::forward(1..=1))
+                .with_topology(TopologyRules::new().with_self_loops(false))
+                .with_orders(Orders::new().exact("QED", 2))
+                .with_cuts(Cuts::new().with_blobs(1..=1).with_spectators(0..=0)),
+        );
+        process.numerators.naming = Naming::prefix("D");
         let graphs = process.generate(&model, &settings)?;
         assert_eq!(
             graphs.len(),
             graph_count,
             "the complete covariant Higgs cut inventory"
         );
-        assert!(!process.may_filter_covariant_partners(&model));
-        if process.process.outgoing_pdgs(&model)?[0] == [24, -24] {
+        // Coupling bounds alone retain the covariant sector. The explicitly selected
+        // cut ranges now count as restrictions, since the shared default is unrestricted.
+        let mut coupling_only = process.clone();
+        coupling_only.request = coupling_only.request.with_cuts(Cuts::new());
+        assert!(!coupling_only.may_filter_covariant_partners(&model));
+        assert!(process.may_filter_covariant_partners(&model));
+        if process.request.process().outgoing_pdgs(&model)?[0] == [24, -24] {
             let mut filtered = process.clone();
             // In H -> WW this retains the four bosonic Born graphs while
             // removing the two ghost graphs required by covariant completeness.
-            filtered.generation_options =
-                filtered
-                    .generation_options
-                    .with_graph_filter(GenerationFilter::VertexVeto(vec![
-                        "V_17".into(),
-                        "V_25".into(),
-                    ]));
+            filtered.request = filtered
+                .request
+                .with_restrict(Restrict::new().exclude_vertices(["V_17", "V_25"]));
             assert!(filtered.may_filter_covariant_partners(&model));
             let bosonic_graphs = filtered.generate(&model, &settings)?;
             assert_eq!(bosonic_graphs.len(), 4);
@@ -186,9 +184,15 @@ fn generated_higgs_covariant_cuts_equal_three_physical_vector_polarizations() ->
                     .iter_edges()
                     .all(|(_, _, edge)| !edge.data.particle().resolve(&model).is_ghost())
             }));
-            filtered.process = filtered
-                .process
-                .with_final_state_alternatives([vec![251_i64, -251]])?;
+            filtered.request = filtered
+                .request
+                .process()
+                .clone()
+                .with_final_state_alternatives([vec![251_i64, -251]])?
+                .cross_section(filtered.request.loops().clone())
+                .with_orders(filtered.request.orders().clone())
+                .with_restrict(filtered.request.restrictions().clone())
+                .with_topology(filtered.request.topology().clone());
             assert!(!filtered.may_filter_covariant_partners(&model));
         }
         // Raw imported states cannot establish physical-vector intent. The
@@ -391,7 +395,7 @@ fn generated_higgs_covariant_cuts_equal_three_physical_vector_polarizations() ->
                     "{channels:?}, boosted={boosted}"
                 );
                 // The VV channel alone is the incomplete covariant metric sum.
-                let vector_channel = process.process.outgoing_pdgs(&model)?[0]
+                let vector_channel = process.request.process().outgoing_pdgs(&model)?[0]
                     .iter()
                     .copied()
                     .sorted()

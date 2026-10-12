@@ -107,7 +107,14 @@ impl PyLoopCounts {
 #[pyclass(name = "PlanReport", frozen)]
 #[cfg_attr(feature = "community", pyo3(module = "symbolica.community.graph"))]
 #[cfg_attr(not(feature = "community"), pyo3(module = "linnet_py"))]
-pub(super) struct PyPlanReport(pub(super) PlanReport);
+#[doc(hidden)]
+pub struct PyPlanReport(pub(super) PlanReport);
+
+impl From<PlanReport> for PyPlanReport {
+    fn from(value: PlanReport) -> Self {
+        Self(value)
+    }
+}
 
 #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
 #[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
@@ -167,6 +174,7 @@ impl PyPlanCriterion {
             PlanStage::Dressing => "dressing",
             PlanStage::Rules => "rules",
             PlanStage::Selection => "selection",
+            PlanStage::Preparation => "preparation",
         }
     }
 

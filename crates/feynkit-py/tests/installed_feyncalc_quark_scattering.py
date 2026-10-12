@@ -42,10 +42,15 @@ for name, pdgs in [
     same = name in ("qq", "qaq")
     masses = [m**2, (m if same else M) ** 2] * 2
     kin = hep.Kinematics.mandelstam([P(i) for i in range(4)], masses, [s, t, u])
-    generation = model.process(
-        pdgs[:2], pdgs[2:], vertex_allow=vertices
-    ).generate_diagrams(
-        max_vertices=2, maximum_bridges=None, numerator_grouping=None, progress=None
+    generation = (
+        model.process(pdgs[:2], pdgs[2:])
+        .amplitude(
+            loops=hep.Loops.total(0),
+            restrict=hep.Restrict().only_vertices(vertices),
+            topology=hep.TopologyRules(max_vertices=2),
+        )
+        .generate()
+        .build(hep.NumeratorOptions(naming=hep.Naming.named("D")))
     )
     assert len(generation.diagrams) == (2 if same else 1)
     operators, denominators = [], []

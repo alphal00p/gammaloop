@@ -23,15 +23,15 @@
 //! Edge masses may be unknown (untyped topologies); a mass-dependent veto then applies only when
 //! it vetoes both masses, so an unknown mass never vetoes a graph that some typing would keep.
 
-use crate::{SelfEnergyFilterOptions, SnailFilterOptions, TadpoleFilterOptions};
+use crate::{Range, Veto};
 
 /// The special-topology filters of a generation request.
 #[derive(Debug, Clone, Copy, Default)]
 pub(crate) struct SpecialTopologyVetoes {
-    pub(crate) self_energy: Option<SelfEnergyFilterOptions>,
-    pub(crate) tadpoles: Option<TadpoleFilterOptions>,
-    pub(crate) snails: Option<SnailFilterOptions>,
-    pub(crate) factorized_loop_range: Option<(usize, usize)>,
+    pub(crate) self_energy: Option<Veto>,
+    pub(crate) tadpoles: Option<Veto>,
+    pub(crate) snails: Option<Veto>,
+    pub(crate) factorized_loop_range: Range,
 }
 
 /// Whether vetoes for massive and for massless lines apply to a line of the given
@@ -49,7 +49,7 @@ impl SpecialTopologyVetoes {
         self.self_energy.is_none()
             && self.tadpoles.is_none()
             && self.snails.is_none()
-            && self.factorized_loop_range.is_none()
+            && self.factorized_loop_range == Range::Unrestricted
     }
 
     pub(crate) fn vetoes(&self, graph: &PlainGraph) -> bool {
@@ -57,19 +57,17 @@ impl SpecialTopologyVetoes {
             return false;
         }
         let blocks = Blocks::new(graph);
-        if self
+        if !self
             .factorized_loop_range
-            .is_some_and(|(minimum, maximum)| {
-                !(minimum..=maximum).contains(&blocks.factorized_loops())
-            })
+            .contains(blocks.factorized_loops())
         {
             return true;
         }
+
         if let Some(options) = self.self_energy
             && blocks.self_energy_legs(graph).iter().any(|legs| {
-                legs.iter().all(|&massless| {
-                    applies(Some(massless), options.veto_massive, options.veto_massless)
-                })
+                legs.iter()
+                    .all(|&massless| applies(Some(massless), options.massive, options.massless))
             })
         {
             return true;
@@ -79,18 +77,12 @@ impl SpecialTopologyVetoes {
             .into_iter()
             .any(|attachment| {
                 let options = match attachment.kind {
-                    Attachment::Tadpole => self.tadpoles.map(|options| {
-                        (
-                            options.veto_attached_to_massive,
-                            options.veto_attached_to_massless,
-                        )
-                    }),
-                    Attachment::Snail => self.snails.map(|options| {
-                        (
-                            options.veto_attached_to_massive,
-                            options.veto_attached_to_massless,
-                        )
-                    }),
+                    Attachment::Tadpole => self
+                        .tadpoles
+                        .map(|options| (options.massive, options.massless)),
+                    Attachment::Snail => self
+                        .snails
+                        .map(|options| (options.massive, options.massless)),
                 };
                 options.is_some_and(|(veto_massive, veto_massless)| {
                     applies(attachment.massless, veto_massive, veto_massless)
@@ -527,22 +519,22 @@ mod tests {
 
     fn all_vetoes(snails: bool) -> SpecialTopologyVetoes {
         SpecialTopologyVetoes {
-            self_energy: Some(SelfEnergyFilterOptions {
-                veto_massive: true,
-                veto_massless: true,
+            self_energy: Some(Veto {
+                massive: true,
+                massless: true,
                 ..Default::default()
             }),
-            tadpoles: Some(TadpoleFilterOptions {
-                veto_attached_to_massive: true,
-                veto_attached_to_massless: true,
+            tadpoles: Some(Veto {
+                massive: true,
+                massless: true,
                 ..Default::default()
             }),
-            snails: snails.then_some(SnailFilterOptions {
-                veto_attached_to_massive: true,
-                veto_attached_to_massless: true,
+            snails: snails.then_some(Veto {
+                massive: true,
+                massless: true,
                 ..Default::default()
             }),
-            factorized_loop_range: None,
+            factorized_loop_range: Range::Unrestricted,
         }
     }
 
@@ -576,9 +568,9 @@ mod tests {
         graph.add_leg(d, false);
         assert!(all_vetoes(false).vetoes(&graph));
         let massless_only = SpecialTopologyVetoes {
-            self_energy: Some(SelfEnergyFilterOptions {
-                veto_massive: false,
-                veto_massless: true,
+            self_energy: Some(Veto {
+                massive: false,
+                massless: true,
                 ..Default::default()
             }),
             ..Default::default()
@@ -600,9 +592,9 @@ mod tests {
         graph.add_leg(c, true);
         assert!(all_vetoes(false).vetoes(&graph));
         let massive_only = SpecialTopologyVetoes {
-            self_energy: Some(SelfEnergyFilterOptions {
-                veto_massive: true,
-                veto_massless: false,
+            self_energy: Some(Veto {
+                massive: true,
+                massless: false,
                 ..Default::default()
             }),
             ..Default::default()
@@ -622,9 +614,9 @@ mod tests {
         graph.add_edge((c, c), None);
         assert!(all_vetoes(false).vetoes(&graph));
         let massive_only = SpecialTopologyVetoes {
-            tadpoles: Some(TadpoleFilterOptions {
-                veto_attached_to_massive: true,
-                veto_attached_to_massless: false,
+            tadpoles: Some(Veto {
+                massive: true,
+                massless: false,
                 ..Default::default()
             }),
             ..Default::default()
@@ -643,9 +635,9 @@ mod tests {
         graph.add_edge((b, b), Some(true));
         graph.add_leg(b, false);
         let snails = |veto_attached_to_massive, veto_attached_to_massless| SpecialTopologyVetoes {
-            snails: Some(SnailFilterOptions {
-                veto_attached_to_massive,
-                veto_attached_to_massless,
+            snails: Some(Veto {
+                massive: veto_attached_to_massive,
+                massless: veto_attached_to_massless,
                 ..Default::default()
             }),
             ..Default::default()
@@ -666,7 +658,7 @@ mod tests {
             graph.add_edge(ends, Some(true));
         }
         let mut vetoes = all_vetoes(true);
-        vetoes.factorized_loop_range = Some((0, 0));
+        vetoes.factorized_loop_range = Range::exact(0);
         assert!(!vetoes.vetoes(&graph));
     }
 
@@ -728,7 +720,7 @@ mod tests {
         }
         assert_eq!(Blocks::new(&graph).factorized_loops(), 0);
         let mut vetoes = all_vetoes(true);
-        vetoes.factorized_loop_range = Some((0, 0));
+        vetoes.factorized_loop_range = Range::exact(0);
         assert!(!vetoes.vetoes(&graph));
     }
 

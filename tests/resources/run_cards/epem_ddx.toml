@@ -1,6 +1,6 @@
 commands = [
     "import model sm-default",
-   "generate xs e+ e- > d d~ | e- a d g QED^2==4 [{{1}}] --filter-zero-color --numerator-grouping no_grouping --clear-existing-processes ",
+   "generate xs e+ e- > d d~ | e- a d g QED^2==4 [{{1}}] --filter-zero-color --numerator-grouping no_grouping --clear-existing-processes --filter-selfenergies true --filter-snails true --filter-tadpoles true --n-cut-blobs 1 1 --n-cut-spectators 0 0 ",
 ]
 
 [cli_settings.global]
