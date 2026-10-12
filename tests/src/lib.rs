@@ -24,6 +24,11 @@ use std::{
 };
 use tracing::{debug, warn};
 
+/// Serialize tests within one harness, retaining nested locking and panic recovery.
+/// Process isolation and nextest test groups coordinate separate harnesses.
+pub static SERIAL_TEST_LOCK: parking_lot::ReentrantMutex<()> =
+    parking_lot::const_reentrant_mutex(());
+
 static SET_WORKSPACE_CWD: Once = Once::new();
 static WORKSPACE_ROOT: OnceLock<PathBuf> = OnceLock::new();
 

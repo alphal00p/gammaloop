@@ -111,7 +111,16 @@ pub fn get_vakint(mut vakint_settings: VakintSettings) -> TestVakint {
     }
     static VAKINT_INSTANCE: OnceLock<Vakint> = OnceLock::new();
     let vakint = VAKINT_INSTANCE
-        .get_or_init(|| Vakint::new().expect("Failed to initialize vakint"))
+        .get_or_init(|| {
+            let filter = tracing_subscriber::EnvFilter::builder()
+                .with_default_directive(tracing_subscriber::filter::LevelFilter::INFO.into())
+                .from_env_lossy();
+            let _ = tracing_subscriber::FmtSubscriber::builder()
+                .with_env_filter(filter)
+                .with_writer(tracing_subscriber::fmt::TestWriter::with_stderr)
+                .try_init();
+            Vakint::new().expect("Failed to initialize vakint")
+        })
         .clone();
     TestVakint {
         vakint,

@@ -725,15 +725,15 @@ where
 pub mod test {
     use std::sync::RwLock;
 
-    use once_cell::sync::Lazy;
+    use std::sync::LazyLock;
     use symbolica::atom::Symbol;
 
     use crate::network::library::{symbolic::ETS, symbolic::ExplicitKey, symbolic::TensorLibrary};
 
     #[allow(clippy::type_complexity)]
-    pub static EXPLICIT_TENSOR_MAP: Lazy<
+    pub static EXPLICIT_TENSOR_MAP: LazyLock<
         RwLock<TensorLibrary<MixedTensor<f64, ExplicitKey<AbstractIndex>>, AbstractIndex>>,
-    > = Lazy::new(|| {
+    > = LazyLock::new(|| {
         let mut lib = TensorLibrary::new();
         lib.update_ids();
         RwLock::new(lib)

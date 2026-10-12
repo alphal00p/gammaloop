@@ -1341,8 +1341,8 @@ fn epem_a_ddx_nlo_raised_cff_generation() -> Result<()> {
 }
 
 #[test]
-#[serial_test::serial]
 fn scalar_amplitudes_match_across_local_uv_routes() -> Result<()> {
+    let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
     const AMPLITUDE_RUNTIME: &str = r#"
         [general]
         integral_unit = "none"
@@ -1790,15 +1790,15 @@ fn scalar_spectacles_integrated_route_comparison(use_arb_prec: bool) -> Result<(
 }
 
 #[test]
-#[serial_test::serial]
 fn scalar_spectacles_integrated_matches_across_local_uv_routes() -> Result<()> {
+    let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
     scalar_spectacles_integrated_route_comparison(false)
 }
 
 #[test]
-#[serial_test::serial]
 #[ignore = "1000-bit Arb exposes a non-scaling roughly 4e-15 localized/explicit route delta"]
 fn scalar_spectacles_integrated_arb_route_precision_diagnostic() -> Result<()> {
+    let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
     scalar_spectacles_integrated_route_comparison(true)
 }
 
@@ -2718,8 +2718,8 @@ fn local_ct_cli(
 }
 
 #[test]
-#[serial_test::serial]
 fn local_ir_integrated_generation_succeeds_across_local_uv_routes() -> Result<()> {
+    let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
     for (name, external_pdg_sets, internal_pdgs, component_counts, momenta, require_nonzero) in [
         (
             "local_ir_quark_self_energy",
@@ -2894,8 +2894,8 @@ fn local_ir_integrated_generation_succeeds_across_local_uv_routes() -> Result<()
 }
 
 #[test]
-#[serial_test::serial]
 fn genuine_vacuum_tadpole_matches_all_local_uv_routes_and_vakint_inputs() -> Result<()> {
+    let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
     const VACUUM_TADPOLE: &str = r#"
         digraph vacuum_tadpole {
             edge [num=1 mass=2]
@@ -3065,8 +3065,8 @@ fn genuine_vacuum_tadpole_matches_all_local_uv_routes_and_vakint_inputs() -> Res
 }
 
 #[test]
-#[serial_test::serial]
 fn local_os_integrated_generation_is_rejected_by_run_generate() -> Result<()> {
+    let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
     let mut cli = get_test_cli(
         Some(LOCAL_OS_CARD.into()),
         get_tests_workspace_path().join("local_os_integrated_generation_rejected"),
@@ -3102,8 +3102,8 @@ fn local_os_integrated_generation_is_rejected_by_run_generate() -> Result<()> {
 }
 
 #[test]
-#[serial_test::serial]
 fn local_ir_and_pole_part_wood_is_rejected_by_run_generate() -> Result<()> {
+    let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
     const PROCESS: &str = "dgse";
     const INTEGRAND: &str = "dgse";
     let mut cli = get_test_cli(
@@ -3155,8 +3155,8 @@ fn local_ir_and_pole_part_wood_is_rejected_by_run_generate() -> Result<()> {
 }
 
 #[test]
-#[serial_test::serial]
 fn local_ir_child_under_positive_degree_muv_parent_is_rejected_by_run_generate() -> Result<()> {
+    let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
     const NAME: &str = "nested_positive_degree_hu";
     let mut cli = get_test_cli(
         Some("local_ir_child_muv_parent_rejected.toml".into()),
@@ -4396,8 +4396,8 @@ fn run_dgse_local_ir_profiles_are_non_vacuous(
 }
 
 #[test]
-#[serial_test::serial]
 fn dgse_local_ir_profiles_are_non_vacuous() -> Result<()> {
+    let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
     for (explicit_orientation_sum_only, project_local_4d) in
         [(false, false), (true, false), (true, true)]
     {
@@ -4420,8 +4420,8 @@ fn dgse_local_ir_profiles_are_non_vacuous() -> Result<()> {
 }
 
 #[test]
-#[serial_test::serial]
 fn dgse_local_ir_generation_orientation_filter_profiles_one_orientation() -> Result<()> {
+    let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
     let project_local_4d = false;
     // Runtime production-orientation indices are exposed by the localized direct route.
     const UNFILTERED_ORIENTATION_INDEX: usize = 3;
@@ -4572,8 +4572,8 @@ fn dgse_local_ir_generation_orientation_filter_profiles_one_orientation() -> Res
 }
 
 #[test]
-#[serial_test::serial]
 fn massless_quark_self_energy_local_ir_profile_is_non_vacuous() -> Result<()> {
+    let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
     for (explicit_orientation_sum_only, project_local_4d) in
         [(false, false), (true, false), (true, true)]
     {
@@ -4647,8 +4647,8 @@ fn massless_quark_self_energy_local_ir_profile_is_non_vacuous() -> Result<()> {
 }
 
 #[test]
-#[serial_test::serial]
 fn massless_gluon_self_energy_local_ir_profile_is_non_vacuous() -> Result<()> {
+    let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
     for (explicit_orientation_sum_only, project_local_4d) in
         [(false, false), (true, false), (true, true)]
     {
@@ -4846,8 +4846,8 @@ NAME,
 }
 
 #[test]
-#[serial_test::serial]
 fn soft_cff_state_survives_a_fresh_process_reload() -> Result<()> {
+    let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
     for project_local_4d in [false, true] {
         println!("project_local_4d={project_local_4d}");
         let state_path = get_tests_workspace_path().join(format!(
@@ -4893,8 +4893,8 @@ const LOCAL_OS_CARD: &str = "local_os_top_self_energy.toml";
 const LOCAL_OS_NAME: &str = "local_os_top_self_energy";
 
 #[test]
-#[serial_test::serial]
 fn massive_top_self_energy_local_os_dispatch_is_deferred() {
+    let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
     let state_path = get_tests_workspace_path().join(format!(
         "{LOCAL_OS_NAME}_explicit_false_project_local_4d_false"
     ));
@@ -4918,8 +4918,8 @@ fn massive_top_self_energy_local_os_dispatch_is_deferred() {
 }
 
 #[test]
-#[serial_test::serial]
 fn paper_appendix_b1_os_child_reaches_deferred_dispatch() {
+    let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
     const NAME: &str = "paper_appendix_b1_nested_gluon_self_energy_os";
     let state_path =
         get_tests_workspace_path().join(format!("{NAME}_explicit_false_project_local_4d_false"));
@@ -4949,8 +4949,8 @@ fn paper_appendix_b1_os_child_reaches_deferred_dispatch() {
 }
 
 #[test]
-#[serial_test::serial]
 fn local_ir_disconnected_completed_components_form_nonzero_union() -> Result<()> {
+    let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
     for (explicit_orientation_sum_only, project_local_4d) in
         [(false, false), (true, false), (true, true)]
     {
@@ -5127,8 +5127,8 @@ bare_uv.total > 0 && bare_uv.resolved > 0 && bare_uv.dod_failures > 0
 }
 
 #[test]
-#[serial_test::serial]
 fn consecutive_soft_components_have_exact_forest_and_cli_profile() -> Result<()> {
+    let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
     for (explicit_orientation_sum_only, project_local_4d) in
         [(false, false), (true, false), (true, true)]
     {
@@ -5284,8 +5284,8 @@ bare_uv.total > 0 && bare_uv.resolved > 0 && bare_uv.dod_failures > 0
 }
 
 #[test]
-#[serial_test::serial]
 fn sunrise_pole_part_matches_muv_inspect() -> Result<()> {
+    let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
     let process = "sunrise_scalar_1";
     let integrand_name = "scalar_sunrise";
     let setup = |test_name: &str, scheme| -> Result<CLIState> {
@@ -5750,8 +5750,8 @@ mod slow {
     }
 
     #[test]
-    #[serial_test::serial]
     fn paper_figure_b1_massless_bubble_uses_a_complete_soft_wood() -> Result<()> {
+        let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
         for (explicit_orientation_sum_only, project_local_4d) in
             [(false, false), (true, false), (true, true)]
         {
@@ -5779,8 +5779,8 @@ mod slow {
     }
 
     #[test]
-    #[serial_test::serial]
     fn paper_figure_b1_double_triangle_is_a_non_vacuous_uv_fixture() -> Result<()> {
+        let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
         for (explicit_orientation_sum_only, project_local_4d) in
             [(false, false), (true, false), (true, true)]
         {
@@ -5844,8 +5844,8 @@ mod slow {
     }
 
     #[test]
-    #[serial_test::serial]
     fn local_nested_soft_fixture_generates() -> Result<()> {
+        let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
         for (explicit_orientation_sum_only, project_local_4d) in
             [(false, false), (true, false), (true, true)]
         {
@@ -5970,8 +5970,8 @@ bare_uv.total > 0 && bare_uv.resolved > 0 && bare_uv.dod_failures > 0
     }
 
     #[test]
-    #[serial_test::serial]
     fn paper_appendix_b1_ir_specialization_generates_and_profiles() -> Result<()> {
+        let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
         for (explicit_orientation_sum_only, project_local_4d) in
             [(false, false), (true, false), (true, true)]
         {
@@ -6387,8 +6387,8 @@ bare_uv.total > 0 && bare_uv.resolved > 0 && bare_uv.dod_failures > 0
     }
 
     #[test]
-    #[serial_test::serial]
     fn gamma_star_ddbar_top_bubble_child_only_has_two_power_soft_improvement() -> Result<()> {
+        let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
         for (explicit_orientation_sum_only, project_local_4d) in
             [(false, false), (true, false), (true, true)]
         {
@@ -6522,8 +6522,8 @@ bare_uv.total > 0 && bare_uv.resolved > 0 && bare_uv.dod_failures > 0
     }
 
     #[test]
-    #[serial_test::serial]
     fn gamma_star_ddbar_top_bubble_has_two_power_soft_improvement() -> Result<()> {
+        let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
         for (explicit_orientation_sum_only, project_local_4d) in
             [(false, false), (true, false), (true, true)]
         {
@@ -6881,8 +6881,8 @@ soft_ir_uv.total > 0 && soft_ir_uv.resolved > 0 && soft_ir_uv.failed == 0
     }
 
     #[test]
-    #[serial_test::serial]
     fn aa_aa_2l_gl00_matches_across_local_uv_routes() -> Result<()> {
+        let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
         AA_AA_2L_UV_RICH_INSPECT.run_graph_local_uv_route_comparison(
             "GL00",
             "examples/cli/aa_aa/2L/graphs/GL00.dot",
@@ -6892,8 +6892,8 @@ soft_ir_uv.total > 0 && soft_ir_uv.resolved > 0 && soft_ir_uv.failed == 0
     }
 
     #[test]
-    #[serial_test::serial]
     fn aa_aa_2l_gl01_matches_across_local_uv_routes() -> Result<()> {
+        let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
         AA_AA_2L_UV_RICH_INSPECT.run_graph_local_uv_route_comparison(
             "GL01",
             "examples/cli/aa_aa/2L/graphs/GL01.dot",
@@ -6903,8 +6903,8 @@ soft_ir_uv.total > 0 && soft_ir_uv.resolved > 0 && soft_ir_uv.failed == 0
     }
 
     #[test]
-    #[serial_test::serial]
     fn aa_aa_3l_gl262_matches_across_local_uv_routes() -> Result<()> {
+        let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
         AA_AA_2L_UV_RICH_INSPECT.run_graph_local_uv_route_comparison(
             "GL262",
             "examples/cli/aa_aa/3L/graphs/processes/amplitudes/aa_aa/3L/GL262.dot",
@@ -6917,8 +6917,8 @@ soft_ir_uv.total > 0 && soft_ir_uv.resolved > 0 && soft_ir_uv.failed == 0
         ($($name:ident => $graph:literal),+ $(,)?) => {
             $(
                 #[test]
-                #[serial_test::serial]
                 fn $name() -> Result<()> {
+                    let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
                     AA_AA_2L_UV_RICH_INSPECT.run_graph_uv_profile_and_rich_inspect($graph)
                 }
             )+

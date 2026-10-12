@@ -392,16 +392,14 @@ impl Topology {
                 )
                 .with(S.one.to_pattern());
 
-            for a in [&mut contracted_short_expression] {
-                if !a.is_zero() {
-                    *a = a
-                        .replace(
-                            vk_parse!(format!("pow({})", prop_id).as_str())
-                                .unwrap()
-                                .to_pattern(),
-                        )
-                        .with(S.zero.to_pattern());
-                }
+            if !contracted_short_expression.is_zero() {
+                contracted_short_expression = contracted_short_expression
+                    .replace(
+                        vk_parse!(format!("pow({})", prop_id).as_str())
+                            .unwrap()
+                            .to_pattern(),
+                    )
+                    .with(S.zero.to_pattern());
             }
         }
 

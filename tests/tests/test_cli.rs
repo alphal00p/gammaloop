@@ -20,7 +20,6 @@ use gammalooprs::{
     processes::{CrossSection, ProcessCollection, ProcessDefinition},
     settings::{RuntimeSettings, global::GenerationSettings},
 };
-use serial_test::serial;
 
 static TEMPLATE_CLI: OnceLock<Mutex<CLIState>> = OnceLock::new();
 
@@ -649,8 +648,8 @@ fn boot_mismatch_uses_conflicting_boot_blocks_read_only() -> Result<()> {
 }
 
 #[test]
-#[serial]
 fn state_load_option_clean_state_removes_saved_state_before_load() -> Result<()> {
+    let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
     let test_name = "state_load_option_clean_state_removes_saved_state_before_load";
     let mut cli = new_cli(test_name)?;
 
@@ -1005,8 +1004,8 @@ fn remove_processes_rejects_integrand_without_process() -> Result<()> {
 }
 
 #[test]
-#[serial]
 fn cli_stateful_workflow_behaviors() -> Result<()> {
+    let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
     run_without_arguments_is_a_noop()?;
     run_records_executed_commands()?;
     run_prevalidation_is_all_or_nothing_for_inline_commands()?;
@@ -1050,8 +1049,8 @@ fn cli_stateful_workflow_behaviors() -> Result<()> {
 }
 
 #[test]
-#[serial]
 fn run_history_load_reports_detailed_parse_errors() {
+    let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
     let run_card_path = run_card_path("run_history_load_reports_detailed_parse_errors.toml");
     if let Some(parent) = run_card_path.parent() {
         fs::create_dir_all(parent).unwrap();
@@ -1066,8 +1065,8 @@ fn run_history_load_reports_detailed_parse_errors() {
 }
 
 #[test]
-#[serial]
 fn run_history_load_reports_block_command_context() {
+    let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
     let run_card_path = run_card_path("run_history_load_reports_block_command_context.toml");
     if let Some(parent) = run_card_path.parent() {
         fs::create_dir_all(parent).unwrap();
@@ -1090,8 +1089,8 @@ commands = ["no_such_command"]
 }
 
 #[test]
-#[serial]
 fn run_history_load_accepts_command_block_templates_that_need_late_parsing() -> Result<()> {
+    let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
     let mut cli =
         new_cli("run_history_load_accepts_command_block_templates_that_need_late_parsing")?;
     let path = run_card_path("late_parsing.toml");
@@ -1121,8 +1120,8 @@ commands = ["quit -n --override-state $(overwrite)"]
 }
 
 #[test]
-#[serial]
 fn nested_inline_runs_apply_defines_in_their_own_scope() -> Result<()> {
+    let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
     let mut cli = new_cli("nested_inline_runs_apply_defines_in_their_own_scope")?;
     cli.run_command(
         r#"run -c 'run -D level=warn -c "set global kv global.display_directive=$(level)"'"#,
@@ -1138,8 +1137,8 @@ fn nested_inline_runs_apply_defines_in_their_own_scope() -> Result<()> {
 }
 
 #[test]
-#[serial]
 fn boot_nested_blocks_resolve_inherited_variables_when_invoked() -> Result<()> {
+    let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
     let mut cli = new_cli("boot_nested_blocks_resolve_inherited_variables_when_invoked")?;
     let history = RunHistory {
         command_blocks: vec![
@@ -1163,8 +1162,8 @@ fn boot_nested_blocks_resolve_inherited_variables_when_invoked() -> Result<()> {
 }
 
 #[test]
-#[serial]
 fn boot_parameterized_blocks_reject_missing_and_recursive_calls() -> Result<()> {
+    let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
     for (name, nested_commands, expected) in [
         (
             "missing",
@@ -1200,8 +1199,8 @@ fn boot_parameterized_blocks_reject_missing_and_recursive_calls() -> Result<()> 
 }
 
 #[test]
-#[serial]
 fn three_d_rep_defaults_keep_artifacts_outside_unsaved_state() -> Result<()> {
+    let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
     let mut cli = new_cli("three_d_rep_defaults_keep_artifacts_outside_unsaved_state")?;
     let cwd = cli_state_path("three_d_rep_default_workspace");
     clean_test(&cwd);
@@ -1231,8 +1230,8 @@ fn three_d_rep_defaults_keep_artifacts_outside_unsaved_state() -> Result<()> {
 }
 
 #[test]
-#[serial]
 fn existing_invalid_state_folder_fails_to_load_instead_of_falling_back() -> Result<()> {
+    let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
     let state_path =
         cli_state_path("existing_invalid_state_folder_fails_to_load_instead_of_falling_back");
     clean_test(&state_path);

@@ -24,7 +24,7 @@ follows:
   compact symbol encodings, and canonicalization;
 - the optional `python` module registers a Symbolica community-module facade.
 
-Idenso always depends on Spenso with `shadowing`, as well as Linnet and Symbolica. It reuses
+Idenso always depends on Spenso with `symbolica`, as well as Linnet and Symbolica. It reuses
 Spenso's representation tags, slot parser, tensor-network graph, and contraction scheduling;
 it does not fork those abstractions. It has no FORM process, numerical backend, filesystem
 workspace, network service, or database.
@@ -199,12 +199,12 @@ The shared concrete syntax and which crate owns each rewrite are specified in th
 
 Idenso defaults to `native`, forwarding GMP/MPFR support; `wasm` selects the Wasm backend with
 default features disabled. The core Rust rewrite layer always includes Symbolica and Spenso's
-`shadowing` support. `python` enables community-module functions and automatic representation
-initialization; `python_stubgen` adds stub metadata and enables Symbolica's stub surface.
+`symbolica` support. `python` enables community-module functions and automatic representation
+initialization; `python-stubs` adds stub metadata and enables Symbolica's stub surface.
 `reference-cases` exposes the otherwise test-only curated identity cases.
 
-The optional `bincode` feature derives binary encoding only for Idenso's zero-sized
-representation marker types. `SymbolicTensor`, rewrite settings, symbol registries, networks,
+Binary encoding is always derived for Idenso's zero-sized representation marker types.
+`SymbolicTensor`, rewrite settings, symbol registries, networks,
 and cooked expressions do not form an Idenso checkpoint format. Reversible cooking stores the
 source atom in Symbolica symbol user data and derives a stable-looking hash name, but recovery
 still depends on the matching Symbolica registry and cooking settings. Printed or binary names
@@ -255,9 +255,9 @@ Dirac, color, and epsilon rules. Snapshot tests pin canonical Symbolica strings.
 and FeynCalc examples are reference fixtures checked by tests; they are not runtime calls to
 those external systems. Benchmarks separately cover Schoonschip modes and vertex-algebra paths.
 
-The default boundary is exercised with `cargo test -p idenso`. Optional representation encoding
-uses `cargo test -p idenso --features bincode`; community-module and stub coverage require their
-respective Python features. The `reference-cases` feature makes the curated cases available to
+The default boundary, including representation encoding, is exercised with `cargo test -p idenso`.
+Community-module and stub coverage require their respective Python features.
+The `reference-cases` feature makes the curated cases available to
 non-test consumers but does not add a second simplifier.
 
 For supported workflows, start with the

@@ -4,6 +4,7 @@ use std::ffi::OsStr;
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use include_dir::Dir;
 use linnest::{
     encode_graph_spec_bytes, TypstEdgeSpec, TypstEndpointSpec, TypstGraphSpec, TypstNodeSpec,
 };
@@ -11,7 +12,6 @@ use linnet::half_edge::involution::{Flow, Hedge, HedgePair, Orientation};
 use pyo3::exceptions::{PyReferenceError, PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::{PyAny, PyBytes, PyDict, PyDictMethods, PyList, PyListMethods, PyModule};
-use rust_embed::RustEmbed;
 use walkdir::WalkDir;
 
 use crate::drawing::DrawingKind;
@@ -30,27 +30,7 @@ const DEFAULT_TEMPLATE: &str = "crates/linnest/typst/src/render/figure.typ";
 const ENTRYPOINT: &str = "main.typ";
 const TOPOLOGY: &str = "diagram.cbor";
 
-#[derive(RustEmbed)]
-#[folder = "$CARGO_MANIFEST_DIR/../linnest/typst"]
-#[include = "src/*.typ"]
-#[include = "src/**/*.typ"]
-#[include = "typst.toml"]
-#[include = "linnest.wasm"]
-#[include = "LICENSE"]
-struct EmbeddedLinnestPackage;
-
-#[derive(RustEmbed)]
-#[folder = "$CARGO_MANIFEST_DIR/../kurvst/typst"]
-#[include = "src/*.typ"]
-#[include = "src/**/*.typ"]
-#[include = "typst.toml"]
-#[include = "kurvst.wasm"]
-#[include = "LICENSE"]
-struct EmbeddedKurvstPackage;
-
-#[derive(RustEmbed)]
-#[folder = "$CARGO_MANIFEST_DIR/vendor/typst-packages"]
-struct EmbeddedTypstPackages;
+include!(concat!(env!("OUT_DIR"), "/embedded_assets.rs"));
 
 fn element_drawing<'py>(
     py: Python<'py>,
@@ -346,7 +326,7 @@ fn prepare(topology: Vec<u8>, transport: RenderConfigTransport) -> PyResult<Prep
     let build_dir =
         tempfile::tempdir().map_err(|error| PyRuntimeError::new_err(error.to_string()))?;
     let build_root = canonicalize(build_dir.path(), "render directory")?;
-    write_embedded_assets::<EmbeddedTypstPackages>(&build_root.join(TYPST_PACKAGES_DIR))?;
+    write_embedded_assets(&TYPST_PACKAGE_ASSETS, &build_root.join(TYPST_PACKAGES_DIR))?;
     let package_store = canonicalize(
         &build_root.join(TYPST_PACKAGES_DIR),
         "bundled Typst package store",
@@ -366,8 +346,18 @@ fn prepare(topology: Vec<u8>, transport: RenderConfigTransport) -> PyResult<Prep
     }
 
     let mut files = BTreeMap::new();
-    insert_embedded_assets::<EmbeddedLinnestPackage>(&mut files, &build_root, LINNEST_PACKAGE_DIR)?;
-    insert_embedded_assets::<EmbeddedKurvstPackage>(&mut files, &build_root, KURVST_PACKAGE_DIR)?;
+    insert_embedded_assets(
+        &LINNEST_PACKAGE_ASSETS,
+        &mut files,
+        &build_root,
+        LINNEST_PACKAGE_DIR,
+    )?;
+    insert_embedded_assets(
+        &KURVST_PACKAGE_ASSETS,
+        &mut files,
+        &build_root,
+        KURVST_PACKAGE_DIR,
+    )?;
     write_project_asset(&build_root, TOPOLOGY, &topology)?;
 
     let mut source_paths = transport.template.iter().cloned().collect::<Vec<_>>();
@@ -413,20 +403,21 @@ fn prepare(topology: Vec<u8>, transport: RenderConfigTransport) -> PyResult<Prep
     })
 }
 
-fn insert_embedded_assets<E: RustEmbed>(
+fn insert_embedded_assets(
+    assets: &Dir<'_>,
     files: &mut BTreeMap<String, Vec<u8>>,
     build_root: &Path,
     root: &str,
 ) -> PyResult<()> {
-    for path in E::iter() {
-        let contents = E::get(path.as_ref()).ok_or_else(|| {
-            PyRuntimeError::new_err(format!("embedded render asset {path} is missing"))
-        })?;
+    for file in assets.files() {
         insert_project_asset(
             files,
             build_root,
-            &format!("{root}/{}", path.replace('\\', "/")),
-            contents.data.as_ref(),
+            &format!(
+                "{root}/{}",
+                file.path().to_string_lossy().replace('\\', "/")
+            ),
+            file.contents(),
         )?;
     }
     Ok(())
@@ -466,12 +457,9 @@ fn write_project_asset(build_root: &Path, path: &str, contents: &[u8]) -> PyResu
     })
 }
 
-fn write_embedded_assets<E: RustEmbed>(root: &Path) -> PyResult<()> {
-    for path in E::iter() {
-        let target = root.join(path.as_ref());
-        let contents = E::get(path.as_ref()).ok_or_else(|| {
-            PyRuntimeError::new_err(format!("embedded render asset {path} is missing"))
-        })?;
+fn write_embedded_assets(assets: &Dir<'_>, root: &Path) -> PyResult<()> {
+    for file in assets.files() {
+        let target = root.join(file.path());
         if let Some(parent) = target.parent() {
             fs::create_dir_all(parent).map_err(|error| {
                 PyRuntimeError::new_err(format!(
@@ -480,7 +468,7 @@ fn write_embedded_assets<E: RustEmbed>(root: &Path) -> PyResult<()> {
                 ))
             })?;
         }
-        fs::write(&target, contents.data.as_ref()).map_err(|error| {
+        fs::write(&target, file.contents()).map_err(|error| {
             PyRuntimeError::new_err(format!(
                 "failed to stage render asset {}: {error}",
                 target.display()
@@ -674,7 +662,7 @@ fn entrypoint_source(
 }
 
 /// One Typst render whose virtual project and generated entrypoint share a lifetime.
-#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
+#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(module = "linnet_py", frozen)]
 pub(crate) struct PreparedRender {
     _build_dir: tempfile::TempDir,
@@ -738,8 +726,8 @@ impl PreparedRender {
     }
 }
 
-#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
-#[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
+#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pymethods)]
+#[cfg_attr(not(feature = "python-stubs"), pyo3_stub_gen_derive::remove_gen_stub)]
 #[pymethods]
 impl PreparedRender {
     /// Return the exact generated Typst entrypoint for this preparation.
@@ -837,4 +825,35 @@ pub(crate) fn prepare_graph(
 ) -> PyResult<PreparedRender> {
     let (topology, transport) = request(py, graph, config)?;
     prepare(topology, transport)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn embedded_packages_keep_nested_sources_and_licenses() {
+        assert!(LINNEST_PACKAGE_ASSETS
+            .get_file("src/impl/draw.typ")
+            .is_some());
+        assert!(KURVST_PACKAGE_ASSETS.get_file("src/impl.typ").is_some());
+        for package in [&LINNEST_PACKAGE_ASSETS, &KURVST_PACKAGE_ASSETS] {
+            assert!(package.get_file("LICENSE").is_some());
+            assert!(package.get_file("typst.toml").is_some());
+            assert!(package.files().all(|file| {
+                !["docs", "examples", "benches"]
+                    .iter()
+                    .any(|directory| file.path().starts_with(directory))
+                    && file.path() != Path::new("README.md")
+            }));
+        }
+        for path in [
+            "preview/cetz/0.5.1/cetz-core/cetz_core.wasm",
+            "preview/cetz/0.5.1/LICENSE",
+            "preview/oxifmt/1.0.0/LICENSE-MIT",
+            "preview/oxifmt/1.0.0/LICENSE-APACHE",
+        ] {
+            assert!(TYPST_PACKAGE_ASSETS.get_file(path).is_some());
+        }
+    }
 }

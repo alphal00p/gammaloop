@@ -7,7 +7,7 @@ use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 
 /// A position snapshot from one continuous force-layout run.
-#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
+#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(frozen, name = "LayoutFrame", get_all)]
 pub(crate) struct PyLayoutFrame {
     nodes: Vec<(f64, f64)>,
@@ -21,7 +21,7 @@ pub(crate) struct PyLayoutFrame {
 ///
 /// Topology is fixed for the lifetime of the stream. Frames contain only
 /// coordinates and progress, so notebook viewers can retain their SVG elements.
-#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
+#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(unsendable, name = "LayoutStream")]
 pub(crate) struct PyLayoutStream {
     stream: ForceLayoutStream,
@@ -30,8 +30,8 @@ pub(crate) struct PyLayoutStream {
     finished: bool,
 }
 
-#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
-#[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
+#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pymethods)]
+#[cfg_attr(not(feature = "python-stubs"), pyo3_stub_gen_derive::remove_gen_stub)]
 #[pymethods]
 impl PyLayoutStream {
     /// Start a force-layout preview from a single DOT graph.

@@ -61,7 +61,7 @@ not merely equal dimensions.
 
 #callout("The docs run this example", [
   The documentation test compiles and executes this program against the current workspace. The
-  contraction itself needs neither Symbolica nor Spenso's optional `shadowing` feature.
+  contraction itself needs neither Symbolica nor Spenso's optional `symbolica` feature.
 ])
 
 Continue with the #link("tutorial/")[first tensor workflow] for a more deliberate explanation of

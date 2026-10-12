@@ -6,8 +6,10 @@ publish = false
 
 [features]
 default = []
-persistent-typst = [
+watch = [
   "dep:comemo",
+  "dep:notify",
+  "dep:tiny_http",
   "dep:typst",
   "dep:typst-bundle",
   "dep:typst-kit",
@@ -20,13 +22,13 @@ clap = { workspace = true, features = ["derive", "env"] }
 chrono.workspace = true
 comemo = { version = "=0.5.1", optional = true }
 eyre.workspace = true
-notify.workspace = true
+notify = { workspace = true, optional = true }
 percent-encoding.workspace = true
 regex.workspace = true
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
 tempfile = "3.8"
-tiny_http.workspace = true
+tiny_http = { workspace = true, optional = true }
 toml.workspace = true
 # `Cargo.lock` deliberately holds Typst's internal component family at 0.15.1
 # as well, matching the Nix-provided CLI used for release output parity.

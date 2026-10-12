@@ -18,8 +18,8 @@ rewrite families:
 Representation helper macros such as `bis!`, `cof!`, and `coad!` construct the symbolic forms
 expected by Spenso and Idenso. The #link("reference/rust/")[Rust orientation] leads to the
 revision-specific Rustdoc for their accepted forms, return types, feature gates, and source
-locations. APIs behind `bincode`, `reference-cases`, `python`, and `python_stubgen` are available
-only when the matching Cargo feature is enabled.
+locations. Representation encoding is always available. APIs behind `reference-cases`, `python`,
+and `python-stubs` require the matching Cargo feature.
 
 == Python community module
 

@@ -20,14 +20,14 @@ use std::{
 
 use bincode::{Decode, Encode};
 
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 use crate::{
     network::{library::symbolic::ETS, tags::SPENSO_TAG},
     self_dual_symbol,
     structure::slot::SlotError,
 };
 
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 use symbolica::{
     atom::{
         Atom, AtomOrView, AtomView, FunctionBuilder, NamespacedSymbol, Symbol, SymbolBuilder,
@@ -48,7 +48,7 @@ pub trait BaseRepName: RepName<Dual: RepName> + Default {
     // fn selfless_name() -> String;
     fn selfless_base() -> Self::Base;
 
-    #[cfg(feature = "shadowing")]
+    #[cfg(feature = "symbolica")]
     fn selfless_symbol() -> Symbol {
         symbol!(Self::NAME)
     }
@@ -63,7 +63,7 @@ pub trait BaseRepName: RepName<Dual: RepName> + Default {
         }
     }
 
-    #[cfg(feature = "shadowing")]
+    #[cfg(feature = "symbolica")]
     fn pattern(symbol: Symbol) -> Atom {
         Self::default().to_symbolic([Atom::var(symbol)])
     }
@@ -79,7 +79,7 @@ pub trait BaseRepName: RepName<Dual: RepName> + Default {
         }
     }
 
-    #[cfg(feature = "shadowing")]
+    #[cfg(feature = "symbolica")]
     fn new_slot_from(
         sym: Symbol,
         dim: Dimension,
@@ -101,16 +101,16 @@ pub trait BaseRepName: RepName<Dual: RepName> + Default {
 
 #[derive(Error, Debug)]
 pub enum RepresentationError {
-    #[cfg(feature = "shadowing")]
+    #[cfg(feature = "symbolica")]
     #[error("Symbol {0} isn't one of [sind,uind,dind]")]
     SymbolError(Symbol),
-    #[cfg(feature = "shadowing")]
+    #[cfg(feature = "symbolica")]
     #[error("Expected dual state: {0} but got {1}")]
     ExpectedDualStateError(Symbol, Symbol),
-    #[cfg(feature = "shadowing")]
+    #[cfg(feature = "symbolica")]
     #[error("{0} is not a possible Representation")]
     NotRepresentationError(Symbol),
-    #[cfg(feature = "shadowing")]
+    #[cfg(feature = "symbolica")]
     #[error(
         "inline-metric representation {0} must be registered locally because its metric function is not portable"
     )]
@@ -154,11 +154,11 @@ pub trait RepName:
         Ordering::Equal
     }
 
-    #[cfg(feature = "shadowing")]
+    #[cfg(feature = "symbolica")]
     fn try_from_symbol(sym: Symbol, aind: Symbol) -> Result<Self, RepresentationError> {
         Self::from_library_rep(LibraryRep::try_from_symbol(sym, aind)?)
     }
-    #[cfg(feature = "shadowing")]
+    #[cfg(feature = "symbolica")]
     fn try_from_symbol_coerced(sym: Symbol) -> Result<Self, RepresentationError> {
         Self::from_library_rep(LibraryRep::try_from_symbol_coerced(sym)?)
     }
@@ -174,7 +174,7 @@ pub trait RepName:
     }
 
     #[allow(clippy::cast_possible_wrap)]
-    #[cfg(feature = "shadowing")]
+    #[cfg(feature = "symbolica")]
     /// yields a function builder for the representation, adding a first variable: the dimension.
     ///
     fn to_symbolic<'a, It: Into<AtomOrView<'a>>>(
@@ -186,7 +186,7 @@ pub trait RepName:
         librep.to_symbolic(args)
     }
 
-    #[cfg(feature = "shadowing")]
+    #[cfg(feature = "symbolica")]
     /// An atom representing the identity function for that representation.
     /// a is dualized
     /// b is not
@@ -204,7 +204,7 @@ pub trait RepName:
     }
 
     #[allow(clippy::cast_possible_wrap)]
-    #[cfg(feature = "shadowing")]
+    #[cfg(feature = "symbolica")]
     /// yields a function builder for the representation, adding a first variable: the dimension.
     ///
     fn metric_atom<'a, It: Into<AtomOrView<'a>>>(
@@ -469,7 +469,7 @@ impl BaseRepName for Dummy {
     // bincode_trait_derive::BorrowDecodeFromDecode,
 )]
 #[cfg_attr(
-    feature = "shadowing",
+    feature = "symbolica",
     trait_decode(trait = symbolica::state::HasStateMap),
 )]
 pub struct Representation<T: RepName> {
@@ -510,7 +510,7 @@ impl<T: RepName> Eq for Representation<T> {}
 
 impl<T: RepName> Representation<T> {
     #[allow(clippy::cast_possible_wrap)]
-    #[cfg(feature = "shadowing")]
+    #[cfg(feature = "symbolica")]
     /// An atom representing the identity tensor with aind a, and b.
     /// a is dualized, b is not.
     ///
@@ -521,7 +521,7 @@ impl<T: RepName> Representation<T> {
     }
 
     // [allow(clippy::cast_possible_wrap)]
-    #[cfg(feature = "shadowing")]
+    #[cfg(feature = "symbolica")]
     /// Construct compact `dot(a(rep), b(rep))` notation from unrepresented
     /// vector function heads (or vector symbols).
     ///
@@ -561,14 +561,14 @@ impl<T: RepName> Representation<T> {
     }
 
     #[allow(clippy::cast_possible_wrap)]
-    #[cfg(feature = "shadowing")]
+    #[cfg(feature = "symbolica")]
     /// An atom representing the metric tensor with aind a, and b.
     pub fn g<'a, It: Into<AtomOrView<'a>>>(&self, a: It, b: It) -> Atom {
         let a: AtomOrView<'a> = a.into();
         let b: AtomOrView<'a> = b.into();
         function!(ETS.metric, self.pattern(a), self.pattern(b))
     }
-    #[cfg(feature = "shadowing")]
+    #[cfg(feature = "symbolica")]
     /// An atom representing the musical isomorphism tensor with aind a, and b.
     pub fn flat<'a, It: Into<AtomOrView<'a>>>(&self, a: It, b: It) -> Atom {
         let a: AtomOrView<'a> = a.into();
@@ -595,14 +595,14 @@ impl<T: RepName> Representation<T> {
         )
     }
 
-    #[cfg(feature = "shadowing")]
+    #[cfg(feature = "symbolica")]
     pub fn pattern<'a, A: Into<AtomOrView<'a>>>(&self, aind: A) -> Atom {
         let dim = AtomOrView::Atom(self.dim.to_symbolic());
         let a = aind.into();
         self.rep.to_symbolic([dim, a])
     }
 
-    #[cfg(feature = "shadowing")]
+    #[cfg(feature = "symbolica")]
     pub fn to_pattern_wrapped(&self, aind: Symbol) -> Atom {
         self.rep.to_symbolic([
             self.dim.to_symbolic(),
@@ -693,12 +693,12 @@ impl PartialOrd for LibraryRep {
 
 pub type LibrarySlot<Aind> = Slot<LibraryRep, Aind>;
 
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 crate::symbolica_init_lazy_static! {
     pub(crate) static REPS, REPS_INNER: RwLock<ExtendibleReps> =
         || RwLock::new(ExtendibleReps::new());
 }
-#[cfg(not(feature = "shadowing"))]
+#[cfg(not(feature = "symbolica"))]
 pub(crate) static REPS: LazyLock<RwLock<ExtendibleReps>> =
     LazyLock::new(|| RwLock::new(ExtendibleReps::new()));
 pub(crate) static SELF_DUAL: AppendOnlyVec<(LibraryRep, RepData)> = AppendOnlyVec::new();
@@ -752,12 +752,12 @@ fn canonical_representation_name(name: &str) -> String {
     }
 }
 
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 fn representation_label_name(name: &str) -> &str {
     name.rsplit("::").next().unwrap_or(name)
 }
 
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 fn default_index_row(name: &str) -> IndexRow {
     // Idenso's canonical self-dual bispinor indices conventionally sit below
     // the tensor head. A same-named representation in another namespace is a
@@ -769,7 +769,7 @@ fn default_index_row(name: &str) -> IndexRow {
     }
 }
 
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 fn default_index_palette(name: &str) -> IndexPalette {
     let labels: &[&str] = match canonical_representation_name(name).as_str() {
         "spenso::mink" | "spenso::lor" => &["mu", "nu", "rho", "sigma"],
@@ -790,7 +790,7 @@ fn default_index_palette(name: &str) -> IndexPalette {
     .expect("the built-in representation palettes are non-empty and valid")
 }
 
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 fn representation_typst_body(label: &IndexDisplay) -> String {
     format!(
         "(dim, ind ) = (content: $ {}^#dim _#ind $, upper:true)",
@@ -1165,7 +1165,7 @@ impl IndexDisplay {
         }
     }
 
-    #[cfg(feature = "shadowing")]
+    #[cfg(feature = "symbolica")]
     fn node_user_data(&self) -> UserData {
         match self {
             Self::Symbol(name) => UserData::List(vec![
@@ -1207,7 +1207,7 @@ impl IndexDisplay {
         }
     }
 
-    #[cfg(feature = "shadowing")]
+    #[cfg(feature = "symbolica")]
     fn from_node_user_data(data: &UserData, depth: usize) -> Option<Self> {
         if depth > 16 {
             return None;
@@ -1273,7 +1273,7 @@ impl IndexDisplay {
         }
     }
 
-    #[cfg(feature = "shadowing")]
+    #[cfg(feature = "symbolica")]
     pub fn symbol_user_data(&self) -> UserData {
         UserData::List(vec![
             UserData::String("spenso::index-display-v1".to_owned()),
@@ -1281,7 +1281,7 @@ impl IndexDisplay {
         ])
     }
 
-    #[cfg(feature = "shadowing")]
+    #[cfg(feature = "symbolica")]
     pub fn from_symbol(symbol: Symbol) -> Option<Self> {
         match symbol.get_data() {
             UserData::List(fields) => match fields.as_slice() {
@@ -1343,7 +1343,7 @@ impl IndexPalette {
         }
     }
 
-    #[cfg(feature = "shadowing")]
+    #[cfg(feature = "symbolica")]
     fn to_user_data(&self) -> UserData {
         match self {
             Self::Numeric => UserData::List(vec![UserData::String("numeric".to_owned())]),
@@ -1355,7 +1355,7 @@ impl IndexPalette {
         }
     }
 
-    #[cfg(feature = "shadowing")]
+    #[cfg(feature = "symbolica")]
     fn from_user_data(data: &UserData) -> Option<Self> {
         let UserData::List(fields) = data else {
             return None;
@@ -1414,7 +1414,7 @@ impl IndexRow {
         }
     }
 
-    #[cfg(feature = "shadowing")]
+    #[cfg(feature = "symbolica")]
     fn from_str(value: &str) -> Option<Self> {
         match value {
             "top" => Some(Self::Top),
@@ -1432,7 +1432,7 @@ pub struct RepresentationMetadata {
     pub index_row: IndexRow,
 }
 
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 impl RepresentationMetadata {
     pub fn to_user_data(&self) -> UserData {
         let class = match self.class {
@@ -1499,7 +1499,7 @@ impl RepresentationMetadata {
 }
 
 impl LibraryRep {
-    #[cfg(feature = "shadowing")]
+    #[cfg(feature = "symbolica")]
     pub fn new_symbol(
         &self,
         name: &str,
@@ -1508,7 +1508,7 @@ impl LibraryRep {
         self.new_symbol_with_index_row(name, index_palette, default_index_row(name))
     }
 
-    #[cfg(feature = "shadowing")]
+    #[cfg(feature = "symbolica")]
     fn new_symbol_with_index_row(
         &self,
         name: &str,
@@ -1701,7 +1701,7 @@ impl LibraryRep {
         REPS.write().unwrap().new_dual_impl(name)
     }
 
-    #[cfg(feature = "shadowing")]
+    #[cfg(feature = "symbolica")]
     pub fn new_dual_with_index_palette(
         name: &str,
         index_palette: IndexPalette,
@@ -1711,7 +1711,7 @@ impl LibraryRep {
             .new_dual_impl_with_index_palette(name, index_palette)
     }
 
-    #[cfg(feature = "shadowing")]
+    #[cfg(feature = "symbolica")]
     pub fn new_dual_with_index_palette_and_row(
         name: &str,
         index_palette: IndexPalette,
@@ -1722,7 +1722,7 @@ impl LibraryRep {
             .new_dual_impl_with_index_palette_and_row(name, index_palette, index_row)
     }
 
-    #[cfg(feature = "shadowing")]
+    #[cfg(feature = "symbolica")]
     pub fn symbol(&self) -> Symbol {
         REPS.read().unwrap()[*self].symbol
     }
@@ -1731,12 +1731,12 @@ impl LibraryRep {
         REPS.read().unwrap()[*self].name.clone()
     }
 
-    #[cfg(feature = "shadowing")]
+    #[cfg(feature = "symbolica")]
     pub fn metadata(&self) -> Option<RepresentationMetadata> {
         RepresentationMetadata::from_symbol(self.symbol())
     }
 
-    #[cfg(feature = "shadowing")]
+    #[cfg(feature = "symbolica")]
     fn from_registered_or_portable_symbol(symbol: Symbol) -> Result<Self, RepresentationError> {
         let registered = { REPS.read().unwrap().find_symbol(symbol) };
         if let Some(representation) = registered {
@@ -1780,7 +1780,7 @@ impl LibraryRep {
         REPS.write().unwrap().new_self_dual(name)
     }
 
-    #[cfg(feature = "shadowing")]
+    #[cfg(feature = "symbolica")]
     pub fn new_self_dual_with_index_palette(
         name: &str,
         index_palette: IndexPalette,
@@ -1790,7 +1790,7 @@ impl LibraryRep {
             .new_self_dual_with_index_palette(name, index_palette)
     }
 
-    #[cfg(feature = "shadowing")]
+    #[cfg(feature = "symbolica")]
     pub fn new_self_dual_with_index_palette_and_row(
         name: &str,
         index_palette: IndexPalette,
@@ -1828,19 +1828,19 @@ pub struct MetricRepData {
 pub struct RepData {
     // metric_data: Fn(Dimension)->SparseTensor<i8,IndexLess>
     name: String,
-    #[cfg(feature = "shadowing")]
+    #[cfg(feature = "symbolica")]
     symbol: Symbol,
 }
 
 static DUMMY_REP_DATA: LazyLock<RepData> = LazyLock::new(|| RepData {
     name: "Dummy".to_string(),
-    #[cfg(feature = "shadowing")]
+    #[cfg(feature = "symbolica")]
     symbol: self_dual_symbol!("Dummy"),
 });
 
 pub struct ExtendibleReps {
     name_map: AHashMap<String, LibraryRep>,
-    #[cfg(feature = "shadowing")]
+    #[cfg(feature = "symbolica")]
     symbol_map: AHashMap<Symbol, LibraryRep>,
 }
 
@@ -1869,7 +1869,7 @@ impl ExtendibleReps {
         self.new_dual_impl_with_metadata_request(name, None, None)
     }
 
-    #[cfg(feature = "shadowing")]
+    #[cfg(feature = "symbolica")]
     pub fn new_dual_impl_with_index_palette(
         &mut self,
         name: &str,
@@ -1878,7 +1878,7 @@ impl ExtendibleReps {
         self.new_dual_impl_with_metadata_request(name, Some(index_palette), None)
     }
 
-    #[cfg(feature = "shadowing")]
+    #[cfg(feature = "symbolica")]
     pub fn new_dual_impl_with_index_palette_and_row(
         &mut self,
         name: &str,
@@ -1888,7 +1888,7 @@ impl ExtendibleReps {
         self.new_dual_impl_with_metadata_request(name, Some(index_palette), Some(index_row))
     }
 
-    #[cfg(feature = "shadowing")]
+    #[cfg(feature = "symbolica")]
     fn new_dual_impl_with_metadata_request(
         &mut self,
         name: &str,
@@ -1928,14 +1928,14 @@ impl ExtendibleReps {
             rep,
             RepData {
                 name: name.to_string(),
-                #[cfg(feature = "shadowing")]
+                #[cfg(feature = "symbolica")]
                 symbol,
             },
         ));
         Ok(rep)
     }
 
-    #[cfg(not(feature = "shadowing"))]
+    #[cfg(not(feature = "symbolica"))]
     fn new_dual_impl_with_metadata_request(
         &mut self,
         name: &str,
@@ -1969,7 +1969,7 @@ impl ExtendibleReps {
         self.new_self_dual_impl(name, None, None)
     }
 
-    #[cfg(feature = "shadowing")]
+    #[cfg(feature = "symbolica")]
     pub fn new_self_dual_with_index_palette(
         &mut self,
         name: &str,
@@ -1978,7 +1978,7 @@ impl ExtendibleReps {
         self.new_self_dual_impl(name, Some(index_palette), None)
     }
 
-    #[cfg(feature = "shadowing")]
+    #[cfg(feature = "symbolica")]
     pub fn new_self_dual_with_index_palette_and_row(
         &mut self,
         name: &str,
@@ -1999,14 +1999,14 @@ impl ExtendibleReps {
             if let LibraryRep::Dualizable(_) = rep {
                 return Err(RepLibraryError::AlreadyExistsDifferentType(name.into()));
             }
-            #[cfg(feature = "shadowing")]
+            #[cfg(feature = "symbolica")]
             if let Some(index_palette) = &index_palette
                 && RepresentationMetadata::from_symbol(self[*rep].symbol)
                     .is_none_or(|metadata| metadata.index_palette != *index_palette)
             {
                 return Err(RepLibraryError::AlreadyExistsDifferentMetadata(name.into()));
             }
-            #[cfg(feature = "shadowing")]
+            #[cfg(feature = "symbolica")]
             if let Some(index_row) = index_row
                 && RepresentationMetadata::from_symbol(self[*rep].symbol)
                     .is_none_or(|metadata| metadata.index_row != index_row)
@@ -2018,23 +2018,23 @@ impl ExtendibleReps {
 
         let rep = LibraryRep::SelfDual(SELF_DUAL.len() as u16);
 
-        #[cfg(feature = "shadowing")]
+        #[cfg(feature = "symbolica")]
         let symbol = rep.new_symbol_with_index_row(
             &canonical_name,
             index_palette.unwrap_or_else(|| default_index_palette(&canonical_name)),
             index_row.unwrap_or_else(|| default_index_row(&canonical_name)),
         )?;
-        #[cfg(not(feature = "shadowing"))]
+        #[cfg(not(feature = "symbolica"))]
         let _ = (index_palette, index_row);
         self.name_map.insert(canonical_name, rep);
-        #[cfg(feature = "shadowing")]
+        #[cfg(feature = "symbolica")]
         self.symbol_map.insert(symbol, rep);
 
         SELF_DUAL.push((
             rep,
             RepData {
                 name: name.to_string(),
-                #[cfg(feature = "shadowing")]
+                #[cfg(feature = "symbolica")]
                 symbol,
             },
         ));
@@ -2055,7 +2055,7 @@ impl ExtendibleReps {
                 }
                 LibraryRep::InlineMetric(a) => {
                     if INLINE_METRIC[*a as usize].1.metric_data == metric_fn {
-                        #[cfg(feature = "shadowing")]
+                        #[cfg(feature = "symbolica")]
                         if RepresentationMetadata::from_symbol(self[*rep].symbol).is_none_or(
                             |metadata| {
                                 metadata.index_palette != default_index_palette(&canonical_name)
@@ -2076,10 +2076,10 @@ impl ExtendibleReps {
         }
 
         let rep = LibraryRep::InlineMetric(INLINE_METRIC.len() as u16);
-        #[cfg(feature = "shadowing")]
+        #[cfg(feature = "symbolica")]
         let symbol = rep.new_symbol(&canonical_name, default_index_palette(&canonical_name))?;
         self.name_map.insert(canonical_name, rep);
-        #[cfg(feature = "shadowing")]
+        #[cfg(feature = "symbolica")]
         self.symbol_map.insert(symbol, rep);
 
         INLINE_METRIC.push((
@@ -2088,7 +2088,7 @@ impl ExtendibleReps {
                 metric_data: metric_fn,
                 rep_data: RepData {
                     name: name.to_string(),
-                    #[cfg(feature = "shadowing")]
+                    #[cfg(feature = "symbolica")]
                     symbol,
                 },
             },
@@ -2119,11 +2119,11 @@ impl ExtendibleReps {
     pub fn new() -> Self {
         let mut new = Self {
             name_map: AHashMap::new(),
-            #[cfg(feature = "shadowing")]
+            #[cfg(feature = "symbolica")]
             symbol_map: AHashMap::new(),
         };
 
-        // #[cfg(feature = "shadowing")]
+        // #[cfg(feature = "symbolica")]
         // let _ = AIND_SYMBOLS.aind;
         new.new_self_dual(Euclidean::NAME).unwrap();
         fn mink_is_neg(id: ConcreteIndex) -> bool {
@@ -2136,7 +2136,7 @@ impl ExtendibleReps {
         new
     }
 
-    #[cfg(feature = "shadowing")]
+    #[cfg(feature = "symbolica")]
     pub fn find_symbol(&self, symbol: Symbol) -> Option<LibraryRep> {
         self.symbol_map.get(&symbol).cloned()
     }
@@ -2167,7 +2167,7 @@ impl Display for LibraryRep {
 
 pub fn initialize() {
     let _ = LibraryRep::from(Minkowski {}).to_string();
-    #[cfg(feature = "shadowing")]
+    #[cfg(feature = "symbolica")]
     let _ = ETS.metric;
 }
 
@@ -2249,7 +2249,7 @@ impl RepName for LibraryRep {
         }
     }
 
-    #[cfg(feature = "shadowing")]
+    #[cfg(feature = "symbolica")]
     fn try_from_symbol(sym: Symbol, aind: Symbol) -> Result<Self, RepresentationError> {
         use super::abstract_index::AIND_SYMBOLS;
 
@@ -2285,7 +2285,7 @@ impl RepName for LibraryRep {
         }
     }
 
-    #[cfg(feature = "shadowing")]
+    #[cfg(feature = "symbolica")]
     fn try_from_symbol_coerced(sym: Symbol) -> Result<Self, RepresentationError> {
         Self::from_registered_or_portable_symbol(sym)
     }
@@ -2302,7 +2302,7 @@ impl RepName for LibraryRep {
         matches!(self, LibraryRep::Dummy)
     }
 
-    #[cfg(feature = "shadowing")]
+    #[cfg(feature = "symbolica")]
     /// yields a function builder for the representation
     fn to_symbolic<'a, It: Into<AtomOrView<'a>>>(
         &self,
@@ -2397,7 +2397,7 @@ impl<T: RepName> Representation<T> {
             .then(self.rep.match_cmp(&other.rep))
     }
 
-    #[cfg(feature = "shadowing")]
+    #[cfg(feature = "symbolica")]
     /// yields a function builder for the representation, adding a first variable: the dimension.
     ///
     pub fn to_symbolic(&self, args: impl IntoIterator<Item = Atom>) -> Atom {
@@ -2457,7 +2457,7 @@ fn test_negative() {
     assert!(agree);
 }
 
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 /// Can construct a `Representation` from an `AtomView` of the form
 /// `<representation>(<dimension>)`.
 ///
@@ -2556,7 +2556,7 @@ mod test {
 }
 
 #[cfg(test)]
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 mod shadowing_tests {
     use symbolica::atom::{Atom, AtomView, NamespacedSymbol, Symbol, SymbolBuilder};
 

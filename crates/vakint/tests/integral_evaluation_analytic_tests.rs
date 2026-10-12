@@ -20,7 +20,7 @@ use vakint::{externals_from_f64, params_from_f64, vakint_parse};
 
 const N_DIGITS_ANLYTICAL_EVALUATION_FOR_TESTS: u32 = 32;
 
-#[test_log::test]
+#[test]
 fn analytic_backends_preserve_coefficients_and_epsilon_pole_orders() {
     use symbolica::domains::float::{RealLike, SingleFloat};
 
@@ -75,7 +75,7 @@ fn analytic_backends_preserve_coefficients_and_epsilon_pole_orders() {
         // I1 = 1/epsilon + (1-gamma_E) +
         // epsilon*(1-gamma_E+gamma_E^2/2+pi^2/12) in this normalization.
         // The coefficient's pole makes the last term necessary at finite order.
-        let gamma = 0.577_215_664_901_532_9;
+        let gamma = std::f64::consts::EULER_GAMMA;
         let coefficients = [
             1.0,
             1.0 - gamma,
@@ -96,11 +96,11 @@ fn analytic_backends_preserve_coefficients_and_epsilon_pole_orders() {
     }
 }
 
-#[test_log::test]
+#[test]
 fn analytic_backends_resolve_dimensional_prefactors_through_double_poles() {
     use symbolica::domains::float::{RealLike, SingleFloat};
 
-    let gamma = 0.577_215_664_901_532_9;
+    let gamma = std::f64::consts::EULER_GAMMA;
     let finite = 1.0 - gamma;
     let linear = finite + gamma * gamma / 2.0 + std::f64::consts::PI.powi(2) / 12.0;
     for evaluation_order in [
@@ -163,7 +163,7 @@ fn analytic_backends_resolve_dimensional_prefactors_through_double_poles() {
     }
 }
 
-#[test_log::test]
+#[test]
 fn analytic_backends_account_for_normalization_and_nested_coefficient_poles() {
     use symbolica::domains::float::RealLike;
 
@@ -236,7 +236,7 @@ fn analytic_backends_account_for_normalization_and_nested_coefficient_poles() {
     }
 }
 
-#[test_log::test]
+#[test]
 fn matad_six_term_tadpoles_match_schwinger_gamma_integrals() {
     use symbolica::domains::float::{RealLike, SingleFloat};
 
@@ -343,7 +343,7 @@ fn matad_six_term_tadpoles_match_schwinger_gamma_integrals() {
     }
 }
 
-#[test_log::test]
+#[test]
 fn analytic_backends_reject_unavailable_epsilon_depth() {
     for (normalization, coefficient, topology, terms) in [
         ("1", "ε^-5", "topo(I1L(muvsq,1))", 2),
@@ -366,7 +366,7 @@ fn analytic_backends_reject_unavailable_epsilon_depth() {
     }
 }
 
-#[test_log::test]
+#[test]
 fn partly_massless_sunsets_match_independent_gamma_integrals() {
     use symbolica::domains::float::RealLike;
 
@@ -427,7 +427,7 @@ fn partly_massless_sunsets_match_independent_gamma_integrals() {
     }
 }
 
-#[test_log::test]
+#[test]
 fn test_integrate_1l_a() {
     let mut vakint = get_vakint(VakintSettings {
         allow_unknown_integrals: false,
@@ -588,7 +588,7 @@ fn test_integrate_1l_a() {
     );
 }
 
-#[test_log::test]
+#[test]
 fn test_integrate_1l_simple() {
     #[rustfmt::skip]
     compare_vakint_evaluation_vs_reference(
@@ -612,7 +612,7 @@ fn test_integrate_1l_simple() {
     );
 }
 
-#[test_log::test]
+#[test]
 fn test_integrate_1l_simple_squared_mass() {
     #[rustfmt::skip]
     compare_vakint_evaluation_vs_reference(
@@ -636,7 +636,7 @@ fn test_integrate_1l_simple_squared_mass() {
     );
 }
 
-#[test_log::test]
+#[test]
 fn test_integrate_1l_cross_product() {
     #[rustfmt::skip]
     compare_vakint_evaluation_vs_reference(
@@ -667,7 +667,7 @@ fn test_integrate_1l_cross_product() {
     );
 }
 
-#[test_log::test]
+#[test]
 fn test_integrate_1l_cross_product_with_additional_symbols_numerator() {
     #[rustfmt::skip]
     compare_vakint_evaluation_vs_reference(
@@ -698,7 +698,7 @@ fn test_integrate_1l_cross_product_with_additional_symbols_numerator() {
     );
 }
 
-#[test_log::test]
+#[test]
 fn test_integrate_1l_dot_product_external() {
     #[rustfmt::skip]
     compare_vakint_evaluation_vs_reference(
@@ -728,7 +728,7 @@ fn test_integrate_1l_dot_product_external() {
     );
 }
 
-#[test_log::test]
+#[test]
 fn test_integrate_2l() {
     #[rustfmt::skip]
     compare_vakint_evaluation_vs_reference(
@@ -760,7 +760,7 @@ fn test_integrate_2l() {
     );
 }
 
-#[test_log::test]
+#[test]
 fn test_integrate_3l() {
     #[rustfmt::skip]
     compare_vakint_evaluation_vs_reference(
@@ -793,7 +793,7 @@ fn test_integrate_3l() {
     );
 }
 
-#[test_log::test]
+#[test]
 fn test_integrate_3l_rank_4() {
     #[rustfmt::skip]
     compare_vakint_evaluation_vs_reference(
@@ -831,7 +831,7 @@ fn test_integrate_3l_rank_4() {
     );
 }
 
-#[test_log::test]
+#[test]
 fn test_integrate_3l_rank_4_additional_symbols_numerator() {
     #[rustfmt::skip]
     compare_vakint_evaluation_vs_reference(
@@ -872,7 +872,7 @@ fn test_integrate_3l_rank_4_additional_symbols_numerator() {
     );
 }
 
-#[test_log::test]
+#[test]
 fn test_integrate_3l_rank_4_matad() {
     #[rustfmt::skip]
     compare_vakint_evaluation_vs_reference(
@@ -911,7 +911,7 @@ fn test_integrate_3l_rank_4_matad() {
     );
 }
 
-#[test_log::test]
+#[test]
 fn test_integrate_3l_rank_4_matad_additional_symbols_numerator() {
     #[rustfmt::skip]
     compare_vakint_evaluation_vs_reference(
@@ -953,7 +953,7 @@ fn test_integrate_3l_rank_4_matad_additional_symbols_numerator() {
     );
 }
 
-#[test_log::test]
+#[test]
 fn test_integrate_3l_matad() {
     #[rustfmt::skip]
     compare_vakint_evaluation_vs_reference(
@@ -987,7 +987,7 @@ fn test_integrate_3l_matad() {
     );
 }
 
-#[test_log::test]
+#[test]
 fn test_integrate_4l_h() {
     #[rustfmt::skip]
     compare_vakint_evaluation_vs_reference(
@@ -1022,7 +1022,7 @@ fn test_integrate_4l_h() {
     );
 }
 
-#[test_log::test]
+#[test]
 fn test_integrate_4l_h_squared_mass() {
     #[rustfmt::skip]
     compare_vakint_evaluation_vs_reference(
@@ -1057,7 +1057,7 @@ fn test_integrate_4l_h_squared_mass() {
     );
 }
 
-#[test_log::test]
+#[test]
 fn test_integrate_4l_h_rank_4() {
     #[rustfmt::skip]
     compare_vakint_evaluation_vs_reference(
@@ -1099,7 +1099,7 @@ fn test_integrate_4l_h_rank_4() {
     );
 }
 
-#[test_log::test]
+#[test]
 fn test_integrate_4l_h_rank_4_additional_symbols_numerator() {
     #[rustfmt::skip]
     compare_vakint_evaluation_vs_reference(
@@ -1142,7 +1142,7 @@ fn test_integrate_4l_h_rank_4_additional_symbols_numerator() {
 }
 
 #[allow(non_snake_case)]
-#[test_log::test]
+#[test]
 fn test_integrate_4l_PR9d_from_H() {
     #[rustfmt::skip]
     compare_vakint_evaluation_vs_reference(
@@ -1182,7 +1182,7 @@ fn test_integrate_4l_PR9d_from_H() {
 }
 
 #[allow(non_snake_case)]
-#[test_log::test]
+#[test]
 fn test_integrate_4l_PR9d_from_X() {
     #[rustfmt::skip]
     compare_vakint_evaluation_vs_reference(
@@ -1222,7 +1222,7 @@ fn test_integrate_4l_PR9d_from_X() {
 }
 
 #[allow(non_snake_case)]
-#[test_log::test]
+#[test]
 fn test_integrate_4l_PR9d_from_H_pinch() {
     #[rustfmt::skip]
     compare_vakint_evaluation_vs_reference(
@@ -1260,7 +1260,7 @@ fn test_integrate_4l_PR9d_from_H_pinch() {
 }
 
 #[allow(non_snake_case)]
-#[test_log::test]
+#[test]
 fn test_integrate_4l_PR9d_from_FG() {
     #[rustfmt::skip]
     compare_vakint_evaluation_vs_reference(
@@ -1299,7 +1299,7 @@ fn test_integrate_4l_PR9d_from_FG() {
 }
 
 #[allow(non_snake_case)]
-#[test_log::test]
+#[test]
 fn test_integrate_4l_PR9d_from_FG_pinch() {
     #[rustfmt::skip]
     compare_vakint_evaluation_vs_reference(
@@ -1337,7 +1337,7 @@ fn test_integrate_4l_PR9d_from_FG_pinch() {
 }
 
 #[allow(non_snake_case)]
-#[test_log::test]
+#[test]
 fn test_integrate_4l_PR11d() {
     #[rustfmt::skip]
     compare_vakint_evaluation_vs_reference(
@@ -1371,7 +1371,7 @@ fn test_integrate_4l_PR11d() {
 }
 
 #[allow(non_snake_case)]
-#[test_log::test]
+#[test]
 fn test_integrate_4l_clover() {
     #[rustfmt::skip]
     compare_vakint_evaluation_vs_reference(
@@ -1407,7 +1407,7 @@ fn test_integrate_4l_clover() {
 }
 
 #[allow(non_snake_case)]
-#[test_log::test]
+#[test]
 fn test_integrate_4l_clover_with_non_unit_scales() {
     #[rustfmt::skip]
     compare_vakint_evaluation_vs_reference(
@@ -1441,7 +1441,7 @@ fn test_integrate_4l_clover_with_non_unit_scales() {
 }
 
 #[allow(non_snake_case)]
-#[test_log::test]
+#[test]
 fn test_integrate_4l_dotted_clover() {
     #[rustfmt::skip]
     compare_vakint_evaluation_vs_reference(
@@ -1475,7 +1475,7 @@ fn test_integrate_4l_dotted_clover() {
 }
 
 #[allow(non_snake_case)]
-#[test_log::test]
+#[test]
 fn test_integrate_4l_clover_with_numerator() {
     #[rustfmt::skip]
     compare_vakint_evaluation_vs_reference(
@@ -1547,7 +1547,7 @@ fn run_integral_evaluation_analytic_tests() {
     test_integrate_4l_clover_with_numerator();
 }
 
-#[test_log::test]
+#[test]
 fn whole_numerator_and_projected_analytic_backends_have_identical_laurent_coefficients() {
     for evaluation_order in [
         EvaluationOrder::alphaloop_only(),

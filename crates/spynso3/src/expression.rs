@@ -16,7 +16,7 @@ use pyo3::{
     prelude::*,
     types::{PyAny, PyTuple},
 };
-#[cfg(feature = "python_stubgen")]
+#[cfg(feature = "python-stubs")]
 use pyo3_stub_gen::{
     PyStubType, TypeInfo,
     generate::MethodType,
@@ -58,13 +58,13 @@ use crate::{
 };
 
 /// The local placeholder used to leave a tensor port unresolved.
-#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
+#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(frozen, name = "_AutoIndex", module = "symbolica.community.spenso")]
 pub struct AutoIndex;
 
-#[cfg(feature = "python_stubgen")]
+#[cfg(feature = "python-stubs")]
 pyo3_stub_gen::module_variable!("symbolica.community.spenso", "AUTO", AutoIndex);
-#[cfg(feature = "python_stubgen")]
+#[cfg(feature = "python-stubs")]
 pyo3_stub_gen::module_variable!("symbolica.community.spenso", "_", AutoIndex);
 
 #[pymethods]
@@ -97,7 +97,7 @@ impl AutoIndex {
 /// >>> sigma = TensorExpression.sigma(4)("mu", "nu", "i", "j")
 /// >>> structure_constant = TensorExpression.f(8)("a", "b", "c")
 /// >>> generator = TensorExpression.t(8, 3)("a", "i", "j")
-#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
+#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(
     frozen,
     extends = PythonExpression,
@@ -603,7 +603,7 @@ enum TensorDispatch {
     Network(Py<SpensoNet>),
 }
 
-#[cfg(feature = "python_stubgen")]
+#[cfg(feature = "python-stubs")]
 impl PyStubType for TensorDispatch {
     fn type_output() -> TypeInfo {
         TensorExpression::type_output() | SpensoNet::type_output()
@@ -1500,8 +1500,8 @@ fn inferred_descriptor(atom: AtomView<'_>) -> (Option<Symbol>, Vec<Atom>) {
     }
 }
 
-#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
-#[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
+#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pymethods)]
+#[cfg_attr(not(feature = "python-stubs"), pyo3_stub_gen_derive::remove_gen_stub)]
 #[pymethods]
 impl TensorExpression {
     /// Create an unresolved metric tensor for `rep`.
@@ -2680,7 +2680,7 @@ impl TensorExpression {
 
 /// Restore tensor-aware dispatch after a base Symbolica transformation.
 #[cfg_attr(
-    feature = "python_stubgen",
+    feature = "python-stubs",
     pyo3_stub_gen::derive::gen_stub_pyfunction(module = "symbolica.community.spenso")
 )]
 #[pyfunction]
@@ -2722,7 +2722,7 @@ fn structured_operand(value: &Bound<'_, PyAny>, operation: &str) -> PyResult<Str
 
 /// Contract two rank-one tensors into the canonical dot form.
 #[cfg_attr(
-    feature = "python_stubgen",
+    feature = "python-stubs",
     pyo3_stub_gen::derive::gen_stub_pyfunction(module = "symbolica.community.spenso")
 )]
 #[pyfunction]
@@ -2756,7 +2756,7 @@ fn dot(
 
 /// Build an explicitly-ended ordered tensor chain.
 #[cfg_attr(
-    feature = "python_stubgen",
+    feature = "python-stubs",
     pyo3_stub_gen::derive::gen_stub_pyfunction(module = "symbolica.community.spenso")
 )]
 #[pyfunction]
@@ -2938,7 +2938,7 @@ fn chain(
 
 /// Close an ordered factor sequence into a canonical cyclic trace.
 #[cfg_attr(
-    feature = "python_stubgen",
+    feature = "python-stubs",
     pyo3_stub_gen::derive::gen_stub_pyfunction(module = "symbolica.community.spenso")
 )]
 #[pyfunction]
@@ -3022,7 +3022,7 @@ pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     Ok(())
 }
 
-#[cfg(feature = "python_stubgen")]
+#[cfg(feature = "python-stubs")]
 submit! {
     PyMethodsInfo {
         struct_id: std::any::TypeId::of::<TensorExpression>,

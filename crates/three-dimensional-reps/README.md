@@ -20,9 +20,8 @@ CLI/state layer.
 
 ## Features
 
-- `serde` (default): retained as downstream compatibility vocabulary. Serde
-  dependencies and derives are unconditional, so disabling this no-op feature
-  does not change the crate's serialization API.
+Serde serialization is always enabled.
+
 - `display`: colored/table expression summaries.
 - `eval`: optional eager f64 diagnostic evaluator and oracle tests.
 

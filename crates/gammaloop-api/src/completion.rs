@@ -1,3 +1,7 @@
+use gammalooprs::model::ParameterType;
+
+use crate::integrand_info::IntegrandKind;
+
 use clap::builder::ArgExt;
 use clap::Arg;
 
@@ -92,6 +96,61 @@ impl CompletionArgExt for Arg {
     }
 }
 
+#[cfg(feature = "cli")]
 pub(crate) fn arg_value_completion(arg: &Arg) -> Option<ArgValueCompletion> {
     arg.get::<ArgValueCompletion>().copied()
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ModelParameterCompletionEntry {
+    pub name: String,
+    pub parameter_type: ParameterType,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ModelVertexCompletionEntry {
+    pub name: String,
+    pub particles: Vec<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ProcessKind {
+    Amplitude,
+    CrossSection,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProcessCompletionEntry {
+    pub id: usize,
+    pub name: String,
+    pub kind: ProcessKind,
+    pub integrand_names: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct IntegrandDetailCompletionEntry {
+    pub process_name: String,
+    pub integrand_name: String,
+    pub kind: IntegrandKind,
+    pub master_graph_names: Vec<String>,
+    pub raised_all_signatures: Vec<String>,
+    pub raised_massive_signatures: Vec<String>,
+    pub raised_massless_signatures: Vec<String>,
+    pub cycle_signatures: Vec<String>,
+    pub amplitude_raised_all_signatures: Vec<String>,
+    pub amplitude_raised_massive_signatures: Vec<String>,
+    pub amplitude_raised_massless_signatures: Vec<String>,
+    pub amplitude_cycle_signatures: Vec<String>,
+    pub raised_cut_all_signatures: Vec<String>,
+    pub raised_cut_massive_signatures: Vec<String>,
+    pub raised_cut_massless_signatures: Vec<String>,
+    pub categories: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct IrProfileCompletionEntry {
+    pub process_name: String,
+    pub integrand_name: String,
+    pub graph_names: Vec<String>,
+    pub graph_limit_entries: Vec<String>,
 }

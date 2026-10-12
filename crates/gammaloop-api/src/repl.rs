@@ -8,7 +8,6 @@ use std::{
 
 use clap::Parser;
 use console::style;
-use gammalooprs::model::ParameterType;
 use gammalooprs::processes::RaisedPropagatorSignature;
 use gammalooprs::settings::RuntimeSettings;
 use serde_json::Value as JsonValue;
@@ -26,7 +25,9 @@ use crate::{
         ProcessSettingsCompletionEntry,
     },
     completion::{
-        arg_value_completion, ArgValueCompletion, SelectRaisedSignatureScope, SelectorKind,
+        arg_value_completion, ArgValueCompletion, IntegrandDetailCompletionEntry,
+        IrProfileCompletionEntry, ModelParameterCompletionEntry, ModelVertexCompletionEntry,
+        ProcessCompletionEntry, ProcessKind, SelectRaisedSignatureScope, SelectorKind,
     },
     integrand_info::IntegrandKind,
     session::CliSession,
@@ -53,18 +54,6 @@ pub struct CompletionState {
     model_vertices: Vec<ModelVertexCompletionEntry>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ModelParameterCompletionEntry {
-    pub name: String,
-    pub parameter_type: ParameterType,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ModelVertexCompletionEntry {
-    pub name: String,
-    pub particles: Vec<String>,
-}
-
 impl ModelVertexCompletionEntry {
     fn particle_description(&self) -> String {
         if self.particles.is_empty() {
@@ -75,12 +64,6 @@ impl ModelVertexCompletionEntry {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ProcessKind {
-    Amplitude,
-    CrossSection,
-}
-
 impl ProcessKind {
     fn label(self) -> &'static str {
         match self {
@@ -88,42 +71,6 @@ impl ProcessKind {
             ProcessKind::CrossSection => "cross sections",
         }
     }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ProcessCompletionEntry {
-    pub id: usize,
-    pub name: String,
-    pub kind: ProcessKind,
-    pub integrand_names: Vec<String>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct IntegrandDetailCompletionEntry {
-    pub process_name: String,
-    pub integrand_name: String,
-    pub kind: IntegrandKind,
-    pub master_graph_names: Vec<String>,
-    pub raised_all_signatures: Vec<String>,
-    pub raised_massive_signatures: Vec<String>,
-    pub raised_massless_signatures: Vec<String>,
-    pub cycle_signatures: Vec<String>,
-    pub amplitude_raised_all_signatures: Vec<String>,
-    pub amplitude_raised_massive_signatures: Vec<String>,
-    pub amplitude_raised_massless_signatures: Vec<String>,
-    pub amplitude_cycle_signatures: Vec<String>,
-    pub raised_cut_all_signatures: Vec<String>,
-    pub raised_cut_massive_signatures: Vec<String>,
-    pub raised_cut_massless_signatures: Vec<String>,
-    pub categories: Vec<String>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct IrProfileCompletionEntry {
-    pub process_name: String,
-    pub integrand_name: String,
-    pub graph_names: Vec<String>,
-    pub graph_limit_entries: Vec<String>,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -1060,6 +1007,7 @@ fn add_flag_suggestions(
                     extra: None,
                     span: Span::new(request.current_token.start, request.pos),
                     append_whitespace: true,
+                    match_indices: None,
                 });
             }
         }
@@ -1074,6 +1022,7 @@ fn add_flag_suggestions(
                     extra: None,
                     span: Span::new(request.current_token.start, request.pos),
                     append_whitespace: true,
+                    match_indices: None,
                 });
             }
         }
@@ -1118,6 +1067,7 @@ fn add_possible_value_suggestions(
                 extra: None,
                 span: Span::new(request.span_start, pos),
                 append_whitespace: value_completion_appends_whitespace(&rendered),
+                match_indices: None,
             });
             added = true;
         }
@@ -1158,6 +1108,7 @@ fn add_generate_vertex_suggestions(
             extra: None,
             span: Span::new(request.span_start, pos),
             append_whitespace: value_completion_appends_whitespace(&rendered),
+            match_indices: None,
         });
     }
 }
@@ -1219,6 +1170,7 @@ fn add_subcommand_name_suggestion(
         extra: None,
         span: Span::new(span_start, pos),
         append_whitespace: true,
+        match_indices: None,
     });
 }
 
@@ -1281,6 +1233,7 @@ fn add_run_block_suggestions(
                 extra: None,
                 span: Span::new(context.current_token.start, pos),
                 append_whitespace: true,
+                match_indices: None,
             });
         }
     }
@@ -1332,6 +1285,7 @@ fn add_run_define_suggestions(
             extra: None,
             span: Span::new(value_start, pos),
             append_whitespace: true,
+            match_indices: None,
         });
         return;
     }
@@ -1358,6 +1312,7 @@ fn add_run_define_suggestions(
             extra: None,
             span: Span::new(request.span_start, pos),
             append_whitespace: false,
+            match_indices: None,
         });
     }
 }
@@ -1518,6 +1473,7 @@ fn add_builtin_model_suggestions(
                 extra: None,
                 span: Span::new(context.current_token.start, pos),
                 append_whitespace: true,
+                match_indices: None,
             });
         }
     }
@@ -1567,6 +1523,7 @@ fn add_builtin_model_restriction_suggestions(
             extra: None,
             span: Span::new(span_start, pos),
             append_whitespace: true,
+            match_indices: None,
         });
     }
 }
@@ -1621,6 +1578,7 @@ fn add_model_parameter_suggestions(
                 extra: None,
                 span: Span::new(context.current_token.start, pos),
                 append_whitespace: true,
+                match_indices: None,
             });
         }
     }
@@ -1642,6 +1600,7 @@ fn add_model_parameter_suggestions(
             extra: None,
             span: Span::new(context.current_token.start, pos),
             append_whitespace: false,
+            match_indices: None,
         });
     }
 }
@@ -1681,6 +1640,7 @@ fn add_model_parameter_value_hint(
         extra: None,
         span: Span::new(context.current_token.start, pos),
         append_whitespace: false,
+        match_indices: None,
     });
 }
 
@@ -2090,6 +2050,7 @@ fn add_generate_literal_suggestion(
         extra: None,
         span: Span::new(current_token.start, pos),
         append_whitespace: value_completion_appends_whitespace(&rendered),
+        match_indices: None,
     });
 }
 
@@ -2583,6 +2544,7 @@ fn add_literal_value_suggestions<'a>(
             extra: None,
             span: Span::new(current_token.start, pos),
             append_whitespace: value_completion_appends_whitespace(&rendered),
+            match_indices: None,
         });
     }
 }
@@ -2610,6 +2572,7 @@ fn add_path_request_literal_suggestions<'a>(
             extra: None,
             span: Span::new(request.span_start, pos),
             append_whitespace: true,
+            match_indices: None,
         });
     }
 }
@@ -2771,6 +2734,7 @@ fn add_process_suggestions(
                 extra: None,
                 span: Span::new(request.span_start, pos),
                 append_whitespace: true,
+                match_indices: None,
             });
         }
         return;
@@ -2798,6 +2762,7 @@ fn add_process_suggestions(
                 extra: None,
                 span: Span::new(request.span_start, pos),
                 append_whitespace: true,
+                match_indices: None,
             });
         }
         return;
@@ -2818,6 +2783,7 @@ fn add_process_suggestions(
             extra: None,
             span: Span::new(request.span_start, pos),
             append_whitespace: true,
+            match_indices: None,
         });
     }
 }
@@ -2901,6 +2867,7 @@ fn add_integrand_suggestions(
                 extra: None,
                 span: Span::new(context.request.span_start, context.pos),
                 append_whitespace: true,
+                match_indices: None,
             });
         }
     }
@@ -2943,6 +2910,7 @@ fn add_selected_integrand_target_suggestions(
             extra: None,
             span: Span::new(request.span_start, pos),
             append_whitespace: false,
+            match_indices: None,
         });
     }
 }
@@ -2987,6 +2955,7 @@ fn add_selected_master_graph_suggestions(
             extra: None,
             span: Span::new(context.request.span_start, context.pos),
             append_whitespace: true,
+            match_indices: None,
         });
     }
 }
@@ -3031,6 +3000,7 @@ fn add_selected_integrand_category_suggestions(
             extra: None,
             span: Span::new(context.request.span_start, context.pos),
             append_whitespace: true,
+            match_indices: None,
         });
     }
 }
@@ -3448,6 +3418,7 @@ fn add_select_value_suggestion(
         extra: None,
         span: Span::new(context.request.span_start, context.pos),
         append_whitespace,
+        match_indices: None,
     });
 }
 
@@ -3511,6 +3482,7 @@ fn add_ir_profile_select_suggestions(
                 extra: None,
                 span: Span::new(request.span_start, pos),
                 append_whitespace: true,
+                match_indices: None,
             });
         }
 
@@ -3532,6 +3504,7 @@ fn add_ir_profile_select_suggestions(
                 extra: None,
                 span: Span::new(request.span_start, pos),
                 append_whitespace: true,
+                match_indices: None,
             });
         }
     }
@@ -3625,6 +3598,7 @@ fn add_settings_path_suggestions(
             extra: None,
             span: Span::new(pos.saturating_sub(key_request.len()), pos),
             append_whitespace: value_completion_appends_whitespace(&replacement),
+            match_indices: None,
         });
     }
 }
@@ -3687,6 +3661,7 @@ fn add_settings_value_suggestions(
                     extra: None,
                     span: Span::new(value_request.span_start, pos),
                     append_whitespace: true,
+                    match_indices: None,
                 });
             }
             return;
@@ -3712,6 +3687,7 @@ fn add_settings_value_suggestions(
                 extra: None,
                 span: Span::new(value_request.span_start, pos),
                 append_whitespace: true,
+                match_indices: None,
             });
             added_example = true;
         }
@@ -3742,6 +3718,7 @@ fn add_settings_value_suggestions(
                 extra: None,
                 span: Span::new(value_request.span_start, pos),
                 append_whitespace: true,
+                match_indices: None,
             });
         }
         return;
@@ -3771,6 +3748,7 @@ fn add_type_hint_suggestion(
         extra: None,
         span: Span::new(value_request.span_start, pos),
         append_whitespace: false,
+        match_indices: None,
     });
 }
 
@@ -4359,6 +4337,7 @@ fn add_path_suggestions(
             extra: None,
             span: Span::new(request.span_start, pos),
             append_whitespace: !candidate.is_dir,
+            match_indices: None,
         });
     }
 }

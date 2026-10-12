@@ -24,7 +24,6 @@
 //! over the creation of zero and one values for generic calculations, potentially
 //! in contexts involving external libraries like `symbolica`.
 
-use duplicate::duplicate;
 use std::{
     borrow::Borrow,
     fmt::Display,
@@ -41,10 +40,8 @@ pub enum SignError {
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy, PartialOrd, Ord, Hash)]
-#[cfg_attr(
-    feature = "serde",
-    derive(serde_repr::Serialize_repr, serde_repr::Deserialize_repr)
-)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(into = "i8", try_from = "i8"))]
 #[cfg_attr(feature = "bincode", derive(bincode::Encode, bincode::Decode))]
 #[repr(i8)]
 pub enum SignOrZero {
@@ -54,15 +51,25 @@ pub enum SignOrZero {
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
-#[cfg_attr(
-    feature = "serde",
-    derive(serde_repr::Serialize_repr, serde_repr::Deserialize_repr)
-)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(into = "i8", try_from = "i8"))]
 #[cfg_attr(feature = "bincode", derive(bincode::Encode, bincode::Decode))]
 #[repr(i8)]
 pub enum Sign {
     Positive = 1,
     Negative = -1,
+}
+
+impl From<SignOrZero> for i8 {
+    fn from(value: SignOrZero) -> Self {
+        value as i8
+    }
+}
+
+impl From<Sign> for i8 {
+    fn from(value: Sign) -> Self {
+        value as i8
+    }
 }
 
 impl From<Sign> for SignOrZero {
@@ -137,6 +144,14 @@ impl TryFrom<i8> for SignOrZero {
             -1 => Ok(SignOrZero::Minus),
             _ => Err(SignError::InvalidValue),
         }
+    }
+}
+
+impl TryFrom<i8> for Sign {
+    type Error = SignError;
+
+    fn try_from(value: i8) -> Result<Self, Self::Error> {
+        SignOrZero::try_from(value)?.try_into()
     }
 }
 
@@ -292,37 +307,69 @@ impl Neg for SignOrZero {
 //     }
 // }
 
-duplicate! {
-    [types zero one;
-        [f32] [0.0] [1.];
-        [f64] [0.0] [1.];
-        [i8] [0] [1];
-        [i16] [0] [1] ;
-        [i32] [0] [1];
-        [i64] [0] [1];
-        [i128] [0] [1];
-        [u8] [0] [1];
-        [u16] [0] [1];
-        [u32] [0] [1];
-        [u64] [0] [1];
-        [u128] [0] [1];
-        ]
+macro_rules! impl_ref_identities {
+    ($($ty:ty => ($zero:expr, $one:expr)),* $(,)?) => {
+        $(
+            impl RefZero for $ty {
+                fn ref_zero(&self) -> Self {
+                    $zero
+                }
+            }
 
-    impl RefZero for types{
-        fn ref_zero(&self)-> Self{
-            zero
-        }
-    }
+            impl RefZero<$ty> for &$ty {
+                fn ref_zero(&self) -> $ty {
+                    $zero
+                }
+            }
 
-    impl RefZero<types> for &types{
-        fn ref_zero(&self)-> types{
-            zero
-        }
-    }
+            impl RefOne for $ty {
+                fn ref_one(&self) -> Self {
+                    $one
+                }
+            }
+        )*
+    };
+}
 
-    impl RefOne for types{
-        fn ref_one(&self)-> Self{
-            one
+impl_ref_identities!(
+    f32 => (0.0, 1.0),
+    f64 => (0.0, 1.0),
+    i8 => (0, 1),
+    i16 => (0, 1),
+    i32 => (0, 1),
+    i64 => (0, 1),
+    i128 => (0, 1),
+    u8 => (0, 1),
+    u16 => (0, 1),
+    u32 => (0, 1),
+    u64 => (0, 1),
+    u128 => (0, 1),
+);
+
+#[cfg(all(test, feature = "serde", feature = "bincode"))]
+mod tests {
+    use super::{Sign, SignOrZero};
+
+    #[test]
+    fn sign_serde_preserves_i8_wire_values_and_valid_ranges() {
+        let config = bincode::config::standard();
+        for value in i8::MIN..=i8::MAX {
+            let bytes = bincode::serde::encode_to_vec(value, config).unwrap();
+            let sign = bincode::serde::decode_from_slice::<Sign, _>(&bytes, config);
+            assert_eq!(sign.is_ok(), matches!(value, -1 | 1));
+            if let Ok((sign, consumed)) = sign {
+                assert_eq!(sign as i8, value);
+                assert_eq!(consumed, bytes.len());
+                assert_eq!(bincode::serde::encode_to_vec(sign, config).unwrap(), bytes);
+            }
+
+            let sign_or_zero = bincode::serde::decode_from_slice::<SignOrZero, _>(&bytes, config);
+            assert_eq!(sign_or_zero.is_ok(), matches!(value, -1..=1));
+            if let Ok((sign, consumed)) = sign_or_zero {
+                assert_eq!(sign as i8, value);
+                assert_eq!(consumed, bytes.len());
+                assert_eq!(bincode::serde::encode_to_vec(sign, config).unwrap(), bytes);
+            }
         }
     }
 }

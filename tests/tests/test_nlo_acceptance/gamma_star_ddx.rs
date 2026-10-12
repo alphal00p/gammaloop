@@ -20,14 +20,13 @@ use gammalooprs::{
     uv::settings::{ApproximationType, FinalIntegrandDimension},
 };
 use ndarray::Array2;
-use serial_test::serial;
 use spenso::algebra::algebraic_traits::IsZero;
 use symbolica::domains::float::Real;
 use which::which;
 
 #[test]
-#[serial]
 fn gamma_star_ddx_msbar_nlo_matches_the_published_graph_cross_sections() -> Result<()> {
+    let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
     const LO_PROCESS: &str = "gamma_star_ddx_lo";
     const NLO_PROCESS: &str = "gamma_star_ddx_explicit_local_3d";
     const ROUTES: [(&str, bool, bool); 3] = [

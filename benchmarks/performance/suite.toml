@@ -1,7 +1,9 @@
-# Four workloads, with each scalar tested through all three LU routes.
+# Scalar route coverage and all-mode evaluator construction/runtime probes.
 [settings]
-schema_version = 1
+schema_version = 2
 pairs = 5
+evaluator_methods = ["SingleParametric"]
+reference_method = "SingleParametric"
 fixture_timeout_seconds = 240
 bench_duration_seconds = 5.0
 bench_batches = 10
@@ -38,23 +40,63 @@ points = [
   [0.11, 0.21, 0.31, 0.41, 0.51, 0.61, 0.71, 0.81, 0.91],
 ]
 
+[evaluator-aliases]
+card = "scalar-gl16-evaluators.toml"
+bench_duration_seconds = 0.2
+evaluator_methods = ["SingleParametric", "Iterative", "SummedFunctionMap", "Summed"]
+reference_method = "SingleParametric"
+required_metrics = ["generation_seconds", "evaluator_build_seconds", "warm_runtime_seconds_per_sample", "generation_peak_ram_bytes"]
+correctness_tolerance = { absolute = 0.0, relative = 1e-9 }
+
+[evaluator-aliases.corpus]
+process_id = 0
+integrand = "numerator"
+continuous_dimension = 9
+discrete_dim = [0, 0]
+inputs = ["benchmarks/performance/scalar-3l-gl16-q7-squared.dot", "assets/models/json/scalars/scalars.json", "assets/models/json/scalars/restrict_default.json"]
+points = [
+  [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9],
+  [0.13, 0.23, 0.33, 0.43, 0.53, 0.63, 0.73, 0.83, 0.93],
+]
+
+[evaluator-guards]
+card = "gluon-self-energy-evaluators.toml"
+bench_duration_seconds = 1.0
+evaluator_methods = ["SingleParametric", "Iterative", "SummedFunctionMap", "Summed"]
+reference_method = "SingleParametric"
+required_metrics = ["generation_seconds", "evaluator_build_seconds", "warm_runtime_seconds_per_sample", "generation_peak_ram_bytes"]
+
+[evaluator-guards.corpus]
+process_id = 0
+integrand = "2L"
+continuous_dimension = 6
+discrete_dim = [0, 0]
+inputs = ["benchmarks/performance/gluon-self-energy-gl1.dot", "assets/models/json/sm/sm.json", "assets/models/json/sm/restrict_default.json"]
+points = [[0.3684805278343727, 0.20242350926484026, 0.48242524836619227, 0.3919994435419629, 0.14345675651437087, 0.47075342347077187], [0.23, 0.31, 0.41, 0.53, 0.67, 0.79]]
+
 [routes.orientation-3d]
 explicit_orientation_sum_only = false
 summed = true
 projected_4d = false
 evaluator_method = "Summed"
+evaluator_methods = ["Summed"]
+reference_method = "Summed"
 
 [routes.explicit-3d]
 explicit_orientation_sum_only = true
 summed = false
 projected_4d = false
 evaluator_method = "SingleParametric"
+evaluator_methods = ["SingleParametric"]
+reference_method = "SingleParametric"
 
 [routes.projected-4d]
 explicit_orientation_sum_only = true
 summed = false
 projected_4d = true
 evaluator_method = "SingleParametric"
+evaluator_methods = ["SingleParametric"]
+reference_method = "SingleParametric"
 
 [workloads.gl15]
 family = "physical"
@@ -78,3 +120,13 @@ family = "scalar"
 process = "scalar_gl02"
 graph_name = "GL02"
 graph = "scalar-3l-gl02-energy-quartic.dot"
+
+[workloads.gl16-evaluator-aliases]
+family = "evaluator-aliases"
+process = "scalar_gl16"
+graph_name = "GL16"
+
+[workloads.gl1-evaluator-guards]
+family = "evaluator-guards"
+process = "double_triangle"
+graph_name = "GL1"

@@ -12,15 +12,7 @@
     ],
     "alphal00p-docs-examples": [
       "alphal00p-docs-catalogs",
-      "alphal00p-docs-schema",
-      "gammaloop-api",
-      "gammalooprs",
-      "idenso",
-      "linnet",
-      "spenso",
-      "spenso-hep-lib",
-      "spenso-macros",
-      "vakint"
+      "alphal00p-docs-schema"
     ],
     "alphal00p-docs-macros": [],
     "alphal00p-docs-python-exporter": [
@@ -39,7 +31,6 @@
       "idenso",
       "linnet",
       "spenso",
-      "symbolica-utils",
       "three-dimensional-reps"
     ],
     "gammaloop-integration-tests": [
@@ -48,7 +39,6 @@
       "gammalooprs",
       "linnet",
       "spenso",
-      "symbolica-utils",
       "three-dimensional-reps",
       "vakint"
     ],
@@ -98,15 +88,13 @@
     "spenso-hep-lib": [
       "gammaloop-workspace-hack",
       "idenso",
-      "spenso",
-      "spenso-macros"
+      "spenso"
     ],
     "spenso-macros": [],
     "spynso3": [
       "idenso",
       "spenso",
-      "spenso-hep-lib",
-      "spenso-macros"
+      "spenso-hep-lib"
     ],
     "symbolica-utils": [],
     "three-dimensional-reps": [
@@ -129,48 +117,24 @@
     },
     "alphal00p-docs-examples": {
       "alphal00p-docs-catalogs": [],
-      "alphal00p-docs-schema": [],
-      "gammaloop-api": [
-        "cli"
-      ],
-      "gammalooprs": [],
-      "idenso": [
-        "bincode",
-        "reference-cases"
-      ],
-      "linnet": [
-        "bincode",
-        "drawing",
-        "nodestore-vec",
-        "serde",
-        "symbolica"
-      ],
-      "spenso": [
-        "shadowing"
-      ],
-      "spenso-hep-lib": [
-        "native"
-      ],
-      "spenso-macros": [],
-      "vakint": []
+      "alphal00p-docs-schema": []
     },
     "alphal00p-docs-macros": {},
     "alphal00p-docs-python-exporter": {
       "gammaloop-api": [
-        "python_stubgen"
+        "python-stubs"
       ],
       "idenso": [
-        "python_stubgen"
+        "python-stubs"
       ],
       "linnet-py": [
-        "python_stubgen"
+        "python-stubs"
       ],
       "spynso3": [
-        "python_stubgen"
+        "python-stubs"
       ],
       "vakint": [
-        "python_stubgen",
-        "symbolica_community_module"
+        "python-stubs"
       ]
     },
     "alphal00p-docs-schema": {},
@@ -191,10 +155,7 @@
       ],
       "spenso": [
         "native",
-        "shadowing"
-      ],
-      "symbolica-utils": [
-        "native"
+        "symbolica"
       ],
       "three-dimensional-reps": [
         "display"
@@ -207,10 +168,7 @@
       "linnet": [],
       "spenso": [
         "native",
-        "shadowing"
-      ],
-      "symbolica-utils": [
-        "native"
+        "symbolica"
       ],
       "three-dimensional-reps": [
         "eval"
@@ -222,7 +180,7 @@
       "gammaloop-workspace-hack": [],
       "spenso": [
         "native",
-        "shadowing"
+        "symbolica"
       ]
     },
     "gammaloop-tracing-filter-macros": {},
@@ -233,7 +191,6 @@
       ],
       "gammaloop-workspace-hack": [],
       "idenso": [
-        "bincode",
         "native"
       ],
       "linnet": [
@@ -243,7 +200,7 @@
       ],
       "spenso": [
         "native-code-generation",
-        "shadowing"
+        "symbolica"
       ],
       "spenso-hep-lib": [
         "native"
@@ -256,11 +213,10 @@
     },
     "idenso": {
       "linnet": [
-        "nodestore-vec",
         "serde"
       ],
       "spenso": [
-        "shadowing"
+        "symbolica"
       ],
       "spenso-macros": [],
       "symbolica-utils": []
@@ -269,7 +225,6 @@
     "linnest": {
       "linnet": [
         "drawing",
-        "nodestore-vec",
         "rkyv",
         "serde"
       ]
@@ -282,7 +237,6 @@
       "kurvst": [],
       "linnest": [],
       "linnet": [
-        "nodestore-vec",
         "serde"
       ]
     },
@@ -290,7 +244,6 @@
       "gammaloop-workspace-hack": [],
       "linnet": [
         "bincode",
-        "nodestore-vec",
         "serde"
       ],
       "spenso-macros": [],
@@ -302,9 +255,8 @@
         "reference-cases"
       ],
       "spenso": [
-        "shadowing"
-      ],
-      "spenso-macros": []
+        "symbolica"
+      ]
     },
     "spenso-macros": {},
     "spynso3": {
@@ -314,10 +266,9 @@
       "spenso": [
         "portable-payload",
         "python",
-        "shadowing"
+        "symbolica"
       ],
-      "spenso-hep-lib": [],
-      "spenso-macros": []
+      "spenso-hep-lib": []
     },
     "symbolica-utils": {},
     "three-dimensional-reps": {
@@ -394,20 +345,7 @@
     "alphal00p-docs-examples": [
       "alphal00p-docs-catalogs",
       "alphal00p-docs-macros",
-      "alphal00p-docs-schema",
-      "gammaloop-api",
-      "gammaloop-tracing-filter",
-      "gammaloop-tracing-filter-macros",
-      "gammaloop-workspace-hack",
-      "gammalooprs",
-      "idenso",
-      "linnet",
-      "spenso",
-      "spenso-hep-lib",
-      "spenso-macros",
-      "symbolica-utils",
-      "three-dimensional-reps",
-      "vakint"
+      "alphal00p-docs-schema"
     ],
     "alphal00p-docs-macros": [],
     "alphal00p-docs-python-exporter": [],
@@ -652,7 +590,6 @@
     "vakint": []
   },
   "symbolica_normal_packages": [
-    "alphal00p-docs-examples",
     "gammaloop-api",
     "gammaloop-integration-tests",
     "gammaloop-tracing-filter",
@@ -725,7 +662,6 @@
       "idenso",
       "linnet",
       "spenso",
-      "symbolica-utils",
       "three-dimensional-reps"
     ],
     "gammaloop-integration-tests": [
@@ -734,7 +670,6 @@
       "gammalooprs",
       "linnet",
       "spenso",
-      "symbolica-utils",
       "three-dimensional-reps",
       "vakint"
     ],
@@ -785,15 +720,13 @@
     "spenso-hep-lib": [
       "gammaloop-workspace-hack",
       "idenso",
-      "spenso",
-      "spenso-macros"
+      "spenso"
     ],
     "spenso-macros": [],
     "spynso3": [
       "idenso",
       "spenso",
-      "spenso-hep-lib",
-      "spenso-macros"
+      "spenso-hep-lib"
     ],
     "symbolica-utils": [],
     "three-dimensional-reps": [
@@ -822,18 +755,16 @@
       ],
       "gammalooprs": [],
       "idenso": [
-        "bincode",
         "reference-cases"
       ],
       "linnet": [
         "bincode",
         "drawing",
-        "nodestore-vec",
         "serde",
         "symbolica"
       ],
       "spenso": [
-        "shadowing"
+        "symbolica"
       ],
       "spenso-hep-lib": [
         "native"
@@ -846,20 +777,19 @@
     },
     "alphal00p-docs-python-exporter": {
       "gammaloop-api": [
-        "python_stubgen"
+        "python-stubs"
       ],
       "idenso": [
-        "python_stubgen"
+        "python-stubs"
       ],
       "linnet-py": [
-        "python_stubgen"
+        "python-stubs"
       ],
       "spynso3": [
-        "python_stubgen"
+        "python-stubs"
       ],
       "vakint": [
-        "python_stubgen",
-        "symbolica_community_module"
+        "python-stubs"
       ]
     },
     "alphal00p-docs-schema": {},
@@ -880,10 +810,7 @@
       ],
       "spenso": [
         "native",
-        "shadowing"
-      ],
-      "symbolica-utils": [
-        "native"
+        "symbolica"
       ],
       "three-dimensional-reps": [
         "display"
@@ -896,10 +823,7 @@
       "linnet": [],
       "spenso": [
         "native",
-        "shadowing"
-      ],
-      "symbolica-utils": [
-        "native"
+        "symbolica"
       ],
       "three-dimensional-reps": [
         "eval"
@@ -911,7 +835,7 @@
       "gammaloop-workspace-hack": [],
       "spenso": [
         "native",
-        "shadowing"
+        "symbolica"
       ]
     },
     "gammaloop-tracing-filter-macros": {},
@@ -922,7 +846,6 @@
       ],
       "gammaloop-workspace-hack": [],
       "idenso": [
-        "bincode",
         "native"
       ],
       "linnet": [
@@ -932,7 +855,7 @@
       ],
       "spenso": [
         "native-code-generation",
-        "shadowing"
+        "symbolica"
       ],
       "spenso-hep-lib": [
         "native"
@@ -945,11 +868,10 @@
     },
     "idenso": {
       "linnet": [
-        "nodestore-vec",
         "serde"
       ],
       "spenso": [
-        "shadowing"
+        "symbolica"
       ],
       "spenso-macros": [],
       "symbolica-utils": []
@@ -958,7 +880,6 @@
     "linnest": {
       "linnet": [
         "drawing",
-        "nodestore-vec",
         "rkyv",
         "serde"
       ]
@@ -976,7 +897,6 @@
       "kurvst": [],
       "linnest": [],
       "linnet": [
-        "nodestore-vec",
         "serde"
       ]
     },
@@ -984,7 +904,6 @@
       "gammaloop-workspace-hack": [],
       "linnet": [
         "bincode",
-        "nodestore-vec",
         "serde"
       ],
       "spenso-macros": [],
@@ -996,9 +915,8 @@
         "reference-cases"
       ],
       "spenso": [
-        "shadowing"
-      ],
-      "spenso-macros": []
+        "symbolica"
+      ]
     },
     "spenso-macros": {},
     "spynso3": {
@@ -1008,10 +926,9 @@
       "spenso": [
         "portable-payload",
         "python",
-        "shadowing"
+        "symbolica"
       ],
-      "spenso-hep-lib": [],
-      "spenso-macros": []
+      "spenso-hep-lib": []
     },
     "symbolica-utils": {},
     "three-dimensional-reps": {

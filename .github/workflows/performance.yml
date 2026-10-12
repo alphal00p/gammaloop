@@ -27,7 +27,7 @@ permissions:
 
 jobs:
   compare:
-    name: Physical and scalar generation and runtime
+    name: Generation and evaluator performance
     runs-on: ubuntu-24.04
     timeout-minutes: 360
     env:

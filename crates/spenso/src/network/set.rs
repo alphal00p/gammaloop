@@ -17,14 +17,14 @@ use std::{
     ops::{AddAssign, MulAssign},
 };
 
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 use eyre::eyre;
 
-#[cfg(all(feature = "shadowing", feature = "native-code-generation"))]
+#[cfg(all(feature = "symbolica", feature = "native-code-generation"))]
 use symbolica::evaluate::{
     CompileOptions, CompiledCode, CompiledNumber, ExportNumber, ExportSettings, ExportedCode,
 };
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 use symbolica::{
     atom::{Atom, AtomView},
     domains::{
@@ -37,17 +37,17 @@ use symbolica::{
     },
 };
 
-#[cfg(all(feature = "shadowing", feature = "native-code-generation"))]
+#[cfg(all(feature = "symbolica", feature = "native-code-generation"))]
 use crate::algebra::complex::Complex;
-#[cfg(all(feature = "shadowing", feature = "native-code-generation"))]
+#[cfg(all(feature = "symbolica", feature = "native-code-generation"))]
 use crate::algebra::complex::symbolica_traits::CompiledComplexEvaluatorSpenso;
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 use crate::{
     tensors::data::{DataIterator, DenseTensor, SetTensorData, SparseTensor},
     tensors::parametric::ParamTensor,
 };
 
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 use super::store::TensorScalarStoreMapping;
 
 use crate::{
@@ -72,7 +72,7 @@ use super::{FastTensorSum, Library, Network, Ref, TensorNetworkError, TensorOrSc
     // bincode_trait_derive::BorrowDecodeFromDecode,
 )]
 #[cfg_attr(
-    feature = "shadowing",
+    feature = "symbolica",
     trait_decode(trait = symbolica::state::HasStateMap),
 )]
 pub struct TensorNetworkSet<S, K, FK, Aind> {
@@ -104,15 +104,15 @@ impl<S, K, FK, Aind> Default for TensorNetworkSet<S, K, FK, Aind> {
     }
 }
 
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 pub type EvalTreeTensorNetworkSet<T, S, K, FK, Aind, Str> =
     SharedTensorNetworkSet<EvalTree<T>, S, K, FK, Aind, Str>;
 
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 pub type EvalTensorNetworkSet<T, S, K, FK, Aind, Str> =
     SharedTensorNetworkSet<ExpressionEvaluator<T>, S, K, FK, Aind, Str>;
 
-#[cfg(all(feature = "shadowing", feature = "native-code-generation"))]
+#[cfg(all(feature = "symbolica", feature = "native-code-generation"))]
 pub type CompiledTensorNetworkSet<S, K, FK, Aind, Str> =
     SharedTensorNetworkSet<CompiledComplexEvaluatorSpenso, S, K, FK, Aind, Str>;
 
@@ -211,7 +211,7 @@ impl<
     }
 }
 
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 impl<
     Store: TensorScalarStore<Tensor = ParamTensor<S>, Scalar = Atom>,
     S: TensorStructure + Clone,
@@ -302,7 +302,7 @@ impl<
     }
 }
 
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 impl<
     S: Clone + TensorStructure,
     K,
@@ -315,7 +315,7 @@ impl<
         self.shared_data.horner_scheme();
     }
 }
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 impl<
     S: TensorStructure + Clone,
     K: Clone,
@@ -336,7 +336,7 @@ impl<
     }
 }
 
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 impl<
     T,
     S: TensorStructure + Clone,
@@ -417,7 +417,7 @@ impl<
     }
 }
 
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 impl<
     T,
     S: TensorStructure + Clone,
@@ -499,7 +499,7 @@ impl<
     }
 }
 
-#[cfg(all(feature = "shadowing", feature = "native-code-generation"))]
+#[cfg(all(feature = "symbolica", feature = "native-code-generation"))]
 impl<F: CompiledNumber, S: TensorStructure + Clone, K: Clone, FK: Clone, Aind: AbsInd>
     SharedTensorNetworkSet<ExportedCode<F>, S, K, FK, Aind>
 {
@@ -516,7 +516,7 @@ impl<F: CompiledNumber, S: TensorStructure + Clone, K: Clone, FK: Clone, Aind: A
     }
 }
 
-#[cfg(all(feature = "shadowing", feature = "native-code-generation"))]
+#[cfg(all(feature = "symbolica", feature = "native-code-generation"))]
 impl<F: CompiledNumber, S: TensorStructure + Clone, K: Clone, FK: Clone, Aind: AbsInd>
     SharedTensorNetworkSet<CompiledCode<F>, S, K, FK, Aind>
 {
@@ -529,7 +529,7 @@ impl<F: CompiledNumber, S: TensorStructure + Clone, K: Clone, FK: Clone, Aind: A
     }
 }
 
-#[cfg(all(feature = "shadowing", feature = "native-code-generation"))]
+#[cfg(all(feature = "symbolica", feature = "native-code-generation"))]
 impl<
     S: TensorStructure + Clone,
     K: Clone,

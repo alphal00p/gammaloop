@@ -32,7 +32,7 @@ rust_components = [
   { id = "gammaloop-api", package = "gammaloop-api", kind = "library-and-cli", version_source = "crates/gammaloop-api/Cargo.toml", features = ["cli"] },
 ]
 python_components = [
-  { id = "gammaloop-python", package = "gammaloop", kind = "maturin-distribution", version_source = "pyproject.toml", module = "gammaloop._gammaloop", features = ["python_api", "python_abi", "python_stubgen"] },
+  { id = "gammaloop-python", package = "gammaloop", kind = "maturin-distribution", version_source = "pyproject.toml", module = "gammaloop._gammaloop", features = ["python", "abi3", "python-stubs"] },
 ]
 
 [[product]]
@@ -68,10 +68,10 @@ pages = [
 changelog = "crates/linnet/CHANGELOG.typ"
 related = ["spenso", "gammaloop"]
 rust_components = [
-  { id = "linnet", package = "linnet", kind = "library", version_source = "crates/linnet/Cargo.toml", features = ["native", "nodestore-vec", "serde", "bincode", "drawing", "symbolica"] },
+  { id = "linnet", package = "linnet", kind = "library", version_source = "crates/linnet/Cargo.toml", features = ["native", "serde", "bincode", "drawing", "symbolica"] },
 ]
 python_components = [
-  { id = "linnet-py", package = "linnet-py", kind = "maturin-distribution", version_source = "crates/linnet-py/pyproject.toml", module = "linnet_py", features = ["extension-module", "abi3-py310"] },
+  { id = "linnet-py", package = "linnet-py", kind = "maturin-distribution", version_source = "crates/linnet-py/pyproject.toml", module = "linnet_py", features = ["extension-module", "abi3"] },
 ]
 
 [[product]]
@@ -99,12 +99,12 @@ pages = [
 changelog = "crates/spenso/CHANGELOG.typ"
 related = ["linnet", "idenso", "gammaloop"]
 rust_components = [
-  { id = "spenso", package = "spenso", kind = "library", version_source = "crates/spenso/Cargo.toml", features = ["native", "shadowing"] },
+  { id = "spenso", package = "spenso", kind = "library", version_source = "crates/spenso/Cargo.toml", features = ["native", "symbolica"] },
   { id = "spenso-macros", package = "spenso-macros", kind = "proc-macro-library", version_source = "crates/spenso-macros/Cargo.toml" },
   { id = "spenso-hep-lib", package = "spenso-hep-lib", kind = "domain-library", version_source = "crates/spenso-hep-lib/Cargo.toml", features = ["native"] },
 ]
 python_components = [
-  { id = "spynso3", package = "spynso3", kind = "symbolica-community-module", version_source = "crates/spynso3/Cargo.toml", module = "symbolica.community.spenso", features = ["python_stubgen"] },
+  { id = "spynso3", package = "spynso3", kind = "symbolica-community-module", version_source = "crates/spynso3/Cargo.toml", module = "symbolica.community.spenso", features = ["python-stubs"] },
 ]
 
 [[product]]
@@ -128,10 +128,10 @@ pages = [
 changelog = "crates/idenso/CHANGELOG.typ"
 related = ["spenso", "gammaloop"]
 rust_components = [
-  { id = "idenso", package = "idenso", kind = "library", version_source = "crates/idenso/Cargo.toml", features = ["native", "bincode", "reference-cases"] },
+  { id = "idenso", package = "idenso", kind = "library", version_source = "crates/idenso/Cargo.toml", features = ["native", "reference-cases"] },
 ]
 python_components = [
-  { id = "idenso-community", package = "idenso", kind = "symbolica-community-module", version_source = "crates/idenso/Cargo.toml", module = "symbolica.community.idenso", features = ["python", "python_stubgen"] },
+  { id = "idenso-community", package = "idenso", kind = "symbolica-community-module", version_source = "crates/idenso/Cargo.toml", module = "symbolica.community.idenso", features = ["python", "python-stubs"] },
 ]
 
 [[product]]
@@ -155,5 +155,5 @@ rust_components = [
   { id = "vakint", package = "vakint", kind = "library", version_source = "crates/vakint/Cargo.toml" },
 ]
 python_components = [
-  { id = "vakint-community", package = "vakint", kind = "symbolica-community-module", version_source = "crates/vakint/Cargo.toml", module = "symbolica.community.vakint", features = ["symbolica_community_module", "python_stubgen"] },
+  { id = "vakint-community", package = "vakint", kind = "symbolica-community-module", version_source = "crates/vakint/Cargo.toml", module = "symbolica.community.vakint", features = ["python", "python-stubs"] },
 ]

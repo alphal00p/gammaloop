@@ -12,9 +12,9 @@ use linnet::half_edge::subgraph::subset::SubSet;
 use linnet::half_edge::swap::Swap;
 use thiserror::Error;
 
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 use crate::structure::slot::ParseableAind;
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 use crate::{
     tensors::data::DenseTensor,
     tensors::parametric::{ExpandedCoefficent, FlatCoefficent, TensorCoefficient},
@@ -27,9 +27,9 @@ use slot::DualSlotTo;
 use slot::IsAbstractSlot;
 use slot::SlotError;
 use std::fmt::Debug;
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 use symbolica::atom::{Atom, FunctionBuilder, Symbol};
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 use symbolica_utils::{IntoArgs, IntoSymbol};
 
 use crate::iterators::TensorStructureIndexIterator;
@@ -113,7 +113,7 @@ pub trait CastStructure<O: HasStructure<Structure: From<Self::Structure>>>: HasS
     fn cast_structure(self) -> O;
 }
 
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 impl<T> ToSymbolic for Canonicalized<T>
 where
     T: TensorStructure + ToSymbolic,
@@ -196,7 +196,7 @@ where
     }
 }
 
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 impl<T: HasName> ToSymbolic for T
 where
     T: TensorStructure,
@@ -274,7 +274,7 @@ where
     }
 }
 
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 pub trait ToSymbolic {
     fn concrete_atom(&self, id: FlatIndex) -> ExpandedCoefficent<()>;
     // {
@@ -409,7 +409,7 @@ pub trait TensorStructure {
     fn external_indices_iter(&self) -> impl Iterator<Item = <Self::Slot as IsAbstractSlot>::Aind>;
 
     /// Returns the symbolic arguments for external tensor ports in storage order.
-    #[cfg(feature = "shadowing")]
+    #[cfg(feature = "symbolica")]
     fn symbolic_external_args(&self) -> Vec<Atom>
     where
         <Self::Slot as IsAbstractSlot>::Aind: ParseableAind,
@@ -878,7 +878,7 @@ pub trait HasName {
     fn args(&self) -> Option<Self::Args>;
     fn set_name(&mut self, name: Self::Name);
 
-    #[cfg(feature = "shadowing")]
+    #[cfg(feature = "symbolica")]
     fn expanded_coef(&self, id: FlatIndex) -> ExpandedCoefficent<Self::Args>
     where
         Self: TensorStructure,
@@ -891,7 +891,7 @@ pub trait HasName {
             args: self.args(),
         }
     }
-    #[cfg(feature = "shadowing")]
+    #[cfg(feature = "symbolica")]
     fn flat_coef(&self, id: FlatIndex) -> FlatCoefficent<Self::Args>
     where
         Self: TensorStructure,
@@ -1099,5 +1099,5 @@ mod tests {
 }
 
 #[cfg(test)]
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 mod shadowing_tests {}

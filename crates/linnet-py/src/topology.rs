@@ -18,10 +18,7 @@ use crate::graph::{PyEdge, PyGraph, PyHalfEdge, PyNode, PyOrientation};
 use crate::native_graph::PyHedgeGraph;
 
 /// Selects which notion of edge direction a directed algorithm follows.
-#[cfg_attr(
-    feature = "python_stubgen",
-    pyo3_stub_gen::derive::gen_stub_pyclass_enum
-)]
+#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pyclass_enum)]
 #[pyclass(from_py_object, eq, eq_int, name = "DirectionBasis")]
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum PyDirectionBasis {
@@ -42,7 +39,7 @@ impl From<PyDirectionBasis> for DirectionBasis {
 }
 
 /// A graph-bound structural selection.
-#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
+#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(unsendable, name = "Subgraph")]
 pub struct PySubgraph {
     graph: Option<Py<PyGraph>>,
@@ -134,8 +131,8 @@ fn isolated_node_indices(graph: &PyHedgeGraph) -> BTreeSet<usize> {
         .collect()
 }
 
-#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
-#[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
+#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pymethods)]
+#[cfg_attr(not(feature = "python-stubs"), pyo3_stub_gen_derive::remove_gen_stub)]
 #[pymethods]
 impl PySubgraph {
     #[getter]
@@ -382,7 +379,7 @@ impl PySubgraph {
 }
 
 /// A cycle in a particular graph revision.
-#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
+#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(unsendable, name = "Cycle")]
 pub struct PyCycle {
     graph: Option<Py<PyGraph>>,
@@ -411,8 +408,8 @@ impl PyCycle {
     }
 }
 
-#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
-#[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
+#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pymethods)]
+#[cfg_attr(not(feature = "python-stubs"), pyo3_stub_gen_derive::remove_gen_stub)]
 #[pymethods]
 impl PyCycle {
     #[getter]
@@ -452,7 +449,7 @@ impl PyCycle {
 }
 
 /// An oriented cut in a particular graph revision.
-#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
+#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(unsendable, name = "OrientedCut")]
 pub struct PyOrientedCut {
     graph: Option<Py<PyGraph>>,
@@ -486,7 +483,7 @@ impl PyOrientedCut {
 }
 
 /// One source-side, oriented-boundary, target-side cut partition.
-#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
+#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(unsendable, name = "CutPartition")]
 pub struct PyCutPartition {
     graph: Option<Py<PyGraph>>,
@@ -507,8 +504,8 @@ impl PyCutPartition {
     }
 }
 
-#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
-#[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
+#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pymethods)]
+#[cfg_attr(not(feature = "python-stubs"), pyo3_stub_gen_derive::remove_gen_stub)]
 #[pymethods]
 impl PyCutPartition {
     #[getter]
@@ -590,8 +587,8 @@ impl PyCutPartition {
     }
 }
 
-#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
-#[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
+#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pymethods)]
+#[cfg_attr(not(feature = "python-stubs"), pyo3_stub_gen_derive::remove_gen_stub)]
 #[pymethods]
 impl PyOrientedCut {
     fn side(&self, py: Python<'_>, left: bool) -> PyResult<PySubgraph> {
@@ -686,7 +683,7 @@ impl PyOrientedCut {
 }
 
 /// A graph-bound DFS or BFS traversal tree.
-#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
+#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(unsendable, name = "TraversalTree")]
 pub struct PyTraversalTree {
     graph: Option<Py<PyGraph>>,
@@ -735,8 +732,8 @@ impl PyTraversalTree {
     }
 }
 
-#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
-#[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
+#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pymethods)]
+#[cfg_attr(not(feature = "python-stubs"), pyo3_stub_gen_derive::remove_gen_stub)]
 #[pymethods]
 impl PyTraversalTree {
     #[getter]

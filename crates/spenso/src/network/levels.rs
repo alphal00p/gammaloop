@@ -1,4 +1,4 @@
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 #[allow(dead_code)]
 #[derive(Debug, Clone, Encode, Decode)]
 #[bincode(decode_context = "symbolica::state::StateMap")]
@@ -13,7 +13,7 @@ pub struct Levels<
     params: Vec<Sc>,
 }
 
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 impl<T, S, Sc: AtomCore> From<Network<T, Sc>> for Levels<T, S, Sc>
 where
     T: HasStructure<Structure = S>,
@@ -29,7 +29,7 @@ where
     }
 }
 
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 impl<
         T: Clone + RefZero + Display,
         S: TensorStructure + Clone + TracksCount + Display,
@@ -116,7 +116,7 @@ where
     }
 }
 
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 impl<S: TensorStructure + Clone + TracksCount + Display, Sc: AtomCore + Clone>
     Levels<ParamTensor<S>, S, Sc>
 where

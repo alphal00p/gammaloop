@@ -11,7 +11,7 @@ use pyo3::{
     types::{PyAnyMethods, PyDictMethods, PyListMethods, PyModule, PyModuleMethods},
     wrap_pyfunction,
 };
-#[cfg(feature = "python_stubgen")]
+#[cfg(feature = "python-stubs")]
 use pyo3_stub_gen::derive::gen_stub_pyfunction;
 use spenso::structure::abstract_index::AbstractIndex;
 use symbolica::atom::Symbol;
@@ -40,7 +40,7 @@ pub use tooling::{
 };
 
 #[cfg_attr(
-    feature = "python_stubgen",
+    feature = "python-stubs",
     gen_stub_pyfunction(module = "symbolica.community.idenso")
 )]
 #[pyfunction]
@@ -80,7 +80,7 @@ pub fn dirac_adjoint(expression: &PythonExpression) -> PyResult<PythonExpression
 }
 
 #[cfg_attr(
-    feature = "python_stubgen",
+    feature = "python-stubs",
     gen_stub_pyfunction(module = "symbolica.community.idenso")
 )]
 #[pyfunction]
@@ -140,7 +140,7 @@ pub fn expand_mink(expression: &PythonExpression) -> Vec<PythonTerm> {
 /// True
 /// ```
 #[cfg_attr(
-    feature = "python_stubgen",
+    feature = "python-stubs",
     gen_stub_pyfunction(module = "symbolica.community.idenso")
 )]
 #[pyfunction]
@@ -176,7 +176,7 @@ pub fn expand_bis(expression: &PythonExpression) -> Vec<PythonTerm> {
 /// True
 /// ```
 #[cfg_attr(
-    feature = "python_stubgen",
+    feature = "python-stubs",
     gen_stub_pyfunction(module = "symbolica.community.idenso")
 )]
 #[pyfunction]
@@ -219,7 +219,7 @@ pub fn expand_mink_bis(expression: &PythonExpression) -> Vec<PythonTerm> {
 /// True
 /// ```
 #[cfg_attr(
-    feature = "python_stubgen",
+    feature = "python-stubs",
     gen_stub_pyfunction(module = "symbolica.community.idenso")
 )]
 #[pyfunction]
@@ -228,7 +228,7 @@ pub fn expand_color(expression: &PythonExpression) -> Vec<PythonTerm> {
 }
 
 #[cfg_attr(
-    feature = "python_stubgen",
+    feature = "python-stubs",
     gen_stub_pyfunction(module = "symbolica.community.idenso")
 )]
 #[pyfunction]
@@ -263,7 +263,7 @@ pub fn expand_metrics(expression: &PythonExpression) -> Vec<PythonTerm> {
 }
 
 #[cfg_attr(
-    feature = "python_stubgen",
+    feature = "python-stubs",
     gen_stub_pyfunction(module = "symbolica.community.idenso")
 )]
 #[pyfunction]
@@ -298,7 +298,7 @@ pub fn wrap_indices(expression: &PythonExpression, header: Symbol) -> PythonExpr
 }
 
 #[cfg_attr(
-    feature = "python_stubgen",
+    feature = "python-stubs",
     gen_stub_pyfunction(module = "symbolica.community.idenso")
 )]
 #[pyfunction(signature = (expression, settings = None))]
@@ -353,7 +353,7 @@ pub fn cook_indices(
 }
 
 #[cfg_attr(
-    feature = "python_stubgen",
+    feature = "python-stubs",
     gen_stub_pyfunction(module = "symbolica.community.idenso")
 )]
 #[pyfunction(signature = (expression, settings = None))]
@@ -410,7 +410,7 @@ pub fn cook_function(
 }
 
 #[cfg_attr(
-    feature = "python_stubgen",
+    feature = "python-stubs",
     gen_stub_pyfunction(module = "symbolica.community.idenso")
 )]
 #[pyfunction]
@@ -462,7 +462,7 @@ pub fn wrap_dummies(expression: &PythonExpression, header: Symbol) -> PyResult<P
 }
 
 #[cfg_attr(
-    feature = "python_stubgen",
+    feature = "python-stubs",
     gen_stub_pyfunction(module = "symbolica.community.idenso")
 )]
 #[pyfunction]
@@ -514,7 +514,7 @@ pub fn list_dangling(expression: &PythonExpression) -> PyResult<Vec<PythonExpres
 }
 
 #[cfg_attr(
-    feature = "python_stubgen",
+    feature = "python-stubs",
     gen_stub_pyfunction(module = "symbolica.community.idenso")
 )]
 #[pyfunction(signature = (expression, settings = None))]
@@ -580,7 +580,7 @@ pub fn simplify_gamma(
 }
 
 #[cfg_attr(
-    feature = "python_stubgen",
+    feature = "python-stubs",
     gen_stub_pyfunction(module = "symbolica.community.idenso")
 )]
 #[pyfunction]
@@ -619,7 +619,7 @@ pub fn to_dots(expression: &PythonExpression) -> PythonExpression {
 }
 
 #[cfg_attr(
-    feature = "python_stubgen",
+    feature = "python-stubs",
     gen_stub_pyfunction(module = "symbolica.community.idenso")
 )]
 #[pyfunction]
@@ -662,7 +662,7 @@ pub fn simplify_metrics(expression: &PythonExpression) -> PythonExpression {
 }
 
 #[cfg_attr(
-    feature = "python_stubgen",
+    feature = "python-stubs",
     gen_stub_pyfunction(module = "symbolica.community.idenso")
 )]
 #[pyfunction(signature = (expression, settings = None))]
@@ -745,7 +745,7 @@ macro_rules! define_idenso_python_surface {
         }
 
         /// The functions, classes, and exceptions registered on `symbolica.community.idenso`.
-        #[cfg(feature = "python_stubgen")]
+        #[cfg(feature = "python-stubs")]
         pub const PYTHON_STUB_SURFACE: &[&str] = &[$(stringify!($function),)+ $($registered,)+];
     };
 }

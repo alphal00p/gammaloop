@@ -3,7 +3,6 @@ use std::ffi::OsStr;
 use std::fs::{self, File};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
 use std::time::Duration;
 
 use blake3::Hasher;
@@ -13,7 +12,6 @@ use clinnet::{
 };
 use eyre::{Context, Result, bail, eyre};
 use indicatif::{ProgressBar, ProgressStyle};
-use parking_lot::Mutex as ParkingMutex;
 use pathdiff::diff_paths;
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -342,11 +340,7 @@ fn run() -> Result<()> {
     save_run_metadata(&metadata_path, &metadata)?;
 
     let previous_cache = load_cache(&cache_file)?;
-    let new_cache = Arc::new(ParkingMutex::new(BTreeMap::new()));
-    let rebuilt = Arc::new(ParkingMutex::new(0usize));
-    let reused = Arc::new(ParkingMutex::new(0usize));
-
-    let progress = Arc::new(ProgressBar::new(plans.len() as u64));
+    let progress = ProgressBar::new(plans.len() as u64);
     progress.set_style(
         ProgressStyle::with_template(
             "{spinner:.green} [{elapsed_precise}] {wide_bar:.cyan/blue} {pos}/{len} {msg}",
@@ -357,89 +351,50 @@ fn run() -> Result<()> {
     progress.enable_steady_tick(Duration::from_millis(120));
     progress.set_message("Preparing figures...");
 
-    // Process figures in parallel or sequential based on CLI flags
-    let results: Result<Vec<_>> = if cli.no_parallel {
-        // Sequential processing
-        plans
-            .iter()
-            .map(|plan| {
-                let key = path_key(&plan.relative);
-                let hash = compute_hash(
-                    &plan.data_path,
-                    &figure_template,
-                    &style_files,
-                    &draw_args.input_args.input,
-                )?;
-                let needs_rebuild = !previous_cache
-                    .get(&key)
-                    .map(|old| old == &hash)
-                    .unwrap_or(false);
+    let process = |plan: &FigurePlan| -> Result<_> {
+        let key = path_key(&plan.relative);
+        let hash = compute_hash(
+            &plan.data_path,
+            &figure_template,
+            &style_files,
+            &draw_args.input_args.input,
+        )?;
+        let needs_rebuild = !previous_cache
+            .get(&key)
+            .map(|old| old == &hash)
+            .unwrap_or(false);
 
-                if needs_rebuild {
-                    progress.set_message(format!("building {}", plan.relative.display()));
-                    build_figure(
-                        plan,
-                        &figure_template,
-                        &draw_args.input_args.input,
-                        &renderer,
-                    )?;
-                    *rebuilt.lock() += 1;
-                } else {
-                    progress.set_message(format!("cached {}", plan.relative.display()));
-                    *reused.lock() += 1;
-                }
+        if needs_rebuild {
+            progress.set_message(format!("building {}", plan.relative.display()));
+            build_figure(
+                plan,
+                &figure_template,
+                &draw_args.input_args.input,
+                &renderer,
+            )?;
+        } else {
+            progress.set_message(format!("cached {}", plan.relative.display()));
+        }
 
-                new_cache.lock().insert(key.clone(), hash.clone());
-                progress.inc(1);
-                Ok((key, hash))
-            })
-            .collect()
-    } else {
-        // Parallel processing
-        plans
-            .par_iter()
-            .map(|plan| {
-                let key = path_key(&plan.relative);
-                let hash = compute_hash(
-                    &plan.data_path,
-                    &figure_template,
-                    &style_files,
-                    &draw_args.input_args.input,
-                )?;
-                let needs_rebuild = !previous_cache
-                    .get(&key)
-                    .map(|old| old == &hash)
-                    .unwrap_or(false);
-
-                if needs_rebuild {
-                    progress.set_message(format!("building {}", plan.relative.display()));
-                    build_figure(
-                        plan,
-                        &figure_template,
-                        &draw_args.input_args.input,
-                        &renderer,
-                    )?;
-                    *rebuilt.lock() += 1;
-                } else {
-                    progress.set_message(format!("cached {}", plan.relative.display()));
-                    *reused.lock() += 1;
-                }
-
-                new_cache.lock().insert(key.clone(), hash.clone());
-                progress.inc(1);
-                Ok((key, hash))
-            })
-            .collect()
+        progress.inc(1);
+        Ok((key, hash, needs_rebuild))
     };
 
-    // Check if any parallel processing failed
-    results?;
+    // Publish the complete cache only after every figure succeeds.
+    let results: Vec<_> = if cli.no_parallel {
+        plans.iter().map(process).collect::<Result<_>>()
+    } else {
+        plans.par_iter().map(process).collect::<Result<_>>()
+    }?;
 
     progress.finish_with_message("figures ready");
 
-    let final_cache = Arc::try_unwrap(new_cache).unwrap().into_inner();
-    let rebuilt = Arc::try_unwrap(rebuilt).unwrap().into_inner();
-    let reused = Arc::try_unwrap(reused).unwrap().into_inner();
+    let rebuilt = results.iter().filter(|(_, _, rebuilt)| *rebuilt).count();
+    let reused = results.len() - rebuilt;
+    let final_cache = results
+        .into_iter()
+        .map(|(key, hash, _)| (key, hash))
+        .collect();
 
     save_cache(&cache_file, &final_cache)?;
     let removed = remove_stale_outputs(&previous_cache, &final_cache, &figs_dir)?;
@@ -762,7 +717,9 @@ fn bool_input(key: &str, value: &str) -> Result<bool> {
     match value.to_ascii_lowercase().as_str() {
         "true" | "on" | "yes" | "1" => Ok(true),
         "false" | "off" | "no" | "0" => Ok(false),
-        _ => bail!("{key} must be true or false, found {value:?}"),
+        _ => {
+            bail!("{key} must be true or false, found {value:?}");
+        }
     }
 }
 

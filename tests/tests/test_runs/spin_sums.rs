@@ -5,8 +5,8 @@ mod important {
     use super::*;
 
     #[test]
-    #[serial]
     fn cross_section_fermion_spin_sum_matches_explicit_incoming_helicity_average() -> Result<()> {
+        let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
         let test_name = "cross_section_fermion_spin_sum_matches_explicit_incoming_helicity_average";
         let mut cli = setup_epem_tth_spin_sum_cli(test_name)?;
         let point = nontrivial_xspace_point_for(&mut cli, "epem_a_tth_sum", "LO")?;
@@ -36,8 +36,8 @@ mod important {
 }
 
 #[test]
-#[serial]
 fn cross_section_vector_spin_sum_matches_explicit_incoming_helicity_average() -> Result<()> {
+    let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
     let test_name = "cross_section_vector_spin_sum_matches_explicit_incoming_helicity_average";
     let mut cli = setup_aa_ttbar_spin_sum_cli(test_name)?;
     let point = nontrivial_xspace_point_for(&mut cli, "aa_ttbar_sum", "LO")?;

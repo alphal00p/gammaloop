@@ -15,7 +15,9 @@ use gammalooprs::{
 use serde::Serialize;
 use serde_json::Value as JsonValue;
 
-use crate::settings_tree::{serialize_schema, serialize_settings_with_defaults};
+#[cfg(feature = "cli")]
+use crate::settings_tree::serialize_schema;
+use crate::settings_tree::serialize_settings_with_defaults;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum NamedProcessSettingKind {
@@ -42,6 +44,7 @@ impl NamedProcessSettingKind {
     }
 }
 
+#[cfg(feature = "cli")]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct ProcessSettingsCompletionEntry {
     pub process_id: usize,
@@ -63,6 +66,7 @@ pub(crate) struct SerializedRuntimeNamedSettings {
 struct KindedTemplate<T> {
     kind: String,
     settings: T,
+    #[cfg(feature = "cli")]
     root: JsonValue,
 }
 
@@ -80,6 +84,7 @@ where
     KindedTemplate {
         kind,
         settings,
+        #[cfg(feature = "cli")]
         root,
     }
 }
@@ -250,6 +255,7 @@ pub(crate) fn selector_template(kind: &str) -> Option<SelectorSettings> {
         .map(|entry| entry.settings.clone())
 }
 
+#[cfg(feature = "cli")]
 pub(crate) fn quantity_completion_root_for_kind(kind: &str) -> Option<&'static JsonValue> {
     quantity_templates()
         .iter()
@@ -257,6 +263,7 @@ pub(crate) fn quantity_completion_root_for_kind(kind: &str) -> Option<&'static J
         .map(|entry| &entry.root)
 }
 
+#[cfg(feature = "cli")]
 pub(crate) fn selector_completion_root_for_kind(kind: &str) -> Option<&'static JsonValue> {
     selector_templates()
         .iter()
@@ -264,6 +271,7 @@ pub(crate) fn selector_completion_root_for_kind(kind: &str) -> Option<&'static J
         .map(|entry| &entry.root)
 }
 
+#[cfg(feature = "cli")]
 pub(crate) fn observable_completion_root() -> &'static JsonValue {
     static ROOT: OnceLock<JsonValue> = OnceLock::new();
     ROOT.get_or_init(|| {
@@ -272,6 +280,7 @@ pub(crate) fn observable_completion_root() -> &'static JsonValue {
     })
 }
 
+#[cfg(feature = "cli")]
 pub(crate) fn quantity_schema() -> &'static JsonValue {
     static ROOT: OnceLock<JsonValue> = OnceLock::new();
     ROOT.get_or_init(|| {
@@ -280,6 +289,7 @@ pub(crate) fn quantity_schema() -> &'static JsonValue {
     })
 }
 
+#[cfg(feature = "cli")]
 pub(crate) fn selector_schema() -> &'static JsonValue {
     static ROOT: OnceLock<JsonValue> = OnceLock::new();
     ROOT.get_or_init(|| {
@@ -288,6 +298,7 @@ pub(crate) fn selector_schema() -> &'static JsonValue {
     })
 }
 
+#[cfg(feature = "cli")]
 pub(crate) fn observable_schema() -> &'static JsonValue {
     static ROOT: OnceLock<JsonValue> = OnceLock::new();
     ROOT.get_or_init(|| {

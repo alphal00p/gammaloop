@@ -197,10 +197,12 @@ fn argument_metadata(command: &Command, argument: &Arg, inherited: bool) -> Resu
         ArgAction::HelpShort => CliArgumentAction::HelpShort,
         ArgAction::HelpLong => CliArgumentAction::HelpLong,
         ArgAction::Version => CliArgumentAction::Version,
-        action => bail!(
-            "unsupported Clap action {action:?} for {}",
-            argument.get_id()
-        ),
+        action => {
+            bail!(
+                "unsupported Clap action {action:?} for {}",
+                argument.get_id()
+            );
+        }
     };
     let arity = argument.get_num_args().unwrap_or_else(|| {
         if argument.get_action().takes_values() {

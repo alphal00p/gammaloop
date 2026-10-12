@@ -25,7 +25,7 @@ python3.10 -m venv .venv
 python -m pip install "maturin>=1.7,<2.0"
 maturin develop --locked \
   --manifest-path crates/linnet-py/Cargo.toml \
-  --features extension-module,abi3-py310
+  --features extension-module,abi3
 ```
 
 The declared Python dependencies install `typst` 0.15.0 alongside the extension. Python rendering

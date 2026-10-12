@@ -16,18 +16,18 @@ use crate::{
     network::SpensoNet,
 };
 
-#[cfg(feature = "python_stubgen")]
+#[cfg(feature = "python-stubs")]
 use pyo3_stub_gen::{
     PyStubType,
     generate::MethodType,
     inventory::submit,
     type_info::{MethodInfo, ParameterDefault, ParameterInfo, ParameterKind, PyMethodsInfo},
 };
-#[cfg(feature = "python_stubgen")]
+#[cfg(feature = "python-stubs")]
 use symbolica::api::python::ConvertibleToExpression;
 
 /// A unary Symbolica function whose action is broadcast over tensor entries.
-#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
+#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(
     from_py_object,
     name = "BroadcastFunction",
@@ -40,8 +40,8 @@ pub struct SpensoBroadcastFunction {
 
 impl ModuleInit for SpensoBroadcastFunction {}
 
-#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
-#[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
+#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pymethods)]
+#[cfg_attr(not(feature = "python-stubs"), pyo3_stub_gen_derive::remove_gen_stub)]
 #[pymethods]
 impl SpensoBroadcastFunction {
     /// Register a Symbolica function for elementwise application to tensor entries.
@@ -190,7 +190,7 @@ impl SpensoBroadcastFunction {
     }
 }
 
-#[cfg(feature = "python_stubgen")]
+#[cfg(feature = "python-stubs")]
 submit! {
     PyMethodsInfo {
         struct_id: std::any::TypeId::of::<SpensoBroadcastFunction>,

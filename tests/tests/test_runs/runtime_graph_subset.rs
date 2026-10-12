@@ -41,8 +41,8 @@ fn discrete_sample(group_id: usize, weight: f64, point: &[f64]) -> Sample<F<f64>
 }
 
 #[test]
-#[serial]
 fn amplitude_runtime_graph_subset_preserves_complete_group_metadata() -> Result<()> {
+    let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
     let test_name = "amplitude_runtime_graph_subset_preserves_complete_group_metadata";
     let mut cli = get_test_cli(
         Some("test_grouped_subtraction.toml".into()),
@@ -153,8 +153,8 @@ fn amplitude_runtime_graph_subset_preserves_complete_group_metadata() -> Result<
 }
 
 #[test]
-#[serial]
 fn cross_section_runtime_graph_subset_is_compact_normalized_and_event_safe() -> Result<()> {
+    let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
     let test_name = "cross_section_runtime_graph_subset_is_compact_normalized_and_event_safe";
     let mut cli = setup_sm_differential_lu_cli(test_name)?;
     set_process_incoming_helicities(&mut cli, "epem_ddxg", "default", "[1, -1]")?;
@@ -387,8 +387,8 @@ fn cross_section_runtime_graph_subset_is_compact_normalized_and_event_safe() -> 
 }
 
 #[test]
-#[serial]
 fn correlated_runtime_graph_subsets_allow_different_graph_names() -> Result<()> {
+    let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
     let test_name = "correlated_runtime_graph_subsets_allow_different_graph_names";
     let mut cli = setup_sm_differential_lu_cli(test_name)?;
     set_process_incoming_helicities(&mut cli, "epem_ddxg", "default", "[1, -1]")?;

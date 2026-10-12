@@ -70,6 +70,7 @@ third-party = [
     { name = "figment", version = "0.10" },
     { name = "derive_more", version = "2" },
     { name = "syn", version = "2" },
+    { name = "tabled", version = "0.22" },
     # Stub generation is opt-in and must not leak into ordinary abi3 builds.
     { name = "pyo3-stub-gen" },
 ]

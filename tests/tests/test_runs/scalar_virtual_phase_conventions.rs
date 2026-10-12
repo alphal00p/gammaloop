@@ -8,8 +8,8 @@ use gammalooprs::{
 use std::f64::consts::PI;
 
 #[test]
-#[serial]
 fn scalar_virtual_triangle_mirrors_match_signed_born_interference() -> Result<()> {
+    let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
     let parent_mass: f64 = 1.0;
     // Feynman parameters give the UV-finite triangle integral
     // -i/(16π²) integral_{x,y>=0,x+y<=1} dx dy/(m²-M²xy).

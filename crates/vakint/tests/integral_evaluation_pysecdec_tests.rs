@@ -17,7 +17,7 @@ const N_DIGITS_PYSECDEC_EVALUATION_FOR_TESTS: u32 = 10;
 // PySecDec QMC is often very optimistic
 const MAX_PULL: f64 = 1.0e99;
 
-#[test_log::test]
+#[test]
 #[ignore = "manual PySecDec validation"]
 fn test_integrate_1l_simple() {
     test_utils::require_pysecdec_tests();
@@ -44,14 +44,14 @@ fn test_integrate_1l_simple() {
     );
 }
 
-#[test_log::test]
+#[test]
 #[ignore = "manual PySecDec validation"]
 fn test_integrate_1l_complex_and_signed_parameters() {
     use symbolica::domains::float::SingleFloat;
 
     test_utils::require_pysecdec_tests();
-    let vakint = Vakint::new().unwrap();
-    let euler_gamma = 0.577_215_664_901_532_9;
+    let vakint = test_utils::get_vakint(VakintSettings::default()).vakint;
+    let euler_gamma = std::f64::consts::EULER_GAMMA;
     let tadpole_coefficients = [
         1.0,
         1.0 - euler_gamma,
@@ -169,7 +169,7 @@ fn test_integrate_1l_complex_and_signed_parameters() {
     }
 }
 
-#[test_log::test]
+#[test]
 #[ignore = "manual PySecDec validation"]
 fn test_integrate_1l_cross_product() {
     test_utils::require_pysecdec_tests();
@@ -204,7 +204,7 @@ fn test_integrate_1l_cross_product() {
     );
 }
 
-#[test_log::test]
+#[test]
 #[ignore = "manual PySecDec validation"]
 fn test_integrate_1l_cross_product_with_additional_symbols_numerator() {
     test_utils::require_pysecdec_tests();
@@ -239,7 +239,7 @@ fn test_integrate_1l_cross_product_with_additional_symbols_numerator() {
     );
 }
 
-#[test_log::test]
+#[test]
 #[ignore = "manual PySecDec validation"]
 fn test_integrate_2l_different_masses() {
     test_utils::require_pysecdec_tests();
@@ -275,7 +275,7 @@ fn test_integrate_2l_different_masses() {
     );
 }
 
-#[test_log::test]
+#[test]
 #[ignore = "manual PySecDec validation"]
 fn test_integrate_3l_o_eps() {
     test_utils::require_pysecdec_tests();
@@ -314,7 +314,7 @@ fn test_integrate_3l_o_eps() {
 }
 
 #[allow(non_snake_case)]
-#[test_log::test]
+#[test]
 #[ignore = "manual PySecDec validation"]
 fn test_integrate_4l_h() {
     test_utils::require_pysecdec_tests();
@@ -356,7 +356,7 @@ fn test_integrate_4l_h() {
 }
 
 #[allow(non_snake_case)]
-#[test_log::test]
+#[test]
 #[ignore = "manual PySecDec validation"]
 fn test_integrate_4l_PR9d_from_FG_pinch() {
     test_utils::require_pysecdec_tests();
@@ -401,7 +401,7 @@ fn test_integrate_4l_PR9d_from_FG_pinch() {
 }
 
 #[allow(non_snake_case)]
-#[test_log::test]
+#[test]
 #[ignore = "manual PySecDec validation"]
 fn test_integrate_4l_PR11d() {
     test_utils::require_pysecdec_tests();
@@ -441,7 +441,7 @@ fn test_integrate_4l_PR11d() {
 }
 
 #[allow(non_snake_case)]
-#[test_log::test]
+#[test]
 #[ignore = "manual PySecDec validation"]
 fn test_integrate_4l_clover() {
     test_utils::require_pysecdec_tests();
@@ -481,7 +481,7 @@ fn test_integrate_4l_clover() {
 }
 
 #[allow(non_snake_case)]
-#[test_log::test]
+#[test]
 #[ignore = "manual PySecDec validation"]
 fn test_integrate_4l_clover_with_numerator() {
     test_utils::require_pysecdec_tests();

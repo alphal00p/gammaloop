@@ -42,7 +42,7 @@ The core package supports three related levels of work:
 - tensor networks represent a collection of tensors and choose an execution or contraction
   strategy.
 
-Networks can be assembled directly. With the `shadowing` feature, they can also be inferred
+Networks can be assembled directly. With the `symbolica` feature, they can also be inferred
 from Symbolica expressions whose functions carry recognizable tensor structure. Parsing is not
 mere string conversion: representation initialization, index variance, names, and the tensor
 library determine the inferred network.
@@ -53,7 +53,7 @@ library determine the inferred network.
 spenso = "0.6"
 ```
 
-Enable `shadowing` only when Symbolica-backed parsing or symbolic operations are needed. It
+Enable `symbolica` only when Symbolica-backed parsing or symbolic operations are needed. It
 pulls in the Symbolica integration and corresponding Linnet support. The default core remains
 useful for typed tensors and contractions without that layer.
 

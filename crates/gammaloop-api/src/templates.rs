@@ -1,41 +1,21 @@
 use color_eyre::Result;
-use rust_embed::RustEmbed;
+use include_dir::Dir;
 use std::fs;
 use std::path::Path;
 
 const LINNEST_PACKAGE_DIR: &str = "crates/linnest/typst";
 const KURVST_PACKAGE_DIR: &str = "crates/kurvst/typst";
 
-#[derive(RustEmbed)]
-#[folder = "../../assets/embedded"]
 pub struct Assets;
 
-#[derive(RustEmbed)]
-#[folder = "$CARGO_MANIFEST_DIR/../../assets/embedded/drawing/templates"]
-#[include = "*.typ"]
-#[include = "impl/*.typ"]
-struct GammaLoopTemplateAssets;
-
-#[derive(RustEmbed)]
-#[folder = "$CARGO_MANIFEST_DIR/../linnest/typst"]
-#[include = "src/*.typ"]
-#[include = "src/**/*.typ"]
-#[include = "typst.toml"]
-#[include = "linnest.wasm"]
-struct LinnestPackageAssets;
-
-#[derive(RustEmbed)]
-#[folder = "$CARGO_MANIFEST_DIR/../kurvst/typst"]
-#[include = "src/*.typ"]
-#[include = "src/**/*.typ"]
-#[include = "typst.toml"]
-#[include = "kurvst.wasm"]
-struct KurvstPackageAssets;
+include!(concat!(env!("OUT_DIR"), "/embedded_assets.rs"));
 
 impl Assets {
     /// Get all app template paths written under drawings/templates.
     pub fn template_paths() -> impl Iterator<Item = String> {
-        GammaLoopTemplateAssets::iter().map(|path| path.to_string())
+        GAMMALOOP_TEMPLATE_ASSETS
+            .files()
+            .map(|file| file.path().to_string_lossy().into_owned())
     }
 
     /// Extract all drawing templates to drawings/templates relative to target_dir.
@@ -44,9 +24,9 @@ impl Assets {
 
         fs::create_dir_all(&target)?;
 
-        extract_package::<GammaLoopTemplateAssets>(&target)?;
-        extract_package::<LinnestPackageAssets>(&target.join(LINNEST_PACKAGE_DIR))?;
-        extract_package::<KurvstPackageAssets>(&target.join(KURVST_PACKAGE_DIR))?;
+        extract_package(&GAMMALOOP_TEMPLATE_ASSETS, &target)?;
+        extract_package(&LINNEST_PACKAGE_ASSETS, &target.join(LINNEST_PACKAGE_DIR))?;
+        extract_package(&KURVST_PACKAGE_ASSETS, &target.join(KURVST_PACKAGE_DIR))?;
 
         Ok(())
     }
@@ -55,26 +35,23 @@ impl Assets {
     pub fn extract_justfile<P: AsRef<Path>>(target_dir: P) -> Result<()> {
         let justfile_path = target_dir.as_ref().join("justfile");
 
-        if let Some(file) = Self::get("drawing/justfile") {
-            fs::write(&justfile_path, file.data)?;
-        }
+        fs::write(
+            &justfile_path,
+            include_bytes!("../../../assets/embedded/drawing/justfile"),
+        )?;
 
         Ok(())
     }
 }
 
-fn extract_package<E: RustEmbed>(target: &Path) -> Result<()> {
+fn extract_package(assets: &Dir<'_>, target: &Path) -> Result<()> {
     fs::create_dir_all(target)?;
-    for package_path in E::iter() {
-        if let Some(file) = E::get(package_path.as_ref()) {
-            let target_path = target.join(package_path.as_ref());
-
-            if let Some(parent) = target_path.parent() {
-                fs::create_dir_all(parent)?;
-            }
-
-            fs::write(&target_path, file.data)?;
+    for file in assets.files() {
+        let target_path = target.join(file.path());
+        if let Some(parent) = target_path.parent() {
+            fs::create_dir_all(parent)?;
         }
+        fs::write(&target_path, file.contents())?;
     }
 
     Ok(())
@@ -123,6 +100,11 @@ mod tests {
         assert!(!templates.join("linnest.wasm").exists());
         assert!(!templates.join("kurvst.wasm").exists());
         assert!(!templates.join("curve.typ").exists());
+        for package in [LINNEST_PACKAGE_DIR, KURVST_PACKAGE_DIR] {
+            for excluded in ["docs", "examples", "benches", "README.md", "LICENSE"] {
+                assert!(!templates.join(package).join(excluded).exists());
+            }
+        }
 
         Assets::extract_justfile(tempdir.path())?;
         assert!(tempdir.path().join("justfile").is_file());

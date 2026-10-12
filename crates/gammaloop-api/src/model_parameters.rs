@@ -10,6 +10,7 @@ pub(crate) const MODEL_COMPLEX_VALUE_FORMAT_HINT: &str =
     "expects complex like 1.0, -1.0e13, 1.0+2.0i, or 1.0-2.0j";
 pub(crate) const MODEL_REAL_VALUE_FORMAT_HINT: &str = "expects real like 1.0, -1.0, or 1.0e13";
 
+#[cfg(any(feature = "cli", test))]
 pub(crate) fn model_value_format_hint(parameter_type: Option<ParameterType>) -> &'static str {
     match parameter_type {
         Some(ParameterType::Real) => MODEL_REAL_VALUE_FORMAT_HINT,

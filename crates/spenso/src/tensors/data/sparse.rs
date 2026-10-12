@@ -1,7 +1,7 @@
 use crate::algebra::algebraic_traits::RefZero;
 use crate::structure::dimension::Dimension;
 use crate::structure::representation::{RepName, Representation};
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 use crate::structure::slot::ParseableAind;
 use crate::structure::slot::{AbsInd, IsAbstractSlot, Slot};
 use crate::structure::{
@@ -21,13 +21,13 @@ use crate::{
 use delegate::delegate;
 use eyre::{Result, eyre};
 
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 use crate::{
     shadowing::symbolica_utils::atomic_expanded_label_id,
     shadowing::{ShadowMapping, Shadowable},
     tensors::parametric::{ExpandedCoefficent, FlatCoefficent, TensorCoefficient},
 };
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 use symbolica_utils::{IntoArgs, IntoSymbol};
 
 use bincode::{Decode, Encode};
@@ -37,7 +37,7 @@ use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 use std::{borrow::Cow, fmt::Display, hash::Hash};
 
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 use symbolica::{atom::Atom, atom::Symbol};
 
 use super::{
@@ -210,7 +210,7 @@ impl<T, S: TensorStructure, O: From<S> + TensorStructure> CastStructure<SparseTe
     }
 }
 
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 impl<T: Clone, S: TensorStructure> Shadowable for SparseTensor<T, S>
 where
     S: HasName + Clone,
@@ -220,7 +220,7 @@ where
 {
 }
 
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 impl<T: Clone, S: TensorStructure> ShadowMapping for SparseTensor<T, S>
 where
     S: HasName + Clone,
@@ -286,7 +286,7 @@ where
         self.structure.set_name(name);
     }
 
-    #[cfg(feature = "shadowing")]
+    #[cfg(feature = "symbolica")]
     fn expanded_coef(&self, id: FlatIndex) -> ExpandedCoefficent<Self::Args>
     where
         Self: TensorStructure,
@@ -296,7 +296,7 @@ where
         self.structure.expanded_coef(id)
     }
 
-    #[cfg(feature = "shadowing")]
+    #[cfg(feature = "symbolica")]
     fn flat_coef(&self, id: FlatIndex) -> FlatCoefficent<Self::Args>
     where
         Self: TensorStructure,
@@ -335,7 +335,7 @@ where
         }
         hashmap
     }
-    #[cfg(feature = "shadowing")]
+    #[cfg(feature = "symbolica")]
     fn symhashmap(&self, name: Symbol, args: &[Atom]) -> HashMap<Atom, T> {
         let mut hashmap = HashMap::new();
 

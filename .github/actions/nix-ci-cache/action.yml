@@ -1,0 +1,36 @@
+name: Authenticated Nix CI cache
+description: Reuse signed NixCI artifacts and bound concurrent hosted-runner builds.
+inputs:
+  netrc:
+    description: Netrc entry for cache.nix-ci.com
+    required: true
+runs:
+  using: composite
+  steps:
+    - name: Authenticate with the NixCI cache
+      shell: bash
+      env:
+        NIXCI_NETRC_SECRET: ${{ inputs.netrc }}
+      run: |
+        set -euo pipefail
+        if [ -z "$NIXCI_NETRC_SECRET" ]; then
+          echo '::error::Nix builds require the NIXCI_NETRC cache secret'
+          exit 1
+        fi
+        umask 077
+        netrc="$RUNNER_TEMP/nixci.netrc"
+        trap 'rm -f "$netrc"' ERR
+        printf '%s\n' "$NIXCI_NETRC_SECRET" > "$netrc"
+        curl --fail --silent --show-error --max-time 30 \
+          --netrc-file "$netrc" \
+          https://cache.nix-ci.com/nix-cache-info >/dev/null
+    - uses: NixOS/nix-installer-action@main
+      with:
+        extra-conf: |
+          netrc-file = ${{ runner.temp }}/nixci.netrc
+          extra-substituters = https://cache.nix-ci.com
+          extra-trusted-public-keys = nix-ci:g3xV5BDTLtIBZr/A00IU1x0EtKKlb7YLgBN2SgYgM6A=
+          max-jobs = 1
+          cores = 2
+          min-free = 4294967296
+          max-free = 8589934592

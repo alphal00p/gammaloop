@@ -1,14 +1,14 @@
 use derive_more::Display;
 use serde::{Deserialize, Serialize};
 
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 use symbolica::{atom::AtomView, coefficient::CoefficientView};
 use thiserror::Error;
 
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 use symbolica::atom::{Atom, Symbol};
 
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 use symbolica_utils::SerializableSymbol;
 
 /// A Dimension
@@ -27,12 +27,12 @@ use symbolica_utils::SerializableSymbol;
     // bincode_trait_derive::BorrowDecodeFromDecode,
 )]
 #[cfg_attr(
-    feature = "shadowing",
+    feature = "symbolica",
     trait_decode(trait = symbolica::state::HasStateMap),
 )]
 pub enum Dimension {
     Concrete(usize),
-    #[cfg(feature = "shadowing")]
+    #[cfg(feature = "symbolica")]
     Symbolic(SerializableSymbol),
 }
 
@@ -41,7 +41,7 @@ impl Dimension {
         Self::Concrete(value)
     }
 
-    #[cfg(feature = "shadowing")]
+    #[cfg(feature = "symbolica")]
     pub fn to_symbolic(&self) -> Atom {
         match self {
             Self::Concrete(c) => Atom::num(*c as i64),
@@ -54,7 +54,7 @@ impl Ord for Dimension {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
         match (self, other) {
             (Dimension::Concrete(s), Dimension::Concrete(o)) => s.cmp(o),
-            #[cfg(feature = "shadowing")]
+            #[cfg(feature = "symbolica")]
             _ => std::cmp::Ordering::Equal,
         }
     }
@@ -77,7 +77,7 @@ pub enum DimensionError {
     #[error("Dimension is not natural")]
     NotNatural,
 
-    #[cfg(feature = "shadowing")]
+    #[cfg(feature = "symbolica")]
     #[error("Dimension is not a var or int: {0}")]
     NotVarOrInt(Atom),
 }
@@ -100,14 +100,14 @@ impl From<usize> for Dimension {
     }
 }
 
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 impl From<Symbol> for Dimension {
     fn from(value: Symbol) -> Self {
         Dimension::Symbolic(value.into())
     }
 }
 
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 impl<'a> TryFrom<AtomView<'a>> for Dimension {
     type Error = DimensionError;
     fn try_from(value: AtomView<'a>) -> Result<Self, Self::Error> {
@@ -156,7 +156,7 @@ impl PartialEq<Dimension> for usize {
 }
 
 #[cfg(test)]
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 mod shadowing_tests {
     use symbolica::{atom::Atom, function, symbol};
 

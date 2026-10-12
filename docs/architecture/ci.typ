@@ -27,6 +27,24 @@ forcing rebuilds.
   [`.github/scripts/ci-report.mjs`], [Collect and compare existing CI runs],
 )
 
+Actions use Rust 1.98.1, matching the Nix toolchain, for native and WebAssembly
+builds. Update the toolchains deliberately together.
+Main's native Actions jobs install Just 1.58.0 rather than the Ubuntu package,
+which cannot parse the shared recipe attributes. Fast-test jobs also install
+Typst 0.15.1 and prebuilt Jujutsu 0.45.1 for drawing and provenance tests.
+These tools are verified before the test suite starts on Linux and macOS.
+Manual dispatches can set `run_native_tests = false` for static-check debugging.
+It defaults to true; main pushes always run the native tests. Nix's runtime suite
+is independent of this manual option.
+
+Nix Actions producers and matrix workers authenticate to the NixCI cache before
+realizing their exact inputs. They build one derivation at a time with two build
+cores and retain output roots through Hestia publication. Nix's automatic store
+collection keeps a 4–8 GiB free-space watermark; the producer checks for at least
+12 GiB free before compiling and reports free space after realization. The
+8 GiB producer-publication limit still applies to the final closure, independently
+of temporary compiler/store usage.
+
 Automatic NixCI work covers tests, Clippy, doctests, formatting, graph validation,
 the full five-product documentation check, necessary producers and final success.
 The documentation check validates generated references and examples, renders
@@ -49,6 +67,12 @@ separate because their global type registries can change the generated APIs when
 combined. Unit-test crates and Rustdoc snippets still require their own compilation.
 Clippy and doctests share check dependencies but retain workspace-wide source
 inputs, so their rebuild isolation differs from package test artifacts.
+
+Prebuild and normal dependency commands omit feature selections already encoded
+by their generated Cargo anchors. Test dependency commands retain features on
+selected component crates and all forwarded selectors, since a selector can
+activate an optional dependency on a selected root. Expanded feature vectors still define
+cache contexts and workspace checks.
 
 Core API tests import UFO models using Python packages pinned in `uv.lock`.
 These dependencies enter the runtime environment through `PYTHONPATH`; they do
@@ -138,10 +162,11 @@ a read-only secondary cache. The temporary credential file has mode 0600 and
 is removed on success or failure. Compiler products are cached; measurements
 always run afresh.
 
-The single manifest in `benchmarks/performance/suite.toml` defines four workloads
-and three scalar routes, producing ten comparisons. Scalar workloads share their
-point corpus and settings. The runner renders `scalar.toml` with each workload's
-graph and route settings; `gg-hhh-gl15.toml` defines the physical workload.
+The single manifest in `benchmarks/performance/suite.toml` defines twelve
+comparisons: the existing physical workload and nine scalar route cases, plus
+two cases that build and benchmark every evaluator method. Scalar route cases
+share their point corpus and settings. The runner renders `scalar.toml` with
+each workload's graph and route settings; the other cases use fixed cards.
 The exact rendered card and declared inputs, including scalar DOT graphs and
 shared model and restriction files, are hashed before measurement. Both
 revisions receive those same bytes.
@@ -153,6 +178,8 @@ revisions receive those same bytes.
   [Scalar GL04, q₁²], [Quadratic Lorentz numerator], [All three LU routes],
   [Scalar GL16, q₇²], [A different quadratic topology], [All three LU routes],
   [Scalar GL02, (q₁⁰)⁴], [Quartic energy numerator], [All three LU routes],
+  [Scalar GL16 evaluator probe], [Reachable aliases and selected function maps], [All four evaluator methods],
+  [Two-loop gluon self-energy GL1], [Weighted local-UV guards and runtime arithmetic], [All four evaluator methods],
 )
 
 The scalar routes are orientation-local 3D with the summed evaluator,
@@ -166,18 +193,35 @@ forests, counterterms and evaluators are generated afresh in every trial.
 These fixtures exercise numerator and route differences without relying on
 the exactly vanishing massless cuts of several Lorentz-quartic examples.
 
+The two evaluator probes exercise complementary performance mechanisms.
+GL16 includes local and integrated UV terms, with 174 orientations in each of
+two evaluator stacks and substantial shared alias catalogs. GL1 retains nine
+orientations with one fermion-edge sign fixed, plus local UV terms. Integrated
+addbacks, soft counterterms, threshold subtraction and thermal settings are
+disabled for GL1. Separate retained-source validation found repeated weighted
+guards in GL1: shared regions reduced root guards from 93 to 21 and final
+SingleParametric root inversions from 639 to 299. These diagnostic exports are
+outside the measured path. Both probes build SingleParametric, Iterative,
+SummedFunctionMap and Summed, then check all four at the same two fixed points.
+They pin graph and LMB selectors and sum their retained orientations, with
+stability rotations disabled.
+
 Generation measures the complete import, generation and state-save command.
 For scalar cases, graph enumeration is outside this timing because the graph
 is supplied as a fixed DOT input. GL15 also runs graph enumeration.
 Numeric metadata retains the native per-graph total and the Spenso, Symbolica
-and compilation durations from `generation_summary.json`. These explain
-generation costs without changing the wall-time metric or its thresholds;
-the native total excludes CLI initialization, import and state saving.
-Runtime measures the existing `bench` command at four distinct fixed points,
+and compilation durations from `generation_summary.json`. The native total
+excludes CLI initialization, import and state saving. All-mode cases also gate
+each evaluator's construction duration from the existing structured milestones,
+summed across the graph's complete evaluator stacks. Missing, duplicate or
+unfinished stages invalidate the measurement. Whole-generation peak RAM is
+gated separately; it is not attributed to individual evaluator modes.
+Runtime measures the existing `bench` command at four distinct fixed points
+for the original cases, and two points for each all-evaluator probe,
 with caching disabled and evaluator compilation disabled. Each point is
 repeated within its own warmed benchmark. GL15 fixes one helicity/external
 configuration and selects one orientation and LMB channel, with stability
-rotations disabled. Scalars retain the correctness tests' rotation settings
+rotations disabled. Scalar route cases retain the correctness tests' rotation settings
 and sum all orientations and LMB channels at nine-dimensional points.
 `bench` disables event generation for its timed batches; selectors and
 observables are absent. This measures fixed-point integrand evaluation rather
@@ -185,22 +229,37 @@ than a batch of changing integration points. Large scalar numerators,
 compiled evaluators and isolated cold-load cost remain outside this fast gate.
 The extended scalar correctness suite supplies timing telemetry for the
 long Lorentz-quartic cases, including GL16 q₇⁴, on main.
-The requested benchmark duration per point is five seconds for GL15 and two
-seconds for scalars. The CLI calibrates sample counts from its ten-sample
-warmup, so the actual warmed loop can be shorter than that target.
+The requested benchmark duration per point is five seconds for GL15, two
+seconds for the scalar route cases, 0.2 seconds per evaluator for GL16 and
+one second per evaluator for GL1. Every point uses ten warmup samples and ten timed batches. The CLI
+calibrates sample counts from its warmup, so the actual warmed loop can be
+shorter than that target. Each revision generates its state once per trial,
+regardless of the number of methods.
+
+Measurement schema 2 records a separate numeric output vector and runtime
+metric for every requested evaluator method. Each method must match its own
+revision's reference evaluator and the baseline reference at every corpus point.
+This also rejects a method-specific incorrect result shared by both revisions.
+The runner generates one fresh state per revision and trial, then switches
+evaluator methods in one read-only benchmark session. Timings are never
+averaged across evaluator methods.
 
 Five baseline/candidate pairs alternate execution order. A suspected regression
 requires another five pairs starting in the opposite order. Generation must
-increase by more than 20% and 0.5 seconds; warmed runtime must increase by more
-than 15% and one microsecond per sample. At least four pairs must be slower,
-and the effect must exceed three times the robust paired noise estimate.
+increase by more than 20% and 0.5 seconds; each evaluator's construction by
+more than 20% and 0.1 seconds; each warmed runtime by more than 15% and one
+microsecond per sample; peak RAM by more than 20% and 64 MiB. At least four
+pairs must be slower, and the effect must exceed three times the robust paired noise estimate.
+Noise can make a comparison inconclusive only when the paired absolute delta
+plus its noise margin also exceeds the absolute budget. Large relative noise
+on a tiny operation does not by itself block the gate.
 This is a noise-screening policy, not a statistical confidence interval.
 Every physical result must be finite, nonzero and agree between revisions.
 Scalar results use relative tolerance 10⁻⁹ with no absolute allowance, because
 an absolute floor suitable for GL15 could mask changes to their smaller values.
 Each topology/route comparison, including any confirmation run, has a
 four-minute budget. The collection can take longer than four minutes.
-Compilation is outside that budget. Exceeding it yields
+Building the two CLI binaries is outside that budget. Exceeding it yields
 an inconclusive failure rather than a claimed performance regression.
 
 The comparator exits zero for a clean comparison, one for a confirmed
@@ -227,7 +286,7 @@ do not trigger this workflow. Manual benchmark dispatch remains available.
 A relevant new commit while `final-review` remains set must rerun the gate.
 Returning to development means removing that label; PR-number concurrency
 cancels superseded work. Compiled CLI packages are reused from Nix caches, but
-the benchmark always measures fresh states. All ten cases run sequentially on
+the benchmark always measures fresh states. All twelve cases run sequentially on
 one worker in a single runner invocation and pinned runtime shell, to avoid timing
 interference and reuse the two CLI packages built once before measurement.
 The runner gives each case separate work and output subdirectories. Every case
@@ -273,7 +332,7 @@ label. Returning to development means removing the label and committing
 For rollout, create the `final-review` label first. After the readiness workflow
 is merged and its successful check is registered, add `NixCI readiness`, bound
 to GitHub Actions, to the existing `PRs must pass` ruleset. Preserve the required
-`deploy packages.x86_64-linux.nix-ci-passed` status from NixCI and all unrelated
+`NixCI` suite status from NixCI and all unrelated
 rules. The readiness check supplements successful tests; it does not replace them.
 
 Prefer an available completion notification over keeping an agent polling CI.

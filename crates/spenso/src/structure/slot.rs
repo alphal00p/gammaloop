@@ -7,14 +7,14 @@ use super::{
 };
 use crate::structure::dimension::Dimension;
 use bincode::Encode;
-// #[cfg(feature = "shadowing")]
+// #[cfg(feature = "symbolica")]
 use serde::{Deserialize, Serialize};
 use std::hash::Hash;
 use std::{
     cmp::Ordering,
     fmt::{Debug, Display},
 };
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 use symbolica::{
     atom::{Atom, AtomView, Symbol},
     symbol,
@@ -38,7 +38,7 @@ use thiserror::Error;
     // bincode_trait_derive::BorrowDecodeFromDecode,
 )]
 #[cfg_attr(
-    feature = "shadowing",
+    feature = "symbolica",
     trait_decode(trait = symbolica::state::HasStateMap),
 )]
 /// A [`Slot`] is an index, identified by a `usize` and a [`Representation`].
@@ -95,7 +95,7 @@ pub enum SlotError {
     Any(#[from] eyre::Error),
 }
 
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 /// Can construct a `Slot` from an `AtomView` of the form
 /// `<representation>(<dimension>, <index>)`.
 ///
@@ -178,7 +178,7 @@ pub trait AbsInd:
 {
 }
 
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 pub trait ParseableAind: Sized {
     type Error: Into<SlotError>;
     fn from_view(view: AtomView<'_>) -> Result<Self, Self::Error>;
@@ -233,16 +233,16 @@ pub trait IsAbstractSlot: Copy + PartialEq + Eq + Debug + Clone + Hash + Ord + D
         }
     }
 
-    #[cfg(feature = "shadowing")]
+    #[cfg(feature = "symbolica")]
     /// using the function builder of the representation add the abstract index as an argument, and finish it to an Atom.
     fn to_atom(&self) -> Atom
     where
         Self::Aind: ParseableAind;
-    #[cfg(feature = "shadowing")]
+    #[cfg(feature = "symbolica")]
     fn to_symbolic_wrapped(&self) -> Atom
     where
         Self::Aind: ParseableAind;
-    // #[cfg(feature = "shadowing")]
+    // #[cfg(feature = "symbolica")]
     // fn try_from_view<'a>(v: AtomView<'a>) -> Result<Self, SlotError>
     // where
     //     Self::Aind: TryFrom<AtomView<'a>>,
@@ -287,14 +287,14 @@ impl<T: RepName, A: AbsInd> IsAbstractSlot for Slot<T, A> {
     fn set_aind(&mut self, aind: Self::Aind) {
         self.aind = aind;
     }
-    #[cfg(feature = "shadowing")]
+    #[cfg(feature = "symbolica")]
     fn to_atom(&self) -> Atom
     where
         Self::Aind: ParseableAind,
     {
         self.rep.to_symbolic([self.aind.to_atom()])
     }
-    #[cfg(feature = "shadowing")]
+    #[cfg(feature = "symbolica")]
     fn to_symbolic_wrapped(&self) -> Atom
     where
         Self::Aind: ParseableAind,
@@ -304,7 +304,7 @@ impl<T: RepName, A: AbsInd> IsAbstractSlot for Slot<T, A> {
         self.rep
             .to_symbolic([function!(symbol!("indexid"), self.aind.to_atom())])
     }
-    // #[cfg(feature = "shadowing")]
+    // #[cfg(feature = "symbolica")]
     // fn try_from_view<'a>(v: AtomView<'a>) -> Result<Self, SlotError>
     // where
     //     Self::Aind: TryFrom<AtomView<'a>>,
@@ -326,7 +326,7 @@ impl<T: RepName, Aind: AbsInd> std::fmt::Display for Slot<T, Aind> {
     }
 }
 
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 impl<T: RepName, Aind: AbsInd> Slot<T, Aind>
 where
     Atom: From<Aind>,
@@ -358,7 +358,7 @@ impl<T: RepName, Aind: AbsInd> DualSlotTo for Slot<T, Aind> {
 }
 
 #[cfg(test)]
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 mod shadowing_tests {
     use insta::assert_snapshot;
     use symbolica::{atom::AtomCore, parse, symbol};

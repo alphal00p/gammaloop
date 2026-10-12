@@ -616,7 +616,8 @@ A profile may contain failed fits even when its process exits successfully.
   substantial time in evaluator preprocessing.],
 )
 
-The generation binary is the dev-optim build with `ufo_support`, Symbolica
+The generation binary is the dev-optim build with `ufo_support` (now named
+`ufo-import`), Symbolica
 revision `6cdca414400ac6201ff6f692a5fa9ff21da5da58`, and SHA-256
 `41af23019c808eebf1c674ee9856ce0fb2696ae799eb4bf94651f6675697bbb9`.
 The jj change is `yllzpryx`; its build-time commit is

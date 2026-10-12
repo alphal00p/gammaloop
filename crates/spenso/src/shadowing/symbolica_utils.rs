@@ -298,20 +298,20 @@ pub fn atomic_expanded_label<I: IntoSymbol>(indices: &[ConcreteIndex], name: I) 
     let id = name.ref_into_symbol();
     atomic_expanded_label_id(indices, id, &[])
 }
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 pub fn atomic_flat_label<I: IntoSymbol>(index: usize, name: I) -> Atom {
     let id = name.ref_into_symbol();
     atomic_flat_label_id(index, id)
 }
 
 #[allow(clippy::cast_possible_wrap)]
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 pub fn atomic_flat_label_id(index: usize, id: Symbol) -> Atom {
     let mut value_builder = FunctionBuilder::new(id);
     value_builder = value_builder.add_arg(Atom::num(index as i64).as_atom_view());
     value_builder.finish()
 }
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 #[allow(clippy::cast_possible_wrap)]
 pub fn atomic_expanded_label_id(indices: &[ConcreteIndex], name: Symbol, args: &[Atom]) -> Atom {
     let mut value_builder = FunctionBuilder::new(name);
@@ -327,14 +327,14 @@ pub fn atomic_expanded_label_id(indices: &[ConcreteIndex], name: Symbol, args: &
     value_builder.add_arg(&indices).finish()
 }
 
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 pub trait IntoSymbol {
     fn ref_into_symbol(&self) -> Symbol;
 
     fn from_str(s: &str) -> Self;
 }
 
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 pub trait IntoArgs {
     fn ref_into_args(&self) -> impl Iterator<Item = Atom>;
     fn args(&self) -> Vec<Atom> {
@@ -343,7 +343,7 @@ pub trait IntoArgs {
     fn cooked_name(&self) -> std::string::String;
 }
 
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 impl IntoArgs for usize {
     fn ref_into_args(&self) -> impl Iterator<Item = Atom> {
         std::iter::once(Atom::num(*self as i64))
@@ -353,7 +353,7 @@ impl IntoArgs for usize {
     }
 }
 
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 impl IntoArgs for () {
     fn ref_into_args(&self) -> impl Iterator<Item = Atom> {
         std::iter::empty()
@@ -372,7 +372,7 @@ impl Display for NoArgs {
     }
 }
 
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 impl IntoArgs for NoArgs {
     fn ref_into_args(&self) -> impl Iterator<Item = Atom> {
         std::iter::empty()
@@ -382,7 +382,7 @@ impl IntoArgs for NoArgs {
     }
 }
 
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 impl IntoArgs for Atom {
     fn ref_into_args(&self) -> impl Iterator<Item = Atom> {
         std::iter::once(self.clone())
@@ -393,7 +393,7 @@ impl IntoArgs for Atom {
     }
 }
 
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 impl IntoArgs for Vec<Atom> {
     fn ref_into_args(&self) -> impl Iterator<Item = Atom> {
         self.iter().cloned()
@@ -406,7 +406,7 @@ impl IntoArgs for Vec<Atom> {
     }
 }
 
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 impl<const N: usize> IntoArgs for [Atom; N] {
     fn ref_into_args(&self) -> impl Iterator<Item = Atom> {
         self.iter().cloned()
@@ -419,7 +419,7 @@ impl<const N: usize> IntoArgs for [Atom; N] {
     }
 }
 
-// #[cfg(feature = "shadowing")]
+// #[cfg(feature = "symbolica")]
 // impl IntoSymbol for String {
 //     fn ref_into_symbol(&self) -> Symbol {
 //         symbol!(self)
@@ -430,7 +430,7 @@ impl<const N: usize> IntoArgs for [Atom; N] {
 //     }
 // }
 
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 impl IntoSymbol for Symbol {
     fn ref_into_symbol(&self) -> Symbol {
         *self
@@ -441,7 +441,7 @@ impl IntoSymbol for Symbol {
     }
 }
 
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 impl IntoSymbol for SerializableSymbol {
     fn ref_into_symbol(&self) -> Symbol {
         self.symbol
@@ -452,7 +452,7 @@ impl IntoSymbol for SerializableSymbol {
     }
 }
 
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 impl IntoSymbol for std::string::String {
     fn ref_into_symbol(&self) -> Symbol {
         symbol!(self)

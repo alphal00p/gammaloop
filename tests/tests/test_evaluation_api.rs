@@ -13,7 +13,6 @@ use gammaloop_integration_tests::{
     get_tests_workspace_path, setup_sm_differential_lu_cli,
 };
 use ndarray::{Array1, Array2};
-use serial_test::serial;
 
 fn configure_jet_quantities(cli: &mut CLIState) -> Result<()> {
     configure_jet_quantities_with_clustered_pdgs(cli, None)
@@ -340,8 +339,8 @@ fn event_multiset(events: impl IntoIterator<Item = String>) -> BTreeMap<String, 
 }
 
 #[test]
-#[serial]
 fn lu_rust_get_integrand_info_reports_groups_orientations_lmbs_and_cuts() -> Result<()> {
+    let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
     let cli = setup_sm_differential_lu_cli("lu_rust_get_integrand_info")?;
     let (process_id, integrand_name) = cli.state.find_integrand_ref(None, None)?;
     let info = cli.state.get_integrand_info(None, None)?;
@@ -469,8 +468,8 @@ fn lu_rust_get_integrand_info_reports_groups_orientations_lmbs_and_cuts() -> Res
 }
 
 #[test]
-#[serial]
 fn skip_thresholds_that_are_cuts_excludes_every_physical_cut_association() -> Result<()> {
+    let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
     let cli = get_test_cli(
         Some("test_epem_tth_inspect_nlo_gl18.toml".into()),
         get_tests_workspace_path()
@@ -522,8 +521,8 @@ fn skip_thresholds_that_are_cuts_excludes_every_physical_cut_association() -> Re
 }
 
 #[test]
-#[serial]
 fn gl20_multichannel_local_inspect_event_snapshot() -> Result<()> {
+    let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
     let test_name = "gl20_multichannel_local_inspect_event_snapshot";
     let mut cli = get_test_cli(
         Some("test_epem_tth_multichannel_gl20.toml".into()),
@@ -758,8 +757,8 @@ fn gl20_multichannel_local_inspect_event_snapshot() -> Result<()> {
 }
 
 #[test]
-#[serial]
 fn lu_rust_generated_events_follow_graph_grouping_and_cut_ids() -> Result<()> {
+    let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
     let mut cli = setup_sm_differential_lu_cli("lu_rust_generated_event_grouping")?;
     cli.run_command(
         "set process kv general.generate_events=true general.store_additional_weights_in_event=true",
@@ -822,8 +821,8 @@ fn lu_rust_generated_events_follow_graph_grouping_and_cut_ids() -> Result<()> {
 }
 
 #[test]
-#[serial]
 fn lu_rust_precise_evaluate_samples_returns_precision_tagged_results() -> Result<()> {
+    let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
     let mut cli = setup_sm_differential_lu_cli("lu_rust_precise_evaluate_samples")?;
     configure_jet_quantities(&mut cli)?;
     add_jet_observables(&mut cli)?;
@@ -848,8 +847,8 @@ fn lu_rust_precise_evaluate_samples_returns_precision_tagged_results() -> Result
 }
 
 #[test]
-#[serial]
 fn lu_rust_evaluate_samples_respect_event_generation_and_observables() -> Result<()> {
+    let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
     let mut cli = setup_sm_differential_lu_cli("lu_rust_evaluate_samples_end_to_end")?;
     let point = default_xspace_point(&cli)?;
 
@@ -947,9 +946,9 @@ fn lu_rust_evaluate_samples_respect_event_generation_and_observables() -> Result
 }
 
 #[test]
-#[serial]
 fn lu_rust_evaluate_samples_can_override_returned_events_without_forcing_internal_generation()
 -> Result<()> {
+    let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
     let mut cli = setup_sm_differential_lu_cli(
         "lu_rust_evaluate_samples_can_override_returned_events_without_forcing_internal_generation",
     )?;
@@ -1009,8 +1008,8 @@ fn lu_rust_evaluate_samples_can_override_returned_events_without_forcing_interna
 }
 
 #[test]
-#[serial]
 fn lu_rust_xspace_integrator_weights_align_per_sample_and_scale_events() -> Result<()> {
+    let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
     let mut cli = setup_sm_differential_lu_cli("lu_rust_xspace_integrator_weights_per_sample")?;
     cli.run_command(
         "set process kv general.generate_events=true general.store_additional_weights_in_event=true",
@@ -1064,8 +1063,8 @@ fn lu_rust_xspace_integrator_weights_align_per_sample_and_scale_events() -> Resu
 }
 
 #[test]
-#[serial]
 fn lu_rust_xspace_integrator_weights_scale_observable_histograms() -> Result<()> {
+    let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
     let mut unit_cli = setup_sm_differential_lu_cli("lu_rust_xspace_integrator_weights_unit")?;
     unit_cli.run_command("set process kv general.generate_events=true")?;
     configure_jet_quantities(&mut unit_cli)?;
@@ -1114,8 +1113,8 @@ fn lu_rust_xspace_integrator_weights_scale_observable_histograms() -> Result<()>
 }
 
 #[test]
-#[serial]
 fn lu_rust_default_clustered_pdgs_match_explicit_massless_qcd_list() -> Result<()> {
+    let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
     let mut default_cli = setup_sm_differential_lu_cli("lu_rust_default_clustered_pdgs")?;
     default_cli.run_command("set process kv general.generate_events=true")?;
     configure_jet_quantities(&mut default_cli)?;
@@ -1141,8 +1140,8 @@ fn lu_rust_default_clustered_pdgs_match_explicit_massless_qcd_list() -> Result<(
 }
 
 #[test]
-#[serial]
 fn lu_rust_momentum_space_evaluate_sample_reports_no_parameterization_jacobian() -> Result<()> {
+    let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
     let mut cli = setup_sm_differential_lu_cli("lu_rust_momentum_space_evaluate_sample")?;
     cli.run_command("set process kv general.generate_events=true")?;
     let point = default_momentum_space_point(&cli)?;
@@ -1162,8 +1161,8 @@ fn lu_rust_momentum_space_evaluate_sample_reports_no_parameterization_jacobian()
 }
 
 #[test]
-#[serial]
 fn lu_rust_momentum_space_integrator_weights_scale_events_without_jacobian() -> Result<()> {
+    let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
     let mut cli =
         setup_sm_differential_lu_cli("lu_rust_momentum_space_integrator_weights_scale_events")?;
     cli.run_command("set process kv general.generate_events=true")?;
@@ -1218,8 +1217,8 @@ fn lu_rust_momentum_space_integrator_weights_scale_events_without_jacobian() -> 
 }
 
 #[test]
-#[serial]
 fn lu_rust_explicit_lmb_multichanneling_groups_channel_events_and_tags_metadata() -> Result<()> {
+    let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
     let point_group_label = "lu_rust_explicit_lmb_multichanneling_explicit";
     let mut explicit_cli = setup_sm_differential_lu_cli(point_group_label)?;
     explicit_cli.run_command(
@@ -1397,8 +1396,8 @@ lmb_basis_ids = {{ {master_graph_name} = [1, 0] }}
 }
 
 #[test]
-#[serial]
 fn amplitude_group_members_resolve_lmb_overrides_through_the_master() -> Result<()> {
+    let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
     let test_name = "amplitude_group_members_resolve_lmb_overrides_through_the_master";
     let mut cli = get_test_cli(
         None,
@@ -1541,8 +1540,8 @@ lmb_basis_ids = {{ "{master_name}" = [{override_basis_id}] }}
 }
 
 #[test]
-#[serial]
 fn lu_threshold_counterterms_follow_lmb_channel_normalization() -> Result<()> {
+    let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
     let test_name = "lu_threshold_counterterms_follow_lmb_channel_normalization";
     let mut cli = get_test_cli(
         Some("generate_threshold_subtraction_mass_approach_dotted.toml".into()),
@@ -1851,8 +1850,8 @@ lmb_basis_ids = {{ "{graph_name}" = [{}, {}] }}
 }
 
 #[test]
-#[serial]
 fn lu_rust_minimal_output_keeps_events_and_observables() -> Result<()> {
+    let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
     let mut cli = setup_sm_differential_lu_cli("lu_rust_minimal_output")?;
     cli.run_command(
         "set process kv general.generate_events=true general.store_additional_weights_in_event=true",

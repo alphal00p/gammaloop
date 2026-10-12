@@ -6,7 +6,7 @@ mod streaming;
 pub use streaming::{ForceLayoutStream, LayoutFrame};
 #[cfg(test)]
 mod tests;
-#[cfg(feature = "custom")]
+#[cfg(all(target_arch = "wasm32", feature = "typst-plugin"))]
 mod wasm_random;
 
 pub use api::{
@@ -60,10 +60,10 @@ use rand::rngs::SmallRng;
 use rkyv::with::{ArchiveWith, DeserializeWith, SerializeWith};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashMap, HashSet};
+use std::fs::File;
 use std::io::BufWriter;
 use std::ops::{Deref, IndexMut};
 use std::path::Path;
-use std::{f64, fs::File};
 
 #[cfg(all(target_arch = "wasm32", feature = "typst-plugin"))]
 use wasm_minimal_protocol::*;
@@ -72,14 +72,14 @@ use wasm_minimal_protocol::*;
 initiate_protocol!();
 
 // Custom getrandom implementation for WASM
-#[cfg(feature = "custom")]
+#[cfg(all(target_arch = "wasm32", feature = "typst-plugin"))]
 use getrandom::register_custom_getrandom;
-#[cfg(feature = "custom")]
+#[cfg(all(target_arch = "wasm32", feature = "typst-plugin"))]
 use wasm_random::custom_getrandom;
 
 use crate::geom::{tangent_angle_toward_c_side, GeomError};
 
-#[cfg(feature = "custom")]
+#[cfg(all(target_arch = "wasm32", feature = "typst-plugin"))]
 register_custom_getrandom!(custom_getrandom);
 
 fn dot_statement_value<'a>(

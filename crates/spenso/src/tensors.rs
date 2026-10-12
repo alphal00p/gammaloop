@@ -1,6 +1,6 @@
 pub mod complex;
 pub mod data;
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 pub mod parametric;
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 pub mod symbolic;

@@ -268,10 +268,7 @@ impl SymjitComplexEvaluatorGL {
         }
     }
 }
-#[cfg_attr(
-    feature = "python_api",
-    pyo3::pyclass(from_py_object, get_all, set_all)
-)]
+#[cfg_attr(feature = "python", pyo3::pyclass(from_py_object, get_all, set_all))]
 #[derive(Debug, Clone, Deserialize, Serialize, Encode, Decode, PartialEq, JsonSchema)]
 pub enum EvaluatorMethod {
     SingleParametric,
@@ -552,16 +549,15 @@ impl EvaluatorStack {
                             // physical sector; eliminating it afterwards is too
                             // late because Symbolica has already formed
                             // infinity.
-                            let map = |atom: &Atom| {
-                                GS.collect_orientation_if(
-                                    orientation.select(production_id.select(atom)),
-                                )
-                            };
-                            let mut selected = AliasedAtom::from(map(atom.get_root()));
-                            for (alias, body) in atom.get_aliases() {
-                                selected.register_alias(alias.clone(), map(body));
-                            }
-                            selected.prune();
+                            // Each orientation is a separate output, so handles
+                            // keep their names. Only bodies still reached after
+                            // selection are specialized and retained.
+                            let select = Self::residue_map_selector(orientation, *production_id);
+                            let selected = Self::select_reachable(
+                                atom,
+                                |atom| GS.collect_orientation_if(select(atom)),
+                                Atom::clone,
+                            );
                             debug!(
                                 "Selected iterative residue-map branch {}: {}",
                                 production_id.0,
@@ -592,123 +588,72 @@ impl EvaluatorStack {
         let _progress_guard = crate::processes::enter_detailed_progress_span(
             "Generating Summed Function Map Evaluator",
         );
-        let first_orientation = orientations.first().ok_or_else(|| {
-            eyre!("summed function-map evaluator requires at least one residue-map orientation")
-        })?;
-        let params: Vec<Atom> = (&param_builder.pairs)
-            .into_iter()
-            .flat_map(|p| p.params.clone())
-            .collect();
-        let mut fn_map = param_builder.fn_map.clone();
-
-        // The exact residue-map key is an argument independent of physical
-        // edge signs: I(map_id, sign(1), sign(2), ...).
-        let residue_map_id_arg = symbol!("residue_map_id_arg");
-
-        let mut alias_entries = Vec::new();
-        let entries: Vec<FnMapEntry> = atoms
+        if orientations.is_empty() {
+            return Err(eyre!(
+                "summed function-map evaluator requires at least one residue-map orientation"
+            ));
+        }
+        // Select each residue-map entry symbolically, as the summed evaluator
+        // does, and keep it behind the argument-free alias integrand(i, map_id).
+        // Passing the selector and signs as call arguments bound them only
+        // during linearization, so no downstream call simplified and the
+        // program grew by orders of magnitude before common-subexpression
+        // elimination.
+        let sum = atoms
             .iter()
             .enumerate()
-            .map(|(i, a)| {
-                let mut args = vec![];
-                let mut lhs = FunctionBuilder::new(GS.integrand);
-                lhs = lhs.add_arg(i);
-                lhs = lhs.add_arg(residue_map_id_arg);
-                args.push(residue_map_id_arg.into());
-                for (e, _) in first_orientation {
-                    lhs = lhs.add_arg(GS.sign(e));
-                    args.push(Indeterminate::try_from(GS.sign(e)).unwrap());
-                }
-                // Explicit arguments keep alias bodies in scope when the
-                // integrand call is replaced by its body before compilation.
-                let alias_calls = a
-                    .get_aliases()
-                    .keys()
-                    .map(|alias| {
-                        let call = FunctionBuilder::from_atom(alias)
-                            .add_args(args.iter().cloned().map(Atom::from))
-                            .finish();
-                        Replacement::new(alias.to_pattern(), call)
-                    })
-                    .collect::<Vec<_>>();
-                let map = |atom: &Atom| {
-                    GS.collect_orientation_if(Self::parametrize_residue_map_selectors(
-                        atom,
-                        Atom::var(residue_map_id_arg),
-                    ))
-                    .replace_multiple(&alias_calls)
-                };
-                let param_integrand = map(a.get_root());
-                for (alias, body) in a.get_aliases() {
-                    let rhs = map(body);
-                    let function = alias.as_fun_view().unwrap();
-                    let tags = function
-                        .iter()
-                        .map(|arg| arg.to_owned())
-                        .collect::<Vec<_>>();
-                    fn_map
-                        .add_tagged_function(
-                            function.get_symbol(),
-                            tags.clone(),
-                            args.clone(),
-                            rhs.clone(),
-                        )
-                        .map_err(|e| eyre!(e))?;
-                    if settings.store_atom {
-                        alias_entries.push(FnMapEntry {
-                            inlining: InliningPolicy::Always,
-                            is_alias: false,
-                            lhs: alias.replace_multiple(&alias_calls),
-                            rhs,
-                            tags,
-                            args: args.clone(),
-                        });
+            .map(|(i, atom)| {
+                let mut summed = AliasedAtom::default();
+                let mut calls = Vec::with_capacity(orientations.len());
+                for (orientation, production_id) in
+                    orientations.iter().zip(production_orientation_ids)
+                {
+                    let (root, aliases) =
+                        Self::select_orientation(atom, orientation, *production_id)
+                            .into_inner_with_aliases();
+                    let call = FunctionBuilder::new(GS.integrand)
+                        .add_arg(i)
+                        .add_arg(production_id.0)
+                        .finish();
+                    summed.register_alias(call.clone(), root);
+                    for (alias, body) in aliases {
+                        summed.register_alias(alias, body);
                     }
+                    calls.push(call);
                 }
-                fn_map
-                    .add_tagged_function(
-                        GS.integrand,
-                        vec![Atom::num(i)],
-                        args.clone(),
-                        param_integrand.clone(),
-                    )
-                    .map_err(|a| eyre!(a))?;
-                Ok(FnMapEntry {
-                    inlining: InliningPolicy::Always,
-                    is_alias: false,
-                    lhs: lhs.finish(),
-                    rhs: param_integrand,
-                    tags: vec![Atom::num(i)],
-                    args,
-                })
-            })
-            .collect::<Result<_>>()?;
-
-        // Summed evaluators contain concrete orientation calls; runtime orientation
-        // selection stays in the single-parametric evaluator.
-        let sum = (0..entries.len())
-            .map(|i| {
-                orientations
-                    .iter()
-                    .zip(production_orientation_ids)
-                    .map(|(orientation, production_id)| {
-                        GS.integrand(i, *production_id, orientation)
-                    })
-                    .fold(Atom::Zero, |acc, n| acc + n)
+                summed.map_root(|_| Atom::add_many(calls))
             })
             .collect::<Vec<_>>();
-        let entries = param_builder.reps.iter().cloned().chain(entries).collect();
-        let mut evaluator = GenericEvaluator::new_from_raw_params(
+        GenericEvaluator::new_from_builder(
             sum,
-            &params,
-            &fn_map,
-            entries,
+            param_builder,
+            dual_shape.clone(),
             settings.optimization_settings(),
-            dual_shape.clone().map(|shape| (shape, Vec::new())),
             settings,
-        )?;
-        evaluator.fn_map_entries.extend(alias_entries);
-        Ok(evaluator)
+        )
+    }
+
+    /// Bind every runtime orientation input after discarding inactive residue maps.
+    fn residue_map_selector(
+        orientation: &EdgeVec<Orientation>,
+        production_id: OrientationID,
+    ) -> impl Fn(&Atom) -> Atom + '_ {
+        // GraphOrientation::select is a partial selector: undirected edges
+        // are wildcards. A compiled evaluator instead binds those inputs to
+        // zero, just like InputParams::set_orientation_values_impl.
+        let undirected = orientation
+            .iter()
+            .filter(|(_, direction)| **direction == Orientation::Undirected)
+            .map(|(edge, _)| Replacement::new(GS.sign(edge).to_pattern(), Atom::Zero))
+            .collect::<Vec<_>>();
+        move |atom| {
+            let selected = orientation.select(production_id.select(atom));
+            if undirected.is_empty() {
+                selected
+            } else {
+                selected.replace_multiple(&undirected)
+            }
+        }
     }
 
     /// Specialize the selected alias DAG from its root. Alias handles remain
@@ -719,6 +664,27 @@ impl EvaluatorStack {
         orientation: &EdgeVec<Orientation>,
         production_id: OrientationID,
     ) -> AliasedAtom {
+        Self::select_reachable(
+            atom,
+            Self::residue_map_selector(orientation, production_id),
+            |alias| {
+                let function = alias.as_fun_view().unwrap();
+                FunctionBuilder::new(function.get_symbol())
+                    .add_args(function.iter())
+                    .add_arg(production_id.0)
+                    .finish()
+            },
+        )
+    }
+
+    /// Apply `select` to the root and to each alias body reached from it after
+    /// selection, renaming every reached handle with the injective `scope`.
+    /// Unreached aliases are neither selected nor retained.
+    fn select_reachable(
+        atom: &AliasedAtom,
+        select: impl Fn(&Atom) -> Atom,
+        scope: impl Fn(&Atom) -> Atom,
+    ) -> AliasedAtom {
         let aliases = atom.get_aliases();
         let max_handle_bytes = aliases
             .keys()
@@ -727,31 +693,26 @@ impl EvaluatorStack {
             .unwrap_or(0);
         let mut renames = HashMap::<Atom, Atom>::new();
         let mut pending = Vec::new();
-        let select =
+        let specialize =
             |expression: &Atom, renames: &mut HashMap<Atom, Atom>, pending: &mut Vec<Atom>| {
-                orientation
-                    .select(production_id.select(expression))
-                    .replace_map(|view, _, out| {
-                        if view.get_data().len() <= max_handle_bytes
-                            && let Some((alias, _)) = aliases.get_key_value(view.get_data())
-                        {
-                            let scoped = renames.entry(alias.clone()).or_insert_with(|| {
-                                // Register before traversing the body: shared
-                                // dependencies are visited once, including cycles.
-                                pending.push(alias.clone());
-                                let function = alias.as_fun_view().unwrap();
-                                FunctionBuilder::new(function.get_symbol())
-                                    .add_args(function.iter())
-                                    .add_arg(production_id.0)
-                                    .finish()
-                            });
-                            out.set_from_view(&scoped.as_view());
-                        }
-                    })
+                select(expression).replace_map(|view, _, out| {
+                    if view.get_data().len() <= max_handle_bytes
+                        && let Some((alias, _)) = aliases.get_key_value(view.get_data())
+                    {
+                        let scoped = renames.entry(alias.clone()).or_insert_with(|| {
+                            // Register before traversing the body: shared
+                            // dependencies are visited once, including cycles.
+                            pending.push(alias.clone());
+                            scope(alias)
+                        });
+                        out.set_from_view(&scoped.as_view());
+                    }
+                })
             };
-        let mut selected = AliasedAtom::from(select(atom.get_root(), &mut renames, &mut pending));
+        let mut selected =
+            AliasedAtom::from(specialize(atom.get_root(), &mut renames, &mut pending));
         while let Some(alias) = pending.pop() {
-            let body = select(&aliases[&alias], &mut renames, &mut pending);
+            let body = specialize(&aliases[&alias], &mut renames, &mut pending);
             selected.register_alias(renames[&alias].clone(), body);
         }
         selected
@@ -5643,6 +5604,24 @@ mod tests {
         assert_eq!(selected.into_inner(), ((&x + 1) * (&y + 2) + 1).pow(2));
         // Selection owns a separate DAG; the original inactive body survives.
         assert_eq!(source.get_aliases().len(), 4);
+
+        // Iterative outputs keep their handles. Unlike AliasedAtom::prune, which
+        // would keep `dead` for its occurrence inside the opaque key, the
+        // inactive body selected to 0^-1 is not retained.
+        let orientation = EdgeVec::from_iter([Orientation::Default]);
+        let iterative = EvaluatorStack::select_reachable(
+            &source,
+            |atom| GS.collect_orientation_if(orientation.select(selected_id.select(atom))),
+            Atom::clone,
+        );
+        assert_eq!(iterative.get_aliases().len(), 3);
+        assert!(!iterative.get_aliases().contains_key(&function!(head, 2)));
+        assert!(
+            iterative
+                .get_aliases()
+                .contains_key(&function!(head, function!(head, 2)))
+        );
+        assert_eq!(iterative.into_inner(), ((&x + 1) * (&y + 2) + 1).pow(2));
     }
 
     #[test]
@@ -5796,66 +5775,80 @@ mod tests {
             let selected = production_id.select(&atom);
             assert_eq!(orientation.select(&selected), Atom::num(expected));
         }
-        let evaluator_settings = EvaluatorSettings {
-            summed: true,
-            summed_function_map: true,
-            ..Default::default()
-        };
-        let (mut stack, _) = EvaluatorStack::new_with_timings(
-            &[atom],
-            &builder,
-            &[],
-            &orientations.raw,
-            &production_ids,
-            None,
-            &evaluator_settings,
-        )
-        .unwrap();
-
-        let make_input = || InputParams {
-            values: SliceMut::Owned(vec![Complex::new_re(F(0.0)); parameter_count]),
-            residue_map_id_start: builder.pairs.residue_map_id.value_range.start,
-            orientations_start: builder.pairs.orientations.value_range.start,
-            multiplicative_offset: 1,
-        };
-        let mut metadata = EvaluationMetaData::new_empty();
-        for (runtime_id, expected) in [2.0, 3.0, 5.0, 7.0].into_iter().enumerate() {
-            let actual = stack.evaluate_parametric(
-                make_input(),
-                SingleOrAllOrientations::Single {
-                    orientation: &orientations[OrientationID(runtime_id)],
-                    id: OrientationID(runtime_id),
-                },
-                &mut metadata,
-            );
-            assert_eq!(scalar_value(actual), Complex::new_re(F(expected)));
-        }
-
-        let filter = SubSet::full(orientations.len());
-        let all = SingleOrAllOrientations::All {
-            all: &orientations,
-            filter: &filter,
-        };
+        // The public selector keeps an undirected sign symbolic. Compiled
+        // orientation sums must instead bind it to zero, independently of a
+        // previous evaluation's values in the reusable orientation slots.
+        let undirected_sign = GS.sign(EdgeIndex(1));
         assert_eq!(
-            scalar_value(stack.evaluate_parametric(make_input(), all, &mut metadata)),
-            Complex::new_re(F(17.0))
+            orientations[OrientationID(0)].select(&undirected_sign),
+            undirected_sign
         );
+        let atom =
+            atom + Atom::add_many(production_ids.iter().map(|id| id.atom())) * undirected_sign;
+        for store_atom in [false, true] {
+            let evaluator_settings = EvaluatorSettings {
+                iterative_orientation_optimization: true,
+                store_atom,
+                summed: true,
+                summed_function_map: true,
+                ..Default::default()
+            };
+            let (mut stack, _) = EvaluatorStack::new_with_timings(
+                std::slice::from_ref(&atom),
+                &builder,
+                &[],
+                &orientations.raw,
+                &production_ids,
+                None,
+                &evaluator_settings,
+            )
+            .unwrap();
 
-        for method in [
-            EvaluatorMethod::Iterative,
-            EvaluatorMethod::SummedFunctionMap,
-            EvaluatorMethod::Summed,
-        ] {
-            let mut runtime_settings = RuntimeSettings::default();
-            runtime_settings.general.evaluator_method = method;
+            let make_input = || InputParams {
+                values: SliceMut::Owned(vec![Complex::new_re(F(11.0)); parameter_count]),
+                residue_map_id_start: builder.pairs.residue_map_id.value_range.start,
+                orientations_start: builder.pairs.orientations.value_range.start,
+                multiplicative_offset: 1,
+            };
+            let mut metadata = EvaluationMetaData::new_empty();
+            for (runtime_id, expected) in [2.0, 3.0, 5.0, 7.0].into_iter().enumerate() {
+                let actual = stack.evaluate_parametric(
+                    make_input(),
+                    SingleOrAllOrientations::Single {
+                        orientation: &orientations[OrientationID(runtime_id)],
+                        id: OrientationID(runtime_id),
+                    },
+                    &mut metadata,
+                );
+                assert_eq!(scalar_value(actual), Complex::new_re(F(expected)));
+            }
+
+            let filter = SubSet::full(orientations.len());
+            let all = SingleOrAllOrientations::All {
+                all: &orientations,
+                filter: &filter,
+            };
             assert_eq!(
-                scalar_value(
-                    stack
-                        .evaluate(make_input(), all, &runtime_settings, &mut metadata)
-                        .unwrap()
-                ),
+                scalar_value(stack.evaluate_parametric(make_input(), all, &mut metadata)),
                 Complex::new_re(F(17.0))
             );
+
+            for method in [
+                EvaluatorMethod::Iterative,
+                EvaluatorMethod::SummedFunctionMap,
+                EvaluatorMethod::Summed,
+            ] {
+                let mut runtime_settings = RuntimeSettings::default();
+                runtime_settings.general.evaluator_method = method;
+                assert_eq!(
+                    scalar_value(
+                        stack
+                            .evaluate(make_input(), all, &runtime_settings, &mut metadata)
+                            .unwrap()
+                    ),
+                    Complex::new_re(F(17.0))
+                );
+            }
         }
     }
 
@@ -6202,6 +6195,62 @@ mod tests {
                     assert_eq!(
                         <f64 as GenericEvaluatorFloat>::get_evaluator_single(&mut evaluator)(&[
                             Complex::new_re(F(input))
+                        ]),
+                        Complex::new_re(F(expected))
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn weighted_orientation_alias_preserves_inactive_pole_laziness() {
+        test_initialise().unwrap();
+        let key = Atom::var(symbol!("evaluator_test::weighted_guard_key"));
+        let x = Atom::var(symbol!("evaluator_test::weighted_guard_x"));
+        let weight = function!(symbol!("evaluator_test::weighted_guard_alias"), 7);
+        let collected = GS.collect_orientation_if(
+            Symbol::IF.call_args([key.clone(), Atom::Zero, Atom::num(3)]) * &weight,
+        );
+        assert_eq!(
+            collected,
+            Symbol::IF.call_args([key.clone(), Atom::Zero, Atom::num(3) * &weight])
+        );
+        let mut retained = AliasedAtom::from(collected);
+        retained.register_alias(weight, x.pow(-1));
+        let protected = Symbol::IF.call_args([key.clone(), Atom::Zero, Atom::num(3) / &x]);
+        let params = [key, x];
+        let settings = EvaluatorSettings::default();
+        let mut evaluators = [retained, AliasedAtom::from(protected)].map(|atom| {
+            GenericEvaluator::new_from_raw_params(
+                [atom],
+                &params,
+                &FunctionMap::new(),
+                vec![],
+                settings.optimization_settings(),
+                None,
+                &settings,
+            )
+            .unwrap()
+        });
+        for optimization in [
+            None,
+            Some(CompilationOptimizationLevel::O0),
+            Some(CompilationOptimizationLevel::O2),
+        ] {
+            for evaluator in &mut evaluators {
+                if let Some(optimization) = optimization {
+                    evaluator.activate_symjit(optimization).unwrap();
+                } else {
+                    evaluator.activate_eager();
+                }
+                // The inverse is singular only in the inactive branch. Compare
+                // with an explicitly protected expression, not the original 0/0.
+                for (key, x, expected) in [(1.0, 0.0, 0.0), (0.0, 2.0, 1.5)] {
+                    assert_eq!(
+                        <f64 as GenericEvaluatorFloat>::get_evaluator_single(evaluator)(&[
+                            Complex::new_re(F(key)),
+                            Complex::new_re(F(x)),
                         ]),
                         Complex::new_re(F(expected))
                     );

@@ -16,17 +16,17 @@ path = "src/spenso.rs"
 [[example]]
 name = "symbolica_lazy_deadlock_mwe"
 path = "examples/symbolica_lazy_deadlock_mwe.rs"
-required-features = ["shadowing"]
+required-features = ["symbolica"]
 
 [[bench]]
 name = "symbolic_parallelism"
 harness = false
-required-features = ["shadowing"]
+required-features = ["symbolica"]
 
 # [[test]]
 # name = "three_loop"
 # path = "tests/three_loop.rs"
-# required-features = ["shadowing"]
+# required-features = ["symbolica"]
 
 [dependencies]
 ahash = { workspace = true, features = ["serde"] }
@@ -40,45 +40,37 @@ bincode-trait-derive = { version = "0.1.1" }
 # bincode = "2"
 bitvec = { version = "1.0.1", features = ["serde"] }
 # const_format = { version = "0.2.32", features = ["rust_1_51"] }
-constcat = "0.5.0"
-delegate = "0.12.0"
-derive_more = "0.99.17"
+delegate = "0.13.5"
+derive_more = { version = "2.1.1", features = ["add", "add_assign", "display", "from", "index", "into", "into_iterator", "mul", "mul_assign"] }
 # disjoint_impls = "0.7.1"
-duplicate = "1.0.0"
-dyn-clone = "1.0.17"
+dyn-clone = { version = "1.0.17", optional = true }
 enum-try-as-inner = "0.1.1"
-env_logger = "0.11.5"
 eyre = { workspace = true }
-features = "0.10.0"
 # flexi_logger = "0.28.5"
 gat-lending-iterator = "0.1.5"
 indexmap = { workspace = true, features = ["serde"] }
-linnet = { workspace = true, default-features = false, features = ["bincode", "nodestore-vec", "serde"] }
+linnet = { workspace = true, default-features = false, features = ["bincode", "serde"] }
 
 log = "0.4.22"
-num = { version = "0.4.3", features = ["serde"] }
-once_cell = "1.20.2"
-rand = "0.9"
-rand_xoshiro = "0.6.0"
+num-traits = "0.2.19"
+rand = { version = "0.9", optional = true }
 rayon = "1.10.0"
 ref-ops = "0.2.5"
 serde = "1.0"
-serde_json = "1.0"
 spenso-macros = { workspace = true, default-features = false }
 # serde_toml = "0.0.1"
 # slotmap = { version = "1.0.7", features = ["serde"] }
 # smartstring = { version = "1.0.1", features = ["serde"] }
-symbolica-utils = { workspace = true, default-features = false }
-tabled = "0.22.0"
+symbolica-utils = { workspace = true, default-features = false, optional = true }
+tabled = { workspace = true }
 thiserror = { workspace = true }
-tracing = { workspace = true }
+tracing = { workspace = true, optional = true }
 # approx-derive = "0.2.6"
 
 pyo3 = { workspace = true, optional = true }
 
-colored = { workspace = true }
-itertools = "0.14.0"
-nu-ansi-term = { workspace = true }
+colored = { workspace = true, optional = true }
+nu-ansi-term = { workspace = true, optional = true }
 pyo3-stub-gen = { workspace = true, optional = true }
 gammaloop-workspace-hack = { version = "0.1", path = "../gammaloop-workspace-hack", optional = true }
 ciborium = { version = "0.2.2", optional = true }
@@ -93,36 +85,41 @@ optional = true
 
 [dev-dependencies]
 criterion = { version = "0.5", features = ["html_reports"] }
-insta = { version = "1.38.0", features = ["json", "ron", "toml", "yaml"] }
-ron = "0.8"
+insta = "1.38.0"
 
 [features]
 default = ["native"]
 native = [
   "linnet/native",
-  "symbolica?/integer-gmp",
-  "symbolica?/float-mpfr",
-  "symbolica-utils/native",
+  "symbolica-utils?/native",
   "symbolica-typst-atom-payload?/native",
 ]
 native-code-generation = [
   "native",
-  "shadowing",
+  "symbolica",
   "symbolica/native_code_generation",
   "dep:gammaloop-workspace-hack",
 ]
 portable-payload = [
-  "shadowing",
+  "symbolica",
   "dep:blake3",
   "dep:ciborium",
   "dep:symbolica-typst-atom-payload",
 ]
 python = ["dep:pyo3"]
-python_stubgen = ["dep:pyo3-stub-gen", "python"]
-shadowing = ["dep:symbolica", "linnet/symbolica"]
+python-stubs = ["dep:pyo3-stub-gen", "python"]
+symbolica = [
+  "dep:symbolica",
+  "dep:symbolica-utils",
+  "dep:rand",
+  "dep:colored",
+  "dep:dyn-clone",
+  "dep:nu-ansi-term",
+  "dep:tracing",
+  "linnet/symbolica",
+]
 wasm = [
   "linnet/wasm",
-  "symbolica?/wasm",
-  "symbolica-utils/wasm",
+  "symbolica-utils?/wasm",
   "symbolica-typst-atom-payload?/wasm",
 ]

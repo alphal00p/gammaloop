@@ -39,14 +39,14 @@ use crate::{
     composition::{self, StructuredAtom},
 };
 
-#[cfg(feature = "python_stubgen")]
+#[cfg(feature = "python-stubs")]
 use pyo3_stub_gen::derive::{gen_stub_pyclass, gen_stub_pyfunction, gen_stub_pymethods};
 
 const RENDER_TYP: &str = include_str!("../typst/render.typ");
 const NOTATION_TYP: &str = include_str!("../typst/notation.typ");
 
 /// Presentation settings shared by Typst source, HTML, and SVG rendering.
-#[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
+#[cfg_attr(feature = "python-stubs", gen_stub_pyclass)]
 #[pyclass(
     frozen,
     from_py_object,
@@ -101,7 +101,7 @@ fn validate_typst_length(value: &str, field: &str) -> PyResult<()> {
     Ok(())
 }
 
-#[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
+#[cfg_attr(feature = "python-stubs", gen_stub_pymethods)]
 #[pymethods]
 impl DisplaySettings {
     #[new]
@@ -1475,7 +1475,7 @@ pub(crate) fn format_concrete_tensor_output_rich(
 
 /// Format a tensor expression using compact Spenso notation.
 #[cfg_attr(
-    feature = "python_stubgen",
+    feature = "python-stubs",
     gen_stub_pyfunction(module = "symbolica.community.spenso")
 )]
 #[pyfunction]
@@ -1496,7 +1496,7 @@ fn format_tensor(
 
 /// Format a tensor expression as Typst math source.
 #[cfg_attr(
-    feature = "python_stubgen",
+    feature = "python-stubs",
     gen_stub_pyfunction(module = "symbolica.community.spenso")
 )]
 #[pyfunction]
@@ -1517,7 +1517,7 @@ fn to_typst(
 
 /// Render a tensor expression to semantic HTML through the optional Typst runtime.
 #[cfg_attr(
-    feature = "python_stubgen",
+    feature = "python-stubs",
     gen_stub_pyfunction(module = "symbolica.community.spenso")
 )]
 #[pyfunction]
@@ -1535,7 +1535,7 @@ fn to_html(
 
 /// Render a tensor expression to an SVG string through the optional Typst runtime.
 #[cfg_attr(
-    feature = "python_stubgen",
+    feature = "python-stubs",
     gen_stub_pyfunction(module = "symbolica.community.spenso")
 )]
 #[pyfunction]
@@ -1553,7 +1553,7 @@ fn to_svg(
 
 /// Build Symbolica's rich display wrapper for a tensor expression.
 #[cfg_attr(
-    feature = "python_stubgen",
+    feature = "python-stubs",
     gen_stub_pyfunction(module = "symbolica.community.spenso")
 )]
 #[pyfunction]

@@ -24,7 +24,7 @@ cargo add spenso@0.6
 ```
 
 This first contraction uses dense integer tensors and needs neither Symbolica nor the
-`shadowing` feature.
+`symbolica` feature.
 
 == Contract one shared index
 
@@ -88,7 +88,7 @@ structure. The contraction follows index identity and duality, not merely equal 
 
 Pairwise `Contract` is the clearest first success. For a larger expression, place tensors in a
 `Network`, inspect its graph, choose or benchmark a contraction strategy, and execute it. Use
-`DataTensor` when individual nodes may be dense or sparse. Enable `shadowing` only when the
+`DataTensor` when individual nodes may be dense or sparse. Enable `symbolica` only when the
 network must mix concrete data with Symbolica-backed parametric tensors.
 
 == Troubleshooting and next steps

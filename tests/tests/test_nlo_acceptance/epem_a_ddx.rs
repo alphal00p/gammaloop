@@ -21,13 +21,12 @@ use gammalooprs::{
     uv::settings::{ApproximationType, FinalIntegrandDimension},
 };
 use ndarray::Array2;
-use serial_test::serial;
 use spenso::algebra::algebraic_traits::IsZero;
 use symbolica::domains::float::Real;
 
 #[test]
-#[serial]
 fn epem_a_ddx_nlo_is_alpha_s_over_pi_times_lo_in_all_local_uv_routes() -> Result<()> {
+    let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
     const LO_PROCESS: &str = "epem_a_ddx_lo";
     const EXPLICIT_3D_PROCESS: &str = "epem_a_ddx_explicit_local_3d";
     const LOCAL_ONLY_ROUTES: [(&str, bool, bool); 3] = [

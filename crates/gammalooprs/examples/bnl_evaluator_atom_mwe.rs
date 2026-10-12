@@ -110,7 +110,7 @@ impl TermSelection {
             });
         }
 
-        bail!("unknown selector {value:?}; use all, first:N, term:N, or range:START..END")
+        bail!("unknown selector {value:?}; use all, first:N, term:N, or range:START..END");
     }
 
     fn selected_label(self) -> String {
@@ -658,7 +658,9 @@ impl Config {
                     input_path = PathBuf::from(arg);
                     input_path_seen = true;
                 }
-                _ => bail!("unexpected argument {arg:?}"),
+                _ => {
+                    bail!("unexpected argument {arg:?}");
+                }
             }
         }
 
@@ -706,7 +708,9 @@ fn parse_contraction_order(value: &str) -> Result<TensorNetworkContractionOrder>
         "atom-aware" => Ok(TensorNetworkContractionOrder::AtomAware),
         "result-rank-only" => Ok(TensorNetworkContractionOrder::ResultRankOnly),
         "entry-aware" => Ok(TensorNetworkContractionOrder::EntryAware),
-        _ => bail!("unknown contraction order {value:?}"),
+        _ => {
+            bail!("unknown contraction order {value:?}");
+        }
     }
 }
 
@@ -775,9 +779,11 @@ fn parse_strict_tensor_filter(value: &str) -> Result<StrictTensorFilter> {
         "tagged" => Ok(StrictTensorFilter::Tagged),
         "tagged-checked" => Ok(StrictTensorFilter::TaggedChecked),
         "contains-reps" => Ok(StrictTensorFilter::ContainsReps),
-        _ => bail!(
-            "invalid symbolic strict tensor filter {value:?}; use tagged, tagged-checked, or contains-reps"
-        ),
+        _ => {
+            bail!(
+                "invalid symbolic strict tensor filter {value:?}; use tagged, tagged-checked, or contains-reps"
+            );
+        }
     }
 }
 
@@ -2109,6 +2115,8 @@ fn select_term_range(atom: &Atom, start: usize, end: usize) -> Result<Atom> {
                 .fold(Atom::Zero, |sum, term| sum + term))
         }
         _ if start == 0 && end == 1 => Ok(atom.clone()),
-        _ => bail!("term selection requires a top-level sum; the input atom has one term"),
+        _ => {
+            bail!("term selection requires a top-level sum; the input atom has one term");
+        }
     }
 }

@@ -10,18 +10,18 @@ use std::hash::Hash;
 use tabled::{builder::Builder, settings::Style};
 
 use crate::structure::SlotIndex;
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 use crate::{
     structure::{ExpandedCoefficent, FlatIndex, ToSymbolic, slot::ParseableAind},
     tensors::{data::DenseTensor, parametric::TensorCoefficient},
 };
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 use symbolica_utils::IntoSymbol;
 
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 use eyre::Result;
 
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 use symbolica::atom::{Atom, FunctionBuilder, Symbol};
 
 use super::{
@@ -33,13 +33,13 @@ use super::{
     representation::{LibraryRep, RepName, Representation},
     slot::{AbsInd, DualSlotTo, DummyAind, IsAbstractSlot, Slot},
 };
-#[cfg(not(feature = "shadowing"))]
+#[cfg(not(feature = "symbolica"))]
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, bincode_trait_derive::Encode, bincode_trait_derive::Decode)]
-#[cfg_attr(not(feature = "shadowing"), derive(Serialize, Deserialize))]
+#[cfg_attr(not(feature = "symbolica"), derive(Serialize, Deserialize))]
 #[cfg_attr(
-    feature = "shadowing",
+    feature = "symbolica",
     trait_decode(trait = symbolica::state::HasStateMap),
 )]
 pub struct OrderedStructure<R: RepName = LibraryRep, Aind = AbstractIndex> {
@@ -451,7 +451,7 @@ impl<R: RepName, Aind: AbsInd> ScalarStructure for OrderedStructure<R, Aind> {
     }
 }
 
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 impl<R: RepName<Dual = R>, Aind: AbsInd + ParseableAind> ToSymbolic for OrderedStructure<R, Aind> {
     fn concrete_atom(&self, id: FlatIndex) -> ExpandedCoefficent<()> {
         ExpandedCoefficent {
@@ -1078,7 +1078,7 @@ pub mod test {
         }
     }
 
-    #[cfg(feature = "shadowing")]
+    #[cfg(feature = "symbolica")]
     #[test]
     fn canonicalized_symbolic_output_uses_logical_slot_order_and_delegates_name() {
         use symbolica::{

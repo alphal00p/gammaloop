@@ -1,8 +1,9 @@
-use test_log::env_logger;
 use vakint::{InputFloatRationalizationPrecision, Vakint, VakintExpression, VakintSettings};
 
 fn main() {
-    env_logger::init();
+    tracing_subscriber::fmt()
+        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+        .init();
     let vakint = Vakint::new().unwrap();
 
     let settings = VakintSettings {

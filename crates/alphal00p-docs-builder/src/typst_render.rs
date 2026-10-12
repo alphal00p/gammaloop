@@ -82,7 +82,7 @@ impl TypstRenderer for CliTypstRenderer {
     }
 }
 
-#[cfg(feature = "persistent-typst")]
+#[cfg(feature = "watch")]
 mod persistent {
     use std::{
         collections::{BTreeSet, HashMap, HashSet, hash_map::Entry},
@@ -248,7 +248,9 @@ mod persistent {
 
             let virtual_fs = match output {
                 Ok(output) => output,
-                Err(_) => bail!("Typst failed for {}", job.label),
+                Err(_) => {
+                    bail!("Typst failed for {}", job.label);
+                }
             };
             write_virtual_fs(&job.output, &virtual_fs)
         }
@@ -584,24 +586,5 @@ mod persistent {
     }
 }
 
-#[cfg(feature = "persistent-typst")]
+#[cfg(feature = "watch")]
 pub(crate) use persistent::PersistentTypstRenderer;
-
-#[cfg(not(feature = "persistent-typst"))]
-pub(crate) struct PersistentTypstRenderer;
-
-#[cfg(not(feature = "persistent-typst"))]
-impl PersistentTypstRenderer {
-    pub(crate) fn new(_root: &Path, _work_root: &Path) -> Result<Self> {
-        eyre::bail!(
-            "the live watcher requires the persistent-typst feature; run `just docs-watch all` or pass `--features persistent-typst`"
-        )
-    }
-}
-
-#[cfg(not(feature = "persistent-typst"))]
-impl TypstRenderer for PersistentTypstRenderer {
-    fn render(&mut self, _job: TypstRenderJob) -> Result<()> {
-        unreachable!("PersistentTypstRenderer::new always fails without its feature")
-    }
-}

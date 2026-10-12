@@ -824,7 +824,7 @@ impl Propagator {
 pub struct SerializableCoupling {
     name: SmartString<LazyCompact>,
     expression: SmartString<LazyCompact>,
-    #[serde(with = "vectorize")]
+    #[serde(with = "crate::utils::serde_utils::map_as_pairs")]
     orders: BTreeMap<SmartString<LazyCompact>, usize>,
     value: Option<(f64, f64)>,
 }

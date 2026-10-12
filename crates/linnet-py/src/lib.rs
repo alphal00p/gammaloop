@@ -1,7 +1,7 @@
 //! Python bindings for Linnet's typed graph, DOT, and Typst drawing APIs.
 
 use pyo3::prelude::*;
-#[cfg(feature = "python_stubgen")]
+#[cfg(feature = "python-stubs")]
 use pyo3_stub_gen::define_stub_info_gatherer;
 
 mod dot;
@@ -26,13 +26,13 @@ fn linnet_py(module: &Bound<'_, PyModule>) -> PyResult<()> {
     Ok(())
 }
 
-#[cfg(feature = "python_stubgen")]
+#[cfg(feature = "python-stubs")]
 define_stub_info_gatherer!(stub_info);
 
 // Rust's `PyAny` boundary is intentionally wider than the Python API: values
 // are recursively checked before they can cross into Typst.  Keep the aliases
 // here so manual signatures and generated signatures share one closed model.
-#[cfg(feature = "python_stubgen")]
+#[cfg(feature = "python-stubs")]
 const STUB_TYPE_ALIASES: &str = r#"class _TypstValueRef(typing.Protocol): ...
 class _TypstContentRef(typing.Protocol): ...
 class _TypstFunctionRef(typing.Protocol):
@@ -189,7 +189,7 @@ _TemplateOptions: typing.TypeAlias = _NativeDict | None | Inherit
 "#;
 
 /// Render the installed and documented Python surface from one stub inventory.
-#[cfg(feature = "python_stubgen")]
+#[cfg(feature = "python-stubs")]
 pub fn canonical_stub() -> pyo3_stub_gen::Result<String> {
     let info = stub_info()?;
     let module = info
@@ -200,7 +200,7 @@ pub fn canonical_stub() -> pyo3_stub_gen::Result<String> {
 }
 
 /// Render a gathered Linnet module without collecting the global inventory again.
-#[cfg(feature = "python_stubgen")]
+#[cfg(feature = "python-stubs")]
 #[doc(hidden)]
 pub fn canonical_stub_from_module(module: &pyo3_stub_gen::generate::Module) -> String {
     let mut exports = module
@@ -215,8 +215,17 @@ pub fn canonical_stub_from_module(module: &pyo3_stub_gen::generate::Module) -> S
     exports.dedup();
 
     let generated = module.to_string();
+    // Only the leading prelude contains imports; docstrings can start with
+    // "from" or "import" too.
     let import_end = generated
         .split_inclusive('\n')
+        .take_while(|line| {
+            let line = line.trim_start();
+            line.is_empty()
+                || line.starts_with('#')
+                || line.starts_with("import ")
+                || line.starts_with("from ")
+        })
         .scan(0, |offset, line| {
             *offset += line.len();
             Some((line, *offset))

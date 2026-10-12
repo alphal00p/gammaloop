@@ -526,10 +526,10 @@ def validate(runtime_module, stub_source):
             "def build(*items: _GraphItem, name: _OptionalString = None",
             "def map(self, *, node: typing.Callable[[Node], typing.Any] | None = None",
             "def render(self, output: builtins.str | os.PathLike[builtins.str], *, config: RenderConfig | None = None)",
-            "node_selector: _NodeSelector = ...",
+            "subgraph: _DrawSubgraphs = ...",
             "node_outset: _AutoNumber = ...",
             "_Padding: typing.TypeAlias = builtins.int | builtins.float | _NativeArray | _NativeDict | Insets",
-            "show_node_index: _Boolean = ...",
+            "show_half_edge_ids: _Boolean = ...",
             "def call(self, *args: _NativeValue, **kwargs: _NativeValue) -> TypstCall",
         ] {
             assert!(canonical.contains(declaration), "missing `{declaration}`");
@@ -541,6 +541,26 @@ def validate(runtime_module, stub_source):
             );
         }
         assert_eq!(canonical.matches("def anchor(self)").count(), 1);
+    }
+
+    #[cfg(feature = "linnet")]
+    #[test]
+    fn linnet_stub_keeps_aliases_before_import_like_docstrings() {
+        let (module_name, mut stub_info) = super::gather("linnet-py").unwrap();
+        let module = stub_info.modules.get_mut(module_name).unwrap();
+        module
+            .class
+            .values_mut()
+            .find(|class| class.name == "Graph")
+            .unwrap()
+            .doc = "Construct a graph\nfrom its nodes and edges.\nimport drawing data as needed.";
+
+        let canonical = super::render("linnet-py", module).unwrap();
+        let graph = canonical.find("class Graph:").unwrap();
+        assert!(canonical.find("\n__all__ = [\n").unwrap() < graph);
+        assert!(canonical.find("\n_NativeValue: typing.TypeAlias").unwrap() < graph);
+        assert!(canonical.contains("    from its nodes and edges."));
+        assert!(canonical.contains("    import drawing data as needed."));
     }
 
     #[cfg(feature = "gammaloop")]

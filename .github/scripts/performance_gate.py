@@ -1,11 +1,14 @@
 #!/usr/bin/env python3
 """Compare paired performance measurements; emit only numeric report values.
 
-Schema 1 has baseline/candidate commit and fixture/corpus/config SHA256 metadata,
-required_metrics, correctness_tolerance {absolute, relative}, and discovery.
+Schema 2 has baseline/candidate commit and fixture/corpus/config SHA256 metadata,
+required_metrics, evaluator_methods, reference_method, correctness_tolerance
+{absolute, relative}, and discovery.
 Each discovery/confirmation has a positive run_id and five alternating AB/BA
 pairs. A pair has baseline/candidate metric dictionaries and baseline_output /
-candidate_output numeric vectors. Confirmation starts in the opposite order and
+candidate_output maps from evaluator method to numeric vectors. Every method
+must agree with its revision's reference method and the baseline reference.
+Confirmation starts in the opposite order and
 has a distinct run_id. Generation/load are seconds; warm runtime is seconds per
 sample. CLI commit arguments bind measurements to the intended revisions.
 
@@ -25,6 +28,12 @@ import sys
 from pathlib import Path
 from typing import ClassVar
 
+EVALUATOR_METHODS = ("Iterative", "SingleParametric", "Summed", "SummedFunctionMap")
+MODE_METRICS = {
+    "evaluator_build_seconds": (0.20, 0.1),
+    "warm_runtime_seconds_per_sample": (0.15, 1e-6),
+}
+
 
 class InvalidMeasurements(ValueError):
     pass
@@ -34,7 +43,12 @@ class PerformanceGate:
     THRESHOLDS: ClassVar[dict[str, tuple[float, float]]] = {
         "generation_seconds": (0.20, 0.5),
         "load_seconds": (0.20, 0.1),
-        "warm_runtime_seconds_per_sample": (0.15, 1e-6),
+        "generation_peak_ram_bytes": (0.20, 64 * 1024**2),
+        **{
+            f"{metric}.{method}": thresholds
+            for metric, thresholds in MODE_METRICS.items()
+            for method in EVALUATOR_METHODS
+        },
     }
     # Normal-consistent MAD is a robust estimate of paired dispersion. The
     # three-noise margin is a screening heuristic, not a confidence interval.
@@ -88,7 +102,14 @@ class PerformanceGate:
             report["identity_mismatch"] = 1
             raise InvalidMeasurements("Measurement identities do not match")
 
-    def validate_phase(self, phase: object, metrics: list[str], tolerance: dict):
+    def validate_phase(
+        self,
+        phase: object,
+        metrics: list[str],
+        methods: list[str],
+        reference: str,
+        tolerance: dict,
+    ):
         phase = self.fields(phase, {"run_id", "pairs"})
         if type(phase["run_id"]) is not int or phase["run_id"] <= 0:
             raise InvalidMeasurements("Invalid run identifier")
@@ -120,41 +141,58 @@ class PerformanceGate:
                 before = self.number(baseline[metric])
                 after = self.number(candidate[metric])
                 if before <= 0 or after <= 0:
-                    raise InvalidMeasurements("Timings must be positive")
+                    raise InvalidMeasurements("Measurements must be positive")
                 results[metric].append((before, after))
-            before_output, after_output = (
-                pair["baseline_output"],
-                pair["candidate_output"],
-            )
-            if (
-                not isinstance(before_output, list)
-                or not isinstance(after_output, list)
-                or not before_output
-                or len(before_output) != len(after_output)
-                or (output_size is not None and len(before_output) != output_size)
+            outputs = {}
+            for side in ("baseline", "candidate"):
+                output = self.fields(pair[side + "_output"], set(methods))
+                outputs[side] = {}
+                for method in methods:
+                    values = output[method]
+                    if (
+                        not isinstance(values, list)
+                        or not values
+                        or len(values) % 2
+                        or (output_size is not None and len(values) != output_size)
+                    ):
+                        raise InvalidMeasurements(
+                            "Correctness output vectors must match in complex-point count"
+                        )
+                    output_size = len(values)
+                    outputs[side][method] = [self.number(value) for value in values]
+            baseline_reference = outputs["baseline"][reference]
+            if any(
+                not any(baseline_reference[index : index + 2])
+                for index in range(0, output_size, 2)
             ):
                 raise InvalidMeasurements(
-                    "Correctness output vectors must match in size"
+                    "Every physical correctness reference point must be nonzero"
                 )
-            output_size = len(before_output)
-            before_output = [self.number(value) for value in before_output]
-            after_output = [self.number(value) for value in after_output]
-            if not any(before_output):
-                raise InvalidMeasurements(
-                    "A physical correctness reference must be nonzero"
-                )
-            pair_mismatches = sum(
-                not math.isclose(
-                    before,
-                    after,
-                    rel_tol=tolerance["relative"],
-                    abs_tol=tolerance["absolute"],
-                )
-                for before, after in zip(before_output, after_output)
-            )
-            # Even an absolute tolerance must not accept a completely zeroed
-            # physical candidate. The producer also checks each complex point.
-            mismatches += max(pair_mismatches, int(not any(after_output)))
+            for side in ("baseline", "candidate"):
+                for values in outputs[side].values():
+                    pair_mismatches = sum(
+                        not math.isclose(
+                            value,
+                            own_reference,
+                            rel_tol=tolerance["relative"],
+                            abs_tol=tolerance["absolute"],
+                        )
+                        or not math.isclose(
+                            value,
+                            before_reference,
+                            rel_tol=tolerance["relative"],
+                            abs_tol=tolerance["absolute"],
+                        )
+                        for value, own_reference, before_reference in zip(
+                            values, outputs[side][reference], baseline_reference
+                        )
+                    )
+                    # Absolute tolerance must not accept a zeroed physical point.
+                    zero_points = sum(
+                        not any(values[index : index + 2])
+                        for index in range(0, output_size, 2)
+                    )
+                    mismatches += max(pair_mismatches, zero_points)
         return results, mismatches, output_size
 
     def summarize(self, samples: list[tuple[float, float]], metric: str) -> dict:
@@ -175,10 +213,11 @@ class PerformanceGate:
         slower = sum(after > before for before, after in samples)
         exceeds_limits = effect > relative_limit and delta > absolute_limit
         qualified = exceeds_limits and slower >= 4 and effect > margin
-        # A noisy phase cannot pass merely because its median happens to fall
-        # below a threshold. Also flag a near-threshold uncertainty interval.
+        # Noise must respect the absolute floor too: a large relative spread
+        # on a tiny operation need not put the permitted absolute cost at risk.
+        # Also flag a near-threshold uncertainty interval.
         uncertain = (
-            margin >= relative_limit
+            (margin >= relative_limit and delta + absolute_margin > absolute_limit)
             or (exceeds_limits and not qualified)
             or (
                 not qualified
@@ -202,7 +241,7 @@ class PerformanceGate:
 
     def analyze(self, data: object) -> dict:
         report = {
-            "schema_version": 1,
+            "schema_version": 2,
             "status": 2,
             "confirmation_required": 0,
             "invalid_input": 0,
@@ -218,14 +257,27 @@ class PerformanceGate:
                     "baseline",
                     "candidate",
                     "required_metrics",
+                    "evaluator_methods",
+                    "reference_method",
                     "correctness_tolerance",
                     "discovery",
                 },
                 {"confirmation"},
             )
-            if type(data["schema_version"]) is not int or data["schema_version"] != 1:
+            if type(data["schema_version"]) is not int or data["schema_version"] != 2:
                 raise InvalidMeasurements("Unsupported schema version")
             self.validate_identity(data, report)
+            methods = data["evaluator_methods"]
+            reference = data["reference_method"]
+            if (
+                not isinstance(methods, list)
+                or not methods
+                or any(not isinstance(method, str) for method in methods)
+                or len(set(methods)) != len(methods)
+                or not set(methods) <= set(EVALUATOR_METHODS)
+                or reference not in methods
+            ):
+                raise InvalidMeasurements("Invalid evaluator methods or reference")
             metrics = data["required_metrics"]
             if (
                 not isinstance(metrics, list)
@@ -233,8 +285,22 @@ class PerformanceGate:
                 or any(not isinstance(metric, str) for metric in metrics)
                 or len(set(metrics)) != len(metrics)
                 or not set(metrics) <= self.THRESHOLDS.keys()
+                or any(
+                    "." in metric and metric.split(".")[1] not in methods
+                    for metric in metrics
+                )
             ):
                 raise InvalidMeasurements("Invalid required metrics")
+            for family in MODE_METRICS:
+                selected = {
+                    metric for metric in metrics if metric.startswith(family + ".")
+                }
+                if selected and selected != {
+                    f"{family}.{method}" for method in methods
+                }:
+                    raise InvalidMeasurements(
+                        "Every requested method needs its scoped metric"
+                    )
             tolerance = self.fields(
                 data["correctness_tolerance"], {"absolute", "relative"}
             )
@@ -242,13 +308,13 @@ class PerformanceGate:
             if any(value < 0 for value in tolerance.values()):
                 raise InvalidMeasurements("Correctness tolerances cannot be negative")
             discovery, mismatch, output_size = self.validate_phase(
-                data["discovery"], metrics, tolerance
+                data["discovery"], metrics, methods, reference, tolerance
             )
             report["correctness_mismatches"] = mismatch
             confirmation = None
             if "confirmation" in data:
                 confirmation, mismatch, confirmation_size = self.validate_phase(
-                    data["confirmation"], metrics, tolerance
+                    data["confirmation"], metrics, methods, reference, tolerance
                 )
                 if (
                     data["confirmation"]["run_id"] == data["discovery"]["run_id"]
@@ -304,6 +370,13 @@ class PerformanceGate:
         print(f"Performance gate: {outcome}", file=sys.stderr)
         phase_labels = {0: "within policy", 1: "regression signal", 2: "inconclusive"}
         for metric, entry in report["metrics"].items():
+            unit = (
+                "bytes"
+                if metric == "generation_peak_ram_bytes"
+                else "s/sample"
+                if metric.startswith("warm_runtime_seconds_per_sample.")
+                else "s"
+            )
             for phase in ("discovery", "confirmation"):
                 if phase not in entry:
                     continue
@@ -316,9 +389,9 @@ class PerformanceGate:
                 )
                 print(
                     f"  {metric} {phase}: {summary['baseline_median']:.6g} -> "
-                    f"{summary['candidate_median']:.6g} ({change}); "
+                    f"{summary['candidate_median']:.6g} {unit} ({change}); "
                     f"policy >{summary['relative_threshold']:.0%} and "
-                    f">{summary['absolute_threshold']:.6g}; "
+                    f">{summary['absolute_threshold']:.6g} {unit}; "
                     f"paired relative noise {summary['paired_noise']:.3g}; "
                     f"{phase_labels[summary['status']]}",
                     file=sys.stderr,

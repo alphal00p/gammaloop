@@ -194,7 +194,6 @@
       "packages.x86_64-linux.crate-test-dependencies-idenso"
       "packages.x86_64-linux.crate-test-dependencies-linnet"
       "packages.x86_64-linux.crate-test-dependencies-spenso"
-      "packages.x86_64-linux.crate-test-dependencies-symbolica-utils"
       "packages.x86_64-linux.crate-test-dependencies-three-dimensional-reps"
     ];
     "packages.x86_64-linux.crate-test-dependencies-gammaloop-integration-tests" = [
@@ -204,7 +203,6 @@
       "packages.x86_64-linux.crate-test-dependencies-gammalooprs"
       "packages.x86_64-linux.crate-test-dependencies-linnet"
       "packages.x86_64-linux.crate-test-dependencies-spenso"
-      "packages.x86_64-linux.crate-test-dependencies-symbolica-utils"
       "packages.x86_64-linux.crate-test-dependencies-three-dimensional-reps"
       "packages.x86_64-linux.crate-test-dependencies-vakint"
     ];
@@ -271,7 +269,6 @@
       "packages.x86_64-linux.crate-deps-gammaloop-workspace-hack"
       "packages.x86_64-linux.crate-test-dependencies-idenso"
       "packages.x86_64-linux.crate-test-dependencies-spenso"
-      "packages.x86_64-linux.crate-test-dependencies-spenso-macros"
     ];
     "packages.x86_64-linux.crate-test-dependencies-spenso-macros" = [
       "packages.x86_64-linux.cargoArtifacts"
@@ -283,7 +280,6 @@
       "packages.x86_64-linux.crate-test-dependencies-idenso"
       "packages.x86_64-linux.crate-test-dependencies-spenso"
       "packages.x86_64-linux.crate-test-dependencies-spenso-hep-lib"
-      "packages.x86_64-linux.crate-test-dependencies-spenso-macros"
     ];
     "packages.x86_64-linux.crate-test-dependencies-symbolica-utils" = [
       "packages.x86_64-linux.cargoArtifacts"

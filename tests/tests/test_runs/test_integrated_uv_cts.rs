@@ -175,8 +175,8 @@ fn setup_scalar_bubble_uv_cli(test_name: &str) -> Result<gammaloop_integration_t
 }
 
 #[test]
-#[serial]
 fn orientation_monte_carlo_rejects_non_parametric_evaluators() -> Result<()> {
+    let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
     let cli =
         setup_scalar_bubble_uv_cli("orientation_monte_carlo_rejects_non_parametric_evaluators")?;
     let (process_id, integrand_name) = cli.state.find_integrand_ref(
@@ -331,8 +331,8 @@ mod important {
     use super::*;
 
     #[test]
-    #[serial]
     fn scalar_bubble_inspect() -> Result<()> {
+        let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
         let mut cli = setup_scalar_bubble_uv_cli("scalar_bubble_inspect")?;
         // The contour oracle keeps its numerator factors intact, as symbolic
         // subtraction does when it factors shared sums before cancellation.
@@ -509,8 +509,8 @@ mod important {
 }
 
 #[test]
-#[serial]
 fn scalar_bubble_integrated() -> Result<()> {
+    let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
     let mut cli = setup_scalar_bubble_uv_cli("scalar_bubble_integrated")?;
 
     let integration_result = Integrate {

@@ -259,8 +259,8 @@ pub mod swap;
 /// - `H`: The type of data associated with each individual half-edge.
 /// - `S`: The node storage strategy, implementing the [`NodeStorage`] trait.
 ///   This determines how node data and their connectivity to half-edges
-///   are stored. Defaults to [`DefaultNodeStore<V>`] (feature-selected; `nodestore-vec` uses
-///   [`nodestore::NodeStorageVec<V>`]).
+///   are stored. Defaults to [`DefaultNodeStore<V>`], which uses
+///   [`nodestore::NodeStorageVec<V>`] unless a forest nodestore feature is enabled.
 pub struct HedgeGraph<E, V, H = NoData, S: NodeStorage<NodeData = V> = DefaultNodeStore<V>> {
     pub(crate) hedge_data: HedgeVec<H>,
     /// Edge data and the involution that pairs internal half-edges or marks

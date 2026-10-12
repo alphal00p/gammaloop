@@ -389,6 +389,7 @@
       "pyproject.toml"
     ];
     "gammaloop-api" = [
+      "crates/linnest/build_assets.rs"
       "assets/embedded"
       "assets/models"
       "crates/kurvst/typst/kurvst.wasm"
@@ -405,6 +406,7 @@
       "tests/resources/fjcore"
     ];
     clinnet = [
+      "crates/linnest/build_assets.rs"
       "crates/clinnet/templates"
       "crates/kurvst/typst/kurvst.wasm"
       "crates/kurvst/typst/src"
@@ -732,12 +734,12 @@
 
   craneCiExtraFeatureSets = {
     "gammaloop-workspace-hack" = ["symbolica/tracing_max_level_info"];
-    "gammaloop-tracing-filter" = ["clap" "symbolica" "python_api"];
-    "gammaloop-api" = ["python_stubgen"];
-    gammalooprs = ["python_stubgen"];
+    "gammaloop-tracing-filter" = ["clap" "symbolica" "python"];
+    "gammaloop-api" = ["python-stubs"];
+    gammalooprs = ["python-stubs"];
     idenso = ["reference-cases"];
     linnet = ["drawing" "symbolica"];
-    spenso = ["shadowing" "python_stubgen"];
+    spenso = ["symbolica" "python-stubs"];
   };
 
   workspaceIncomingNormalDependencyFeaturesFor = dependency:
@@ -930,14 +932,22 @@
     install -D -m 0644 ${workspacePrebuildCargoToml} "$out/${workspacePrebuildPackageDir}/Cargo.toml"
     install -D -m 0644 ${dummyCargoTarget} "$out/${workspacePrebuildPackageDir}/src/lib.rs"
   '';
-  workspacePrebuildCargoArgs =
+  workspaceAnchorDependencyFeatures = cargoQualifiedFeaturesFor
+    (builtins.attrNames nativePythonDependencyFeatures)
+    (dependency: nativePythonDependencyFeatures.${dependency});
+  workspacePrebuildCargoArgs = let
+    # The generated anchor requests local features and native Python features.
+    featureArgs = cargoQualifiedFeatureArgsFor workspaceMemberPackages
+      (package: lib.subtractLists workspaceAnchorDependencyFeatures
+        (lib.filter (feature: lib.hasInfix "/" feature) (craneCiFeaturesFor package)));
+  in
     lib.concatStringsSep " " (
       [
         "--offline"
         "-p ${lib.escapeShellArg workspacePrebuildPackage}"
         "-p ${lib.escapeShellArg workspaceHackPackage}"
       ]
-      ++ lib.optional (craneWorkspacePrebuildFeatureArgs != "") craneWorkspacePrebuildFeatureArgs
+      ++ lib.optional (featureArgs != "") featureArgs
     );
   workspaceConsumerPackageFor = package: "gammaloop-ci-consumer-${package}";
   workspaceConsumerPackageDirFor = package: "crates/${workspaceConsumerPackageFor package}";
@@ -982,7 +992,7 @@
             lib.filter (feature: lib.hasInfix "/" feature) (craneCiFeaturesFor featurePackage)
         )
         (sortedUnique (sourcePackages ++ anchorPackages)));
-    featureArgs = cargoFeatureArgs crossFeatures;
+    featureArgs = cargoFeatureArgs (lib.subtractLists workspaceAnchorDependencyFeatures crossFeatures);
   in
     lib.concatStringsSep " " (
       [
@@ -1109,7 +1119,10 @@
     touch -d @0 "${prefix}${workspaceMemberPackageDirs.${package}}/Cargo.toml"
   '';
   cargoTestContextArgsFor = context: packages: let
-    featureArgs = cargoQualifiedFeatureArgsFor context.featurePackages (featurePackage: context.features.${featurePackage});
+    # Keep root features and forwarded features that can activate optional dependencies.
+    featureArgs = cargoQualifiedFeatureArgsFor context.featurePackages (featurePackage:
+      lib.filter (feature: builtins.elem featurePackage context.componentPackages || lib.hasInfix "/" feature)
+        context.features.${featurePackage});
   in
     lib.concatStringsSep " " (
       ["--offline"]
@@ -1129,14 +1142,14 @@
       ++ lib.optional (featureArgs != "") featureArgs
     );
   cranePythonExtraFeatureSets = {
-    "gammaloop-api" = ["python_abi" "pyo3-extension-module"];
+    "gammaloop-api" = ["abi3" "extension-module"];
   };
   cranePythonFeaturesFor = package:
     sortedUnique (
       # Stub generation needs the native Python API, not the extension's
       # minimum stable ABI. Forwarded dependency features activate it too.
       lib.filter (feature:
-        !builtins.any (part: builtins.elem part ["python_stubgen" "pyo3-stub-gen"])
+        !builtins.any (part: builtins.elem part ["python-stubs" "pyo3-stub-gen"])
           (lib.splitString "/" feature))
       (craneCiFeaturesFor package)
       ++ (cranePythonExtraFeatureSets.${package} or [])
@@ -1620,6 +1633,19 @@
       --no-deps \
       --manifest-path "$manifest_path" \
       > "$tmp/metadata.json"
+
+    # Check the actual normal/build dependency closure, including weak ABI
+    # modifiers. Shared Python CI features must not enter the standalone CLI.
+    for features in cli cli,abi3; do
+      cargo tree --locked --offline -p gammaloop-api \
+        --no-default-features --features "$features" \
+        --target ${nextestTargetTriple} --edges normal,build \
+        --prefix none --format '{p}' > "$tmp/cli-dependencies.txt"
+      if grep -E '^(pyo3([_-][[:alnum:]_-]+)?|numpy) v' "$tmp/cli-dependencies.txt"; then
+        echo "Python dependency in standalone CLI ($features)" >&2
+        exit 1
+      fi
+    done
 
     jq '
       def workspace_deps($path_map; $kinds):
@@ -2899,7 +2925,7 @@
 
       gammaloop-doc = workspaceChecks.doc;
       alphal00p-docs = documentation.alphal00pDocsCheck;
-      alphal00p-docs-persistent-typst = documentation.persistentTypstCheck;
+      alphal00p-docs-watch = documentation.watchCheck;
 
       gammaloop-doctest = workspaceChecks.doctest;
 

@@ -1,6 +1,6 @@
 #[cfg(test)]
 use pyo3::Python;
-#[cfg(not(feature = "python_stubgen"))]
+#[cfg(not(feature = "python-stubs"))]
 use pyo3::create_exception;
 use pyo3::{
     Borrowed, Bound, FromPyObject, PyAny, PyErr, PyResult,
@@ -9,9 +9,9 @@ use pyo3::{
     types::{PyAnyMethods, PyModule, PyModuleMethods},
     wrap_pyfunction,
 };
-#[cfg(feature = "python_stubgen")]
+#[cfg(feature = "python-stubs")]
 use pyo3_stub_gen::create_exception;
-#[cfg(feature = "python_stubgen")]
+#[cfg(feature = "python-stubs")]
 use pyo3_stub_gen::derive::{
     gen_stub_pyclass, gen_stub_pyclass_enum, gen_stub_pyfunction, gen_stub_pymethods,
 };
@@ -100,7 +100,7 @@ impl<'a, 'py> FromPyObject<'a, 'py> for RegisteredRepresentation {
     }
 }
 
-#[cfg(feature = "python_stubgen")]
+#[cfg(feature = "python-stubs")]
 impl pyo3_stub_gen::PyStubType for RegisteredRepresentation {
     fn type_output() -> pyo3_stub_gen::TypeInfo {
         pyo3_stub_gen::TypeInfo::locally_defined(
@@ -114,7 +114,7 @@ impl pyo3_stub_gen::PyStubType for RegisteredRepresentation {
 ///
 /// Available values are `FlattenedSymbol` for readable names and `ReversibleEncoding` for a
 /// stable encoding that can later be restored by `uncook`.
-#[cfg_attr(feature = "python_stubgen", gen_stub_pyclass_enum)]
+#[cfg_attr(feature = "python-stubs", gen_stub_pyclass_enum)]
 #[pyclass(
     frozen,
     name = "CookMode",
@@ -150,7 +150,7 @@ impl From<RustCookMode> for PyCookMode {
 }
 
 /// A tag predicate used to select which function heads are cooked.
-#[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
+#[cfg_attr(feature = "python-stubs", gen_stub_pyclass)]
 #[pyclass(
     frozen,
     name = "CookTagFilter",
@@ -168,7 +168,7 @@ impl PyCookTagFilter {
     }
 }
 
-#[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
+#[cfg_attr(feature = "python-stubs", gen_stub_pymethods)]
 #[pymethods]
 impl PyCookTagFilter {
     /// Match a function head when it carries at least one listed tag.
@@ -197,7 +197,7 @@ impl PyCookTagFilter {
 }
 
 /// Selects the function occurrences or representation-index payloads to cook.
-#[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
+#[cfg_attr(feature = "python-stubs", gen_stub_pyclass)]
 #[pyclass(
     frozen,
     name = "CookSourceFilter",
@@ -215,7 +215,7 @@ impl PyCookSourceFilter {
     }
 }
 
-#[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
+#[cfg_attr(feature = "python-stubs", gen_stub_pymethods)]
 #[pymethods]
 impl PyCookSourceFilter {
     /// Select every function-like subexpression.
@@ -249,7 +249,7 @@ impl PyCookSourceFilter {
 }
 
 /// Immutable configuration for cooking symbolic functions and index payloads.
-#[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
+#[cfg_attr(feature = "python-stubs", gen_stub_pyclass)]
 #[pyclass(
     frozen,
     name = "CookSettings",
@@ -305,7 +305,7 @@ impl PyCookSettings {
     }
 }
 
-#[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
+#[cfg_attr(feature = "python-stubs", gen_stub_pymethods)]
 #[pymethods]
 impl PyCookSettings {
     /// Configure how functions are selected, encoded, and tagged when cooked.
@@ -393,7 +393,7 @@ impl PyCookSettings {
 /// Selects whether a Schoonschip pass runs once or recursively.
 ///
 /// Available values are `SinglePass` and `Recursive`.
-#[cfg_attr(feature = "python_stubgen", gen_stub_pyclass_enum)]
+#[cfg_attr(feature = "python-stubs", gen_stub_pyclass_enum)]
 #[pyclass(
     frozen,
     name = "SchoonschipMode",
@@ -413,7 +413,7 @@ pub enum PySchoonschipMode {
 /// Selects the recursive traversal order for a Schoonschip pass.
 ///
 /// Available values are `DepthFirst` and `BreadthFirst`.
-#[cfg_attr(feature = "python_stubgen", gen_stub_pyclass_enum)]
+#[cfg_attr(feature = "python-stubs", gen_stub_pyclass_enum)]
 #[pyclass(
     frozen,
     name = "SchoonschipTraversal",
@@ -435,7 +435,7 @@ pub enum PySchoonschipTraversal {
 /// Available values are `SmallestDegree`, `LargestDegree`, `MinLargestOperandBytes`,
 /// `MinProductTerms`, `MinProductBytes`, `SmallestDegreeMinLargestOperandBytes`,
 /// `SmallestDegreeMinProductTerms`, and `SmallestDegreeMinProductBytes`.
-#[cfg_attr(feature = "python_stubgen", gen_stub_pyclass_enum)]
+#[cfg_attr(feature = "python-stubs", gen_stub_pyclass_enum)]
 #[pyclass(
     frozen,
     name = "SchoonschipContractionOrder",
@@ -507,7 +507,7 @@ impl From<RustSchoonschipContractionOrder> for PySchoonschipContractionOrder {
 }
 
 /// Immutable configuration for expression and network Schoonschip passes.
-#[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
+#[cfg_attr(feature = "python-stubs", gen_stub_pyclass)]
 #[pyclass(
     frozen,
     name = "SchoonschipSettings",
@@ -574,7 +574,7 @@ impl PySchoonschipSettings {
     }
 }
 
-#[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
+#[cfg_attr(feature = "python-stubs", gen_stub_pymethods)]
 #[pymethods]
 impl PySchoonschipSettings {
     /// Configure traversal, depth, shorthand expansion, and network-contraction policies.
@@ -743,7 +743,7 @@ impl PySchoonschipSettings {
 }
 
 #[cfg_attr(
-    feature = "python_stubgen",
+    feature = "python-stubs",
     gen_stub_pyfunction(module = "symbolica.community.idenso")
 )]
 #[pyfunction]
@@ -759,7 +759,7 @@ pub fn canonize(expression: &PythonExpression) -> PyResult<PythonExpression> {
 }
 
 #[cfg_attr(
-    feature = "python_stubgen",
+    feature = "python-stubs",
     gen_stub_pyfunction(module = "symbolica.community.idenso")
 )]
 #[pyfunction]
@@ -786,7 +786,7 @@ pub fn alias_subtensors(
 }
 
 #[cfg_attr(
-    feature = "python_stubgen",
+    feature = "python-stubs",
     gen_stub_pyfunction(module = "symbolica.community.idenso")
 )]
 #[pyfunction]
@@ -796,7 +796,7 @@ pub fn spenso_conjugate(expression: &PythonExpression) -> PythonExpression {
 }
 
 #[cfg_attr(
-    feature = "python_stubgen",
+    feature = "python-stubs",
     gen_stub_pyfunction(module = "symbolica.community.idenso")
 )]
 #[pyfunction]
@@ -812,7 +812,7 @@ pub fn conjugate_transpose(
 }
 
 #[cfg_attr(
-    feature = "python_stubgen",
+    feature = "python-stubs",
     gen_stub_pyfunction(module = "symbolica.community.idenso")
 )]
 #[pyfunction(signature = (expression, settings = None))]
@@ -830,7 +830,7 @@ pub fn cook(
 }
 
 #[cfg_attr(
-    feature = "python_stubgen",
+    feature = "python-stubs",
     gen_stub_pyfunction(module = "symbolica.community.idenso")
 )]
 #[pyfunction(signature = (expression, settings = None))]
@@ -845,7 +845,7 @@ pub fn uncook(
 }
 
 #[cfg_attr(
-    feature = "python_stubgen",
+    feature = "python-stubs",
     gen_stub_pyfunction(module = "symbolica.community.idenso")
 )]
 #[pyfunction(signature = (expression, settings = None))]
@@ -862,7 +862,7 @@ pub fn schoonschip(
 }
 
 #[cfg_attr(
-    feature = "python_stubgen",
+    feature = "python-stubs",
     gen_stub_pyfunction(module = "symbolica.community.idenso")
 )]
 #[pyfunction(signature = (expression, settings = None, *, expand_contracted_sums = false))]
@@ -889,7 +889,7 @@ pub fn schoonschip_net(
 }
 
 #[cfg_attr(
-    feature = "python_stubgen",
+    feature = "python-stubs",
     gen_stub_pyfunction(module = "symbolica.community.idenso")
 )]
 #[pyfunction]
@@ -899,7 +899,7 @@ pub fn normalize_dots(expression: &PythonExpression) -> PythonExpression {
 }
 
 #[cfg_attr(
-    feature = "python_stubgen",
+    feature = "python-stubs",
     gen_stub_pyfunction(module = "symbolica.community.idenso")
 )]
 #[pyfunction]
@@ -915,7 +915,7 @@ pub fn expand_dots(expression: &PythonExpression) -> PyResult<PythonExpression> 
 }
 
 #[cfg_attr(
-    feature = "python_stubgen",
+    feature = "python-stubs",
     gen_stub_pyfunction(module = "symbolica.community.idenso")
 )]
 #[pyfunction]
@@ -930,7 +930,7 @@ macro_rules! undo_shorthand_binding {
         #[doc = $doc]
         #[doc = "\n\nRaises `NetworkToolingError` when the expression is not a valid tensor network or evaluation fails."]
         #[cfg_attr(
-            feature = "python_stubgen",
+            feature = "python-stubs",
             gen_stub_pyfunction(module = "symbolica.community.idenso")
         )]
         #[pyfunction]
@@ -971,7 +971,7 @@ undo_shorthand_binding!(
 );
 
 #[cfg_attr(
-    feature = "python_stubgen",
+    feature = "python-stubs",
     gen_stub_pyfunction(module = "symbolica.community.idenso")
 )]
 #[pyfunction]
@@ -984,7 +984,7 @@ pub fn collect_chains(
 }
 
 #[cfg_attr(
-    feature = "python_stubgen",
+    feature = "python-stubs",
     gen_stub_pyfunction(module = "symbolica.community.idenso")
 )]
 #[pyfunction]
@@ -997,7 +997,7 @@ pub fn chainify(
 }
 
 #[cfg_attr(
-    feature = "python_stubgen",
+    feature = "python-stubs",
     gen_stub_pyfunction(module = "symbolica.community.idenso")
 )]
 #[pyfunction]
@@ -1007,7 +1007,7 @@ pub fn normalize_chains(expression: &PythonExpression) -> PythonExpression {
 }
 
 #[cfg_attr(
-    feature = "python_stubgen",
+    feature = "python-stubs",
     gen_stub_pyfunction(module = "symbolica.community.idenso")
 )]
 #[pyfunction]

@@ -336,8 +336,8 @@ mod important {
     use super::*;
 
     #[test]
-    #[serial]
     fn aa_aa_local_inspect_backend_consistency() -> Result<()> {
+        let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
         let point = vec![0.11, -0.07, 0.19];
         let cases = [
             ("a", "1L_ppmm", 0),
@@ -415,8 +415,8 @@ mod important {
 }
 
 #[test]
-#[serial]
 fn aa_aa_integrated_graph_histogram_bins() -> Result<()> {
+    let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
     let targets = load_integrated_targets()?;
     let mut cli = setup_aa_aa_cli("aa_aa_integrated_graph_histogram_bins_generated")?;
     // The historical saved state was generated with SM-default parameters;

@@ -19,7 +19,7 @@ use crate::{
     VakintExpression, VakintSettings, vakint_symbol,
 };
 
-#[cfg(feature = "python_stubgen")]
+#[cfg(feature = "python-stubs")]
 use pyo3_stub_gen::derive::*;
 
 impl SymbolicaCommunityModule for VakintWrapper {
@@ -55,7 +55,7 @@ macro_rules! define_vakint_python_surface {
         }
 
         /// The classes registered on `symbolica.community.vakint`.
-        #[cfg(feature = "python_stubgen")]
+        #[cfg(feature = "python-stubs")]
         pub const PYTHON_STUB_SURFACE: &[&str] = &[$(<$class as PyClass>::NAME,)+];
     };
 }
@@ -71,7 +71,7 @@ fn vakint_to_python_error(vakint_error: VakintError) -> PyErr {
     exceptions::PyValueError::new_err(format!("Vakint error | {vakint_error}"))
 }
 
-#[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
+#[cfg_attr(feature = "python-stubs", gen_stub_pyclass)]
 #[pyclass(name = "Vakint", module = "symbolica.community.vakint")]
 /// Vakint engine and settings used for matching, reduction, and evaluation.
 ///
@@ -81,7 +81,7 @@ pub struct VakintWrapper {
     pub settings: VakintSettings,
 }
 
-#[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
+#[cfg_attr(feature = "python-stubs", gen_stub_pyclass)]
 #[pyclass(name = "VakintNumericalResult", module = "symbolica.community.vakint")]
 /// Numerical Laurent series in the dimensional-regularization parameter epsilon.
 pub struct NumericalEvaluationResultWrapper {
@@ -104,7 +104,7 @@ impl<'a, 'py> FromPyObject<'a, 'py> for NumericalEvaluationResultWrapper {
     }
 }
 
-#[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
+#[cfg_attr(feature = "python-stubs", gen_stub_pymethods)]
 #[pymethods]
 impl NumericalEvaluationResultWrapper {
     /// String representation of the numerical result.
@@ -240,7 +240,7 @@ impl NumericalEvaluationResultWrapper {
 /// A Vakint integral split into its numerator and normalized topology structure.
 ///
 /// Construct this wrapper from a Symbolica expression before applying Vakint operations.
-#[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
+#[cfg_attr(feature = "python-stubs", gen_stub_pyclass)]
 #[pyclass(name = "VakintExpression", module = "symbolica.community.vakint")]
 pub struct VakintExpressionWrapper {
     pub value: VakintExpression,
@@ -260,7 +260,7 @@ impl<'a, 'py> FromPyObject<'a, 'py> for VakintExpressionWrapper {
     }
 }
 
-#[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
+#[cfg_attr(feature = "python-stubs", gen_stub_pymethods)]
 #[pymethods]
 impl VakintExpressionWrapper {
     /// String representation of the VakintExpression.
@@ -328,7 +328,7 @@ impl VakintExpressionWrapper {
     }
 }
 
-#[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
+#[cfg_attr(feature = "python-stubs", gen_stub_pyclass)]
 #[pyclass(name = "VakintEvaluationMethod", module = "symbolica.community.vakint")]
 /// One configured backend in a `Vakint` instance's evaluation order.
 pub struct VakintEvaluationMethodWrapper {
@@ -349,7 +349,7 @@ impl<'a, 'py> FromPyObject<'a, 'py> for VakintEvaluationMethodWrapper {
     }
 }
 
-#[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
+#[cfg_attr(feature = "python-stubs", gen_stub_pymethods)]
 #[pymethods]
 impl VakintEvaluationMethodWrapper {
     /// String representation of the evaluation method.
@@ -545,7 +545,7 @@ impl VakintEvaluationMethodWrapper {
     }
 }
 
-#[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
+#[cfg_attr(feature = "python-stubs", gen_stub_pymethods)]
 #[pymethods]
 impl VakintWrapper {
     #[pyo3(signature = (run_time_decimal_precision = None, evaluation_order = None, epsilon_symbol = None, mu_r_sq_symbol = None, form_exe_path = None, python_exe_path = None, verify_numerator_identification = None, integral_normalization_factor = None, allow_unknown_integrals = None, clean_tmp_dir = None, number_of_terms_in_epsilon_expansion = None, use_dot_product_notation = None, temporary_directory = None))]

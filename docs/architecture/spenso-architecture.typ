@@ -125,7 +125,7 @@ is disabled or the contraction strategy performs partial graph rewrites.
 
 === Symbolic parallelism and optimized sums
 
-With `shadowing`, the process-wide `SymbolicParallelism` policy controls Rayon work involving
+With `symbolica`, the process-wide `SymbolicParallelism` policy controls Rayon work involving
 Symbolica atoms. `Auto` checks the Symbolica license once and uses a workload heuristic where an
 operation provides one; `Serial` disables Rayon; `Parallel` forces Rayon and bypasses `Auto`'s
 license safety check. Configure the policy before tensor work: changing it concurrently with an
@@ -144,7 +144,7 @@ require `SPENSO_NETWORK_PROFILE_VERBOSE`.
 
 == Symbolica parsing boundary
 
-The `shadowing` feature enables `network::parsing`. `NetworkParse` and the more general
+The `symbolica` feature enables `network::parsing`. `NetworkParse` and the more general
 `Network::try_from_view` lower a Symbolica `AtomView` into the same graph and store used by
 programmatic construction. Dispatch recognizes addition, multiplication, integer powers, and
 functions before falling back to scalar or opaque-tensor construction.
@@ -174,14 +174,14 @@ Spenso and Idenso are recorded in the
 
 The default `native` feature forwards GMP/MPFR support; `wasm` selects Symbolica's Wasm backend
 with default features disabled. Native code generation is a separate `native-code-generation`
-feature. `shadowing` enables Symbolica atoms,
+feature. `symbolica` enables Symbolica atoms,
 parametric tensors, parsing, state-aware decoding, and Linnet's Symbolica adapter. `python`
 only adds PyO3 extraction for Spenso's complex scalar type; the full Python tensor surface lives
-in `spynso3`. `python_stubgen` adds stub metadata and implies `python`.
+in `spynso3`. `python-stubs` adds stub metadata and implies `python`.
 
 Structures, dense and sparse tensors, `DataTensor`, `NetworkGraph`, `NetworkStore`, and
 `Network` derive Serde and bincode representations when their generic fields support them.
-Under `shadowing`, selected types also decode through Symbolica's state map. These are type-level
+Under `symbolica`, selected types also decode through Symbolica's state map. These are type-level
 encodings, not a versioned checkpoint protocol: Spenso provides no state directory, database,
 schema migration, or cross-version compatibility promise. The optional `portable-payload`
 module carries representation and math-display declarations beside native Atom bytes through
@@ -231,7 +231,7 @@ Unit and snapshot tests live beside structures, dense and sparse data, contracti
 network graph and store operations, libraries, execution strategies, symbolic parsing,
 parametric tensors, and serialization-sensitive types. The default typed boundary is exercised
 with `cargo test -p spenso`; parsing and symbolic execution require
-`cargo test -p spenso --features shadowing`. Rayon behavior also depends on the Symbolica
+`cargo test -p spenso --features symbolica`. Rayon behavior also depends on the Symbolica
 parallelism setting, so performance checks should record both the Cargo feature set and runtime
 thread configuration.
 

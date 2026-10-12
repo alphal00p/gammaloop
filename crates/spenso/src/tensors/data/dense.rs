@@ -20,7 +20,7 @@ use crate::structure::representation::Representation;
 use crate::structure::slot::IsAbstractSlot;
 use delegate::delegate;
 
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 use crate::{
     shadowing::{ShadowMapping, Shadowable, symbolica_utils::atomic_expanded_label_id},
     structure::slot::ParseableAind,
@@ -29,8 +29,8 @@ use crate::{
 use bincode::{Decode, Encode};
 use eyre::{Result, eyre};
 use indexmap::IndexMap;
-use num::Zero;
-#[cfg(feature = "shadowing")]
+use num_traits::Zero;
+#[cfg(feature = "symbolica")]
 use symbolica_utils::{IntoArgs, IntoSymbol};
 
 use super::{CastData, GetTensorData, HasTensorData, SetTensorData, SparseTensor, StorageTensor};
@@ -43,7 +43,7 @@ use std::{
     ops::{Index, IndexMut},
 };
 
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 use symbolica::{atom::Atom, atom::Symbol};
 
 /// Contiguous tensor components paired with their structural coordinate map.
@@ -187,7 +187,7 @@ impl<T, S: TensorStructure, O: From<S> + TensorStructure> CastStructure<DenseTen
     }
 }
 
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 impl<T: Clone, S: TensorStructure> Shadowable for DenseTensor<T, S>
 where
     S: HasName + Clone,
@@ -197,7 +197,7 @@ where
 {
 }
 
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 impl<T: Clone, S: TensorStructure> ShadowMapping for DenseTensor<T, S>
 where
     S: HasName + Clone,
@@ -604,7 +604,7 @@ where
         }
         hashmap
     }
-    #[cfg(feature = "shadowing")]
+    #[cfg(feature = "symbolica")]
     fn symhashmap(&self, name: Symbol, args: &[Atom]) -> std::collections::HashMap<Atom, T> {
         let mut hashmap = std::collections::HashMap::new();
 

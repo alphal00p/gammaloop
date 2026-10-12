@@ -11,7 +11,7 @@ clap = { workspace = true, features = ["derive"] }
 eyre.workspace = true
 gammaloop-api = { path = "../gammaloop-api", default-features = false, features = ["cli"], optional = true }
 gammalooprs = { path = "../gammalooprs", default-features = false, optional = true }
-regex.workspace = true
+regex = { workspace = true, optional = true }
 schemars = { workspace = true, optional = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
@@ -20,7 +20,7 @@ vakint = { path = "../vakint", default-features = false, optional = true }
 [features]
 default = []
 gammaloop-reference = ["dep:gammaloop-api", "dep:gammalooprs", "dep:schemars"]
-vakint-reference = ["dep:vakint"]
+vakint-reference = ["dep:vakint", "dep:regex"]
 
 [[bin]]
 name = "alphal00p-docs-gammaloop-reference"

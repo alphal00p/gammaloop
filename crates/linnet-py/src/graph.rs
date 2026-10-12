@@ -24,10 +24,7 @@ use crate::topology::{PyCutPartition, PyCycle, PyDirectionBasis, PySubgraph, PyT
 static SPEC_ID: AtomicU64 = AtomicU64::new(0);
 
 /// The directed role of a half-edge within its edge.
-#[cfg_attr(
-    feature = "python_stubgen",
-    pyo3_stub_gen::derive::gen_stub_pyclass_enum
-)]
+#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pyclass_enum)]
 #[pyclass(from_py_object, eq, eq_int, name = "Flow")]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum PyFlow {
@@ -54,10 +51,7 @@ impl From<Flow> for PyFlow {
 }
 
 /// How an edge's declared endpoints determine its logical direction.
-#[cfg_attr(
-    feature = "python_stubgen",
-    pyo3_stub_gen::derive::gen_stub_pyclass_enum
-)]
+#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pyclass_enum)]
 #[pyclass(from_py_object, eq, eq_int, name = "Orientation")]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub enum PyOrientation {
@@ -88,7 +82,7 @@ impl From<Orientation> for PyOrientation {
 }
 
 /// A reusable declarative node description accepted by `build()` and `Graph.add_node()`.
-#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
+#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(unsendable, name = "NodeSpec")]
 pub struct PyNodeSpec {
     token: u64,
@@ -116,8 +110,8 @@ impl PyNodeSpec {
     }
 }
 
-#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
-#[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
+#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pymethods)]
+#[cfg_attr(not(feature = "python-stubs"), pyo3_stub_gen_derive::remove_gen_stub)]
 #[pymethods]
 impl PyNodeSpec {
     #[getter]
@@ -182,7 +176,7 @@ impl EndpointRole {
 }
 
 /// A declarative edge endpoint produced by `source()` or `sink()`.
-#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
+#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(unsendable, name = "HalfEdgeSpec")]
 pub struct PyHalfEdgeSpec {
     node: Option<Py<PyAny>>,
@@ -191,8 +185,8 @@ pub struct PyHalfEdgeSpec {
     drawing: Option<Py<PyDict>>,
 }
 
-#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
-#[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
+#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pymethods)]
+#[cfg_attr(not(feature = "python-stubs"), pyo3_stub_gen_derive::remove_gen_stub)]
 #[pymethods]
 impl PyHalfEdgeSpec {
     #[getter]
@@ -237,7 +231,7 @@ impl PyHalfEdgeSpec {
 }
 
 /// A reusable declarative edge description accepted by `build()` and `Graph.add_edge()`.
-#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
+#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(unsendable, name = "EdgeSpec")]
 pub struct PyEdgeSpec {
     name: Option<String>,
@@ -248,8 +242,8 @@ pub struct PyEdgeSpec {
     orientation: PyOrientation,
 }
 
-#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
-#[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
+#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pymethods)]
+#[cfg_attr(not(feature = "python-stubs"), pyo3_stub_gen_derive::remove_gen_stub)]
 #[pymethods]
 impl PyEdgeSpec {
     #[getter]
@@ -302,7 +296,7 @@ impl PyEdgeSpec {
 
 /// Describe a node while preserving its arbitrary Python data by identity.
 #[cfg_attr(
-    feature = "python_stubgen",
+    feature = "python-stubs",
     pyo3_stub_gen::derive::gen_stub_pyfunction(python = r#"
     import typing
 
@@ -353,7 +347,7 @@ fn endpoint(
 
 /// Attach a source endpoint resolved by `build()` or `Graph.add_edge()`.
 #[cfg_attr(
-    feature = "python_stubgen",
+    feature = "python-stubs",
     pyo3_stub_gen::derive::gen_stub_pyfunction(python = r#"
     import typing
 
@@ -374,7 +368,7 @@ pub fn source(
 
 /// Attach a sink endpoint resolved by `build()` or `Graph.add_edge()`.
 #[cfg_attr(
-    feature = "python_stubgen",
+    feature = "python-stubs",
     pyo3_stub_gen::derive::gen_stub_pyfunction(python = r#"
     import typing
 
@@ -395,7 +389,7 @@ pub fn sink(
 
 /// Describe an edge from one or two endpoint specs.
 #[cfg_attr(
-    feature = "python_stubgen",
+    feature = "python-stubs",
     pyo3_stub_gen::derive::gen_stub_pyfunction(python = r#"
     import typing
 
@@ -520,7 +514,7 @@ impl GraphState {
 }
 
 /// An owned topology with arbitrary element data and typed rendering configuration.
-#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
+#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(unsendable, name = "Graph")]
 pub struct PyGraph {
     pub(crate) state: RefCell<Option<GraphState>>,
@@ -634,7 +628,7 @@ enum ViewIndex {
 macro_rules! graph_view {
     ($doc:literal, $rust:ident, $python:literal, $index_variant:ident) => {
         #[doc = $doc]
-        #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
+        #[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pyclass)]
         #[pyclass(unsendable, name = $python)]
         pub struct $rust {
             graph: Option<Py<PyGraph>>,
@@ -779,8 +773,8 @@ impl PyEdge {
     }
 }
 
-#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
-#[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
+#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pymethods)]
+#[cfg_attr(not(feature = "python-stubs"), pyo3_stub_gen_derive::remove_gen_stub)]
 #[pymethods]
 impl PyNode {
     #[getter]
@@ -870,8 +864,8 @@ impl PyNode {
     }
 }
 
-#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
-#[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
+#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pymethods)]
+#[cfg_attr(not(feature = "python-stubs"), pyo3_stub_gen_derive::remove_gen_stub)]
 #[pymethods]
 impl PyEdge {
     #[getter]
@@ -965,8 +959,8 @@ impl PyEdge {
     }
 }
 
-#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
-#[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
+#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pymethods)]
+#[cfg_attr(not(feature = "python-stubs"), pyo3_stub_gen_derive::remove_gen_stub)]
 #[pymethods]
 impl PyHalfEdge {
     #[getter]
@@ -1115,8 +1109,8 @@ fn view_for(
     })
 }
 
-#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
-#[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
+#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pymethods)]
+#[cfg_attr(not(feature = "python-stubs"), pyo3_stub_gen_derive::remove_gen_stub)]
 #[pymethods]
 impl PyGraph {
     #[new]
@@ -2235,7 +2229,7 @@ impl PyEdgeSpec {
 
 /// Build a graph from declarative node and edge specs.
 #[cfg_attr(
-    feature = "python_stubgen",
+    feature = "python-stubs",
     pyo3_stub_gen::derive::gen_stub_pyfunction(python = r#"
     import typing
 

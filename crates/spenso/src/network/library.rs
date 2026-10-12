@@ -16,7 +16,7 @@ use crate::{
 
 use eyre::Result;
 
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 pub mod function_lib;
 pub mod panicing;
 use serde::{Deserialize, Serialize};
@@ -415,7 +415,7 @@ impl<D: Clone + Default, S: TensorStructure + Clone> LibraryTensor for RealOrCom
     }
 }
 
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 pub mod symbolic;
 
 pub trait TensorLibraryData: Neg<Output = Self> {
@@ -456,7 +456,7 @@ impl_tensor_library_data!(f32, 0.0, 1.0);
 impl_tensor_library_data!(f64, 0.0, 1.0);
 impl_tensor_library_data!(i32, 0, 1);
 impl_tensor_library_data!(i64, 0, 1);
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 impl_tensor_library_data!(
     symbolica::atom::Atom,
     symbolica::atom::Atom::Zero,

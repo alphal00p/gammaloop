@@ -7,7 +7,6 @@ use crate::{
     tensors::complex::RealOrComplexTensor,
     tensors::data::DataTensor,
 };
-use duplicate::duplicate;
 use symbolica::{atom::Atom, domains::rational::Rational};
 
 use super::{ConcreteOrParam, MixedTensor, ParamOrConcrete, ParamTensor};
@@ -99,39 +98,27 @@ where
     }
 }
 
-duplicate! {
-    [smaller larger;
+impl TrySmallestUpgrade<Rational> for Complex<Rational> {
+    type LCM = Complex<Rational>;
 
-[Rational][Complex<Rational>]
-
-]
-
-impl TrySmallestUpgrade<smaller> for larger {
-    type LCM = larger;
-
-
-
-    fn try_upgrade(&self) -> Option<std::borrow::Cow<'_,Self::LCM>>
-        where
-            Self::LCM: Clone {
+    fn try_upgrade(&self) -> Option<std::borrow::Cow<'_, Self::LCM>>
+    where
+        Self::LCM: Clone,
+    {
         Some(std::borrow::Cow::Borrowed(self))
     }
 }
 
-impl TrySmallestUpgrade<larger> for smaller {
-    type LCM = larger;
+impl TrySmallestUpgrade<Complex<Rational>> for Rational {
+    type LCM = Complex<Rational>;
 
-
-
-    fn try_upgrade(&self) -> Option<std::borrow::Cow<'_,Self::LCM>>
-        where
-            Self::LCM: Clone {
-               let z = self.ref_zero();
-                Some(std::borrow::Cow::Owned(Complex::new(self.clone(), z)))
+    fn try_upgrade(&self) -> Option<std::borrow::Cow<'_, Self::LCM>>
+    where
+        Self::LCM: Clone,
+    {
+        let z = self.ref_zero();
+        Some(std::borrow::Cow::Owned(Complex::new(self.clone(), z)))
     }
-}
-
-
 }
 
 // impl<S: TensorStructure + Clone, T> ScalarMul<RealOrComplex<T>> for ParamTensor<S>

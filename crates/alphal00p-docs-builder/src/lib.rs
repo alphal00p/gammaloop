@@ -1,12 +1,15 @@
 //! Build and validate the five independently rendered product manuals.
 
+#[cfg(feature = "watch")]
 mod server;
 mod typst_render;
+#[cfg(feature = "watch")]
 mod watch;
 
 #[cfg(test)]
 mod provenance_tests;
 
+#[cfg(feature = "watch")]
 pub use watch::WatchRequest;
 
 use std::{
@@ -103,8 +106,10 @@ pub(crate) enum ComponentCatalogCache<'a> {
     /// Generate catalogs into a build-scoped temporary directory.
     Temporary,
     /// Regenerate every catalog and atomically replace the watch-session cache.
+    #[cfg_attr(not(feature = "watch"), allow(dead_code))]
     Refresh(&'a Path),
     /// Validate and publish catalogs from the existing watch-session cache.
+    #[cfg_attr(not(feature = "watch"), allow(dead_code))]
     Reuse(&'a Path),
 }
 
@@ -113,8 +118,10 @@ pub(crate) enum ReferencePageCache<'a> {
     /// Generate reference pages only for this build.
     Temporary,
     /// Regenerate and atomically replace the watch-session reference pages.
+    #[cfg_attr(not(feature = "watch"), allow(dead_code))]
     Refresh(&'a Path),
     /// Reuse fully decorated reference pages from the watch session.
+    #[cfg_attr(not(feature = "watch"), allow(dead_code))]
     Reuse(&'a Path),
 }
 
@@ -1054,10 +1061,12 @@ impl SiteBuilder {
                 Some("typ") => {
                     architecture_sources.insert(path.strip_prefix(&self.root)?.to_path_buf());
                 }
-                Some("md" | "html") => bail!(
-                    "developer source {} must be migrated to Typst",
-                    path.display()
-                ),
+                Some("md" | "html") => {
+                    bail!(
+                        "developer source {} must be migrated to Typst",
+                        path.display()
+                    );
+                }
                 _ => {}
             }
         }
@@ -2555,7 +2564,9 @@ impl SiteBuilder {
         let language = match language {
             ApiLanguage::Rust => "rust",
             ApiLanguage::Python => "python",
-            _ => bail!("unsupported component catalog language {language:?}"),
+            _ => {
+                bail!("unsupported component catalog language {language:?}");
+            }
         };
         let mut command = Command::new(env::var_os("CARGO").unwrap_or_else(|| "cargo".into()));
         command
@@ -10107,14 +10118,14 @@ mod tests {
 
         assert_eq!(module, "symbolica.community.spenso");
         assert_ne!(module, catalog.component.package);
-        assert_eq!(item.required_features.as_slice(), ["python_stubgen"]);
+        assert_eq!(item.required_features.as_slice(), ["python-stubs"]);
         assert!(rendered.contains(&format!("<p><code>{module}</code> · version")));
         assert!(!rendered.contains(&format!(
             "<p><code>{}</code> · version",
             catalog.component.package
         )));
         assert!(rendered.contains(
-            "<strong>Source-build provenance:</strong> this catalog was generated with <code>python_stubgen</code>."
+            "<strong>Source-build provenance:</strong> this catalog was generated with <code>python-stubs</code>."
         ));
         assert!(!symbol.contains("api-feature-requirement"));
         assert!(symbol.contains("href=\"guides/python/\""));
@@ -10407,6 +10418,10 @@ mod tests {
             schema: LEGACY_PROSE_SCHEMA_VERSION,
             source: Vec::new(),
         };
+        assert!(builder.check_prose_sources().is_ok());
+        // On a case-insensitive filesystem, writing readme.md over README.md
+        // preserves the original directory entry's allowed spelling.
+        fs::remove_file(temporary.path().join("README.md")).unwrap();
 
         for source in [
             "new-note.MD",
@@ -10428,6 +10443,7 @@ mod tests {
             fs::remove_file(path).unwrap();
         }
 
+        fs::write(temporary.path().join("README.md"), "Compatibility readme").unwrap();
         fs::write(temporary.path().join("README.typ"), "= Duplicate readme").unwrap();
         assert!(builder.check_prose_sources().is_err());
     }

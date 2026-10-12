@@ -17,7 +17,7 @@ use pyo3::{
     types::{PyComplex, PyFloat, PySlice, PyTuple, PyType},
 };
 
-#[cfg(feature = "python_stubgen")]
+#[cfg(feature = "python-stubs")]
 use pyo3_stub_gen::{
     generate::MethodType,
     inventory::submit,
@@ -59,10 +59,10 @@ use symbolica::{
 
 use symbolica::api::python::{PythonExpression, PythonFormattedOutput};
 
-#[cfg(feature = "python_stubgen")]
+#[cfg(feature = "python-stubs")]
 use pyo3_stub_gen::{PyStubType, TypeInfo, derive::*, impl_stub_type};
 
-#[cfg(feature = "python_stubgen")]
+#[cfg(feature = "python-stubs")]
 use pyo3_stub_gen::derive::{gen_stub_pyclass_enum, gen_stub_pyfunction};
 
 pub mod broadcast;
@@ -90,7 +90,7 @@ trait ModuleInit: PyClass {
     }
 }
 
-#[cfg(feature = "python_stubgen")]
+#[cfg(feature = "python-stubs")]
 /// The Python names that must be present in Spenso's generated stub.
 ///
 /// `registered` is the actual community-module surface. `returned_opaque`
@@ -127,7 +127,7 @@ macro_rules! define_spenso_python_surface {
             Ok(())
         }
 
-        #[cfg(feature = "python_stubgen")]
+        #[cfg(feature = "python-stubs")]
         pub const PYTHON_STUB_SURFACE: PythonStubSurface = PythonStubSurface {
             registered: &[
                 $($(#[$class_attr])* <$class as PyClass>::NAME,)+
@@ -142,7 +142,7 @@ macro_rules! define_spenso_python_surface {
 pub struct SpensoModule;
 
 /// Policy for Rayon operations that manipulate Symbolica expressions.
-#[cfg_attr(feature = "python_stubgen", gen_stub_pyclass_enum)]
+#[cfg_attr(feature = "python-stubs", gen_stub_pyclass_enum)]
 #[pyclass(from_py_object, eq, eq_int, module = "symbolica.community.spenso")]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SymbolicParallelism {
@@ -174,7 +174,7 @@ impl From<SymbolicParallelism> for spenso::symbolic_parallelism::SymbolicParalle
 /// reports whether the resolved policy permits Rayon, not whether every
 /// operation will use it.
 #[cfg_attr(
-    feature = "python_stubgen",
+    feature = "python-stubs",
     gen_stub_pyfunction(module = "symbolica.community.spenso")
 )]
 #[pyfunction]
@@ -246,7 +246,7 @@ define_spenso_python_surface! {
 /// >>> data = [1.0, 2.0, 3.0, 4.0]
 /// >>> tensor = Tensor.dense(structure, data)
 /// >>> sparse_tensor = Tensor.sparse(structure, float)
-#[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
+#[cfg_attr(feature = "python-stubs", gen_stub_pyclass)]
 #[pyclass(from_py_object, name = "Tensor", module = "symbolica.community.spenso")]
 #[derive(Clone)]
 pub struct Spensor {
@@ -289,7 +289,7 @@ impl<'a, 'py> FromPyObject<'a, 'py> for AtomsOrFloats {
     }
 }
 
-#[cfg(feature = "python_stubgen")]
+#[cfg(feature = "python-stubs")]
 impl_stub_type!(AtomsOrFloats = Vec<PythonExpression> | Vec<f64> | Vec<Complex<f64>>);
 
 fn tensor_data_layout_error(error: TensorDataLayoutError) -> PyErr {
@@ -361,7 +361,7 @@ impl<'a, 'py> FromPyObject<'a, 'py> for TensorDataDescriptor {
     }
 }
 
-#[cfg(feature = "python_stubgen")]
+#[cfg(feature = "python-stubs")]
 impl PyStubType for TensorDataDescriptor {
     fn type_output() -> TypeInfo {
         TensorExpression::type_output()
@@ -417,7 +417,7 @@ pub enum SliceOrIntOrExpanded<'a> {
     Expanded(Vec<usize>),
 }
 
-#[cfg(feature = "python_stubgen")]
+#[cfg(feature = "python-stubs")]
 impl PyStubType for SliceOrIntOrExpanded<'_> {
     fn type_input() -> pyo3_stub_gen::TypeInfo {
         TypeInfo::builtin("slice") | usize::type_input() | TypeInfo::list_of::<usize>()
@@ -435,7 +435,7 @@ pub enum TensorElements {
     Symbolica(PythonExpression),
 }
 
-#[cfg(feature = "python_stubgen")]
+#[cfg(feature = "python-stubs")]
 impl PyStubType for TensorElements {
     fn type_input() -> pyo3_stub_gen::TypeInfo {
         PythonExpression::type_input() | Complex::type_input() | PyFloat::type_input()
@@ -466,7 +466,7 @@ impl From<ConcreteOrParam<RealOrComplex<f64>>> for TensorElements {
     }
 }
 
-#[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
+#[cfg_attr(feature = "python-stubs", gen_stub_pymethods)]
 #[pymethods]
 impl Spensor {
     /// Return the exact structured expression describing this tensor's data.
@@ -1178,7 +1178,7 @@ impl Spensor {
 /// --------
 /// >>> evaluator = my_tensor.evaluator(constants={}, funs={}, params=[x, y])
 /// >>> results = evaluator.evaluate([[1.0, 2.0], [3.0, 4.0]])
-#[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
+#[cfg_attr(feature = "python-stubs", gen_stub_pyclass)]
 #[pyclass(
     from_py_object,
     name = "TensorEvaluator",
@@ -1194,7 +1194,7 @@ pub struct SpensoExpressionEvaluator {
     descriptor_args: Vec<Atom>,
 }
 
-#[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
+#[cfg_attr(feature = "python-stubs", gen_stub_pymethods)]
 #[pymethods]
 impl SpensoExpressionEvaluator {
     /// Evaluate the tensor expression for multiple real-valued parameter inputs.
@@ -1258,7 +1258,7 @@ impl SpensoExpressionEvaluator {
 }
 
 #[cfg(feature = "native")]
-#[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
+#[cfg_attr(feature = "python-stubs", gen_stub_pymethods)]
 #[pymethods]
 impl SpensoExpressionEvaluator {
     /// Compile the evaluator to a shared library using C++ for maximum performance.
@@ -1391,7 +1391,7 @@ impl SpensoExpressionEvaluator {
 /// >>> compiled = evaluator.compile("eval_func", "code.cpp", "lib")
 /// >>> results = compiled.evaluate_complex(large_input_batch)
 #[cfg(feature = "native")]
-#[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
+#[cfg_attr(feature = "python-stubs", gen_stub_pyclass)]
 #[pyclass(
     from_py_object,
     name = "CompiledTensorEvaluator",
@@ -1406,7 +1406,7 @@ pub struct SpensoCompiledExpressionEvaluator {
 }
 
 #[cfg(feature = "native")]
-#[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
+#[cfg_attr(feature = "python-stubs", gen_stub_pymethods)]
 #[pymethods]
 impl SpensoCompiledExpressionEvaluator {
     /// Evaluate the tensor expression for multiple complex-valued parameter inputs.
@@ -1451,7 +1451,7 @@ impl SpensoCompiledExpressionEvaluator {
     }
 }
 
-#[cfg(feature = "python_stubgen")]
+#[cfg(feature = "python-stubs")]
 submit! {
     PyMethodsInfo {
         struct_id: std::any::TypeId::of::<crate::structure::SpensoRepresentation>,
@@ -1542,7 +1542,7 @@ Examples
 
 // static NONE: LazyLock<String> = LazyLock::new(|| "None".to_string());
 
-#[cfg(feature = "python_stubgen")]
+#[cfg(feature = "python-stubs")]
 submit! {
     PyMethodsInfo {
         struct_id: std::any::TypeId::of::<Spensor>,
@@ -1682,7 +1682,7 @@ Examples
     }
 }
 
-#[cfg(feature = "python_stubgen")]
+#[cfg(feature = "python-stubs")]
 pub fn stub_info() -> pyo3_stub_gen::Result<pyo3_stub_gen::StubInfo> {
     pyo3_stub_gen::StubInfo::from_project_root(
         "symbolica".to_owned(),
@@ -1789,7 +1789,7 @@ mod tests {
         .unwrap();
     }
 
-    #[cfg(feature = "python_stubgen")]
+    #[cfg(feature = "python-stubs")]
     #[test]
     fn tensor_indexing_stubs_document_logical_order() {
         let methods = pyo3_stub_gen::inventory::iter::<PyMethodsInfo>
