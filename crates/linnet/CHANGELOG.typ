@@ -7,6 +7,13 @@ and this project adheres to #link("https://semver.org/spec/v2.0.0.html")[Semanti
 
 == Unreleased
 
+=== Fixed
+
+- Cut enumeration now preserves complete node sides and separates both terminal regions
+  symmetrically. Every connected component must contain a terminal of its side; dangling
+  half-edges remain with their nodes and bridges appear in the boundary only when they cross
+  between sides. Disconnected components without terminals and live isolated nodes yield no cuts.
+
 === Added
 
 - Canonical forms: `HedgeGraph::canonical_form_by` and `canonical_form` compute the

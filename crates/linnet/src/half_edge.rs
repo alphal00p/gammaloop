@@ -1994,11 +1994,20 @@ impl<E, V, H, N: Topology> HedgeGraph<E, V, H, N> {
         }
     }
 
+    /// Enumerates terminal-rooted partitions; see [`Self::all_cuts`].
     pub fn all_cuts_from_ids(
         &self,
         source: &[NodeIndex],
         target: &[NodeIndex],
     ) -> Vec<(SuBitGraph, OrientedCut, SuBitGraph)> {
+        // Combining crowns would erase the identity of an isolated terminal.
+        if source
+            .iter()
+            .chain(target)
+            .any(|&node| self.iter_crown(node).next().is_none())
+        {
+            return Vec::new();
+        }
         let source = self.combine_to_single_hedgenode(source);
         let target = self.combine_to_single_hedgenode(target);
         self.all_cuts(source, target)
@@ -2247,151 +2256,81 @@ impl<E, V, H, N: Topology> HedgeGraph<E, V, H, N> {
         None
     }
 
+    /// Enumerates whole-node partitions separating two terminal regions.
+    ///
+    /// Each connected component on either side contains a terminal of that side.
+    /// The supplied regions must be unions of complete node crowns. Empty or
+    /// overlapping terminal regions give no partitions. Live isolated nodes also
+    /// give no partitions: their side cannot be represented by a half-edge mask.
+    /// Dangling half-edges stay with their node and never enter the boundary;
+    /// the boundary may be empty for disconnected terminal-rooted components.
+    /// Results are sorted by the source-side mask.
     pub fn all_cuts(
         &self,
         source: HedgeNode,
         target: HedgeNode,
     ) -> Vec<(SuBitGraph, OrientedCut, SuBitGraph)> {
-        // println!("//Source\n{}", self.dot(&source.hairs));
-        // println!("//Target\n{}", self.dot(&target.hairs));
-
-        let full_source = source.internal_and_hairs();
-        let full_target = target.internal_and_hairs();
-        let s_connectivity = self.count_connected_components(&full_source);
-
-        let t_connectivity = self.count_connected_components(&full_target);
-
-        let augmented: HedgeGraph<(), (), (), N> = self.just_structure();
-        let s_nodes = self
-            .iter_nodes_of(&source)
-            .map(|a| self.id_from_crown(a.1).unwrap())
-            .collect::<Vec<_>>();
-        let t_nodes = self
-            .iter_nodes_of(&target)
-            .map(|a| self.id_from_crown(a.1).unwrap())
-            .collect::<Vec<_>>();
-
-        let t_node = t_nodes[0];
-        let s_node = s_nodes[0];
-
-        let augmented = s_nodes.iter().fold(augmented, |aug, n| {
-            let (_, _, augmented) = aug.add_pair(*n, t_node, (), false).unwrap();
-            augmented
-        });
-
-        let augmented = t_nodes.iter().fold(augmented, |aug, n| {
-            let (_, _, augmented) = aug.add_pair(s_node, *n, (), false).unwrap();
-            augmented
-        });
-
-        let mut non_bridges = augmented.non_bridges();
-
-        for _ in &s_nodes {
-            non_bridges.pop();
-            non_bridges.pop();
-        }
-        for _ in &t_nodes {
-            non_bridges.pop();
-            non_bridges.pop();
+        let source = source.internal_and_hairs();
+        let target = target.internal_and_hairs();
+        if source.is_empty()
+            || target.is_empty()
+            || source.intersects(&target)
+            || self.iter_isolated_nodes().next().is_some()
+        {
+            return Vec::new();
         }
 
-        // println!("//non_bridges:\n{}", self.dot(&non_bridges));
-
-        non_bridges.union_with(&source.hairs);
-        non_bridges.union_with(&target.hairs);
-
-        // println!("//non_bridges:\n{}", self.dot(&non_bridges));
-
-        let mut regions = AHashSet::new();
-        self.all_s_t_cuts_impl(
-            &non_bridges,
-            s_connectivity,
-            source,
-            &target,
-            t_connectivity,
-            &mut regions,
-        );
-
-        let mut cuts = vec![];
-        let bridges = non_bridges.complement(self);
-
-        for mut r in regions.drain() {
-            // let disconnected = r.complement(self);
-
-            // let mut s_side_covers = if s.hairs.intersects(&r) {
-            //     s.hairs.clone()
-            // } else {
-            //     SimpleTraversalTree::depth_first_traverse(self, &disconnected, &source, None)
-            //         .unwrap()
-            //         .covers()
-            // };
-            let cut = OrientedCut::from_underlying_coerce(r.hairs.clone(), self).unwrap();
-            r.add_all_hairs(self);
-            let mut s_side_covers = r.internal_and_hairs();
-            for i in bridges.included_iter() {
-                if s_side_covers.includes(&self.inv(i)) {
-                    s_side_covers.add(i);
+        let mut pending = vec![source.clone()];
+        let mut visited = AHashSet::new();
+        let mut cuts = Vec::new();
+        while let Some(mut left) = pending.pop() {
+            // A complement component without a target terminal must be wholly
+            // source-side in every valid extension. Removing whole components
+            // leaves all remaining target-side components rooted and intact.
+            for component in self.connected_components(&left.complement(self)) {
+                if !component.intersects(&target) {
+                    left.union_with(&component);
                 }
             }
+            if !visited.insert(left.clone()) {
+                continue;
+            }
+            // Forced closure can expose a terminal-free global component, which
+            // cannot belong to either side of a terminal-rooted partition.
+            if self
+                .connected_components(&left)
+                .iter()
+                .any(|component| !component.intersects(&source))
+            {
+                continue;
+            }
 
-            let t_side_covers = s_side_covers.complement(self);
+            let mut boundary: SuBitGraph = self.empty_subgraph();
+            let mut adjacent = BTreeSet::new();
+            for hedge in left.included_iter() {
+                let partner = self.inv(hedge);
+                if partner != hedge && !left.includes(&partner) {
+                    boundary.add(hedge);
+                    if !target.includes(&partner) {
+                        adjacent.insert(self.node_id(partner));
+                    }
+                }
+            }
+            let cut = OrientedCut::from_underlying_strict(boundary, self)
+                .expect("a whole-node boundary contains one half of each crossing edge");
+            cuts.push((left.clone(), cut, left.complement(self)));
 
-            // let internal = InternalSubGraph::cleaned_filter_pessimist(t_side_covers, self);
-            // let mut t_side = self.nesting_node_from_subgraph(internal);
-            // t_side.hairs.union_with(&t.hairs);
-            //
-
-            cuts.push((s_side_covers, cut, t_side_covers));
+            // Every larger source-rooted region has a vertex adjacent to this
+            // one along a path to a source terminal. Forced closure never leaves
+            // that larger region, so these growth steps enumerate every cut.
+            for node in adjacent {
+                let mut grown = left.clone();
+                grown.union_with_iter(self.iter_crown(node));
+                pending.push(grown);
+            }
         }
-
+        cuts.sort_by(|a, b| a.0.cmp(&b.0));
         cuts
-    }
-
-    pub fn all_s_t_cuts_impl<S: SubSetLike<Base = SuBitGraph>>(
-        &self,
-        subgraph: &S,
-        s_connectivity: usize,
-        s: HedgeNode, // will grow
-        t: &HedgeNode,
-        t_connectivity: usize,
-        regions: &mut AHashSet<HedgeNode>,
-    ) {
-        // println!("regions size:{}", regions.len());
-        //
-
-        let hairy = s.internal_graph.filter.union(&s.hairs);
-        let mut complement = hairy.complement(self);
-        complement.intersect_with(subgraph.included());
-        if !complement.includes(&t.hairs) {
-            return;
-        }
-
-        let t_count = self.count_connected_components(&complement);
-        let s_count = self.count_connected_components(&hairy);
-
-        if t_count <= t_connectivity && s_count <= s_connectivity && regions.get(&s).is_none() {
-            for h in s.hairs.included_iter() {
-                let invh = self.inv(h);
-
-                if invh != h && !t.hairs.includes(&invh) && subgraph.includes(&invh) {
-                    let mut new_node = s.clone();
-
-                    new_node.hairs.union_with_iter(self.neighbors(invh));
-                    new_node.hairs.intersect_with(subgraph.included());
-
-                    new_node.fix(self);
-                    self.all_s_t_cuts_impl(
-                        subgraph,
-                        s_connectivity,
-                        new_node,
-                        t,
-                        t_connectivity,
-                        regions,
-                    );
-                }
-            }
-            regions.insert(s);
-        }
     }
 }
 

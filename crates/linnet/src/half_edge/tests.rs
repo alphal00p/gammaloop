@@ -792,6 +792,359 @@ use insta::assert_snapshot;
 
 use super::*;
 
+mod cut_partitions {
+    use super::*;
+
+    type Partition = (SuBitGraph, OrientedCut, SuBitGraph);
+
+    struct CutGraph(HedgeGraph<(), (), ()>);
+
+    impl CutGraph {
+        fn new(nodes: usize, edges: &[(usize, usize)], dangling: &[usize]) -> Self {
+            let mut builder = HedgeGraphBuilder::new();
+            let nodes: Vec<_> = (0..nodes).map(|_| builder.add_node(())).collect();
+            for (index, &(a, b)) in edges.iter().enumerate() {
+                let orientation = match index % 3 {
+                    0 => Orientation::Default,
+                    1 => Orientation::Reversed,
+                    _ => Orientation::Undirected,
+                };
+                builder.add_edge(nodes[a], nodes[b], (), orientation);
+            }
+            for (index, &node) in dangling.iter().enumerate() {
+                let flow = if index % 2 == 0 {
+                    Flow::Source
+                } else {
+                    Flow::Sink
+                };
+                builder.add_external_edge(nodes[node], (), false, flow);
+            }
+            Self(builder.build())
+        }
+
+        // Independent vertex BFS: no native component, cut, or growth routine.
+        fn rooted(&self, side: &BTreeSet<NodeIndex>, terminals: &[NodeIndex]) -> bool {
+            let mut remaining = side.clone();
+            while let Some(&start) = remaining.iter().next() {
+                remaining.remove(&start);
+                let mut pending = vec![start];
+                let mut rooted = false;
+                while let Some(node) = pending.pop() {
+                    rooted |= terminals.contains(&node);
+                    for hedge in self.0.iter_crown(node) {
+                        let neighbor = self.0.node_id(self.0.inv(hedge));
+                        if remaining.remove(&neighbor) {
+                            pending.push(neighbor);
+                        }
+                    }
+                }
+                if !rooted {
+                    return false;
+                }
+            }
+            true
+        }
+
+        fn exhaustive(&self, source: &[NodeIndex], target: &[NodeIndex]) -> BTreeSet<Partition> {
+            let live: BTreeSet<_> = self.0.iter_nodes().map(|(node, ..)| node).collect();
+            if source.is_empty()
+                || target.is_empty()
+                || source.iter().any(|node| target.contains(node))
+                || source.iter().chain(target).any(|node| !live.contains(node))
+                || live
+                    .iter()
+                    .any(|&node| self.0.iter_crown(node).next().is_none())
+            {
+                // A live isolated node cannot have a side in a half-edge mask.
+                return BTreeSet::new();
+            }
+            let free: Vec<_> = live
+                .iter()
+                .filter(|node| !source.contains(node) && !target.contains(node))
+                .copied()
+                .collect();
+            assert!(free.len() <= 12, "small exhaustive oracle only");
+            let mut expected = BTreeSet::new();
+            for assignment in 0..1_usize << free.len() {
+                let mut left: BTreeSet<_> = source.iter().copied().collect();
+                for (bit, &node) in free.iter().enumerate() {
+                    if assignment & (1 << bit) != 0 {
+                        left.insert(node);
+                    }
+                }
+                let right = live.difference(&left).copied().collect();
+                if !self.rooted(&left, source) || !self.rooted(&right, target) {
+                    continue;
+                }
+                let mut left_mask: SuBitGraph = self.0.empty_subgraph();
+                let mut right_mask: SuBitGraph = self.0.empty_subgraph();
+                let mut cut_left: SuBitGraph = self.0.empty_subgraph();
+                let mut cut_right: SuBitGraph = self.0.empty_subgraph();
+                for id in 0..self.0.n_hedges() {
+                    let hedge = Hedge(id);
+                    let is_left = left.contains(&self.0.node_id(hedge));
+                    if is_left {
+                        left_mask.add(hedge);
+                    } else {
+                        right_mask.add(hedge);
+                    }
+                    let partner = self.0.inv(hedge);
+                    if partner != hedge && is_left != left.contains(&self.0.node_id(partner)) {
+                        if is_left {
+                            cut_left.add(hedge);
+                        } else {
+                            cut_right.add(hedge);
+                        }
+                    }
+                }
+                expected.insert((
+                    left_mask,
+                    OrientedCut {
+                        left: cut_left,
+                        right: cut_right,
+                    },
+                    right_mask,
+                ));
+            }
+            expected
+        }
+
+        fn check(&self, source: &[usize], target: &[usize]) -> BTreeSet<Partition> {
+            let source: Vec<_> = source.iter().copied().map(NodeIndex).collect();
+            let target: Vec<_> = target.iter().copied().map(NodeIndex).collect();
+            let expected = self.exhaustive(&source, &target);
+            let actual = self.0.all_cuts_from_ids(&source, &target);
+            assert_eq!(
+                actual.len(),
+                expected.len(),
+                "duplicates or missing partitions"
+            );
+            assert_eq!(actual.iter().cloned().collect::<BTreeSet<_>>(), expected);
+            assert!(actual.windows(2).all(|pair| pair[0].0 < pair[1].0));
+            assert_eq!(
+                self.0.all_cuts(
+                    self.0.combine_to_single_hedgenode(&source),
+                    self.0.combine_to_single_hedgenode(&target),
+                ),
+                actual
+            );
+            let reversed = self.0.all_cuts_from_ids(&target, &source);
+            assert_eq!(reversed.len(), expected.len());
+            let normalized: BTreeSet<_> = reversed
+                .into_iter()
+                .map(|(left, cut, right)| {
+                    (
+                        right,
+                        OrientedCut {
+                            left: cut.right,
+                            right: cut.left,
+                        },
+                        left,
+                    )
+                })
+                .collect();
+            assert_eq!(
+                normalized, expected,
+                "both sides and both boundary masks must swap"
+            );
+            expected
+        }
+
+        fn nodes(&self, mask: &SuBitGraph) -> BTreeSet<usize> {
+            mask.included_iter()
+                .map(|hedge| self.0.node_id(hedge).0)
+                .collect()
+        }
+    }
+
+    #[test]
+    fn forced_complement_closure_is_relabeling_invariant() {
+        let edges = [(0, 1), (0, 2), (0, 3), (0, 4), (1, 4), (2, 3)];
+        for labels in [[0, 1, 2, 3, 4], [4, 3, 2, 1, 0], [2, 4, 0, 3, 1]] {
+            for reverse_edges in [false, true] {
+                let mut edges: Vec<_> =
+                    edges.iter().map(|&(a, b)| (labels[a], labels[b])).collect();
+                if reverse_edges {
+                    edges.reverse();
+                }
+                let graph = CutGraph::new(5, &edges, &[]);
+                let cuts = graph.check(&[labels[0], labels[1]], &[labels[2], labels[3]]);
+                assert_eq!(cuts.len(), 1);
+                assert_eq!(
+                    graph.nodes(&cuts.first().unwrap().0),
+                    BTreeSet::from([labels[0], labels[1], labels[4]])
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn disconnected_terminals_require_a_root_in_every_component() {
+        let graph = CutGraph::new(6, &[(0, 2), (0, 4), (1, 3), (1, 4), (2, 5), (3, 5)], &[]);
+        let cuts = graph.check(&[0, 1], &[2, 3]);
+        assert_eq!(cuts.len(), 1);
+        let (left, _, right) = cuts.first().unwrap();
+        assert_eq!(graph.nodes(left), BTreeSet::from([0, 1, 4]));
+        assert_eq!(graph.nodes(right), BTreeSet::from([2, 3, 5]));
+    }
+
+    #[test]
+    fn aaee_precut_candidate_has_its_unique_rooted_partition() {
+        // Frozen352 aaee L2, initial/LR off, raw assignment 3240: the forward
+        // search missed this partition even though reversed terminals found it.
+        let graph = CutGraph::new(
+            10,
+            &[
+                (0, 1),
+                (0, 1),
+                (0, 5),
+                (1, 3),
+                (2, 3),
+                (2, 4),
+                (4, 5),
+                (6, 3),
+                (7, 5),
+                (8, 4),
+                (9, 2),
+            ],
+            &[],
+        );
+        let cuts = graph.check(&[3, 5, 6, 7], &[2, 4, 8, 9]);
+        assert_eq!(cuts.len(), 1);
+        let (left, cut, right) = cuts.first().unwrap();
+        assert_eq!(graph.nodes(left), BTreeSet::from([0, 1, 3, 5, 6, 7]));
+        assert_eq!(graph.nodes(right), BTreeSet::from([2, 4, 8, 9]));
+        assert_eq!(
+            cut.left.included_iter().collect::<Vec<_>>(),
+            vec![Hedge(9), Hedge(13)]
+        );
+        assert_eq!(
+            cut.right.included_iter().collect::<Vec<_>>(),
+            vec![Hedge(8), Hedge(12)]
+        );
+    }
+
+    #[test]
+    fn pendant_crowns_dangling_legs_loops_and_parallel_edges_stay_whole() {
+        let graph = CutGraph::new(5, &[(0, 1), (1, 2), (2, 0), (0, 3), (3, 4)], &[]);
+        let cuts = graph.check(&[0], &[1]);
+        assert_eq!(cuts.len(), 2);
+        assert!(cuts
+            .iter()
+            .all(|(left, _, _)| graph.nodes(left).is_superset(&BTreeSet::from([3, 4]))));
+
+        let decorated = CutGraph::new(
+            4,
+            &[
+                (0, 1),
+                (0, 1),
+                (1, 2),
+                (2, 0),
+                (0, 3),
+                (0, 0),
+                (1, 1),
+                (3, 3),
+            ],
+            &[0, 1, 3],
+        );
+        let cuts = decorated.check(&[0], &[1]);
+        assert_eq!(cuts.len(), 2);
+        for (_, cut, _) in cuts {
+            assert_eq!(cut.left.n_included(), 3);
+            assert!(cut
+                .as_subgraph()
+                .included_iter()
+                .all(|h| !decorated.0.is_dangling(h) && !decorated.0.is_self_loop(h)));
+        }
+    }
+
+    #[test]
+    fn disconnected_components_allow_empty_boundaries_but_need_terminals() {
+        let graph = CutGraph::new(4, &[(0, 1), (2, 3)], &[]);
+        for (source, target) in [(vec![0], vec![2]), (vec![0, 1], vec![2, 3])] {
+            let cuts = graph.check(&source, &target);
+            assert_eq!(cuts.len(), 1);
+            assert!(cuts.first().unwrap().1.as_subgraph().is_empty());
+        }
+        let dangling_only = CutGraph::new(2, &[], &[0, 1]);
+        let cuts = dangling_only.check(&[0], &[1]);
+        assert_eq!(cuts.len(), 1);
+        assert!(cuts.first().unwrap().1.as_subgraph().is_empty());
+
+        let unrooted = CutGraph::new(6, &[(0, 1), (2, 3), (4, 5)], &[]);
+        assert!(unrooted.check(&[0], &[2]).is_empty());
+        let unrooted_dangling = CutGraph::new(3, &[(0, 1)], &[2]);
+        assert!(unrooted_dangling.check(&[0], &[1]).is_empty());
+    }
+
+    #[test]
+    fn isolated_nodes_are_unrepresentable_but_absorbed_slots_are_ignored() {
+        let isolated = CutGraph::new(3, &[(0, 1)], &[]);
+        assert!(isolated.check(&[0], &[1]).is_empty());
+        assert!(isolated.check(&[0], &[2]).is_empty());
+
+        let mut identified = CutGraph::new(3, &[(0, 2), (1, 2)], &[]);
+        let survivor = identified
+            .0
+            .identify_nodes(&[NodeIndex(0), NodeIndex(1)], ());
+        assert_eq!(identified.0.iter_nodes().count(), 2);
+        assert_eq!(identified.0.node_bound(), 3);
+        assert_eq!(identified.check(&[survivor.0], &[2]).len(), 1);
+        let absorbed = if survivor.0 == 0 { 1 } else { 0 };
+        assert!(identified.check(&[absorbed], &[2]).is_empty());
+    }
+
+    #[test]
+    fn empty_or_overlapping_terminal_regions_have_no_cuts() {
+        let graph = CutGraph::new(2, &[(0, 1)], &[]);
+        assert!(graph.check(&[], &[1]).is_empty());
+        assert!(graph.check(&[0], &[]).is_empty());
+        assert!(graph.check(&[0], &[0]).is_empty());
+        assert!(graph.check(&[0, 1], &[1]).is_empty());
+    }
+
+    #[test]
+    fn small_graphs_match_exhaustive_vertex_partitions() {
+        let terminal_sizes = [(1, 1), (1, 2), (2, 1), (2, 2)];
+        // Every simple graph on two through five live nodes, including isolates.
+        for nodes in 2..=5 {
+            let possible: Vec<_> = (0..nodes)
+                .flat_map(|a| (a + 1..nodes).map(move |b| (a, b)))
+                .collect();
+            for bits in 0..1_usize << possible.len() {
+                let edges: Vec<_> = possible
+                    .iter()
+                    .enumerate()
+                    .filter_map(|(i, &edge)| (bits & (1 << i) != 0).then_some(edge))
+                    .collect();
+                let graph = CutGraph::new(nodes, &edges, &[]);
+                for (sources, targets) in terminal_sizes {
+                    if sources + targets <= nodes {
+                        graph.check(
+                            &(0..sources).collect::<Vec<_>>(),
+                            &(nodes - targets..nodes).collect::<Vec<_>>(),
+                        );
+                    }
+                }
+            }
+        }
+        // Deterministic multigraphs add loops, parallel edges, and dangling legs.
+        let mut rng = SmallRng::seed_from_u64(0xc07);
+        for sample in 0..256 {
+            let edges: Vec<_> = (0..rng.gen_range(0..16))
+                .map(|_| (rng.gen_range(0..6), rng.gen_range(0..6)))
+                .collect();
+            let dangling: Vec<_> = (0..6).filter(|_| rng.gen_bool(0.4)).collect();
+            let graph = CutGraph::new(6, &edges, &dangling);
+            let (sources, targets) = terminal_sizes[sample % terminal_sizes.len()];
+            graph.check(
+                &(0..sources).collect::<Vec<_>>(),
+                &(6 - targets..6).collect::<Vec<_>>(),
+            );
+        }
+    }
+}
+
 #[test]
 fn double_triangle() {
     let mut builder = HedgeGraphBuilder::new();

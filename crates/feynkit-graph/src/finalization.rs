@@ -385,7 +385,7 @@ impl FeynmanDiagramBuilder {
         // Each branch above either constructs a routing from a spanning forest
         // or validates an imported routing against that same construction.
         let _ = diagram.routing_validation.set(());
-        // The initial-state tree only trims threshold candidates.
+        // Project threshold candidates outside the initial-state attachment tree.
         if frame.is_some() && !diagram.topology_threshold_candidates.is_empty() {
             let ignored = diagram.initial_state_tree().0;
             let excluded = diagram
@@ -398,15 +398,42 @@ impl FeynmanDiagramBuilder {
                     )
                 })
                 .collect::<BTreeSet<_>>();
-            for candidate in &mut diagram.topology_threshold_candidates {
-                // The loop-independent initial-state attachment tree belongs
-                // to neither threshold side, as in GammaLoop finalization.
-                candidate
-                    .left
-                    .retain(|half_edge| !excluded.contains(half_edge));
-                candidate
-                    .right
-                    .retain(|half_edge| !excluded.contains(half_edge));
+            if !excluded.is_empty() {
+                let vertex_half_edges = diagram.vertex_half_edges();
+                let mut candidates = std::mem::take(&mut diagram.topology_threshold_candidates);
+                for (index, candidate) in candidates.iter_mut().enumerate() {
+                    // The loop-independent initial-state attachment tree belongs
+                    // to neither threshold side, as in GammaLoop finalization.
+                    candidate
+                        .left
+                        .retain(|half_edge| !excluded.contains(half_edge));
+                    candidate
+                        .right
+                        .retain(|half_edge| !excluded.contains(half_edge));
+                    // A fixed-momentum crossing into an omitted crown disappears,
+                    // while loop-carrying crossings retain their oriented boundary.
+                    candidate.cut = diagram
+                        .partition_crossing(
+                            index,
+                            &candidate.left,
+                            &candidate.right,
+                            &vertex_half_edges,
+                            Some(&ignored),
+                        )
+                        .map_err(|error| match error {
+                            DiagramError::InvalidCut { message, .. } => {
+                                DiagramError::InvalidThresholdCandidate {
+                                    candidate: index,
+                                    message,
+                                }
+                            }
+                            error => error,
+                        })?
+                        .crossing
+                        .into_iter()
+                        .collect();
+                }
+                diagram.topology_threshold_candidates = candidates;
             }
         }
         let mut cuts = std::mem::take(&mut diagram.cuts);
@@ -1524,6 +1551,161 @@ mod tests {
             with_cut.topology_threshold_candidates(),
             diagram.topology_threshold_candidates()
         );
+    }
+
+    #[test]
+    fn generated_thresholds_project_fixed_and_loop_carrying_crossings() {
+        let (source, target) = (DiagramEndpoint::Source, DiagramEndpoint::Target);
+        // A bubble between attachment bridges, with a second bubble on the
+        // incoming attachment crown. The second bubble has no crossing before
+        // projection, but both of its edges cross the omitted crown afterward.
+        let mut bridged = generated(
+            scalar_model(),
+            5,
+            &[
+                Leg(1, Sink, "phi", In, 0),
+                Leg(0, Source, "phi", Out, 0),
+                Internal(1, 2, "phi"),
+                Internal(2, 3, "phi"),
+                Internal(2, 3, "phi"),
+                Internal(3, 0, "phi"),
+                Internal(1, 4, "phi"),
+                Internal(4, 1, "phi"),
+            ],
+        );
+        for vertex in [0, 1, 4] {
+            bridged.vertices[vertex].interaction = None;
+        }
+        for (mut builder, left_vertices, physical_left, expected, before, ignored_crossings) in [
+            (
+                // The captured phi3 two-loop failure: the 2 -> 4 bridge used
+                // to remain in the boundary after crown 2 had been removed.
+                generated(
+                    scalar_model(),
+                    6,
+                    &[
+                        Leg(2, Sink, "phi", In, 0),
+                        Leg(1, Sink, "phi", In, 1),
+                        Leg(5, Source, "phi", Out, 0),
+                        Leg(5, Source, "phi", Out, 1),
+                        Internal(0, 0, "phi"),
+                        Internal(0, 2, "phi"),
+                        Internal(1, 3, "phi"),
+                        Internal(1, 4, "phi"),
+                        Internal(2, 4, "phi"),
+                        Internal(3, 4, "phi"),
+                        Internal(3, 5, "phi"),
+                    ],
+                ),
+                vec![0, 1, 2],
+                vec![0, 1, 2, 4],
+                vec![(6, source), (7, source)],
+                3,
+                0,
+            ),
+            (
+                bridged,
+                vec![1, 2, 4],
+                vec![1, 2, 4],
+                vec![(3, source), (4, source), (6, target), (7, source)],
+                2,
+                2,
+            ),
+        ] {
+            let mut slots = vec![0; builder.vertices.len()];
+            let mut candidate = DiagramThresholdCandidate {
+                cut: Vec::new(),
+                left: Vec::new(),
+                right: Vec::new(),
+            };
+            for (edge, (ends, data)) in builder.edges.iter_mut().enumerate() {
+                for (vertex, slot) in [
+                    (ends.source, &mut data.source_slot),
+                    (ends.target, &mut data.target_slot),
+                ] {
+                    if let Some(vertex) = vertex {
+                        *slot = VertexSlot(slots[vertex.0]);
+                        slots[vertex.0] += 1;
+                    }
+                }
+                let mut left = Vec::new();
+                for (endpoint, vertex) in [
+                    (source, ends.source.or(ends.target).unwrap()),
+                    (target, ends.target.or(ends.source).unwrap()),
+                ] {
+                    let half_edge = DiagramHalfEdge {
+                        edge: EdgeId(edge),
+                        endpoint,
+                    };
+                    if left_vertices.contains(&vertex.0) {
+                        candidate.left.push(half_edge);
+                        left.push(half_edge);
+                    } else {
+                        candidate.right.push(half_edge);
+                    }
+                }
+                if left.len() == 1 {
+                    candidate.cut.extend(left);
+                }
+            }
+            assert_eq!(candidate.cut.len(), before);
+            let builder = builder
+                .canonical_loop_momentum_basis()
+                .topology_threshold_candidates(vec![candidate]);
+            let (graph, frame) = final_graph(&builder);
+            let expected = expected
+                .into_iter()
+                .map(|(edge, endpoint)| {
+                    let hedge = frame
+                        .half_edge(DiagramHalfEdge {
+                            edge: EdgeId(edge),
+                            endpoint,
+                        })
+                        .unwrap();
+                    DiagramHalfEdge {
+                        edge: EdgeId(graph[&hedge].0),
+                        endpoint: if graph.flow(hedge) == Flow::Source {
+                            source
+                        } else {
+                            target
+                        },
+                    }
+                })
+                .collect::<BTreeSet<_>>();
+            let diagram = builder.build().unwrap();
+            // Full cross-section validation also requires its physical cut.
+            // These are the captured cut and the existing bridged-bubble cut.
+            let crowns = diagram.vertex_half_edges();
+            let (left, right): (Vec<_>, Vec<_>) =
+                (0..crowns.len()).partition(|vertex| physical_left.contains(vertex));
+            let [left, right] = [left, right].map(|vertices| {
+                vertices
+                    .into_iter()
+                    .flat_map(|vertex| crowns[vertex].clone())
+                    .collect()
+            });
+            let diagram = diagram.with_cut_partitions(vec![(left, right)]).unwrap();
+            diagram.validate().unwrap();
+            let [candidate] = diagram.topology_threshold_candidates() else {
+                panic!("one projected threshold");
+            };
+            assert_eq!(
+                candidate.cut.iter().copied().collect::<BTreeSet<_>>(),
+                expected
+            );
+            let ignored = diagram.initial_state_tree().0;
+            assert_eq!(
+                candidate
+                    .cut
+                    .iter()
+                    .filter(|&&half_edge| {
+                        let hedge = diagram.half_edge_id(half_edge).unwrap();
+                        ignored.includes(&hedge) || ignored.includes(&diagram.graph.inv(hedge))
+                    })
+                    .count(),
+                ignored_crossings,
+            );
+        }
     }
 
     #[test]

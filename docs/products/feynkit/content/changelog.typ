@@ -40,6 +40,11 @@ Model fingerprints now preserve symbolic namespaces and function attributes whil
 independent of symbol-registration order. Regenerate annotated diagram exports from their
 original models when upgrading from the previous fingerprint encoding.
 
+Cross-section cuts now use terminal-rooted partitions independent of which side is enumerated
+first. Threshold finalization removes the initial-state attachment tree from both sides before
+recomputing their crossing boundary, including loop-carrying crossings. Regenerated inventories
+can differ from earlier exports.
+
 The default loop momentum basis of a cross-section diagram no longer lets a cut edge carry part
 of the beam momenta, such as `K + P1`: GammaLoop rescales loop momenta about the origin of this
 basis, which must lie inside every cut energy surface. Regenerated cross sections can therefore

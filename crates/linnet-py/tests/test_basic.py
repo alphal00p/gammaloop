@@ -975,7 +975,8 @@ class TestHedgeGraphTopology(unittest.TestCase):
         self.assertEqual(len(forests), 3)
         self.assertTrue(all(len(forest) == 4 for forest in forests))
 
-        cuts = graph.all_cuts(["a"], ["d"])
+        self.assertEqual(graph.all_cuts(["a"], ["d"]), [])
+        cuts = graph.all_cuts(["a", "e"], ["d", "f"])
         self.assertTrue(cuts)
         self.assertTrue(all(isinstance(cut, lp.CutPartition) for cut in cuts))
         ordering = []
@@ -1249,7 +1250,8 @@ class TestHedgeGraphTopology(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "both edge endpoints"):
             tree.fundamental_cycle(graph.edge("ef").source)
 
-        partition = graph.all_cuts(["a"], ["d"])[0]
+        self.assertEqual(graph.all_cuts(["a"], ["d"]), [])
+        partition = graph.all_cuts(["a", "e"], ["d", "f"])[0]
         cut = partition.boundary
         self.assertEqual(
             [edge.index for edge in cut.edges],

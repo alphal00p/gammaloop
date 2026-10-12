@@ -4032,8 +4032,8 @@ impl ResolvedProcess {
                 right: summarize_side(&right)?,
             });
         }
-        // The cuts arrive in no fixed order, which finalization fixes for every diagram. Merging
-        // mirror images compares inventories before that, so equal graphs need equal ones.
+        // Mirror merging compares inventories before finalization, so equal graphs need
+        // equally ordered diagram-level cut and threshold keys.
         if self.identifies_mirror_images() {
             inventory.physical.sort();
             inventory.topology_threshold_candidates.sort();
