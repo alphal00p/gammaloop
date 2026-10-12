@@ -7,6 +7,7 @@ import os
 import pickle
 import re
 import shutil
+import sys
 import unittest
 import weakref
 import xml.etree.ElementTree as ET
@@ -1161,7 +1162,7 @@ class TestHedgeGraphTopology(unittest.TestCase):
         with self.assertRaisesRegex(
             ValueError, "powerset at rank 64 is not representable"
         ):
-            large_cycle_space.all_cycles(max_results=2**64 - 1)
+            large_cycle_space.all_cycles(max_results=2 * sys.maxsize + 1)
 
         bond = graph.find_bond(min_size=1, max_size=1)
         self.assertIsInstance(bond, lp.Subgraph)

@@ -152,35 +152,50 @@ canonical forms.
 
 == Feynman-graph generation
 
-`generate::GraphGenerator` enumerates the connected graphs built from vertex signatures and
-external legs, one per isomorphism class. A signature is a multiset of typed stubs: a field with a
-direction relative to the vertex (undirected for self-conjugate fields, incoming or outgoing for
-fermions, ghosts and other charged fields). Two stubs pair when they carry the same field and are
-both undirected, or one is outgoing and the other incoming. Legs are `(label, stub)` pairs that
-become dangling half-edges keyed by their label; repeating a label makes those legs
-interchangeable. Settings cover a loop range, a vertex bound (legs are not vertices), a bridge
-limit (`0` for one-particle-irreducible graphs), self-loops and zero-flow bridges (a bridge with no
-leg on one side), budgets (sums of integer signature weights such as coupling and counterterm
-orders, and counts of vertices, propagators, chords and closed lines of some fields, each within a
-range), a filter that prunes the search, and progress and abort callbacks. The filter
-sees read-only views of the partial untyped topologies, the partial field assignments and the
-complete graphs; it must be hereditary (reject every completion of a state it rejects), so the
-output is exactly the complete graphs it accepts, and a validation mode searches without pruning
-and fails when a rejected state completes to an accepted graph. Only paired edges count as bridges: a one-leg process keeps its graphs without
-internal bridges, where Graphica counts the leg as a zero-flow bridge and drops them.
+`generate::Theory` compiles ordered vertex rules and reusable structural automata. A rule is a
+multiset of typed stubs: a field with a direction relative to the vertex (undirected for
+self-conjugate fields, incoming or outgoing for fermions, ghosts and other charged fields).
+Two stubs pair when they carry the same field and are both undirected, or one is outgoing and the
+other incoming. Rules with identical stubs retain distinct insertion indices.
 
-Each output carries the `HedgeGraph` (fields on edges, signature indices on nodes), its loop
-order, the exact automorphism count and the canonizer's canonical form under the keys
-`(signature, field, Option<label>)`, so a graph from elsewhere can be matched against generated
-ones by canonizing it with the same keys. Signatures with identical stubs are distinct vertex rules.
+`Legs` describes external slots. Each `(label, stub)` becomes a dangling half-edge keyed by its
+label; equal labels and stubs make slots interchangeable. `Query` adds a loop range, `Structure`
+restrictions, named signed weight bounds and `Countable` restrictions. `Structure` owns the
+vertex bound (legs are not vertices), self-loops, zero-flow bridges and the `Bridges` policy:
+`Any`, `AtMost`, `OnePI` or `OnePIInLoops`. Only paired edges count as bridges; a one-leg process
+keeps its graphs without internal bridges, where Graphica counts the leg as a zero-flow bridge
+and drops them. A finite loop range or vertex bound is required, and rules of degree at most two
+need the vertex bound. Unbounded requests produce a planning error before search.
+
+`Plan::new(&theory, &query)` compiles the request, including query-specific weight bounds over
+the theory's existing automaton states. `Plan::explain` reports effective restrictions and the
+stages that enforce them; infeasible planning carries a `PlanReport`. `Run` holds transient
+parallelism, progress, cancellation and heredity checking, so the same plan can run repeatedly
+with independent controls.
+
+Three typed hooks expose the stages: `prune_skeletons` receives a `SkeletonView`,
+`prune_dressings` a `DressingView`, and final `select` a `DiagramView`. A pruning predicate must
+reject every refinement of a rejected state. `Run::check_heredity` searches without that pruning
+and fails when a rejected state has an accepted completion, independently of final selection.
+`select` may use any predicate on a complete assignment.
+
+`Plan::count` returns exact arbitrary-precision totals and the rational sum of inverse
+automorphism orders, including per-loop totals, without constructing `Diagram` outputs.
+`Plan::skeletons` streams complete untyped topologies; a skeleton can be dressed without repeating
+topology search. `Plan::diagrams` streams compact owned assignments. Their `graph()` and
+`canonical_form()` are lazy demands: the graph has fields on edges, rule indices on nodes and
+external labels on dangling half-edges. The canonical form uses those same keys, so a graph from
+elsewhere can be matched by canonizing it with them. `symmetry_factor()` returns the checked
+u128 automorphism order; overflow does not prevent compact diagram iteration, but is reported
+when the order or an exact inverse-order count is demanded.
 
 Generation runs in two stages per loop order. Untyped topologies are built by McKay's canonical
 augmentation, one vertex at a time: rule 1 keeps one multiplicity vector per orbit of the parent's
 node automorphism group, and rule 2 accepts a child only if the new vertex is in the orbit of its
 canonical deletion (the deletable vertex with the largest invariant, ties broken by a node
 canonization). Every prune (completability, permanent bridges, zero-flow bridges) is a necessary
-condition for completion, so each output appears exactly once; the filter prunes stage 1 and the
-partial field assignments of stage 2 the same way. Once the counts force every remaining vertex to
+condition for completion, so each output appears exactly once; the two pruning hooks further
+restrict topology construction and partial dressing respectively. Once the counts force every remaining vertex to
 be a pendant on an open stub, the pendants are hung all at once, one assignment per orbit. Three or
 more legs with distinct labels and a common stub are placed as anonymous legs while the topology
 is shaped and labelled afterwards, each label on one vertex per orbit of the group fixing the
@@ -191,18 +206,19 @@ classes need no node canonization. Each complete topology is then
 decorated with fields, orientations and vertex rules edge by edge, keeping one decoration per orbit
 of the topology's automorphism group. A partial vertex is a state of an automaton over the
 sub-multisets of the signatures, so an edge tries only the fields both of its ends can still take,
-and forward checking drops a partial decoration before the filter sees it once an edge at the ends
+and forward checking drops a partial decoration before its hook sees it once an edge at the ends
 of the last decorated one has no field left; a topology with an edge that no field fits at its
 ends gets no decoration. Typed canonical augmentation (signatures as the corollas) was measured as the
 alternative and visits about four times as many partial objects on QED and QCD processes.
 
-Budgets prune the decorations in the same way. Every automaton state carries the least and the
-most weight of the signatures containing it, so the sums of these bounds over the vertices bound
+Budgets prune the decorations in the same way. The plan computes the least and greatest active
+weights of the rules containing each automaton state, reusing the theory's state identities and
+transitions. The sums of these bounds over the vertices bound
 each weight of a partial decoration, and a decoration step changes them at its two ends only;
 propagator and chord counts are bounded by the edges counted and the edges still undecorated, and
 closed lines by the lines closed so far (a union-find over the decorated edges of their fields),
 unless a signature lets lines branch. A partial decoration whose bounds miss a range is dropped
-before the filter sees it, and the vertex rules are checked exactly; the weights are invariant
+before the dressing hook sees it, and the vertex rules are checked exactly; the weights are invariant
 under the stabilizer of a labelling, so keeping the orbit-minimal rule tuples that meet them is
 exact. Before any search, a loop order is skipped when no multiset of signatures has the degrees
 its Euler relation needs and weights within the ranges, and a request is empty when its legs
@@ -213,15 +229,16 @@ partitions themselves: on SMEFTsim with an NP budget the partitions number tens 
 (2->3 at three loops: 46,697) while the sums stay a few thousand (2,533).
 
 #callout("Streaming, deterministic order and parallelism", [
-  Both stages are resumable depth-first searches with explicit stacks, so the iterator streams:
-  each `next` searches only up to the next graph, and dropping it ends the search. Graphs come in
-  the depth-first order of the search. With the `rayon` feature, `parallel(true)` runs a window of
-  independent subtrees on the current thread pool, each at most a fixed number of graphs ahead of
-  the output, splits the unsearched rest of the oldest subtrees while fewer subtrees than threads
-  can advance, and returns their results in that same order, so the output does not depend on the
-  number of threads. The first step runs only the oldest subtree, up to its first graph, and
-  further steps buffer one graph per subtree until the first is returned, so the first graph does
-  not wait for a step of the whole window.
+  Both stages are resumable depth-first searches with explicit stacks. Iteration advances bounded
+  search work and dropping an iterator ends its search. With the `rayon` feature,
+  `Run::parallel(true)` advances independent subtrees on the current thread pool and returns
+  results in depth-first order, independent of the thread count. The first output is sought in
+  the oldest subtree before the wider window advances.
+
+  Python predicates receive individual typed views on the thread advancing the iterator. The
+  binding batches independent suspended requests into one dispatcher call, validates each bool
+  immediately and expires its view before invoking the next predicate. Progress and signal checks
+  remain execution controls; cancelling one run does not alter another run of the same plan.
 ])
 
 == Mutation boundaries

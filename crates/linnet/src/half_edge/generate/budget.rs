@@ -36,7 +36,7 @@ use super::{
     GenerationError,
 };
 
-/// A count over a graph, which [`super::GraphGenerator::count`] keeps within a range.
+/// A count over a graph, which [`super::Query::count`] keeps within a range.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Countable<F> {
     /// Vertices whose signature index is listed.

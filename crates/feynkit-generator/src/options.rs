@@ -1,7 +1,7 @@
 use std::{
     collections::{BTreeMap, BTreeSet},
     fmt,
-    ops::RangeInclusive,
+    ops::{ControlFlow, RangeInclusive},
     sync::{
         Arc,
         atomic::{AtomicBool, Ordering},
@@ -9,7 +9,8 @@ use std::{
 };
 
 use feynkit_graph::{DiagramId, EdgeId};
-use feynkit_model::Model;
+use feynkit_model::{Model, ParticleId};
+use linnet::half_edge::generate::batch;
 use serde::{Deserialize, Serialize};
 use symbolica::{
     atom::{Atom, AtomCore},
@@ -17,8 +18,8 @@ use symbolica::{
 };
 
 use crate::{
-    GenerationError, GenerationType, GenerationView, ParticleSelector, SelectorError,
-    VertexSelector,
+    ExternalLabel, GenerationDiagramView, GenerationDressingView, GenerationError,
+    GenerationSkeletonView, GenerationType, ParticleSelector, SelectorError, VertexSelector,
 };
 
 #[derive(
@@ -340,7 +341,15 @@ impl CancellationToken {
 
 type ProgressCallback =
     Arc<dyn Fn(GenerationProgress) -> GenerationControl + Send + Sync + 'static>;
-type GenerationFilterCallback = Arc<dyn Fn(&GenerationView<'_>) -> bool + Send + Sync + 'static>;
+type SkeletonCallback = Arc<dyn Fn(&GenerationSkeletonView<'_>) -> bool + Send + Sync + 'static>;
+type DressingCallback = Arc<dyn Fn(&GenerationDressingView<'_>) -> bool + Send + Sync + 'static>;
+type SelectionCallback = Arc<dyn Fn(&GenerationDiagramView<'_>) -> bool + Send + Sync + 'static>;
+type DeferredDispatch = Arc<
+    dyn Fn(Vec<batch::Request<ParticleId, ExternalLabel>>) -> ControlFlow<(), Vec<batch::Reply>>
+        + Send
+        + Sync
+        + 'static,
+>;
 type CancellationCheck = Arc<dyn Fn() -> bool + Send + Sync + 'static>;
 
 /// Metadata requested from generation, independently of progress and cancellation.
@@ -397,7 +406,10 @@ pub struct GenerationOptions {
     pub(crate) cancellation: CancellationToken,
     pub(crate) cancellation_check: Option<CancellationCheck>,
     pub(crate) progress: Option<ProgressCallback>,
-    pub(crate) filter: Option<GenerationFilterCallback>,
+    pub(crate) prune_skeletons: Option<SkeletonCallback>,
+    pub(crate) prune_dressings: Option<DressingCallback>,
+    pub(crate) select: Option<SelectionCallback>,
+    pub(crate) deferred_hooks: Option<(batch::HookMask, DeferredDispatch)>,
 }
 
 /// Stable persistent portion of [`GenerationOptions`]. Callbacks and
@@ -567,7 +579,10 @@ impl Default for GenerationOptions {
             cancellation: CancellationToken::new(),
             cancellation_check: None,
             progress: None,
-            filter: None,
+            prune_skeletons: None,
+            prune_dressings: None,
+            select: None,
+            deferred_hooks: None,
         }
     }
 }
@@ -762,7 +777,10 @@ impl GenerationOptions {
             cancellation: CancellationToken::new(),
             cancellation_check: None,
             progress: None,
-            filter: None,
+            prune_skeletons: None,
+            prune_dressings: None,
+            select: None,
+            deferred_hooks: None,
         })
     }
 
@@ -835,7 +853,10 @@ impl fmt::Debug for GenerationOptions {
             .field("cancelled", &self.cancellation.is_cancelled())
             .field("cancellation_check", &self.cancellation_check.is_some())
             .field("progress", &self.progress.is_some())
-            .field("filter", &self.filter.is_some())
+            .field("prune_skeletons", &self.prune_skeletons.is_some())
+            .field("prune_dressings", &self.prune_dressings.is_some())
+            .field("select", &self.select.is_some())
+            .field("deferred_hooks", &self.deferred_hooks.is_some())
             .finish()
     }
 }
@@ -990,6 +1011,11 @@ impl GenerationOptions {
         self
     }
 
+    /// Shared cancellation state, including cancellation initiated inside a callback.
+    pub fn cancellation(&self) -> &CancellationToken {
+        &self.cancellation
+    }
+
     pub fn cancellation_token(mut self, token: CancellationToken) -> Self {
         self.cancellation = token;
         self
@@ -1009,23 +1035,56 @@ impl GenerationOptions {
         self
     }
 
-    /// Prune the diagram search with `callback`, which sees every search state: partial and
-    /// complete untyped topologies, partial field assignments and complete diagrams (see
-    /// [`GenerationView::stage`]). Rejecting a state drops everything that completes it, so the
-    /// callback must be hereditary within each stage, as for
-    /// [`linnet::half_edge::generate::GraphGenerator::filter`]. Graphs reaching the callback
-    /// already satisfy the process filters decided at their stage. Partial field assignments whose
-    /// bounds on the coupling orders or the closed fermion loops already miss their ranges do not
-    /// reach it; the bounds are not tight, so some assignments without a completion still do.
+    /// Prune partial and complete untyped process topologies. A rejection must also reject
+    /// every refinement. Built-in topology restrictions run before this callback.
     ///
-    /// Cross-section legs keep their index. With [`Self::symmetrize_initial`] one forward graph
-    /// of every beam-exchange orbit is kept after the search and counts the others, so a
-    /// verdict must not depend on which beam carries which index.
-    pub fn filter(
+    /// Cross-section legs retain their indices. With initial-state symmetrization, verdicts
+    /// must be invariant under exchanging interchangeable beams.
+    pub fn prune_skeletons(
         mut self,
-        callback: impl Fn(&GenerationView<'_>) -> bool + Send + Sync + 'static,
+        callback: impl Fn(&GenerationSkeletonView<'_>) -> bool + Send + Sync + 'static,
     ) -> Self {
-        self.filter = Some(Arc::new(callback));
+        self.prune_skeletons = Some(Arc::new(callback));
+        self
+    }
+
+    /// Prune partial and complete field/rule assignments on complete topologies. A rejection
+    /// must also reject every refinement. Coupling and fermion-loop budgets run first; their
+    /// bounds can still admit partial assignments with no completion. Complete assignments
+    /// also pass the mass-dependent process filters before this callback.
+    /// Verdicts must respect any requested interchangeable-beam symmetry.
+    pub fn prune_dressings(
+        mut self,
+        callback: impl Fn(&GenerationDressingView<'_>) -> bool + Send + Sync + 'static,
+    ) -> Self {
+        self.prune_dressings = Some(Arc::new(callback));
+        self
+    }
+
+    /// Select fully assigned diagrams after dressing pruning. This predicate need not be
+    /// hereditary; it must respect any requested interchangeable-beam symmetry.
+    pub fn select(
+        mut self,
+        callback: impl Fn(&GenerationDiagramView<'_>) -> bool + Send + Sync + 'static,
+    ) -> Self {
+        self.select = Some(Arc::new(callback));
+        self
+    }
+
+    /// Binding transport for the same typed hooks. A whole native wave completes before the
+    /// calling coordinator dispatches it; a break aborts this run through ordinary cancellation.
+    #[doc(hidden)]
+    pub fn deferred_hooks(
+        mut self,
+        mask: batch::HookMask,
+        dispatch: impl Fn(
+            Vec<batch::Request<ParticleId, ExternalLabel>>,
+        ) -> ControlFlow<(), Vec<batch::Reply>>
+        + Send
+        + Sync
+        + 'static,
+    ) -> Self {
+        self.deferred_hooks = Some((mask, Arc::new(dispatch)));
         self
     }
 
@@ -1219,13 +1278,22 @@ mod tests {
     #[test]
     fn runtime_callbacks_are_not_serialized() {
         let options = GenerationOptions::default()
-            .filter(|_| false)
+            .prune_skeletons(|_| false)
+            .prune_dressings(|_| false)
+            .select(|_| false)
+            .deferred_hooks(
+                linnet::half_edge::generate::batch::HookMask::default(),
+                |_| std::ops::ControlFlow::Break(()),
+            )
             .progress(|_| super::GenerationControl::Cancel);
         let encoded = bincode::encode_to_vec(&options, bincode::config::standard()).unwrap();
         let (decoded, _): (GenerationOptions, usize) =
             bincode::decode_from_slice(&encoded, bincode::config::standard()).unwrap();
         assert_eq!(decoded, options);
-        assert!(decoded.filter.is_none());
+        assert!(decoded.prune_skeletons.is_none());
+        assert!(decoded.prune_dressings.is_none());
+        assert!(decoded.select.is_none());
+        assert!(decoded.deferred_hooks.is_none());
         assert!(decoded.progress.is_none());
     }
 

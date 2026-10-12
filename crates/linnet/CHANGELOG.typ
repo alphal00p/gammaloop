@@ -16,18 +16,27 @@ and this project adheres to #link("https://semver.org/spec/v2.0.0.html")[Semanti
 
 === Added
 
+- Generation now separates reusable `Theory` data, `Legs`, `Query`, compiled `Plan` and
+  execution `Run`. `Plan::count` returns exact totals without constructing output graphs;
+  skeletons can be retained and dressed separately. `explain()` reports where constraints act.
+- `prune_skeletons` and `prune_dressings` receive typed hereditary views; `select` receives
+  only complete diagrams. The Python bindings expose the same staged engine, batch hooks
+  on the calling thread, and expire callback views on return. Explicit graph snapshots remain
+  independent. Replace the previous generator constructor and graph generation method with
+  a theory query and plan execution.
+
 - Canonical forms: `HedgeGraph::canonical_form_by` and `canonical_form` compute the
   `CanonicalForm` of a graph (equal exactly for isomorphic graphs under the same keys) without
   labelling maps, automorphism generators or count. `Canonization::canonical_form` returns the
-  same form and generated `Diagram`s carry theirs in `canonical_form`;
+  same form and generated `Diagram`s compute theirs lazily with `canonical_form()`;
   `CanonicalForm::into_parts` moves out its words and key tables.
 
-- Generation budgets: `GraphGenerator::weight` bounds sums of integer signature weights (coupling
-  and counterterm orders) and `GraphGenerator::count` with `Countable` the vertices, propagators,
+- Generation budgets: `Query::weight` bounds sums of integer signature weights (coupling
+  and counterterm orders) and `Query::count` with `Countable` the vertices, propagators,
   chords and closed lines of some fields. Field dressing prunes with bounds kept per automaton
   state, the vertex rules are checked exactly, and loop orders that no vertex multiset meets and
   requests whose legs carry a charge or parity that no vertex balances are not searched. Budgets
-  that every graph meets cost nothing. New `GenerationError::Weights` and
+  that every graph meets cost nothing. New `GenerationError::VertexWeights` and
   `GenerationError::TooManyCounts`.
 
 == #link("https://github.com/alphal00p/linnet/compare/linnet-v0.16.1...linnet-v0.17.0")[0.17.0] - 2026-01-28

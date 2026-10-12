@@ -1,5 +1,6 @@
 mod algorithms;
 mod generate;
+pub use generate::{CancelCheck, GenerationCallbacks};
 mod keys;
 use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet};

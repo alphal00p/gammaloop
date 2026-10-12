@@ -375,16 +375,17 @@ class CanonizeTests(unittest.TestCase):
         quark = g.EdgeSignature(field("q"), direction=False)
         rng = random.Random(3)
         generated = list(
-            g.Graph.generate(
-                [(1, gluon), (2, gluon)],
-                [[gluon] * 3, [quark.flip(), quark, gluon], [gluon] * 4],
+            g.Theory([[gluon] * 3, [quark.flip(), quark, gluon], [gluon] * 4])
+            .query(
+                g.Legs([(1, gluon), (2, gluon)]),
                 loops=range(4),
-                max_bridges=0,
-                allow_self_loops=True,
+                structure=g.Structure(bridges=g.Bridges.one_pi(), self_loops=True),
             )
+            .diagrams()
         )
         self.assertEqual(len(generated), 210)
-        for graph, size in generated:
+        for diagram in generated:
+            graph, size = diagram.graph(), diagram.symmetry_factor()
             canonical = graph.canonize()[0]
             self.assertEqual(graph.canonize()[2], size)
             other = relabelled(graph, rng)
@@ -395,10 +396,11 @@ class CanonizeTests(unittest.TestCase):
         # With one shared colour, permutations of dangling legs at a node are
         # automorphisms, exactly as for legs ending in identical degree-one vertices.
         phi = g.EdgeSignature(field("phi"))
-        generated = g.Graph.generate(
-            [(i, phi) for i in range(1, 5)], [[phi] * 3, [phi] * 4], loops=range(2)
+        plan = g.Theory([[phi] * 3, [phi] * 4]).query(
+            g.Legs([(i, phi) for i in range(1, 5)]), loops=range(2)
         )
-        for graph, _ in generated:
+        for diagram in plan.diagrams():
+            graph = diagram.graph()
             names = [str(i) for i in range(graph.n_nodes)]
             vertices = [g.Node(name, data=1) for name in names]
             links = []

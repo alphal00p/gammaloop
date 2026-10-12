@@ -14,9 +14,10 @@ mod process;
 use feynkit_graph::momentum_symbol;
 
 pub use generation::{
-    DiagramGroup, ExternalLabel, ExternalNode, FeynmanDiagramRulesExt, GenerationError,
-    GenerationReport, GenerationResult, GenerationView, GroupMember, SourceIdentity,
-    UnresolvedCutContent, unresolved_cut_content,
+    DiagramGroup, ExternalLabel, ExternalNode, FeynmanDiagramRulesExt, GenerationDiagramView,
+    GenerationDressingView, GenerationError, GenerationReport, GenerationResult,
+    GenerationSkeletonView, GroupMember, SourceIdentity, UnresolvedCutContent,
+    unresolved_cut_content,
 };
 pub use grouping::GroupingError;
 pub use options::{

@@ -11,6 +11,8 @@ pub use snapshot::PyDiagramRender;
 mod scene;
 mod snapshot;
 pub use graph::PyGraph;
+#[doc(hidden)]
+pub use graph::{CancelCheck, GenerationCallbacks};
 pub use topology::PySubgraph;
 pub use typst::PyRenderSettings;
 pub use typst::{PyAuto as Auto, PyRenderSettings as RenderSettings};
@@ -325,6 +327,9 @@ fn render_stub(key_import: &str, key: &str) -> pyo3_stub_gen::Result<String> {
     for (rust, python) in [
         ("PyEdgeLengthResolution", "EdgeLengthResolution"),
         ("PyDirectionBasis", "DirectionBasis"),
+        ("PySkeletonView", "SkeletonView"),
+        ("PyDressingView", "DressingView"),
+        ("PyDiagramView", "DiagramView"),
         ("PyHalfEdgeDrawing", "HalfEdgeDrawing"),
         ("PyHalfEdgeValue", "HalfEdgeValue"),
         ("PyLayoutAlgorithm", "LayoutAlgorithm"),

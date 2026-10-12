@@ -32,6 +32,7 @@ test-sources = [
   "crates/linnest/typst/src",
   "crates/linnest/typst/linnest.wasm",
   "docs/products/linnet/content/quickstart-python.typ",
+  "docs/products/linnet/content/api.typ",
 ]
 test-command = "python -m unittest discover -s crates/linnet-py/tests -p 'test_*.py'"
 

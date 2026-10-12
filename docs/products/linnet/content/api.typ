@@ -68,13 +68,50 @@ and file exports reuse the snapshot, even after later graph or settings mutation
 HepKit's physics-specific options live in `DiagramStyle`, passed separately as `style`.
 For multipage renders, use `to_svg_pages()`; `to_svg()` requires exactly one page.
 
-`Graph.generate()` runs Linnet's native generator on `EdgeSignature` slots, whose fields and leg
-labels are hashable keys like canonization keys, and streams `(graph, symmetry factor)` pairs in
-depth-first order: nodes carry their signature index, edges their field, and each external leg is
-a dangling half-edge labelled by its leg label. Its `filter_fn` prunes the search through
-`GenerationView`s of partial topologies, partial field assignments and complete graphs; it must be
-hereditary within each stage, rejecting every completion of a state it rejects. The search runs
-without the GIL; `filter_fn` and `progress_fn` take it only while they run.
+`Theory` compiles ordered vertex rules once. `Legs` describes labelled or interchangeable
+external slots, and `Query` separates their structural, weight and count restrictions from
+execution. `Plan(theory, query)` compiles a request; `theory.query(...)` is the concise form.
+Equal vertex signatures remain distinct rules. Fields and leg labels use the same hashable-key
+semantics as canonization. Bound a generic Linnet query with `loops` or `Structure.max_vertices`;
+rules of degree at most two always need the vertex bound.
+
+```python
+import linnet_py as graph
+# Community installation: from symbolica.community import graph
+
+phi = graph.EdgeSignature("phi")
+theory = graph.Theory(vertices=[[phi, phi, phi]])
+legs = graph.Legs([(label, phi) for label in range(4)])
+plan = theory.query(legs, loops=0)
+assert plan.count().diagrams == 3
+for diagram in plan.diagrams():
+    assert diagram.symmetry_factor() == 1
+    native_graph = diagram.graph()
+```
+
+`plan.count()` returns exact integer totals and a `fractions.Fraction` sum of inverse
+automorphism orders, including per-loop totals and whether execution completed. It does not
+construct diagrams. `plan.diagrams()` yields compact owned `Diagram` objects: `graph()` and
+`canonical_form()` are lazy demands. `plan.skeletons()` streams complete untyped `Skeleton`s;
+`skeleton.diagrams()` starts fresh dressing of that snapshot without repeating topology search.
+A materialized graph has rule indices on nodes, fields on edges, and leg labels on dangling
+half-edges. Its mutation does not change the compact output.
+
+The three typed hooks have separate purposes: `prune_skeletons` receives `SkeletonView`,
+`prune_dressings` receives `DressingView`, and final `select` receives `DiagramView`.
+Pruning predicates must reject every refinement of a rejected state; selection can use any
+predicate. Callback views expire when their predicate returns. Batching can visit completed
+states in a different order from the emitted diagrams. `plan.explain()` reports the
+lowered constraints and their stages. Infeasible planning raises `ValueError` with its
+`PlanReport` attached as `report`.
+
+`Run(parallel=True, check_heredity=True, progress=callback)` holds transient execution controls.
+Pass it to `plan.count(run)`, `plan.diagrams(run)` or `plan.skeletons(run)`; `run.cancel()`
+stops its active executions. Progress receives an immutable `Progress` snapshot and returns a
+bool; False stops after the accepted item already counted at that notification. Native search
+releases the GIL, while batched predicates and progress run on the thread advancing the Python
+execution. Hook exceptions propagate and stop that execution.
+
 `HalfEdge` describes an endpoint; `HalfEdgeView` accesses a live incidence. Canonicalization and
 isomorphism run Linnet's native canonizer on the payloads, or on what `node_key`, `edge_key`,
 and `half_edge_key` return for them. Keys must be hashable. Distinct keys sort by kind: `None`,

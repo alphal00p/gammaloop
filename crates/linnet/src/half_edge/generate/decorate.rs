@@ -35,6 +35,7 @@ use crate::half_edge::canon::{factorial, scaled};
 use super::{
     budget::Lines,
     model::{Fitting, Model, VertexState},
+    suspend::{Step, Work},
     topology::{Group, Topology},
     view::{Prune, State},
 };
@@ -112,9 +113,20 @@ pub(crate) struct Decorator {
     /// Number of edges labelled so far, and whether the labelling extends (or backtracks next).
     assigned: usize,
     descending: bool,
+    /// An unfinished label attempt retains its next candidate and the states before this edge.
+    placement: Option<Placement>,
+    /// The current candidate passed native feasibility and awaits exactly one pruning verdict.
+    parked: bool,
     /// While checking the filter's heredity: the first edge whose partial labelling the filter
     /// rejected.
     vetoed: Option<usize>,
+}
+
+#[derive(Clone, Copy, Debug)]
+struct Placement {
+    edge: usize,
+    next_label: usize,
+    before: [VertexState; 2],
 }
 
 /// Where the decoration of a topology stands.
@@ -142,6 +154,8 @@ impl Decorator {
         node_group_order: Option<u128>,
     ) {
         self.phase = Phase::Done;
+        self.placement = None;
+        self.parked = false;
         self.vetoed = None;
         self.node_stabilizer = Some(1);
         self.leg_kernel = topology.vertices[..topology.n]
@@ -202,51 +216,116 @@ impl Decorator {
     }
 
     /// The next diagram on the topology given to [`Self::start`], with its partial labellings
-    /// pruned by `filter`.
+    /// pruned by `filter`. Scalar iteration resolves the same parked prefixes as batching,
+    /// checking cancellation around each verdict and between bounded work allowances.
     pub(crate) fn next<'d>(
         &'d mut self,
         model: &Model,
         t: &'d Topology,
         filter: Option<&dyn Prune>,
+        stopped: impl Fn() -> bool,
     ) -> Option<Decoration<'d>> {
-        loop {
-            match self.phase {
-                Phase::Done => return None,
-                Phase::Single => {
-                    self.phase = Phase::Done;
-                    break;
-                }
-                Phase::Rules(first) => {
-                    if self.next_rules(model, first) {
-                        self.phase = Phase::Rules(false);
-                        break;
+        while !stopped() {
+            let step = self.poll(model, t, filter, filter.is_some(), &mut Work::bounded(128));
+            if stopped() {
+                return None;
+            }
+            match step {
+                Step::Ready => return Some(self.decoration(t)),
+                Step::Done => return None,
+                Step::Pending => {
+                    let filter = filter.expect("a deferred dressing filter");
+                    let keep = filter.keeps(State::Decoration(self.pending(t)));
+                    if stopped() {
+                        return None;
                     }
-                    self.phase = Phase::Labels;
+                    self.resume(model, keep, filter.checks_heredity());
                 }
-                Phase::Labels => {
-                    // without a filter, every labelling is kept at no cost
-                    let labelled = match filter {
-                        None => self.next_labelling(model, &mut |_, _| true),
-                        Some(filter) => {
-                            self.next_labelling(model, &mut |d: &mut Self, e| d.keeps(t, filter, e))
-                        }
-                    };
-                    if !labelled {
-                        self.phase = Phase::Done;
-                    } else if self.labelling_minimal(model) {
-                        self.choices.clear();
-                        self.choices.resize(t.n, 0);
-                        self.phase = Phase::Rules(true);
-                    }
-                }
+                Step::Yield => {}
             }
         }
-        Some(Decoration {
+        None
+    }
+
+    /// Advance within the work allowance. Deferred pruning parks a feasible field assignment
+    /// before invoking any hook; the caller supplies its combined verdict through [`Self::resume`].
+    pub(crate) fn poll(
+        &mut self,
+        model: &Model,
+        t: &Topology,
+        filter: Option<&dyn Prune>,
+        defer: bool,
+        work: &mut Work,
+    ) -> Step {
+        if self.parked {
+            return Step::Pending;
+        }
+        loop {
+            match self.phase {
+                Phase::Done => return Step::Done,
+                Phase::Single => {
+                    if !work.spend() {
+                        return Step::Yield;
+                    }
+                    self.phase = Phase::Done;
+                    return Step::Ready;
+                }
+                Phase::Rules(first) => match self.poll_rules(model, first, work) {
+                    Step::Ready => return Step::Ready,
+                    Step::Yield => return Step::Yield,
+                    Step::Done => self.phase = Phase::Labels,
+                    Step::Pending => unreachable!("rule tuples are judged after dressing"),
+                },
+                Phase::Labels => match self.poll_labelling(model, t, filter, defer, work) {
+                    Step::Done => self.phase = Phase::Done,
+                    Step::Pending => return Step::Pending,
+                    Step::Yield => return Step::Yield,
+                    Step::Ready => {
+                        if self.labelling_minimal(model) {
+                            self.choices.clear();
+                            self.choices.resize(t.n, 0);
+                            self.phase = Phase::Rules(true);
+                        }
+                    }
+                },
+            }
+        }
+    }
+
+    /// The complete assignment from the last [`Step::Ready`].
+    pub(crate) fn decoration<'d>(&'d self, t: &'d Topology) -> Decoration<'d> {
+        Decoration {
             rules: &self.rules,
             automorphism_count: scaled(self.node_stabilizer, self.kernel),
             vetoed: self.vetoed.is_some(),
             ..self.labelled(t, self.edges.len())
-        })
+        }
+    }
+
+    /// The field prefix from the last [`Step::Pending`], before its line counts are committed.
+    pub(crate) fn pending<'d>(&'d self, t: &'d Topology) -> Decoration<'d> {
+        assert!(self.parked, "a dressing verdict must be pending");
+        self.labelled(t, self.placement.expect("parked edge").edge + 1)
+    }
+
+    /// Resolve one parked edge. Rejection resumes at its next label; accepted prefixes commit
+    /// line counts once, including rejected prefixes retained for the heredity diagnostic.
+    pub(crate) fn resume(&mut self, model: &Model, keep: bool, check_heredity: bool) {
+        assert!(self.parked, "a dressing verdict must be pending");
+        self.parked = false;
+        let placement = self.placement.expect("parked edge");
+        if self.verdict(placement.edge, keep, check_heredity) {
+            self.commit(model, placement.edge);
+        } else {
+            self.set_ends(self.edges[placement.edge], placement.before);
+        }
+    }
+
+    fn commit(&mut self, model: &Model, edge: usize) {
+        self.follow_lines(model, edge, false);
+        self.assigned = edge + 1;
+        self.descending = true;
+        self.placement = None;
     }
 
     /// The diagram with its first `n` edges labelled and no rules.
@@ -548,64 +627,79 @@ impl Decorator {
         }
     }
 
-    /// Advance to the next complete labelling whose vertices all fit a signature and whose
-    /// prefixes are kept (`keeps(self, e)` judges the labelling up to edge `e`), depth-first over
-    /// the edges; `false` after the last.
-    fn next_labelling(
+    /// Depth-first field assignment with one work checkpoint per candidate. The placement
+    /// cursor survives both a work yield and a deferred verdict, so neither repeats an edge.
+    fn poll_labelling(
         &mut self,
         model: &Model,
-        keeps: &mut impl FnMut(&mut Self, usize) -> bool,
-    ) -> bool {
+        t: &Topology,
+        filter: Option<&dyn Prune>,
+        defer: bool,
+        work: &mut Work,
+    ) -> Step {
         loop {
-            if self.descending {
-                let e = self.assigned;
-                if e == self.edges.len() {
-                    self.descending = false;
-                    return true;
+            if self.placement.is_none() && self.descending && self.assigned == self.edges.len() {
+                self.descending = false;
+                return Step::Ready;
+            }
+            if !work.spend() {
+                return Step::Yield;
+            }
+            let placement = match self.placement {
+                Some(placement) => placement,
+                None => {
+                    let (e, first) = if self.descending {
+                        let e = self.assigned;
+                        let first = if e > 0 && self.edges[e - 1].bundle == self.edges[e].bundle {
+                            self.labels[e - 1] as usize
+                        } else {
+                            0
+                        };
+                        (e, first)
+                    } else {
+                        let Some(e) = self.assigned.checked_sub(1) else {
+                            return Step::Done;
+                        };
+                        self.assigned = e;
+                        self.set_ends(self.edges[e], self.trail[e]);
+                        self.follow_lines(model, e, true);
+                        (e, self.labels[e] as usize + 1)
+                    };
+                    let before = self.ends(self.edges[e]);
+                    self.trail[e] = before;
+                    Placement {
+                        edge: e,
+                        next_label: first,
+                        before,
+                    }
                 }
-                let bundle = self.edges[e].bundle;
-                let first = if e > 0 && self.edges[e - 1].bundle == bundle {
-                    self.labels[e - 1]
-                } else {
-                    0
-                };
-                self.descending = self.place(model, e, first as usize, keeps);
-            } else {
-                // backtrack: the last labelled edge takes its next label
-                let Some(e) = self.assigned.checked_sub(1) else {
-                    return false;
-                };
-                self.assigned = e;
-                self.set_ends(self.edges[e], self.trail[e]);
-                self.follow_lines(model, e, true);
-                self.descending = self.place(model, e, self.labels[e] as usize + 1, keeps);
+            };
+            let e = placement.edge;
+            let edge = self.edges[e];
+            let Some(label) = self.fitting(model, edge, placement.next_label).next() else {
+                self.set_ends(edge, placement.before);
+                self.placement = None;
+                self.descending = false;
+                continue;
+            };
+            self.placement = Some(Placement {
+                next_label: label + 1,
+                ..placement
+            });
+            self.add(model, edge, label, placement.before);
+            self.labels[e] = label as u8;
+            if self.forward_check(model, e) && self.within_budgets(model, e) {
+                if defer {
+                    self.parked = true;
+                    return Step::Pending;
+                }
+                if filter.is_none_or(|filter| self.keeps(t, filter, e)) {
+                    self.commit(model, e);
+                    continue;
+                }
             }
+            self.set_ends(edge, placement.before);
         }
-    }
-
-    /// Give edge `e` the first label from `first` on that fits its ends, passes forward checking
-    /// and the budgets, and that `keeps`.
-    fn place(
-        &mut self,
-        model: &Model,
-        e: usize,
-        first: usize,
-        keeps: &mut impl FnMut(&mut Self, usize) -> bool,
-    ) -> bool {
-        let edge = self.edges[e];
-        let before = self.ends(edge);
-        self.trail[e] = before;
-        for l in self.fitting(model, edge, first) {
-            self.add(model, edge, l, before);
-            self.labels[e] = l as u8;
-            if self.forward_check(model, e) && self.within_budgets(model, e) && keeps(self, e) {
-                self.follow_lines(model, e, false);
-                self.assigned = e + 1;
-                return true;
-            }
-        }
-        self.set_ends(edge, before);
-        false
     }
 
     /// The states of the ends of `edge`.
@@ -667,14 +761,19 @@ impl Decorator {
     /// Whether `filter` keeps the labelling up to edge `e`. While checking heredity, a rejection
     /// is recorded instead of pruning.
     fn keeps(&mut self, t: &Topology, filter: &dyn Prune, e: usize) -> bool {
+        let keep = filter.keeps(State::Decoration(self.labelled(t, e + 1)));
+        self.verdict(e, keep, filter.checks_heredity())
+    }
+
+    fn verdict(&mut self, e: usize, keep: bool, check_heredity: bool) -> bool {
         // a rejection recorded at `e` or later was undone by backtracking
         if self.vetoed.is_some_and(|v| v >= e) {
             self.vetoed = None;
         }
-        if filter.keeps(State::Decoration(self.labelled(t, e + 1))) {
+        if keep {
             return true;
         }
-        if filter.checks_heredity() {
+        if check_heredity {
             self.vetoed.get_or_insert(e);
             return true;
         }
@@ -691,7 +790,7 @@ impl Decorator {
             self.image.clear();
             self.image.extend(self.labels[start..end].iter().map(|&l| {
                 if self.flips[k * nb + j] && !loop_bundle {
-                    model.labels[l as usize].flip
+                    model.theory.labels[l as usize].flip
                 } else {
                     l
                 }
@@ -736,7 +835,7 @@ impl Decorator {
                 end += 1;
             }
             order = scaled(order, factorial(end - start));
-            if edge.u == edge.v && !model.loop_labels[label as usize].directed {
+            if edge.u == edge.v && !model.theory.loop_labels[label as usize].directed {
                 for _ in start..end {
                     order = scaled(order, Some(2));
                 }
@@ -746,17 +845,20 @@ impl Decorator {
         order
     }
 
-    /// Advance to the next rule tuple (the first if `first`) that is minimal under the
-    /// stabilizer of the labelling; `false` after the last.
-    fn next_rules(&mut self, model: &Model, mut first: bool) -> bool {
+    /// Advance to the next minimal rule tuple. A rejected tuple still spends work; preserving
+    /// the first-tuple flag prevents its replay when every tuple in a quantum is rejected.
+    fn poll_rules(&mut self, model: &Model, mut first: bool, work: &mut Work) -> Step {
         let n = self.choices.len();
         loop {
+            if !work.spend() {
+                return Step::Yield;
+            }
             if !first {
                 // next rule tuple
                 let mut v = 0;
                 loop {
                     if v == n {
-                        return false;
+                        return Step::Done;
                     }
                     self.choices[v] += 1;
                     if self.choices[v] < model.rules(self.states[v]).len() {
@@ -767,11 +869,12 @@ impl Decorator {
                 }
             }
             first = false;
+            self.phase = Phase::Rules(false);
             self.rules.clear();
             self.rules
                 .extend((0..n).map(|v| model.rules(self.states[v])[self.choices[v]]));
             if self.rules_minimal() && model.budgets.rules_admit(&self.rules) {
-                return true;
+                return Step::Ready;
             }
         }
     }
@@ -795,5 +898,196 @@ impl Decorator {
             }
         }
         true
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::{atomic::AtomicBool, Mutex};
+
+    use super::*;
+    use crate::half_edge::generate::{Countable, Legs, Plan, Query, Structure, Stub, Theory};
+
+    #[derive(Debug, PartialEq, Eq)]
+    struct Assignment {
+        labels: Vec<u8>,
+        rules: Vec<u32>,
+        automorphisms: Option<u128>,
+        vetoed: bool,
+    }
+
+    struct Prefixes {
+        reject: bool,
+        check: bool,
+        seen: Mutex<Vec<Vec<u8>>>,
+    }
+
+    impl Prune for Prefixes {
+        fn keeps(&self, state: State<'_>) -> bool {
+            let State::Decoration(d) = state else {
+                panic!("only field prefixes belong to decorator pruning");
+            };
+            assert!(d.rules.is_empty());
+            self.seen.lock().unwrap().push(d.labels.to_vec());
+            !self.reject || d.labels.last() == Some(&0)
+        }
+
+        fn checks_heredity(&self) -> bool {
+            self.check
+        }
+    }
+
+    fn plan() -> Plan<u8, u8> {
+        let (a, b) = (Stub::undirected(0), Stub::undirected(1));
+        let theory = Theory::builder()
+            .weights(["order"])
+            .vertex([a.clone(), a.clone(), a.clone()], [0])
+            .vertex([a.clone(), a.clone(), a.clone()], [2])
+            .vertex([a.clone(), a.clone(), b.clone()], [1])
+            .vertex([a.clone(), b.clone(), b.clone()], [2])
+            .vertex([b.clone(), b.clone(), b], [3])
+            .build()
+            .unwrap();
+        let legs = Legs::new().leg(1, a.clone()).leg(2, a);
+        let query = Query::new(&legs)
+            .loops(1..=1)
+            .structure(Structure {
+                self_loops: true,
+                zero_flow_edges: true,
+                ..Structure::default()
+            })
+            .weight("order", 0..=3)
+            .count(Countable::Propagators(vec![1]), ..=1)
+            .count(Countable::ClosedLines(vec![1]), ..=1);
+        Plan::new(&theory, &query).unwrap()
+    }
+
+    /// Compare owned assignments and the exact callback sequence across every topology.
+    fn collect(
+        plan: &Plan<u8, u8>,
+        filter: Option<&Prefixes>,
+        deferred: bool,
+        quantum: Option<usize>,
+    ) -> (Vec<Assignment>, usize) {
+        use crate::half_edge::generate::topology::{Context, Search};
+        let model = &plan.compiled.model;
+        let limits = &plan.orders[0].1;
+        let stop = AtomicBool::new(false);
+        let cx = Context {
+            model,
+            limits,
+            stop: &stop,
+            abort_check: None,
+            filter: None,
+        };
+        let mut search = Search::new(model, Topology::empty(model, limits), Default::default());
+        let (mut assignments, mut yields) = (Vec::new(), 0);
+        while search.next(&cx) {
+            let t = search.topology();
+            let mut decorator = Decorator::default();
+            decorator.start(model, t, search.generators(), search.node_group_order());
+            loop {
+                let mut work = quantum.map_or_else(Work::unlimited, Work::bounded);
+                match decorator.poll(
+                    model,
+                    t,
+                    filter.map(|f| f as &dyn Prune),
+                    deferred,
+                    &mut work,
+                ) {
+                    Step::Ready => {
+                        let d = decorator.decoration(t);
+                        assignments.push(Assignment {
+                            labels: d.labels.to_vec(),
+                            rules: d.rules.to_vec(),
+                            automorphisms: d.automorphism_count,
+                            vetoed: d.vetoed,
+                        });
+                    }
+                    Step::Pending => {
+                        let filter = filter.expect("deferred hook");
+                        let labels = decorator.pending(t).labels.to_vec();
+                        // Polling a parked cursor spends nothing and never invokes the hook.
+                        let seen = filter.seen.lock().unwrap().len();
+                        assert_eq!(
+                            decorator.poll(model, t, Some(filter), true, &mut Work::bounded(0)),
+                            Step::Pending
+                        );
+                        assert_eq!(filter.seen.lock().unwrap().len(), seen);
+                        assert_eq!(decorator.pending(t).labels, labels);
+                        let keep = filter.keeps(State::Decoration(decorator.pending(t)));
+                        decorator.resume(model, keep, filter.check);
+                    }
+                    Step::Yield => yields += 1,
+                    Step::Done => break,
+                }
+            }
+        }
+        (assignments, yields)
+    }
+
+    #[test]
+    fn tiny_work_quanta_preserve_assignments_and_rule_tuple_order() {
+        let plan = plan();
+        let (expected, _) = collect(&plan, None, false, None);
+        assert!(!expected.is_empty());
+        for quantum in [1, 2, 3] {
+            let (actual, yields) = collect(&plan, None, false, Some(quantum));
+            assert_eq!(actual, expected);
+            assert!(yields > 0);
+        }
+    }
+
+    #[test]
+    fn native_budget_rejections_yield_without_any_hook_or_output() {
+        // A connected diagram with A legs can only use AAA vertices: BBB is disconnected.
+        // Degree/weight partitions admit one BBB vertex, but dressing must reject every graph.
+        let (a, b) = (Stub::undirected(0), Stub::undirected(1));
+        let theory = Theory::builder()
+            .weights(["b_vertices"])
+            .vertex([a.clone(), a.clone(), a.clone()], [0])
+            .vertex([b.clone(), b.clone(), b], [1])
+            .build()
+            .unwrap();
+        let legs = Legs::new().leg(1, a.clone()).leg(2, a);
+        let query = Query::new(&legs)
+            .loops(2..=2)
+            .structure(Structure {
+                self_loops: true,
+                zero_flow_edges: true,
+                ..Structure::default()
+            })
+            .weight("b_vertices", 1..=1);
+        let plan = Plan::new(&theory, &query).unwrap();
+        assert!(collect(&plan, None, false, None).0.is_empty());
+        let (assignments, yields) = collect(&plan, None, false, Some(1));
+        assert!(assignments.is_empty());
+        assert!(yields > 0);
+    }
+
+    #[test]
+    fn deferred_rejections_resume_once_and_preserve_heredity_lineage() {
+        let plan = plan();
+        for check in [false, true] {
+            let direct = Prefixes {
+                reject: true,
+                check,
+                seen: Mutex::default(),
+            };
+            let (expected, _) = collect(&plan, Some(&direct), false, None);
+            assert!(!expected.is_empty());
+            assert_eq!(expected.iter().any(|d| d.vetoed), check);
+            for quantum in [1, 2, 3] {
+                let deferred = Prefixes {
+                    reject: true,
+                    check,
+                    seen: Mutex::default(),
+                };
+                let (actual, _) = collect(&plan, Some(&deferred), true, Some(quantum));
+                assert_eq!(actual, expected);
+                assert_eq!(*deferred.seen.lock().unwrap(), *direct.seen.lock().unwrap());
+                assert!(!deferred.seen.lock().unwrap().is_empty());
+            }
+        }
     }
 }

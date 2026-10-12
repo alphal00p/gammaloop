@@ -1,11 +1,11 @@
 //! Native generation against Graphica generate on whole Feynman-graph sets. Both produce one graph
-//! per isomorphism class with its symmetry factor; the native side also materializes every graph
-//! as a `HedgeGraph` and computes its canonical form. Graphica returns all loop orders up to the
-//! bound, so its set is filtered to the requested order like the native one.
+//! per isomorphism class with its symmetry factor; the native side consumes each compact diagram.
+//! Graphica returns all loop orders up to the bound, so its set is filtered to the requested order
+//! like the native one.
 use std::{hint::black_box, time::Duration};
 
 use criterion::{criterion_group, criterion_main, Criterion};
-use linnet::half_edge::generate::{GraphGenerator, Stub};
+use linnet::half_edge::generate::{Bridges, Legs, Plan, Query, Run, Structure, Stub, Theory};
 use symbolica::graph::{GenerationSettings, Graph, HalfEdge};
 
 struct Case {
@@ -33,23 +33,36 @@ impl Case {
     }
 
     fn native(&self) -> usize {
-        let externals = self
+        let legs = self
             .externals
             .iter()
             .enumerate()
-            .map(|(i, h)| (i + 1, Self::stub(&h.flip())));
-        let signatures = self
+            .fold(Legs::new(), |legs, (i, h)| {
+                legs.leg(i + 1, Self::stub(&h.flip()))
+            });
+        let theory = self
             .signatures
             .iter()
-            .map(|s| s.iter().map(Self::stub).collect());
-        let mut generator = GraphGenerator::new(externals, signatures)
+            .fold(Theory::builder(), |theory, signature| {
+                theory.vertex(signature.iter().map(Self::stub), [])
+            })
+            .build()
+            .unwrap();
+        let query = Query::new(&legs)
             .loops(self.loops..=self.loops)
-            .allow_self_loops(true)
-            .allow_zero_flow_edges(self.zero_flow_edges);
-        if self.one_pi {
-            generator = generator.max_bridges(0);
-        }
-        generator.iter().unwrap().map(black_box).count()
+            .structure(Structure {
+                self_loops: true,
+                zero_flow_edges: self.zero_flow_edges,
+                bridges: if self.one_pi {
+                    Bridges::OnePI
+                } else {
+                    Bridges::Any
+                },
+                ..Structure::default()
+            });
+        let plan = Plan::new(&theory, &query).unwrap();
+        let run = Run::default();
+        plan.diagrams(&run).unwrap().map(black_box).count()
     }
 
     fn graphica(&self) -> usize {
@@ -136,12 +149,22 @@ fn generate(c: &mut Criterion) {
 /// automorphisms and most partial graphs that close a cycle cannot complete.
 fn trees(c: &mut Criterion) {
     let undirected = Stub::undirected(0u8);
-    let signatures = (1..=15).map(|d| vec![undirected.clone(); d]);
-    let generator = GraphGenerator::<u8, u8>::new([], signatures)
+    let theory = (1..=15)
+        .fold(Theory::builder(), |theory, degree| {
+            theory.vertex(vec![undirected.clone(); degree], [])
+        })
+        .build()
+        .unwrap();
+    let query = Query::new(&Legs::<u8, u8>::new())
         .loops(0..=0)
-        .max_vertices(14)
-        .allow_zero_flow_edges(true);
-    let count = || generator.iter().unwrap().map(black_box).count();
+        .structure(Structure {
+            max_vertices: Some(14),
+            zero_flow_edges: true,
+            ..Structure::default()
+        });
+    let plan = Plan::new(&theory, &query).unwrap();
+    let run = Run::default();
+    let count = || plan.diagrams(&run).unwrap().map(black_box).count();
     // OEIS A000055: the free trees with 2 to 14 vertices
     assert_eq!(count(), 5446);
     let mut group = c.benchmark_group("trees with degrees 1 to 15 up to 14 vertices");

@@ -1,15 +1,15 @@
-//! What the filter of [`super::GraphGenerator`] sees: read-only views of the search states of
-//! both stages and of the complete graphs.
+//! Read-only typed views of skeletons, dressing states and complete assignments.
 
-use std::{cell::OnceCell, iter};
+use std::{cell::OnceCell, iter, sync::OnceLock};
 
 use itertools::Either;
 
 use super::{
     decorate::{Decoration, Edge},
-    model::Direction,
+    model::{Direction, Model},
+    output::SkeletonData,
     topology::Topology,
-    Compiled, DiagramEdge, Filter, Stub,
+    CanonicalForm, Compiled, DiagramEdge, Hooks, OutputTables, Stub,
 };
 use crate::half_edge::{
     builder::HedgeGraphBuilder,
@@ -35,14 +35,26 @@ pub(crate) trait Prune: Sync {
 /// The user filter with what its views need.
 pub(crate) struct Pruner<'a, F, L> {
     pub(super) compiled: &'a Compiled<F, L>,
-    pub(super) filter: &'a Filter<F, L>,
+    pub(super) hooks: &'a Hooks<F, L>,
     pub(super) loops: usize,
     pub(super) check_heredity: bool,
 }
 
 impl<F: Send + Sync, L: Send + Sync> Prune for Pruner<'_, F, L> {
     fn keeps(&self, state: State<'_>) -> bool {
-        (self.filter)(&GraphView::new(self.compiled, self.loops, state))
+        let view = View::new(self.compiled, self.loops, state);
+        match state {
+            State::Topology(_) => self
+                .hooks
+                .skeletons
+                .as_ref()
+                .is_none_or(|hook| hook(&SkeletonView(view))),
+            State::Decoration(_) => self
+                .hooks
+                .dressings
+                .as_ref()
+                .is_none_or(|hook| hook(&DressingView(view))),
+        }
     }
 
     fn checks_heredity(&self) -> bool {
@@ -50,7 +62,7 @@ impl<F: Send + Sync, L: Send + Sync> Prune for Pruner<'_, F, L> {
     }
 }
 
-/// How far a [`GraphView`] is built.
+/// How far a [`View`] is built.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Stage {
     /// An untyped, connected topology, partial or complete: vertices with their degrees, attached
@@ -68,19 +80,91 @@ pub enum Stage {
     Complete,
 }
 
-/// A state of the search or a complete graph, as the filter of
-/// [`super::GraphGenerator::filter`] sees it.
+/// Shared private representation of the typed borrowed views.
 ///
 /// Vertices are numbered `0..n_vertices()` and keep their numbers in every extension of a state:
 /// stage 1 adds vertices with higher numbers, stage 2 adds fields and rules.
-pub struct GraphView<'a, F, L> {
-    compiled: &'a Compiled<F, L>,
+pub(super) struct View<'a, F, L> {
+    compiled: Option<&'a Compiled<F, L>>,
+    tables: &'a OutputTables<F, L>,
+    skeleton: Option<&'a SkeletonData<F, L>>,
     loops: usize,
     state: State<'a>,
     complete: OnceCell<HedgeGraph<F, usize, Option<L>>>,
+    /// Complete batch assignments share this cache across scoped views and hook stages.
+    complete_cache: Option<&'a OnceLock<HedgeGraph<F, usize, Option<L>>>>,
+    skeleton_id: OnceCell<CanonicalForm<Option<usize>, Option<F>, Option<L>>>,
 }
 
-/// An edge of a [`GraphView`].
+// Typed boundaries share the compact representation and accessor semantics. The private View
+// cannot be supplied as a public callback, so a hook cannot accidentally run at another stage.
+macro_rules! typed_views {
+    ($($(#[$doc:meta])* $name:ident),+ $(,)?) => {$ (
+        $(#[$doc])*
+        pub struct $name<'a, F, L>(pub(super) View<'a, F, L>);
+
+        impl<'a, F, L> $name<'a, F, L> {
+            pub fn stage(&self) -> Stage { self.0.stage() }
+            pub fn is_complete(&self) -> bool { self.0.is_complete() }
+            pub fn is_topology_complete(&self) -> bool { self.0.is_topology_complete() }
+            pub fn loop_order(&self) -> usize { self.0.loop_order() }
+            pub fn n_vertices(&self) -> usize { self.0.n_vertices() }
+            pub fn degree(&self, vertex: usize) -> usize { self.0.degree(vertex) }
+            pub fn open_stubs(&self, vertex: usize) -> usize { self.0.open_stubs(vertex) }
+            pub fn self_loops(&self, vertex: usize) -> usize { self.0.self_loops(vertex) }
+            pub fn multiplicity(&self, source: usize, target: usize) -> usize {
+                self.0.multiplicity(source, target)
+            }
+            pub fn legs(&self, vertex: usize) -> impl Iterator<Item = (&'a L, Stub<&'a F>)> + 'a {
+                self.0.legs(vertex)
+            }
+            pub fn unplaced_legs(&self) -> usize { self.0.unplaced_legs() }
+            pub fn loops(&self) -> usize { self.0.loops() }
+            pub fn is_connected(&self, side: VertexSet) -> bool { self.0.is_connected(side) }
+            pub fn loops_in(&self, side: VertexSet) -> usize { self.0.loops_in(side) }
+            pub fn edges(&self) -> impl Iterator<Item = EdgeView<'a, F>> + 'a { self.0.edges() }
+            pub fn rules(&self, vertex: usize) -> Option<&'a [u32]> { self.0.rules(vertex) }
+            /// Rules compatible with the assigned stubs at this vertex, in declaration order.
+            pub fn domains(&self, vertex: usize) -> Vec<u32> { self.0.domains(vertex) }
+            /// Bounds on declared theory weights for a complete skeleton. `None` before its
+            /// vertex set is final, or when a vertex has no possible rule.
+            pub fn order_bounds(&self) -> Option<Vec<OrderBound<'a>>> { self.0.order_bounds() }
+            /// Stable topology identity once every edge and external label is placed.
+            pub fn skeleton_id(&self) -> Option<&CanonicalForm<Option<usize>, Option<F>, Option<L>>>
+            where F: Clone + Ord, L: Clone + Ord { self.0.skeleton_id() }
+            pub fn bridges(&self) -> Vec<Bridge> { self.0.bridges() }
+            pub fn graph(&self) -> HedgeGraph<Option<F>, Option<usize>, Option<L>>
+            where F: Clone, L: Clone {
+                self.0.graph()
+            }
+            pub fn complete_graph(&self) -> Option<&HedgeGraph<F, usize, Option<L>>>
+            where F: Clone, L: Clone {
+                self.0.complete_graph()
+            }
+        }
+    )+};
+}
+
+typed_views! {
+    /// A partial or complete untyped topology. Vertex numbers are retained by its refinements.
+    /// Open stubs and unplaced legs describe the unfinished part; edge fields are unassigned.
+    SkeletonView,
+    /// A complete topology with a partial or complete assignment of fields and vertex rules.
+    /// Pruning must remain hereditary as fields and rules become known.
+    DressingView,
+    /// A fully assigned diagram, after built-in restrictions and dressing pruning.
+    /// Final selection may use any predicate; graph construction remains an explicit demand.
+    DiagramView,
+}
+
+/// An inclusive range of the possible sum of one declared theory weight.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct OrderBound<'a> {
+    pub name: &'a str,
+    pub range: [i64; 2],
+}
+
+/// An edge of a [`View`].
 #[derive(Debug, PartialEq, Eq)]
 pub struct EdgeView<'a, F> {
     /// Its vertices, equal for a self-loop.
@@ -90,7 +174,7 @@ pub struct EdgeView<'a, F> {
     pub stub: Option<Stub<&'a F>>,
 }
 
-/// A bridge of a [`GraphView`] together with the side of it that is final: that side has no open
+/// A bridge of a [`View`] together with the side of it that is final: that side has no open
 /// stubs, so no later vertex or edge attaches to it and the bridge stays a bridge.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Bridge {
@@ -100,7 +184,7 @@ pub struct Bridge {
     pub side: VertexSet,
 }
 
-/// A set of vertices of a [`GraphView`].
+/// A set of vertices of a [`View`].
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 pub struct VertexSet(pub(super) u64);
 
@@ -140,14 +224,57 @@ impl FromIterator<usize> for VertexSet {
     }
 }
 
-impl<'a, F, L> GraphView<'a, F, L> {
+impl<'a, F, L> View<'a, F, L> {
     pub(super) fn new(compiled: &'a Compiled<F, L>, loops: usize, state: State<'a>) -> Self {
-        GraphView {
-            compiled,
+        View {
+            compiled: Some(compiled),
+            tables: &compiled.tables,
+            skeleton: None,
             loops,
             state,
             complete: OnceCell::new(),
+            complete_cache: None,
+            skeleton_id: OnceCell::new(),
         }
+    }
+
+    pub(super) fn stored(skeleton: &'a SkeletonData<F, L>) -> Self {
+        Self {
+            compiled: None,
+            tables: &skeleton.tables,
+            skeleton: Some(skeleton),
+            loops: skeleton.loops,
+            state: State::Topology(&skeleton.topology),
+            complete: OnceCell::new(),
+            complete_cache: None,
+            skeleton_id: OnceCell::new(),
+        }
+    }
+
+    pub(super) fn with_complete_cache(
+        mut self,
+        cache: Option<&'a OnceLock<HedgeGraph<F, usize, Option<L>>>>,
+    ) -> Self {
+        self.complete_cache = cache;
+        self
+    }
+
+    /// Restore a demanded batch graph to the same owner used by scalar output freezing.
+    pub(super) fn with_complete_graph(
+        mut self,
+        graph: Option<HedgeGraph<F, usize, Option<L>>>,
+    ) -> Self {
+        if let Some(graph) = graph {
+            self.complete = OnceCell::from(graph);
+        }
+        self
+    }
+
+    fn model(&self) -> &'a Model {
+        &self
+            .compiled
+            .expect("a decoration view borrows its compiled plan")
+            .model
     }
 
     fn topology(&self) -> &'a Topology {
@@ -191,7 +318,11 @@ impl<'a, F, L> GraphView<'a, F, L> {
 
     /// Stubs of `v` not taken by an edge or a leg yet; zero from [`Stage::Fields`] on.
     pub fn open_stubs(&self, v: usize) -> usize {
-        self.topology().free_stubs(&self.compiled.model, v) as usize
+        {
+            let vertex = &self.topology().vertices[v];
+            vertex.open as usize + vertex.n_legs as usize
+                - self.tables.packing.size(vertex.labelled) as usize
+        }
     }
 
     pub fn self_loops(&self, v: usize) -> usize {
@@ -205,19 +336,18 @@ impl<'a, F, L> GraphView<'a, F, L> {
 
     /// The legs attached to `v`, with their stubs at `v`.
     pub fn legs(&self, v: usize) -> impl Iterator<Item = (&'a L, Stub<&'a F>)> + 'a {
-        let (compiled, packed) = (self.compiled, self.topology().vertices[v].labelled);
-        compiled
-            .tables
+        let (tables, packed) = (self.tables, self.topology().vertices[v].labelled);
+        tables
             .legs
             .iter()
             .enumerate()
-            .flat_map(move |(c, leg)| {
+            .flat_map(move |(class, leg)| {
                 let stub = Stub {
-                    field: &compiled.tables.fields[leg.field as usize],
+                    field: &tables.fields[leg.field as usize],
                     flow: leg.flow,
                 };
-                let count = compiled.model.legs.count(packed, c) as usize;
-                iter::repeat_n((&compiled.tables.labels[leg.label as usize], stub), count)
+                let count = tables.packing.count(packed, class) as usize;
+                iter::repeat_n((&tables.labels[leg.label as usize], stub), count)
             })
     }
 
@@ -226,9 +356,9 @@ impl<'a, F, L> GraphView<'a, F, L> {
         let t = self.topology();
         let placed: usize = t.vertices[..t.n]
             .iter()
-            .map(|v| v.n_legs as usize - v.unlabelled(&self.compiled.model) as usize)
+            .map(|v| self.tables.packing.size(v.labelled) as usize)
             .sum();
-        self.compiled.model.legs.total as usize - placed
+        self.tables.packing.total as usize - placed
     }
 
     /// Independent cycles of the edges placed so far.
@@ -292,7 +422,7 @@ impl<'a, F, L> GraphView<'a, F, L> {
                     })
                 })
             })),
-            State::Decoration(d) => Either::Right(self.compiled.edges(d)),
+            State::Decoration(d) => Either::Right(self.compiled.expect("decoration view").edges(d)),
         }
     }
 
@@ -306,15 +436,109 @@ impl<'a, F, L> GraphView<'a, F, L> {
             return Some(&d.rules[v..=v]);
         }
         // only the full states of the vertex automaton have rules
-        let rules = self.compiled.model.rules(d.states[v]);
+        let rules = self.model().rules(d.states[v]);
         (!rules.is_empty()).then_some(rules)
+    }
+
+    fn domains(&self, vertex: usize) -> Vec<u32> {
+        let t = self.topology();
+        if let Some(compiled) = self.compiled {
+            let state = match self.state {
+                State::Decoration(d) if !d.rules.is_empty() => return vec![d.rules[vertex]],
+                State::Decoration(d) => Some(d.states[vertex]),
+                State::Topology(_) => compiled
+                    .model
+                    .leg_state(t.vertices[vertex].degree, t.vertices[vertex].legs),
+            };
+            return state.map(|s| compiled.model.domain(s)).unwrap_or_default();
+        }
+        // Stored skeletons keep rule declarations but no automaton. Match the attached stubs
+        // directly, preserving duplicate rules and their original insertion indices.
+        let mut stubs = Vec::new();
+        let v = &t.vertices[vertex];
+        for (class, leg) in self.tables.legs.iter().enumerate() {
+            let direction = Stub {
+                field: leg.field,
+                flow: leg.flow,
+            }
+            .direction();
+            stubs.extend(iter::repeat_n(
+                3 * leg.field + direction,
+                self.tables.packing.count(v.labelled, class) as usize,
+            ));
+        }
+        self.tables
+            .signatures
+            .iter()
+            .enumerate()
+            .filter_map(|(rule, signature)| {
+                if signature.len() != v.degree as usize {
+                    return None;
+                }
+                let mut remaining = signature.clone();
+                for &stub in &stubs {
+                    let index = remaining.iter().position(|&s| s == stub)?;
+                    remaining.swap_remove(index);
+                }
+                Some(rule as u32)
+            })
+            .collect()
+    }
+
+    fn order_bounds(&self) -> Option<Vec<OrderBound<'a>>> {
+        if !self.is_topology_complete() {
+            return None;
+        }
+        let domains: Vec<_> = (0..self.n_vertices()).map(|v| self.domains(v)).collect();
+        if domains.iter().any(Vec::is_empty) {
+            return None;
+        }
+        Some(
+            self.tables
+                .weights
+                .iter()
+                .map(|(name, weights)| {
+                    let mut range = [0i64; 2];
+                    for domain in &domains {
+                        let values = domain.iter().map(|&rule| i64::from(weights[rule as usize]));
+                        range[0] += values.clone().min().expect("nonempty domain");
+                        range[1] += values.max().expect("nonempty domain");
+                    }
+                    OrderBound { name, range }
+                })
+                .collect(),
+        )
+    }
+
+    fn skeleton_id(&self) -> Option<&CanonicalForm<Option<usize>, Option<F>, Option<L>>>
+    where
+        F: Clone + Ord,
+        L: Clone + Ord,
+    {
+        if !self.is_topology_complete() {
+            return None;
+        }
+        Some(match self.skeleton {
+            Some(skeleton) => skeleton.id(),
+            None => self.skeleton_id.get_or_init(|| {
+                let view = Self::new(
+                    self.compiled.expect("search view"),
+                    self.loops,
+                    State::Topology(self.topology()),
+                );
+                view.graph()
+                    .canonize_by(Clone::clone, Clone::clone, Clone::clone)
+                    .canonical_form()
+                    .clone()
+            }),
+        })
     }
 
     /// The bridges with a final side; a bridge of a complete topology is listed once per side.
     pub fn bridges(&self) -> Vec<Bridge> {
         let mut bridges = vec![];
         self.topology()
-            .closed_sides(&self.compiled.model, |ends, side| {
+            .closed_sides(&self.tables.packing, |ends, side| {
                 bridges.push(Bridge {
                     ends,
                     side: VertexSet(side),
@@ -333,7 +557,7 @@ impl<'a, F, L> GraphView<'a, F, L> {
     {
         Self::build(
             self.n_vertices(),
-            self.compiled.model.legs.total as usize,
+            self.tables.packing.total as usize,
             (0..self.n_vertices())
                 .flat_map(|v| self.legs(v).map(move |(label, stub)| (v, label, stub))),
             self.edges(),
@@ -355,13 +579,13 @@ impl<'a, F, L> GraphView<'a, F, L> {
             return None;
         };
         (!d.rules.is_empty()).then(|| {
-            self.complete.get_or_init(|| {
+            let build = || {
                 Self::build(
                     self.n_vertices(),
-                    self.compiled.model.legs.total as usize,
+                    self.tables.packing.total as usize,
                     (0..self.n_vertices())
                         .flat_map(|v| self.legs(v).map(move |(label, stub)| (v, label, stub))),
-                    self.compiled.edges(d),
+                    self.compiled.expect("decoration view").edges(d),
                     |v| d.rules[v] as usize,
                     |stub| {
                         stub.expect("a complete graph has every field")
@@ -369,7 +593,11 @@ impl<'a, F, L> GraphView<'a, F, L> {
                             .clone()
                     },
                 )
-            })
+            };
+            match self.complete_cache {
+                Some(cache) => cache.get_or_init(build),
+                None => self.complete.get_or_init(build),
+            }
         })
     }
 
@@ -433,10 +661,10 @@ impl<F, L> Compiled<F, L> {
     pub(super) fn edge(&self, e: &Edge, l: u8) -> DiagramEdge {
         let model = &self.model;
         let (field, flow) = if e.u == e.v {
-            let label = model.loop_labels[l as usize];
+            let label = model.theory.loop_labels[l as usize];
             (label.field, label.directed.then_some(Flow::Source))
         } else {
-            let label = model.labels[l as usize];
+            let label = model.theory.labels[l as usize];
             let flow = match label.direction {
                 Direction::Undirected => None,
                 Direction::Forward => Some(Flow::Source),

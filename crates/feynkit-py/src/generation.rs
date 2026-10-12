@@ -1,9 +1,13 @@
-use linnet_py::PyDiagramRender;
 use linnet_py::PyGraph;
 use linnet_py::PyRenderSettings;
+use linnet_py::{CancelCheck, GenerationCallbacks, PyDiagramRender};
 use std::{
     collections::{BTreeMap, VecDeque},
-    sync::{Arc, Mutex},
+    ops::ControlFlow,
+    sync::{
+        Arc, Mutex,
+        atomic::{AtomicBool, Ordering},
+    },
     time::{Duration, Instant},
 };
 
@@ -16,12 +20,12 @@ use feynkit_generator::{
 };
 use feynkit_graph::{DiagramId, EdgeId};
 use feynkit_model::{Model, ParticleId};
-use linnet::half_edge::{HedgeGraph, generate::Stage};
+use linnet::half_edge::generate::batch::{Reply, Request};
 use pyo3::{
     FromPyObject, IntoPyObjectExt,
     exceptions::{PyIndexError, PyTypeError, PyValueError},
     prelude::*,
-    types::{PyAny, PyBool, PyEllipsis, PyList, PyModule, PyString},
+    types::{PyAny, PyBool, PyEllipsis, PyList, PyModule, PyString, PyTuple},
 };
 
 #[cfg(feature = "python_stubgen")]
@@ -39,13 +43,6 @@ use crate::{
     render_settings::PyDiagramStyle,
 };
 use symbolica::api::python::{ConvertibleToExpression, PythonExpression};
-
-/// A search state of diagram generation as handed to Python filters: edge fields, vertex
-/// signatures where decided, and the labels of the external legs.
-type FilterSnapshot = (
-    HedgeGraph<Option<ParticleId>, Option<usize>, Option<ExternalLabel>>,
-    Stage,
-);
 
 /// A model-independent way to identify an external particle.
 ///
@@ -988,30 +985,23 @@ impl PyProcess {
     ///     The display closes on completion, cancellation, or error.
     ///     Observe stage changes and coalesced counts on the calling Python thread.
     ///     Callback exceptions propagate and stop generation.
-    /// filter : Callable[[symbolica.community.graph.Graph, str], bool] or None, optional
-    ///     Prune the diagram search. The callback receives every search state with its
-    ///     stage: "topology" for untyped topologies, partial or complete, "fields" for
-    ///     partial field assignments of a complete topology, and "complete" for complete
-    ///     diagrams. Partial field assignments whose bounds on the coupling orders or the
-    ///     fermion loops already miss their ranges are dropped without a call. False drops
-    ///     the state with everything that completes it, so the verdict must be hereditary
-    ///     within each stage. Edge data is the PDG code of the particle of the line,
-    ///     directed along its flow, or None before its field is assigned. External legs
-    ///     are dangling half-edges whose data is the pair
-    ///     (state, index), with index None for amplitude legs symmetrized within their state.
-    ///     Cross-section legs keep their index; with ``symmetrize_initial``, diagrams related
-    ///     by exchanging identical beams are identified after the search, so verdicts should
-    ///     not depend on which beam carries which index. A "complete"-stage callback can add
-    ///     vetoes to the built-in filters, for example a different self-energy definition.
-    ///     Node data is None. Mutating the snapshot does not change enumeration. Keep
-    ///     callbacks cheap: each snapshot is a new Python graph.
+    /// prune_skeletons : Callable[[graph.SkeletonView], bool] or None, optional
+    ///     Prune untyped topologies. False rejects every refinement of that state.
+    /// prune_dressings : Callable[[graph.DressingView], bool] or None, optional
+    ///     Prune partial and complete field assignments. Verdicts must be hereditary.
+    /// select : Callable[[graph.DiagramView], bool] or None, optional
+    ///     Select complete assignments with an arbitrary predicate.
+    ///     All three hooks run on the calling Python thread with scoped typed views.
+    ///     Fields are Particle objects; external labels are (state, index) pairs.
+    ///     Views expire when the callback returns. Explicit graph() or complete_graph()
+    ///     calls create independent snapshots. Callbacks must return bool.
     /// cancellation_token : CancellationToken or None, optional
     ///     Shared token for cancelling a running generation task. Token cancellation
     ///     returns an incomplete result; Python signal-handler exceptions, including
     ///     KeyboardInterrupt, stop generation and propagate to the caller.
-    #[pyo3(signature = (*, loops=OrderRangeInput::default(), symmetrize_initial=false, symmetrize_final=false, symmetrize_left_right=false, symmetrize_external_fermions=false, threads=None, max_vertices=None, allow_self_loops=true, allow_zero_flow_edges=false, graph_prefix=None, output="named", maximum_bridges=Some(Python::attach(|py| py.Ellipsis())), self_energy=Some(Python::attach(|py| py.Ellipsis())), tadpoles=Some(Python::attach(|py| py.Ellipsis())), zero_snails=Some(Python::attach(|py| py.Ellipsis())), coupling_orders=None, fermion_loop_count_range=None, factorized_loop_topologies_count_range=Some(Python::attach(|py| py.Ellipsis())), blob_range=Some(Python::attach(|py| py.Ellipsis())), spectator_range=Some(Python::attach(|py| py.Ellipsis())), perturbative_orders=None, sewn_tadpoles=None, cut_amplitude_coupling_orders=None, cut_amplitude_loop_count_range=None, select_diagrams=None, veto_diagrams=None, loop_momentum_bases=None, numerator_prefactor=None, projector=None, numerator_grouping=None, filter_zero_color=false, cancellation_token=None, progress=Some(Python::attach(|py| PyString::new(py, "auto").into_any().unbind())), filter=None))]
+    #[pyo3(signature = (*, loops=OrderRangeInput::default(), symmetrize_initial=false, symmetrize_final=false, symmetrize_left_right=false, symmetrize_external_fermions=false, threads=None, max_vertices=None, allow_self_loops=true, allow_zero_flow_edges=false, graph_prefix=None, output="named", maximum_bridges=Some(Python::attach(|py| py.Ellipsis())), self_energy=Some(Python::attach(|py| py.Ellipsis())), tadpoles=Some(Python::attach(|py| py.Ellipsis())), zero_snails=Some(Python::attach(|py| py.Ellipsis())), coupling_orders=None, fermion_loop_count_range=None, factorized_loop_topologies_count_range=Some(Python::attach(|py| py.Ellipsis())), blob_range=Some(Python::attach(|py| py.Ellipsis())), spectator_range=Some(Python::attach(|py| py.Ellipsis())), perturbative_orders=None, sewn_tadpoles=None, cut_amplitude_coupling_orders=None, cut_amplitude_loop_count_range=None, select_diagrams=None, veto_diagrams=None, loop_momentum_bases=None, numerator_prefactor=None, projector=None, numerator_grouping=None, filter_zero_color=false, cancellation_token=None, progress=Some(Python::attach(|py| PyString::new(py, "auto").into_any().unbind())), prune_skeletons=None, prune_dressings=None, select=None))]
     #[pyo3(
-        text_signature = "($self, *, loops=0, symmetrize_initial=False, symmetrize_final=False, symmetrize_left_right=False, symmetrize_external_fermions=False, threads=None, max_vertices=None, allow_self_loops=True, allow_zero_flow_edges=False, graph_prefix=None, output='named', maximum_bridges=..., self_energy=..., tadpoles=..., zero_snails=..., coupling_orders=None, fermion_loop_count_range=None, factorized_loop_topologies_count_range=..., blob_range=..., spectator_range=..., perturbative_orders=None, sewn_tadpoles=None, cut_amplitude_coupling_orders=None, cut_amplitude_loop_count_range=None, select_diagrams=None, veto_diagrams=None, loop_momentum_bases=None, numerator_prefactor=None, projector=None, numerator_grouping=None, filter_zero_color=False, cancellation_token=None, progress='auto', filter=None)"
+        text_signature = "($self, *, loops=0, symmetrize_initial=False, symmetrize_final=False, symmetrize_left_right=False, symmetrize_external_fermions=False, threads=None, max_vertices=None, allow_self_loops=True, allow_zero_flow_edges=False, graph_prefix=None, output='named', maximum_bridges=..., self_energy=..., tadpoles=..., zero_snails=..., coupling_orders=None, fermion_loop_count_range=None, factorized_loop_topologies_count_range=..., blob_range=..., spectator_range=..., perturbative_orders=None, sewn_tadpoles=None, cut_amplitude_coupling_orders=None, cut_amplitude_loop_count_range=None, select_diagrams=None, veto_diagrams=None, loop_momentum_bases=None, numerator_prefactor=None, projector=None, numerator_grouping=None, filter_zero_color=False, cancellation_token=None, progress='auto', prune_skeletons=None, prune_dressings=None, select=None)"
     )]
     #[allow(clippy::too_many_arguments)]
     fn generate_diagrams(
@@ -1060,7 +1050,9 @@ impl PyProcess {
         #[gen_stub(override_type(type_repr = "typing.Literal['auto'] | collections.abc.Callable[[GenerationProgress], None] | None", imports = ("collections.abc", "typing")))]
         progress: Option<Py<PyAny>>,
         #[gen_stub(override_type(type_repr = "collections.abc.Callable[[symbolica.community.graph.Graph, str], bool] | None", imports = ("collections.abc", "symbolica.community.graph")))]
-        filter: Option<Py<PyAny>>,
+        prune_skeletons: Option<Py<PyAny>>,
+        prune_dressings: Option<Py<PyAny>>,
+        select: Option<Py<PyAny>>,
     ) -> PyResult<PyGenerationResult> {
         let generation_type = GenerationType::Amplitude;
         let process = self.inner.clone();
@@ -1109,7 +1101,9 @@ impl PyProcess {
             generation_type,
             options,
             progress,
-            filter,
+            prune_skeletons,
+            prune_dressings,
+            select,
         )
     }
     /// Generate a coherent symbolic amplitude for this process.
@@ -1219,30 +1213,23 @@ impl PyProcess {
     ///     The display closes on completion, cancellation, or error.
     ///     Observe stage changes and coalesced counts on the calling Python thread.
     ///     Callback exceptions propagate and stop generation.
-    /// filter : Callable[[symbolica.community.graph.Graph, str], bool] or None, optional
-    ///     Prune the diagram search. The callback receives every search state with its
-    ///     stage: "topology" for untyped topologies, partial or complete, "fields" for
-    ///     partial field assignments of a complete topology, and "complete" for complete
-    ///     diagrams. Partial field assignments whose bounds on the coupling orders or the
-    ///     fermion loops already miss their ranges are dropped without a call. False drops
-    ///     the state with everything that completes it, so the verdict must be hereditary
-    ///     within each stage. Edge data is the PDG code of the particle of the line,
-    ///     directed along its flow, or None before its field is assigned. External legs
-    ///     are dangling half-edges whose data is the pair
-    ///     (state, index), with index None for amplitude legs symmetrized within their state.
-    ///     Cross-section legs keep their index; with ``symmetrize_initial``, diagrams related
-    ///     by exchanging identical beams are identified after the search, so verdicts should
-    ///     not depend on which beam carries which index. A "complete"-stage callback can add
-    ///     vetoes to the built-in filters, for example a different self-energy definition.
-    ///     Node data is None. Mutating the snapshot does not change enumeration. Keep
-    ///     callbacks cheap: each snapshot is a new Python graph.
+    /// prune_skeletons : Callable[[graph.SkeletonView], bool] or None, optional
+    ///     Prune untyped topologies. False rejects every refinement of that state.
+    /// prune_dressings : Callable[[graph.DressingView], bool] or None, optional
+    ///     Prune partial and complete field assignments. Verdicts must be hereditary.
+    /// select : Callable[[graph.DiagramView], bool] or None, optional
+    ///     Select complete assignments with an arbitrary predicate.
+    ///     All three hooks run on the calling Python thread with scoped typed views.
+    ///     Fields are Particle objects; external labels are (state, index) pairs.
+    ///     Views expire when the callback returns. Explicit graph() or complete_graph()
+    ///     calls create independent snapshots. Callbacks must return bool.
     /// cancellation_token : CancellationToken or None, optional
     ///     Shared token for cancelling a running generation task. Token cancellation
     ///     returns an incomplete result; Python signal-handler exceptions, including
     ///     KeyboardInterrupt, stop generation and propagate to the caller.
-    #[pyo3(signature = (*, dimension=None, real=None, loops=OrderRangeInput::default(), symmetrize_initial=false, symmetrize_final=false, symmetrize_left_right=false, symmetrize_external_fermions=false, threads=None, max_vertices=None, allow_self_loops=true, allow_zero_flow_edges=false, graph_prefix=None, output="named", maximum_bridges=Some(Python::attach(|py| py.Ellipsis())), self_energy=Some(Python::attach(|py| py.Ellipsis())), tadpoles=Some(Python::attach(|py| py.Ellipsis())), zero_snails=Some(Python::attach(|py| py.Ellipsis())), coupling_orders=None, fermion_loop_count_range=None, factorized_loop_topologies_count_range=Some(Python::attach(|py| py.Ellipsis())), blob_range=Some(Python::attach(|py| py.Ellipsis())), spectator_range=Some(Python::attach(|py| py.Ellipsis())), perturbative_orders=None, sewn_tadpoles=None, cut_amplitude_coupling_orders=None, cut_amplitude_loop_count_range=None, select_diagrams=None, veto_diagrams=None, loop_momentum_bases=None, numerator_prefactor=None, projector=None, numerator_grouping=None, filter_zero_color=false, cancellation_token=None, progress=Some(Python::attach(|py| PyString::new(py, "auto").into_any().unbind())), filter=None))]
+    #[pyo3(signature = (*, dimension=None, real=None, loops=OrderRangeInput::default(), symmetrize_initial=false, symmetrize_final=false, symmetrize_left_right=false, symmetrize_external_fermions=false, threads=None, max_vertices=None, allow_self_loops=true, allow_zero_flow_edges=false, graph_prefix=None, output="named", maximum_bridges=Some(Python::attach(|py| py.Ellipsis())), self_energy=Some(Python::attach(|py| py.Ellipsis())), tadpoles=Some(Python::attach(|py| py.Ellipsis())), zero_snails=Some(Python::attach(|py| py.Ellipsis())), coupling_orders=None, fermion_loop_count_range=None, factorized_loop_topologies_count_range=Some(Python::attach(|py| py.Ellipsis())), blob_range=Some(Python::attach(|py| py.Ellipsis())), spectator_range=Some(Python::attach(|py| py.Ellipsis())), perturbative_orders=None, sewn_tadpoles=None, cut_amplitude_coupling_orders=None, cut_amplitude_loop_count_range=None, select_diagrams=None, veto_diagrams=None, loop_momentum_bases=None, numerator_prefactor=None, projector=None, numerator_grouping=None, filter_zero_color=false, cancellation_token=None, progress=Some(Python::attach(|py| PyString::new(py, "auto").into_any().unbind())), prune_skeletons=None, prune_dressings=None, select=None))]
     #[pyo3(
-        text_signature = "($self, *, dimension=None, real=None, loops=0, symmetrize_initial=False, symmetrize_final=False, symmetrize_left_right=False, symmetrize_external_fermions=False, threads=None, max_vertices=None, allow_self_loops=True, allow_zero_flow_edges=False, graph_prefix=None, output='named', maximum_bridges=..., self_energy=..., tadpoles=..., zero_snails=..., coupling_orders=None, fermion_loop_count_range=None, factorized_loop_topologies_count_range=..., blob_range=..., spectator_range=..., perturbative_orders=None, sewn_tadpoles=None, cut_amplitude_coupling_orders=None, cut_amplitude_loop_count_range=None, select_diagrams=None, veto_diagrams=None, loop_momentum_bases=None, numerator_prefactor=None, projector=None, numerator_grouping=None, filter_zero_color=False, cancellation_token=None, progress='auto', filter=None)"
+        text_signature = "($self, *, dimension=None, real=None, loops=0, symmetrize_initial=False, symmetrize_final=False, symmetrize_left_right=False, symmetrize_external_fermions=False, threads=None, max_vertices=None, allow_self_loops=True, allow_zero_flow_edges=False, graph_prefix=None, output='named', maximum_bridges=..., self_energy=..., tadpoles=..., zero_snails=..., coupling_orders=None, fermion_loop_count_range=None, factorized_loop_topologies_count_range=..., blob_range=..., spectator_range=..., perturbative_orders=None, sewn_tadpoles=None, cut_amplitude_coupling_orders=None, cut_amplitude_loop_count_range=None, select_diagrams=None, veto_diagrams=None, loop_momentum_bases=None, numerator_prefactor=None, projector=None, numerator_grouping=None, filter_zero_color=False, cancellation_token=None, progress='auto', prune_skeletons=None, prune_dressings=None, select=None)"
     )]
     #[allow(clippy::too_many_arguments)]
     fn generate_amplitude(
@@ -1293,7 +1280,9 @@ impl PyProcess {
         #[gen_stub(override_type(type_repr = "typing.Literal['auto'] | collections.abc.Callable[[GenerationProgress], None] | None", imports = ("collections.abc", "typing")))]
         progress: Option<Py<PyAny>>,
         #[gen_stub(override_type(type_repr = "collections.abc.Callable[[symbolica.community.graph.Graph, str], bool] | None", imports = ("collections.abc", "symbolica.community.graph")))]
-        filter: Option<Py<PyAny>>,
+        prune_skeletons: Option<Py<PyAny>>,
+        prune_dressings: Option<Py<PyAny>>,
+        select: Option<Py<PyAny>>,
     ) -> PyResult<PyAmplitude> {
         let generation_type = GenerationType::Amplitude;
         let process = self.inner.clone();
@@ -1342,7 +1331,9 @@ impl PyProcess {
             generation_type,
             options,
             progress,
-            filter,
+            prune_skeletons,
+            prune_dressings,
+            select,
         )?;
         if !result.inner.report.completed {
             return Err(error::generation(
@@ -1472,30 +1463,23 @@ impl PyProcess {
     ///     The display closes on completion, cancellation, or error.
     ///     Observe stage changes and coalesced counts on the calling Python thread.
     ///     Callback exceptions propagate and stop generation.
-    /// filter : Callable[[symbolica.community.graph.Graph, str], bool] or None, optional
-    ///     Prune the diagram search. The callback receives every search state with its
-    ///     stage: "topology" for untyped topologies, partial or complete, "fields" for
-    ///     partial field assignments of a complete topology, and "complete" for complete
-    ///     diagrams. Partial field assignments whose bounds on the coupling orders or the
-    ///     fermion loops already miss their ranges are dropped without a call. False drops
-    ///     the state with everything that completes it, so the verdict must be hereditary
-    ///     within each stage. Edge data is the PDG code of the particle of the line,
-    ///     directed along its flow, or None before its field is assigned. External legs
-    ///     are dangling half-edges whose data is the pair
-    ///     (state, index), with index None for amplitude legs symmetrized within their state.
-    ///     Cross-section legs keep their index; with ``symmetrize_initial``, diagrams related
-    ///     by exchanging identical beams are identified after the search, so verdicts should
-    ///     not depend on which beam carries which index. A "complete"-stage callback can add
-    ///     vetoes to the built-in filters, for example a different self-energy definition.
-    ///     Node data is None. Mutating the snapshot does not change enumeration. Keep
-    ///     callbacks cheap: each snapshot is a new Python graph.
+    /// prune_skeletons : Callable[[graph.SkeletonView], bool] or None, optional
+    ///     Prune untyped topologies. False rejects every refinement of that state.
+    /// prune_dressings : Callable[[graph.DressingView], bool] or None, optional
+    ///     Prune partial and complete field assignments. Verdicts must be hereditary.
+    /// select : Callable[[graph.DiagramView], bool] or None, optional
+    ///     Select complete assignments with an arbitrary predicate.
+    ///     All three hooks run on the calling Python thread with scoped typed views.
+    ///     Fields are Particle objects; external labels are (state, index) pairs.
+    ///     Views expire when the callback returns. Explicit graph() or complete_graph()
+    ///     calls create independent snapshots. Callbacks must return bool.
     /// cancellation_token : CancellationToken or None, optional
     ///     Shared token for cancelling a running generation task. Token cancellation
     ///     returns an incomplete result; Python signal-handler exceptions, including
     ///     KeyboardInterrupt, stop generation and propagate to the caller.
-    #[pyo3(signature = (*, loops=OrderRangeInput::default(), symmetrize_initial=false, symmetrize_left_right=false, symmetrize_external_fermions=false, threads=None, max_vertices=None, allow_self_loops=true, allow_zero_flow_edges=false, graph_prefix=None, output="named", maximum_bridges=Some(Python::attach(|py| py.Ellipsis())), self_energy=Some(Python::attach(|py| py.Ellipsis())), tadpoles=Some(Python::attach(|py| py.Ellipsis())), zero_snails=Some(Python::attach(|py| py.Ellipsis())), coupling_orders=None, fermion_loop_count_range=None, factorized_loop_topologies_count_range=Some(Python::attach(|py| py.Ellipsis())), blob_range=Some(Python::attach(|py| py.Ellipsis())), spectator_range=Some(Python::attach(|py| py.Ellipsis())), perturbative_orders=None, sewn_tadpoles=None, cut_amplitude_coupling_orders=None, cut_amplitude_loop_count_range=None, select_diagrams=None, veto_diagrams=None, loop_momentum_bases=None, numerator_prefactor=None, projector=None, numerator_grouping=None, filter_zero_color=false, cancellation_token=None, progress=Some(Python::attach(|py| PyString::new(py, "auto").into_any().unbind())), filter=None))]
+    #[pyo3(signature = (*, loops=OrderRangeInput::default(), symmetrize_initial=false, symmetrize_left_right=false, symmetrize_external_fermions=false, threads=None, max_vertices=None, allow_self_loops=true, allow_zero_flow_edges=false, graph_prefix=None, output="named", maximum_bridges=Some(Python::attach(|py| py.Ellipsis())), self_energy=Some(Python::attach(|py| py.Ellipsis())), tadpoles=Some(Python::attach(|py| py.Ellipsis())), zero_snails=Some(Python::attach(|py| py.Ellipsis())), coupling_orders=None, fermion_loop_count_range=None, factorized_loop_topologies_count_range=Some(Python::attach(|py| py.Ellipsis())), blob_range=Some(Python::attach(|py| py.Ellipsis())), spectator_range=Some(Python::attach(|py| py.Ellipsis())), perturbative_orders=None, sewn_tadpoles=None, cut_amplitude_coupling_orders=None, cut_amplitude_loop_count_range=None, select_diagrams=None, veto_diagrams=None, loop_momentum_bases=None, numerator_prefactor=None, projector=None, numerator_grouping=None, filter_zero_color=false, cancellation_token=None, progress=Some(Python::attach(|py| PyString::new(py, "auto").into_any().unbind())), prune_skeletons=None, prune_dressings=None, select=None))]
     #[pyo3(
-        text_signature = "($self, *, loops=0, symmetrize_initial=False, symmetrize_left_right=False, symmetrize_external_fermions=False, threads=None, max_vertices=None, allow_self_loops=True, allow_zero_flow_edges=False, graph_prefix=None, output='named', maximum_bridges=..., self_energy=..., tadpoles=..., zero_snails=..., coupling_orders=None, fermion_loop_count_range=None, factorized_loop_topologies_count_range=..., blob_range=..., spectator_range=..., perturbative_orders=None, sewn_tadpoles=None, cut_amplitude_coupling_orders=None, cut_amplitude_loop_count_range=None, select_diagrams=None, veto_diagrams=None, loop_momentum_bases=None, numerator_prefactor=None, projector=None, numerator_grouping=None, filter_zero_color=False, cancellation_token=None, progress='auto', filter=None)"
+        text_signature = "($self, *, loops=0, symmetrize_initial=False, symmetrize_left_right=False, symmetrize_external_fermions=False, threads=None, max_vertices=None, allow_self_loops=True, allow_zero_flow_edges=False, graph_prefix=None, output='named', maximum_bridges=..., self_energy=..., tadpoles=..., zero_snails=..., coupling_orders=None, fermion_loop_count_range=None, factorized_loop_topologies_count_range=..., blob_range=..., spectator_range=..., perturbative_orders=None, sewn_tadpoles=None, cut_amplitude_coupling_orders=None, cut_amplitude_loop_count_range=None, select_diagrams=None, veto_diagrams=None, loop_momentum_bases=None, numerator_prefactor=None, projector=None, numerator_grouping=None, filter_zero_color=False, cancellation_token=None, progress='auto', prune_skeletons=None, prune_dressings=None, select=None)"
     )]
     #[allow(clippy::too_many_arguments)]
     fn generate_cross_section(
@@ -1543,7 +1527,9 @@ impl PyProcess {
         #[gen_stub(override_type(type_repr = "typing.Literal['auto'] | collections.abc.Callable[[GenerationProgress], None] | None", imports = ("collections.abc", "typing")))]
         progress: Option<Py<PyAny>>,
         #[gen_stub(override_type(type_repr = "collections.abc.Callable[[symbolica.community.graph.Graph, str], bool] | None", imports = ("collections.abc", "symbolica.community.graph")))]
-        filter: Option<Py<PyAny>>,
+        prune_skeletons: Option<Py<PyAny>>,
+        prune_dressings: Option<Py<PyAny>>,
+        select: Option<Py<PyAny>>,
     ) -> PyResult<PyGenerationResult> {
         let generation_type = GenerationType::CrossSection;
         let process = self.inner.clone();
@@ -1593,7 +1579,9 @@ impl PyProcess {
             generation_type,
             options,
             progress,
-            filter,
+            prune_skeletons,
+            prune_dressings,
+            select,
         )
     }
 
@@ -2929,7 +2917,9 @@ fn run_generation(
     generation_type: GenerationType,
     mut options: GenerationOptions,
     progress: Option<Py<PyAny>>,
-    filter: Option<Py<PyAny>>,
+    prune_skeletons: Option<Py<PyAny>>,
+    prune_dressings: Option<Py<PyAny>>,
+    select: Option<Py<PyAny>>,
 ) -> PyResult<PyGenerationResult> {
     py.check_signals()?;
     let automatic = progress.as_ref().is_some_and(|value| {
@@ -2939,18 +2929,20 @@ fn run_generation(
             .is_ok_and(|s| s == "auto")
     });
     let progress = if automatic { None } else { progress };
-    for (name, callback) in [("progress", &progress), ("filter", &filter)] {
-        if callback
-            .as_ref()
-            .is_some_and(|callback| !callback.bind(py).is_callable())
-        {
-            return Err(PyTypeError::new_err(if name == "progress" {
-                "progress must be 'auto', callable, or None".to_owned()
-            } else {
-                "filter must be callable".to_owned()
-            }));
-        }
+    if progress
+        .as_ref()
+        .is_some_and(|callback| !callback.bind(py).is_callable())
+    {
+        return Err(PyTypeError::new_err(
+            "progress must be 'auto', callable, or None",
+        ));
     }
+    let callbacks = GenerationCallbacks::new(py, prune_skeletons, prune_dressings, select)?;
+    let mask = callbacks.mask();
+    let has_hooks = mask.skeletons || mask.dressings || mask.select;
+    let cancelled = Arc::new(AtomicBool::new(false));
+    let check = cancelled.clone();
+    options = options.cancellation_check(move || check.load(Ordering::Relaxed));
     let marimo_progress = if automatic {
         MarimoProgress::detect(py, "Generating diagrams", "Starting generation")?
             .map(|display| Arc::new(Mutex::new(display)))
@@ -3062,47 +3054,66 @@ fn run_generation(
             GenerationControl::Continue
         });
     }
-    let has_filter = filter.is_some();
-    let pdgs: Vec<_> = model.particles().iter().map(|p| p.pdg_code).collect();
-    let apply_filter = move |(graph, stage): &FilterSnapshot| -> PyResult<bool> {
-        Python::attach(|py| {
-            let snapshot = PyGraph::from_hedge_graph(
-                py,
-                graph,
-                |_| Ok(py.None()),
-                |field| field.map(|particle| pdgs[particle.index()]).into_py_any(py),
-                |label| {
-                    label
-                        .map(|label| match label {
-                            ExternalLabel::Exact { state, index } => (state.as_str(), Some(index)),
-                            ExternalLabel::WithinState(state) => (state.as_str(), None),
-                        })
-                        .into_py_any(py)
-                },
-            )?;
-            let stage = match stage {
-                Stage::Topology => "topology",
-                Stage::Fields => "fields",
-                Stage::Complete => "complete",
-            };
-            filter
-                .as_ref()
-                .unwrap()
-                .call1(py, (snapshot, stage))?
-                .extract(py)
-        })
-    };
+    // The key table belongs to one compiled plan. Processes with alternative external
+    // states may use several plans, so refresh it only when their sorted keys differ.
+    let keys = Mutex::new(
+        None::<(
+            Vec<ParticleId>,
+            Vec<ExternalLabel>,
+            Py<PyTuple>,
+            Py<PyTuple>,
+        )>,
+    );
+    let callback_model = Arc::clone(&model);
+    let token = options.cancellation().clone();
+    let callback_flag = Arc::clone(&cancelled);
+    let callback_cancelled: CancelCheck =
+        Arc::new(move || token.is_cancelled() || callback_flag.load(Ordering::Relaxed));
+    let apply_batch =
+        move |requests: Vec<Request<ParticleId, ExternalLabel>>| -> PyResult<Option<Vec<Reply>>> {
+            Python::attach(|py| {
+                let Some(first) = requests.first() else {
+                    return Ok(Some(Vec::new()));
+                };
+                let mut keys = keys.lock().unwrap();
+                if keys.as_ref().is_none_or(|(fields, labels, ..)| {
+                    fields != first.fields() || labels != first.labels()
+                }) {
+                    let fields = first
+                        .fields()
+                        .iter()
+                        .map(|&id| PyParticle::new(id, Arc::clone(&callback_model)));
+                    let labels = first.labels().iter().map(|label| match *label {
+                        ExternalLabel::Exact { state, index } => (state.as_str(), Some(index)),
+                        ExternalLabel::WithinState(state) => (state.as_str(), None),
+                    });
+                    *keys = Some((
+                        first.fields().to_vec(),
+                        first.labels().to_vec(),
+                        PyTuple::new(py, fields)?.unbind(),
+                        PyTuple::new(py, labels)?.unbind(),
+                    ));
+                }
+                let (_, _, fields, labels) = keys.as_ref().unwrap();
+                callbacks.dispatch(
+                    py,
+                    requests.into_iter().map(Request::into_ranked).collect(),
+                    fields.bind(py),
+                    labels.bind(py),
+                    &callback_cancelled,
+                )
+            })
+        };
     #[cfg(not(target_arch = "wasm32"))]
     let result = {
-        let cancellation = CancellationToken::new();
-        let check = cancellation.clone();
-        options = options.cancellation_check(move || check.is_cancelled());
         let (requests, receiver) = std::sync::mpsc::sync_channel(1);
-        if has_filter {
-            options = options.filter(move |view| {
+        if has_hooks {
+            options = options.deferred_hooks(mask, move |batch| {
                 let (reply, response) = std::sync::mpsc::sync_channel(1);
-                requests.send(((view.graph(), view.stage()), reply)).is_ok()
-                    && response.recv().unwrap_or(false)
+                if requests.send((batch, reply)).is_err() {
+                    return ControlFlow::Break(());
+                }
+                response.recv().unwrap_or(ControlFlow::Break(()))
             });
         }
         let interruption = interruption.clone();
@@ -3115,34 +3126,32 @@ fn run_generation(
                         process.generate_cross_section(model.clone(), &options)
                     }
                 });
-                // Python handles signals only on its main thread, including while
-                // generation is inside Rayon's parallel interaction assignment.
-                // Filter requests wake this thread immediately; never impose the
-                // progress refresh interval on each enumeration decision.
+                // Native workers finish their wave before the generation coordinator
+                // sends a batch here. Only that coordinator awaits a combined reply.
                 while !worker.is_finished() {
                     if interruption.lock().unwrap().is_none() {
                         let result = Python::attach(|py| py.check_signals())
                             .and_then(|()| deliver_progress(false));
                         if let Err(error) = result {
                             *interruption.lock().unwrap() = Some(error);
-                            cancellation.cancel();
+                            cancelled.store(true, Ordering::Relaxed);
                         }
                     }
-                    if let Ok((snapshot, reply)) = receiver.recv_timeout(Duration::from_millis(25))
-                    {
-                        let accepted = if interruption.lock().unwrap().is_some() {
-                            false
+                    if let Ok((batch, reply)) = receiver.recv_timeout(Duration::from_millis(25)) {
+                        let response = if interruption.lock().unwrap().is_some() {
+                            ControlFlow::Break(())
                         } else {
-                            match apply_filter(&snapshot) {
-                                Ok(accepted) => accepted,
+                            match apply_batch(batch) {
+                                Ok(Some(replies)) => ControlFlow::Continue(replies),
+                                Ok(None) => ControlFlow::Break(()),
                                 Err(error) => {
                                     *interruption.lock().unwrap() = Some(error);
-                                    cancellation.cancel();
-                                    false
+                                    cancelled.store(true, Ordering::Relaxed);
+                                    ControlFlow::Break(())
                                 }
                             }
                         };
-                        let _ = reply.send(accepted);
+                        let _ = reply.send(response);
                     }
                 }
                 worker
@@ -3153,28 +3162,29 @@ fn run_generation(
     };
     #[cfg(target_arch = "wasm32")]
     let result = {
-        // Browser kernels execute generation on the calling thread. Poll the
-        // existing cancellation hook there instead of creating a native thread.
+        // Browser kernels service the same joined batch directly on their calling thread.
         let signal_error = interruption.clone();
+        let signal_cancelled = Arc::clone(&cancelled);
         options = options.cancellation_check(move || {
             if signal_error.lock().unwrap().is_none() {
-                let error = Python::attach(|py| py.check_signals()).err();
-                *signal_error.lock().unwrap() = error;
+                if let Err(error) = Python::attach(|py| py.check_signals()) {
+                    *signal_error.lock().unwrap() = Some(error);
+                    signal_cancelled.store(true, Ordering::Relaxed);
+                }
             }
-            signal_error.lock().unwrap().is_some()
+            signal_cancelled.load(Ordering::Relaxed)
         });
-        if has_filter {
+        if has_hooks {
             let error = interruption.clone();
-            options =
-                options.filter(
-                    move |view| match apply_filter(&(view.graph(), view.stage())) {
-                        Ok(accepted) => accepted,
-                        Err(exception) => {
-                            *error.lock().unwrap() = Some(exception);
-                            false
-                        }
-                    },
-                );
+            options = options.deferred_hooks(mask, move |batch| match apply_batch(batch) {
+                Ok(Some(replies)) => ControlFlow::Continue(replies),
+                Ok(None) => ControlFlow::Break(()),
+                Err(exception) => {
+                    *error.lock().unwrap() = Some(exception);
+                    cancelled.store(true, Ordering::Relaxed);
+                    ControlFlow::Break(())
+                }
+            });
         }
         py.detach(|| match generation_type {
             GenerationType::Amplitude => process.generate_diagrams(model.clone(), &options),
@@ -3324,7 +3334,7 @@ for via_model in (True, False):
         assert any(" / " in call.args[-1] for call in indicator.update.call_args_list)
 
         context.reset_mock()
-        empty = generate(progress="auto", filter=lambda graph, n: False)
+        empty = generate(progress="auto", prune_skeletons=lambda view: False)
         assert len(empty) == 0
         assert indicator.update.call_args.args[-1].startswith("0 diagrams retained")
         context.__exit__.assert_called_with(None, None, None)
@@ -3344,7 +3354,7 @@ for via_model in (True, False):
             def fail(*args):
                 raise exception
             try:
-                generate(filter=fail)
+                generate(prune_dressings=fail)
             except BaseException as caught:
                 assert caught is exception
             else:
@@ -3610,17 +3620,19 @@ for via_model in (True, False):
         assert p.total is None or p.completed <= p.total
         updates.append(p)
 
-    def keep(graph, stage):
+    snapshots = []
+    def keep(view):
         assert threading.get_ident() == caller
-        assert isinstance(graph, Graph)
-        assert stage in ("topology", "fields", "complete")
-        assert all(edge.data in (None, 1000) for edge in graph.edges())
-        topologies.append((graph, stage))
+        assert type(view).__name__ in ("SkeletonView", "DressingView", "DiagramView")
+        assert all(stub is None or stub.data.pdg_code == 1000 for _, _, stub in view.edges())
+        topologies.append((view, type(view).__name__))
+        if view.is_complete:
+            snapshots.append(view.complete_graph())
         return True
 
-    result = generate(progress=report, filter=keep)
+    result = generate(progress=report, prune_skeletons=keep, prune_dressings=keep, select=keep)
     assert result.report.completed and len(result) == len(baseline)
-    assert {"topology", "complete"} <= {stage for _, stage in topologies}
+    assert {"SkeletonView", "DressingView", "DiagramView"} == {stage for _, stage in topologies}
     assert updates[0].stage == "topologies"
     assert updates[-1].stage == "complete"
     assert updates[-1].completed == len(result)
@@ -3629,16 +3641,24 @@ for via_model in (True, False):
     for before, after in zip(updates, updates[1:]):
         if before.stage == after.stage:
             assert before.completed <= after.completed
-    # Snapshots outlive enumeration and never mutate its internal graph.
-    topologies[0][0].add_node(Node(data=42))
+    # Scoped views expire, while explicitly materialized snapshots remain independent.
+    for view, _ in topologies:
+        try:
+            view.n_vertices
+        except ReferenceError:
+            pass
+        else:
+            raise AssertionError("callback view escaped its scope")
+    assert snapshots
+    snapshots[0].add_node(Node(data=42))
     assert len(generate()) == len(baseline)
 
     updates.clear()
-    empty = generate(progress=report, filter=lambda graph, n: False)
+    empty = generate(progress=report, prune_skeletons=lambda view: False)
     assert empty.report.completed and len(empty) == 0
     assert updates[-1].stage == "complete" and updates[-1].completed == 0
 
-    for keyword in ("progress", "filter"):
+    for keyword in ("progress", "prune_skeletons", "prune_dressings", "select"):
         expected = RuntimeError("callback failed")
         def fail(*args):
             raise expected
@@ -3654,6 +3674,22 @@ for via_model in (True, False):
             pass
         else:
             raise AssertionError("non-callable callback was accepted")
+    for keyword in ("prune_skeletons", "prune_dressings", "select"):
+        token = fk.CancellationToken()
+        calls = []
+        def cancel(view):
+            calls.append(type(view).__name__)
+            token.cancel()
+            return True
+        cancelled = generate(cancellation_token=token, **{keyword: cancel})
+        assert calls == [{"prune_skeletons": "SkeletonView", "prune_dressings": "DressingView", "select": "DiagramView"}[keyword]]
+        assert not cancelled.report.completed
+        try:
+            generate(**{keyword: lambda view: 1})
+        except TypeError:
+            pass
+        else:
+            raise AssertionError("a truthy non-bool verdict was accepted")
     assert len(generate()) == len(baseline)
 
 # Directed snapshot edges carry the electron and point along its flow. External legs are the
@@ -3661,18 +3697,21 @@ for via_model in (True, False):
 # the sink, and the incoming positron is an electron flowing out, so its leg is the source.
 sm_model = fk.Model.from_json(SM_MODEL_JSON)
 legs = set()
-def flows(graph, stage):
+def flows(view):
+    graph = view.complete_graph()
+    if graph is None:
+        return True
     for edge in graph.edges():
         if edge.orientation == Orientation.Undirected:
             continue
-        assert edge.orientation == Orientation.Default and edge.data == 11
+        assert edge.orientation == Orientation.Default and edge.data.pdg_code == 11
         if edge.source is None:
             legs.add(("sink", edge.sink.data))
         elif edge.sink is None:
             legs.add(("source", edge.source.data))
     return True
 annihilation = sm_model.process(["e-", "e+"], ["a", "a"], particle_selection=["e-", 22])
-assert len(annihilation.generate_diagrams(progress=None, filter=flows)) == 2
+assert len(annihilation.generate_diagrams(loops=0, progress=None, prune_dressings=flows)) == 2
 assert legs == {("sink", ("incoming", 0)), ("source", ("incoming", 1))}
 "#).unwrap();
             py.run(&code, Some(&locals), Some(&locals)).unwrap();
@@ -3879,11 +3918,11 @@ assert foreign_process.outgoing_alternatives[0][0].pdg == 1000
         });
     }
 
-    /// The Python filter path (graph snapshots with PDG codes, answered on the calling thread)
-    /// prunes like the same predicate as a Rust filter: the same diagrams with the same names,
+    /// Typed Python dressing predicates, batched on the calling thread, prune like the same
+    /// native predicate: the same diagrams with the same names,
     /// ids, symmetry and overall factors, in the same order at every thread count.
     #[test]
-    fn python_filters_prune_like_rust_filters() {
+    fn python_typed_hooks_prune_like_rust_hooks() {
         use symbolica::atom::AtomCore;
 
         let model = Arc::new(Model::qcd());
@@ -3923,7 +3962,7 @@ assert foreign_process.outgoing_alternatives[0][0].pdg == 1000
             let pdgs: Vec<_> = ghosts.iter().map(|particle| particle.pdg_code).collect();
             locals.set_item("GHOSTS", pdgs).unwrap();
             let code = CString::new(
-                "def keep(graph, stage):\n    return all(edge.data not in GHOSTS for edge in graph.edges())\n",
+                "def keep(view):\n    return all(stub is None or stub.data.pdg_code not in GHOSTS for _, _, stub in view.edges())\n",
             )
             .unwrap();
             py.run(&code, Some(&locals), Some(&locals)).unwrap();
@@ -3934,7 +3973,7 @@ assert foreign_process.outgoing_alternatives[0][0].pdg == 1000
                 let rust = process
                     .generate_diagrams(
                         model.clone(),
-                        &options(threads).filter(move |view| {
+                        &options(threads).prune_dressings(move |view| {
                             view.edges().all(|edge| {
                                 edge.stub.is_none_or(|stub| !ghost_ids.contains(stub.field))
                             })
@@ -3948,7 +3987,9 @@ assert foreign_process.outgoing_alternatives[0][0].pdg == 1000
                     GenerationType::Amplitude,
                     options(threads),
                     None,
+                    None,
                     Some(keep.clone_ref(py)),
+                    None,
                 )
                 .unwrap()
                 .inner;

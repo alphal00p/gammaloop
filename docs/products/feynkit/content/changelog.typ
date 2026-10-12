@@ -20,6 +20,12 @@ Python symbolic constants are now static methods: use `Symbols.dimension()`,
 follow this convention, as does the tensor module's `Nc()`. Deferring their construction lets
 callers set a license key after import.
 
+Live generation pruning now uses `prune_skeletons`, `prune_dressings` and `select`
+callbacks with typed views. Pruning remains hereditary; selection runs only on complete
+assignments. Python fields are `Particle` objects, and views expire when their callback
+returns. Explicit graph snapshots remain usable. Batched callbacks run on the calling
+thread and stop immediately on cancellation or an exception.
+
 Generation now exposes `output="minimal"` in Python and `GenerationOutput::Minimal` in Rust.
 This omits diagram names and group-member source identities while retaining physical graphs,
 source indices and grouping factors. Named output remains the default. Ungrouped generation

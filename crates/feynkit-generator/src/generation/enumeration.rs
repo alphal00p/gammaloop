@@ -8,7 +8,7 @@
 //! Coupling orders and the fermion-loop range are budgets of the generator: it bounds them on
 //! every partial field assignment, drops the assignments without a completion in range and checks
 //! them exactly on the vertex rules (see
-//! [`linnet::half_edge::generate::GraphGenerator::weight`]). The other process filters run inside
+//! [`linnet::half_edge::generate::Query::weight`]). The other process filters run inside
 //! the search through the generator's filter, after the budgets and at the earliest stage where
 //! they are decided: bridges and special topologies on untyped topologies, and the special
 //! topologies again with the masses of complete graphs.
@@ -17,13 +17,15 @@ use std::{
     cmp::Ordering,
     collections::{BTreeMap, BTreeSet},
     ops::Bound,
-    sync::Arc,
 };
 
 use feynkit_graph::ExternalState;
 use feynkit_model::{Model, Particle, ParticleId, VertexRuleId};
 use linnet::half_edge::{
-    generate::{Countable, Diagram, GraphGenerator, GraphView, Stage, Stub},
+    generate::{
+        Bridges, Countable, Diagram, DiagramView, DressingView, EdgeView, Legs, Plan, Query,
+        SkeletonView, Structure, Stub, Theory,
+    },
     involution::{Flow, Hedge},
 };
 
@@ -48,10 +50,12 @@ pub enum ExternalLabel {
     WithinState(ExternalState),
 }
 
-/// A search state of diagram generation, as seen by [`GenerationOptions::filter`]: edge fields
-/// are the particle of each particle/antiparticle pair, directed along its flow, and node rules
-/// index the generation signatures.
-pub type GenerationView<'a> = GraphView<'a, ParticleId, ExternalLabel>;
+/// A partial or complete untyped process topology. Fields identify particle/antiparticle pairs.
+pub type GenerationSkeletonView<'a> = SkeletonView<'a, ParticleId, ExternalLabel>;
+/// A partial or complete field and vertex-rule assignment on a complete process topology.
+pub type GenerationDressingView<'a> = DressingView<'a, ParticleId, ExternalLabel>;
+/// A complete process assignment at the arbitrary final-selection boundary.
+pub type GenerationDiagramView<'a> = DiagramView<'a, ParticleId, ExternalLabel>;
 
 /// A generator stub: the particle of its conjugate pair as field, flowing into the vertex for a
 /// particle and out of it for an antiparticle. Self-conjugate particles are undirected.
@@ -145,42 +149,63 @@ impl VertexSignatures {
 
     /// The generator of a request: the legs of `externals`, these signatures, the loop orders and
     /// structural limits of `options`, and its coupling orders and fermion-loop range as budgets;
-    /// `filter` prunes it after the budgets.
-    pub(crate) fn generator(
+    /// Typed hooks prune it after the budgets.
+    pub(crate) fn plan(
         &self,
         model: &Model,
         externals: &ProcessExternals,
         options: &GenerationOptions,
-        filter: impl Fn(&GenerationView<'_>) -> bool + Send + Sync + 'static,
-    ) -> Result<GraphGenerator<ParticleId, ExternalLabel>, GenerationError> {
-        let mut generator = GraphGenerator::new(externals.legs(), self.stubs.clone())
-            .loops(options.loop_count())
-            .allow_self_loops(options.allow_self_loops)
-            .allow_zero_flow_edges(options.allow_zero_flow_edges)
-            .filter(filter);
+        skeletons: impl Fn(&GenerationSkeletonView<'_>) -> bool + Send + Sync + 'static,
+        dressings: impl Fn(&GenerationDressingView<'_>) -> bool + Send + Sync + 'static,
+    ) -> Result<Option<Plan<ParticleId, ExternalLabel>>, GenerationError> {
         let bounds = CouplingBounds::new(options);
-        if !bounds.0.is_empty() {
-            let rule_orders = self
-                .rules
-                .iter()
-                .map(|rule| Ok(model.vertex_rule_by_id(*rule)?.coupling_orders(model)))
-                .collect::<Result<Vec<_>, GenerationError>>()?;
-            let bound = |order: usize| i32::try_from(order).unwrap_or(i32::MAX);
-            // a weight per bound: the bounds of one order must all hold
-            for (name, minimum, maximum) in &bounds.0 {
-                let orders = rule_orders
-                    .iter()
-                    .map(|orders| {
-                        i32::try_from(orders.get(name).copied().unwrap_or(0))
-                            .map_err(|_| GenerationError::ArithmeticOverflow("a coupling order"))
-                    })
-                    .collect::<Result<Vec<_>, _>>()?;
-                let maximum =
-                    maximum.map_or(Bound::Unbounded, |maximum| Bound::Included(bound(maximum)));
-                generator = generator.weight(orders, (Bound::Included(bound(*minimum)), maximum));
+        let mut columns = Vec::new();
+        for (name, ..) in &bounds.0 {
+            if !columns.contains(name) {
+                columns.push(name.clone());
             }
         }
-        // fermion loops are the closed lines of the fermions; ghost loops do not count
+        let mut theory = Theory::builder().weights(columns.iter().cloned());
+        for (&rule, stubs) in self.rules.iter().zip(&self.stubs) {
+            let orders = if columns.is_empty() {
+                BTreeMap::new()
+            } else {
+                model.vertex_rule_by_id(rule)?.coupling_orders(model)
+            };
+            let weights = columns
+                .iter()
+                .map(|name| {
+                    i32::try_from(orders.get(name).copied().unwrap_or(0))
+                        .map_err(|_| GenerationError::ArithmeticOverflow("a coupling order"))
+                })
+                .collect::<Result<Vec<_>, _>>()?;
+            theory = theory.vertex(stubs.iter().cloned(), weights);
+        }
+        let theory = theory.build()?;
+        let legs = externals
+            .legs()
+            .fold(Legs::new(), |legs, (label, stub)| legs.leg(label, stub));
+        let structure = Structure {
+            self_loops: options.allow_self_loops,
+            zero_flow_edges: options.allow_zero_flow_edges,
+            max_vertices: options.max_vertices,
+            bridges: options
+                .max_bridges(*options.loop_count().start())
+                .map_or(Bridges::Any, Bridges::AtMost),
+        };
+        let mut query = Query::new(&legs)
+            .loops(options.loop_count())
+            .structure(structure)
+            .prune_skeletons(skeletons)
+            .prune_dressings(dressings);
+        // Repeated constraints on one declared order must all hold.
+        let bound = |order: usize| i32::try_from(order).unwrap_or(i32::MAX);
+        for (name, minimum, maximum) in &bounds.0 {
+            let maximum =
+                maximum.map_or(Bound::Unbounded, |maximum| Bound::Included(bound(maximum)));
+            query = query.weight(name, (Bound::Included(bound(*minimum)), maximum));
+        }
+        // Fermion loops are closed lines of fermions; ghost loops do not count.
         let fermions = || {
             (0..model.particles().len())
                 .map(ParticleId::from_index)
@@ -193,17 +218,20 @@ impl VertexSignatures {
         };
         for filter in &options.graph_filters {
             if let GenerationFilter::FermionLoopCountRange((minimum, maximum)) = filter {
-                let lines = Countable::ClosedLines(fermions());
-                generator = generator.count(lines, *minimum..=*maximum);
+                query = query.count(Countable::ClosedLines(fermions()), *minimum..=*maximum);
             }
         }
-        if let Some(maximum) = options.max_vertices {
-            generator = generator.max_vertices(maximum);
+        if let Some(select) = options.select.clone() {
+            query = query.select(move |view| select(view));
         }
-        if let Some(maximum) = options.max_bridges(*options.loop_count().start()) {
-            generator = generator.max_bridges(maximum);
+        if let Some((mask, _)) = &options.deferred_hooks {
+            query = query.deferred_hooks(*mask);
         }
-        Ok(generator)
+        match Plan::new(&theory, &query) {
+            Ok(plan) => Ok(Some(plan)),
+            Err(linnet::half_edge::generate::GenerationError::Infeasible(_)) => Ok(None),
+            Err(error) => Err(error.into()),
+        }
     }
 }
 
@@ -508,15 +536,12 @@ impl ProcessExternals {
     }
 }
 
-type UserFilter = dyn Fn(&GenerationView<'_>) -> bool + Send + Sync;
-
 /// The process filters evaluated during the search; see the module documentation.
 pub(crate) struct Pruner {
     one_particle_irreducible_loops: bool,
     vetoes: SpecialTopologyVetoes,
     /// Per particle index: massless.
     massless: Vec<bool>,
-    user: Option<Arc<UserFilter>>,
 }
 
 impl Pruner {
@@ -559,40 +584,53 @@ impl Pruner {
             massless: (0..model.particles().len())
                 .map(|index| model.particle_is_massless(ParticleId::from_index(index)))
                 .collect(),
-            user: options.filter.clone(),
         }
     }
 
-    pub(crate) fn keeps(&self, view: &GenerationView<'_>) -> bool {
-        let keeps = match view.stage() {
-            Stage::Topology => {
-                !(self.one_particle_irreducible_loops
-                    && view.loop_order() > 0
-                    && !view.bridges().is_empty())
-                    && !(view.is_topology_complete() && self.special_topology_vetoed(view))
-            }
-            Stage::Fields => true,
-            Stage::Complete => !self.special_topology_vetoed(view),
-        };
-        keeps && self.user.as_ref().is_none_or(|user| user(view))
+    pub(crate) fn keeps_skeleton(&self, view: &GenerationSkeletonView<'_>) -> bool {
+        !(self.one_particle_irreducible_loops
+            && view.loop_order() > 0
+            && !view.bridges().is_empty())
+            && !(view.is_topology_complete()
+                && !self.vetoes.is_empty()
+                && self.vetoes.vetoes(
+                    &self.plain(
+                        view.n_vertices(),
+                        (0..view.n_vertices())
+                            .flat_map(|v| view.legs(v).map(move |(_, stub)| (v, *stub.field))),
+                        view.edges(),
+                    ),
+                ))
     }
 
-    fn special_topology_vetoed(&self, view: &GenerationView<'_>) -> bool {
-        !self.vetoes.is_empty() && self.vetoes.vetoes(&self.plain(view))
+    pub(crate) fn keeps_dressing(&self, view: &GenerationDressingView<'_>) -> bool {
+        !(view.is_complete()
+            && !self.vetoes.is_empty()
+            && self.vetoes.vetoes(
+                &self.plain(
+                    view.n_vertices(),
+                    (0..view.n_vertices())
+                        .flat_map(|v| view.legs(v).map(move |(_, stub)| (v, *stub.field))),
+                    view.edges(),
+                ),
+            ))
     }
 
-    /// The view as a plain graph with masses where the fields are known.
-    fn plain(&self, view: &GenerationView<'_>) -> PlainGraph {
+    /// Compact topology data as a plain graph, with masses where fields are known.
+    fn plain<'a>(
+        &self,
+        vertices: usize,
+        legs: impl Iterator<Item = (usize, ParticleId)>,
+        edges: impl Iterator<Item = EdgeView<'a, ParticleId>>,
+    ) -> PlainGraph {
         let mut graph = PlainGraph::default();
-        for _ in 0..view.n_vertices() {
+        for _ in 0..vertices {
             graph.add_vertex();
         }
-        for vertex in 0..view.n_vertices() {
-            for (_, stub) in view.legs(vertex) {
-                graph.add_leg(vertex, self.massless[stub.field.index()]);
-            }
+        for (vertex, field) in legs {
+            graph.add_leg(vertex, self.massless[field.index()]);
         }
-        for edge in view.edges() {
+        for edge in edges {
             graph.add_edge(
                 (edge.vertices[0], edge.vertices[1]),
                 edge.stub.map(|stub| self.massless[stub.field.index()]),
@@ -689,7 +727,7 @@ mod tests {
             let PreparedSearch {
                 signatures,
                 externals,
-                generator: search,
+                plan,
                 ..
             } = generator
                 .search(
@@ -697,10 +735,12 @@ mod tests {
                     &case.options(&generator.model, 1),
                     case.kind,
                     |_, _| {},
+                    |_, _| {},
                 )
                 .unwrap();
             let mut count = 0;
-            for diagram in search.iter().unwrap() {
+            let run = linnet::half_edge::generate::Run::default();
+            for diagram in plan.as_ref().unwrap().diagrams(&run).unwrap() {
                 assert_eq!(
                     externals.graph(&diagram, &signatures),
                     externals.materialized_reference(&diagram, &signatures),

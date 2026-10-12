@@ -184,30 +184,32 @@ class GenerationTests(unittest.TestCase):
     def test_counts_and_symmetry_factors_match_graphica(self):
         for external, loops, expected in ((2, range(4), 210), (4, range(3), 278)):
             with self.subTest(external=external):
-                graphs = list(
-                    g.Graph.generate(
-                        [(i + 1, GLUON) for i in range(external)],
-                        [QCD[0], QCD[2]] if external == 4 else QCD,
-                        loops=loops,
-                        max_bridges=0,
-                        allow_self_loops=True,
-                    )
+                theory = g.Theory([QCD[0], QCD[2]] if external == 4 else QCD)
+                plan = theory.query(
+                    g.Legs([(i + 1, GLUON) for i in range(external)]),
+                    loops=loops,
+                    structure=g.Structure(bridges=g.Bridges.one_pi(), self_loops=True),
                 )
-                self.assertEqual(len(graphs), expected)
-                for graph, size in graphs:
-                    self.assertEqual(graph.canonize()[2], size)
+                diagrams = list(plan.diagrams())
+                self.assertEqual(len(diagrams), expected)
+                for diagram in diagrams:
+                    self.assertEqual(
+                        diagram.graph().canonize()[2], diagram.symmetry_factor()
+                    )
 
     def test_graphs_are_native_with_dangling_labelled_legs(self):
         phi = g.EdgeSignature("phi")
-        generated = g.Graph.generate(
-            [(i, phi) for i in range(1, 5)], [[phi] * 3], loops=0
+        plan = g.Theory([[phi] * 3]).query(
+            g.Legs([(i, phi) for i in range(1, 5)]), loops=0
         )
-        self.assertIsInstance(generated, g.GeneratedGraphs)
+        generated = plan.diagrams()
+        self.assertIsInstance(generated, g.Diagrams)
         self.assertIs(iter(generated), generated)
-        graphs = list(generated)
+        diagrams = list(generated)
         # Four distinct legs in phi^3 have exactly the s, t and u trees.
-        self.assertEqual([size for _, size in graphs], [1, 1, 1])
-        for graph, size in graphs:
+        self.assertEqual([diagram.symmetry_factor() for diagram in diagrams], [1, 1, 1])
+        for diagram in diagrams:
+            graph, size = diagram.graph(), diagram.symmetry_factor()
             self.assertIs(type(graph), g.Graph)
             self.assertIs(type(size), int)
             self.assertEqual(graph.n_nodes, 2)
@@ -223,24 +225,28 @@ class GenerationTests(unittest.TestCase):
     def test_directed_fields_keep_their_slot_directions(self):
         photon = g.EdgeSignature("a")
         electron = g.EdgeSignature("e", direction=False)
-        qed = [[electron, electron.flip(), photon]]
-        ((graph, size),) = g.Graph.generate(
-            [(1, photon), (2, photon)], qed, loops=1, max_bridges=0
-        )
+        qed = g.Theory([[electron, electron.flip(), photon]])
+        (diagram,) = qed.query(
+            g.Legs([(1, photon), (2, photon)]),
+            loops=1,
+            structure=g.Structure.one_pi(),
+        ).diagrams()
+        graph, size = diagram.graph(), diagram.symmetry_factor()
         self.assertEqual(size, 1)
         fermions = [e for e in graph.edges() if e.data == "e"]
         self.assertEqual(len(fermions), 2)
         self.assertTrue(all(e.orientation == g.Orientation.Default for e in fermions))
         # e+ e- annihilation: the incoming electron slot is a leg into its vertex.
-        graphs = list(
-            g.Graph.generate(
-                [("e-", electron), ("e+", electron.flip()), (3, photon)], qed, loops=0
-            )
+        diagrams = list(
+            qed.query(
+                g.Legs([("e-", electron), ("e+", electron.flip()), (3, photon)]),
+                loops=0,
+            ).diagrams()
         )
-        self.assertEqual(len(graphs), 1)
+        self.assertEqual(len(diagrams), 1)
         flows = {
             half.data: half.flow
-            for e in graphs[0][0].edges()
+            for e in diagrams[0].graph().edges()
             for half in (e.source, e.sink)
             if half is not None and half.pair is None
         }
@@ -260,38 +266,44 @@ class GenerationTests(unittest.TestCase):
         one = g.EdgeSignature(1)
 
         def count(*fields):
-            legs = [(i, g.EdgeSignature(f)) for i, f in enumerate(fields)]
-            return len(list(g.Graph.generate(legs, [[one] * 3], loops=1)))
+            legs = g.Legs([(i, g.EdgeSignature(f)) for i, f in enumerate(fields)])
+            return g.Theory([[one] * 3]).query(legs, loops=1).count().diagrams
 
         self.assertEqual(count(1, 1.0), 1)
-        self.assertEqual(count(1, "1"), 0)
+        with self.assertRaises(ValueError) as rejected:
+            count(1, "1")
+        self.assertIn("external field is absent", rejected.exception.report.infeasible)
         if COMMUNITY:
             from symbolica import E
 
-            self.assertEqual(count(1, E("1")), 0)
+            with self.assertRaises(ValueError) as rejected:
+                count(1, E("1"))
+            self.assertIn("external field is absent", rejected.exception.report.infeasible)
         with self.assertRaisesRegex(TypeError, "use hashable fields"):
-            g.Graph.generate([], [[g.EdgeSignature([1])] * 3], loops=0)
+            g.Theory([[g.EdgeSignature([1])] * 3])
 
     def test_filter_sees_every_stage_and_prunes_hereditarily(self):
         stages = set()
+        theory = g.Theory(QCD)
 
-        def generate(keep):
-            return len(
-                list(
-                    g.Graph.generate(
-                        [(1, GLUON), (2, GLUON)],
-                        QCD,
-                        loops=range(5),
-                        max_bridges=0,
-                        allow_self_loops=True,
-                        filter_fn=keep,
-                    )
-                )
+        def count_with_pruning(keep):
+            plan = theory.query(
+                g.Legs([(1, GLUON), (2, GLUON)]),
+                loops=range(5),
+                structure=g.Structure(bridges=g.Bridges.one_pi(), self_loops=True),
+                prune_skeletons=keep,
+                prune_dressings=keep,
             )
+            return len(list(plan.diagrams()))
 
         def at_most_one_cubic_gluon_vertex(view):
             # Hereditary: rules(v) is [0] only once the fields at v fix the rule.
-            self.assertIs(type(view), g.GenerationView)
+            self.assertIs(
+                type(view),
+                g.SkeletonView
+                if view.stage == g.GenerationStage.Topology
+                else g.DressingView,
+            )
             stages.add(view.stage)
             return sum(view.rules(v) == [0] for v in range(view.n_vertices)) <= 1
 
@@ -309,7 +321,7 @@ class GenerationTests(unittest.TestCase):
                 count += len(fields) == 3 and all(f == GLUON.data for f in fields)
             return count <= 1
 
-        pruned = generate(at_most_one_cubic_gluon_vertex)
+        pruned = count_with_pruning(at_most_one_cubic_gluon_vertex)
         self.assertEqual(
             stages,
             {
@@ -319,10 +331,10 @@ class GenerationTests(unittest.TestCase):
             },
         )
         self.assertEqual(
-            pruned, generate(on_complete_graphs(at_most_one_cubic_gluon_vertex))
+            pruned, count_with_pruning(on_complete_graphs(at_most_one_cubic_gluon_vertex))
         )
         self.assertEqual(pruned, 960)
-        self.assertEqual(generate(on_complete_graphs(three_gluon_neighbours)), 845)
+        self.assertEqual(count_with_pruning(on_complete_graphs(three_gluon_neighbours)), 845)
 
     def test_views_describe_the_search_state(self):
         seen = []
@@ -374,36 +386,60 @@ class GenerationTests(unittest.TestCase):
             return True
 
         generated = list(
-            g.Graph.generate(
-                [(1, GLUON), (2, GLUON)], QCD, loops=2, max_bridges=0, filter_fn=check
+            g.Theory(QCD)
+            .query(
+                g.Legs([(1, GLUON), (2, GLUON)]),
+                loops=2,
+                structure=g.Structure.one_pi(),
+                prune_skeletons=check,
+                prune_dressings=check,
             )
+            .diagrams()
         )
         self.assertEqual(len(seen), len(generated))
-        for (graph, _), complete in zip(generated, seen):
-            self.assertTrue(graph.is_isomorphic(complete))
+        # A batch can visit later completed states before the oldest output is emitted.
+        # Match every callback graph exactly once, preserving multiplicity.
+        unmatched = seen.copy()
+        for diagram in generated:
+            graph = diagram.graph()
+            match = next(
+                (i for i, complete in enumerate(unmatched) if graph.is_isomorphic(complete)),
+                None,
+            )
+            self.assertIsNotNone(match, "an emitted graph has no complete callback")
+            unmatched.pop(match)
+        self.assertEqual(unmatched, [])
 
-    def test_views_expire_with_their_filter_call(self):
+    def test_views_expire_with_their_callback(self):
         views = []
 
         def keep(view):
             views.append(view)
             return True
 
-        list(g.Graph.generate([(1, GLUON), (2, GLUON)], QCD, loops=1, filter_fn=keep))
+        plan = g.Theory(QCD).query(
+            g.Legs([(1, GLUON), (2, GLUON)]),
+            loops=1,
+            prune_skeletons=keep,
+            prune_dressings=keep,
+        )
+        list(plan.diagrams())
         self.assertTrue(views)
-        with self.assertRaisesRegex(ReferenceError, "filter call"):
+        with self.assertRaisesRegex(ReferenceError, "callback"):
             views[0].degree(0)
 
     def test_generation_streams_and_progress_can_stop_it(self):
         reports = []
 
-        def progress(loops, topologies, graphs):
-            reports.append((loops, topologies, graphs))
-            return graphs < 2
+        def progress(report):
+            self.assertIs(type(report), g.Progress)
+            reports.append((report.loops, report.topologies, report.diagrams))
+            return report.diagrams < 2
 
-        generated = g.Graph.generate(
-            [(1, GLUON), (2, GLUON)], QCD, loops=range(4), progress_fn=progress
+        plan = g.Theory(QCD).query(
+            g.Legs([(1, GLUON), (2, GLUON)]), loops=range(4)
         )
+        generated = plan.diagrams(g.Run(progress=progress))
         next(generated)
         # Lazy: the first step searched only up to the first graph.
         self.assertEqual(max(r[2] for r in reports), 1)
@@ -416,38 +452,43 @@ class GenerationTests(unittest.TestCase):
         def reject(view):
             raise RuntimeError("callback sentinel")
 
-        kwargs = {
-            "external_edges": [(i, signature) for i in range(4)],
-            "vertex_signatures": [[signature] * 3],
-            "loops": 0,
-        }
-        generated = g.Graph.generate(**kwargs, filter_fn=reject)
+        theory = g.Theory([[signature] * 3])
+        external = g.Legs([(i, signature) for i in range(4)])
+        generated = theory.query(
+            external, loops=0, prune_skeletons=reject, prune_dressings=reject
+        ).diagrams()
         with self.assertRaisesRegex(RuntimeError, "callback sentinel"):
             next(generated)
         self.assertEqual(list(generated), [])
+        plan = theory.query(external, loops=0)
         with self.assertRaisesRegex(TypeError, "bool"):
-            next(g.Graph.generate(**kwargs, progress_fn=lambda *counts: None))
-        self.assertEqual(len(list(g.Graph.generate(**kwargs))), 3)
+            next(plan.diagrams(g.Run(progress=lambda report: None)))
+        self.assertEqual(len(list(plan.diagrams())), 3)
 
     def test_invalid_bounds_are_rejected(self):
         phi = g.EdgeSignature(0)
+        theory = g.Theory([[phi] * 3])
+        external = g.Legs([(1, phi), (2, phi)])
         with self.assertRaisesRegex(ValueError, "bound the loop order"):
-            g.Graph.generate([(1, phi), (2, phi)], [[phi] * 3])
+            theory.query(external)
         with self.assertRaisesRegex(ValueError, "step 1"):
-            g.Graph.generate([(1, phi), (2, phi)], [[phi] * 3], loops=range(0, 4, 2))
+            theory.query(external, loops=range(0, 4, 2))
         with self.assertRaises(OverflowError):
-            g.Graph.generate([(1, phi), (2, phi)], [[phi] * 3], loops=-1)
+            theory.query(external, loops=-1)
         with self.assertRaisesRegex(TypeError, "not a bool"):
-            g.Graph.generate([(1, phi), (2, phi)], [[phi] * 3], loops=True)
+            theory.query(external, loops=True)
 
     def test_automorphism_orders_beyond_u128_raise(self):
         # Permuting 70 interchangeable legs at their vertices gives more than 2**128 symmetries.
         phi = g.EdgeSignature(0)
-        generated = g.Graph.generate(
-            [(0, phi)] * 70, [[phi] * 15, [phi] * 5], loops=0, max_vertices=6
+        plan = g.Theory([[phi] * 15, [phi] * 5]).query(
+            g.Legs([(0, phi)] * 70),
+            loops=0,
+            structure=g.Structure(max_vertices=6),
         )
+        generated = plan.diagrams()
         with self.assertRaisesRegex(OverflowError, "2\\*\\*128"):
-            next(generated)
+            next(generated).symmetry_factor()
 
     def test_callbacks_referring_to_their_iterator_are_collected(self):
         phi = g.EdgeSignature(0)
@@ -462,13 +503,20 @@ class GenerationTests(unittest.TestCase):
             def keep(*args):
                 return holder is not None
 
-            holder["generated"] = g.Graph.generate(
-                [(i, phi) for i in range(4)], [[phi] * 3], loops=0, **{callback: keep}
-            )
+            theory = g.Theory([[phi] * 3])
+            external = g.Legs([(i, phi) for i in range(4)])
+            if callback == "pruning":
+                plan = theory.query(
+                    external, loops=0, prune_skeletons=keep, prune_dressings=keep
+                )
+                holder["generated"] = plan.diagrams()
+            else:
+                plan = theory.query(external, loops=0)
+                holder["generated"] = plan.diagrams(g.Run(progress=keep))
             next(holder["generated"])
             return weakref.ref(marker)
 
-        for callback in ("filter_fn", "progress_fn"):
+        for callback in ("pruning", "progress"):
             with self.subTest(callback=callback):
                 probe = cycle(callback)
                 gc.collect()

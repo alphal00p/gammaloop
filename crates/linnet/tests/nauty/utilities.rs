@@ -10,7 +10,7 @@
 
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
-use linnet::half_edge::generate::{GraphGenerator, Stub};
+use linnet::half_edge::generate::{Legs, Plan, Query, Run, Structure, Stub, Theory};
 use rand::{rngs::SmallRng, seq::SliceRandom, SeedableRng};
 
 use super::{
@@ -252,12 +252,23 @@ fn generated_trees_match_the_free_tree_enumeration() {
     // OEIS A000055, from 0 vertices
     let counts = [1, 1, 1, 1, 2, 3, 6, 11, 23, 47, 106, 235];
     let undirected = Stub::undirected(0u8);
-    let generator = GraphGenerator::<u8, u8>::new([], (1..n).map(|d| vec![undirected.clone(); d]))
+    let theory = (1..n)
+        .fold(Theory::builder(), |theory, degree| {
+            theory.vertex(vec![undirected.clone(); degree], [])
+        })
+        .build()
+        .unwrap();
+    let query = Query::new(&Legs::<u8, u8>::new())
         .loops(0..=0)
-        .max_vertices(n)
-        .allow_zero_flow_edges(true);
+        .structure(Structure {
+            max_vertices: Some(n),
+            zero_flow_edges: true,
+            ..Structure::default()
+        });
+    let plan = Plan::new(&theory, &query).unwrap();
+    let run = Run::default();
     let mut generated: BTreeMap<usize, BTreeSet<Form>> = BTreeMap::new();
-    for diagram in generator.iter().unwrap() {
+    for diagram in plan.diagrams(&run).unwrap() {
         let tree = Graph::of_hedge_graph(diagram.graph());
         let symmetry = tree.symmetry();
         assert_eq!(diagram.automorphism_count, Some(symmetry.order));
@@ -522,10 +533,17 @@ fn genquarticg_quartic_graphs() {
     );
     let read: BTreeSet<Form> = quartic.iter().map(Graph::canonical_form).collect();
     assert_eq!(read.len(), 16);
-    let generator = GraphGenerator::<u8, u8>::new([], [vec![Stub::undirected(0u8); 4]])
+    let theory = Theory::builder()
+        .vertex(vec![Stub::undirected(0u8); 4], [])
+        .build()
+        .unwrap();
+    let query = Query::new(&Legs::<u8, u8>::new())
         .loops(10..=10)
-        .max_vertices(9)
-        .filter(|g| {
+        .structure(Structure {
+            max_vertices: Some(9),
+            ..Structure::default()
+        })
+        .prune_skeletons(|g| {
             // no parallel edges (self-loops are off by default)
             let mut edges: Vec<_> = g
                 .edges()
@@ -539,9 +557,11 @@ fn genquarticg_quartic_graphs() {
             edges.sort_unstable();
             edges.windows(2).all(|w| w[0] != w[1])
         });
+    let plan = Plan::new(&theory, &query).unwrap();
+    let run = Run::default();
     let mut generated = BTreeSet::new();
     let mut generated_orders = vec![];
-    for diagram in generator.iter().unwrap() {
+    for diagram in plan.diagrams(&run).unwrap() {
         let g = Graph::of_hedge_graph(diagram.graph());
         assert_eq!(g.n, 9);
         let symmetry = g.symmetry();

@@ -29,6 +29,9 @@ getrandom = { version = "0.2", default-features = false, features = ["custom"] }
 indenter = { version = "0.3.3", features = ["std"] }
 indexmap = { workspace = true }
 itertools = "0.14.0"
+num-bigint = "0.4.6"
+num-rational = "0.4.2"
+num-traits = "0.2.19"
 paste = "1.0.15"
 rand = { version = "0.8.5", features = ["small_rng"] }
 rkyv = { version = "0.7", features = ["validation"], optional = true }

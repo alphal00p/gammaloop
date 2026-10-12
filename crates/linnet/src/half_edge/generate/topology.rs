@@ -44,6 +44,7 @@ use ahash::AHashSet;
 
 use super::{
     model::{Legs, Model},
+    suspend::{Step, Work},
     view::{Prune, State as View, VertexSet},
     AbortCheck,
 };
@@ -78,8 +79,22 @@ impl Limits {
         self_loops: bool,
     ) -> Self {
         let excess = |d: &u8| *d as i32 - 2;
-        let lo = model.degrees.iter().map(excess).min().unwrap_or(0).min(0);
-        let hi = model.degrees.iter().map(excess).max().unwrap_or(0).max(0);
+        let lo = model
+            .theory
+            .degrees
+            .iter()
+            .map(excess)
+            .min()
+            .unwrap_or(0)
+            .min(0);
+        let hi = model
+            .theory
+            .degrees
+            .iter()
+            .map(excess)
+            .max()
+            .unwrap_or(0)
+            .max(0);
         let low = lo * max_vertices as i32;
         let width = ((hi - lo) as usize) * max_vertices + 1;
         let mut reach = vec![false; width];
@@ -92,7 +107,7 @@ impl Limits {
             }
             let mut next = vec![false; width];
             for i in (0..width).filter(|&i| reach[i]) {
-                for d in &model.degrees {
+                for d in &model.theory.degrees {
                     let j = i as i32 + excess(d);
                     if (0..width as i32).contains(&j) {
                         next[j as usize] = true;
@@ -208,13 +223,6 @@ pub(crate) struct Vertex {
     nbr: u64,
 }
 
-impl Vertex {
-    /// Its anonymous legs without a label.
-    pub(crate) fn unlabelled(&self, model: &Model) -> u32 {
-        model.slots.size(model.anonymous(self.legs)) - model.slots.size(self.labelled_slots)
-    }
-}
-
 /// The vertex an augmentation adds.
 #[derive(Clone, Copy, Debug, Default)]
 struct Corolla {
@@ -237,6 +245,23 @@ fn above(u: usize) -> u64 {
 }
 
 impl Topology {
+    /// Own the live partial or complete topology for immutable views. Unused search capacity
+    /// is dropped; the snapshot must not be resumed as a mutable search cursor.
+    pub(crate) fn snapshot(&self) -> Self {
+        let mut snapshot = self.clone();
+        snapshot.vertices.truncate(self.n);
+        snapshot.vertices.shrink_to_fit();
+        for u in 0..self.n {
+            for v in 0..self.n {
+                snapshot.adj[u * self.n + v] = self.adj[u * self.cap + v];
+            }
+        }
+        snapshot.adj.truncate(self.n * self.n);
+        snapshot.adj.shrink_to_fit();
+        snapshot.cap = self.n;
+        snapshot
+    }
+
     pub(crate) fn empty(model: &Model, limits: &Limits) -> Self {
         let cap = limits.max_vertices.max(1);
         Topology {
@@ -267,10 +292,21 @@ impl Topology {
         self.n > 0 && self.budget == 0 && self.open_total == 0 && self.unplaced_count == 0
     }
 
-    /// Stubs of `v` not taken by an edge or a labelled leg yet: open stubs and anonymous legs
-    /// without a label.
-    pub(crate) fn free_stubs(&self, model: &Model, v: usize) -> u32 {
-        self.vertices[v].open as u32 + self.vertices[v].unlabelled(model)
+    /// Apply one combined native/deferred prune verdict, preserving the hereditary marker.
+    pub(crate) fn resolve_prune(&mut self, keep: bool, check_heredity: bool) -> bool {
+        if !check_heredity {
+            return keep;
+        }
+        if !self.is_complete() {
+            self.vetoed |= !keep;
+            return true;
+        }
+        assert!(
+            !(keep && self.vetoed),
+            "the filter is not hereditary: it accepts a complete topology but rejected a partial \
+             topology it completes"
+        );
+        keep
     }
 
     /// Index of the next label to assign in [`Model::labelling`].
@@ -470,15 +506,20 @@ impl Topology {
     /// The bridges whose `side` (the vertices beyond `ends[1]`) has no free stubs: no later edge
     /// or label reaches that side, so the bridge and the subgraph on that side are final. A
     /// complete topology reports every bridge once per side.
-    pub(crate) fn closed_sides(&self, model: &Model, mut side: impl FnMut([usize; 2], u64)) {
+    pub(crate) fn closed_sides(
+        &self,
+        legs: &super::model::Legs,
+        mut side: impl FnMut([usize; 2], u64),
+    ) {
         if self.n == 0 {
             return;
         }
         let mut scratch = BridgeScratch::default();
         scratch.reset(self.n);
         let all = u64::MAX >> (64 - self.n);
-        let total_open = (0..self.n).map(|v| self.free_stubs(model, v)).sum::<u32>();
-        let stubs = |v: &Vertex| (v.open as u32 + v.unlabelled(model), 0);
+        let free = |v: &Vertex| v.open as u32 + v.n_legs as u32 - legs.size(v.labelled);
+        let total_open = self.vertices[..self.n].iter().map(free).sum::<u32>();
+        let stubs = |v: &Vertex| (free(v), 0);
         self.lowlink(
             0,
             usize::MAX,
@@ -635,6 +676,8 @@ struct Level {
     sewings: SewingOrbits,
     /// Whether `sewn` and `counts` enumerate the sewings of `corolla`.
     sewing: bool,
+    /// The next sewing attempt starts the next total rather than advancing this vector.
+    next_sum: bool,
     /// How the children of the object at this depth are made.
     mode: Mode,
     /// [`Mode::Label`]: the vertices that can take the label, the current one at `next - 1`.
@@ -643,8 +686,7 @@ struct Level {
     pendants: Pendants,
     /// Whether the current augmentation is applied to the topology.
     pushed: bool,
-    /// The children found so far, and whether the rest was split off (see [`Search::split`]).
-    children: usize,
+    /// Whether the residual children were transferred to another cursor.
     done: bool,
     /// While checking the filter's heredity: the filter rejected the object at this depth or one
     /// on the way to it. Kept only with a filter.
@@ -652,6 +694,36 @@ struct Level {
 }
 
 impl Level {
+    /// Retain only the applied child's inverse while the actual sibling cursor moves away.
+    fn undo_only(&self) -> Self {
+        let mut undo = Self {
+            mode: self.mode,
+            pushed: self.pushed,
+            vetoed: self.vetoed,
+            done: true,
+            ..Self::default()
+        };
+        if self.pushed {
+            match self.mode {
+                Mode::Vertex => {
+                    undo.corolla = self.corolla;
+                    undo.counts = self.counts.clone();
+                }
+                Mode::Pendants => {
+                    undo.counts = self.counts.clone();
+                    undo.pendants.types = self.pendants.types.clone();
+                    undo.pendants.owners = self.pendants.owners.clone();
+                    undo.pendants.choice = self.pendants.choice.clone();
+                }
+                Mode::Label => {
+                    undo.targets.push(self.targets[self.next - 1]);
+                    undo.next = 1;
+                }
+            }
+        }
+        undo
+    }
+
     /// Remove the child applied at this level from `t`.
     fn unapply(&mut self, t: &mut Topology, model: &Model) {
         match self.mode {
@@ -714,6 +786,8 @@ struct Pendants {
     owners: Vec<usize>,
     /// The type at each stub.
     choice: Vec<usize>,
+    /// The next stub attempt within a suspended assignment search.
+    cursor: Option<usize>,
     /// `used[i]`: the legs of the pendants at the stubs before `i`, packed by slot class.
     used: Vec<u64>,
     /// Per vertex of the object: its first stub in `owners`.
@@ -728,26 +802,41 @@ struct Pendants {
 impl Pendants {
     /// Advance to the next assignment (the first if `first`) that places exactly `legs`; `false`
     /// after the last.
+    #[cfg(test)]
     fn next(&mut self, slots: &Legs, legs: u64, first: bool) -> bool {
+        self.poll(slots, legs, first, &mut Work::unlimited()) == Step::Ready
+    }
+
+    fn poll(&mut self, slots: &Legs, legs: u64, first: bool, work: &mut Work) -> Step {
         let k = self.owners.len();
-        let mut i = if first {
-            self.choice.clear();
-            self.choice.resize(k, 0);
-            self.marked.clear();
-            self.used.clear();
-            self.used.resize(k + 1, 0);
-            0
-        } else {
-            self.choice[k - 1] += 1;
-            k - 1
-        };
+        if self.cursor.is_none() {
+            if !work.spend() {
+                return Step::Yield;
+            }
+            if first {
+                self.choice.clear();
+                self.choice.resize(k, 0);
+                self.marked.clear();
+                self.used.clear();
+                self.used.resize(k + 1, 0);
+                self.cursor = Some(0);
+            } else {
+                self.choice[k - 1] += 1;
+                self.cursor = Some(k - 1);
+            }
+        }
         loop {
+            if !work.spend() {
+                return Step::Yield;
+            }
+            let i = self.cursor.expect("an assignment attempt is active");
             if self.choice[i] == self.types.len() {
                 if i == 0 {
-                    return false;
+                    self.cursor = None;
+                    return Step::Done;
                 }
-                i -= 1;
-                self.choice[i] += 1;
+                self.cursor = Some(i - 1);
+                self.choice[i - 1] += 1;
                 continue;
             }
             let add = self.types[self.choice[i]].legs;
@@ -758,15 +847,16 @@ impl Pendants {
             self.used[i + 1] = self.used[i] + add;
             if i + 1 == k {
                 if self.used[k] == legs {
-                    return true;
+                    self.cursor = None;
+                    return Step::Ready;
                 }
                 self.choice[i] += 1;
                 continue;
             }
-            i += 1;
-            // non-decreasing at each vertex: pendants on one vertex are interchangeable
-            self.choice[i] = if self.owners[i] == self.owners[i - 1] {
-                self.choice[i - 1]
+            self.cursor = Some(i + 1);
+            // Non-decreasing at each vertex: its pendants are interchangeable.
+            self.choice[i + 1] = if self.owners[i + 1] == self.owners[i] {
+                self.choice[i]
             } else {
                 0
             };
@@ -941,7 +1031,7 @@ pub(crate) struct Context<'a> {
     pub(crate) model: &'a Model,
     pub(crate) limits: &'a Limits,
     pub(crate) stop: &'a AtomicBool,
-    pub(crate) abort_check: Option<&'a AbortCheck>,
+    pub(crate) abort_check: Option<&'a AbortCheck<'a>>,
     pub(crate) filter: Option<&'a dyn Prune>,
 }
 
@@ -966,6 +1056,10 @@ enum State {
     Start,
     /// Enumerating the children of the object at this depth.
     At(usize),
+    /// A native-accepted child is waiting for its combined prune verdict.
+    Pending(usize),
+    /// That verdict was accepted; commit/descent has not run yet.
+    Accepted(usize),
     Done,
 }
 
@@ -996,6 +1090,14 @@ impl Search {
         }
     }
 
+    /// Enumerate immediate children incrementally, without descending into any of them.
+    pub(crate) fn child_source(model: &Model, topology: Topology, buf: Buffers) -> Self {
+        Self {
+            children_only: true,
+            ..Self::new(model, topology, buf)
+        }
+    }
+
     /// The accepted children of `topology` after the first `skip` (a complete one is its own only
     /// child), searched with `buf`.
     pub(crate) fn children(
@@ -1004,10 +1106,7 @@ impl Search {
         skip: usize,
         buf: &mut Buffers,
     ) -> Vec<Topology> {
-        let mut search = Search {
-            children_only: true,
-            ..Search::new(cx.model, topology, std::mem::take(buf))
-        };
+        let mut search = Self::child_source(cx.model, topology, std::mem::take(buf));
         let mut children = vec![];
         let mut found = 0;
         while search.next(cx) {
@@ -1048,9 +1147,19 @@ impl Search {
     /// Advance to the next complete topology, or to the next child of the root with
     /// [`Self::children`]; `false` when the subtree is exhausted or the generation stops.
     pub(crate) fn next(&mut self, cx: &Context<'_>) -> bool {
+        match self.poll(cx, &mut Work::unlimited(), false) {
+            Step::Ready => true,
+            Step::Done => false,
+            Step::Pending | Step::Yield => unreachable!("unlimited native search cannot suspend"),
+        }
+    }
+
+    /// Advance without replaying an attempt or callback when a finite allowance runs out.
+    pub(crate) fn poll(&mut self, cx: &Context<'_>, work: &mut Work, defer: bool) -> Step {
         loop {
             match self.state {
-                State::Done => return false,
+                State::Done => return Step::Done,
+                State::Pending(_) => return Step::Pending,
                 State::Start => {
                     let root = self.buf.level(0);
                     root.known = false;
@@ -1058,35 +1167,47 @@ impl Search {
                     if self.topology.is_complete() {
                         self.state = State::Done;
                         self.found(0);
-                        return true;
+                        return Step::Ready;
                     }
                     if cx.stopped() {
                         self.state = State::Done;
-                        return false;
+                        return Step::Done;
+                    }
+                    if !work.spend() {
+                        return Step::Yield;
                     }
                     self.prepare(cx, 0);
                     self.state = State::At(0);
                 }
                 State::At(depth) => {
                     self.undo(cx.model, depth);
-                    if cx.stop.load(Ordering::Relaxed) {
+                    // A rejected hook returns here without visiting State::Accepted.
+                    if cx.stopped() {
                         self.state = State::Done;
-                        return false;
+                        return Step::Done;
                     }
                     let child = depth + 1;
                     let Level { mode, done, .. } = self.buf.levels[depth];
-                    let advanced = !done
-                        && match mode {
-                            Mode::Vertex => self.next_augmentation(cx, depth),
-                            Mode::Pendants => self.next_pendants(cx, depth),
-                            Mode::Label => self.next_label(cx.model, depth),
-                        };
-                    if !advanced {
-                        self.state = match depth {
-                            0 => State::Done,
-                            _ => State::At(depth - 1),
-                        };
-                        continue;
+                    let advanced = if done {
+                        Step::Done
+                    } else {
+                        match mode {
+                            Mode::Vertex => self.next_augmentation(cx, depth, work),
+                            Mode::Pendants => self.next_pendants(cx, depth, work),
+                            Mode::Label => self.next_label(cx.model, depth, work),
+                        }
+                    };
+                    match advanced {
+                        Step::Yield => return Step::Yield,
+                        Step::Done => {
+                            self.state = match depth {
+                                0 => State::Done,
+                                _ => State::At(depth - 1),
+                            };
+                            continue;
+                        }
+                        Step::Ready => {}
+                        Step::Pending => unreachable!("native augmentation does not invoke hooks"),
                     }
                     if mode == Mode::Vertex {
                         let level = &mut self.buf.levels[depth];
@@ -1097,20 +1218,30 @@ impl Search {
                             continue;
                         }
                     }
-                    if let Some(filter) = cx.filter {
-                        self.buf.levels[child].vetoed = self.buf.levels[depth].vetoed;
-                        if !self.filter_keeps(filter, child) {
-                            continue;
-                        }
+                    self.buf.level(child).vetoed = self.buf.levels[depth].vetoed;
+                    self.topology.vetoed = self.buf.levels[child].vetoed;
+                    self.state = State::Pending(depth);
+                    if defer {
+                        return Step::Pending;
                     }
-                    self.buf.levels[depth].children += 1;
+                    let keep = cx
+                        .filter
+                        .is_none_or(|filter| filter.keeps(View::Topology(&self.topology)));
+                    self.resume(cx, keep);
+                }
+                State::Accepted(depth) => {
+                    if !work.spend() {
+                        return Step::Yield;
+                    }
+                    let child = depth + 1;
+                    self.state = State::At(depth);
                     if self.topology.is_complete() || self.children_only {
                         self.found(child);
-                        return true;
+                        return Step::Ready;
                     }
                     if cx.stopped() {
                         self.state = State::Done;
-                        return false;
+                        return Step::Done;
                     }
                     self.prepare(cx, child);
                     self.state = State::At(child);
@@ -1119,25 +1250,32 @@ impl Search {
         }
     }
 
-    /// Whether `filter` keeps the object at `depth`. While checking heredity, a rejected partial
-    /// topology is marked instead of pruned, and a complete topology that the filter keeps must
-    /// have no rejected part.
-    fn filter_keeps(&mut self, filter: &dyn Prune, depth: usize) -> bool {
-        let keeps = filter.keeps(View::Topology(&self.topology));
-        if !filter.checks_heredity() {
-            return keeps;
-        }
-        let vetoed = &mut self.buf.levels[depth].vetoed;
-        if !self.topology.is_complete() {
-            *vetoed |= !keeps;
-            return true;
-        }
+    /// Resolve exactly the one child exposed by `Pending`; neither hook is called here.
+    pub(crate) fn resume(&mut self, cx: &Context<'_>, keep: bool) {
+        let State::Pending(depth) = self.state else {
+            panic!("topology search has no pending prune decision");
+        };
+        let check = cx.filter.is_some_and(Prune::checks_heredity);
+        let accepted = self.topology.resolve_prune(keep, check);
+        self.buf.levels[depth + 1].vetoed = self.topology.vetoed;
+        self.state = if accepted {
+            State::Accepted(depth)
+        } else {
+            State::At(depth)
+        };
+    }
+
+    /// Transfer an unresolved immediate child; the source's next poll advances its sibling cursor.
+    pub(crate) fn take_pending_child(&mut self) -> Topology {
         assert!(
-            !(keeps && *vetoed),
-            "the filter is not hereditary: it accepts a complete topology but rejected a partial \
-             topology it completes"
+            self.children_only,
+            "only a child source can detach a pending child"
         );
-        keeps
+        let State::Pending(0) = self.state else {
+            panic!("child source has no pending child");
+        };
+        self.state = State::At(0);
+        self.topology.clone()
     }
 
     /// Record the object at `depth` as found, with its generators if it is a complete topology.
@@ -1255,17 +1393,19 @@ impl Search {
         level.mode = Mode::Label;
         level.next = 0;
         level.pushed = false;
-        level.children = 0;
         level.done = false;
     }
 
     /// Give the next label of the shaped object at `depth` to its next target vertex; `false`
     /// after the last. The child is rigid if the object is.
-    fn next_label(&mut self, model: &Model, depth: usize) -> bool {
+    fn next_label(&mut self, model: &Model, depth: usize, work: &mut Work) -> Step {
         let level = &mut self.buf.levels[depth];
         let Some(&v) = level.targets.get(level.next) else {
-            return false;
+            return Step::Done;
         };
+        if !work.spend() {
+            return Step::Yield;
+        }
         level.next += 1;
         level.pushed = true;
         let rigid = level.generators.is_empty();
@@ -1277,7 +1417,7 @@ impl Search {
             child.generators.clear();
             child.group_order = Some(1);
         }
-        true
+        Step::Ready
     }
 
     /// Undo the augmentation or label applied at `depth`, if any.
@@ -1293,14 +1433,29 @@ impl Search {
     /// as objects to search separately: in the search order they come after everything else this
     /// search still finds, which no longer includes them. Their search uses `buf`.
     pub(crate) fn split(&mut self, cx: &Context<'_>, buf: &mut Buffers) -> Vec<Topology> {
-        let State::At(deepest) = self.state else {
-            return vec![];
+        while let Some(mut source) = self.split_source(cx, buf) {
+            let mut rest = Vec::new();
+            while source.next(cx) {
+                rest.push(source.topology().clone());
+            }
+            *buf = source.into_buffers();
+            if !rest.is_empty() {
+                return rest;
+            }
+        }
+        Vec::new()
+    }
+
+    /// Move an existing residual sibling cursor rather than re-enumerating accepted children.
+    pub(crate) fn split_source(&mut self, cx: &Context<'_>, buf: &mut Buffers) -> Option<Self> {
+        let deepest = match self.state {
+            State::At(depth) | State::Pending(depth) | State::Accepted(depth) => depth,
+            State::Start | State::Done => return None,
         };
         for depth in 0..=deepest {
             if self.buf.levels[depth].done {
                 continue;
             }
-            // the object at `depth`, and the children it has after those already found
             let mut object = self.topology.clone();
             for level in self.buf.levels[depth..=deepest].iter_mut().rev() {
                 if level.pushed {
@@ -1308,28 +1463,31 @@ impl Search {
                 }
             }
             object.vetoed = self.buf.levels[depth].vetoed;
-            let rest = Search::children(cx, object, self.buf.levels[depth].children, buf);
-            self.buf.levels[depth].done = true;
-            if !rest.is_empty() {
-                return rest;
-            }
+            let undo = self.buf.levels[depth].undo_only();
+            let mut cursor = std::mem::replace(&mut self.buf.levels[depth], undo);
+            cursor.pushed = false;
+            let mut source = Self::child_source(cx.model, object, std::mem::take(buf));
+            source.buf.levels.clear();
+            source.buf.levels.push(cursor);
+            source.state = State::At(0);
+            return Some(source);
         }
-        vec![]
+        None
     }
 
     /// Hang the next assignment of pendants on the open stubs of the object at `depth` that is
     /// minimal under the object's group (rule 1) and whose pendants are the last vertices on the
     /// canonical deletion path of the result (rule 2); `false` after the last.
-    fn next_pendants(&mut self, cx: &Context<'_>, depth: usize) -> bool {
+    fn next_pendants(&mut self, cx: &Context<'_>, depth: usize, work: &mut Work) -> Step {
         loop {
             let level = &mut self.buf.levels[depth];
             let first = level.next == 0;
-            level.next = 1;
-            if !level
+            match level
                 .pendants
-                .next(&cx.model.slots, self.topology.unplaced, first)
+                .poll(&cx.model.slots, self.topology.unplaced, first, work)
             {
-                return false;
+                Step::Ready => level.next = 1,
+                step => return step,
             }
             if !self.buf.levels[depth].known {
                 self.canonize(depth, false);
@@ -1347,7 +1505,7 @@ impl Search {
                 || self.topology.bridges_allow(limits, &mut self.buf.bridges))
                 && self.pendants_canonical(depth)
             {
-                return true;
+                return Step::Ready;
             }
             let level = &mut self.buf.levels[depth];
             level.pop_pendants(&mut self.topology);
@@ -1459,12 +1617,12 @@ impl Search {
             .deletable
             .sort_unstable_by(|&a, &b| invariants[b].cmp(&invariants[a]));
         // a vertex holds at most its degree in legs
-        let max_degree = model.degrees.last().copied().unwrap_or(0);
+        let max_degree = model.theory.degrees.last().copied().unwrap_or(0);
         model
             .slots
             .subsets(t.unplaced, max_degree as u32, &mut level.subsets);
         level.corollas.clear();
-        for &degree in &model.degrees {
+        for &degree in &model.theory.degrees {
             let budget = t.budget - (degree as i32 - 2);
             for &(legs, n_legs) in &level.subsets {
                 if n_legs > degree as u32 || model.leg_state(degree, legs).is_none() {
@@ -1500,7 +1658,6 @@ impl Search {
         level.next = 0;
         level.sewing = false;
         level.pushed = false;
-        level.children = 0;
         level.done = false;
         level.mode = Mode::Vertex;
         // every completion hangs one pendant on each open stub: no further cycle (open stubs and
@@ -1513,6 +1670,7 @@ impl Search {
         {
             level.mode = Mode::Pendants;
             let pendants = &mut level.pendants;
+            pendants.cursor = None;
             pendants.types.clear();
             pendants.types.extend(
                 level
@@ -1533,78 +1691,82 @@ impl Search {
 
     /// Move the cursor of the level at `depth` to its next augmentation that passes rule 1 and
     /// the checks before the push; `false` after the last.
-    fn next_augmentation(&mut self, cx: &Context<'_>, depth: usize) -> bool {
+    fn next_augmentation(&mut self, cx: &Context<'_>, depth: usize, work: &mut Work) -> Step {
         loop {
             if self.buf.levels[depth].sewing {
-                if self.next_sewing(cx, depth) {
-                    return true;
+                match self.next_sewing(cx, depth, work) {
+                    Step::Done => self.buf.levels[depth].sewing = false,
+                    step => return step,
                 }
-                self.buf.levels[depth].sewing = false;
             }
             let level = &mut self.buf.levels[depth];
             let Some(&corolla) = level.corollas.get(level.next) else {
-                return false;
+                return Step::Done;
             };
+            if !work.spend() {
+                return Step::Yield;
+            }
             level.next += 1;
             level.corolla = corolla;
             if self.topology.n == 0 {
-                // the first vertex: nothing to sew, completability checked in `prepare`
-                return true;
+                // The first vertex: nothing to sew, completability checked in `prepare`.
+                return Step::Ready;
             }
             level.sewing = true;
             level.sewn = 0;
+            level.next_sum = true;
         }
     }
 
-    /// Advance to the next multiplicity vector sewing the level's corolla to the open stubs that
-    /// passes the rule-2 precheck and rule 1, by increasing number of sewn stubs.
-    fn next_sewing(&mut self, cx: &Context<'_>, depth: usize) -> bool {
+    /// Advance one sewing attempt at a time; both the sum and vector survive a yield.
+    fn next_sewing(&mut self, cx: &Context<'_>, depth: usize, work: &mut Work) -> Step {
         let n = self.topology.n;
         let open_total = self.topology.open_total;
-        let level = &mut self.buf.levels[depth];
-        let corolla = level.corolla;
-        let max_sewn = corolla.free.min(open_total.min(u8::MAX as u32) as u8);
-        let opens = std::mem::take(&mut level.open_vertices);
-        let mut counts = std::mem::take(&mut level.counts);
-        let mut sewn = level.sewn;
-        let found = loop {
-            if sewn == 0 || !opens.next(&mut counts) {
-                // the first vector of the next sum that can still be completed: completability
-                // depends only on the number of sewn stubs
-                let filled = loop {
-                    if sewn == max_sewn {
-                        break false;
-                    }
-                    sewn += 1;
-                    let open_after = open_total - sewn as u32 + (corolla.free - sewn) as u32;
-                    if cx
-                        .limits
-                        .completable(n + 1, corolla.budget, open_after, corolla.unplaced)
-                        && opens.fill(&mut counts, 0, sewn as u32)
-                    {
-                        break true;
-                    }
-                };
-                if !filled {
-                    break false;
+        loop {
+            let level = &mut self.buf.levels[depth];
+            let corolla = level.corolla;
+            let max_sewn = corolla.free.min(open_total.min(u8::MAX as u32) as u8);
+            if !work.spend() {
+                return Step::Yield;
+            }
+            if level.next_sum {
+                if level.sewn == max_sewn {
+                    return Step::Done;
                 }
-                self.buf.levels[depth].sewings.clear();
+                level.sewn += 1;
+                let open_after =
+                    open_total - level.sewn as u32 + (corolla.free - level.sewn) as u32;
+                if !cx
+                    .limits
+                    .completable(n + 1, corolla.budget, open_after, corolla.unplaced)
+                    || !level
+                        .open_vertices
+                        .fill(&mut level.counts, 0, level.sewn as u32)
+                {
+                    continue;
+                }
+                level.next_sum = false;
+                level.sewings.clear();
+            } else if !level.open_vertices.next(&mut level.counts) {
+                level.next_sum = true;
+                continue;
             }
-            let new_open = corolla.free - sewn;
+            let new_open = corolla.free - level.sewn;
             let forced = corolla.budget == 0
-                && open_total - sewn as u32 + new_open as u32 == 0
+                && open_total - level.sewn as u32 + new_open as u32 == 0
                 && corolla.unplaced == 0;
-            if !self.beaten(depth, &corolla, &counts, &opens, new_open)
-                && (forced || self.minimal(depth, &counts[..n]))
-            {
-                break true;
+            // Canonization and orbit closure remain atomic native work units.
+            let opens = std::mem::take(&mut level.open_vertices);
+            let counts = std::mem::take(&mut level.counts);
+            let accepted = !self.beaten(depth, &corolla, &counts, &opens, new_open)
+                && (forced || self.minimal(depth, &counts[..n]));
+            let level = &mut self.buf.levels[depth];
+            level.counts = counts;
+            level.open_vertices = opens;
+            if accepted {
+                return Step::Ready;
             }
-        };
-        let level = &mut self.buf.levels[depth];
-        level.sewn = sewn;
-        level.counts = counts;
-        level.open_vertices = opens;
-        found
+        }
     }
 
     /// Rule 2 before building the child: a vertex of the parent that is certainly deletable in
@@ -1754,13 +1916,22 @@ impl Search {
 
 #[cfg(test)]
 mod tests {
-    use super::{Corolla, Legs, Limits, Model, OpenStubs, Pendants, Topology};
+    use super::{
+        Buffers, Context, Corolla, Legs, Limits, Mode, Model, OpenStubs, Pendants, Prune, Search,
+        State, Step, Topology, View, Work,
+    };
     use crate::half_edge::generate::budget::Request;
+    use std::sync::{atomic::AtomicBool, Arc, Mutex};
 
     #[test]
     fn twins_have_equal_corollas_and_neighbours() {
         // phi^3 with anonymous legs
-        let model = Model::new(1, &[vec![0; 3]], &[(0, 1); 5], &Request::default()).unwrap();
+        let model = Model::new(
+            std::sync::Arc::new(super::super::model::Theory::new(1, &[vec![0; 3]]).unwrap()),
+            &[(0, 1); 5],
+            &Request::default(),
+        )
+        .unwrap();
         let limits = Limits::new(&model, 3, 3, None, true, true);
         let corolla = |n_legs: u32| Corolla {
             degree: 3,
@@ -1787,7 +1958,12 @@ mod tests {
     fn twins_have_equal_multiplicities() {
         // phi^4: vertices 2 and 3 share the neighbours 0 and 1, which look alike, but with swapped
         // multiplicities, so exchanging 2 and 3 alone is not an automorphism
-        let model = Model::new(1, &[vec![0; 4]], &[], &Request::default()).unwrap();
+        let model = Model::new(
+            std::sync::Arc::new(super::super::model::Theory::new(1, &[vec![0; 4]]).unwrap()),
+            &[],
+            &Request::default(),
+        )
+        .unwrap();
         let limits = Limits::new(&model, 8, 4, None, true, true);
         let phi4 = Corolla {
             degree: 4,
@@ -1898,5 +2074,276 @@ mod tests {
             seen.sort();
             assert_eq!(seen, expected, "sum {sum}");
         }
+    }
+
+    fn topology_key(t: &Topology) -> String {
+        let vertices: Vec<_> = t.vertices[..t.n]
+            .iter()
+            .map(|v| (v.degree, v.open, v.loops, v.legs, v.labelled))
+            .collect();
+        let edges: Vec<_> = (0..t.n)
+            .flat_map(|u| (u..t.n).map(move |v| t.multiplicity(u, v)))
+            .collect();
+        format!(
+            "{vertices:?}/{edges:?}/{:?}",
+            (t.unplaced, t.unlabelled, t.budget)
+        )
+    }
+
+    #[derive(Default)]
+    struct Trace {
+        calls: Mutex<Vec<String>>,
+        reject_loops: bool,
+    }
+
+    impl Prune for Trace {
+        fn keeps(&self, state: View<'_>) -> bool {
+            let View::Topology(t) = state else {
+                unreachable!()
+            };
+            self.calls.lock().unwrap().push(topology_key(t));
+            !self.reject_loops || t.vertices[..t.n].iter().all(|v| v.loops == 0)
+        }
+
+        fn checks_heredity(&self) -> bool {
+            true
+        }
+    }
+
+    fn search_fixture(
+        degrees: &[usize],
+        legs: &[(u8, u8)],
+        budget: i32,
+        cap: usize,
+    ) -> (Model, Limits) {
+        let signatures: Vec<_> = degrees.iter().map(|&d| vec![0; d]).collect();
+        let model = Model::new(
+            Arc::new(super::super::model::Theory::new(1, &signatures).unwrap()),
+            legs,
+            &Request::default(),
+        )
+        .unwrap();
+        let limits = Limits::new(&model, budget, cap, None, true, true);
+        (model, limits)
+    }
+
+    fn complete_keys(search: &mut Search, cx: &Context<'_>) -> Vec<String> {
+        let mut found = Vec::new();
+        while search.next(cx) {
+            found.push(topology_key(search.topology()));
+        }
+        found
+    }
+
+    #[test]
+    fn tiny_topology_quanta_preserve_all_modes_and_hook_order() {
+        let fixtures = [
+            search_fixture(&[3], &[(0, 5)], 3, 3),
+            search_fixture(&[3], &[(0, 1); 5], 5, 5),
+            search_fixture(&[3, 4], &[(0, 1); 4], 4, 4),
+        ];
+        let mut modes = [false; 3];
+        for (model, limits) in fixtures {
+            let stop = AtomicBool::new(false);
+            for reject_loops in [false, true] {
+                let native = Trace {
+                    reject_loops,
+                    ..Trace::default()
+                };
+                let cx = Context {
+                    model: &model,
+                    limits: &limits,
+                    stop: &stop,
+                    abort_check: None,
+                    filter: Some(&native),
+                };
+                let expected = complete_keys(
+                    &mut Search::new(&model, Topology::empty(&model, &limits), Buffers::default()),
+                    &cx,
+                );
+                for quantum in [1, 2, 7] {
+                    let deferred = Trace {
+                        reject_loops,
+                        ..Trace::default()
+                    };
+                    let deferred_cx = Context {
+                        filter: Some(&deferred),
+                        ..cx
+                    };
+                    let mut search =
+                        Search::new(&model, Topology::empty(&model, &limits), Buffers::default());
+                    let mut actual = Vec::new();
+                    let mut yields = 0;
+                    loop {
+                        let before = deferred.calls.lock().unwrap().len();
+                        let step = search.poll(&deferred_cx, &mut Work::bounded(quantum), true);
+                        assert_eq!(
+                            deferred.calls.lock().unwrap().len(),
+                            before,
+                            "deferred poll never invokes the hook"
+                        );
+                        match step {
+                            Step::Pending => {
+                                let State::Pending(depth) = search.state else {
+                                    unreachable!()
+                                };
+                                modes[match search.buf.levels[depth].mode {
+                                    Mode::Vertex => 0,
+                                    Mode::Pendants => 1,
+                                    Mode::Label => 2,
+                                }] = true;
+                                let snapshot = search.topology().snapshot();
+                                assert_eq!(
+                                    topology_key(&snapshot),
+                                    topology_key(search.topology())
+                                );
+                                assert_eq!(snapshot.is_complete(), search.topology().is_complete());
+                                let keep = deferred.keeps(View::Topology(search.topology()));
+                                search.resume(&deferred_cx, keep);
+                            }
+                            Step::Ready => actual.push(topology_key(search.topology())),
+                            Step::Yield => yields += 1,
+                            Step::Done => break,
+                        }
+                    }
+                    assert!(yields > 0);
+                    assert_eq!(actual, expected);
+                    assert_eq!(
+                        *deferred.calls.lock().unwrap(),
+                        *native.calls.lock().unwrap()
+                    );
+                }
+            }
+        }
+        assert_eq!(
+            modes, [true; 3],
+            "vertex, pendant and anonymous-label cursors exercised"
+        );
+    }
+
+    #[test]
+    fn splitting_moves_sibling_cursor_without_replaying_hooks() {
+        let (model, limits) = search_fixture(&[3, 4], &[(0, 1); 4], 4, 4);
+        let stop = AtomicBool::new(false);
+        let native = Trace::default();
+        let mut cx = Context {
+            model: &model,
+            limits: &limits,
+            stop: &stop,
+            abort_check: None,
+            filter: Some(&native),
+        };
+        let expected = complete_keys(
+            &mut Search::new(&model, Topology::empty(&model, &limits), Buffers::default()),
+            &cx,
+        );
+        let split = Trace::default();
+        cx.filter = Some(&split);
+        let mut search = Search::new(&model, Topology::empty(&model, &limits), Buffers::default());
+        assert!(search.next(&cx));
+        let mut actual = vec![topology_key(search.topology())];
+        let count = split.calls.lock().unwrap().len();
+        let mut source = search
+            .split_source(&cx, &mut Buffers::default())
+            .expect("residual root siblings");
+        assert_eq!(
+            split.calls.lock().unwrap().len(),
+            count,
+            "splitting performs no callbacks"
+        );
+        actual.extend(complete_keys(&mut search, &cx));
+        let mut transferred = 0;
+        while source.next(&cx) {
+            transferred += 1;
+            let mut child = Search::new(&model, source.topology().clone(), Buffers::default());
+            actual.extend(complete_keys(&mut child, &cx));
+        }
+        assert!(
+            transferred > 0,
+            "the residual source must contain unseen children"
+        );
+        assert_eq!(actual, expected);
+        assert_eq!(*split.calls.lock().unwrap(), *native.calls.lock().unwrap());
+    }
+
+    #[test]
+    fn detached_pending_children_resolve_once_and_inherit_vetoes() {
+        let (model, limits) = search_fixture(&[3, 4], &[(0, 1); 4], 4, 4);
+        let stop = AtomicBool::new(false);
+        let native = Trace {
+            reject_loops: true,
+            ..Trace::default()
+        };
+        let mut cx = Context {
+            model: &model,
+            limits: &limits,
+            stop: &stop,
+            abort_check: None,
+            filter: Some(&native),
+        };
+        let expected = complete_keys(
+            &mut Search::new(&model, Topology::empty(&model, &limits), Buffers::default()),
+            &cx,
+        );
+        let detached = Trace {
+            reject_loops: true,
+            ..Trace::default()
+        };
+        cx.filter = Some(&detached);
+        let mut source =
+            Search::child_source(&model, Topology::empty(&model, &limits), Buffers::default());
+        let mut actual = Vec::new();
+        let mut marked = false;
+        loop {
+            match source.poll(&cx, &mut Work::bounded(1), true) {
+                Step::Pending => {
+                    let count = detached.calls.lock().unwrap().len();
+                    let mut child = source.take_pending_child();
+                    assert_eq!(detached.calls.lock().unwrap().len(), count);
+                    let keep = detached.keeps(View::Topology(&child));
+                    if child.resolve_prune(keep, true) {
+                        marked |= child.vetoed;
+                        actual.extend(complete_keys(
+                            &mut Search::new(&model, child, Buffers::default()),
+                            &cx,
+                        ));
+                    }
+                }
+                Step::Yield => {}
+                Step::Ready => panic!("the empty root is incomplete; each child needs a verdict"),
+                Step::Done => break,
+            }
+        }
+        assert!(
+            marked,
+            "a rejected partial root preserves its heredity marker"
+        );
+        assert_eq!(actual, expected);
+        assert_eq!(
+            *detached.calls.lock().unwrap(),
+            *native.calls.lock().unwrap()
+        );
+    }
+
+    #[test]
+    fn impossible_pendant_assignments_yield_without_losing_the_cursor() {
+        let legs = Legs::new(&[(0, 5)]).unwrap();
+        let mut pendants = Pendants {
+            types: vec![Corolla {
+                legs: 2,
+                ..Corolla::default()
+            }],
+            owners: vec![0, 1, 2],
+            ..Pendants::default()
+        };
+        let mut yields = 0;
+        loop {
+            match pendants.poll(&legs, legs.all, true, &mut Work::bounded(1)) {
+                Step::Yield => yields += 1,
+                Step::Done => break,
+                _ => panic!("three two-leg pendants cannot place five legs"),
+            }
+        }
+        assert!(yields > 3);
     }
 }

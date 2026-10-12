@@ -286,7 +286,7 @@ test_one TEST_NAME:
 test-verbose TEST_NAME:
     cargo nextest run {{ TEST_NAME }} --nocapture
 
-generation_oracle_filter := "binary(generation_oracle) or (package(feynkit-generator) and test(/^generation::/) and not test(/::failing::/)) or (package(linnet) and test(/^half_edge::generate::/)) or (package(feynkit-py) and test(=generation::tests::python_filters_prune_like_rust_filters))"
+generation_oracle_filter := "binary(generation_oracle) or (package(feynkit-generator) and test(/^generation::/) and not test(/::failing::/)) or (package(linnet) and test(/^half_edge::generate::/)) or (package(feynkit-py) and test(=generation::tests::python_typed_hooks_prune_like_rust_hooks))"
 
 # The fast tier runs every case of crates/feynkit-generator/tests/generation_oracle at 1, 8
 # and 32 threads, the search census of the small reference workloads, the generation unit tests

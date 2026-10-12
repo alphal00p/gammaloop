@@ -12,6 +12,8 @@
 //! topologies, and by slot class while the topology search places them, where distinct labels with
 //! a common stub can share an anonymous class.
 
+use std::sync::Arc;
+
 use ahash::AHashMap;
 
 use super::{
@@ -76,9 +78,8 @@ const EMPTY: u8 = u8::MAX;
 /// table of its own, keyed by stub type with linear probing, at most half full: memory grows with
 /// the transitions rather than with the states times the stub types.
 ///
-/// Signatures may carry integer weights (coupling orders, counterterm orders, any tag); every state
-/// then carries, per weight, the least and the most weight of the signatures containing it, which
-/// bound the weight of every vertex completing it.
+/// The transitions depend only on signatures. Each request derives its weight bounds from this
+/// same DAG, so changing a selected weight or vertex-count constraint never rebuilds it.
 #[derive(Debug)]
 struct Automaton {
     /// Per degree `0..=MAX_DEGREE`: its root, `NONE` without a signature of that degree.
@@ -90,9 +91,8 @@ struct Automaton {
     /// The signatures equal to state `s` are `rules[starts[s]..starts[s + 1]]`, ascending.
     starts: Vec<u32>,
     rules: Vec<u32>,
-    /// Per state and weight (`n_weights` per state): its least and most weight.
-    weights: Vec<[i32; 2]>,
-    n_weights: usize,
+    /// States with fewer remaining stubs first: every successor precedes its predecessors.
+    completion_order: Vec<VertexState>,
 }
 
 /// A transition of the [`Automaton`]: `(state, stub, target)`.
@@ -100,19 +100,13 @@ type Transition = (VertexState, u8, VertexState);
 
 impl Automaton {
     /// The automaton of `signatures`, given as stub types below `stubs` and of degree
-    /// `1..=MAX_DEGREE`, with every transition once. `weights` holds `n_weights` weights per
-    /// signature.
-    fn new(
-        signatures: &[Vec<u8>],
-        stubs: usize,
-        weights: &[i32],
-        n_weights: usize,
-    ) -> (Self, Vec<Transition>) {
+    /// `1..=MAX_DEGREE`, with every transition once.
+    fn new(signatures: &[Vec<u8>], stubs: usize) -> (Self, Vec<Transition>) {
         let width = stubs.div_ceil(64);
         let mut ids: AHashMap<u128, VertexState> = AHashMap::new();
         // per state, `width` words of a bit per stub type it takes, to list each transition once
         let mut takes: Vec<u64> = vec![];
-        let mut state_weights: Vec<[i32; 2]> = vec![];
+        let mut remaining = vec![];
         let mut transitions = vec![];
         let mut roots = [NONE; MAX_DEGREE + 1];
         let mut full = vec![];
@@ -149,14 +143,7 @@ impl Automaton {
                 let state = *ids.entry(set.key()).or_insert(id);
                 if state == id {
                     takes.resize(takes.len() + width, 0);
-                    state_weights.resize(state_weights.len() + n_weights, [i32::MAX, i32::MIN]);
-                }
-                let own = &weights[i * n_weights..(i + 1) * n_weights];
-                for (bounds, &w) in state_weights[state as usize * n_weights..]
-                    .iter_mut()
-                    .zip(own)
-                {
-                    *bounds = [bounds[0].min(w), bounds[1].max(w)];
+                    remaining.push(degree as usize - keep.iter().sum::<usize>());
                 }
                 // the sub-multiset with one stub of run `r` fewer takes that stub to this one
                 for (r, &(stub, _)) in runs.iter().enumerate() {
@@ -211,14 +198,15 @@ impl Automaton {
         for s in 0..n_states {
             starts[s + 1] += starts[s];
         }
+        let mut completion_order: Vec<_> = (0..n_states as VertexState).collect();
+        completion_order.sort_unstable_by_key(|&s| remaining[s as usize]);
         let automaton = Automaton {
             roots,
             tables,
             slots,
             starts,
             rules: full.into_iter().map(|(_, rule)| rule).collect(),
-            weights: state_weights,
-            n_weights,
+            completion_order,
         };
         (automaton, transitions)
     }
@@ -253,10 +241,60 @@ impl Automaton {
         &self.rules[self.starts[s] as usize..self.starts[s + 1] as usize]
     }
 
-    /// The least and the most weight `k` of the signatures containing `state`.
-    #[inline(always)]
-    fn weight(&self, state: VertexState, k: usize) -> [i32; 2] {
-        self.weights[state as usize * self.n_weights + k]
+    /// Completing rules of a state, computed only when a view asks for its domain.
+    fn domain(&self, state: VertexState) -> Vec<u32> {
+        let mut seen = std::collections::BTreeSet::new();
+        let mut stack = vec![state];
+        let mut rules = Vec::new();
+        while let Some(state) = stack.pop() {
+            if !seen.insert(state) {
+                continue;
+            }
+            rules.extend_from_slice(self.rules(state));
+            let (start, mask) = self.tables[state as usize];
+            stack.extend(
+                self.slots[start as usize..=(start + mask) as usize]
+                    .iter()
+                    .filter_map(|&(_, next)| (next != NONE).then_some(next)),
+            );
+        }
+        rules.sort_unstable();
+        rules.dedup();
+        rules
+    }
+
+    /// Per state, the minimum and maximum of each selected weight over all completing rules.
+    /// Terminal rules include distinct rules with identical stubs. The successor union then
+    /// contains exactly the signatures extending a partial multiset; duplicate paths do not
+    /// affect extrema. This visits transitions once per selected weight, without a state/rule
+    /// incidence matrix or an assumption about numeric state ordering.
+    fn weight_bounds(&self, weights: &[i32], n_weights: usize) -> Vec<[i32; 2]> {
+        let mut bounds = vec![[i32::MAX, i32::MIN]; self.len() * n_weights];
+        if n_weights == 0 {
+            return bounds;
+        }
+        for &state in &self.completion_order {
+            let first = state as usize * n_weights;
+            for &rule in self.rules(state) {
+                for k in 0..n_weights {
+                    let w = weights[rule as usize * n_weights + k];
+                    let b = &mut bounds[first + k];
+                    *b = [b[0].min(w), b[1].max(w)];
+                }
+            }
+            let (start, mask) = self.tables[state as usize];
+            for &(_, target) in &self.slots[start as usize..=(start + mask) as usize] {
+                if target == NONE {
+                    continue;
+                }
+                for k in 0..n_weights {
+                    let next = bounds[target as usize * n_weights + k];
+                    let b = &mut bounds[first + k];
+                    *b = [b[0].min(next[0]), b[1].max(next[1])];
+                }
+            }
+        }
+        bounds
     }
 
     /// `label` fits an edge from a vertex in state `a` to a higher one in state `b`.
@@ -363,18 +401,18 @@ impl Iterator for Scan<'_> {
             self_loop,
             next,
         } = *self;
-        let vertices = &model.vertices;
+        let vertices = &model.theory.vertices;
         let fits = |&l: &usize| {
             if self_loop {
-                vertices.loop_fits(&model.loop_labels[l], ends[0])
+                vertices.loop_fits(&model.theory.loop_labels[l], ends[0])
             } else {
-                vertices.label_fits(&model.labels[l], ends)
+                vertices.label_fits(&model.theory.labels[l], ends)
             }
         };
         let end = if self_loop {
-            model.loop_labels.len()
+            model.theory.loop_labels.len()
         } else {
-            model.labels.len()
+            model.theory.labels.len()
         };
         let l = (next..end).find(fits);
         self.next = l.map_or(end, |l| l + 1);
@@ -485,9 +523,9 @@ impl Legs {
     }
 }
 
-/// The dense model shared by both stages.
+/// Reusable structural tables, independent of external legs and selected budgets.
 #[derive(Debug)]
-pub(crate) struct Model {
+pub(crate) struct Theory {
     /// Distinct signature degrees, ascending.
     pub(crate) degrees: Vec<u8>,
     vertices: Automaton,
@@ -496,6 +534,17 @@ pub(crate) struct Model {
     /// Per state of `vertices`: the labels it can take. `None` with more than 128 labels or
     /// self-loop labels, where [`Fitting`] scans the transitions instead.
     masks: Option<Vec<Masks>>,
+    /// Every vertex has at most one rule for its stubs.
+    pub(crate) unique_rules: bool,
+    pub(crate) signatures: Arc<[Vec<u8>]>,
+    present: Vec<bool>,
+    charges: Charges,
+}
+
+/// Dense request data shared by topology search and dressing.
+#[derive(Debug)]
+pub(crate) struct Model {
+    pub(crate) theory: Arc<Theory>,
     /// The external legs by label class, as complete topologies carry them.
     pub(crate) legs: Legs,
     /// The external legs as the topology search places them: three or more label classes of
@@ -507,23 +556,17 @@ pub(crate) struct Model {
     slot_labels: Vec<Option<usize>>,
     /// The labels of anonymous slots in assignment order: `(slot class, label class)`.
     pub(crate) labelling: Vec<(usize, usize)>,
-    /// Every vertex has at most one rule for its stubs.
-    pub(crate) unique_rules: bool,
     /// The budgets of the request.
     pub(crate) budgets: Budgets,
-    /// Vertices can balance the charges and parities of the legs (see [`Model::balances`]);
+    /// Request-specific extrema, indexed by structural vertex state and selected weight.
+    weight_bounds: Vec<[i32; 2]>,
+    /// Vertices can balance the charges and parities of the legs (see [`Charges::balances`]);
     /// otherwise no graph exists.
     pub(crate) balanced: bool,
 }
 
-impl Model {
-    /// `signatures` and `legs` are given as stub types; legs as classes `(stub, multiplicity)`.
-    pub(crate) fn new(
-        n_fields: usize,
-        signatures: &[Vec<u8>],
-        legs: &[(u8, u8)],
-        request: &Request,
-    ) -> Result<Self, GenerationError> {
+impl Theory {
+    pub(crate) fn new(n_fields: usize, signatures: &[Vec<u8>]) -> Result<Self, GenerationError> {
         if n_fields > MAX_FIELDS {
             return Err(GenerationError::TooManyFields);
         }
@@ -541,9 +584,7 @@ impl Model {
         }
         degrees.sort_unstable();
         degrees.dedup();
-        let weights = request.signature_weights(signatures.len());
-        let (vertices, transitions) =
-            Automaton::new(signatures, 3 * n_fields, &weights, request.weights.len());
+        let (vertices, transitions) = Automaton::new(signatures, 3 * n_fields);
 
         let mut labels = vec![];
         let mut loop_labels = vec![];
@@ -589,6 +630,27 @@ impl Model {
             }
         }
         let unique_rules = (0..vertices.len() as VertexState).all(|s| vertices.rules(s).len() <= 1);
+        Ok(Self {
+            degrees,
+            masks: Masks::of(&vertices, &transitions, &labels, &loop_labels),
+            vertices,
+            labels,
+            loop_labels,
+            unique_rules,
+            signatures: signatures.into(),
+            present,
+            charges: Charges::new(n_fields, signatures),
+        })
+    }
+}
+
+impl Model {
+    /// `legs` are classes `(stub, multiplicity)` in the reusable theory's field ranks.
+    pub(crate) fn new(
+        theory: Arc<Theory>,
+        legs: &[(u8, u8)],
+        request: &Request,
+    ) -> Result<Self, GenerationError> {
         // slot classes in the order of their first label class
         let anonymous = |&(stub, mult): &(u8, u8)| {
             mult == 1 && legs.iter().filter(|&&other| other == (stub, 1)).count() > 2
@@ -617,81 +679,32 @@ impl Model {
             };
             labelling.push((s, c));
         }
+        let weights = request.signature_weights(theory.signatures.len());
+        let weight_bounds = theory
+            .vertices
+            .weight_bounds(&weights, request.weights.len());
+        let budgets = Budgets::new(
+            request,
+            weights,
+            &theory.signatures,
+            &theory.labels,
+            &theory.loop_labels,
+            legs,
+        )?;
+        let balanced = legs
+            .iter()
+            .all(|&(stub, _)| theory.present.get(stub as usize).copied().unwrap_or(false))
+            && theory.charges.balances(legs);
         Ok(Model {
-            degrees,
-            masks: Masks::of(&vertices, &transitions, &labels, &loop_labels),
-            budgets: Budgets::new(request, weights, signatures, &labels, &loop_labels, legs)?,
-            balanced: Self::balances(n_fields, signatures, legs),
-            vertices,
-            labels,
-            loop_labels,
+            theory,
+            budgets,
+            weight_bounds,
+            balanced,
             legs: Legs::new(legs)?,
             slots: Legs::new(&slots)?,
             slot_labels,
             labelling,
-            unique_rules,
         })
-    }
-
-    /// Whether vertices can balance the legs. The two stubs of an edge are an incoming and an
-    /// outgoing stub of a charged field or two stubs of a self-conjugate one, so summed over the
-    /// vertices, the flow of every charged field (incoming less outgoing stubs) equals that of the
-    /// legs, and the stubs of every field have the parity of the legs'. The legs' flows must then
-    /// lie in the span of the signatures' flows, and their parities in the span of the signatures'
-    /// parities, checked modulo a large prime and modulo two: the legs carry none of the charges
-    /// and parities that all signatures conserve.
-    fn balances(n_fields: usize, signatures: &[Vec<u8>], legs: &[(u8, u8)]) -> bool {
-        // a column per charged field: those with a directed stub
-        let mut columns = vec![usize::MAX; n_fields];
-        let mut n_charged = 0;
-        let leg_stubs = legs.iter().map(|(stub, _)| stub);
-        for &stub in signatures.iter().flatten().chain(leg_stubs) {
-            let column = &mut columns[stub as usize / 3];
-            if stub % 3 != UNDIRECTED && *column == usize::MAX {
-                *column = n_charged;
-                n_charged += 1;
-            }
-        }
-        // the flows over the charged fields and the parities of all fields, a bit each
-        fn vectors(
-            stubs: impl Iterator<Item = (u8, u8)>,
-            columns: &[usize],
-            flows: &mut [i64],
-        ) -> u128 {
-            flows.fill(0);
-            let mut parities = 0;
-            for (stub, mult) in stubs {
-                parities ^= (mult as u128 & 1) << (stub / 3);
-                let column = columns[stub as usize / 3];
-                match stub % 3 {
-                    INCOMING => flows[column] += mult as i64,
-                    OUTGOING => flows[column] -= mult as i64,
-                    _ => {}
-                }
-            }
-            parities
-        }
-        let mut flows = vec![0; n_charged];
-        let mut signature_flows = vec![];
-        let mut parity_basis = [0u128; 128];
-        for signature in signatures {
-            let stubs = signature.iter().map(|&stub| (stub, 1));
-            let parities = reduce_bits(&parity_basis, vectors(stubs, &columns, &mut flows));
-            if parities != 0 {
-                parity_basis[127 - parities.leading_zeros() as usize] = parities;
-            }
-            if flows.iter().any(|&f| f != 0) {
-                signature_flows.push(flows.clone());
-            }
-        }
-        signature_flows.sort_unstable();
-        signature_flows.dedup();
-        let mut span = Span::new(n_charged);
-        for flows in &signature_flows {
-            span.insert(flows);
-        }
-        let parities = vectors(legs.iter().copied(), &columns, &mut flows);
-        span.contains(&flows) && reduce_bits(&parity_basis, parities) == 0
     }
 
     /// The legs of the labelled slot classes in `slots` (packed by slot class), packed by label
@@ -704,37 +717,32 @@ impl Model {
             .sum()
     }
 
-    /// The legs of the anonymous slot classes in `slots`.
-    pub(crate) fn anonymous(&self, slots: u64) -> u64 {
-        self.slot_labels
-            .iter()
-            .enumerate()
-            .filter(|(_, c)| c.is_none())
-            .map(|(s, _)| self.slots.count(slots, s) as u64 * self.slots.one(s))
-            .sum()
+    /// Completing rules of a partial vertex; requested only by a view accessor.
+    pub(crate) fn domain(&self, state: VertexState) -> Vec<u32> {
+        self.theory.vertices.domain(state)
     }
 
     /// The signatures equal to the stubs of a vertex in `state`; empty until all its stubs are
     /// placed.
     pub(crate) fn rules(&self, state: VertexState) -> &[u32] {
-        self.vertices.rules(state)
+        self.theory.vertices.rules(state)
     }
 
     /// The least and the most weight `k` of a vertex completing `state`.
     #[inline(always)]
     pub(crate) fn weight(&self, state: VertexState, k: usize) -> [i32; 2] {
-        self.vertices.weight(state, k)
+        self.weight_bounds[state as usize * self.budgets.n_weights + k]
     }
 
     /// The state of a vertex of this degree with the legs in `slots` (packed by slot class), if
     /// a signature of the degree contains them.
     pub(crate) fn leg_state(&self, degree: u8, slots: u64) -> Option<VertexState> {
-        let mut state = self.vertices.root(degree)?;
+        let mut state = self.theory.vertices.root(degree)?;
         let (mut rest, mut c) = (slots, 0);
         while rest != 0 {
             let count = self.slots.count(rest, c);
             for _ in 0..count {
-                state = self.vertices.step(state, self.slots.stub[c])?;
+                state = self.theory.vertices.step(state, self.slots.stub[c])?;
             }
             rest -= count as u64 * self.slots.one(c);
             c += 1;
@@ -746,7 +754,7 @@ impl Model {
     /// one in state `b`.
     #[inline(always)]
     pub(crate) fn fitting(&self, [a, b]: [VertexState; 2], from: usize) -> Fitting<'_> {
-        match &self.masks {
+        match &self.theory.masks {
             Some(masks) => {
                 Fitting::Mask(masks[a as usize].at_u & masks[b as usize].at_v & at_least(from))
             }
@@ -757,7 +765,7 @@ impl Model {
     /// The self-loop labels from `from` on that fit a vertex in state `a`.
     #[inline(always)]
     pub(crate) fn fitting_loops(&self, a: VertexState, from: usize) -> Fitting<'_> {
-        match &self.masks {
+        match &self.theory.masks {
             Some(masks) => Fitting::Mask(masks[a as usize].loops & at_least(from)),
             None => Fitting::Scan(self.scan([a, a], true, from)),
         }
@@ -777,28 +785,104 @@ impl Model {
     /// which fits them.
     #[inline(always)]
     pub(crate) fn add_label(&self, [a, b]: [VertexState; 2], l: usize) -> [VertexState; 2] {
-        let label = self.labels[l];
-        let step = |s, stub| self.vertices.step(s, stub).expect("the label fits");
+        let label = self.theory.labels[l];
+        let step = |s, stub| self.theory.vertices.step(s, stub).expect("the label fits");
         [step(a, label.at_u), step(b, label.at_v)]
     }
 
     /// The state after adding self-loop label `l`, which fits it.
     #[inline(always)]
     pub(crate) fn add_loop(&self, a: VertexState, l: usize) -> VertexState {
-        let [s, t] = self.loop_labels[l].stubs;
-        let step = |s, stub| self.vertices.step(s, stub).expect("the label fits");
+        let [s, t] = self.theory.loop_labels[l].stubs;
+        let step = |s, stub| self.theory.vertices.step(s, stub).expect("the label fits");
         step(step(a, s), t)
     }
 
     /// Edges can take only one label and vertices one rule: a topology has one diagram.
     pub(crate) fn single_diagram(&self) -> bool {
-        self.labels.len() <= 1 && self.loop_labels.len() <= 1 && self.unique_rules
+        self.theory.labels.len() <= 1
+            && self.theory.loop_labels.len() <= 1
+            && self.theory.unique_rules
     }
 }
 
 /// The mask of the labels from `from` on.
 fn at_least(from: usize) -> u128 {
     u128::MAX.checked_shl(from as u32).unwrap_or(0)
+}
+
+/// Conserved flow and parity bases compiled once from vertex signatures.
+#[derive(Debug)]
+struct Charges {
+    columns: Vec<usize>,
+    span: Span,
+    parity_basis: [u128; 128],
+}
+
+impl Charges {
+    fn new(n_fields: usize, signatures: &[Vec<u8>]) -> Self {
+        let mut columns = vec![usize::MAX; n_fields];
+        let mut n_charged = 0;
+        for &stub in signatures.iter().flatten() {
+            let column = &mut columns[stub as usize / 3];
+            if stub % 3 != UNDIRECTED && *column == usize::MAX {
+                *column = n_charged;
+                n_charged += 1;
+            }
+        }
+        let mut charges = Self {
+            columns,
+            span: Span::new(n_charged),
+            parity_basis: [0; 128],
+        };
+        let mut flows = vec![0; n_charged];
+        let mut signature_flows = vec![];
+        for signature in signatures {
+            let stubs = signature.iter().map(|&stub| (stub, 1));
+            let parity = reduce_bits(&charges.parity_basis, charges.vector(stubs, &mut flows));
+            if parity != 0 {
+                charges.parity_basis[127 - parity.leading_zeros() as usize] = parity;
+            }
+            if flows.iter().any(|&f| f != 0) {
+                signature_flows.push(flows.clone());
+            }
+        }
+        signature_flows.sort_unstable();
+        signature_flows.dedup();
+        for flows in &signature_flows {
+            charges.span.insert(flows);
+        }
+        charges
+    }
+
+    /// Fill directed flows and return field parities; stubs have already been validated.
+    fn vector(&self, stubs: impl Iterator<Item = (u8, u8)>, flows: &mut [i64]) -> u128 {
+        flows.fill(0);
+        let mut parities = 0;
+        for (stub, mult) in stubs {
+            parities ^= (mult as u128 & 1) << (stub / 3);
+            let column = self.columns[stub as usize / 3];
+            match stub % 3 {
+                INCOMING => flows[column] += mult as i64,
+                OUTGOING => flows[column] -= mult as i64,
+                _ => {}
+            }
+        }
+        parities
+    }
+
+    /// Whether vertices can balance the legs. The two stubs of an edge are an incoming and an
+    /// outgoing stub of a charged field or two stubs of a self-conjugate one, so summed over the
+    /// vertices, the flow of every charged field (incoming less outgoing stubs) equals that of the
+    /// legs, and the stubs of every field have the parity of the legs'. The legs' flows must then
+    /// lie in the span of the signatures' flows, and their parities in the span of the signatures'
+    /// parities, checked modulo a large prime and modulo two: the legs carry none of the charges
+    /// and parities that all signatures conserve.
+    fn balances(&self, legs: &[(u8, u8)]) -> bool {
+        let mut flows = vec![0; self.span.0.len()];
+        let parities = self.vector(legs.iter().copied(), &mut flows);
+        self.span.contains(&flows) && reduce_bits(&self.parity_basis, parities) == 0
+    }
 }
 
 /// The prime modulus of [`Span`].
@@ -876,7 +960,19 @@ fn reduce_bits(basis: &[u128; 128], mut x: u128) -> u128 {
 mod tests {
     use ahash::AHashMap;
 
-    use super::{Automaton, Direction, Legs, Model, Request, StubSet, VertexState};
+    use super::{
+        Arc, Automaton, Direction, GenerationError, Legs, Model, Request, StubSet, Theory,
+        VertexState,
+    };
+
+    fn model(
+        n_fields: usize,
+        signatures: &[Vec<u8>],
+        legs: &[(u8, u8)],
+        request: &Request,
+    ) -> Result<Model, GenerationError> {
+        Model::new(Arc::new(Theory::new(n_fields, signatures)?), legs, request)
+    }
 
     #[test]
     fn stub_sets_are_sorted_multisets() {
@@ -895,14 +991,14 @@ mod tests {
     #[test]
     fn automaton_states_are_the_sub_multisets_of_the_signatures() {
         // stub types 0 = a (undirected), 4 = e in, 5 = e out: e e~ a, a a a, a a a a twice
-        let model = Model::new(
+        let model = model(
             2,
             &[vec![4, 5, 0], vec![0; 3], vec![0; 4], vec![0; 4]],
             &[],
             &Request::default(),
         )
         .unwrap();
-        let v = &model.vertices;
+        let v = &model.theory.vertices;
         // degree 3: {}, {a}, {e}, {e~}, {a e}, {a e~}, {e e~}, {a e e~}, {a a}, {a a a};
         // degree 4: {}, {a}, {a a}, {a a a}, {a a a a}
         assert_eq!(v.len(), 15);
@@ -921,7 +1017,7 @@ mod tests {
         assert_eq!(walk(3, &[4, 4]), None);
         assert_eq!(walk(4, &[4]), None);
         assert_eq!(v.root(5), None);
-        assert!(!model.unique_rules);
+        assert!(!model.theory.unique_rules);
     }
 
     #[test]
@@ -932,9 +1028,9 @@ mod tests {
             ..Request::default()
         };
         let signatures = [vec![4, 5, 0], vec![0; 3], vec![0; 4], vec![0; 4]];
-        let model = Model::new(2, &signatures, &[], &request).unwrap();
+        let model = model(2, &signatures, &[], &request).unwrap();
         let walk = |degree, stubs: &[u8]| {
-            let v = &model.vertices;
+            let v = &model.theory.vertices;
             let state = stubs
                 .iter()
                 .try_fold(v.root(degree).unwrap(), |s, &stub| v.step(s, stub));
@@ -949,10 +1045,119 @@ mod tests {
     }
 
     #[test]
+    fn one_automaton_bounds_independent_signed_and_indicator_columns() {
+        use std::collections::BTreeSet;
+
+        let signatures = [
+            vec![0, 1, 2],
+            vec![0, 0, 2],
+            vec![0, 1, 2], // a distinct rule, including a different weight
+            vec![1, 2, 2],
+            vec![0],
+            vec![2; 4],
+        ];
+        let (automaton, _) = Automaton::new(&signatures, 3);
+        // Enumerate partial multisets directly, without using the transition DAG as the oracle.
+        let mut partials = BTreeSet::new();
+        for signature in &signatures {
+            for mask in 0usize..1 << signature.len() {
+                let mut partial: Vec<_> = signature
+                    .iter()
+                    .enumerate()
+                    .filter_map(|(i, &stub)| (mask >> i & 1 == 1).then_some(stub))
+                    .collect();
+                partial.sort_unstable();
+                partials.insert((signature.len() as u8, partial));
+            }
+        }
+        assert_eq!(partials.len(), automaton.len());
+        for columns in [0, 1, 3, 7] {
+            let weights: Vec<_> = (0..signatures.len())
+                .flat_map(|rule| {
+                    (0..columns).map(move |k| match k {
+                        0 => (rule as i32 * 7) - 19,
+                        1 => i32::from(rule == 2),
+                        2 => i32::from(rule % 2 == 0),
+                        3 => i32::MIN,
+                        4 => i32::MAX,
+                        _ => ((rule * 13 + k * 11) % 17) as i32 - 8,
+                    })
+                })
+                .collect();
+            let bounds = automaton.weight_bounds(&weights, columns);
+            assert_eq!(bounds.len(), automaton.len() * columns);
+            for (degree, partial) in &partials {
+                let state = partial
+                    .iter()
+                    .fold(automaton.root(*degree).unwrap(), |s, &stub| {
+                        automaton.step(s, stub).unwrap()
+                    });
+                let matching: Vec<_> = signatures
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, signature)| {
+                        signature.len() == *degree as usize
+                            && (0..3).all(|stub| {
+                                partial.iter().filter(|&&s| s == stub).count()
+                                    <= signature.iter().filter(|&&s| s == stub).count()
+                            })
+                    })
+                    .map(|(rule, _)| rule)
+                    .collect();
+                assert!(!matching.is_empty());
+                for k in 0..columns {
+                    let values = || matching.iter().map(|&rule| weights[rule * columns + k]);
+                    assert_eq!(
+                        bounds[state as usize * columns + k],
+                        [values().min().unwrap(), values().max().unwrap()],
+                        "degree={degree}, partial={partial:?}, column={k}"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn shared_theory_keeps_request_budgets_and_legs_separate() {
+        let theory = Arc::new(Theory::new(2, &[vec![4, 5, 0], vec![0; 3]]).unwrap());
+        let first = Model::new(
+            Arc::clone(&theory),
+            &[(0, 2)],
+            &Request {
+                weights: vec![(vec![-3, 8], [-6, 16])],
+                ..Request::default()
+            },
+        )
+        .unwrap();
+        let second = Model::new(
+            Arc::clone(&theory),
+            &[(4, 1), (5, 1), (0, 1)],
+            &Request {
+                weights: vec![(vec![1, 0], [1, 1]), (vec![0, 1], [0, 2])],
+                ..Request::default()
+            },
+        )
+        .unwrap();
+        let root = theory.vertices.root(3).unwrap();
+        assert!(Arc::ptr_eq(&first.theory, &second.theory));
+        assert_eq!(first.weight(root, 0), [-3, 8]);
+        assert_eq!(second.weight(root, 0), [0, 1]);
+        assert_eq!(second.weight(root, 1), [0, 1]);
+        assert_eq!(first.legs.total, 2);
+        assert_eq!(second.legs.total, 3);
+        assert!(first.balanced && second.balanced);
+        // A directed photon is absent from this theory, even though the field is known.
+        let absent = Model::new(theory, &[(1, 1)], &Request::default()).unwrap();
+        assert!(!absent.balanced);
+        drop(second);
+        assert_eq!(first.weight(root, 0), [-3, 8]);
+    }
+
+    #[test]
     fn legs_carry_only_what_vertices_balance() {
         // QED, e e~ a: stub types 0 = a, 4 = e in, 5 = e out
         let qed = |legs: &[(u8, u8)]| {
-            Model::new(2, &[vec![4, 5, 0]], legs, &Request::default())
+            model(2, &[vec![4, 5, 0]], legs, &Request::default())
                 .unwrap()
                 .balanced
         };
@@ -964,7 +1169,7 @@ mod tests {
         assert!(!qed(&[(4, 1), (0, 1)]));
         // phi^3 and phi^2 chi^2 (stub types 0 = phi, 3 = chi): chi comes in pairs
         let scalars = |legs: &[(u8, u8)]| {
-            Model::new(
+            model(
                 2,
                 &[vec![0; 3], vec![3, 3, 0, 0]],
                 legs,
@@ -982,7 +1187,7 @@ mod tests {
     fn state_tables_hold_exactly_the_transitions() {
         // 65 charged fields with a photon: 198 stub types, of which each state takes few
         let signatures: Vec<Vec<u8>> = (1..=65).map(|f| vec![3 * f + 1, 3 * f + 2, 0]).collect();
-        let (v, transitions) = Automaton::new(&signatures, 198, &[], 0);
+        let (v, transitions) = Automaton::new(&signatures, 198);
         let listed: AHashMap<_, _> = transitions
             .iter()
             .map(|&(state, stub, target)| ((state, stub), target))
@@ -1003,18 +1208,18 @@ mod tests {
     fn masks_select_the_labels_that_the_transitions_admit() {
         // QCD-like: g g g, g g g g, q~ q g, c~ c g with q = field 1, c = field 2
         let signatures = [vec![0; 3], vec![0; 4], vec![4, 5, 0], vec![7, 8, 0]];
-        let model = Model::new(3, &signatures, &[(0, 2)], &Request::default()).unwrap();
-        assert!(model.masks.is_some());
+        let model = model(3, &signatures, &[(0, 2)], &Request::default()).unwrap();
+        assert!(model.theory.masks.is_some());
         let scan = |ends, self_loop, from| model.scan(ends, self_loop, from).collect::<Vec<_>>();
-        let n = model.vertices.len() as VertexState;
+        let n = model.theory.vertices.len() as VertexState;
         let mut fitting = 0;
         for a in 0..n {
-            for from in 0..=model.loop_labels.len() {
+            for from in 0..=model.theory.loop_labels.len() {
                 let loops: Vec<_> = model.fitting_loops(a, from).collect();
                 assert_eq!(loops, scan([a, a], true, from));
             }
             for b in 0..n {
-                for from in 0..=model.labels.len() {
+                for from in 0..=model.theory.labels.len() {
                     let labels: Vec<_> = model.fitting([a, b], from).collect();
                     assert_eq!(labels, scan([a, b], false, from));
                     fitting += labels.len();
@@ -1028,16 +1233,16 @@ mod tests {
     fn many_labels_scan_the_transitions() {
         // 65 charged fields with a photon: 131 paired labels
         let signatures: Vec<Vec<u8>> = (1..=65).map(|f| vec![3 * f + 1, 3 * f + 2, 0]).collect();
-        let model = Model::new(66, &signatures, &[(0, 2)], &Request::default()).unwrap();
-        assert_eq!(model.labels.len(), 131);
-        assert!(model.masks.is_none());
+        let model = model(66, &signatures, &[(0, 2)], &Request::default()).unwrap();
+        assert_eq!(model.theory.labels.len(), 131);
+        assert!(model.theory.masks.is_none());
         let photon = model.leg_state(3, model.slots.one(0)).unwrap();
         // from a vertex with a photon and an incoming fermion of field 65 to a vertex with a
         // photon, only that fermion fits, flowing out of the first vertex
-        let e = model.vertices.step(photon, 3 * 65 + 1).unwrap();
+        let e = model.theory.vertices.step(photon, 3 * 65 + 1).unwrap();
         let fits: Vec<_> = model.fitting([e, photon], 0).collect();
         assert_eq!(fits.len(), 1);
-        let label = model.labels[fits[0]];
+        let label = model.theory.labels[fits[0]];
         assert_eq!((label.field, label.direction), (65, Direction::Forward));
         assert_eq!(model.fitting([e, photon], fits[0] + 1).count(), 0);
         let [full, partial] = model.add_label([e, photon], fits[0]);

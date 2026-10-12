@@ -3,6 +3,7 @@
 
 import builtins
 import enum
+import fractions
 import os
 import pathlib
 import typing
@@ -12,12 +13,17 @@ __all__ = [
     "AUTO",
     "Angle",
     "Auto",
+    "Bridges",
     "Color",
+    "Countable",
+    "Counts",
     "CutPartition",
     "Cycle",
     "Dash",
     "DebugLevel",
+    "Diagram",
     "DiagramRender",
+    "Diagrams",
     "DirectionBasis",
     "DotCodec",
     "DotEdgeData",
@@ -29,9 +35,7 @@ __all__ = [
     "EdgeSignature",
     "Flow",
     "Fraction",
-    "GeneratedGraphs",
     "GenerationStage",
-    "GenerationView",
     "GlobalData",
     "Graph",
     "GraphStyleOptions",
@@ -42,16 +46,24 @@ __all__ = [
     "LayoutFrame",
     "LayoutSettings",
     "LayoutStream",
+    "Legs",
     "Length",
+    "LoopCounts",
     "Mark",
     "MathSymbol",
     "Node",
     "Orientation",
     "OrientedCut",
+    "Plan",
+    "PlanCriterion",
+    "PlanReport",
+    "Progress",
     "Anchor",
     "Compass",
     "DanglingTangent",
     "DashPattern",
+    "DiagramView",
+    "DressingView",
     "EdgeView",
     "EdgeDrawing",
     "EdgeLengthResolution",
@@ -75,15 +87,22 @@ __all__ = [
     "RankAlignment",
     "RoutePoints",
     "Routing",
+    "SkeletonView",
     "StrokeCap",
     "StrokeJoin",
     "TextStyle",
+    "Query",
     "Ratio",
     "RelativeLength",
     "RenderSettings",
+    "Run",
+    "Skeleton",
+    "Skeletons",
     "Stroke",
+    "Structure",
     "Subgraph",
     "TextLabel",
+    "Theory",
     "TraversalTree",
     "TypstBind",
     "TypstCall",
@@ -279,6 +298,21 @@ class Auto:
     def __deepcopy__(self, _memo: typing.Any) -> Auto: ...
 
 @typing.final
+class Bridges:
+    r"""
+    Bridge policy; dangling external legs never count as bridges.
+    """
+    @staticmethod
+    def any() -> Bridges: ...
+    @staticmethod
+    def at_most(count: builtins.int) -> Bridges: ...
+    @staticmethod
+    def one_pi() -> Bridges: ...
+    @staticmethod
+    def one_pi_in_loops() -> Bridges: ...
+    def __repr__(self) -> builtins.str: ...
+
+@typing.final
 class Color:
     r"""
     A safe Typst color value.
@@ -287,6 +321,39 @@ class Color:
     @staticmethod
     def rgb(red: builtins.int, green: builtins.int, blue: builtins.int, alpha: typing.Optional[builtins.int] = None) -> Color: ...
     def __repr__(self) -> builtins.str: ...
+
+@typing.final
+class Countable:
+    r"""
+    A native rule/propagator/chord/closed-line count selector.
+    """
+    @staticmethod
+    def vertices(rules: typing.Sequence[builtins.int]) -> Countable: ...
+    @staticmethod
+    def propagators(fields: typing.Sequence[_Key]) -> Countable: ...
+    @staticmethod
+    def chords(fields: typing.Sequence[_Key]) -> Countable: ...
+    @staticmethod
+    def closed_lines(fields: typing.Sequence[_Key]) -> Countable: ...
+
+@typing.final
+class Counts:
+    r"""
+    Exact totals for a generation run, including whether the search completed.
+    """
+    @property
+    def skeletons(self) -> builtins.int: ...
+    @property
+    def diagrams(self) -> builtins.int: ...
+    @property
+    def sum_inv_aut(self) -> fractions.Fraction:
+        r"""
+        The exact sum of inverse automorphism orders, without process-specific factors.
+        """
+    @property
+    def per_loop(self) -> dict[int, LoopCounts]: ...
+    @property
+    def complete(self) -> builtins.bool: ...
 
 @typing.final
 class CutPartition:
@@ -325,6 +392,24 @@ class Dash:
     def __repr__(self) -> builtins.str: ...
 
 @typing.final
+class Diagram:
+    r"""
+    Owned compact output. Graph and canonical identity are computed only by their accessors.
+    """
+    @property
+    def loops(self) -> builtins.int: ...
+    def symmetry_factor(self) -> builtins.int: ...
+    def rules(self) -> builtins.list[builtins.int]: ...
+    def edges(self) -> builtins.list[tuple[builtins.int, builtins.int, EdgeSignature]]: ...
+    def legs(self) -> list[tuple[int, _Key, EdgeSignature]]: ...
+    def skeleton(self) -> SkeletonView: ...
+    def graph(self) -> Graph: ...
+    def canonical_form(self) -> tuple[tuple[int, ...], tuple[int, ...], tuple[_Key, ...], tuple[tuple[typing.Any, ...], ...]]:
+        r"""
+        Hashable native canonical words and key tables; no graph materialization is needed.
+        """
+
+@typing.final
 class DiagramRender:
     r"""
     An immutable graph rendering with source inspection, file exports, and notebook display.
@@ -361,6 +446,16 @@ class DiagramRender:
     def _repr_svg_(self) -> typing.Optional[builtins.str]: ...
     def _mime_(self) -> tuple[builtins.str, builtins.str]: ...
     def __repr__(self) -> builtins.str: ...
+
+@typing.final
+class Diagrams:
+    r"""
+    A lazy stream of compact diagrams; no Python Graph or canonical form is created by next().
+    """
+    @property
+    def aborted(self) -> builtins.bool: ...
+    def __iter__(self) -> Diagrams: ...
+    def __next__(self) -> typing.Optional[Diagram]: ...
 
 @typing.final
 class DotCodec:
@@ -460,26 +555,14 @@ class Edge:
 @typing.final
 class EdgeSignature:
     r"""
-    A typed slot of a vertex signature or an external leg: a field and its direction relative to
-    its vertex, outgoing (True), incoming (False) or undirected (None). Two slots pair into an
-    edge when their fields are equal and both are undirected, or one is outgoing and the other
-    incoming. Fields are hashable keys, compared and ordered like `Graph.canonize` keys.
+    A field and its direction at a vertex: outgoing True, incoming False, undirected None.
     """
     @property
-    def data(self) -> _Key:
-        r"""
-        The field, as given.
-        """
+    def data(self) -> _Key: ...
     @property
     def direction(self) -> typing.Optional[builtins.bool]: ...
-    def __new__(cls, data: _Key, direction: typing.Optional[builtins.bool] = None) -> EdgeSignature:
-        r"""
-        A field `data` with an outgoing (True), incoming (False) or undirected (None) direction.
-        """
-    def flip(self) -> EdgeSignature:
-        r"""
-        The same field with the opposite direction.
-        """
+    def __new__(cls, data: _Key, direction: typing.Optional[builtins.bool] = None) -> EdgeSignature: ...
+    def flip(self) -> EdgeSignature: ...
     def __repr__(self) -> builtins.str: ...
 
 @typing.final
@@ -491,97 +574,6 @@ class Fraction:
     def value(self) -> builtins.float: ...
     def __new__(cls, value: builtins.float) -> Fraction: ...
     def __repr__(self) -> builtins.str: ...
-
-@typing.final
-class GeneratedGraphs:
-    r"""
-    The graphs of `Graph.generate` with their automorphism-group orders, in depth-first search
-    order; each step searches up to the next graph.
-    """
-    def __iter__(self) -> GeneratedGraphs: ...
-    def __next__(self) -> tuple[Graph, int]: ...
-
-@typing.final
-class GenerationView:
-    r"""
-    A search state of `Graph.generate`, as its `filter_fn` sees it. Valid only during the call
-    that received it.
-
-    Vertices are numbered `0..n_vertices` and keep their numbers in every completion of the state:
-    the topology stage adds vertices with higher numbers, the later stages fields and signatures.
-    """
-    @property
-    def stage(self) -> GenerationStage: ...
-    @property
-    def loop_order(self) -> builtins.int:
-        r"""
-        The loop order being generated.
-        """
-    @property
-    def n_vertices(self) -> builtins.int: ...
-    @property
-    def loops(self) -> builtins.int:
-        r"""
-        Independent cycles of the edges placed so far.
-        """
-    @property
-    def unplaced_legs(self) -> builtins.int:
-        r"""
-        Legs not attached to a vertex yet; zero from `GenerationStage.Fields` on.
-        """
-    @property
-    def is_topology_complete(self) -> builtins.bool:
-        r"""
-        Every vertex, edge and leg is placed; always true from `GenerationStage.Fields` on.
-        """
-    def degree(self, vertex: builtins.int) -> builtins.int: ...
-    def open_stubs(self, vertex: builtins.int) -> builtins.int:
-        r"""
-        Slots of `vertex` not taken by an edge or a leg yet; zero from `GenerationStage.Fields`
-        on.
-        """
-    def self_loops(self, vertex: builtins.int) -> builtins.int: ...
-    def multiplicity(self, u: builtins.int, v: builtins.int) -> builtins.int:
-        r"""
-        Number of edges between the distinct vertices `u` and `v`.
-        """
-    def legs(self, vertex: builtins.int) -> list[tuple[_Key, EdgeSignature]]:
-        r"""
-        The labels of the legs attached to `vertex`, with their slots at it.
-        """
-    def edges(self) -> builtins.list[tuple[builtins.int, builtins.int, typing.Optional[EdgeSignature]]]:
-        r"""
-        Every edge between vertices as `(u, v, slot)`, equal ends for a self-loop, with the field
-        and direction at `u` once assigned: an outgoing slot points the edge from `u` to `v`. From
-        `GenerationStage.Fields` on, the edges with a field come first.
-        """
-    def rules(self, vertex: builtins.int) -> typing.Optional[builtins.list[builtins.int]]:
-        r"""
-        The indices of the signatures that fit `vertex` once every slot of it has a field (from
-        `GenerationStage.Fields` on), and in a complete graph the signature of `vertex`.
-        """
-    def bridges(self) -> builtins.list[tuple[builtins.int, builtins.int, builtins.list[builtins.int]]]:
-        r"""
-        The bridges with a final side, as `(outside, inside, side)`: `side` holds `inside` and has
-        no open slots, so no later vertex or edge attaches to it and the bridge stays a bridge. A
-        bridge of a complete topology is listed once per side.
-        """
-    def loops_in(self, side: typing.Sequence[builtins.int]) -> builtins.int:
-        r"""
-        Independent cycles of the subgraph on the non-empty connected vertex set `side`, such as
-        the side of a bridge; raises ValueError for another set.
-        """
-    def graph(self) -> Graph:
-        r"""
-        The state as a graph: the edges placed so far with their field once assigned (None
-        before), the legs labelled as in generated graphs, and on each node the index of its
-        signature once it is the only one that fits (None before). Open slots are left out.
-        """
-    def complete_graph(self) -> typing.Optional[Graph]:
-        r"""
-        The complete graph as `Graph.generate` yields it; None before
-        `GenerationStage.Complete`.
-        """
 
 @typing.final
 class GlobalData:
@@ -812,41 +804,6 @@ class Graph:
         r"""
         Export a Mermaid flowchart, with escaped display labels and dangling terminals.
         """
-    @staticmethod
-    def generate(external_edges: typing.Sequence[tuple[_Key, EdgeSignature]], vertex_signatures: typing.Sequence[typing.Sequence[EdgeSignature]], *, loops: int | range | None = None, max_vertices: typing.Optional[builtins.int] = None, max_bridges: typing.Optional[builtins.int] = None, allow_self_loops: builtins.bool = False, allow_zero_flow_edges: builtins.bool = False, filter_fn: typing.Callable[[GenerationView], bool] | None = None, progress_fn: typing.Callable[[int, int, int], bool] | None = None) -> GeneratedGraphs:
-        r"""
-        Stream the connected graphs built from `vertex_signatures` and the external legs, one per
-        isomorphism class, with their automorphism-group orders (the symmetry factors).
-
-        `external_edges` pairs each leg label with its slot at the vertex the leg attaches to;
-        legs with equal labels and slots are interchangeable. Fields and labels are hashable keys,
-        compared and ordered like `canonize` keys. A generated graph has a node per vertex with the
-        index of its signature as data, an edge per propagator with its field as data, directed
-        from the outgoing to the incoming slot, and per leg a dangling half-edge with the leg
-        label as data and the direction of the leg's slot; paired half-edges carry None.
-        Signatures with identical slots are distinct vertex rules and give distinct graphs.
-
-        `loops` is a loop order or a `range` of them. `loops` or `max_vertices` (legs are not
-        vertices) must bound the search, and `max_vertices` is needed with signatures of two or
-        fewer slots. `max_bridges=0` keeps one-particle-irreducible graphs; legs are never
-        bridges. `allow_zero_flow_edges` allows bridges with no leg on one side.
-
-        `filter_fn` prunes the search. It sees every search state as a `GenerationView`: partial
-        untyped topologies (`GenerationStage.Topology`), then for each accepted complete topology
-        partial field assignments (`Fields`) and complete graphs (`Complete`). A rejected state is
-        dropped with everything that completes it, so the filter must be hereditary within each
-        stage: when it rejects a partial topology, it rejects every complete topology completing
-        it, and when it rejects a partial field assignment, every complete graph completing it.
-        The output is then exactly the graphs whose complete topology and complete graph it
-        accepts. Each state costs a call: test a condition at the stage that decides it and
-        accept the earlier states, and keep verdicts on complete graphs independent of the vertex
-        numbering.
-
-        `progress_fn(loops, topologies, graphs)` runs after every complete topology and every
-        yielded graph; returning False stops the generation. The search runs without the GIL,
-        which the callbacks take while they run. An exception in a callback, or a signal such as
-        KeyboardInterrupt, stops the generation and is raised by the step that saw it.
-        """
 
 @typing.final
 class GraphStyleOptions:
@@ -975,6 +932,16 @@ class LayoutStream:
     def __next__(self) -> LayoutFrame: ...
 
 @typing.final
+class Legs:
+    r"""
+    Ordered external slots. Equal labels and signatures describe interchangeable legs.
+    """
+    def __new__(cls, slots: typing.Sequence[tuple[_Key, EdgeSignature]] | None = None) -> Legs: ...
+    def leg(self, label: _Key, stub: EdgeSignature) -> Legs: ...
+    def identical(self, label: _Key, stub: EdgeSignature, multiplicity: builtins.int) -> Legs: ...
+    def __len__(self) -> builtins.int: ...
+
+@typing.final
 class Length:
     r"""
     A Typst length such as `2pt` or `1.2em`.
@@ -995,6 +962,18 @@ class Length:
     @staticmethod
     def em(value: builtins.float) -> Length: ...
     def __repr__(self) -> builtins.str: ...
+
+@typing.final
+class LoopCounts:
+    r"""
+    Exact totals for one loop order.
+    """
+    @property
+    def skeletons(self) -> builtins.int: ...
+    @property
+    def diagrams(self) -> builtins.int: ...
+    @property
+    def sum_inv_aut(self) -> fractions.Fraction: ...
 
 @typing.final
 class Mark:
@@ -1056,6 +1035,204 @@ class OrientedCut:
         Return the signed intersection count with a cycle from the same graph revision.
         """
     def __repr__(self) -> builtins.str: ...
+
+@typing.final
+class Plan:
+    r"""
+    A compiled request, reusable across independent executions.
+    """
+    def __new__(cls, theory: Theory, query: Query) -> Plan: ...
+    def explain(self) -> PlanReport: ...
+    def count(self, run: typing.Optional[Run] = None, *, parallel: typing.Optional[builtins.bool] = None, check_heredity: typing.Optional[builtins.bool] = None) -> Counts: ...
+    def diagrams(self, run: typing.Optional[Run] = None, *, parallel: typing.Optional[builtins.bool] = None, check_heredity: typing.Optional[builtins.bool] = None) -> Diagrams: ...
+    def skeletons(self, run: typing.Optional[Run] = None, *, parallel: typing.Optional[builtins.bool] = None, check_heredity: typing.Optional[builtins.bool] = None) -> Skeletons: ...
+
+@typing.final
+class PlanCriterion:
+    r"""
+    One effective constraint and where it is enforced.
+    """
+    @property
+    def criterion(self) -> builtins.str: ...
+    @property
+    def effective(self) -> builtins.str: ...
+    @property
+    def stage(self) -> builtins.str: ...
+    @property
+    def hereditary(self) -> builtins.bool: ...
+    @property
+    def role(self) -> builtins.str: ...
+
+@typing.final
+class PlanReport:
+    r"""
+    Effective restrictions and propagation decisions from compiling a query.
+    """
+    @property
+    def criteria(self) -> builtins.list[PlanCriterion]: ...
+    @property
+    def empty_partitions(self) -> builtins.list[tuple[builtins.int, builtins.str]]: ...
+    @property
+    def infeasible(self) -> typing.Optional[builtins.str]: ...
+    def __str__(self) -> builtins.str: ...
+
+@typing.final
+class Progress:
+    r"""
+    Progress at an exact committed-output boundary; returning false stops before further work.
+    """
+    @property
+    def loops(self) -> builtins.int: ...
+    @property
+    def topologies(self) -> int: ...
+    @property
+    def diagrams(self) -> int: ...
+
+@typing.final
+class DiagramView:
+    r"""
+    A scoped fully assigned diagram supplied to final selection.
+    """
+    @property
+    def stage(self) -> GenerationStage: ...
+    @property
+    def loop_order(self) -> builtins.int:
+        r"""
+        The loop order being generated.
+        """
+    @property
+    def n_vertices(self) -> builtins.int: ...
+    @property
+    def loops(self) -> builtins.int:
+        r"""
+        Independent cycles of the edges placed so far.
+        """
+    @property
+    def unplaced_legs(self) -> builtins.int: ...
+    @property
+    def is_topology_complete(self) -> builtins.bool: ...
+    @property
+    def is_complete(self) -> builtins.bool: ...
+    def degree(self, vertex: builtins.int) -> builtins.int: ...
+    def open_stubs(self, vertex: builtins.int) -> builtins.int: ...
+    def self_loops(self, vertex: builtins.int) -> builtins.int: ...
+    def multiplicity(self, u: builtins.int, v: builtins.int) -> builtins.int:
+        r"""
+        Number of edges between distinct vertices; use self_loops for equal ends.
+        """
+    def legs(self, vertex: builtins.int) -> list[tuple[_Key, EdgeSignature]]:
+        r"""
+        Attached external labels and their field/direction at this vertex.
+        """
+    def edges(self) -> builtins.list[tuple[builtins.int, builtins.int, typing.Optional[EdgeSignature]]]:
+        r"""
+        Internal edges `(u, v, stub)`; stub is None before its field is assigned.
+        """
+    def rules(self, vertex: builtins.int) -> typing.Optional[builtins.list[builtins.int]]:
+        r"""
+        Exact matching rules once all vertex stubs have fields; otherwise None.
+        """
+    def domains(self, vertex: builtins.int) -> builtins.list[builtins.int]:
+        r"""
+        Compatible rules in declaration order, including rules for partial assignments.
+        """
+    def order_bounds(self) -> dict[str, tuple[int, int]] | None:
+        r"""
+        Inclusive named weight bounds once the skeleton is complete and feasible.
+        """
+    def skeleton_id(self) -> tuple[typing.Any, ...] | None:
+        r"""
+        Stable untyped topology identity; None while edges or external labels are missing.
+        """
+    def bridges(self) -> builtins.list[tuple[builtins.int, builtins.int, builtins.list[builtins.int]]]:
+        r"""
+        Bridges with a final side, as `(outside, inside, side_vertices)`.
+        """
+    def loops_in(self, side: typing.Sequence[builtins.int]) -> builtins.int:
+        r"""
+        Independent cycles on a nonempty connected set of vertices.
+        """
+    def graph(self) -> Graph:
+        r"""
+        Materialize the current state, omitting open slots and using None for unknown keys.
+        """
+    def complete_graph(self) -> typing.Optional[Graph]:
+        r"""
+        Materialize a fully assigned graph; None before the Complete stage.
+        """
+
+@typing.final
+class DressingView:
+    r"""
+    A scoped complete topology with fields and rules being assigned.
+    """
+    @property
+    def stage(self) -> GenerationStage: ...
+    @property
+    def loop_order(self) -> builtins.int:
+        r"""
+        The loop order being generated.
+        """
+    @property
+    def n_vertices(self) -> builtins.int: ...
+    @property
+    def loops(self) -> builtins.int:
+        r"""
+        Independent cycles of the edges placed so far.
+        """
+    @property
+    def unplaced_legs(self) -> builtins.int: ...
+    @property
+    def is_topology_complete(self) -> builtins.bool: ...
+    @property
+    def is_complete(self) -> builtins.bool: ...
+    def degree(self, vertex: builtins.int) -> builtins.int: ...
+    def open_stubs(self, vertex: builtins.int) -> builtins.int: ...
+    def self_loops(self, vertex: builtins.int) -> builtins.int: ...
+    def multiplicity(self, u: builtins.int, v: builtins.int) -> builtins.int:
+        r"""
+        Number of edges between distinct vertices; use self_loops for equal ends.
+        """
+    def legs(self, vertex: builtins.int) -> list[tuple[_Key, EdgeSignature]]:
+        r"""
+        Attached external labels and their field/direction at this vertex.
+        """
+    def edges(self) -> builtins.list[tuple[builtins.int, builtins.int, typing.Optional[EdgeSignature]]]:
+        r"""
+        Internal edges `(u, v, stub)`; stub is None before its field is assigned.
+        """
+    def rules(self, vertex: builtins.int) -> typing.Optional[builtins.list[builtins.int]]:
+        r"""
+        Exact matching rules once all vertex stubs have fields; otherwise None.
+        """
+    def domains(self, vertex: builtins.int) -> builtins.list[builtins.int]:
+        r"""
+        Compatible rules in declaration order, including rules for partial assignments.
+        """
+    def order_bounds(self) -> dict[str, tuple[int, int]] | None:
+        r"""
+        Inclusive named weight bounds once the skeleton is complete and feasible.
+        """
+    def skeleton_id(self) -> tuple[typing.Any, ...] | None:
+        r"""
+        Stable untyped topology identity; None while edges or external labels are missing.
+        """
+    def bridges(self) -> builtins.list[tuple[builtins.int, builtins.int, builtins.list[builtins.int]]]:
+        r"""
+        Bridges with a final side, as `(outside, inside, side_vertices)`.
+        """
+    def loops_in(self, side: typing.Sequence[builtins.int]) -> builtins.int:
+        r"""
+        Independent cycles on a nonempty connected set of vertices.
+        """
+    def graph(self) -> Graph:
+        r"""
+        Materialize the current state, omitting open slots and using None for unknown keys.
+        """
+    def complete_graph(self) -> typing.Optional[Graph]:
+        r"""
+        Materialize a fully assigned graph; None before the Complete stage.
+        """
 
 @typing.final
 class EdgeView:
@@ -1310,6 +1487,86 @@ class NodeValue:
     def __new__(cls, *, data: typing.Any = None, drawing: typing.Optional[NodeDrawing] = None) -> NodeValue: ...
 
 @typing.final
+class SkeletonView:
+    r"""
+    An untyped topology, borrowed during a callback or retained as compact owned data.
+    """
+    @property
+    def stage(self) -> GenerationStage: ...
+    @property
+    def loop_order(self) -> builtins.int:
+        r"""
+        The loop order being generated.
+        """
+    @property
+    def n_vertices(self) -> builtins.int: ...
+    @property
+    def loops(self) -> builtins.int:
+        r"""
+        Independent cycles of the edges placed so far.
+        """
+    @property
+    def unplaced_legs(self) -> builtins.int: ...
+    @property
+    def is_topology_complete(self) -> builtins.bool: ...
+    @property
+    def is_complete(self) -> builtins.bool: ...
+    def degree(self, vertex: builtins.int) -> builtins.int: ...
+    def open_stubs(self, vertex: builtins.int) -> builtins.int: ...
+    def self_loops(self, vertex: builtins.int) -> builtins.int: ...
+    def multiplicity(self, u: builtins.int, v: builtins.int) -> builtins.int:
+        r"""
+        Number of edges between distinct vertices; use self_loops for equal ends.
+        """
+    def legs(self, vertex: builtins.int) -> list[tuple[_Key, EdgeSignature]]:
+        r"""
+        Attached external labels and their field/direction at this vertex.
+        """
+    def edges(self) -> builtins.list[tuple[builtins.int, builtins.int, typing.Optional[EdgeSignature]]]:
+        r"""
+        Internal edges `(u, v, stub)`; stub is None before its field is assigned.
+        """
+    def rules(self, vertex: builtins.int) -> typing.Optional[builtins.list[builtins.int]]:
+        r"""
+        Exact matching rules once all vertex stubs have fields; otherwise None.
+        """
+    def domains(self, vertex: builtins.int) -> builtins.list[builtins.int]:
+        r"""
+        Compatible rules in declaration order, including rules for partial assignments.
+        """
+    def order_bounds(self) -> dict[str, tuple[int, int]] | None:
+        r"""
+        Inclusive named weight bounds once the skeleton is complete and feasible.
+        """
+    def skeleton_id(self) -> tuple[typing.Any, ...] | None:
+        r"""
+        Stable untyped topology identity; None while edges or external labels are missing.
+        """
+    def bridges(self) -> builtins.list[tuple[builtins.int, builtins.int, builtins.list[builtins.int]]]:
+        r"""
+        Bridges with a final side, as `(outside, inside, side_vertices)`.
+        """
+    def loops_in(self, side: typing.Sequence[builtins.int]) -> builtins.int:
+        r"""
+        Independent cycles on a nonempty connected set of vertices.
+        """
+    def graph(self) -> Graph:
+        r"""
+        Materialize the current state, omitting open slots and using None for unknown keys.
+        """
+    def complete_graph(self) -> typing.Optional[Graph]:
+        r"""
+        Materialize a fully assigned graph; None before the Complete stage.
+        """
+
+@typing.final
+class Query:
+    r"""
+    A request snapshot. Later edits to the supplied Legs do not change it.
+    """
+    def __new__(cls, legs: Legs, *, loops: int | range | None = None, structure: typing.Optional[Structure] = None, weights: dict[str, tuple[int | None, int | None]] | None = None, counts: typing.Sequence[tuple[Countable, tuple[int | None, int | None]]] | None = None, prune_skeletons: typing.Callable[[SkeletonView], bool] | None = None, prune_dressings: typing.Callable[[DressingView], bool] | None = None, select: typing.Callable[[DiagramView], bool] | None = None) -> Query: ...
+
+@typing.final
 class Ratio:
     r"""
     A Typst ratio expressed in percent.
@@ -1387,12 +1644,71 @@ class RenderSettings:
     def __new__(cls, *, template: _TemplatePath = ..., source_root: _SourceRootPath = ..., title: _AutoOptionalStaticContent = ..., style: _RenderStyle = ..., layouts: _RenderLayouts = ..., drawing: _RenderDrawing = ..., selectors: _RenderSelectors = ..., template_options: _TemplateOptions = ...) -> RenderSettings: ...
 
 @typing.final
+class Run:
+    r"""
+    Transient execution controls. Cancellation and dispatch statistics are shared by executions
+    using this Run; callbacks are invoked on the Python thread advancing the execution.
+    """
+    @property
+    def cancelled(self) -> builtins.bool: ...
+    @property
+    def callback_round_trips(self) -> builtins.int:
+        r"""
+        Number of outer predicate-batch dispatches across executions using this Run.
+        """
+    def __new__(cls, *, parallel: builtins.bool = False, check_heredity: builtins.bool = False, progress: typing.Callable[[Progress], bool] | None = None) -> Run: ...
+    def cancel(self) -> None: ...
+
+@typing.final
+class Skeleton:
+    r"""
+    An immutable compact skeleton and its originating plan, independent of its source iterator.
+    """
+    @property
+    def loops(self) -> builtins.int: ...
+    def automorphisms(self) -> builtins.int: ...
+    def graph(self) -> Graph: ...
+    def id(self) -> tuple[typing.Any, ...]: ...
+    def view(self) -> SkeletonView: ...
+    def diagrams(self) -> Diagrams:
+        r"""
+        Start fresh decoration without repeating topology search, using this execution's hooks.
+        """
+
+@typing.final
+class Skeletons:
+    r"""
+    Complete untyped skeletons, streamed without decorating them.
+    """
+    @property
+    def aborted(self) -> builtins.bool: ...
+    def __iter__(self) -> Skeletons: ...
+    def __next__(self) -> typing.Optional[Skeleton]: ...
+
+@typing.final
 class Stroke:
     r"""
     A typed Typst stroke dictionary.
     """
     def __repr__(self) -> builtins.str: ...
     def __new__(cls, *, paint: _OptionalPaint = ..., thickness: _OptionalLengthValue = ..., cap: _OptionalStrokeCap = ..., join: _OptionalStrokeJoin = ..., dash: _OptionalDashValue = ..., miter_limit: _Number = ...) -> Stroke: ...
+
+@typing.final
+class Structure:
+    r"""
+    Restrictions decided by topology alone. Defaults are the native Structure defaults.
+    """
+    @property
+    def bridges(self) -> Bridges: ...
+    @property
+    def self_loops(self) -> builtins.bool: ...
+    @property
+    def zero_flow_edges(self) -> builtins.bool: ...
+    @property
+    def max_vertices(self) -> typing.Optional[builtins.int]: ...
+    def __new__(cls, *, bridges: typing.Optional[Bridges] = None, self_loops: builtins.bool = False, zero_flow_edges: builtins.bool = False, max_vertices: typing.Optional[builtins.int] = None) -> Structure: ...
+    @staticmethod
+    def one_pi() -> Structure: ...
 
 @typing.final
 class Subgraph:
@@ -1466,6 +1782,18 @@ class TextLabel:
     def text(self) -> builtins.str: ...
     def __repr__(self) -> builtins.str: ...
     def __new__(cls, text: str, *, fill: _Paint = ..., size: _LengthValue = ..., weight: _NativeValue = ..., style: _TextStyleValue = ...) -> TextLabel: ...
+
+@typing.final
+class Theory:
+    r"""
+    Ordered rules and reusable structural automata. Equal signatures remain distinct rules.
+    """
+    @property
+    def n_rules(self) -> builtins.int: ...
+    @property
+    def weight_names(self) -> builtins.list[builtins.str]: ...
+    def __new__(cls, vertices: typing.Sequence[typing.Sequence[EdgeSignature]], *, weights: dict[str, typing.Sequence[int]] | None = None) -> Theory: ...
+    def query(self, legs: Legs, *, loops: int | range | None = None, structure: typing.Optional[Structure] = None, weights: dict[str, tuple[int | None, int | None]] | None = None, counts: typing.Sequence[tuple[Countable, tuple[int | None, int | None]]] | None = None, prune_skeletons: typing.Callable[[SkeletonView], bool] | None = None, prune_dressings: typing.Callable[[DressingView], bool] | None = None, select: typing.Callable[[DiagramView], bool] | None = None) -> Plan: ...
 
 @typing.final
 class TraversalTree:
@@ -1568,22 +1896,19 @@ class Flow(enum.Enum):
 @typing.final
 class GenerationStage(enum.Enum):
     r"""
-    How far a `GenerationView` is built.
+    How far a typed generation view has been built.
     """
     Topology = ...
     r"""
-    A connected untyped topology, partial or complete: vertices with their degrees, attached
-    legs, edges without fields, and open slots that later vertices or legs take. Three or more
-    legs with distinct labels and a common slot are open slots and unplaced legs until every
-    vertex and edge is placed, then labelled one at a time.
+    An untyped topology with vertices, edges, attached legs and any remaining open stubs.
     """
     Fields = ...
     r"""
-    A complete topology with fields on some of its edges.
+    A complete topology with fields assigned to some of its edges.
     """
     Complete = ...
     r"""
-    A complete graph: every edge has a field and every vertex a signature.
+    Every edge has a field and every vertex has a rule.
     """
 
 @typing.final

@@ -1,0 +1,8 @@
+loops = (0, None) -> Planning; hereditary=true; Restriction
+bridges = Any -> Skeletons; hereditary=true; Restriction
+self loops = false -> Skeletons; hereditary=true; Restriction
+zero-flow edges = false -> Skeletons; hereditary=true; Restriction
+vertex bound = Some(3) -> Skeletons; hereditary=true; Restriction
+prune_skeletons = user predicate -> Skeletons; hereditary=true; Restriction
+prune_dressings = user predicate -> Dressing; hereditary=true; Restriction
+select = user predicate -> Selection; hereditary=false; FinalCheck

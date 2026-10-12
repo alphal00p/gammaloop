@@ -239,7 +239,7 @@ fn numerators_up_to_scalar(_: &Model, options: GenerationOptions) -> GenerationO
     ))
 }
 
-/// The `rejected` particles rejected in flight by a user filter, as the Python `filter` callback
+/// The `rejected` particles rejected in flight by a user filter, as the Python dressing callback
 /// does.
 fn filtered(
     model: &Model,
@@ -252,7 +252,7 @@ fn filtered(
         .filter(|particle| rejected(particle))
         .map(|particle| model.particle_id(&particle.name).unwrap())
         .collect();
-    options.filter(move |view| {
+    options.prune_dressings(move |view| {
         view.edges()
             .all(|edge| edge.stub.is_none_or(|stub| !rejected.contains(stub.field)))
     })

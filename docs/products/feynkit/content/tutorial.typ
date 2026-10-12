@@ -167,31 +167,33 @@ yield execution to the browser for painting.
 result = model.process(["e-", "e+"], ["mu-", "mu+"]).generate_diagrams(loops=1, maximum_bridges=None)
 ```
 
-Use `filter=callback` for live pruning during enumeration. It receives a Symbolica `Graph`
-snapshot and `completed_vertices`: the first N vertices have all their incident edges fixed,
-while later vertices may still gain edges. Returning `False` rejects that search branch,
-without cancelling the run. Reject only conditions that cannot become acceptable as the
-partial graph grows; a numerator or UV-degree test requires a finished `FeynmanDiagram`.
+Use `prune_skeletons` for hereditary pruning of untyped topologies and
+`prune_dressings` for hereditary pruning of field assignments. Returning `False`
+rejects that state and every refinement, without cancelling the run. `select`
+receives only complete assignments and may apply an arbitrary predicate.
 
 // docs-example: compile
 ```python
-def no_self_edges(topology, completed_vertices):
-    return all(source != target for source, target, directed, pdg in topology.edges())
+def no_self_edges(view):
+    return all(view.self_loops(vertex) == 0 for vertex in range(view.n_vertices))
 
-result = model.process(["e-", "e+"], ["mu-", "mu+"]).generate_diagrams(loops=1, allow_self_loops=True, maximum_bridges=None, filter=no_self_edges)
+result = model.process(["e-", "e+"], ["mu-", "mu+"]).generate_diagrams(loops=1, allow_self_loops=True, maximum_bridges=None, prune_skeletons=no_self_edges)
 ```
 
 This example illustrates the callback contract; for this particular condition, prefer the
 built-in `allow_self_loops=False` option to avoid Python callback overhead.
 
-Node data is a Symbolica integer: 0 for an interaction vertex, `-(index+1)` for an incoming
-external leg, and `+(index+1)` for an outgoing leg, using the generator's external-leg index.
-Edge data is the base particle's PDG code; directed edges distinguish particle flow from
-antiparticle flow. These snapshots can be retained or modified without changing generation.
-Keep the filter cheap: it runs synchronously for enumeration candidates, and the current
-Symbolica API requires building each Python snapshot through `Graph.add_node` and
-`Graph.add_edge`. No FeynKit topology wrapper or independent graph algorithms are involved.
-Exceptions from either callback cancel generation and propagate unchanged.
+Hooks receive read-only `SkeletonView`, `DressingView` or `DiagramView` values. They
+provide degrees, open stubs, loops, edges, external legs, rules, field domains and
+coupling-order bounds without building a graph. Assigned fields are `Particle`
+objects; external labels are `(state, index)` pairs. Use `view.graph()` or
+`view.complete_graph()` explicitly when a graph snapshot is needed. These snapshots
+can be retained or modified independently; the typed view itself expires when its
+callback returns. Numerator and UV-degree tests require the later built diagrams.
+
+The search batches independent pending predicates and calls Python on the calling
+thread after the native workers return. Every predicate must return a `bool`.
+Exceptions propagate unchanged, and cancellation stops the remaining callbacks.
 
 == Assemble and square amplitudes
 

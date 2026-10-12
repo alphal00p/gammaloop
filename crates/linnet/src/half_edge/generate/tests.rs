@@ -6,11 +6,13 @@ use std::{
     },
 };
 
+use num_traits::ToPrimitive;
 use proptest::prelude::*;
+use std::ops::{ControlFlow, RangeBounds};
 
 use super::{
-    Compiled, Countable, Diagram, EdgeView, GenerationError, GraphGenerator, GraphView, Stage,
-    Stub, VertexSet,
+    Bridges, Compiled, Countable, Diagram, EdgeView, GenerationError, Legs, Plan, PlanReport,
+    Query, Run, Stage, Structure, Stub, Theory, VertexSet,
 };
 use crate::half_edge::{canon::CanonicalForm, involution::HedgePair, HedgeGraph};
 
@@ -53,41 +55,126 @@ impl Ratio {
     }
 }
 
-fn run<F, L>(generator: GraphGenerator<F, L>) -> Vec<Diagram<F, L>>
-where
-    F: Clone + Ord + Send + Sync,
-    L: Clone + Ord + Send + Sync,
-{
-    generator.iter().unwrap().collect()
+type Fixture = (Theory<u8>, Query<u8, u8>);
+
+/// Fixture construction uses the public declarations; execution always compiles a Plan.
+fn fixture(
+    externals: impl IntoIterator<Item = (u8, Stub<u8>)>,
+    signatures: impl IntoIterator<Item = Vec<Stub<u8>>>,
+) -> Fixture {
+    let theory = signatures
+        .into_iter()
+        .fold(Theory::builder(), |theory, signature| {
+            theory.vertex(signature, [])
+        })
+        .build()
+        .unwrap();
+    let legs = externals
+        .into_iter()
+        .fold(Legs::new(), |legs, (label, stub)| legs.leg(label, stub));
+    (theory, Query::new(&legs))
+}
+
+fn configure(
+    (theory, query): Fixture,
+    configure: impl FnOnce(Query<u8, u8>) -> Query<u8, u8>,
+) -> Fixture {
+    (theory, configure(query))
+}
+
+fn run(fixture: Fixture) -> Vec<Diagram<u8, u8>> {
+    run_with(&fixture, &Run::default())
+}
+
+fn run_with((theory, query): &Fixture, controls: &Run<'_>) -> Vec<Diagram<u8, u8>> {
+    Plan::new(theory, query)
+        .unwrap()
+        .diagrams(controls)
+        .unwrap()
+        .collect()
+}
+
+fn plan_error((theory, query): Fixture) -> Option<GenerationError> {
+    Plan::new(&theory, &query).err()
+}
+
+fn assert_infeasible((theory, query): Fixture) {
+    match Plan::new(&theory, &query) {
+        Err(GenerationError::Infeasible(report)) => assert!(report.infeasible.is_some()),
+        _ => panic!("request must be rejected during planning"),
+    }
+}
+
+/// Declare a fresh column on a fixture Theory, then select its range through Query.
+fn weighted(
+    (theory, query): Fixture,
+    weights: impl IntoIterator<Item = i32>,
+    range: impl RangeBounds<i32>,
+) -> Fixture {
+    let weights: Vec<_> = weights.into_iter().collect();
+    assert_eq!(weights.len(), theory.n_rules());
+    let name = format!("weight_{}", theory.weights.len());
+    let mut columns = theory.weights.to_vec();
+    columns.push((name.clone(), weights));
+    let mut builder = Theory::builder().weights(columns.iter().map(|(name, _)| name.clone()));
+    for (rule, signature) in theory.dense.signatures.iter().enumerate() {
+        let stubs = signature.iter().map(|&stub| {
+            let field = theory.fields[(stub / 3) as usize];
+            match stub % 3 {
+                super::model::UNDIRECTED => Stub::undirected(field),
+                super::model::INCOMING => Stub::incoming(field),
+                super::model::OUTGOING => Stub::outgoing(field),
+                _ => unreachable!(),
+            }
+        });
+        builder = builder.vertex(stubs, columns.iter().map(|(_, values)| values[rule]));
+    }
+    (builder.build().unwrap(), query.weight(name, range))
 }
 
 /// Scalar theory with the given vertex degrees and labelled legs.
-fn phi(degrees: &[usize], labels: &[u8]) -> GraphGenerator<u8, u8> {
+fn phi(degrees: &[usize], labels: &[u8]) -> Fixture {
     let phi = Stub::undirected(PHI);
-    GraphGenerator::new(
-        labels.iter().map(|&l| (l, phi.clone())),
-        degrees.iter().map(|&d| vec![phi.clone(); d]),
+    configure(
+        fixture(
+            labels.iter().map(|&l| (l, phi.clone())),
+            degrees.iter().map(|&d| vec![phi.clone(); d]),
+        ),
+        |query| {
+            let structure = Structure {
+                self_loops: true,
+                zero_flow_edges: true,
+                ..query.structure.clone()
+            };
+            query.structure(structure)
+        },
     )
-    .allow_self_loops(true)
-    .allow_zero_flow_edges(true)
 }
 
-fn qed(externals: Vec<(u8, Stub<u8>)>) -> GraphGenerator<u8, u8> {
+fn qed(externals: Vec<(u8, Stub<u8>)>) -> Fixture {
     let electron = Stub::incoming(ELECTRON);
-    GraphGenerator::new(
-        externals,
-        [vec![
-            electron.clone(),
-            electron.flipped(),
-            Stub::undirected(PHOTON),
-        ]],
+    configure(
+        fixture(
+            externals,
+            [vec![
+                electron.clone(),
+                electron.flipped(),
+                Stub::undirected(PHOTON),
+            ]],
+        ),
+        |query| {
+            let structure = Structure {
+                self_loops: true,
+                ..query.structure.clone()
+            };
+            query.structure(structure)
+        },
     )
-    .allow_self_loops(true)
 }
 
 /// QCD (signatures 0 to 3: qqg, ggg, gggg, ccg) and, with `qed`, the photon couplings of the quark
 /// and the electron (4: qqa, 5: eea).
-fn qcd_qed(externals: Vec<(u8, Stub<u8>)>, qed: bool) -> GraphGenerator<u8, u8> {
+fn qcd_qed(externals: Vec<(u8, Stub<u8>)>, qed: bool) -> Fixture {
     let (g, q, c, a, e) = (
         Stub::undirected(GLUON),
         Stub::incoming(QUARK),
@@ -105,11 +192,17 @@ fn qcd_qed(externals: Vec<(u8, Stub<u8>)>, qed: bool) -> GraphGenerator<u8, u8> 
         signatures.push(vec![q.clone().flipped(), q, a.clone()]);
         signatures.push(vec![e.clone().flipped(), e, a]);
     }
-    GraphGenerator::new(externals, signatures).allow_self_loops(true)
+    configure(fixture(externals, signatures), |query| {
+        let structure = Structure {
+            self_loops: true,
+            ..query.structure.clone()
+        };
+        query.structure(structure)
+    })
 }
 
 /// QCD with gluons, one quark flavour and ghosts.
-fn qcd(externals: Vec<(u8, Stub<u8>)>) -> GraphGenerator<u8, u8> {
+fn qcd(externals: Vec<(u8, Stub<u8>)>) -> Fixture {
     qcd_qed(externals, false)
 }
 
@@ -257,7 +350,9 @@ fn phi3_vacuum_matches_oeis_and_zero_dimensional_sums() {
         ),
     ];
     for (loops, count, sum, histogram) in cases {
-        let diagrams = run(phi(&[3], &[]).loops(loops..=loops));
+        let diagrams = run(configure(phi(&[3], &[]), |query| {
+            query.loops(loops..=loops)
+        }));
         assert_oracle(
             &format!("phi3 vacuum L{loops}"),
             &diagrams,
@@ -322,7 +417,9 @@ fn phi4_vacuum_and_phi34_two_point_match_zero_dimensional_sums() {
         ),
     ];
     for (loops, count, sum, histogram) in vacuum {
-        let diagrams = run(phi(&[4], &[]).loops(loops..=loops));
+        let diagrams = run(configure(phi(&[4], &[]), |query| {
+            query.loops(loops..=loops)
+        }));
         assert_oracle(
             &format!("phi4 vacuum L{loops}"),
             &diagrams,
@@ -400,7 +497,9 @@ fn phi4_vacuum_and_phi34_two_point_match_zero_dimensional_sums() {
         ),
     ];
     for (loops, count, sum, histogram) in two_point {
-        let diagrams = run(phi(&[3, 4], &[1, 2]).loops(loops..=loops));
+        let diagrams = run(configure(phi(&[3, 4], &[1, 2]), |query| {
+            query.loops(loops..=loops)
+        }));
         assert_oracle(
             &format!("phi34 2-point L{loops}"),
             &diagrams,
@@ -418,7 +517,13 @@ fn phi4_vacuum_and_phi34_two_point_match_zero_dimensional_sums() {
 fn typed_processes_match_graphica_counts() {
     let photons = || vec![(1, Stub::undirected(PHOTON)), (2, Stub::undirected(PHOTON))];
     for (loops, count) in [(1, 1), (2, 3), (3, 20), (4, 189)] {
-        let diagrams = run(qed(photons()).loops(loops..=loops).max_bridges(0));
+        let diagrams = run(configure(qed(photons()), |query| {
+            let structure = Structure {
+                bridges: Bridges::AtMost(0),
+                ..query.structure.clone()
+            };
+            query.structure(structure).loops(loops..=loops)
+        }));
         let case = format!("QED photon self-energy L{loops}");
         assert_oracle(
             &case,
@@ -439,7 +544,9 @@ fn typed_processes_match_graphica_counts() {
         ),
     ];
     for (loops, count, sum, histogram) in gg {
-        let diagrams = run(qcd(gluons(&[1, 2, 3, 4])).loops(loops..=loops));
+        let diagrams = run(configure(qcd(gluons(&[1, 2, 3, 4])), |query| {
+            query.loops(loops..=loops)
+        }));
         assert_oracle(
             &format!("gg -> gg L{loops}"),
             &diagrams,
@@ -466,10 +573,14 @@ fn typed_processes_match_graphica_counts() {
         ),
     ];
     for (loops, count, sum, histogram) in self_energy {
-        let generator = GraphGenerator::new(gluons(&[1, 2]), signatures.clone())
-            .allow_self_loops(true)
-            .loops(loops..=loops)
-            .max_bridges(0);
+        let generator = configure(fixture(gluons(&[1, 2]), signatures.clone()), |query| {
+            let structure = Structure {
+                self_loops: true,
+                bridges: Bridges::AtMost(0),
+                ..query.structure.clone()
+            };
+            query.structure(structure).loops(loops..=loops)
+        });
         let case = format!("QCD gluon self-energy L{loops}");
         assert_oracle(&case, &run(generator), count, sum, histogram);
     }
@@ -485,27 +596,45 @@ fn directed_external_legs_keep_their_direction() {
         (3, Stub::undirected(PHOTON)),
         (4, Stub::undirected(PHOTON)),
     ];
-    let diagrams = run(qed(externals.clone()).loops(1..=1));
+    let diagrams = run(configure(qed(externals.clone()), |query| {
+        query.loops(1..=1)
+    }));
     assert_eq!(diagrams.len(), 18);
     check_canonical(&diagrams);
     // electron self-energy, one-particle irreducible
-    let diagrams = run(qed(externals[..2].to_vec()).loops(3..=3).max_bridges(0));
+    let diagrams = run(configure(qed(externals[..2].to_vec()), |query| {
+        let structure = Structure {
+            bridges: Bridges::AtMost(0),
+            ..query.structure.clone()
+        };
+        query.structure(structure).loops(3..=3)
+    }));
     assert_eq!(diagrams.len(), 20);
     // two incoming electrons cannot attach to QED vertices alone
     let both_in = vec![(1, electron.clone()), (2, electron)];
-    assert!(run(qed(both_in).loops(0..=2).max_vertices(6)).is_empty());
+    assert_infeasible(configure(qed(both_in), |query| {
+        let structure = Structure {
+            max_vertices: Some(6),
+            ..query.structure.clone()
+        };
+        query.structure(structure).loops(0..=2)
+    }));
 }
 
 #[test]
 fn legs_with_equal_labels_are_interchangeable() {
-    let diagrams = run(phi(&[3, 4], &[1, 1]).loops(3..=3));
+    let diagrams = run(configure(phi(&[3, 4], &[1, 1]), |query| query.loops(3..=3)));
     assert_eq!(diagrams.len(), 240);
     assert_eq!(Ratio::sum(&diagrams), Ratio(1741, 48));
     check_canonical(&diagrams);
-    let diagrams = run(qcd(gluons(&[1, 1, 1, 1])).loops(1..=1));
+    let diagrams = run(configure(qcd(gluons(&[1, 1, 1, 1])), |query| {
+        query.loops(1..=1)
+    }));
     assert_eq!(diagrams.len(), 22);
     assert_eq!(Ratio::sum(&diagrams), Ratio(79, 16));
-    let diagrams = run(qcd(gluons(&[1, 1, 2, 2])).loops(1..=1));
+    let diagrams = run(configure(qcd(gluons(&[1, 1, 2, 2])), |query| {
+        query.loops(1..=1)
+    }));
     assert_eq!(diagrams.len(), 61);
     check_canonical(&diagrams);
 }
@@ -518,7 +647,7 @@ fn distinct_legs_are_labelled_on_shaped_topologies() {
     for (n, phi3, phi34) in [(4, 3, 4), (5, 15, 25), (6, 105, 220), (7, 945, 2485)] {
         let labels: Vec<u8> = (1..=n).collect();
         for (degrees, count) in [(&[3][..], phi3), (&[3, 4][..], phi34)] {
-            let diagrams = run(phi(degrees, &labels).loops(0..=0));
+            let diagrams = run(configure(phi(degrees, &labels), |query| query.loops(0..=0)));
             assert_eq!(diagrams.len(), count, "{degrees:?} trees with {n} legs");
             assert!(diagrams.iter().all(|d| d.automorphism_count == Some(1)));
             if n <= 6 {
@@ -531,31 +660,58 @@ fn distinct_legs_are_labelled_on_shaped_topologies() {
     for n in 1..=5u8 {
         let mut externals = vec![(1, electron.clone()), (2, electron.clone().flipped())];
         externals.extend((3..3 + n).map(|l| (l, Stub::undirected(PHOTON))));
-        let diagrams = run(qed(externals).loops(0..=0));
+        let diagrams = run(configure(qed(externals), |query| query.loops(0..=0)));
         assert_eq!(diagrams.len(), (1..=n as usize).product::<usize>());
         check_canonical(&diagrams);
     }
     // the pendants completing a tree hang on bridges: five legs make two internal bridges
-    let five = || phi(&[3], &[1, 2, 3, 4, 5]).loops(0..=0);
-    assert!(run(five().max_bridges(1)).is_empty());
-    assert_eq!(run(five().max_bridges(2)).len(), 15);
+    let five = || configure(phi(&[3], &[1, 2, 3, 4, 5]), |query| query.loops(0..=0));
+    assert!(run(configure(five(), |query| {
+        let structure = Structure {
+            bridges: Bridges::AtMost(1),
+            ..query.structure.clone()
+        };
+        query.structure(structure)
+    }))
+    .is_empty());
+    assert_eq!(
+        run(configure(five(), |query| {
+            let structure = Structure {
+                bridges: Bridges::AtMost(2),
+                ..query.structure.clone()
+            };
+            query.structure(structure)
+        }))
+        .len(),
+        15
+    );
 }
 
 /// Equal labels divide the sum of `1/|Aut|` by the factorials of their multiplicities (orbit
 /// counting), whether the other legs are labelled on shaped topologies or not.
 #[test]
 fn equal_labels_divide_the_sums_of_distinct_ones() {
-    let sum = |generator: GraphGenerator<u8, u8>| Ratio::sum(&run(generator));
+    let sum = |generator: Fixture| Ratio::sum(&run(generator));
     for loops in 0..=1 {
-        let gg = |labels: &[u8]| sum(qcd(gluons(labels)).loops(loops..=loops));
+        let gg = |labels: &[u8]| {
+            sum(configure(qcd(gluons(labels)), |query| {
+                query.loops(loops..=loops)
+            }))
+        };
         let distinct = gg(&[1, 2, 3, 4, 5]);
         assert_eq!(gg(&[1, 1, 2, 3, 4]), distinct.divided(2), "L{loops}");
         assert_eq!(gg(&[1, 1, 1, 2, 3]), distinct.divided(6), "L{loops}");
     }
     for (loops, n) in [(1, 5u8), (2, 4)] {
         let phi3 = |labels: &[u8]| {
-            let generator = phi(&[3], labels).allow_zero_flow_edges(false);
-            sum(generator.loops(loops..=loops))
+            let generator = configure(phi(&[3], labels), |query| {
+                let structure = Structure {
+                    zero_flow_edges: false,
+                    ..query.structure.clone()
+                };
+                query.structure(structure)
+            });
+            sum(configure(generator, |query| query.loops(loops..=loops)))
         };
         let distinct: Vec<u8> = (1..=n).collect();
         let factorial = (1..=n as u128).product();
@@ -573,11 +729,13 @@ fn many_distinct_legs_stream() {
     let topologies = Arc::new(AtomicUsize::new(0));
     let seen = topologies.clone();
     let labels: Vec<u8> = (1..=40).collect();
-    let generator = phi(&[3], &labels).loops(0..=0).progress(move |progress| {
-        seen.store(progress.topologies, Ordering::Relaxed);
-        true
+    let (theory, query) = configure(phi(&[3], &labels), |query| query.loops(0..=0));
+    let plan = Plan::new(&theory, &query).unwrap();
+    let controls = Run::default().progress(move |progress| {
+        seen.store(progress.topologies.to_usize().unwrap(), Ordering::Relaxed);
+        ControlFlow::Continue(())
     });
-    let first: Vec<_> = generator.iter().unwrap().take(3).collect();
+    let first: Vec<_> = plan.diagrams(&controls).unwrap().take(3).collect();
     assert_eq!(topologies.load(Ordering::Relaxed), 3);
     assert!(first
         .iter()
@@ -587,31 +745,66 @@ fn many_distinct_legs_stream() {
 
 #[test]
 fn self_loop_bridge_and_vertex_limits() {
-    let diagrams = run(phi(&[3], &[1, 2]).allow_self_loops(false).loops(4..=4));
+    let diagrams = run(configure(phi(&[3], &[1, 2]), |query| {
+        let structure = Structure {
+            self_loops: false,
+            ..query.structure.clone()
+        };
+        query.structure(structure).loops(4..=4)
+    }));
     assert_eq!(
         (diagrams.len(), Ratio::sum(&diagrams)),
         (143, Ratio(1307, 32))
     );
-    let diagrams = run(phi(&[3, 4], &[1, 2]).max_bridges(1).loops(3..=3));
+    let diagrams = run(configure(phi(&[3, 4], &[1, 2]), |query| {
+        let structure = Structure {
+            bridges: Bridges::AtMost(1),
+            ..query.structure.clone()
+        };
+        query.structure(structure).loops(3..=3)
+    }));
     assert_eq!(
         (diagrams.len(), Ratio::sum(&diagrams)),
         (183, Ratio(201, 4))
     );
-    let diagrams = run(phi(&[3, 4], &[1, 2])
-        .max_bridges(1)
-        .allow_zero_flow_edges(false)
-        .loops(3..=3));
+    let diagrams = run(configure(phi(&[3, 4], &[1, 2]), |query| {
+        let structure = Structure {
+            bridges: Bridges::AtMost(1),
+            zero_flow_edges: false,
+            ..query.structure.clone()
+        };
+        query.structure(structure).loops(3..=3)
+    }));
     assert_eq!(
         (diagrams.len(), Ratio::sum(&diagrams)),
         (116, Ratio(103, 3))
     );
     // the four-gluon contact graph has one vertex
     assert_eq!(
-        run(qcd(gluons(&[1, 2, 3, 4])).loops(0..=0).max_vertices(1)).len(),
+        run(configure(qcd(gluons(&[1, 2, 3, 4])), |query| {
+            let structure = Structure {
+                max_vertices: Some(1),
+                ..query.structure.clone()
+            };
+            query.structure(structure).loops(0..=0)
+        }))
+        .len(),
         1
     );
-    assert!(run(qcd(gluons(&[1, 2, 3, 4])).loops(0..=0).max_vertices(0)).is_empty());
-    let diagrams = run(phi(&[3, 4], &[1, 2]).max_vertices(4).loops(3..=3));
+    assert_infeasible(configure(qcd(gluons(&[1, 2, 3, 4])), |query| {
+        let structure = Structure {
+            max_vertices: Some(0),
+            ..query.structure.clone()
+        };
+        query.structure(structure).loops(0..=0)
+    }));
+    let diagrams = run(configure(phi(&[3, 4], &[1, 2]), |query| {
+        let structure = Structure {
+            max_vertices: Some(4),
+            ..query.structure.clone()
+        };
+        query.structure(structure).loops(3..=3)
+    }));
     assert_eq!(
         (diagrams.len(), Ratio::sum(&diagrams)),
         (115, Ratio(339, 16))
@@ -621,21 +814,39 @@ fn self_loop_bridge_and_vertex_limits() {
 
 #[test]
 fn loop_ranges_and_low_degree_vertices() {
-    let diagrams = run(phi(&[3], &[]).loops(..=5));
+    let diagrams = run(configure(phi(&[3], &[]), |query| query.loops(..=5)));
     assert_eq!(diagrams.len(), 2 + 5 + 17 + 71);
     assert!(diagrams.windows(2).all(|w| w[0].loops <= w[1].loops));
     assert!(diagrams.iter().all(|d| loop_count(d.graph()) == d.loops));
     // a vertex bound alone bounds the loop order: eight cubic vertices reach five loops
-    let bounded = run(phi(&[3], &[]).max_vertices(8));
+    let bounded = run(configure(phi(&[3], &[]), |query| {
+        let structure = Structure {
+            max_vertices: Some(8),
+            ..query.structure.clone()
+        };
+        query.structure(structure)
+    }));
     assert_eq!(bounded.len(), diagrams.len());
     // mass insertions (degree two) need a vertex bound
     assert_eq!(
-        phi(&[3, 2], &[1, 2]).loops(2..=2).iter().err(),
+        plan_error(configure(phi(&[3, 2], &[1, 2]), |query| query.loops(2..=2))),
         Some(GenerationError::Unbounded)
     );
-    let diagrams = run(phi(&[3, 2], &[1, 2]).loops(2..=2).max_vertices(5));
+    let diagrams = run(configure(phi(&[3, 2], &[1, 2]), |query| {
+        let structure = Structure {
+            max_vertices: Some(5),
+            ..query.structure.clone()
+        };
+        query.structure(structure).loops(2..=2)
+    }));
     assert_eq!((diagrams.len(), Ratio::sum(&diagrams)), (68, Ratio(25, 1)));
-    let diagrams = run(phi(&[3, 2], &[]).loops(2..=2).max_vertices(5));
+    let diagrams = run(configure(phi(&[3, 2], &[]), |query| {
+        let structure = Structure {
+            max_vertices: Some(5),
+            ..query.structure.clone()
+        };
+        query.structure(structure).loops(2..=2)
+    }));
     assert_eq!((diagrams.len(), Ratio::sum(&diagrams)), (20, Ratio(25, 6)));
     check_canonical(&diagrams);
 }
@@ -644,7 +855,13 @@ fn loop_ranges_and_low_degree_vertices() {
 fn trees_of_every_degree() {
     // one signature per degree: the free trees, OEIS A000055 by number of vertices
     let degrees: Vec<usize> = (1..=15).collect();
-    let diagrams = run(phi(&degrees, &[]).loops(0..=0).max_vertices(11));
+    let diagrams = run(configure(phi(&degrees, &[]), |query| {
+        let structure = Structure {
+            max_vertices: Some(11),
+            ..query.structure.clone()
+        };
+        query.structure(structure).loops(0..=0)
+    }));
     let mut counts = [0; 12];
     for d in &diagrams {
         counts[d.graph().n_live()] += 1;
@@ -653,7 +870,13 @@ fn trees_of_every_degree() {
     check_canonical(&diagrams);
     // Partial stars have up to 12! automorphisms and the complete star has 13!: neither
     // the search nor the Single decorator may enumerate that group
-    let diagrams = run(phi(&[1, 13], &[]).loops(0..=0).max_vertices(14));
+    let diagrams = run(configure(phi(&[1, 13], &[]), |query| {
+        let structure = Structure {
+            max_vertices: Some(14),
+            ..query.structure.clone()
+        };
+        query.structure(structure).loops(0..=0)
+    }));
     let mut symmetries: Vec<_> = diagrams.iter().map(|d| d.automorphism_count).collect();
     symmetries.sort();
     assert_eq!(symmetries, [Some(2), Some((1..=13).product())]);
@@ -715,26 +938,40 @@ fn compact_automorphisms_split_node_stabilizers_and_local_kernels() {
         ),
     ];
     for (rule, loops, vertices, self_loops, order) in cases {
-        let diagrams = run(GraphGenerator::<u8, u8>::new([], [rule])
-            .loops(loops..=loops)
-            .max_vertices(vertices)
-            .allow_self_loops(self_loops));
+        let diagrams = run(configure(fixture([], [rule]), |query| {
+            let structure = Structure {
+                max_vertices: Some(vertices),
+                self_loops: self_loops,
+                ..query.structure.clone()
+            };
+            query.structure(structure).loops(loops..=loops)
+        }));
         assert_eq!(diagrams.len(), 1);
         assert_eq!(diagrams[0].automorphism_count, Some(order));
         check_canonical(&diagrams);
     }
     for (labels, order) in [(vec![0, 0], 4), (vec![0, 1], 2)] {
-        let diagrams = run(phi(&[3], &labels).allow_self_loops(false).loops(1..=1));
+        let diagrams = run(configure(phi(&[3], &labels), |query| {
+            let structure = Structure {
+                self_loops: false,
+                ..query.structure.clone()
+            };
+            query.structure(structure).loops(1..=1)
+        }));
         assert_eq!(diagrams.len(), 1);
         assert_eq!(diagrams[0].automorphism_count, Some(order));
         check_canonical(&diagrams);
     }
-    let diagrams = run(GraphGenerator::<u8, u8>::new(
-        [],
-        [vec![scalar.clone(); 3], vec![scalar; 3]],
-    )
-    .loops(2..=2)
-    .max_vertices(2));
+    let diagrams = run(configure(
+        fixture([], [vec![scalar.clone(); 3], vec![scalar; 3]]),
+        |query| {
+            let structure = Structure {
+                max_vertices: Some(2),
+                ..query.structure.clone()
+            };
+            query.structure(structure).loops(2..=2)
+        },
+    ));
     let mut orders: Vec<_> = diagrams.iter().map(|d| d.automorphism_count).collect();
     orders.sort();
     assert_eq!(orders, [Some(6), Some(12), Some(12)]);
@@ -744,7 +981,13 @@ fn compact_automorphisms_split_node_stabilizers_and_local_kernels() {
 #[test]
 fn identical_leg_kernel_and_checked_group_products() {
     for (labels, expected) in [(vec![0; 13], (1..=13).product()), ((0..13).collect(), 1)] {
-        let diagrams = run(phi(&[13], &labels).loops(0..=0).max_vertices(1));
+        let diagrams = run(configure(phi(&[13], &labels), |query| {
+            let structure = Structure {
+                max_vertices: Some(1),
+                ..query.structure.clone()
+            };
+            query.structure(structure).loops(0..=0)
+        }));
         assert_eq!(diagrams.len(), 1);
         assert_eq!(diagrams[0].automorphism_count, Some(expected));
         check_canonical(&diagrams);
@@ -761,11 +1004,13 @@ fn identical_leg_kernel_and_checked_group_products() {
 #[test]
 fn compact_outputs_own_payloads_after_scratch_reuse_and_clone() {
     use rayon::prelude::*;
-    let mut saved = run(qed(vec![
-        (1, Stub::undirected(PHOTON)),
-        (2, Stub::undirected(PHOTON)),
-    ])
-    .loops(2..=2));
+    let mut saved = run(configure(
+        qed(vec![
+            (1, Stub::undirected(PHOTON)),
+            (2, Stub::undirected(PHOTON)),
+        ]),
+        |query| query.loops(2..=2),
+    ));
     let expected = canonical_forms(&saved);
     for diagram in &mut saved {
         // Debug emission warms both caches for its independent oracle. Clear only those derived
@@ -777,7 +1022,13 @@ fn compact_outputs_own_payloads_after_scratch_reuse_and_clone() {
     }
     let cold = saved.clone();
     // A different model reuses the normal decorator buffers on its Single path.
-    let scalar = run(phi(&[1, 13], &[]).loops(0..=0).max_vertices(14));
+    let scalar = run(configure(phi(&[1, 13], &[]), |query| {
+        let structure = Structure {
+            max_vertices: Some(14),
+            ..query.structure.clone()
+        };
+        query.structure(structure).loops(0..=0)
+    }));
     assert!(scalar
         .iter()
         .any(|d| d.automorphism_count == Some((1..=13).product())));
@@ -802,9 +1053,11 @@ fn compact_outputs_own_payloads_after_scratch_reuse_and_clone() {
 #[cfg(not(debug_assertions))]
 #[test]
 fn release_outputs_materialize_only_on_demand() {
-    let mut compact = run(phi(&[3], &[1, 2]).loops(1..=1).filter(|view| {
-        let _ = view.edges().count();
-        true
+    let mut compact = run(configure(phi(&[3], &[1, 2]), |query| {
+        query.loops(1..=1).select(|view| {
+            let _ = view.edges().count();
+            true
+        })
     }));
     assert!(!compact.is_empty());
     for diagram in &compact {
@@ -816,9 +1069,11 @@ fn release_outputs_materialize_only_on_demand() {
     let second = first.clone();
     let _ = second.graph();
     assert!(second.graph.get().is_some() && first.graph.get().is_none());
-    let requested = run(phi(&[3], &[1, 2]).loops(1..=1).filter(|view| {
-        let _ = view.complete_graph();
-        true
+    let requested = run(configure(phi(&[3], &[1, 2]), |query| {
+        query.loops(1..=1).select(|view| {
+            let _ = view.complete_graph();
+            true
+        })
     }));
     assert!(requested
         .iter()
@@ -831,10 +1086,14 @@ fn identical_signatures_are_distinct_vertex_rules() {
     // two rules with the stubs of phi^3: every vertex colouring up to symmetry, so the sum of
     // 1/|Aut| is 2^V times the sum over phi^3 graphs
     let phi = Stub::undirected(PHI);
-    let generator = GraphGenerator::<u8, u8>::new([], [vec![phi.clone(); 3], vec![phi; 3]])
-        .allow_self_loops(true)
-        .allow_zero_flow_edges(true)
-        .loops(3..=3);
+    let generator = configure(fixture([], [vec![phi.clone(); 3], vec![phi; 3]]), |query| {
+        let structure = Structure {
+            self_loops: true,
+            zero_flow_edges: true,
+            ..query.structure.clone()
+        };
+        query.structure(structure).loops(3..=3)
+    });
     let diagrams = run(generator);
     assert_eq!(Ratio::sum(&diagrams), Ratio(5, 1));
     check_canonical(&diagrams);
@@ -856,9 +1115,13 @@ fn models_with_more_labels_than_a_mask_holds() {
             .map(|f| vec![Stub::incoming(f), Stub::outgoing(f), photon.clone()])
             .collect::<Vec<_>>();
         let legs = [(1u8, photon.clone()), (2, photon.clone())];
-        run(GraphGenerator::new(legs, signatures)
-            .loops(1..=2)
-            .max_bridges(0))
+        run(configure(fixture(legs, signatures), |query| {
+            let structure = Structure {
+                bridges: Bridges::AtMost(0),
+                ..query.structure.clone()
+            };
+            query.structure(structure).loops(1..=2)
+        }))
     };
     let one = self_energies(1);
     let many = self_energies(65);
@@ -872,10 +1135,10 @@ fn models_with_more_labels_than_a_mask_holds() {
 /// The graphs of `generator` and the number of partial field assignments its search shows the
 /// filter, less the number of edges of the graphs: zero when it shows each graph's prefixes once
 /// and nothing else.
-fn dead_field_assignments(generator: GraphGenerator<u8, u8>) -> (Vec<Diagram<u8, u8>>, isize) {
+fn dead_field_assignments(generator: Fixture) -> (Vec<Diagram<u8, u8>>, isize) {
     let fields = Arc::new(AtomicUsize::new(0));
     let seen = fields.clone();
-    let diagrams = run(generator.filter(move |view| {
+    let diagrams = run(with_pruning(generator, move |view| {
         if view.stage() == Stage::Fields {
             seen.fetch_add(1, Ordering::Relaxed);
         }
@@ -899,7 +1162,10 @@ fn forward_checking_leaves_no_dead_field_assignments_on_gluon_trees() {
     // a quark or ghost line in a tree would have to end at a leg, so with gluon legs every
     // topology has only its all-gluon labelling; forward checking drops each quark and ghost
     // before the filter sees it, so the filter sees just the prefixes of the emitted labellings
-    let (diagrams, dead) = dead_field_assignments(qcd(gluons(&[1, 2, 3, 4, 5, 6])).loops(0..=0));
+    let (diagrams, dead) =
+        dead_field_assignments(configure(qcd(gluons(&[1, 2, 3, 4, 5, 6])), |query| {
+            query.loops(0..=0)
+        }));
     assert_eq!(diagrams.len(), 220);
     assert_eq!(dead, 0);
 }
@@ -913,12 +1179,16 @@ fn topologies_with_an_edge_no_field_fits_get_no_field_assignment() {
         vec![Stub::undirected(PHI); 3],
         vec![Stub::undirected(CHI); 4],
     ];
-    let both = GraphGenerator::<u8, u8>::new([], signatures)
-        .allow_self_loops(true)
-        .allow_zero_flow_edges(true)
-        .loops(2..=4);
+    let both = configure(fixture([], signatures), |query| {
+        let structure = Structure {
+            self_loops: true,
+            zero_flow_edges: true,
+            ..query.structure.clone()
+        };
+        query.structure(structure).loops(2..=4)
+    });
     let (diagrams, dead) = dead_field_assignments(both);
-    let pure = |degree| run(phi(&[degree], &[]).loops(2..=4)).len();
+    let pure = |degree| run(configure(phi(&[degree], &[]), |query| query.loops(2..=4))).len();
     assert_eq!(diagrams.len(), pure(3) + pure(4));
     assert_eq!(dead, 0);
 }
@@ -932,13 +1202,22 @@ fn filter_keeps_exactly_the_accepted_graphs() {
         })
     };
     // on complete graphs only, and pruning partial topologies with self-loops
-    let complete = run(phi(&[3], &[1, 2])
-        .loops(4..=4)
-        .filter(move |view| view.complete_graph().is_none_or(no_loops)));
-    let pruned = run(phi(&[3], &[1, 2])
-        .loops(4..=4)
-        .filter(|view| (0..view.n_vertices()).all(|v| view.self_loops(v) == 0)));
-    let disallowed = run(phi(&[3], &[1, 2]).allow_self_loops(false).loops(4..=4));
+    let complete = run(configure(phi(&[3], &[1, 2]), |query| {
+        query
+            .loops(4..=4)
+            .select(move |view| no_loops(view.complete_graph().unwrap()))
+    }));
+    let pruned = run(with_pruning(
+        configure(phi(&[3], &[1, 2]), |query| query.loops(4..=4)),
+        |view| (0..view.n_vertices()).all(|v| view.self_loops(v) == 0),
+    ));
+    let disallowed = run(configure(phi(&[3], &[1, 2]), |query| {
+        let structure = Structure {
+            self_loops: false,
+            ..query.structure.clone()
+        };
+        query.structure(structure).loops(4..=4)
+    }));
     let set = |d: &[Diagram<u8, u8>]| canonical_forms(d).into_iter().collect::<HashSet<_>>();
     assert_eq!(set(&complete), set(&disallowed));
     assert_eq!(set(&pruned), set(&disallowed));
@@ -951,7 +1230,23 @@ fn canonical_forms(diagrams: &[Diagram<u8, u8>]) -> Vec<CanonicalForm<usize, u8,
         .collect()
 }
 
-type View<'a> = GraphView<'a, u8, u8>;
+type View<'a> = super::view::View<'a, u8, u8>;
+
+/// Share invariant predicates between the two typed pruning boundaries. Final selection is
+/// tested separately and is never used as a substitute for a pruning hook.
+fn with_pruning(
+    (theory, query): Fixture,
+    predicate: impl Fn(&View<'_>) -> bool + Send + Sync + 'static,
+) -> Fixture {
+    let predicate = Arc::new(predicate);
+    let skeletons = predicate.clone();
+    (
+        theory,
+        query
+            .prune_skeletons(move |view| skeletons(&view.0))
+            .prune_dressings(move |view| predicate(&view.0)),
+    )
+}
 
 /// No self-energy insertion on an external leg: no bridge cuts off a side with a single leg and a
 /// loop. Decided in stage 1 as soon as such a side is final, and by the complete topology.
@@ -1000,15 +1295,18 @@ fn qcd_order_at_most(max: usize) -> impl Fn(&View<'_>) -> bool + Clone + Send + 
 
 /// Graphs of a run with `filter`, and the number of states the search visited.
 fn run_counting(
-    generator: GraphGenerator<u8, u8>,
+    generator: Fixture,
     filter: impl Fn(&View<'_>) -> bool + Send + Sync + 'static,
 ) -> (Vec<Diagram<u8, u8>>, usize) {
     let states = Arc::new(AtomicUsize::new(0));
     let visits = states.clone();
-    let diagrams = run(generator.filter(move |view| {
-        visits.fetch_add(1, Ordering::Relaxed);
-        filter(view)
-    }));
+    let diagrams = budgeted_run(
+        &with_pruning(generator, move |view| {
+            visits.fetch_add(1, Ordering::Relaxed);
+            filter(view)
+        }),
+        &Run::default(),
+    );
     (diagrams, states.load(Ordering::Relaxed))
 }
 
@@ -1016,7 +1314,7 @@ fn run_counting(
 /// complete topologies and complete graphs, in the same order, and the heredity check accepts the
 /// filter. Returns the states visited with and without pruning.
 fn assert_prunes_like_post_filter(
-    generator: impl Fn() -> GraphGenerator<u8, u8>,
+    generator: impl Fn() -> Fixture,
     filter: impl Fn(&View<'_>) -> bool + Clone + Send + Sync + 'static,
 ) -> (usize, usize) {
     let (pruned, pruned_states) = run_counting(generator(), filter.clone());
@@ -1026,8 +1324,14 @@ fn assert_prunes_like_post_filter(
         Stage::Fields => true,
         Stage::Complete => post(view),
     });
-    let checked = run(generator().filter(filter.clone()).check_heredity(true));
-    let parallel = run(generator().filter(filter).parallel(true));
+    let checked = run_with(
+        &with_pruning(generator(), filter.clone()),
+        &Run::default().check_heredity(true),
+    );
+    let parallel = run_with(
+        &with_pruning(generator(), filter),
+        &Run::default().parallel(true),
+    );
     assert_eq!(canonical_forms(&pruned), canonical_forms(&post_filtered));
     assert_eq!(canonical_forms(&checked), canonical_forms(&post_filtered));
     assert_eq!(canonical_forms(&parallel), canonical_forms(&post_filtered));
@@ -1036,7 +1340,7 @@ fn assert_prunes_like_post_filter(
 
 #[test]
 fn hereditary_filters_prune_to_the_post_filtered_graphs() {
-    let gggg = || qcd(gluons(&[1, 2, 3, 4])).loops(1..=1);
+    let gggg = || configure(qcd(gluons(&[1, 2, 3, 4])), |query| query.loops(1..=1));
     let ee_qq = |loops| {
         move || {
             let (e, q) = (Stub::incoming(ELECTRON), Stub::incoming(QUARK));
@@ -1046,7 +1350,7 @@ fn hereditary_filters_prune_to_the_post_filtered_graphs() {
                 (3, q.clone()),
                 (4, q.flipped()),
             ];
-            qcd_qed(legs, true).loops(loops..=loops)
+            configure(qcd_qed(legs, true), |query| query.loops(loops..=loops))
         }
     };
     // stage 1: self-energies on legs are cut before the topology is complete
@@ -1064,7 +1368,7 @@ fn hereditary_filters_prune_to_the_post_filtered_graphs() {
         .filter(|d| d.graph().iter_edges().all(|(_, _, f)| *f.data != GHOST))
         .collect::<Vec<_>>();
     assert_eq!(
-        canonical_forms(&run(gggg().filter(without_field(GHOST)))),
+        canonical_forms(&run(with_pruning(gggg(), without_field(GHOST)))),
         canonical_forms(&ghostless)
     );
     // stages 1 and 2
@@ -1090,45 +1394,56 @@ fn rejects_partial_topologies(view: &View<'_>) -> bool {
     view.stage() != Stage::Topology || view.is_topology_complete()
 }
 
-fn gggg_tree() -> GraphGenerator<u8, u8> {
-    qcd(gluons(&[1, 2, 3, 4])).loops(0..=0)
+fn gggg_tree() -> Fixture {
+    configure(qcd(gluons(&[1, 2, 3, 4])), |query| query.loops(0..=0))
 }
 
 #[test]
 fn filters_that_reject_too_early_lose_graphs() {
     // the s, t and u channels and the contact graph; the rule veto keeps only the contact graph
     assert_eq!(run(gggg_tree()).len(), 4);
-    assert_eq!(run(gggg_tree().filter(vetoes_undecided_rules)).len(), 1);
+    assert_eq!(
+        run(with_pruning(gggg_tree(), vetoes_undecided_rules)).len(),
+        1
+    );
     // the four distinct gluons are labelled after the contact vertex is placed, so the contact
     // graph has partial topologies too; with two pairs of equal labels, it is placed at once
-    assert_eq!(run(gggg_tree().filter(rejects_partial_topologies)).len(), 0);
-    let pairs = qcd(gluons(&[1, 1, 2, 2])).loops(0..=0);
-    assert_eq!(run(pairs.filter(rejects_partial_topologies)).len(), 1);
+    assert_eq!(
+        run(with_pruning(gggg_tree(), rejects_partial_topologies)).len(),
+        0
+    );
+    let pairs = configure(qcd(gluons(&[1, 1, 2, 2])), |query| query.loops(0..=0));
+    assert_eq!(
+        run(with_pruning(pairs, rejects_partial_topologies)).len(),
+        1
+    );
 }
 
 #[test]
 #[should_panic(expected = "not hereditary")]
 fn heredity_check_reports_rejected_partial_labellings() {
-    run(gggg_tree()
-        .filter(vetoes_undecided_rules)
-        .check_heredity(true));
+    run_with(
+        &with_pruning(gggg_tree(), vetoes_undecided_rules),
+        &Run::default().check_heredity(true),
+    );
 }
 
 #[test]
 #[should_panic(expected = "not hereditary")]
 fn heredity_check_reports_rejected_partial_topologies() {
-    run(gggg_tree()
-        .filter(rejects_partial_topologies)
-        .check_heredity(true));
+    run_with(
+        &with_pruning(gggg_tree(), rejects_partial_topologies),
+        &Run::default().check_heredity(true),
+    );
 }
 
 #[test]
 #[should_panic(expected = "not hereditary")]
 fn heredity_check_follows_parallel_subtrees() {
-    run(gggg_tree()
-        .filter(rejects_partial_topologies)
-        .check_heredity(true)
-        .parallel(true));
+    run_with(
+        &with_pruning(gggg_tree(), rejects_partial_topologies),
+        &Run::default().check_heredity(true).parallel(true),
+    );
 }
 
 /// The invariants every view satisfies, at every stage, with `n_legs` legs in the process.
@@ -1211,14 +1526,17 @@ fn views_describe_the_search_states() {
         let stages = Arc::new(std::sync::Mutex::new(HashSet::new()));
         let seen = stages.clone();
         let n_legs = externals.len();
-        let generator = qcd(externals.clone()).loops(1..=1).filter(move |view| {
-            // some legs placed and some not: for the gluons, only while labelling
-            let placed = (0..view.n_vertices()).any(|v| view.legs(v).count() > 0);
-            let partial = view.stage() == Stage::Topology && placed && view.unplaced_legs() > 0;
-            seen.lock().unwrap().insert((view.stage(), partial));
-            check_view(view, n_legs);
-            true
-        });
+        let generator = with_pruning(
+            configure(qcd(externals.clone()), |query| query.loops(1..=1)),
+            move |view| {
+                // some legs placed and some not: for the gluons, only while labelling
+                let placed = (0..view.n_vertices()).any(|v| view.legs(v).count() > 0);
+                let partial = view.stage() == Stage::Topology && placed && view.unplaced_legs() > 0;
+                seen.lock().unwrap().insert((view.stage(), partial));
+                check_view(view, n_legs);
+                true
+            },
+        );
         let filtered = run(generator);
         let stages = stages.lock().unwrap();
         assert_eq!(
@@ -1226,7 +1544,7 @@ fn views_describe_the_search_states() {
             3
         );
         assert!(stages.contains(&(Stage::Topology, true)));
-        let unfiltered = run(qcd(externals).loops(1..=1));
+        let unfiltered = run(configure(qcd(externals), |query| query.loops(1..=1)));
         assert_eq!(canonical_forms(&filtered), canonical_forms(&unfiltered));
         check_canonical(&filtered);
     }
@@ -1241,26 +1559,29 @@ fn views_of_complete_graphs_match_the_emitted_graphs() {
         (2, electron.flipped()),
         (3, Stub::undirected(PHOTON)),
     ];
-    let generator = qed(legs.clone()).loops(1..=1).filter(|view| {
-        if let Some(complete) = view.complete_graph() {
-            for e in view.edges() {
-                let stub = e.stub.unwrap();
-                assert_eq!(stub.flow.is_some(), *stub.field == ELECTRON);
+    let generator = with_pruning(
+        configure(qed(legs.clone()), |query| query.loops(1..=1)),
+        |view| {
+            if let Some(complete) = view.complete_graph() {
+                for e in view.edges() {
+                    let stub = e.stub.unwrap();
+                    assert_eq!(stub.flow.is_some(), *stub.field == ELECTRON);
+                }
+                let graph = view.graph();
+                assert!(graph.iter_nodes().all(|(_, _, &rule)| rule == Some(0)));
+                assert!(graph
+                    .iter_edges()
+                    .zip(complete.iter_edges())
+                    .all(|((_, _, a), (_, _, b))| a.orientation == b.orientation
+                        && *a.data == Some(*b.data)));
             }
-            let graph = view.graph();
-            assert!(graph.iter_nodes().all(|(_, _, &rule)| rule == Some(0)));
-            assert!(graph
-                .iter_edges()
-                .zip(complete.iter_edges())
-                .all(|((_, _, a), (_, _, b))| a.orientation == b.orientation
-                    && *a.data == Some(*b.data)));
-        }
-        true
-    });
+            true
+        },
+    );
     let diagrams = run(generator);
     assert_eq!(
         canonical_forms(&diagrams),
-        canonical_forms(&run(qed(legs).loops(1..=1)))
+        canonical_forms(&run(configure(qed(legs), |query| query.loops(1..=1))))
     );
     check_canonical(&diagrams);
 }
@@ -1293,7 +1614,7 @@ proptest! {
         ][process].clone();
         let generator = move || {
             let legs = legs.iter().cloned().enumerate().map(|(i, s)| (i as u8, s)).collect();
-            qcd_qed(legs, true).loops(loops..=loops)
+            configure(qcd_qed(legs, true), |query| query.loops(loops..=loops))
         };
         let filter = move |view: &View<'_>| {
             vetoed_fields.iter().all(|&f| without_field(f)(view))
@@ -1389,10 +1710,12 @@ fn closed_lines(n: usize, (edges, legs): &Edges, fields: &[u8]) -> Option<usize>
 }
 
 impl Budget {
-    fn apply(&self, generator: GraphGenerator<u8, u8>) -> GraphGenerator<u8, u8> {
+    fn apply(&self, generator: Fixture) -> Fixture {
         match self.clone() {
-            Budget::Weight(weights, [min, max]) => generator.weight(weights, min..=max),
-            Budget::Count(count, [min, max]) => generator.count(count, min..=max),
+            Budget::Weight(weights, [min, max]) => weighted(generator, weights, min..=max),
+            Budget::Count(count, [min, max]) => {
+                configure(generator, |query| query.count(count, min..=max))
+            }
         }
     }
 
@@ -1430,10 +1753,21 @@ impl Budget {
     }
 }
 
+fn budgeted_run((theory, query): &Fixture, controls: &Run<'_>) -> Vec<Diagram<u8, u8>> {
+    match Plan::new(theory, query) {
+        Ok(plan) => plan.diagrams(controls).unwrap().collect(),
+        Err(GenerationError::Infeasible(report)) => {
+            assert!(report.infeasible.is_some());
+            Vec::new()
+        }
+        Err(error) => panic!("unexpected planning error: {error:?}"),
+    }
+}
+
 /// Budgets prune to the graphs of the unbudgeted run that meet them, in its order, sequentially
 /// and in parallel. Returns the states the filter sees with and without the budgets.
 fn assert_budgets_prune_like_post_filter(
-    generator: impl Fn() -> GraphGenerator<u8, u8>,
+    generator: impl Fn() -> Fixture,
     budgets: &[Budget],
 ) -> (usize, usize) {
     assert_filtered_budgets_prune_like_post_filter(generator, |_| true, budgets)
@@ -1441,7 +1775,7 @@ fn assert_budgets_prune_like_post_filter(
 
 /// [`assert_budgets_prune_like_post_filter`] with a hereditary `filter` pruning both runs.
 fn assert_filtered_budgets_prune_like_post_filter(
-    generator: impl Fn() -> GraphGenerator<u8, u8>,
+    generator: impl Fn() -> Fixture,
     filter: impl Fn(&View<'_>) -> bool + Clone + Send + Sync + 'static,
     budgets: &[Budget],
 ) -> (usize, usize) {
@@ -1457,7 +1791,10 @@ fn assert_filtered_budgets_prune_like_post_filter(
         canonical_forms(&post),
         "{budgets:?}"
     );
-    let parallel = run(budgeted().filter(filter).parallel(true));
+    let parallel = budgeted_run(
+        &with_pruning(budgeted(), filter),
+        &Run::default().parallel(true),
+    );
     assert_eq!(
         canonical_forms(&parallel),
         canonical_forms(&post),
@@ -1467,7 +1804,7 @@ fn assert_filtered_budgets_prune_like_post_filter(
 }
 
 /// e+ e- -> q q~ in [`qcd_qed`] at `loops` loops, and its QCD and QED orders per signature.
-fn ee_qq(loops: usize) -> impl Fn() -> GraphGenerator<u8, u8> {
+fn ee_qq(loops: usize) -> impl Fn() -> Fixture {
     move || {
         let (e, q) = (Stub::incoming(ELECTRON), Stub::incoming(QUARK));
         let legs = vec![
@@ -1476,7 +1813,7 @@ fn ee_qq(loops: usize) -> impl Fn() -> GraphGenerator<u8, u8> {
             (3, q.clone()),
             (4, q.flipped()),
         ];
-        qcd_qed(legs, true).loops(loops..=loops)
+        configure(qcd_qed(legs, true), |query| query.loops(loops..=loops))
     }
 }
 const QCD_ORDER: [i32; 6] = [1, 1, 2, 1, 0, 0];
@@ -1506,7 +1843,7 @@ fn coupling_orders_prune_to_the_post_filtered_graphs() {
 
 #[test]
 fn counts_prune_to_the_post_filtered_graphs() {
-    let gggg = || qcd(gluons(&[1, 2, 3, 4])).loops(1..=1);
+    let gggg = || configure(qcd(gluons(&[1, 2, 3, 4])), |query| query.loops(1..=1));
     let count = |count, min, max| Budget::Count(count, [min, max]);
     let cases = [
         count(Countable::Propagators(vec![GHOST]), 0, 0),
@@ -1534,7 +1871,7 @@ fn counts_prune_to_the_post_filtered_graphs() {
         );
     }
     // the contact graph of the gluon tree has no edge: its legs alone decide its counts
-    let tree = || qcd(gluons(&[1, 2, 3, 4])).loops(0..=0);
+    let tree = || configure(qcd(gluons(&[1, 2, 3, 4])), |query| query.loops(0..=0));
     for budget in [
         count(Countable::Propagators(vec![GLUON]), 1, 1),
         count(Countable::ClosedLines(vec![QUARK]), 1, 1),
@@ -1575,7 +1912,7 @@ fn branching_lines_are_counted_on_complete_graphs() {
             (3, g.clone()),
             (4, g.clone()),
         ];
-        GraphGenerator::new(legs, signatures).loops(2..=2)
+        configure(fixture(legs, signatures), |query| query.loops(2..=2))
     };
     for (min, max) in [(0, 0), (1, 1)] {
         let budget = Budget::Count(Countable::ClosedLines(vec![QUARK]), [min, max]);
@@ -1596,7 +1933,7 @@ fn lines_follow_only_the_field_assignments_the_filter_keeps() {
         (&[1, 1, 1, 1][..], 2),
         (&[1, 2][..], 3),
     ] {
-        let generator = move || qcd(gluons(labels)).loops(loops..=loops);
+        let generator = move || configure(qcd(gluons(labels)), |query| query.loops(loops..=loops));
         for range in [[0, 0], [1, 1], [2, 2], [0, 1]] {
             let lines = |fields| [Budget::Count(Countable::ClosedLines(fields), range)];
             let ghosts = lines(vec![QUARK, GHOST]);
@@ -1617,7 +1954,7 @@ fn lines_follow_only_the_field_assignments_the_filter_keeps() {
 #[test]
 fn single_diagram_models_meet_budgets() {
     // phi^3 + phi^4 has one diagram per topology
-    let two_point = || phi(&[3, 4], &[1, 2]).loops(3..=3);
+    let two_point = || configure(phi(&[3, 4], &[1, 2]), |query| query.loops(3..=3));
     for budget in [
         Budget::Count(Countable::Vertices(vec![1]), [1, 1]),
         Budget::Weight(vec![1, 2], [5, 6]),
@@ -1661,7 +1998,7 @@ proptest! {
         ][process].clone();
         let generator = move || {
             let legs = legs.iter().cloned().enumerate().map(|(i, s)| (i as u8, s)).collect();
-            qcd_qed(legs, true).loops(loops..=loops)
+            configure(qcd_qed(legs, true), |query| query.loops(loops..=loops))
         };
         let mut budgets: Vec<Budget> = weights
             .into_iter()
@@ -1680,40 +2017,31 @@ proptest! {
     }
 }
 
-/// The states that the filter of `generator` sees, and the complete topologies it reports.
-fn searched(generator: GraphGenerator<u8, u8>) -> (usize, usize) {
-    let topologies = Arc::new(AtomicUsize::new(0));
-    let seen = topologies.clone();
-    let generator = generator.progress(move |progress| {
-        seen.store(progress.topologies, Ordering::Relaxed);
-        true
-    });
-    let (diagrams, states) = run_counting(generator, |_| true);
-    assert!(diagrams.is_empty());
-    (states, topologies.load(Ordering::Relaxed))
-}
-
 #[test]
 fn requests_proven_empty_are_not_searched() {
     let e = Stub::incoming(ELECTRON);
     // charge: two incoming electrons
-    let charge = qed(vec![(1, e.clone()), (2, e.clone())]).loops(0..=2);
-    assert_eq!(searched(charge), (0, 0));
+    let charge = configure(qed(vec![(1, e.clone()), (2, e.clone())]), |query| {
+        query.loops(0..=2)
+    });
+    assert_infeasible(charge);
     // parity: one leg of a field that only quartic vertices carry
-    let parity = GraphGenerator::<u8, u8>::new(
-        [(1, Stub::undirected(CHI)), (2, Stub::undirected(PHI))],
-        [
-            vec![Stub::undirected(PHI); 3],
-            vec![
-                Stub::undirected(CHI),
-                Stub::undirected(CHI),
-                Stub::undirected(PHI),
-                Stub::undirected(PHI),
+    let parity = configure(
+        fixture(
+            [(1, Stub::undirected(CHI)), (2, Stub::undirected(PHI))],
+            [
+                vec![Stub::undirected(PHI); 3],
+                vec![
+                    Stub::undirected(CHI),
+                    Stub::undirected(CHI),
+                    Stub::undirected(PHI),
+                    Stub::undirected(PHI),
+                ],
             ],
-        ],
-    )
-    .loops(0..=2);
-    assert_eq!(searched(parity), (0, 0));
+        ),
+        |query| query.loops(0..=2),
+    );
+    assert_infeasible(parity);
     // weights: e+ e- -> e+ e- needs QED order 2 + 2 L
     let legs = vec![
         (1, e.clone()),
@@ -1721,33 +2049,43 @@ fn requests_proven_empty_are_not_searched() {
         (3, e.clone()),
         (4, e.flipped()),
     ];
-    let order = qed(legs.clone()).loops(0..=1).weight([1], 3..=3);
-    assert_eq!(searched(order), (0, 0));
-    let vertices = qed(legs.clone())
-        .loops(1..=1)
-        .count(Countable::Vertices(vec![0]), ..4);
-    assert_eq!(searched(vertices), (0, 0));
+    let order = weighted(
+        configure(qed(legs.clone()), |query| query.loops(0..=1)),
+        [1],
+        3..=3,
+    );
+    assert_infeasible(order);
+    let vertices = configure(qed(legs.clone()), |query| {
+        query.loops(1..=1).count(Countable::Vertices(vec![0]), ..4)
+    });
+    assert_infeasible(vertices);
     // an empty range
-    let empty = qed(legs.clone())
-        .loops(0..=1)
-        .count(Countable::Propagators(vec![PHOTON]), 2..2);
-    assert_eq!(searched(empty), (0, 0));
+    let empty = configure(qed(legs.clone()), |query| {
+        query
+            .loops(0..=1)
+            .count(Countable::Propagators(vec![PHOTON]), 2..2)
+    });
+    assert_infeasible(empty);
     // the loop orders that the weights admit are searched
     assert_eq!(
-        canonical_forms(&run(qed(legs.clone()).loops(0..=2).weight([1], 4..=4))),
-        canonical_forms(&run(qed(legs).loops(1..=1)))
+        canonical_forms(&run(weighted(
+            configure(qed(legs.clone()), |query| query.loops(0..=2)),
+            [1],
+            4..=4
+        ))),
+        canonical_forms(&run(configure(qed(legs), |query| query.loops(1..=1))))
     );
 }
 
 /// The graphs of `generator` with `filter`, the field assignments the filter sees and those it
 /// rejects.
 fn field_assignments(
-    generator: GraphGenerator<u8, u8>,
+    generator: Fixture,
     filter: impl Fn(&View<'_>) -> bool + Send + Sync + 'static,
 ) -> (Vec<Diagram<u8, u8>>, usize, usize) {
     let (seen, rejected) = (Arc::new(AtomicUsize::new(0)), Arc::new(AtomicUsize::new(0)));
     let (s, r) = (seen.clone(), rejected.clone());
-    let diagrams = run(generator.filter(move |view| {
+    let diagrams = run(with_pruning(generator, move |view| {
         let keeps = filter(view);
         if view.stage() == Stage::Fields {
             s.fetch_add(1, Ordering::Relaxed);
@@ -1770,7 +2108,7 @@ fn budgets_prune_field_assignments_before_the_filter() {
     // assignments than when it prunes alone
     for (loops, max) in [(1, 0), (2, 0), (2, 1), (2, 2)] {
         let filter = qcd_order_at_most(max);
-        let budgeted = ee_qq(loops)().weight(QCD_ORDER, ..=max as i32);
+        let budgeted = weighted(ee_qq(loops)(), QCD_ORDER, ..=max as i32);
         let (diagrams, seen, rejected) = field_assignments(budgeted, filter.clone());
         let (alone, seen_alone, _) = field_assignments(ee_qq(loops)(), filter);
         assert_eq!(canonical_forms(&diagrams), canonical_forms(&alone));
@@ -1784,11 +2122,22 @@ fn budgets_prune_field_assignments_before_the_filter() {
 
 #[test]
 fn budget_errors_and_limits() {
-    let wrong = qed(vec![]).loops(1..=1).weight([1, 2], ..);
+    let wrong = Theory::builder()
+        .weights(["coupling"])
+        .vertex(
+            [
+                Stub::incoming(ELECTRON),
+                Stub::outgoing(ELECTRON),
+                Stub::undirected(PHOTON),
+            ],
+            [1, 2],
+        )
+        .build();
     assert_eq!(
-        wrong.iter().err(),
-        Some(GenerationError::Weights {
-            signatures: 1,
+        wrong.err(),
+        Some(GenerationError::VertexWeights {
+            rule: 0,
+            columns: 1,
             weights: 2
         })
     );
@@ -1801,46 +2150,59 @@ fn budget_errors_and_limits() {
         (4, e.flipped()),
     ];
     let photons = |n, max| {
-        (0..n).fold(qed(legs.clone()).loops(1..=1), |g, _| {
-            g.count(Countable::Propagators(vec![PHOTON]), 0..=max)
-        })
+        (0..n).fold(
+            configure(qed(legs.clone()), |query| query.loops(1..=1)),
+            |g, _| {
+                configure(g, |query| {
+                    query.count(Countable::Propagators(vec![PHOTON]), 0..=max)
+                })
+            },
+        )
     };
     assert_eq!(
-        photons(65, 9).iter().err(),
+        plan_error(photons(65, 9)),
         Some(GenerationError::TooManyCounts)
     );
     let plain = canonical_forms(&run(photons(0, 0)));
     assert_eq!(canonical_forms(&run(photons(64, 9))), plain);
     assert_eq!(canonical_forms(&run(photons(65, usize::MAX))), plain);
     // budgets that every graph meets are left out, the others kept
-    let budgets = |generator: GraphGenerator<u8, u8>| {
-        let request = Compiled::request(&generator, &[PHOTON, ELECTRON]).unwrap();
+    let budgets = |(theory, query): Fixture| {
+        let request = Compiled::request(&theory, &query, &mut PlanReport::default()).unwrap();
         (
             request.weights.len(),
             request.edges.len(),
             request.lines.len(),
         )
     };
-    let vacuous = qed(legs.clone())
-        .weight([1], 0..)
-        .weight([-1], ..=2)
-        .count(Countable::Vertices(vec![0]), ..)
-        .count(Countable::ClosedLines(vec![ELECTRON]), 0..);
+    let vacuous = configure(
+        weighted(weighted(qed(legs.clone()), [1], 0..), [-1], ..=2),
+        |query| {
+            query
+                .count(Countable::Vertices(vec![0]), ..)
+                .count(Countable::ClosedLines(vec![ELECTRON]), 0..)
+        },
+    );
     assert_eq!(budgets(vacuous), (0, 0, 0));
-    let bounding = qed(legs)
-        .weight([1], 0..=9)
-        .weight([-1], 0..)
-        .count(Countable::Vertices(vec![0]), 1..)
-        .count(Countable::ClosedLines(vec![ELECTRON]), ..=1);
+    let bounding = configure(
+        weighted(weighted(qed(legs), [1], 0..=9), [-1], 0..),
+        |query| {
+            query
+                .count(Countable::Vertices(vec![0]), 1..)
+                .count(Countable::ClosedLines(vec![ELECTRON]), ..=1)
+        },
+    );
     assert_eq!(budgets(bounding), (3, 0, 1));
 }
 
 #[test]
 fn budgets_do_not_outlive_their_generation() {
     // decorators return to a pool of the thread and serve later generations
-    let gggg = || qcd(gluons(&[1, 2, 3, 4])).loops(1..=1);
+    let gggg = || configure(qcd(gluons(&[1, 2, 3, 4])), |query| query.loops(1..=1));
     let plain = canonical_forms(&run(gggg()));
-    let lines = gggg().count(Countable::ClosedLines(vec![QUARK]), 1..=1);
+    let lines = configure(gggg(), |query| {
+        query.count(Countable::ClosedLines(vec![QUARK]), 1..=1)
+    });
     assert!(run(lines).len() < plain.len());
     assert_eq!(canonical_forms(&run(gggg())), plain);
 }
@@ -1849,18 +2211,23 @@ fn budgets_do_not_outlive_their_generation() {
 fn abort_check_and_progress_stop_the_generation() {
     let polls = Arc::new(AtomicUsize::new(0));
     let counter = polls.clone();
-    let generator = phi(&[3, 4], &[1, 2])
-        .loops(3..=3)
-        .abort_check(move || counter.fetch_add(1, Ordering::Relaxed) >= 20);
-    let mut diagrams = generator.iter().unwrap();
+    let (theory, query) = configure(phi(&[3, 4], &[1, 2]), |query| query.loops(3..=3));
+    let plan = Plan::new(&theory, &query).unwrap();
+    let controls =
+        Run::default().abort_check(move || counter.fetch_add(1, Ordering::Relaxed) >= 20);
+    let mut diagrams = plan.diagrams(&controls).unwrap();
     let count = diagrams.by_ref().count();
     assert!(diagrams.aborted());
     assert!(count < 351);
 
-    let generator = phi(&[3, 4], &[1, 2])
-        .loops(3..=3)
-        .progress(|progress| progress.diagrams < 3);
-    let mut diagrams = generator.iter().unwrap();
+    let controls = Run::default().progress(|progress| {
+        if progress.diagrams < 3u32.into() {
+            ControlFlow::Continue(())
+        } else {
+            ControlFlow::Break(())
+        }
+    });
+    let mut diagrams = plan.diagrams(&controls).unwrap();
     assert_eq!(diagrams.by_ref().count(), 3);
     assert!(diagrams.aborted());
 }
@@ -1872,27 +2239,30 @@ fn generation_streams() {
     // topologies
     let topologies = Arc::new(AtomicUsize::new(0));
     let seen = topologies.clone();
-    let generator = phi(&[3, 4], &[1, 2])
-        .loops(5..=5)
-        .progress(move |progress| {
-            seen.store(progress.topologies, Ordering::Relaxed);
-            true
-        });
-    let first: Vec<_> = generator.iter().unwrap().take(3).collect();
+    let (theory, query) = configure(phi(&[3, 4], &[1, 2]), |query| query.loops(5..=5));
+    let plan = Plan::new(&theory, &query).unwrap();
+    let controls = Run::default().progress(move |progress| {
+        seen.store(progress.topologies.to_usize().unwrap(), Ordering::Relaxed);
+        ControlFlow::Continue(())
+    });
+    let first: Vec<_> = plan.diagrams(&controls).unwrap().take(3).collect();
     assert_eq!(first.len(), 3);
     assert_eq!(topologies.load(Ordering::Relaxed), 3);
     check_canonical(&first);
 
     // progress sees every complete topology, so it stops a run whose graphs are all filtered out
     let seen = topologies.clone();
-    let generator = phi(&[3, 4], &[1, 2])
-        .loops(3..=3)
-        .filter(|view| !view.is_complete())
-        .progress(move |progress| {
-            seen.store(progress.topologies, Ordering::Relaxed);
-            progress.topologies < 5
-        });
-    let mut diagrams = generator.iter().unwrap();
+    let query = query.loops(3..=3).select(|_| false);
+    let plan = Plan::new(&theory, &query).unwrap();
+    let controls = Run::default().progress(move |progress| {
+        seen.store(progress.topologies.to_usize().unwrap(), Ordering::Relaxed);
+        if progress.topologies < 5u32.into() {
+            ControlFlow::Continue(())
+        } else {
+            ControlFlow::Break(())
+        }
+    });
+    let mut diagrams = plan.diagrams(&controls).unwrap();
     assert!(diagrams.next().is_none());
     assert!(diagrams.aborted());
     assert_eq!(topologies.load(Ordering::Relaxed), 5);
@@ -1902,9 +2272,13 @@ fn generation_streams() {
 fn without_signatures_nothing_is_generated() {
     let legs = [(1, Stub::undirected(PHI)), (2, Stub::undirected(PHI))];
     let none = Vec::<Vec<Stub<u8>>>::new();
-    assert!(run(GraphGenerator::new(legs.clone(), none.clone()).loops(0..=2)).is_empty());
-    assert!(run(GraphGenerator::<u8, u8>::new([], none.clone()).loops(0..=2)).is_empty());
-    assert!(run(GraphGenerator::new(legs, none)).is_empty());
+    assert_infeasible(configure(fixture(legs.clone(), none.clone()), |query| {
+        query.loops(0..=2)
+    }));
+    assert_infeasible(configure(fixture([], none.clone()), |query| {
+        query.loops(0..=2)
+    }));
+    assert_infeasible(fixture(legs, none));
 }
 
 #[test]
@@ -1913,10 +2287,22 @@ fn one_leg_graphs_without_bridges_are_kept() {
     // tadpole (leg and self-loop on one vertex) at one loop and the triangle with a doubled side
     // at two loops; Graphica returns neither
     for generator in [
-        phi(&[3], &[1]).allow_zero_flow_edges(false),
-        phi(&[3], &[1]).max_bridges(0),
+        configure(phi(&[3], &[1]), |query| {
+            let structure = Structure {
+                zero_flow_edges: false,
+                ..query.structure.clone()
+            };
+            query.structure(structure)
+        }),
+        configure(phi(&[3], &[1]), |query| {
+            let structure = Structure {
+                bridges: Bridges::AtMost(0),
+                ..query.structure.clone()
+            };
+            query.structure(structure)
+        }),
     ] {
-        let diagrams = run(generator.loops(1..=2));
+        let diagrams = run(configure(generator, |query| query.loops(1..=2)));
         let summary: Vec<_> = diagrams
             .iter()
             .map(|d| (d.loops, d.graph().n_live(), d.automorphism_count))
@@ -1924,19 +2310,24 @@ fn one_leg_graphs_without_bridges_are_kept() {
         assert_eq!(summary, [(1, 1, Some(2)), (2, 3, Some(4))]);
     }
     // zero-flow bridges add the two graphs with tadpoles on bridges
-    assert_eq!(run(phi(&[3], &[1]).loops(2..=2)).len(), 3);
+    assert_eq!(
+        run(configure(phi(&[3], &[1]), |query| query.loops(2..=2))).len(),
+        3
+    );
 }
 
 #[test]
 fn output_order_does_not_depend_on_threads() {
     let generators = || {
         [
-            phi(&[3], &[]).loops(5..=5),
-            phi(&[3, 4], &[1, 2]).loops(3..=3),
-            qcd(gluons(&[1, 2, 3, 4])).loops(1..=1),
-            phi(&[3], &[1, 2, 3, 4, 5, 6, 7]).loops(0..=0),
+            configure(phi(&[3], &[]), |query| query.loops(5..=5)),
+            configure(phi(&[3, 4], &[1, 2]), |query| query.loops(3..=3)),
+            configure(qcd(gluons(&[1, 2, 3, 4])), |query| query.loops(1..=1)),
+            configure(phi(&[3], &[1, 2, 3, 4, 5, 6, 7]), |query| {
+                query.loops(0..=0)
+            }),
             // several loop orders, of which only the first starts with the oldest subtree alone
-            phi(&[3, 4], &[1, 2, 3, 4]).loops(0..=2),
+            configure(phi(&[3, 4], &[1, 2, 3, 4]), |query| query.loops(0..=2)),
         ]
     };
     for (sequential, parallel) in generators().into_iter().zip(generators()) {
@@ -1946,37 +2337,29 @@ fn output_order_does_not_depend_on_threads() {
                 .collect::<Vec<_>>()
         };
         let expected = order(run(sequential));
-        let parallel = parallel.parallel(true);
+        let controls = Run::default().parallel(true);
         for threads in [1, 2, 4, 8, 32] {
             let pool = rayon::ThreadPoolBuilder::new()
                 .num_threads(threads)
                 .build()
                 .unwrap();
-            assert_eq!(pool.install(|| order(run_ref(&parallel))), expected);
+            assert_eq!(
+                pool.install(|| order(run_with(&parallel, &controls))),
+                expected
+            );
         }
     }
-}
-
-fn run_ref<F, L>(generator: &GraphGenerator<F, L>) -> Vec<Diagram<F, L>>
-where
-    F: Clone + Ord + Send + Sync,
-    L: Clone + Ord + Send + Sync,
-{
-    generator.iter().unwrap().collect()
 }
 
 #[test]
 fn invalid_settings_are_errors() {
     let phi = Stub::undirected(PHI);
-    let unbounded = GraphGenerator::<u8, u8>::new([], [vec![phi.clone(); 3]]);
-    assert_eq!(unbounded.iter().err(), Some(GenerationError::Unbounded));
-    let wide = GraphGenerator::<u8, u8>::new([], [vec![phi.clone(); 16]]).loops(..=2);
-    assert_eq!(
-        wide.iter().err(),
-        Some(GenerationError::UnsupportedDegree(16))
-    );
-    let large = GraphGenerator::<u8, u8>::new([], [vec![phi; 3]]).loops(40..=40);
-    assert_eq!(large.iter().err(), Some(GenerationError::TooManyVertices));
+    let unbounded = fixture([], [vec![phi.clone(); 3]]);
+    assert_eq!(plan_error(unbounded), Some(GenerationError::Unbounded));
+    let wide = Theory::builder().vertex(vec![phi.clone(); 16], []).build();
+    assert_eq!(wide.err(), Some(GenerationError::UnsupportedDegree(16)));
+    let large = configure(fixture([], [vec![phi; 3]]), |query| query.loops(40..=40));
+    assert_eq!(plan_error(large), Some(GenerationError::TooManyVertices));
 }
 
 #[cfg(feature = "symbolica")]
@@ -2023,15 +2406,14 @@ mod graphica {
             Self::forms(self.generator())
         }
 
-        fn forms(generator: GraphGenerator<u8, u8>) -> HashMap<Key, u128> {
-            generator
-                .iter()
-                .unwrap()
+        fn forms(generator: Fixture) -> HashMap<Key, u128> {
+            run(generator)
+                .into_iter()
                 .map(|d| (d.canonical_form().clone(), d.automorphism_count.unwrap()))
                 .collect()
         }
 
-        fn generator(&self) -> GraphGenerator<u8, u8> {
+        fn generator(&self) -> Fixture {
             // Graphica's external half-edge is the stub at the external node
             let externals = self
                 .externals
@@ -2041,12 +2423,22 @@ mod graphica {
                 .signatures
                 .iter()
                 .map(|s| s.iter().map(Self::stub).collect());
-            let mut generator = GraphGenerator::new(externals, signatures)
-                .loops(self.loops..=self.loops)
-                .allow_self_loops(true)
-                .allow_zero_flow_edges(self.zero_flow_edges);
+            let mut generator = configure(fixture(externals, signatures), |query| {
+                let structure = Structure {
+                    self_loops: true,
+                    zero_flow_edges: self.zero_flow_edges,
+                    ..query.structure.clone()
+                };
+                query.structure(structure).loops(self.loops..=self.loops)
+            });
             if let Some(b) = self.max_bridges {
-                generator = generator.max_bridges(b);
+                generator = configure(generator, |query| {
+                    let structure = Structure {
+                        bridges: Bridges::AtMost(b),
+                        ..query.structure.clone()
+                    };
+                    query.structure(structure)
+                });
             }
             generator
         }
@@ -2299,11 +2691,11 @@ mod graphica {
                 max_bridges: None,
                 zero_flow_edges: false,
             };
-            let native = Case::forms(case.generator().filter(without_field(GHOST)));
+            let native = Case::forms(with_pruning(case.generator(), without_field(GHOST)));
             let graphica = case.graphica(|g| g.iter_edges().all(|(_, _, f)| *f.data != GHOST));
             assert!(!native.is_empty() && native.len() < case.native().len());
             assert_eq!(native, graphica);
-            let native = Case::forms(case.generator().filter(without_rule(2)));
+            let native = Case::forms(with_pruning(case.generator(), without_rule(2)));
             let graphica = case.graphica(|g| g.iter_nodes().all(|(_, _, &rule)| rule != 2));
             assert!(!native.is_empty() && native.len() < case.native().len());
             assert_eq!(native, graphica);

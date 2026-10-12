@@ -1,6 +1,6 @@
 //! # Feynman-graph generation
 //!
-//! [`GraphGenerator`] enumerates the connected graphs built from vertex signatures (multisets of
+//! [`Plan`] enumerates the connected graphs built from vertex signatures (multisets of
 //! typed stubs) and a set of external legs, one per isomorphism class, each with its exact
 //! automorphism count and the canonical form of the native canonizer.
 //!
@@ -21,17 +21,17 @@
 //! distinct graphs.
 //!
 //! ```
-//! use linnet::half_edge::generate::{GraphGenerator, Stub};
+//! use linnet::half_edge::generate::{Theory, Legs, Query, Plan, Run, Structure, Stub};
 //!
 //! // QED photon self-energy at two loops, one-particle irreducible
 //! let (photon, electron) = (Stub::undirected('a'), Stub::incoming('e'));
-//! let generator = GraphGenerator::new(
-//!     [(1, photon.clone()), (2, photon.clone())],
-//!     [vec![electron.clone(), electron.flipped(), photon]],
-//! )
-//! .loops(2..=2)
-//! .max_bridges(0);
-//! let diagrams: Vec<_> = generator.iter().unwrap().collect();
+//! let theory = Theory::builder()
+//!     .vertex([electron.clone(), electron.flipped(), photon.clone()], []).build().unwrap();
+//! let legs = Legs::new().leg(1, photon.clone()).leg(2, photon);
+//! let query = Query::new(&legs).loops(2..=2).structure(Structure::one_pi());
+//! let plan = Plan::new(&theory, &query).unwrap();
+//! let run = Run::default();
+//! let diagrams: Vec<_> = plan.diagrams(&run).unwrap().collect();
 //! assert_eq!(diagrams.len(), 3);
 //! assert!(diagrams.iter().all(|d| d.automorphism_count == Some(1)));
 //! ```
@@ -45,8 +45,8 @@
 //! placed as anonymous legs and labelled once the topology is shaped, each label up to the
 //! stabilizer of the previous ones, so many distinct legs cost few topologies. Every complete
 //! topology is then decorated with fields, orientations and vertex rules, one decoration per orbit
-//! of its automorphism group ([`decorate`]). Budgets ([`GraphGenerator::weight`],
-//! [`GraphGenerator::count`]) bound every partial decoration and drop those whose bounds miss their
+//! of its automorphism group ([`decorate`]). Budgets ([`Query::weight`],
+//! [`Query::count`]) bound every partial decoration and drop those whose bounds miss their
 //! ranges. Loop orders without a vertex multiset that meets the weights, and requests whose legs
 //! carry a charge or parity that no vertex balances, are not searched. Accepted diagrams own compact data; their [`HedgeGraph`] and canonical form are
 //! materialized only when requested (also checked independently in debug builds).
@@ -54,7 +54,7 @@
 //! Both stages are resumable depth-first searches, so [`Diagrams`] streams: each `next` call
 //! searches only up to the next diagram and nothing is buffered. Output order is the depth-first
 //! order of the search and does not depend on parallelism: with the `rayon` feature,
-//! [`GraphGenerator::parallel`] runs independent subtrees on the current thread pool, each at most
+//! [`Run::parallel`] runs independent subtrees on the current thread pool, each at most
 //! a fixed number of diagrams ahead of the output, and emits their results in that order. The
 //! search starts from a few subtrees per thread; while fewer subtrees than threads can advance,
 //! the unsearched rest of the oldest ones is split off into new subtrees. The first step runs only
@@ -63,14 +63,13 @@
 //!
 //! ## Filtering
 //!
-//! [`GraphGenerator::filter`] prunes both searches. It sees each search state as a [`GraphView`]:
-//! partial untyped topologies in stage 1, partial field assignments in stage 2 and the complete
-//! graphs, and a rejected state is dropped with everything below it. A hereditary filter (one that
-//! rejects every completion of a state it rejects) thus yields exactly the complete graphs it
-//! accepts, and cuts the search as early as its conditions are decided:
+//! [`Query::prune_skeletons`] and [`Query::prune_dressings`] see typed borrowed views
+//! and prune each search independently. A pruning predicate must reject every refinement of a
+//! rejected state. [`Query::select`] sees only completed assignments and may be arbitrary;
+//! [`Run::check_heredity`] diagnoses pruning violations independently of final selection.
 //!
 //! ```
-//! use linnet::half_edge::generate::{GraphGenerator, Stub};
+//! use linnet::half_edge::generate::{Theory, Legs, Query, Plan, Run, Structure, Stub};
 //!
 //! // gg -> gg at one loop without ghosts: ghost fields are decided edge by edge in stage 2
 //! let (g, q, c) = (Stub::undirected('g'), Stub::incoming('q'), Stub::incoming('c'));
@@ -80,19 +79,26 @@
 //!     vec![g.clone(); 4],
 //!     vec![c.clone().flipped(), c, g.clone()],
 //! ];
-//! let generator = GraphGenerator::new((1..=4).map(|l| (l, g.clone())), signatures)
-//!     .allow_self_loops(true)
-//!     .loops(1..=1);
-//! let no_ghosts = generator.filter(|view| {
-//!     view.edges().all(|e| e.stub.is_none_or(|s| *s.field != 'c'))
-//! });
-//! let diagrams: Vec<_> = no_ghosts.iter().unwrap().collect();
+//! let theory = signatures.into_iter().fold(Theory::builder(), |t, rule| t.vertex(rule, []))
+//!     .build().unwrap();
+//! let legs = (1..=4).fold(Legs::new(), |legs, label| legs.leg(label, g.clone()));
+//! let query = Query::new(&legs).loops(1..=1)
+//!     .structure(Structure { self_loops: true, ..Structure::default() })
+//!     .prune_dressings(|view| view.edges().all(|e| e.stub.is_none_or(|s| *s.field != 'c')));
+//! let plan = Plan::new(&theory, &query).unwrap();
+//! let run = Run::default();
+//! let diagrams: Vec<_> = plan.diagrams(&run).unwrap().collect();
 //! assert_eq!(diagrams.len(), 111);
 //! ```
 
+#[doc(hidden)]
+pub mod batch;
 mod budget;
 mod decorate;
 mod model;
+mod output;
+mod query;
+mod suspend;
 #[cfg(test)]
 mod tests;
 mod topology;
@@ -100,21 +106,33 @@ mod view;
 
 use std::{
     cell::RefCell,
-    collections::VecDeque,
-    ops::{Bound, RangeBounds},
+    collections::{BTreeMap, VecDeque},
+    ops::ControlFlow,
     sync::{
         atomic::{AtomicBool, Ordering},
         Arc, OnceLock,
     },
 };
 
+use num_bigint::BigUint;
+use num_traits::Zero;
+
 pub use budget::Countable;
-use budget::{inclusive, Request};
+use budget::Request;
 use decorate::{Decoration, Decorator};
 use model::{Model, INCOMING, OUTGOING, UNDIRECTED};
+pub use output::{Counts, Dressings, LoopCounts, Skeleton, SkeletonSnapshot, Skeletons};
+use output::{DiagramOutput, Emit, SkeletonData};
+use query::Hooks;
+pub use query::{
+    Bridges, Legs, PlanCriterion, PlanReport, PlanRole, PlanStage, Query, Run, Structure, Theory,
+    TheoryBuilder,
+};
 use topology::{Context, Limits, Search, Topology, MAX_VERTICES};
-pub use view::{Bridge, EdgeView, GraphView, Stage, VertexSet};
-use view::{Prune, Pruner, State};
+pub use view::{
+    Bridge, DiagramView, DressingView, EdgeView, OrderBound, SkeletonView, Stage, VertexSet,
+};
+use view::{Prune, Pruner, State, View};
 
 use super::{
     canon::{CanonicalForm, KeyTables, RawHedge, Role},
@@ -177,6 +195,7 @@ pub struct Diagram<F, L> {
     /// `(vertex, leg class)` in native half-edge insertion order.
     legs: Box<[(u8, u32)]>,
     tables: Arc<OutputTables<F, L>>,
+    skeleton: Arc<SkeletonData<F, L>>,
     graph: OnceLock<HedgeGraph<F, usize, Option<L>>>,
     canonical_form: OnceLock<CanonicalForm<usize, F, Option<L>>>,
     /// Loop order.
@@ -210,6 +229,18 @@ impl<F, L> std::fmt::Debug for Diagram<F, L> {
 }
 
 impl<F, L> Diagram<F, L> {
+    /// Order of the half-edge automorphism group. Its reciprocal contributes to
+    /// [`Counts::sum_inv_aut`]; computing either does not materialize a graph.
+    pub fn symmetry_factor(&self) -> Result<u128, GenerationError> {
+        self.automorphism_count
+            .ok_or(GenerationError::AutomorphismOverflow)
+    }
+
+    /// The complete untyped topology, independent of the plan and its search buffers.
+    pub fn skeleton(&self) -> SkeletonView<'_, F, L> {
+        self.skeleton.view()
+    }
+
     /// Signature indices in native vertex order, without materializing the graph.
     pub fn rules(&self) -> &[u32] {
         &self.rules
@@ -246,7 +277,7 @@ impl<F: Clone, L: Clone> Diagram<F, L> {
     /// Fields on edges/legs, signature indices on nodes and `Some(label)` on dangling hedges.
     pub fn graph(&self) -> &HedgeGraph<F, usize, Option<L>> {
         self.graph.get_or_init(|| {
-            GraphView::build(
+            View::build(
                 self.rules.len(),
                 self.legs.len(),
                 self.legs(),
@@ -348,16 +379,26 @@ pub struct Progress {
     /// Loop order being generated.
     pub loops: usize,
     /// Complete topologies decorated so far. Loop orders and requests proven empty before the
-    /// search (see [`GraphGenerator::weight`] and [`GraphGenerator::iter`]) add none.
-    pub topologies: usize,
+    /// search (see [`Query::weight`] and [`Plan::diagrams`]) add none.
+    pub topologies: BigUint,
     /// Graphs emitted so far.
-    pub diagrams: usize,
+    pub diagrams: BigUint,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
 pub enum GenerationError {
-    #[error("bound the loop order or the number of vertices (vertices of degree two or less always need a vertex bound)")]
+    #[error(
+        "bound the loop order or the number of vertices (vertices of degree two or less always need a vertex bound)"
+    )]
     Unbounded,
+    #[error("the automorphism order exceeds u128; an exact reciprocal cannot be counted")]
+    AutomorphismOverflow,
+    #[error("the skeleton belongs to a different plan")]
+    ForeignSkeleton,
+    #[error("this plan has deferred hooks; execute it with the batch driver")]
+    DeferredHooks,
+    #[error("the callback reply does not match the pending batch")]
+    InvalidReply,
     #[error("signatures need between 1 and 15 stubs, found {0}")]
     UnsupportedDegree(usize),
     #[error("at most 84 distinct fields are supported")]
@@ -366,312 +407,216 @@ pub enum GenerationError {
     TooManyLegs,
     #[error("graphs of this size would need more than 64 vertices")]
     TooManyVertices,
-    #[error("a weight needs one value per signature: {signatures} signatures, {weights} values")]
-    Weights { signatures: usize, weights: usize },
     #[error("at most 64 propagator, chord and closed-line counts are supported")]
     TooManyCounts,
+    #[error("unknown weight column {0:?}")]
+    UnknownWeight(String),
+    #[error("generation request is infeasible: {0}")]
+    Infeasible(PlanReport),
+    #[error("weight name {0:?} is declared more than once")]
+    DuplicateWeight(String),
+    #[error("vertex rule {rule} has {weights} weights, but the theory declares {columns} columns")]
+    VertexWeights {
+        rule: usize,
+        columns: usize,
+        weights: usize,
+    },
 }
 
-type Filter<F, L> = dyn Fn(&GraphView<'_, F, L>) -> bool + Send + Sync;
-type ProgressFn = dyn Fn(&Progress) -> bool + Send + Sync;
-type AbortCheck = dyn Fn() -> bool + Send + Sync;
+type ProgressFn<'a> = dyn Fn(&Progress) -> ControlFlow<()> + Send + Sync + 'a;
+type AbortCheck<'a> = dyn Fn() -> bool + Send + Sync + 'a;
 
-/// Generation settings; [`Self::iter`] runs the generation.
-///
-/// At least one of a loop bound and a vertex bound is required. Defaults: no self-loops, no
-/// zero-flow edges (bridges with no external leg on one side), any number of bridges.
-pub struct GraphGenerator<F, L> {
-    externals: Vec<(L, Stub<F>)>,
-    signatures: Vec<Vec<Stub<F>>>,
-    loops: (usize, Option<usize>),
-    max_vertices: Option<usize>,
-    max_bridges: Option<usize>,
-    allow_self_loops: bool,
-    allow_zero_flow_edges: bool,
-    #[cfg(feature = "rayon")]
-    parallel: bool,
-    /// Per weight: one value per signature and the range of the sum.
-    weights: Vec<(Vec<i32>, [i64; 2])>,
-    counts: Vec<(Countable<F>, [i64; 2])>,
-    filter: Option<Box<Filter<F, L>>>,
-    check_heredity: bool,
-    progress: Option<Box<ProgressFn>>,
-    abort_check: Option<Box<AbortCheck>>,
+/// A validated request, reusable for independent executions against one compiled theory.
+/// Output diagrams retain only their compact data and immutable field/label tables.
+pub struct Plan<F, L> {
+    compiled: Arc<Compiled<F, L>>,
+    hooks: Hooks<F, L>,
+    orders: Vec<(usize, Arc<Limits>)>,
+    report: PlanReport,
 }
 
-impl<F, L> GraphGenerator<F, L>
-where
-    F: Clone + Ord + Send + Sync,
-    L: Clone + Ord + Send + Sync,
-{
-    /// External legs as `(label, stub at the vertex)` and the vertex signatures; a node of a
-    /// generated graph carries the index of its signature.
-    pub fn new(
-        externals: impl IntoIterator<Item = (L, Stub<F>)>,
-        signatures: impl IntoIterator<Item = Vec<Stub<F>>>,
-    ) -> Self {
-        GraphGenerator {
-            externals: externals.into_iter().collect(),
-            signatures: signatures.into_iter().collect(),
-            loops: (0, None),
-            max_vertices: None,
-            max_bridges: None,
-            allow_self_loops: false,
-            allow_zero_flow_edges: false,
-            #[cfg(feature = "rayon")]
-            parallel: false,
-            weights: vec![],
-            counts: vec![],
-            filter: None,
-            check_heredity: false,
-            progress: None,
-            abort_check: None,
+impl<F: Clone + Ord, L: Clone + Ord> Plan<F, L> {
+    pub fn new(theory: &Theory<F>, query: &Query<F, L>) -> Result<Self, GenerationError> {
+        let mut report = PlanReport::default();
+        report.criterion(
+            "loops",
+            format!("{:?}", query.loops),
+            PlanStage::Planning,
+            true,
+            PlanRole::Restriction,
+        );
+        report.criterion(
+            "bridges",
+            format!("{:?}", query.structure.bridges),
+            PlanStage::Skeletons,
+            true,
+            PlanRole::Restriction,
+        );
+        report.criterion(
+            "self loops",
+            query.structure.self_loops.to_string(),
+            PlanStage::Skeletons,
+            true,
+            PlanRole::Restriction,
+        );
+        report.criterion(
+            "zero-flow edges",
+            query.structure.zero_flow_edges.to_string(),
+            PlanStage::Skeletons,
+            true,
+            PlanRole::Restriction,
+        );
+        report.criterion(
+            "vertex bound",
+            format!("{:?}", query.structure.max_vertices),
+            PlanStage::Skeletons,
+            true,
+            PlanRole::Restriction,
+        );
+        let compiled = Compiled::new(theory, query, &mut report)?;
+        let degrees = &compiled.model.theory.degrees;
+        let (Some(&min_degree), Some(&max_degree)) = (degrees.first(), degrees.last()) else {
+            return Err(report.infeasible("the theory has no vertex rules"));
+        };
+        let (min_degree, max_degree) = (min_degree as usize, max_degree as usize);
+        let vertex_bound = query.structure.max_vertices;
+        if min_degree <= 2 && vertex_bound.is_none() {
+            return Err(GenerationError::Unbounded);
         }
-    }
-
-    /// Loop orders to generate, e.g. `2..=2` for exactly two loops or `..=3` up to three.
-    pub fn loops(mut self, loops: impl RangeBounds<usize>) -> Self {
-        let low = match loops.start_bound() {
-            Bound::Included(&l) => l,
-            Bound::Excluded(&l) => l + 1,
-            Bound::Unbounded => 0,
-        };
-        let high = match loops.end_bound() {
-            Bound::Included(&h) => Some(h),
-            Bound::Excluded(&h) => Some(h.saturating_sub(1)),
-            Bound::Unbounded => None,
-        };
-        self.loops = (low, high);
-        self
-    }
-
-    /// Maximum number of vertices (legs are not vertices).
-    pub fn max_vertices(mut self, max_vertices: usize) -> Self {
-        self.max_vertices = Some(max_vertices);
-        self
-    }
-
-    /// Maximum number of bridges; `0` keeps one-particle-irreducible graphs. Bridges are paired
-    /// edges whose removal disconnects the graph; legs are never bridges.
-    pub fn max_bridges(mut self, max_bridges: usize) -> Self {
-        self.max_bridges = Some(max_bridges);
-        self
-    }
-
-    /// Allow edges from a vertex to itself.
-    pub fn allow_self_loops(mut self, allow: bool) -> Self {
-        self.allow_self_loops = allow;
-        self
-    }
-
-    /// Allow bridges that carry no momentum: one side has no external leg (tadpoles, and every
-    /// bridge of a vacuum graph).
-    ///
-    /// Only paired edges count, so a one-leg process keeps its graphs without bridges (at one
-    /// loop in phi^3, the vertex with the leg and a self-loop) although its leg carries no
-    /// momentum either. Graphica counts that leg as a zero-flow bridge and returns no one-leg
-    /// graph without zero-flow edges or with `max_bridges(0)`.
-    pub fn allow_zero_flow_edges(mut self, allow: bool) -> Self {
-        self.allow_zero_flow_edges = allow;
-        self
-    }
-
-    /// Keep only the graphs whose vertex weights sum into `range`; `weights` gives one weight per
-    /// signature, in the order of the signatures (a coupling order, a counterterm order or any
-    /// integer tag). Several weights must all be met.
-    ///
-    /// Unlike a filter, a weight prunes with bounds that the search keeps: every partial vertex
-    /// bounds its weight by the signatures that it can still become, and the field assignments
-    /// whose bounds miss `range` are dropped before the filter sees them (see [`Self::filter`]).
-    /// The vertex rules are then checked exactly. A loop order whose vertex degrees cannot meet
-    /// the weights is not searched. A weight that every graph meets (weights of one sign, `range`
-    /// unbounded on that side of zero) costs nothing.
-    ///
-    /// ```
-    /// use linnet::half_edge::generate::{GraphGenerator, Stub};
-    ///
-    /// // e+ e- -> mu+ mu- at one loop with photons (signatures 0 and 1) and a scalar (2 and 3) whose
-    /// // vertices have order one: order zero keeps the graphs without the scalar
-    /// let (a, h) = (Stub::undirected('a'), Stub::undirected('h'));
-    /// let (e, m) = (Stub::incoming('e'), Stub::incoming('m'));
-    /// let vertex = |f: &Stub<char>, b: &Stub<char>| vec![f.clone(), f.clone().flipped(), b.clone()];
-    /// let signatures = [vertex(&e, &a), vertex(&m, &a), vertex(&e, &h), vertex(&m, &h)];
-    /// let legs = [(1, e.clone()), (2, e.flipped()), (3, m.clone()), (4, m.flipped())];
-    /// let generator = |signatures: &[Vec<Stub<char>>]| {
-    ///     GraphGenerator::new(legs.clone(), signatures.to_vec()).loops(1..=1)
-    /// };
-    /// let without_scalar = generator(&signatures[..2]).iter().unwrap().count();
-    /// let order_zero = generator(&signatures).weight([0, 0, 1, 1], ..=0);
-    /// assert_eq!(order_zero.iter().unwrap().count(), without_scalar);
-    /// ```
-    pub fn weight(
-        mut self,
-        weights: impl IntoIterator<Item = i32>,
-        range: impl RangeBounds<i32>,
-    ) -> Self {
-        let range = inclusive(&range, i64::from);
-        self.weights.push((weights.into_iter().collect(), range));
-        self
-    }
-
-    /// Keep only the graphs in which `count` lies in `range`. Several counts must all be met.
-    ///
-    /// Counts prune like weights ([`Self::weight`]): a vertex count is a weight of one on its
-    /// signatures; propagators and chords are counted as their fields are assigned, against the
-    /// edges still to assign; closed lines are counted as they close, and on complete assignments
-    /// only if a signature has three or more stubs of their fields (lines may branch).
-    pub fn count(mut self, count: Countable<F>, range: impl RangeBounds<usize>) -> Self {
-        let range = inclusive(&range, |n| i64::try_from(n).unwrap_or(i64::MAX));
-        self.counts.push((count, range));
-        self
-    }
-
-    /// Keep only the graphs accepted by `filter`, and prune the search with it.
-    ///
-    /// `filter` sees every state of the search as a [`GraphView`]. Stage 1 builds untyped
-    /// topologies ([`Stage::Topology`]) up to each complete topology: a vertex at a time, the
-    /// pendant vertices that complete a topology at once, then the labels of anonymous legs one at
-    /// a time (see [`Stage::Topology`]). Stage 2 assigns fields to the edges of an accepted
-    /// complete topology ([`Stage::Fields`]) up to each complete graph ([`Stage::Complete`]), seen
-    /// before it is canonized. Assignments that a single edge or the budgets ([`Self::weight`],
-    /// [`Self::count`]) show to have no completion are dropped unseen: a topology with an edge
-    /// that no field fits at its ends (given their legs and degrees), or whose legs alone exceed
-    /// a budget, gets no assignment; an assignment that leaves an edge at the vertices of the last
-    /// assigned one without a fitting field, or whose bounds on a budget already miss its range, is
-    /// dropped; and the complete graphs it sees meet the budgets. The output is the graphs whose
-    /// complete topology and complete graph `filter` accepts.
-    ///
-    /// A rejected state is dropped with everything that completes it, so `filter` must be
-    /// hereditary within each stage: when it rejects a partial topology, it rejects every complete
-    /// topology completing it (with more vertices, edges and legs), and when it rejects a partial
-    /// field assignment, it rejects every complete graph completing it (with more fields and the
-    /// vertex rules). Each state costs a call, so a condition is best tested where it is decided:
-    /// one on the topology alone in stage 1, accepting every state from [`Stage::Fields`] on, and
-    /// one on complete graphs only at [`Stage::Complete`], accepting every earlier state.
-    /// [`Self::check_heredity`] validates a filter.
-    ///
-    /// The view shows each graph in one vertex numbering, so the verdict on complete graphs
-    /// should not depend on it.
-    pub fn filter(
-        mut self,
-        filter: impl Fn(&GraphView<'_, F, L>) -> bool + Send + Sync + 'static,
-    ) -> Self {
-        self.filter = Some(Box::new(filter));
-        self
-    }
-
-    /// Validate the heredity of the filter instead of pruning with it: search every partial state,
-    /// and panic when the filter accepts a complete topology or a complete graph although it
-    /// rejected a partial state of the same stage that it completes. The output is that of a
-    /// hereditary filter, at the cost of the search without the partial prunes.
-    pub fn check_heredity(mut self, check: bool) -> Self {
-        self.check_heredity = check;
-        self
-    }
-
-    /// Called after every complete topology (before its graphs are decorated) and every emitted
-    /// graph; returning `false` stops the generation. A parallel search counts the topologies of
-    /// a subtree when its graphs are handed out.
-    pub fn progress(
-        mut self,
-        progress: impl Fn(&Progress) -> bool + Send + Sync + 'static,
-    ) -> Self {
-        self.progress = Some(Box::new(progress));
-        self
-    }
-
-    /// Polled during the search; returning `true` stops the generation.
-    pub fn abort_check(mut self, abort_check: impl Fn() -> bool + Send + Sync + 'static) -> Self {
-        self.abort_check = Some(Box::new(abort_check));
-        self
-    }
-
-    /// Search independent subtrees on the current rayon thread pool. The output order is the
-    /// same as without parallelism.
-    #[cfg(feature = "rayon")]
-    pub fn parallel(mut self, parallel: bool) -> Self {
-        self.parallel = parallel;
-        self
-    }
-
-    /// Generate lazily: each call to `next` searches up to the next graph. A request whose legs
-    /// carry a conserved charge or parity that the signatures cannot balance, or with an empty
-    /// budget range, yields nothing without a search.
-    pub fn iter(&self) -> Result<Diagrams<'_, F, L>, GenerationError> {
-        let compiled = Compiled::new(self)?;
         let n_legs = compiled.model.legs.total as usize;
-        let degrees = &compiled.model.degrees;
-        let budgets = &compiled.model.budgets;
-        // the legs carry a charge no vertex balances, or no value meets a budget
-        let empty = !compiled.model.balanced || budgets.unsatisfiable();
-        let mut orders = VecDeque::new();
-        // without signatures there is no vertex, hence no graph
-        if let (Some(&min_degree), Some(&max_degree)) = (degrees.first(), degrees.last()) {
-            let (min_degree, max_degree) = (min_degree as usize, max_degree as usize);
-            if min_degree <= 2 && self.max_vertices.is_none() {
-                return Err(GenerationError::Unbounded);
+        // 2 L - 2 + legs = sum (degree - 2) <= max_vertices (max_degree - 2).
+        let high = match (query.loops.1, vertex_bound) {
+            (Some(high), _) => high,
+            (None, Some(v)) => {
+                v.checked_mul(max_degree.saturating_sub(2))
+                    .and_then(|n| n.checked_add(2))
+                    .ok_or(GenerationError::TooManyVertices)?
+                    .saturating_sub(n_legs)
+                    / 2
             }
-            let high = match (self.loops.1, self.max_vertices) {
-                (Some(high), _) => high,
-                // 2 L - 2 + legs = sum (degree - 2) <= max_vertices (max_degree - 2)
-                (None, Some(v)) => {
-                    (v * max_degree.saturating_sub(2) + 2).saturating_sub(n_legs) / 2
-                }
-                (None, None) => return Err(GenerationError::Unbounded),
-            };
-            for loops in self.loops.0..=high {
-                let budget = 2 * loops as i32 - 2 + n_legs as i32;
-                let by_budget = (min_degree > 2).then(|| budget.max(0) as usize / (min_degree - 2));
-                // one of them is set: low degrees need a vertex bound
-                let max_vertices = [self.max_vertices, by_budget]
-                    .into_iter()
-                    .flatten()
-                    .min()
-                    .ok_or(GenerationError::Unbounded)?;
-                if max_vertices > MAX_VERTICES {
-                    return Err(GenerationError::TooManyVertices);
-                }
-                if empty || !budgets.partition_exists(budget, max_vertices) {
-                    continue;
-                }
-                let limits = Limits::new(
+            (None, None) => return Err(GenerationError::Unbounded),
+        };
+        if !compiled.model.balanced {
+            return Err(report.infeasible(
+                "the external legs violate a conserved charge, parity or stub direction",
+            ));
+        }
+        let budgets = &compiled.model.budgets;
+        if budgets.unsatisfiable() {
+            return Err(report.infeasible("a budget range has no possible value"));
+        }
+        let mut orders = Vec::new();
+        for loops in query.loops.0..=high {
+            let budget = i32::try_from(loops)
+                .ok()
+                .and_then(|l| l.checked_mul(2))
+                .and_then(|n| n.checked_add(n_legs as i32))
+                .and_then(|n| n.checked_sub(2))
+                .ok_or(GenerationError::TooManyVertices)?;
+            let by_budget = (min_degree > 2).then(|| budget.max(0) as usize / (min_degree - 2));
+            let max_vertices = [vertex_bound, by_budget]
+                .into_iter()
+                .flatten()
+                .min()
+                .ok_or(GenerationError::Unbounded)?;
+            if max_vertices > MAX_VERTICES {
+                return Err(GenerationError::TooManyVertices);
+            }
+            if max_vertices == 0 || !budgets.partition_exists(budget, max_vertices) {
+                report.empty_partitions.push((
+                    loops,
+                    "no degree/weight partition satisfies the request".into(),
+                ));
+                continue;
+            }
+            orders.push((
+                loops,
+                Arc::new(Limits::new(
                     &compiled.model,
                     budget,
                     max_vertices,
-                    self.max_bridges,
-                    self.allow_zero_flow_edges,
-                    self.allow_self_loops,
-                );
-                orders.push_back((loops, limits));
+                    query.structure.bridges.limit(loops),
+                    query.structure.zero_flow_edges,
+                    query.structure.self_loops,
+                )),
+            ));
+        }
+        if orders.is_empty() {
+            return Err(report.infeasible("no loop partition satisfies the request"));
+        }
+        for (present, name, stage, hereditary, role) in [
+            (
+                query.hooks.skeletons.is_some() || query.hooks.deferred.skeletons,
+                "prune_skeletons",
+                PlanStage::Skeletons,
+                true,
+                PlanRole::Restriction,
+            ),
+            (
+                query.hooks.dressings.is_some() || query.hooks.deferred.dressings,
+                "prune_dressings",
+                PlanStage::Dressing,
+                true,
+                PlanRole::Restriction,
+            ),
+            (
+                query.hooks.select.is_some() || query.hooks.deferred.select,
+                "select",
+                PlanStage::Selection,
+                false,
+                PlanRole::FinalCheck,
+            ),
+        ] {
+            if present {
+                report.criterion(name, "user predicate", stage, hereditary, role);
             }
         }
-        Ok(Diagrams {
-            generator: self,
-            compiled,
+        Ok(Self {
+            compiled: Arc::new(compiled),
+            hooks: query.hooks.clone(),
             orders,
-            current: None,
-            run: None,
-            scratch: None,
-            tasks: VecDeque::new(),
-            window: VecDeque::new(),
-            alone: true,
-            ready: VecDeque::new(),
-            stop: AtomicBool::new(false),
-            progress: Progress::default(),
+            report,
         })
+    }
+
+    /// The report produced while lowering this request, without running another planner.
+    pub fn explain(&self) -> &PlanReport {
+        &self.report
+    }
+}
+
+impl<F: Clone + Ord + Send + Sync, L: Clone + Ord + Send + Sync> Plan<F, L> {
+    /// Enumerate lazily, borrowing transient controls only for this execution.
+    pub fn diagrams<'a>(&'a self, run: &'a Run<'a>) -> Result<Diagrams<'a, F, L>, GenerationError> {
+        self.direct_hooks()?;
+        Ok(Diagrams {
+            traversal: Traversal::new(self, run),
+        })
+    }
+
+    fn direct_hooks(&self) -> Result<(), GenerationError> {
+        if self.hooks.deferred.any() {
+            return Err(GenerationError::DeferredHooks);
+        }
+        Ok(())
     }
 }
 
 /// Generation input in dense form; emitted diagrams retain only the immutable output tables.
 struct Compiled<F, L> {
-    model: Model,
+    model: Arc<Model>,
     tables: Arc<OutputTables<F, L>>,
+    /// Bindings translate key ranks through Python-owned tables without cloning automata.
+    ranked: OnceLock<Arc<Compiled<u32, u32>>>,
 }
 
 struct OutputTables<F, L> {
     /// Distinct fields and labels, sorted: their ids are ranks.
-    fields: Box<[F]>,
+    fields: Arc<[F]>,
     labels: Box<[L]>,
+    packing: model::Legs,
+    signatures: Arc<[Vec<u8>]>,
+    weights: Arc<[(String, Vec<i32>)]>,
     /// Per leg class, in the model's class order.
     legs: Box<[LegClass]>,
 }
@@ -695,31 +640,24 @@ struct RawDiagram {
 }
 
 impl<F: Clone + Ord, L: Clone + Ord> Compiled<F, L> {
-    fn new(generator: &GraphGenerator<F, L>) -> Result<Self, GenerationError> {
-        let mut fields: Vec<F> = generator
-            .signatures
-            .iter()
-            .flatten()
-            .chain(generator.externals.iter().map(|(_, s)| s))
-            .map(|s| s.field.clone())
-            .collect();
-        fields.sort();
-        fields.dedup();
-        if fields.len() > model::MAX_FIELDS {
-            return Err(GenerationError::TooManyFields);
+    fn new(
+        theory: &Theory<F>,
+        query: &Query<F, L>,
+        report: &mut PlanReport,
+    ) -> Result<Self, GenerationError> {
+        let fields = &theory.fields;
+        let mut externals = Vec::with_capacity(query.legs.len());
+        for (label, stub) in &query.legs.slots {
+            let Ok(field) = fields.binary_search(&stub.field) else {
+                return Err(report.infeasible("an external field is absent from the theory"));
+            };
+            externals.push((label, 3 * field as u8 + stub.direction(), stub));
         }
-        let field = |s: &Stub<F>| fields.binary_search(&s.field).expect("interned field") as u8;
-        let stub = |s: &Stub<F>| 3 * field(s) + s.direction();
-        let signatures: Vec<Vec<u8>> = generator
-            .signatures
-            .iter()
-            .map(|sig| sig.iter().map(stub).collect())
-            .collect();
-        let mut externals: Vec<(&L, u8, &Stub<F>)> = generator
-            .externals
-            .iter()
-            .map(|(l, s)| (l, stub(s), s))
-            .collect();
+        let field = |stub: &Stub<F>| {
+            fields
+                .binary_search(&stub.field)
+                .expect("validated external field") as u8
+        };
         externals.sort_by(|a, b| (a.0, a.1).cmp(&(b.0, b.1)));
         let mut labels: Vec<L> = externals.iter().map(|(l, ..)| (*l).clone()).collect();
         labels.dedup();
@@ -735,35 +673,59 @@ impl<F: Clone + Ord, L: Clone + Ord> Compiled<F, L> {
                 flow: s.flow,
             });
         }
-        let request = Self::request(generator, &fields)?;
-        Ok(Compiled {
-            model: Model::new(fields.len(), &signatures, &classes, &request)?,
+        let request = Self::request(theory, query, report)?;
+        let model = Model::new(Arc::clone(&theory.dense), &classes, &request)?;
+        let packing = model.legs.clone();
+        Ok(Self {
+            model: Arc::new(model),
+            ranked: OnceLock::new(),
             tables: Arc::new(OutputTables {
-                fields: fields.into_boxed_slice(),
+                fields: Arc::clone(fields),
                 labels: labels.into_boxed_slice(),
+                packing,
+                signatures: Arc::clone(&theory.dense.signatures),
+                weights: Arc::clone(&theory.weights),
                 legs: legs.into_boxed_slice(),
             }),
         })
     }
 
-    /// The budgets of `generator` with fields as ranks in `fields`: vertex counts become weights,
+    /// Budgets with theory fields as ranks: vertex counts become weights,
     /// and fields that no stub carries are left out of the counts. Budgets that every graph meets
     /// are left out, so they cost nothing.
-    fn request(generator: &GraphGenerator<F, L>, fields: &[F]) -> Result<Request, GenerationError> {
-        let n_signatures = generator.signatures.len();
+    fn request(
+        theory: &Theory<F>,
+        query: &Query<F, L>,
+        report: &mut PlanReport,
+    ) -> Result<Request, GenerationError> {
+        let n_signatures = theory.n_rules;
+        let fields = &theory.fields;
         // a sum of values of one sign, with the range unbounded on that side of zero
         let bounds_nothing = |values: &[i32], [min, max]: [i64; 2]| {
             (min <= 0 && max == i64::MAX && values.iter().all(|&v| v >= 0))
                 || (max >= 0 && min == i64::MIN && values.iter().all(|&v| v <= 0))
         };
         let mut request = Request::default();
-        for (weights, range) in &generator.weights {
-            if weights.len() != n_signatures {
-                return Err(GenerationError::Weights {
-                    signatures: n_signatures,
-                    weights: weights.len(),
-                });
-            }
+        for (name, range) in &query.weights {
+            let (_, weights) = theory
+                .weights
+                .iter()
+                .find(|(column, _)| column == name)
+                .ok_or_else(|| GenerationError::UnknownWeight(name.clone()))?;
+            report.criterion(
+                format!("weight {name}"),
+                format!("{}..={}", range[0], range[1]),
+                PlanStage::Dressing,
+                true,
+                PlanRole::Propagator,
+            );
+            report.criterion(
+                format!("weight {name}"),
+                format!("{}..={}", range[0], range[1]),
+                PlanStage::Rules,
+                false,
+                PlanRole::FinalCheck,
+            );
             request.weights.push((weights.clone(), *range));
         }
         let set = |counted: &[F]| {
@@ -771,7 +733,20 @@ impl<F: Clone + Ord, L: Clone + Ord> Compiled<F, L> {
                 .filter_map(|f| fields.binary_search(f).ok())
                 .fold(0u128, |set, field| set | 1 << field)
         };
-        for (count, range) in &generator.counts {
+        for (count, range) in &query.counts {
+            let criterion = match count {
+                Countable::Vertices(rules) => format!("vertices in {rules:?}"),
+                Countable::Propagators(_) => "propagators".into(),
+                Countable::Chords(_) => "chords".into(),
+                Countable::ClosedLines(_) => "closed lines".into(),
+            };
+            report.criterion(
+                criterion,
+                format!("{}..={}", range[0], range[1]),
+                PlanStage::Dressing,
+                true,
+                PlanRole::Propagator,
+            );
             match count {
                 Countable::Vertices(signatures) => request.weights.push((
                     (0..n_signatures)
@@ -794,24 +769,14 @@ impl<F: Clone + Ord, L: Clone + Ord> Compiled<F, L> {
         Ok(request)
     }
 
-    /// Freeze accepted output without retaining the topology, decorator or scratch pool.
+    /// Freeze only an accepted output, transferring a graph only if a hook requested it.
     fn diagram(
         &self,
         d: Decoration<'_>,
         loops: usize,
-        filter: Option<&Filter<F, L>>,
-    ) -> Option<Diagram<F, L>> {
-        let mut view = GraphView::new(self, loops, State::Decoration(d));
-        if let Some(filter) = filter {
-            if !filter(&view) {
-                return None;
-            }
-            assert!(
-                !d.vetoed,
-                "the filter is not hereditary: it accepts a graph but rejected a partial field \
-                 assignment it completes"
-            );
-        }
+        mut view: View<'_, F, L>,
+        skeleton: Arc<SkeletonData<F, L>>,
+    ) -> Diagram<F, L> {
         let diagram = Diagram {
             rules: d.rules.into(),
             edges: d
@@ -838,6 +803,7 @@ impl<F: Clone + Ord, L: Clone + Ord> Compiled<F, L> {
                 })
                 .collect(),
             tables: Arc::clone(&self.tables),
+            skeleton,
             graph: view
                 .take_complete_graph()
                 .map_or_else(OnceLock::new, OnceLock::from),
@@ -854,7 +820,7 @@ impl<F: Clone + Ord, L: Clone + Ord> Compiled<F, L> {
             assert!(canon.canonical_form() == diagram.canonical_form());
             assert_eq!(canon.automorphism_count(), diagram.automorphism_count);
         }
-        Some(diagram)
+        diagram
     }
 }
 
@@ -894,32 +860,83 @@ struct RunContext<'a, F, L> {
     compiled: &'a Compiled<F, L>,
     limits: &'a Limits,
     stop: &'a AtomicBool,
-    abort_check: Option<&'a AbortCheck>,
+    abort_check: Option<&'a AbortCheck<'a>>,
     loops: usize,
     filter: Option<Pruner<'a, F, L>>,
+    hooks: &'a Hooks<F, L>,
 }
 
 impl<'a, F: Send + Sync, L: Send + Sync> RunContext<'a, F, L> {
     fn new(
-        generator: &'a GraphGenerator<F, L>,
-        compiled: &'a Compiled<F, L>,
-        current: &'a Option<(usize, Limits)>,
+        plan: &'a Plan<F, L>,
+        controls: &'a Run<'a>,
+        current: &'a Option<(usize, Arc<Limits>)>,
         stop: &'a AtomicBool,
     ) -> Self {
         let (loops, limits) = current.as_ref().expect("a loop order is running");
+        let compiled = &plan.compiled;
         RunContext {
             compiled,
             limits,
             stop,
-            abort_check: generator.abort_check.as_deref(),
+            abort_check: controls.abort_check.as_deref(),
             loops: *loops,
-            filter: generator.filter.as_deref().map(|filter| Pruner {
-                compiled,
-                filter,
-                loops: *loops,
-                check_heredity: generator.check_heredity,
-            }),
+            filter: (plan.hooks.skeletons.is_some()
+                || plan.hooks.dressings.is_some()
+                || plan.hooks.deferred.skeletons
+                || plan.hooks.deferred.dressings)
+                .then_some(Pruner {
+                    compiled,
+                    hooks: &plan.hooks,
+                    loops: *loops,
+                    check_heredity: controls.check_heredity,
+                }),
+            hooks: &plan.hooks,
         }
+    }
+
+    fn stopped(&self) -> bool {
+        if self.stop.load(Ordering::Relaxed) {
+            return true;
+        }
+        if self.abort_check.is_some_and(|check| check()) {
+            self.stop.store(true, Ordering::Relaxed);
+            return true;
+        }
+        false
+    }
+
+    /// Complete-assignment acceptance shared by diagram, count and retained-skeleton runs.
+    /// Cancellation inside a predicate stops before another predicate or output is delivered.
+    fn accept<'b>(&'b self, d: Decoration<'b>) -> Option<View<'b, F, L>> {
+        if self.stopped() {
+            return None;
+        }
+        let mut view = View::new(self.compiled, self.loops, State::Decoration(d));
+        if let Some(prune) = &self.hooks.dressings {
+            let dressing = DressingView(view);
+            let keep = prune(&dressing);
+            if self.stopped() {
+                return None;
+            }
+            assert!(
+                !(keep && d.vetoed),
+                "prune_dressings is not hereditary: it accepts a diagram but rejected an ancestor assignment"
+            );
+            if !keep {
+                return None;
+            }
+            view = dressing.0;
+        }
+        if let Some(select) = &self.hooks.select {
+            let diagram = DiagramView(view);
+            let keep = select(&diagram);
+            if self.stopped() || !keep {
+                return None;
+            }
+            view = diagram.0;
+        }
+        Some(view)
     }
 
     /// The filter as both stages prune with it.
@@ -938,27 +955,29 @@ impl<'a, F: Send + Sync, L: Send + Sync> RunContext<'a, F, L> {
     }
 }
 
-/// Call the progress callback; `false` stops the generation.
-fn report(callback: Option<&ProgressFn>, progress: &Progress, stop: &AtomicBool) {
-    if callback.is_some_and(|callback| !callback(progress)) {
+/// Call the progress callback; `Break` stops the generation.
+fn report(callback: Option<&ProgressFn<'_>>, progress: &Progress, stop: &AtomicBool) {
+    if callback.is_some_and(|callback| callback(progress).is_break()) {
         stop.store(true, Ordering::Relaxed);
     }
 }
 
 /// A resumable generation under one search object: the topology search and the decoration of
 /// its current complete topology.
-struct Run {
+struct Cursor<F, L> {
     search: Search,
     decorator: Decorator,
     decorating: bool,
+    skeleton: Option<Arc<SkeletonData<F, L>>>,
 }
 
-impl Run {
+impl<F, L> Cursor<F, L> {
     fn new(model: &Model, task: Topology, scratch: Scratch) -> Self {
-        Run {
+        Cursor {
             search: Search::new(model, task, scratch.search),
             decorator: scratch.decorator,
             decorating: false,
+            skeleton: None,
         }
     }
 
@@ -971,22 +990,37 @@ impl Run {
 
     /// The next diagram; `None` when the subtree is exhausted or the generation stops.
     /// `topology` is called on every complete topology before it is decorated.
-    fn next<F: Clone + Ord + Send + Sync, L: Clone + Ord + Send + Sync>(
+    fn next<M: Emit<F, L>>(
         &mut self,
         cx: &RunContext<'_, F, L>,
         topology: &mut dyn FnMut(),
-    ) -> Option<Diagram<F, L>> {
+    ) -> Option<M::Item>
+    where
+        F: Clone + Ord + Send + Sync,
+        L: Clone + Ord + Send + Sync,
+    {
         let model = &cx.compiled.model;
-        let filter = cx.filter.as_ref().map(|pruner| pruner.filter);
         loop {
+            if cx.stopped() {
+                return None;
+            }
             while self.decorating {
+                if cx.stopped() {
+                    return None;
+                }
                 let t = self.search.topology();
-                let Some(d) = self.decorator.next(model, t, cx.prune()) else {
+                let Some(d) = self.decorator.next(model, t, cx.prune(), || cx.stopped()) else {
                     self.decorating = false;
                     break;
                 };
-                if let Some(diagram) = cx.compiled.diagram(d, cx.loops, filter) {
-                    return Some(diagram);
+                if let Some(view) = cx.accept(d) {
+                    return Some(M::diagram(
+                        cx.compiled,
+                        d,
+                        cx.loops,
+                        view,
+                        self.skeleton.as_ref(),
+                    ));
                 }
             }
             if !self.search.next(&cx.search()) {
@@ -995,6 +1029,18 @@ impl Run {
             topology();
             if cx.stop.load(Ordering::Relaxed) {
                 return None;
+            }
+            if M::SNAPSHOT {
+                self.skeleton = Some(Arc::new(SkeletonData::new(
+                    cx.compiled,
+                    &self.search,
+                    cx.loops,
+                )));
+            }
+            if !M::DECORATE {
+                return M::skeleton(Arc::clone(
+                    self.skeleton.as_ref().expect("skeleton output snapshots"),
+                ));
             }
             self.decorator.start(
                 model,
@@ -1015,21 +1061,21 @@ const WINDOW_PER_THREAD: usize = 16;
 const AHEAD: usize = 1024;
 
 /// A subtree of a parallel search and the diagrams it found that are not emitted yet.
-struct Slot<F, L> {
+struct Slot<F, L, M: Emit<F, L>> {
     task: Option<Topology>,
-    run: Option<Run>,
-    diagrams: Vec<Diagram<F, L>>,
-    topologies: usize,
+    run: Option<Cursor<F, L>>,
+    diagrams: Vec<M::Item>,
+    topologies: BigUint,
     done: bool,
 }
 
-impl<F: Clone + Ord + Send + Sync, L: Clone + Ord + Send + Sync> Slot<F, L> {
+impl<F: Clone + Ord + Send + Sync, L: Clone + Ord + Send + Sync, M: Emit<F, L>> Slot<F, L, M> {
     fn new(task: Topology) -> Self {
         Slot {
             task: Some(task),
             run: None,
             diagrams: vec![],
-            topologies: 0,
+            topologies: BigUint::zero(),
             done: false,
         }
     }
@@ -1058,10 +1104,10 @@ impl<F: Clone + Ord + Send + Sync, L: Clone + Ord + Send + Sync> Slot<F, L> {
         }
         let run = self.run.get_or_insert_with(|| {
             let task = self.task.take().expect("an unstarted slot has its task");
-            Run::new(&cx.compiled.model, task, Scratch::take())
+            Cursor::new(&cx.compiled.model, task, Scratch::take())
         });
         while self.diagrams.len() < ahead {
-            let Some(diagram) = run.next(cx, &mut || self.topologies += 1) else {
+            let Some(diagram) = run.next::<M>(cx, &mut || self.topologies += 1u8) else {
                 self.done = true;
                 self.run.take().expect("running").into_scratch().give();
                 return;
@@ -1071,42 +1117,61 @@ impl<F: Clone + Ord + Send + Sync, L: Clone + Ord + Send + Sync> Slot<F, L> {
     }
 }
 
-/// Graphs in generation order; see [`GraphGenerator::iter`].
-pub struct Diagrams<'g, F, L> {
-    generator: &'g GraphGenerator<F, L>,
-    compiled: Compiled<F, L>,
+/// Common bounded traversal, parameterized only at output acceptance.
+struct Traversal<'g, F, L, M: Emit<F, L>> {
+    plan: &'g Plan<F, L>,
+    controls: &'g Run<'g>,
     /// Loop orders not started yet.
-    orders: VecDeque<(usize, Limits)>,
-    current: Option<(usize, Limits)>,
+    orders: VecDeque<(usize, Arc<Limits>)>,
+    current: Option<(usize, Arc<Limits>)>,
     /// The sequential search of the current loop order, and its buffers between orders.
-    run: Option<Run>,
+    run: Option<Cursor<F, L>>,
     scratch: Option<Scratch>,
     /// The parallel search of the current loop order: subtrees not started, running subtrees in
     /// order, and diagrams of finished ones not emitted yet.
     tasks: VecDeque<Topology>,
-    window: VecDeque<Slot<F, L>>,
+    window: VecDeque<Slot<F, L, M>>,
     /// Whether the next step runs only the oldest subtree, up to its first diagram: the first step,
     /// so that the first graph does not wait for a step of the whole window.
     alone: bool,
-    ready: VecDeque<Diagram<F, L>>,
+    ready: VecDeque<M::Item>,
     stop: AtomicBool,
     progress: Progress,
+    topologies: BTreeMap<usize, BigUint>,
 }
 
-impl<F, L> Diagrams<'_, F, L>
+impl<'a, F, L, M: Emit<F, L>> Traversal<'a, F, L, M>
 where
     F: Clone + Ord + Send + Sync,
     L: Clone + Ord + Send + Sync,
 {
+    fn new(plan: &'a Plan<F, L>, controls: &'a Run<'a>) -> Self {
+        Self {
+            plan,
+            controls,
+            orders: plan.orders.iter().cloned().collect(),
+            current: None,
+            run: None,
+            scratch: None,
+            tasks: VecDeque::new(),
+            window: VecDeque::new(),
+            alone: true,
+            ready: VecDeque::new(),
+            stop: AtomicBool::new(false),
+            progress: Progress::default(),
+            topologies: BTreeMap::new(),
+        }
+    }
+
     /// Whether the abort check or the progress callback stopped the generation.
     pub fn aborted(&self) -> bool {
         self.stop.load(Ordering::Relaxed)
     }
 
     fn parallel(&self) -> bool {
-        #[cfg(feature = "rayon")]
-        return self.generator.parallel;
-        #[cfg(not(feature = "rayon"))]
+        #[cfg(all(feature = "rayon", not(target_arch = "wasm32")))]
+        return self.controls.parallel;
+        #[cfg(not(all(feature = "rayon", not(target_arch = "wasm32"))))]
         false
     }
 
@@ -1116,8 +1181,8 @@ where
         items: Vec<T>,
         f: impl Fn(T) -> R + Send + Sync,
     ) -> Vec<R> {
-        #[cfg(feature = "rayon")]
-        if self.generator.parallel {
+        #[cfg(all(feature = "rayon", not(target_arch = "wasm32")))]
+        if self.controls.parallel {
             use rayon::prelude::*;
             return items.into_par_iter().map(f).collect();
         }
@@ -1125,8 +1190,8 @@ where
     }
 
     fn threads(&self) -> usize {
-        #[cfg(feature = "rayon")]
-        if self.generator.parallel {
+        #[cfg(all(feature = "rayon", not(target_arch = "wasm32")))]
+        if self.controls.parallel {
             return rayon::current_num_threads();
         }
         1
@@ -1134,7 +1199,7 @@ where
 
     fn report(&self) {
         report(
-            self.generator.progress.as_deref(),
+            self.controls.progress.as_deref(),
             &self.progress,
             &self.stop,
         );
@@ -1146,13 +1211,13 @@ where
             return false;
         };
         self.progress.loops = loops;
-        let root = Topology::empty(&self.compiled.model, &limits);
+        let root = Topology::empty(&self.plan.compiled.model, &limits);
         self.current = Some((loops, limits));
         if self.parallel() {
             self.tasks = self.frontier(root).into();
         } else {
             let scratch = self.scratch.take().unwrap_or_else(Scratch::take);
-            self.run = Some(Run::new(&self.compiled.model, root, scratch));
+            self.run = Some(Cursor::new(&self.plan.compiled.model, root, scratch));
         }
         true
     }
@@ -1161,7 +1226,7 @@ where
     /// to balance the threads.
     fn frontier(&self, root: Topology) -> Vec<Topology> {
         let target = TASKS_PER_THREAD * self.threads();
-        let run = RunContext::new(self.generator, &self.compiled, &self.current, &self.stop);
+        let run = RunContext::new(self.plan, self.controls, &self.current, &self.stop);
         let cx = run.search();
         let mut items = vec![root];
         while items.len() < target
@@ -1195,9 +1260,9 @@ where
         if self.window.is_empty() {
             return false;
         }
-        let cx = RunContext::new(self.generator, &self.compiled, &self.current, &self.stop);
+        let cx = RunContext::new(self.plan, self.controls, &self.current, &self.stop);
         // until the first diagram is out, a step buffers one diagram per subtree
-        let ahead = if self.progress.diagrams == 0 {
+        let ahead = if self.progress.diagrams.is_zero() {
             1
         } else {
             AHEAD
@@ -1221,14 +1286,14 @@ where
                     self.window.insert(i + k, Slot::new(task));
                 }
             }
-            #[cfg(feature = "rayon")]
+            #[cfg(all(feature = "rayon", not(target_arch = "wasm32")))]
             {
                 use rayon::prelude::*;
                 self.window
                     .par_iter_mut()
                     .for_each(|slot| slot.advance(&cx, ahead));
             }
-            #[cfg(not(feature = "rayon"))]
+            #[cfg(not(all(feature = "rayon", not(target_arch = "wasm32"))))]
             self.window
                 .iter_mut()
                 .for_each(|slot| slot.advance(&cx, ahead));
@@ -1240,8 +1305,9 @@ where
             if done {
                 self.window.pop_front();
             }
-            if topologies > 0 {
+            if !topologies.is_zero() {
                 // a subtree's topologies are counted when its diagrams are handed out
+                *self.topologies.entry(self.progress.loops).or_default() += &topologies;
                 self.progress.topologies += topologies;
                 self.report();
             }
@@ -1253,13 +1319,13 @@ where
     }
 }
 
-impl<F, L> Drop for Diagrams<'_, F, L> {
+impl<F, L, M: Emit<F, L>> Drop for Traversal<'_, F, L, M> {
     /// Hand the buffers of the sequential search to the next generation on this thread.
     fn drop(&mut self) {
         if let Some(scratch) = self
             .run
             .take()
-            .map(Run::into_scratch)
+            .map(Cursor::into_scratch)
             .or(self.scratch.take())
         {
             scratch.give();
@@ -1267,37 +1333,51 @@ impl<F, L> Drop for Diagrams<'_, F, L> {
     }
 }
 
-impl<F, L> Iterator for Diagrams<'_, F, L>
+impl<F, L, M: Emit<F, L>> Iterator for Traversal<'_, F, L, M>
 where
     F: Clone + Ord + Send + Sync,
     L: Clone + Ord + Send + Sync,
 {
-    type Item = Diagram<F, L>;
+    type Item = M::Item;
 
-    fn next(&mut self) -> Option<Diagram<F, L>> {
+    fn next(&mut self) -> Option<M::Item> {
         loop {
+            if self
+                .controls
+                .abort_check
+                .as_ref()
+                .is_some_and(|check| check())
+            {
+                self.stop.store(true, Ordering::Relaxed);
+            }
             if self.stop.load(Ordering::Relaxed) {
                 return None;
             }
             if let Some(diagram) = self.ready.pop_front() {
-                self.progress.diagrams += 1;
+                if M::DECORATE {
+                    self.progress.diagrams += 1u8;
+                }
                 self.report();
                 return Some(diagram);
             }
             if let Some(run) = &mut self.run {
-                let cx = RunContext::new(self.generator, &self.compiled, &self.current, &self.stop);
+                let cx = RunContext::new(self.plan, self.controls, &self.current, &self.stop);
                 let (callback, progress, stop) = (
-                    self.generator.progress.as_deref(),
+                    self.controls.progress.as_deref(),
                     &mut self.progress,
                     &self.stop,
                 );
-                let diagram = run.next(&cx, &mut || {
-                    progress.topologies += 1;
+                let topologies = &mut self.topologies;
+                let diagram = run.next::<M>(&cx, &mut || {
+                    *topologies.entry(progress.loops).or_default() += 1u8;
+                    progress.topologies += 1u8;
                     report(callback, progress, stop);
                 });
                 match diagram {
                     Some(diagram) => {
-                        self.progress.diagrams += 1;
+                        if M::DECORATE {
+                            self.progress.diagrams += 1u8;
+                        }
                         self.report();
                         return Some(diagram);
                     }
@@ -1314,5 +1394,23 @@ where
                 }
             }
         }
+    }
+}
+
+/// Accepted diagrams in deterministic search order.
+pub struct Diagrams<'a, F: Clone + Ord + Send + Sync, L: Clone + Ord + Send + Sync> {
+    traversal: Traversal<'a, F, L, DiagramOutput>,
+}
+
+impl<F: Clone + Ord + Send + Sync, L: Clone + Ord + Send + Sync> Diagrams<'_, F, L> {
+    pub fn aborted(&self) -> bool {
+        self.traversal.aborted()
+    }
+}
+
+impl<F: Clone + Ord + Send + Sync, L: Clone + Ord + Send + Sync> Iterator for Diagrams<'_, F, L> {
+    type Item = Diagram<F, L>;
+    fn next(&mut self) -> Option<Self::Item> {
+        self.traversal.next()
     }
 }

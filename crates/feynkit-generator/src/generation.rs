@@ -15,9 +15,10 @@ use std::{
     collections::{BTreeMap, BTreeSet, HashMap},
     fmt,
     hash::Hash,
+    ops::ControlFlow,
     sync::{
         Arc, Mutex, RwLock,
-        atomic::{AtomicUsize, Ordering},
+        atomic::{AtomicBool, AtomicUsize, Ordering},
     },
 };
 
@@ -32,7 +33,7 @@ use linnet::half_edge::{
     HedgeGraph, NodeIndex,
     builder::HedgeGraphBuilder,
     canon::ignore,
-    generate::GraphGenerator,
+    generate::{Plan, Run, batch},
     involution::{Flow, Orientation},
     subgraph::{InternalSubGraph, SuBitGraph, SubSetLike},
 };
@@ -57,7 +58,9 @@ use crate::{
     GenerationType, GroupingError, NumeratorGrouping, ParticleSelector, Process, ProcessError,
     SelectorError, SewnFilterOptions, grouping, momentum_symbol,
 };
-pub use enumeration::{ExternalLabel, GenerationView};
+pub use enumeration::{
+    ExternalLabel, GenerationDiagramView, GenerationDressingView, GenerationSkeletonView,
+};
 use enumeration::{
     ParticleStub, ProcessExternals, Pruner, VertexSignatures, closed_loops, incoming_stub,
     resolved_vertex,
@@ -1349,7 +1352,7 @@ struct PreparedSearch {
     resolved: ResolvedProcess,
     signatures: VertexSignatures,
     externals: ProcessExternals,
-    generator: GraphGenerator<ParticleId, ExternalLabel>,
+    plan: Option<Plan<ParticleId, ExternalLabel>>,
 }
 
 #[derive(Clone)]
@@ -1497,7 +1500,8 @@ impl Generator {
         process: &Process,
         options: &GenerationOptions,
         generation_type: GenerationType,
-        observe: impl Fn(&GenerationView<'_>, bool) + Send + Sync + 'static,
+        observe_skeleton: impl Fn(&GenerationSkeletonView<'_>, bool) + Send + Sync + 'static,
+        observe_dressing: impl Fn(&GenerationDressingView<'_>, bool) + Send + Sync + 'static,
     ) -> Result<PreparedSearch, GenerationError> {
         process.validate()?;
         if generation_type == GenerationType::Amplitude
@@ -1518,19 +1522,40 @@ impl Generator {
         let resolved = ResolvedProcess::new(&self.model, process, generation_type, &options)?;
         let signatures = VertexSignatures::new(&self.model, &options)?;
         let externals = resolved.externals(&self.model)?;
-        let pruner = Pruner::new(&self.model, &options);
-
-        let generator = signatures.generator(&self.model, &externals, &options, move |view| {
-            let kept = pruner.keeps(view);
-            observe(view, kept);
-            kept
-        })?;
+        let pruner = Arc::new(Pruner::new(&self.model, &options));
+        let skeleton_pruner = Arc::clone(&pruner);
+        // Census observers describe scalar decisions, not the native half of a deferred
+        // verdict. Deferred runs are observed only after binding resolution by their driver.
+        let observe = options.deferred_hooks.is_none();
+        let skeleton_hook = options.prune_skeletons.clone();
+        let dressing_hook = options.prune_dressings.clone();
+        let plan = signatures.plan(
+            &self.model,
+            &externals,
+            &options,
+            move |view| {
+                let kept = skeleton_pruner.keeps_skeleton(view)
+                    && skeleton_hook.as_ref().is_none_or(|hook| hook(view));
+                if observe {
+                    observe_skeleton(view, kept);
+                }
+                kept
+            },
+            move |view| {
+                let kept = pruner.keeps_dressing(view)
+                    && dressing_hook.as_ref().is_none_or(|hook| hook(view));
+                if observe {
+                    observe_dressing(view, kept);
+                }
+                kept
+            },
+        )?;
         Ok(PreparedSearch {
             options,
             resolved,
             signatures,
             externals,
-            generator,
+            plan,
         })
     }
 
@@ -1545,32 +1570,61 @@ impl Generator {
             resolved,
             signatures,
             externals,
-            generator,
-        } = self.search(process, options, generation_type, |_, _| {})?;
+            plan,
+        } = self.search(process, options, generation_type, |_, _| {}, |_, _| {})?;
         let options = &options;
 
         options.report_progress("topologies", 0, None);
-        let topologies = Arc::new(AtomicUsize::new(0));
-        let generator = generator
-            .progress({
-                let options = options.clone();
-                let topologies = Arc::clone(&topologies);
-                move |progress| {
-                    topologies.store(progress.topologies, Ordering::Relaxed);
-                    options.report_progress("topologies", progress.topologies, None);
-                    !options.cancellation_requested()
+        let topologies = AtomicUsize::new(0);
+        let overflow = AtomicBool::new(false);
+        let run = Run::default()
+            .progress(|progress| {
+                let Ok(count) = usize::try_from(&progress.topologies) else {
+                    overflow.store(true, Ordering::Relaxed);
+                    return ControlFlow::Break(());
+                };
+                topologies.store(count, Ordering::Relaxed);
+                options.report_progress("topologies", count, None);
+                if options.cancellation_requested() {
+                    ControlFlow::Break(())
+                } else {
+                    ControlFlow::Continue(())
                 }
             })
-            .abort_check({
-                let options = options.clone();
-                move || options.cancellation_requested()
-            });
+            .abort_check(|| overflow.load(Ordering::Relaxed) || options.cancellation_requested());
         #[cfg(not(target_arch = "wasm32"))]
-        let generator = generator.parallel(true);
+        let run = run.parallel(true);
         let enumerate = || {
-            generator
-                .iter()
-                .map(|diagrams| diagrams.collect::<Vec<_>>())
+            let Some(plan) = &plan else {
+                return Ok(Vec::new());
+            };
+            let Some((_, dispatch)) = &options.deferred_hooks else {
+                return plan
+                    .diagrams(&run)
+                    .map(|diagrams| diagrams.collect::<Vec<_>>());
+            };
+            let mut driver = plan.batched(&run, batch::Output::Diagrams)?;
+            let mut diagrams = Vec::new();
+            loop {
+                match driver.poll()? {
+                    batch::Event::Batch(requests) => match dispatch(requests) {
+                        ControlFlow::Continue(replies) => driver.resolve(&replies)?,
+                        ControlFlow::Break(()) => {
+                            options.cancellation.cancel();
+                            driver.abort();
+                        }
+                    },
+                    batch::Event::Diagram(diagram) => diagrams.push(diagram),
+                    batch::Event::Yield | batch::Event::Progress(_) => {
+                        if options.cancellation_requested() {
+                            driver.abort();
+                        }
+                    }
+                    batch::Event::Done => break,
+                    batch::Event::Skeleton(_) => unreachable!("diagram output was requested"),
+                }
+            }
+            Ok(diagrams)
         };
         #[cfg(not(target_arch = "wasm32"))]
         let pool = {
@@ -1591,6 +1645,9 @@ impl Generator {
             let generated = pool.install(enumerate)?;
             generated
         };
+        if overflow.load(Ordering::Relaxed) {
+            return Err(GenerationError::ArithmeticOverflow("the topology count"));
+        }
         let mut completed = !options.cancellation_requested();
         // Numerator grouping keeps the first representative, so preserve its canonical
         // encounter order. Ungrouped output retains Linnet's deterministic search order
@@ -5206,6 +5263,131 @@ mod tests {
                 ))
             ));
         }
+    }
+
+    #[test]
+    fn typed_search_hooks_separate_complete_dressing_from_selection() {
+        let generator = Generator::new(scalar_model());
+        let skeletons = Arc::new(AtomicUsize::new(0));
+        let dressings = Arc::new(AtomicUsize::new(0));
+        let selections = Arc::new(AtomicUsize::new(0));
+        let options = GenerationOptions::default()
+            .with_loop_count(0, 0)
+            .unwrap()
+            .threads(1)
+            .prune_skeletons({
+                let count = Arc::clone(&skeletons);
+                move |view| {
+                    count.fetch_add(usize::from(view.is_topology_complete()), Ordering::Relaxed);
+                    true
+                }
+            })
+            .prune_dressings({
+                let count = Arc::clone(&dressings);
+                move |view| {
+                    count.fetch_add(usize::from(view.is_complete()), Ordering::Relaxed);
+                    true
+                }
+            })
+            .select({
+                let count = Arc::clone(&selections);
+                move |view| {
+                    assert!(view.is_complete());
+                    count.fetch_add(1, Ordering::Relaxed);
+                    false
+                }
+            });
+        let result = generator
+            .generate(
+                &Process::new(["phi", "phi"], ["phi", "phi"]),
+                &options,
+                GenerationType::Amplitude,
+            )
+            .unwrap();
+        assert!(result.report.completed);
+        assert!(result.diagrams.is_empty());
+        assert!(skeletons.load(Ordering::Relaxed) > 0);
+        assert!(dressings.load(Ordering::Relaxed) > 0);
+        assert_eq!(
+            dressings.load(Ordering::Relaxed),
+            selections.load(Ordering::Relaxed)
+        );
+    }
+
+    #[test]
+    fn deferred_typed_hooks_preserve_outputs_and_cancel_without_worker_replies() {
+        let generator = Generator::new(scalar_model());
+        let process = Process::new(["phi", "phi"], ["phi", "phi", "phi"]);
+        let options = GenerationOptions::default()
+            .with_loop_count(0, 0)
+            .unwrap()
+            .threads(1);
+        let expected = generator
+            .generate(&process, &options, GenerationType::Amplitude)
+            .unwrap();
+        let json = |result: &GenerationResult| {
+            result
+                .diagrams
+                .iter()
+                .map(|diagram| diagram.to_json().unwrap())
+                .collect::<Vec<_>>()
+        };
+        let mask = batch::HookMask {
+            skeletons: true,
+            dressings: true,
+            select: true,
+        };
+        for threads in [1, 4] {
+            let observed = Arc::new(Mutex::new([0usize; 3]));
+            let callbacks = Arc::clone(&observed);
+            let deferred = options
+                .clone()
+                .threads(threads)
+                .deferred_hooks(mask, move |requests| {
+                    let mut observed = callbacks.lock().unwrap();
+                    ControlFlow::Continue(
+                        requests
+                            .into_iter()
+                            .map(|request| {
+                                match request.hook() {
+                                    batch::Hook::Skeleton => {
+                                        assert!(request.skeleton().is_some());
+                                        assert!(request.dressing().is_none());
+                                        observed[0] += 1;
+                                    }
+                                    batch::Hook::Dressing => {
+                                        let view = request.dressing().unwrap();
+                                        observed[1] += usize::from(view.is_complete());
+                                    }
+                                    batch::Hook::Select => {
+                                        assert!(request.diagram().unwrap().is_complete());
+                                        observed[2] += 1;
+                                    }
+                                }
+                                request.reply(true)
+                            })
+                            .collect(),
+                    )
+                });
+            let actual = generator
+                .generate(&process, &deferred, GenerationType::Amplitude)
+                .unwrap();
+            assert!(actual.report.completed);
+            assert_eq!(json(&actual), json(&expected), "{threads} threads");
+            assert_eq!(actual.report.topology_count, expected.report.topology_count);
+            let observed = observed.lock().unwrap();
+            assert!(observed.iter().all(|&count| count > 0));
+            assert_eq!(observed[1], observed[2]);
+        }
+        let cancelled = generator
+            .generate(
+                &process,
+                &options.deferred_hooks(mask, |_| ControlFlow::Break(())),
+                GenerationType::Amplitude,
+            )
+            .unwrap();
+        assert!(!cancelled.report.completed);
+        assert!(cancelled.diagrams.is_empty());
     }
 
     #[test]

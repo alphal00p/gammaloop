@@ -33,17 +33,21 @@ fn diagram_inputs(generator: &Generator, case: &Case) -> (GenerationOptions, Vec
         resolved,
         signatures,
         externals,
-        generator: search,
+        plan,
     } = generator
         .search(
             &case.process(),
             &case.options(&generator.model, 1),
             case.kind,
             |_, _| {},
+            |_, _| {},
         )
         .unwrap();
-    let inputs = search
-        .iter()
+    let run = Run::default();
+    let inputs = plan
+        .as_ref()
+        .unwrap()
+        .diagrams(&run)
         .unwrap()
         .filter_map(|diagram| {
             let multiplicity = externals.sewn_pair_orbit(&diagram)?;

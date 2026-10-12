@@ -1,10 +1,8 @@
 //! Search census of the reference generation workloads: how many states each search stage keeps,
 //! and how many of them lead nowhere.
 //!
-//! [`Generator::generate`] searches in parallel. The parallel frontier interleaves subtrees and
-//! starts split subtrees at children it has already filtered, so stage counts taken there
-//! overcount. The census therefore runs the same generator sequentially and counts through its
-//! filter, which sees every kept search state in depth-first order. Vertices keep their numbers
+//! [`Generator::generate`] searches in parallel. The census instead follows the same plan
+//! sequentially so each callback lies on one depth-first path. Vertices keep their numbers
 //! in every extension of a stage-1 state and stage 2 types one edge per step, so the parent of a
 //! state is the nearest earlier state on the depth-first path that it extends.
 //!
@@ -13,9 +11,13 @@
 
 use std::sync::{Arc, Mutex};
 
-use linnet::half_edge::generate::Stage;
+use linnet::half_edge::generate::Run;
 
-use super::{Generator, cases::Case, enumeration::GenerationView};
+use super::{
+    Generator,
+    cases::Case,
+    enumeration::{GenerationDressingView, GenerationSkeletonView},
+};
 use crate::{GenerationControl, GenerationError};
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -57,7 +59,7 @@ struct Topology {
 }
 
 impl Topology {
-    fn of(view: &GenerationView<'_>) -> Self {
+    fn of(view: &GenerationSkeletonView<'_>) -> Self {
         let n = view.n_vertices();
         Topology {
             vertices: (0..n)
@@ -99,59 +101,58 @@ struct Tracker {
 }
 
 impl Tracker {
-    fn record(&mut self, view: &GenerationView<'_>, kept: bool) {
-        let stage = view.stage();
+    fn skeleton(&mut self, view: &GenerationSkeletonView<'_>, kept: bool) {
         if !kept {
-            let index = match stage {
-                Stage::Topology => 0,
-                Stage::Fields => 1,
-                Stage::Complete => 2,
-            };
-            self.census.rejected[index] += 1;
+            self.census.rejected[0] += 1;
             return;
         }
-        match stage {
-            Stage::Topology => {
-                self.close_dressings(0);
-                let topology = Topology::of(view);
-                while self
-                    .topologies
-                    .last()
-                    .is_some_and(|open| !open.key.extended_by(&topology))
-                {
-                    self.close_topology();
-                }
-                let complete = topology.complete;
-                if complete {
-                    self.census.topologies += 1;
-                } else {
-                    self.census.partial_topologies += 1;
-                }
-                self.topologies.push(Open {
-                    key: topology,
-                    complete,
-                    diagram: false,
-                });
+        self.close_dressings(0);
+        let topology = Topology::of(view);
+        while self
+            .topologies
+            .last()
+            .is_some_and(|open| !open.key.extended_by(&topology))
+        {
+            self.close_topology();
+        }
+        let complete = topology.complete;
+        if complete {
+            self.census.topologies += 1;
+        } else {
+            self.census.partial_topologies += 1;
+        }
+        self.topologies.push(Open {
+            key: topology,
+            complete,
+            diagram: false,
+        });
+    }
+
+    fn dressing(&mut self, view: &GenerationDressingView<'_>, kept: bool) {
+        let complete = view.is_complete();
+        if !kept {
+            self.census.rejected[if complete { 2 } else { 1 }] += 1;
+            return;
+        }
+        if complete {
+            // This is the old Complete search event. Final selection is a separate hook,
+            // not a second census event for the same field/rule assignment.
+            self.census.diagrams += 1;
+            for open in &mut self.dressings {
+                open.diagram = true;
             }
-            Stage::Fields => {
-                let typed = view.edges().filter(|edge| edge.stub.is_some()).count();
-                self.close_dressings(typed);
-                self.census.dressings += 1;
-                self.dressings.push(Open {
-                    key: typed,
-                    complete: typed == view.edges().count(),
-                    diagram: false,
-                });
+            if let Some(topology) = self.topologies.last_mut() {
+                topology.diagram = true;
             }
-            Stage::Complete => {
-                self.census.diagrams += 1;
-                for open in &mut self.dressings {
-                    open.diagram = true;
-                }
-                if let Some(topology) = self.topologies.last_mut() {
-                    topology.diagram = true;
-                }
-            }
+        } else {
+            let typed = view.edges().filter(|edge| edge.stub.is_some()).count();
+            self.close_dressings(typed);
+            self.census.dressings += 1;
+            self.dressings.push(Open {
+                key: typed,
+                complete: typed == view.edges().count(),
+                diagram: false,
+            });
         }
     }
 
@@ -201,13 +202,23 @@ impl SearchCensus {
         let generator = Generator::new(model);
         let model = &generator.model;
         let tracker = Arc::new(Mutex::new(Tracker::default()));
-        let recorder = Arc::clone(&tracker);
-        let prepared =
-            generator.search(&case.process(), &options, case.kind, move |view, kept| {
-                recorder.lock().unwrap().record(view, kept);
-            })?;
+        let skeleton_recorder = Arc::clone(&tracker);
+        let dressing_recorder = Arc::clone(&tracker);
+        let prepared = generator.search(
+            &case.process(),
+            &options,
+            case.kind,
+            move |view, kept| skeleton_recorder.lock().unwrap().skeleton(view, kept),
+            move |view, kept| dressing_recorder.lock().unwrap().dressing(view, kept),
+        )?;
         assert!(!prepared.externals.vetoed(model, &prepared.options));
-        let diagrams = prepared.generator.iter()?.count();
+        let run = Run::default();
+        let diagrams = prepared
+            .plan
+            .as_ref()
+            .map(|plan| plan.diagrams(&run).map(Iterator::count))
+            .transpose()?
+            .unwrap_or(0);
         drop(prepared);
         let census = Arc::into_inner(tracker)
             .unwrap()

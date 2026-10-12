@@ -1,0 +1,6 @@
+loops = (0, Some(0)) -> Planning; hereditary=true; Restriction
+bridges = Any -> Skeletons; hereditary=true; Restriction
+self loops = false -> Skeletons; hereditary=true; Restriction
+zero-flow edges = false -> Skeletons; hereditary=true; Restriction
+vertex bound = None -> Skeletons; hereditary=true; Restriction
+vertices in [0] = 1..=1 -> Dressing; hereditary=true; Propagator

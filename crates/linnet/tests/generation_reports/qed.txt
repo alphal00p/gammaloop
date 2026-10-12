@@ -1,0 +1,5 @@
+loops = (2, Some(2)) -> Planning; hereditary=true; Restriction
+bridges = OnePI -> Skeletons; hereditary=true; Restriction
+self loops = false -> Skeletons; hereditary=true; Restriction
+zero-flow edges = false -> Skeletons; hereditary=true; Restriction
+vertex bound = None -> Skeletons; hereditary=true; Restriction
