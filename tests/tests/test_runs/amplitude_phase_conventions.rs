@@ -9,8 +9,8 @@ use std::f64::consts::PI;
 use symbolica::atom::Atom;
 
 #[test]
-#[serial]
 fn scalar_tree_amplitudes_match_textbook_ufo_rules() -> Result<()> {
+    let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
     // With lambda=2, the contact graph is -2i. Distinct external species
     // and the allowed cubic vertices select only s-channel scalar_2 exchange:
     // (-i lambda)^2 i/(s-m_2^2) = +4i/3 at s=1 and m_2=2.
@@ -86,8 +86,8 @@ helicities = [0,0,0,0]
 }
 
 #[test]
-#[serial]
 fn scalar_unit_amplitudes_match_convergent_mc_integrals_at_one_through_four_loops() -> Result<()> {
+    let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
     // Each triangle carries one independent momentum and three identical massive
     // scalar denominators. The petals share a vertex, so the graph is connected,
     // but the full integral factorizes. Every energy and UV integral converges:
@@ -276,8 +276,8 @@ target_relative_accuracy = 0.01
 }
 
 #[test]
-#[serial]
 fn scalar_bubble_absorptive_part_matches_the_causal_discontinuity() -> Result<()> {
+    let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
     // For equal internal masses m=1 and p²=9, the Feynman-parameter logarithm
     // has imaginary part +π sqrt(1-4/9). The physical loop factor i/(16π²)
     // makes the corresponding part of A=-iM negative real. Two -i vertices,

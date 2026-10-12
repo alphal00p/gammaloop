@@ -131,7 +131,9 @@ directory, database, or background persistence service.
 
 The `drawing` feature enables `cgmath` and the layout modules. The `symbolica` feature enables
 the half-edge Symbolica adapter. These features extend data conversion or analysis; they do not
-change the involution and node-incidence contracts.
+change the involution and node-incidence contracts. The optional `energy-timing` feature
+implies `drawing` and records cumulative timing counters for spring-layout energy terms.
+Timing instrumentation remains disabled unless this feature is selected.
 
 `SubSetLike::symbol_from_label` restores the same custom printer used by a subset's `symbol`
 method from its textual label, including composite labels. Consumers can persist those labels

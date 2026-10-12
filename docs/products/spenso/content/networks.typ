@@ -102,7 +102,7 @@ run it to execute the assertion in a provisioned Symbolica environment. See the 
 
 == Symbolica shadowing
 
-With `shadowing`, Spenso recognizes registered tensor functions inside Symbolica expressions
+With `symbolica`, Spenso recognizes registered tensor functions inside Symbolica expressions
 and builds a network whose nodes shadow those subexpressions. Initialization of representations
 and the tensor library must happen before parsing. Unknown functions remain symbolic rather
 than silently acquiring tensor semantics.

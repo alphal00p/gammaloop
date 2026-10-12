@@ -15,7 +15,7 @@ use derive_more::Rem;
 use derive_more::RemAssign;
 use derive_more::Sub;
 use derive_more::SubAssign;
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 use symbolica::{
     atom::{Atom, AtomCore, FunctionBuilder},
     {function, symbol},
@@ -42,7 +42,7 @@ pub enum DualConciousIndex {
     SelfDual(ConcreteIndex),
 }
 
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 impl From<DualConciousIndex> for Atom {
     fn from(value: DualConciousIndex) -> Self {
         match value {
@@ -69,7 +69,7 @@ impl From<DualConciousIndex> for Atom {
     Display,
     IntoIterator,
 )]
-#[display(fmt = "{:?}", indices)]
+#[display("{:?}", indices)]
 pub struct DualConciousExpandedIndex {
     indices: Vec<DualConciousIndex>,
 }
@@ -88,7 +88,7 @@ impl DualConciousExpandedIndex {
     }
 }
 
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 impl From<DualConciousExpandedIndex> for Atom {
     fn from(value: DualConciousExpandedIndex) -> Self {
         let mut cind = FunctionBuilder::new(symbol!(CONCRETEIND));
@@ -118,7 +118,7 @@ impl From<DualConciousExpandedIndex> for Atom {
     Encode,
     Decode,
 )]
-#[display(fmt = "{:?}", indices)]
+#[display("{:?}", indices)]
 pub struct ExpandedIndex {
     pub indices: Vec<ConcreteIndex>,
 }
@@ -148,7 +148,7 @@ impl AsRef<[ConcreteIndex]> for ExpandedIndex {
     }
 }
 
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 impl From<ExpandedIndex> for Atom {
     fn from(value: ExpandedIndex) -> Self {
         let mut cind = FunctionBuilder::new(super::abstract_index::AIND_SYMBOLS.cind);
@@ -200,12 +200,12 @@ impl FromIterator<ConcreteIndex> for ExpandedIndex {
     Encode,
     Decode,
 )]
-#[display(fmt = "{}", index)]
+#[display("{}", index)]
 pub struct FlatIndex {
     index: usize,
 }
 
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 impl From<FlatIndex> for Atom {
     fn from(value: FlatIndex) -> Self {
         let mut cind = FunctionBuilder::new(symbol!(FLATIND));

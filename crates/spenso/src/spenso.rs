@@ -19,7 +19,7 @@ trait. This can be done manually or through a [`Network`](network::Network) with
 a selected contraction strategy.
 
 [`DataTensor`](tensors::data::DataTensor) stores either dense or sparse data.
-With the `shadowing` feature, [`MixedTensor`](tensors::parametric::MixedTensor)
+With the `symbolica` feature, [`MixedTensor`](tensors::parametric::MixedTensor)
 stores heterogeneous numeric and parametric tensors.
 
 */
@@ -37,11 +37,11 @@ pub mod portable_payload;
 pub mod structure;
 pub mod tensors;
 
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 pub mod shadowing;
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 pub mod symbolic_parallelism;
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 pub mod symbolica_init;
 
 pub mod utils;

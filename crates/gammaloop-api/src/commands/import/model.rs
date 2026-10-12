@@ -4,10 +4,11 @@ use colored::Colorize;
 use eyre::{eyre, Context};
 use gammalooprs::utils::F;
 
-#[cfg(feature = "ufo_support")]
+#[cfg(feature = "ufo-import")]
 use pyo3::sync::PyOnceLock;
-use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
+#[cfg(feature = "cli")]
+use std::{collections::BTreeMap, sync::OnceLock};
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -15,16 +16,18 @@ use smartstring::{LazyCompact, SmartString};
 
 use gammalooprs::model::{InputParamCard, Model};
 use include_dir::{include_dir, Dir, File};
-use std::{env, fs, sync::OnceLock};
+use std::{env, fs};
 use tracing::info;
 
-#[cfg(feature = "ufo_support")]
+#[cfg(feature = "ufo-import")]
 use pyo3::prelude::*;
 
 use crate::state::State;
 
 static BUILTIN_MODELS: Dir = include_dir!("$CARGO_MANIFEST_DIR/../../assets/models/json");
+#[cfg(feature = "cli")]
 static BUILTIN_MODEL_NAMES: OnceLock<Vec<String>> = OnceLock::new();
+#[cfg(feature = "cli")]
 static BUILTIN_MODEL_RESTRICTIONS: OnceLock<BTreeMap<String, Vec<String>>> = OnceLock::new();
 
 #[derive(Debug, Args, Serialize, Deserialize, Clone, JsonSchema, PartialEq)]
@@ -41,22 +44,22 @@ pub struct ImportModel {
     pub simplify_model: bool,
 }
 
-#[cfg(not(feature = "ufo_support"))]
+#[cfg(not(feature = "ufo-import"))]
 pub(crate) fn load_ufo_model(
     _path: &Path,
     _restriction_name: Option<String>,
     _simplify_model: bool,
 ) -> Result<(Model, InputParamCard<F<f64>>)> {
     Err(eyre!(
-        "UFO support not enabled in gammaloop. Please recompile with the `ufo_support` feature."
+        "UFO support not enabled in gammaloop. Please recompile with the `ufo-import` feature."
     ))
 }
 
-#[cfg(feature = "ufo_support")]
+#[cfg(feature = "ufo-import")]
 #[pyclass]
 struct PyLogStream;
 
-#[cfg(feature = "ufo_support")]
+#[cfg(feature = "ufo-import")]
 #[pymethods]
 impl PyLogStream {
     #[new]
@@ -71,10 +74,10 @@ impl PyLogStream {
     fn flush(&self) {}
 }
 
-#[cfg(feature = "ufo_support")]
+#[cfg(feature = "ufo-import")]
 static PY_LOG_BRIDGE_INIT: PyOnceLock<()> = PyOnceLock::new();
 
-#[cfg(feature = "ufo_support")]
+#[cfg(feature = "ufo-import")]
 fn ensure_py_log_bridge(py: Python<'_>) -> PyResult<()> {
     PY_LOG_BRIDGE_INIT.get_or_try_init(py, || -> PyResult<()> {
         bridge_py_logging(py)?;
@@ -83,7 +86,7 @@ fn ensure_py_log_bridge(py: Python<'_>) -> PyResult<()> {
     Ok(())
 }
 
-#[cfg(feature = "ufo_support")]
+#[cfg(feature = "ufo-import")]
 fn bridge_py_logging(py: Python<'_>) -> PyResult<()> {
     let logging = py.import("logging")?;
     let stream = Py::new(py, PyLogStream {})?;
@@ -111,7 +114,7 @@ fn bridge_py_logging(py: Python<'_>) -> PyResult<()> {
     Ok(())
 }
 
-#[cfg(feature = "ufo_support")]
+#[cfg(feature = "ufo-import")]
 pub(crate) fn load_ufo_model(
     path: &std::path::Path,
     restriction_name: Option<String>,
@@ -283,10 +286,12 @@ impl ImportModel {
     }
 }
 
+#[cfg(feature = "cli")]
 pub(crate) fn builtin_json_model_names() -> &'static [String] {
     BUILTIN_MODEL_NAMES.get_or_init(scan_builtin_json_model_names)
 }
 
+#[cfg(feature = "cli")]
 pub(crate) fn builtin_json_model_restriction_names(model: &str) -> Option<&'static [String]> {
     BUILTIN_MODEL_RESTRICTIONS
         .get_or_init(scan_builtin_json_model_restriction_names)
@@ -634,6 +639,7 @@ fn builtin_has_model(model: &str) -> bool {
         .is_some()
 }
 
+#[cfg(feature = "cli")]
 fn scan_builtin_json_model_names() -> Vec<String> {
     let mut names = BUILTIN_MODELS
         .dirs()
@@ -645,6 +651,7 @@ fn scan_builtin_json_model_names() -> Vec<String> {
     names
 }
 
+#[cfg(feature = "cli")]
 fn scan_builtin_json_model_restriction_names() -> BTreeMap<String, Vec<String>> {
     BUILTIN_MODELS
         .dirs()
@@ -709,7 +716,7 @@ fn canonical_dir_allow_abs_missing(p: &Path) -> Result<PathBuf> {
     }
 }
 
-#[cfg(all(test, feature = "ufo_support"))]
+#[cfg(all(test, feature = "ufo-import"))]
 mod tests {
     use super::*;
 

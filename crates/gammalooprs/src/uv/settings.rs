@@ -30,7 +30,7 @@ use vakint::{AlphaLoopOptions, EvaluationMethod, FMFTOptions, MATADOptions, PySe
     JsonSchema,
     Default,
 )]
-#[cfg_attr(feature = "python_api", pyo3::pyclass(from_py_object))]
+#[cfg_attr(feature = "python", pyo3::pyclass(from_py_object))]
 #[serde(deny_unknown_fields)]
 pub enum ApproximationType {
     #[default]
@@ -75,7 +75,7 @@ impl Display for ApproximationType {
     JsonSchema,
     Default,
 )]
-#[cfg_attr(feature = "python_api", pyo3::pyclass(from_py_object))]
+#[cfg_attr(feature = "python", pyo3::pyclass(from_py_object))]
 #[serde(deny_unknown_fields)]
 pub enum UVOrchestrator {
     #[serde(rename = "legacy_dag_forest", alias = "LegacyDagForest")]
@@ -97,10 +97,7 @@ impl Display for UVOrchestrator {
     }
 }
 
-#[cfg_attr(
-    feature = "python_api",
-    pyo3::pyclass(from_py_object, get_all, set_all)
-)]
+#[cfg_attr(feature = "python", pyo3::pyclass(from_py_object, get_all, set_all))]
 #[derive(
     Debug,
     Clone,
@@ -146,10 +143,7 @@ impl CTIdentifier {
     }
 }
 
-#[cfg_attr(
-    feature = "python_api",
-    pyo3::pyclass(from_py_object, get_all, set_all)
-)]
+#[cfg_attr(feature = "python", pyo3::pyclass(from_py_object, get_all, set_all))]
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq, Eq, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct CTRenormalizationRule {
@@ -168,10 +162,7 @@ impl CTRenormalizationRule {
     }
 }
 
-#[cfg_attr(
-    feature = "python_api",
-    pyo3::pyclass(from_py_object, get_all, set_all)
-)]
+#[cfg_attr(feature = "python", pyo3::pyclass(from_py_object, get_all, set_all))]
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
 #[serde(default, deny_unknown_fields)]
 pub struct RenormalizationPrescriptionSettings {
@@ -237,7 +228,7 @@ impl RenormalizationPrescriptionSettings {
     }
 }
 
-#[cfg_attr(feature = "python_api", pyo3::pyclass(from_py_object))]
+#[cfg_attr(feature = "python", pyo3::pyclass(from_py_object))]
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
 #[serde(default, deny_unknown_fields)]
 pub struct MATADSettings {
@@ -266,7 +257,7 @@ impl Default for MATADSettings {
     }
 }
 
-#[cfg_attr(feature = "python_api", pyo3::pyclass(from_py_object))]
+#[cfg_attr(feature = "python", pyo3::pyclass(from_py_object))]
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
 #[serde(default, deny_unknown_fields)]
 pub struct AlphaLoopSettings {
@@ -283,7 +274,7 @@ impl Default for AlphaLoopSettings {
     }
 }
 
-#[cfg_attr(feature = "python_api", pyo3::pyclass(from_py_object))]
+#[cfg_attr(feature = "python", pyo3::pyclass(from_py_object))]
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
 #[serde(default, deny_unknown_fields)]
 pub struct FMFTSettings {
@@ -303,7 +294,7 @@ impl Default for FMFTSettings {
         }
     }
 }
-#[cfg_attr(feature = "python_api", pyo3::pyclass(from_py_object))]
+#[cfg_attr(feature = "python", pyo3::pyclass(from_py_object))]
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
 #[serde(default, deny_unknown_fields)]
 pub struct PySecDecSettings {
@@ -336,7 +327,7 @@ impl Default for PySecDecSettings {
     }
 }
 
-#[cfg_attr(feature = "python_api", pyo3::pyclass(from_py_object))]
+#[cfg_attr(feature = "python", pyo3::pyclass(from_py_object))]
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
 #[serde(default, deny_unknown_fields)]
 pub struct VakintSettings {
@@ -461,10 +452,7 @@ impl Default for VakintSettings {
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
-#[cfg_attr(
-    feature = "python_api",
-    pyo3::pyclass(from_py_object, get_all, set_all)
-)]
+#[cfg_attr(feature = "python", pyo3::pyclass(from_py_object, get_all, set_all))]
 pub enum FinalIntegrandDimension {
     FourD,
     #[default]
@@ -481,10 +469,7 @@ impl Display for FinalIntegrandDimension {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
-#[cfg_attr(
-    feature = "python_api",
-    pyo3::pyclass(from_py_object, get_all, set_all)
-)]
+#[cfg_attr(feature = "python", pyo3::pyclass(from_py_object, get_all, set_all))]
 #[serde(default, deny_unknown_fields)]
 pub struct UVgenerationSettings {
     /// Generate soft ultraviolet counterterms where required by the selected prescription.

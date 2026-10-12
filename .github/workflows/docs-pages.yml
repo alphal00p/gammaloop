@@ -246,12 +246,13 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ${{ runner.temp }}/linnet-docs-wheel
-          key: linnet-docs-wheel-v1-${{ runner.os }}-cibuildwheel-4.2.0-${{ steps.notebook_source.outputs.revision }}
+          key: linnet-docs-wheel-v1-${{ runner.os }}-rust-1.98.1-cibuildwheel-4.2.0-${{ steps.notebook_source.outputs.revision }}
 
       - name: Install the WebAssembly Rust target
         if: steps.notebook_source.outputs.enabled == 'true' && steps.notebook_wheel.outputs.cache-hit != 'true'
         uses: dtolnay/rust-toolchain@stable
         with:
+          toolchain: 1.98.1
           targets: wasm32-unknown-emscripten
 
       - name: Build and test the documented revision's browser wheel

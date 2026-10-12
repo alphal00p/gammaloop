@@ -8,7 +8,7 @@ use pyo3::{
     types::{PyAny, PyComplex},
 };
 
-#[cfg(feature = "python_stubgen")]
+#[cfg(feature = "python-stubs")]
 use pyo3_stub_gen::{
     PyStubType,
     derive::{gen_stub_pyclass, gen_stub_pymethods},
@@ -63,7 +63,7 @@ use super::ModuleInit;
 /// lib.register(tensor)
 /// tensor_ref = lib[name]
 /// ```
-#[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
+#[cfg_attr(feature = "python-stubs", gen_stub_pyclass)]
 #[pyclass(name = "TensorLibrary", module = "symbolica.community.spenso")]
 pub struct SpensorLibrary {
     pub(crate) library: TensorLibrary<MixedTensor<f64, ExplicitKey<AbstractIndex>>, AbstractIndex>,
@@ -72,7 +72,7 @@ pub struct SpensorLibrary {
 }
 
 /// A registry of elementwise tensor functions used during network evaluation.
-#[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
+#[cfg_attr(feature = "python-stubs", gen_stub_pyclass)]
 #[pyclass(name = "TensorFunctionLibrary", module = "symbolica.community.spenso")]
 pub struct SpensorFunctionLibrary {
     pub(crate) library:
@@ -132,7 +132,7 @@ impl<'a, 'py> FromPyObject<'a, 'py> for ConvertibleToSymbol {
     }
 }
 #[allow(clippy::new_without_default)]
-#[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
+#[cfg_attr(feature = "python-stubs", gen_stub_pymethods)]
 #[pymethods]
 impl SpensorFunctionLibrary {
     #[new]
@@ -252,7 +252,7 @@ impl SpensorFunctionLibrary {
     }
 }
 
-#[cfg(feature = "python_stubgen")]
+#[cfg(feature = "python-stubs")]
 impl PyStubType for ConvertibleToSymbol {
     fn type_output() -> pyo3_stub_gen::TypeInfo {
         SpensoName::type_input() | PythonExpression::type_input() | String::type_input()
@@ -343,7 +343,7 @@ impl<'a, 'py> FromPyObject<'a, 'py> for ConvertibleToLibraryReference {
     }
 }
 
-#[cfg(feature = "python_stubgen")]
+#[cfg(feature = "python-stubs")]
 impl PyStubType for ConvertibleToLibraryReference {
     fn type_input() -> pyo3_stub_gen::TypeInfo {
         TensorExpression::type_input() | ConvertibleToSymbol::type_input()
@@ -395,7 +395,7 @@ fn storage_hep_references() -> HashMap<ExplicitKey<AbstractIndex>, PartialStruct
 }
 
 #[allow(clippy::new_without_default)]
-#[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
+#[cfg_attr(feature = "python-stubs", gen_stub_pymethods)]
 #[pymethods]
 impl SpensorLibrary {
     #[new]
@@ -985,5 +985,5 @@ mod tests {
     }
 }
 
-#[cfg(feature = "python_stubgen")]
+#[cfg(feature = "python-stubs")]
 pyo3_stub_gen::define_stub_info_gatherer!(stub_info);

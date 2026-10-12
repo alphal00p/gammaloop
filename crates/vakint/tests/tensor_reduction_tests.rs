@@ -3,7 +3,7 @@ use test_utils::{compare_output, get_vakint};
 use vakint::VakintSettings;
 use vakint::vakint_parse;
 
-#[test_log::test]
+#[test]
 fn test_reduction_1l_a() {
     let vakint = get_vakint(VakintSettings {
         allow_unknown_integrals: false,
@@ -33,7 +33,7 @@ fn test_reduction_1l_a() {
     ));
 }
 
-#[test_log::test]
+#[test]
 fn test_reduction_1l_b() {
     let vakint = get_vakint(VakintSettings {
         allow_unknown_integrals: false,
@@ -61,7 +61,7 @@ fn test_reduction_1l_b() {
     }
 }
 
-#[test_log::test]
+#[test]
 fn test_reduction_2l_a() {
     let vakint = get_vakint(VakintSettings {
         allow_unknown_integrals: false,
@@ -98,7 +98,7 @@ fn run_tensor_reduction_tests() {
     test_reduction_2l_a();
 }
 
-#[test_log::test]
+#[test]
 fn public_parser_initializes_dot_attributes_before_first_input() {
     // Parsing is a public entry point and must also work before Vakint::new().
     let input = vakint_parse!("dot(k(1),k(2))+dot(k(2),k(1))").unwrap();
@@ -111,7 +111,7 @@ fn public_parser_initializes_dot_attributes_before_first_input() {
     assert_eq!(vakint_parse!("dot(2*k(1),k(2))").unwrap(), expected);
 }
 
-#[test_log::test]
+#[test]
 fn dot_conversion_preserves_factorized_scalar_powers() {
     use vakint::Vakint;
 
@@ -138,7 +138,7 @@ fn dot_conversion_preserves_factorized_scalar_powers() {
     }
 }
 
-#[test_log::test]
+#[test]
 fn tensor_reduction_of_powered_scalar_sum_matches_angular_average() {
     use symbolica::atom::AtomCore;
 
@@ -166,7 +166,7 @@ fn tensor_reduction_of_powered_scalar_sum_matches_angular_average() {
     }
 }
 
-#[test_log::test]
+#[test]
 fn tensor_reduction_preserves_factorized_scalar_cancellation() {
     use symbolica::{
         atom::{Atom, AtomCore},
@@ -229,7 +229,7 @@ fn tensor_reduction_preserves_factorized_scalar_cancellation() {
     }
 }
 
-#[test_log::test]
+#[test]
 fn dot_conversion_preserves_existing_indices() {
     use vakint::Vakint;
 
@@ -261,7 +261,7 @@ fn dot_conversion_preserves_existing_indices() {
     }
 }
 
-#[test_log::test]
+#[test]
 fn dot_conversion_preserves_reciprocal_powers() {
     use symbolica::atom::AtomCore;
     use vakint::Vakint;
@@ -296,7 +296,7 @@ fn dot_conversion_preserves_reciprocal_powers() {
     }
 }
 
-#[test_log::test]
+#[test]
 fn loop_normalization_uses_numeric_imaginary_coefficients() {
     use symbolica::atom::{Atom, AtomCore};
     use vakint::LoopNormalizationFactor;
@@ -329,7 +329,7 @@ fn loop_normalization_uses_numeric_imaginary_coefficients() {
     }
 }
 
-#[test_log::test]
+#[test]
 fn tensor_reduction_preserves_complex_numeric_coefficients() {
     use symbolica::atom::AtomCore;
 
@@ -370,7 +370,7 @@ fn tensor_reduction_preserves_complex_numeric_coefficients() {
     }
 }
 
-#[test_log::test]
+#[test]
 fn tensor_reduction_preserves_symbolica_user_namespaces() {
     use symbolica::atom::AtomCore;
 
@@ -433,7 +433,7 @@ fn tensor_reduction_preserves_symbolica_user_namespaces() {
     }
 }
 
-#[test_log::test]
+#[test]
 fn whole_numerator_and_tensor_projection_preserve_structured_open_slots() {
     use symbolica::{
         atom::AtomCore,

@@ -15,7 +15,7 @@ dependencies = ["typst==0.15.0"]
 
 [tool.maturin]
 module-name = "linnet_py"
-features = ["extension-module", "abi3-py310"]
+features = ["extension-module", "abi3"]
 
 [tool.cibuildwheel]
 build = "cp314-*"

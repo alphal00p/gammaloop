@@ -2,8 +2,8 @@ use super::utils::*;
 use super::*;
 
 #[test]
-#[serial]
 fn amplitude_events_surface_threshold_counterterms_and_reproduce_weight() -> Result<()> {
+    let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
     let test_name = "amplitude_events_surface_threshold_counterterms";
     let mut cli = setup_gg_hhh_threshold_amplitude_cli(test_name)?;
     let process_ref = ProcessRef::Unqualified("gg_hhh".to_string());
@@ -124,8 +124,8 @@ fn amplitude_events_surface_threshold_counterterms_and_reproduce_weight() -> Res
 }
 
 #[test]
-#[serial]
 fn amplitude_threshold_counterterms_follow_lmb_channel_normalization() -> Result<()> {
+    let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
     let test_name = "amplitude_threshold_counterterms_follow_lmb_channel_normalization";
     let mut cli = setup_gg_hhh_threshold_amplitude_cli(test_name)?;
     cli.run_command(
@@ -381,8 +381,8 @@ lmb_basis_ids = {{ "{graph_name}" = [{}, {}] }}
 }
 
 #[test]
-#[serial]
 fn amplitude_selectors_generate_internal_events_without_surfacing_them() -> Result<()> {
+    let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
     let test_name = "amplitude_selectors_generate_internal_events_without_surfacing_them";
     let mut cli = setup_gg_hhh_threshold_amplitude_cli(test_name)?;
     cli.run_command(
@@ -448,8 +448,8 @@ max = 4
 }
 
 #[test]
-#[serial]
 fn amplitude_observables_accumulate_without_returning_events() -> Result<()> {
+    let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
     let test_name = "amplitude_observables_accumulate_without_returning_events";
     let mut cli = setup_gg_hhh_threshold_amplitude_cli(test_name)?;
     cli.run_command(

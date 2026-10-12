@@ -1065,8 +1065,8 @@ fn run_scalar_3l_quartic_energy_numerator_case(case: Scalar3LGraphCase, edge: us
 }
 
 #[test]
-#[serial]
 fn scalar_3l_gl00_higher_power_cff_is_invariant_under_nonzero_sampling_scale() -> Result<()> {
+    let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
     let case = Scalar3LGraphCase::default("GL00");
     let process = "scalar_3l_gl00_higher_power_sampling_scale";
     let integrand = "numerator";
@@ -1135,15 +1135,15 @@ fn scalar_3l_gl00_higher_power_cff_is_invariant_under_nonzero_sampling_scale() -
 macro_rules! scalar_3l_graph_test {
     ($name:ident, $graph:literal) => {
         #[test]
-        #[serial]
         fn $name() -> Result<()> {
+            let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
             run_scalar_3l_cross_section_case(Scalar3LGraphCase::default($graph))
         }
     };
     ($name:ident, $case:expr) => {
         #[test]
-        #[serial]
         fn $name() -> Result<()> {
+            let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
             run_scalar_3l_cross_section_case($case)
         }
     };
@@ -1155,8 +1155,8 @@ macro_rules! quadratic_energy_graph_test {
             use super::*;
 
             #[test]
-            #[serial]
             fn q1_squared() -> Result<()> {
+                let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
                 run_scalar_3l_quadratic_energy_numerator_case($q1_case, 1)
             }
         }
@@ -1166,8 +1166,8 @@ macro_rules! quadratic_energy_graph_test {
             use super::*;
 
             #[test]
-            #[serial]
             fn q7_squared() -> Result<()> {
+                let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
                 run_scalar_3l_quadratic_energy_numerator_case($q7_case, 7)
             }
         }
@@ -1177,14 +1177,14 @@ macro_rules! quadratic_energy_graph_test {
             use super::*;
 
             #[test]
-            #[serial]
             fn q1_squared() -> Result<()> {
+                let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
                 run_scalar_3l_quadratic_energy_numerator_case(Scalar3LGraphCase::default($graph), 1)
             }
 
             #[test]
-            #[serial]
             fn q7_squared() -> Result<()> {
+                let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
                 run_scalar_3l_quadratic_energy_numerator_case(Scalar3LGraphCase::default($graph), 7)
             }
         }
@@ -1194,14 +1194,14 @@ macro_rules! quadratic_energy_graph_test {
             use super::*;
 
             #[test]
-            #[serial]
             fn q1_squared() -> Result<()> {
+                let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
                 run_scalar_3l_quadratic_energy_numerator_case($case, 1)
             }
 
             #[test]
-            #[serial]
             fn q7_squared() -> Result<()> {
+                let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
                 run_scalar_3l_quadratic_energy_numerator_case($case, 7)
             }
         }
@@ -1211,14 +1211,14 @@ macro_rules! quadratic_energy_graph_test {
             use super::*;
 
             #[test]
-            #[serial]
             fn q1_squared() -> Result<()> {
+                let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
                 run_scalar_3l_quadratic_energy_numerator_case($q1_case, 1)
             }
 
             #[test]
-            #[serial]
             fn q7_squared() -> Result<()> {
+                let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
                 run_scalar_3l_quadratic_energy_numerator_case($q7_case, 7)
             }
         }
@@ -1231,8 +1231,8 @@ macro_rules! quartic_energy_graph_test {
             use super::*;
 
             #[test]
-            #[serial]
             fn q1_quartic() -> Result<()> {
+                let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
                 run_scalar_3l_quartic_energy_numerator_case(Scalar3LGraphCase::default($graph), 1)
             }
         }
@@ -1242,8 +1242,8 @@ macro_rules! quartic_energy_graph_test {
             use super::*;
 
             #[test]
-            #[serial]
             fn q1_quartic() -> Result<()> {
+                let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
                 run_scalar_3l_quartic_energy_numerator_case($case, 1)
             }
         }
@@ -1271,8 +1271,8 @@ mod default_scalar_3l_cross_section_inspects {
     );
 
     #[test]
-    #[serial]
     fn scalar_3l_cross_section_gl00_first_owned_dot_inspects_match() -> Result<()> {
+        let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
         run_scalar_3l_cross_section_case_impl(
             "scalar_3l_gl00_first_owned_dot",
             Scalar3LGraphCase::default("GL00").with_numerator(NumeratorChoice::Dot {
@@ -1286,8 +1286,8 @@ mod default_scalar_3l_cross_section_inspects {
     }
 
     #[test]
-    #[serial]
     fn scalar_3l_cross_section_gl00_second_owned_dot_inspects_match() -> Result<()> {
+        let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
         run_scalar_3l_cross_section_case_impl(
             "scalar_3l_gl00_second_owned_dot",
             Scalar3LGraphCase::default("GL00").with_numerator(NumeratorChoice::Dot {
@@ -1301,8 +1301,8 @@ mod default_scalar_3l_cross_section_inspects {
     }
 
     #[test]
-    #[serial]
     fn scalar_3l_cross_section_gl00_second_owned_temporal_product_inspects_match() -> Result<()> {
+        let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
         run_scalar_3l_cross_section_case_impl(
             "scalar_3l_gl00_second_owned_temporal_product",
             Scalar3LGraphCase::default("GL00").with_numerator(NumeratorChoice::ComponentProduct {
@@ -1316,8 +1316,8 @@ mod default_scalar_3l_cross_section_inspects {
     }
 
     #[test]
-    #[serial]
     fn scalar_3l_cross_section_gl00_q5_temporal_component_inspects_match() -> Result<()> {
+        let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
         run_scalar_3l_cross_section_case_impl(
             "scalar_3l_gl00_q5_temporal_component",
             Scalar3LGraphCase::default("GL00").with_numerator(NumeratorChoice::SingleComponent {
@@ -1330,8 +1330,8 @@ mod default_scalar_3l_cross_section_inspects {
     }
 
     #[test]
-    #[serial]
     fn scalar_3l_cross_section_gl00_q6_temporal_component_inspects_match() -> Result<()> {
+        let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
         run_scalar_3l_cross_section_case_impl(
             "scalar_3l_gl00_q6_temporal_component",
             Scalar3LGraphCase::default("GL00").with_numerator(NumeratorChoice::SingleComponent {
@@ -1344,8 +1344,8 @@ mod default_scalar_3l_cross_section_inspects {
     }
 
     #[test]
-    #[serial]
     fn scalar_3l_cross_section_gl00_q5_spatial_component_inspects_match() -> Result<()> {
+        let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
         run_scalar_3l_cross_section_case_impl(
             "scalar_3l_gl00_q5_spatial_component",
             Scalar3LGraphCase::default("GL00").with_numerator(NumeratorChoice::SingleComponent {
@@ -1358,8 +1358,8 @@ mod default_scalar_3l_cross_section_inspects {
     }
 
     #[test]
-    #[serial]
     fn scalar_3l_cross_section_gl00_q6_spatial_component_inspects_match() -> Result<()> {
+        let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
         run_scalar_3l_cross_section_case_impl(
             "scalar_3l_gl00_q6_spatial_component",
             Scalar3LGraphCase::default("GL00").with_numerator(NumeratorChoice::SingleComponent {
@@ -1372,8 +1372,8 @@ mod default_scalar_3l_cross_section_inspects {
     }
 
     #[test]
-    #[serial]
     fn scalar_3l_cross_section_gl00_second_owned_spatial_product_inspects_match() -> Result<()> {
+        let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
         run_scalar_3l_cross_section_case_impl(
             "scalar_3l_gl00_second_owned_spatial_product",
             Scalar3LGraphCase::default("GL00").with_numerator(NumeratorChoice::ComponentProduct {
@@ -1387,8 +1387,8 @@ mod default_scalar_3l_cross_section_inspects {
     }
 
     #[test]
-    #[serial]
     fn scalar_3l_cross_section_gl02_dod_zero_triangle_inspects_match() -> Result<()> {
+        let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
         run_scalar_3l_cross_section_case_impl(
             "scalar_3l_gl02_dod_zero_triangle",
             Scalar3LGraphCase::default("GL02"),
@@ -1398,8 +1398,8 @@ mod default_scalar_3l_cross_section_inspects {
     }
 
     #[test]
-    #[serial]
     fn scalar_3l_cross_section_gl04_left_owned_dot_inspects_match() -> Result<()> {
+        let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
         run_scalar_3l_cross_section_case_impl(
             "scalar_3l_gl04_left_owned_dot",
             Scalar3LGraphCase::default("GL04").with_numerator(NumeratorChoice::Dot {
@@ -1413,8 +1413,8 @@ mod default_scalar_3l_cross_section_inspects {
     }
 
     #[test]
-    #[serial]
     fn scalar_3l_cross_section_gl04_right_owned_dot_inspects_match() -> Result<()> {
+        let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
         run_scalar_3l_cross_section_case_impl(
             "scalar_3l_gl04_right_owned_dot",
             Scalar3LGraphCase::default("GL04").with_numerator(NumeratorChoice::Dot {
@@ -1428,8 +1428,8 @@ mod default_scalar_3l_cross_section_inspects {
     }
 
     #[test]
-    #[serial]
     fn scalar_3l_cross_section_gl04_left_temporal_product_inspects_match() -> Result<()> {
+        let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
         run_scalar_3l_cross_section_case_impl(
             "scalar_3l_gl04_left_temporal_product",
             Scalar3LGraphCase::default("GL04").with_numerator(NumeratorChoice::ComponentProduct {
@@ -1443,8 +1443,8 @@ mod default_scalar_3l_cross_section_inspects {
     }
 
     #[test]
-    #[serial]
     fn scalar_3l_cross_section_gl04_right_temporal_product_inspects_match() -> Result<()> {
+        let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
         run_scalar_3l_cross_section_case_impl(
             "scalar_3l_gl04_right_temporal_product",
             Scalar3LGraphCase::default("GL04").with_numerator(NumeratorChoice::ComponentProduct {
@@ -1458,8 +1458,8 @@ mod default_scalar_3l_cross_section_inspects {
     }
 
     #[test]
-    #[serial]
     fn scalar_3l_cross_section_gl04_q5_temporal_component_inspects_match() -> Result<()> {
+        let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
         run_scalar_3l_cross_section_case_impl(
             "scalar_3l_gl04_q5_temporal_component",
             Scalar3LGraphCase::default("GL04").with_numerator(NumeratorChoice::SingleComponent {
@@ -1472,8 +1472,8 @@ mod default_scalar_3l_cross_section_inspects {
     }
 
     #[test]
-    #[serial]
     fn scalar_3l_cross_section_gl04_q6_temporal_component_inspects_match() -> Result<()> {
+        let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
         run_scalar_3l_cross_section_case_impl(
             "scalar_3l_gl04_q6_temporal_component",
             Scalar3LGraphCase::default("GL04").with_numerator(NumeratorChoice::SingleComponent {
@@ -1486,8 +1486,8 @@ mod default_scalar_3l_cross_section_inspects {
     }
 
     #[test]
-    #[serial]
     fn scalar_3l_cross_section_gl04_q5_temporal_square_inspects_match() -> Result<()> {
+        let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
         run_scalar_3l_cross_section_case_impl(
             "scalar_3l_gl04_q5_temporal_square",
             Scalar3LGraphCase::default("GL04").with_numerator(NumeratorChoice::ComponentProduct {
@@ -1501,8 +1501,8 @@ mod default_scalar_3l_cross_section_inspects {
     }
 
     #[test]
-    #[serial]
     fn scalar_3l_cross_section_gl04_q5_spatial_square_inspects_match() -> Result<()> {
+        let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
         run_scalar_3l_cross_section_case_impl(
             "scalar_3l_gl04_q5_spatial_square",
             Scalar3LGraphCase::default("GL04").with_numerator(NumeratorChoice::ComponentProduct {
@@ -1522,8 +1522,8 @@ mod default_scalar_3l_cross_section_inspects {
             use super::*;
 
             #[test]
-            #[serial]
             fn q7_squared() -> Result<()> {
+                let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
                 run_scalar_3l_cross_section_case_impl(
                     "scalar_3l_quadratic_energy_q7_squared",
                     Scalar3LGraphCase::default("GL00").with_squared_edge_numerator(7),
@@ -1536,8 +1536,8 @@ mod default_scalar_3l_cross_section_inspects {
             use super::*;
 
             #[test]
-            #[serial]
             fn q7_squared() -> Result<()> {
+                let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
                 run_scalar_3l_gl16_quadratic_energy_three_route_case()
             }
         }
@@ -1550,8 +1550,8 @@ mod default_scalar_3l_cross_section_inspects {
             use super::*;
 
             #[test]
-            #[serial]
             fn q1_quartic() -> Result<()> {
+                let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
                 run_scalar_3l_cross_section_case_impl(
                     "scalar_3l_quartic_energy_q1",
                     Scalar3LGraphCase::default("GL02")
@@ -1966,8 +1966,8 @@ mod slow {
             use super::*;
 
             #[test]
-            #[serial]
             fn q7_quartic() -> Result<()> {
+                let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
                 run_scalar_3l_gl16_quartic_energy_three_route_case()
             }
         }
@@ -1976,8 +1976,8 @@ mod slow {
             use super::*;
 
             #[test]
-            #[serial]
             fn q1_quartic() -> Result<()> {
+                let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
                 run_scalar_3l_cross_section_case_impl(
                     "scalar_3l_quartic_energy_q1",
                     Scalar3LGraphCase::default("GL24").with_quartic_edge_numerator(1),

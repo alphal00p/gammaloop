@@ -191,7 +191,7 @@ filter = "test(/^slow::(paper_figure_b1_massless_bubble_uses_a_complete_soft_woo
 test-group = "soft-ct-serial"
 threads-required = "num-test-threads"
 
-# Feyngen tests use one generated-state directory; serial_test locks cannot
+# Feyngen tests use one generated-state directory; in-process locks cannot
 # protect that directory across Nextest's separate test processes.
 [[profile.default.overrides]]
 filter = "package(gammaloop-integration-tests) and binary(=test_feyngen)"

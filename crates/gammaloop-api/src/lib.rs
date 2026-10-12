@@ -43,42 +43,19 @@
 //! # }
 //! ```
 
-#[cfg(all(
-    feature = "no_pyo3",
-    any(
-        feature = "python_api",
-        feature = "python_abi",
-        feature = "python_stubgen",
-        feature = "pyo3-extension-module",
-        feature = "ufo_support",
-    )
-))]
-compile_error!(
-    "feature `no_pyo3` is incompatible with python/pyo3 features (python_api, python_abi, \
-python_stubgen, pyo3-extension-module, ufo_support). Use --no-default-features --features \
-cli,no_pyo3."
-);
-
-use ::tracing::debug;
 use ::tracing::info;
 use ::tracing::level_filters::LevelFilter;
 use ::tracing::warn;
 use clap::parser::ValueSource;
-use clap::{CommandFactory, FromArgMatches, Parser, ValueEnum};
-use clap_complete::shells::{Bash, Elvish, Fish, PowerShell, Zsh};
-use clap_complete_nushell::Nushell;
+use clap::{CommandFactory, FromArgMatches, Parser};
 use commands::save::SaveState;
 use commands::Commands;
 
 use gammalooprs::utils::serde_utils::{SerdeFileError, SHOWDEFAULTS};
-use reedline::FileBackedHistory;
-use repl::ClapEditor;
-use repl::ReadCommandOutput;
 use session::{CliSession, CliSessionState};
 use tracing::{
-    configure_file_log_boot_mode, get_stderr_log_filter_label, set_file_log_filter,
-    set_file_log_filter_override, set_log_format_override, set_log_style, set_stderr_log_filter,
-    set_stderr_log_filter_override,
+    configure_file_log_boot_mode, set_file_log_filter, set_file_log_filter_override,
+    set_log_format_override, set_log_style, set_stderr_log_filter, set_stderr_log_filter_override,
 };
 
 // use clap_repl::{
@@ -88,8 +65,6 @@ use tracing::{
 
 use color_eyre::Result;
 use colored::Colorize;
-use console::{measure_text_width, style};
-use dirs::home_dir;
 use eyre::{eyre, Context};
 use gammaloop_tracing_filter::LogFormat;
 use gammalooprs::{
@@ -100,30 +75,41 @@ use gammalooprs::{
     utils::{
         serde_utils::{get_schema_folder, is_false, is_true, SmartSerde},
         tracing::LogLevel,
-        GIT_VERSION,
     },
 };
-use reedline::{Prompt, PromptEditMode, PromptHistorySearch};
 use schemars::{schema_for, JsonSchema};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
-use state::{
-    classify_state_folder, CommandHistory, RunHistory, State, StateFolderKind, SyncSettings,
-};
-use std::{
-    borrow::Cow, ffi::OsString, io::IsTerminal, path::Path, path::PathBuf, sync::atomic::Ordering,
-};
+use state::{classify_state_folder, RunHistory, State, StateFolderKind, SyncSettings};
+use std::{ffi::OsString, path::Path, path::PathBuf, sync::atomic::Ordering};
 use std::{fs, fs::File, ops::ControlFlow, time::Duration, time::Instant};
 use walkdir::WalkDir;
+
+#[cfg(feature = "cli")]
+use {
+    ::tracing::debug,
+    clap::ValueEnum,
+    clap_complete::shells::{Bash, Elvish, Fish, PowerShell, Zsh},
+    clap_complete_nushell::Nushell,
+    console::{measure_text_width, style},
+    dirs::home_dir,
+    gammalooprs::utils::GIT_VERSION,
+    reedline::{FileBackedHistory, Prompt, PromptEditMode, PromptHistorySearch},
+    repl::{ClapEditor, ReadCommandOutput},
+    state::CommandHistory,
+    std::{borrow::Cow, io::IsTerminal},
+    tracing::get_stderr_log_filter_label,
+};
 
 // use tracing::LogLevel;
 mod command_parser;
 pub(crate) mod command_template;
-pub(crate) mod completion;
+pub mod completion;
 pub mod integrand_info;
 pub(crate) mod model_parameters;
-#[cfg(feature = "python_api")]
+#[cfg(feature = "python")]
 pub mod python;
+#[cfg(feature = "cli")]
 pub mod repl;
 pub mod session;
 pub(crate) mod settings_tree;
@@ -178,6 +164,7 @@ pub(crate) fn test_workspace_root() -> &'static Path {
 
 pub(crate) const GLOBAL_SETTINGS_FILENAME: &str = "global_settings.toml";
 pub(crate) const DEFAULT_RUNTIME_SETTINGS_FILENAME: &str = "default_runtime_settings.toml";
+#[cfg(feature = "cli")]
 const BANNER_ART: &str = r"              ██         ▄████████▄  ▄████████▄  ██████████▄
   ██          ▀▀         ▀▀      ▀▀  ▀▀      ▀▀  ▀▀       ██
     ██  ▄██████████████████████████████████████████████████▀
@@ -319,6 +306,7 @@ pub struct OneShot {
     #[arg(long)]
     no_try_strings: bool,
 
+    #[cfg(feature = "cli")]
     /// Generate a shell completion script for the gammaloop executable
     #[arg(long = "completions", value_enum)]
     completions: Option<CompletionShell>,
@@ -331,6 +319,7 @@ pub struct OneShot {
     pub command: Option<Commands>,
 }
 
+#[cfg(feature = "cli")]
 #[derive(Debug, Copy, Clone, PartialEq, Eq, ValueEnum)]
 enum CompletionShell {
     Bash,
@@ -713,6 +702,7 @@ impl StateLoadOption {
             settings_global_path: self.settings_global_path,
             settings_runtime_defaults_path: self.settings_runtime_defaults_path,
             no_try_strings: false,
+            #[cfg(feature = "cli")]
             completions: None,
             command: None,
         }
@@ -789,11 +779,13 @@ pub struct StateLoadSummary {
     pub total_graphs: usize,
 }
 
+#[cfg(feature = "cli")]
 #[derive(Clone)]
 struct SessionPrompt {
     left_prompt: String,
 }
 
+#[cfg(feature = "cli")]
 impl Prompt for SessionPrompt {
     fn render_prompt_left(&self) -> Cow<'_, str> {
         Cow::Borrowed(&self.left_prompt)
@@ -819,6 +811,7 @@ impl Prompt for SessionPrompt {
     }
 }
 
+#[cfg(feature = "cli")]
 fn make_repl_prompt(state_label: &str, pending_block_name: Option<&str>) -> Box<dyn Prompt> {
     let left_prompt = match pending_block_name {
         Some(name) => format!(
@@ -831,6 +824,7 @@ fn make_repl_prompt(state_label: &str, pending_block_name: Option<&str>) -> Box<
     Box::new(SessionPrompt { left_prompt })
 }
 
+#[cfg(feature = "cli")]
 fn format_duration_human(duration: Duration) -> String {
     if duration.as_secs() >= 60 {
         let minutes = duration.as_secs() / 60;
@@ -843,6 +837,7 @@ fn format_duration_human(duration: Duration) -> String {
     }
 }
 
+#[cfg(feature = "cli")]
 fn format_size_human(bytes: u64) -> String {
     const UNITS: [&str; 5] = ["B", "KiB", "MiB", "GiB", "TiB"];
 
@@ -889,6 +884,7 @@ fn total_graph_count(state: &State) -> usize {
         .sum::<usize>()
 }
 
+#[cfg(feature = "cli")]
 fn banner_footer_line(spec: &str) -> String {
     format!(
         r#"   ▀██████▀   version:{:<15} log level:{}         "#,
@@ -896,6 +892,7 @@ fn banner_footer_line(spec: &str) -> String {
     )
 }
 
+#[cfg(feature = "cli")]
 fn banner_width(spec: &str) -> usize {
     BANNER_ART
         .lines()
@@ -907,6 +904,7 @@ fn banner_width(spec: &str) -> usize {
         .unwrap_or_default()
 }
 
+#[cfg(feature = "cli")]
 fn print_state_load_summary(summary: &StateLoadSummary) {
     let spec_label = get_stderr_log_filter_label();
     let banner_width = banner_width(&spec_label);
@@ -1041,6 +1039,7 @@ impl OneShot {
             settings_global_path: None,
             settings_runtime_defaults_path: None,
             no_try_strings: false,
+            #[cfg(feature = "cli")]
             completions: None,
             clean_state: false,
             processes: None,
@@ -1550,6 +1549,7 @@ impl OneShot {
         ))
     }
 
+    #[cfg(feature = "cli")]
     pub fn run(mut self, raw: String) -> Result<()> {
         if let Some(shell) = self.completions {
             print!("{}", generate_completion_script(shell));
@@ -1655,6 +1655,7 @@ impl OneShot {
     // pub fn initialize(&self) {}
 }
 
+#[cfg(feature = "cli")]
 fn run_repl_session(session: &mut CliSession<'_>, save_state: &mut SaveState) {
     let completion_state = repl::SharedCompletionState::new();
     completion_state.update_from_session(session);
@@ -1733,6 +1734,7 @@ fn run_repl_session(session: &mut CliSession<'_>, save_state: &mut SaveState) {
     }
 }
 
+#[cfg(feature = "cli")]
 fn generate_completion_script(shell: CompletionShell) -> String {
     let mut command = OneShot::command();
     let mut output = Vec::new();
@@ -1766,6 +1768,7 @@ fn generate_completion_script(shell: CompletionShell) -> String {
     }
 }
 
+#[cfg(feature = "cli")]
 fn patch_bash_completion_for_repo_wrapper(mut script: String) -> String {
     script.push_str(
         "\n# Support the repository wrapper script path as well.\n\
@@ -1776,6 +1779,7 @@ fi\n",
     script
 }
 
+#[cfg(feature = "cli")]
 fn patch_fish_completion_for_repo_wrapper(script: String) -> String {
     let mut wrapper_lines = Vec::new();
     for line in script.lines() {
@@ -1797,6 +1801,7 @@ fn patch_fish_completion_for_repo_wrapper(script: String) -> String {
     }
 }
 
+#[cfg(feature = "cli")]
 fn normalize_fish_completion(script: String) -> String {
     let mut normalized = String::with_capacity(script.len());
     let bytes = script.as_bytes();
@@ -1847,6 +1852,7 @@ pub enum Log {
 //     }
 // }
 
+#[cfg(feature = "cli")]
 pub(crate) fn print_banner() {
     let spec = get_stderr_log_filter_label();
     println!(
@@ -1893,7 +1899,7 @@ mod tests {
         utils::serde_utils::{ShowDefaultsGuard, SmartSerde},
     };
 
-    use crate::commands::{save::SaveState, Duplicate, Remove};
+    use crate::commands::{Duplicate, Remove};
     use crate::settings_tree::serialize_settings_with_defaults;
     use crate::state::ProcessRef;
     use crate::tracing::{
@@ -1903,11 +1909,17 @@ mod tests {
     };
 
     use super::{
-        generate_completion_script, CLISettings, CommandHistory, Commands, CompletionShell,
-        LogFormat, LogLevel, OneShot, Repl, RunHistory, State, StateSettings,
+        CLISettings, Commands, LogFormat, LogLevel, OneShot, Repl, RunHistory, StateSettings,
         GLOBAL_SETTINGS_FILENAME, LOG_TEST_MUTEX,
     };
-    use crate::state::CommandsBlock;
+    #[cfg(feature = "cli")]
+    use {
+        super::{generate_completion_script, CompletionShell, State},
+        crate::{
+            commands::save::SaveState,
+            state::{CommandHistory, CommandsBlock},
+        },
+    };
 
     const ENV_FILE_LOG_FILTER: &str = "GL_LOGFILE_FILTER";
     const ENV_DISPLAY_LOG_FILTER: &str = "GL_DISPLAY_FILTER";
@@ -2126,6 +2138,7 @@ mod tests {
         assert!(state_path.join("stale.txt").exists());
     }
 
+    #[cfg(feature = "cli")]
     #[test]
     fn one_shot_run_history_persists_all_executed_commands() {
         let temp = tempdir().unwrap();
@@ -2196,6 +2209,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "cli")]
     #[test]
     fn auto_read_only_boot_settings_mismatch_ignores_quit_override_for_active_state() {
         let temp = tempdir().unwrap();
@@ -2487,12 +2501,14 @@ mod tests {
         assert_eq!(get_file_log_filter(), "gammaloop_api=off,gammalooprs=off");
     }
 
+    #[cfg(feature = "cli")]
     #[test]
     fn oneshot_accepts_completions_flag() {
         let parsed = OneShot::try_parse_from(["gammaloop", "--completions", "bash"]).unwrap();
         assert_eq!(parsed.completions, Some(CompletionShell::Bash));
     }
 
+    #[cfg(feature = "cli")]
     #[test]
     fn bash_completion_script_binds_repo_wrapper_path() {
         let script = generate_completion_script(CompletionShell::Bash);
@@ -2500,6 +2516,7 @@ mod tests {
         assert!(script.contains("complete -F _gammaloop -o bashdefault -o default ./gammaloop"));
     }
 
+    #[cfg(feature = "cli")]
     #[test]
     fn fish_completion_script_binds_repo_wrapper_path() {
         let script = generate_completion_script(CompletionShell::Fish);
@@ -2508,12 +2525,14 @@ mod tests {
         assert!(!script.contains("-a \"true\\t''\nfalse\\t''\""));
     }
 
+    #[cfg(feature = "cli")]
     #[test]
     fn oneshot_accepts_nushell_completions_flag() {
         let parsed = OneShot::try_parse_from(["gammaloop", "--completions", "nushell"]).unwrap();
         assert_eq!(parsed.completions, Some(CompletionShell::Nushell));
     }
 
+    #[cfg(feature = "cli")]
     #[test]
     fn nushell_completion_script_is_exportable_module() {
         let script = generate_completion_script(CompletionShell::Nushell);

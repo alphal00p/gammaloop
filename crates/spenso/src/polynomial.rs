@@ -35,7 +35,7 @@ mod test {
 
     use crate::shadowing::test::EXPLICIT_TENSOR_MAP;
     use constcat::concat;
-    #[cfg(feature = "shadowing")]
+    #[cfg(feature = "symbolica")]
     use symbolica::{
         atom::Atom,
         id::Replacement,
@@ -43,7 +43,7 @@ mod test {
     };
     use symbolica::{atom::AtomCore, domains::rational::Q, parse, poly::LexOrder, symbol};
 
-    #[cfg(feature = "shadowing")]
+    #[cfg(feature = "symbolica")]
     use crate::symbolic::SymbolicTensor;
 
     use crate::upgrading_arithmetic::FallibleAdd;
@@ -54,7 +54,7 @@ mod test {
         one.add_fallible(&one).unwrap();
     }
 
-    #[cfg(feature = "shadowing")]
+    #[cfg(feature = "symbolica")]
     #[test]
     fn three_loop_photon_poly() {
         use symbolica::{atom::AtomCore, symbol};
@@ -168,7 +168,7 @@ mod test {
 
     #[test]
     fn one_loop_photon_parse() {
-        #[cfg(feature = "shadowing")]
+        #[cfg(feature = "symbolica")]
         use symbolica::domains::rational::Q;
 
         use crate::structure::HasStructure;

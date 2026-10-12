@@ -732,7 +732,7 @@ mod tests {
         assert_eq!(base.tensor(1), &20);
     }
 
-    #[cfg(feature = "shadowing")]
+    #[cfg(feature = "symbolica")]
     #[test]
     fn tensor_retention_preserves_unreferenced_alias_definitions() {
         use symbolica::{atom::Atom, parse};
@@ -768,7 +768,7 @@ mod tests {
             tensors::data::DenseTensor,
         };
 
-        #[cfg(feature = "shadowing")]
+        #[cfg(feature = "symbolica")]
         let _parallel = crate::symbolic_parallelism::scoped_symbolica_rayon_setting_for_test(
             crate::symbolic_parallelism::SymbolicParallelism::Parallel,
             || true,

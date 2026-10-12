@@ -34,6 +34,33 @@ pub enum SerdeFileError {
     NoExtension(String),
 }
 
+/// Preserve map entries as an ordered sequence of key-value pairs, including non-string keys.
+pub(crate) mod map_as_pairs {
+    use serde::{Deserialize, Deserializer, Serialize, Serializer};
+
+    pub fn serialize<'a, T, K, V, S>(target: T, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+        T: IntoIterator<Item = (&'a K, &'a V)>,
+        K: Serialize + 'a,
+        V: Serialize + 'a,
+    {
+        let entries: Vec<_> = target.into_iter().collect();
+        entries.serialize(serializer)
+    }
+
+    pub fn deserialize<'de, T, K, V, D>(deserializer: D) -> Result<T, D::Error>
+    where
+        D: Deserializer<'de>,
+        T: FromIterator<(K, V)>,
+        K: Deserialize<'de>,
+        V: Deserialize<'de>,
+    {
+        let entries: Vec<_> = Deserialize::deserialize(deserializer)?;
+        Ok(entries.into_iter().collect())
+    }
+}
+
 pub(crate) fn deserialize_nonnegative_finite_f64<'de, D>(
     deserializer: D,
 ) -> std::result::Result<f64, D::Error>

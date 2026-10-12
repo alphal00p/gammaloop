@@ -9,8 +9,8 @@ use gammalooprs::settings::runtime::{
 use gammalooprs::uv::profile::UVLimitSelection;
 
 #[test]
-#[serial]
 fn raised_cut_numerator_cancels_one_propagator_in_both_orientation_modes() -> Result<()> {
+    let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
     let routes = [
         ("localized_local_3d", false, false),
         ("explicit_local_3d", true, false),
@@ -126,8 +126,8 @@ fn raised_cut_numerator_cancels_one_propagator_in_both_orientation_modes() -> Re
 }
 
 #[test]
-#[serial]
 fn raised_scalar_self_energy_uv_matches_across_local_uv_routes() -> Result<()> {
+    let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
     let routes = [
         ("localized_local_3d", false, false),
         ("explicit_local_3d", true, false),
@@ -241,8 +241,8 @@ fn raised_scalar_self_energy_uv_matches_across_local_uv_routes() -> Result<()> {
 }
 
 #[test]
-#[serial]
 fn bare_raised_scalar_self_energy_has_the_reported_uv_degree() -> Result<()> {
+    let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
     let test_root = get_tests_workspace_path().join("bare_raised_scalar_self_energy_uv_degree");
     let mut cli = get_test_cli(None, &test_root, Some("bare_uv_degree".to_string()), true)?;
     run_commands(
@@ -462,8 +462,8 @@ fn uv_profile_all_limits_profiles_finite_amplitude_cycles() -> Result<()> {
 }
 
 #[test]
-#[serial]
 fn uv_profile_selects_lu_graph_and_cut() -> Result<()> {
+    let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
     let test_root = get_tests_workspace_path().join("uv_profile_selects_lu_graph_and_cut");
     let mut cli = get_test_cli(None, &test_root, Some("uv_profile_cut".to_string()), true)?;
     run_commands(
@@ -942,8 +942,8 @@ fn integrate_writes_numerical_stability_histograms_for_scalar_triangle() -> Resu
 }
 
 #[test]
-#[serial]
 fn inspect_x_space_reports_missing_discrete_dimensions_cleanly() -> Result<()> {
+    let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
     let mut cli =
         setup_gg_hhh_threshold_amplitude_cli("gg_hhh_inspect_missing_discrete_dimensions")?;
 

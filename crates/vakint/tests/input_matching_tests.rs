@@ -4,7 +4,7 @@ use symbolica::try_parse;
 use test_utils::{compare_output, get_vakint};
 use vakint::{VakintError, VakintSettings};
 
-#[test_log::test]
+#[test]
 fn test_1l_matching() {
     let vakint = get_vakint(VakintSettings {
         allow_unknown_integrals: false,
@@ -69,7 +69,7 @@ fn test_1l_matching() {
     );
 }
 
-#[test_log::test]
+#[test]
 fn test_2l_matching_3prop() {
     let vakint = get_vakint(VakintSettings {
         allow_unknown_integrals: false,
@@ -138,7 +138,7 @@ fn test_2l_matching_3prop() {
     );
 }
 
-#[test_log::test]
+#[test]
 fn partly_massless_sunsets_preserve_mass_labels_and_exclude_alphaloop() {
     use symbolica::atom::AtomCore;
     use vakint::{EvaluationOrder, vakint_parse};
@@ -199,7 +199,7 @@ fn partly_massless_sunsets_preserve_mass_labels_and_exclude_alphaloop() {
     }
 }
 
-#[test_log::test]
+#[test]
 fn test_2l_matching_pinched() {
     let vakint = get_vakint(VakintSettings {
         allow_unknown_integrals: false,
@@ -293,7 +293,7 @@ fn test_2l_matching_pinched() {
     );
 }
 
-#[test_log::test]
+#[test]
 fn test_3l_matching_with_zero_powers_in_short_form() {
     let vakint = get_vakint(VakintSettings {
         allow_unknown_integrals: false,
@@ -323,7 +323,7 @@ fn test_3l_matching_with_zero_powers_in_short_form() {
     );
 }
 
-#[test_log::test]
+#[test]
 fn test_unknown_integrals() {
     let vakint = get_vakint(VakintSettings {
         allow_unknown_integrals: false,
@@ -364,7 +364,7 @@ fn test_unknown_integrals() {
     );
 }
 
-#[test_log::test]
+#[test]
 fn test_2l_pinched_matching() {
     let vakint = get_vakint(VakintSettings {
         allow_unknown_integrals: false,

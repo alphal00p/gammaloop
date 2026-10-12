@@ -125,7 +125,9 @@ pub fn export_catalog(
             let stub = python_stub.context("a checked-in Python stub is required")?;
             python_scope(request, workspace_root, stub)?
         }
-        language => bail!("unsupported catalog exporter language {language}"),
+        language => {
+            bail!("unsupported catalog exporter language {language}");
+        }
     };
     let product = DocProduct::new(&request.product_id, &request.product_title);
     let mut component = DocComponent::new(
@@ -283,9 +285,9 @@ fn rust_scope(component: &str, workspace_root: &Path) -> Result<DocScope> {
 fn rust_item_required_features(component: &str, item: &str) -> &'static [&'static str] {
     match (component, item) {
         // The entire parametric module is behind Spenso's Symbolica-backed
-        // `shadowing` feature, not merely extra implementations on the type.
+        // `symbolica` feature, not merely extra implementations on the type.
         ("spenso", "NetworkParse" | "ParamTensor" | "ParseSettings" | "SymbolicParallelism") => {
-            &["shadowing"]
+            &["symbolica"]
         }
         _ => &[],
     }
@@ -301,7 +303,9 @@ fn rust_examples(component: &str) -> Result<&'static [RustExampleSpec]> {
         "spenso-hep-lib" => Ok(SPENSO_HEP_LIB),
         "idenso" => Ok(IDENSO),
         "vakint" => Ok(VAKINT),
-        _ => bail!("unknown Rust component {component}"),
+        _ => {
+            bail!("unknown Rust component {component}");
+        }
     }
 }
 
@@ -942,7 +946,9 @@ fn python_required_exports(component: &str) -> Result<&'static [&'static str]> {
             "trace",
         ]),
         "linnet-py" | "idenso-community" | "vakint-community" => Ok(&[]),
-        _ => bail!("unknown Python component {component}"),
+        _ => {
+            bail!("unknown Python component {component}");
+        }
     }
 }
 
@@ -950,7 +956,9 @@ fn python_export_is_supported(component: &str, name: &str) -> Result<bool> {
     match component {
         "linnet-py" | "idenso-community" | "vakint-community" => Ok(true),
         "gammaloop-python" | "spynso3" => Ok(python_required_exports(component)?.contains(&name)),
-        _ => bail!("unknown Python component {component}"),
+        _ => {
+            bail!("unknown Python component {component}");
+        }
     }
 }
 
@@ -1262,7 +1270,7 @@ mod tests {
             );
         }
         for entry in ["ParseSettings", "NetworkParse", "SymbolicParallelism"] {
-            assert_eq!(rust_item_required_features("spenso", entry), &["shadowing"]);
+            assert_eq!(rust_item_required_features("spenso", entry), &["symbolica"]);
         }
     }
 

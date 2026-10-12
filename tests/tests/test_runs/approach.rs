@@ -439,8 +439,8 @@ fn command_succeeds(program: &str, args: &[&str]) -> bool {
 }
 
 #[test]
-#[serial]
 fn approach_cross_section_json_has_cut_metadata_and_parallel_matches_sequential() -> Result<()> {
+    let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
     let test_name = "lu_approach_cross_section";
     let mut cli = setup_sm_differential_lu_cli(test_name)?;
     let point = default_xspace_point(&cli)?;
@@ -500,8 +500,8 @@ fn approach_cross_section_json_has_cut_metadata_and_parallel_matches_sequential(
 }
 
 #[test]
-#[serial]
 fn approach_cross_section_momentum_space_uses_graph_orientation_selectors() -> Result<()> {
+    let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
     let test_name = "lu_approach_cross_section_momentum";
     let mut cli = setup_sm_differential_lu_cli(test_name)?;
     let point = default_momentum_space_point(&cli)?;
@@ -577,8 +577,8 @@ fn approach_momentum_space_reports_incomplete_triplet_cleanly() -> Result<()> {
 }
 
 #[test]
-#[serial]
 fn approach_amplitude_json_has_synthetic_cut_and_threshold_weights() -> Result<()> {
+    let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
     let test_name = "gg_hhh_approach_amplitude";
     let mut cli = setup_gg_hhh_threshold_amplitude_cli(test_name)?;
     let point = vec![0.23, 0.41, 0.67];
@@ -703,8 +703,8 @@ fn approach_amplitude_json_has_synthetic_cut_and_threshold_weights() -> Result<(
 }
 
 #[test]
-#[serial]
 fn approach_sampling_modes_record_effective_lmb_sample_ids() -> Result<()> {
+    let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
     let test_name = "lu_approach_lmb_sampling";
     let mut cli = setup_sm_differential_lu_cli(test_name)?;
     let point = default_xspace_point(&cli)?;
@@ -833,8 +833,8 @@ lmb_basis_ids = {{ {master_graph_name} = [1, 0] }}
 }
 
 #[test]
-#[serial]
 fn plot_approach_result_script_smoke() -> Result<()> {
+    let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
     if !command_succeeds("python3", &["-c", "import matplotlib"]) {
         eprintln!("skipping plot smoke test because python3/matplotlib is unavailable");
         return Ok(());

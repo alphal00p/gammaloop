@@ -77,7 +77,7 @@ target/release/gammaloop --clean-state examples/cli/aa_aa/3L/aa_aa_grouped.toml 
 The release binary was built with:
 
 ```bash
-nix develop --no-write-lock-file -c cargo build -p gammaloop-api --bin gammaloop --features ufo_support --release
+nix develop --no-write-lock-file -c cargo build -p gammaloop-api --bin gammaloop --features ufo-import --release
 ```
 
 Observed behavior from `/tmp/aa_aa_3l_grouped_release.log` and process monitoring:
@@ -189,7 +189,7 @@ The complete 339-row timing matrix is preserved as
 This follow-up used the release binary `target/release/gammaloop` built with
 
 ```bash
-nix develop --no-write-lock-file -c cargo build -p gammaloop-api --bin gammaloop --features ufo_support --release
+nix develop --no-write-lock-file -c cargo build -p gammaloop-api --bin gammaloop --features ufo-import --release
 ```
 
 The grouped card is `examples/cli/aa_aa/3L/aa_aa_grouped.toml`. The default symbolic scalar-rescaling comparison remained impractical, so the successful one-time feyngen pass used the same scalar-rescaling grouping mode but with a single fully numerical numerator-comparison sample:

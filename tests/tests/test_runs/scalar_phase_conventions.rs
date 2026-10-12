@@ -12,7 +12,7 @@ fn scalar_contact_cli(
     incoming: usize,
     final_mass: f64,
 ) -> Result<gammaloop_integration_tests::CLIState> {
-    // Nextest processes do not share #[serial] locks, so isolate their state directories.
+    // Nextest processes do not share the integration test lock, so isolate their state directories.
     let name = format!(
         "scalar_born_phase_{}_n{multiplicity}_{incoming}_{final_mass}",
         std::process::id()
@@ -226,8 +226,8 @@ fn check_scalar_contact_point(
 }
 
 #[test]
-#[serial]
 fn scalar_born_phases_match_phase_space_at_one_through_five_loops() -> Result<()> {
+    let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
     for multiplicity in 2..=6 {
         let mut cli = scalar_contact_cli(multiplicity, 1, 0.0)?;
         for seed in 0..3 {
@@ -297,8 +297,8 @@ fn integrate_scalar_contact(multiplicity: usize, incoming: usize, final_mass: f6
 macro_rules! scalar_born_mc_test {
     ($name:ident, $multiplicity:expr) => {
         #[test]
-        #[serial]
         fn $name() -> Result<()> {
+            let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
             integrate_scalar_contact($multiplicity, 1, 0.0)
         }
     };
@@ -311,15 +311,15 @@ scalar_born_mc_test!(scalar_born_five_body_mc_matches_phase_space, 5);
 scalar_born_mc_test!(scalar_born_six_body_mc_matches_phase_space, 6);
 
 #[test]
-#[serial]
 fn scalar_born_massive_decay_and_scattering_mc_match_phase_space() -> Result<()> {
+    let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
     integrate_scalar_contact(2, 1, 0.15)?;
     integrate_scalar_contact(2, 2, 0.0)
 }
 
 #[test]
-#[serial]
 fn scalar_born_exchange_tree_matches_squared_amplitude() -> Result<()> {
+    let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
     // This labelled Born topology has one internal scalar on each side. The
     // explicit identical-state factor is 1/3!, with no sum over the other
     // possible spectator choices or their interference graphs. All vertex and

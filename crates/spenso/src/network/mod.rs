@@ -26,21 +26,21 @@ use library::{Library, LibraryError};
 
 use crate::algebra::{ScalarMul, algebraic_traits::RefOne};
 use crate::contraction::{Contract, Trace};
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 use crate::iterators::IteratableTensor;
 use crate::network::library::{DummyKey, FunctionLibrary, FunctionLibraryError, LibraryTensor};
 use crate::structure::abstract_index::AbstractIndex;
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 use crate::structure::concrete_index::{ConcreteIndex, FlatIndex};
 use crate::structure::permuted::ApplyPendingIndexPermutation;
 // use crate::shadowing::Concretize;
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 use crate::structure::StructureContract;
 use crate::structure::representation::LibrarySlot;
 use crate::structure::slot::{AbsInd, IsAbstractSlot};
 use crate::structure::{Canonicalized, HasName, StructureError, TensorShell};
 use std::borrow::Cow;
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 use std::collections::HashMap;
 use std::fmt::Display;
 use std::ops::{Add, AddAssign, Div, Mul, MulAssign, Neg, Sub, SubAssign};
@@ -51,9 +51,9 @@ use store::{
 use thiserror::Error;
 // use log::trace;
 
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 use crate::algebra::complex::RealOrComplexRef;
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 use crate::tensors::parametric::{
     AtomViewOrConcrete, ConcreteOrParam, ParamOrConcrete, ParamTensor,
 };
@@ -67,14 +67,14 @@ use crate::{
 };
 use eyre::eyre;
 
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 use symbolica::atom::{Atom, AtomCore, AtomView};
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 use symbolica::id::AliasedAtom;
 
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 pub mod tags;
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 use tags::{SPENSO_TAG, scalar_store_alias, scalar_store_alias_index};
 // use eyre::Result;
 
@@ -82,9 +82,9 @@ use std::{convert::Infallible, fmt::Debug};
 
 const LARGE_SUM_PROFILE_THRESHOLD: usize = 32;
 const MIN_LAZY_TENSOR_SUM_TERMS: usize = 2;
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 pub const MAX_EAGER_TENSOR_SUM_BYTES: usize = 16 * 1024 * 1024;
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 const MIN_LAZY_FUSED_NUMERIC_CONTRACT_TERMS: usize = 8;
 
 pub struct FastTensorSumContractTerm<T, Sc> {
@@ -99,7 +99,7 @@ pub enum FastTensorSumContract<T, Sc> {
 }
 
 impl<T, Sc> FastTensorSumContract<T, Sc> {
-    #[cfg(feature = "shadowing")]
+    #[cfg(feature = "symbolica")]
     fn map<U>(self, mut f: impl FnMut(T) -> U) -> FastTensorSumContract<U, Sc> {
         match self {
             FastTensorSumContract::Materialized(tensor) => {
@@ -180,7 +180,7 @@ impl TensorContractionProfile {
         }
     }
 
-    #[cfg(feature = "shadowing")]
+    #[cfg(feature = "symbolica")]
     fn from_param_tensor<S>(tensor: &ParamTensor<S>) -> Self
     where
         S: TensorStructure + Clone,
@@ -328,7 +328,7 @@ impl<S> FastTensorSum for TensorShell<S> {}
 impl<S, Sc> FastTensorSumContractible<Sc> for TensorShell<S> {}
 impl<S, Sc> TensorCommonFactor<Sc> for TensorShell<S> {}
 
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 impl<S> FastTensorSum for ParamTensor<S>
 where
     S: TensorStructure + Clone + Sync,
@@ -448,7 +448,7 @@ where
     }
 }
 
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 #[derive(Default)]
 struct FastTensorSumWorkload {
     shape: AtomSumShapeStats,
@@ -456,7 +456,7 @@ struct FastTensorSumWorkload {
     max_group_bytes: usize,
 }
 
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 impl FastTensorSumWorkload {
     // These conservative floors select only shapes that showed a clear win in
     // the fast sparse-sum benchmark. In particular, a large number of trivial
@@ -509,7 +509,7 @@ impl FastTensorSumWorkload {
     }
 }
 
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 impl<S> FastTensorSumContractible<Atom> for ParamTensor<S>
 where
     S: TensorStructure + Clone + Send + Sync + StructureContract,
@@ -552,7 +552,7 @@ where
     }
 }
 
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 impl<S> TensorCommonFactor<Atom> for ParamTensor<S>
 where
     S: TensorStructure + Clone,
@@ -595,7 +595,7 @@ where
     }
 }
 
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 #[allow(clippy::too_many_arguments)]
 fn sparse_atom_pair_estimate<S>(
     left: &ParamTensor<S>,
@@ -718,7 +718,7 @@ where
     }
 }
 
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 fn sparse_free_keys_by_match<S>(
     sparse: &SparseTensor<Atom, S>,
     matches: &[bool],
@@ -749,7 +749,7 @@ where
     groups
 }
 
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 impl<C, S> FastTensorSum for ParamOrConcrete<C, S>
 where
     S: TensorStructure + Clone + Sync,
@@ -768,7 +768,7 @@ where
     }
 }
 
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 impl<C, S> FastTensorSumContractible<Atom> for ParamOrConcrete<C, S>
 where
     S: TensorStructure + Clone + Send + Sync + StructureContract,
@@ -839,7 +839,7 @@ where
     }
 }
 
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 impl<C, S, CSc> FastTensorSumContractible<ConcreteOrParam<CSc>> for ParamOrConcrete<C, S>
 where
     S: TensorStructure + Clone + Send + Sync + StructureContract,
@@ -895,7 +895,7 @@ where
     }
 }
 
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 impl<C, S> TensorCommonFactor<Atom> for ParamOrConcrete<C, S>
 where
     S: TensorStructure + Clone,
@@ -910,7 +910,7 @@ where
     }
 }
 
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 impl<C, S, CSc> TensorCommonFactor<ConcreteOrParam<CSc>> for ParamOrConcrete<C, S>
 where
     S: TensorStructure + Clone,
@@ -928,7 +928,7 @@ where
     }
 }
 
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 struct NumericContractEntry {
     index: Vec<ConcreteIndex>,
     coefficient: Atom,
@@ -936,7 +936,7 @@ struct NumericContractEntry {
     left_metric_negative: bool,
 }
 
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 struct FusedNumericContractPlan<S>
 where
     S: TensorStructure,
@@ -954,7 +954,7 @@ where
     right_match_flags: Vec<bool>,
 }
 
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 fn fused_numeric_tensor_sum_contract<S>(
     terms: &[&ParamTensor<S>],
     numeric: &ParamTensor<S>,
@@ -1059,7 +1059,7 @@ where
     })())
 }
 
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 fn fused_numeric_tensor_sum_contract_impl<S>(
     terms: &[&ParamTensor<S>],
     plan: FusedNumericContractPlan<S>,
@@ -1090,7 +1090,7 @@ where
     plan.finish_groups(groups)
 }
 
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 impl<S> FusedNumericContractPlan<S>
 where
     S: TensorStructure + Clone + Send + Sync + StructureContract,
@@ -1453,7 +1453,7 @@ where
     }
 }
 
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 fn common_sparse_atom_factors<S>(sum_sparse: &SparseTensor<Atom, S>) -> Vec<Atom>
 where
     S: TensorStructure,
@@ -1480,7 +1480,7 @@ where
     common
 }
 
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 fn atom_factors(atom: AtomView<'_>) -> Vec<Atom> {
     match atom {
         AtomView::Mul(mul) => mul
@@ -1491,7 +1491,7 @@ fn atom_factors(atom: AtomView<'_>) -> Vec<Atom> {
     }
 }
 
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 fn atom_contains_factor(atom: AtomView<'_>, factor: &Atom) -> bool {
     match atom {
         AtomView::Mul(mul) => mul
@@ -1501,7 +1501,7 @@ fn atom_contains_factor(atom: AtomView<'_>, factor: &Atom) -> bool {
     }
 }
 
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 fn atom_without_factors(atom: AtomView<'_>, factors: &[Atom]) -> Atom {
     match atom {
         AtomView::Mul(mul) => {
@@ -1529,14 +1529,14 @@ fn atom_without_factors(atom: AtomView<'_>, factors: &[Atom]) -> Atom {
     }
 }
 
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 fn atom_product(factors: impl IntoIterator<Item = Atom>) -> Atom {
     factors
         .into_iter()
         .fold(Atom::num(1), |product, factor| product * factor)
 }
 
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 fn collect_numeric_contract_entries<S>(
     numeric: &SparseTensor<Atom, S>,
     numeric_match_axes: &[usize],
@@ -1571,12 +1571,12 @@ where
     Ok(entries)
 }
 
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 fn component_key(index: &[ConcreteIndex], axes: &[usize]) -> Vec<ConcreteIndex> {
     axes.iter().map(|axis| index[*axis]).collect()
 }
 
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 fn match_flags(order: usize, axes: &[usize]) -> Vec<bool> {
     let mut flags = vec![false; order];
     for axis in axes {
@@ -1585,7 +1585,7 @@ fn match_flags(order: usize, axes: &[usize]) -> Vec<bool> {
     flags
 }
 
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 fn metric_negative<S>(
     structure: &S,
     matched_axes: &[usize],
@@ -1612,7 +1612,7 @@ where
     Ok(negative)
 }
 
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 fn contract_result_index<S>(
     result_structure: &S,
     left_slots: &[S::Slot],
@@ -1659,7 +1659,7 @@ where
         .map_err(ContractionError::from)
 }
 
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 fn multiply_atom_by_numeric_coefficient(atom: Atom, coefficient: &Atom) -> Atom {
     if coefficient == &Atom::num(1) {
         atom
@@ -1681,7 +1681,7 @@ fn multiply_atom_by_numeric_coefficient(atom: Atom, coefficient: &Atom) -> Atom 
     Eq,
 )]
 #[cfg_attr(
-    feature = "shadowing",
+    feature = "symbolica",
     trait_decode(trait = symbolica::state::HasStateMap),
 )]
 /// An owned tensor-expression graph together with the values referenced by it.
@@ -1772,7 +1772,7 @@ pub struct Network<S, LibKey, FunKey, Aind = AbstractIndex> {
     pub state: NetworkState,
 }
 
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 #[derive(Debug, Clone)]
 pub struct ScalarAliases {
     aliased_originals: Vec<bool>,
@@ -1782,7 +1782,7 @@ pub struct ScalarAliases {
     max_aliased_bytes: usize,
 }
 
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 impl ScalarAliases {
     fn new(scalars: usize) -> Self {
         Self {
@@ -1881,7 +1881,7 @@ impl ScalarAliases {
     }
 }
 
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 impl<T, K: Debug, FK: Debug, Aind: AbsInd> Network<NetworkStore<T, Atom>, K, FK, Aind> {
     pub fn alias_scalar_refs(
         &mut self,
@@ -2587,7 +2587,7 @@ pub enum TensorNetworkError<K: Display, FK: Display> {
     #[error("library tensor graph has {actual} indices, expected {expected}")]
     LibraryIndexRankMismatch { expected: usize, actual: usize },
     /// A chain expression had invalid nesting.
-    #[cfg(feature = "shadowing")]
+    #[cfg(feature = "symbolica")]
     #[error(transparent)]
     ChainNesting(#[from] parsing::ChainNestingError),
     /// Applying a registered tensor function failed.
@@ -3195,7 +3195,7 @@ impl<T, S, FK: Debug, K: Debug, Aind: AbsInd> Network<NetworkStore<T, S>, K, FK,
 }
 
 // use log::trace;
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 pub mod parsing;
 // use log::trace;
 pub mod contract;
@@ -3367,7 +3367,7 @@ fn log_sum_add(
     }
 }
 
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 #[derive(Clone, Copy, Debug, Default)]
 struct AtomSumShapeStats {
     logical_entries: usize,
@@ -3380,7 +3380,7 @@ struct AtomSumShapeStats {
     max_bytes: usize,
 }
 
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 impl AtomSumShapeStats {
     fn observe_atom(&mut self, atom: AtomView<'_>, include_bytes: bool) -> (usize, usize) {
         let terms = atom.nterms();
@@ -3412,19 +3412,19 @@ impl AtomSumShapeStats {
     }
 }
 
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 trait AtomEntryShape {
     fn observe_atom_shape(self, stats: &mut AtomSumShapeStats, include_bytes: bool);
 }
 
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 impl AtomEntryShape for AtomView<'_> {
     fn observe_atom_shape(self, stats: &mut AtomSumShapeStats, include_bytes: bool) {
         stats.observe_atom(self, include_bytes);
     }
 }
 
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 impl<T> AtomEntryShape for AtomViewOrConcrete<'_, T> {
     fn observe_atom_shape(self, stats: &mut AtomSumShapeStats, include_bytes: bool) {
         if let AtomViewOrConcrete::Atom(atom) = self {
@@ -3433,28 +3433,28 @@ impl<T> AtomEntryShape for AtomViewOrConcrete<'_, T> {
     }
 }
 
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 impl<T> AtomEntryShape for &T {
     fn observe_atom_shape(self, _stats: &mut AtomSumShapeStats, _include_bytes: bool) {}
 }
 
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 impl<T> AtomEntryShape for RealOrComplexRef<'_, T> {
     fn observe_atom_shape(self, _stats: &mut AtomSumShapeStats, _include_bytes: bool) {}
 }
 
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 trait AtomSumShapeDiagnostics {
     fn atom_sum_shape_stats(&self, include_bytes: bool) -> AtomSumShapeStats;
 }
 
-#[cfg(not(feature = "shadowing"))]
+#[cfg(not(feature = "symbolica"))]
 trait AtomSumShapeDiagnostics {}
 
-#[cfg(not(feature = "shadowing"))]
+#[cfg(not(feature = "symbolica"))]
 impl<T> AtomSumShapeDiagnostics for T {}
 
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 impl<T> AtomSumShapeDiagnostics for T
 where
     T: HasStructure + IteratableTensor,
@@ -3472,7 +3472,7 @@ where
     }
 }
 
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 fn scalar_atom_sum_shape_stats<S: 'static>(
     scalar: &S,
     include_bytes: bool,
@@ -3486,7 +3486,7 @@ fn scalar_atom_sum_shape_stats<S: 'static>(
     Some(stats)
 }
 
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 fn log_sum_leaf_atom_shapes<K, FK, Aind, Store, LT, L>(
     store: &Store,
     graph: &NetworkGraph<K, FK, Aind>,
@@ -3812,7 +3812,7 @@ where
     let keep_lazy = !all_scalar_terms
         && terms.len() >= MIN_LAZY_TENSOR_SUM_TERMS
         && (profile::lazy_tensor_sums() || {
-            #[cfg(feature = "shadowing")]
+            #[cfg(feature = "symbolica")]
             {
                 // Broadcasting a scalar coefficient into every component can
                 // make a small factored sum enormous before external tensors
@@ -3838,7 +3838,7 @@ where
                     estimated_bytes >= MAX_EAGER_TENSOR_SUM_BYTES
                 })
             }
-            #[cfg(not(feature = "shadowing"))]
+            #[cfg(not(feature = "symbolica"))]
             false
         });
 
@@ -3939,7 +3939,7 @@ where
     NetworkLeaf::LocalTensor(store.push_tensor(result))
 }
 
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 fn try_atom_scalar_sum<K, Aind, Store>(
     store: &mut Store,
     targets: &[(NodeIndex, &NetworkLeaf<K, Aind>)],
@@ -4607,7 +4607,7 @@ impl Parallel {
         FK: Clone + Debug + Display + Send + Sync,
         Aind: AbsInd + Send + Sync,
     {
-        #[cfg(feature = "shadowing")]
+        #[cfg(feature = "symbolica")]
         if !crate::symbolic_parallelism::symbolica_rayon_enabled() {
             return <Sequential as ExecutionStrategy<
                 NetworkStore<T, Sc>,
@@ -5318,7 +5318,7 @@ where
                         target_start.elapsed().as_secs_f64() * 1000.0,
                     );
                 }
-                #[cfg(feature = "shadowing")]
+                #[cfg(feature = "symbolica")]
                 if profile_sum {
                     log_sum_leaf_atom_shapes::<K, FK, Aind, Self, LT, L>(
                         self, graph, &targets, lib,
@@ -5327,7 +5327,7 @@ where
 
                 let (nf, first) = &targets[0];
 
-                #[cfg(feature = "shadowing")]
+                #[cfg(feature = "symbolica")]
                 if let Some(new_node) = try_atom_scalar_sum(self, &targets) {
                     if let Some(sum_start) = sum_start {
                         eprintln!(
@@ -6041,9 +6041,9 @@ impl Ref for f64 {
     }
 }
 
-// #[cfg(feature = "shadowing")]
+// #[cfg(feature = "symbolica")]
 // pub mod levels;
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 pub mod symbolica_interop;
 
 #[cfg(test)]

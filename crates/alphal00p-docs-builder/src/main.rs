@@ -1,8 +1,8 @@
 use std::path::PathBuf;
 
-use alphal00p_docs_builder::{
-    BuildChannel, BuildRequest, RustdocCacheMode, SiteBuilder, WatchRequest,
-};
+#[cfg(feature = "watch")]
+use alphal00p_docs_builder::WatchRequest;
+use alphal00p_docs_builder::{BuildChannel, BuildRequest, RustdocCacheMode, SiteBuilder};
 use clap::{Parser, Subcommand};
 
 #[derive(Debug, Parser)]
@@ -45,8 +45,9 @@ enum Command {
     },
     /// Continuously rebuild with retained Typst state and browser reloads.
     ///
-    /// Requires the `persistent-typst` Cargo feature; `just docs-watch` selects
+    /// Requires the `watch` Cargo feature; `just docs-watch` selects
     /// the feature and optimized watcher profile.
+    #[cfg(feature = "watch")]
     Watch {
         /// Product id or "all".
         #[arg(long, default_value = "all")]
@@ -95,6 +96,7 @@ fn main() -> eyre::Result<()> {
             rustdoc_cache: RustdocCacheMode::Disabled,
             dependency_output,
         }),
+        #[cfg(feature = "watch")]
         Command::Watch {
             product,
             output,

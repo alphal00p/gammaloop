@@ -106,8 +106,8 @@ fn set_mass_delta(
 }
 
 #[test]
-#[serial]
 fn repeated_bubble_split_mass_limit_without_threshold_subtraction() -> Result<()> {
+    let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
     let point = [0.34, 0.41, 0.23];
     let mut case_a = setup_repeated_bubble_cli(
         "repeated_bubble_split_mass_limit_no_threshold_a",
@@ -163,8 +163,8 @@ fn repeated_bubble_split_mass_limit_without_threshold_subtraction() -> Result<()
 }
 
 #[test]
-#[serial]
 fn repeated_bubble_model_mass_limit_without_threshold_subtraction() -> Result<()> {
+    let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
     let point = [0.34, 0.41, 0.23];
     let mut case_a = setup_repeated_bubble_cli(
         "repeated_bubble_model_mass_limit_no_threshold_a",

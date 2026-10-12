@@ -130,10 +130,10 @@ The Cargo build script has one platform-specific boundary: on macOS, setting
 `EXTRA_MACOS_LIBS_FOR_GNU_GCC` opts into linking `gcc_s.1.1` from MacPorts' libgcc directory when
 that library exists. This affects native linking only; it does not select an evaluation backend.
 
-The core Rust API has no feature requirement. `symbolica_community_module` enables the PyO3
+The core Rust API has no feature requirement. `python` enables the PyO3
 wrapper and registers `Vakint`, `VakintExpression`, `VakintEvaluationMethod`, and
-`VakintNumericalResult` on `symbolica.community.vakint`. `python_stubgen` adds stub metadata and
-also enables Symbolica's Python export. The wrapper delegates transformations to the Rust engine
+`VakintNumericalResult` on `symbolica.community.vakint`. `python-stubs` adds stub metadata and
+implies `python`, including Symbolica's Python export. The wrapper delegates transformations to the Rust engine
 and converts `VakintError` into Python `ValueError`; it does not implement a second evaluation
 pipeline.
 

@@ -336,7 +336,7 @@ where
     }
 }
 
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 impl<T: Real> Real for Complex<T>
 where
     T: for<'a> RefMul<&'a T, Output = T>

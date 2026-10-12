@@ -1,4 +1,4 @@
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 use ahash::{HashMap, HashMapExt};
 use indexmap::{IndexMap, IndexSet};
 
@@ -8,14 +8,14 @@ use insta::{assert_ron_snapshot, assert_snapshot, assert_yaml_snapshot};
 use rand::{distributions::Uniform, Rng, SeedableRng};
 use rand_xoshiro::Xoroshiro64Star;
 
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 use symbolica::{
     atom::{Atom, AtomCore, AtomView},
     parse, symbol,
 };
 
 
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 use std::hash::{DefaultHasher, Hash};
 
 use crate::{
@@ -42,7 +42,7 @@ use crate::{
     },
     upgrading_arithmetic::{FallibleAdd, FallibleAddAssign, FallibleMul, FallibleSub},
 };
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 use crate::{
     iterators::IteratableTensor,
     parametric::{MixedTensor, ParamTensor},
@@ -312,7 +312,7 @@ fn construct_dense_tensor() {
     let num_tensor: NumTensor = tensor.clone().into();
     let data_tensor: DataTensor<f64, _> = tensor.clone().into();
 
-    #[cfg(feature = "shadowing")]
+    #[cfg(feature = "symbolica")]
     {
         let mixed_tensor: MixedTensor<f64, _> = tensor.clone().into();
         assert_eq!(
@@ -345,7 +345,7 @@ fn construct_sparse_tensor() -> Result<()> {
     let num_tensor: NumTensor = a.clone().into();
     let data_tensor: DataTensor<f64, _> = a.clone().into();
 
-    #[cfg(feature = "shadowing")]
+    #[cfg(feature = "symbolica")]
     {
         let mixed_tensor: MixedTensor<f64, _> = a.clone().into();
         assert_eq!(
@@ -1204,7 +1204,7 @@ fn contract_densor_with_spensor() {
 // }
 
 #[test]
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 fn evaluate() {
     use crate::{parametric::atomcore::TensorAtomMaps, shadowing::Shadowable};
 
@@ -1226,7 +1226,7 @@ fn evaluate() {
 }
 
 #[test]
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 fn convert_sym() {
     let i: Complex<f64> = Complex::new(0.0, 1.0);
     let mut data_b: Vec<Complex<f64>> = vec![i * Complex::from(5.0), Complex::<f64>::from(2.6) + i];
@@ -1270,7 +1270,7 @@ fn convert_sym() {
 }
 
 #[test]
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 fn simple_multi_contract_sym() {
     let structa = VecStructure::from_iter([
         Euclidean {}.slot(3, 1),
@@ -1335,7 +1335,7 @@ fn complex() {
 }
 
 #[test]
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 fn symbolic_contract() {
     let structura: NamedStructure<String, ()> = NamedStructure::from_iter(
         [
@@ -1404,7 +1404,7 @@ fn test_fallible_mul() {
     assert_eq!(d, Some(16.));
     assert_eq!(e, Some(16.));
 
-    #[cfg(feature = "shadowing")]
+    #[cfg(feature = "symbolica")]
     {
         let a = &parse!("a(2)").unwrap();
 
@@ -1439,7 +1439,7 @@ fn test_fallible_mul() {
 }
 
 // #[test]
-// #[cfg(feature = "shadowing")]
+// #[cfg(feature = "symbolica")]
 // fn get_license_key() {
 //     symbolica::LicenseManager::new();
 // }

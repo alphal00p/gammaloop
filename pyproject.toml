@@ -51,7 +51,23 @@ requires = ["maturin>=1.0,<2.0"]
 build-backend = "maturin"
 
 [tool.maturin]
-features = ["python_abi"]
+no-default-features = true
+include = [
+  { path = "crates/linnest/build_assets.rs", format = "sdist" },
+  { path = "crates/linnest/Cargo.toml", format = "sdist" },
+  { path = "crates/linnest/src/**/*.rs", format = "sdist" },
+  { path = "crates/kurvst/Cargo.toml", format = "sdist" },
+  { path = "crates/kurvst/src/**/*.rs", format = "sdist" },
+  { path = "assets/embedded/**/*", format = "sdist" },
+  { path = "assets/models/json/**/*", format = "sdist" },
+  { path = "crates/linnest/typst/src/**/*.typ", format = "sdist" },
+  { path = "crates/linnest/typst/typst.toml", format = "sdist" },
+  { path = "crates/linnest/typst/linnest.wasm", format = "sdist" },
+  { path = "crates/kurvst/typst/src/**/*.typ", format = "sdist" },
+  { path = "crates/kurvst/typst/typst.toml", format = "sdist" },
+  { path = "crates/kurvst/typst/kurvst.wasm", format = "sdist" },
+]
+features = ["extension-module", "abi3"]
 module-name = "gammaloop._gammaloop"
 python-source = "crates/gammaloop-api/python"
 

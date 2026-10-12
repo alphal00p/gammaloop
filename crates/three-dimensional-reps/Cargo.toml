@@ -28,7 +28,5 @@ typed-index-collections = { workspace = true, features = [
 ] }
 
 [features]
-default = ["serde"]
-serde = []
 display = ["dep:tabled", "dep:nu-ansi-term"]
 eval = ["dep:serde_json"]

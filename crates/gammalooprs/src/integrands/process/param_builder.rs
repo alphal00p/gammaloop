@@ -11,7 +11,6 @@ use color_eyre::Result;
 use idenso::color::CS;
 use itertools::Itertools;
 use linnet::half_edge::involution::EdgeIndex;
-use ringbuffer::{ConstGenericRingBuffer, RingBuffer};
 use spenso::{
     algebra::{
         algebraic_traits::{IsZero, RefZero},
@@ -595,33 +594,32 @@ impl GammaLoopPairs {
 
 #[derive(Clone)]
 pub struct ParamCache<T: FloatLike> {
-    cache: ConstGenericRingBuffer<Vec<Complex<F<T>>>, 64>,
+    cache: [Option<Vec<Complex<F<T>>>>; 64],
     len: usize,
 }
 
 impl<T: FloatLike> ParamCache<T> {
+    const CAPACITY: usize = 64;
+
     pub fn get(&self, key: usize) -> Option<&Vec<Complex<F<T>>>> {
-        if self.len <= key || key + 64 < self.len {
+        if key >= self.len || self.len - key > Self::CAPACITY {
             None
-        } else if self.len < 64 {
-            Some(&self.cache[key])
         } else {
-            let cachekey = (64 + key) - self.len;
-            Some(&self.cache[cachekey])
+            self.cache[key % Self::CAPACITY].as_ref()
         }
     }
 
     pub fn checked_push(&mut self, key: usize, value: Vec<Complex<F<T>>>) {
         debug_assert_eq!(self.len, key);
+        self.cache[self.len % Self::CAPACITY] = Some(value);
         self.len += 1;
-        self.cache.enqueue(value);
     }
 }
 
 impl<T: FloatLike> Default for ParamCache<T> {
     fn default() -> Self {
         Self {
-            cache: ConstGenericRingBuffer::new(),
+            cache: [const { None }; 64],
             len: 0,
         }
     }
@@ -1827,6 +1825,66 @@ mod tests {
         momentum::sample::{BareMomentumSample, LoopMomenta},
         utils::{ArbPrec, SamplingFloat},
     };
+
+    #[test]
+    fn polarization_cache_keeps_the_latest_64_absolute_keys() {
+        let mut cache = ParamCache::<f64>::default();
+        assert!(cache.get(0).is_none());
+        assert!(cache.get(usize::MAX).is_none());
+
+        for key in 0..130 {
+            let value = vec![Complex::new(F(key as f64), F(0.0))];
+            cache.checked_push(key, value.clone());
+            assert_eq!(cache.get(key), Some(&value));
+            assert_eq!(cache.len, key + 1);
+            assert_eq!(cache.cache.iter().flatten().count(), (key + 1).min(64));
+
+            let first_key = (key + 1).saturating_sub(64);
+            for retained_key in first_key..=key {
+                assert_eq!(
+                    cache.get(retained_key),
+                    Some(&vec![Complex::new(F(retained_key as f64), F(0.0))]),
+                );
+            }
+            if first_key > 0 {
+                assert!(cache.get(first_key - 1).is_none());
+            }
+            assert!(cache.get(key + 1).is_none());
+            assert!(cache.get(usize::MAX).is_none());
+        }
+    }
+
+    #[test]
+    fn polarization_cache_looks_up_absolute_keys_without_overflow() {
+        let first_key = usize::MAX - 65;
+        let mut cache = ParamCache::<f64> {
+            len: first_key,
+            ..Default::default()
+        };
+        for value in 0..64 {
+            cache.checked_push(
+                first_key + value,
+                vec![Complex::new(F(value as f64), F(0.0))],
+            );
+        }
+        for value in 0..64 {
+            assert_eq!(
+                cache.get(first_key + value),
+                Some(&vec![Complex::new(F(value as f64), F(0.0))]),
+            );
+        }
+        assert!(cache.get(first_key - 1).is_none());
+        assert!(cache.get(usize::MAX - 1).is_none());
+        assert!(cache.get(usize::MAX).is_none());
+
+        let value = vec![Complex::new(F(64.0), F(0.0))];
+        cache.checked_push(usize::MAX - 1, value.clone());
+        assert!(cache.get(first_key).is_none());
+        assert_eq!(cache.get(usize::MAX - 1), Some(&value));
+        assert!(cache.get(usize::MAX).is_none());
+        assert_eq!(cache.len, usize::MAX);
+        assert_eq!(cache.cache.iter().flatten().count(), 64);
+    }
 
     #[test]
     fn model_values_follow_saved_names_in_all_derivative_buffers() {

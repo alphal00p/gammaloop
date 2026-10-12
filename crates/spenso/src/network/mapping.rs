@@ -1,7 +1,7 @@
 use ahash::AHashMap;
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 use ahash::{AHashSet, HashMap};
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 use anyhow::anyhow;
 use bincode::{Decode, Encode};
 use bitvec::vec::BitVec;
@@ -20,11 +20,11 @@ use ref_ops::{RefAdd, RefMul};
 use std::borrow::Cow;
 use std::fmt::format;
 use std::ops::{Add, Mul, Neg};
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 use std::sync::Arc;
 use store::{NetworkStore, TensorScalarStoreMapping};
 
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 use symbolica::atom::PowView;
 
 use crate::algebraic_traits::{One, Zero};
@@ -32,7 +32,7 @@ use crate::structure::representation::LibraryRep;
 use crate::structure::slot::{IsAbstractSlot, Slot};
 // use log::trace;
 use serde::{Deserialize, Serialize};
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 use symbolica::{
     atom::{AddView, Atom, AtomView, MulView, Symbol, representation::FunView},
     coefficient::ConvertToRing,
@@ -54,7 +54,7 @@ use symbolica::{
     utils::BorrowedOrOwned,
 };
 
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 use symbolica::{
     atom::{AtomCore, KeyLookup},
     id::BorrowReplacement,
@@ -62,7 +62,7 @@ use symbolica::{
     symbol,
 };
 
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 use crate::{
     complex::{Complex, RealOrComplexTensor},
     contraction::RefZero,
@@ -78,7 +78,7 @@ use crate::{
     tensor_library::{LibraryTensor, TensorLibrary},
     upgrading_arithmetic::{FallibleAdd, TrySmallestUpgrade},
 };
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 use symbolica_utils::{IntoArgs, IntoSymbol, PatternReplacement};
 
 use crate::{
@@ -93,7 +93,7 @@ use crate::{
     upgrading_arithmetic::FallibleMul,
 };
 
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 use crate::{
     data::StorageTensor,
     parametric::atomcore::{TensorAtomMaps, TensorAtomOps},

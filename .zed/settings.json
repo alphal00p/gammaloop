@@ -108,8 +108,9 @@
           },
         },
         "cargo": {
-          // "features": ["python_api"],
-          "features": ["no_pyo3"],
+          "noDefaultFeatures": true,
+          // "features": ["python"],
+          "features": ["cli"],
           "allTargets": true,
         },
         "diagnostics": {
@@ -121,8 +122,8 @@
 
         "check": {
           "onSave": true,
-          "features": ["python_api"],
-          // "features": ["no_pyo3"],
+          "features": ["python"],
+          // "features": ["cli"],
           "command": "clippy",
         },
         "runnables": {

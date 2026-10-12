@@ -266,7 +266,7 @@ fn scalar_box() -> Result<()> {
     // In the default chart K=q5, P0=q3, P1=q0, P2=q1, the four lower
     // energy-pole residues give +i*0.00032031590000891889816516.
     // This independently fixes the point before comparing cached integrals.
-    assert_snapshot!(format!("{a:.8e}"),@"(0e0+3.203159000089191e-4i)");
+    assert_snapshot!(format!("{a:.8e}"),@"(0.00000000e0+3.20315900e-4i)");
 
     cli.run_command("set process -p 0 -i default kv general.enable_cache=false")?;
     let integral_no_cache = Integrate {

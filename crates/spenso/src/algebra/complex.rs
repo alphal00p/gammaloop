@@ -5,14 +5,13 @@ use std::{
 
 use crate::network::Ref;
 
-use duplicate::duplicate;
 use enum_try_as_inner::EnumTryAsInner;
-use num::{Float, One, Zero};
+use num_traits::{Float, One, Zero};
 #[cfg(feature = "python")]
 use pyo3::types::{PyComplex, PyComplexMethods};
 use ref_ops::{RefAdd, RefDiv, RefMul, RefSub};
 use serde::{Deserialize, Serialize};
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 use symbolica::domains::{
     float::{Complex as SymComplex, Constructible, Real},
     rational::Rational,
@@ -21,23 +20,13 @@ use symbolica::domains::{
 use crate::algebra::algebraic_traits::{RefOne, RefZero};
 
 pub trait R {}
-duplicate! {
-    [t;
-    [f32];
-    [f64];
-    [i8];
-    [i16];
-    [i32];
-    [i64];
-    [i128];
-    [u8];
-    [u16];
-    [u32];
-    [u64];
-    [u128];
-    ]
-    impl R for t {}
+macro_rules! impl_real {
+    ($($ty:ty),* $(,)?) => {
+        $(impl R for $ty {})*
+    };
 }
+
+impl_real!(f32, f64, i8, i16, i32, i64, i128, u8, u16, u32, u64, u128);
 #[derive(
     Copy,
     Clone,
@@ -57,7 +46,7 @@ pub struct Complex<T> {
     pub im: T,
 }
 
-#[cfg(feature = "python_stubgen")]
+#[cfg(feature = "python-stubs")]
 impl pyo3_stub_gen::PyStubType for Complex<f64> {
     fn type_output() -> pyo3_stub_gen::TypeInfo {
         pyo3_stub_gen::TypeInfo::builtin("complex")
@@ -116,10 +105,10 @@ pub mod neg;
 pub mod sub;
 pub mod sub_assign;
 
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 pub mod symbolica_traits;
 
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 impl From<f64> for Complex<Rational> {
     fn from(re: f64) -> Self {
         Complex {
@@ -129,7 +118,7 @@ impl From<f64> for Complex<Rational> {
     }
 }
 
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 impl From<Complex<f64>> for Complex<Rational> {
     fn from(value: Complex<f64>) -> Self {
         Complex {
@@ -163,14 +152,14 @@ where
     }
 }
 
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 impl<T: Real> From<Complex<T>> for SymComplex<T> {
     fn from(complex: Complex<T>) -> Self {
         SymComplex::new(complex.re, complex.im)
     }
 }
 
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 impl<T: Real> From<SymComplex<T>> for Complex<T> {
     fn from(complex: SymComplex<T>) -> Self {
         Complex::new(complex.re, complex.im)
@@ -196,7 +185,7 @@ pub trait NumTraitComplex {
     fn arg(&self) -> Self::R;
 }
 
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 impl<T: Real> SymbolicaComplex for Complex<T> {
     type R = T;
     fn arg(&self) -> T {
@@ -267,7 +256,7 @@ impl<T: Float + for<'a> RefMul<&'a T, Output = T> + Add<T, Output = T>> FloatDer
     #[inline]
     fn to_polar_coordinates(self) -> (T, T)
     where
-        T: num::Float,
+        T: Float,
     {
         (self.norm_squared().sqrt(), self.arg())
     }
@@ -329,7 +318,7 @@ impl<T> Complex<T> {
         }
     }
 
-    #[cfg(feature = "shadowing")]
+    #[cfg(feature = "symbolica")]
     pub fn new_zero() -> Self
     where
         T: Constructible,
@@ -340,7 +329,7 @@ impl<T> Complex<T> {
         }
     }
 
-    #[cfg(feature = "shadowing")]
+    #[cfg(feature = "symbolica")]
     #[inline]
     pub fn new_i() -> Self
     where
@@ -388,7 +377,7 @@ impl<T> Complex<T> {
     #[inline]
     pub fn i() -> Complex<T>
     where
-        T: num::Zero + num::One,
+        T: Zero + One,
     {
         Complex {
             re: T::zero(),
@@ -430,7 +419,13 @@ impl<T: Debug> std::fmt::Debug for Complex<T> {
 
 impl<T: LowerExp> std::fmt::LowerExp for Complex<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_fmt(format_args!("({:e}+{:e}i)", self.re, self.im))
+        match f.precision() {
+            Some(precision) => f.write_fmt(format_args!(
+                "({:.*e}+{:.*e}i)",
+                precision, self.re, precision, self.im
+            )),
+            None => f.write_fmt(format_args!("({:e}+{:e}i)", self.re, self.im)),
+        }
     }
 }
 
@@ -523,5 +518,31 @@ impl<T: Display> Display for RealOrComplex<T> {
             RealOrComplex::Complex(c) => c.fmt(f),
             RealOrComplex::Real(r) => r.fmt(f),
         }
+    }
+}
+
+#[cfg(test)]
+mod formatting_tests {
+    use super::Complex;
+
+    #[test]
+    fn lower_exp_preserves_default_component_formatting() {
+        let value = Complex::new(1.23456e-4_f64, -6.78912e-5);
+        assert_eq!(format!("{value:e}"), "(1.23456e-4+-6.78912e-5i)");
+    }
+
+    #[test]
+    fn lower_exp_forwards_precision_to_both_components() {
+        let value = Complex::new(1.23456e-4_f64, -6.78912e-5);
+        assert_eq!(format!("{value:.3e}"), "(1.235e-4+-6.789e-5i)");
+        assert_eq!(format!("{value:.8e}"), "(1.23456000e-4+-6.78912000e-5i)");
+    }
+
+    #[test]
+    fn lower_exp_formats_zero_at_requested_precision() {
+        let value = Complex::new(0.0_f64, 0.0);
+        assert_eq!(format!("{value:e}"), "(0e0+0e0i)");
+        assert_eq!(format!("{value:.0e}"), "(0e0+0e0i)");
+        assert_eq!(format!("{value:.8e}"), "(0.00000000e0+0.00000000e0i)");
     }
 }

@@ -29,7 +29,6 @@ pub(crate) use itertools::Itertools;
 pub(crate) use momtrop::assert_approx_eq;
 pub(crate) use ndarray::arr2;
 pub(crate) use serde_json::Value as JsonValue;
-pub(crate) use serial_test::serial;
 pub(crate) use spenso::algebra::complex::Complex;
 pub(crate) use std::path::{Path, PathBuf};
 pub(crate) use std::{env, fmt::Write, time::Duration};

@@ -646,13 +646,19 @@ preferences; they protect behavior that has been easy to regress.
 
 === API / Python Interop
 
-- `python_api`: Basic Python API support, enabled by default for
-  `gammaloop-api`.
-- `python_abi`: Enables stable Python ABI (abi3) for cross-version
-  compatibility.
-  - Use for distribution builds that need to work across Python versions.
-  - Adds some performance overhead compared to version-specific builds.
-  - Not enabled by default; opt in with `--features python_abi`.
+- `gammaloop-api` defaults to `cli`, which owns the executable, interactive
+  editor, and shell completion generators. Python packaging disables default
+  features; reusable state loading and command sessions remain available.
+- `ufo-import` enables Python embedding for UFO model imports; JSON model
+  imports remain available without it.
+- `python` enables the Python API and implies `ufo-import`. `python-stubs`
+  adds stub metadata and implies `python`.
+- `extension-module` enables importable-extension linking and implies `python`.
+  Keep this mode separate from CLI and Rust test builds that embed Python.
+- `abi3` selects the stable Python ABI without activating Python support.
+  Use `ufo-import,abi3` for a compatible embedding CLI or
+  `extension-module,abi3` for a distribution extension. Stable-ABI builds may
+  have more overhead than version-specific builds.
 - The Rust API has precise endpoints `evaluate_sample_precise` and
   `evaluate_samples_precise`; the Python API intentionally stays `f64`-only.
 - Python API end-to-end tests are subprocess-based and assume the contributor

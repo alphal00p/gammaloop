@@ -49,7 +49,7 @@ use super::{
     Eq, // bincode_trait_derive::BorrowDecodeFromDecode,
 )]
 #[cfg_attr(
-    feature = "shadowing",
+    feature = "symbolica",
     trait_decode(trait = symbolica::state::HasStateMap),
 )]
 pub struct NetworkGraph<K, FK = i8, Aind = AbstractIndex> {
@@ -201,7 +201,7 @@ pub struct NetworkOperationReadiness {
     // bincode_trait_derive::BorrowDecodeFromDecode,
 )]
 #[cfg_attr(
-    feature = "shadowing",
+    feature = "symbolica",
     trait_decode(trait = symbolica::state::HasStateMap),
 )]
 pub enum NetworkEdge<Aind> {
@@ -1870,7 +1870,7 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
             &|_| None,
             &|e| {
                 if let NetworkEdge::Slot(s) = e {
-                    // #[cfg(feature = "shadowing")]
+                    // #[cfg(feature = "symbolica")]
                     // {
                     //     use symbolica::atom::AtomCore;
 
@@ -1882,7 +1882,7 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
                     //             .printer(SpensoPrintSettings::compact().nice_symbolica())
                     //     ))
                     // }
-                    // #[cfg(not(feature = "shadowing"))]
+                    // #[cfg(not(feature = "symbolica"))]
                     Some(format!("label=\"{s}\""))
                 } else {
                     None
@@ -3014,7 +3014,7 @@ pub mod test {
         tree::child_vec::ChildVecStore,
     };
 
-    #[cfg(feature = "shadowing")]
+    #[cfg(feature = "symbolica")]
     use crate::network::TensorNetworkError;
     use crate::{
         network::graph::NetworkLeaf,
@@ -3027,7 +3027,7 @@ pub mod test {
 
     use super::{NetworkGraph, NetworkNode, NetworkOp};
 
-    #[cfg(feature = "shadowing")]
+    #[cfg(feature = "symbolica")]
     #[test]
     fn library_materialization_preserves_repeated_representation_axis_order() {
         use crate::{

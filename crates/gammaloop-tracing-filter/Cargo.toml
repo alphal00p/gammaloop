@@ -12,7 +12,7 @@ itertools = { workspace = true }
 pyo3 = { workspace = true, optional = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
-spenso = { workspace = true, features = ["native", "shadowing"], optional = true }
+spenso = { workspace = true, features = ["native", "symbolica"], optional = true }
 symbolica = { workspace = true, optional = true }
 tabled = { workspace = true, features = ["ansi"] }
 thiserror = { workspace = true }
@@ -26,5 +26,5 @@ features = ["env-filter", "fmt", "registry", "std"]
 [features]
 default = []
 clap = ["dep:clap"]
-python_api = ["dep:pyo3"]
+python = ["dep:pyo3"]
 symbolica = ["dep:spenso", "dep:symbolica"]

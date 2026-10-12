@@ -44,7 +44,7 @@ pub use selection::{
 };
 pub(crate) use selection::{GraphCutSelectionSubject, GraphSelectionSubject};
 
-#[cfg_attr(feature = "python_api", pyo3::pyclass(from_py_object))]
+#[cfg_attr(feature = "python", pyo3::pyclass(from_py_object))]
 #[derive(
     Debug, Clone, Copy, Default, Serialize, Deserialize, Encode, Decode, PartialEq, Eq, JsonSchema,
 )]
@@ -58,7 +58,7 @@ pub enum TensorNetworkContractionOrder {
     IntermediateCost,
 }
 
-#[cfg_attr(feature = "python_api", pyo3::pyclass(from_py_object))]
+#[cfg_attr(feature = "python", pyo3::pyclass(from_py_object))]
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
 pub enum ExecutionMode {
     Sequential,
@@ -67,13 +67,13 @@ pub enum ExecutionMode {
     SequentialExtract,
 }
 
-#[cfg_attr(feature = "python_api", pyo3::pyclass(from_py_object))]
+#[cfg_attr(feature = "python", pyo3::pyclass(from_py_object))]
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
 pub enum ContractionMode {
     SmallestDegree,
     MinResultRank,
 }
-#[cfg_attr(feature = "python_api", pyo3::pyclass(from_py_object))]
+#[cfg_attr(feature = "python", pyo3::pyclass(from_py_object))]
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
 pub struct EvaluatorSettings {
     /// Perform symbolic tensor and scalar algebra before lowering to an evaluator.
@@ -426,11 +426,8 @@ fn validate_process_load_selection(
 
 /// Controls which graph details and algebraic transformations are included in DOT exports.
 #[derive(Serialize, Deserialize, Debug, Clone)]
-#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
-#[cfg_attr(
-    feature = "python_api",
-    pyo3::pyclass(from_py_object, get_all, set_all)
-)]
+#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pyclass)]
+#[cfg_attr(feature = "python", pyo3::pyclass(from_py_object, get_all, set_all))]
 pub struct DotExportSettings {
     // pub root_folder: PathBuf,
     /// Write all diagrams of an integrand to one file during filesystem export.
@@ -451,10 +448,7 @@ pub struct DotExportSettings {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
-#[cfg_attr(
-    feature = "python_api",
-    pyo3::pyclass(from_py_object, get_all, set_all)
-)]
+#[cfg_attr(feature = "python", pyo3::pyclass(from_py_object, get_all, set_all))]
 pub struct StandaloneExportSettings {
     #[serde(default)]
     pub mode: StandaloneExportMode,
@@ -464,7 +458,7 @@ pub struct StandaloneExportSettings {
     pub precision: StandaloneNumericTarget,
 }
 
-#[cfg_attr(feature = "python_api", pyo3::pyclass(from_py_object))]
+#[cfg_attr(feature = "python", pyo3::pyclass(from_py_object))]
 #[derive(
     Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Default, Encode, Decode, JsonSchema,
 )]
@@ -475,7 +469,7 @@ pub enum StandaloneExportMode {
     Python,
 }
 
-#[cfg_attr(feature = "python_api", pyo3::pyclass(from_py_object))]
+#[cfg_attr(feature = "python", pyo3::pyclass(from_py_object))]
 #[derive(
     Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Default, Encode, Decode, JsonSchema,
 )]
@@ -486,7 +480,7 @@ pub enum StandaloneDataFormat {
     Json,
 }
 
-#[cfg_attr(feature = "python_api", pyo3::pyclass(from_py_object))]
+#[cfg_attr(feature = "python", pyo3::pyclass(from_py_object))]
 #[derive(
     Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Default, Encode, Decode, JsonSchema,
 )]
@@ -498,9 +492,9 @@ pub enum StandaloneNumericTarget {
     Arb,
 }
 
-#[cfg(feature = "python_api")]
-#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
-#[cfg_attr(feature = "python_api", pyo3::pymethods)]
+#[cfg(feature = "python")]
+#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pymethods)]
+#[cfg_attr(feature = "python", pyo3::pymethods)]
 impl DotExportSettings {
     /// Construct DOT export settings with GammaLoop's defaults.
     #[new]

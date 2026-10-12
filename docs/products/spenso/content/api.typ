@@ -16,8 +16,8 @@ The `spenso` crate organizes its public surface into `structure`, `tensors`, `co
 Trait implementations and generic constraints determine which combinations of structure and
 data support an operation. Consult the #link("reference/rust/")[Rust orientation] to choose the
 relevant crate, then use its revision-specific Rustdoc when a method is unavailable for a
-particular tensor type. The `shadowing` API and symbolic parallelism controls require their
-corresponding Cargo features.
+particular tensor type. Symbolica integration and symbolic parallelism controls require the
+`symbolica` Cargo feature.
 
 == Proc macros and HEP data
 

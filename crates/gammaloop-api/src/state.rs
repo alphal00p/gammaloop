@@ -798,7 +798,7 @@ impl<'de> Deserialize<'de> for ProcessRef {
     }
 }
 
-#[cfg(feature = "python_api")]
+#[cfg(feature = "python")]
 impl<'a, 'py> pyo3::FromPyObject<'a, 'py> for ProcessRef {
     type Error = pyo3::PyErr;
 
@@ -1608,7 +1608,7 @@ fn parse_toml_command_history(value: TomlValue, context: &str) -> Result<Command
 }
 
 #[cfg_attr(
-    feature = "python_api",
+    feature = "python",
     pyo3::pyclass(from_py_object, unsendable, name = "GammaLoopState")
 )]
 #[derive(Clone)]

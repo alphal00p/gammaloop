@@ -1,4 +1,4 @@
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 use eyre::Result;
 
 use serde::Deserialize;
@@ -8,9 +8,9 @@ use std::hash::Hash;
 use std::ops::AddAssign;
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering;
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 use symbolica::atom::AtomOrView;
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 use symbolica::{
     atom::Symbol,
     atom::{Atom, AtomCore, AtomView},
@@ -18,20 +18,20 @@ use symbolica::{
     symbol, try_parse,
 };
 
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 use nu_ansi_term::Color::DarkGray;
 
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 use symbolica::coefficient::CoefficientView;
 
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 use crate::network::tags::SPENSO_TAG;
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 use crate::shadowing::symbolica_utils::{SpensoPrintBackend, SpensoPrintSettings};
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 use crate::structure::slot::ParseableAind;
 use crate::utils::{to_subscript, to_superscript};
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 use symbolica_utils::SerializableSymbol;
 
 use thiserror::Error;
@@ -47,10 +47,10 @@ pub const DOWNIND: &str = "dind";
 
 pub const SELFDUALIND: &str = "sind";
 
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 const OPENIND: &str = "spenso::open_index";
 
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 pub struct AindSymbols {
     pub aind: Symbol,
     pub uind: Symbol,
@@ -61,7 +61,7 @@ pub struct AindSymbols {
     pub find: Symbol,
 }
 
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 #[cfg(test)]
 mod test {
     use std::collections::{BTreeSet, HashSet};
@@ -200,13 +200,13 @@ mod test {
     }
 }
 
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 impl AindSymbols {
     pub fn dual<'a, A: Into<AtomOrView<'a>>>(&self, arg: A) -> Atom {
         symbolica::function!(self.dind, arg.into().as_view())
     }
 }
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 crate::symbolica_init_lazy_static! {
 pub static AIND_SYMBOLS, AIND_SYMBOLS_INNER: AindSymbols = || AindSymbols {
         cind: symbol!(
@@ -398,7 +398,7 @@ static DUMMYCOUNTER: AtomicUsize = AtomicUsize::new(0);
     // bincode_trait_derive::BorrowDecodeFromDecode,
 )]
 #[cfg_attr(
-    feature = "shadowing",
+    feature = "symbolica",
     trait_decode(trait = symbolica::state::HasStateMap),
 )]
 pub enum AbstractIndex {
@@ -407,7 +407,7 @@ pub enum AbstractIndex {
     Double(u16, u16),
     Dummy(usize),
     Added(usize),
-    #[cfg(feature = "shadowing")]
+    #[cfg(feature = "symbolica")]
     Symbol(SerializableSymbol),
     /// An unresolved concrete storage port.
     ///
@@ -435,7 +435,7 @@ impl DummyAind for AbstractIndex {
     }
 }
 
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 impl From<Symbol> for AbstractIndex {
     fn from(value: Symbol) -> Self {
         AbstractIndex::Symbol(value.into())
@@ -457,7 +457,7 @@ impl std::ops::Add<AbstractIndex> for AbstractIndex {
                 AbstractIndex::Added(r) => AbstractIndex::Added(l + r),
                 AbstractIndex::Dummy(r) => AbstractIndex::Added(l + r),
                 AbstractIndex::Double(_, _) => panic!("cannot add double"),
-                #[cfg(feature = "shadowing")]
+                #[cfg(feature = "symbolica")]
                 AbstractIndex::Symbol(r) => AbstractIndex::Added(l + r.get_id() as usize),
                 AbstractIndex::Open { .. } => panic!("cannot add open index"),
             },
@@ -467,7 +467,7 @@ impl std::ops::Add<AbstractIndex> for AbstractIndex {
                 AbstractIndex::Added(r) => AbstractIndex::Added(l + r),
                 AbstractIndex::Dummy(r) => AbstractIndex::Added(l + r),
                 AbstractIndex::Double(_, _) => panic!("cannot add double"),
-                #[cfg(feature = "shadowing")]
+                #[cfg(feature = "symbolica")]
                 AbstractIndex::Symbol(r) => AbstractIndex::Added(l + r.get_id() as usize),
                 AbstractIndex::Open { .. } => panic!("cannot add open index"),
             },
@@ -477,7 +477,7 @@ impl std::ops::Add<AbstractIndex> for AbstractIndex {
                 AbstractIndex::Added(r) => AbstractIndex::Added(l + r),
                 AbstractIndex::Dummy(r) => AbstractIndex::Added(l + r),
                 AbstractIndex::Double(_, _) => panic!("cannot add double"),
-                #[cfg(feature = "shadowing")]
+                #[cfg(feature = "symbolica")]
                 AbstractIndex::Symbol(r) => AbstractIndex::Added(l + r.get_id() as usize),
                 AbstractIndex::Open { .. } => panic!("cannot add open index"),
             },
@@ -487,13 +487,13 @@ impl std::ops::Add<AbstractIndex> for AbstractIndex {
                 AbstractIndex::Added(r) => AbstractIndex::Added(l + r),
                 AbstractIndex::Dummy(r) => AbstractIndex::Added(l + r),
                 AbstractIndex::Double(_, _) => panic!("cannot add double"),
-                #[cfg(feature = "shadowing")]
+                #[cfg(feature = "symbolica")]
                 AbstractIndex::Symbol(r) => AbstractIndex::Added(l + r.get_id() as usize),
                 AbstractIndex::Open { .. } => panic!("cannot add open index"),
             },
             AbstractIndex::Double(_, _) => panic!("cannot add double"),
 
-            #[cfg(feature = "shadowing")]
+            #[cfg(feature = "symbolica")]
             AbstractIndex::Symbol(l) => match rhs {
                 AbstractIndex::Normal(r) => AbstractIndex::Added(l.get_id() as usize + r),
                 AbstractIndex::Dualize(r) => AbstractIndex::Added(l.get_id() as usize + r),
@@ -566,7 +566,7 @@ impl std::fmt::Display for AbstractIndex {
                     write!(f, "(+){}", v)
                 }
             }
-            #[cfg(feature = "shadowing")]
+            #[cfg(feature = "symbolica")]
             AbstractIndex::Symbol(v) => {
                 if f.sign_minus() {
                     write!(f, "_{}", v)
@@ -587,7 +587,7 @@ impl From<usize> for AbstractIndex {
     }
 }
 
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 impl From<AbstractIndex> for Atom {
     fn from(value: AbstractIndex) -> Self {
         match value {
@@ -603,14 +603,14 @@ impl From<AbstractIndex> for Atom {
         }
     }
 }
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 impl From<AbstractIndex> for symbolica::atom::AtomOrView<'_> {
     fn from(value: AbstractIndex) -> Self {
         symbolica::atom::AtomOrView::Atom(Atom::from(value))
     }
 }
 
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 impl ParseableAind for AbstractIndex {
     type Error = AbstractIndexError;
 
@@ -631,7 +631,7 @@ impl From<AbstractIndex> for usize {
             AbstractIndex::Normal(v) => v,
             AbstractIndex::Added(v) => v,
             AbstractIndex::Dummy(v) => v,
-            #[cfg(feature = "shadowing")]
+            #[cfg(feature = "symbolica")]
             AbstractIndex::Symbol(v) => v.get_id() as usize,
             AbstractIndex::Open { axis, .. } => axis,
         }
@@ -668,7 +668,7 @@ pub enum AbstractIndexError {
     ParsingError(String),
 }
 
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 impl TryFrom<AtomView<'_>> for AbstractIndex {
     type Error = AbstractIndexError;
 
@@ -699,7 +699,7 @@ impl TryFrom<AtomView<'_>> for AbstractIndex {
     }
 }
 
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 impl TryFrom<std::string::String> for AbstractIndex {
     type Error = AbstractIndexError;
 
@@ -709,7 +709,7 @@ impl TryFrom<std::string::String> for AbstractIndex {
     }
 }
 
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 impl TryFrom<&'_ str> for AbstractIndex {
     type Error = AbstractIndexError;
 

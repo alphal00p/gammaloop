@@ -1,6 +1,6 @@
 //! Python builders for Spenso's tagged Symbolica pattern syntax.
 
-#[cfg(not(feature = "python_stubgen"))]
+#[cfg(not(feature = "python-stubs"))]
 use pyo3_stub_gen_derive::remove_gen_stub;
 
 use idenso::{
@@ -12,7 +12,7 @@ use pyo3::{
     exceptions::{PyTypeError, PyValueError},
     prelude::*,
 };
-#[cfg(feature = "python_stubgen")]
+#[cfg(feature = "python-stubs")]
 use pyo3_stub_gen::{PyStubType, TypeInfo, derive::*};
 use spenso::{
     network::{
@@ -59,7 +59,7 @@ impl<'py> IntoPyObject<'py> for PatternArgument {
     }
 }
 
-#[cfg(feature = "python_stubgen")]
+#[cfg(feature = "python-stubs")]
 impl PyStubType for PatternArgument {
     fn type_input() -> TypeInfo {
         ConvertibleToExpression::type_input()
@@ -101,7 +101,7 @@ impl<'py> IntoPyObject<'py> for PatternPort {
     }
 }
 
-#[cfg(feature = "python_stubgen")]
+#[cfg(feature = "python-stubs")]
 impl PyStubType for PatternPort {
     fn type_input() -> TypeInfo {
         SpensoSlot::type_input()
@@ -133,7 +133,7 @@ impl<'a, 'py> FromPyObject<'a, 'py> for RepresentationPattern {
     }
 }
 
-#[cfg(feature = "python_stubgen")]
+#[cfg(feature = "python-stubs")]
 impl PyStubType for RepresentationPattern {
     fn type_input() -> TypeInfo {
         SpensoRepresentation::type_input() | PythonExpression::type_input()
@@ -272,7 +272,7 @@ fn antifundamental_port(dimension: &Atom, index: &Atom) -> Atom {
 /// >>> exact = PortPattern.exact(Representation.mink(4), i_)
 /// >>> generic = PortPattern.self_dual("R_", D_, i_)
 /// >>> stripped = PortPattern.dualizable("C_", D_)
-#[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
+#[cfg_attr(feature = "python-stubs", gen_stub_pyclass)]
 #[pyclass(
     frozen,
     extends = PythonExpression,
@@ -304,8 +304,8 @@ impl PortPattern {
     }
 }
 
-#[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
-#[cfg_attr(not(feature = "python_stubgen"), remove_gen_stub)]
+#[cfg_attr(feature = "python-stubs", gen_stub_pymethods)]
+#[cfg_attr(not(feature = "python-stubs"), remove_gen_stub)]
 #[pymethods]
 impl PortPattern {
     /// Match one exact representation, optionally carrying `index`.
@@ -420,7 +420,7 @@ impl ModuleInit for PortPattern {}
 /// >>> rule = TensorPattern.gamma(D_, i_, j_, mu_)
 /// >>> target.replace(rule, 0)
 /// 0
-#[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
+#[cfg_attr(feature = "python-stubs", gen_stub_pyclass)]
 #[pyclass(
     frozen,
     extends = PythonExpression,
@@ -460,8 +460,8 @@ impl TensorPattern {
     }
 }
 
-#[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
-#[cfg_attr(not(feature = "python_stubgen"), remove_gen_stub)]
+#[cfg_attr(feature = "python-stubs", gen_stub_pymethods)]
+#[cfg_attr(not(feature = "python-stubs"), remove_gen_stub)]
 #[pymethods]
 impl TensorPattern {
     /// Create a pattern for the fixed tensor `head`.
@@ -1164,7 +1164,7 @@ mod tests {
         .unwrap();
     }
 
-    #[cfg(feature = "python_stubgen")]
+    #[cfg(feature = "python-stubs")]
     #[test]
     fn typed_tensor_stubs_preserve_public_signatures() {
         use pyo3_stub_gen::{

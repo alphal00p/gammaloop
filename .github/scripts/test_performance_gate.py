@@ -8,13 +8,15 @@ import tomllib
 import unittest
 from pathlib import Path
 
-from performance_gate import PerformanceGate
+from performance_gate import EVALUATOR_METHODS, PerformanceGate
 
 BASELINE = "a" * 40
 CANDIDATE = "b" * 40
 
 
-def measurements(generation=10.0, warm=10e-6, *, confirmation=False):
+def measurements(
+    generation=10.0, warm=10e-6, *, confirmation=False, methods=("SingleParametric",)
+):
     def phase(run_id, first):
         return {
             "run_id": run_id,
@@ -27,14 +29,24 @@ def measurements(generation=10.0, warm=10e-6, *, confirmation=False):
                     else "AB",
                     "baseline": {
                         "generation_seconds": 10.0,
-                        "warm_runtime_seconds_per_sample": 10e-6,
+                        **{
+                            f"warm_runtime_seconds_per_sample.{method}": 10e-6
+                            for method in methods
+                        },
                     },
                     "candidate": {
                         "generation_seconds": generation,
-                        "warm_runtime_seconds_per_sample": warm,
+                        **{
+                            f"warm_runtime_seconds_per_sample.{method}": warm
+                            for method in methods
+                        },
                     },
-                    "baseline_output": [1.25, -0.4, 0.1, 0.0],
-                    "candidate_output": [1.25, -0.4, 0.1, 0.0],
+                    "baseline_output": {
+                        method: [1.25, -0.4, 0.1, 0.0] for method in methods
+                    },
+                    "candidate_output": {
+                        method: [1.25, -0.4, 0.1, 0.0] for method in methods
+                    },
                 }
                 for index in range(5)
             ],
@@ -46,10 +58,15 @@ def measurements(generation=10.0, warm=10e-6, *, confirmation=False):
         "config_sha256": "3" * 64,
     }
     data = {
-        "schema_version": 1,
+        "schema_version": 2,
+        "evaluator_methods": list(methods),
+        "reference_method": methods[0],
         "baseline": {"commit": BASELINE, **identity},
         "candidate": {"commit": CANDIDATE, **identity},
-        "required_metrics": ["generation_seconds", "warm_runtime_seconds_per_sample"],
+        "required_metrics": [
+            "generation_seconds",
+            *[f"warm_runtime_seconds_per_sample.{method}" for method in methods],
+        ],
         "correctness_tolerance": {"absolute": 1e-12, "relative": 1e-9},
         "discovery": phase(1, "AB"),
     }
@@ -75,12 +92,14 @@ class PerformanceGateTests(unittest.TestCase):
         confirmed = self.gate.analyze(measurements(13.0, 13e-6, confirmation=True))
         self.assertEqual(confirmed["status"], 1)
 
-    def test_all_three_metric_thresholds_have_relative_and_absolute_floors(self):
+    def test_metric_thresholds_have_relative_and_absolute_floors(self):
         # Large percentage changes on tiny operations must not fail the gate.
         for metric, before, after in (
             ("generation_seconds", 0.1, 0.2),
             ("load_seconds", 0.01, 0.02),
-            ("warm_runtime_seconds_per_sample", 1e-7, 2e-7),
+            ("warm_runtime_seconds_per_sample.SingleParametric", 1e-7, 2e-7),
+            ("evaluator_build_seconds.SingleParametric", 0.01, 0.02),
+            ("generation_peak_ram_bytes", 1024**2, 2 * 1024**2),
         ):
             data = measurements(confirmation=True)
             data["required_metrics"] = [metric]
@@ -98,8 +117,117 @@ class PerformanceGateTests(unittest.TestCase):
                 pair["candidate"] = {"load_seconds": 1.3}
         self.assertEqual(self.gate.analyze(data)["status"], 1)
 
+    def test_build_and_memory_regressions_require_independent_confirmation(self):
+        for metric, before, after in (
+            ("evaluator_build_seconds.Iterative", 1.0, 1.3),
+            ("generation_peak_ram_bytes", 256 * 1024**2, 384 * 1024**2),
+        ):
+            data = measurements(methods=("Iterative",), confirmation=True)
+            data["required_metrics"] = [metric]
+            for phase in (data["discovery"], data["confirmation"]):
+                for pair in phase["pairs"]:
+                    pair["baseline"] = {metric: before}
+                    pair["candidate"] = {metric: after}
+            with self.subTest(metric=metric):
+                self.assertEqual(self.gate.analyze(data)["status"], 1)
+                del data["confirmation"]
+                report = self.gate.analyze(data)
+                self.assertEqual(report["status"], 2)
+                self.assertEqual(report["confirmation_required"], 1)
+
+    def test_one_slow_method_is_not_hidden_by_faster_other_methods(self):
+        data = measurements(warm=5e-6, methods=EVALUATOR_METHODS, confirmation=True)
+        metric = "warm_runtime_seconds_per_sample.SummedFunctionMap"
+        for phase in (data["discovery"], data["confirmation"]):
+            for pair in phase["pairs"]:
+                pair["candidate"][metric] = 14e-6
+        report = self.gate.analyze(data)
+        self.assertEqual(report["status"], 1)
+        self.assertEqual(report["metrics"][metric]["status"], 1)
+        self.assertEqual(
+            report["metrics"]["warm_runtime_seconds_per_sample.Summed"]["status"], 0
+        )
+
+    def test_method_error_shared_by_both_revisions_fails_against_reference(self):
+        data = measurements(methods=EVALUATOR_METHODS)
+        data["reference_method"] = "SingleParametric"
+        pair = data["discovery"]["pairs"][0]
+        for side in ("baseline", "candidate"):
+            pair[side + "_output"]["SummedFunctionMap"][0] = 2.0
+        report = self.gate.analyze(data)
+        self.assertEqual(report["status"], 1)
+        self.assertEqual(report["correctness_mismatches"], 2)
+
+    def test_method_outputs_and_reference_are_required_and_exact(self):
+        changes = (
+            lambda data: data.update(reference_method="missing"),
+            lambda data: data.update(
+                evaluator_methods=["SingleParametric", "SingleParametric"]
+            ),
+            lambda data: data["required_metrics"].remove(
+                "warm_runtime_seconds_per_sample.Iterative"
+            ),
+            lambda data: data["discovery"]["pairs"][0]["candidate_output"].pop(
+                "Iterative"
+            ),
+            lambda data: data["discovery"]["pairs"][0]["candidate_output"].update(
+                Other=[1.0, 0.0]
+            ),
+            lambda data: data["discovery"]["pairs"][0]["candidate_output"].update(
+                Iterative=[math.nan, 0.0, 1.0, 0.0]
+            ),
+        )
+        for change in changes:
+            data = measurements(methods=EVALUATOR_METHODS)
+            change(data)
+            with self.subTest(data=data):
+                self.assertEqual(self.gate.analyze(data)["invalid_input"], 1)
+
     def test_large_absolute_delta_below_relative_threshold_passes(self):
         self.assertEqual(self.gate.analyze(measurements(11.0))["status"], 0)
+
+    def test_noisy_small_operations_respect_each_absolute_floor(self):
+        for metric, (_, absolute_limit) in self.gate.THRESHOLDS.items():
+            data = measurements(
+                methods=(
+                    metric.split(".")[-1] if "." in metric else "SingleParametric",
+                )
+            )
+            data["required_metrics"] = [metric]
+            before = absolute_limit / 10
+            for pair, ratio in zip(
+                data["discovery"]["pairs"], [0.7, 1.5, 1.0, 1.5, 0.7]
+            ):
+                pair["baseline"] = {metric: before}
+                pair["candidate"] = {metric: before * ratio}
+            with self.subTest(metric=metric):
+                self.assertEqual(self.gate.analyze(data)["status"], 0)
+                data["discovery"]["pairs"][0]["candidate_output"][
+                    data["reference_method"]
+                ][0] = 1.3
+                report = self.gate.analyze(data)
+                self.assertEqual(report["status"], 1)
+                self.assertEqual(report["correctness_mismatches"], 1)
+
+    def test_noisy_absolute_boundary_still_requires_an_inconclusive_result(self):
+        # The same relative spread puts the absolute upper screening bound
+        # just below the budget at scale 2.2, and just above it at scale 2.3.
+        for metric, (_, absolute_limit) in self.gate.THRESHOLDS.items():
+            for scale, expected in ((2.2, 0), (2.3, 2)):
+                data = measurements(
+                    methods=(
+                        metric.split(".")[-1] if "." in metric else "SingleParametric",
+                    )
+                )
+                data["required_metrics"] = [metric]
+                before = absolute_limit * scale
+                for pair, ratio in zip(
+                    data["discovery"]["pairs"], [0.9, 1.2, 1.0, 1.2, 0.9]
+                ):
+                    pair["baseline"] = {metric: before}
+                    pair["candidate"] = {metric: before * ratio}
+                with self.subTest(metric=metric, scale=scale):
+                    self.assertEqual(self.gate.analyze(data)["status"], expected)
 
     def test_single_slow_outlier_does_not_gate(self):
         data = measurements()
@@ -173,14 +301,18 @@ class PerformanceGateTests(unittest.TestCase):
 
     def test_correctness_mismatch_fails_without_timing_confirmation(self):
         data = measurements(8.0, 7e-6)
-        data["discovery"]["pairs"][0]["candidate_output"][0] = 1.3
+        data["discovery"]["pairs"][0]["candidate_output"][data["reference_method"]][
+            0
+        ] = 1.3
         report = self.gate.analyze(data)
         self.assertEqual(report["status"], 1)
         self.assertEqual(report["correctness_mismatches"], 1)
 
     def test_numerical_tolerance_allows_roundoff(self):
         data = measurements()
-        data["discovery"]["pairs"][0]["candidate_output"][0] += 1e-11
+        data["discovery"]["pairs"][0]["candidate_output"][data["reference_method"]][
+            0
+        ] += 1e-11
         self.assertEqual(self.gate.analyze(data)["status"], 0)
 
     def test_scalar_tolerance_detects_changes_smaller_than_physical_absolute_floor(
@@ -194,30 +326,35 @@ class PerformanceGateTests(unittest.TestCase):
             "correctness_tolerance"
         ]
         for pair in data["discovery"]["pairs"]:
-            pair["baseline_output"] = [8e-12, 4e-14]
-            pair["candidate_output"] = [8.001e-12, 4e-14]
+            pair["baseline_output"][data["reference_method"]] = [8e-12, 4e-14]
+            pair["candidate_output"][data["reference_method"]] = [8.001e-12, 4e-14]
         self.assertEqual(self.gate.analyze(data)["status"], 1)
         for pair in data["discovery"]["pairs"]:
-            pair["candidate_output"] = [8e-12 * (1 + 1e-11), 4e-14]
+            pair["candidate_output"][data["reference_method"]] = [
+                8e-12 * (1 + 1e-11),
+                4e-14,
+            ]
         self.assertEqual(self.gate.analyze(data)["status"], 0)
 
     def test_zero_physical_reference_is_invalid_and_zero_candidate_fails(self):
         data = measurements()
         pair = data["discovery"]["pairs"][0]
-        pair["baseline_output"] = [0.0] * 4
-        pair["candidate_output"] = [0.0] * 4
+        pair["baseline_output"][data["reference_method"]] = [0.0] * 4
+        pair["candidate_output"][data["reference_method"]] = [0.0] * 4
         report = self.gate.analyze(data)
         self.assertEqual(report["status"], 2)
         self.assertEqual(report["invalid_input"], 1)
-        pair["baseline_output"] = [1e-15, 0.0, 0.0, 0.0]
+        pair["baseline_output"][data["reference_method"]] = [1e-15, 0.0, 1e-15, 0.0]
         report = self.gate.analyze(data)
         self.assertEqual(report["status"], 1)
-        self.assertEqual(report["correctness_mismatches"], 1)
+        self.assertEqual(report["correctness_mismatches"], 2)
 
     def test_invalid_correctness_data_does_not_pass(self):
         for value in ([], [math.nan], [1.0], "bad"):
             data = measurements()
-            data["discovery"]["pairs"][0]["candidate_output"] = value
+            data["discovery"]["pairs"][0]["candidate_output"][
+                data["reference_method"]
+            ] = value
             with self.subTest(value=value):
                 self.assertEqual(self.gate.analyze(data)["invalid_input"], 1)
         data = measurements()
@@ -247,7 +384,7 @@ class PerformanceGateTests(unittest.TestCase):
 
     def test_unknown_schema_or_fields_are_invalid(self):
         data = measurements()
-        data["schema_version"] = 2
+        data["schema_version"] = 1
         self.assertEqual(self.gate.analyze(data)["invalid_input"], 1)
         data = measurements()
         data["debug_output"] = "This must never reach the report"

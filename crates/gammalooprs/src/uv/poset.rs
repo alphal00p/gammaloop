@@ -9,7 +9,6 @@ use symbolica::symbol;
 use ahash::AHashSet;
 use color_eyre::Result;
 use eyre::eyre;
-use pathfinding::prelude::BfsReachable;
 use serde::{Deserialize, Serialize};
 
 // Define a new key type for the Poset
@@ -217,13 +216,6 @@ impl<T, R: Key, D> DAG<T, R, D> {
         from_node.remove_child(to);
         let to_node = self.nodes.get_mut(to).unwrap();
         to_node.remove_parent(from);
-    }
-
-    pub(crate) fn bfs_reach<'a>(
-        &'a self,
-        start: &'a R,
-    ) -> BfsReachable<&'a R, impl FnMut(&'a &'a R) -> &'a [R]> {
-        pathfinding::directed::bfs::bfs_reach(start, |&s| self.succesors(*s))
     }
 
     pub(crate) fn maximum(&self) -> Option<R>

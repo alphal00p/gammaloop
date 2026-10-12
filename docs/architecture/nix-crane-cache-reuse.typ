@@ -1490,10 +1490,11 @@ confined to the terminal documentation/runtime closure.
 The release and Pages builders still use the pinned Typst 0.15 command-line
 renderer. That path remains the reproducible publishing reference and does not
 link the Typst compiler into the normal documentation Cargo artifact. The local
-`docs-watch` path enables a separate, optional `persistent-typst` feature and
-keeps the compiler in the watcher process. Typst's source-independent feature
-notices are emitted once per watcher; source warnings and errors remain visible
-on each compilation. Non-blocking developer-note maintenance reminders are
+`docs-watch` path enables the optional `watch` feature, which owns the file
+watcher, live HTTP server, and embedded Typst compiler. Ordinary builds omit
+those dependencies and the watch command. The compiler stays in the watcher
+process. Typst's source-independent feature notices are emitted once per watcher;
+source warnings and errors remain visible on each compilation. Non-blocking developer-note maintenance reminders are
 reported by `docs-check`, while every build still enforces registry validity.
 Verified-scope content drift is also reported as a warning during `docs-watch`,
 so an architectural edit does not block its own preview. Ordinary checks and
@@ -1582,12 +1583,13 @@ profile. Nix exposes the package tree from `typst.withPackages` through
 embedded world would bypass the executable wrapper that normally injects the
 CeTZ, MiTeX, and Tidy packages.
 
-The dedicated `alphal00p-docs-persistent-typst` flake check builds only the
-feature-enabled documentation builder and its schema dependency. It checks all
-targets, runs the persistent reload and failure-recovery tests together with a
-representative CLI byte-parity test, and applies Clippy with warnings denied.
-Keeping this separate from the normal workspace and Pages artifacts tests the
-opt-in path without making the release builder link Typst's compiler crates.
+The dedicated `alphal00p-docs-watch` flake check builds the feature-enabled
+documentation builder and its schema dependency. It checks all targets, runs
+the persistent reload and failure-recovery tests together with a representative
+CLI byte-parity test, exercises the filesystem watcher and live HTTP server,
+and applies Clippy with warnings denied. Keeping this separate from the normal
+workspace and Pages artifacts tests the opt-in path without adding the watcher,
+server, or Typst compiler dependencies to release builds.
 
 The final Pages derivation remains terminal. Its identity includes all
 rendered documentation sources, the publication channel and optional

@@ -1,6 +1,7 @@
 use color_eyre::Result;
 use eyre::{eyre, Context};
 use gammalooprs::utils::serde_utils::ShowDefaultsGuard;
+#[cfg(feature = "cli")]
 use schemars::{schema_for, JsonSchema};
 use serde::Serialize;
 use serde_json::Value as JsonValue;
@@ -13,6 +14,7 @@ pub(crate) fn serialize_settings_with_defaults<T: Serialize>(
     serde_json::to_value(settings).context(format!("While serializing {context}"))
 }
 
+#[cfg(feature = "cli")]
 pub(crate) fn serialize_schema<T: JsonSchema>(context: &str) -> Result<JsonValue> {
     serde_json::to_value(schema_for!(T)).context(format!("While serializing schema for {context}"))
 }
@@ -76,6 +78,7 @@ pub(crate) fn json_type_name(value: &JsonValue) -> &'static str {
     }
 }
 
+#[cfg(feature = "cli")]
 pub(crate) fn schema_at_path<'a>(root: &'a JsonValue, path: &str) -> Option<&'a JsonValue> {
     let mut current = root;
     for segment in path.split('.').filter(|segment| !segment.is_empty()) {
@@ -84,12 +87,14 @@ pub(crate) fn schema_at_path<'a>(root: &'a JsonValue, path: &str) -> Option<&'a 
     resolve_schema_refs(root, current)
 }
 
+#[cfg(feature = "cli")]
 pub(crate) fn schema_enum_values(root: &JsonValue, node: &JsonValue) -> Vec<String> {
     let mut values = Vec::new();
     collect_schema_enum_values(root, node, &mut values);
     values
 }
 
+#[cfg(feature = "cli")]
 pub(crate) fn schema_value_hint(root: &JsonValue, node: &JsonValue) -> Option<String> {
     let description = schema_description(root, node);
     let type_hint = schema_type_hint(root, node);
@@ -105,12 +110,14 @@ pub(crate) fn schema_value_hint(root: &JsonValue, node: &JsonValue) -> Option<St
     }
 }
 
+#[cfg(feature = "cli")]
 pub(crate) fn schema_object_property_names(root: &JsonValue, node: &JsonValue) -> Vec<String> {
     let mut values = Vec::new();
     collect_schema_object_property_names(root, node, &mut values);
     values
 }
 
+#[cfg(feature = "cli")]
 pub(crate) fn schema_is_object_container(root: &JsonValue, node: &JsonValue) -> bool {
     let Some(node) = resolve_schema_refs(root, node) else {
         return false;
@@ -152,12 +159,14 @@ pub(crate) fn schema_is_object_container(root: &JsonValue, node: &JsonValue) -> 
     false
 }
 
+#[cfg(feature = "cli")]
 pub(crate) fn schema_example_values(root: &JsonValue, node: &JsonValue) -> Vec<String> {
     let mut values = Vec::new();
     collect_schema_examples(root, node, &mut values);
     values
 }
 
+#[cfg(feature = "cli")]
 fn schema_child_for_segment<'a>(
     root: &'a JsonValue,
     node: &'a JsonValue,
@@ -190,6 +199,7 @@ fn schema_child_for_segment<'a>(
     None
 }
 
+#[cfg(feature = "cli")]
 fn resolve_schema_refs<'a>(root: &'a JsonValue, mut node: &'a JsonValue) -> Option<&'a JsonValue> {
     loop {
         let Some(reference) = node.get("$ref").and_then(JsonValue::as_str) else {
@@ -200,6 +210,7 @@ fn resolve_schema_refs<'a>(root: &'a JsonValue, mut node: &'a JsonValue) -> Opti
     }
 }
 
+#[cfg(feature = "cli")]
 fn collect_schema_enum_values(root: &JsonValue, node: &JsonValue, values: &mut Vec<String>) {
     let Some(node) = resolve_schema_refs(root, node) else {
         return;
@@ -226,6 +237,7 @@ fn collect_schema_enum_values(root: &JsonValue, node: &JsonValue, values: &mut V
     }
 }
 
+#[cfg(feature = "cli")]
 fn collect_schema_object_property_names(
     root: &JsonValue,
     node: &JsonValue,
@@ -253,6 +265,7 @@ fn collect_schema_object_property_names(
     }
 }
 
+#[cfg(feature = "cli")]
 fn schema_description(root: &JsonValue, node: &JsonValue) -> Option<String> {
     let node = resolve_schema_refs(root, node)?;
     node.get("description")
@@ -262,6 +275,7 @@ fn schema_description(root: &JsonValue, node: &JsonValue) -> Option<String> {
         .map(str::to_string)
 }
 
+#[cfg(feature = "cli")]
 fn schema_type_hint(root: &JsonValue, node: &JsonValue) -> Option<String> {
     let mut type_names = Vec::new();
     collect_schema_type_names(root, node, &mut type_names);
@@ -286,6 +300,7 @@ fn schema_type_hint(root: &JsonValue, node: &JsonValue) -> Option<String> {
     })
 }
 
+#[cfg(feature = "cli")]
 fn collect_schema_type_names(root: &JsonValue, node: &JsonValue, values: &mut Vec<&'static str>) {
     let Some(node) = resolve_schema_refs(root, node) else {
         return;
@@ -313,6 +328,7 @@ fn collect_schema_type_names(root: &JsonValue, node: &JsonValue, values: &mut Ve
     }
 }
 
+#[cfg(feature = "cli")]
 fn push_unique_type_name(values: &mut Vec<&'static str>, type_name: &str) {
     let normalized = match type_name {
         "boolean" => Some("boolean"),
@@ -332,6 +348,7 @@ fn push_unique_type_name(values: &mut Vec<&'static str>, type_name: &str) {
     }
 }
 
+#[cfg(feature = "cli")]
 fn schema_type_description(type_name: &'static str) -> &'static str {
     match type_name {
         "array" => "an array",
@@ -345,6 +362,7 @@ fn schema_type_description(type_name: &'static str) -> &'static str {
     }
 }
 
+#[cfg(feature = "cli")]
 fn collect_schema_examples(root: &JsonValue, node: &JsonValue, values: &mut Vec<String>) {
     let Some(node) = resolve_schema_refs(root, node) else {
         return;
@@ -369,6 +387,7 @@ fn collect_schema_examples(root: &JsonValue, node: &JsonValue, values: &mut Vec<
     }
 }
 
+#[cfg(feature = "cli")]
 fn push_unique_example(values: &mut Vec<String>, example: &JsonValue) {
     let Ok(rendered) = serde_json::to_string(example) else {
         return;

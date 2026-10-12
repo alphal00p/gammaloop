@@ -18,7 +18,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from string import Template
 
-from performance_gate import PerformanceGate
+from performance_gate import EVALUATOR_METHODS, MODE_METRICS, PerformanceGate
 
 
 def positive_number(value, label):
@@ -81,6 +81,10 @@ class Fixture:
         directory = Path("benchmarks/performance")
         card = cls.source(input_root, str(directory / family["card"])).read_text()
         if route:
+            config |= {
+                key: suite["routes"][route][key]
+                for key in ("evaluator_methods", "reference_method")
+            }
             graph = str(directory / workload["graph"])
             corpus["inputs"] = [graph, *corpus["inputs"]]
             values = suite["routes"][route] | {
@@ -122,13 +126,38 @@ class Fixture:
         card = tomllib.loads(card)
         if card["default_runtime_settings"]["general"]["enable_cache"] is not False:
             raise ValueError("The production benchmark must disable point caching")
-        if self.config["schema_version"] != 1 or self.config["pairs"] != 5:
-            raise ValueError("The performance gate requires schema 1 and five pairs")
-        if self.config["required_metrics"] != [
-            "generation_seconds",
-            "warm_runtime_seconds_per_sample",
-        ]:
+        if self.config["schema_version"] != 2 or self.config["pairs"] != 5:
+            raise ValueError("The performance gate requires schema 2 and five pairs")
+        self.methods = self.config["evaluator_methods"]
+        if (
+            not isinstance(self.methods, list)
+            or not self.methods
+            or any(not isinstance(method, str) for method in self.methods)
+            or len(set(self.methods)) != len(self.methods)
+            or not set(self.methods) <= set(EVALUATOR_METHODS)
+            or self.config["reference_method"] not in self.methods
+        ):
+            raise ValueError("Invalid evaluator methods or reference")
+        metrics = self.config["required_metrics"]
+        if (
+            not isinstance(metrics, list)
+            or any(not isinstance(metric, str) for metric in metrics)
+            or len(set(metrics)) != len(metrics)
+            or not {"generation_seconds", "warm_runtime_seconds_per_sample"}
+            <= set(metrics)
+            or not set(metrics)
+            <= {"generation_seconds", "generation_peak_ram_bytes", *MODE_METRICS}
+        ):
             raise ValueError("Unexpected required performance metrics")
+        self.metrics = [
+            f"{metric}.{method}" if method else metric
+            for metric in metrics
+            for method in (self.methods if metric in MODE_METRICS else [None])
+        ]
+        if len(self.methods) > 1 and (
+            card["default_runtime_settings"]["sampling"]["orientations"] != "summed"
+        ):
+            raise ValueError("Multiple evaluator methods require summed orientations")
         self.timeout = positive_number(
             self.config["fixture_timeout_seconds"], "Fixture timeout"
         )
@@ -168,28 +197,130 @@ class Fixture:
 
     def benchmark_card(self, directory):
         commands = []
-        for index, point in enumerate(self.corpus["points"]):
-            point_args = " ".join(format(v, ".17g") for v in point)
-            dims = self.corpus["discrete_dim"]
-            selector = "-d " + " ".join(str(v) for v in dims) if dims else ""
-            path = directory / f"bench-{index}.json"
+        for method in self.methods:
             commands.append(
-                f"bench -p {self.corpus['process']} -i {self.corpus['integrand']} "
-                f"-x {point_args} {selector} "
-                f"--duration {self.config['bench_duration_seconds']} "
-                f"--n-batches {self.config['bench_batches']} "
-                f"--json-output {shlex.quote(str(path))}"
+                f"set process -p {self.corpus['process']} -i {self.corpus['integrand']} "
+                f"kv general.evaluator_method={method}"
             )
+            for index, point in enumerate(self.corpus["points"]):
+                point_args = " ".join(format(v, ".17g") for v in point)
+                dims = self.corpus["discrete_dim"]
+                selector = "-d " + " ".join(str(v) for v in dims) if dims else ""
+                path = directory / f"bench-{method}-{index}.json"
+                commands.append(
+                    f"bench -p {self.corpus['process']} -i {self.corpus['integrand']} "
+                    f"-x {point_args} {selector} "
+                    f"--duration {self.config['bench_duration_seconds']} "
+                    f"--n-batches {self.config['bench_batches']} "
+                    f"--json-output {shlex.quote(str(path))}"
+                )
         commands.append("quit --no-save-state")
         card = directory / "benchmark.toml"
         card.write_text("commands = " + json.dumps(commands, ensure_ascii=False) + "\n")
         return card
 
+    def construction_metrics(self, state, deadline):
+        stages = {
+            "evaluator_stack_new_iterative_done": "Iterative",
+            "evaluator_stack_new_single_parametric_done": "SingleParametric",
+            "evaluator_stack_new_summed_done": "Summed",
+            "evaluator_stack_new_summed_function_map_done": "SummedFunctionMap",
+        }
+        flags = {
+            "iterative_orientation_optimization": "Iterative",
+            "summed": "Summed",
+            "summed_function_map": "SummedFunctionMap",
+        }
+        durations = dict.fromkeys(self.methods, 0.0)
+        counts = dict.fromkeys(self.methods, 0)
+        orientation_counts = []
+        # Generation uses one worker. Validate each complete stack separately:
+        # distinct cuts/dual groups legitimately repeat the same stage names.
+        for path in sorted((state / "logs").glob("gammalog*.jsonl")):
+            active = None
+            with path.open() as stream:
+                for line in stream:
+                    check_deadline(deadline)
+                    event = json.loads(line)
+                    if not isinstance(event, dict):
+                        raise TypeError("Invalid evaluator construction log record")
+                    stage = event.get("stage")
+                    if stage == "evaluator_stack_new_start":
+                        if active is not None:
+                            raise ValueError(
+                                "Overlapping evaluator construction records"
+                            )
+                        orientations = event["orientation_count"]
+                        if type(orientations) is not int or orientations <= 0:
+                            raise ValueError("Invalid construction orientation count")
+                        if any(type(event[flag]) is not bool for flag in flags):
+                            raise ValueError("Invalid evaluator construction flags")
+                        expected = {"SingleParametric"} | {
+                            method for flag, method in flags.items() if event[flag]
+                        }
+                        active = (expected, set(), orientations)
+                    elif stage in stages or stage == "evaluator_stack_new_done":
+                        if active is None:
+                            raise ValueError(
+                                "Evaluator construction stage without a start"
+                            )
+                        if (
+                            type(event["orientation_count"]) is not int
+                            or event["orientation_count"] != active[2]
+                        ):
+                            raise ValueError(
+                                "Construction orientation counts changed within a stack"
+                            )
+                        if stage == "evaluator_stack_new_done":
+                            if active[0] != active[1]:
+                                raise ValueError(
+                                    "Incomplete evaluator construction records"
+                                )
+                            orientation_counts.append(active[2])
+                            active = None
+                            continue
+                        method = stages[stage]
+                        if method not in active[0] or method in active[1]:
+                            raise ValueError(
+                                "Unexpected or duplicate evaluator construction stage"
+                            )
+                        elapsed = (
+                            positive_number(
+                                event["elapsed_ms"], "Evaluator construction"
+                            )
+                            / 1000
+                        )
+                        active[1].add(method)
+                        if method in durations:
+                            durations[method] += elapsed
+                            counts[method] += 1
+            if active is not None:
+                raise ValueError("Unfinished evaluator construction records")
+        if any(count == 0 for count in counts.values()):
+            raise ValueError("Missing requested evaluator construction timings")
+        return (
+            {
+                f"evaluator_build_seconds.{method}": elapsed
+                for method, elapsed in durations.items()
+            },
+            {
+                "evaluator_build_counts": counts,
+                "construction_orientation_counts": orientation_counts,
+            },
+        )
 
-def run_cli(command, repository, log_path, deadline):
+
+def run_cli(command, repository, log_path, deadline, *, logfile_filter="off"):
     check_deadline(deadline)
     environment = os.environ.copy()
-    environment.update({"RAYON_NUM_THREADS": "1", "OMP_NUM_THREADS": "1"})
+    environment.pop("GL_ALL_LOG_FILTER", None)
+    environment.update(
+        {
+            "RAYON_NUM_THREADS": "1",
+            "OMP_NUM_THREADS": "1",
+            "GL_LOGFILE_FILTER": logfile_filter,
+        }
+    )
     with log_path.open("w") as log:
         process = subprocess.Popen(
             command,
@@ -289,6 +420,11 @@ def measure(binary, repository, directory, fixture, deadline):
         repository,
         directory / "generation.log",
         deadline,
+        logfile_filter=(
+            "[{#generation,#profile,#compile,#summary}]=debug"
+            if "evaluator_build_seconds" in fixture.config["required_metrics"]
+            else "off"
+        ),
     )
     generation_seconds = time.monotonic() - started
     summaries = list(state.rglob("generation_summary.json"))
@@ -302,6 +438,17 @@ def measure(binary, repository, directory, fixture, deadline):
     count = stats["evaluator_count"]
     if type(count) is not int or count <= 0:
         raise ValueError("Fresh generation did not build any evaluators")
+    peak_ram = summary["peak_ram_bytes"]
+    if type(peak_ram) is not int or not 0 < peak_ram < 2**64:
+        raise ValueError("Invalid whole-generation peak RAM")
+    metrics = {
+        "generation_seconds": generation_seconds,
+        "generation_peak_ram_bytes": peak_ram,
+    }
+    construction = {}
+    if "evaluator_build_seconds" in fixture.config["required_metrics"]:
+        build_metrics, construction = fixture.construction_metrics(state, deadline)
+        metrics.update(build_metrics)
     generation_timings = {}
     for stage in (
         "total_time",
@@ -328,27 +475,28 @@ def measure(binary, repository, directory, fixture, deadline):
         directory / "benchmark.log",
         deadline,
     )
-    timings, outputs, sample_counts = [], [], []
-    for index in range(len(fixture.corpus["points"])):
-        check_deadline(deadline)
-        timing, output, samples = benchmark_result(
-            directory / f"bench-{index}.json", fixture, index
-        )
-        timings.append(timing)
-        outputs.extend(output)
-        sample_counts.append(samples)
+    outputs, sample_counts = {}, {}
+    for method in fixture.methods:
+        timings, outputs[method], sample_counts[method] = [], [], []
+        for index in range(len(fixture.corpus["points"])):
+            check_deadline(deadline)
+            timing, output, samples = benchmark_result(
+                directory / f"bench-{method}-{index}.json", fixture, index
+            )
+            timings.append(timing)
+            outputs[method].extend(output)
+            sample_counts[method].append(samples)
+        metrics[f"warm_runtime_seconds_per_sample.{method}"] = statistics.mean(timings)
     check_deadline(deadline)
     return (
-        {
-            "generation_seconds": generation_seconds,
-            "warm_runtime_seconds_per_sample": statistics.mean(timings),
-        },
+        {metric: metrics[metric] for metric in fixture.metrics},
         outputs,
         {
             "samples_per_point": sample_counts,
             "evaluator_count": count,
-            "generation_peak_ram_bytes": summary["peak_ram_bytes"],
+            "generation_peak_ram_bytes": peak_ram,
             **generation_timings,
+            **construction,
         },
     )
 
@@ -396,8 +544,10 @@ def run_case(args, suite, name):
         output_ready = True
         fixture = Fixture.from_suite(suite, name, args.input_root)
         measurement = {
-            "schema_version": 1,
-            "required_metrics": fixture.config["required_metrics"],
+            "schema_version": 2,
+            "required_metrics": fixture.metrics,
+            "evaluator_methods": fixture.methods,
+            "reference_method": fixture.config["reference_method"],
             "correctness_tolerance": fixture.config["correctness_tolerance"],
             **{
                 side: {"commit": getattr(args, side + "_commit"), **fixture.hashes}

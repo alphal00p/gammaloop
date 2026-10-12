@@ -14,7 +14,6 @@ use gammalooprs::processes::{
 };
 
 use gammaloop_integration_tests::{CLIState, get_test_cli, get_tests_workspace_path, run_commands};
-use serial_test::serial;
 use symbolica::{
     atom::{Atom, AtomCore},
     domains::float::Complex,
@@ -628,8 +627,8 @@ fn feyngen_str(
 }
 
 #[test]
-#[serial]
 fn closed_ghost_loops_preserve_statistics_weights() -> Result<()> {
+    let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
     let test_name = "closed_ghost_loops_preserve_statistics_weights";
     let mut cli = get_test_cli(
         Some("sm_load.toml".into()),
@@ -658,8 +657,8 @@ fn closed_ghost_loops_preserve_statistics_weights() -> Result<()> {
 }
 
 #[test]
-#[serial]
 fn numerator_grouping_preserves_values_across_worker_counts() -> Result<()> {
+    let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
     use gammaloop_api::{commands::inspect::Inspect, state::ProcessRef};
 
     let test_name = "numerator_grouping_preserves_values_across_worker_counts";
@@ -734,8 +733,8 @@ fn numerator_grouping_preserves_values_across_worker_counts() -> Result<()> {
 }
 
 #[test]
-#[serial]
 fn scalar_lu_generation_with_e2e_hack_compiles() -> Result<()> {
+    let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
     let mut cli = get_test_cli(
         Some("scalars_load.toml".into()),
         get_tests_workspace_path().join("scalar_lu_generation_with_e2e_hack"),
@@ -908,8 +907,8 @@ fn cross_section_standalone_export_writes_archive_and_loader() -> Result<()> {
 }
 
 #[test]
-#[serial]
 fn select_tth_graph_before_generation_generates_and_integrates() -> Result<()> {
+    let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
     let test_name = "select_tth_graph_before_generation_generates_and_integrates";
     let mut cli = setup_tth_select_cli(test_name)?;
 
@@ -927,8 +926,8 @@ fn select_tth_graph_before_generation_generates_and_integrates() -> Result<()> {
 }
 
 #[test]
-#[serial]
 fn select_tth_graph_after_generation_discards_and_regenerates() -> Result<()> {
+    let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
     let test_name = "select_tth_graph_after_generation_discards_and_regenerates";
     let mut cli = setup_tth_select_cli(test_name)?;
 
@@ -967,8 +966,8 @@ fn select_tth_graph_after_generation_discards_and_regenerates() -> Result<()> {
 }
 
 #[test]
-#[serial]
 fn select_ddxg_graph_by_raised_cuts_before_generation_generates_and_integrates() -> Result<()> {
+    let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
     let test_name = "select_ddxg_graph_by_raised_cuts_before_generation_generates_and_integrates";
     let mut cli = setup_ddxg_raised_cut_select_cli(test_name)?;
 
@@ -1014,8 +1013,8 @@ fn select_ddxg_graph_by_raised_cuts_before_generation_generates_and_integrates()
 }
 
 #[test]
-#[serial]
 fn select_ddxg_graph_by_raised_cuts_after_generation_discards_and_regenerates() -> Result<()> {
+    let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
     let test_name = "select_ddxg_graph_by_raised_cuts_after_generation_discards_and_regenerates";
     let mut cli = setup_ddxg_raised_cut_select_cli(test_name)?;
 
@@ -1087,8 +1086,8 @@ fn select_ddxg_graph_by_raised_cuts_after_generation_discards_and_regenerates() 
 }
 
 #[test]
-#[serial]
 fn select_ddx_amplitude_graph_before_generation_generates_and_integrates() -> Result<()> {
+    let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
     let test_name = "select_ddx_amplitude_graph_before_generation_generates_and_integrates";
     let mut cli = setup_ddx_amplitude_select_cli(test_name)?;
 
@@ -1124,8 +1123,8 @@ fn select_ddx_amplitude_graph_before_generation_generates_and_integrates() -> Re
 }
 
 #[test]
-#[serial]
 fn select_ddx_amplitude_graph_after_generation_discards_and_regenerates() -> Result<()> {
+    let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
     let test_name = "select_ddx_amplitude_graph_after_generation_discards_and_regenerates";
     let mut cli = setup_ddx_amplitude_select_cli(test_name)?;
 
@@ -1187,8 +1186,8 @@ fn select_ddx_amplitude_graph_after_generation_discards_and_regenerates() -> Res
 }
 
 #[test]
-#[serial]
 fn select_tth_graph_copy_before_generation_generates_and_integrates() -> Result<()> {
+    let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
     let test_name = "select_tth_graph_copy_before_generation_generates_and_integrates";
     let mut cli = setup_tth_select_cli(test_name)?;
     let output_process = "epem_a_tth_selected";
@@ -1220,8 +1219,8 @@ fn select_tth_graph_copy_before_generation_generates_and_integrates() -> Result<
 }
 
 #[test]
-#[serial]
 fn select_tth_graph_copy_after_generation_preserves_source_and_integrates_target() -> Result<()> {
+    let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
     let test_name = "select_tth_graph_copy_after_generation_preserves_source_and_integrates_target";
     let mut cli = setup_tth_select_cli(test_name)?;
     let output_integrand = "LO_selected";

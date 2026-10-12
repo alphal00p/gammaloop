@@ -9,9 +9,9 @@ use three_dimensional_reps::{
 use super::*;
 
 #[test]
-#[serial]
 #[allow(clippy::type_complexity)]
 fn diagnostic_shifted_double_poles_validate_and_build_with_exact_energy_bounds() -> Result<()> {
+    let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
     let test_name = "threedreps_diagnostic_shifted_double_poles";
     let test_root = get_tests_workspace_path().join(test_name);
     let state_path = test_root.join("state");
@@ -183,8 +183,8 @@ fn diagnostic_shifted_double_poles_validate_and_build_with_exact_energy_bounds()
 }
 
 #[test]
-#[serial]
 fn cff_cli_validate_and_build_use_gammaloop_graph_state() -> Result<()> {
+    let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
     let test_name = "threedreps_cff_cli_validate_build";
     let test_root = get_tests_workspace_path().join(test_name);
     let state_path = test_root.join("state");

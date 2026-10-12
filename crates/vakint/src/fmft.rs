@@ -11,7 +11,6 @@ use crate::{
 use colored::Colorize;
 use log::debug;
 use regex::Regex;
-use string_template_plus::{Render, RenderOptions, Template};
 use symbolica::atom::Symbol;
 use symbolica::printer::{AtomPrinter, PrintOptions};
 use symbolica::{
@@ -21,9 +20,7 @@ use symbolica::{
     id::Condition,
 };
 
-use crate::{
-    FMFTOptions, TEMPLATES, get_integer_from_atom, number_condition, symbol_condition, symbols::S,
-};
+use crate::{FMFTOptions, get_integer_from_atom, number_condition, symbol_condition, symbols::S};
 
 use crate::{ReplacementRules, Vakint, VakintError, VakintSettings};
 
@@ -400,7 +397,6 @@ impl Vakint {
             ahash::RandomState,
         > = std::collections::HashSet::default();
 
-        let template = Template::parse_template(TEMPLATES.get("run_fmft.txt").unwrap()).unwrap();
         let mut vars: HashMap<String, String> = HashMap::new();
         vars.insert("numerator".into(), numerator_string);
         vars.insert("integral".into(), integral_string);
@@ -442,12 +438,7 @@ impl Vakint {
         }
         vars.insert("additional_symbols".into(), additional_symbols_str);
 
-        let rendered = template
-            .render(&RenderOptions {
-                variables: vars,
-                ..Default::default()
-            })
-            .unwrap();
+        let rendered = Self::render_template(include_str!("../templates/run_fmft.txt"), &vars);
 
         let form_result = self.run_form(
             settings,

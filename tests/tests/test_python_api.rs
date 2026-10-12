@@ -8,7 +8,6 @@ use std::{
 use color_eyre::{Result, eyre::eyre};
 use gammaloop_integration_tests::new_test_artifact_dir;
 use serde_json::Value as JsonValue;
-use serial_test::serial;
 
 const JSON_SENTINEL: &str = "__GL_JSON__";
 
@@ -183,8 +182,8 @@ fn default_momentum_space_point() -> &'static str {
 }
 
 #[test]
-#[serial]
 fn python_settings_wrappers_expose_nested_runtime_and_global_settings() -> Result<()> {
+    let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
     let mut commands = base_setup_commands();
     commands.push(
         "set global kv global.display_directive=warn global.generation.threshold_subtraction.enable_thresholds=false"
@@ -309,8 +308,8 @@ payload = {
 }
 
 #[test]
-#[serial]
 fn python_settings_expose_ecm_relative_stability_tolerances() -> Result<()> {
+    let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
     let payload = run_python_case(
         "python_api_ecm_relative_stability_tolerances",
         &[r#"set default-runtime string '
@@ -352,8 +351,8 @@ payload = {
 }
 
 #[test]
-#[serial]
 fn python_settings_preserve_ose_and_named_channel_weight() -> Result<()> {
+    let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
     let payload = run_python_case(
         "python_api_ose_channel_weights",
         &[r#"set default-runtime string '
@@ -393,8 +392,8 @@ payload = {"legacy": legacy, "mixed": mixed}
 }
 
 #[test]
-#[serial]
 fn python_evaluate_sample_preserves_graph_grouping_and_incoming_pdgs() -> Result<()> {
+    let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
     let mut commands = base_setup_commands();
     commands.push(
         "set process kv general.generate_events=true general.store_additional_weights_in_event=true"
@@ -463,8 +462,8 @@ payload = {{
 }
 
 #[test]
-#[serial]
 fn python_session_getters_return_live_toml_and_command_blocks() -> Result<()> {
+    let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
     let commands = vec!["set global kv global.display_directive=warn".to_string()];
 
     let payload = run_python_case(
@@ -511,8 +510,8 @@ payload = {
 }
 
 #[test]
-#[serial]
 fn python_evaluate_sample_honors_generate_events_and_observable_snapshots() -> Result<()> {
+    let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
     let mut commands = base_setup_commands();
     commands.push(
         r#"set process string '
@@ -644,8 +643,8 @@ payload = {{
 }
 
 #[test]
-#[serial]
 fn python_evaluate_samples_batch_and_momentum_space_have_expected_shape() -> Result<()> {
+    let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
     let mut commands = base_setup_commands();
     commands.push(
         r#"set process string '

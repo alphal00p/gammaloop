@@ -35,6 +35,20 @@ use crate::{
     CLISettings,
 };
 
+// Keep Figment's source metadata and profile handling while sharing the TOML
+// parser used by the rest of the API.
+struct Toml;
+
+impl Format for Toml {
+    type Error = toml::de::Error;
+
+    const NAME: &'static str = "TOML";
+
+    fn from_str<T: DeserializeOwned>(string: &str) -> Result<T, Self::Error> {
+        toml::from_str(string)
+    }
+}
+
 impl FromStr for Set {
     type Err = Report;
     fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
@@ -679,7 +693,7 @@ impl SetArgs {
                     .unwrap_or("")
                     .to_ascii_lowercase();
                 match ext.as_str() {
-                    "toml" => Ok(fig.merge(figment::providers::Toml::file_exact(file))),
+                    "toml" => Ok(fig.merge(Toml::file_exact(file))),
                     // "yaml" | "yml" => Ok(fig.merge(figment::providers::Yaml::file(file))),
                     "json" => Ok(fig.merge(figment::providers::Json::file_exact(file))),
                     _ => Err(color_eyre::eyre::eyre!(
@@ -688,7 +702,7 @@ impl SetArgs {
                     )),
                 }
             }
-            SetArgs::String { string } => Ok(fig.merge(figment::providers::Toml::string(string))),
+            SetArgs::String { string } => Ok(fig.merge(Toml::string(string))),
             SetArgs::Kv { pairs } => {
                 let mut figment = Figment::new();
 
@@ -2433,6 +2447,89 @@ max = 250.0
 
         let _ = std::fs::remove_file(file_path);
         assert_eq!(via_string, via_file);
+        assert_eq!(
+            via_string,
+            MergeFixture {
+                alpha: 123,
+                beta: true,
+            }
+        );
+    }
+
+    #[test]
+    fn string_toml_preserves_selected_profile_and_source_metadata() {
+        let defaults = MergeFixture {
+            alpha: 1,
+            beta: false,
+        };
+        let base = Figment::from(Serialized::defaults(&defaults))
+            .merge(Serialized::from(
+                std::collections::BTreeMap::from([("alpha", 9)]),
+                "production",
+            ))
+            .select("production");
+        let merged = SetArgs::String {
+            string: "alpha = 123\nbeta = true".to_string(),
+        }
+        .merge_figment(base)
+        .unwrap();
+
+        assert_eq!(merged.profile(), &figment::Profile::new("production"));
+        assert_eq!(
+            merged.extract::<MergeFixture>().unwrap(),
+            MergeFixture {
+                alpha: 9,
+                beta: true,
+            }
+        );
+        assert_eq!(
+            merged.find_metadata("beta").unwrap().name,
+            "TOML source string"
+        );
+    }
+
+    #[test]
+    fn toml_file_errors_preserve_source_and_field_metadata() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("settings.toml");
+        std::fs::write(&path, "alpha = 'not a number'\nbeta = true").unwrap();
+        let error = SetArgs::File { file: path.clone() }
+            .merge_figment(Figment::new())
+            .unwrap()
+            .extract::<MergeFixture>()
+            .unwrap_err();
+
+        assert_eq!(error.path, ["alpha"]);
+        let metadata = error.metadata.unwrap();
+        assert_eq!(metadata.name, "TOML file");
+        assert_eq!(metadata.source.unwrap().file_path(), Some(path.as_path()));
+
+        std::fs::remove_file(&path).unwrap();
+        let error = SetArgs::File { file: path.clone() }
+            .merge_figment(Figment::new())
+            .unwrap()
+            .extract::<MergeFixture>()
+            .unwrap_err();
+        assert_eq!(
+            error.metadata.unwrap().source.unwrap().file_path(),
+            Some(path.as_path())
+        );
+    }
+
+    #[test]
+    fn invalid_toml_strings_report_parser_errors() {
+        for string in ["alpha = [", "alpha = 1\nalpha = 2"] {
+            let error = SetArgs::String {
+                string: string.to_string(),
+            }
+            .merge_figment(Figment::new())
+            .unwrap()
+            .extract::<MergeFixture>()
+            .unwrap_err();
+
+            assert!(matches!(error.kind, figment::error::Kind::Message(_)));
+            assert_eq!(error.metadata.unwrap().name, "TOML source string");
+        }
     }
 
     #[test]

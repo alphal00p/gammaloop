@@ -1,6 +1,6 @@
 use idenso::representations::{ColorAdjoint, ColorFundamental, ColorSextet};
 
-#[cfg(not(feature = "python_stubgen"))]
+#[cfg(not(feature = "python-stubs"))]
 use pyo3_stub_gen_derive::remove_gen_stub;
 
 use pyo3::{
@@ -11,7 +11,7 @@ use pyo3::{
     types::{PyAny, PyTuple},
 };
 
-#[cfg(feature = "python_stubgen")]
+#[cfg(feature = "python-stubs")]
 use pyo3_stub_gen::{
     generate::MethodType,
     inventory::submit,
@@ -43,7 +43,7 @@ use idenso::{color::CS, dirac::AGS, representations::Bispinor};
 
 use super::{ModuleInit, expression::TensorExpression};
 
-#[cfg(feature = "python_stubgen")]
+#[cfg(feature = "python-stubs")]
 use pyo3_stub_gen::{PyStubType, derive::*, impl_stub_type};
 
 pub struct ConvertibleToSpensoName(pub SpensoName, pub Vec<Atom>);
@@ -132,7 +132,7 @@ impl<'a, 'py> FromPyObject<'a, 'py> for ConvertibleToSpensoName {
     }
 }
 
-#[cfg(feature = "python_stubgen")]
+#[cfg(feature = "python-stubs")]
 impl PyStubType for ConvertibleToSpensoName {
     fn type_output() -> pyo3_stub_gen::TypeInfo {
         SpensoName::type_output()
@@ -174,7 +174,7 @@ impl<'a, 'py> FromPyObject<'a, 'py> for SpensoSlotOrArgOrRep {
     }
 }
 
-#[cfg(feature = "python_stubgen")]
+#[cfg(feature = "python-stubs")]
 impl PyStubType for SpensoSlotOrArgOrRep {
     fn type_output() -> pyo3_stub_gen::TypeInfo {
         SpensoSlot::type_output()
@@ -205,7 +205,7 @@ impl PyStubType for SpensoSlotOrArgOrRep {
 /// >>> mu = rep('mu')
 /// >>> nu = rep('nu')
 /// >>> tensor_expression = T(mu, nu)
-#[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
+#[cfg_attr(feature = "python-stubs", gen_stub_pyclass)]
 #[pyclass(
     from_py_object,
     name = "TensorName",
@@ -244,8 +244,8 @@ impl SpensoName {
         }
     }
 }
-#[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
-#[cfg_attr(not(feature = "python_stubgen"), remove_gen_stub)]
+#[cfg_attr(feature = "python-stubs", gen_stub_pymethods)]
+#[cfg_attr(not(feature = "python-stubs"), remove_gen_stub)]
 #[pymethods]
 impl SpensoName {
     #[new]
@@ -623,7 +623,7 @@ pub enum ArithmeticStructure {
     Convertible(ConvertibleToExpression),
 }
 
-#[cfg(feature = "python_stubgen")]
+#[cfg(feature = "python-stubs")]
 impl PyStubType for ArithmeticStructure {
     fn type_output() -> pyo3_stub_gen::TypeInfo {
         ConvertibleToExpression::type_output() | TensorExpression::type_output()
@@ -660,7 +660,7 @@ impl<'a, 'py> FromPyObject<'a, 'py> for ArithmeticStructure {
     }
 }
 
-#[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
+#[cfg_attr(feature = "python-stubs", gen_stub_pyclass)]
 #[pyclass(
     from_py_object,
     eq,
@@ -753,7 +753,7 @@ impl<'a, 'py> FromPyObject<'a, 'py> for ConvertibleToAbstractIndex {
     }
 }
 
-#[cfg(feature = "python_stubgen")]
+#[cfg(feature = "python-stubs")]
 impl_stub_type!(ConvertibleToAbstractIndex = isize | Symbol | PyBackedStr);
 
 pub struct ConvertibleToDimension(pub(crate) Dimension);
@@ -795,7 +795,7 @@ impl<'a, 'py> FromPyObject<'a, 'py> for ConvertibleToDimension {
     }
 }
 
-#[cfg(feature = "python_stubgen")]
+#[cfg(feature = "python-stubs")]
 impl_stub_type!(ConvertibleToDimension = usize | PythonExpression | PyBackedStr);
 
 struct ConvertibleToInvariantDegree(Atom);
@@ -826,7 +826,7 @@ impl<'py> IntoPyObject<'py> for ConvertibleToInvariantDegree {
     }
 }
 
-#[cfg(feature = "python_stubgen")]
+#[cfg(feature = "python-stubs")]
 impl PyStubType for ConvertibleToInvariantDegree {
     fn type_input() -> pyo3_stub_gen::TypeInfo {
         ConvertibleToExpression::type_input()
@@ -837,8 +837,8 @@ impl PyStubType for ConvertibleToInvariantDegree {
     }
 }
 
-#[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
-#[cfg_attr(not(feature = "python_stubgen"), remove_gen_stub)]
+#[cfg_attr(feature = "python-stubs", gen_stub_pymethods)]
+#[cfg_attr(not(feature = "python-stubs"), remove_gen_stub)]
 #[pymethods]
 impl SpensoRepresentation {
     #[new]
@@ -1184,7 +1184,7 @@ impl SpensoRepresentation {
 /// from symbolica.community.spenso import TensorName
 /// tensor_expression = TensorName("T")(slot1, slot2)
 /// ```
-#[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
+#[cfg_attr(feature = "python-stubs", gen_stub_pyclass)]
 #[pyclass(
     from_py_object,
     eq,
@@ -1198,7 +1198,7 @@ pub struct SpensoSlot {
 
 impl ModuleInit for SpensoSlot {}
 
-#[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
+#[cfg_attr(feature = "python-stubs", gen_stub_pymethods)]
 #[pymethods]
 impl SpensoSlot {
     fn __repr__(&self) -> String {
@@ -1289,7 +1289,7 @@ impl SpensoSlot {
     }
 }
 
-#[cfg(feature = "python_stubgen")]
+#[cfg(feature = "python-stubs")]
 submit! {
     PyMethodsInfo {
         struct_id: std::any::TypeId::of::<SpensoName>,
@@ -1346,7 +1346,7 @@ Examples
     }
 }
 
-#[cfg(feature = "python_stubgen")]
+#[cfg(feature = "python-stubs")]
 pyo3_stub_gen::define_stub_info_gatherer!(stub_info);
 
 #[cfg(test)]

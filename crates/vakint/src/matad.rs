@@ -12,7 +12,6 @@ use crate::{
 use colored::Colorize;
 use log::debug;
 use regex::Regex;
-use string_template_plus::{Render, RenderOptions, Template};
 use symbolica::atom::Symbol;
 use symbolica::id::Replacement;
 use symbolica::printer::{AtomPrinter, PrintOptions};
@@ -24,8 +23,8 @@ use symbolica::{
 };
 
 use crate::{
-    MATADOptions, TEMPLATES, even_condition, get_integer_from_atom, number_condition,
-    odd_condition, symbol_condition, symbols::S,
+    MATADOptions, even_condition, get_integer_from_atom, number_condition, odd_condition,
+    symbol_condition, symbols::S,
 };
 
 use crate::{ReplacementRules, Vakint, VakintError, VakintSettings};
@@ -537,7 +536,6 @@ impl Vakint {
             ahash::RandomState,
         > = HashSet::default();
 
-        let template = Template::parse_template(TEMPLATES.get("run_matad.txt").unwrap()).unwrap();
         let mut vars: HashMap<String, String> = HashMap::new();
         vars.insert("numerator".into(), numerator_string);
 
@@ -584,12 +582,7 @@ impl Vakint {
         }
         vars.insert("additional_symbols".into(), additional_symbols_str);
 
-        let rendered = template
-            .render(&RenderOptions {
-                variables: vars,
-                ..Default::default()
-            })
-            .unwrap();
+        let rendered = Self::render_template(include_str!("../templates/run_matad.txt"), &vars);
 
         let form_result = self.run_form(
             settings,

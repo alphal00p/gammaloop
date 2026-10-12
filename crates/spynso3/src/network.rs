@@ -7,7 +7,7 @@ use pyo3::{
     types::PyTuple,
 };
 
-#[cfg(not(feature = "python_stubgen"))]
+#[cfg(not(feature = "python-stubs"))]
 use pyo3_stub_gen_derive::remove_gen_stub;
 
 use spenso::{
@@ -57,7 +57,7 @@ use super::{Spensor, fresh_open_owner, library::SpensorLibrary, structure::Arith
 
 use super::ModuleInit;
 
-#[cfg(feature = "python_stubgen")]
+#[cfg(feature = "python-stubs")]
 use pyo3_stub_gen::{PyStubType, derive::*};
 
 /// A graph of tensor operations that can be simplified and executed.
@@ -96,7 +96,7 @@ use pyo3_stub_gen::{PyStubType, derive::*};
 /// >>> result = network.result_tensor(library=library)
 /// >>> len(result)
 /// 4
-#[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
+#[cfg_attr(feature = "python-stubs", gen_stub_pyclass)]
 #[pyclass(
     from_py_object,
     name = "TensorNetwork",
@@ -175,7 +175,7 @@ fn insert_function_values<'a>(
 /// Single : Select one smallest-degree rewrite per step; without `n_steps`, continue until no work remains
 /// Scalar : Only contract scalar operations, leaving tensor structure intact
 /// All : Execute all possible contractions for complete evaluation
-#[cfg_attr(feature = "python_stubgen", gen_stub_pyclass_enum)]
+#[cfg_attr(feature = "python-stubs", gen_stub_pyclass_enum)]
 #[pyclass(
     from_py_object,
     name = "ExecutionMode",
@@ -225,7 +225,7 @@ impl<'a, 'py> FromPyObject<'a, 'py> for ReplacementCondition {
     }
 }
 
-#[cfg(feature = "python_stubgen")]
+#[cfg(feature = "python-stubs")]
 pyo3_stub_gen::impl_stub_type!(ReplacementCondition = PythonPatternRestriction | PythonCondition);
 
 fn non_scalar_zero_network(value: &StructuredAtom) -> Option<ParsingNet> {
@@ -383,7 +383,7 @@ impl<'a, 'py> FromPyObject<'a, 'py> for ConvertibleToSpensoNet {
     }
 }
 
-#[cfg(feature = "python_stubgen")]
+#[cfg(feature = "python-stubs")]
 impl PyStubType for ConvertibleToSpensoNet {
     fn type_output() -> pyo3_stub_gen::TypeInfo {
         ArithmeticStructure::type_output() | SpensoNet::type_output() | Spensor::type_output()
@@ -866,8 +866,8 @@ impl SpensoNet {
 
 // #[gen_stub_pymethods]
 
-#[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
-#[cfg_attr(not(feature = "python_stubgen"), remove_gen_stub)]
+#[cfg_attr(feature = "python-stubs", gen_stub_pymethods)]
+#[cfg_attr(not(feature = "python-stubs"), remove_gen_stub)]
 #[pymethods]
 impl SpensoNet {
     #[new]
@@ -1743,7 +1743,7 @@ impl SpensoNet {
     // }
 }
 
-#[cfg(feature = "python_stubgen")]
+#[cfg(feature = "python-stubs")]
 pyo3_stub_gen::define_stub_info_gatherer!(stub_info);
 
 #[cfg(test)]

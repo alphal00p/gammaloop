@@ -40,8 +40,8 @@ min = 0.0
 }
 
 #[test]
-#[serial]
 fn lu_differential_observables_without_selectors_still_fill_histograms() -> Result<()> {
+    let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
     let mut cli = setup_sm_differential_lu_cli(
         "lu_differential_observables_without_selectors_still_fill_histograms",
     )?;
@@ -76,8 +76,8 @@ fn lu_differential_observables_without_selectors_still_fill_histograms() -> Resu
 }
 
 #[test]
-#[serial]
 fn lu_differential_integration_cli_flag_writes_iteration_observables() -> Result<()> {
+    let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
     let mut cli = setup_sm_differential_lu_cli(
         "lu_differential_integration_cli_flag_writes_iteration_observables",
     )?;
@@ -118,8 +118,8 @@ fn lu_differential_integration_cli_flag_writes_iteration_observables() -> Result
 }
 
 #[test]
-#[serial]
 fn lu_differential_integration_hwu_output_is_optional_and_single_file() -> Result<()> {
+    let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
     let mut cli = setup_sm_differential_lu_cli(
         "lu_differential_integration_hwu_output_is_optional_and_single_file",
     )?;
@@ -191,8 +191,8 @@ fn lu_differential_integration_hwu_output_is_optional_and_single_file() -> Resul
 }
 
 #[test]
-#[serial]
 fn lu_save_dot_silently_overwrites_existing_files() -> Result<()> {
+    let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
     let mut cli = setup_sm_differential_lu_cli("lu_save_dot_overwrite")?;
     cli.run_command("save dot")?;
     cli.run_command("save dot")?;
@@ -203,8 +203,8 @@ mod failing {
     use super::*;
 
     #[test]
-    #[serial]
     fn lu_differential_integration_writes_json_observables() -> Result<()> {
+        let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
         let mut cli =
             setup_sm_differential_lu_cli("lu_differential_integration_writes_json_observables")?;
         configure_differential_leading_jet_observable(&mut cli)?;
@@ -245,8 +245,8 @@ mod failing {
 }
 
 #[test]
-#[serial]
 fn lu_differential_json_observables_resume_from_workspace() -> Result<()> {
+    let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
     let mut cli =
         setup_sm_differential_lu_cli("lu_differential_json_observables_resume_from_workspace")?;
     configure_differential_leading_jet_observable(&mut cli)?;
@@ -316,8 +316,8 @@ fn lu_differential_json_observables_resume_from_workspace() -> Result<()> {
 }
 
 #[test]
-#[serial]
 fn lu_differential_hwu_observables_resume_from_workspace() -> Result<()> {
+    let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
     let mut cli =
         setup_sm_differential_lu_cli("lu_differential_hwu_observables_resume_from_workspace")?;
     configure_differential_leading_jet_observable(&mut cli)?;

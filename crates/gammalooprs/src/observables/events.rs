@@ -139,7 +139,10 @@ impl<T: FloatLike> GenericEventGroupList<T> {
 
 #[derive(Default, Debug, Clone, Deserialize)]
 pub struct GenericAdditionalWeightInfo<T: FloatLike> {
-    #[serde(with = "vectorize", bound(deserialize = "T: Deserialize<'de>"))]
+    #[serde(
+        with = "crate::utils::serde_utils::map_as_pairs",
+        bound(deserialize = "T: Deserialize<'de>")
+    )]
     pub weights: BTreeMap<AdditionalWeightKey, Complex<F<T>>>,
     /// Detailed, addable threshold-counterterm decomposition. It is absent on the legacy path so
     /// no-directive human-readable event serialization remains unchanged.

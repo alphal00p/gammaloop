@@ -39,16 +39,15 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
     vec,
 };
-use string_template_plus::{Render, RenderOptions, Template};
 use symbolica::{
     coefficient::{Coefficient, CoefficientView},
     domains::float::{FloatLike, RealLike},
 };
-#[cfg(feature = "symbolica_community_module")]
+#[cfg(feature = "python")]
 pub mod symbolica_community_module;
 
 /// Gather the Python API registered for the Vakint Symbolica community module.
-#[cfg(feature = "python_stubgen")]
+#[cfg(feature = "python-stubs")]
 pub fn stub_info() -> pyo3_stub_gen::Result<pyo3_stub_gen::StubInfo> {
     pyo3_stub_gen::StubInfo::from_project_root(
         "symbolica".to_owned(),
@@ -91,8 +90,6 @@ use version_compare::{Cmp, compare_to};
 #[allow(unused)]
 use symbols::SYMBOL_REGISTRY;
 use symbols::{EXTERNAL_MOMENTUM_SYMBOL, LOOP_MOMENTUM_SYMBOL, METRIC_SYMBOL, S};
-
-use phf::phf_map;
 
 use crate::{
     symbols::DOT_SYMBOL,
@@ -173,51 +170,19 @@ fn create_unique_tmp_run_dir(base_dir: Option<&str>, prefix: &str) -> std::io::R
 static MINIMAL_FORM_VERSION: &str = "4.2.1";
 static MINIMAL_PYSECDEC_VERSION: &str = "1.6.4";
 
-static FORM_SRC: phf::Map<&'static str, &'static str> = phf_map! {
-    "integrateduv.frm" =>  include_str!(concat!(
-        env!("CARGO_MANIFEST_DIR"),
-        "/form_src/alphaloop/integrateduv.frm"
-    )),
-    "tensorreduce.frm" =>  include_str!(concat!(
-        env!("CARGO_MANIFEST_DIR"),
-        "/form_src/alphaloop/tensorreduce.frm"
-    )),
-    "pvtab10.h" =>  include_str!(concat!(
-        env!("CARGO_MANIFEST_DIR"),
-        "/form_src/alphaloop/pvtab10.h"
-    )),
-    "fmft.frm" =>  include_str!(concat!(
-        env!("CARGO_MANIFEST_DIR"),
-        "/form_src/fmft/fmft.frm"
-    )),
-    "matad-ng.hh" =>  include_str!(concat!(
-        env!("CARGO_MANIFEST_DIR"),
-        "/form_src/matad/matad-ng.hh"
-    )),
-};
-
-static TEMPLATES: phf::Map<&'static str, &'static str> = phf_map! {
-    "run_tensor_reduction.txt" =>  include_str!(concat!(
-        env!("CARGO_MANIFEST_DIR"),
-        "/templates/run_tensor_reduction.txt"
-    )),
-    "run_alphaloop_integral_evaluation.txt" => include_str!(concat!(
-        env!("CARGO_MANIFEST_DIR"),
-        "/templates/run_alphaloop_integral_evaluation.txt"
-    )),
-    "run_pySecDec_template.txt" => include_str!(concat!(
-        env!("CARGO_MANIFEST_DIR"),
-        "/templates/run_pySecDec_template.txt"
-    )),
-    "run_matad.txt" => include_str!(concat!(
-        env!("CARGO_MANIFEST_DIR"),
-        "/templates/run_matad.txt"
-    )),
-    "run_fmft.txt" => include_str!(concat!(
-        env!("CARGO_MANIFEST_DIR"),
-        "/templates/run_fmft.txt"
-    )),
-};
+const FORM_SRC: [(&str, &str); 5] = [
+    (
+        "integrateduv.frm",
+        include_str!("../form_src/alphaloop/integrateduv.frm"),
+    ),
+    (
+        "tensorreduce.frm",
+        include_str!("../form_src/alphaloop/tensorreduce.frm"),
+    ),
+    ("pvtab10.h", include_str!("../form_src/alphaloop/pvtab10.h")),
+    ("fmft.frm", include_str!("../form_src/fmft/fmft.frm")),
+    ("matad-ng.hh", include_str!("../form_src/matad/matad-ng.hh")),
+];
 
 #[derive(Error, Debug)]
 pub enum VakintError {
@@ -2871,21 +2836,14 @@ impl VakintTerm {
                 );
         }
 
-        let template =
-            Template::parse_template(TEMPLATES.get("run_tensor_reduction.txt").unwrap()).unwrap();
-
         let mut vars: HashMap<String, String> = HashMap::new();
         let (form_header_additions, form_expression, indices) =
             vakint.prepare_expression_for_form(settings, form_numerator, true, &[])?;
         vars.insert("numerator".into(), form_expression);
         vars.insert("additional_symbols".into(), form_header_additions);
 
-        let rendered = template
-            .render(&RenderOptions {
-                variables: vars,
-                ..Default::default()
-            })
-            .unwrap();
+        let rendered =
+            Vakint::render_template(include_str!("../templates/run_tensor_reduction.txt"), &vars);
 
         // println!("Rendered: {}", rendered);
         let form_result = vakint.run_form(
@@ -3385,6 +3343,36 @@ impl NumericalEvaluationResult {
 }
 
 impl Vakint {
+    // Embedded scripts use named placeholders, backslash escapes, and quoted
+    // literal sections. Inserted expressions must not be interpreted again.
+    fn render_template(template: &str, variables: &HashMap<String, String>) -> String {
+        let mut rendered = String::with_capacity(template.len());
+        let mut chars = template.chars();
+        while let Some(c) = chars.next() {
+            match c {
+                '\\' => rendered.extend(chars.next()),
+                '"' | '{' => {
+                    let end = if c == '"' { '"' } else { '}' };
+                    let (value, remainder) = chars
+                        .as_str()
+                        .split_once(end)
+                        .expect("Unclosed delimiter in embedded Vakint template");
+                    chars = remainder.chars();
+                    let value = if c == '"' || value.is_empty() {
+                        value
+                    } else {
+                        variables.get(value).unwrap_or_else(|| {
+                            panic!("Missing variable '{value}' in embedded Vakint template")
+                        })
+                    };
+                    rendered.push_str(value);
+                }
+                c => rendered.push(c),
+            }
+        }
+        rendered
+    }
+
     pub fn initialize_vakint_symbols() {
         // Force initialization of symbolica symbols with proper attributes
         LazyLock::force(&S);
@@ -4305,18 +4293,10 @@ Evaluated (n_loops=1, mu_r=1) :
             vars.insert("couplings_prefactor".into(), "'1'".into());
             vars.insert("couplings_values".into(), "{}".into());
 
-            let template =
-                Template::parse_template(TEMPLATES.get("run_pySecDec_template.txt").unwrap())
-                    .unwrap();
-
-            let rendered = template
-                .render(&RenderOptions {
-                    variables: vars,
-                    ..Default::default()
-                })
-                .unwrap_or_else(|e| {
-                    panic!("Error while rendering template: {}", e);
-                });
+            let rendered = Self::render_template(
+                include_str!("../templates/run_pySecDec_template.txt"),
+                &vars,
+            );
 
             vec![
                 ("run_pySecDec.py".into(), rendered),
@@ -4586,13 +4566,6 @@ Evaluated (n_loops=1, mu_r=1) :
         }
         // println!("Input expression for FORM : {}", form_expression);
 
-        let template = Template::parse_template(
-            TEMPLATES
-                .get("run_alphaloop_integral_evaluation.txt")
-                .unwrap(),
-        )
-        .unwrap();
-
         let mut vars: HashMap<String, String> = HashMap::new();
 
         let (form_header_additions, form_expression, indices) =
@@ -4601,12 +4574,10 @@ Evaluated (n_loops=1, mu_r=1) :
         vars.insert("numerator".into(), form_expression);
         vars.insert("additional_symbols".into(), form_header_additions);
 
-        let rendered = template
-            .render(&RenderOptions {
-                variables: vars,
-                ..Default::default()
-            })
-            .unwrap();
+        let rendered = Self::render_template(
+            include_str!("../templates/run_alphaloop_integral_evaluation.txt"),
+            &vars,
+        );
         let form_result = self.run_form(
             settings,
             &["integrateduv.frm".into()],
@@ -5585,7 +5556,12 @@ Evaluated (n_loops=1, mu_r=1) :
         let tmp_dir = create_unique_tmp_run_dir(temporary_directory.as_deref(), "vakint_temp")?;
 
         for resource in resources.iter() {
-            fs::write(tmp_dir.join(resource), FORM_SRC.get(resource).unwrap())?;
+            let source = FORM_SRC
+                .iter()
+                .find(|(name, _)| *name == resource)
+                .unwrap()
+                .1;
+            fs::write(tmp_dir.join(resource), source)?;
         }
         fs::write(tmp_dir.join(&input.0), &input.1)?;
         let mut cmd = Command::new(settings.form_exe_path.as_str());
@@ -5678,6 +5654,24 @@ mod tests {
     use symbolica::parse_lit;
 
     use super::*;
+
+    #[test]
+    fn script_templates_preserve_escapes_literals_and_inserted_expressions() {
+        let variables = HashMap::from([("name".into(), "{other}\\n$1 λ".into())]);
+        assert_eq!(
+            Vakint::render_template(
+                r#"\{name\}, "{name}", {name}, \"quoted\", \\, {}"#,
+                &variables,
+            ),
+            "{name}, {name}, {other}\\n$1 λ, \"quoted\", \\, "
+        );
+    }
+
+    #[test]
+    #[should_panic(expected = "Missing variable 'numerator'")]
+    fn script_templates_reject_missing_variables() {
+        Vakint::render_template("L F = {numerator};", &HashMap::new());
+    }
 
     #[test]
     fn numerical_laurent_results_preserve_epsilon_symbol_identity() {

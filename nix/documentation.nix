@@ -270,7 +270,7 @@ let
         cargoWithProfile test --locked --no-run -p alphal00p-docs-examples
         cargo clean --profile ${docsCargoProfile} -p alphal00p-docs-examples
         cargoWithProfile build --locked -p alphal00p-docs-builder
-        cargoWithProfile build --locked -p linnet-py --lib --features extension-module,abi3-py310
+        cargoWithProfile build --locked -p linnet-py --lib --features extension-module,abi3
         ${documentationRustdocBuildCommands}
         cargoWithProfile build --locked -p alphal00p-docs-catalogs \
           --features ${lib.escapeShellArg documentationCatalogFeatures} \
@@ -284,13 +284,13 @@ let
   );
 
   # Exercise the embedded Typst watcher behind its opt-in feature without
-  # adding Typst's compiler crates to normal workspace or Pages artifacts.
-  persistentTypstArgs = ciArgs // {
-    pname = "alphal00p-docs-persistent-typst";
+  # adding the file watcher, live server or Typst compiler to ordinary builds.
+  watchArgs = ciArgs // {
+    pname = "alphal00p-docs-watch";
     src = workspacePackageSrcFor "alphal00p-docs-builder";
     buildType = "docs-watch";
     CARGO_PROFILE = "docs-watch";
-    cargoExtraArgs = "--locked -p alphal00p-docs-builder --features persistent-typst";
+    cargoExtraArgs = "--locked -p alphal00p-docs-builder --features watch";
     nativeBuildInputs = (ciArgs.nativeBuildInputs or [ ]) ++ [
       docsTypst
       pkgs.roboto
@@ -299,20 +299,22 @@ let
     TYPST_PACKAGE_CACHE_PATH = "${docsTypst}/lib/typst/packages";
   };
 
-  persistentTypstCargoArtifacts = craneLib.buildDepsOnly persistentTypstArgs;
+  watchCargoArtifacts = craneLib.buildDepsOnly watchArgs;
 
-  persistentTypstCheck = craneLib.mkCargoDerivation (
-    persistentTypstArgs
+  watchCheck = craneLib.mkCargoDerivation (
+    watchArgs
     // {
-      cargoArtifacts = persistentTypstCargoArtifacts;
+      cargoArtifacts = watchCargoArtifacts;
       doNotLinkInheritedArtifacts = true;
       doInstallCargoArtifacts = false;
       postPatch = workspaceMissingCargoTargetsScript;
       buildPhaseCargoCommand = ''
         mkdir -p "$out"
-        cargoWithProfile check ${persistentTypstArgs.cargoExtraArgs} --all-targets
-        cargoWithProfile test ${persistentTypstArgs.cargoExtraArgs} typst_render::persistent::tests
-        cargoWithProfile clippy ${persistentTypstArgs.cargoExtraArgs} --all-targets --no-deps -- --deny warnings
+        cargoWithProfile check ${watchArgs.cargoExtraArgs} --all-targets
+        cargoWithProfile test ${watchArgs.cargoExtraArgs} --lib typst_render::persistent::tests
+        cargoWithProfile test ${watchArgs.cargoExtraArgs} --lib watch::tests
+        cargoWithProfile test ${watchArgs.cargoExtraArgs} --lib server::tests
+        cargoWithProfile clippy ${watchArgs.cargoExtraArgs} --all-targets --no-deps -- --deny warnings
       '';
       checkPhaseCargoCommand = "";
       doCheck = false;
@@ -381,7 +383,8 @@ let
     cargo run --locked --profile ${docsCargoProfile} -p alphal00p-docs-python-exporter --features spenso -- spynso3 docs/api/python/spynso3.pyi --check
     cargo run --locked --profile ${docsCargoProfile} -p alphal00p-docs-python-exporter --features idenso -- idenso-community docs/api/python/idenso-community.pyi --check
     cargo run --locked --profile ${docsCargoProfile} -p alphal00p-docs-python-exporter --features vakint -- vakint-community docs/api/python/vakint-community.pyi --check
-    cargo test --locked --profile ${docsCargoProfile} -p alphal00p-docs-python-exporter --features gammaloop gammaloop_runtime_surface_and_signatures_match_the_docs_stub
+    cargo test --locked --profile ${docsCargoProfile} -p alphal00p-docs-python-exporter --features gammaloop
+    cargo test --locked --profile ${docsCargoProfile} -p alphal00p-docs-python-exporter --features linnet
     linnet_python="$TMPDIR/alphal00p-docs-linnet-python"
     export UV_CACHE_DIR="$TMPDIR/alphal00p-docs-uv-cache"
     export UV_OFFLINE=true
@@ -394,7 +397,7 @@ let
       --interpreter "$linnet_python/bin/python" \
       --out "$linnet_wheels" \
       --manifest-path crates/linnet-py/Cargo.toml \
-      --features extension-module,abi3-py310
+      --features extension-module,abi3
     # Python imports the pinned Typst from Nix; uv does not discover those
     # inherited packages when resolving dependencies.
     uv pip install --offline --no-deps --python "$linnet_python/bin/python" \
@@ -674,6 +677,6 @@ in
     alphal00pDocsPages
     alphal00pDocsSnapshotFixture
     alphal00pDocsCheck
-    persistentTypstCheck
+    watchCheck
     ;
 }

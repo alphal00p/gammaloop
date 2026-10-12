@@ -231,7 +231,7 @@ tutorial starts the one permitted restricted Symbolica instance and the later `N
 construction aborts while attempting to start another. Serial test execution does not change
 the outcome. This prevents the aggregate harness from treating both examples as runnable in one
 process and may also expose an initialization boundary relevant to unlicensed users of the
-`shadowing` feature.
+`symbolica` feature.
 
 *Resolution and build evidence (2026-08-21):* the generated harness now runs every executable
 manual example and the Spenso `Network` catalog examples in fresh child processes. Its shared

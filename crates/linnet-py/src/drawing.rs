@@ -189,7 +189,7 @@ macro_rules! drawing_class {
         [$($getter:ident, $setter:ident, $property:ident, $name:literal, $stub_type:literal);+ $(;)?]
     ) => {
         #[doc = $doc]
-        #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
+        #[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pyclass)]
         #[pyclass(unsendable, name = $python)]
         pub struct $rust {
             values: Option<Py<PyDict>>,
@@ -258,8 +258,8 @@ macro_rules! drawing_class {
             }
         }
 
-        #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
-        #[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
+        #[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pymethods)]
+        #[cfg_attr(not(feature = "python-stubs"), pyo3_stub_gen_derive::remove_gen_stub)]
 #[pymethods]
         impl $rust {
             #[new]
@@ -394,7 +394,7 @@ drawing_class!(
     ]
 );
 
-#[cfg(feature = "python_stubgen")]
+#[cfg(feature = "python-stubs")]
 pyo3_stub_gen::inventory::submit! {
     pyo3_stub_gen::derive::gen_methods_from_python! { r#"
         import typing
@@ -404,7 +404,7 @@ pyo3_stub_gen::inventory::submit! {
     "# }
 }
 
-#[cfg(feature = "python_stubgen")]
+#[cfg(feature = "python-stubs")]
 pyo3_stub_gen::inventory::submit! {
     pyo3_stub_gen::derive::gen_methods_from_python! { r#"
         import typing
@@ -414,7 +414,7 @@ pyo3_stub_gen::inventory::submit! {
     "# }
 }
 
-#[cfg(feature = "python_stubgen")]
+#[cfg(feature = "python-stubs")]
 pyo3_stub_gen::inventory::submit! {
     pyo3_stub_gen::derive::gen_methods_from_python! { r#"
         import typing

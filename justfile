@@ -34,55 +34,55 @@ _sync-drawing-assets:
 
 # Build gammaloop Python CLI with UFO support and dev-optim profile
 build-cli: _sync-drawing-assets
-    cargo build -p gammaloop-api --bin gammaloop --features ufo_support --profile dev-optim
+    cargo build -p gammaloop-api --bin gammaloop --features ufo-import --profile dev-optim
 
 # Build gammaloop CLI without Python (no pyo3)
 build-cli-no-pyo3: _sync-drawing-assets
-    cargo build -p gammaloop-api --bin gammaloop --no-default-features --features cli,no_pyo3 --profile dev-optim
+    cargo build -p gammaloop-api --bin gammaloop --no-default-features --features cli --profile dev-optim
 
 # Build gammaloop Python CLI with UFO support and stable ABI (dev-optim profile)
 build-cli-abi: _sync-drawing-assets
-    cargo build -p gammaloop-api --bin gammaloop --features ufo_support,python_abi --profile dev-optim
+    cargo build -p gammaloop-api --bin gammaloop --features ufo-import,abi3 --profile dev-optim
 
 # Build gammaloop Python CLI in release mode
 build-cli-release: _sync-drawing-assets
-    cargo build -p gammaloop-api --bin gammaloop --features ufo_support --release
+    cargo build -p gammaloop-api --bin gammaloop --features ufo-import --release
 
 # Build gammaloop Python CLI in release mode with stable ABI
 build-cli-release-abi: _sync-drawing-assets
-    cargo build -p gammaloop-api --bin gammaloop --features ufo_support,python_abi --release
+    cargo build -p gammaloop-api --bin gammaloop --features ufo-import,abi3 --release
 
 # Build gammaloop Python API with UFO support and dev-optim profile
 build-api: _sync-drawing-assets
-    maturin develop -m crates/gammaloop-api/Cargo.toml --features=ufo_support,python_api --profile=dev-optim
+    maturin develop -m crates/gammaloop-api/Cargo.toml --no-default-features --features=extension-module --profile=dev-optim
 
 # Build gammaloop Python API with UFO support and stable ABI (dev-optim profile)
 build-api-abi: _sync-drawing-assets
-    maturin develop -m crates/gammaloop-api/Cargo.toml --features=ufo_support,python_abi --profile=dev-optim
+    maturin develop -m crates/gammaloop-api/Cargo.toml --no-default-features --features=extension-module,abi3 --profile=dev-optim
 
 # Build gammaloop Python API with UFO support and dev-optim profile
 build-api-wheel: _sync-drawing-assets
-    maturin build -m crates/gammaloop-api/Cargo.toml --features=ufo_support,python_api --profile=dev-optim
+    maturin build -m crates/gammaloop-api/Cargo.toml --no-default-features --features=extension-module --profile=dev-optim
 
 # Build gammaloop Python API with UFO support and stable ABI (dev-optim profile)
 build-api-abi-wheel: _sync-drawing-assets
-    maturin build -m crates/gammaloop-api/Cargo.toml --features=ufo_support,python_abi --profile=dev-optim
+    maturin build -m crates/gammaloop-api/Cargo.toml --no-default-features --features=extension-module,abi3 --profile=dev-optim
 
 # Build gammaloop Python API with UFO support and release profile
 build-api-release: _sync-drawing-assets
-    maturin develop -m crates/gammaloop-api/Cargo.toml --features=ufo_support,python_api --profile=release
+    maturin develop -m crates/gammaloop-api/Cargo.toml --no-default-features --features=extension-module --profile=release
 
 # Build gammaloop Python API with UFO support and stable ABI (release profile)
 build-api-abi-release: _sync-drawing-assets
-    maturin develop -m crates/gammaloop-api/Cargo.toml --features=ufo_support,python_abi --profile=release
+    maturin develop -m crates/gammaloop-api/Cargo.toml --no-default-features --features=extension-module,abi3 --profile=release
 
 # Build gammaloop Python API wheel with UFO support and release profile
 build-api-release-wheel: _sync-drawing-assets
-    maturin build -m crates/gammaloop-api/Cargo.toml --features=ufo_support,python_api --profile=release
+    maturin build -m crates/gammaloop-api/Cargo.toml --no-default-features --features=extension-module --profile=release
 
 # Build gammaloop Python API wheel with UFO support and stable ABI (release profile)
 build-api-abi-release-wheel: _sync-drawing-assets
-    maturin build -m crates/gammaloop-api/Cargo.toml --features=ufo_support,python_abi --profile=release
+    maturin build -m crates/gammaloop-api/Cargo.toml --no-default-features --features=extension-module,abi3 --profile=release
 
 # Build all workspace packages
 build-all:
@@ -263,7 +263,7 @@ docs-linnet-python-check:
 
     python_bin=${PYTHON_BIN_PATH:-python3}
     uv venv "$test_root/venv" --python "$python_bin"
-    VIRTUAL_ENV="$test_root/venv" maturin develop --uv --locked --manifest-path crates/linnet-py/Cargo.toml --features extension-module,abi3-py310
+    VIRTUAL_ENV="$test_root/venv" maturin develop --uv --locked --manifest-path crates/linnet-py/Cargo.toml --features extension-module,abi3
     "$test_root/venv/bin/python" -m unittest \
       crates/linnet-py/tests/test_basic.py \
       crates/linnet-py/tests/test_wasm.py \
@@ -296,7 +296,7 @@ docs-watch PRODUCT PORT="8000" OUTPUT="target/alphal00p-docs-watch":
     set -euo pipefail
 
     exec cargo run --locked --profile docs-watch -p alphal00p-docs-builder \
-        --features persistent-typst -- \
+        --features watch -- \
         watch \
         --product {{ quote(PRODUCT) }} \
         --port {{ quote(PORT) }} \
@@ -323,4 +323,4 @@ dev-release: build-release-all
 
 # Run gammaloop
 run *ARGS:
-    cargo run -p gammaloop-api --bin gammaloop --features ufo_support --profile dev-optim -- {{ ARGS }}
+    cargo run -p gammaloop-api --bin gammaloop --features ufo-import --profile dev-optim -- {{ ARGS }}

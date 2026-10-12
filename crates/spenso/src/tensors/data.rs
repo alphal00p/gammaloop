@@ -20,13 +20,13 @@ use crate::structure::representation::Representation;
 use crate::structure::slot::IsAbstractSlot;
 use delegate::delegate;
 
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 use crate::{
     shadowing::{ShadowMapping, Shadowable},
     structure::slot::ParseableAind,
     tensors::parametric::TensorCoefficient,
 };
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 use symbolica_utils::{IntoArgs, IntoSymbol};
 
 use eyre::{Result, eyre};
@@ -40,7 +40,7 @@ use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 use std::{borrow::Cow, fmt::Display, hash::Hash};
 
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 use symbolica::{atom::Atom, atom::Symbol};
 pub trait DataIterator<T> {
     type FlatIter<'a>: Iterator<Item = (FlatIndex, &'a T)>
@@ -109,7 +109,7 @@ pub trait HasTensorData: HasStructure {
     fn hashmap(&self) -> IndexMap<ExpandedIndex, Self::Data>;
 
     /// Returns a hashmap of the data, with the the shadowed indices as keys
-    #[cfg(feature = "shadowing")]
+    #[cfg(feature = "symbolica")]
     fn symhashmap(&self, name: Symbol, args: &[Atom]) -> HashMap<Atom, Self::Data>;
 
     // fn map(&self, f: impl Fn(&Self::Data) -> Self::Data) -> Self;
@@ -242,7 +242,7 @@ impl<T: Clone, S: TensorStructure, O: From<S> + TensorStructure> CastStructure<D
     }
 }
 
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 impl<T: Clone, S: TensorStructure> Shadowable for DataTensor<T, S>
 where
     S: HasName + Clone,
@@ -252,7 +252,7 @@ where
 {
 }
 
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 impl<T: Clone, S: TensorStructure> ShadowMapping for DataTensor<T, S>
 where
     S: HasName + Clone,
@@ -384,7 +384,7 @@ where
             DataTensor::Sparse(s) => s.hashmap(),
         }
     }
-    #[cfg(feature = "shadowing")]
+    #[cfg(feature = "symbolica")]
     fn symhashmap(&self, name: Symbol, args: &[Atom]) -> HashMap<Atom, T> {
         match self {
             DataTensor::Dense(d) => d.symhashmap(name, args),

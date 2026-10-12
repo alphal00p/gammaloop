@@ -19,7 +19,7 @@ fn display_labels_match_network_errors() {
     assert_eq!(invalid_power.to_string(), "Non self-dual tensor power: T^2");
 }
 
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 #[test]
 fn scalar_alias_refs_resolve_to_original_atom() {
     use symbolica::{
@@ -77,7 +77,7 @@ fn scalar_alias_refs_resolve_to_original_atom() {
     );
 }
 
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 #[test]
 fn scalar_alias_resolution_preserves_nested_and_unregistered_handles() {
     use symbolica::{
@@ -126,7 +126,7 @@ fn scalar_alias_resolution_preserves_nested_and_unregistered_handles() {
     }
 }
 
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 #[test]
 fn auto_serializes_unlicensed_symbolic_fast_tensor_sum() {
     use std::collections::HashMap;
@@ -178,7 +178,7 @@ fn auto_serializes_unlicensed_symbolic_fast_tensor_sum() {
     assert_eq!(result.elements[&FlatIndex::from(1)], parse!("b+y"));
 }
 
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 #[test]
 fn fast_tensor_sum_parallel_candidate_rejects_light_or_unbalanced_work() {
     use super::{AtomSumShapeStats, FastTensorSumWorkload};
@@ -574,7 +574,7 @@ fn odd_tensor_powers_keep_the_base_square_fixed() {
     }
 }
 
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 #[test]
 fn odd_library_tensor_powers_keep_the_base_square_fixed() {
     use symbolica::{
@@ -748,7 +748,7 @@ fn scalar_sums_accept_closed_lazy_tensors_in_either_order() {
     }
 }
 
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 #[test]
 fn tensor_powers_preserve_exponents_for_every_leaf_kind() {
     use symbolica::{
@@ -985,7 +985,7 @@ fn lazy_scalar_tensors_add_scalars_in_either_order() {
     }
 }
 
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 #[test]
 fn bulk_atom_sum_accepts_closed_tensor_leaves_and_preserves_aliases() {
     use linnet::half_edge::{builder::HedgeGraphBuilder, involution::Flow};
@@ -1149,7 +1149,7 @@ fn bulk_atom_sum_accepts_closed_tensor_leaves_and_preserves_aliases() {
     }
 }
 
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 #[test]
 fn fused_numeric_contraction_matches_dual_indices_in_storage_order() {
     use symbolica::{atom::Atom, parse};
@@ -1226,7 +1226,7 @@ fn fused_numeric_contraction_matches_dual_indices_in_storage_order() {
     }
 }
 
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 #[test]
 fn sparse_pair_estimate_counts_shared_output_coordinates() {
     use linnet::permutation::Permutation;
@@ -1309,7 +1309,7 @@ fn sparse_pair_estimate_counts_shared_output_coordinates() {
     }
 }
 
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 #[test]
 fn large_scaled_tensor_sum_preserves_results_across_strategies() {
     use std::collections::HashMap;
@@ -1855,7 +1855,7 @@ fn ready_sum_boundary_closure_matches_coordinates_across_execution_strategies() 
     }
 }
 
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 #[test]
 fn sparse_contraction_preserves_overlapping_and_disjoint_support() {
     use crate::{

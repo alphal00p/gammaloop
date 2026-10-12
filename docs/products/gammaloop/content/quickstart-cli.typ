@@ -84,7 +84,7 @@ Cargo compiles the CLI locally, so its first installation takes longer than down
 Nix build. Its default build vendors the required GMP, MPFR, and MPC sources; OpenSSL, Python,
 FORM, and system copies of those libraries are not prerequisites for this example. On Windows,
 use WSL 2 and follow the Debian or Ubuntu instructions above. The `SYMBOLICA_OEM_LICENSE` value
-is GammaLoop's public build selector, not a private license key. Add the `ufo_support` feature and
+is GammaLoop's public build selector, not a private license key. Add the `ufo-import` feature and
 Python development headers only when external UFO model loading is needed. Symbolica's license
 terms still apply to both installation paths.
 

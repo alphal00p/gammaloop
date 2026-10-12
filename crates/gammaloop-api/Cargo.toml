@@ -25,16 +25,16 @@ ahash = { workspace = true, features = ["serde"] }
 bincode = { workspace = true, features = ["serde"] }
 chrono = { workspace = true, features = ["serde"] }
 clap = { workspace = true, features = ["unstable-ext"] }
-clap_complete = "4.5.57"
-clap_complete_nushell = "4.5.10"
+clap_complete = { version = "4.5.57", optional = true }
+clap_complete_nushell = { version = "4.5.10", optional = true }
 # clap-repl = "0.3.2"
 color-eyre = { workspace = true }
 colored = { workspace = true }
 console = "0.16.3"
-crossterm = "0.28.1"
+crossterm = "0.29"
 dirs = { workspace = true }
 eyre = { workspace = true }
-figment = { version = "0.10.19", features = ["json", "toml"] }
+figment = { version = "0.10.19", features = ["json"] }
 gammaloop-tracing-filter = { workspace = true, features = ["clap"] }
 gammalooprs = { workspace = true }
 three-dimensional-reps = { workspace = true, features = ["display"] }
@@ -47,23 +47,19 @@ json5 = { workspace = true }
 ndarray = { workspace = true }
 nu-ansi-term = { workspace = true }
 numpy = { workspace = true, optional = true }
-rand = { workspace = true, features = ["small_rng"] }
-ratatui = { workspace = true, features = ["crossterm_0_28"] }
+ratatui = { workspace = true }
 rayon = { workspace = true }
-reedline = "0.42.0"
+reedline = { version = "0.44", optional = true }
 regex = { workspace = true }
-rust-embed = { version = "8.11.0", features = ["debug-embed", "include-exclude", "interpolate-folder-path"] }
 schemars = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 serde_yaml = { workspace = true }
 shlex = "1.3.0"
 smartstring = { workspace = true, features = ["serde"] }
-spenso = { workspace = true, features = ["native", "shadowing"] }
+spenso = { workspace = true, features = ["native", "symbolica"] }
 # symbolica = { version = "0.18.0", default-features = false }
-symbolica-utils = { workspace = true, features = ["native"] }
-sysinfo = { workspace = true }
-tabled = { workspace = true, features = ["ansi"] }
+tabled = { workspace = true, features = ["ansi", "derive"] }
 thiserror = { workspace = true }
 toml = { workspace = true }
 tracing = { workspace = true }
@@ -83,7 +79,7 @@ features = [
 # PyO3: optional for embedding. Auto-init at runtime.
 [dependencies.pyo3]
 workspace = true
-# Stable ABI features are now feature-gated via python_abi feature
+# The abi3 feature changes compatibility without activating Python support.
 features = ["auto-initialize", "eyre"]
 optional = true
 
@@ -94,6 +90,7 @@ features = ["numpy"]
 
 [dependencies.pyo3-stub-gen-derive]
 workspace = true
+optional = true
 
 [dependencies.symbolica]
 workspace = true
@@ -119,6 +116,9 @@ features = [
   "serde",
   "serde-alloc",
 ]
+[target.'cfg(not(target_os = "linux"))'.dependencies]
+sysinfo = { workspace = true }
+
 [dev-dependencies]
 tempfile = "3.8"
 
@@ -129,24 +129,23 @@ walkdir = { workspace = true }
 [features]
 # Keep Python optional unless explicitly enabled.
 default = ["cli"]
-cli = []
-no_pyo3 = []
-pyo3-extension-module = [
-  "dep:pyo3",
-  "gammalooprs/pyo3-extension-module",
+cli = ["dep:clap_complete", "dep:clap_complete_nushell", "dep:reedline"]
+extension-module = [
+  "python",
   "pyo3/extension-module"
 ]
-python_abi = ["pyo3/abi3", "pyo3/abi3-py37", "python_api"]
-python_api = [
+abi3 = ["pyo3?/abi3-py37"]
+python = [
+  "dep:pyo3-stub-gen-derive",
   "dep:numpy",
   "dep:pyo3-build-config",
-  "gammaloop-tracing-filter/python_api",
-  "gammalooprs/python_api",
-  "ufo_support",
+  "gammaloop-tracing-filter/python",
+  "gammalooprs/python",
+  "ufo-import",
 ]
-python_stubgen = [
+python-stubs = [
   "dep:pyo3-stub-gen",
-  "gammalooprs/python_stubgen",
-  "python_api",
+  "gammalooprs/python-stubs",
+  "python",
 ]
-ufo_support = ["dep:pyo3", "pyo3/auto-initialize"]
+ufo-import = ["dep:pyo3"]

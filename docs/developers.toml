@@ -47,7 +47,9 @@ anchor = "load_state_manifest(&save_path)?"
 # states predating the OnShellEnergy/Esurface rename before import. Generation
 # monitoring now reads process-local Linux RSS and wakes on completion; this
 # monitoring change preserves persistence and numerical contracts.
-digest = "41a6eb0974a0a74a6d47fb2f517c251f993be18d"
+# Reviewed 2026-10-12: Capability feature names and formatting are updated;
+# the reviewed implementation and data contracts are unchanged.
+digest = "b23c9b373541cafa3e05e1e51f65d70c0ba83083"
 
 [[section.note.scope]]
 path = "crates/gammaloop-api/src/commands/integrate.rs"
@@ -59,7 +61,9 @@ anchor = "fn default_workspace_path(&self"
 # Reviewed 2026-09-23: Canonical sampling/native weighted results, selected loading, state v9, structured Python integration, and threshold event metadata are documented in architecture-current.typ.
 # No architecture impact 2026-09-23: corrected the JSON example code span;
 # command behavior and dashboard ownership are unchanged.
-digest = "da178138da46666acf41dc7a4abeebfab4bfec9c"
+# Reviewed 2026-10-12: Capability feature names and formatting are updated;
+# the reviewed implementation and data contracts are unchanged.
+digest = "760d4d8ca49da45b09eee374053d914a9b861573"
 
 [[section.note.scope]]
 path = "crates/gammalooprs/src/integrands/evaluation.rs"
@@ -109,7 +113,10 @@ anchor = "pub struct GenericEvent<T: FloatLike> {"
 # event serialization retains optional-field markers and enum discriminants.
 # Reviewed 2026-09-23: Added native-precision and iterated-occurrence round-trip
 # tests; the documented production serialization contract is unchanged.
-digest = "0f98f614b94643fa398bd8ea5b2d3c222e64e665"
+# Reviewed 2026-10-12: The map-of-pairs serializer replaces vectorize with the
+# same ordered pair representation; event weights and persistence fields are
+# unchanged.
+digest = "6450148360cff16688c3e37986180c678682606e"
 
 [[section.note.scope]]
 path = "crates/gammalooprs/src/observables/mod.rs"
@@ -119,7 +126,9 @@ anchor = "pub struct EventProcessingRuntime {"
 # Reviewed 2026-09-23: Canonical sampling/native weighted results, selected loading, state v9, structured Python integration, and threshold event metadata are documented in architecture-current.typ.
 # Reviewed 2026-10-04: architecture-current.typ documents normalized unlabeled
 # continuous checkpoint metadata, with explicit labels and merge guards retained.
-digest = "ababa60e78cc323596cdf335006256023e2ad519"
+# Reviewed 2026-10-12: Capability feature names and formatting are updated;
+# the reviewed implementation and data contracts are unchanged.
+digest = "e42015d34dc3d2d1b27d75a1a35dd96002fe8604"
 
 [[section.note.scope]]
 path = "crates/gammaloop-api/src/python.rs"
@@ -133,7 +142,9 @@ anchor = "struct GammaLoopAPI {"
 # absolute-result classes; runtime Python registration and behavior are unchanged.
 # Reviewed 2026-09-23: Getter prose distinguishes physical contributions from
 # outer-grid weights; the typed integration entrypoint remains disabled.
-digest = "c64cf7ed332416136a0a570965ea8a77c099eac7"
+# Reviewed 2026-10-12: Capability feature names and formatting are updated;
+# the reviewed implementation and data contracts are unchanged.
+digest = "f49d9a4a439665c6944987961a185d3596fbd3f3"
 
 [[section.note.scope]]
 path = "crates/gammalooprs/src/lib.rs"
@@ -187,7 +198,9 @@ anchor = "fn dashboard_event_loop(receiver"
 # Reviewed 2026-09-23: The dashboard documents signed/absolute view ownership, unchanged sampling/RNG behavior, and version-3 completed-iteration resume.
 # No architecture impact 2026-09-23: corrected the JSON example code span;
 # command behavior and dashboard ownership are unchanged.
-digest = "da178138da46666acf41dc7a4abeebfab4bfec9c"
+# Reviewed 2026-10-12: Capability feature names and formatting are updated;
+# the reviewed implementation and data contracts are unchanged.
+digest = "760d4d8ca49da45b09eee374053d914a9b861573"
 
 [[section.note.scope]]
 path = "crates/gammalooprs/src/integrate/render_ratatui.rs"
@@ -315,7 +328,10 @@ anchor = "pub fn extract_templates<P: AsRef<Path>>"
 # current preface now names the style composer alongside its three adapters.
 # No architecture impact 2026-10-04: only the drawing test uses the public
 # mapper's flattened fields; template extraction and style ownership are unchanged.
-digest = "ae9fac7abff7bf002f6361cb389e74aeada7ebe5"
+# Reviewed 2026-10-12: Template embedding uses include_dir and generated
+# include_bytes tables; extraction paths and shipped Typst assets are
+# unchanged.
+digest = "cc91f55813de46de52ab05aaa476e60714c9a4ed"
 
 [[section.note]]
 id = "gammaloop-drawing-architecture"
@@ -363,7 +379,9 @@ anchor = "pub trait IndexTooling {"
 # which now records the shared chain/trace placeholder scope.
 # Reviewed 2026-09-17: Documented factor preservation and explicit-index reservation during canonicalization.
 # Reviewed 2026-10-05: documented reversible formal-dimension labels around index canonicalization; component dimensions and factorization remain unchanged.
-digest = "43e4e539a1b17eef98756fa5f3aeb026208b6527"
+# Reviewed 2026-10-12: Capability feature names and formatting are updated;
+# the reviewed implementation and data contracts are unchanged.
+digest = "026cfab08c153e267367672d0813462e81ff4807"
 
 [[section.note]]
 id = "spenso-architecture"
@@ -388,7 +406,9 @@ anchor = "pub trait TensorStructure {"
 # slot-order, index-matching, and coordinate contracts explicit in Rustdoc.
 # Reviewed 2026-09-14: the note distinguishes canonical layouts from pending
 # index permutations and records backend features and portable attachments.
-digest = "a1af2993b3d34be7a209019820060d2215aa7eef"
+# Reviewed 2026-10-12: Capability feature names and formatting are updated;
+# the reviewed implementation and data contracts are unchanged.
+digest = "9385506a01703431293c49f82c1ff578d299ab7e"
 
 [[section.note.scope]]
 path = "crates/spenso/src/tensors/data.rs"
@@ -396,7 +416,9 @@ symbol = "spenso::tensors::data::DataTensor"
 anchor = "pub enum DataTensor<T, I = OrderedStructure> {"
 # Reviewed 2026-09-14: payload ownership is unchanged; canonical layouts and
 # explicit storage reindexing replace the previous permuted wrapper.
-digest = "f0e8de6af46e1464919245b04739bb6c8fb20eb2"
+# Reviewed 2026-10-12: Capability feature names and formatting are updated;
+# the reviewed implementation and data contracts are unchanged.
+digest = "562c61b02f9ebd28e629be30dbbb7dab09a3e919"
 
 [[section.note.scope]]
 path = "crates/spenso/src/contraction.rs"
@@ -420,7 +442,9 @@ anchor = "pub struct Network<S, LibKey, FunKey, Aind = AbstractIndex> {"
 # without changing network ownership, scheduling, or factor preservation.
 # Reviewed 2026-10-01: The added comment explains existing scalar extraction before summing closed lazy tensors; documented that leaf-order invariant.
 # Reviewed 2026-10-06: basic profiling retains counters, timers and slow-operation diagnostics; detailed execution and merge traces require verbose mode.
-digest = "743afa27f2788c06b61f6af9fa540ed78a1c2b5c"
+# Reviewed 2026-10-12: Capability feature names and formatting are updated;
+# the reviewed implementation and data contracts are unchanged.
+digest = "0978dc338492b56f077d8e96923da176e2013df5"
 
 [[section.note.scope]]
 path = "crates/spenso/src/network/parsing/mod.rs"
@@ -462,7 +486,10 @@ symbol = "idenso::representations::initialize"
 anchor = "pub fn initialize() {"
 # Reviewed 2026-09-14: removed Python exposure of initialize; community-module
 # initialization still registers the same representations.
-digest = "6401f1b81469292511f6018715a4033b3ff38136"
+# Reviewed 2026-10-12: Bincode derives are always available after removing the
+# redundant capability flag; representation types and wire encodings are
+# unchanged.
+digest = "ac418eb7016701a0e0bda4e300cc2a3b415e1ca1"
 
 [[section.note.scope]]
 path = "crates/idenso/src/lib.rs"
@@ -472,7 +499,9 @@ anchor = "pub trait IndexTooling {"
 # documented; symbolic tensor and rewrite ownership remain unchanged.
 # Reviewed 2026-09-17: Documented factorized index canonicalization and symbolic-dimension materialization.
 # Reviewed 2026-10-05: documented reversible formal-dimension labels around index canonicalization; component dimensions and factorization remain unchanged.
-digest = "43e4e539a1b17eef98756fa5f3aeb026208b6527"
+# Reviewed 2026-10-12: Capability feature names and formatting are updated;
+# the reviewed implementation and data contracts are unchanged.
+digest = "026cfab08c153e267367672d0813462e81ff4807"
 
 [[section.note.scope]]
 path = "crates/idenso/src/cook.rs"
@@ -555,7 +584,10 @@ anchor = "pub struct HedgeGraph<E, V, H = NoData, S: NodeStorage<NodeData = V> =
 # No architecture impact: the 2026-08-21 APIDOC-002 review corrected the
 # public graph-invariant and DOT parsing documentation without changing behavior.
 # Reviewed 2026-09-17: Documented dense edge join ownership and preserved node/slot/flow invariants.
-digest = "93c8f6b2494a3745658b2e22a9d02644d1d4c33f"
+# Reviewed 2026-10-12: The default nodestore documentation now states the
+# existing Vec/forest feature selection; graph storage and algorithms are
+# unchanged.
+digest = "ab9af84a52f5a11adfd57083fb87d524b28bdd55"
 
 [[section.note.scope]]
 path = "crates/linnet/src/half_edge/involution.rs"
@@ -623,7 +655,10 @@ anchor = "pub struct Vakint {"
 # Reviewed 2026-10-01: Documented explicit zero masses, nonzero scale selection, withheld AlphaLoop massless representation, and numeric complex serialization.
 # Reviewed 2026-10-04: vakint-architecture.typ documents the certified six-term
 # tadpole exception and structural, namespace-preserving Laurent extraction.
-digest = "11835407d531a05d9c52134e02d4cfceab32e209"
+# Reviewed 2026-10-12: Embedded FORM sources and template substitution use
+# small static tables and the local renderer; solver dispatch and integral
+# algorithms are unchanged.
+digest = "7766f7350df0de625027faa69123030fcc83df59"
 
 [[section.note.scope]]
 path = "crates/vakint/src/topologies.rs"
@@ -632,7 +667,9 @@ anchor = "pub fn match_topologies_to_user_input("
 # Reviewed 2026-09-14: the new solution-set API still requires one fully
 # determined loop-basis solution; matching and replacement mappings are unchanged.
 # Reviewed 2026-10-01: Documented registered MATAD MM0 and M00 one-scale sunset topologies.
-digest = "544767ea364c0fd212718098d6f6dc285be7bcb6"
+# Reviewed: the main CI repair removes a one-element loop while preserving
+# the exact guarded replacement and topology-matching behavior.
+digest = "f4efb1593e4f4ca2c4290f913a3629e5f8512a94"
 
 [[section.note.scope]]
 path = "crates/vakint/src/graph.rs"
@@ -647,7 +684,9 @@ anchor = "pub struct VakintWrapper {"
 # No architecture impact: the 2026-08-21 APIDOC-005 review made the Python
 # wrapper contracts and required tool boundaries explicit without changing behavior.
 # Reviewed 2026-09-17: Documented tensor projection, epsilon depth, opaque spin slots, and complex numerical parameters.
-digest = "4a02d93233deb0d268682bf9c0ce6d2f2499a762"
+# Reviewed 2026-10-12: Capability feature names and formatting are updated;
+# the reviewed implementation and data contracts are unchanged.
+digest = "d2483b4ed0df187a8fb6997c70122cbe9887a8e6"
 
 [[section]]
 id = "proposals"
@@ -997,7 +1036,10 @@ end_anchor = "# Exercise the embedded Typst watcher"
 # library archive and uses the common optimized profile, compatible features
 # and interpreter. Python inventories and extension ABI contexts stay separate;
 # the native catalogue anchor is optional outside reference generation.
-digest = "bd0d477a53cab0ed65e2c5cc9637d1e1969155ab"
+# Reviewed 2026-10-12: ABI/Python capability names are updated and
+# watcher/server checks are grouped under watch; reusable compiler and
+# terminal publication boundaries are retained.
+digest = "2c7dc06eb8221eb03f5d2925fbea9dc4fd61536d"
 
 [[section.note.scope]]
 path = "nix/documentation.nix"
@@ -1042,7 +1084,10 @@ end_anchor = "workspacePackageExtraSourceRootsForSourcePackages ="
 # No-impact attestation 2026-09-29: Clinnet's runtime test sources add the
 # documentation theme imported by the portal edge style its Typst tests render.
 # Reviewed 2026-10-01: Retained main source ownership and added embedded GL256/GL262 and RQFT test fixtures; ci.typ documents their cache boundaries.
-digest = "eb51e18942ce44deebdee52795f9ed29140bdb2b"
+# Reviewed 2026-10-12: Package source ownership now includes the shared
+# Linnest asset builder used by GammaLoop and Clinnet; the existing per-
+# package filtering boundary is retained.
+digest = "4b54f528d1200ddef5c742c27c80c825bb042022"
 
 [[section.note.scope]]
 path = "nix/documentation.nix"
@@ -1058,7 +1103,12 @@ end_anchor = "\nin\n{\n  inherit"
 # the reusable Cargo producer inputs remain unchanged.
 # No-impact attestation 2026-09-29: the rendered-SVG check also compares the
 # two GammaLoop construction marks; the Cargo producer boundary is unchanged.
-digest = "1df6d6b51f04ac78e9512f0223a73c9761ac732e"
+# Reviewed 2026-10-12: ABI/Python capability names are updated and
+# watcher/server checks are grouped under watch; reusable compiler and
+# terminal publication boundaries are retained.
+# Reviewed 2026-10-12: documentation validation runs the feature-enabled
+# GammaLoop and Linnet exporter tests; reusable producer inputs are unchanged.
+digest = "6d17c6abcbea74e222f6adaf0f3a74f4eaac309d"
 
 [[section.note.scope]]
 path = "nix/rust-workspace.nix"
@@ -1084,7 +1134,10 @@ symbol = "alphal00p_docs_builder::typst_render::PersistentTypstRenderer"
 anchor = "pub(crate) struct PersistentTypstRenderer {"
 end_anchor = "    #[cfg(test)]\n    mod tests {"
 # Reviewed feature-notice deduplication; source diagnostics still emit every time.
-digest = "9e60895405ff95f51fc80b64c90ec08fcb124f72"
+# Reviewed 2026-10-12: The persistent renderer is owned by the opt-in watch
+# capability and its unreachable disabled stub is removed; CLI rendering and
+# publication behavior are unchanged.
+digest = "61fa327720910af549fc9613c757c2a534b975f2"
 
 [[section.note.scope]]
 path = "crates/alphal00p-docs-builder/src/watch.rs"
@@ -1154,7 +1207,10 @@ end_anchor = "!self.portal.title.trim().is_empty()"
 # Reviewed 2026-09-14: verified ranges hash exact selected content. Watch
 # generations warn on digest drift while check/build still reject it; malformed
 # scopes, missing symbols, and invalid metadata remain errors in every mode.
-digest = "947d9b81a8cf58b29e83da1ccb75fb015517c0eb"
+# Reviewed 2026-10-12: Reviewed validation code only gains equivalent braced
+# error arms; registry schema, source-format enforcement and ownership rules
+# are unchanged.
+digest = "63e44b7c2e03ae63fbf549882c9ba0cdcb7439e9"
 
 [[section.note]]
 id = "documentation-improvement-plan"

@@ -11,10 +11,7 @@ use tracing_subscriber::{
     registry::LookupSpan,
 };
 
-#[cfg_attr(
-    feature = "python_api",
-    pyo3::pyclass(from_py_object, get_all, set_all)
-)]
+#[cfg_attr(feature = "python", pyo3::pyclass(from_py_object, get_all, set_all))]
 #[repr(usize)]
 #[derive(
     Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug, Hash, Serialize, Deserialize, Default,
@@ -29,10 +26,7 @@ pub enum LogFormat {
     None,
 }
 
-#[cfg_attr(
-    feature = "python_api",
-    pyo3::pyclass(from_py_object, get_all, set_all)
-)]
+#[cfg_attr(feature = "python", pyo3::pyclass(from_py_object, get_all, set_all))]
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 #[serde(default, deny_unknown_fields)]
 pub struct LogStyle {

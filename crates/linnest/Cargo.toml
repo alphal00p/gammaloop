@@ -13,7 +13,7 @@ crate-type = ["cdylib", "rlib"]
 [dependencies]
 ciborium = "0.2.2"
 dot-parser = { workspace = true }
-linnet = { workspace = true, features = ["drawing", "nodestore-vec", "rkyv", "serde"] }
+linnet = { workspace = true, features = ["drawing", "rkyv", "serde"] }
 rkyv = { version = "0.7", features = ["validation"] }
 serde = { version = "1.0", features = ["derive"] }
 self_cell = { workspace = true }
@@ -23,8 +23,9 @@ figment = "0.10.19"
 getrandom = { version = "0.2", default-features = false, features = ["custom"] }
 rand = "0.8.5"
 thiserror = { workspace = true }
-wasm-minimal-protocol = "0.2.0"
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+wasm-minimal-protocol = { version = "0.2.0", optional = true }
 
 [features]
-custom = []
-typst-plugin = ["custom"]
+typst-plugin = ["dep:wasm-minimal-protocol"]

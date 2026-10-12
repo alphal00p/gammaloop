@@ -1,4 +1,4 @@
-#[cfg(not(feature = "python_stubgen"))]
+#[cfg(not(feature = "python-stubs"))]
 use pyo3::create_exception;
 use pyo3::{
     Bound, PyResult,
@@ -7,9 +7,9 @@ use pyo3::{
     types::{PyModule, PyModuleMethods},
     wrap_pyfunction,
 };
-#[cfg(feature = "python_stubgen")]
+#[cfg(feature = "python-stubs")]
 use pyo3_stub_gen::create_exception;
-#[cfg(feature = "python_stubgen")]
+#[cfg(feature = "python-stubs")]
 use pyo3_stub_gen::derive::{
     gen_stub_pyclass, gen_stub_pyclass_enum, gen_stub_pyfunction, gen_stub_pymethods,
 };
@@ -34,7 +34,7 @@ create_exception!(
 ///
 /// Available values are `RepeatedPairs`, which only moves matching matrices together, and
 /// `Canonical`, which canonically orders the complete open chain.
-#[cfg_attr(feature = "python_stubgen", gen_stub_pyclass_enum)]
+#[cfg_attr(feature = "python-stubs", gen_stub_pyclass_enum)]
 #[pyclass(
     frozen,
     from_py_object,
@@ -70,7 +70,7 @@ impl From<GammaChainOrdering> for PyGammaChainOrdering {
 }
 
 /// Immutable configuration for gamma-chain simplification.
-#[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
+#[cfg_attr(feature = "python-stubs", gen_stub_pyclass)]
 #[pyclass(
     frozen,
     from_py_object,
@@ -103,7 +103,7 @@ impl PyGammaSimplifySettings {
     }
 }
 
-#[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
+#[cfg_attr(feature = "python-stubs", gen_stub_pymethods)]
 #[pymethods]
 impl PyGammaSimplifySettings {
     /// Configure gamma-chain ordering, trace evaluation, and the optional 4D three-gamma identity.
@@ -167,7 +167,7 @@ impl PyGammaSimplifySettings {
 }
 
 /// Immutable configuration for color simplification.
-#[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
+#[cfg_attr(feature = "python-stubs", gen_stub_pyclass)]
 #[pyclass(
     frozen,
     from_py_object,
@@ -185,7 +185,7 @@ impl PyColorSimplifySettings {
     }
 }
 
-#[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
+#[cfg_attr(feature = "python-stubs", gen_stub_pymethods)]
 #[pymethods]
 impl PyColorSimplifySettings {
     /// Configure color-trace evaluation, cross-chain Fierz expansion, and invariant substitution.
@@ -231,7 +231,7 @@ impl PyColorSimplifySettings {
 }
 
 /// Immutable configuration for rewriting color invariants into a Casimir basis.
-#[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
+#[cfg_attr(feature = "python-stubs", gen_stub_pyclass)]
 #[pyclass(
     frozen,
     from_py_object,
@@ -249,7 +249,7 @@ impl PyColorCasimirSettings {
     }
 }
 
-#[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
+#[cfg_attr(feature = "python-stubs", gen_stub_pymethods)]
 #[pymethods]
 impl PyColorCasimirSettings {
     /// Configure the SU(N) dimension and fundamental-index normalizations used by Casimir rewriting.
@@ -282,7 +282,7 @@ impl PyColorCasimirSettings {
 }
 
 #[cfg_attr(
-    feature = "python_stubgen",
+    feature = "python-stubs",
     gen_stub_pyfunction(module = "symbolica.community.idenso")
 )]
 #[pyfunction]
@@ -292,7 +292,7 @@ pub fn collect_gamma_chains(expression: &PythonExpression) -> PythonExpression {
 }
 
 #[cfg_attr(
-    feature = "python_stubgen",
+    feature = "python-stubs",
     gen_stub_pyfunction(module = "symbolica.community.idenso")
 )]
 #[pyfunction]
@@ -302,7 +302,7 @@ pub fn simplify_gamma0(expression: &PythonExpression) -> PythonExpression {
 }
 
 #[cfg_attr(
-    feature = "python_stubgen",
+    feature = "python-stubs",
     gen_stub_pyfunction(module = "symbolica.community.idenso")
 )]
 #[pyfunction]
@@ -318,7 +318,7 @@ pub fn simplify_gamma_conjugate(expression: &PythonExpression) -> PyResult<Pytho
 }
 
 #[cfg_attr(
-    feature = "python_stubgen",
+    feature = "python-stubs",
     gen_stub_pyfunction(module = "symbolica.community.idenso")
 )]
 #[pyfunction]
@@ -328,7 +328,7 @@ pub fn simplify_epsilon(expression: &PythonExpression) -> PythonExpression {
 }
 
 #[cfg_attr(
-    feature = "python_stubgen",
+    feature = "python-stubs",
     gen_stub_pyfunction(module = "symbolica.community.idenso")
 )]
 #[pyfunction(signature = (expression, *, fundamental, adjoint, settings = None))]
@@ -355,7 +355,7 @@ pub fn to_color_casimir(
 }
 
 #[cfg_attr(
-    feature = "python_stubgen",
+    feature = "python-stubs",
     gen_stub_pyfunction(module = "symbolica.community.idenso")
 )]
 #[pyfunction]
@@ -365,7 +365,7 @@ pub fn to_cof_dimension_invariants(expression: &PythonExpression) -> PythonExpre
 }
 
 #[cfg_attr(
-    feature = "python_stubgen",
+    feature = "python-stubs",
     gen_stub_pyfunction(module = "symbolica.community.idenso")
 )]
 #[pyfunction]
@@ -375,7 +375,7 @@ pub fn collect_color(expression: &PythonExpression) -> PythonExpression {
 }
 
 #[cfg_attr(
-    feature = "python_stubgen",
+    feature = "python-stubs",
     gen_stub_pyfunction(module = "symbolica.community.idenso")
 )]
 #[pyfunction]
@@ -385,7 +385,7 @@ pub fn collect_color_constants(expression: &PythonExpression) -> PythonExpressio
 }
 
 #[cfg_attr(
-    feature = "python_stubgen",
+    feature = "python-stubs",
     gen_stub_pyfunction(module = "symbolica.community.idenso")
 )]
 #[pyfunction]

@@ -3,7 +3,7 @@ use pyo3::{
     types::{PyModule, PyModuleMethods},
     wrap_pyfunction,
 };
-#[cfg(feature = "python_stubgen")]
+#[cfg(feature = "python-stubs")]
 use pyo3_stub_gen::derive::gen_stub_pyfunction;
 use symbolica::{
     api::python::PythonExpression,
@@ -22,7 +22,7 @@ pub(super) fn python_terms(terms: Vec<(Atom, Atom)>) -> Vec<PythonTerm> {
 }
 
 #[cfg_attr(
-    feature = "python_stubgen",
+    feature = "python-stubs",
     gen_stub_pyfunction(module = "symbolica.community.idenso")
 )]
 #[pyfunction]

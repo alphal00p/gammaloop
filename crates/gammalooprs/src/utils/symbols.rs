@@ -282,14 +282,9 @@ impl GammaloopSymbols {
         {
             return arg.into_owned();
         }
-        arg.replace(self.sign_theta(W_.a_))
+        let mut collected = arg
+            .replace(self.sign_theta(W_.a_))
             .with(Symbol::IF.call(Atom::var(W_.a_) + 1))
-            // A generalized residue-map delta is represented as
-            // IF(current_id-key, 0, 1). Move the selected branch body inside
-            // that conditional so an inactive key is discarded before any of
-            // its selector-local inverses are evaluated.
-            .replace(Symbol::IF.call_args([Atom::var(W_.a_), Atom::Zero, Atom::one()]) * W_.b___)
-            .with(Symbol::IF.call_args([Atom::var(W_.a_), Atom::Zero, Atom::var(W_.b___)]))
             .replace(Symbol::IF.call(W_.a_) * Symbol::IF.call(W_.b_))
             .repeat()
             .with(Symbol::IF.call(W_.a_ * W_.b_))
@@ -298,15 +293,95 @@ impl GammaloopSymbols {
             .replace(Symbol::IF.call_args([Atom::var(W_.a_), Atom::Zero]))
             .with(Symbol::IF.call_args([Atom::var(W_.a_), Atom::one(), Atom::Zero]))
             .replace(Symbol::IF.call_args([Atom::var(W_.a_)]))
-            .with(Symbol::IF.call_args([Atom::var(W_.a_), Atom::one(), Atom::Zero]))
-            // Tensor contractions are complete here. Combine scalar contributions
-            // selected by the same key while keeping their complete bodies lazy.
-            .replace(
-                Symbol::IF.call_args([Atom::var(W_.a_), Atom::Zero, Atom::var(W_.b_)])
-                    + Symbol::IF.call_args([Atom::var(W_.a_), Atom::Zero, Atom::var(W_.c_)]),
-            )
-            .repeat()
-            .with(Symbol::IF.call_args([Atom::var(W_.a_), Atom::Zero, Atom::var(W_.b_) + W_.c_]))
+            .with(Symbol::IF.call_args([Atom::var(W_.a_), Atom::one(), Atom::Zero]));
+        // Tensor contractions are complete here. Residue-map deltas use
+        // IF(current_id-key, 0, body). Move complete scalar weights into their
+        // selected arms before merging same-key contributions. This
+        // keeps inactive inverses lazy and gives the evaluator one shared region.
+        // Collection can expose more weighted guards, so repeat until stable.
+        collected.repeat_map(Self::collect_orientation_if_terms);
+        collected
+    }
+
+    /// Absorb scalar weights into zero-arm guards without expanding products,
+    /// then merge same-key terms into one `IF(key, 0, sum of bodies)`. Unlike a
+    /// sweep of `.replace(IF(a_, 0, b_) + IF(a_, 0, c_)).with(IF(a_, 0, b_ + c_))`,
+    /// which merges one pair per sum, this merges all of them, so repeating it
+    /// does not retraverse the whole expression for every pair of a nested sum.
+    fn collect_orientation_if_terms(expr: AtomView<'_>) -> Atom {
+        fn key_and_body(term: AtomView<'_>) -> Option<(AtomView<'_>, AtomView<'_>)> {
+            let AtomView::Fun(call) = term else {
+                return None;
+            };
+            let (key, zero, body) = call.iter().collect_tuple()?;
+            (call.get_symbol() == Symbol::IF && zero == 0).then_some((key, body))
+        }
+
+        expr.replace_map(|term, _, out| {
+            if let AtomView::Fun(call) = term
+                && call.get_symbol() != Symbol::IF
+            {
+                // Function arguments can be literal parameter or alias tags.
+                // Keep the complete call as a factor so its lookup key survives.
+                out.set_from_view(&term);
+                return;
+            }
+            if let AtomView::Mul(product) = term {
+                let Some((key, _)) = product.iter().find_map(key_and_body) else {
+                    return;
+                };
+                // Same-key factors belong to one live arm. Different keys keep
+                // their own guards, and functions/powers remain complete factors.
+                let body = Atom::mul_many(product.iter().map(|factor| {
+                    key_and_body(factor)
+                        .filter(|(factor_key, _)| *factor_key == key)
+                        .map_or(factor, |(_, body)| body)
+                }));
+                let guarded = Symbol::IF.call_args([key, Atom::Zero.as_view(), body.as_view()]);
+                **out = Self::collect_orientation_if_terms(guarded.as_view());
+                return;
+            }
+            let AtomView::Add(sum) = term else {
+                return;
+            };
+            let mut groups = HashMap::<_, Vec<_>>::new();
+            for term in sum.iter() {
+                if let Some((key, _)) = key_and_body(term) {
+                    groups.entry(key).or_default().push(term);
+                }
+            }
+            groups.retain(|_, group| group.len() > 1);
+            if groups.is_empty() {
+                return;
+            }
+            let mut terms = sum
+                .iter()
+                .filter(|&term| {
+                    key_and_body(term).is_none_or(|(key, _)| !groups.contains_key(&key))
+                })
+                .map(AtomOrView::from)
+                .collect_vec();
+            for (key, mut group) in groups {
+                // Add bodies in the order of that pairwise replacement, which
+                // matches the first two same-key terms of the sorted sum, so
+                // floating-point coefficients round identically.
+                group.sort_by(|a, b| b.get_data().cmp(a.get_data()));
+                let mut group = group.into_iter().map(AtomOrView::from).collect_vec();
+                while group.len() > 1 {
+                    let pair = [group.pop().unwrap(), group.pop().unwrap()];
+                    let bodies = pair
+                        .iter()
+                        .map(|term| key_and_body(term.as_view()).unwrap().1);
+                    let body = Atom::add_many(bodies);
+                    let merged = Symbol::IF.call_args([key, Atom::Zero.as_view(), body.as_view()]);
+                    let data = merged.as_view().get_data();
+                    let at = group.partition_point(|term| term.as_view().get_data() > data);
+                    group.insert(at, merged.into());
+                }
+                terms.extend(group);
+            }
+            **out = Self::collect_orientation_if_terms(Atom::add_many(terms).as_view());
+        })
     }
 
     pub fn den<'a>(
@@ -1201,29 +1276,6 @@ pub static GS, GS_INNER: GammaloopSymbols = || GammaloopSymbols {
 }
 
 impl GammaloopSymbols {
-    pub fn integrand<O: GraphOrientation>(
-        &self,
-        i: usize,
-        residue_map_id: three_dimensional_reps::expression::OrientationID,
-        orientation: &O,
-    ) -> Atom {
-        let args = orientation
-            .orientation()
-            .iter()
-            .map(|(_, ori)| match ori {
-                Orientation::Default => Atom::num(1),
-                Orientation::Reversed => Atom::num(-1),
-                Orientation::Undirected => Atom::num(0),
-            })
-            .collect_vec();
-
-        FunctionBuilder::new(self.integrand)
-            .add_arg(i)
-            .add_arg(residue_map_id.0)
-            .add_args(&args)
-            .finish()
-    }
-
     pub fn wrap_tree_denoms<'a>(&self, arg: impl Into<AtomOrView<'a>>) -> Atom {
         self.tree_denom_wrapper.call_args([arg.into().as_view()])
     }
@@ -1914,6 +1966,135 @@ mod tests {
         ) + &unrelated;
         let expected =
             Symbol::IF.call_args([condition, Atom::Zero, Atom::add_many(bodies)]) + unrelated;
+        let collected = GS.collect_orientation_if(expression);
+        assert_eq!(collected, expected);
+        assert_eq!(GS.collect_orientation_if(collected.clone()), collected);
+    }
+
+    #[test]
+    fn orientation_collection_merges_nested_same_key_contributions() {
+        let (key, a, b, c, d, w) = symbol!(
+            "nested_selector_key",
+            "nested_selector_a",
+            "nested_selector_b",
+            "nested_selector_c",
+            "nested_selector_d",
+            "nested_selector_w"
+        );
+        let select = |offset: i64, body: Atom| {
+            Symbol::IF.call_args([Atom::var(key) - offset, Atom::Zero, body])
+        };
+        // Same-key siblings inside a factorized sum merge where they are, and
+        // a merged body merges the same-key siblings it now contains.
+        let inner = select(1, select(2, Atom::var(a)))
+            + select(1, select(2, Atom::var(b)))
+            + select(3, Atom::var(c));
+        let expression = Atom::var(w) * (Atom::var(d) + Atom::var(w) * inner)
+            + select(1, Atom::var(c))
+            + select(1, Atom::var(d));
+        let expected = Atom::var(w)
+            * (Atom::var(d)
+                + Atom::var(w)
+                    * (select(1, select(2, Atom::var(a) + b)) + select(3, Atom::var(c))))
+            + select(1, Atom::var(c) + d);
+        let collected = GS.collect_orientation_if(expression);
+        assert_eq!(collected, expected);
+        assert_eq!(GS.collect_orientation_if(collected.clone()), collected);
+    }
+
+    #[test]
+    fn orientation_collection_merges_weighted_factorized_contributions() {
+        let (key, a, b, c, d, x, alias) = symbol!(
+            "weighted_selector_key",
+            "weighted_selector_a",
+            "weighted_selector_b",
+            "weighted_selector_c",
+            "weighted_selector_d",
+            "weighted_selector_x",
+            "weighted_selector_alias"
+        );
+        let condition = Atom::var(key) - 4;
+        let select = |body: Atom| Symbol::IF.call_args([condition.clone(), Atom::Zero, body]);
+        let numerator = (Atom::var(a) + b).pow(3);
+        let weight = (Atom::var(c) + d).pow(2);
+        let handle = alias.call(7);
+        let expression = select(numerator.clone()) * &weight
+            + Atom::i() * &handle * select(Atom::var(x).pow(-1));
+        let expected = select(numerator * weight + Atom::i() * &handle * Atom::var(x).pow(-1));
+        let collected = GS.collect_orientation_if(expression);
+        assert_eq!(collected, expected);
+        assert!(collected.contains(&handle));
+        assert_eq!(GS.collect_orientation_if(collected.clone()), collected);
+    }
+
+    #[test]
+    fn orientation_collection_reaches_nested_weighted_guards() {
+        let (key, a, b, c, x, y, z, w) = symbol!(
+            "nested_weighted_key",
+            "nested_weighted_a",
+            "nested_weighted_b",
+            "nested_weighted_c",
+            "nested_weighted_x",
+            "nested_weighted_y",
+            "nested_weighted_z",
+            "nested_weighted_w"
+        );
+        let select = |body: Atom| Symbol::IF.call_args([Atom::var(key), Atom::Zero, body]);
+        let expression = Atom::var(w) * (select(Atom::var(a)) * x + select(Atom::var(b)) * y)
+            + select(Atom::var(c)) * z;
+        let expected =
+            select(Atom::var(w) * (Atom::var(a) * x + Atom::var(b) * y) + Atom::var(c) * z);
+        let collected = GS.collect_orientation_if(expression);
+        assert_eq!(collected, expected);
+        assert_eq!(GS.collect_orientation_if(collected.clone()), collected);
+    }
+
+    #[test]
+    fn orientation_collection_preserves_distinct_weighted_conditions() {
+        let (key, a, b, c, x, y, z) = symbol!(
+            "distinct_weighted_key",
+            "distinct_weighted_a",
+            "distinct_weighted_b",
+            "distinct_weighted_c",
+            "distinct_weighted_x",
+            "distinct_weighted_y",
+            "distinct_weighted_z"
+        );
+        let select = |offset: i64, body: Atom| {
+            Symbol::IF.call_args([Atom::var(key) - offset, Atom::Zero, body])
+        };
+        let ordinary = Symbol::IF.call_args([Atom::var(key), Atom::var(b), Atom::var(c)]);
+        let expression = select(1, Atom::var(a)) * x + select(2, Atom::var(b)) * y + &ordinary * z;
+        let expected = select(1, Atom::var(a) * x) + select(2, Atom::var(b) * y) + ordinary * z;
+        let collected = GS.collect_orientation_if(expression);
+        assert_eq!(collected, expected);
+        assert_eq!(GS.collect_orientation_if(collected.clone()), collected);
+    }
+
+    #[test]
+    fn orientation_collection_preserves_literal_function_tags() {
+        let (key, a, w, alias) = symbol!(
+            "opaque_weighted_key",
+            "opaque_weighted_a",
+            "opaque_weighted_w",
+            "opaque_weighted_alias"
+        );
+        let tag = Symbol::IF.call_args([Atom::var(key), Atom::Zero, Atom::var(a)]) * Atom::var(w);
+        let handle = alias.call(tag);
+        assert_eq!(GS.collect_orientation_if(handle.clone()), handle);
+    }
+
+    #[test]
+    fn orientation_collection_combines_same_key_guard_factors() {
+        let (key, a, b, w) = symbol!(
+            "guard_product_key",
+            "guard_product_a",
+            "guard_product_b",
+            "guard_product_w"
+        );
+        let select = |body: Atom| Symbol::IF.call_args([Atom::var(key), Atom::Zero, body]);
+        let expression = select(Atom::var(a)) * select(Atom::var(b)) * w;
+        let expected = select(Atom::var(a) * b * w);
         let collected = GS.collect_orientation_if(expression);
         assert_eq!(collected, expected);
         assert_eq!(GS.collect_orientation_if(collected.clone()), collected);

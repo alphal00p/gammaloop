@@ -14,12 +14,12 @@ use super::{
 use delegate::delegate;
 
 use crate::structure::SlotIndex;
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 use symbolica::atom::Atom;
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 use symbolica_utils::SerializableSymbol;
 
-#[cfg(not(feature = "shadowing"))]
+#[cfg(not(feature = "symbolica"))]
 use serde::{Deserialize, Serialize};
 /// A named structure is a structure with a global name, and a list of slots
 ///
@@ -27,9 +27,9 @@ use serde::{Deserialize, Serialize};
 #[derive(
     Clone, PartialEq, Eq, Default, Hash, bincode_trait_derive::Encode, bincode_trait_derive::Decode,
 )]
-#[cfg_attr(not(feature = "shadowing"), derive(Serialize, Deserialize))]
+#[cfg_attr(not(feature = "symbolica"), derive(Serialize, Deserialize))]
 #[cfg_attr(
-    feature = "shadowing",
+    feature = "symbolica",
     trait_decode(trait = symbolica::state::HasStateMap),
 )]
 pub struct NamedStructure<
@@ -43,7 +43,7 @@ pub struct NamedStructure<
     pub additional_args: Option<Args>,
 }
 
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 pub type AtomStructure<R, A> = NamedStructure<SerializableSymbol, Vec<Atom>, R, A>;
 
 impl<Name, Args, R: RepName, Aind: AbsInd> NamedStructure<Name, Args, R, Aind> {
@@ -225,12 +225,12 @@ impl ArgDisplayMarker for u16 {}
 impl ArgDisplayMarker for u32 {}
 impl ArgDisplayMarker for u64 {}
 
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 impl ArgDisplayMarker for symbolica::atom::Atom {}
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 impl ArgDisplayMarker for symbolica::atom::Symbol {}
 
-#[cfg(feature = "shadowing")]
+#[cfg(feature = "symbolica")]
 impl ArgDisplay for Vec<symbolica::atom::Atom> {
     fn arg_display(&self) -> String {
         self.iter()
