@@ -88,7 +88,8 @@ pub struct EvaluatorSettings {
     /// Build one evaluator for the sum of all contributions instead of separate evaluators.
     #[serde(default, skip_serializing_if = "is_false")]
     pub summed: bool,
-    /// Represent a summed evaluator through a shared Symbolica function map.
+    /// Sum all orientations, retaining each selected orientation as a separate
+    /// Symbolica function-map alias instead of merging them into one expression.
     #[serde(default, skip_serializing_if = "is_false")]
     pub summed_function_map: bool,
     /// Compile the lowered evaluator using the configured generation compilation backend.

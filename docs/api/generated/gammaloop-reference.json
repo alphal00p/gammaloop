@@ -17934,7 +17934,7 @@
     {
       "path": "cli.global.generation.evaluator.summed_function_map",
       "value_type": "boolean",
-      "description": "Represent a summed evaluator through a shared Symbolica function map.",
+      "description": "Sum all orientations, retaining each selected orientation as a separate\nSymbolica function-map alias instead of merging them into one expression.",
       "required": false,
       "default": false,
       "possible_values": []
