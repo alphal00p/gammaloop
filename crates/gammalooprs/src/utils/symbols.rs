@@ -282,7 +282,8 @@ impl GammaloopSymbols {
         {
             return arg.into_owned();
         }
-        arg.replace(self.sign_theta(W_.a_))
+        let mut collected = arg
+            .replace(self.sign_theta(W_.a_))
             .with(Symbol::IF.call(Atom::var(W_.a_) + 1))
             // A generalized residue-map delta is represented as
             // IF(current_id-key, 0, 1). Move the selected branch body inside
@@ -298,15 +299,70 @@ impl GammaloopSymbols {
             .replace(Symbol::IF.call_args([Atom::var(W_.a_), Atom::Zero]))
             .with(Symbol::IF.call_args([Atom::var(W_.a_), Atom::one(), Atom::Zero]))
             .replace(Symbol::IF.call_args([Atom::var(W_.a_)]))
-            .with(Symbol::IF.call_args([Atom::var(W_.a_), Atom::one(), Atom::Zero]))
-            // Tensor contractions are complete here. Combine scalar contributions
-            // selected by the same key while keeping their complete bodies lazy.
-            .replace(
-                Symbol::IF.call_args([Atom::var(W_.a_), Atom::Zero, Atom::var(W_.b_)])
-                    + Symbol::IF.call_args([Atom::var(W_.a_), Atom::Zero, Atom::var(W_.c_)]),
-            )
-            .repeat()
-            .with(Symbol::IF.call_args([Atom::var(W_.a_), Atom::Zero, Atom::var(W_.b_) + W_.c_]))
+            .with(Symbol::IF.call_args([Atom::var(W_.a_), Atom::one(), Atom::Zero]));
+        // Tensor contractions are complete here. Combine scalar contributions
+        // selected by the same key while keeping their complete bodies lazy.
+        // Merging can make keys that contain sums equal, so repeat until stable.
+        collected.repeat_map(Self::merge_same_key_if_terms);
+        collected
+    }
+
+    /// Merge the bare `IF(key, 0, body)` terms of each sum that share a key into
+    /// one `IF(key, 0, sum of bodies)`, before visiting the sum's terms. Unlike a
+    /// sweep of `.replace(IF(a_, 0, b_) + IF(a_, 0, c_)).with(IF(a_, 0, b_ + c_))`,
+    /// which merges one pair per sum, this merges all of them, so repeating it
+    /// does not retraverse the whole expression for every pair of a nested sum.
+    fn merge_same_key_if_terms(expr: AtomView<'_>) -> Atom {
+        fn key_and_body(term: AtomView<'_>) -> Option<(AtomView<'_>, AtomView<'_>)> {
+            let AtomView::Fun(call) = term else {
+                return None;
+            };
+            let (key, zero, body) = call.iter().collect_tuple()?;
+            (call.get_symbol() == Symbol::IF && zero == 0).then_some((key, body))
+        }
+
+        expr.replace_map(|term, _, out| {
+            let AtomView::Add(sum) = term else {
+                return;
+            };
+            let mut groups = HashMap::<_, Vec<_>>::new();
+            for term in sum.iter() {
+                if let Some((key, _)) = key_and_body(term) {
+                    groups.entry(key).or_default().push(term);
+                }
+            }
+            groups.retain(|_, group| group.len() > 1);
+            if groups.is_empty() {
+                return;
+            }
+            let mut terms = sum
+                .iter()
+                .filter(|&term| {
+                    key_and_body(term).is_none_or(|(key, _)| !groups.contains_key(&key))
+                })
+                .map(AtomOrView::from)
+                .collect_vec();
+            for (key, mut group) in groups {
+                // Add bodies in the order of that pairwise replacement, which
+                // matches the first two same-key terms of the sorted sum, so
+                // floating-point coefficients round identically.
+                group.sort_by(|a, b| b.get_data().cmp(a.get_data()));
+                let mut group = group.into_iter().map(AtomOrView::from).collect_vec();
+                while group.len() > 1 {
+                    let pair = [group.pop().unwrap(), group.pop().unwrap()];
+                    let bodies = pair
+                        .iter()
+                        .map(|term| key_and_body(term.as_view()).unwrap().1);
+                    let body = Atom::add_many(bodies);
+                    let merged = Symbol::IF.call_args([key, Atom::Zero.as_view(), body.as_view()]);
+                    let data = merged.as_view().get_data();
+                    let at = group.partition_point(|term| term.as_view().get_data() > data);
+                    group.insert(at, merged.into());
+                }
+                terms.extend(group);
+            }
+            **out = Self::merge_same_key_if_terms(Atom::add_many(terms).as_view());
+        })
     }
 
     pub fn den<'a>(
@@ -1914,6 +1970,37 @@ mod tests {
         ) + &unrelated;
         let expected =
             Symbol::IF.call_args([condition, Atom::Zero, Atom::add_many(bodies)]) + unrelated;
+        let collected = GS.collect_orientation_if(expression);
+        assert_eq!(collected, expected);
+        assert_eq!(GS.collect_orientation_if(collected.clone()), collected);
+    }
+
+    #[test]
+    fn orientation_collection_merges_nested_same_key_contributions() {
+        let (key, a, b, c, d, w) = symbol!(
+            "nested_selector_key",
+            "nested_selector_a",
+            "nested_selector_b",
+            "nested_selector_c",
+            "nested_selector_d",
+            "nested_selector_w"
+        );
+        let select = |offset: i64, body: Atom| {
+            Symbol::IF.call_args([Atom::var(key) - offset, Atom::Zero, body])
+        };
+        // Same-key siblings inside a factorized sum merge where they are, and
+        // a merged body merges the same-key siblings it now contains.
+        let inner = select(1, select(2, Atom::var(a)))
+            + select(1, select(2, Atom::var(b)))
+            + select(3, Atom::var(c));
+        let expression = Atom::var(w) * (Atom::var(d) + Atom::var(w) * inner)
+            + select(1, Atom::var(c))
+            + select(1, Atom::var(d));
+        let expected = Atom::var(w)
+            * (Atom::var(d)
+                + Atom::var(w)
+                    * (select(1, select(2, Atom::var(a) + b)) + select(3, Atom::var(c))))
+            + select(1, Atom::var(c) + d);
         let collected = GS.collect_orientation_if(expression);
         assert_eq!(collected, expected);
         assert_eq!(GS.collect_orientation_if(collected.clone()), collected);
