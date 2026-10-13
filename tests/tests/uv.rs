@@ -4963,28 +4963,63 @@ fn massive_top_self_energy_local_os_dispatch_uses_projected_four_d() -> Result<(
 }
 
 #[test]
-fn paper_appendix_b1_os_child_requires_validated_nested_policy() {
+fn paper_appendix_b1_os_child_projects_with_live_parent_momentum() -> Result<()> {
     let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
-    const NAME: &str = "paper_appendix_b1_nested_gluon_self_energy_os";
-    let state_path =
-        get_tests_workspace_path().join(format!("{NAME}_explicit_false_project_local_4d_false"));
-    clean_test(&state_path);
-    let error = local_ct_cli(
+    const PROCESS: &str = "paper_appendix_b1_nested_gluon_self_energy";
+    const INTEGRAND: &str = "deferred_os";
+    let mut cli = local_ct_cli(
         "paper_appendix_b1_nested_gluon_self_energy_os.toml",
-        NAME,
+        "paper_appendix_b1_os_child_projected",
+        false,
+        true,
+        true,
+    )?;
+    assert_generated_local_integrand(&cli, PROCESS, INTEGRAND, 6)?;
+    for momentum in [
+        [19.0, -29.0, 37.0, 11.0, 43.0, -23.0],
+        [41.0, 17.0, -31.0, -13.0, 59.0, 7.0],
+    ] {
+        let value =
+            evaluate_momentum_sample(&mut cli, PROCESS, INTEGRAND, &momentum, None, f64::EPSILON)?;
+        assert!(value.value.re.is_finite() && value.value.im.is_finite());
+    }
+    clean_test(&cli.cli_settings.state.folder);
+    Ok(())
+}
+
+#[test]
+fn paper_appendix_b1_os_child_direct_dispatch_keeps_mixed_prescriptions() -> Result<()> {
+    let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
+    const PROCESS: &str = "paper_appendix_b1_nested_gluon_self_energy";
+    const INTEGRAND: &str = "deferred_os";
+    let cli = local_ct_cli(
+        "paper_appendix_b1_nested_gluon_self_energy_os.toml",
+        "paper_appendix_b1_os_child_direct_dispatch",
         false,
         false,
         false,
-    )
-    .err()
-    .expect("the nested OS fixture must fail before unvalidated forest composition");
-    clean_test(&state_path);
-    let message = format!("{error:#}");
-    assert!(
-        message.contains("on-shell/OS component")
-            && message.contains("nested or disconnected scheme policy"),
-        "unexpected Appendix-B.1 OS error: {message}",
-    );
+    )?;
+    assert_generated_local_integrand(&cli, PROCESS, INTEGRAND, 6)?;
+    assert_selected_local_identifier(
+        &cli,
+        PROCESS,
+        INTEGRAND,
+        ApproximationType::OS,
+        [-6, 6],
+        [6, 21],
+        1,
+    )?;
+    assert_selected_local_identifier(
+        &cli,
+        PROCESS,
+        INTEGRAND,
+        ApproximationType::IR,
+        [-21, 21],
+        [6, 21],
+        1,
+    )?;
+    clean_test(&cli.cli_settings.state.folder);
+    Ok(())
 }
 
 #[test]

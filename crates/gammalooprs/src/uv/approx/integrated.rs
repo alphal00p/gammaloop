@@ -2623,6 +2623,21 @@ mod tests {
 
     use super::*;
 
+    fn exact_one_loop_constants(atom: &Atom) -> Atom {
+        // MATAD's symbolic mode retains Gamma/PolyGamma atoms, whereas AlphaLoop
+        // uses z3. Its numerical constant substitution would approximate zeta(3),
+        // so compare the two backends using only these exact identities. They
+        // cover the Gamma(1+epsilon) expansion needed through epsilon^2 of I2.
+        atom.replace(function!(vakint_symbol!("Gamma"), 1))
+            .with(Atom::one())
+            .replace(function!(vakint_symbol!("PolyGamma"), 0, 1))
+            .with(-Atom::var(vakint_symbol!("EulerGamma")))
+            .replace(function!(vakint_symbol!("PolyGamma"), 1, 1))
+            .with(Atom::var(symbolica::atom::Symbol::PI).pow(2) / Atom::num(6))
+            .replace(function!(vakint_symbol!("PolyGamma"), 2, 1))
+            .with(-Atom::num(2) * Atom::var(vakint_symbol!("z3")))
+    }
+
     #[test]
     fn fixed_momentum_components_have_the_formal_dimensional_wick_projection() {
         test_initialise().unwrap();
@@ -2914,73 +2929,98 @@ mod tests {
     }
 
     #[test]
-    fn physical_on_shell_finite_prefix_keeps_epsilon_for_an_enclosing_pole() -> Result<()> {
+    fn physical_on_shell_finite_prefix_keeps_epsilon_squared_for_two_enclosing_poles() -> Result<()>
+    {
         test_initialise()?;
         let epsilon = Atom::var(GS.dim_epsilon);
-        let settings = vakint::VakintSettings {
-            number_of_terms_in_epsilon_expansion: 4,
-            ..VakintSettings::default().true_settings()
-        };
-        let mut vacuum = vakint::VakintTerm {
-            integral: function!(
-                vakint::symbols::S.topo,
-                function!(vakint_symbol!("I1L"), Atom::var(GS.m_uv_vacuum).pow(2), 2)
-            ),
-            // The independently derived signed OS field remainder, after
-            // stripping its common coupling and (p-slash - m) matrix.
-            numerator: Atom::one() - &epsilon,
-            vectors: vec![("k".into(), 1)],
-        };
-        vacuum.evaluate_integral(crate::utils::vakint()?, &settings)?;
-        let child_expansion = series(
-            &vacuum
-                .numerator
-                .replace(GS.mu_r_sq)
-                .with(Atom::one())
-                .replace(GS.m_uv_vacuum)
-                .with(Atom::one()),
-            2,
-        )?;
-        let child_source = SymbolicTensor::infer_indexed(child_expansion.to_atom())?;
-        let child = IntegratedCts::from_series(&child_source, &child_expansion, 4)?;
         let pi = Atom::var(symbolica::atom::Symbol::PI);
+        let zeta_three = Atom::var(vakint_symbol!("z3"));
         let normalization = Atom::i() / (Atom::num(16) * pi.pow(2));
-        // A subsequent ordinary forest operation supplies its own minus.
-        let parent_pole = -&normalization * epsilon.pow(-1);
-        let finite_child = child.physical_finite_counterterm()?;
-        let complete_source =
-            finite_child.with_checked_expression(finite_child.expression() * &parent_pole)?;
-        let complete = IntegratedCts::from_series(
-            &complete_source,
-            &series(complete_source.expression(), 1)?,
-            8,
-        )?;
-        let premature_source = finite_child.with_checked_expression(
-            finite_child
-                .expression()
-                .replace(GS.dim_epsilon)
-                .with(Atom::Zero)
-                * parent_pole,
-        )?;
-        let prematurely_four_dimensional = IntegratedCts::from_series(
-            &premature_source,
-            &series(premature_source.expression(), 1)?,
-            8,
-        )?;
-        let finite = complete
-            .physical_finite_counterterm()?
-            .expression()
-            .replace(GS.dim_epsilon)
-            .with(Atom::Zero);
-        let expected = -normalization.pow(2) * pi.pow(2) / Atom::num(12);
-        assert!((finite - &expected).expand().is_zero());
-        assert!(!expected.is_zero());
-        assert!(
-            prematurely_four_dimensional
-                .physical_finite_counterterm()?
-                .is_zero(),
-            "dropping the child's epsilon term must lose the nonzero physical finite contribution"
-        );
+        for (backend, evaluation_order) in [
+            (
+                "AlphaLoop",
+                vakint::EvaluationOrder(vec![vakint::EvaluationMethod::AlphaLoop(
+                    vakint::AlphaLoopOptions {
+                        susbstitute_masters: false,
+                    },
+                )]),
+            ),
+            (
+                "MATAD",
+                vakint::EvaluationOrder::matad_only(Some(vakint::MATADOptions {
+                    susbstitute_masters: false,
+                    direct_numerical_substition: false,
+                    ..Default::default()
+                })),
+            ),
+        ] {
+            let settings = vakint::VakintSettings {
+                // A one-loop child times two enclosing poles needs precisely
+                // epsilon^-1, epsilon^0, epsilon^1 and epsilon^2.
+                number_of_terms_in_epsilon_expansion: 4,
+                evaluation_order,
+                ..VakintSettings::default().true_settings()
+            };
+            let mut vacuum = vakint::VakintTerm {
+                integral: function!(
+                    vakint::symbols::S.topo,
+                    function!(vakint_symbol!("I1L"), Atom::var(GS.m_uv_vacuum).pow(2), 2)
+                ),
+                // Before the forest minus V=-(1-epsilon) I2 (p-slash-m).
+                // The signed local counterterm therefore integrates -V.
+                numerator: Atom::one() - &epsilon,
+                vectors: vec![("k".into(), 1)],
+            };
+            vacuum.evaluate_integral(crate::utils::vakint()?, &settings)?;
+            let child_expansion = series(
+                &exact_one_loop_constants(&vacuum.numerator)
+                    .replace(GS.mu_r_sq)
+                    .with(Atom::one())
+                    .replace(GS.m_uv_vacuum)
+                    .with(Atom::one()),
+                2,
+            )?;
+            let child_source = SymbolicTensor::infer_indexed(child_expansion.to_atom())?;
+            let child = IntegratedCts::from_series(&child_source, &child_expansion, 4)?;
+            let finite_child = child.physical_finite_counterterm()?;
+            // log(exp(gamma_E epsilon) Gamma(1+epsilon)) has coefficients
+            // zeta(2)/2 and -zeta(3)/3. At mu=M, the finite addback is
+            // N[1-zeta(2) epsilon/2+(zeta(2)/2+zeta(3)/3) epsilon^2].
+            for (enclosing_poles, child_coefficient) in [
+                (1, -pi.pow(2) / Atom::num(12)),
+                (2, pi.pow(2) / Atom::num(12) + &zeta_three / Atom::num(3)),
+            ] {
+                let parent_poles = (-&normalization * epsilon.pow(-1)).pow(enclosing_poles);
+                let complete_source = finite_child
+                    .with_checked_expression(finite_child.expression() * &parent_poles)?;
+                let complete = IntegratedCts::from_series(
+                    &complete_source,
+                    &series(complete_source.expression(), 0)?,
+                    4 * (1 + enclosing_poles),
+                )?;
+                let insufficient_child =
+                    series(finite_child.expression(), (enclosing_poles - 1) as usize)?.to_atom();
+                let insufficient_source =
+                    finite_child.with_checked_expression(insufficient_child * &parent_poles)?;
+                let insufficient = IntegratedCts::from_series(
+                    &insufficient_source,
+                    &series(insufficient_source.expression(), 0)?,
+                    complete.scale_power,
+                )?;
+                let finite = complete.physical_finite_counterterm()?;
+                let expected =
+                    -&normalization * (-&normalization).pow(enclosing_poles) * child_coefficient;
+                assert!(
+                    (finite.expression() - &expected).expand().is_zero(),
+                    "{backend}: a one-loop OS prefix lost the finite term from {enclosing_poles} enclosing poles"
+                );
+                assert!(!expected.is_zero());
+                assert!(
+                    insufficient.physical_finite_counterterm()?.is_zero(),
+                    "{backend}: truncating below epsilon^{enclosing_poles} must lose this nonzero finite contribution"
+                );
+            }
+        }
         Ok(())
     }
 
@@ -3439,8 +3479,7 @@ mod tests {
         let numerator = graph
             .numerator(current.subgraph(), root.subgraph())?
             .to_d_dim(GS.dim)?
-            .color_simplify()
-            .unwrap()
+            .color_simplify()?
             .get_single_atom()
             .expect("the primitive quark source has a single numerator");
         let massless = numerator.replace(mass.to_pattern()).with(Atom::Zero);
@@ -3458,58 +3497,93 @@ mod tests {
         let pi = Atom::var(symbolica::atom::Symbol::PI);
         let normalization = Atom::i() / (Atom::num(16) * pi.pow(2));
         let epsilon = Atom::var(GS.dim_epsilon);
-        for project_onto_tensor_integrals in [true, false] {
-            let vakint_settings = vakint::VakintSettings {
-                number_of_terms_in_epsilon_expansion: 3,
-                project_onto_tensor_integrals,
-                ..settings.vakint.true_settings()
-            };
-            let integrated = Integrated::new(crate::utils::vakint()?, &vakint_settings)
-                .run(&local, &ctx, &current, &root, &current, &root)?;
-            let pole = NumeratorInterface::export(&integrated.physical_pole()?).0;
-            assert!(
-                !pole.contains_symbol(GS.m_uv_vacuum) && !pole.contains_symbol(GS.m_uv_expansion),
-                "the integrated field pole must be auxiliary-scale independent before choosing a scale"
-            );
-            let pole = pole.replace(GS.dim).with(4);
-            let expected_pole = &normalization * &field_matrix * epsilon.pow(-1);
-            let mut comparisons = vec![("signed field pole".to_owned(), pole - expected_pole, 0)];
-            for vacuum_mass in [1, 2] {
-                // For real positive scales, L = log(mu²)-log(M²) is also
-                // -log(M²/mu²). Use the ratio form without assuming a generic
-                // complex-log product identity inside the symbolic engine.
-                let logarithm = -function!(
-                    symbolica::atom::Symbol::LOG,
-                    Atom::num(vacuum_mass).pow(2) / Atom::var(GS.mu_r_sq)
-                );
-                let finite = NumeratorInterface::export(&integrated.physical_finite_counterterm()?)
-                    .0
-                    .replace(GS.m_uv_vacuum)
-                    .with(Atom::num(vacuum_mass))
-                    .replace(GS.dim)
-                    .with(4);
-                let expected_finite = &normalization
-                    * &field_matrix
-                    * (Atom::one() - &logarithm
-                        + &epsilon
-                            * (&logarithm
-                                - logarithm.pow(2) / Atom::num(2)
-                                - pi.pow(2) / Atom::num(12)));
-                comparisons.push((
-                    format!("finite scheme correction at M={vacuum_mass}"),
-                    finite - expected_finite,
-                    1,
-                ));
-            }
-            for (label, difference, depth) in comparisons {
-                let difference = series(&simplify(&difference)?, depth)?.to_atom();
-                assert!(
-                    difference
-                        .try_to_rational_polynomial::<_, _, u32>(&*Q_I, &*Q_I, None)?
-                        .numerator
-                        .is_zero(),
-                    "project={project_onto_tensor_integrals}: {label} differs from the independent one-loop fermion reference: {difference}"
-                );
+        let zeta_three = Atom::var(vakint_symbol!("z3"));
+        for (backend, evaluation_order) in [
+            (
+                "AlphaLoop",
+                vakint::EvaluationOrder(vec![vakint::EvaluationMethod::AlphaLoop(
+                    vakint::AlphaLoopOptions {
+                        susbstitute_masters: false,
+                    },
+                )]),
+            ),
+            (
+                "MATAD",
+                vakint::EvaluationOrder::matad_only(Some(vakint::MATADOptions {
+                    susbstitute_masters: false,
+                    direct_numerical_substition: false,
+                    ..Default::default()
+                })),
+            ),
+        ] {
+            for project_onto_tensor_integrals in [true, false] {
+                for enclosing_poles in [1, 2] {
+                    let vakint_settings = vakint::VakintSettings {
+                        // Whole-forest depth: three terms for one enclosing pole,
+                        // four for two. The one-loop run must preserve that request.
+                        number_of_terms_in_epsilon_expansion: enclosing_poles as i64 + 2,
+                        project_onto_tensor_integrals,
+                        evaluation_order: evaluation_order.clone(),
+                        ..settings.vakint.true_settings()
+                    };
+                    let integrated = Integrated::new(crate::utils::vakint()?, &vakint_settings)
+                        .run(&local, &ctx, &current, &root, &current, &root)?;
+                    let pole = NumeratorInterface::export(&integrated.physical_pole()?).0;
+                    assert!(
+                        !pole.contains_symbol(GS.m_uv_vacuum)
+                            && !pole.contains_symbol(GS.m_uv_expansion),
+                        "the integrated field pole must be auxiliary-scale independent before choosing a scale"
+                    );
+                    let pole = pole.replace(GS.dim).with(4);
+                    let expected_pole = &normalization * &field_matrix * epsilon.pow(-1);
+                    let mut comparisons =
+                        vec![("signed field pole".to_owned(), pole - expected_pole, 0)];
+                    for vacuum_mass in [1, 2] {
+                        // For real positive scales, L = log(mu²)-log(M²) is also
+                        // -log(M²/mu²). Use the ratio form without assuming a generic
+                        // complex-log product identity inside the symbolic engine.
+                        let logarithm = -function!(
+                            symbolica::atom::Symbol::LOG,
+                            Atom::num(vacuum_mass).pow(2) / Atom::var(GS.mu_r_sq)
+                        );
+                        let finite =
+                            NumeratorInterface::export(&integrated.physical_finite_counterterm()?)
+                                .0
+                                .replace(GS.m_uv_vacuum)
+                                .with(Atom::num(vacuum_mass))
+                                .replace(GS.dim)
+                                .with(4);
+                        let expected_finite = &normalization
+                            * &field_matrix
+                            * (Atom::one() - &logarithm
+                                + &epsilon
+                                    * (&logarithm
+                                        - logarithm.pow(2) / Atom::num(2)
+                                        - pi.pow(2) / Atom::num(12))
+                                + epsilon.pow(2)
+                                    * (-logarithm.pow(3) / Atom::num(6)
+                                        + logarithm.pow(2) / Atom::num(2)
+                                        + (Atom::one() - &logarithm) * pi.pow(2) / Atom::num(12)
+                                        + &zeta_three / Atom::num(3)));
+                        comparisons.push((
+                            format!("finite scheme correction at M={vacuum_mass}"),
+                            finite - expected_finite,
+                            enclosing_poles,
+                        ));
+                    }
+                    for (label, difference, depth) in comparisons {
+                        let difference =
+                            series(&simplify(&exact_one_loop_constants(&difference))?, depth)?
+                                .to_atom();
+                        assert!(
+                            difference
+                                .try_to_rational_polynomial::<_, _, u32>(&*Q_I, &*Q_I, None)?
+                                .numerator
+                                .is_zero(),
+                            "{backend}, project={project_onto_tensor_integrals}, enclosing poles={enclosing_poles}: {label} differs from the independent one-loop fermion reference: {difference}"
+                        );
+                    }
+                }
             }
         }
         Ok(())
@@ -3519,32 +3593,16 @@ mod tests {
     fn on_shell_vacuum_remainder_matches_dimensional_one_loop_reference() -> Result<()> {
         test_initialise()?;
         let vakint = crate::utils::vakint()?;
-        let settings = vakint::VakintSettings {
-            number_of_terms_in_epsilon_expansion: 4,
-            ..VakintSettings::default().true_settings()
-        };
         let epsilon = Atom::var(GS.dim_epsilon);
         let dimension = Atom::num(4) - Atom::num(2) * &epsilon;
         let mass_squared = Atom::var(GS.m_uv_vacuum).pow(2);
-        let tadpole = |power| {
-            function!(
-                vakint::symbols::S.topo,
-                function!(vakint_symbol!("I1L"), &mass_squared, power)
-            )
-        };
-        let evaluate = |numerator: Atom, power| -> Result<Atom> {
-            let mut term = vakint::VakintTerm {
-                integral: tadpole(power),
-                numerator,
-                vectors: vec![("k".into(), 1)],
-            };
-            term.evaluate_integral(vakint, &settings)?;
-            Ok(term.numerator)
-        };
+        let pi = Atom::var(symbolica::atom::Symbol::PI);
+        let zeta_three = Atom::var(vakint_symbol!("z3"));
+        let normalization = Atom::i() / (Atom::num(16) * pi.pow(2));
 
         // Independently contract the Feynman-gauge numerator before comparing
         // its angular average. Internal gamma algebra is d-dimensional; the
-        // on-shell projector and the external spinor slots remain four-dimensional.
+        // on-shell projector and external spinor slots are four-dimensional.
         let mink = Minkowski {}.new_rep(GS.dim);
         let mu = mink.to_symbolic([Aind::new_dummy().to_atom()]);
         let rho = mink.to_symbolic([Aind::new_dummy().to_atom()]);
@@ -3559,63 +3617,145 @@ mod tests {
             simplify(&((Atom::num(2) - Atom::var(GS.dim)) * function!(AGS.gamma, &a, &d, &rho)))?;
         assert!((contracted - expected).expand().is_zero());
 
-        // Strip only the common coupling and (p-slash - m) matrix. The signed
-        // vacuum remainder is (d-2)[I2 - 2/d (I2 + M² I3)]. Its two topologies
-        // are integrated independently, so the tensor-reduction identity
-        // integral(k²/D³) = d/4 I2 is not assumed by the tested calculation.
-        let tensor_reduced = evaluate(
-            (&dimension - Atom::num(2)) * (Atom::one() - Atom::num(2) / &dimension),
-            2,
-        )? + evaluate(
-            -Atom::num(2) * (&dimension - Atom::num(2)) * &mass_squared / &dimension,
-            3,
-        )?;
-        let scalar_reference = evaluate(Atom::one() - &epsilon, 2)?;
+        // Feynman parameters give int_0^1 dt t^(-2 epsilon)[2+(2-2 epsilon)t].
+        // Derive its coefficients from exact logarithmic moments
+        // int_0^1 dt t^a log(t)^n = (-1)^n n!/(a+1)^(n+1).
+        // The scalar master has one pole, so epsilon^3 of this weight is
+        // necessary and sufficient for the physical mass term at epsilon^2.
+        let mut on_shell_weight = Atom::Zero;
+        for order in 0..=3_i64 {
+            let factorial = (1..=order).product::<i64>();
+            let exponential_coefficient =
+                Atom::num((-2_i64).pow(order as u32)) / Atom::num(factorial);
+            for radial_power in [0_i64, 1] {
+                let moment = Atom::num((-1_i64).pow(order as u32) * factorial)
+                    / Atom::num(radial_power + 1).pow(order + 1);
+                let contribution =
+                    Atom::num(2) * &exponential_coefficient * moment * epsilon.pow(order);
+                on_shell_weight += &contribution;
+                if radial_power == 1 && order < 3 {
+                    on_shell_weight -= contribution * &epsilon;
+                }
+            }
+        }
+        let closed_weight =
+            (Atom::num(3) - Atom::num(2) * &epsilon) / (Atom::one() - Atom::num(2) * &epsilon);
         assert!(
-            series(&(&tensor_reduced - &scalar_reference), 2)?
+            series(&(&on_shell_weight - closed_weight), 3)?
                 .to_atom()
-                .expand()
-                .is_zero(),
-            "the OS vacuum remainder must equal (1-epsilon) I2 through the orders needed by enclosing poles"
+                .is_zero()
         );
 
-        // The repository's MS-bar measure is i/(16*pi²) times the scalar
-        // Gamma-function result. Set mu²=M² only after integration to isolate
-        // the evanescent finite term and its positive-epsilon successor.
-        let at_reference_scale = tensor_reduced
-            .replace(GS.mu_r_sq)
-            .with(mass_squared.clone());
-        let pi = Atom::var(symbolica::atom::Symbol::PI);
-        let normalization = Atom::i() / (Atom::num(16) * pi.pow(2));
-        let expected =
-            &normalization * (epsilon.pow(-1) - Atom::one() + pi.pow(2) * &epsilon / Atom::num(12));
-        assert!(
-            series(&(at_reference_scale - expected), 1)?
-                .to_atom()
-                .expand()
-                .is_zero(),
-            "the signed field pole is positive and its dimensional finite term is -1"
-        );
+        for (backend, evaluation_order) in [
+            (
+                "AlphaLoop",
+                vakint::EvaluationOrder(vec![vakint::EvaluationMethod::AlphaLoop(
+                    vakint::AlphaLoopOptions {
+                        susbstitute_masters: false,
+                    },
+                )]),
+            ),
+            (
+                "MATAD",
+                vakint::EvaluationOrder::matad_only(Some(vakint::MATADOptions {
+                    susbstitute_masters: false,
+                    direct_numerical_substition: false,
+                    ..Default::default()
+                })),
+            ),
+        ] {
+            let settings = vakint::VakintSettings {
+                number_of_terms_in_epsilon_expansion: 4,
+                evaluation_order,
+                ..VakintSettings::default().true_settings()
+            };
+            let evaluate = |numerator: Atom, power| -> Result<Atom> {
+                let mut term = vakint::VakintTerm {
+                    integral: function!(
+                        vakint::symbols::S.topo,
+                        function!(vakint_symbol!("I1L"), &mass_squared, power)
+                    ),
+                    numerator,
+                    vectors: vec![("k".into(), 1)],
+                };
+                term.evaluate_integral(vakint, &settings)?;
+                Ok(exact_one_loop_constants(&term.numerator))
+            };
 
-        // A separate Feynman-parameter integration of the on-shell two-point
-        // function gives integral_0^1 dt t^(-2eps)[2+(d-2)t]. It multiplies I2
-        // with the physical mass as its scale, yielding the known 3/eps + 4
-        // mass correction. The finite OS mass must remain in the local branch.
-        let mass_reference = evaluate(
-            Atom::num(2) / (Atom::one() - Atom::num(2) * &epsilon) + Atom::one(),
-            2,
-        )?
-        .replace(GS.mu_r_sq)
-        .with(mass_squared.clone());
-        assert!(
-            series(
-                &(mass_reference - normalization * (Atom::num(3) * epsilon.pow(-1) + Atom::num(4))),
-                0,
-            )?
-            .to_atom()
-            .expand()
-            .is_zero()
-        );
+            // V=-(1-epsilon) I2 (p-slash-m) precedes the forest minus.
+            // The signed local counterterm -V has radial coefficient
+            // (d-2)[I2-2/d (I2+M^2 I3)]. Evaluate the two denominator
+            // topologies independently instead of assuming the IBP identity.
+            let tensor_reduced = evaluate(
+                (&dimension - Atom::num(2)) * (Atom::one() - Atom::num(2) / &dimension),
+                2,
+            )? + evaluate(
+                -Atom::num(2) * (&dimension - Atom::num(2)) * &mass_squared / &dimension,
+                3,
+            )?;
+            let scalar_reference = evaluate(Atom::one() - &epsilon, 2)?;
+            assert!(
+                series(&(&tensor_reduced - &scalar_reference), 2)?
+                    .to_atom()
+                    .expand()
+                    .is_zero(),
+                "{backend}: the signed OS vacuum remainder must equal (1-epsilon) I2 through epsilon^2"
+            );
+
+            // exp(gamma_E epsilon) Gamma(epsilon) at mu=M follows from
+            // log Gamma(1+epsilon)=-gamma_E epsilon+zeta(2)epsilon^2/2
+            // -zeta(3)epsilon^3/3+... . Multiplication by (1-epsilon)
+            // also contributes -zeta(2)/2 to the epsilon^2 coefficient.
+            let at_reference_scale = tensor_reduced
+                .replace(GS.mu_r_sq)
+                .with(mass_squared.clone());
+            let expected = &normalization
+                * (epsilon.pow(-1) - Atom::one() + pi.pow(2) * &epsilon / Atom::num(12)
+                    - (pi.pow(2) / Atom::num(12) + &zeta_three / Atom::num(3)) * epsilon.pow(2));
+            assert!(
+                series(&(at_reference_scale - expected), 2)?
+                    .to_atom()
+                    .expand()
+                    .is_zero(),
+                "{backend}: the vacuum Gamma-function reference differs through epsilon^2"
+            );
+
+            let physical_mass = Atom::var(symbol!("os_reference_physical_mass"));
+            let logarithm = -function!(
+                symbolica::atom::Symbol::LOG,
+                physical_mass.pow(2) / Atom::var(GS.mu_r_sq)
+            );
+            let mass_reference = evaluate(on_shell_weight.clone(), 2)?
+                .replace(GS.m_uv_vacuum)
+                .with(physical_mass);
+            // O = exp(gamma_E epsilon) Gamma(epsilon) (mu^2/m^2)^epsilon
+            // times the independently integrated Feynman-parameter weight.
+            let expected_mass = &normalization
+                * (Atom::num(3) * epsilon.pow(-1)
+                    + Atom::num(3) * &logarithm
+                    + Atom::num(4)
+                    + &epsilon
+                        * (Atom::num(3) * logarithm.pow(2) / Atom::num(2)
+                            + Atom::num(4) * &logarithm
+                            + Atom::num(8)
+                            + pi.pow(2) / Atom::num(4))
+                    + epsilon.pow(2)
+                        * (logarithm.pow(3) / Atom::num(2)
+                            + Atom::num(2) * logarithm.pow(2)
+                            + Atom::num(8) * &logarithm
+                            + Atom::num(16)
+                            + &logarithm * pi.pow(2) / Atom::num(4)
+                            + pi.pow(2) / Atom::num(3)
+                            - &zeta_three));
+            let difference = series(&(mass_reference - expected_mass), 2)?.to_atom();
+            assert!(
+                difference
+                    .try_to_rational_polynomial::<_, _, u32>(&*Q_I, &*Q_I, None)?
+                    .numerator
+                    .is_zero(),
+                "{backend}: the physical OS mass reference differs through epsilon^2: {difference}"
+            );
+        }
         Ok(())
     }
 

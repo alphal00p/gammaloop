@@ -458,7 +458,6 @@ impl ExactSourceEnergyMapper {
     /// Inactive source energies are placeholders while the affine maps are
     /// assembled and are set to zero only after the complete factorized atom
     /// has been rewritten.
-    #[cfg(test)]
     pub(crate) fn map_numerator(
         &self,
         loop_energy_map: &[LinearEnergyExpr],
@@ -1094,7 +1093,6 @@ impl ExactSourceEnergyMapper {
         Ok(tagged_numerator.replace_multiple(&replacements))
     }
 
-    #[cfg(test)]
     fn energy_atoms(&self, energies: &[LinearEnergyExpr]) -> Vec<Atom> {
         energies
             .iter()
