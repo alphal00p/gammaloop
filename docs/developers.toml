@@ -1196,6 +1196,21 @@ title = "Design proposals"
 summary = "Possible changes that are deliberately kept separate from the implemented architecture."
 
 [[section.note]]
+id = "on-shell-counterterms"
+title = "On-shell counterterms for massive fermions"
+summary = "Ordered component-local OS subtraction, vacuum-only scheme correction, independent one-loop references, and exact reconstruction and forest validation boundaries."
+source = "docs/architecture/on-shell-counterterms.typ"
+kind = "Physics design and validation contract"
+status = "Implementation in progress"
+lifecycle = "proposal"
+owner = "unassigned"
+reviewed_at = "2026-10-13"
+review_ref = "arXiv:2203.11038v1"
+products = ["gammaloop"]
+topics = ["uv", "renormalization", "on-shell", "cff"]
+review_triggers = ["crates/gammalooprs/src/uv/**", "tests/resources/graphs/local_os_top_self_energy.dot", "tests/resources/graphs/local_nested_soft_top_self_energy.dot"]
+
+[[section.note]]
 id = "gammaloop-roadmap"
 title = "GammaLoop architecture roadmap"
 summary = "Candidate service boundaries, cache sessions, pipeline unification, error handling, orchestration, and observability improvements."
