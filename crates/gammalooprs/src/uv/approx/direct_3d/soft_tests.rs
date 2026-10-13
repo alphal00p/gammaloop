@@ -1773,10 +1773,7 @@ fn one_orientation_ir_dispatch_stores_one_combined_h_atom_per_residue() -> Resul
 }
 
 #[test]
-#[should_panic(
-    expected = "local on-shell counterterms are deferred until local counterterms can be derived from the 4D expanded representation"
-)]
-fn local_3d_os_dispatch_is_unconditionally_deferred() {
+fn local_3d_os_dispatch_returns_projected_route_error() {
     test_initialise().unwrap();
     let mut graph = scalar_two_point_graph();
     let mut current = two_point_node(&graph, 1);
@@ -1790,7 +1787,7 @@ fn local_3d_os_dispatch_is_unconditionally_deferred() {
         ..Default::default()
     };
 
-    Direct3dApproximation::new(localizer, &mut graph, &settings)
+    let error = Direct3dApproximation::new(localizer, &mut graph, &settings)
         .run_local(
             &Direct3dCts::Root(
                 DirectResidueBranches::production(OrientationID(0), Integrands::root()).unwrap(),
@@ -1800,5 +1797,8 @@ fn local_3d_os_dispatch_is_unconditionally_deferred() {
             &current,
             &given,
         )
-        .unwrap();
+        .expect_err("the unsupported direct OS route must return a configuration error");
+    let message = error.to_string();
+    assert!(message.contains("local_uv_cts_from_expanded_4d_integrands=true"));
+    assert!(message.contains("explicit_orientation_sum_only=true"));
 }

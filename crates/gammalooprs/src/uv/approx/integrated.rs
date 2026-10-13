@@ -332,14 +332,19 @@ impl Integrated<'_> {
 
         let scheme = current.renormalization_scheme();
         match scheme {
-            ApproximationType::MUV | ApproximationType::PolePart | ApproximationType::IR => {
-                // Integrate the complete signed operator in each retained frame.
-                // Linearity permits this sector sum; no soft branch is discarded
-                // before the nested forest has supplied its completed coefficient.
+            ApproximationType::MUV
+            | ApproximationType::PolePart
+            | ApproximationType::IR
+            | ApproximationType::OS => {
+                // The local operation owns its integration policy. In the OS
+                // scheme this is the signed vacuum remainder -(U - UO); the
+                // physical O branch already supplies the on-shell mass shift
+                // and must never enter the finite MS-bar addback. Soft and
+                // ordinary components retain their complete signed expression.
                 let mut integrated = Atom::Zero;
                 for sector in integrand.active_sectors() {
                     let physical = sector
-                        .atom
+                        .integration_atom()
                         .replace(GS.integrated_loop_scale)
                         .with(Atom::one());
                     let simplified = simplify(&physical)?;
@@ -392,7 +397,6 @@ impl Integrated<'_> {
                 })
             }
             ApproximationType::VaccuumLimit => Err(eyre!("Not yet implemented VaccuumLimit")),
-            ApproximationType::OS => Err(eyre!("Not yet implemented OS")),
             ApproximationType::Unsubtracted => {
                 panic!("should have been kept out of the wood");
             }
@@ -927,7 +931,7 @@ impl Integrated<'_> {
             .undo_chain::<Aind>()?
             .undo_trace::<Aind>()?
             .metric_shorthand_to_dot();
-        Ok(Self::to_vakint_numerator(&numerator))
+        Self::to_vakint_numerator(&numerator)
     }
 
     fn ensure_resolved_lorentz_contractions(numerator: &Atom) -> Result<()> {
@@ -1141,7 +1145,23 @@ impl Integrated<'_> {
         res
     }
 
-    fn to_vakint_numerator(numerator: &Atom) -> Atom {
+    fn to_vakint_numerator(numerator: &Atom) -> Result<Atom> {
+        // The fixed OS four-vector is m*delta(0,mu), not an independent
+        // Lorentz vector. Expose its scalar-product contractions with the
+        // existing power-aware tensor parser. A bare k(cind(0)) would instead
+        // look like an unpaired abstract index to Vakint. Open the complete
+        // analytic numerator in one pass so every dot shares a dummy allocator
+        // that reserves the source indices. This preserves factored scalar
+        // spectators and sums; it does not expand the graph numerator.
+        let numerator = if numerator.contains_symbol(GS.delta_vec)
+            && numerator.contains_symbol(SPENSO_TAG.dot)
+        {
+            numerator.undo_dots::<Aind>().map_err(|error| {
+                eyre!("invalid fixed-vector scalar product in analytic numerator: {error}")
+            })?
+        } else {
+            numerator.clone()
+        };
         let numerator = numerator
             .replace(function!(GS.loop_mom, W_.x___))
             .with(function!(vakint::symbols::S.k, W_.x___))
@@ -1167,7 +1187,7 @@ impl Integrated<'_> {
         // teaching Vakint Spenso's representation syntax or tensor algebra.
         // Direct slots use the same parser as the tensor network. The original
         // leaf stays opaque, including its spin and color indices.
-        numerator.replace_map(|view, _, out| {
+        Ok(numerator.replace_map(|view, _, out| {
             let AtomView::Fun(tensor) = view else { return };
             if [
                 vakint::symbols::S.k,
@@ -1192,7 +1212,7 @@ impl Integrated<'_> {
                 }
                 **out = wrapped.finish();
             }
-        })
+        }))
     }
 }
 
@@ -1779,7 +1799,7 @@ pub(crate) fn to_vakint_integrand<
             .with(function!(vakint::symbols::S.k, W_.x___))
             .replace(function!(GS.emr_mom, W_.x___))
             .with(function!(vakint::symbols::S.p, W_.x___));
-        t.numerator = Integrated::to_vakint_numerator(&t.numerator);
+        t.numerator = Integrated::to_vakint_numerator(&t.numerator)?;
         debug_tags!(#uv, #integrated, #vakint, #trace;
             stage = "to_vakint_integrand_term_after_vakint_symbols",
             term_index = %term_index,
@@ -1994,6 +2014,271 @@ mod tests {
     use super::*;
 
     #[test]
+    fn analytic_os_temporal_dot_keeps_scalar_and_numerator_factors() {
+        test_initialise().unwrap();
+        let vakint = crate::utils::vakint().unwrap();
+        let settings = VakintSettings::default().true_settings();
+        let vector_slot = Minkowski {}.new_rep(GS.dim).to_symbolic([]);
+        let temporal = GS.energy_delta(&vector_slot);
+        let mass = parse!("os_mass");
+        let spectator = parse!("(os_a+os_b)^3*(os_c+os_d)");
+        let reserved = Minkowski {}
+            .new_rep(GS.dim)
+            .to_symbolic([Aind::new_dummy_at(1_000_000).to_atom()]);
+        let source_contraction = function!(GS.loop_mom, 7, &reserved)
+            * function!(symbol!("os_reserved_vector"), &reserved);
+        let second_dot = function!(
+            SPENSO_TAG.dot,
+            &temporal,
+            function!(GS.emr_mom, 8, &vector_slot)
+        );
+        for source in [GS.loop_mom, GS.emr_mom] {
+            let vector = function!(source, 7, &vector_slot);
+            for coefficient in [Atom::one(), mass.clone(), parse!("os_mass*(os_x+os_y)")] {
+                for power in [1, 2] {
+                    for (left, right) in [
+                        (&coefficient * &temporal, vector.clone()),
+                        (vector.clone(), &coefficient * &temporal),
+                    ] {
+                        let source = &spectator
+                            * &source_contraction
+                            * &second_dot
+                            * function!(SPENSO_TAG.dot, left, right).pow(power);
+                        let converted = Integrated::to_vakint_numerator(&source).unwrap();
+                        assert!(!converted.contains_symbol(SPENSO_TAG.dot));
+                        assert!(
+                            converted
+                                .pattern_match(&spectator.to_pattern(), None, None)
+                                .next()
+                                .is_some()
+                        );
+                        let mut term = vakint::VakintTerm {
+                            integral: vakint::vakint_parse!("topo(I1L(os_mass_squared,3))")
+                                .unwrap(),
+                            numerator: converted,
+                            vectors: vec![("k".into(), 7)],
+                        };
+                        // Every newly opened Lorentz index has exactly two
+                        // incidences, including separate contractions for powers.
+                        term.tensor_reduce(vakint, &settings).unwrap();
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn production_on_shell_scheme_integral_matches_bare_fermion_reference() -> Result<()> {
+        use crate::uv::{
+            UVgenerationSettings,
+            approx::local_4d::{Full4dCts, on_shell_tests::fixture, uv_limit},
+        };
+
+        test_initialise()?;
+        let (graph, current, root) = fixture(false)?;
+        let settings = UVgenerationSettings {
+            generate_integrated: true,
+            add_marker: false,
+            ..Default::default()
+        };
+        let ctx = UVCtx::new(&graph, &settings);
+        let local = uv_limit(
+            &Full4dCts::from_factorized_local(&Local4dCts::root()),
+            &ctx,
+            &current,
+            &root,
+            &current,
+            &root,
+        )?;
+        let mass = graph[EdgeIndex(2)].mass_atom();
+
+        // Determine only the graph's Feynman-rule phase, coupling, color, and
+        // open-spin normalization from its bare numerator N=C[(2-d)k/+dm].
+        // No Taylor result enters the oracle. The integrated field matrix is
+        // C(p/-m), independently of which internal line carries the loop k.
+        let numerator = graph
+            .numerator(current.subgraph(), root.subgraph())
+            .to_d_dim(GS.dim)
+            .color_simplify()
+            .get_single_atom()
+            .expect("the primitive quark source has a single numerator");
+        let massless = numerator.replace(mass.to_pattern()).with(Atom::Zero);
+        let external_slash = massless
+            .replace(function!(GS.emr_mom, 2, W_.x___))
+            .with(function!(GS.emr_mom, 0, W_.x___).to_pattern());
+        let field_matrix = simplify(
+            &(external_slash / (Atom::num(2) - Atom::var(GS.dim))
+                - (&numerator - &massless) / Atom::var(GS.dim)),
+        )?;
+        let field_matrix = field_matrix.replace(GS.dim).with(4);
+        assert!(!field_matrix.is_zero());
+        assert!(field_matrix.contains_symbol(GS.emr_mom));
+
+        let pi = Atom::var(symbolica::atom::Symbol::PI);
+        let normalization = Atom::i() / (Atom::num(16) * pi.pow(2));
+        let epsilon = Atom::var(GS.dim_epsilon);
+        for project_onto_tensor_integrals in [true, false] {
+            let vakint_settings = vakint::VakintSettings {
+                number_of_terms_in_epsilon_expansion: 3,
+                project_onto_tensor_integrals,
+                ..settings.vakint.true_settings()
+            };
+            let integrated = Integrated::new(crate::utils::vakint()?, &vakint_settings)
+                .run(&local, &ctx, &current, &root, &current, &root)?;
+            let pole = integrated.physical_pole_atom();
+            assert!(
+                !pole.contains_symbol(GS.m_uv_vacuum) && !pole.contains_symbol(GS.m_uv_expansion),
+                "the integrated field pole must be auxiliary-scale independent before choosing a scale"
+            );
+            let pole = pole.replace(GS.dim).with(4);
+            let expected_pole = &normalization * &field_matrix * epsilon.pow(-1);
+            let mut comparisons = vec![("signed field pole".to_owned(), pole - expected_pole, 0)];
+            for vacuum_mass in [1, 2] {
+                // For real positive scales, L = log(mu²)-log(M²) is also
+                // -log(M²/mu²). Use the ratio form without assuming a generic
+                // complex-log product identity inside the symbolic engine.
+                let logarithm = -function!(
+                    symbolica::atom::Symbol::LOG,
+                    Atom::num(vacuum_mass).pow(2) / Atom::var(GS.mu_r_sq)
+                );
+                let finite = integrated
+                    .physical_finite_counterterm_atom()
+                    .replace(GS.m_uv_vacuum)
+                    .with(Atom::num(vacuum_mass))
+                    .replace(GS.dim)
+                    .with(4);
+                let expected_finite = &normalization
+                    * &field_matrix
+                    * (Atom::one() - &logarithm
+                        + &epsilon
+                            * (&logarithm
+                                - logarithm.pow(2) / Atom::num(2)
+                                - pi.pow(2) / Atom::num(12)));
+                comparisons.push((
+                    format!("finite scheme correction at M={vacuum_mass}"),
+                    finite - expected_finite,
+                    1,
+                ));
+            }
+            for (label, difference, depth) in comparisons {
+                let difference = series(&simplify(&difference)?, depth)?.to_atom();
+                assert!(
+                    difference
+                        .try_to_rational_polynomial::<_, _, u32>(&*Q_I, &*Q_I, None)?
+                        .numerator
+                        .is_zero(),
+                    "project={project_onto_tensor_integrals}: {label} differs from the independent one-loop fermion reference: {difference}"
+                );
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn on_shell_vacuum_remainder_matches_dimensional_one_loop_reference() -> Result<()> {
+        test_initialise()?;
+        let vakint = crate::utils::vakint()?;
+        let settings = vakint::VakintSettings {
+            number_of_terms_in_epsilon_expansion: 4,
+            ..VakintSettings::default().true_settings()
+        };
+        let epsilon = Atom::var(GS.dim_epsilon);
+        let dimension = Atom::num(4) - Atom::num(2) * &epsilon;
+        let mass_squared = Atom::var(GS.m_uv_vacuum).pow(2);
+        let tadpole = |power| {
+            function!(
+                vakint::symbols::S.topo,
+                function!(vakint_symbol!("I1L"), &mass_squared, power)
+            )
+        };
+        let evaluate = |numerator: Atom, power| -> Result<Atom> {
+            let mut term = vakint::VakintTerm {
+                integral: tadpole(power),
+                numerator,
+                vectors: vec![("k".into(), 1)],
+            };
+            term.evaluate_integral(vakint, &settings)?;
+            Ok(term.numerator)
+        };
+
+        // Independently contract the Feynman-gauge numerator before comparing
+        // its angular average. Internal gamma algebra is d-dimensional; the
+        // on-shell projector and the external spinor slots remain four-dimensional.
+        let mink = Minkowski {}.new_rep(GS.dim);
+        let mu = mink.to_symbolic([Aind::new_dummy().to_atom()]);
+        let rho = mink.to_symbolic([Aind::new_dummy().to_atom()]);
+        let bis = Bispinor {}.new_rep(4);
+        let [a, b, c, d] = std::array::from_fn(|_| bis.to_symbolic([Aind::new_dummy().to_atom()]));
+        let contracted = simplify(
+            &(function!(AGS.gamma, &a, &b, &mu)
+                * function!(AGS.gamma, &b, &c, &rho)
+                * function!(AGS.gamma, &c, &d, &mu)),
+        )?;
+        let expected =
+            simplify(&((Atom::num(2) - Atom::var(GS.dim)) * function!(AGS.gamma, &a, &d, &rho)))?;
+        assert!((contracted - expected).expand().is_zero());
+
+        // Strip only the common coupling and (p-slash - m) matrix. The signed
+        // vacuum remainder is (d-2)[I2 - 2/d (I2 + M² I3)]. Its two topologies
+        // are integrated independently, so the tensor-reduction identity
+        // integral(k²/D³) = d/4 I2 is not assumed by the tested calculation.
+        let tensor_reduced = evaluate(
+            (&dimension - Atom::num(2)) * (Atom::one() - Atom::num(2) / &dimension),
+            2,
+        )? + evaluate(
+            -Atom::num(2) * (&dimension - Atom::num(2)) * &mass_squared / &dimension,
+            3,
+        )?;
+        let scalar_reference = evaluate(Atom::one() - &epsilon, 2)?;
+        assert!(
+            series(&(&tensor_reduced - &scalar_reference), 2)?
+                .to_atom()
+                .expand()
+                .is_zero(),
+            "the OS vacuum remainder must equal (1-epsilon) I2 through the orders needed by enclosing poles"
+        );
+
+        // The repository's MS-bar measure is i/(16*pi²) times the scalar
+        // Gamma-function result. Set mu²=M² only after integration to isolate
+        // the evanescent finite term and its positive-epsilon successor.
+        let at_reference_scale = tensor_reduced
+            .replace(GS.mu_r_sq)
+            .with(mass_squared.clone());
+        let pi = Atom::var(symbolica::atom::Symbol::PI);
+        let normalization = Atom::i() / (Atom::num(16) * pi.pow(2));
+        let expected =
+            &normalization * (epsilon.pow(-1) - Atom::one() + pi.pow(2) * &epsilon / Atom::num(12));
+        assert!(
+            series(&(at_reference_scale - expected), 1)?
+                .to_atom()
+                .expand()
+                .is_zero(),
+            "the signed field pole is positive and its dimensional finite term is -1"
+        );
+
+        // A separate Feynman-parameter integration of the on-shell two-point
+        // function gives integral_0^1 dt t^(-2eps)[2+(d-2)t]. It multiplies I2
+        // with the physical mass as its scale, yielding the known 3/eps + 4
+        // mass correction. The finite OS mass must remain in the local branch.
+        let mass_reference = evaluate(
+            Atom::num(2) / (Atom::one() - Atom::num(2) * &epsilon) + Atom::one(),
+            2,
+        )?
+        .replace(GS.mu_r_sq)
+        .with(mass_squared.clone());
+        assert!(
+            series(
+                &(mass_reference - normalization * (Atom::num(3) * epsilon.pow(-1) + Atom::num(4))),
+                0,
+            )?
+            .to_atom()
+            .expand()
+            .is_zero()
+        );
+        Ok(())
+    }
+
+    #[test]
     fn analytic_spin_simplification_preserves_shared_color_factor() {
         use idenso::{bis, coad, cof, color_f, color_idx, color_t, gamma};
         use spenso::{mink, trace, trace_sym};
@@ -2097,7 +2382,7 @@ mod tests {
                         * function!(AGS.gamma, &b, if closed { &a } else { &c }, &nu);
                     let mut term = vakint::VakintTerm {
                         integral: vakint::vakint_parse!("topo(I2L(mUVsq,1,1,1))").unwrap(),
-                        numerator: Integrated::to_vakint_numerator(&numerator),
+                        numerator: Integrated::to_vakint_numerator(&numerator).unwrap(),
                         vectors: vec![("k".into(), 1), ("k".into(), 2)],
                     };
                     term.tensor_reduce(&vakint, &settings).unwrap();
@@ -2195,7 +2480,7 @@ mod tests {
                 * function!(AGS.gamma, &b, &a, &nu);
             let mut projected = vakint::VakintTerm {
                 integral: vakint::vakint_parse!("topo(I2L(mUVsq,1,1,1))").unwrap(),
-                numerator: Integrated::to_vakint_numerator(&numerator),
+                numerator: Integrated::to_vakint_numerator(&numerator).unwrap(),
                 vectors: vec![("k".into(), 1), ("k".into(), 2)],
             };
             projected.tensor_reduce(&vakint, &settings).unwrap();

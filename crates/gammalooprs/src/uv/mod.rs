@@ -476,6 +476,8 @@ mod marker;
 mod orchestrator;
 #[cfg(test)]
 pub(crate) mod overlap_control;
+#[cfg(test)]
+pub(crate) mod overlap_numerators;
 pub mod renormalization;
 pub use renormalization::{RenormalizationPart, RenormalizationStats};
 pub mod settings;

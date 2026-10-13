@@ -2,10 +2,13 @@ use std::sync::LazyLock;
 
 use spenso::{
     chain, g,
-    network::tags::SPENSO_TAG as T,
+    network::{library::symbolic::ETS, tags::SPENSO_TAG as T},
     rep_,
     shadowing::{self, IntoAtom},
-    structure::representation::{LibraryRep, Minkowski, RepName},
+    structure::{
+        abstract_index::AIND_SYMBOLS,
+        representation::{LibraryRep, Minkowski, RepName},
+    },
     trace,
 };
 use symbolica::{
@@ -20,7 +23,10 @@ use crate::{
     dirac::GammaSimplifier,
     epsilon::{EpsilonSimplifier, epsilon4},
     representations::Bispinor,
-    shorthands::schoonschip::{Schoonschip, SchoonschipSettings},
+    shorthands::{
+        chain::Chain,
+        schoonschip::{Schoonschip, SchoonschipSettings},
+    },
 };
 
 use super::{AGS, id_atom};
@@ -360,11 +366,72 @@ impl<'settings> DiracSimplifier<'settings> {
         let mut expr = expr.to_owned();
 
         loop {
+            // A slash of the fixed temporal unit vector is gamma0 in any
+            // Lorentz dimension. Normalize it before chain rules: treating two
+            // such slashes as generic vectors would leave delta(0).delta(0)
+            // instead of invoking the existing gamma0-square identity.
+            let normalized = if expr.contains_symbol(ETS.delta) {
+                expr.replace_map(|view, _, out| {
+                    let AtomView::Fun(gamma) = view else { return };
+                    if gamma.get_symbol() != AGS.gamma || gamma.get_nargs() != 3 {
+                        return;
+                    }
+                    let AtomView::Fun(delta) = gamma.get(2) else {
+                        return;
+                    };
+                    if delta.get_symbol() == ETS.delta
+                        && delta.get_nargs() == 2
+                        && delta.iter().any(|argument| {
+                            matches!(argument, AtomView::Fun(index)
+                            if index.get_symbol() == AIND_SYMBOLS.cind
+                                && index.get_nargs() == 1
+                                && index.get(0).is_zero())
+                        })
+                        && delta.iter().any(|argument| {
+                            matches!(argument, AtomView::Fun(slot)
+                            if slot.get_symbol() == *MINKOWSKI_SYMBOL
+                                && slot.get_nargs() == 1)
+                        })
+                    {
+                        **out = FunctionBuilder::new(AGS.gamma0)
+                            .add_arg(gamma.get(0))
+                            .add_arg(gamma.get(1))
+                            .finish();
+                    }
+                })
+            } else {
+                expr.clone()
+            };
+            // A single gamma0 is symmetric in its spinor ports. Expose such
+            // factors so the established gamma0-pair rule can also compose
+            // chains meeting at two inputs or two outputs. Multi-factor
+            // chains retain their ordering, and generic spinor dimensions
+            // remain subject to the existing four-dimensional special rules.
+            let normalized = if normalized.contains_symbol(AGS.gamma0) {
+                let opened = normalized.undo_single_length();
+                let gamma_zero = symbolica::function!(AGS.gamma0, W_.a_, W_.b_).to_pattern();
+                let four_dimensional =
+                    opened
+                        .pattern_match(&gamma_zero, None, None)
+                        .all(|matched| {
+                            let start = matched[&W_.a_].as_view();
+                            let end = matched[&W_.b_].as_view();
+                            has_chain_endpoints(start, end)
+                                || has_four_dimensional_spin_endpoints(start, end)
+                        });
+                if four_dimensional {
+                    opened.simplify_gamma0()
+                } else {
+                    normalized
+                }
+            } else {
+                normalized
+            };
             // Metric contraction can close a chain or connect separate chains.
             // Include their collection in the fixed point of the complete pass.
             let next = self
                 .settings
-                .rewrite_expression(expr.collect_gamma_chains())
+                .rewrite_expression(normalized.collect_gamma_chains())
                 .simplify_epsilon()
                 .normalize_dots()
                 .schoonschip();

@@ -164,10 +164,42 @@ pub(crate) fn validate_local_counterterm_schemes(
                 pole.filter().string_label(),
             ));
         }
-        if os_components.count() > 0 && settings.generate_integrated {
-            return Err(eyre!(
-                "local on-shell/OS counterterms are local-only in phase 1; set uv.generate_integrated=false"
-            ));
+        for component in os_components {
+            if component.dod != 1 || graph.n_loops(component.filter()) != 1 {
+                return Err(eyre!(
+                    "graph '{}' cut {cut_index}: on-shell/OS component {} requires a degree-one, one-loop massive-fermion self-energy",
+                    graph.name,
+                    component.filter().string_label(),
+                ));
+            }
+            let related = spinneys.iter().find(|other| {
+                if other.n_components() != 1 || other.filter() == component.filter() {
+                    return false;
+                }
+                let nested = component.filter().includes(other.filter())
+                    || other.filter().includes(component.filter());
+                let disjoint = !component.filter().intersects(other.filter())
+                    && spinneys.iter().any(|candidate| {
+                        candidate.n_components() > 1
+                            && candidate.filter() == &component.filter().union(other.filter())
+                    });
+                nested || disjoint
+            });
+            if let Some(other) = related {
+                return Err(eyre!(
+                    "graph '{}' cut {cut_index}: on-shell/OS component {} and component {} require a nested or disconnected scheme policy that has not yet been validated",
+                    graph.name,
+                    component.filter().string_label(),
+                    other.filter().string_label(),
+                ));
+            }
+            if matches!(settings.final_integrand, FinalIntegrandDimension::ThreeD)
+                && !settings.local_uv_cts_from_expanded_4d_integrands
+            {
+                return Err(eyre!(
+                    "local on-shell/OS counterterms require the projected-4D route; set uv.local_uv_cts_from_expanded_4d_integrands=true and generation.explicit_orientation_sum_only=true; direct 3D OS counterterms are not yet implemented"
+                ));
+            }
         }
     }
 
@@ -547,7 +579,7 @@ mod tests {
     }
 
     #[test]
-    fn integrated_on_shell_scheme_is_rejected_before_forest_generation() {
+    fn on_shell_scheme_rejects_nonfermionic_degree_before_forest_generation() {
         test_initialise().unwrap();
         let model = load_generic_model("scalars");
         let graph: Graph =
@@ -567,10 +599,49 @@ mod tests {
 
         let error =
             validate_local_counterterm_schemes(&graph, &CutStructure::empty(&graph), &settings)
-                .expect_err("integrated local on-shell generation must fail at the orchestrator");
+                .expect_err("a quadratic scalar component cannot use the fermionic OS operator");
         let message = error.to_string();
-        assert!(message.contains("local on-shell/OS counterterms"));
-        assert!(message.contains("generate_integrated=false"));
+        assert!(message.contains("on-shell/OS component"));
+        assert!(message.contains("degree-one, one-loop massive-fermion self-energy"));
+    }
+
+    #[test]
+    fn integrated_on_shell_self_energy_requires_projected_three_d_route() {
+        test_initialise().unwrap();
+        let model = load_generic_model("sm");
+        let graph: Graph =
+            include_str!("../../../../tests/resources/graphs/local_os_top_self_energy.dot")
+                .into_graph(&model)
+                .unwrap();
+        let mut settings = UVgenerationSettings {
+            generate_integrated: true,
+            final_integrand: FinalIntegrandDimension::ThreeD,
+            local_uv_cts_from_expanded_4d_integrands: true,
+            renormalization_prescription: RenormalizationPrescriptionSettings {
+                massive_power_divergent: ApproximationType::OS,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let components = graph
+            .classified_spinneys(&graph.full_filter(), &settings, &graph.loop_momentum_basis)
+            .unwrap();
+        assert!(components.iter().any(|component| {
+            component.renormalization_scheme == ApproximationType::OS
+                && component.n_components() == 1
+        }));
+        validate_local_counterterm_schemes(&graph, &CutStructure::empty(&graph), &settings)
+            .expect("the primitive OS self-energy has an explicit vacuum integration policy");
+        settings.local_uv_cts_from_expanded_4d_integrands = false;
+        let error =
+            validate_local_counterterm_schemes(&graph, &CutStructure::empty(&graph), &settings)
+                .expect_err("an unsupported direct OS route must fail before forest generation");
+        let message = error.to_string();
+        assert!(message.contains("local_uv_cts_from_expanded_4d_integrands=true"));
+        assert!(message.contains("explicit_orientation_sum_only=true"));
+        settings.final_integrand = FinalIntegrandDimension::FourD;
+        validate_local_counterterm_schemes(&graph, &CutStructure::empty(&graph), &settings)
+            .expect("symbolic 4D construction does not require a 3D projection route");
     }
 
     #[test]

@@ -447,9 +447,9 @@ pub(super) fn apply_taylor<S: ForestNodeLike>(
             soft.zip_add(&uv_remainder)
         }
         ApproximationType::VaccuumLimit => Err(eyre!("Not yet implemented VaccuumLimit")),
-        ApproximationType::OS => unimplemented!(
-            "local on-shell counterterms are deferred until local counterterms can be derived from the 4D expanded representation"
-        ),
+        ApproximationType::OS => Err(eyre!(
+            "local on-shell/OS counterterms require the projected-4D route; set uv.local_uv_cts_from_expanded_4d_integrands=true and generation.explicit_orientation_sum_only=true; direct 3D OS counterterms are not yet implemented"
+        )),
         ApproximationType::Unsubtracted => panic!("should have been kept out of the wood"),
     }
 }

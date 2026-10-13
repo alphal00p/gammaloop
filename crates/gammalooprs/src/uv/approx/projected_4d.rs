@@ -257,6 +257,7 @@ impl Localizer<'_> {
                 term.powers.clone(),
                 raw_reports,
                 term.numerator.clone(),
+                term.on_shell_point.clone(),
                 Vec::<Atom>::new(),
                 vec![(residual_factor, Vec::<Atom>::new())],
             ));
@@ -282,8 +283,16 @@ impl Localizer<'_> {
                 .collect::<Vec<_>>();
             // Incidence uses the enclosing source scope, while denominator
             // owners retain this component's quotient topology and capacities.
-            for (component_denominators, classes, _, raw_reports, numerator, parameters, rows) in
-                &mut terms
+            for (
+                component_denominators,
+                classes,
+                _,
+                raw_reports,
+                numerator,
+                on_shell_point,
+                parameters,
+                rows,
+            ) in &mut terms
             {
                 if rows.is_empty() {
                     continue;
@@ -308,12 +317,28 @@ impl Localizer<'_> {
                     "Preparing shared factorized local-4D child numerator"
                 );
                 context.projected_component_requests += 1;
+                let point = on_shell_point
+                    .as_ref()
+                    .filter(|point| point.component == component);
+                let boundaries = if point.is_some() {
+                    graph
+                        .dummy_stripped_external_flows_of(source_scope)
+                        .included_iter()
+                        .collect::<Vec<_>>()
+                } else {
+                    Vec::new()
+                };
+                let frame = if point.is_some() {
+                    ExactUvSubLmbFrame::RetainedPhysicalCrown
+                } else {
+                    ExactUvSubLmbFrame::TaylorVacuum
+                };
                 let (mut cff, _) = graph.cff_from_4d_denominators_in_uv_sub_lmb(
                     denominators,
                     uv_edges.iter().copied(),
-                    [],
+                    boundaries,
                     coordinate_lmb,
-                    ExactUvSubLmbFrame::TaylorVacuum,
+                    frame,
                     &child_cutset,
                     &options,
                     numerator,
@@ -351,6 +376,10 @@ impl Localizer<'_> {
                         )
                     })?;
                 let composition_started = Instant::now();
+                // Both source reconstruction certificates have passed. Bind
+                // this child's formal crown before any cograph is attached.
+                let bind =
+                    |atom: &Atom| point.map_or_else(|| atom.clone(), |point| point.bind(atom));
                 let mut next_rows = BTreeMap::<Vec<Atom>, Atom>::new();
                 for (carrier, arguments) in std::mem::take(rows) {
                     for (orientation, incoming) in cff_term.orientations.iter().zip(&argument_rows)
@@ -358,10 +387,10 @@ impl Localizer<'_> {
                         let arguments = arguments
                             .iter()
                             .cloned()
-                            .chain(incoming.iter().cloned())
+                            .chain(incoming.iter().map(&bind))
                             .collect();
                         *next_rows.entry(arguments).or_insert(Atom::Zero) +=
-                            &carrier * &orientation.expression * &production_prefactor;
+                            bind(&carrier) * bind(&orientation.expression) * &production_prefactor;
                     }
                 }
                 *rows = next_rows
@@ -370,7 +399,10 @@ impl Localizer<'_> {
                         (!carrier.is_zero()).then_some((carrier, arguments))
                     })
                     .collect();
-                *numerator = mapped;
+                *numerator = bind(&mapped);
+                if point.is_some() {
+                    *on_shell_point = None;
+                }
                 parameters.extend(new_parameters);
                 // Equal complete argument rows share one summed carrier. Other
                 // Taylor families remain separate ordinary bodies; adding them
@@ -386,6 +418,7 @@ impl Localizer<'_> {
                 mut powers,
                 mut reports,
                 numerator,
+                on_shell_point,
                 parameters,
                 rows,
             ) in terms
@@ -400,8 +433,13 @@ impl Localizer<'_> {
                 classes.retain(|class| class.component > component);
                 powers.retain(|class, _| sector.class(*class).component > component);
                 reports[component] = Default::default();
-                let key = (powers.clone(), numerator.clone(), parameters.clone());
-                let (_, _, _, combined_reports, _, _, combined_rows) =
+                let key = (
+                    powers.clone(),
+                    numerator.clone(),
+                    on_shell_point.clone(),
+                    parameters.clone(),
+                );
+                let (_, _, _, combined_reports, _, _, _, combined_rows) =
                     remaining.entry(key).or_insert_with(|| {
                         (
                             denominators,
@@ -409,6 +447,7 @@ impl Localizer<'_> {
                             powers,
                             vec![EnergyPowerCapMap::default(); reports.len()],
                             numerator,
+                            on_shell_point,
                             parameters,
                             BTreeMap::<Vec<Atom>, Atom>::new(),
                         )
@@ -425,13 +464,23 @@ impl Localizer<'_> {
             terms = remaining
                 .into_values()
                 .map(
-                    |(denominators, classes, powers, reports, numerator, parameters, rows)| {
+                    |(
+                        denominators,
+                        classes,
+                        powers,
+                        reports,
+                        numerator,
+                        on_shell_point,
+                        parameters,
+                        rows,
+                    )| {
                         (
                             denominators,
                             classes,
                             powers,
                             reports,
                             numerator,
+                            on_shell_point,
                             parameters,
                             rows.into_iter()
                                 .filter_map(|(arguments, carrier)| {
@@ -449,7 +498,7 @@ impl Localizer<'_> {
                 elapsed_ms = composition_time.as_secs_f64() * 1000.0,
                 families_before,
                 remaining_requests = terms.len(),
-                remaining_states = terms.iter().map(|(_, _, _, _, _, _, rows)| rows.len()).sum::<usize>(),
+                remaining_states = terms.iter().map(|(_, _, _, _, _, _, _, rows)| rows.len()).sum::<usize>(),
                 "Composed scalar argument rows for shared UV numerator families"
             );
             context.numerator_rows.clear();
@@ -467,7 +516,7 @@ impl Localizer<'_> {
         let composition_started = Instant::now();
         let mut active = Atom::Zero;
         let mut definitions = Vec::new();
-        for (_, _, _, _, numerator, parameters, rows) in terms {
+        for (_, _, _, _, numerator, _, parameters, rows) in terms {
             if rows.is_empty() || numerator.is_zero() {
                 continue;
             }
@@ -649,9 +698,226 @@ mod tests {
     };
     use linnet::half_edge::{
         involution::EdgeIndex,
-        subgraph::{InternalSubGraph, SubSetOps},
+        subgraph::{InternalSubGraph, SuBitGraph, SubSetOps},
     };
-    use symbolica::atom::{AtomCore, FunctionBuilder};
+    use symbolica::{
+        atom::{AtomCore, FunctionBuilder},
+        domains::rational::Rational,
+        function,
+    };
+
+    #[test]
+    fn on_shell_point_projection_matches_independent_bubble_residues() -> Result<()> {
+        test_initialise()?;
+        let mut graph: Graph = dot!(digraph on_shell_bubble {
+            edge [num=1 mass=1]
+            node [num=1]
+            incoming [style=invis]
+            outgoing [style=invis]
+            incoming -> a [id=0]
+            a -> b [id=1 lmb_id=0]
+            a -> b [id=2]
+            b -> outgoing [id=3]
+        })?;
+        let owners = graph
+            .full_filter()
+            .subtract(&graph.external_filter::<SuBitGraph>());
+        let subgraph = InternalSubGraph::cleaned_filter_optimist(owners.clone(), graph.as_ref());
+        let lmb = graph.try_compatible_sub_lmb(
+            &subgraph,
+            graph.dummy_stripped_external_flows_of(&subgraph),
+            &graph.loop_momentum_basis,
+        )?;
+        let external = *lmb.ext_edges.iter().next().unwrap();
+        let mass = Atom::var(symbol!("os_projection_test::mass"));
+        let scalar_parameter = symbol!("os_projection_test::a");
+        let scalar = Atom::var(scalar_parameter);
+        let loop_momentum = function!(GS.emr_mom, 1);
+        let loop_energy = GS.emr_mom(EdgeIndex(1), GS.cind(0));
+        let spatial_squared = (1..=3)
+            .map(|index| GS.emr_mom(EdgeIndex(1), GS.cind(index)).pow(2))
+            .sum::<Atom>();
+        let gluon_energy = Atom::var(symbol!("os_projection_test::E_gluon"));
+        let cutset = CutSet::empty(graph.n_hedges());
+        let pattern = OrientationPattern::default();
+        let production = Default::default();
+        let options = graph.denominator_only_cff_3d_expression_options();
+        let localizer = Localizer::new(
+            &cutset,
+            OrientationProjection::exact(&production, &options, &pattern, false),
+        );
+        let mut context = Local4dProjectionContext::default();
+        for sign in [-1, 1, 0] {
+            let branch_mass = if sign == 0 { Atom::Zero } else { mass.clone() };
+            let fermion_invariant = &spatial_squared + branch_mass.pow(2);
+            let fermion_ose = fermion_invariant.sqrt();
+            let fermion_energy = if sign == 0 {
+                gluon_energy.clone()
+            } else {
+                Atom::var(symbol!("os_projection_test::E_fermion"))
+            };
+            let point_energy = Atom::num(sign) * &branch_mass;
+            let point = function!(GS.os_mom, usize::from(external), &point_energy);
+            let gluon_momentum = &point - &loop_momentum;
+            let quadratic = |momentum: &Atom, mass_squared: Atom| {
+                (0..=3).fold(-mass_squared, |sum, index| {
+                    sum + Atom::num(if index == 0 { 1 } else { -1 })
+                        * GS.indexed_momentum(momentum, &[GS.cind(index)]).pow(2)
+                })
+            };
+            let fermion_denominator = GS.den(
+                1,
+                &loop_momentum,
+                branch_mass.pow(2),
+                quadratic(&loop_momentum, branch_mass.pow(2)),
+            );
+            let gluon_denominator = GS.den(
+                2,
+                &gluon_momentum,
+                0,
+                quadratic(&gluon_momentum, Atom::Zero),
+            );
+            // The point remains indexed until projection. The independent
+            // numerator factors are never combined with denominator algebra.
+            let numerator = (&loop_energy + &scalar)
+                * (GS.indexed_momentum(&point, &[GS.cind(0)]) + Atom::num(2));
+            let sector = FourDSector::new(
+                numerator / fermion_denominator / gluon_denominator,
+                vec![(owners.clone(), owners.clone(), lmb.clone())],
+                Vec::new(),
+            );
+            let canonical = sector.canonical_projection(&graph)?;
+            assert!(
+                canonical
+                    .terms
+                    .iter()
+                    .all(|term| term.on_shell_point.is_some())
+            );
+            for term in &canonical.terms {
+                assert_eq!(term.source_witness.len(), 2);
+                assert_eq!(term.powers.values().sum::<usize>(), 2);
+                assert_eq!(
+                    term.source_witness
+                        .iter()
+                        .map(|denominator| denominator.mass_squared.clone())
+                        .collect::<std::collections::BTreeSet<_>>(),
+                    std::collections::BTreeSet::from([Atom::Zero, branch_mass.pow(2)]),
+                );
+            }
+            let projected = localizer
+                .project_factorized_taylor_sector(&mut graph, &canonical, &mut context)?
+                .resolved()?;
+            let actual = projected
+                .iter()
+                .next()
+                .unwrap()
+                .1
+                .clone()
+                .replace(crate::utils::ose_atom_from_index(EdgeIndex(1)))
+                .with(fermion_ose.clone())
+                // Both exact positive source energies are compared in a
+                // neutral formal frame. Replace every half-integer invariant
+                // power, including inverse roots in the residue measure.
+                .replace_map(|view, _, output| {
+                    let symbolica::atom::AtomView::Pow(power) = view else {
+                        return;
+                    };
+                    let energy = if power.get_base() == fermion_invariant.as_view() {
+                        &fermion_energy
+                    } else if power.get_base() == spatial_squared.as_view() {
+                        &gluon_energy
+                    } else {
+                        return;
+                    };
+                    let twice_exponent = power.get_exp().to_owned() * Atom::num(2);
+                    if let Ok(exponent) = i64::try_from(twice_exponent.as_view()) {
+                        **output = energy.pow(exponent);
+                    }
+                });
+            assert!(!actual.contains_symbol(GS.os_mom));
+            assert!(!actual.contains_symbol(GS.emr_mom));
+            // Clockwise Feynman contour: the poles below are k0=E_m and
+            // k0=p0+E_0. The production bridge includes i/(2 pi)^3.
+            let expected = if sign == 0 {
+                // At m=pOS=0 there is one double pole. Differentiating
+                // 2*(z+a)/(z+E)^2 at z=E gives -a/(2*E^3).
+                Atom::i() * &scalar
+                    / (Atom::num(16) * Atom::var(GS.pi).pow(3) * gluon_energy.pow(3))
+            } else {
+                let residue = (&fermion_energy + &scalar)
+                    / (Atom::num(2)
+                        * &fermion_energy
+                        * ((&point_energy - &fermion_energy).pow(2) - gluon_energy.pow(2)))
+                    + (&point_energy + &gluon_energy + &scalar)
+                        / (Atom::num(2)
+                            * &gluon_energy
+                            * ((&point_energy + &gluon_energy).pow(2) - fermion_energy.pow(2)));
+                -Atom::i() * residue * (&point_energy + Atom::num(2))
+                    / (Atom::num(8) * Atom::var(GS.pi).pow(3))
+            };
+            // Certify the two exact coefficients of the degree-one numerator
+            // separately. Rational cancellation then acts on scalar contour
+            // weights only, never on the complete graph numerator sum.
+            let fixed_factor = &point_energy + Atom::num(2);
+            let actual = actual / &fixed_factor;
+            let expected = expected / fixed_factor;
+            for value in [&actual, &expected] {
+                assert!(
+                    value
+                        .derivative(scalar_parameter)
+                        .derivative(scalar_parameter)
+                        .is_zero()
+                );
+            }
+            for coefficient in [1, 0] {
+                let extract = |value: &Atom| {
+                    if coefficient == 0 {
+                        value.replace(scalar_parameter).with(Atom::Zero)
+                    } else {
+                        value.derivative(scalar_parameter)
+                    }
+                };
+                let actual_coefficient = extract(&actual);
+                let expected_coefficient = extract(&expected);
+                let difference = (&actual_coefficient - &expected_coefficient).together();
+                assert!(
+                    difference.is_zero(),
+                    "OS branch {sign}, numerator coefficient {coefficient}: actual={actual_coefficient}, expected={expected_coefficient}, difference={difference}"
+                );
+                if sign != 0 {
+                    // On the positive soft ray k=rho*r, choose m=|r|=1.
+                    // The independent residue has weights proportional to
+                    // 1/(E*w^2) and sigma/(w^2*(E+w)). The radial measure
+                    // rho^2 therefore leaves finite, nonzero limits 1 and
+                    // sigma. Apply this check to the certified production
+                    // coefficients, without expanding any graph numerator.
+                    let rho = symbol!("os_projection_test::soft_rho");
+                    let radial = Atom::var(rho);
+                    let weighted = (&actual_coefficient * Atom::num(32) * Atom::var(GS.pi).pow(3)
+                        / Atom::i()
+                        * radial.pow(2))
+                    .replace(fermion_energy.clone())
+                    .with((Atom::one() + radial.pow(2)).sqrt())
+                    .replace(gluon_energy.clone())
+                    .with(radial)
+                    .replace(mass.clone())
+                    .with(Atom::one());
+                    let soft_series = weighted.series(rho, Atom::Zero, 0)?;
+                    assert_eq!(
+                        soft_series.get_trailing_exponent(),
+                        Rational::from(0),
+                        "OS branch {sign}, coefficient {coefficient} must have exactly integrable rho^-2 soft scaling"
+                    );
+                    assert_eq!(
+                        soft_series.coefficient(Rational::from(0)),
+                        Some(Atom::num(if coefficient == 1 { 1 } else { sign })),
+                        "the massive OS soft-limit check must retain its nonzero leading term"
+                    );
+                }
+            }
+        }
+        Ok(())
+    }
 
     #[test]
     fn projected_rows_retain_one_ordinary_numerator_and_scalar_arguments() -> Result<()> {

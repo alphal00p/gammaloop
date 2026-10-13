@@ -1575,7 +1575,9 @@ impl Forests {
                         .require(component_key)?
                         .integrated(component_key)?;
                     let projection = match self.source_spinney(component).renormalization_scheme {
-                        ApproximationType::MUV | ApproximationType::IR => {
+                        // The OS integral owns the vacuum scheme correction;
+                        // its physical mass term stays in the local operator.
+                        ApproximationType::MUV | ApproximationType::IR | ApproximationType::OS => {
                             integrated.physical_finite_counterterm_atom()
                         }
                         ApproximationType::PolePart => integrated.physical_pole_atom(),

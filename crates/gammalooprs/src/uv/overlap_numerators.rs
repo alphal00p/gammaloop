@@ -1,5 +1,5 @@
 //! Offline, finite component contraction of already bound numerator coefficients.
-//! This module is included only by the test-only overlap certificate. Neither
+//! Shared by the overlap and on-shell test certificates. Neither
 //! scalar nor tensor-valued graph numerators are polynomial-expanded here.
 
 use std::{collections::HashMap, ops::Deref};
@@ -147,6 +147,41 @@ impl NumeratorJetCache {
         }
     }
 
+    fn normalize_scalar_component(value: AtomView<'_>) -> Atom {
+        // This value is already a finite scalar tensor entry. A scalar
+        // Casimir may still contain representation metadata in its arguments;
+        // whole-graph tensor inference must not classify it as an open tensor.
+        // Freeze complete function/power leaves into an injective neutral
+        // alphabet, preserving all source symbols, bodies and factorization.
+        let mut used = value.get_all_symbols(true);
+        let mut aliases = HashMap::<Atom, Atom>::new();
+        let mut serial = 0usize;
+        let protected = value.replace_map(|view, _, output| {
+            if matches!(view, AtomView::Fun(_) | AtomView::Pow(_)) {
+                let alias = aliases.entry(view.to_owned()).or_insert_with(|| {
+                    loop {
+                        let symbol =
+                            symbol!(&format!("gammalooprs::uv::scalar_component_{serial}"));
+                        serial += 1;
+                        if used.insert(symbol) {
+                            break Atom::var(symbol);
+                        }
+                    }
+                });
+                **output = alias.clone();
+            }
+        });
+        protected
+            .collect_compact_factors()
+            .expand_num()
+            .collect_compact_factors()
+            .replace_multiple(
+                aliases.iter().map(|(source, alias)| {
+                    Replacement::new(alias.to_pattern(), source.to_pattern())
+                }),
+            )
+    }
+
     fn contract(body: &Atom) -> Result<CanonicalTensor> {
         let mut network = body.parse_into_net()?;
         let slots = network.graph.dangling_indices();
@@ -191,7 +226,11 @@ impl NumeratorJetCache {
         let mut bytes = slots.as_view().get_byte_size();
         let mut scalar_prefactor = Atom::num(1);
         for (index, value) in tensor.iter_flat() {
-            let mut value = value.collect_compact_factors();
+            // Finite tensor execution can leave nested numeric signs and
+            // rational weights, such as -(C*(-2*k)+C*(-2*(p-k)))+C*(-2*p).
+            // Distribute only numbers; symbolic products and function bodies
+            // remain factorized, including the original numerator spectators.
+            let mut value = Self::normalize_scalar_component(value);
             if value.is_zero() {
                 continue;
             }
@@ -284,6 +323,34 @@ mod tests {
         assert!(constant.key.is_one());
         assert_eq!(constant.scalar_prefactor, Atom::num(4));
         assert!(cache.canonicalize(&Atom::Zero).unwrap().is_zero);
+    }
+
+    #[test]
+    fn finite_numeric_coefficients_cancel_without_distributing_symbolic_factors() {
+        test_initialise().unwrap();
+        let mut cache = NumeratorJetCache::default();
+        let p = parse_lit!(p);
+        let k = parse_lit!(k);
+        // Reserving every source symbol must also protect deliberate overlap
+        // with the temporary scalar alphabet used by this exact proof.
+        let reserved = Atom::var(symbol!("gammalooprs::uv::scalar_component_0"));
+        for casimir in [Atom::one(), idenso::color_cas!(2, idenso::cof!(3))] {
+            let shared = parse_lit!((a + b) * (c + d)) * casimir * &reserved;
+            let difference = -(&shared * (-Atom::num(2) * &k)
+                + &shared * (-Atom::num(2) * (&p - &k)))
+                + &shared * (-Atom::num(2) * &p);
+            assert!(cache.canonicalize(&difference).unwrap().is_zero);
+            let retained = cache.canonicalize(&shared).unwrap();
+            assert!(!retained.is_zero);
+            assert!(
+                retained
+                    .key
+                    .replace(shared.to_pattern())
+                    .match_iter()
+                    .next()
+                    .is_some()
+            );
+        }
     }
 
     #[test]

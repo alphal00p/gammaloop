@@ -351,9 +351,9 @@ impl<'a> Direct3dApproximation<'a> {
         marker_given: &M,
     ) -> Result<Direct3dCts> {
         if current.renormalization_scheme() == crate::uv::ApproximationType::OS {
-            unimplemented!(
-                "local on-shell counterterms are deferred until local counterterms can be derived from the 4D expanded representation"
-            );
+            return Err(eyre!(
+                "local on-shell/OS counterterms require the projected-4D route; set uv.local_uv_cts_from_expanded_4d_integrands=true and generation.explicit_orientation_sum_only=true; direct 3D OS counterterms are not yet implemented"
+            ));
         }
         let ctx = UVCtx::new(self.graph, self.settings);
         let reduced_subgraph = current.reduced_subgraph(given);

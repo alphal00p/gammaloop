@@ -293,6 +293,57 @@ fn gamma0_square_collapses_inside_chain() {
 }
 
 #[test]
+fn fixed_temporal_slash_uses_gamma_zero_without_fixing_lorentz_dimension() {
+    use spenso::{
+        network::library::symbolic::ETS, shadowing::IntoAtom,
+        structure::abstract_index::AIND_SYMBOLS,
+    };
+    use symbolica::{function, symbol};
+
+    let r = test_initialize();
+    let dimension = Atom::var(symbol!("temporal_slash_dimension"));
+    let vector_slot = Minkowski {}.to_symbolic([&dimension]);
+    let temporal = function!(ETS.delta, function!(AIND_SYMBOLS.cind, 0), &vector_slot);
+    let slash = gamma!(temporal);
+    let start = slot!(r.bis4, a).into_atom();
+    let end = slot!(r.bis4, b).into_atom();
+    let middle = slot!(r.bis4, c).into_atom();
+    let evanescent = &dimension - Atom::num(4);
+    for settings in [
+        GammaSimplifySettings::canonical(),
+        GammaSimplifySettings::repeated_pairs(),
+    ] {
+        for factors in [
+            vec![gamma0!(), slash.clone()],
+            vec![slash.clone(), gamma0!()],
+            vec![slash.clone(), slash.clone()],
+        ] {
+            let expression = &evanescent * chain!(&start, &end; factors);
+            assert_eq!(
+                expression.simplify_gamma_with(settings),
+                &evanescent * g!(&start, &end),
+            );
+        }
+        let projected =
+            &evanescent * chain!(&middle, &start, gamma0!()) * chain!(&middle, &end, slash.clone());
+        assert_eq!(
+            projected.simplify_gamma_with(settings),
+            &evanescent * g!(&start, &end),
+        );
+    }
+    let spatial = gamma!(function!(
+        ETS.delta,
+        function!(AIND_SYMBOLS.cind, 1),
+        &vector_slot
+    ));
+    assert!(
+        chain!(&start, &end, spatial)
+            .simplify_gamma()
+            .contains_symbol(AGS.gamma)
+    );
+}
+
+#[test]
 fn gamma0_conjugates_gamma5_inside_chain() {
     let r = test_initialize();
     let expr = chain!(
@@ -312,6 +363,9 @@ fn gamma0_square_is_four_dimensional() {
     let expr = chain!(slot!(r.bis_d, a), slot!(r.bis_d, b), gamma0!(), gamma0!(),);
 
     assert_snapshot!(expr.simplify_gamma().to_bare_ordered_string(), @"chain(bis(d,a),bis(d,b),gamma0(in,out),gamma0(in,out))");
+    let separate = chain!(slot!(r.bis_d, c), slot!(r.bis_d, a), gamma0!())
+        * chain!(slot!(r.bis_d, c), slot!(r.bis_d, b), gamma0!());
+    assert_eq!(separate.simplify_gamma(), separate);
 }
 
 #[test]
