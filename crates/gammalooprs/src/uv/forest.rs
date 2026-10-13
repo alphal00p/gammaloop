@@ -351,7 +351,10 @@ impl Forest {
 
             let integrated = n.data.integrated(graph)?;
             let physical = match n.data.renormalization_scheme() {
-                ApproximationType::MUV | ApproximationType::IR => {
+                // OS stores only its vacuum remainder in IntegratedCts. The
+                // terminal result is its finite scheme addback; the on-shell
+                // mass correction remains in the local counterterm.
+                ApproximationType::MUV | ApproximationType::IR | ApproximationType::OS => {
                     integrated.physical_finite_counterterm()?
                 }
                 ApproximationType::PolePart => integrated.physical_pole()?,

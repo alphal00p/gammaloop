@@ -119,6 +119,20 @@ $U_1+S_0-U_1 S_0$, the existing degree-one soft-refined operation. This is an
 algebraic specialization; a massive on-shell integral cannot be made massless
 by naively setting $m=0$ inside its logarithms.
 
+The checked-in validation graph chooses the quark momentum as $k$ and the
+massless-gluon momentum as $k-p$. For that original homogeneous basis, write
+$F'=N(k,m)/((k^2-m^2)(k-p)^2)$, with $N_0=N(k,0)$. The independent compact
+remainder used by the production test is instead
+
+$ V'=frac(2(N_0(k dot.op p)-m gamma^0 N_0 k^0),D^3). $
+
+The two OS branches have denominators
+$(k^2-m^2)(k^2-2 sigma m k^0+m^2)$. This is a separately derived expression
+in the fixture basis, not a post-subtraction loop shift of the previous oracle.
+The tests compare the source QCD numerator as a finite open-spinor tensor,
+retain identical denominator products separately and check that attaching the
+projector to the opposite spinor port changes the answer.
+
 For the UV check, compare the exact source and completed subtraction under
 $k mapsto Lambda k$. $O-U_1 O$ has no terms at the retained divergent orders,
 so $T_("OS")$ has the same UV jet as $U_1$. Check this statement before energy
@@ -156,6 +170,12 @@ scheme payload, not the integral of the complete local counterterm. The result
 at the integrated boundary is
 
 $ [C_("local")+C_("scheme")]=-[O]-"Pole"[V]. $
+
+The standalone `renormalize` output uses the terminal analytic projection,
+matching the existing MUV command semantics. For OS it therefore exports the
+finite vacuum scheme correction $+"Fin"[V]$; it is not an export of the full
+OS mass counterterm. The physical mass term remains in the local $-O$ branch
+and enters the assembled integrand through that branch.
 
 The retained $-[O]$ supplies the OS mass subtraction. Passing the complete
 $-(O+V)$ to the generic finite-addback policy would cancel its finite mass
@@ -248,6 +268,22 @@ energy shifts, while the fermion remains a physical-mass propagator. A matching
 spatial momentum alone does not certify a denominator. Neither certificate
 may be replaced by evaluation at sample coordinates.
 
+The implemented point bridge is restricted to an isolated component. It
+lifts the fixed point into a temporary source-crown coordinate and requires the
+inverse substitution to reproduce the exact source. This is injective only
+when that same coordinate does not also represent a live surrounding momentum.
+A nested numerator can contain both the child's fixed point and a parent's
+live crown momentum with the same edge owner; merging them would change the
+graph. Two disjoint point owners likewise require separate assignments.
+The current single-point and inverse-reconstruction guards remain necessary.
+
+Nested and disjoint projection therefore requires a per-component source
+assignment with distinct neutral coordinates for the live crown and the fixed
+point. Other components' points must remain affine spectators until their own
+contour step. These are planned extensions, not support established by the
+isolated-component certificates. Counting points per component alone does not
+solve the live-crown collision.
+
 As a separate contour oracle, let $omega=abs(bold(k))$,
 $E=sqrt(bold(k)^2+m^2)$, and
 $N_sigma(z)=(2-d)(gamma^0(z+sigma m)-bold(gamma) dot.op bold(k))+d m$.
@@ -327,6 +363,16 @@ The soft-refined gluon-inside-quark case has the opposite operator order.
 Disjoint components commute only on their owned factors; their signed completed
 counterterms and integrated prefixes use the established disconnected replay.
 No global OS substitution is permitted on the shared direct-CFF root.
+
+The local forest identities above do not establish an integrated policy for
+an IR gluon parent containing an OS quark child. The parent's soft jet can
+retain the child's physical on-shell denominators. Sending its complete
+$-H_2[X]$ through generic analytic integration can therefore reintroduce the
+on-shell integrals that the OS scheme deliberately retains locally. The
+vacuum-only parent payload and any omitted integrated soft contribution must
+be derived at the appropriate complete self-energy boundary before enabling
+this combination. Its integrated support remains unproven even if the local
+hard and soft tests pass.
 
 Mixed-prescription guards can be relaxed only for those cases actually derived
 and tested. Required coverage includes all relevant hard subspaces and the

@@ -310,18 +310,23 @@ impl Integrated<'_> {
 
         let scheme = current.renormalization_scheme();
         match scheme {
-            ApproximationType::MUV | ApproximationType::PolePart | ApproximationType::IR => {
-                // Integrate the complete signed operator in each retained frame.
-                // Linearity permits this sector sum; no soft branch is discarded
-                // before the nested forest has supplied its completed coefficient.
+            ApproximationType::MUV
+            | ApproximationType::PolePart
+            | ApproximationType::IR
+            | ApproximationType::OS => {
+                // The local operation owns its integration policy. In the OS
+                // scheme this is the signed vacuum remainder -(U - UO); the
+                // physical O branch already supplies the on-shell mass shift
+                // and must never enter the finite MS-bar addback. Soft and
+                // ordinary components retain their complete signed expression.
                 let mut integrated = integrand.atom().with_checked_expression(Atom::Zero)?;
                 for sector in integrand.active_sectors() {
                     let physical = sector
-                        .atom
+                        .integration_atom()
                         .expression()
                         .replace(GS.integrated_loop_scale)
                         .with(Atom::one());
-                    let physical = sector.atom.with_algebra_result(physical)?;
+                    let physical = sector.integration_atom().with_algebra_result(physical)?;
                     let simplified = simplify(&physical)?;
                     if !simplified.is_zero() {
                         let coefficient = self
@@ -369,7 +374,6 @@ impl Integrated<'_> {
                 // marker independent of mUV so enclosing limits still rescale the vacuum mass.
                 IntegratedCts::from_series(&integrated, &expansion, 4 * n_loops as i64)
             }
-            ApproximationType::OS => Err(eyre!("Not yet implemented OS")),
             ApproximationType::Unsubtracted => {
                 panic!("should have been kept out of the wood");
             }
@@ -2742,6 +2746,219 @@ mod tests {
                 }
             }
         }
+        Ok(())
+    }
+
+    #[test]
+    fn production_on_shell_scheme_integral_matches_bare_fermion_reference() -> Result<()> {
+        use crate::uv::{
+            UVgenerationSettings,
+            approx::local_4d::{Full4dCts, on_shell_tests::fixture, uv_limit},
+        };
+
+        use crate::graph::parse::NumeratorInterface;
+        test_initialise()?;
+        let (graph, current, root) = fixture(false)?;
+        let settings = UVgenerationSettings {
+            generate_integrated: true,
+            add_marker: false,
+            ..Default::default()
+        };
+        let ctx = UVCtx::new(&graph, &graph.model, &settings);
+        let local = uv_limit(
+            &Full4dCts::from_factorized_local(&Local4dCts::root()),
+            &ctx,
+            &current,
+            &root,
+            &current,
+            &root,
+        )?;
+        let mass = graph[EdgeIndex(2)].mass_atom(&graph.model);
+
+        // Determine only the graph's Feynman-rule phase, coupling, color, and
+        // open-spin normalization from its bare numerator N=C[(2-d)k/+dm].
+        // No Taylor result enters the oracle. The integrated field matrix is
+        // C(p/-m), independently of which internal line carries the loop k.
+        let numerator = graph
+            .numerator(current.subgraph(), root.subgraph())?
+            .to_d_dim(GS.dim)?
+            .color_simplify()
+            .unwrap()
+            .get_single_atom()
+            .expect("the primitive quark source has a single numerator");
+        let massless = numerator.replace(mass.to_pattern()).with(Atom::Zero);
+        let external_slash = massless
+            .replace(function!(GS.emr_mom, 2, W_.x___))
+            .with(function!(GS.emr_mom, 0, W_.x___).to_pattern());
+        let field_matrix = simplify(
+            &(external_slash / (Atom::num(2) - Atom::var(GS.dim))
+                - (&numerator - &massless) / Atom::var(GS.dim)),
+        )?;
+        let field_matrix = field_matrix.replace(GS.dim).with(4);
+        assert!(!field_matrix.is_zero());
+        assert!(field_matrix.contains_symbol(GS.emr_mom));
+
+        let pi = Atom::var(symbolica::atom::Symbol::PI);
+        let normalization = Atom::i() / (Atom::num(16) * pi.pow(2));
+        let epsilon = Atom::var(GS.dim_epsilon);
+        for project_onto_tensor_integrals in [true, false] {
+            let vakint_settings = vakint::VakintSettings {
+                number_of_terms_in_epsilon_expansion: 3,
+                project_onto_tensor_integrals,
+                ..settings.vakint.true_settings()
+            };
+            let integrated = Integrated::new(crate::utils::vakint()?, &vakint_settings)
+                .run(&local, &ctx, &current, &root, &current, &root)?;
+            let pole = NumeratorInterface::export(&integrated.physical_pole()?).0;
+            assert!(
+                !pole.contains_symbol(GS.m_uv_vacuum) && !pole.contains_symbol(GS.m_uv_expansion),
+                "the integrated field pole must be auxiliary-scale independent before choosing a scale"
+            );
+            let pole = pole.replace(GS.dim).with(4);
+            let expected_pole = &normalization * &field_matrix * epsilon.pow(-1);
+            let mut comparisons = vec![("signed field pole".to_owned(), pole - expected_pole, 0)];
+            for vacuum_mass in [1, 2] {
+                // For real positive scales, L = log(mu²)-log(M²) is also
+                // -log(M²/mu²). Use the ratio form without assuming a generic
+                // complex-log product identity inside the symbolic engine.
+                let logarithm = -function!(
+                    symbolica::atom::Symbol::LOG,
+                    Atom::num(vacuum_mass).pow(2) / Atom::var(GS.mu_r_sq)
+                );
+                let finite = NumeratorInterface::export(&integrated.physical_finite_counterterm()?)
+                    .0
+                    .replace(GS.m_uv_vacuum)
+                    .with(Atom::num(vacuum_mass))
+                    .replace(GS.dim)
+                    .with(4);
+                let expected_finite = &normalization
+                    * &field_matrix
+                    * (Atom::one() - &logarithm
+                        + &epsilon
+                            * (&logarithm
+                                - logarithm.pow(2) / Atom::num(2)
+                                - pi.pow(2) / Atom::num(12)));
+                comparisons.push((
+                    format!("finite scheme correction at M={vacuum_mass}"),
+                    finite - expected_finite,
+                    1,
+                ));
+            }
+            for (label, difference, depth) in comparisons {
+                let difference = series(&simplify(&difference)?, depth)?.to_atom();
+                assert!(
+                    difference
+                        .try_to_rational_polynomial::<_, _, u32>(&*Q_I, &*Q_I, None)?
+                        .numerator
+                        .is_zero(),
+                    "project={project_onto_tensor_integrals}: {label} differs from the independent one-loop fermion reference: {difference}"
+                );
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn on_shell_vacuum_remainder_matches_dimensional_one_loop_reference() -> Result<()> {
+        test_initialise()?;
+        let vakint = crate::utils::vakint()?;
+        let settings = vakint::VakintSettings {
+            number_of_terms_in_epsilon_expansion: 4,
+            ..VakintSettings::default().true_settings()
+        };
+        let epsilon = Atom::var(GS.dim_epsilon);
+        let dimension = Atom::num(4) - Atom::num(2) * &epsilon;
+        let mass_squared = Atom::var(GS.m_uv_vacuum).pow(2);
+        let tadpole = |power| {
+            function!(
+                vakint::symbols::S.topo,
+                function!(vakint_symbol!("I1L"), &mass_squared, power)
+            )
+        };
+        let evaluate = |numerator: Atom, power| -> Result<Atom> {
+            let mut term = vakint::VakintTerm {
+                integral: tadpole(power),
+                numerator,
+                vectors: vec![("k".into(), 1)],
+            };
+            term.evaluate_integral(vakint, &settings)?;
+            Ok(term.numerator)
+        };
+
+        // Independently contract the Feynman-gauge numerator before comparing
+        // its angular average. Internal gamma algebra is d-dimensional; the
+        // on-shell projector and the external spinor slots remain four-dimensional.
+        let mink = Minkowski {}.new_rep(GS.dim);
+        let mu = mink.to_symbolic([Aind::new_dummy().to_atom()]);
+        let rho = mink.to_symbolic([Aind::new_dummy().to_atom()]);
+        let bis = Bispinor {}.new_rep(4);
+        let [a, b, c, d] = std::array::from_fn(|_| bis.to_symbolic([Aind::new_dummy().to_atom()]));
+        let contracted = simplify(
+            &(function!(AGS.gamma, &a, &b, &mu)
+                * function!(AGS.gamma, &b, &c, &rho)
+                * function!(AGS.gamma, &c, &d, &mu)),
+        )?;
+        let expected =
+            simplify(&((Atom::num(2) - Atom::var(GS.dim)) * function!(AGS.gamma, &a, &d, &rho)))?;
+        assert!((contracted - expected).expand().is_zero());
+
+        // Strip only the common coupling and (p-slash - m) matrix. The signed
+        // vacuum remainder is (d-2)[I2 - 2/d (I2 + M² I3)]. Its two topologies
+        // are integrated independently, so the tensor-reduction identity
+        // integral(k²/D³) = d/4 I2 is not assumed by the tested calculation.
+        let tensor_reduced = evaluate(
+            (&dimension - Atom::num(2)) * (Atom::one() - Atom::num(2) / &dimension),
+            2,
+        )? + evaluate(
+            -Atom::num(2) * (&dimension - Atom::num(2)) * &mass_squared / &dimension,
+            3,
+        )?;
+        let scalar_reference = evaluate(Atom::one() - &epsilon, 2)?;
+        assert!(
+            series(&(&tensor_reduced - &scalar_reference), 2)?
+                .to_atom()
+                .expand()
+                .is_zero(),
+            "the OS vacuum remainder must equal (1-epsilon) I2 through the orders needed by enclosing poles"
+        );
+
+        // The repository's MS-bar measure is i/(16*pi²) times the scalar
+        // Gamma-function result. Set mu²=M² only after integration to isolate
+        // the evanescent finite term and its positive-epsilon successor.
+        let at_reference_scale = tensor_reduced
+            .replace(GS.mu_r_sq)
+            .with(mass_squared.clone());
+        let pi = Atom::var(symbolica::atom::Symbol::PI);
+        let normalization = Atom::i() / (Atom::num(16) * pi.pow(2));
+        let expected =
+            &normalization * (epsilon.pow(-1) - Atom::one() + pi.pow(2) * &epsilon / Atom::num(12));
+        assert!(
+            series(&(at_reference_scale - expected), 1)?
+                .to_atom()
+                .expand()
+                .is_zero(),
+            "the signed field pole is positive and its dimensional finite term is -1"
+        );
+
+        // A separate Feynman-parameter integration of the on-shell two-point
+        // function gives integral_0^1 dt t^(-2eps)[2+(d-2)t]. It multiplies I2
+        // with the physical mass as its scale, yielding the known 3/eps + 4
+        // mass correction. The finite OS mass must remain in the local branch.
+        let mass_reference = evaluate(
+            Atom::num(2) / (Atom::one() - Atom::num(2) * &epsilon) + Atom::one(),
+            2,
+        )?
+        .replace(GS.mu_r_sq)
+        .with(mass_squared.clone());
+        assert!(
+            series(
+                &(mass_reference - normalization * (Atom::num(3) * epsilon.pow(-1) + Atom::num(4))),
+                0,
+            )?
+            .to_atom()
+            .expand()
+            .is_zero()
+        );
         Ok(())
     }
 
