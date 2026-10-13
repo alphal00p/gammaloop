@@ -2,7 +2,7 @@
 
 #quote(block: true)[
 #strong[Status:] Current implementation architecture, audited against the Linnet source on
-2026-10-12.
+2026-10-13.
 
 This note covers the `linnet` Rust crate. `clinnet` is a separate command-line renderer and
 `linnest` owns Typst layout and drawing; neither is part of Linnet's graph core.
@@ -113,10 +113,11 @@ and rejects cycles; transitive closure and reduction first require that DAG chec
 delete complete half-edge pairs rather than one side of an edge.
 
 Exhaustive circuit enumeration requires an explicit cycle-rank bound and rejects powersets that
-the platform cannot represent before enumeration. Tadpole classification similarly validates and
-canonicalizes a non-empty terminal set, compares components against every terminal-incident edge,
-and returns deduplicated structural results. These guards make malformed input return errors and
-keep retained node-identification history on canonical structural paths instead of panic paths.
+the platform cannot represent before enumeration. Tadpole classification requires a non-empty
+set of distinct live terminals, each with an incident half-edge. A node absorbed by a pending
+identification is rejected; callers supply its live representative. It compares components against
+every terminal-incident edge and returns deduplicated structural results. These guards report
+malformed input as errors.
 
 Connectivity counts use one union-find pass over the nodes touched by a subgraph's half-edges.
 Dangling and split edges touch a node without joining components; internal edges determine the
@@ -142,8 +143,8 @@ DOT interchange follows a separate adapter path:
 
 ```text
 DOT text/file
-  -> dot-parser AST
-  -> SubGraphFreeGraph plus inherited attributes
+  -> parser::syntax: lexing and recursive descent, flattened in one pass
+  -> FlatGraph: attribute statements, nodes keyed by decoded identifier, single edges
   -> DotVertexData / DotEdgeData / DotHedgeData
   -> HedgeGraphBuilder
   -> explicit id permutations, when ids were supplied
@@ -153,8 +154,14 @@ DOT text/file
 Invisible endpoint nodes represent dangling edges. `dir` controls superficial orientation, while
 the endpoint side determines underlying flow. Serialization maps caller data into the DOT data
 types and writes through a caller-provided `fmt::Write` or `io::Write`; DOT parsing separately
-offers string- and file-based entry points. Malformed direction, endpoint, and explicit-ID data
-are reported as parser errors; they do not panic or publish a partially constructed graph.
+offers string- and file-based entry points. `DotGraph` requires exactly one graph and rejects
+trailing input; `DotGraphSet` accepts multiple graphs. Invalid DOT is a `DotSyntaxError` with
+its line and column; the in-tree reader limits subgraph nesting to 256 levels, because the
+Typst plugin parses user-supplied DOT. Malformed direction, endpoint, and explicit-ID data
+produce `DotParseError` without publishing a partially constructed graph. Later graph-attribute
+statements take precedence, and parallel edges with equal endpoints retain their statement order.
+Quoted values preserve literal backslashes and Graphviz escapes. The shared `DotIndent` formatter
+keeps newlines and indentation inside quoted values intact in whole-graph and subgraph output.
 
 == Feature and persistence boundaries
 

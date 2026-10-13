@@ -7,6 +7,8 @@ name = "symbolica"
 version = "3.0.1"
 requires-python = ">=3.10"
 dependencies = ["anywidget>=0.9,<1; sys_platform == 'emscripten'"]
+# Copies of linnet-py's LICENSE, licenses/ and bundled Typst package notices
+# (MiTeX, oxifmt and their PROVENANCE), plus GPL-3.0 and LGPL-3.0 for GMP/MPFR.
 license-files = ["licenses/*"]
 
 [project.optional-dependencies]
@@ -23,5 +25,7 @@ build = "cp314-*"
 # Pyodide's ABI-tag rewrite repacks the wheel with DEFLATE; compress afterwards.
 repair-wheel-command = 'python "{package}/compress_wheel.py" "{wheel}" "{dest_dir}"'
 environment = { MATURIN_PEP517_ARGS = "--locked --no-default-features --features wasm", RUSTFLAGS = "" }
-test-sources = ["crates/linnet-py/tests", "crates/linnet-py/python", "crates/linnest/typst/src", "crates/linnest/typst/linnest.wasm", "docs/products/linnet/content/quickstart-python.typ", "docs/products/linnet/content/api.typ", "crates/feynkit-py/tests/installed_offline_rendering.py", "crates/spynso3/tests/installed_tensor_paging.py"]
-test-command = "python -m unittest discover -s crates/linnet-py/tests -p 'test_*.py' && python crates/feynkit-py/tests/installed_offline_rendering.py && python crates/spynso3/tests/installed_tensor_paging.py"
+# Typst-route renders read stock CeTZ, which the wheel does not bundle, from the
+# package directory that scripts/fetch-stock-cetz.sh provides before the build.
+test-sources = ["crates/linnet-py/tests", "crates/linnet-py/python", "crates/linnest/typst/src", "crates/linnest/typst/linnest.wasm", "docs/products/linnet/content/quickstart-python.typ", "docs/products/linnet/content/api.typ", "crates/feynkit-py/tests/installed_offline_rendering.py", "crates/spynso3/tests/installed_tensor_paging.py", "target/typst-packages"]
+test-command = "export TYPST_PACKAGE_PATH=target/typst-packages && python -m unittest discover -s crates/linnet-py/tests -p 'test_*.py' && python crates/feynkit-py/tests/installed_offline_rendering.py && python crates/spynso3/tests/installed_tensor_paging.py"

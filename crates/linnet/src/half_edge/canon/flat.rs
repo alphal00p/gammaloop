@@ -5,11 +5,15 @@
 //! key, the rank of its own key and its physical role, so the arbitrary stored Source/Sink role
 //! of an undirected edge never matters and `Orientation::Reversed` resolves to the physical
 //! direction.
+//!
+//! Only live nodes are loaded, numbered as [`HedgeGraph::compact`] would number them, so a graph
+//! with pending identifications loads exactly like its compacted copy.
 
 use crate::half_edge::{
     involution::{Flow, InvolutiveMapping, Orientation},
     nodestore::Topology,
-    HedgeGraph,
+    remap::NodeRemap,
+    HedgeGraph, NodeIndex,
 };
 
 /// Marks the missing opposite of a dangling hedge.
@@ -58,6 +62,12 @@ pub(crate) struct Flat {
     pub(crate) colour_table: Vec<u32>,
     edge_key: Vec<u32>,
     hedge_key: Vec<u32>,
+    /// The node slot of each loaded node while the graph has absorbed nodes; empty otherwise,
+    /// when the loaded nodes are the slots.
+    pub(crate) slots: Vec<u32>,
+    /// While `slots` is not empty, the compaction of the node slots into the loaded nodes:
+    /// absorbed slots merge into their representative's.
+    compaction: NodeRemap,
 }
 
 /// Sorted distinct caller keys; the canonical colours are ranks into these tables.
@@ -94,9 +104,16 @@ impl Flat {
     where
         N: Topology,
     {
+        let nodes = &graph.node_store;
+        let topology = nodes.topology();
+        self.slots.clear();
+        if topology.n_live() < topology.node_bound() {
+            self.number_live_nodes(topology);
+        }
+        let slot = |v: usize| self.slots.get(v).map_or(v, |&slot| slot as usize);
         let keys = KeyTables {
             nodes: rank(
-                graph.node_store.iter().map(|(v, d)| (v.0, node_key(d))),
+                (0..topology.n_live()).map(|v| (v, node_key(nodes.get(NodeIndex(slot(v)))))),
                 &mut self.ncol,
             ),
             edges: rank(
@@ -149,14 +166,52 @@ impl Flat {
             // provisional colour: the role; `colour` folds in the keys below
             self.hcol.push(role as u32);
         }
+        if !self.slots.is_empty() {
+            for v in &mut self.node_of {
+                *v = loaded_node(&self.compaction, *v as usize) as u32;
+            }
+        }
         self.colour(keys.edges.len(), keys.hedges.len());
         self.index_nodes(self.ncol.len());
         keys
     }
 
+    /// Numbers the live nodes of a topology with absorbed nodes as [`Topology::compact`] does.
+    fn number_live_nodes(&mut self, topology: &impl Topology) {
+        let bound = topology.node_bound();
+        self.slots.extend(0..bound as u32);
+        self.compaction.set_compaction(
+            &mut self.slots,
+            bound,
+            |_, slot| topology.is_live(NodeIndex(slot)),
+            |_, slot| topology.representative(NodeIndex(slot)).0,
+            |slots, hole, live| slots.swap(hole, live),
+        );
+        self.slots.truncate(self.compaction.new_bound());
+    }
+
+    /// Restates a canonical node map and the generators' node images of a graph with absorbed
+    /// nodes from loaded nodes to node slots: absorbed slots take their representative's
+    /// entries. Cold, as only graphs with pending identifications take it.
+    #[cold]
+    pub(crate) fn restate_by_slot(
+        &self,
+        node_map: &NodeRemap,
+        generator_nodes: &[u32],
+    ) -> (NodeRemap, Vec<u32>) {
+        let (n, n_slots) = (self.n_nodes(), self.compaction.old_bound());
+        let mut nodes = Vec::with_capacity(generator_nodes.len() / n * n_slots);
+        for gamma in generator_nodes.chunks(n) {
+            let image = |slot| self.slots[gamma[loaded_node(&self.compaction, slot)] as usize];
+            nodes.extend((0..n_slots).map(image));
+        }
+        (self.compaction.then(node_map), nodes)
+    }
+
     /// Load a graph given directly by node colours and undirected `[a, b, colour]` edges, for
     /// callers that keep their own light graph state and only need node canonization.
     pub(crate) fn load_coloured(&mut self, ncol: &[u32], edges: &[[u32; 3]]) {
+        self.slots.clear();
         self.ncol.clear();
         self.ncol.extend_from_slice(ncol);
         self.colour_table.clear();
@@ -188,6 +243,7 @@ impl Flat {
         n_edge_keys: usize,
         n_hedge_keys: usize,
     ) {
+        self.slots.clear();
         self.ncol.clear();
         self.ncol.extend_from_slice(node_colours);
         self.edge_key.clear();
@@ -427,4 +483,11 @@ fn rank<K: Ord>(keys: impl Iterator<Item = (usize, K)>, ranks: &mut Vec<u32>) ->
         ranks[i as usize] = table.len() as u32 - 1;
     }
     table
+}
+
+/// The loaded node of node `slot` of a graph with absorbed nodes, by the `compaction` of its
+/// node slots.
+fn loaded_node(compaction: &NodeRemap, slot: usize) -> usize {
+    let node = compaction.get(NodeIndex(slot));
+    node.expect("compaction keeps or merges every node").0
 }

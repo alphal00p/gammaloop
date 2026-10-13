@@ -30,13 +30,12 @@ Typst compiler typesets labels and formulas with bundled fonts; it does not load
 MiTeX, Linnest, or Kurvst Typst packages. NumPy is the host's only Python dependency
 for these notebook displays.
 
-The notebook compiler retains SVG output, HTML/MathML, text shaping, and math
-layout. It omits PDF/PNG export, PDF image import, WebAssembly plugins,
-syntax highlighting, bibliographies, JPEG/GIF/WebP decoding, and system font
-discovery. Labels can use normal Typst math and text, including bold and italic;
-raw text is displayed without syntax coloring. Fonts are bundled, so rendering
-works offline without Typst packages or a system installation. General document
-compilation remains available in the standalone tools.
+The notebook compiler is the full Typst compiler of the standalone Linnet
+wheel, with WebAssembly plugins, PDF/PNG export, PDF image import, syntax
+highlighting, bibliographies, and JPEG/GIF/WebP decoding, but no system font
+discovery. Text is set in Libertinus Serif, equations in STIX Two Math, and raw
+text in DejaVu Sans Mono. These fonts are bundled, so rendering works offline
+without Typst packages or a system installation.
 
 == Model labels
 
@@ -54,7 +53,9 @@ figure directly in IPython, Jupyter, and Marimo. The result retains its rendered
 SVG and labels, so later display and export reuse the same snapshot.
 Use `to_svg()` or `to_html()` for text exports, or `to_linnest()` for a
 self-contained Typst document embedding the SVG. The exported document needs
-no graph packages.
+no graph packages. The HTML is interactive; `to_svg()`, `to_linnest()` and file
+exports are the static drawing without inspection targets.
+`to_svg(interactive=True)` returns the interactive SVG.
 
 // docs-example: compile
 ```python
@@ -127,8 +128,8 @@ objects also expose compact representations for inspection.
 
 For explicit Marimo embedding, use `mo.iframe(diagram.to_html())` so the interaction script
 runs. Displaying `diagram` directly already uses Marimo's interactive HTML path.
-Without scripts, inline SVG still shows native hover labels; embedding it as a static image
-shows the drawing. Figure selections are local browser state; they do not alter the Python
+Without scripts, the interactive SVG of `to_svg(interactive=True)` still shows native hover
+labels inline; embedding the static `to_svg()` as an image shows the drawing. Figure selections are local browser state; they do not alter the Python
 diagram or create a physics `Subgraph`. Copy the node and edge IDs from the details panel into
 `diagram.subgraph(nodes=[...], edges=[...])` for subsequent symbolic calculations, or use
 `diagram.filter(...)` to select by physics properties.

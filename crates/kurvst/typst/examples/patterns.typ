@@ -1,5 +1,5 @@
 #import "../src/lib.typ" as kurvst
-#import "@preview/cetz:0.5.1" as cetz
+#import "@preview/cetz:0.5.2" as cetz
 
 #set page(width: 120mm, height: 80mm, margin: 10mm)
 

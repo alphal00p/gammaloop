@@ -17,7 +17,6 @@ required-features = ["community", "python_stubgen"]
 [dependencies]
 symbolica = { workspace = true, features = ["python_export"], optional = true }
 ciborium = "0.2.2"
-dot-parser = { workspace = true }
 linnet = { workspace = true, features = ["serde"] }
 linnest = { workspace = true, features = ["svg"] }
 # Maturin follows path dependencies into sdists; render.rs embeds Kurvst's Typst assets.

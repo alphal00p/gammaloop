@@ -21,8 +21,8 @@ kind = "System architecture"
 status = "Implemented"
 lifecycle = "current"
 owner = "unassigned"
-reviewed_at = "2026-10-12"
-review_ref = "96b28772ba65281cf75cef70c3ec5e0873c1513e"
+reviewed_at = "2026-10-13"
+review_ref = "e81fa93f8177a195c43015f95510d5d3adac5d01"
 products = ["gammaloop", "feynkit"]
 topics = ["state", "python", "generation", "evaluation", "events", "integration", "persistence"]
 review_triggers = ["crates/feynkit*/**", "crates/gammaloop-api/src/**", "crates/gammaloop-api/python/**", "crates/gammalooprs/src/**"]
@@ -40,7 +40,10 @@ anchor = "load_state_manifest(&save_path)?"
 # version 10. The note preserves the version 9 beam history and documents version 10
 # Request, separate stage settings and u128 symmetry orders. Import kind now comes from
 # request.kind; exact-version guards remain.
-digest = "fa3d87f744e652b9bfdcfd81a34103108cf25f6d"
+# Reviewed 2026-10-13: Only a pre-Request load regression was added. It proves the
+# existing version 10 guard rejects old state before model or symbolic payload decoding,
+# without changing the persisted layout or load implementation.
+digest = "944bb45fddc56c9133e2791b2515c4458d0e9434"
 
 [[section.note.scope]]
 path = "crates/gammaloop-api/src/commands/integrate.rs"
@@ -51,7 +54,10 @@ anchor = "fn default_workspace_path(&self"
 # No integration/dashboard impact 2026-09-16: graph-group selection now
 # receives the canonical model; persistence and terminal ownership are unchanged.
 # Reviewed 2026-09-23: Canonical FeynKit model/graph ownership, version 8 persistence, and shared generalized CFF generation are documented in the current architecture.
-digest = "3d3ec5e44087c857deff2b0ae1aea9da5e186dba"
+# Reviewed 2026-10-13: The note documents selecting on clones before warm-up, restored
+# non-model settings with current model overrides, fingerprints of the warmed selected
+# collection before observable restoration, and delayed live-state/workspace mutation.
+digest = "4cd0f145b42b6c1d102dd29737263f0c2f4fa9a8"
 
 [[section.note.scope]]
 path = "crates/gammalooprs/src/integrands/evaluation.rs"
@@ -92,7 +98,11 @@ anchor = "pub struct EventProcessingRuntime {"
 # No event-ownership impact 2026-09-16: canonical model access and finite,
 # nonnegative jet-threshold validation preserve grouping and accumulation.
 # Reviewed 2026-09-23: Canonical FeynKit model/graph ownership, version 8 persistence, and shared generalized CFF generation are documented in the current architecture.
-digest = "fd2c408eec5d2aad4a7c4ec2284fe779c8a53ce7"
+# Reviewed 2026-10-13: Continuous checkpoint restoration now preserves the empty label
+# representation of its constructor, while discrete labels and all compatibility
+# predicates remain intact. The existing observable/checkpoint ownership is unchanged;
+# exact JSON round-trip and resumed integration regressions cover the correction.
+digest = "1d62e5c6221f48ccf89a8af8bd809c67145cffaf"
 
 [[section.note.scope]]
 path = "crates/gammaloop-api/src/python.rs"
@@ -185,7 +195,12 @@ anchor = "pub struct FeynmanDiagram {"
 # identity, with lazy ID/aggregate, cached validation, optional names/u128 and shared
 # partition checking. Identity/numerator/certificate ownership is documented. Existing
 # finalized-IR/routing/cut ownership remains; API migration is separately documented.
-digest = "21ccb5e8bf69f862ba00beeb050733f7b5505cb1"
+# Reviewed 2026-10-13: The note now distinguishes live vertex IDs from absorbed node
+# slots. The full-file delta also adds mass-only DOT rejection tests; existing model-owned
+# particle and mass semantics remain unchanged. The later fixture repairs omit empty DOT
+# defaults and select the unique incoming edge; all model-mass assertions and production
+# semantics are retained.
+digest = "74e758d6f37e41f957335d3124093f242db4ab10"
 
 [[section.note.scope]]
 path = "crates/feynkit-tensor/src/lib.rs"
@@ -214,8 +229,8 @@ kind = "Runtime presentation architecture"
 status = "Implemented"
 lifecycle = "current"
 owner = "unassigned"
-reviewed_at = "2026-08-18"
-review_ref = "6feaba98e48a2cedb4688d3d0cc9a214716a8677"
+reviewed_at = "2026-10-13"
+review_ref = "e81fa93f8177a195c43015f95510d5d3adac5d01"
 products = ["gammaloop"]
 topics = ["integration", "terminal", "ratatui", "status"]
 review_triggers = ["crates/gammaloop-api/src/commands/integrate.rs", "crates/gammalooprs/src/integrate/**"]
@@ -229,7 +244,11 @@ anchor = "fn dashboard_event_loop(receiver"
 # No integration/dashboard impact 2026-09-16: graph-group selection now
 # receives the canonical model; persistence and terminal ownership are unchanged.
 # Reviewed 2026-09-23: The main integration status and terminal ownership paths remain downstream of canonical FeynKit data.
-digest = "3d3ec5e44087c857deff2b0ae1aea9da5e186dba"
+# Reviewed 2026-10-13: Preparation now selects and warms private integrands and validates
+# selected fingerprints before committing settings or workspace changes. The note records
+# this resume boundary; terminal lifecycle and renderer-neutral status ownership are
+# unchanged.
+digest = "4cd0f145b42b6c1d102dd29737263f0c2f4fa9a8"
 
 [[section.note.scope]]
 path = "crates/gammalooprs/src/integrate/render_ratatui.rs"
@@ -247,7 +266,11 @@ anchor = "mod render_ratatui;"
 # No dashboard impact 2026-09-16: unit-volume fixtures use named empty
 # FeynKit models; production status flow and terminal ownership are unchanged.
 # Reviewed 2026-09-23: The main integration status and terminal ownership paths remain downstream of canonical FeynKit data.
-digest = "3d96c87757c8ffdd07f74d3b28a45c39e599aad9"
+# Reviewed 2026-10-13: Workspace version 2 and its old-version rejection regression
+# replace the full-source fingerprint contract. The note records selected-collection
+# fingerprints and required restart of older workspaces; renderer data and numerical
+# workers are unchanged.
+digest = "500b03078f3f6b0cc59e941f5ade022218e6539f"
 
 [[section.note]]
 id = "uv-renormalization"
@@ -676,8 +699,8 @@ kind = "System architecture"
 status = "Implemented · reviewed 2026-08-18"
 lifecycle = "current"
 owner = "unassigned"
-reviewed_at = "2026-10-12"
-review_ref = "96b28772ba65281cf75cef70c3ec5e0873c1513e"
+reviewed_at = "2026-10-13"
+review_ref = "e81fa93f8177a195c43015f95510d5d3adac5d01"
 products = ["linnet"]
 topics = ["half-edge", "subgraph", "dot", "serialization", "algorithms"]
 review_triggers = ["crates/linnet/src/lib.rs", "crates/linnet/src/half_edge.rs", "crates/linnet/src/half_edge/**", "crates/linnet/src/parser/**", "crates/linnet/src/permutation.rs", "crates/linnet/src/tree/**", "crates/linnet/src/union_find/**", "crates/linnet/src/drawing.rs", "crates/linnet/src/num_traits.rs", "crates/linnet/Cargo.toml"]
@@ -709,7 +732,11 @@ anchor = "pub struct HedgeGraph<E, V, H = NoData, N: Topology = NodeForest> {"
 # share a union-find pass, and node iteration uses direct node IDs without recursive
 # skipping. The note adds these current boundaries while retaining existing
 # storage/topology/invariant prose.
-digest = "ef4a8c60ded06c70a6ec41de2a1c80ef2986512b"
+# Reviewed 2026-10-13: Real API boundary change: tadpoles rejects absorbed terminal slots
+# with AbsorbedTerminal and requires distinct live nodes; no automatic representative
+# canonicalization. The note replaces its former canonicalization claim. Remaining removed
+# commented-out error variants have no architecture effect.
+digest = "863720b19d8df9505ae9744cec947c9f13b5ae25"
 
 [[section.note.scope]]
 path = "crates/linnet/src/half_edge/involution.rs"
@@ -737,7 +764,11 @@ anchor = "pub trait SubGraphLike: SubSetLike<Hedge> + Inclusion<HedgePair> {"
 # reexported beside SuBitGraph; the SubGraphLike contract and pair inclusion semantics
 # remain unchanged. The note describes membership and split-edge semantics, not the
 # removed iterator representation.
-digest = "329e58877ebf0c0d3cb9934cccdf0eec9aa21b65"
+# Reviewed 2026-10-13: Only DOT writer ownership changes from generic CodeFormatter to
+# quote-aware DotIndent. SubGraphLike membership/inclusion contract is unchanged. Shared
+# parser paragraph now explains preserved quoted multiline contents for subgraph and
+# whole-graph writers.
+digest = "d44aa9b416ab4b4349dac69b02978fb458d7306a"
 
 [[section.note.scope]]
 # Documentation-impact attestation 2026-08-21: malformed DOT endpoint,
@@ -766,7 +797,12 @@ anchor = "pub struct DotGraph<N: Topology = NodeForest> {"
 # Reviewed 2026-10-12: dot_value becomes public and gains documentation, with its
 # implementation byte-unchanged. The existing DOT adapter and caller-data serialization
 # boundary remain accurate, including lossless escaping and explicit parser errors.
-digest = "210681f75a403e94ec133746fca4c5ec6bebe897"
+# Reviewed 2026-10-13: The existing SIDE note already documents the in-tree
+# FlatGraph/parser::syntax pipeline and nesting guard. Added prose covers exact
+# single-vs-multiple graph entrypoints, syntax/semantic error owners, stable parallel-edge
+# order, later graph attributes and lossless quoting/indentation. Existing native pipeline
+# text retained; no runtime validation inferred.
+digest = "bb3e6eb54812c4446cb3ead858533bea76ef96b3"
 
 [[section.note]]
 id = "vakint-architecture"
@@ -878,6 +914,21 @@ digest = "d051c576cbaefe711ce1a5ece5c31f061b1ed8b8"
 id = "proposals"
 title = "Design proposals"
 summary = "Possible changes that are deliberately kept separate from the implemented architecture."
+
+[[section.note]]
+id = "kurvst-arrowhead-engine"
+title = "Kurvst Arrowhead Engine"
+summary = "Shared native/Wasm marks, drawing-wide batching, and stock CeTZ 0.5.2 rendering; final performance and image acceptance pending."
+source = "docs/architecture/kurvst-arrowhead-engine.typ"
+kind = "Accepted design plan"
+status = "Accepted · P0–P7 implemented; performance and image acceptance pending"
+lifecycle = "proposal"
+owner = "unassigned"
+reviewed_at = "2026-10-09"
+review_ref = "404048c90d3d67da606b57dc88fbd5fa8cab5d2a"
+products = ["linnet", "gammaloop"]
+topics = ["drawing", "geometry", "arrowheads", "performance"]
+review_triggers = ["crates/kurvst/**", "crates/linnest/**", "crates/linnet-py/**", "docs/architecture/kurvst-arrowhead-engine.typ"]
 
 [[section.note]]
 id = "gammaloop-roadmap"
@@ -1208,8 +1259,8 @@ kind = "Build engineering"
 status = "Living engineering record"
 lifecycle = "current"
 owner = "unassigned"
-reviewed_at = "2026-10-12"
-review_ref = "96b28772ba65281cf75cef70c3ec5e0873c1513e"
+reviewed_at = "2026-10-13"
+review_ref = "e81fa93f8177a195c43015f95510d5d3adac5d01"
 products = ["gammaloop"]
 topics = ["nix", "ci", "cache", "documentation"]
 review_triggers = ["flake.nix", "flake.lock", "nix/**", "nix-ci.nix", ".github/workflows/**", "crates/gammaloop-workspace-hack/**", "crates/alphal00p-docs-builder/**", "justfile"]
@@ -1333,7 +1384,10 @@ end_anchor = "workspacePackageExtraSourceRootsForSourcePackages ="
 # and nauty runtime files extend their owning package tiers; Community paths replace
 # standalone wrappers/stubs. The note now names those input classes while retaining the
 # production/test/runtime separation and historical experiment results.
-digest = "38e459675114fd36b9e7f87c2a0dd1e0b1434ad0"
+# Reviewed 2026-10-13: The note documents the current drawing plugin/license inputs, exact
+# mark/layout fixtures and theme asset, and extension-filtered DOT corpus roots. These are
+# inputs of their owning Cargo packages rather than a new producer partition.
+digest = "8f38f9c3b64b51a5d5dc184bdcf9930c3fe1447c"
 
 [[section.note.scope]]
 path = "nix/documentation.nix"
@@ -1368,7 +1422,10 @@ anchor = "nextestPackageGroups ="
 end_anchor = "sortedUnique ="
 # Reviewed 2026-09-14: documentation provenance tests exercise standalone
 # Jujutsu workspaces; the terminal test closure supplies both Git and Jujutsu.
-digest = "66f700580ce13b9eaee90fe0111639e46968c531"
+# Reviewed 2026-10-13: The Clinnet group now receives stock-CeTZ docsTypst via
+# TYPST_TEST_EXECUTABLE so mark parity and Typst behavior tests are required; the
+# runtime-tool ownership is documented.
+digest = "96d0d3982d2043808bf3027fe8aa5f1d7e744df2"
 
 [[section.note.scope]]
 path = "nix/rust-workspace.nix"

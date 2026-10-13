@@ -1240,7 +1240,7 @@ pub mod test {
             involution::{EdgeIndex, Hedge},
             subgraph::{Inclusion, InternalSubGraph, ModifySubSet, SuBitGraph, SubSetOps},
         },
-        parser::DotGraph,
+        parser::{CompassPt, DotGraph},
     };
 
     use crate::{
@@ -1517,7 +1517,7 @@ pub mod test {
         )
         .unwrap();
 
-        let subgraph: SuBitGraph = g.compass_subgraph(Some(dot_parser::ast::CompassPt::S));
+        let subgraph: SuBitGraph = g.compass_subgraph(Some(CompassPt::S));
 
         let lmb = g.lmb_of(&subgraph);
         assert_snapshot!(g.dot_lmb_of(&subgraph, &lmb));
@@ -1552,9 +1552,9 @@ pub mod test {
         )
         .unwrap();
 
-        let subgraph: SuBitGraph = g.compass_subgraph(Some(dot_parser::ast::CompassPt::S));
+        let subgraph: SuBitGraph = g.compass_subgraph(Some(CompassPt::S));
 
-        let dummy: SuBitGraph = g.compass_subgraph(Some(dot_parser::ast::CompassPt::N));
+        let dummy: SuBitGraph = g.compass_subgraph(Some(CompassPt::N));
         let non_dummy = g.full_filter().subtract(&dummy);
         let lmb = g.lmb_of(&non_dummy);
         let non_dummy_sub_ext = g.full_crown(&subgraph).subtract(&dummy);
@@ -1576,7 +1576,7 @@ pub mod test {
         )
         .unwrap();
 
-        let subgraph: SuBitGraph = g.compass_subgraph(Some(dot_parser::ast::CompassPt::S));
+        let subgraph: SuBitGraph = g.compass_subgraph(Some(CompassPt::S));
         let non_dummy = g.full_filter();
         let lmb = g.lmb_of(&non_dummy);
         let sub_lmb = g.compatible_sub_lmb(&subgraph, non_dummy, &lmb);

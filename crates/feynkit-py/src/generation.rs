@@ -621,12 +621,14 @@ impl PyProcess {
             .iter()
             .map(|state| resolve(state))
             .collect::<PyResult<Vec<_>>>()?;
-        let svg = crate::display::process_svg(&self.model, &incoming, &outgoing, config, style)?;
+        let drawing =
+            crate::display::process_render(&self.model, &incoming, &outgoing, config, style)?;
+        let svg = drawing.to_svg(true)?;
         let html = format!(
             "<figure class=\"feynkit-process\" style=\"max-width:100%;margin:.5rem 0\"><div style=\"width:360px;max-width:100%;overflow-x:auto\">{svg}</div><figcaption style=\"font-size:.85em;opacity:.75\">{}</figcaption></figure>",
             crate::display::escape_html(&self.__repr__())
         );
-        Ok(PyDiagramRender::new(svg, html))
+        Ok(drawing.with_html(html))
     }
 
     /// Display the process schematic in SVG-aware frontends.
@@ -638,7 +640,7 @@ impl PyProcess {
     /// >>> from IPython.display import display
     /// >>> display(process)
     fn _repr_svg_(&self) -> PyResult<String> {
-        self.render(None, None)?.to_svg()
+        self.render(None, None)?.to_svg(false)
     }
 
     /// Display the process blob, model and active restrictions in notebooks.

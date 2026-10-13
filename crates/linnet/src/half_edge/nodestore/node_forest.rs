@@ -1120,7 +1120,7 @@ mod archive {
         Archive, Archived, Deserialize, Fallible, Serialize,
     };
 
-    use super::NodeForest;
+    use super::{NodeForest, NONE};
     use crate::half_edge::{involution::Hedge, nodestore::NodeStore, NodeIndex, NodeVec};
 
     /// The archived canonical image of a [`NodeForest`]: each half-edge's node
@@ -1143,6 +1143,18 @@ mod archive {
         /// The number of node slots.
         pub fn node_bound(&self) -> usize {
             self.anchor.len()
+        }
+
+        /// The number of live nodes.
+        pub fn n_live(&self) -> usize {
+            (self.absorbed_into.iter())
+                .filter(|&&into| into == NONE)
+                .count()
+        }
+
+        /// Whether `node` has not been absorbed by an identification.
+        pub fn is_live(&self, node: NodeIndex) -> bool {
+            self.absorbed_into[node.0] == NONE
         }
 
         fn to_store(&self) -> Result<NodeForest, String> {
@@ -1251,9 +1263,21 @@ mod archive {
             self.topology.node_id(hedge)
         }
 
-        /// Each node slot's payload, absorbed nodes included.
-        pub fn node_data(&self) -> &[Archived<V>] {
-            &self.data
+        /// The number of node slots, live or absorbed.
+        pub fn node_bound(&self) -> usize {
+            self.topology.node_bound()
+        }
+
+        /// The number of live nodes.
+        pub fn n_live(&self) -> usize {
+            self.topology.n_live()
+        }
+
+        /// The live nodes with their payloads; absorbed nodes are skipped.
+        pub fn iter_nodes(&self) -> impl Iterator<Item = (NodeIndex, &Archived<V>)> {
+            (self.data.iter().enumerate())
+                .map(|(node, data)| (NodeIndex(node), data))
+                .filter(|&(node, _)| self.topology.is_live(node))
         }
     }
 
@@ -1342,8 +1366,12 @@ mod archive {
             for hedge in (0..5).map(Hedge) {
                 assert_eq!(archived.node_id(hedge), store.node_id(hedge));
             }
-            let data: Vec<_> = archived.node_data().iter().map(|&d| d as usize).collect();
-            assert_eq!(data, [0, 10, 2, 3]);
+            // The absorbed slot 2 keeps its payload for the round trip but is no node.
+            let nodes: Vec<_> = (archived.iter_nodes())
+                .map(|(node, &data)| (node.0, data as usize))
+                .collect();
+            assert_eq!(nodes, [(0, 0), (1, 10), (3, 3)]);
+            assert_eq!((archived.n_live(), archived.node_bound()), (3, 4));
             let label = archived.topology.label.as_ptr() as usize - bytes.as_ptr() as usize;
 
             let back: NodeStore<NodeForest, usize> = rkyv::from_bytes(&bytes).unwrap();

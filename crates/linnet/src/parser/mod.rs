@@ -2,15 +2,18 @@
 //!
 //! This module parses the [DOT language](https://graphviz.org/doc/info/lang.html)
 //! into Linnet's half-edge model and serializes half-edge graphs back to DOT.
-//! [`DotGraph::from_string`] and [`DotGraph::from_file`] parse one graph. A
-//! [`DotGraph`] retains [`GlobalData`] alongside a [`HedgeGraph`] whose node,
-//! edge, and half-edge payloads are [`DotVertexData`], [`DotEdgeData`], and
-//! [`DotHedgeData`]. Use [`set::DotGraphSet`] for input containing multiple graphs.
+//! [`DotGraph::from_string`] and [`DotGraph::from_file`] parse input holding
+//! exactly one graph. A [`DotGraph`] retains [`GlobalData`] alongside a
+//! [`HedgeGraph`] whose node, edge, and half-edge payloads are [`DotVertexData`],
+//! [`DotEdgeData`], and [`DotHedgeData`]. Use [`set::DotGraphSet`] for input
+//! containing multiple graphs.
 //!
 //! Parsed DOT attributes remain available in those payload types. In particular,
 //! external-port flow and edge orientation are preserved in the parsed graph
 //! rather than discarded as drawing-only attributes. [`DotGraph`] dereferences to
-//! its inner [`HedgeGraph`] for graph algorithms.
+//! its inner [`HedgeGraph`] for graph algorithms. Invalid DOT is reported as a
+//! [`DotSyntaxError`] with its line and column; well-formed DOT that does not
+//! describe a valid half-edge graph is reported as a [`DotParseError`].
 //!
 //! ## Parse, inspect, and serialize
 //!
@@ -40,14 +43,13 @@
 //! [`HedgeGraph::dot_serialize_io`] or [`HedgeGraph::dot_serialize_fmt`]. Those
 //! methods take graph-level metadata plus mappings for half-edge, edge, and node
 //! payloads; parsing does not implicitly convert DOT payloads into user types.
-//! Canonical output reserves the ID namespace beginning with `__linnet_hex_id_`
-//! to transport strings ending in a backslash, which dot-parser cannot quote.
 //!
 //! [`HedgeGraph`]: crate::half_edge::HedgeGraph
 
 use std::{
+    borrow::Cow,
     collections::BTreeMap,
-    fmt::{Debug, Write},
+    fmt::{self, Debug, Write},
     ops::{Deref, DerefMut},
     path::Path,
 };
@@ -56,11 +58,8 @@ use std::{
 use figment;
 
 use ahash::{HashSet, HashSetExt};
-use dot_parser::ast::CompassPt;
 use figment::Figment;
-use indenter::CodeFormatter;
-use itertools::{Either, Itertools};
-use subgraph_free::SubGraphFreeGraph;
+use itertools::Either;
 
 use crate::{
     half_edge::{
@@ -75,73 +74,12 @@ use crate::{
     permutation::Permutation,
 };
 
-const HEX_DOT_ID_PREFIX: &str = "__linnet_hex_id_";
+mod syntax;
+use syntax::FlatGraph;
+pub use syntax::{CompassPt, DotSyntaxError, UnknownCompassPt};
 
-/// Strips surrounding quotes from a string if present and decodes the escapes
-/// emitted by this module's canonical DOT serializer.
-pub(crate) fn strip_quotes(s: &str) -> String {
-    let inner = s
-        .strip_prefix('"')
-        .and_then(|value| value.strip_suffix('"'))
-        .or_else(|| {
-            s.strip_prefix('\'')
-                .and_then(|value| value.strip_suffix('\''))
-        });
-    let mut output = inner.map_or_else(
-        || s.to_owned(),
-        |inner| {
-            let mut output = String::with_capacity(inner.len());
-            let mut chars = inner.chars().peekable();
-            while let Some(character) = chars.next() {
-                if character == '\\' && matches!(chars.peek(), Some('"')) {
-                    output.push(chars.next().expect("peeked character"));
-                } else {
-                    output.push(character);
-                }
-            }
-            output
-        },
-    );
-    if let Some(encoded) = output.strip_prefix(HEX_DOT_ID_PREFIX) {
-        if encoded.len().is_multiple_of(2) {
-            let decoded = encoded
-                .as_bytes()
-                .as_chunks::<2>()
-                .0
-                .iter()
-                .map(|digits| {
-                    std::str::from_utf8(digits)
-                        .ok()
-                        .and_then(|digits| u8::from_str_radix(digits, 16).ok())
-                })
-                .collect::<Option<Vec<_>>>();
-            if let Some(decoded) = decoded
-                .and_then(|bytes| String::from_utf8(bytes).ok())
-                .filter(|decoded| decoded.ends_with('\\') || decoded.starts_with(HEX_DOT_ID_PREFIX))
-            {
-                output = decoded;
-            }
-        }
-    }
-    output
-}
-
-pub(crate) fn escape_dot_string(value: &str) -> String {
-    value.replace('"', "\\\"")
-}
-
+/// Writes an identifier bare when DOT allows it, and quoted otherwise.
 pub(crate) fn dot_id(value: &str) -> String {
-    // dot-parser treats the final `\"` of a quoted ID as an escaped quote, so
-    // use a semantic envelope that remains distinct after external DOT tools
-    // discard lexical quoting. Envelope-looking literal values are escaped too.
-    if value.ends_with('\\') || value.starts_with(HEX_DOT_ID_PREFIX) {
-        let mut encoded = String::with_capacity(HEX_DOT_ID_PREFIX.len() + value.len() * 2);
-        encoded.push_str(HEX_DOT_ID_PREFIX);
-        for byte in value.as_bytes() {
-            write!(encoded, "{byte:02x}").expect("writing to a String cannot fail");
-        }
-        return encoded;
-    }
     let keyword = matches!(
         value.to_ascii_lowercase().as_str(),
         "node" | "edge" | "graph" | "digraph" | "subgraph" | "strict"
@@ -154,17 +92,96 @@ pub(crate) fn dot_id(value: &str) -> String {
     if plain && !keyword {
         value.to_owned()
     } else {
-        format!("\"{}\"", escape_dot_string(value))
+        dot_value(value)
     }
 }
 
-/// Encode an attribute value for lossless round-tripping through [`DotGraph::from_string`].
-/// Uses DOT quoting rather than JSON escaping, preserving literal backslashes.
+/// Writes `value` as a quoted DOT string that this module reads back as
+/// `value`. Quotes are escaped, and a backslash is doubled exactly where it
+/// would otherwise escape the next character: before a quote, a backslash, a
+/// newline, or the closing quote. Other backslashes stay single, so Graphviz
+/// escapes such as `\N` and `\l` reach Graphviz unchanged.
 pub fn dot_value(value: &str) -> String {
-    if value.ends_with('\\') || value.starts_with(HEX_DOT_ID_PREFIX) {
-        dot_id(value)
-    } else {
-        format!("\"{}\"", escape_dot_string(value))
+    let mut quoted = String::with_capacity(value.len() + 2);
+    quoted.push('"');
+    let mut chars = value.chars().peekable();
+    while let Some(c) = chars.next() {
+        match c {
+            '"' => quoted.push_str("\\\""),
+            '\\' if matches!(chars.peek(), None | Some('"' | '\\' | '\n')) => {
+                quoted.push_str("\\\\")
+            }
+            c => quoted.push(c),
+        }
+    }
+    quoted.push('"');
+    quoted
+}
+
+/// Indents the statements of the `*_dot_fmt` writers, which emit each
+/// statement as a chunk that starts with a newline.
+///
+/// Such a chunk is written as indented lines, each ending in a newline, after
+/// removing the leading whitespace its lines share; any other chunk is written
+/// unchanged. Line breaks inside quoted strings belong to the value: they are
+/// kept verbatim and do not start a new line.
+pub(crate) struct DotIndent<'w, W> {
+    writer: &'w mut W,
+}
+
+impl<'w, W: Write> DotIndent<'w, W> {
+    pub(crate) fn new(writer: &'w mut W) -> Self {
+        Self { writer }
+    }
+
+    /// Splits `chunk` at the line breaks outside quoted strings.
+    fn lines(chunk: &str) -> impl Iterator<Item = &str> + Clone {
+        let (mut quoted, mut escaped) = (false, false);
+        chunk.split(move |c| {
+            let line_break = c == '\n' && !quoted;
+            if escaped {
+                escaped = false;
+            } else if c == '\\' {
+                escaped = quoted;
+            } else if c == '"' {
+                quoted = !quoted;
+            }
+            line_break
+        })
+    }
+}
+
+impl<W: Write> Write for DotIndent<'_, W> {
+    fn write_str(&mut self, chunk: &str) -> fmt::Result {
+        let Some(chunk) = chunk.strip_prefix('\n') else {
+            return self.writer.write_str(chunk);
+        };
+        let chunk = chunk.trim_end_matches(|c: char| c.is_ascii_whitespace());
+        let indent = |line: &str| {
+            line.len()
+                - line
+                    .trim_start_matches(|c: char| c.is_ascii_whitespace())
+                    .len()
+        };
+        let lines = Self::lines(chunk);
+        let common = (lines.clone().map(indent).filter(|&n| n > 0).min()).unwrap_or(0);
+        for line in lines {
+            let line = &line[common.min(indent(line))..];
+            if !line.is_empty() {
+                self.writer.write_str("  ")?;
+            }
+            self.writer.write_str(line)?;
+            self.writer.write_char('\n')?;
+        }
+        Ok(())
+    }
+
+    /// Writes a whole `write!` as one chunk.
+    fn write_fmt(&mut self, args: fmt::Arguments<'_>) -> fmt::Result {
+        match args.as_str() {
+            Some(chunk) => self.write_str(chunk),
+            None => self.write_str(&args.to_string()),
+        }
     }
 }
 
@@ -225,8 +242,6 @@ pub enum NodeIdOrDangling {
         statements: BTreeMap<String, String>,
     },
 }
-
-mod subgraph_free;
 
 impl<S: Topology> DotGraph<S> {
     pub fn compass_subgraph<Sub: ModifySubSet<Hedge> + SubSetLike>(
@@ -309,8 +324,7 @@ impl<S: Topology> DotGraph<S> {
         };
         writeln!(writer, "digraph{name} {{")?;
 
-        let mut writer = CodeFormatter::new(writer, "  ");
-        writer.indent(1);
+        let mut writer = DotIndent::new(writer);
 
         write!(writer, "{}", self.global_data)?;
         for (n, _, v) in self.iter_nodes() {
@@ -385,37 +399,26 @@ impl<S: Topology> DotGraph<S> {
         unsafe { rkyv::archived_root::<Self>(bytes) }
     }
 
-    #[allow(clippy::result_large_err, clippy::type_complexity)]
-    pub fn from_file<'a, P>(p: P) -> Result<Self, HedgeParseError<'a, (), (), (), ()>>
+    /// Parses a file holding exactly one DOT graph.
+    pub fn from_file<P>(p: P) -> Result<Self, HedgeParseError<(), (), (), ()>>
     where
         P: AsRef<Path>,
     {
-        let ast_graph: SubGraphFreeGraph = dot_parser::ast::Graph::from_file(p)?.into();
-
-        Self::from_parser(ast_graph, Figment::new())
+        let source = std::fs::read_to_string(p)?;
+        Self::from_flat(FlatGraph::parse(&source)?, Figment::new())
     }
 
-    #[allow(clippy::result_large_err, clippy::type_complexity)]
-    pub fn from_string<'a, Str: AsRef<str>>(
-        s: Str,
-    ) -> Result<Self, HedgeParseError<'a, (), (), (), ()>> {
-        let ast_graph: SubGraphFreeGraph = dot_parser::ast::Graph::try_from(s.as_ref())?
-            .filter_map(&|(key, value)| Some((key.to_owned(), value.to_owned())))
-            .into();
-
-        Self::from_parser(ast_graph, Figment::new())
+    /// Parses input holding exactly one DOT graph; trailing input is an error.
+    pub fn from_string<Str: AsRef<str>>(s: Str) -> Result<Self, HedgeParseError<(), (), (), ()>> {
+        Self::from_flat(FlatGraph::parse(s.as_ref())?, Figment::new())
     }
 
     #[cfg(feature = "serde")]
-    pub fn from_string_with_figment<'a, Str: AsRef<str>>(
+    pub fn from_string_with_figment<Str: AsRef<str>>(
         s: Str,
         figment: figment::Figment,
-    ) -> Result<Self, HedgeParseError<'a, (), (), (), ()>> {
-        let ast_graph: SubGraphFreeGraph = dot_parser::ast::Graph::try_from(s.as_ref())?
-            .filter_map(&|(key, value)| Some((key.to_owned(), value.to_owned())))
-            .into();
-
-        Self::from_parser(ast_graph, figment)
+    ) -> Result<Self, HedgeParseError<(), (), (), ()>> {
+        Self::from_flat(FlatGraph::parse(s.as_ref())?, figment)
     }
 
     pub fn back_and_forth_dot(self) -> Self {
@@ -462,40 +465,45 @@ impl<S: Topology> DotGraph<S> {
         )
     }
 
-    fn from_parser<'a>(
-        value: SubGraphFreeGraph,
+    /// Builds the half-edge graph of a flattened DOT graph. Nodes are added in
+    /// identifier order and edges in endpoint order before the explicit `id`
+    /// and numeric-port reservations are applied.
+    fn from_flat(
+        graph: FlatGraph<'_>,
         fig: Figment,
-    ) -> Result<Self, HedgeParseError<'a, (), (), (), ()>> {
-        let is_digraph = value.is_digraph;
-        let name = value.name.clone();
-        let (attrs, ids, nodes, edges) = value.nodes_and_edges();
-
-        // let can_graph = dot_parser::canonical::Graph::from(ast_graph);
-        let mut global_data = GlobalData::try_from((attrs, ids)).unwrap();
+    ) -> Result<Self, HedgeParseError<(), (), (), ()>> {
+        let FlatGraph {
+            directed,
+            name,
+            graph_attrs,
+            node_defaults,
+            edge_defaults,
+            nodes,
+            mut edges,
+        } = graph;
+        let mut global_data =
+            GlobalData::from_statements(graph_attrs, node_defaults, edge_defaults);
         if let Some(name) = name {
-            global_data.add_name(strip_quotes(&name));
+            global_data.add_name(name.into_owned());
         }
         global_data.set_figment(fig);
 
         let mut g = HedgeGraphBuilder::new();
-        let mut map = BTreeMap::new();
+        let map = (nodes.into_iter())
+            .map(|(id, attrs)| {
+                let node = match DotVertexData::from_parser(&id, attrs, &global_data)? {
+                    Either::Left(d) => NodeIdOrDangling::Id(g.add_node(d)),
+                    Either::Right(statements) => NodeIdOrDangling::Dangling { statements },
+                };
+                Ok((id, node))
+            })
+            .collect::<Result<BTreeMap<Cow<str>, _>, DotParseError>>()?;
 
-        for (id, n) in nodes {
-            let idorstatements = match DotVertexData::from_parser(n, &global_data)? {
-                Either::Left(d) => NodeIdOrDangling::Id(g.add_node(d)),
-                Either::Right(statements) => NodeIdOrDangling::Dangling { statements },
-            };
-
-            map.insert(id, idorstatements);
-        }
-
-        for e in edges
-            .set
-            .into_iter()
-            .sorted_by(|a, b| Ord::cmp(&(&a.from, &a.to), &(&b.from, &b.to)))
-        {
+        // Stable, so parallel edges with equal endpoints keep their flattened order.
+        edges.sort_by(|a, b| (&a.from, &a.to).cmp(&(&b.from, &b.to)));
+        for e in edges {
             let (data, orientation, source, target) =
-                DotEdgeData::from_parser(e, &map, is_digraph, &global_data)?;
+                DotEdgeData::from_parser(e, &map, directed, &global_data)?;
             match target {
                 Either::Left(a) => {
                     g.add_edge(source, a, data, orientation);
@@ -729,8 +737,8 @@ impl<E, V, H, N: Topology> HedgeGraph<E, V, H, N> {
 pub mod test {
 
     use crate::{
-        half_edge::{nodestore::NodeForest, subgraph::SuBitGraph},
-        parser::{DotGraph, DotParseError, ExplicitIdKind, HedgeParseError},
+        half_edge::{nodestore::NodeForest, subgraph::SuBitGraph, NodeIndex},
+        parser::{CompassPt, DotGraph, DotParseError, ExplicitIdKind, HedgeParseError},
     };
 
     use super::GraphSet;
@@ -878,74 +886,64 @@ pub mod test {
         assert!(serialized.contains("\"graph \\\"name\""));
         assert!(serialized.contains("\"node-key\"=\"a\\\"b\\N\""));
         assert!(serialized.contains("\"edge-key\"=\"c\\\"d\\l\""));
-        assert!(serialized.contains("\"global-terminal\" = __linnet_hex_id_"));
-        assert!(serialized.contains("\"node-terminal\"=__linnet_hex_id_"));
-        assert!(serialized.contains("\"edge-terminal\"=__linnet_hex_id_"));
+        assert!(serialized.contains(r#""global-terminal" = "graph\\""#));
+        assert!(serialized.contains(r#""node-terminal"="node\\""#));
+        assert!(serialized.contains(r#""edge-terminal"="edge\\""#));
     }
 
+    /// Every string survives the writer and the parser, including backslashes
+    /// next to quotes, newlines or the closing quote, and multi-line values,
+    /// whose continuation lines the writer must not indent.
     #[test]
-    fn canonical_transport_prefix_remains_literal() {
-        let literal = "__linnet_hex_id_5c";
-        let mut graph: DotGraph = DotGraph::from_string("digraph { a -> other; }").unwrap();
-        let node_index = graph
-            .iter_nodes()
-            .find(|(_, _, node)| node.name.as_deref() == Some("a"))
-            .map(|(index, _, _)| index)
-            .unwrap();
+    fn quoted_values_round_trip_through_the_writer() {
+        let values = [
+            "trailing\\",
+            "two\\\\backslashes",
+            "graphviz \\N and \\l escapes",
+            "a \"quote\" and \\\" an escaped one",
+            "backslash\\\nbefore a newline",
+            "multi-line\n  indented continuation\n",
+            "__linnet_hex_id_5c",
+        ];
+        let mut graph: DotGraph = DotGraph::from_string("digraph { a -> b; }").unwrap();
         let edge_index = graph.iter_edges().next().unwrap().1;
-        graph.global_data.name = literal.to_owned();
-        graph
-            .global_data
-            .statements
-            .insert("prefix".to_owned(), literal.to_owned());
-        graph
-            .global_data
-            .edge_statements
-            .insert("default-prefix".to_owned(), literal.to_owned());
-        graph[node_index].name = Some(literal.to_owned());
-        graph[node_index]
-            .statements
-            .insert("value".to_owned(), literal.to_owned());
-        graph[edge_index]
-            .statements
-            .insert("edge-prefix".to_owned(), literal.to_owned());
-        let serialized = graph.debug_dot();
-        let reparsed: DotGraph = DotGraph::from_string(&serialized).unwrap();
-        let node = reparsed
-            .iter_nodes()
-            .find(|(_, _, node)| node.name.as_deref() == Some("__linnet_hex_id_5c"))
-            .unwrap()
-            .2;
-
-        assert_eq!(reparsed.global_data.name, "__linnet_hex_id_5c");
-        assert_eq!(node.name.as_deref(), Some("__linnet_hex_id_5c"));
-        assert_eq!(
-            node.statements.get("value").map(String::as_str),
-            Some("__linnet_hex_id_5c")
-        );
-        assert_eq!(
-            reparsed
+        for (i, value) in values.into_iter().enumerate() {
+            let key = format!("key {i}");
+            graph
                 .global_data
                 .statements
-                .get("prefix")
-                .map(String::as_str),
-            Some("__linnet_hex_id_5c")
+                .insert(key.clone(), value.to_owned());
+            graph[NodeIndex(0)]
+                .statements
+                .insert(key.clone(), value.to_owned());
+            graph[edge_index].statements.insert(key, value.to_owned());
+        }
+        graph.global_data.name = values[0].to_owned();
+
+        let reparsed: DotGraph = DotGraph::from_string(graph.debug_dot()).unwrap();
+        assert_eq!(reparsed.global_data, graph.global_data);
+        assert_eq!(
+            reparsed[NodeIndex(0)].statements,
+            graph[NodeIndex(0)].statements
         );
         assert_eq!(
-            reparsed
-                .global_data
-                .edge_statements
-                .get("default-prefix")
-                .map(String::as_str),
-            Some("__linnet_hex_id_5c")
+            reparsed.iter_edges().next().unwrap().2.data.statements,
+            graph[edge_index].statements
         );
-        let edge = reparsed.iter_edges().next().unwrap().2;
-        assert_eq!(
-            edge.data.statements.get("edge-prefix").map(String::as_str),
-            Some("__linnet_hex_id_5c")
-        );
-        assert!(!serialized.contains("\"__linnet_hex_id_5c\""));
-        assert!(serialized.contains("__linnet_hex_id_5f5f"));
+        assert!(graph.debug_dot().contains(r#""key 0" = "trailing\\";"#));
+        assert_eq!(reparsed, reparsed.clone().back_and_forth_dot());
+    }
+
+    /// The indenting writer used to dedent the continuation lines of a
+    /// multi-line value and cut the start of its statement.
+    #[test]
+    fn multi_line_values_keep_their_statement() {
+        let graph: DotGraph =
+            DotGraph::from_string("digraph g { a [label=\"x\n  y\"]; a -> b; }").unwrap();
+        let written = graph.debug_dot();
+        assert!(written.contains("  a[label=\"x\n  y\"];\n"), "{written}");
+        let reparsed: DotGraph = DotGraph::from_string(&written).unwrap();
+        assert_eq!(reparsed, graph.back_and_forth_dot());
     }
 
     #[test]
@@ -967,7 +965,7 @@ pub mod test {
             Some("terminal-backslash\\")
         );
         assert_eq!(reparsed, graph.back_and_forth_dot());
-        assert!(serialized.contains("source=__linnet_hex_id_"));
+        assert!(serialized.contains(r#"source="terminal-backslash\\""#));
         assert!(serialized.contains("sink=\"sink \\\"quoted\\\"\\N\""));
     }
 
@@ -1285,7 +1283,7 @@ pub mod test {
         })
         .unwrap();
 
-        let sub: SuBitGraph = aligned.compass_subgraph(Some(dot_parser::ast::CompassPt::S));
+        let sub: SuBitGraph = aligned.compass_subgraph(Some(CompassPt::S));
 
         println!("{}", aligned.dot_of(&sub));
     }
@@ -1318,31 +1316,36 @@ pub mod test {
         let edge = graph.iter_edges().next().unwrap().2.data;
         assert_eq!(edge.statements.get("label").unwrap(), "Edge Label");
     }
-}
 
-mod multi {
-
+    /// `ID = ID` and `graph [ID = ID]` set the same graph attributes, and the
+    /// later statement wins, as in Graphviz.
     #[test]
-    fn multiple() {
+    fn later_graph_attributes_win() {
+        let graph: DotGraph =
+            DotGraph::from_string("digraph { k = 1; graph [k=2, j=1]; j = 2; a }").unwrap();
+        let statements = &graph.global_data.statements;
         assert_eq!(
-            dot_parser::ast::Graphs::try_from(
-                r#"digraph d{
-                overall_factor = 1
-                edge [overall_factor=1]
-                A
-                }
-
-                digraph P{
-                overall_factor = 1
-                edge [overall_factor=1]
-                A
-                }
-                "#
-            )
-            .unwrap()
-            .graphs
-            .len(),
-            2
+            (statements["k"].as_str(), statements["j"].as_str()),
+            ("2", "2")
         );
+    }
+
+    /// Edges with equal endpoints keep their statement order. The standard
+    /// library sorts up to 20 elements stably even with an unstable sort, so
+    /// this needs more edges.
+    #[test]
+    fn parallel_edges_keep_their_statement_order() {
+        let statements: String = (0..64)
+            .map(|n| match n % 2 {
+                0 => format!("a -> b [n={n}]; "),
+                _ => format!("b -> a [n={n}]; "),
+            })
+            .collect();
+        let graph: DotGraph = DotGraph::from_string(format!("digraph {{ {statements} }}")).unwrap();
+        let order: Vec<usize> = (graph.iter_edges())
+            .map(|(_, _, edge)| edge.data.statements["n"].parse().unwrap())
+            .collect();
+        let expected: Vec<usize> = (0..64).step_by(2).chain((1..64).step_by(2)).collect();
+        assert_eq!(order, expected);
     }
 }

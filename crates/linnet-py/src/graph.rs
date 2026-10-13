@@ -1658,26 +1658,29 @@ impl PyGraph {
         crate::render::render_graph(py, &slf, config, None)
     }
 
-    #[pyo3(signature = (*, config=None))]
+    /// Render one static SVG page; ``interactive=True`` adds the hover,
+    /// selection and keyboard targets of notebook display.
+    #[pyo3(signature = (*, config=None, interactive=false))]
     fn to_svg(
         slf: Py<PyGraph>,
         py: Python<'_>,
         #[gen_stub(override_type(type_repr = "RenderSettings | None"))] config: Option<
             &Bound<'_, PyAny>,
         >,
+        interactive: bool,
     ) -> PyResult<String> {
-        crate::render::graph_to_svg(py, &slf, config)
+        crate::render::graph_to_svg(py, &slf, config, interactive)
     }
 
     #[pyo3(signature = ())]
     fn _repr_svg_(slf: Py<PyGraph>, py: Python<'_>) -> PyResult<String> {
-        crate::render::graph_to_svg(py, &slf, None)
+        crate::render::graph_to_svg(py, &slf, None, false)
     }
 
     /// Display the SVG with hover details and local interactive selection.
     #[pyo3(signature = ())]
     fn _repr_html_(slf: Py<PyGraph>, py: Python<'_>) -> PyResult<String> {
-        crate::render::graph_to_svg(py, &slf, None)
+        crate::render::graph_to_svg(py, &slf, None, true)
     }
 
     #[pyo3(name = "full_subgraph", signature = ())]

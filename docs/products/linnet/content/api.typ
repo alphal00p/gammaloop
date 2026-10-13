@@ -67,6 +67,7 @@ Call `.render(config=settings)` to capture a `DiagramRender`. Its SVG, HTML, sou
 and file exports reuse the snapshot, even after later graph or settings mutations.
 HepKit's physics-specific options live in `DiagramStyle`, passed separately as `style`.
 For multipage renders, use `to_svg_pages()`; `to_svg()` requires exactly one page.
+Both return static SVG unless called with `interactive=True`.
 
 `Theory` compiles ordered vertex rules once. `Legs` describes labelled or interchangeable
 external slots, and `Query` separates their structural, weight and count restrictions from
@@ -364,6 +365,66 @@ and `MathSymbol`, plus recursively validated arrays and string-keyed dictionarie
 layout, placement, routing, anchor, pattern, mark, and debug choices use their exported enums;
 the structured Python reference lists the choices for each option.
 
+==== Shared native SVG and Typst marks
+
+`Mark(name, ...)` is data for the shared Kurvst arrowhead engine, not a CeTZ
+configuration. Its catalogue and parameter definitions follow tiptoe 0.4.0
+(MIT, Mc-Zen); geometry, defaults, and curved-end fitting belong to Kurvst.
+Choose `triangle`, `straight`, `stealth`, `round`, `tikz`, `barb`, `hooks`,
+`bar`, `bracket`, `circle`, `square`, `diamond`, or `rays`. Fields are strict
+per shape: for example `tikz` accepts width and stroke, not arc.
+
+```python
+from symbolica.community.graph import GraphStyleOptions, Mark, RenderSettings
+
+# Explicit physical sizes preserve the existing native notebook appearance.
+flow = Mark("triangle", length="0.21cm", width="0.1575cm")
+momentum = Mark("straight", length="0.16cm", width="0.12cm")
+settings = RenderSettings(
+    style=GraphStyleOptions(
+        edge_style={"flow-arrow": flow, "momentum-arrow": momentum}
+    )
+)
+cut = Mark.combine(Mark("bar"), "2pt", Mark("bar"), fit="bend")
+```
+
+Domain scenes (diagrams and tensor networks) accept these values, or their
+`to_dict()` dictionaries, as `flow-arrow` and `momentum-arrow` of the graph
+edge style `GraphStyleOptions.edge_style`; fill and stroke colors paint the
+matching leaves of a composite. The heads are the same whether the scene is
+drawn natively or, when other settings need it, through Typst. The leaf
+paints follow from the mark and cannot be set separately. Fixed lengths
+accept `pt`, `mm`, `cm`, and `in`; ratios are relative to line thickness, not
+carrier length. Mixed sizes such as `"3pt + 450%"` add the two components.
+Typed `Length`, `Ratio`, and `RelativeLength` are equivalent; font-relative
+`em` has no native mark context and is rejected. `inset` and `shorten` require
+ratios, while `arc` and `phase` require typed `Angle` values.
+
+`fit="chord"` is the default. Endpoint `fit="bend"` follows the tangent,
+with `shorten="100%"` by default; interior stations always use a chord.
+`Mark.combine` accepts nested marks and signed size gaps positionally and
+fits the composite once. Child marks must omit `fit` and `shorten`.
+`to_dict()` returns public data with `kind="kurvst-mark"` and `shape`, without
+materializing engine defaults. Fill and stroke are paint-only: use a color,
+boolean, `None`, or `AUTO`; a `Stroke` may set paint but not thickness, cap,
+join, dash, or miter limit. Set line thickness on the line itself.
+
+The generic Typst route accepts the same `Mark` under the half-edge style's
+`mark` key. Its `mark-position`, `mark-orientation`, `mark-direction`, and
+`mark-shift` keys choose placement independently of shape data. Numeric stations
+center the painted head on the derived visible carrier, before shortening or
+bending. Both routes use one candidate batch and one selected-paint batch per
+drawing; selected shafts paint once.
+
+CeTZ fields `symbol`, `start`, `end`, `scale`, `anchor`, and `shorten_to` are
+rejected with migration guidance. Specify a named shape and physical sizes,
+then select its fit and shortening. Replace legacy edge-mark dictionaries
+such as `{"end": "straight"}` with `Mark("straight", ...)`. Styles check
+`flow-arrow`, `momentum-arrow`, and dictionaries under `mark` when they are
+configured, before either renderer is chosen, so an invalid or legacy head is
+an error, never ignored or redrawn by another route. There is no compatibility
+fallback in either renderer.
+
 `GraphStyleOptions`, `LayoutSettings`, and `DrawOptions` cover the corresponding generic Linnest
 surfaces. `DrawingSelectors` maps arbitrary Python data to detached typed drawing values at render
 time. Layout passes retain their order:
@@ -407,8 +468,10 @@ svg = graph.to_svg()
 graph  # the final expression in a notebook renders inline
 ```
 
-SVG output preserves the native drawing and adds vertex, edge, and half-edge inspection.
-Hover to see an element's identity; click to pin its details without changing the selection. Shift-, Ctrl-, or
+Notebook display, `to_html()` and `to_svg(interactive=True)` add vertex, edge, and half-edge
+inspection to the native drawing. Static output (`to_svg()`, `_repr_svg_()` and every file
+export except HTML) is the same drawing without inspection targets or script, so saved SVGs stay
+small and PDFs carry no link annotations. Hover to see an element's identity; click to pin its details without changing the selection. Shift-, Ctrl-, or
 Meta-click toggles the element in that displayed selection. Enter and Space perform the same
 actions on a focused element; Escape dismisses the details while retaining the selection.
 The first and last quarters of arc length pick the source and sink half-edges; the middle
@@ -437,20 +500,25 @@ half-edges, and draw the complement dotted and muted through Linnest's subgraph 
 Selecting one half of a paired edge highlights only that half; selected isolated nodes are
 highlighted too. The display uses the owner's layout, drawing values, and render configuration
 without changing the graph or its stored settings. `region.to_svg(config=None)` returns the
-same SVG explicitly, and `region.render(config=None)` prepares it for inspection or
+same drawing as static SVG (`interactive=True` keeps the inspection targets), and `region.render(config=None)` prepares it for inspection or
 export through `DiagramRender`. Like other selection operations, rendering checks the topology
 revision and raises `ReferenceError` for a stale selection.
 
 The selected template's defaults are overlaid by the graph's `render_config` and then by a sparse
 per-call `config`. `render(config=None).save(output)` writes PDF, SVG, PNG, HTML, or portable Typst according to the output
-suffix. Use `save_pages(directory, format="svg")` to export each page separately. `to_svg(config=None)` returns SVG text; `_repr_html_()` supports interactive notebook
-display, while `_repr_svg_()` supplies the SVG representation. These are
+suffix; only HTML is interactive. Use `save_pages(directory, format="svg")` to export each page separately. `to_svg(config=None, interactive=False)` returns SVG text; `_repr_html_()` supports interactive notebook
+display, while `_repr_svg_()` supplies the static SVG representation. These are
 the only high-level rendering methods; there are no raw command-line inputs or string-expression
 escape hatches. The Community wheel embeds the Typst compiler and compiles in-process without
 looking up or launching a Typst executable. Generated inputs and imported modules remain alive
-until compilation completes. The wheel has no Clinnet dependency and embeds the Linnest, Kurvst,
-CeTZ 0.5.1, and oxifmt 1.0.0 assets required by its default renderer, so that path does not depend
-on an installed Typst package cache or a network fetch.
+until compilation completes. The wheel has no Clinnet dependency and embeds the Linnest and
+Kurvst packages, MiTeX 0.2.6 and oxifmt 1.0.0. It does not ship CeTZ. Native drawings, the
+default for ordinary graphs and domain scenes, need no Typst package. The Typst route imports
+stock `@preview/cetz:0.5.2` from the local package directories the Typst CLI uses:
+`TYPST_PACKAGE_PATH` (otherwise the Typst data directory), then `TYPST_PACKAGE_CACHE_PATH`
+(otherwise the Typst cache directory). Nothing is downloaded: compiling any document that imports
+CeTZ once with the Typst CLI caches it, and a missing package is reported with the directories
+searched.
 
 For inspection tools, `render(config=None)` evaluates selectors once and returns a
 `DiagramRender`. Its `typst_source` property is the exact generated entrypoint subsequently used

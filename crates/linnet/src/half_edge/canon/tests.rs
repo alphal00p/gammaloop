@@ -4,7 +4,7 @@ use super::{ignore, Canonization};
 use crate::half_edge::{
     builder::HedgeGraphBuilder,
     involution::{Flow, Hedge, Orientation},
-    remap::HedgeRemap,
+    remap::{HedgeRemap, NodeRemap},
     HedgeGraph, NodeIndex,
 };
 use crate::permutation::Permutation;
@@ -249,9 +249,9 @@ fn colour(g: &G, h: Hedge) -> Colour {
 type Relabelled = (Vec<u8>, Vec<(usize, Colour, usize)>);
 
 fn relabelled(g: &G, c: &Canonization<&u8, &u8, &u8>) -> Relabelled {
-    let mut nodes = vec![0; g.node_bound()];
-    for (v, d) in g.node_store.iter() {
-        nodes[c.canonical_node(v).0] = *d;
+    let mut nodes = vec![0; g.n_live()];
+    for v in g.iter_node_ids() {
+        nodes[c.canonical_node(v).0] = g[v];
     }
     let mut hedges: Vec<_> = (0..g.n_hedges())
         .map(Hedge)
@@ -513,16 +513,25 @@ fn check(spec: &Spec, expected: Option<u128>, rng: &mut SmallRng) {
         assert_eq!(c2.canonical_form(), c.canonical_form(), "{spec:?}");
         assert_eq!(c2.automorphism_count(), c.automorphism_count());
         assert_eq!(relabelled(&g2, &c2), form, "{spec:?}");
-        let iso = g
-            .isomorphism_by(&g2, |v| v, |e| e, |h| h)
-            .expect("isomorphic");
-        for h in (0..g.n_hedges()).map(Hedge) {
-            let image = iso.hedges[h];
-            assert_eq!(colour(&g2, image), colour(&g, h));
-            assert_eq!(g2.inv(image), iso.hedges[g.inv(h)]);
-            assert_eq!(g2.node_id(image), iso.nodes[g.node_id(h)]);
-            assert_eq!(g2[&image], iso.edges[g[&h]]);
-        }
+        check_isomorphism(&g, &g2);
+    }
+}
+
+/// [`HedgeGraph::isomorphism_by`] finds an isomorphism `a -> b` that preserves colours,
+/// pairing, incidence, edges and node keys.
+fn check_isomorphism(a: &G, b: &G) {
+    let iso = a
+        .isomorphism_by(b, |v| v, |e| e, |h| h)
+        .expect("isomorphic");
+    for h in (0..a.n_hedges()).map(Hedge) {
+        let image = iso.hedges[h];
+        assert_eq!(colour(b, image), colour(a, h));
+        assert_eq!(b.inv(image), iso.hedges[a.inv(h)]);
+        assert_eq!(b.node_id(image), iso.nodes[a.node_id(h)]);
+        assert_eq!(b[&image], iso.edges[a[&h]]);
+    }
+    for v in a.iter_node_ids() {
+        assert_eq!(a[v], b[iso.nodes[v]], "isomorphisms preserve node keys");
     }
 }
 
@@ -897,6 +906,154 @@ fn parallel_edge_end_pairing_matters() {
     let (a, b) = (straight.build(), crossed.build());
     assert!(!a.is_isomorphic_by(&b, ignore, ignore, |&h| h));
     assert!(a.is_isomorphic_by(&b, ignore, ignore, ignore));
+}
+
+/// Identifies random groups of nodes without compacting. Requests may repeat nodes or name
+/// absorbed ones, and survivors get random keys, so absorbed slots may keep keys that no live
+/// node carries.
+fn identify_some(g: &mut G, rng: &mut SmallRng) {
+    for _ in 0..rng.gen_range(1..=3) {
+        let nodes: Vec<NodeIndex> = (0..rng.gen_range(1..=3))
+            .map(|_| NodeIndex(rng.gen_range(0..g.node_bound())))
+            .collect();
+        g.identify_nodes(&nodes, rng.gen_range(0..3));
+    }
+}
+
+/// A graph with pending identifications canonizes exactly like its compacted copy, through the
+/// remap of [`HedgeGraph::compact`]: node lookups resolve absorbed nodes to their
+/// representative, the relabelled graphs agree, the shared generators pass
+/// [`check_generators`] on the compacted copy, and isomorphisms to relabelled copies are valid
+/// both ways.
+fn check_pending(g: &G, rng: &mut SmallRng) {
+    let mut compacted = g.clone();
+    let remap = compacted.compact();
+    let to = |v: NodeIndex| remap.get(v).expect("compaction keeps or merges every node");
+    let slots = || (0..g.node_bound()).map(NodeIndex);
+    let (c, d) = (g.canonize(), compacted.canonize());
+    assert_eq!(c.canonical_form(), d.canonical_form());
+    assert_eq!(c.automorphism_count(), d.automorphism_count());
+    assert_eq!(c.automorphism_count(), Some(count_isomorphisms(g, g, None)));
+    check_generators(&compacted, &d);
+    assert_eq!(relabelled(g, &c), relabelled(&compacted, &d));
+    assert_eq!(c.hedge_permutation(), d.hedge_permutation());
+    assert_eq!(c.edge_permutation(), d.edge_permutation());
+    assert_eq!(c.hedge_orbits(), d.hedge_orbits());
+    assert_eq!(c.edge_orbits(), d.edge_orbits());
+    for v in slots() {
+        assert_eq!(c.canonical_node(v), d.canonical_node(to(v)));
+    }
+    assert_eq!(c.generators().len(), d.generators().len());
+    for (a, b) in c.generators().zip(d.generators()) {
+        assert_eq!(a.hedge_permutation(), b.hedge_permutation());
+        for v in slots() {
+            assert!(g.node_store.is_live(a.node(v)));
+            assert_eq!(to(a.node(v)), b.node(to(v)));
+        }
+    }
+    let (orbits, compacted_orbits) = (c.node_orbits(), d.node_orbits());
+    for u in slots() {
+        assert!(
+            g.node_store.is_live(orbits[u]),
+            "live nodes name the orbits"
+        );
+        for v in slots() {
+            assert_eq!(
+                orbits[u] == orbits[v],
+                compacted_orbits[to(u)] == compacted_orbits[to(v)]
+            );
+        }
+    }
+    assert!(g.is_isomorphic_by(&compacted, |v| v, |e| e, |h| h));
+    let iso = g
+        .isomorphism_by(&compacted, |v| v, |e| e, |h| h)
+        .expect("isomorphic");
+    assert!(slots().all(|v| iso.nodes[v] == to(v)));
+    assert!(iso.hedges.iter().all(|(h, &image)| image == h));
+    let back = compacted
+        .isomorphism_by(g, |v| v, |e| e, |h| h)
+        .expect("isomorphic");
+    assert!(g.iter_node_ids().all(|v| back.nodes[to(v)] == v));
+
+    let shuffled = |n: usize, rng: &mut SmallRng| {
+        let mut map: Vec<usize> = (0..n).collect();
+        map.shuffle(rng);
+        Permutation::from_map(map)
+    };
+    let mut relabelled = compacted;
+    let (hedges, nodes) = (
+        shuffled(relabelled.n_hedges(), rng),
+        shuffled(relabelled.node_bound(), rng),
+    );
+    relabelled
+        .permute_hedges(&HedgeRemap::from_permutation(&hedges))
+        .unwrap();
+    relabelled
+        .permute_nodes(&NodeRemap::from_permutation(&nodes))
+        .unwrap();
+    check_isomorphism(g, &relabelled);
+    check_isomorphism(&relabelled, g);
+}
+
+#[test]
+fn absorbed_nodes_are_not_isolated_nodes() {
+    // a square whose opposite corners merge: two nodes joined by a double edge, each with a
+    // self-loop, and two absorbed slots
+    let mut g = Spec::new(4)
+        .undirected(0, 0, 1, 0)
+        .undirected(1, 0, 2, 0)
+        .undirected(2, 0, 3, 0)
+        .undirected(3, 0, 0, 0)
+        .build();
+    let survivors = [
+        g.identify_nodes(&[NodeIndex(1), NodeIndex(2)], 0),
+        g.identify_nodes(&[NodeIndex(3), NodeIndex(0)], 0),
+    ];
+    assert_eq!((g.n_live(), g.node_bound()), (2, 4));
+    let c = g.canonize();
+    // swap the nodes, the parallel edges and the ends of either self-loop
+    assert_eq!(c.automorphism_count(), Some(16));
+    for (absorbed, survivor) in [NodeIndex(2), NodeIndex(0)].into_iter().zip(survivors) {
+        assert_eq!(c.canonical_node(absorbed), c.canonical_node(survivor));
+    }
+    check_pending(&g, &mut SmallRng::seed_from_u64(1));
+}
+
+#[test]
+fn pending_identifications_canonize_like_the_compacted_graph() {
+    let mut rng = SmallRng::seed_from_u64(0xAB50);
+    let mut specs: Vec<Spec> = hand_cases().into_iter().map(|(_, spec, _)| spec).collect();
+    specs.extend((0..300).map(|_| Spec::random(&mut rng, 5, 6, 3)));
+    let mut pending = 0;
+    for spec in specs.iter().filter(|spec| !spec.nodes.is_empty()) {
+        let mut g = spec.build();
+        identify_some(&mut g, &mut rng);
+        pending += usize::from(g.n_live() < g.node_bound());
+        check_pending(&g, &mut rng);
+    }
+    assert!(2 * pending > specs.len(), "most graphs keep absorbed nodes");
+}
+
+/// Two nodes joined by an edge, identified into one with a self-loop.
+fn merged_edge() -> G {
+    let mut g = Spec::new(2).undirected(0, 0, 1, 0).build();
+    g.identify_nodes(&[NodeIndex(0), NodeIndex(1)], 0);
+    g
+}
+
+#[test]
+#[should_panic(expected = "compact")]
+fn node_permutations_need_compacted_graphs() {
+    merged_edge().canonize().node_permutation();
+}
+
+#[test]
+#[should_panic(expected = "compact")]
+fn automorphism_node_permutations_need_compacted_graphs() {
+    let g = merged_edge();
+    let c = g.canonize();
+    let flip = c.generators().next().expect("the self-loop flips");
+    flip.node_permutation();
 }
 
 /// Oracle: Graphica on generated Feynman-graph sets, plain graphs and the exact incidence

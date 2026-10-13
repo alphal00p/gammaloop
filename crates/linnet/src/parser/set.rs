@@ -10,8 +10,8 @@ use crate::half_edge::{
 };
 
 use super::{
-    subgraph_free::SubGraphFreeGraph, DotEdgeData, DotGraph, DotHedgeData, DotVertexData,
-    GlobalData, HedgeParseError,
+    syntax::FlatGraph, DotEdgeData, DotGraph, DotHedgeData, DotVertexData, GlobalData,
+    HedgeParseError,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -28,63 +28,41 @@ pub struct GraphSet<E, V, H, G, S: Topology> {
 pub type DotGraphSet = GraphSet<DotEdgeData, DotVertexData, DotHedgeData, GlobalData, NodeForest>;
 
 impl<S: Topology> GraphSet<DotEdgeData, DotVertexData, DotHedgeData, GlobalData, S> {
-    #[allow(clippy::result_large_err, clippy::type_complexity)]
-    pub fn from_file<'a, P>(p: P) -> Result<Self, HedgeParseError<'a, (), (), (), ()>>
+    /// Parses a file holding one or more DOT graphs.
+    pub fn from_file<P>(p: P) -> Result<Self, HedgeParseError<(), (), (), ()>>
     where
         P: AsRef<Path>,
     {
-        let ast_graphs = dot_parser::ast::Graphs::from_file(p)?;
-        let mut set = Vec::with_capacity(ast_graphs.graphs.len());
-        let mut global_data = Vec::new();
-        for g in ast_graphs.graphs {
-            let can_graph = SubGraphFreeGraph::from(g);
-            let graph = DotGraph::<S>::from_parser(can_graph, Figment::new())?;
-
-            set.push(graph.graph);
-            global_data.push(graph.global_data);
-        }
-        Ok(GraphSet { set, global_data })
+        Self::from_flat(
+            FlatGraph::parse_all(&std::fs::read_to_string(p)?)?,
+            Figment::new(),
+        )
     }
 
-    #[allow(clippy::result_large_err, clippy::type_complexity)]
-    pub fn from_string<'a, Str: AsRef<str>>(
-        s: Str,
-    ) -> Result<Self, HedgeParseError<'a, (), (), (), ()>> {
-        let ast_graphs = dot_parser::ast::Graphs::try_from(s.as_ref())?;
-
-        let mut global_data = Vec::new();
-        let mut set = Vec::with_capacity(ast_graphs.graphs.len());
-        for g in ast_graphs.graphs {
-            let can_graph =
-                SubGraphFreeGraph::from(g.filter_map(&|a| Some((a.0.into(), a.1.into()))));
-
-            let graph = DotGraph::<S>::from_parser(can_graph, Figment::new())?;
-            global_data.push(graph.global_data);
-            set.push(graph.graph);
-        }
-
-        Ok(GraphSet { set, global_data })
+    /// Parses input holding one or more DOT graphs.
+    pub fn from_string<Str: AsRef<str>>(s: Str) -> Result<Self, HedgeParseError<(), (), (), ()>> {
+        Self::from_flat(FlatGraph::parse_all(s.as_ref())?, Figment::new())
     }
 
     #[cfg(feature = "serde")]
-    #[allow(clippy::result_large_err, clippy::type_complexity)]
-    pub fn from_string_with_figment<'a, Str: AsRef<str>>(
+    pub fn from_string_with_figment<Str: AsRef<str>>(
         s: Str,
         figment: figment::Figment,
-    ) -> Result<Self, HedgeParseError<'a, (), (), (), ()>> {
-        let ast_graphs = dot_parser::ast::Graphs::try_from(s.as_ref())?;
+    ) -> Result<Self, HedgeParseError<(), (), (), ()>> {
+        Self::from_flat(FlatGraph::parse_all(s.as_ref())?, figment)
+    }
 
-        let mut global_data = Vec::new();
-        let mut set = Vec::with_capacity(ast_graphs.graphs.len());
-        for g in ast_graphs.graphs {
-            let can_graph =
-                SubGraphFreeGraph::from(g.filter_map(&|a| Some((a.0.into(), a.1.into()))));
-
-            let graph = DotGraph::<S>::from_parser(can_graph, figment.clone())?;
-            global_data.push(graph.global_data);
+    fn from_flat(
+        graphs: Vec<FlatGraph<'_>>,
+        figment: Figment,
+    ) -> Result<Self, HedgeParseError<(), (), (), ()>> {
+        let mut set = Vec::with_capacity(graphs.len());
+        let mut global_data = Vec::with_capacity(graphs.len());
+        for graph in graphs {
+            let graph = DotGraph::<S>::from_flat(graph, figment.clone())?;
             set.push(graph.graph);
+            global_data.push(graph.global_data);
         }
-
         Ok(GraphSet { set, global_data })
     }
 }

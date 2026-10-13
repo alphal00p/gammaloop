@@ -1,6 +1,6 @@
 #import "../../../../crates/linnest/typst/src/lib.typ": graph
 #import "../../../../crates/linnest/typst/src/render/layout.typ" as renderer
-#import "@preview/cetz:0.5.1" as cetz
+#import "@preview/cetz:0.5.2" as cetz
 #import "../../../../assets/embedded/drawing/templates/layout-core.typ": (
   bind-layout,
 )

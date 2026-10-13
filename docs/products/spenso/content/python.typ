@@ -189,8 +189,9 @@ graph builder; DOT remains a separate export format.
 Both accept typed `graph.RenderSettings` values. Rust draws the graph directly
 and the embedded Typst compiler typesets labels without graph plugins or MiTeX.
 
-Use `drawing.to_svg()` or `drawing.to_html()` for string exports. Graph settings are
-typed values with discoverable constructors:
+Use `drawing.to_svg()` or `drawing.to_html()` for string exports: the SVG is the static
+drawing, the HTML the interactive display (`to_svg(interactive=True)` gives an interactive SVG).
+Graph settings are typed values with discoverable constructors:
 
 ```python
 from symbolica.community.graph import RenderSettings, LayoutSettings, LayoutAlgorithm, DrawOptions, Stroke, Color

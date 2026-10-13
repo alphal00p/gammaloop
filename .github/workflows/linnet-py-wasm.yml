@@ -7,6 +7,7 @@ on:
     paths:
       - '.github/workflows/linnet-py-wasm.yml'
       - '.cargo/**'
+      - 'scripts/fetch-stock-cetz.sh'
       - 'Cargo.lock'
       - 'Cargo.toml'
       - 'crates/kurvst/**'
@@ -36,6 +37,9 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: wasm32-unknown-emscripten
+
+      - name: Provide stock CeTZ for the Typst-route tests
+        run: scripts/fetch-stock-cetz.sh
 
       - uses: pypa/cibuildwheel@v4.2.0
         with:

@@ -192,7 +192,9 @@ impl<E, V, H, N: Topology> HedgeGraph<E, V, H, N> {
         subgraph: &S,
         include_all_nodes: bool,
     ) -> NodeVec<bool> {
-        let mut included = self.new_nodevec(|_, _, _| include_all_nodes);
+        // Nodes absorbed by pending identifications are never laid out.
+        let mut included =
+            self.new_nodevec(|node, _, _| include_all_nodes && self.node_store.is_live(node));
         if !include_all_nodes {
             for hedge in subgraph.included_iter() {
                 included[self.node_id(hedge)] = true;
@@ -1521,4 +1523,53 @@ fn intervals_overlap(a_start: f64, a_end: f64, b_start: f64, b_end: f64) -> bool
     let b_min = b_start.min(b_end);
     let b_max = b_start.max(b_end);
     a_max >= b_min && b_max >= a_min
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::half_edge::layout::test::PendingIdentification;
+
+    fn geometry<E, V, H, N: Topology>(graph: &HedgeGraph<E, V, H, N>) -> LayeredGeometry {
+        LayeredGeometry {
+            node_ranks: graph.new_nodevec(|_, _, _| None),
+            node_widths: graph.new_nodevec(|_, _, _| 0.4),
+            node_heights: graph.new_nodevec(|_, _, _| 0.3),
+            edge_label_widths: graph.new_edgevec(|_, _, _| 0.2),
+            edge_label_heights: graph.new_edgevec(|_, _, _| 0.1),
+            edge_minlens: graph.new_edgevec(|_, _, _| 1),
+            edge_weights: graph.new_edgevec(|_, _, _| 1.0),
+            edge_source_exits: graph.new_edgevec(|_, _, _| LayeredRouteExit::Auto),
+            edge_sink_exits: graph.new_edgevec(|_, _, _| LayeredRouteExit::Auto),
+            edge_constrained: graph.new_edgevec(|_, _, _| true),
+        }
+    }
+
+    /// Nodes absorbed by pending identifications are not laid out: the live
+    /// nodes and edges are placed as in the compacted copy.
+    #[test]
+    fn layered_layout_skips_nodes_absorbed_by_pending_identifications() {
+        let fixture = PendingIdentification::new();
+        for profile in [LayeredProfile::Dot, LayeredProfile::Stable] {
+            let config = LayeredConfig {
+                profile,
+                ..LayeredConfig::default()
+            };
+            let [pending, compacted] = [&fixture.graph, &fixture.compacted]
+                .map(|graph| graph.layered_layout(&graph.full_filter(), &config, &geometry(graph)));
+            assert_eq!(pending.node_positions[fixture.absorbed], None);
+            assert_eq!(pending.ranks[fixture.absorbed], None);
+            assert_eq!(
+                fixture.compact(&pending.node_positions),
+                compacted.node_positions
+            );
+            assert_eq!(fixture.compact(&pending.ranks), compacted.ranks);
+            assert_eq!(pending.edge_positions, compacted.edge_positions);
+            for (pending, compacted) in pending.edge_routes.iter().zip(compacted.edge_routes.iter())
+            {
+                assert_eq!(pending.1.source, compacted.1.source);
+                assert_eq!(pending.1.sink, compacted.1.sink);
+            }
+        }
+    }
 }

@@ -262,6 +262,7 @@ notebook-wheel OUTPUT="target/notebook-wheels":
     if [ -n "${NIX_SSL_CERT_FILE:-}" ]; then
         export SSL_CERT_FILE="${SSL_CERT_FILE:-$NIX_SSL_CERT_FILE}"
     fi
+    scripts/fetch-stock-cetz.sh
     CIBW_BUILD=cp314-pyodide_wasm32 uv run --no-project --with cibuildwheel==4.2.0 python \
         -m cibuildwheel examples/notebooks/symbolica-host --platform pyodide \
         --output-dir {{ quote(OUTPUT) }}

@@ -167,7 +167,7 @@ impl IntSet {
 
 /// Chrobak–Payne triangulation/canonical ordering translated from NetworkX 3.7.
 /// Copyright NetworkX Developers, BSD-3-Clause; see
-/// `crates/linnest/layout/native/LICENSE.networkx`.
+/// `crates/linnest/typst/LICENSE.networkx`.
 #[derive(Default)]
 struct Embedding {
     rotation: BTreeMap<i32, Vec<i32>>,

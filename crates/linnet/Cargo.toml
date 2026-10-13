@@ -4,8 +4,14 @@ version = "0.17.0"
 edition = "2021"
 description = "A library for working with half-edge data structures, and subgraphs, and drawing them"
 license = "MIT"
-# nauty-derived fixtures (Apache-2.0) and the tests that read them stay out of the package
-exclude = ["tests/nauty/**", "tests/resources/nauty/**"]
+# nauty-derived fixtures (Apache-2.0) and the tests that read them stay out of the package, as
+# does the DOT corpus test, which reads GammaLoop fixtures from the repository, with its snapshot
+exclude = [
+  "tests/nauty/**",
+  "tests/resources/nauty/**",
+  "tests/dot_corpus.rs",
+  "tests/snapshots/dot_corpus__*.snap",
+]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -22,11 +28,9 @@ clarabel = { version = "0.11.1", path = "../../vendor/clarabel", optional = true
 twofloat = { version = "0.8.4", optional = true }
 # derive_more = "0.99.17"
 # hibit_tree = "0.1.0-alpha.3"
-dot-parser = { workspace = true }
 duplicate = "2.0.0"
 figment = { version = "0.10.19" }
 getrandom = { version = "0.2", default-features = false, features = ["custom"] }
-indenter = { version = "0.3.3", features = ["std"] }
 indexmap = { workspace = true }
 itertools = "0.14.0"
 num-bigint = "0.4.6"

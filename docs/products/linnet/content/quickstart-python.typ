@@ -21,9 +21,12 @@ below. Only the Community module accepts Symbolica expressions as graph keys.
 python -m pip install ./crates/linnet-py
 ```
 
-Ordinary drawings use native SVG, with the embedded Rust Typst compiler supplying labels.
-Advanced templates use the full Typst pipeline. No separate Typst package or external Typst
-executable is required.
+Ordinary drawings use native SVG, with the embedded Rust Typst compiler supplying labels; they
+need no Typst package or external Typst executable. Advanced templates, selectors and layout
+sequences use the full Typst pipeline, which imports stock CeTZ 0.5.2 from the local Typst
+package path or cache. Compiling any document that imports `@preview/cetz:0.5.2` once with the
+Typst CLI caches it; alternatively, set `TYPST_PACKAGE_PATH` to a directory holding
+`preview/cetz/0.5.2`.
 
 == Construct a graph
 

@@ -24,7 +24,7 @@ let
 
   docsTypst = typst015.withPackages (
     typstPackages: with typstPackages; [
-      cetz_0_5_1
+      cetz_0_5_2
       mitex_0_2_6
       tidy_0_4_3
     ]

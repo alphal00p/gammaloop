@@ -15,6 +15,7 @@ on:
       - 'crates/linnet-py/**'
       - 'crates/typst-renderer/**'
       - 'docs/products/linnet/content/quickstart-python.typ'
+      - 'scripts/fetch-stock-cetz.sh'
       - 'vendor/**'
   push:
     branches:
@@ -49,8 +50,14 @@ jobs:
           maturin build --release --locked --out ../../dist
           maturin sdist --out ../../dist
 
+      # Typst-route renders read stock CeTZ, which the wheel does not bundle.
+      - name: Provide stock CeTZ for the Typst-route tests
+        run: scripts/fetch-stock-cetz.sh
+
       # Symbolica is absent, so the suite tests `linnet_py`.
       - name: Test
+        env:
+          TYPST_PACKAGE_PATH: ${{ github.workspace }}/target/typst-packages
         run: |
           python -m pip install dist/*.whl
           python -m unittest discover -s crates/linnet-py/tests -p 'test_*.py'

@@ -1,7 +1,7 @@
 #import "crates/linnest/typst/src/impl/draw.typ" as drawing
 #import "crates/linnest/typst/src/lib.typ": graph, draw
 #import "crates/kurvst/typst/src/lib.typ" as curve
-#import "@preview/cetz:0.5.1" as cetz
+#import "@preview/cetz:0.5.2" as cetz
 
 #set page(width: auto, height: auto, margin: 0pt)
 #let length = 0.45 * 3.688720
@@ -114,8 +114,8 @@
         endpoint-slope: slope,
         accuracy: accuracy,
       )
-      assert(calc.abs(actual.length - length) < 1e-8)
-      let rendered = cetz.process.many(ctx, actual.elements.flatten(), compute-bounds: true)
+      assert.eq(type(actual), array)
+      let rendered = cetz.process.many(ctx, actual.flatten(), compute-bounds: true)
       let reference = cetz.process.many(ctx, curve.to-cetz(expected, stroke: style.stroke).flatten(), compute-bounds: true)
       // Arc-length inversion may differ within its accuracy on split baselines;
       // drawing structure and styles must still match exactly.
@@ -158,7 +158,7 @@
     pattern-natural-endpoints: natural,
     crossing-under: <over>,
     crossing-gap: 0.4,
-    mark: (end: "straight", scale: 0.5),
+    mark: curve.mark.straight(length: 4.5pt, width: 3.375pt),
     mark-position: 0.8,
   )
   draw(graph.style(g, node-label: none, edge-label: none,

@@ -902,9 +902,11 @@ name = "clinnet"
 version = "0.1.8"
 dependencies = [
  "blake3",
+ "ciborium",
  "clap",
  "eyre",
  "indicatif",
+ "kurvst",
  "parking_lot",
  "pathdiff",
  "rayon",
@@ -1609,15 +1611,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d4b8a88685455ed29a21542a33abd9cb6510b6b129abadabdcef0f4c55bc8f61"
 dependencies = [
  "litrs",
-]
-
-[[package]]
-name = "dot-parser"
-version = "0.5.1"
-dependencies = [
- "either",
- "pest",
- "pest_derive",
 ]
 
 [[package]]
@@ -2355,7 +2348,6 @@ dependencies = [
  "console 0.16.3",
  "criterion",
  "crossterm 0.28.1",
- "either",
  "indenter",
  "indexmap",
  "libc",
@@ -2410,7 +2402,6 @@ dependencies = [
  "delegate 0.12.0",
  "derive_more 0.99.20",
  "dirs",
- "dot-parser",
  "enum_dispatch",
  "eyre",
  "feynkit-amplitude",
@@ -3705,7 +3696,6 @@ version = "0.1.0"
 dependencies = [
  "cgmath",
  "ciborium",
- "dot-parser",
  "figment",
  "getrandom 0.2.17",
  "indexmap",
@@ -3733,13 +3723,11 @@ dependencies = [
  "cgmath",
  "clarabel",
  "criterion",
- "dot-parser",
  "duplicate 2.0.1",
  "figment",
  "gammaloop-workspace-hack",
  "getrandom 0.2.17",
  "iai-callgrind",
- "indenter",
  "indexmap",
  "insta",
  "itertools 0.14.0",
@@ -3768,7 +3756,6 @@ name = "linnet-py"
 version = "0.1.0"
 dependencies = [
  "ciborium",
- "dot-parser",
  "kurvst",
  "linnest",
  "linnet",
@@ -7716,6 +7703,7 @@ name = "typst-renderer"
 version = "0.1.0"
 dependencies = [
  "comemo",
+ "dirs",
  "tempfile",
  "typst",
  "typst-html",

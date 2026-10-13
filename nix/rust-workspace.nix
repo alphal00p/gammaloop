@@ -40,7 +40,7 @@
   # Cargo path patches are dependencies, not workspace members. Preserve their
   # manifests and implementation in every filtered dependency/build context.
   localCargoPatchDirs = lib.filter (name: builtins.pathExists (workspaceRoot + "/vendor/${name}"))
-    ["clarabel" "dot-parser" "typst-library" "typst-svg"];
+    ["clarabel" "typst-library" "typst-svg"];
   localCargoPatchSources = lib.fileset.unions (
     map (name: workspaceRoot + "/vendor/${name}") localCargoPatchDirs
   );
@@ -92,12 +92,12 @@
     (workspaceRoot + "/crates/linnest/src/svg/interactive.css")
     (workspaceRoot + "/crates/linnest/src/svg/interactive.js")
     (workspaceRoot + "/crates/kurvst/typst/kurvst.wasm")
+    (workspaceRoot + "/crates/kurvst/typst/LICENSE.tiptoe")
     (workspaceRoot + "/crates/kurvst/typst/src")
     (workspaceRoot + "/crates/kurvst/typst/typst.toml")
     (workspaceRoot + "/crates/linnest/typst/linnest.wasm")
-    (workspaceRoot + "/crates/linnest/typst/ec-layout.wasm")
     (workspaceRoot + "/crates/linnest/typst/LICENSE.clarabel")
-    (workspaceRoot + "/crates/linnest/typst/LICENSE.ec-layout")
+    (workspaceRoot + "/crates/linnest/typst/LICENSE.networkx")
     (workspaceRoot + "/crates/linnest/typst/src")
     (workspaceRoot + "/crates/linnest/typst/typst.toml")
     (workspaceRoot + "/crates/linnet-py/README.md")
@@ -173,11 +173,13 @@
       (workspaceRoot + "/crates/clinnet/templates/layout.typ")
       (workspaceRoot + "/crates/kurvst/typst/src")
       (workspaceRoot + "/crates/kurvst/typst/typst.toml")
+      (workspaceRoot + "/crates/kurvst/typst/LICENSE")
+      (workspaceRoot + "/crates/kurvst/typst/LICENSE.tiptoe")
       (workspaceRoot + "/crates/linnest/typst/src")
       (workspaceRoot + "/crates/linnest/typst/typst.toml")
       (workspaceRoot + "/crates/linnest/typst/LICENSE")
       (workspaceRoot + "/crates/linnest/typst/LICENSE.clarabel")
-      (workspaceRoot + "/crates/linnest/typst/LICENSE.ec-layout")
+      (workspaceRoot + "/crates/linnest/typst/LICENSE.networkx")
     ];
   };
 
@@ -426,12 +428,12 @@
       "assets/embedded"
       "assets/models"
       "crates/kurvst/typst/kurvst.wasm"
+      "crates/kurvst/typst/LICENSE.tiptoe"
       "crates/kurvst/typst/src"
       "crates/kurvst/typst/typst.toml"
       "crates/linnest/typst/linnest.wasm"
-      "crates/linnest/typst/ec-layout.wasm"
       "crates/linnest/typst/LICENSE.clarabel"
-      "crates/linnest/typst/LICENSE.ec-layout"
+      "crates/linnest/typst/LICENSE.networkx"
       "crates/linnest/typst/src"
       "crates/linnest/typst/typst.toml"
     ];
@@ -444,12 +446,12 @@
     clinnet = [
       "crates/clinnet/templates"
       "crates/kurvst/typst/kurvst.wasm"
+      "crates/kurvst/typst/LICENSE.tiptoe"
       "crates/kurvst/typst/src"
       "crates/kurvst/typst/typst.toml"
       "crates/linnest/typst/linnest.wasm"
-      "crates/linnest/typst/ec-layout.wasm"
       "crates/linnest/typst/LICENSE.clarabel"
-      "crates/linnest/typst/LICENSE.ec-layout"
+      "crates/linnest/typst/LICENSE.networkx"
       "crates/linnest/typst/src"
       "crates/linnest/typst/typst.toml"
     ];
@@ -459,12 +461,12 @@
       "crates/linnet-py/typst"
       "crates/kurvst/typst/LICENSE"
       "crates/kurvst/typst/kurvst.wasm"
+      "crates/kurvst/typst/LICENSE.tiptoe"
       "crates/kurvst/typst/src"
       "crates/kurvst/typst/typst.toml"
       "crates/linnest/typst/linnest.wasm"
-      "crates/linnest/typst/ec-layout.wasm"
       "crates/linnest/typst/LICENSE.clarabel"
-      "crates/linnest/typst/LICENSE.ec-layout"
+      "crates/linnest/typst/LICENSE.networkx"
       "crates/linnest/typst/LICENSE"
       "crates/linnest/typst/src"
       "crates/linnest/typst/typst.toml"
@@ -509,7 +511,11 @@
       "crates/clinnet/tests/resources"
       "crates/kurvst/typst/tests/pattern-split.typ"
       "crates/kurvst/typst/tests/layer-offset.typ"
+      "crates/kurvst/typst/tests/mark-contract.typ"
+      "crates/kurvst/typst/tests/mark-geometry.typ"
       "crates/linnest/typst/examples/map-style.typ"
+      "crates/linnest/typst/tests/collision-lines.typ"
+      "crates/linnest/typst/tests/identity-targets.typ"
       "tests/resources/graphs/epemttbar.dot"
     ];
     # Unit and integration tests embed these graph fixtures and snapshots with include_str!.
@@ -556,7 +562,10 @@
     "alphal00p-docs-catalogs" = [
       "docs/api/python"
     ];
-    clinnet = ["docs/assets/typst/portal-graphs/edge-style.typ"];
+    clinnet = [
+      "docs/assets/typst/portal-graphs/edge-style.typ"
+      "docs/assets/typst/theme.typ"
+    ];
     "gammaloop-api" = [
       "tests/resources/graphs/scalar_bubble.dot"
     ];
@@ -567,8 +576,20 @@
       "tests/resources/graphs/uv_tests/rqft_a_3l_no_ghost.dot"
       "tests/resources/graphs/uv_tests/rqft_ghG_3l.dot"
     ];
-    # The nauty validation test reads nauty's driver script and answer files at runtime.
-    linnet = ["crates/linnet/tests/resources/nauty"];
+    # The nauty validation test reads nauty's driver script and answer files at
+    # runtime; the DOT corpus test reads only the DOT files below the other roots.
+    linnet =
+      ["crates/linnet/tests/resources/nauty"]
+      ++ map (root: {
+        inherit root;
+        extension = "dot";
+      }) [
+        "crates/gammalooprs/tests/fixtures"
+        "crates/linnest/examples"
+        "examples/cli"
+        "examples/notebooks/fixtures"
+        "tests/resources/graphs"
+      ];
     "gammaloop-integration-tests" = [
       "assets/plot_approach_result.py"
       "examples/api"
@@ -614,8 +635,17 @@
   workspacePackageExtraSourceRootsForSourcePackages = kind: sourcePackages:
     sortedUnique (lib.concatMap (sourcePackage: workspacePackageExtraSourceRoots.${kind}.${sourcePackage} or []) sourcePackages);
 
+  # An extra source root is a workspace-relative path, or `{ root; extension; }`
+  # for only the files below `root` with that extension. Production roots are
+  # plain paths, which the dummy-source restore below copies.
   workspacePackageExtraFilesetsForSourcePackages = kind: sourcePackages:
-    map (sourceRoot: workspaceRoot + "/${sourceRoot}") (workspacePackageExtraSourceRootsForSourcePackages kind sourcePackages);
+    lib.concatMap (sourcePackage:
+      map (sourceRoot:
+        if builtins.isAttrs sourceRoot
+        then lib.fileset.fileFilter (file: file.hasExt sourceRoot.extension) (workspaceRoot + "/${sourceRoot.root}")
+        else workspaceRoot + "/${sourceRoot}")
+      (workspacePackageExtraSourceRoots.${kind}.${sourcePackage} or []))
+    sourcePackages;
 
   workspacePackageExtraSourceRestoreInDummySrcScriptFor = sourcePackages:
     ''
@@ -1400,10 +1430,10 @@
     cp -R ${linnest-wasm}/templates/crates/linnest/typst/src/. crates/linnest/typst/src/
     cp ${linnest-wasm}/templates/crates/linnest/typst/typst.toml crates/linnest/typst/typst.toml
     cp ${linnest-wasm}/templates/crates/linnest/typst/linnest.wasm crates/linnest/typst/linnest.wasm
-    cp ${linnest-wasm}/templates/crates/linnest/typst/ec-layout.wasm crates/linnest/typst/ec-layout.wasm
     cp ${linnest-wasm}/templates/crates/linnest/typst/LICENSE* crates/linnest/typst/
     cp -R ${linnest-wasm}/templates/crates/kurvst/typst/src/. crates/kurvst/typst/src/
     cp ${linnest-wasm}/templates/crates/kurvst/typst/typst.toml crates/kurvst/typst/typst.toml
+    cp ${linnest-wasm}/templates/crates/kurvst/typst/LICENSE* crates/kurvst/typst/
     cp ${linnest-wasm}/templates/crates/kurvst/typst/kurvst.wasm crates/kurvst/typst/kurvst.wasm
   '';
 
@@ -2441,44 +2471,6 @@
       cargoExtraArgs = "${cargoPackagesArgsFor (lib.subtractLists ["gammaloop-integration-tests"] workspaceMemberPackages) craneCiFeaturesFor} --tests";
     });
 
-  ecLayoutWasm = pkgs.stdenv.mkDerivation {
-    pname = "linnest-ec-layout-wasm";
-    version = "1a40505ac00677a58ab5ce532e1dcc3bd63116e5";
-    src = lib.fileset.toSource {
-      root = workspaceRoot + "/crates/linnest/layout/native";
-      fileset = lib.fileset.fileFilter (file:
-        file.hasExt "cpp" || file.hasExt "hpp"
-        || file.name == "CMakeLists.txt" || file.name == "build.py")
-      (workspaceRoot + "/crates/linnest/layout/native");
-    };
-    ogdfArchive = pkgs.fetchurl {
-      url = "https://codeload.github.com/ogdf/ogdf/tar.gz/1a40505ac00677a58ab5ce532e1dcc3bd63116e5";
-      sha256 = "f777924563d31813103e4b9df55bb081885a8b65b7c6868d13d162f892c72d84";
-    };
-    jsonHeader = pkgs.fetchurl {
-      url = "https://raw.githubusercontent.com/nlohmann/json/v3.12.0/single_include/nlohmann/json.hpp";
-      sha256 = "aaf127c04cb31c406e5b04a63f1ae89369fccde6d8fa7cdda1ed4f32dfc5de63";
-    };
-    nativeBuildInputs = [pkgs.emscripten pkgs.binaryen pkgs.cmake pkgs.python3];
-    strictDeps = true;
-    dontConfigure = true;
-    dontStrip = true;
-    buildPhase = ''
-      runHook preBuild
-      export EM_CACHE="$TMPDIR/emscripten-cache"
-      mkdir -p "$EM_CACHE" layout-build/json-include/nlohmann
-      tar -xzf "$ogdfArchive" -C layout-build
-      cp "$jsonHeader" layout-build/json-include/nlohmann/json.hpp
-      python3 build.py --wasm --output layout-build --jobs "$NIX_BUILD_CORES"
-      runHook postBuild
-    '';
-    installPhase = ''
-      runHook preInstall
-      install -Dm644 layout-build/ec-layout.wasm "$out/ec-layout.wasm"
-      runHook postInstall
-    '';
-  };
-
   linnestWasmArgs = {
     inherit cargoVendorDir;
     src = linnestWasmSrc;
@@ -2506,7 +2498,6 @@
           "$out/templates/crates/linnest/typst" \
           "$out/templates/crates/kurvst/typst"
         cp "target/${wasmTarget}/release/linnest.wasm" "$out/linnest.wasm"
-        cp ${ecLayoutWasm}/ec-layout.wasm "$out/ec-layout.wasm"
         cp "target/${wasmTarget}/release/kurvst.wasm" "$out/kurvst.wasm"
         cp crates/clinnet/templates/*.typ "$out/templates/"
         cp -R crates/linnest/typst/src "$out/templates/crates/linnest/typst/"
@@ -2514,15 +2505,23 @@
         cp crates/linnest/typst/LICENSE* "$out/templates/crates/linnest/typst/"
         cp -R crates/kurvst/typst/src "$out/templates/crates/kurvst/typst/"
         cp crates/kurvst/typst/typst.toml "$out/templates/crates/kurvst/typst/typst.toml"
+        cp crates/kurvst/typst/LICENSE* "$out/templates/crates/kurvst/typst/"
         cp "$out/linnest.wasm" "$out/templates/crates/linnest/typst/linnest.wasm"
-        cp "$out/ec-layout.wasm" "$out/templates/crates/linnest/typst/ec-layout.wasm"
         cp "$out/kurvst.wasm" "$out/templates/crates/kurvst/typst/kurvst.wasm"
       '';
     });
 
-  nextestPackageGroups = map (target: target // lib.optionalAttrs (target.name == "docs") {
-    runtimeTools = [docsTypst nextestPython pkgs.git pkgs.jujutsu];
-  }) ci.groups;
+  nextestPackageGroups = map (target:
+    target
+    // lib.optionalAttrs (target.name == "docs") {
+      runtimeTools = [docsTypst nextestPython pkgs.git pkgs.jujutsu];
+    }
+    // lib.optionalAttrs (target.name == "clinnet") {
+      # Clinnet's Typst behaviour and native/Wasm mark parity tests skip without
+      # Typst. This executable carries stock CeTZ 0.5.2 and makes them required.
+      runtimeTools = [docsTypst];
+      runtimeEnv.TYPST_TEST_EXECUTABLE = "${docsTypst}/bin/typst";
+    }) ci.groups;
 
   sortedUnique = list: lib.sort (left: right: left < right) (lib.unique list);
 
@@ -2713,7 +2712,7 @@
     checkedNextestPackageGroups);
 
   nextestCheckFor = target:
-    pkgs.runCommand "gammaloop-nextest-${target.name}" {
+    pkgs.runCommand "gammaloop-nextest-${target.name}" ({
       nativeBuildInputs = [
         ciToolchain
         pkgs.cargo-nextest
@@ -2731,7 +2730,7 @@
       RUST_BACKTRACE = "1";
       RUST_LIB_BACKTRACE = "1";
       SYMBOLICA_LICENSE = builtins.getEnv "SYMBOLICA_LICENSE";
-    } (''
+    } // (target.runtimeEnv or {})) (''
       if [ -z "''${SYMBOLICA_LICENSE:-}" ]; then
         echo "Missing SYMBOLICA_LICENSE environment variable" >&2
         exit 1
@@ -2908,16 +2907,12 @@
         nativeBuildInputs = [pkgs.wasm-tools];
       } ''
         test -s ${linnest-wasm}/linnest.wasm
-        test -s ${linnest-wasm}/ec-layout.wasm
         test -s ${linnest-wasm}/kurvst.wasm
         test -s ${linnest-wasm}/templates/crates/linnest/typst/linnest.wasm
-        test -s ${linnest-wasm}/templates/crates/linnest/typst/ec-layout.wasm
         test -s ${linnest-wasm}/templates/crates/kurvst/typst/kurvst.wasm
         cmp ${linnest-wasm}/linnest.wasm ${linnest-wasm}/templates/crates/linnest/typst/linnest.wasm
-        cmp ${linnest-wasm}/ec-layout.wasm ${linnest-wasm}/templates/crates/linnest/typst/ec-layout.wasm
         cmp ${linnest-wasm}/kurvst.wasm ${linnest-wasm}/templates/crates/kurvst/typst/kurvst.wasm
         wasm-tools validate ${linnest-wasm}/linnest.wasm
-        wasm-tools validate ${linnest-wasm}/ec-layout.wasm
         wasm-tools validate ${linnest-wasm}/kurvst.wasm
         test -s ${linnest-wasm}/templates/layout.typ
         test -s ${linnest-wasm}/templates/crates/linnest/typst/src/lib.typ

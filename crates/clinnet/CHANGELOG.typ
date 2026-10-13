@@ -7,6 +7,34 @@ and this project adheres to #link("https://semver.org/spec/v2.0.0.html")[Semanti
 
 == Unreleased
 
+=== Added
+
+- The bundled Linnest package carries `LICENSE.networkx`, the BSD-3-Clause notice of the
+  NetworkX code that its layout seed translates.
+- The bundled Kurvst package adds `arc` for circular arcs built from cubic segments and
+  `outline` for converting a stroked path into its filled outline.
+- The bundled Kurvst package adds `mark`: data-only constructors for thirteen arrowhead and
+  marker shapes plus `combine`, and one batched geometry call shared with native rendering.
+  The shapes follow tiptoe 0.4, whose MIT notice the package carries as `LICENSE.tiptoe`.
+
+=== Changed
+
+- The bundled Kurvst package rejects unknown fields in path elements and unknown
+  `resolve-length` methods.
+- The bundled Linnest package draws with stock CeTZ 0.5.2 from Typst Universe instead of
+  CeTZ 0.5.1 with local patches, and its templates and generated entrypoints import
+  `@preview/cetz:0.5.2`. Arrowheads, label footprints and hit areas come from the shared
+  Kurvst mark engine: style layers take `kurvst.mark` data under `mark`, and CeTZ mark
+  dictionaries such as `(end: ">")` are rejected.
+
+=== Removed
+
+- The bundled Linnest package no longer carries the unused `ec-layout.wasm` plugin, which
+  linked the GPL-licensed OGDF. Layout seeds come from `linnest.wasm` as before.
+- The bundled Kurvst package drops the `optimize` option of its parallel and layer helpers and
+  the `mode` of `close`, which now always closes with a straight segment; Linnest's
+  `edge-optimize` draw option and style key are gone with it.
+
 == #link("https://github.com/alphal00p/linnet/compare/clinnet-v0.1.7...clinnet-v0.1.8")[0.1.8] - 2025-12-04
 
 === Other

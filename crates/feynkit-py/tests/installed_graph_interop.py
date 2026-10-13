@@ -245,7 +245,7 @@ for candidate in cross_section.topology_threshold_candidates:
     assert isinstance(candidate.right, fk.Subgraph)
 assert any(
     "is_cut" in json.loads(element.get("data-linnet-detail", "{}"))
-    for element in ET.fromstring(cross_section.render().to_svg()).iter()
+    for element in ET.fromstring(cross_section.render().to_svg(interactive=True)).iter()
 )
 assert (
     fk.FeynmanDiagram.from_json(model, cross_section.to_json()).to_json()

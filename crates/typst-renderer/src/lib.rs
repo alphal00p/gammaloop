@@ -1,39 +1,45 @@
-//! Offline Typst compilation with embedded fonts and an explicit package store.
+//! Offline Typst compilation with embedded fonts and explicit package directories.
 //! The same compiler runs natively and inside Pyodide; it never imports Python
 //! packages, invokes a subprocess, or downloads Typst packages.
 
 use std::{
     collections::{BTreeMap, HashMap},
-    fs,
-    path::Path,
+    env, fs,
+    path::{Path, PathBuf},
     sync::{LazyLock, Mutex},
 };
 
 use typst::LibraryExt;
-use typst::syntax::{FileId, RootedPath, Source, VirtualPath, VirtualRoot};
+use typst::syntax::{FileId, RootedPath, Source, Span, VirtualPath, VirtualRoot};
 use typst::utils::LazyHash;
 use typst_kit::fonts::FontStore;
 use typst_library::{
     Feature, Library, World, WorldExt,
-    diag::{FileError, FileResult, SourceDiagnostic},
-    foundations::{Bytes, Datetime, Duration},
-    text::{Font, FontBook},
+    diag::{FileError, FileResult, PackageError, SourceDiagnostic},
+    foundations::{
+        Bytes, Datetime, Dict, Duration, NativeElement, Recipe, Selector, Styles, Transformation,
+        Value,
+    },
+    math::EquationElem,
+    text::{Font, FontBook, FontFamily, FontList, TextElem},
 };
 
+/// The only fonts: Libertinus Serif for text, STIX Two Math for equations and
+/// DejaVu Sans Mono for raw text. All are under permissive licenses.
 static FONTS: LazyLock<FontStore> = LazyLock::new(|| {
     let mut fonts = FontStore::new();
-    #[cfg(feature = "full")]
-    fonts.extend(typst_kit::fonts::embedded());
-    // Typst equations request weight 450 (Book), not the 400 Regular face.
-    #[cfg(not(feature = "full"))]
     for data in [
         include_bytes!("../fonts/LibertinusSerif-Regular.otf").as_slice(),
+        include_bytes!("../fonts/LibertinusSerif-Semibold.otf").as_slice(),
         include_bytes!("../fonts/LibertinusSerif-Bold.otf").as_slice(),
         include_bytes!("../fonts/LibertinusSerif-Italic.otf").as_slice(),
+        include_bytes!("../fonts/LibertinusSerif-SemiboldItalic.otf").as_slice(),
         include_bytes!("../fonts/LibertinusSerif-BoldItalic.otf").as_slice(),
-        include_bytes!("../fonts/NewCMMath-Book.otf").as_slice(),
-        include_bytes!("../fonts/NewCMMath-Bold.otf").as_slice(),
+        include_bytes!("../fonts/STIXTwoMath-Regular.otf").as_slice(),
         include_bytes!("../fonts/DejaVuSansMono.ttf").as_slice(),
+        include_bytes!("../fonts/DejaVuSansMono-Bold.ttf").as_slice(),
+        include_bytes!("../fonts/DejaVuSansMono-Oblique.ttf").as_slice(),
+        include_bytes!("../fonts/DejaVuSansMono-BoldOblique.ttf").as_slice(),
     ] {
         fonts.extend(Font::iter(Bytes::new(data)).map(|font| {
             let info = font.info().clone();
@@ -43,26 +49,59 @@ static FONTS: LazyLock<FontStore> = LazyLock::new(|| {
     fonts
 });
 
-/// One immutable render project. Authored sources override files staged on disk;
-/// package imports resolve exclusively within the supplied package directory.
+/// One immutable render project. Authored sources override files staged on disk,
+/// if the project has a directory; package imports resolve in the first supplied
+/// package directory that holds them, each laid out as `namespace/name/version`.
 pub struct Document<'a> {
-    root: &'a Path,
-    packages: &'a Path,
+    root: Option<&'a Path>,
+    packages: &'a [PathBuf],
     files: &'a BTreeMap<String, Vec<u8>>,
     sources: Mutex<HashMap<FileId, Source>>,
     library: LazyHash<Library>,
-    #[cfg(feature = "full")]
-    fonts: Option<FontStore>,
 }
 
 impl<'a> Document<'a> {
-    /// Compile a virtual document without any package store or plugin assets.
+    /// Resolve a named Typst color to its exact SVG hexadecimal paint.
+    pub fn named_color_css(name: &str) -> Result<String, String> {
+        static LIBRARY: LazyLock<Library> = LazyLock::new(|| Library::builder().build());
+        match LIBRARY
+            .global
+            .scope()
+            .get(name)
+            .map(|binding| binding.read())
+        {
+            Some(Value::Color(color)) => Ok(color.to_hex().to_string()),
+            _ => Err(format!(
+                "unknown Typst color {name:?}; use an RGB or hexadecimal paint"
+            )),
+        }
+    }
+
+    /// Compile a virtual document from its sources alone, without a project
+    /// directory, package store or plugin assets; nothing touches the disk.
     pub fn compile_sources(
         files: &BTreeMap<String, Vec<u8>>,
         format: &str,
     ) -> Result<Vec<Vec<u8>>, String> {
-        let root = tempfile::tempdir().map_err(|e| e.to_string())?;
-        Document::new(root.path(), root.path(), files).compile(format)
+        Document::with_root(None, &[], files).compile(format)
+    }
+
+    /// The package directories of the Typst CLI, in its lookup order: the
+    /// package path (`TYPST_PACKAGE_PATH`, else `<data dir>/typst/packages`),
+    /// then the package cache (`TYPST_PACKAGE_CACHE_PATH`, else
+    /// `<cache dir>/typst/packages`). Unlike the CLI, nothing is downloaded.
+    pub fn local_package_dirs() -> Vec<PathBuf> {
+        [
+            ("TYPST_PACKAGE_PATH", dirs::data_dir()),
+            ("TYPST_PACKAGE_CACHE_PATH", dirs::cache_dir()),
+        ]
+        .into_iter()
+        .filter_map(|(variable, default)| {
+            env::var_os(variable)
+                .map(PathBuf::from)
+                .or_else(|| default.map(|directory| directory.join("typst/packages")))
+        })
+        .collect()
     }
 
     /// A self-contained Typst export of an already drawn SVG figure.
@@ -70,29 +109,58 @@ impl<'a> Document<'a> {
         format!("#set page(width: auto, height: auto, margin: 0pt)\n#image(bytes({svg:?}))")
     }
 
-    pub fn new(root: &'a Path, packages: &'a Path, files: &'a BTreeMap<String, Vec<u8>>) -> Self {
-        #[cfg(feature = "full")]
-        let fonts = std::env::var_os("TYPST_FONT_PATHS").map(|paths| {
-            let mut fonts = FontStore::new();
-            for path in std::env::split_paths(&paths) {
-                fonts.extend(typst_kit::fonts::scan(&path));
-            }
-            fonts.extend(typst_kit::fonts::embedded());
-            fonts
-        });
+    pub fn new(
+        root: &'a Path,
+        packages: &'a [PathBuf],
+        files: &'a BTreeMap<String, Vec<u8>>,
+    ) -> Self {
+        Self::with_root(Some(root), packages, files)
+    }
+
+    fn with_root(
+        root: Option<&'a Path>,
+        packages: &'a [PathBuf],
+        files: &'a BTreeMap<String, Vec<u8>>,
+    ) -> Self {
         Self {
             root,
             packages,
             files,
             sources: Mutex::new(HashMap::new()),
-            #[cfg(feature = "full")]
-            fonts,
-            library: LazyHash::new(
-                Library::builder()
-                    .with_features([Feature::Html].into_iter().collect())
-                    .build(),
-            ),
+            library: LazyHash::new(Self::library(Dict::new())),
         }
+    }
+
+    /// Expose string `inputs` through `sys.inputs`, like the CLI's `--input`,
+    /// so one document can compile to different outputs.
+    pub fn with_inputs<'k>(mut self, inputs: impl IntoIterator<Item = (&'k str, &'k str)>) -> Self {
+        let inputs = inputs
+            .into_iter()
+            .map(|(key, value)| (key.into(), Value::Str(value.into())))
+            .collect();
+        self.library = LazyHash::new(Self::library(inputs));
+        self
+    }
+
+    /// The standard library with STIX Two Math as the equation font. Typst's
+    /// default, New Computer Modern Math, is not embedded; a font set lacking
+    /// it would make equations fall back to a text font and lose their layout.
+    fn library(inputs: Dict) -> Library {
+        let mut library = Library::builder()
+            .with_inputs(inputs)
+            .with_features([Feature::Html].into_iter().collect())
+            .build();
+        let mut math = Styles::new();
+        math.set(
+            TextElem::font,
+            FontList(vec![FontFamily::new("STIX Two Math")]),
+        );
+        library.styles.push(Recipe::new(
+            Some(Selector::Elem(EquationElem::ELEM, None)),
+            Transformation::Style(math),
+            Span::detached(),
+        ));
+        library
     }
 
     /// Compile HTML as one document or SVG as one document per page.
@@ -176,10 +244,6 @@ impl World for Document<'_> {
         &self.library
     }
     fn book(&self) -> &LazyHash<FontBook> {
-        #[cfg(feature = "full")]
-        if let Some(fonts) = &self.fonts {
-            return fonts.book();
-        }
         FONTS.book()
     }
     fn main(&self) -> FileId {
@@ -203,13 +267,37 @@ impl World for Document<'_> {
                 if let Some(bytes) = self.files.get(key) {
                     return Ok(Bytes::new(bytes.clone()));
                 }
-                self.root.to_path_buf()
+                let Some(root) = self.root else {
+                    return Err(FileError::NotFound(key.into()));
+                };
+                root.to_path_buf()
             }
-            VirtualRoot::Package(package) => self
-                .packages
-                .join(package.namespace.as_str())
-                .join(package.name.as_str())
-                .join(package.version.to_string()),
+            VirtualRoot::Package(package) => {
+                let relative = Path::new(package.namespace.as_str())
+                    .join(package.name.as_str())
+                    .join(package.version.to_string());
+                self.packages
+                    .iter()
+                    .map(|directory| directory.join(&relative))
+                    .find(|directory| directory.is_dir())
+                    .ok_or_else(|| {
+                        let searched = self
+                            .packages
+                            .iter()
+                            .map(|directory| directory.display().to_string())
+                            .collect::<Vec<_>>()
+                            .join(", ");
+                        FileError::Package(PackageError::Other(Some(
+                            format!(
+                                "{package} is not installed (searched: {searched}); \
+                                 compile once with the Typst CLI to cache it, or set \
+                                 TYPST_PACKAGE_PATH to a directory holding {}",
+                                relative.display()
+                            )
+                            .into(),
+                        )))
+                    })?
+            }
         };
         let path = id.vpath().realize(&root)?;
         fs::read(&path)
@@ -217,10 +305,6 @@ impl World for Document<'_> {
             .map_err(|error| FileError::from_io(error, &path))
     }
     fn font(&self, index: usize) -> Option<Font> {
-        #[cfg(feature = "full")]
-        if let Some(fonts) = &self.fonts {
-            return fonts.font(index);
-        }
         FONTS.font(index)
     }
     fn today(&self, _offset: Option<Duration>) -> Option<Datetime> {
@@ -231,24 +315,141 @@ impl World for Document<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::BTreeSet;
+    use typst_layout::PagedDocument;
+    use typst_library::layout::{Frame, FrameItem};
+
+    /// The families of all glyph runs in a compiled document.
+    fn font_families(source: &str) -> BTreeSet<String> {
+        fn collect(frame: &Frame, families: &mut BTreeSet<String>) {
+            for (_, item) in frame.items() {
+                match item {
+                    FrameItem::Group(group) => collect(&group.frame, families),
+                    FrameItem::Text(text) => {
+                        families.insert(text.font.info().family.clone());
+                    }
+                    _ => {}
+                }
+            }
+        }
+        let root = tempfile::tempdir().unwrap();
+        let files = BTreeMap::from([("main.typ".into(), source.as_bytes().to_vec())]);
+        let document = Document::new(root.path(), &[], &files);
+        let paged = typst::compile::<PagedDocument>(&document).output.unwrap();
+        let mut families = BTreeSet::new();
+        for page in paged.pages() {
+            collect(&page.frame, &mut families);
+        }
+        families
+    }
 
     #[test]
-    fn embedded_fonts_match_default_math_and_text_variants() {
+    fn virtual_documents_read_no_project_directory() {
+        let files = BTreeMap::from([("main.typ".to_owned(), b"#read(\"Cargo.toml\")".to_vec())]);
+        let error = Document::compile_sources(&files, "svg").unwrap_err();
+        assert!(error.contains("not found"), "{error}");
+    }
+
+    #[test]
+    fn packages_resolve_in_the_first_directory_that_holds_them() {
+        let stores = tempfile::tempdir().unwrap();
+        let directories: Vec<PathBuf> = ["first", "second"]
+            .into_iter()
+            .map(|name| stores.path().join(name))
+            .collect();
+        for (directory, packages) in directories
+            .iter()
+            .zip([&["shared"][..], &["shared", "later"]])
+        {
+            for package in packages {
+                let root = directory.join("preview").join(package).join("1.0.0");
+                fs::create_dir_all(&root).unwrap();
+                fs::write(
+                    root.join("typst.toml"),
+                    format!("[package]\nname = \"{package}\"\nversion = \"1.0.0\"\nentrypoint = \"lib.typ\"\n"),
+                )
+                .unwrap();
+                let marker = directory.file_name().unwrap().to_str().unwrap();
+                fs::write(
+                    root.join("lib.typ"),
+                    format!("#let marker = \"{marker}\"\n"),
+                )
+                .unwrap();
+            }
+        }
+        let files = BTreeMap::from([(
+            "main.typ".to_owned(),
+            b"#import \"@preview/shared:1.0.0\": marker as shared\n\
+              #import \"@preview/later:1.0.0\": marker as later\n\
+              #assert.eq(shared, \"first\")\n#assert.eq(later, \"second\")\n[ok]"
+                .to_vec(),
+        )]);
+        let root = tempfile::tempdir().unwrap();
+        assert!(
+            Document::new(root.path(), &directories, &files)
+                .compile("svg")
+                .is_ok()
+        );
+
+        // A package in no directory names itself, the directories and the remedy.
+        let error = Document::new(root.path(), &directories[..1], &files)
+            .compile("svg")
+            .unwrap_err();
+        for expected in [
+            "@preview/later:1.0.0 is not installed",
+            directories[0].to_str().unwrap(),
+            "TYPST_PACKAGE_PATH",
+        ] {
+            assert!(error.contains(expected), "{error}");
+        }
+    }
+
+    #[test]
+    fn named_color_svg_paints_use_typst_constants_not_css_names() {
+        assert_eq!(Document::named_color_css("red").unwrap(), "#ff4136");
+        assert_eq!(Document::named_color_css("blue").unwrap(), "#0074d9");
+        assert_eq!(Document::named_color_css("eastern").unwrap(), "#239dad");
+        assert!(Document::named_color_css("unknown-mark-color").is_err());
+        assert!(Document::named_color_css("rect").is_err());
+    }
+
+    #[test]
+    fn embedded_fonts_cover_text_math_and_raw_variants() {
         use typst_library::text::{FontStretch, FontStyle, FontVariant, FontWeight};
         for (family, style, weight) in [
-            ("new computer modern math", FontStyle::Normal, 450),
-            ("new computer modern math", FontStyle::Normal, 700),
+            ("stix two math", FontStyle::Normal, 400),
             ("libertinus serif", FontStyle::Normal, 400),
+            ("libertinus serif", FontStyle::Normal, 600),
             ("libertinus serif", FontStyle::Normal, 700),
             ("libertinus serif", FontStyle::Italic, 400),
+            ("libertinus serif", FontStyle::Italic, 600),
             ("libertinus serif", FontStyle::Italic, 700),
             ("dejavu sans mono", FontStyle::Normal, 400),
+            ("dejavu sans mono", FontStyle::Normal, 700),
+            ("dejavu sans mono", FontStyle::Italic, 400),
+            ("dejavu sans mono", FontStyle::Italic, 700),
         ] {
             let variant =
                 FontVariant::new(style, FontWeight::from_number(weight), FontStretch::NORMAL);
             let index = FONTS.book().select(family, variant).unwrap();
             let font = FONTS.font(index).unwrap();
             assert_eq!(font.info().variant, variant, "{family}");
+        }
+    }
+
+    #[test]
+    fn typesets_text_equations_and_raw_text_in_their_own_fonts() {
+        for (source, family) in [
+            ("Text *bold* _italic_", "Libertinus Serif"),
+            ("$x + sum_(i=1)^n cal(L)_i$", "STIX Two Math"),
+            ("$ bold(x) = integral_0^1 f(t) dif t $", "STIX Two Math"),
+            ("`raw`", "DejaVu Sans Mono"),
+        ] {
+            assert_eq!(
+                font_families(source),
+                BTreeSet::from([family.to_owned()]),
+                "{source}"
+            );
         }
     }
 
@@ -271,7 +472,7 @@ mod tests {
             "main.typ".to_owned(),
             b"#set page(width: auto, height: auto)\n$x^2 + 1$".to_vec(),
         )]);
-        let document = Document::new(root.path(), root.path(), &files);
+        let document = Document::new(root.path(), &[], &files);
         assert!(
             String::from_utf8(document.compile("svg").unwrap().remove(0))
                 .unwrap()
@@ -283,6 +484,23 @@ mod tests {
                 .contains("<math")
         );
     }
+    #[test]
+    fn inputs_reach_sys_inputs_of_one_compilation() {
+        let root = tempfile::tempdir().unwrap();
+        let files = BTreeMap::from([(
+            "main.typ".to_owned(),
+            br#"#sys.inputs.at("output", default: "unset")"#.to_vec(),
+        )]);
+        let html = |document: Document| {
+            String::from_utf8(document.compile("html").unwrap().remove(0)).unwrap()
+        };
+        assert!(html(Document::new(root.path(), &[], &files)).contains("unset"));
+        assert!(
+            html(Document::new(root.path(), &[], &files).with_inputs([("output", "interactive")]))
+                .contains("interactive")
+        );
+    }
+
     #[test]
     fn renders_math_styles_and_raw_text() {
         let files = BTreeMap::from([(

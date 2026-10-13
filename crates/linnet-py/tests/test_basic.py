@@ -1748,7 +1748,7 @@ class TestDotCodec(unittest.TestCase):
             "stroke": lp.Stroke(paint=lp.Color("red"), thickness=lp.Length.pt(0.7))
         }
         graph.edge("propagator").drawing.decoration = {
-            "marks": [lp.Mark.barbed()],
+            "marks": [lp.Mark("stealth")],
             "padding": lp.Insets(all=lp.Length.mm(1)),
         }
         graph.edge("propagator").source.drawing.statement = "source statement"
@@ -1989,9 +1989,10 @@ class TestDotCodec(unittest.TestCase):
         self.assertEqual(decoded.node(0).data, value)
         self.assertEqual(decoded.global_data.statements[key], value)
 
-        unsupported = lp.Graph(nodes=[lp.Node("only", data="trailing\\")])
-        with self.assertRaisesRegex(ValueError, "cannot end in a backslash"):
-            unsupported.to_dot(codec)
+        trailing = lp.Graph(nodes=[lp.Node("only\\", data="trailing\\")])
+        decoded = lp.Graph.from_dot(trailing.to_dot(codec), codec)
+        self.assertEqual(decoded.node(0).name, "only\\")
+        self.assertEqual(decoded.node(0).data, "trailing\\")
 
     def test_import_rejects_duplicate_python_element_names(self):
         codec = lp.DotCodec.topology()
@@ -2083,9 +2084,9 @@ class TestTypedTypstSurface(unittest.TestCase):
         )
         insets = lp.Insets(x=length, y=lp.Length.em(0.5))
         mark = lp.Mark(
-            end=lp.MarkSymbol.Barbed,
+            "stealth",
             fill=lp.Color("red"),
-            anchor=lp.Anchor.Center,
+            length="3pt + 450%",
         )
         label = lp.TextLabel(
             'literal "#(not code)"',
@@ -2626,7 +2627,6 @@ class TestTypedTypstSurface(unittest.TestCase):
             edge_ratio=0.8,
             edge_resolve_length=lp.EdgeLengthResolution.Shorter,
             edge_accuracy=0.001,
-            edge_optimize=True,
             edge_split_gap=0.25,
             edge_dangling_tangent=lp.DanglingTangent.Horizontal,
             source_style=[{"stroke": stroke}],
@@ -2652,7 +2652,7 @@ class TestTypedTypstSurface(unittest.TestCase):
                 "length": 5,
                 "ratio": 0.5,
                 "stroke": stroke,
-                "mark": lp.Mark.barbed(),
+                "mark": lp.Mark("stealth"),
             },
             "annotations": {
                 "node-indices": True,
@@ -2741,6 +2741,8 @@ class TestTypedTypstSurface(unittest.TestCase):
             lp.DrawOptions(node_outset=lp.Length.pt(1))
         with self.assertRaises(TypeError):
             lp.DrawOptions(show_half_edge_ids=1)
+        with self.assertRaises(TypeError):
+            lp.DrawOptions(edge_optimize=True)
         with self.assertRaises(TypeError):
             lp.DrawOptions(label_collision_padding=-0.1)
         for gap in (-0.1, True, "0.45", lp.Length.pt(1)):
@@ -3044,6 +3046,52 @@ class TestTypedTypstSurface(unittest.TestCase):
 
 
 class TestRendering(unittest.TestCase):
+    def test_typst_packages_resolve_in_the_local_package_directories(self):
+        with TemporaryDirectory(prefix="linnet packages ") as directory:
+            stores = {name: Path(directory) / name for name in ("path", "cache")}
+            for name, store in stores.items():
+                for package in (f"{name}-only", "shared", "mitex"):
+                    version = "0.2.6" if package == "mitex" else "1.0.0"
+                    target = store / "preview" / package / version
+                    target.mkdir(parents=True)
+                    (target / "lib.typ").write_text(f'#let marker = "{name}"\n')
+                    (target / "typst.toml").write_text(
+                        f'[package]\nname = "{package}"\nversion = "{version}"\n'
+                        'entrypoint = "lib.typ"\n'
+                    )
+            with patch.dict(
+                os.environ,
+                {
+                    "TYPST_PACKAGE_PATH": str(stores["path"]),
+                    "TYPST_PACKAGE_CACHE_PATH": str(stores["cache"]),
+                },
+            ):
+                # The package path precedes the cache, as for the Typst CLI, and
+                # the bundled MiTeX precedes both.
+                resolved = lp.DiagramRender.from_sources(
+                    {
+                        "main.typ": b"""
+#import "@preview/cache-only:1.0.0" as cached
+#import "@preview/path-only:1.0.0" as local
+#import "@preview/shared:1.0.0" as shared
+#import "@preview/mitex:0.2.6": mi
+#assert.eq(cached.marker, "cache")
+#assert.eq(local.marker, "path")
+#assert.eq(shared.marker, "path")
+#mi("x^2")
+"""
+                    }
+                )
+                self.assertIn("<svg", resolved.to_svg())
+                # CeTZ is never bundled; a missing local copy names the remedy.
+                missing = lp.DiagramRender.from_sources(
+                    {"main.typ": b'#import "@preview/cetz:0.5.2"\n[x]'}
+                )
+                with self.assertRaisesRegex(
+                    RuntimeError, r"@preview/cetz:0\.5\.2.*TYPST_PACKAGE_PATH"
+                ):
+                    missing.to_svg()
+
     def test_authored_configuration_uses_the_canonical_settings_type(self):
         typed = lp.RenderSettings(
             selectors=lp.DrawingSelectors(node=None),

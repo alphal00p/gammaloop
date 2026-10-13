@@ -236,6 +236,7 @@
     "packages.x86_64-linux.crate-test-dependencies-clinnet" = [
       "packages.x86_64-linux.cargoArtifacts"
       "packages.x86_64-linux.crate-deps-gammaloop-workspace-hack"
+      "packages.x86_64-linux.crate-test-dependencies-kurvst"
     ];
     "packages.x86_64-linux.crate-test-dependencies-feynkit" = [
       "packages.x86_64-linux.cargoArtifacts"

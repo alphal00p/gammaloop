@@ -1,6 +1,7 @@
 #import "crates/linnest/typst/src/lib.typ": draw, graph, layout, subgraph
 #import graph: edge, node, pin, pos, sink, source
 #import "map-style.typ" as feynman
+#import "crates/linnest/typst/src/curve.typ": mark
 
 // Keep the reference presets explicit so default comparisons do not
 // merely compare two callbacks backed by the same implementation.
@@ -8,16 +9,7 @@
 #let reference-node = (radius: 0.08, fill: black, stroke: reference-stroke)
 #let reference-fermion = (
   stroke: reference-stroke,
-  mark: (
-    end: (
-      symbol: ">",
-      fill: black,
-      stroke: black + 0.2pt,
-      anchor: "center",
-      shorten-to: auto,
-    ),
-    scale: .5,
-  ),
+  mark: mark.triangle(length: 0.10cm, width: 0.075cm),
   mark-position: "center-if-dangling",
   mark-orientation: "edge",
 )
@@ -63,16 +55,7 @@
       ratio: 0.5,
       resolve-length: "min",
       stroke: (paint: black, thickness: 0.4pt, cap: "round"),
-      mark: (
-        end: (
-          symbol: "straight",
-          fill: black,
-          stroke: black + 0.4pt,
-          anchor: "center",
-          shorten-to: auto,
-        ),
-        scale: 0.50,
-      ),
+      mark: mark.straight(length: 0.10cm, width: 0.075cm),
       mark-position: "end",
       mark-orientation: "path",
     )
@@ -141,13 +124,12 @@
 #assert.eq(domain.particles.photon.stroke.thickness, 1.25pt)
 #assert.eq(domain.particles.gluon.stroke.thickness, 1.25pt)
 #assert.eq(domain.particles.scalar.stroke.thickness, 2.5pt)
-#assert.eq(domain.fermion.mark.end.stroke.thickness, 0.5pt)
+#assert.eq(domain.fermion.mark, reference-fermion.mark)
 #assert.eq(domain.momentum-stroke.thickness, 1pt)
-#assert.eq(domain.momentum-mark.end.stroke.thickness, 1pt)
+#assert.eq(domain.momentum-mark, reference-arrow.mark)
 #for (option, width) in (
   ("node-line-width", 1.75pt),
   ("massive-line-width", 3pt),
-  ("fermion-arrow-line-width", 0.625pt),
   ("momentum-line-width", 0.875pt),
 ) {
   let expected = domain
@@ -156,11 +138,8 @@
   } else if option == "massive-line-width" {
     expected.particles.scalar.stroke.thickness = width
     expected.particles.ghG.stroke.thickness = width
-  } else if option == "fermion-arrow-line-width" {
-    expected.fermion.mark.end.stroke = black + width
   } else {
     expected.momentum-stroke.thickness = width
-    expected.momentum-mark.end.stroke = black + width
   }
   let patch = (:)
   patch.insert(option, width)
@@ -179,7 +158,6 @@
   line-width: 1.25pt,
   node-line-width: 1.75pt,
   massive-line-width: 3pt,
-  fermion-arrow-line-width: 0.625pt,
   momentum-line-width: 0.875pt,
 )
 #let variants = (

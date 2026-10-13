@@ -1,6 +1,5 @@
 use feynkit_graph::FeynmanDiagram;
 use feynkit_model::{Model, ParticleId};
-use linnest::svg::Scene;
 use linnet_py::PyRenderSettings;
 
 use crate::render_settings::PyDiagramStyle;
@@ -103,7 +102,7 @@ pub(crate) fn collection_html(
     let mut drawings = Vec::new();
     for (index, diagram) in diagrams.take(limit).enumerate() {
         let drawing = diagram.render(py, config, style, false, None, None)?;
-        let svg = drawing.to_svg_pages()?.join("\n");
+        let svg = drawing.to_svg_pages(true)?.join("\n");
         write!(templates, "<template>{svg}</template>").unwrap();
         drawings.push(drawing);
         let label = format!("Diagram {}", index + 1);
@@ -147,28 +146,27 @@ pub(crate) fn collection_html(
     Ok((html, drawings))
 }
 
-/// Draw each process channel as a native star graph with a hatched interaction blob.
-pub(crate) fn process_svg(
+/// Draw each process channel as a native star graph with a hatched interaction
+/// blob; alternative final states sit side by side on one page.
+pub(crate) fn process_render(
     model: &Model,
     incoming: &[ParticleId],
     outgoing: &[Vec<ParticleId>],
     config: Option<&PyRenderSettings>,
     style: Option<&PyDiagramStyle>,
-) -> PyResult<String> {
+) -> PyResult<PyDiagramRender> {
     let options = PyDiagramStyle::resolve(style, false);
     let config = config.cloned().unwrap_or_default().config()?;
-    let mut figures = Vec::new();
+    let mut channels = Vec::new();
     for state in outgoing {
         let scene = options
             .process_scene(model, incoming, state, &config)
             .map_err(pyo3::exceptions::PyValueError::new_err)?;
-        figures.push(Python::attach(|py| {
-            PyDiagramRender::from_scene(py, scene, None)?
-                .map_svg(themed_svg)?
-                .to_svg()
+        channels.push(Python::attach(|py| {
+            Ok::<_, PyErr>(PyDiagramRender::from_scene(py, scene, None)?.map_svg(themed_svg))
         })?);
     }
-    Scene::combine_svgs(&figures).map_err(pyo3::exceptions::PyRuntimeError::new_err)
+    Ok(PyDiagramRender::row(channels))
 }
 
 /// Values are escaped text or fragments from Symbolica's native expression printer.

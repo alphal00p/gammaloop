@@ -36,9 +36,12 @@ rendering run has these steps:
    and delegates graph styling, layout, and drawing to Linnest's generic renderer.
 + `linnet-py` owns a separate in-process preparation boundary. It serializes only names, indices,
    incidence, flow, and orientation into a versioned `linnest-graph-spec` CBOR document; arbitrary
-   Python `.data` and DOT `GlobalData` never enter it. The wheel embeds Linnest, Kurvst, CeTZ 0.5.1,
-   oxifmt 1.0.0, and MiTeX 0.2.6, stages them with the graph spec, and invokes the embedded Rust Typst compiler. It has
-   no Clinnet library dependency and does not discover or launch a Typst executable.
+   Python `.data` and DOT `GlobalData` never enter it. The wheel embeds Linnest, Kurvst, oxifmt
+   1.0.0, and MiTeX 0.2.6, stages them with the graph spec, and invokes the embedded Rust Typst
+   compiler. Stock CeTZ 0.5.2 is not bundled: the Typst route reads it from the local Typst
+   package path and cache, as the Typst CLI does, without downloading. Native drawings need no
+   Typst package. It has no Clinnet library dependency and does not discover or launch a Typst
+   executable.
 + Both preparers invoke Typst with constant-sized process arguments. Their generated entrypoints
    statically import the selected template and each referenced user module once, materialize the
    native configuration dictionary, and call the template's mandatory `render(config)` export.
@@ -67,6 +70,28 @@ rendering run has these steps:
    typesets the label pages. Configurations that need Typst (templates, selectors, graph styles,
    drawing options, titles) and cross sections, whose initial states open before layout, still
    compile this Typst renderer.
+
+Inspection targets are a property of the output, not of the drawing: the transparent
+`#linnet-node-*`, `#linnet-edge-*` and `#linnet-halfedge-*` links that an interactive viewer
+decorates for hover, selection and keyboard focus. Each is a PDF link annotation or an SVG anchor,
+and edges carry many, so static output omits them. Typst `draw` emits them only with
+`inspection-targets: true`; its default `auto` follows the compile input
+`linnest-inspection-targets`, which documents, manuals, docs assets, Clinnet and GammaLoop CLI
+drawings leave unset. `linnest::svg::Figure` serializes one native drawing either as its static
+`svg()` or as `interactive_svg()`. Python `DiagramRender` snapshots keep both: HTML and notebook
+display use the interactive pages, while `to_svg()`, `_repr_svg_()` and file exports use the
+static pages; `to_svg(interactive=True)` requests the interactive SVG explicitly. On the Typst
+route one SVG compile with that input serves both outputs, since a notebook display requests both:
+`Scene::static_svg` removes the targets and the groups that held only them, leaving the document
+that compiling without the input produces. PDF and PNG exports compile without it.
+
+Label overlaps are measured by the placement code itself. The shared `label_placement` measure
+clips painted edge lines exactly against each chosen label's text box, as the search scores them,
+and lists the labels, nodes, self-loop bends and momentum arrows whose boxes share an area with
+the label. Native label feedback (`impred_labels`) scores its passes by the painted lines and
+labels it lists. On the Typst route the compile input `linnest-label-report=true` makes `draw`
+record the whole measure as `<linnest-label-report>` metadata, which the drawing benchmark's
+`--label-report` collects and compares with a baseline.
 
 The rendering contract has no evaluated-string mode. Generated particle styles are ordinary
 Typst dictionaries/functions in `edge-style.typ`, backed by
@@ -448,17 +473,21 @@ to Kurvst's path-in/path-out helpers:
 - `length`: maximum visible arc length for a centered parallel path.
 - `ratio`: maximum visible fraction of the base edge length for a centered
   parallel path.
-- `resolve-length`: how to combine `length` and `ratio`.
+- `resolve-length`: how to combine `length` and `ratio`; `"none"`/`"full"`
+  ignores both limits. A custom function receives one dictionary with
+  `base-length`, `length`, and `ratio`. The latter two entries are positive
+  absolute-length limits or `none`, with the ratio already multiplied by
+  `base-length`.
+- `shift`: arc-length displacement of the centered visible interval.
 - `accuracy`: Kurbo fitting tolerance for the parallel path.
-- `optimize`: whether Kurbo should optimize the fitted path.
 - `offset-side: "label"`: choose the sign of `offset` so the path is on the
   same side as the edge label.
 
 `draw` also accepts `edge-offset`, `edge-length`, `edge-ratio`,
-`edge-resolve-length`, `edge-accuracy`, and `edge-optimize` as defaults for both
-half edges. Derived paths are computed on the base edge geometry before patterns
-and other decorations; node outsets then trim the shifted path, so it remains
-shortened at node boundaries. When both length and ratio limits are set,
+`edge-resolve-length`, and `edge-accuracy` as defaults for both half edges.
+Derived paths are computed on the base edge geometry before patterns and other
+decorations; node outsets then trim the shifted path, so it remains shortened
+at node boundaries. When both length and ratio limits are set,
 `resolve-length` decides which visible span to use. For paired edges, Linnest
 computes that centered visible interval once on the full edge and then projects
 it onto the source and sink halves, so a short layer can cross the source/sink

@@ -33,9 +33,8 @@ struct EmbeddedTemplates;
 #[include = "src/**/*.typ"]
 #[include = "typst.toml"]
 #[include = "linnest.wasm"]
-#[include = "ec-layout.wasm"]
-#[include = "LICENSE.ec-layout"]
 #[include = "LICENSE.clarabel"]
+#[include = "LICENSE.networkx"]
 struct EmbeddedLinnestPackage;
 
 #[derive(RustEmbed)]
@@ -44,6 +43,7 @@ struct EmbeddedLinnestPackage;
 #[include = "src/**/*.typ"]
 #[include = "typst.toml"]
 #[include = "kurvst.wasm"]
+#[include = "LICENSE.tiptoe"]
 struct EmbeddedKurvstPackage;
 
 #[derive(Copy, Clone)]
@@ -103,7 +103,7 @@ impl TypstModule {
         })
     }
 
-    /// Import a Typst package such as `@preview/cetz:0.5.1`.
+    /// Import a Typst package such as `@preview/cetz:0.5.2`.
     pub fn package(alias: impl Into<String>, package: impl Into<String>) -> Result<Self> {
         let alias = alias.into();
         let package = package.into();
@@ -894,7 +894,7 @@ mod tests {
         ]))
         .unwrap();
         let request = TypstRenderRequest::new("digraph example { a -> b }", config)
-            .module(TypstModule::package("cetz", "@preview/cetz:0.5.1").unwrap());
+            .module(TypstModule::package("cetz", "@preview/cetz:0.5.2").unwrap());
         let svg = TypstRenderer::new(&base)
             .typst_executable(&executable)
             .to_svg(&request)
@@ -902,7 +902,7 @@ mod tests {
         assert_eq!(svg, "<svg>rendered</svg>");
         let entrypoint = fs::read_to_string(captured).unwrap();
         assert!(entrypoint.contains("_clinnet_template.render(_clinnet_config)"));
-        assert!(entrypoint.contains("#import \"@preview/cetz:0.5.1\" as cetz"));
+        assert!(entrypoint.contains("#import \"@preview/cetz:0.5.2\" as cetz"));
         assert!(entrypoint.contains("data-path:"));
         assert!(entrypoint.len() > 100_000);
 
@@ -913,10 +913,19 @@ mod tests {
     fn embedded_packages_include_nested_sources() {
         assert!(EmbeddedLinnestPackage::get("src/impl/draw.typ").is_some());
         assert!(EmbeddedLinnestPackage::get("src/impl/subgraph.typ").is_some());
-        for module in ["linnest.wasm", "ec-layout.wasm"] {
-            assert!(!EmbeddedLinnestPackage::get(module).unwrap().data.is_empty());
+        assert!(
+            !EmbeddedLinnestPackage::get("linnest.wasm")
+                .unwrap()
+                .data
+                .is_empty()
+        );
+        // linnest.wasm compiles Clarabel and NetworkX-derived code.
+        for notice in ["LICENSE.clarabel", "LICENSE.networkx"] {
+            assert!(EmbeddedLinnestPackage::get(notice).is_some(), "{notice}");
         }
         assert!(EmbeddedKurvstPackage::get("src/impl.typ").is_some());
+        // kurvst.wasm compiles mark geometry derived from tiptoe.
+        assert!(EmbeddedKurvstPackage::get("LICENSE.tiptoe").is_some());
     }
 
     #[test]
@@ -924,8 +933,8 @@ mod tests {
         assert!(TypstModule::new("style_0", "style.typ").is_ok());
         assert!(TypstModule::new("bad-alias", "style.typ").is_err());
         assert!(TypstModule::new("_clinnet_template", "style.typ").is_err());
-        assert!(TypstModule::package("cetz", "@preview/cetz:0.5.1").is_ok());
-        assert!(TypstModule::package("cetz", "cetz:0.5.1").is_err());
+        assert!(TypstModule::package("cetz", "@preview/cetz:0.5.2").is_ok());
+        assert!(TypstModule::package("cetz", "cetz:0.5.2").is_err());
         assert!(TypstModule::package("cetz", "@preview/cetz:\"bad\"").is_err());
     }
 
@@ -1104,7 +1113,7 @@ mod tests {
   attach-elements,
   layout-graph,
 )
-#import "crates/linnest/typst/src/lib.typ": draw, graph, subgraph
+#import "crates/linnest/typst/src/lib.typ": curve, draw, graph, subgraph
 
 #let source-drawing = (statement: "source-statement", compass: "e")
 #source-drawing.insert("port-label", "source-port")
@@ -1243,7 +1252,7 @@ mod tests {
     offset: 0.16,
     length: 0.8,
     stroke: red + 0.45pt,
-    mark: (end: ">"),
+    mark: curve.mark.triangle(),
   ),
 )
 #let crossing-style(edge) = crossing-layers(if edge.eid == 0 { 1 } else { none })
@@ -1310,25 +1319,6 @@ mod tests {
                 base.join("preparation-assertions.pdf"),
                 &[&repository],
             )
-            .unwrap();
-
-        // Drawing supplied geometry must not load the unused EC seed plugin.
-        fs::remove_file(templates.join(LINNEST_PACKAGE_DIR).join("ec-layout.wasm")).unwrap();
-        let precomputed = templates.join("precomputed-without-ec.typ");
-        fs::write(
-            &precomputed,
-            r#"#import "crates/linnest/typst/src/graph.typ" as graph
-#import "crates/linnest/typst/src/render/layout.typ": layout-graph
-#let g = graph.build({
-  graph.node(<v>, pos: graph.pos(x: 0, y: 0))
-  graph.edge(graph.source(<v>), pos: graph.pos(x: 2, y: 0))
-})
-#context layout-graph((layouts: none, draw: (title: none)), g)
-"#,
-        )
-        .unwrap();
-        renderer
-            .compile_template(&precomputed, base.join("precomputed-without-ec.pdf"), &[])
             .unwrap();
 
         fs::remove_dir_all(base).unwrap();

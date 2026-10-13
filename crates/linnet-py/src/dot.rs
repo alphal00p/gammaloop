@@ -1,10 +1,9 @@
 use std::collections::{BTreeMap, BTreeSet};
 
-use dot_parser::ast::CompassPt;
 use linnet::half_edge::involution::{EdgeIndex, Flow, Hedge, HedgePair};
 use linnet::half_edge::{HedgeGraph, NodeIndex};
 use linnet::parser::{
-    set::DotGraphSet, DotEdgeData, DotGraph, DotHedgeData, DotVertexData, GlobalData,
+    set::DotGraphSet, CompassPt, DotEdgeData, DotGraph, DotHedgeData, DotVertexData, GlobalData,
 };
 use pyo3::class::gc::{PyTraverseError, PyVisit};
 use pyo3::exceptions::{PyReferenceError, PyTypeError, PyValueError};
@@ -224,36 +223,10 @@ impl PyDotEdgeData {
 fn parse_compass(value: Option<&str>) -> PyResult<Option<CompassPt>> {
     value
         .map(|value| {
-            Ok(match value.to_ascii_lowercase().as_str() {
-                "n" => CompassPt::N,
-                "ne" => CompassPt::NE,
-                "e" => CompassPt::E,
-                "se" => CompassPt::SE,
-                "s" => CompassPt::S,
-                "sw" => CompassPt::SW,
-                "w" => CompassPt::W,
-                "nw" => CompassPt::NW,
-                "c" => CompassPt::C,
-                "_" => CompassPt::Underscore,
-                _ => return Err(PyValueError::new_err("invalid DOT compass point")),
-            })
+            (value.to_ascii_lowercase().parse())
+                .map_err(|_| PyValueError::new_err("invalid DOT compass point"))
         })
         .transpose()
-}
-
-fn compass_name(value: CompassPt) -> &'static str {
-    match value {
-        CompassPt::N => "n",
-        CompassPt::NE => "ne",
-        CompassPt::E => "e",
-        CompassPt::SE => "se",
-        CompassPt::S => "s",
-        CompassPt::SW => "sw",
-        CompassPt::W => "w",
-        CompassPt::NW => "nw",
-        CompassPt::C => "c",
-        CompassPt::Underscore => "_",
-    }
 }
 
 /// The DOT-representable record exchanged for one half-edge by a `DotCodec`.
@@ -312,7 +285,7 @@ impl PyDotHalfEdgeData {
 
     #[getter]
     fn compass(&self) -> Option<&'static str> {
-        self.inner.compasspt.map(compass_name)
+        self.inner.compasspt.map(CompassPt::as_str)
     }
 }
 
@@ -612,7 +585,7 @@ fn encode_half_edge_envelope(value: &DotHedgeData) -> PyResult<String> {
         statement: value.statement.clone(),
         payload: value.payload.clone(),
         port_label: value.port_label.clone(),
-        compass: value.compasspt.map(compass_name).map(str::to_owned),
+        compass: value.compasspt.map(|compass| compass.to_string()),
     };
     serde_json::to_vec(&envelope)
         .map(|bytes| encode_hex(&bytes))
@@ -901,7 +874,7 @@ impl PyDotCodec {
                 if let Some(compass) = value.compasspt {
                     values.set_item(
                         "compass",
-                        crate::typst::compass_value(py, compass_name(compass))?,
+                        crate::typst::compass_value(py, compass.as_str())?,
                     )?;
                 }
                 Ok(PyHalfEdgeValue {
@@ -925,14 +898,6 @@ fn reject_reserved(
     if let Some(key) = reserved.iter().find(|key| statements.contains_key(**key)) {
         return Err(PyValueError::new_err(format!(
             "DOT {kind} statement name {key:?} is reserved by the codec transport"
-        )));
-    }
-    if let Some((key, _)) = statements
-        .iter()
-        .find(|(key, value)| key.ends_with('\\') || value.ends_with('\\'))
-    {
-        return Err(PyValueError::new_err(format!(
-            "DOT {kind} statement {key:?} cannot end in a backslash with the supported DOT parser"
         )));
     }
     Ok(())
@@ -1232,8 +1197,6 @@ pub(crate) fn encode_graph(
     }
     let mut global = global_data.inner.clone();
     reject_reserved(&global.statements, &[GLOBAL_METADATA], "global")?;
-    reject_reserved(&global.edge_statements, &[], "global edge default")?;
-    reject_reserved(&global.node_statements, &[], "global node default")?;
     global.statements.insert(
         GLOBAL_METADATA.to_owned(),
         encode_envelope(&GlobalEnvelope {

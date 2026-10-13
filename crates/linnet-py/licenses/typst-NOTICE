@@ -5,5 +5,6 @@ Licensed under Apache-2.0; see typst-LICENSE.
 The typst-library and typst-svg components have been modified to make
 plugins, syntax highlighting, bibliographies, PDF import, and additional
 raster decoders optional. This distribution enables all of them.
-Font assets are unmodified selections from typst-assets 0.15.1;
+The fonts are unmodified: Libertinus Serif and DejaVu Sans Mono from
+typst-assets 0.15.1, and STIX Two Math 2.13 from the STIX Fonts project;
 see typst-fonts-NOTICE for their copyrights and licenses.

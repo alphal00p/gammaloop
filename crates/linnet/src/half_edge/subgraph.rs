@@ -1,8 +1,9 @@
 use std::{hash::Hash, num::TryFromIntError};
 
 use ahash::AHashSet;
-use indenter::CodeFormatter;
 use std::fmt::Write;
+
+use crate::parser::DotIndent;
 
 use super::{
     involution::HedgePair, nodestore::Topology, GVEdgeAttrs, Hedge, HedgeGraph, PowersetIterator,
@@ -275,8 +276,7 @@ pub trait SubGraphLike: SubSetLike<Hedge> + Inclusion<HedgePair> {
         node_attr: &impl Fn(&V) -> Option<String>,
     ) -> Result<(), std::fmt::Error> {
         writeln!(writer, "digraph {{")?;
-        let mut writer = CodeFormatter::new(writer, "  ");
-        writer.indent(1);
+        let mut writer = DotIndent::new(writer);
         write!(
             writer,
             "\nnode\t [shape=circle,height=0.1,label=\"\"];\noverlap = \"scale\";\nlayout = \"neato\";",

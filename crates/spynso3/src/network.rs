@@ -1489,7 +1489,7 @@ impl SpensoNet {
     #[pyo3(signature = (*, config=None))]
     fn to_linnest(&self, py: Python<'_>, config: Option<&PyRenderSettings>) -> PyResult<String> {
         Ok(typst_renderer::Document::svg_source(
-            &self.render_graph(py, config)?.to_svg()?,
+            &self.render_graph(py, config)?.to_svg(false)?,
         ))
     }
 
@@ -1529,8 +1529,8 @@ impl SpensoNet {
     ) -> PyResult<PyDiagramRender> {
         let drawing = self
             .render_graph(py, config)?
-            .map_svg(|svg| display::network::svg_theme(&svg))?;
-        let html = display::network::html(&drawing.to_svg_pages()?.join("\n"), &self.status());
+            .map_svg(|svg| display::network::svg_theme(&svg));
+        let html = display::network::html(&drawing.to_svg_pages(true)?.join("\n"), &self.status());
         Ok(drawing.with_html(html))
     }
 

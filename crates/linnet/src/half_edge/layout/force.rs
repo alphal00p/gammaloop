@@ -992,6 +992,7 @@ mod tests {
         layout::{
             simulatedanneale::Energy,
             spring::{ParamTuning, ShiftDirection},
+            test::PendingIdentification,
         },
         subgraph::{ModifySubSet, SuBitGraph},
         HedgeGraph,
@@ -3049,5 +3050,56 @@ mod tests {
         assert_eq!(state.edge_points[EdgeIndex(0)].y, 2.0);
         assert_eq!(state.vertex_depths, vec![Some(3.0), Some(-3.0)].into());
         assert_ne!(state.edge_depths[EdgeIndex(0)], Some(5.0));
+    }
+
+    /// Nodes absorbed by pending identifications are no layout points: the
+    /// live nodes move as in the compacted copy, the absorbed point stays.
+    #[test]
+    fn force_layout_skips_nodes_absorbed_by_pending_identifications() {
+        let fixture = PendingIdentification::new();
+        let energy = SpringChargeEnergy::from_graph(
+            fixture.graph.n_live(),
+            4.0,
+            4.0,
+            ParamTuning {
+                gamma_dangling_centroid: 1.0,
+                external_pull: 0.5,
+                ..ParamTuning::default()
+            },
+        );
+        let cfg = ForceLayoutConfig {
+            steps: 15,
+            epochs: 2,
+            step: 0.05,
+            cool: 0.9,
+            max_delta: 0.2,
+            early_tol: 0.0,
+            seed: 3,
+            depth_scale: 1.0,
+            flattening_end: 0.5,
+            initial_repulsion: 0.5,
+            repulsion_growth: 0.7,
+        };
+        let [pending, compacted] = fixture.states().map(|mut state| {
+            force_directed_layout(&mut state, &energy, cfg);
+            state
+        });
+        let [initial, _] = fixture.states();
+        let absorbed = fixture.absorbed;
+        assert_eq!(
+            pending.vertex_points[absorbed],
+            initial.vertex_points[absorbed]
+        );
+        assert_ne!(pending.vertex_points, initial.vertex_points);
+        assert_eq!(
+            fixture.compact(&pending.vertex_points),
+            compacted.vertex_points
+        );
+        assert_eq!(pending.vertex_depths[absorbed], None);
+        assert_eq!(
+            fixture.compact(&pending.vertex_depths),
+            compacted.vertex_depths
+        );
+        assert_eq!(pending.edge_points, compacted.edge_points);
     }
 }

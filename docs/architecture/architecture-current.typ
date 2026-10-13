@@ -231,7 +231,9 @@ only permitted class pairs. Cross sections test squared powers on the summed for
 Diagram names are optional; structural IDs and aggregate numerators are computed on demand.
 The ID hashes Linnet's structural canonical form, including model particle/rule names,
 with BLAKE3; numerical model parameters, numerator expressions and display names do not
-enter it. Canonical forms remain comparable only within one Linnet version. Local
+enter it. Canonical forms remain comparable only within one Linnet version. Vertex IDs resolve
+only live nodes: an absorbed node slot cannot be read or assigned a numerator before compaction,
+and callers follow the compaction remap for renumbered vertices. Local
 numerator fragments stay attached to their edges and vertices; an explicitly supplied
 aggregate is checked against them. Validation and routing certificates are cached and
 invalidated at their owning edit boundaries. The `u128` automorphism order records
@@ -755,6 +757,13 @@ mode. Authoritative completed-iteration state lives in
 snapshots live under `state/observables/<process>@<integrand>/`.
 User-facing `integration_result.json` and observable files are derived
 snapshots, not the resume authority.
+
+Workspace version 2 fingerprints the exact selected integrand collection after warm-up and
+before observable checkpoints are restored. Preparation restores saved non-model settings on
+private clones while preserving current model overrides, selects graph groups, and warms only
+that selection. Excluded groups do not enter the resume fingerprint. Settings and workspace
+writes occur only after preparation, fingerprint and compatibility checks succeed; rejection
+leaves the generated source intact. Older full-source-fingerprint workspaces require a restart.
 
 == Configuration Architecture
 <configuration-architecture>

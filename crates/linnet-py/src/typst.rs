@@ -327,7 +327,6 @@ enum EnumKind {
     StrokeJoin,
     TextStyle,
     DashPattern,
-    MarkSymbol,
     MarkPosition,
     MarkOrientation,
     MarkDirection,
@@ -354,7 +353,6 @@ impl EnumKind {
             Self::StrokeJoin => "StrokeJoin",
             Self::TextStyle => "TextStyle",
             Self::DashPattern => "DashPattern",
-            Self::MarkSymbol => "MarkSymbol",
             Self::MarkPosition => "MarkPosition",
             Self::MarkOrientation => "MarkOrientation",
             Self::MarkDirection => "MarkDirection",
@@ -383,7 +381,6 @@ enum NativeEnum {
     StrokeJoin(PyStrokeJoin),
     TextStyle(PyTextStyle),
     DashPattern(PyDashPattern),
-    MarkSymbol(PyMarkSymbol),
     MarkPosition(PyMarkPosition),
     MarkOrientation(PyMarkOrientation),
     MarkDirection(PyMarkDirection),
@@ -410,7 +407,6 @@ impl NativeEnum {
             Self::StrokeJoin(_) => EnumKind::StrokeJoin,
             Self::TextStyle(_) => EnumKind::TextStyle,
             Self::DashPattern(_) => EnumKind::DashPattern,
-            Self::MarkSymbol(_) => EnumKind::MarkSymbol,
             Self::MarkPosition(_) => EnumKind::MarkPosition,
             Self::MarkOrientation(_) => EnumKind::MarkOrientation,
             Self::MarkDirection(_) => EnumKind::MarkDirection,
@@ -437,7 +433,6 @@ impl NativeEnum {
             Self::StrokeJoin(value) => Py::new(py, value)?.into_any(),
             Self::TextStyle(value) => Py::new(py, value)?.into_any(),
             Self::DashPattern(value) => Py::new(py, value)?.into_any(),
-            Self::MarkSymbol(value) => Py::new(py, value)?.into_any(),
             Self::MarkPosition(value) => Py::new(py, value)?.into_any(),
             Self::MarkOrientation(value) => Py::new(py, value)?.into_any(),
             Self::MarkDirection(value) => Py::new(py, value)?.into_any(),
@@ -478,6 +473,12 @@ enum NativeValue {
 }
 
 impl NativeValue {
+    /// A `Mark` or the public dictionary of one, as `Mark.to_dict()` returns it.
+    fn is_kurvst_mark(&self) -> bool {
+        matches!(self, Self::Mark(values) | Self::Dict(values)
+            if matches!(values.get("kind"), Some(Self::String(kind)) if kind == "kurvst-mark"))
+    }
+
     fn collect_modules(&self, modules: &mut BTreeSet<TypstModuleSource>) {
         match self {
             Self::Array(values) => {
@@ -673,7 +674,6 @@ impl NativeEnum {
             Self::StrokeJoin(value) => value.typst_name(),
             Self::TextStyle(value) => value.typst_name(),
             Self::DashPattern(value) => value.typst_name(),
-            Self::MarkSymbol(value) => value.typst_name(),
             Self::MarkPosition(value) => value.typst_name(),
             Self::MarkOrientation(value) => value.typst_name(),
             Self::MarkDirection(value) => value.typst_name(),
@@ -1076,14 +1076,6 @@ typst_string_enum! {
         DashDotted => "dash-dotted",
         DenselyDashDotted => "densely-dash-dotted",
         LooselyDashDotted => "loosely-dash-dotted",
-    }
-}
-
-typst_string_enum! {
-    /// Built-in arrowhead symbol used by CeTZ edge marks.
-    PyMarkSymbol, "MarkSymbol", MarkSymbol {
-        Barbed => "barbed",
-        Straight => "straight",
     }
 }
 
@@ -1764,7 +1756,7 @@ fn parse_options(
                 | ValueRule::PatternOrStyleLayers
                 | ValueRule::DrawSubgraphs
         ) {
-            validate_nested_drawing_enums(&value)?;
+            validate_nested_drawing_fields(&value)?;
         }
         if !matches!(value, NativeValue::Inherit) {
             out.insert(field.typst.to_owned(), value);
@@ -1945,19 +1937,8 @@ impl PyInsets {
     }
 }
 
-const MARK_FIELDS: &[FieldSpec] = &[
-    FieldSpec::new("start", "start", ValueRule::Any).none(),
-    FieldSpec::new("end", "end", ValueRule::Any).none(),
-    FieldSpec::new("fill", "fill", ValueRule::Paint).none(),
-    FieldSpec::new("stroke", "stroke", ValueRule::Stroke).none(),
-    FieldSpec::new("scale", "scale", ValueRule::NonNegativeNumber),
-    FieldSpec::new("anchor", "anchor", ValueRule::Enum(EnumKind::Anchor)),
-    FieldSpec::new("shorten_to", "shorten-to", ValueRule::Length)
-        .none()
-        .auto(),
-];
-
-/// Typed CeTZ mark configuration.
+/// Data-only Kurvst mark shared by native SVG and Typst drawing.
+/// Shape defaults and fitting belong to the shared geometry engine.
 #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(from_py_object, frozen, name = "Mark")]
 #[cfg_attr(feature = "community", pyo3(module = "symbolica.community.graph"))]
@@ -1973,43 +1954,628 @@ struct PyMark {
 impl PyMark {
     #[new]
     #[pyo3(
-        signature = (**kwargs),
-        text_signature = "(*, start=..., end=..., fill=..., stroke=..., scale=..., anchor=..., shorten_to=...)"
+        signature = (name=None, **kwargs),
+        text_signature = "(name, *, length=..., width=..., inset=..., fill=..., stroke=..., rev=..., align=..., arc=..., n=..., phase=..., fit=..., shorten=...)"
     )]
     #[gen_stub(skip)]
-    fn new(kwargs: Option<&Bound<'_, PyDict>>) -> PyResult<Self> {
-        let values = parse_options(kwargs, MARK_FIELDS)?;
-        if values
-            .values()
-            .all(|value| matches!(value, NativeValue::Inherit))
-        {
-            return Err(PyValueError::new_err("Mark needs at least one option"));
-        }
+    fn new(name: Option<&str>, kwargs: Option<&Bound<'_, PyDict>>) -> PyResult<Self> {
+        let name = name.ok_or_else(|| PyTypeError::new_err(
+            "Mark requires a shape name first; replace CeTZ symbol/scale/anchor/shorten_to options with Mark(\"triangle\", length=..., width=...)",
+        ))?;
+        let values = Self::normalize(Self::options(name, kwargs)?, 0)?;
+        Self::validate(&values)?;
         Ok(Self { values })
     }
 
     #[staticmethod]
-    fn barbed() -> Self {
-        Self {
-            values: BTreeMap::from([(
-                "end".to_owned(),
-                NativeValue::Enum(PyMarkSymbol::Barbed.into()),
-            )]),
+    #[pyo3(signature = (*parts, **kwargs))]
+    #[gen_stub(skip)]
+    fn combine(parts: &Bound<'_, PyTuple>, kwargs: Option<&Bound<'_, PyDict>>) -> PyResult<Self> {
+        let mut values = Self::options("combine", kwargs)?;
+        if values.contains_key("parts") {
+            return Err(PyTypeError::new_err(
+                "Mark.combine parts must be positional",
+            ));
         }
+        let children = parts
+            .iter()
+            .map(|part| native_from_py(&part, 0))
+            .collect::<PyResult<Vec<_>>>()?;
+        values.insert("parts".into(), NativeValue::Array(children));
+        let values = Self::normalize(values, 0)?;
+        Self::validate(&values)?;
+        Ok(Self { values })
     }
 
-    #[staticmethod]
-    fn straight() -> Self {
-        Self {
-            values: BTreeMap::from([(
-                "end".to_owned(),
-                NativeValue::Enum(PyMarkSymbol::Straight.into()),
-            )]),
-        }
+    /// Return the same public data dictionary as `kurvst.mark` constructors.
+    #[gen_stub(skip)]
+    fn to_dict(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        native_to_py(
+            py,
+            &Self::public_data(&NativeValue::Mark(self.values.clone())),
+        )
     }
 
     fn __repr__(&self) -> String {
         options_repr("Mark", &[&self.values])
+    }
+}
+
+impl PyMark {
+    /// A `Mark` or its public `to_dict()` data, normalized and validated.
+    fn from_value(value: &NativeValue) -> PyResult<Self> {
+        let values = match value {
+            NativeValue::Mark(values) | NativeValue::Dict(values) if value.is_kurvst_mark() => {
+                values.clone()
+            }
+            _ => {
+                return Err(PyValueError::new_err(
+                    "replace CeTZ mark dictionaries with Mark(\"triangle\", length=..., width=...)",
+                ));
+            }
+        };
+        let values = Self::normalize(values, 0)?;
+        Self::validate(&values)?;
+        Ok(Self { values })
+    }
+
+    /// Drawing-style keys that hold arrowheads: the native `flow-arrow` and
+    /// `momentum-arrow`, their derived leaf paints, and Linnest's Typst `mark`.
+    fn is_style_field(field: &str) -> bool {
+        matches!(
+            field,
+            "mark"
+                | "flow-arrow"
+                | "momentum-arrow"
+                | "flow-arrow-paints"
+                | "momentum-arrow-paints"
+        )
+    }
+
+    /// Reject arrowhead styles when they are configured, whichever renderer
+    /// draws them later. `flow-arrow` and `momentum-arrow` hold a `Mark` or its
+    /// public data; a dictionary under `mark` must be one too, while Typst checks
+    /// its other values (`none`, module values). Leaf paints come from the mark.
+    fn validate_style_field(field: &str, value: &NativeValue) -> PyResult<()> {
+        match (field, value) {
+            ("flow-arrow-paints" | "momentum-arrow-paints", _) => Err(PyValueError::new_err(
+                format!("{field} follows from the fill and stroke of its Mark; set them there"),
+            )),
+            (_, NativeValue::Inherit) => Ok(()),
+            ("flow-arrow" | "momentum-arrow", NativeValue::Mark(_) | NativeValue::Dict(_))
+            | ("mark", NativeValue::Dict(_)) => Self::from_value(value).map(drop),
+            ("flow-arrow" | "momentum-arrow", _) => Err(PyTypeError::new_err(format!(
+                "{field} must be a Mark or its to_dict() data, not {}",
+                value.kind()
+            ))),
+            _ => Ok(()),
+        }
+    }
+
+    /// The native SVG form: the numeric Kurvst `MarkSpec` and the CSS paints of
+    /// its leaves in the engine's flattened drawable order.
+    fn native(&self) -> PyResult<(serde_json::Value, serde_json::Value)> {
+        let mut paints = Vec::new();
+        Self::paints(&self.values, &mut paints)?;
+        Ok((
+            Self::numeric(&self.values)?,
+            serde_json::Value::Array(paints),
+        ))
+    }
+
+    fn options(
+        name: &str,
+        kwargs: Option<&Bound<'_, PyDict>>,
+    ) -> PyResult<BTreeMap<String, NativeValue>> {
+        let mut values = BTreeMap::from([
+            ("kind".into(), NativeValue::String("kurvst-mark".into())),
+            ("shape".into(), NativeValue::String(name.into())),
+        ]);
+        if let Some(kwargs) = kwargs {
+            for (key, value) in kwargs.iter() {
+                let key = key.extract::<String>()?;
+                if matches!(key.as_str(), "kind" | "shape") {
+                    return Err(PyTypeError::new_err(
+                        "Mark kind and shape are determined by the first name argument",
+                    ));
+                }
+                values.insert(key, native_from_py(&value, 0)?);
+            }
+        }
+        Ok(values)
+    }
+
+    /// One public-data boundary for constructors and the native JSON adapter.
+    /// This translates units and paint only; the shared schema owns fields.
+    fn normalize(
+        values: BTreeMap<String, NativeValue>,
+        depth: usize,
+    ) -> PyResult<BTreeMap<String, NativeValue>> {
+        if depth > MAX_NATIVE_DEPTH {
+            return Err(PyValueError::new_err(
+                "Mark nesting exceeds the native value depth limit",
+            ));
+        }
+        if !matches!(values.get("kind"), Some(NativeValue::String(kind)) if kind == "kurvst-mark") {
+            return Err(PyValueError::new_err(
+                "replace CeTZ mark dictionaries with Mark constructors",
+            ));
+        }
+        let Some(NativeValue::String(name)) = values.get("shape") else {
+            return Err(PyTypeError::new_err("Mark shape must be a string"));
+        };
+        let name = name.clone();
+        let mut out = BTreeMap::new();
+        for (key, value) in values {
+            if matches!(
+                key.as_str(),
+                "start" | "end" | "symbol" | "scale" | "anchor" | "shorten_to" | "shorten-to"
+            ) {
+                return Err(PyValueError::new_err(format!(
+                    "CeTZ Mark option {key:?} is no longer supported; use Mark(\"triangle\", length=..., width=..., fit=\"chord\", shorten=\"100%\")"
+                )));
+            }
+            let value = match key.as_str() {
+                "length" | "width" | "inset" | "shorten" => Self::dimension(value)?,
+                "fill" | "stroke" => Self::paint(value, &key)?,
+                "parts" => {
+                    let NativeValue::Array(parts) = value else {
+                        return Err(PyTypeError::new_err("Mark parts must be an array"));
+                    };
+                    let parts = parts
+                        .into_iter()
+                        .map(|part| match part {
+                            NativeValue::Mark(values) | NativeValue::Dict(values) => {
+                                Ok(NativeValue::Mark(Self::normalize(values, depth + 1)?))
+                            }
+                            _ => Self::dimension(part),
+                        })
+                        .collect::<PyResult<Vec<_>>>()?;
+                    NativeValue::Array(parts)
+                }
+                _ => value,
+            };
+            // AUTO requests an omitted per-shape default. Probe the shared
+            // schema first so an inapplicable automatic field still rejects.
+            if matches!(value, NativeValue::Auto)
+                && (matches!(key.as_str(), "fill" | "stroke" | "width")
+                    || (key == "phase" && name == "rays")
+                    || (key == "length" && name == "bracket"))
+            {
+                let probe = match key.as_str() {
+                    "width" | "length" => serde_json::json!({"points": 0.0, "ratio": 0.0}),
+                    "phase" => serde_json::json!(0.0),
+                    _ => serde_json::json!(true),
+                };
+                let mut spec = serde_json::json!({"shape": name});
+                spec[key.as_str()] = probe;
+                serde_json::from_value::<kurvst::marks::MarkSpec>(spec)
+                    .map_err(|e| PyValueError::new_err(format!("invalid Kurvst Mark: {e}")))?;
+                continue;
+            }
+            out.insert(key, value);
+        }
+        Ok(out)
+    }
+
+    fn paint(value: NativeValue, key: &str) -> PyResult<NativeValue> {
+        match value {
+            NativeValue::Stroke(fields) if key == "stroke" => {
+                if fields.iter().any(|(key, value)| {
+                    key != "paint" && !matches!(value, NativeValue::Inherit | NativeValue::Auto)
+                }) {
+                    return Err(PyValueError::new_err(
+                        "Mark stroke is paint-only; set thickness on the line, and let the shape own cap/join/dash/miter geometry",
+                    ));
+                }
+                Self::paint(
+                    fields
+                        .get("paint")
+                        .filter(|value| !matches!(value, NativeValue::Inherit))
+                        .cloned()
+                        .unwrap_or(NativeValue::Auto),
+                    key,
+                )
+            }
+            NativeValue::String(paint) => Ok(NativeValue::Color(PyColor::new(&paint)?.value)),
+            NativeValue::Color(_)
+            | NativeValue::Bool(_)
+            | NativeValue::None
+            | NativeValue::Auto => Ok(value),
+            _ => Err(PyTypeError::new_err(format!(
+                "Mark {key} must be paint, boolean, None, or AUTO"
+            ))),
+        }
+    }
+
+    fn public_data(value: &NativeValue) -> NativeValue {
+        match value {
+            NativeValue::Mark(values) | NativeValue::Dict(values) => NativeValue::Dict(
+                values
+                    .iter()
+                    .map(|(key, value)| (key.clone(), Self::public_data(value)))
+                    .collect(),
+            ),
+            NativeValue::Array(values) => {
+                NativeValue::Array(values.iter().map(Self::public_data).collect())
+            }
+            _ => value.clone(),
+        }
+    }
+
+    fn dimension(value: NativeValue) -> PyResult<NativeValue> {
+        if let NativeValue::String(source) = value {
+            let mut points = 0.0;
+            let mut ratio = 0.0;
+            let mut has_points = false;
+            let mut has_ratio = false;
+            // This is a unit-expression parser, never executable Typst source.
+            let mut start = 0;
+            let boundaries = source
+                .char_indices()
+                .filter(|(i, c)| *c == '+' && *i > 0 && !source[..*i].ends_with(['e', 'E']))
+                .map(|(i, _)| i)
+                .chain(std::iter::once(source.len()));
+            for end in boundaries {
+                let term = source[start..end].trim();
+                start = end + 1;
+                let unit = ["pt", "mm", "cm", "in", "em", "%"]
+                    .into_iter()
+                    .find(|unit| term.ends_with(unit))
+                    .ok_or_else(|| {
+                        PyValueError::new_err("mark sizes need units, e.g. '3pt + 450%'")
+                    })?;
+                let split = term.len() - unit.len();
+                let number = finite(
+                    term[..split].trim().parse::<f64>().map_err(|_| {
+                        PyValueError::new_err(format!("invalid mark size {source:?}"))
+                    })?,
+                    "mark size",
+                )?;
+                if unit == "%" {
+                    ratio += number;
+                    has_ratio = true;
+                } else {
+                    points += Self::points(number, &LengthUnit::parse(unit)?)?;
+                    has_points = true;
+                }
+            }
+            Ok(match (has_points, has_ratio) {
+                (true, false) => NativeValue::Length(points, LengthUnit::Pt),
+                (false, true) => NativeValue::Ratio(ratio),
+                _ => NativeValue::RelativeLength {
+                    ratio: Some(ratio),
+                    length: Some((points, LengthUnit::Pt)),
+                },
+            })
+        } else {
+            Ok(value)
+        }
+    }
+
+    fn points(value: f64, unit: &LengthUnit) -> PyResult<f64> {
+        let scale = match unit {
+            LengthUnit::Pt => 1.0,
+            LengthUnit::Mm => 72.0 / 25.4,
+            LengthUnit::Cm => 72.0 / 2.54,
+            LengthUnit::In => 72.0,
+            LengthUnit::Em => {
+                return Err(PyValueError::new_err(
+                    "mark sizes require physical units; replace em with pt, mm, cm, or in",
+                ));
+            }
+        };
+        finite(value * scale, "mark size")
+    }
+
+    fn size(value: &NativeValue) -> PyResult<serde_json::Value> {
+        let (points, ratio) = match value {
+            NativeValue::Length(value, unit) => (Self::points(*value, unit)?, 0.0),
+            NativeValue::Ratio(value) => (0.0, value / 100.0),
+            NativeValue::RelativeLength { ratio, length } => (
+                length
+                    .as_ref()
+                    .map(|(v, u)| Self::points(*v, u))
+                    .transpose()?
+                    .unwrap_or(0.0),
+                ratio.unwrap_or(0.0) / 100.0,
+            ),
+            _ => {
+                return Err(PyTypeError::new_err(
+                    "mark size must be a unit string, Length, Ratio, or RelativeLength",
+                ));
+            }
+        };
+        Ok(serde_json::json!({"points": points, "ratio": ratio}))
+    }
+
+    fn numeric(values: &BTreeMap<String, NativeValue>) -> PyResult<serde_json::Value> {
+        let mut out = serde_json::Map::new();
+        for (key, value) in values {
+            let value = match key.as_str() {
+                "kind" => {
+                    if !matches!(value, NativeValue::String(kind) if kind == "kurvst-mark") {
+                        return Err(PyValueError::new_err("Mark kind must be kurvst-mark"));
+                    }
+                    continue;
+                }
+                "length" | "width" => Self::size(value)?,
+                "inset" | "shorten" => match value {
+                    NativeValue::Ratio(ratio) => serde_json::json!(ratio / 100.0),
+                    _ => {
+                        return Err(PyTypeError::new_err(format!(
+                            "Mark {key} must be a Ratio or percent string"
+                        )));
+                    }
+                },
+                "arc" | "phase" => match value {
+                    NativeValue::Angle(value, unit) => serde_json::json!(if unit == "deg" {
+                        value.to_radians()
+                    } else {
+                        *value
+                    }),
+                    _ => return Err(PyTypeError::new_err(format!("Mark {key} must be an Angle"))),
+                },
+                "fill" | "stroke" => match Self::paint(value.clone(), key)? {
+                    NativeValue::None => serde_json::json!(false),
+                    NativeValue::Bool(value) => serde_json::json!(value),
+                    NativeValue::Color(_) => serde_json::json!(true),
+                    _ => {
+                        return Err(PyTypeError::new_err(format!(
+                            "Mark {key} must be paint, boolean, None, or AUTO"
+                        )));
+                    }
+                },
+                "parts" => {
+                    let NativeValue::Array(parts) = value else {
+                        return Err(PyTypeError::new_err("Mark parts must be an array"));
+                    };
+                    let parts = parts
+                        .iter()
+                        .map(|part| match part {
+                            NativeValue::Mark(values) | NativeValue::Dict(values) => {
+                                Self::numeric(values)
+                            }
+                            _ => Ok(serde_json::json!({"gap": Self::size(part)?})),
+                        })
+                        .collect::<PyResult<Vec<_>>>()?;
+                    serde_json::json!(parts)
+                }
+                _ => match value {
+                    NativeValue::String(value) => serde_json::json!(value),
+                    NativeValue::Bool(value) => serde_json::json!(value),
+                    NativeValue::Int(value) => serde_json::json!(value),
+                    _ => return Err(PyTypeError::new_err(format!("invalid Mark option {key:?}"))),
+                },
+            };
+            out.insert(key.clone(), value);
+        }
+        Ok(serde_json::Value::Object(out))
+    }
+
+    fn validate(values: &BTreeMap<String, NativeValue>) -> PyResult<()> {
+        // Data constructors have no drawing context. In particular, mixed
+        // signed sizes must resolve against the real line thickness, not a
+        // placeholder context here.
+        let _: kurvst::marks::MarkSpec = serde_json::from_value(Self::numeric(values)?)
+            .map_err(|e| PyValueError::new_err(format!("invalid Kurvst Mark: {e}")))?;
+        Ok(())
+    }
+
+    fn css_paint(value: &NativeValue) -> PyResult<Option<String>> {
+        match value {
+            NativeValue::Color(ColorValue::Hex(paint)) => Ok(Some(paint.clone())),
+            NativeValue::Color(ColorValue::Named(paint)) => {
+                typst_renderer::Document::named_color_css(paint)
+                    .map(Some)
+                    .map_err(PyValueError::new_err)
+            }
+            NativeValue::Color(ColorValue::Rgba(r, g, b, alpha)) => Ok(Some(alpha.map_or_else(
+                || format!("#{r:02x}{g:02x}{b:02x}"),
+                |a| format!("#{r:02x}{g:02x}{b:02x}{a:02x}"),
+            ))),
+            NativeValue::Bool(_) | NativeValue::None | NativeValue::Auto | NativeValue::Inherit => {
+                Ok(None)
+            }
+            _ => Err(PyValueError::new_err(
+                "native Mark paint must be a CSS color; use Color.rgb or a hexadecimal color",
+            )),
+        }
+    }
+
+    fn paints(
+        values: &BTreeMap<String, NativeValue>,
+        out: &mut Vec<serde_json::Value>,
+    ) -> PyResult<()> {
+        if let Some(NativeValue::Array(parts)) = values.get("parts") {
+            for part in parts {
+                if let NativeValue::Mark(values) | NativeValue::Dict(values) = part {
+                    Self::paints(values, out)?;
+                }
+            }
+        } else {
+            let mut paint = serde_json::Map::new();
+            for key in ["fill", "stroke"] {
+                if let Some(value) = values.get(key).map(Self::css_paint).transpose()?.flatten() {
+                    paint.insert(key.into(), serde_json::json!(value));
+                }
+            }
+            out.push(serde_json::Value::Object(paint));
+        }
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod mark_tests {
+    use super::*;
+    use serde_json::json;
+
+    fn mark(shape: &str, fields: Vec<(&str, NativeValue)>) -> BTreeMap<String, NativeValue> {
+        let mut values = BTreeMap::from([
+            ("kind".into(), NativeValue::String("kurvst-mark".into())),
+            ("shape".into(), NativeValue::String(shape.into())),
+        ]);
+        values.extend(fields.into_iter().map(|(key, value)| (key.into(), value)));
+        values
+    }
+
+    #[test]
+    fn native_styles_carry_numeric_marks_and_their_leaf_paints() {
+        let text = |value: &str| NativeValue::String(value.into());
+        let cases = [
+            (
+                NativeValue::Mark(mark(
+                    "triangle",
+                    vec![("length", text("0.21cm")), ("width", text("0.1575cm"))],
+                )),
+                json!({
+                    "shape": "triangle",
+                    "length": {"points": 0.21 * (72.0 / 2.54), "ratio": 0.0},
+                    "width": {"points": 0.1575 * (72.0 / 2.54), "ratio": 0.0}
+                }),
+                json!([{}]),
+            ),
+            // Public `to_dict()` data is a mark too.
+            (
+                NativeValue::Dict(mark(
+                    "stealth",
+                    vec![
+                        ("length", text("3pt + 450%")),
+                        ("inset", text("40%")),
+                        ("fill", text("red")),
+                        (
+                            "stroke",
+                            NativeValue::Stroke(BTreeMap::from([(
+                                "paint".into(),
+                                NativeValue::Color(ColorValue::Rgba(1, 2, 3, Some(4))),
+                            )])),
+                        ),
+                    ],
+                )),
+                json!({
+                    "shape": "stealth",
+                    "length": {"points": 3.0, "ratio": 4.5},
+                    "inset": 0.4, "fill": true, "stroke": true
+                }),
+                json!([{"fill": "#ff4136", "stroke": "#01020304"}]),
+            ),
+            (
+                NativeValue::Mark(mark(
+                    "combine",
+                    vec![
+                        (
+                            "parts",
+                            NativeValue::Array(vec![
+                                NativeValue::Mark(mark(
+                                    "combine",
+                                    vec![(
+                                        "parts",
+                                        NativeValue::Array(vec![
+                                            NativeValue::Mark(mark(
+                                                "bar",
+                                                vec![("stroke", text("blue"))],
+                                            )),
+                                            text("2pt"),
+                                            NativeValue::Mark(mark("bar", vec![])),
+                                        ]),
+                                    )],
+                                )),
+                                text("50%"),
+                                NativeValue::Mark(mark("triangle", vec![("fill", text("red"))])),
+                            ]),
+                        ),
+                        ("fit", text("bend")),
+                        ("shorten", text("80%")),
+                    ],
+                )),
+                json!({
+                    "shape": "combine", "fit": "bend", "shorten": 0.8,
+                    "parts": [
+                        {"shape": "combine", "parts": [
+                            {"shape": "bar", "stroke": true},
+                            {"gap": {"points": 2.0, "ratio": 0.0}},
+                            {"shape": "bar"}
+                        ]},
+                        {"gap": {"points": 0.0, "ratio": 0.5}},
+                        {"shape": "triangle", "fill": true}
+                    ]
+                }),
+                json!([{"stroke": "#0074d9"}, {}, {"fill": "#ff4136"}]),
+            ),
+        ];
+        for (value, expected, paints) in cases {
+            let style = NativeValue::Dict(BTreeMap::from([("flow-arrow".into(), value)]));
+            assert_eq!(
+                style.json().unwrap(),
+                json!({"flow-arrow": expected, "flow-arrow-paints": paints})
+            );
+        }
+        let legacy = NativeValue::Dict(BTreeMap::from([
+            ("end".into(), text("straight")),
+            ("scale".into(), NativeValue::Float(0.8)),
+        ]));
+        assert!(PyMark::from_value(&legacy).is_err());
+        let legacy = NativeValue::Mark(mark("triangle", vec![("scale", NativeValue::Float(0.8))]));
+        assert!(PyMark::from_value(&legacy).is_err());
+    }
+
+    #[test]
+    fn styles_reject_cetz_heads_and_typst_scenes_take_the_configured_ones() {
+        let text = |value: &str| NativeValue::String(value.into());
+        let style = |field: &str, value: NativeValue| {
+            NativeValue::Dict(BTreeMap::from([(field.into(), value)]))
+        };
+        let cetz = NativeValue::Dict(BTreeMap::from([("end".into(), text("straight"))]));
+        for (field, value) in [
+            ("flow-arrow", cetz.clone()),
+            ("mark", cetz),
+            (
+                "momentum-arrow",
+                NativeValue::Dict(mark("triangle", vec![("scale", NativeValue::Float(0.8))])),
+            ),
+            ("flow-arrow", text("triangle")),
+            ("flow-arrow-paints", NativeValue::Array(Vec::new())),
+            (
+                "momentum_arrow",
+                NativeValue::Mark(mark("straight", vec![])),
+            ),
+        ] {
+            assert!(
+                validate_nested_drawing_fields(&style(field, value)).is_err(),
+                "{field}"
+            );
+        }
+        for (field, value) in [
+            ("flow-arrow", NativeValue::Dict(mark("stealth", vec![]))),
+            ("mark", NativeValue::None),
+            ("momentum-arrow", NativeValue::Inherit),
+        ] {
+            assert!(
+                validate_nested_drawing_fields(&style(field, value)).is_ok(),
+                "{field}"
+            );
+        }
+
+        let bar = || NativeValue::Dict(mark("bar", vec![]));
+        let mut settings = PyRenderSettings::default();
+        let defaults = settings.scene_marks().unwrap();
+        settings.values.insert(
+            "style".into(),
+            style("edge-style", style("momentum-arrow", bar())),
+        );
+        let configured = settings.scene_marks().unwrap();
+        assert_eq!(configured.flow, defaults.flow);
+        assert_eq!(configured.momentum.values, mark("bar", vec![]));
+        // A scene has one head of each kind, not one per drawn style layer.
+        settings.values.insert(
+            "style".into(),
+            style(
+                "edge-style",
+                NativeValue::Array(vec![style("flow-arrow", bar())]),
+            ),
+        );
+        assert!(settings.scene_marks().is_err());
     }
 }
 
@@ -2395,7 +2961,6 @@ fn native_from_py(value: &Bound<'_, PyAny>, depth: usize) -> PyResult<NativeValu
         PyStrokeJoin,
         PyTextStyle,
         PyDashPattern,
-        PyMarkSymbol,
         PyMarkPosition,
         PyMarkOrientation,
         PyMarkDirection,
@@ -2503,6 +3068,7 @@ const GRAPH_STYLE_FIELDS: &[FieldSpec] = &[
         .auto(),
     FieldSpec::new("node_label_style", "node-label-style", ValueRule::Style),
     FieldSpec::new("node_style", "node-style", ValueRule::Style).none(),
+    FieldSpec::new("edge_style", "edge-style", ValueRule::StyleLayers).none(),
     FieldSpec::new("edge_label", "edge-label", ValueRule::ContentOrFunction).none(),
     FieldSpec::new("edge_label_style", "edge-label-style", ValueRule::Style),
 ];
@@ -2694,7 +3260,7 @@ impl PyGraphStyleOptions {
     #[new]
     #[pyo3(
         signature = (**kwargs),
-        text_signature = "(*, scope=..., unit=..., node_label=..., node_label_style=..., node_style=..., edge_label=..., edge_label_style=...)"
+        text_signature = "(*, scope=..., unit=..., node_label=..., node_label_style=..., node_style=..., edge_style=..., edge_label=..., edge_label_style=...)"
     )]
     #[gen_stub(skip)]
     fn new(kwargs: Option<&Bound<'_, PyDict>>) -> PyResult<Self> {
@@ -3038,7 +3604,6 @@ const DRAW_FIELDS: &[FieldSpec] = &[
         "edge-accuracy",
         ValueRule::NonNegativeNumber,
     ),
-    FieldSpec::new("edge_optimize", "edge-optimize", ValueRule::Bool),
     FieldSpec::new(
         "edge_split_gap",
         "edge-split-gap",
@@ -3107,7 +3672,7 @@ impl PyDrawOptions {
     #[new]
     #[pyo3(
         signature = (**kwargs),
-        text_signature = "(*, scope=..., unit=..., title=..., subgraph=..., debug=..., debug_label_collisions=..., label_collision_padding=..., show_half_edge_ids=..., node_radius=..., node_min_radius=..., node_label_padding=..., node_fill=..., node_stroke=..., node_outset=..., node_label_style=..., node_style=..., node_label=..., draw_node=..., edge_stroke=..., edge_offset=..., edge_length=..., edge_ratio=..., edge_resolve_length=..., edge_accuracy=..., edge_optimize=..., edge_split_gap=..., edge_dangling_tangent=..., source_style=..., sink_style=..., edge_label=..., edge_label_style=..., external_label_gap=..., edge_omega=..., edge_trim_accuracy=..., padding=..., debug_edge_radius=..., debug_edge_fill=..., debug_edge_stroke=..., debug_edge_label_fill=..., subgraph_edge_style=..., subgraph_edge_underlay=...)"
+        text_signature = "(*, scope=..., unit=..., title=..., subgraph=..., debug=..., debug_label_collisions=..., label_collision_padding=..., show_half_edge_ids=..., node_radius=..., node_min_radius=..., node_label_padding=..., node_fill=..., node_stroke=..., node_outset=..., node_label_style=..., node_style=..., node_label=..., draw_node=..., edge_stroke=..., edge_offset=..., edge_length=..., edge_ratio=..., edge_resolve_length=..., edge_accuracy=..., edge_split_gap=..., edge_dangling_tangent=..., source_style=..., sink_style=..., edge_label=..., edge_label_style=..., external_label_gap=..., edge_omega=..., edge_trim_accuracy=..., padding=..., debug_edge_radius=..., debug_edge_fill=..., debug_edge_stroke=..., debug_edge_label_fill=..., subgraph_edge_style=..., subgraph_edge_underlay=...)"
     )]
     #[gen_stub(skip)]
     fn new(kwargs: Option<&Bound<'_, PyDict>>) -> PyResult<Self> {
@@ -3449,8 +4014,13 @@ pyo3_stub_gen::inventory::submit! {
 #[cfg(feature = "python_stubgen")]
 pyo3_stub_gen::inventory::submit! {
     pyo3_stub_gen::derive::gen_methods_from_python! { r#"
+        import typing
+
         class PyMark:
-            def __new__(cls, *, start: _NativeValue = ..., end: _NativeValue = ..., fill: _OptionalPaint = ..., stroke: _OptionalStrokeValue = ..., scale: _Number = ..., anchor: _MarkAnchor = ..., shorten_to: _MarkShorten = ...) -> Mark: ...
+            def __new__(cls, name: typing.Literal["triangle", "straight", "stealth", "round", "tikz", "barb", "hooks", "bar", "bracket", "circle", "square", "diamond", "rays"], *, length: _AutoMarkSize = ..., width: _AutoMarkSize = ..., inset: _MarkRatio = ..., fill: _MarkPaint = ..., stroke: _MarkStroke = ..., rev: bool = ..., align: typing.Literal["center", "end"] = ..., arc: Angle = ..., n: int = ..., phase: _MarkPhase = ..., fit: typing.Literal["chord", "bend"] = ..., shorten: _MarkRatio = ...) -> Mark: ...
+            @staticmethod
+            def combine(*parts: _MarkPart, fit: typing.Literal["chord", "bend"] = ..., shorten: _MarkRatio = ...) -> Mark: ...
+            def to_dict(self) -> dict[str, typing.Any]: ...
     "# }
 }
 
@@ -3468,7 +4038,7 @@ pyo3_stub_gen::inventory::submit! {
         import typing
 
         class PyGraphStyleOptions:
-            def __new__(cls, *, scope: _Dictionary = ..., unit: _LengthValue = ..., node_label: _AutoOptionalContent = ..., node_label_style: _Style = ..., node_style: _OptionalStyle = ..., edge_label: _OptionalContent = ..., edge_label_style: _Style = ...) -> GraphStyleOptions: ...
+            def __new__(cls, *, scope: _Dictionary = ..., unit: _LengthValue = ..., node_label: _AutoOptionalContent = ..., node_label_style: _Style = ..., node_style: _OptionalStyle = ..., edge_style: _OptionalStyleLayers = ..., edge_label: _OptionalContent = ..., edge_label_style: _Style = ...) -> GraphStyleOptions: ...
     "# }
 }
 
@@ -3497,7 +4067,7 @@ pyo3_stub_gen::inventory::submit! {
         import typing
 
         class PyDrawOptions:
-            def __new__(cls, *, scope: _Dictionary = ..., unit: _AutoLengthValue = ..., title: _AutoOptionalStaticContent = ..., subgraph: _DrawSubgraphs = ..., debug: _DebugValue = ..., debug_label_collisions: _Boolean = ..., label_collision_padding: _Number = ..., show_half_edge_ids: _Boolean = ..., node_radius: _AutoRadius = ..., node_min_radius: _Number = ..., node_label_padding: _Number = ..., node_fill: _Paint = ..., node_stroke: _StrokeValue = ..., node_outset: _AutoNumber = ..., node_label_style: _Style = ..., node_style: _OptionalStyle = ..., node_label: _AutoOptionalContent = ..., draw_node: _AutoFunction = ..., edge_stroke: _StrokeValue = ..., edge_offset: _Number = ..., edge_length: _OptionalNumber = ..., edge_ratio: _OptionalNumber = ..., edge_resolve_length: _EdgeLengthResolver = ..., edge_accuracy: _Number = ..., edge_optimize: _Boolean = ..., edge_split_gap: _Number = ..., edge_dangling_tangent: _DanglingTangentValue = ..., source_style: _OptionalStyleLayers = ..., sink_style: _OptionalStyleLayers = ..., edge_label: _OptionalContent = ..., edge_label_style: _OptionalStyle = ..., external_label_gap: _Number = ..., edge_omega: _Number = ..., edge_trim_accuracy: _Number = ..., padding: _OptionalPadding = ..., debug_edge_radius: _Number = ..., debug_edge_fill: _Paint = ..., debug_edge_stroke: _StrokeValue = ..., debug_edge_label_fill: _Paint = ..., subgraph_edge_style: _Style = ..., subgraph_edge_underlay: _Boolean = ...) -> DrawOptions: ...
+            def __new__(cls, *, scope: _Dictionary = ..., unit: _AutoLengthValue = ..., title: _AutoOptionalStaticContent = ..., subgraph: _DrawSubgraphs = ..., debug: _DebugValue = ..., debug_label_collisions: _Boolean = ..., label_collision_padding: _Number = ..., show_half_edge_ids: _Boolean = ..., node_radius: _AutoRadius = ..., node_min_radius: _Number = ..., node_label_padding: _Number = ..., node_fill: _Paint = ..., node_stroke: _StrokeValue = ..., node_outset: _AutoNumber = ..., node_label_style: _Style = ..., node_style: _OptionalStyle = ..., node_label: _AutoOptionalContent = ..., draw_node: _AutoFunction = ..., edge_stroke: _StrokeValue = ..., edge_offset: _Number = ..., edge_length: _OptionalNumber = ..., edge_ratio: _OptionalNumber = ..., edge_resolve_length: _EdgeLengthResolver = ..., edge_accuracy: _Number = ..., edge_split_gap: _Number = ..., edge_dangling_tangent: _DanglingTangentValue = ..., source_style: _OptionalStyleLayers = ..., sink_style: _OptionalStyleLayers = ..., edge_label: _OptionalContent = ..., edge_label_style: _OptionalStyle = ..., external_label_gap: _Number = ..., edge_omega: _Number = ..., edge_trim_accuracy: _Number = ..., padding: _OptionalPadding = ..., debug_edge_radius: _Number = ..., debug_edge_fill: _Paint = ..., debug_edge_stroke: _StrokeValue = ..., debug_edge_label_fill: _Paint = ..., subgraph_edge_style: _Style = ..., subgraph_edge_underlay: _Boolean = ...) -> DrawOptions: ...
     "# }
 }
 
@@ -3836,10 +4406,10 @@ impl NativeValue {
                 }
             }
             Self::Mark(values) => {
-                validate_option_values(values, MARK_FIELDS, "Mark", depth)?;
-                if values.values().all(|value| matches!(value, Self::Inherit)) {
-                    return Err(PyValueError::new_err("Mark needs at least one option"));
+                for value in values.values() {
+                    value.validate(depth + 1)?;
                 }
+                PyMark::validate(values)?;
             }
             Self::Color(ColorValue::Named(value) | ColorValue::Hex(value)) => {
                 PyColor::new(value)?;
@@ -4367,11 +4937,11 @@ fn validate_drawing_enum(
     }
 }
 
-fn validate_nested_drawing_enums(value: &NativeValue) -> PyResult<()> {
+fn validate_nested_drawing_fields(value: &NativeValue) -> PyResult<()> {
     match value {
         NativeValue::Array(values) => {
             for value in values {
-                validate_nested_drawing_enums(value)?;
+                validate_nested_drawing_fields(value)?;
             }
         }
         NativeValue::Dict(values)
@@ -4380,16 +4950,17 @@ fn validate_nested_drawing_enums(value: &NativeValue) -> PyResult<()> {
         | NativeValue::Mark(values) => {
             for (field, value) in values {
                 let rule = drawing_enum_rule(field);
-                if field.contains('_') && rule.is_some() {
+                let typst = field.replace('_', "-");
+                if field.contains('_') && (rule.is_some() || PyMark::is_style_field(&typst)) {
                     return Err(PyValueError::new_err(format!(
-                        "drawing style field {field:?} must use its Typst spelling {:?}",
-                        field.replace('_', "-")
+                        "drawing style field {field:?} must use its Typst spelling {typst:?}"
                     )));
                 }
                 if let Some(rule) = rule {
                     validate_drawing_enum(field, value, rule)?;
                 }
-                validate_nested_drawing_enums(value)?;
+                PyMark::validate_style_field(field, value)?;
+                validate_nested_drawing_fields(value)?;
             }
         }
         _ => {}
@@ -4422,7 +4993,7 @@ pub(crate) fn validate_drawing_field(
             })?
             .validate(&native)?;
     }
-    validate_nested_drawing_enums(&native)
+    validate_nested_drawing_fields(&native)
 }
 
 /// Convert a placement mode shorthand to the graph's native placement dictionary.
@@ -4631,7 +5202,6 @@ pub(crate) fn register_typst_api(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<PyStrokeJoin>()?;
     module.add_class::<PyTextStyle>()?;
     module.add_class::<PyDashPattern>()?;
-    module.add_class::<PyMarkSymbol>()?;
     module.add_class::<PyMarkPosition>()?;
     module.add_class::<PyMarkOrientation>()?;
     module.add_class::<PyMarkDirection>()?;
@@ -4683,13 +5253,24 @@ impl NativeValue {
             Self::Length(v, LengthUnit::In) => json!(v * 72.0),
             Self::Text(v) if v.options.is_empty() => json!(v.text),
             Self::Dash(DashValue::Named(v)) => json!(v),
-            Self::Dict(values) | Self::Stroke(values) => Value::Object(
-                values
-                    .iter()
-                    .filter(|(_, v)| !matches!(v, Self::Inherit))
-                    .map(|(k, v)| Ok((k.clone(), v.json()?)))
-                    .collect::<PyResult<_>>()?,
-            ),
+            // linnest's native SVG configuration reads a mark under its key as the
+            // numeric Kurvst specification and its leaf paints under `<key>-paints`.
+            Self::Dict(values) | Self::Stroke(values) => {
+                let mut object = serde_json::Map::new();
+                for (key, value) in values {
+                    if matches!(value, Self::Inherit) {
+                        continue;
+                    }
+                    if value.is_kurvst_mark() {
+                        let (mark, paints) = PyMark::from_value(value)?.native()?;
+                        object.insert(format!("{key}-paints"), paints);
+                        object.insert(key.clone(), mark);
+                    } else {
+                        object.insert(key.clone(), value.json()?);
+                    }
+                }
+                Value::Object(object)
+            }
             Self::Array(v) => Value::Array(v.iter().map(Self::json).collect::<PyResult<_>>()?),
             _ => {
                 return Err(PyValueError::new_err(
@@ -4881,6 +5462,89 @@ pub(crate) fn scene_color(py: Python<'_>, value: &str) -> PyResult<Py<PyAny>> {
         Ok(py.None())
     } else {
         Ok(Py::new(py, PyColor::new(value)?)?.into_any())
+    }
+}
+
+/// The particle-flow and momentum heads of a domain scene drawn through Typst.
+pub(crate) struct SceneMarks {
+    flow: PyMark,
+    momentum: PyMark,
+}
+
+impl PyRenderSettings {
+    /// The graph edge style's `flow-arrow` and `momentum-arrow`, which native
+    /// scenes apply to every edge, else the native renderer's heads with their
+    /// explicit physical sizes.
+    pub(crate) fn scene_marks(&self) -> PyResult<SceneMarks> {
+        let mark = |shape: &str, length: &str, width: &str| -> PyResult<PyMark> {
+            let text = |value: &str| NativeValue::String(value.into());
+            let values = BTreeMap::from([
+                ("kind".into(), text("kurvst-mark")),
+                ("shape".into(), text(shape)),
+                ("length".into(), text(length)),
+                ("width".into(), text(width)),
+            ]);
+            Ok(PyMark {
+                values: PyMark::normalize(values, 0)?,
+            })
+        };
+        let mut marks = SceneMarks {
+            flow: mark("triangle", "0.21cm", "0.1575cm")?,
+            momentum: mark("straight", "0.16cm", "0.12cm")?,
+        };
+        let Some(NativeValue::Dict(style)) = self.values.get("style") else {
+            return Ok(marks);
+        };
+        match style.get("edge-style") {
+            Some(NativeValue::Dict(fields)) => {
+                for (key, mark) in [
+                    ("flow-arrow", &mut marks.flow),
+                    ("momentum-arrow", &mut marks.momentum),
+                ] {
+                    if let Some(value) = fields.get(key).filter(|value| {
+                        !matches!(value, NativeValue::Inherit)
+                    }) {
+                        *mark = PyMark::from_value(value)?;
+                    }
+                }
+            }
+            // Layers draw an edge several times; the scene has one head of each kind.
+            Some(NativeValue::Array(layers))
+                if layers.iter().any(|layer| {
+                    matches!(layer, NativeValue::Dict(fields)
+                        if fields.contains_key("flow-arrow") || fields.contains_key("momentum-arrow"))
+                }) =>
+            {
+                return Err(PyValueError::new_err(
+                    "flow-arrow and momentum-arrow belong to an edge_style dictionary, not to style layers",
+                ));
+            }
+            _ => {}
+        }
+        Ok(marks)
+    }
+}
+
+impl SceneMarks {
+    /// Edge style keys of a flow head pointing along or against the path.
+    pub(crate) fn flow(
+        &self,
+        py: Python<'_>,
+        forward: bool,
+    ) -> PyResult<[(&'static str, Py<PyAny>); 2]> {
+        let direction = if forward {
+            PyMarkDirection::Forward
+        } else {
+            PyMarkDirection::Backward
+        };
+        Ok([
+            ("mark", Py::new(py, self.flow.clone())?.into_any()),
+            ("mark-direction", Py::new(py, direction)?.into_any()),
+        ])
+    }
+
+    pub(crate) fn momentum(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        Ok(Py::new(py, self.momentum.clone())?.into_any())
     }
 }
 

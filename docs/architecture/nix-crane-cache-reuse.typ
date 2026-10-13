@@ -3,7 +3,7 @@
 #quote(block: true)[
 #strong[Status:] Historical Rust CI investigation and current documentation
 cache record. The experiment retains its PR 108 context; the documentation
-source and consumer contracts were reviewed 2026-10-12.
+source and consumer contracts were reviewed 2026-10-13.
 
 The Rust CI experiments below are historical. Uses of “now” or “current”
 describe the surrounding experiment, not the final implementation. See
@@ -1480,9 +1480,9 @@ installs it offline without dependency resolution, and discovers every
 `test_*.py` in `crates/linnet-py/tests`. Its graph surface is
 `symbolica.community.graph`; the canonical component is `linnet-graph`.
 The shared typed-stub regression checks that the package and documentation
-use the same owner. The wheel embeds the graph renderer and its pinned
-drawing packages, so the renderer does not require the old standalone
-wheel's `typst-py` dependency or a network fetch. The virtual environment
+use the same owner. The wheel embeds the graph renderer, MiTeX and oxifmt,
+and reads stock CeTZ from `TYPST_PACKAGE_CACHE_PATH`. Its renderer does not
+require the old standalone wheel's `typst-py` dependency or fetch packages. The virtual environment
 still exposes the Nix-composed system packages, and Cargo and uv run
 offline.
 The broader documentation renderer still receives the package tree from
@@ -1492,6 +1492,14 @@ intentionally enter the source key for `linnet-py` and aggregate Cargo
 producers that compile it. The package-specific source map keeps them out
 of unrelated per-crate producers, while downloaded Python wheels remain
 confined to the terminal documentation/runtime closure.
+
+Drawing package inputs track the current Kurvst and Linnest plugins and their Tiptoe,
+Clarabel and NetworkX license files, replacing the retired ec-layout plugin inputs. Clinnet
+also receives its mark and layout fixtures and the portal theme used by its render tests.
+Linnet's runtime corpus input is limited to DOT files in the declared graph roots, alongside
+its existing nauty resources. The Clinnet nextest group receives `docsTypst` through
+`TYPST_TEST_EXECUTABLE`, including stock CeTZ 0.5.2, so the Typst and native/Wasm mark checks
+run as required tests. The per-package input and runtime-tool owners retain this separation.
 
 == Follow-up: persistent Typst worlds in the live watcher
 <follow-up-persistent-typst-worlds>

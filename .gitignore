@@ -23,8 +23,6 @@ downloads/
 eggs/
 .eggs/
 lib/
-# Retain CeTZ's vendored Typst libraries.
-!crates/linnet-py/vendor/typst-packages/preview/cetz/0.5.1/src/lib/
 lib64/
 parts/
 sdist/
@@ -57,6 +55,10 @@ examples/cli/epem_a_ttxh/NNLO/*
 examples/**/*state*/
 examples/**/OLD_*
 examples/**/gammaloop_state/
+# `save dot` writes drawing templates and a justfile beside the saved graphs; running the
+# card regenerates them.
+examples/**/drawings/
+examples/cli/aa_aa/3L/graphs*/justfile
 examples/cli/a_a/**
 !examples/cli/a_a/
 !examples/cli/a_a/*/

@@ -4221,8 +4221,10 @@ impl PyFeynmanDiagram {
         highlight: Option<&Bound<'_, PyAny>>,
     ) -> PyResult<PyDiagramRender> {
         let drawing = self.render_drawing(py, config, style, momenta, lmb, highlight)?;
-        let html =
-            crate::display::render_diagram_html(&self.inner, &drawing.to_svg_pages()?.join("\n"));
+        let html = crate::display::render_diagram_html(
+            &self.inner,
+            &drawing.to_svg_pages(true)?.join("\n"),
+        );
         Ok(drawing.with_html(html))
     }
 
@@ -4707,7 +4709,7 @@ impl PyFeynmanDiagram {
         highlight: Option<&Bound<'_, PyAny>>,
     ) -> PyResult<String> {
         self.render_drawing(py, config, style, momenta, lmb, highlight)?
-            .to_svg()
+            .to_svg(false)
     }
 
     fn render_drawing(
@@ -4740,7 +4742,7 @@ impl PyFeynmanDiagram {
                 &options,
             )
             .map_err(error::diagram)?;
-        PyDiagramRender::from_scene(py, scene, config)?.map_svg(crate::display::themed_svg)
+        Ok(PyDiagramRender::from_scene(py, scene, config)?.map_svg(crate::display::themed_svg))
     }
 
     /// The highlighted region: the argument, or this subgraph's own region.

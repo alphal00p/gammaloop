@@ -1,11 +1,11 @@
 use std::collections::BTreeMap;
-use std::env;
-use std::ffi::OsStr;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::OnceLock;
 
 use linnest::{
-    encode_graph_spec_bytes, TypstEdgeSpec, TypstEndpointSpec, TypstGraphSpec, TypstNodeSpec,
+    encode_graph_spec_bytes, svg::Scene, TypstEdgeSpec, TypstEndpointSpec, TypstGraphSpec,
+    TypstNodeSpec,
 };
 use linnet::half_edge::involution::{Flow, Hedge, HedgePair, Orientation};
 use linnet::half_edge::subgraph::{Inclusion, SubSetLike};
@@ -31,6 +31,8 @@ const DEFAULT_TEMPLATE: &str = "crates/linnest/typst/src/render/figure.typ";
 const ENTRYPOINT: &str = "main.typ";
 const TOPOLOGY: &str = "diagram.cbor";
 const SUBGRAPH_STYLE: &str = "subgraph.typ";
+/// The compile input with which Linnest's `draw` emits inspection targets.
+const INSPECTION_TARGETS_INPUT: (&str, &str) = ("linnest-inspection-targets", "true");
 
 #[derive(RustEmbed)]
 #[folder = "$CARGO_MANIFEST_DIR/../linnest/typst"]
@@ -38,10 +40,9 @@ const SUBGRAPH_STYLE: &str = "subgraph.typ";
 #[include = "src/**/*.typ"]
 #[include = "typst.toml"]
 #[include = "linnest.wasm"]
-#[include = "ec-layout.wasm"]
 #[include = "LICENSE"]
-#[include = "LICENSE.ec-layout"]
 #[include = "LICENSE.clarabel"]
+#[include = "LICENSE.networkx"]
 struct EmbeddedLinnestPackage;
 
 #[derive(RustEmbed)]
@@ -51,10 +52,12 @@ struct EmbeddedLinnestPackage;
 #[include = "typst.toml"]
 #[include = "kurvst.wasm"]
 #[include = "LICENSE"]
+#[include = "LICENSE.tiptoe"]
 struct EmbeddedKurvstPackage;
 
 #[derive(RustEmbed)]
 #[folder = "$CARGO_MANIFEST_DIR/vendor/typst-packages"]
+#[include = "preview/**"]
 struct EmbeddedTypstPackages;
 
 fn element_drawing<'py>(
@@ -372,17 +375,26 @@ fn prepare(
     selection: Option<(Vec<bool>, Vec<usize>)>,
 ) -> PyResult<PreparedRender> {
     let mut prepared = PreparedRender::from_sources(BTreeMap::new())?;
-    let build_root = &prepared.root;
-    write_project_asset(build_root, TOPOLOGY, &topology)?;
-
-    let mut source =
+    write_project_asset(&prepared.root, TOPOLOGY, &topology)?;
+    let source =
         prepared.configuration_source(&transport, Some(DEFAULT_TEMPLATE), Some(TOPOLOGY))?;
-    let files = &mut prepared.files;
-    if let Some((hedges, nodes)) = selection {
-        files.insert(
+    if selection.is_some() {
+        prepared.files.insert(
             SUBGRAPH_STYLE.to_owned(),
             include_bytes!("../typst/subgraph.typ").to_vec(),
         );
+    }
+    prepared.files.insert(
+        ENTRYPOINT.to_owned(),
+        graph_entrypoint(source, selection.as_ref()).into_bytes(),
+    );
+    Ok(prepared)
+}
+
+/// Complete a graph render's configuration source with the template call, which
+/// focuses the selected half-edges and nodes of a subgraph render.
+fn graph_entrypoint(mut source: String, selection: Option<&(Vec<bool>, Vec<usize>)>) -> String {
+    if let Some((hedges, nodes)) = selection {
         let hedges = hedges
             .iter()
             .map(|value| format!("{value},"))
@@ -399,8 +411,7 @@ fn prepare(
     } else {
         source.push_str("\n#_linnet_template.render(_linnet_config)\n");
     }
-    files.insert(ENTRYPOINT.to_owned(), source.into_bytes());
-    Ok(prepared)
+    source
 }
 
 fn insert_embedded_assets<E: RustEmbed>(
@@ -470,9 +481,6 @@ fn write_embedded_assets<E: RustEmbed>(root: &Path) -> PyResult<()> {
                 ))
             })?;
         }
-        if target.exists() {
-            fs::remove_file(&target).map_err(|error| PyRuntimeError::new_err(error.to_string()))?;
-        }
         fs::write(&target, contents.data.as_ref()).map_err(|error| {
             PyRuntimeError::new_err(format!(
                 "failed to stage render asset {}: {error}",
@@ -490,45 +498,6 @@ fn canonicalize(path: &Path, description: &str) -> PyResult<PathBuf> {
             path.display()
         ))
     })
-}
-
-fn copy_directory(source: &Path, target: &Path, description: &str) -> PyResult<()> {
-    fs::create_dir_all(target).map_err(|error| {
-        PyRuntimeError::new_err(format!(
-            "failed to create staged {description} {}: {error}",
-            target.display()
-        ))
-    })?;
-    for entry in WalkDir::new(source)
-        .follow_links(true)
-        .into_iter()
-        .filter_entry(|entry| !entry.path().starts_with(target))
-    {
-        let entry = entry.map_err(|error| PyRuntimeError::new_err(error.to_string()))?;
-        let relative = entry.path().strip_prefix(source).map_err(|error| {
-            PyRuntimeError::new_err(format!(
-                "failed to stage {description} {}: {error}",
-                entry.path().display()
-            ))
-        })?;
-        let destination = target.join(relative);
-        if entry.file_type().is_dir() {
-            fs::create_dir_all(&destination).map_err(|error| {
-                PyRuntimeError::new_err(format!(
-                    "failed to create staged {description} {}: {error}",
-                    destination.display()
-                ))
-            })?;
-        } else if entry.file_type().is_file() {
-            fs::copy(entry.path(), &destination).map_err(|error| {
-                PyRuntimeError::new_err(format!(
-                    "failed to stage {description} {}: {error}",
-                    entry.path().display()
-                ))
-            })?;
-        }
-    }
-    Ok(())
 }
 
 fn collect_user_sources(
@@ -673,39 +642,26 @@ pub struct PreparedRender {
     _build_dir: tempfile::TempDir,
     files: BTreeMap<String, Vec<u8>>,
     root: PathBuf,
-    package_store: PathBuf,
+    /// Package directories in lookup order: the bundled MiTeX and oxifmt, then
+    /// the Typst CLI's local package path and cache, which supply CeTZ.
+    packages: Vec<PathBuf>,
+    /// The SVG pages with Linnest's inspection targets, compiled on first use.
+    linked_pages: OnceLock<Vec<String>>,
 }
 
 impl PreparedRender {
     /// Prepare a virtual Typst project with bundled Linnest, Kurvst, and packages.
     /// Sources must include `main.typ` before compilation; binary assets are staged on disk.
+    /// Other packages, CeTZ among them, resolve in the local Typst package
+    /// directories without being copied or downloaded.
     pub fn from_sources(sources: BTreeMap<String, Vec<u8>>) -> PyResult<Self> {
         let build_dir =
             tempfile::tempdir().map_err(|error| PyRuntimeError::new_err(error.to_string()))?;
         let build_root = canonicalize(build_dir.path(), "render directory")?;
-        fs::create_dir_all(build_root.join(TYPST_PACKAGES_DIR))
-            .map_err(|error| PyRuntimeError::new_err(error.to_string()))?;
-        let package_store = canonicalize(
-            &build_root.join(TYPST_PACKAGES_DIR),
-            "bundled Typst package store",
-        )?;
-        for (variable, description) in [
-            ("TYPST_PACKAGE_CACHE_PATH", "Typst package cache"),
-            ("TYPST_PACKAGE_PATH", "Typst package path"),
-        ] {
-            if let Some(path) = env::var_os(variable) {
-                let path = Path::new(&path);
-                if variable == "TYPST_PACKAGE_CACHE_PATH" && !path.exists() {
-                    continue;
-                }
-                let path = canonicalize(path, description)?;
-                copy_directory(&path, &package_store, description)?;
-            }
-        }
-
-        // Bundled packages include required patches; user caches may add packages,
-        // but cannot replace these compiler inputs with an incompatible release.
-        write_embedded_assets::<EmbeddedTypstPackages>(&package_store)?;
+        let bundled = build_root.join(TYPST_PACKAGES_DIR);
+        write_embedded_assets::<EmbeddedTypstPackages>(&bundled)?;
+        let mut packages = vec![bundled];
+        packages.extend(typst_renderer::Document::local_package_dirs());
         let mut files = BTreeMap::new();
         insert_embedded_assets::<EmbeddedLinnestPackage>(
             &mut files,
@@ -724,7 +680,8 @@ impl PreparedRender {
             _build_dir: build_dir,
             files,
             root: build_root,
-            package_store,
+            packages,
+            linked_pages: OnceLock::new(),
         })
     }
 
@@ -784,59 +741,42 @@ impl PreparedRender {
         .map_err(|error| PyRuntimeError::new_err(error.to_string()))
     }
 
-    pub(crate) fn render_to(&self, py: Python<'_>, output: PathBuf) -> PyResult<PathBuf> {
-        let format = output_format(&output)?;
-        if let Some(parent) = output
-            .parent()
-            .filter(|parent| !parent.as_os_str().is_empty())
-        {
-            fs::create_dir_all(parent).map_err(|error| {
-                PyRuntimeError::new_err(format!(
-                    "failed to create output directory {}: {error}",
-                    parent.display()
-                ))
-            })?;
-        }
-        if format == "svg" {
-            fs::write(&output, self.svg(py)?)
-                .map_err(|error| PyRuntimeError::new_err(error.to_string()))?;
-        } else {
-            let pages = self.compile(format)?;
-            let [page] = pages.as_slice() else {
-                return Err(PyValueError::new_err(
-                    "file output requires exactly one page",
-                ));
-            };
-            fs::write(&output, page).map_err(|error| PyRuntimeError::new_err(error.to_string()))?;
-        }
-        Ok(output)
-    }
-
-    /// Compile the prepared project to a single SVG page.
-    pub fn svg(&self, py: Python<'_>) -> PyResult<String> {
-        let pages = self.svg_pages(py)?;
-        let [svg] = pages.as_slice() else {
-            return Err(PyRuntimeError::new_err(format!(
-                "Typst SVG render produced {} pages; expected exactly one",
-                pages.len()
-            )));
-        };
-        Self::interactive_svg(svg)
-    }
-
-    /// Compile the prepared project to one SVG document per page.
-    pub fn svg_pages(&self, _py: Python<'_>) -> PyResult<Vec<String>> {
-        self.compile("svg")?
-            .into_iter()
-            .map(|bytes| {
-                String::from_utf8(bytes).map_err(|error| PyRuntimeError::new_err(error.to_string()))
+    /// One SVG document per page. Both outputs come from a single compile with
+    /// Linnest's inspection targets: interactive pages decorate the targets and
+    /// static pages remove them. Linnest emits targets only with that input, so
+    /// a static page is the document compiled without it, like PDF and PNG.
+    pub fn svg_pages(&self, interactive: bool) -> PyResult<Vec<String>> {
+        self.linked_pages()?
+            .iter()
+            .map(|svg| {
+                if interactive {
+                    Self::interactive_svg(svg)
+                } else {
+                    Scene::static_svg(svg).map_err(PyRuntimeError::new_err)
+                }
             })
             .collect()
     }
 
-    /// Compile with the embedded Rust compiler and offline package store.
+    fn linked_pages(&self) -> PyResult<&[String]> {
+        if let Some(pages) = self.linked_pages.get() {
+            return Ok(pages);
+        }
+        let pages = typst_renderer::Document::new(&self.root, &self.packages, &self.files)
+            .with_inputs([INSPECTION_TARGETS_INPUT])
+            .compile("svg")
+            .map_err(PyRuntimeError::new_err)?
+            .into_iter()
+            .map(|bytes| {
+                String::from_utf8(bytes).map_err(|error| PyRuntimeError::new_err(error.to_string()))
+            })
+            .collect::<PyResult<_>>()?;
+        Ok(self.linked_pages.get_or_init(|| pages))
+    }
+
+    /// Compile a static document with the embedded Rust compiler and offline package store.
     pub fn compile(&self, format: &str) -> PyResult<Vec<Vec<u8>>> {
-        typst_renderer::Document::new(&self.root, &self.package_store, &self.files)
+        typst_renderer::Document::new(&self.root, &self.packages, &self.files)
             .compile(format)
             .map_err(PyRuntimeError::new_err)
     }
@@ -880,32 +820,16 @@ impl PreparedRender {
     }
 }
 
-fn output_format(output: &Path) -> PyResult<&'static str> {
-    match output
-        .extension()
-        .and_then(OsStr::to_str)
-        .map(str::to_ascii_lowercase)
-        .as_deref()
-    {
-        Some("pdf") => Ok("pdf"),
-        Some("svg") => Ok("svg"),
-        Some("png") => Ok("png"),
-        _ => Err(PyRuntimeError::new_err(format!(
-            "unsupported Typst output {}; expected a .pdf, .svg, or .png suffix",
-            output.display()
-        ))),
-    }
-}
-
 pub(crate) fn graph_to_svg(
     py: Python<'_>,
     graph: &Py<PyGraph>,
     config: Option<&Bound<'_, PyAny>>,
+    interactive: bool,
 ) -> PyResult<String> {
-    let pages = render_graph(py, graph, config, None)?.to_svg_pages()?;
-    match pages.as_slice() {
+    let render = render_graph(py, graph, config, None)?;
+    match render.pages(interactive)? {
         [svg] => Ok(svg.clone()),
-        _ => Err(PyRuntimeError::new_err(format!(
+        pages => Err(PyRuntimeError::new_err(format!(
             "Typst SVG render produced {} pages; expected exactly one",
             pages.len()
         ))),
@@ -947,9 +871,11 @@ pub(crate) fn render_graph(
         .map_err(|error| PyRuntimeError::new_err(error.to_string()))?;
     if let Some(scene) = transport.native_scene(envelope.graph, selection.as_ref()) {
         let mut result = crate::PyDiagramRender::from_scene(py, scene, None)?;
-        // Keep inspecting the same snapshotted configuration even when Rust
-        // supplies geometry. File exports use the actual native SVG snapshot.
-        result.source = Some(prepare(topology, transport, selection)?.typst_source_value()?);
+        // Keep inspecting the same configuration even when Rust supplies the
+        // geometry. Native scenes use the default template and no modules, so the
+        // entrypoint needs no staged project; exports use the native SVG snapshot.
+        let source = entrypoint_source(&transport, Some(DEFAULT_TEMPLATE), &[], Some(TOPOLOGY))?;
+        result.source = Some(graph_entrypoint(source, selection.as_ref()));
         return Ok(result);
     }
     prepare(topology, transport, selection).map(crate::PyDiagramRender::prepared)
@@ -999,12 +925,11 @@ mod tests {
             let graph = case.getattr("graph")?.extract::<Py<PyGraph>>()?;
             let (topology, transport) = request(py, &graph, None, false)?;
             let prepared = prepare(topology, transport, None)?;
-            let pages = prepared.svg_pages(py)?;
-            assert_eq!(pages.len(), 1);
-            case.call_method1(
-                "assert_native_drawing_unchanged",
-                (&pages[0], prepared.svg(py)?),
-            )?;
+            let [drawing] = <[String; 1]>::try_from(prepared.svg_pages(false)?).unwrap();
+            let [interactive] = <[String; 1]>::try_from(prepared.svg_pages(true)?).unwrap();
+            assert!(!drawing.contains("#linnet-"));
+            assert_eq!(drawing.as_bytes(), prepared.compile("svg")?[0]);
+            case.call_method1("assert_native_drawing_unchanged", (drawing, interactive))?;
             Ok(())
         })
         .unwrap();
@@ -1028,12 +953,42 @@ mod tests {
     }
 
     #[test]
-    fn extracts_typst_packages_for_offline_rendering() {
+    fn static_pages_are_the_document_compiled_without_inspection_targets() {
+        // Like Linnest's draw, the document places each target, in its own
+        // group, only when the compile input asks for targets.
+        let sources = BTreeMap::from([(
+            ENTRYPOINT.to_owned(),
+            br##"#set page(width: auto, height: auto, margin: 0pt)
+#let targets = sys.inputs.at("linnest-inspection-targets", default: "false") == "true"
+#let target(id) = if targets {
+  place(dx: 2pt, dy: 2pt, box(place(link("#linnet-edge-" + id, box(width: 4pt, height: 4pt)))))
+}
+#box(width: 12pt, height: 8pt, fill: blue, target("0"))
+#box(width: 12pt, height: 8pt, stroke: red, target("1"))
+"##
+            .to_vec(),
+        )]);
+        let prepared = PreparedRender::from_sources(sources).unwrap();
+        let [drawing] = <[String; 1]>::try_from(prepared.svg_pages(false).unwrap()).unwrap();
+        let [interactive] = <[String; 1]>::try_from(prepared.svg_pages(true).unwrap()).unwrap();
+        let compiled = prepared.compile("svg").unwrap().remove(0);
+        assert_eq!(drawing, String::from_utf8(compiled).unwrap());
+        assert_eq!(interactive.matches("data-linnet-kind=\"edge\"").count(), 2);
+    }
+
+    #[test]
+    fn bundled_packages_precede_the_local_package_directories() {
         let prepared = PreparedRender::from_sources(BTreeMap::new()).unwrap();
-        assert!(prepared
-            .package_store
-            .join("preview/cetz/0.5.1/typst.toml")
-            .is_file());
+        let (bundled, local) = prepared.packages.split_first().unwrap();
+        for package in ["preview/mitex/0.2.6", "preview/oxifmt/1.0.0"] {
+            assert!(
+                bundled.join(package).join("typst.toml").is_file(),
+                "{package}"
+            );
+        }
+        // CeTZ is never bundled; it resolves in the local Typst package directories.
+        assert!(!bundled.join("preview/cetz").exists());
+        assert_eq!(local, typst_renderer::Document::local_package_dirs());
     }
 
     #[test]
@@ -1048,15 +1003,22 @@ mod tests {
                 .len()
                 > 0
         );
-        assert!(
-            fs::metadata(prepared.root.join("crates/linnest/typst/ec-layout.wasm"))
-                .unwrap()
-                .len()
-                > 0
-        );
+        // linnest.wasm compiles Clarabel and NetworkX-derived code.
+        for notice in ["LICENSE.clarabel", "LICENSE.networkx"] {
+            assert!(
+                prepared
+                    .files
+                    .contains_key(&format!("crates/linnest/typst/{notice}")),
+                "{notice}"
+            );
+        }
         assert!(prepared
             .files
             .contains_key("crates/kurvst/typst/src/lib.typ"));
+        // kurvst.wasm compiles mark geometry derived from tiptoe.
+        assert!(prepared
+            .files
+            .contains_key("crates/kurvst/typst/LICENSE.tiptoe"));
         assert!(
             fs::metadata(prepared.root.join("crates/kurvst/typst/kurvst.wasm"))
                 .unwrap()

@@ -52,7 +52,8 @@ def _(mo):
 
     A graph displays directly in a notebook. Ordinary drawings use native SVG
     geometry and Typst labels. `render()` captures a `DiagramRender` snapshot;
-    use its `to_svg()` or `save(path)` methods to inspect or export the result.
+    use its `to_svg()` or `save(path)` methods to inspect or export the static
+    drawing, or `to_svg(interactive=True)` for the notebook's interactive SVG.
     Advanced settings use the embedded Typst drawing pipeline.
 
     Domain-specific conventions are ordinary Python render settings, not modes
@@ -279,7 +280,8 @@ def _(
                 return None
             return lp.HalfEdgeDrawing(
                 style={
-                    "mark": lp.Mark.straight(),
+                    # The same mark data is used by native SVG and Typst.
+                    "mark": lp.Mark("straight", length="0.16cm", width="0.12cm"),
                     "mark-position": lp.MarkPosition.CenterIfDangling,
                     "mark-orientation": lp.MarkOrientation.Edge,
                 }
@@ -306,7 +308,7 @@ def _(custom_theme, graph, mo):
     ## Automatic rich display
 
     The next cell returns the `Graph` itself, so Marimo discovers
-    `_repr_svg_()` and performs a fresh render. Generic drawings show
+    `_repr_html_()` and performs a fresh interactive render. Generic drawings show
     $n_i$ and $e_i$; the optional control adds $h_i$. {_overlay_note}
 
     `{graph!r}`

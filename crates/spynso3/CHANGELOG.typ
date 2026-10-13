@@ -27,6 +27,9 @@ and this project adheres to #link("https://semver.org/spec/v2.0.0.html")[Semanti
 
   Keep this setup output when saving a notebook. Isolated output frames require
   their own setup; normal online output needs no setup cell.
+- SVG output and tensor network labels typeset math in STIX Two Math, the font
+  of the MathML output, instead of New Computer Modern Math. The embedded Typst
+  fonts are now all permissively licensed.
 
 == #link("https://github.com/alphal00p/spenso/compare/spynso3-v0.1.1...spynso3-v0.1.2")[0.1.2] - 2026-01-14
 

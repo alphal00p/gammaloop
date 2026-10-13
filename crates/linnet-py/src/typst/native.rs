@@ -161,6 +161,10 @@ impl RenderSettingsTransport {
                 .unwrap_or(NativeValue::None)
                 .fields()?,
         );
+        let edge_style = style
+            .remove("edge-style")
+            .unwrap_or(NativeValue::None)
+            .fields()?;
         if !style.is_empty() {
             return None;
         }
@@ -250,10 +254,13 @@ impl RenderSettingsTransport {
         for (index, record) in edges.iter().enumerate() {
             let mut record = record.fields()?;
             let label = record.remove("label").unwrap_or_else(|| edge_label.clone());
-            let local_style = record
-                .remove("edge-style")
-                .unwrap_or(NativeValue::None)
-                .fields()?;
+            let mut local_style = edge_style.clone();
+            local_style.extend(
+                record
+                    .remove("edge-style")
+                    .unwrap_or(NativeValue::None)
+                    .fields()?,
+            );
             if !record.is_empty() {
                 return None;
             }
@@ -262,6 +269,10 @@ impl RenderSettingsTransport {
             scene.edges.push(EdgeDrawing {
                 stroke: ink(0.9),
                 pattern: None,
+                flow_arrow: EdgeDrawing::default_flow_arrow(),
+                momentum_arrow: EdgeDrawing::default_momentum_arrow(),
+                flow_arrow_paints: Vec::new(),
+                momentum_arrow_paints: Vec::new(),
                 flow: None,
                 momentum: false,
                 label,

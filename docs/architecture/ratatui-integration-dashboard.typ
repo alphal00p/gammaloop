@@ -81,5 +81,8 @@ but it is not an API or freshness authority.
 The numerical-stability panel includes the median and processed percentage for each precision.
 An interrupted run may write diagnostic stability and observable previews, but resume state still
 represents the last completed iteration. Integration workspace manifests carry an explicit version;
-resume and summary reject an unsupported version before decoding state. Read-only sessions use
+resume and summary reject an unsupported version before decoding state. Version 2 records the
+warmed selected integrands rather than their full source collection. Selection, saved-settings
+restoration and fingerprint checks use private integrands before committing workspace or live
+settings changes; the dashboard remains a consumer of completed integration status. Read-only sessions use
 sanitized state names for their current-directory output paths.

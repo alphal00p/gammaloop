@@ -4,7 +4,7 @@ use itertools::Either;
 
 use crate::half_edge::NodeIndex;
 
-use super::{dot_id, dot_value, strip_quotes, DotParseError, ExplicitIdKind, GlobalData};
+use super::{dot_id, dot_value, syntax::Attr, DotParseError, ExplicitIdKind, GlobalData};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(
@@ -92,8 +92,12 @@ impl DotVertexData {
         }
     }
 
-    pub fn from_parser(
-        value: dot_parser::canonical::Node<(String, String)>,
+    /// The data of a DOT node named `name` with the attributes of its node
+    /// statements, or the statements of an invisible node, which stands for the
+    /// missing endpoint of dangling edges.
+    pub(crate) fn from_parser(
+        name: &str,
+        attrs: Vec<Attr<'_>>,
         global: &GlobalData,
     ) -> Result<Either<Self, BTreeMap<String, String>>, DotParseError> {
         let mut is_dangling = false;
@@ -111,10 +115,8 @@ impl DotVertexData {
             })
             .transpose()?;
         let mut node_statements = BTreeMap::new();
-        for (key, value) in value.attr {
-            let key = strip_quotes(&key);
-            let value = strip_quotes(&value);
-            match key.as_str() {
+        for (key, value) in attrs {
+            match key.as_ref() {
                 "style" => {
                     if value == "invis" {
                         is_dangling = true
@@ -130,7 +132,7 @@ impl DotVertexData {
                     })?));
                 }
                 _ => {
-                    node_statements.insert(key, value);
+                    node_statements.insert(key.into_owned(), value.into_owned());
                 }
             }
         }
@@ -143,7 +145,7 @@ impl DotVertexData {
             statements.extend(node_statements);
 
             let mut node = DotVertexData {
-                name: Some(strip_quotes(&value.id)),
+                name: Some(name.to_owned()),
                 index,
                 payload: None,
                 statements,

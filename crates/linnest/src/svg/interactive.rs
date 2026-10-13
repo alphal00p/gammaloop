@@ -1,6 +1,79 @@
 use std::collections::{BTreeMap, BTreeSet};
+use std::ops::Range;
+
+/// An identity link emitted by Linnest: `#linnet-{kind}-{id}`, optionally
+/// followed by `?{detail}`, for a node, edge or half-edge.
+struct IdentityLink<'a> {
+    href: &'a str,
+    /// `{kind}-{id}`, shared by all targets of one graph element.
+    identity: &'a str,
+    kind: &'a str,
+    id: &'a str,
+    detail: &'a str,
+}
+
+impl<'a> IdentityLink<'a> {
+    fn of(node: roxmltree::Node<'a, '_>) -> Option<Self> {
+        if !node.has_tag_name("a") {
+            return None;
+        }
+        let href = node
+            .attribute("href")
+            .or_else(|| node.attribute(("http://www.w3.org/1999/xlink", "href")))?;
+        let identity = href.strip_prefix("#linnet-")?;
+        let (identity, detail) = identity.split_once('?').unwrap_or((identity, "{}"));
+        let (kind, id) = identity.split_once('-')?;
+        (matches!(kind, "node" | "edge" | "halfedge")
+            && !id.is_empty()
+            && id.bytes().all(|byte| byte.is_ascii_digit()))
+        .then_some(Self {
+            href,
+            identity,
+            kind,
+            id,
+            detail,
+        })
+    }
+}
+
+/// Whether `node` is an identity link or a group holding only such links.
+fn only_targets(node: roxmltree::Node) -> bool {
+    IdentityLink::of(node).is_some()
+        || (node.has_tag_name("g") && node.has_children() && node.children().all(only_targets))
+}
+
+/// Collect, in document order, the outermost descendants of `node` that hold
+/// only identity links.
+fn target_ranges(node: roxmltree::Node, ranges: &mut Vec<Range<usize>>) {
+    for child in node.children() {
+        if only_targets(child) {
+            ranges.push(child.range());
+        } else {
+            target_ranges(child, ranges);
+        }
+    }
+}
 
 impl super::Scene {
+    /// Remove the identity links emitted by Linnest and the groups that held
+    /// only them, keeping everything else byte for byte. A Linnest drawing
+    /// compiled with inspection targets so becomes the document compiled
+    /// without them.
+    pub fn static_svg(svg: &str) -> Result<String, String> {
+        let document = roxmltree::Document::parse(svg)
+            .map_err(|error| format!("invalid Typst SVG: {error}"))?;
+        let mut ranges = Vec::new();
+        target_ranges(document.root_element(), &mut ranges);
+        let mut output = String::with_capacity(svg.len());
+        let mut cursor = 0;
+        for range in ranges {
+            output.push_str(&svg[cursor..range.start]);
+            cursor = range.end;
+        }
+        output.push_str(&svg[cursor..]);
+        Ok(output)
+    }
+
     /// Decorate only the identity links emitted by Linnest, leaving its drawing intact.
     pub fn interactive_svg(svg: &str) -> Result<String, String> {
         let document = roxmltree::Document::parse(svg)
@@ -9,26 +82,17 @@ impl super::Scene {
         let mut edits = Vec::new();
         let mut seen = BTreeSet::new();
         let mut details = BTreeMap::new();
-        for node in root.descendants().filter(|node| node.has_tag_name("a")) {
-            let Some(href) = node
-                .attribute("href")
-                .or_else(|| node.attribute(("http://www.w3.org/1999/xlink", "href")))
-            else {
-                continue;
-            };
-            let Some(identity) = href.strip_prefix("#linnet-") else {
-                continue;
-            };
-            let (identity, detail) = identity.split_once('?').unwrap_or((identity, "{}"));
-            let Some((kind, id)) = identity.split_once('-') else {
-                continue;
-            };
-            if !matches!(kind, "node" | "edge" | "halfedge")
-                || id.is_empty()
-                || !id.bytes().all(|byte| byte.is_ascii_digit())
-            {
-                continue;
-            }
+        for (node, link) in root
+            .descendants()
+            .filter_map(|node| Some((node, IdentityLink::of(node)?)))
+        {
+            let IdentityLink {
+                href,
+                identity,
+                kind,
+                id,
+                detail,
+            } = link;
             // An edge's many hit targets carry the same inspection payload.
             // Cache by the full href: one identity may have distinct details.
             let (title, detail) = details.entry(href).or_insert_with(|| {
@@ -165,12 +229,32 @@ mod tests {
     #[test]
     fn unrelated_links_and_xml_errors_are_unchanged() {
         let source = r##"<svg><a href="https://example.com"><path/></a><a href="#linnet-other-2"/><a href="#linnet-edge-x"/><a href="#linnet-node-"/></svg>"##;
-        assert_eq!(Scene::interactive_svg(source).unwrap(), source);
         let invalid = "<svg><a></svg>";
         let error = roxmltree::Document::parse(invalid).unwrap_err();
+        for output in [Scene::interactive_svg, Scene::static_svg] {
+            assert_eq!(output(source).unwrap(), source);
+            assert_eq!(
+                output(invalid).unwrap_err(),
+                format!("invalid Typst SVG: {error}"),
+            );
+        }
+    }
+
+    #[test]
+    fn static_output_removes_identity_links_and_groups_holding_only_them() {
+        let source = concat!(
+            r##"<svg xmlns:xlink="http://www.w3.org/1999/xlink">"##,
+            r##"<g transform="translate(1 2)"><use xlink:href="#glyph"/><a href="#linnet-edge-0?{}" transform="translate(3 4)"><rect width="8" height="8"/></a></g>"##,
+            r##"<g><g transform="scale(2)"><a href="#linnet-node-1"><rect/></a><a xlink:href="#linnet-halfedge-2"><rect/></a></g></g>"##,
+            r##"<g/><a href="https://example.com"><rect/></a><a href="#linnet-edge-3"><rect/></a></svg>"##,
+        );
         assert_eq!(
-            Scene::interactive_svg(invalid).unwrap_err(),
-            format!("invalid Typst SVG: {error}"),
+            Scene::static_svg(source).unwrap(),
+            concat!(
+                r##"<svg xmlns:xlink="http://www.w3.org/1999/xlink">"##,
+                r##"<g transform="translate(1 2)"><use xlink:href="#glyph"/></g>"##,
+                r##"<g/><a href="https://example.com"><rect/></a></svg>"##,
+            )
         );
     }
 }

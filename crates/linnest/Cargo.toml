@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 description = "A library for working with linnet data structures in WebAssembly environments"
 repository = "https://github.com/lcnbr/linnet"
-license = "MIT"
+license = "MIT AND BSD-3-Clause"
 publish = false
 
 [lib]
@@ -12,7 +12,6 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 ciborium = "0.2.2"
-dot-parser = { workspace = true }
 linnet = { workspace = true, features = ["drawing", "rkyv", "serde"] }
 rkyv = { version = "0.7", features = ["validation"] }
 serde = { version = "1.0", features = ["derive"] }

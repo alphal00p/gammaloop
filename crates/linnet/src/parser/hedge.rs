@@ -1,7 +1,5 @@
 use std::fmt::Display;
 
-use dot_parser::ast::{CompassPt, Port};
-
 use crate::half_edge::involution::{Flow, Hedge};
 
 #[cfg(feature = "rkyv")]
@@ -10,8 +8,9 @@ use rkyv::{
     Archive, Archived, Deserialize, Fallible, Resolver, Serialize,
 };
 
-use super::{strip_quotes, subgraph_free::PortExt, DotParseError, ExplicitIdKind};
+use super::{syntax::Port, CompassPt, DotParseError, ExplicitIdKind};
 
+/// Archives a compass point as its discriminant byte.
 #[cfg(feature = "rkyv")]
 struct CompassPtRkyv;
 
@@ -26,7 +25,7 @@ impl ArchiveWith<CompassPt> for CompassPtRkyv {
         _: Self::Resolver,
         out: *mut Self::Archived,
     ) {
-        compass_pt_to_u8(*field).resolve(pos, (), out);
+        (*field as u8).resolve(pos, (), out);
     }
 }
 
@@ -36,7 +35,7 @@ where
     u8: Serialize<S>,
 {
     fn serialize_with(field: &CompassPt, serializer: &mut S) -> Result<Self::Resolver, S::Error> {
-        compass_pt_to_u8(*field).serialize(serializer)
+        (*field as u8).serialize(serializer)
     }
 }
 
@@ -46,40 +45,8 @@ where
     Archived<u8>: Deserialize<u8, D>,
 {
     fn deserialize_with(field: &Archived<u8>, deserializer: &mut D) -> Result<CompassPt, D::Error> {
-        Ok(u8_to_compass_pt(field.deserialize(deserializer)?))
-    }
-}
-
-#[cfg(feature = "rkyv")]
-pub(crate) const fn compass_pt_to_u8(value: CompassPt) -> u8 {
-    match value {
-        CompassPt::N => 0,
-        CompassPt::NE => 1,
-        CompassPt::E => 2,
-        CompassPt::SE => 3,
-        CompassPt::S => 4,
-        CompassPt::SW => 5,
-        CompassPt::W => 6,
-        CompassPt::NW => 7,
-        CompassPt::C => 8,
-        CompassPt::Underscore => 9,
-    }
-}
-
-#[cfg(feature = "rkyv")]
-pub(crate) const fn u8_to_compass_pt(value: u8) -> CompassPt {
-    match value {
-        0 => CompassPt::N,
-        1 => CompassPt::NE,
-        2 => CompassPt::E,
-        3 => CompassPt::SE,
-        4 => CompassPt::S,
-        5 => CompassPt::SW,
-        6 => CompassPt::W,
-        7 => CompassPt::NW,
-        8 => CompassPt::C,
-        9 => CompassPt::Underscore,
-        _ => panic!("invalid archived compass point"),
+        let byte: u8 = field.deserialize(deserializer)?;
+        Ok(CompassPt::try_from(byte).expect("invalid archived compass point"))
     }
 }
 
@@ -99,26 +66,32 @@ pub struct DotHedgeData {
 }
 
 impl DotHedgeData {
+    /// The half-edge data of an endpoint port. A port name that parses as a
+    /// nonnegative integer requests that half-edge index; any other integer
+    /// spelling is an invalid index.
     pub(crate) fn from_parser(port: Option<&Port>) -> Result<Self, DotParseError> {
         let Some(port) = port else {
             return Ok(Self::default());
         };
-
-        let data = Self::default().with_port(port);
-        if data.id.is_none() {
-            if let Some(value) = port.id() {
-                let digits = value
-                    .strip_prefix('+')
-                    .or_else(|| value.strip_prefix('-'))
-                    .unwrap_or(value);
-                if !digits.is_empty() && digits.bytes().all(|byte| byte.is_ascii_digit()) {
-                    if let Err(source) = value.parse::<usize>() {
-                        return Err(DotParseError::InvalidExplicitId {
-                            kind: ExplicitIdKind::Hedge,
-                            value: value.to_string(),
-                            source,
-                        });
-                    }
+        let name = port.name();
+        let data = Self {
+            port_label: name.map(str::to_owned),
+            compasspt: port.compass(),
+            id: name.and_then(|name| name.parse().ok()),
+            ..Self::default()
+        };
+        if let (None, Some(value)) = (data.id, name) {
+            let digits = value
+                .strip_prefix('+')
+                .or_else(|| value.strip_prefix('-'))
+                .unwrap_or(value);
+            if !digits.is_empty() && digits.bytes().all(|byte| byte.is_ascii_digit()) {
+                if let Err(source) = value.parse::<usize>() {
+                    return Err(DotParseError::InvalidExplicitId {
+                        kind: ExplicitIdKind::Hedge,
+                        value: value.to_string(),
+                        source,
+                    });
                 }
             }
         }
@@ -158,13 +131,6 @@ impl DotHedgeData {
         self
     }
 
-    pub fn with_port(mut self, port: &Port) -> Self {
-        self.port_label = port.id().map(|a| a.to_string());
-        self.compasspt = port.compass().cloned();
-        self.id = port.hedge();
-        self
-    }
-
     pub fn with_id(mut self, id: Hedge) -> Self {
         self.id = Some(id);
         self
@@ -183,7 +149,7 @@ impl Display for DotHedgeData {
 impl From<Option<String>> for DotHedgeData {
     fn from(statement: Option<String>) -> Self {
         DotHedgeData {
-            statement: statement.map(|s| strip_quotes(&s)),
+            statement,
             ..Default::default()
         }
     }

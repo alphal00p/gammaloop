@@ -319,6 +319,10 @@ jobs:
         with:
           targets: wasm32-unknown-emscripten
 
+      - name: Provide stock CeTZ for the Typst-route tests
+        if: steps.notebook_source.outputs.enabled == 'true' && steps.community_notebook_wheel.outputs.cache-hit != 'true'
+        run: scripts/fetch-stock-cetz.sh
+
       - name: Build the shared Symbolica browser wheel
         if: steps.notebook_source.outputs.enabled == 'true' && steps.community_notebook_wheel.outputs.cache-hit != 'true'
         uses: pypa/cibuildwheel@v4.2.0

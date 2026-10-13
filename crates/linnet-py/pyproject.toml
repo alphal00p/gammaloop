@@ -8,7 +8,6 @@ license-files = [
   "LICENSE",
   "licenses/*",
   "vendor/typst-packages/PROVENANCE.typ",
-  "vendor/typst-packages/preview/cetz/0.5.1/LICENSE",
   "vendor/typst-packages/preview/oxifmt/1.0.0/LICENSE*",
   "vendor/typst-packages/preview/mitex/0.2.6/LICENSE",
 ]
@@ -26,6 +25,8 @@ features = ["standalone", "abi3-py310"]
 
 [tool.cibuildwheel]
 build = "cp314-*"
+# Typst-route renders read stock CeTZ, which the wheel does not bundle, from the
+# package directory that scripts/fetch-stock-cetz.sh provides before the build.
 test-sources = [
   "crates/linnet-py/tests",
   "crates/linnet-py/linnet_py.pyi",
@@ -33,8 +34,9 @@ test-sources = [
   "crates/linnest/typst/linnest.wasm",
   "docs/products/linnet/content/quickstart-python.typ",
   "docs/products/linnet/content/api.typ",
+  "target/typst-packages",
 ]
-test-command = "python -m unittest discover -s crates/linnet-py/tests -p 'test_*.py'"
+test-command = "export TYPST_PACKAGE_PATH=target/typst-packages && python -m unittest discover -s crates/linnet-py/tests -p 'test_*.py'"
 
 [tool.cibuildwheel.pyodide]
 repair-wheel-command = ""

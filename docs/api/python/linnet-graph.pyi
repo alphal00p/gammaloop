@@ -78,7 +78,6 @@ __all__ = [
     "MarkDirection",
     "MarkOrientation",
     "MarkPosition",
-    "MarkSymbol",
     "NodeView",
     "NodeDrawing",
     "NodeValue",
@@ -149,7 +148,6 @@ _NativeValue: typing.TypeAlias = (
     | StrokeJoin
     | TextStyle
     | DashPattern
-    | MarkSymbol
     | MarkPosition
     | MarkOrientation
     | MarkDirection
@@ -210,8 +208,13 @@ _OptionalStrokeCap: typing.TypeAlias = StrokeCap | None | Inherit
 _OptionalStrokeJoin: typing.TypeAlias = StrokeJoin | None | Inherit
 _OptionalDashValue: typing.TypeAlias = _DashValue | None
 _OptionalStrokeValue: typing.TypeAlias = _StrokeValue | None
-_MarkAnchor: typing.TypeAlias = Anchor | Inherit
-_MarkShorten: typing.TypeAlias = _LengthValue | None | Auto
+_MarkSize: typing.TypeAlias = builtins.str | Length | Ratio | RelativeLength
+_MarkPaint: typing.TypeAlias = Color | builtins.str | builtins.bool | None | Auto
+_AutoMarkSize: typing.TypeAlias = _MarkSize | Auto
+_MarkRatio: typing.TypeAlias = builtins.str | Ratio
+_MarkStroke: typing.TypeAlias = _MarkPaint | Stroke
+_MarkPhase: typing.TypeAlias = Angle | Auto
+_MarkPart: typing.TypeAlias = Mark | _NativeDict | _MarkSize
 _TextStyleValue: typing.TypeAlias = TextStyle | Inherit
 _AutoOptionalStaticContent: typing.TypeAlias = _StaticContent | None | Auto
 _OptionalStaticContent: typing.TypeAlias = _StaticContent | None
@@ -427,23 +430,37 @@ class DiagramRender:
         r"""
         Snapshot an authored Typst project, including its referenced assets.
         """
-    def to_svg(self) -> builtins.str:
+    def to_svg(self, *, interactive: builtins.bool = False) -> builtins.str:
         r"""
         Return the one-page SVG. Use to_svg_pages for multipage documents.
+
+        The SVG is static by default: the drawing alone, for files and documents.
+        ``interactive=True`` adds the hover, selection and keyboard targets of
+        notebook display, with their script and style.
         """
-    def to_svg_pages(self) -> builtins.list[builtins.str]: ...
-    def to_html(self) -> builtins.str: ...
+    def to_svg_pages(self, *, interactive: builtins.bool = False) -> builtins.list[builtins.str]:
+        r"""
+        Return one SVG per page, static or ``interactive`` as in ``to_svg``.
+        """
+    def to_html(self) -> builtins.str:
+        r"""
+        Return the interactive HTML display.
+        """
     def to_linnest(self) -> builtins.str: ...
     def save(self, output: builtins.str | os.PathLike | pathlib.Path) -> pathlib.Path:
         r"""
         Export SVG, HTML, Typst, PDF, or PNG, selected by the filename suffix.
+        HTML is the interactive display; the other formats are static.
         """
     def save_pages(self, directory: builtins.str | os.PathLike | pathlib.Path, *, format: builtins.str = 'svg') -> builtins.list[pathlib.Path]:
         r"""
-        Export every SVG or PNG page to a directory and return the written paths.
+        Export every static SVG or PNG page to a directory and return the written paths.
         """
     def _repr_html_(self) -> builtins.str: ...
-    def _repr_svg_(self) -> typing.Optional[builtins.str]: ...
+    def _repr_svg_(self) -> typing.Optional[builtins.str]:
+        r"""
+        The static SVG, for frontends that show or export images.
+        """
     def _mime_(self) -> tuple[builtins.str, builtins.str]: ...
     def __repr__(self) -> builtins.str: ...
 
@@ -521,7 +538,7 @@ class DrawOptions:
     Full typed option surface for `linnest.draw`.
     """
     def __repr__(self) -> builtins.str: ...
-    def __new__(cls, *, scope: _Dictionary = ..., unit: _AutoLengthValue = ..., title: _AutoOptionalStaticContent = ..., subgraph: _DrawSubgraphs = ..., debug: _DebugValue = ..., debug_label_collisions: _Boolean = ..., label_collision_padding: _Number = ..., show_half_edge_ids: _Boolean = ..., node_radius: _AutoRadius = ..., node_min_radius: _Number = ..., node_label_padding: _Number = ..., node_fill: _Paint = ..., node_stroke: _StrokeValue = ..., node_outset: _AutoNumber = ..., node_label_style: _Style = ..., node_style: _OptionalStyle = ..., node_label: _AutoOptionalContent = ..., draw_node: _AutoFunction = ..., edge_stroke: _StrokeValue = ..., edge_offset: _Number = ..., edge_length: _OptionalNumber = ..., edge_ratio: _OptionalNumber = ..., edge_resolve_length: _EdgeLengthResolver = ..., edge_accuracy: _Number = ..., edge_optimize: _Boolean = ..., edge_split_gap: _Number = ..., edge_dangling_tangent: _DanglingTangentValue = ..., source_style: _OptionalStyleLayers = ..., sink_style: _OptionalStyleLayers = ..., edge_label: _OptionalContent = ..., edge_label_style: _OptionalStyle = ..., external_label_gap: _Number = ..., edge_omega: _Number = ..., edge_trim_accuracy: _Number = ..., padding: _OptionalPadding = ..., debug_edge_radius: _Number = ..., debug_edge_fill: _Paint = ..., debug_edge_stroke: _StrokeValue = ..., debug_edge_label_fill: _Paint = ..., subgraph_edge_style: _Style = ..., subgraph_edge_underlay: _Boolean = ...) -> DrawOptions: ...
+    def __new__(cls, *, scope: _Dictionary = ..., unit: _AutoLengthValue = ..., title: _AutoOptionalStaticContent = ..., subgraph: _DrawSubgraphs = ..., debug: _DebugValue = ..., debug_label_collisions: _Boolean = ..., label_collision_padding: _Number = ..., show_half_edge_ids: _Boolean = ..., node_radius: _AutoRadius = ..., node_min_radius: _Number = ..., node_label_padding: _Number = ..., node_fill: _Paint = ..., node_stroke: _StrokeValue = ..., node_outset: _AutoNumber = ..., node_label_style: _Style = ..., node_style: _OptionalStyle = ..., node_label: _AutoOptionalContent = ..., draw_node: _AutoFunction = ..., edge_stroke: _StrokeValue = ..., edge_offset: _Number = ..., edge_length: _OptionalNumber = ..., edge_ratio: _OptionalNumber = ..., edge_resolve_length: _EdgeLengthResolver = ..., edge_accuracy: _Number = ..., edge_split_gap: _Number = ..., edge_dangling_tangent: _DanglingTangentValue = ..., source_style: _OptionalStyleLayers = ..., sink_style: _OptionalStyleLayers = ..., edge_label: _OptionalContent = ..., edge_label_style: _OptionalStyle = ..., external_label_gap: _Number = ..., edge_omega: _Number = ..., edge_trim_accuracy: _Number = ..., padding: _OptionalPadding = ..., debug_edge_radius: _Number = ..., debug_edge_fill: _Paint = ..., debug_edge_stroke: _StrokeValue = ..., debug_edge_label_fill: _Paint = ..., subgraph_edge_style: _Style = ..., subgraph_edge_underlay: _Boolean = ...) -> DrawOptions: ...
 
 @typing.final
 class DrawingSelectors:
@@ -662,7 +679,11 @@ class Graph:
         r"""
         Snapshot a drawing, using native SVG geometry for ordinary graph settings.
         """
-    def to_svg(self, *, config: RenderSettings | None = None) -> builtins.str: ...
+    def to_svg(self, *, config: RenderSettings | None = None, interactive: builtins.bool = False) -> builtins.str:
+        r"""
+        Render one static SVG page; ``interactive=True`` adds the hover,
+        selection and keyboard targets of notebook display.
+        """
     def _repr_svg_(self) -> builtins.str: ...
     def _repr_html_(self) -> builtins.str:
         r"""
@@ -811,7 +832,7 @@ class GraphStyleOptions:
     Options applied by `linnest.graph.style` before layout measurement.
     """
     def __repr__(self) -> builtins.str: ...
-    def __new__(cls, *, scope: _Dictionary = ..., unit: _LengthValue = ..., node_label: _AutoOptionalContent = ..., node_label_style: _Style = ..., node_style: _OptionalStyle = ..., edge_label: _OptionalContent = ..., edge_label_style: _Style = ...) -> GraphStyleOptions: ...
+    def __new__(cls, *, scope: _Dictionary = ..., unit: _LengthValue = ..., node_label: _AutoOptionalContent = ..., node_label_style: _Style = ..., node_style: _OptionalStyle = ..., edge_style: _OptionalStyleLayers = ..., edge_label: _OptionalContent = ..., edge_label_style: _Style = ...) -> GraphStyleOptions: ...
 
 @typing.final
 class HalfEdge:
@@ -978,14 +999,14 @@ class LoopCounts:
 @typing.final
 class Mark:
     r"""
-    Typed CeTZ mark configuration.
+    Data-only Kurvst mark shared by native SVG and Typst drawing.
+    Shape defaults and fitting belong to the shared geometry engine.
     """
-    @staticmethod
-    def barbed() -> Mark: ...
-    @staticmethod
-    def straight() -> Mark: ...
     def __repr__(self) -> builtins.str: ...
-    def __new__(cls, *, start: _NativeValue = ..., end: _NativeValue = ..., fill: _OptionalPaint = ..., stroke: _OptionalStrokeValue = ..., scale: _Number = ..., anchor: _MarkAnchor = ..., shorten_to: _MarkShorten = ...) -> Mark: ...
+    def __new__(cls, name: typing.Literal["triangle", "straight", "stealth", "round", "tikz", "barb", "hooks", "bar", "bracket", "circle", "square", "diamond", "rays"], *, length: _AutoMarkSize = ..., width: _AutoMarkSize = ..., inset: _MarkRatio = ..., fill: _MarkPaint = ..., stroke: _MarkStroke = ..., rev: bool = ..., align: typing.Literal["center", "end"] = ..., arc: Angle = ..., n: int = ..., phase: _MarkPhase = ..., fit: typing.Literal["chord", "bend"] = ..., shorten: _MarkRatio = ...) -> Mark: ...
+    @staticmethod
+    def combine(*parts: _MarkPart, fit: typing.Literal["chord", "bend"] = ..., shorten: _MarkRatio = ...) -> Mark: ...
+    def to_dict(self) -> dict[str, typing.Any]: ...
 
 @typing.final
 class MathSymbol:
@@ -1762,9 +1783,10 @@ class Subgraph:
         Prepare the full owner graph with this selection highlighted and its complement dotted.
         The owner's layout, drawing configuration, and topology remain unchanged.
         """
-    def to_svg(self, *, config: RenderSettings | None = None) -> builtins.str:
+    def to_svg(self, *, config: RenderSettings | None = None, interactive: builtins.bool = False) -> builtins.str:
         r"""
         Render this selection in the context of the full graph, including isolated nodes.
+        The SVG is static unless ``interactive`` adds notebook inspection targets.
         """
     def _repr_svg_(self) -> builtins.str: ...
     def _repr_html_(self) -> builtins.str:
@@ -2053,14 +2075,6 @@ class MarkPosition(enum.Enum):
     End = ...
     Center = ...
     CenterIfDangling = ...
-
-@typing.final
-class MarkSymbol(enum.Enum):
-    r"""
-    Built-in arrowhead symbol used by CeTZ edge marks.
-    """
-    Barbed = ...
-    Straight = ...
 
 @typing.final
 class Pattern(enum.Enum):

@@ -1,7 +1,6 @@
 use std::collections::{BTreeMap, HashMap, HashSet};
 
 use cgmath::{Point2, Rad, Vector2};
-use dot_parser::ast::CompassPt;
 use linnet::{
     half_edge::{
         builder::{HedgeData, HedgeGraphBuilder},
@@ -19,12 +18,14 @@ use linnet::{
     },
     parser::{
         ArchivedDotEdgeView, ArchivedDotEndpointView, ArchivedDotGraphView, ArchivedDotVertexView,
-        DotEdgeData, DotGraph, DotHedgeData, DotVertexData, GlobalData,
+        CompassPt, DotEdgeData, DotGraph, DotHedgeData, DotVertexData, GlobalData,
     },
 };
 use serde::{Deserialize, Serialize};
 
-use crate::{default_figment, PinConstraint, TypstEdge, TypstGraph, TypstHedge, TypstNode};
+use crate::{
+    default_figment, parse_compass, PinConstraint, TypstEdge, TypstGraph, TypstHedge, TypstNode,
+};
 
 type DotBuilder = HedgeGraphBuilder<DotEdgeData, DotVertexData, DotHedgeData>;
 const TYPST_EDGE_NAME_KEY: &str = "__linnest-edge-name";
@@ -974,7 +975,7 @@ fn apply_typst_graph_structural_patch(
             data.port_label = Some(port_label);
         }
         if let Some(compass) = hedge.compass {
-            data.compasspt = parse_endpoint_compass(&compass)?.map(compass_pt_to_string);
+            data.compasspt = parse_compass(&compass)?.map(|compass| compass.to_string());
         }
         if let Some(points) = hedge.route_points {
             data.route_points = points
@@ -2680,7 +2681,7 @@ fn endpoint_spec_to_hedge_data(
             compasspt: endpoint
                 .compass
                 .as_deref()
-                .map(parse_endpoint_compass)
+                .map(parse_compass)
                 .transpose()?
                 .flatten(),
         },
@@ -2706,10 +2707,6 @@ fn parse_flow(value: &str) -> Result<Flow, String> {
     }
 }
 
-fn parse_endpoint_compass(value: &str) -> Result<Option<CompassPt>, String> {
-    parse_compass(value)
-}
-
 fn statement_value<'a>(data: EdgeData<&'a DotEdgeData>, key: &str) -> Option<&'a str> {
     data.data.statements.get(key).map(String::as_str)
 }
@@ -2718,7 +2715,7 @@ fn hedge_value(data: &DotHedgeData, key: &str) -> Option<String> {
     match key {
         "statement" => data.statement.clone(),
         "port-label" => data.port_label.clone(),
-        "compass" => data.compasspt.map(compass_pt_to_string),
+        "compass" => data.compasspt.map(|compass| compass.to_string()),
         "id" => data.id.map(|id| id.0.to_string()),
         _ => None,
     }
@@ -2921,23 +2918,6 @@ fn parse_rad(statements: &BTreeMap<String, String>, key: &str) -> Option<f64> {
     })
 }
 
-fn parse_compass(value: &str) -> Result<Option<CompassPt>, String> {
-    match value.trim().to_ascii_lowercase().as_str() {
-        "" | "none" => Ok(None),
-        "n" => Ok(Some(CompassPt::N)),
-        "ne" => Ok(Some(CompassPt::NE)),
-        "e" => Ok(Some(CompassPt::E)),
-        "se" => Ok(Some(CompassPt::SE)),
-        "s" => Ok(Some(CompassPt::S)),
-        "sw" => Ok(Some(CompassPt::SW)),
-        "w" => Ok(Some(CompassPt::W)),
-        "nw" => Ok(Some(CompassPt::NW)),
-        "c" => Ok(Some(CompassPt::C)),
-        "_" => Ok(Some(CompassPt::Underscore)),
-        other => Err(format!("Invalid compass point: {other}")),
-    }
-}
-
 fn orientation_to_string(orientation: &ArchivedOrientation) -> &'static str {
     match orientation {
         ArchivedOrientation::Default => "default",
@@ -2946,37 +2926,9 @@ fn orientation_to_string(orientation: &ArchivedOrientation) -> &'static str {
     }
 }
 
+/// Spells an archived compass byte, or `?` for an invalid one.
 fn compass_to_string(compass: u8) -> String {
-    match compass {
-        0 => "n",
-        1 => "ne",
-        2 => "e",
-        3 => "se",
-        4 => "s",
-        5 => "sw",
-        6 => "w",
-        7 => "nw",
-        8 => "c",
-        9 => "_",
-        _ => "?",
-    }
-    .to_string()
-}
-
-fn compass_pt_to_string(compass: CompassPt) -> String {
-    match compass {
-        CompassPt::N => "n",
-        CompassPt::NE => "ne",
-        CompassPt::E => "e",
-        CompassPt::SE => "se",
-        CompassPt::S => "s",
-        CompassPt::SW => "sw",
-        CompassPt::W => "w",
-        CompassPt::NW => "nw",
-        CompassPt::C => "c",
-        CompassPt::Underscore => "_",
-    }
-    .to_string()
+    CompassPt::try_from(compass).map_or_else(|_| "?".to_owned(), |compass| compass.to_string())
 }
 
 #[cfg(test)]
