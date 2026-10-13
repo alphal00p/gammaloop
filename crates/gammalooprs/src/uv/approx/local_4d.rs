@@ -2739,6 +2739,8 @@ mod tests {
 
     #[test]
     fn uv_taylor_provenance_erasure_matches_plain_child_lmb_expansion() -> Result<()> {
+        use crate::momentum::{SignOrZero, sample::LoopIndex};
+
         test_initialise()?;
         let graph: Graph = dot!(
             digraph uv_taylor_provenance_oracle {
@@ -2759,6 +2761,20 @@ mod tests {
         )?;
         let first = EdgeIndex(1);
         let second = EdgeIndex(2);
+        let soft_carrier = graph.loop_momentum_basis.loop_edges[LoopIndex(1)];
+        let signature = &graph.loop_momentum_basis.edge_signatures[soft_carrier];
+        assert_eq!(
+            signature.internal.iter().copied().collect::<Vec<_>>(),
+            [SignOrZero::Zero, SignOrZero::Plus],
+            "the soft carrier is exactly the second parent loop momentum"
+        );
+        assert!(
+            signature
+                .external
+                .iter()
+                .all(|sign| *sign == SignOrZero::Zero),
+            "the soft carrier has no fixed external shift"
+        );
         let uv_filter = graph
             .get_edge_subgraph(first)
             .union(&graph.get_edge_subgraph(second));
@@ -2802,7 +2818,9 @@ mod tests {
         assert_eq!(first_soft, Atom::Zero);
         assert_eq!(
             second_soft,
-            FunctionBuilder::new(GS.emr_mom).add_arg(4).finish()
+            FunctionBuilder::new(GS.emr_mom)
+                .add_arg(usize::from(soft_carrier))
+                .finish()
         );
 
         let taylor = |rescaled: Atom| -> Result<Atom> {
@@ -2913,7 +2931,7 @@ mod tests {
             !malformed,
             "no transient provenance role may survive Taylor expansion"
         );
-        assert_eq!(soft_carriers, BTreeSet::from([EdgeIndex(4)]));
+        assert_eq!(soft_carriers, BTreeSet::from([soft_carrier]));
         assert_eq!(
             tags,
             BTreeMap::from([
