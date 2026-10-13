@@ -339,7 +339,7 @@ digest = "d131b0f6a513af1310b647474fac787105610a1b"
 [[section.note]]
 id = "uv-renormalization"
 title = "UV renormalization architecture"
-summary = "Orchestrator ownership, sign conventions, projections, disconnected composition, and current boundaries."
+summary = "Orchestrator ownership, signed local and analytic scheme inputs, component-local OS and soft forest composition, and current boundaries."
 source = "docs/architecture/uv-renormalization.typ"
 kind = "System architecture"
 status = "Implemented"
@@ -370,7 +370,15 @@ anchor = "impl UVOrchestrator {"
 # generation settings for medium-dependent forest selection.
 # Reviewed 2026-10-16: Only comparison fixtures changed: shared normalization contracts dummy charts; exact equivalence and retained scalar factors remain asserted. UV ownership is unchanged.
 # Reviewed 2026-10-18: UV owners retain IndexedStructure and strictly admit explicit public ports; the UV note preserves logical axes, ranked zeros, formal dimensions and existing Taylor/Vakint boundaries without changing forest or routing algorithms.
-digest = "19e0c07de61017d01b36bfda24f60e48d4b17bfc"
+# OS port review 2026-10-15: component-local degree-one fermion admission,
+# canonical-rule Ward checks for IR-over-OS, and direct proper/disjoint history
+# limits agree with the maintained UV note. Numerical validation status is
+# recorded separately in the in-progress OS note.
+# Reviewed 2026-10-18: retained-tensor migration preserves the component-local
+# prescription guards, source-rule Ward certificate and direct history bounds.
+# Static Indexed OS replay review: native carrier publication and existing OS
+# source/rule/history guards are combined; fresh compilation/runtime is pending.
+digest = "610cde2c2e3650f8a46a0262169d2b22cbf0640b"
 
 [[section.note.scope]]
 path = "crates/gammalooprs/src/uv/approx/integrated.rs"

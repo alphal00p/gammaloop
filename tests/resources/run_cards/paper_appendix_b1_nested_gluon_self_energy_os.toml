@@ -10,6 +10,12 @@ commands = [
   "generate existing -p paper_appendix_b1_nested_gluon_self_energy -i deferred_os",
 ]
 
+[[command_blocks]]
+name = "profile_uv"
+commands = [
+  "profile ultra-violet -p paper_appendix_b1_nested_gluon_self_energy -i deferred_os --min-scaling 8 --max-scaling 12 --n-points 25 --seed 1337 --per-orientation",
+]
+
 [default_runtime_settings.kinematics]
 e_cm = 300.0
 

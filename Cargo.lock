@@ -2294,6 +2294,7 @@ dependencies = [
  "ndarray",
  "parking_lot",
  "rand 0.9.4",
+ "rayon",
  "serde_json",
  "spenso",
  "symbolica",

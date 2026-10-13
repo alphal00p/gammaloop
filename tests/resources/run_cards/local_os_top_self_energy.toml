@@ -10,6 +10,12 @@ commands = [
   "generate existing -p local_os_top_self_energy -i local_os_top_self_energy",
 ]
 
+[[command_blocks]]
+name = "profile_uv"
+commands = [
+  "profile ultra-violet -p local_os_top_self_energy -i local_os_top_self_energy --min-scaling 8 --max-scaling 12 --n-points 25 --seed 1337 --per-orientation",
+]
+
 [default_runtime_settings.kinematics.externals]
 type = "constant"
 
