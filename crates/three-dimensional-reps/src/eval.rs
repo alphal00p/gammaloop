@@ -1097,7 +1097,7 @@ mod tests {
     use std::collections::BTreeMap;
 
     use crate::{
-        Generate3DExpressionOptions, MomentumSignature, NumeratorSamplingScaleMode,
+        Generate3DExpressionOptions, MediumMode, MomentumSignature, NumeratorSamplingScaleMode,
         generate_3d_expression,
         generation::generate_3d_expression_from_parsed,
         graph_io::{ParsedGraphInitialStateCutEdge, ParsedGraphInternalEdge},
@@ -1106,10 +1106,44 @@ mod tests {
     use super::*;
 
     #[test]
-    fn evaluation_rejects_input_shape_zero_scale_and_oversized_power() {
+    fn evaluation_rejects_invalid_inputs_and_thermal_weights() {
         let parsed = crate::graph_io::test_graphs::box_graph();
         let expression = generate_3d_expression_from_parsed(&parsed, &Default::default()).unwrap();
         let input = EvaluationInput::deterministic(&parsed, 1337, &BTreeMap::new(), None).unwrap();
+        assert!(
+            evaluate_expression(&parsed, &expression, "1", &input)
+                .unwrap()
+                .value
+                .is_finite()
+        );
+        for medium_mode in [
+            MediumMode::ThermodynamicEquilibrium,
+            MediumMode::ZeroTemperatureEquilibrium,
+        ] {
+            let thermal = generate_3d_expression_from_parsed(
+                &parsed,
+                &Generate3DExpressionOptions {
+                    medium_mode,
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+            let mut later_orientation = expression.clone();
+            later_orientation.orientations[OrientationID(1)].variants[0]
+                .thermal_weight
+                .medium_mode = medium_mode;
+            let mut later_variant = expression.clone();
+            let variants = &mut later_variant.orientations[OrientationID(0)].variants;
+            let mut variant = variants[0].clone();
+            variant.thermal_weight.medium_mode = medium_mode;
+            variants.push(variant);
+            for candidate in [thermal, later_orientation, later_variant] {
+                assert!(matches!(
+                    evaluate_expression(&parsed, &candidate, "1", &input),
+                    Err(EvaluationError::ThermalDistributionInputsUnsupported)
+                ));
+            }
+        }
         for field in ["external momenta", "loop spatial momenta", "masses"] {
             for extra in [false, true] {
                 let mut malformed = input.clone();
