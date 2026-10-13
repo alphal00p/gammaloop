@@ -1,0 +1,60 @@
+commands = []
+
+[[command_blocks]]
+name = "generate"
+commands = [
+  "import model sm-default",
+  "set model MT=173.0 WT=0.0",
+  "remove processes",
+  "import graphs ./tests/resources/graphs/local_disjoint_os_top_self_energies.dot -p local_disjoint_os_top_self_energies -i local_disjoint_os_top_self_energies",
+  "generate existing -p local_disjoint_os_top_self_energies -i local_disjoint_os_top_self_energies",
+]
+
+[[command_blocks]]
+name = "profile_uv"
+commands = [
+  "profile ultra-violet -p local_disjoint_os_top_self_energies -i local_disjoint_os_top_self_energies --min-scaling 8 --max-scaling 12 --n-points 25 --seed 1337 --per-orientation",
+]
+
+[default_runtime_settings.kinematics.externals]
+type = "constant"
+
+# The bridge carries the external momentum; keep it off its physical pole.
+[default_runtime_settings.kinematics.externals.data]
+momenta = [
+  [250.0, 0.0, 0.0, 50.0],
+  "dependent",
+]
+helicities = [1, 1]
+
+[default_runtime_settings.general]
+evaluator_method = "SingleParametric"
+
+[cli_settings.global]
+logfile_directive = "off"
+display_directive = "info"
+
+[cli_settings.global.generation.uv]
+generate_integrated = false
+add_marker = false
+inner_products = true
+orchestrator = "hedge_poset"
+
+[[cli_settings.global.generation.uv.renormalization_prescription.overrides]]
+prescription = "OS"
+
+[cli_settings.global.generation.uv.renormalization_prescription.overrides.ct_identifier]
+external_pdg_set = [-6, 6]
+internal_pdg_set = [6, 21]
+
+[cli_settings.global.generation.tropical_subgraph_table]
+panic_on_fail = false
+disable_tropical_generation = true
+
+[cli_settings.global.generation.threshold_subtraction]
+enable_thresholds = false
+
+[cli_settings.global.generation.evaluator]
+# The runtime uses SingleParametric; do not build the unused all-orientation
+# iterative evaluator for this large nested local counterterm.
+iterative_orientation_optimization = false

@@ -1,7 +1,8 @@
 = UV renormalization architecture
 <uv-renormalization-architecture>
 #quote(block: true)[
-#strong[Reviewed:] 2026-10-13; includes the isolated on-shell self-energy mechanism.
+#strong[Reviewed:] 2026-10-13; includes component-local on-shell operations,
+their analytic scheme policy, and the admitted forest histories.
 
 #strong[Lifecycle:] Current implementation architecture. Unsupported
 prescription paths are recorded explicitly under
@@ -65,12 +66,36 @@ node does not copy that policy; it stores computed values:
 This separation lets the same integrated result be consumed differently
 without storing scheme-specific copies.
 
-An OS component supplies a distinct analytic input: its signed vacuum remainder
-$-[U_1 Sigma-U_1 O Sigma]$. The complete signed local counterterm also retains
-$-O Sigma$, which supplies the physical mass correction. The finite analytic
-addback must not integrate and cancel that physical on-shell contribution.
-The operator, loop-measure derivation, and independent references are maintained
-in #link("on-shell-counterterms.typ")[On-shell massive-fermion counterterms].
+For a degree-one quark self-energy, define
+$p_("OS")=(m,0,0,0)$, $P_sigma=(1+sigma gamma^0)/2$, and
+$O[X]=sum_(sigma=plus.minus 1)P_sigma X(sigma p_("OS"))$.
+The complete OS operation is $T_("OS")[X]=U_1[X]+O[X]-U_1[O[X]]$.
+Projectors multiply on the outgoing spinor port in that order, and the
+ordinary UV operation acts on both completed projected branches. The forest
+minus is applied once to this complete operator. An enclosing operation acts
+on the complete child, including its finite analytic coefficient.
+
+The on-shell substitution belongs to one component. Its own incoming boundary
+momentum is replaced by $sigma p_("OS")$ while the surrounding cograph keeps
+its live momentum. The point retains its physical-mass dependence, so a later
+UV Taylor operation scales $p_("OS")$ together with $m$. Separate point owners
+must remain distinct from live cograph momenta even when their source edge or
+mass symbol coincides. Exact numerator and denominator certificates retain
+these component domains and fixed energy shifts.
+
+Each four-dimensional sector stores the complete signed local expression and,
+when the scheme requires it, a separate signed analytic input. An OS sector
+integrates only $-V[X]=-(U_1-U_1 O)[X]$. Its local $-O[X]$ supplies the physical
+mass correction; analytically adding back that physical branch would change
+the mass scheme. A canonical two-loop QCD gluon parent with a completed
+one-loop OS quark child has a separately certified vanishing integrated soft
+jet. Only that nested family may use the parent's signed vacuum remainder
+$-(U_2-U_2 S_1)[X]$ as its analytic input; its full local soft branch remains.
+The bare two-loop parent retains the ordinary full analytic input. The
+ordered algebra, all-dimensional Ward derivation, independent mass/field
+references, and the separate exact, local-limit and integrated validation
+claims are maintained in
+#link("on-shell-counterterms.typ")[On-shell massive-fermion counterterms].
 
 Four-dimensional recursive state stores completed signed counterterm sectors
 with their active component frames and frozen integrated frames. A containing
@@ -91,7 +116,10 @@ disconnected products; degree-zero H or a zero S branch introduces no flag.
 The orchestrator validates scheme assignments before computation, while direct
 `uv_limit` calls retain cheap invariant checks using this metadata. Ordinary
 scheme controls are constructed explicitly in tests, without carrying a second
-symbolic counterterm through production recursion.
+symbolic counterterm through production recursion. The corresponding
+`has_on_shell_ancestry` flag retains the completed OS history even when a later
+vacuum projection contains no explicit point; a containing IR operation must
+still satisfy its topology and actual-rule Ward certificate.
 
 == Nested soft-counterterm oracle
 <nested-soft-toy>
@@ -145,12 +173,14 @@ local four-dimensional limit constructs the next counterterm as a signed
 `-T(...)` operation. Nested signs therefore arise from recursive
 operation composition, not from terminal depth or parity.
 
-For a connected counterterm, integration stores a Laurent series from
-which two physical projections are obtained:
+For a connected counterterm, integration stores a Laurent series of its
+signed analytic input $A$. This is the complete local expression by default,
+with the OS and certified nested-IR exceptions described above. Two
+projections are obtained:
 
 ```text
-pole projection:               negative powers of integral(local)
-finite-counterterm projection: -nonnegative powers of integral(local)
+pole projection:               negative powers of integral(A)
+finite-counterterm projection: -nonnegative powers of integral(A)
 ```
 
 The second projection includes ε⁰ and the retained positive ε powers,
@@ -168,7 +198,7 @@ The projections are used as follows:
   integrated pole only;
 - a root `PolePart` result combines its local term with the integrated
   pole;
-- an `MUV` or `IR` dependency combines its local term with the signed finite
+- an `MUV`, `IR`, or `OS` dependency combines its local term with the signed finite
   counterterm;
 - terminal renormalization output selects the pole or finite projection
   from the source Spinney\'s prescription;
@@ -178,6 +208,14 @@ The projections are used as follows:
 The last distinction is essential: changing terminal output policy must
 not remove the finite addback required when assembling an integrable 3D
 expression.
+
+For OS this gives a local $-(O+V)$ and a normalized localized addback
+$+N "Fin"[V]$, with $[N]=1$. Their integrated sum is
+$-[O]-"Pole"[V]$: masses are on shell, while fields and couplings remain
+MS-bar. Terminal `renormalize` output selects the finite vacuum scheme
+correction; it does not export the physical OS mass term retained in the
+local branch. The stored analytic series therefore must not be described
+as the integral of the complete OS counterterm.
 
 Vacuum masses carry hard weight within the component on which a Taylor operation acts. The four-dimensional route uses `mUV -> mUV/t` in its inverse-hard expansion; direct three-dimensional Taylor expansion uses `mUV -> lambda*mUV` with its forward hard scale. The auxiliary on-shell-energy deformation mass retains its separate role in the propagator rewrite.
 
@@ -214,7 +252,26 @@ aggregate.
 
 === Direct three-dimensional local terms
 <direct-three-dimensional-local-terms>
-Both direct local-3D representations perform the complete loop-energy integration first and apply every UV Taylor operator to the resulting complete/global CFF expression. They therefore share exactly the same local Taylor-transformed CFF bodies. If the generalized residue map is `{ k -> C_k }`, the orientation-parametric form is represented as `sum_k sigma(k) C_k`, where `sigma(k)` selects the complete residue-map key (loop map, edge map, numerator sampling map, and physical direction metadata). The Taylor operators treat `sigma(k)` as opaque. The sparse implementation therefore applies them branchwise without expanding the factorized numerator. `explicit_orientation_sum_only=true` merely replaces every `sigma(k)` by one and explicitly sums the same bodies. Neither direct form uses the exact-source reconstruction or minimax dispatch of completed local-4D Taylor terms.
+Both direct local-3D representations start from the production CFF residue
+family and apply UV Taylor operations after energy integration. They share
+the same transformed branch bodies. If the generalized residue map is
+`{ k -> C_k }`, the orientation-parametric form is `sum_k sigma(k) C_k`,
+where `sigma(k)` selects the complete key: loop map, edge map, numerator
+sampling map and physical direction metadata. Taylor operations treat this
+selector as opaque and act branchwise without expanding the graph numerator.
+`explicit_orientation_sum_only=true` replaces the selectors by one and sums
+the same bodies.
+
+An OS operation also needs the original physical $O$ branches of its own
+component. A proper component generates their residues from its original
+propagators and ordered projected numerator in a compatible source frame,
+then attaches the live cograph. This reuses exact numerator and denominator
+certificates, including fixed energy shifts, on that physical source; it does
+not construct a recursive local-4D Taylor counterterm as a fallback. A
+completed proper source replays its child, including a finite prefix when
+present, within that source frame. In both direct representations the complete
+operation is $O[X]+U_1[X-O[X]]$ before the one forest minus. Applying a fixed
+point to the entire surrounding CFF expression would violate this ownership.
 
 Cut CFF structures need not factorize over disconnected components.
 Multiplying complete per-component local results would also multiply the
@@ -230,8 +287,9 @@ paths from their common root. At a union it:
 + applies each component\'s local operations to the shared incoming
   state.
 
-The construction operates over an arbitrary number of components and is
-not special-cased for a two-component spectacles graph.
+The general replay construction operates over an arbitrary number of
+components. OS adds the narrower direct-source history bounds recorded below;
+these do not restrict ordinary or soft replay.
 
 Finite prefixes enter this replay as connected coefficients with their source
 owners retained. Algebraic physical-mass factors carry that owner's mass tag;
@@ -242,7 +300,12 @@ its own tag. The normalized frozen kernels remain outside the Taylor operation.
 This preserves the engineering weight of finite mass vertices without rescaling
 unrelated factors in a disconnected product.
 
-The projected local-4D route is separate: it completes the Taylor expansion in four dimensions, reconstructs the exact source occurrence graph, performs the factorized minimax EMR dispatch needed for derivative-created occurrences, and only then projects that completed term to CFF. That reconstruction machinery is exclusive to projected local4D and is not a replacement for the direct replay above.
+The projected local-4D route is separate: it completes the Taylor expansion
+in four dimensions, reconstructs the exact source occurrence graph, performs
+the factorized minimax EMR dispatch needed for derivative-created occurrences,
+and only then projects the completed term to CFF. Direct OS shares the exact
+original-source certificate infrastructure, while retaining its own
+post-residue Taylor operations and component replay.
 
 == Marker Representation
 <marker-representation>
@@ -327,14 +390,28 @@ Each finite-precision ray is first fitted over its complete scale range. A missi
   soft branch. It also rejects IR and PolePart components in one nested or
   disconnected UV wood until their combined integrated policy is implemented.
   Components that cannot occur together in a wood do not trigger this rejection.
-- An isolated degree-one quark self-energy supports local `OS` in four
-  dimensions, its vacuum-only integrated scheme correction, and exact CFF
-  projection. Numerical generation requires
-  `local_uv_cts_from_expanded_4d_integrands = true` and
-  `explicit_orientation_sum_only = true`. Direct three-dimensional, nested,
-  and disconnected OS assignments remain guarded until their component-local
-  composition is validated. The massless specialization agrees with H1.
-  `VaccuumLimit` is unsupported; `Unsubtracted` is
+- A degree-one quark two-point component with equal boundary masses and an
+  open outgoing spinor port supports `OS` through local 4D, its vacuum-only
+  analytic correction, projected CFF and both direct 3D representations.
+  The algebraic massless specialization agrees with H1. This does not impose
+  OS field residues: the implemented scheme keeps fields and couplings MS-bar.
+- Nested OS/OS and OS-parent/IR-child assignments are admitted. An IR parent
+  above OS additionally requires a degree-two parent and the canonical-QCD
+  two-loop self-energy-insertion certificate, including actual propagators,
+  vertices, equal masses and color flow. It does not authorize arbitrary
+  modified numerators or a higher-loop mixed history. OS combined with MUV or
+  PolePart, and disconnected OS/non-OS pairs that occur in one wood, remain
+  rejected until their mixed analytic policy is established.
+- Direct OS source replay admits a primitive one-loop component, the complete
+  paired graph domain, or a proper two-loop component with exactly one
+  classified connected proper descendant that is a degree-one one-loop OS
+  component. Other proper multiloop histories are rejected. Direct disconnected
+  OS replay admits at most two primitive one-loop OS components; a disjoint
+  multiloop component or three OS factors requires the projected route. These
+  are implementation admission bounds, not a claim that arbitrary larger
+  graphs satisfy the independent validation gates in the
+  #link("on-shell-counterterms.typ")[OS design and validation note].
+- `VaccuumLimit` is unsupported; `Unsubtracted` is
   expected to be filtered out before these operations. These checks are skipped
   when UV subtraction itself is disabled.
 - Parametric integrand generation currently supports final 3D output

@@ -184,6 +184,94 @@ impl CLIState {
             &self.cli_settings,
         )
     }
+
+    /// Numeric generation evidence for amplitude route comparisons. Expression
+    /// sizes count stored roots and function definitions without unfolding them.
+    pub fn generation_performance_report(
+        &self,
+        process_id: usize,
+        integrand_name: &str,
+    ) -> Result<serde_json::Value> {
+        use gammalooprs::processes::{GraphGenerationStats, ProcessCollection};
+
+        let summary = self
+            .state
+            .generation_summary(process_id, integrand_name)
+            .ok_or_else(|| eyre::eyre!("missing generation summary for {integrand_name}"))?;
+        let process = self
+            .state
+            .process_list
+            .processes
+            .get(process_id)
+            .ok_or_else(|| eyre::eyre!("missing process {process_id}"))?;
+        let ProcessCollection::Amplitudes(amplitudes) = &process.collection else {
+            return Err(eyre::eyre!("route expression sizes require an amplitude"));
+        };
+        let amplitude = amplitudes
+            .get(integrand_name)
+            .ok_or_else(|| eyre::eyre!("missing amplitude {integrand_name}"))?;
+        let expressions = amplitude
+            .graphs
+            .iter()
+            .map(|graph| {
+                let data = &graph.derived_data;
+                let root_bytes = data.all_mighty_integrand.as_view().get_byte_size();
+                let definition_bytes = data
+                    .all_mighty_numerators
+                    .iter()
+                    .map(|entry| {
+                        entry.lhs.as_view().get_byte_size() + entry.rhs.as_view().get_byte_size()
+                    })
+                    .sum::<usize>();
+                serde_json::json!({
+                    "graph_name": graph.graph.name,
+                    "root_bytes": root_bytes,
+                    "definition_bytes": definition_bytes,
+                    "definition_count": data.all_mighty_numerators.len(),
+                    "total_bytes": root_bytes + definition_bytes,
+                })
+            })
+            .collect::<Vec<_>>();
+        let mut stats = GraphGenerationStats::default();
+        for report in &summary.reports {
+            stats.merge_in_place(&report.stats);
+        }
+        #[cfg(target_os = "linux")]
+        let process_lifetime_peak_rss_bytes = std::fs::read_to_string("/proc/self/status")
+            .ok()
+            .and_then(|status| {
+                let mut fields = status
+                    .lines()
+                    .find_map(|line| line.strip_prefix("VmHWM:"))?
+                    .split_ascii_whitespace();
+                let kibibytes = fields.next()?.parse::<u64>().ok()?;
+                if fields.next()? != "kB" || fields.next().is_some() {
+                    return None;
+                }
+                kibibytes.checked_mul(1024)
+            });
+        #[cfg(not(target_os = "linux"))]
+        let process_lifetime_peak_rss_bytes: Option<u64> = None;
+        Ok(serde_json::json!({
+            "schema_version": 1,
+            "process_id": process_id,
+            "integrand_name": integrand_name,
+            // Correlate numeric evidence with the test process that generated it.
+            "measurement_process_id": std::process::id(),
+            "generation_peak_ram_bytes": summary.peak_ram_bytes,
+            "process_lifetime_peak_rss_bytes": process_lifetime_peak_rss_bytes,
+            "process_lifetime_peak_rss_scope": "process_start_through_report_capture_including_model_import",
+            "generation_native_seconds": stats.total_time.as_secs_f64(),
+            "generation_expression_seconds": stats.expression_build_time().as_secs_f64(),
+            "evaluator_build_seconds": stats.evaluator_build_time().as_secs_f64(),
+            "evaluator_spenso_seconds": stats.evaluator_spenso_time.as_secs_f64(),
+            "evaluator_symbolica_seconds": stats.evaluator_symbolica_time.as_secs_f64(),
+            "evaluator_compile_seconds": stats.evaluator_compile_time.as_secs_f64(),
+            "evaluator_count": stats.evaluator_count,
+            "expression_representation": "factorized_pre_evaluator_roots_and_function_definitions",
+            "expression_sizes": expressions,
+        }))
+    }
 }
 
 /// Yields a cli state for testing.

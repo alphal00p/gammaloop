@@ -212,14 +212,14 @@ digest = "e9df9127071f40900896b069a7b0f1d0ed180c05"
 [[section.note]]
 id = "uv-renormalization"
 title = "UV renormalization architecture"
-summary = "Orchestrator ownership, sign conventions, projections, disconnected composition, and current boundaries."
+summary = "Orchestrator ownership, signed local and analytic scheme inputs, component-local OS and soft forest composition, and current boundaries."
 source = "docs/architecture/uv-renormalization.typ"
 kind = "System architecture"
 status = "Implemented"
 lifecycle = "current"
 owner = "unassigned"
-reviewed_at = "2026-10-01"
-review_ref = "jj:xuoqsyop"
+reviewed_at = "2026-10-13"
+review_ref = "jj:on-shell-counterterms"
 products = ["gammaloop"]
 topics = ["uv", "renormalization"]
 review_triggers = ["crates/gammalooprs/src/uv/**", "crates/gammalooprs/src/graph/**"]
@@ -232,7 +232,13 @@ anchor = "impl UVOrchestrator {"
 # backend selection, returned legacy result, and UV invariants are unchanged.
 # Reviewed 2026-09-17: Documented factorized numerator mapping, consumed measures, integrated mass ownership, and direct versus projected UV composition.
 # Reviewed 2026-10-01: Corrected IR support and the pre-computation mixed-prescription and integrated-OS rejections.
-digest = "7db0c071cda6bc6bb1678e5e969f165136490d13"
+# Reviewed 2026-10-13: Documented the ordered component-local OS operation,
+# its distinct vacuum-only analytic input, and the certified IR-over-OS Ward
+# policy. Reviewed degree, mixed-prescription, proper two-loop history and
+# primitive disjoint replay guards against the actual topology/rule checks;
+# both direct routes are distinguished from completed local-4D projection.
+# The OS design note retains its separate in-progress validation lifecycle.
+digest = "80ca0e7d4ee6087e8e577f525de1c0ecc6aef03b"
 
 [[section.note]]
 id = "spenso-parsing-flow"
@@ -649,25 +655,25 @@ anchor = "pub struct VakintWrapper {"
 # Reviewed 2026-09-17: Documented tensor projection, epsilon depth, opaque spin slots, and complex numerical parameters.
 digest = "4a02d93233deb0d268682bf9c0ce6d2f2499a762"
 
-[[section]]
-id = "proposals"
-title = "Design proposals"
-summary = "Possible changes that are deliberately kept separate from the implemented architecture."
-
 [[section.note]]
 id = "on-shell-counterterms"
 title = "On-shell counterterms for massive fermions"
 summary = "Ordered component-local OS subtraction, vacuum-only scheme correction, independent one-loop references, and exact reconstruction and forest validation boundaries."
 source = "docs/architecture/on-shell-counterterms.typ"
 kind = "Physics design and validation contract"
-status = "Implementation in progress"
-lifecycle = "proposal"
+status = "Implemented · verified 2026-10-14"
+lifecycle = "current"
 owner = "unassigned"
-reviewed_at = "2026-10-13"
-review_ref = "arXiv:2203.11038v1"
+reviewed_at = "2026-10-14"
+review_ref = "jj:on-shell-counterterms"
 products = ["gammaloop"]
 topics = ["uv", "renormalization", "on-shell", "cff"]
-review_triggers = ["crates/gammalooprs/src/uv/**", "tests/resources/graphs/local_os_top_self_energy.dot", "tests/resources/graphs/local_nested_soft_top_self_energy.dot"]
+review_triggers = ["crates/gammalooprs/src/uv/**", "tests/resources/graphs/local_os_top_self_energy.dot", "tests/resources/graphs/local_nested_soft_top_self_energy.dot", "tests/resources/graphs/paper_appendix_b1_nested_gluon_self_energy.dot", "tests/resources/graphs/local_soft_gluon_in_top_self_energy.dot", "tests/resources/graphs/local_disjoint_os_top_self_energies.dot", "tests/resources/graphs/local_os_three_loop_top_self_energy.dot", "tests/tests/test_nlo_acceptance/gamma_star_ttx.rs", "tests/tests/uv.rs"]
+
+[[section]]
+id = "proposals"
+title = "Design proposals"
+summary = "Possible changes that are deliberately kept separate from the implemented architecture."
 
 [[section.note]]
 id = "gammaloop-roadmap"
