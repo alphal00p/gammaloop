@@ -14,6 +14,8 @@ use crate::{
 };
 use idenso::{
     color::ColorSimplifySettings,
+    dirac::GammaSimplifySettings,
+    representations::Bispinor,
     shorthands::UndoShorthands,
     tensor::{AlgebraSettings, SymbolicNetExt, SymbolicNetParse},
 };
@@ -24,7 +26,10 @@ use spenso::{
         parsing::{ParseSettings, SchoonschipExpansionMode, ShorthandParsing},
         tags::SPENSO_TAG,
     },
-    structure::representation::{Minkowski, RepName},
+    structure::{
+        TensorStructure,
+        representation::{Minkowski, RepName},
+    },
 };
 
 pub(crate) fn fixture(massless: bool) -> Result<(Graph, OwnedForestNode, OwnedForestNode)> {
@@ -169,17 +174,27 @@ pub(super) fn assert_rational_zero(
         .into_iter()
         .enumerate()
     {
-        // Close Dirac chains symbolically before finite component execution.
-        // The shared spin-algebra owner protects scalar products and leaves
-        // graph numerator products factorized, avoiding large matrix-entry
-        // circuits for a closed quark trace. It performs no Taylor operation.
-        let source = NumeratorInterface::admit(numerator.clone(), None)?.try_into_indexed()?;
-        let reduced = crate::uv::approx::integrated::simplify(&source)?.simplify_algebra(
-            &AlgebraSettings {
-                color: Some(ColorSimplifySettings::default().with_cof_dimension_invariants()),
-                ..Default::default()
-            },
-        )?;
+        // The finite oracle uses repeated-pair reduction for open spinors to
+        // retain compact words. Closed coefficients keep canonical trace
+        // reduction. The existing typed color pass owns both requested families;
+        // finite component execution below supplies the remaining contractions.
+        let source = NumeratorInterface::admit(numerator.clone(), None)?;
+        let open_spinor = source
+            .structure()
+            .canonical()
+            .external_structure_iter()
+            .any(|slot| slot.rep_name() == Bispinor {}.into());
+        let gamma_settings = if open_spinor {
+            GammaSimplifySettings::repeated_pairs()
+        } else {
+            GammaSimplifySettings::canonical()
+        };
+        let reduced = source.simplify_algebra(&AlgebraSettings {
+            gamma: Some(gamma_settings),
+            color: Some(ColorSimplifySettings::default().with_cof_dimension_invariants()),
+            epsilon: true,
+            ..Default::default()
+        })?;
         let reduced = NumeratorInterface::export(&reduced).0;
         let certificate = numerators.canonicalize(&reduced.undo_dots::<Aind>()?)?;
         let is_zero = certificate.is_zero;
@@ -343,23 +358,67 @@ fn symbolic_spin_reduction_preserves_os_phase_order_and_scalar_factors() -> Resu
     let (graph, current, root) = fixture(false)?;
     let (_, _, numerator) = one_loop_reference(&graph, &current, &root)?;
     let spectator = parse_lit!((spin_a + spin_b) * (spin_c + spin_d) ^ 11);
+    let cooking = CookSettings::indices().with_mode(CookMode::ReversibleEncoding);
     let mut tensors = NumeratorJetCache::default();
     for original in [numerator.clone(), gamma_zero_at_port(&graph, &numerator, 1)] {
+        for gamma_settings in [
+            GammaSimplifySettings::canonical(),
+            GammaSimplifySettings::repeated_pairs(),
+        ] {
+            // This is the same typed admission used by the finite oracle, with
+            // finite component execution as the independent spin-matrix check.
+            let reduced = SymbolicTensor::infer(cooking.try_cook(original.as_view())?)?
+                .simplify_algebra(&AlgebraSettings {
+                    gamma: Some(gamma_settings),
+                    epsilon: true,
+                    ..Default::default()
+                })?;
+            let reduced = cooking.uncook(reduced.expression().as_view());
+            assert!(
+                tensors
+                    .canonicalize(&(&original - &reduced).undo_dots::<Aind>()?)?
+                    .is_zero,
+                "symbolic spin reduction must preserve the exact QCD phase and ordered gamma0 insertion"
+            );
+            let factored =
+                SymbolicTensor::infer(cooking.try_cook((&spectator * &original).as_view())?)?
+                    .simplify_algebra(&AlgebraSettings {
+                        gamma: Some(gamma_settings),
+                        epsilon: true,
+                        ..Default::default()
+                    })?;
+            assert_eq!(
+                cooking.uncook(factored.expression().as_view()),
+                &spectator * &reduced
+            );
+            let momentum =
+                |edge| function!(GS.emr_mom, edge, Minkowski {}.new_rep(4).to_symbolic([]));
+            let scalar_product = dot(&momentum(2), &momentum(0));
+            for power in [2, 3] {
+                assert_rational_zero(
+                    "finite open-spinor proof preserves powered dots and ordered gamma0",
+                    &graph,
+                    &current,
+                    &(&spectator * scalar_product.pow(power) * (&original - &reduced)),
+                )?;
+            }
+        }
+        // The production analytic boundary retains its canonical policy.
         let source = NumeratorInterface::admit(original.clone(), None)?.try_into_indexed()?;
-        let reduced = crate::uv::approx::integrated::simplify(&source)?;
-        let reduced_source = NumeratorInterface::export(&reduced).0;
-        // This comparison deliberately uses the original finite component
-        // engine directly, without the symbolic reduction under test.
+        let analytic = crate::uv::approx::integrated::simplify(&source)?;
+        let analytic = NumeratorInterface::export(&analytic).0;
         assert!(
             tensors
-                .canonicalize(&(&original - &reduced_source).undo_dots::<Aind>()?)?
-                .is_zero,
-            "symbolic spin reduction must preserve the exact QCD phase and ordered gamma0 insertion",
+                .canonicalize(&(&original - &analytic).undo_dots::<Aind>()?)?
+                .is_zero
         );
-        let factored_source =
-            NumeratorInterface::admit(&spectator * &original, None)?.try_into_indexed()?;
-        let factored = crate::uv::approx::integrated::simplify(&factored_source)?;
-        assert_eq!(factored.expression(), &(&spectator * reduced.expression()));
+        assert_eq!(
+            NumeratorInterface::export(&crate::uv::approx::integrated::simplify(
+                &NumeratorInterface::admit(&spectator * &original, None)?.try_into_indexed()?,
+            )?)
+            .0,
+            &spectator * analytic
+        );
     }
     Ok(())
 }

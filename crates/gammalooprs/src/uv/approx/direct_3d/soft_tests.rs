@@ -1453,7 +1453,7 @@ fn production_ir_dispatch_composes_h_for_d0_d1_d2() -> Result<()> {
             Integrands::from_iter([(crate::cff::CutCFFIndex::new_all_none(), integrand.clone())]);
         let input = DirectResidueBranches::from_keyed([(key.clone(), input)])?;
         // Resolve the retained definitions only for this scalar oracle.
-        let ir_result = apply_taylor(&ctx, orientation, &ir, &ir, None, ir.lmb(), &input)?
+        let ir_result = apply_taylor(&ctx, orientation, &ir, &ir, None, ir.lmb(), &input, None)?
             .materialize(false)?
             .resolved()?;
         let ir_step = Local3DLoopRescaling::FullSubgraph.projection_step(
@@ -1511,6 +1511,7 @@ fn production_ir_dispatch_composes_h_for_d0_d1_d2() -> Result<()> {
             None,
             ordinary.lmb(),
             &input,
+            None,
         )?
         .materialize(false)?
         .resolved()?;
@@ -1780,7 +1781,7 @@ fn one_orientation_ir_dispatch_stores_one_combined_h_atom_per_residue() -> Resul
 }
 
 #[test]
-fn local_3d_os_dispatch_returns_projected_route_error() {
+fn local_3d_os_dispatch_rejects_a_nonfermionic_component() {
     test_initialise().unwrap();
     let mut graph = scalar_two_point_graph();
     let mut current = two_point_node(&graph, 1);
@@ -1804,8 +1805,7 @@ fn local_3d_os_dispatch_returns_projected_route_error() {
             &current,
             &given,
         )
-        .expect_err("the unsupported direct OS route must return a configuration error");
+        .expect_err("a scalar component must not acquire a fermion OS projector");
     let message = error.to_string();
-    assert!(message.contains("local_uv_cts_from_expanded_4d_integrands=true"));
-    assert!(message.contains("explicit_orientation_sum_only=true"));
+    assert!(message.contains("OS requires a quark two-point component"));
 }

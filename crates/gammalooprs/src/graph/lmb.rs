@@ -212,7 +212,8 @@ pub trait LMBext {
     ///
     /// This uses `Q3` for both the matched pattern and the wrapped loop
     /// contribution, preserving the represented or indexed Minkowski structure
-    /// on every routed basis vector. Explicit components use `Q(edge,cind(i))`.
+    /// on every routed basis vector. Also route explicit spatial components
+    /// `Q(edge,cind(1..3))`; `Q(edge,cind(0))` retains its residue assignment.
     fn uv_spatial_wrapped_replacement<'a, S: SubSetLike, I>(
         &self,
         subgraph: &S,
@@ -222,7 +223,7 @@ pub trait LMBext {
     where
         &'a I: Into<AtomOrView<'a>>,
     {
-        self.replacement_impl(
+        let mut replacements = self.replacement_impl(
             |e, a, b| {
                 Replacement::new(
                     FunctionBuilder::new(GS.emr_vec)
@@ -250,7 +251,15 @@ pub trait LMBext {
             rep_args,
             HedgePair::is_paired,
             true,
-        )
+        );
+        for component in 1..=3 {
+            replacements.extend(self.uv_wrapped_replacement::<S, Atom>(
+                subgraph,
+                lmb,
+                &[GS.cind(component)],
+            ));
+        }
+        replacements
     }
 
     /// Replace `EMRmom(edge, ..)` by the explicit loop-plus-external momentum
