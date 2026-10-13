@@ -393,7 +393,6 @@ pub fn evaluate_expression_with_matad(
     if direct_masters_substitution {
         // Expanding here is important to improve efficiency and avoid symbolica bugs with floating point coefficients
         integral = integral.expand();
-        integral = matad.substitute_poly_gamma(integral.as_view()).unwrap();
         integral = matad
             .substitute_additional_constants(integral.as_view())
             .unwrap();
@@ -402,7 +401,6 @@ pub fn evaluate_expression_with_matad(
         // Expanding here is important to improve efficiency and avoid symbolica bugs with floating point coefficients
         integral = integral.expand();
         integral = matad.substitute_hpls(integral.as_view()).unwrap();
-        integral = matad.substitute_poly_gamma(integral.as_view()).unwrap();
         integral = matad
             .substitute_additional_constants(integral.as_view())
             .unwrap();

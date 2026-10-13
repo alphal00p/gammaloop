@@ -9,9 +9,7 @@ use symbolica::atom::{Atom, AtomCore, Symbol};
 use symbolica::domains::rational::Rational;
 use symbolica::function;
 
-use crate::fmft_numerics::{
-    ADDITIONAL_CONSTANTS, MASTERS_NUMERIC_SUBSTITUTIONS, POLY_GAMMA_SUBSTITUTIONS,
-};
+use crate::fmft_numerics::{ADDITIONAL_CONSTANTS, MASTERS_NUMERIC_SUBSTITUTIONS};
 use crate::master_precision::MasterPrecisionWarnings;
 use crate::symbols::S;
 use crate::utils::vakint_macros::{vk_parse, vk_symbol};
@@ -105,7 +103,6 @@ impl FMFT {
                 );
                 evaluated_integral = self.substitute_masters(evaluated_integral.as_view())?;
                 evaluated_integral = evaluated_integral.expand();
-                evaluated_integral = self.substitute_poly_gamma(evaluated_integral.as_view())?;
                 evaluated_integral =
                     self.substitute_additional_constants(evaluated_integral.as_view())?;
                 // Sanity check, including tails inside the numerical tables.
@@ -161,11 +158,6 @@ impl FMFT {
         let substitutions = MASTERS_NUMERIC_SUBSTITUTIONS
             .iter()
             .map(|(source, (target, condition))| (source, target, Some(condition)))
-            .chain(
-                POLY_GAMMA_SUBSTITUTIONS
-                    .iter()
-                    .map(|(source, target)| (source, target, None)),
-            )
             .chain(
                 ADDITIONAL_CONSTANTS
                     .iter()

@@ -70,7 +70,9 @@ The main value entry points are:
 - `matad::MASTERS_EXPANSION`: symbolic epsilon expansions and explicit unknown tails.
 - `matad::MASTERS_SUBSTITUTION`: analytic constants, including harmonic polylogarithms.
 - `matad_numerics::DIRECT_SUBSTITUTIONS`: high-precision direct numerical series.
-- `matad_numerics::{HPL_SUBSTITUTIONS, POLY_GAMMA_SUBSTITUTIONS, ADDITIONAL_CONSTANTS}`.
+- `matad_numerics::{HPL_SUBSTITUTIONS, ADDITIONAL_CONSTANTS}`: finite stored period data.
+- Symbolica's native `gamma`, `polygamma`, and `euler_gamma`: exact normalization and
+  numerical evaluation at the requested precision, without fixed polygamma tables.
 - [alphaloop_numerics.rs](src/alphaloop_numerics.rs): the alternative backend's data;
   retain its conventions and comparisons when extending shared constants.
 

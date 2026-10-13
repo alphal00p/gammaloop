@@ -4275,6 +4275,17 @@ impl NumericalEvaluationResult {
 }
 
 impl Vakint {
+    /// Unify the constants left by FORM's gamma expansions with the native CAS.
+    /// In particular, polygamma(0, 1) normalizes to native -euler_gamma, so the
+    /// FORM spelling must become that same exact constant before cancellation.
+    pub(crate) fn normalize_gamma_functions(expression: AtomView) -> Atom {
+        expression
+            .replace(vk_parse!("Gamma(x_)").unwrap().to_pattern())
+            .with(function!(symbolica::transcendental::gamma(), Atom::var(S.x_)).to_pattern())
+            .replace(vk_parse!("EulerGamma").unwrap().to_pattern())
+            .with(Atom::var(symbolica::transcendental::euler_gamma()).to_pattern())
+    }
+
     pub fn initialize_vakint_symbols() {
         // Force initialization of symbolica symbols with proper attributes
         LazyLock::force(&S);
@@ -5924,12 +5935,19 @@ Evaluated (n_loops=1, mu_r=1) :
 
     pub fn convert_to_dot_notation(atom: AtomView) -> Atom {
         let mut old_expr = atom.to_owned().expand();
+        // Native CAS functions are scalar even when they have two integer
+        // arguments: polygamma(1, 3)^2 is not a squared indexed vector.
+        let vector_head_condition = WildcardRestriction::Filter(Box::new(|matched| {
+            matches!(matched, Match::FunctionName(symbol)
+                if symbol.get_namespace() != "symbolica"
+                    || !symbolica::state::State::is_builtin(symbol.get_stripped_name()))
+        }));
 
         loop {
             let mut expr = old_expr
                 .replace(vk_parse!("v_(id_,idx_)^n_").unwrap().to_pattern())
                 .when(
-                    &(Condition::from((vk_symbol!("v_"), symbol_condition()))
+                    &(Condition::from((vk_symbol!("v_"), vector_head_condition.clone()))
                         & Condition::from((vk_symbol!("id_"), number_condition()))
                         & Condition::from((vk_symbol!("n_"), even_condition()))),
                 )
@@ -5947,8 +5965,8 @@ Evaluated (n_loops=1, mu_r=1) :
                         .to_pattern(),
                 )
                 .when(
-                    &(Condition::from((vk_symbol!("v1_"), symbol_condition()))
-                        & Condition::from((vk_symbol!("v2_"), symbol_condition()))
+                    &(Condition::from((vk_symbol!("v1_"), vector_head_condition.clone()))
+                        & Condition::from((vk_symbol!("v2_"), vector_head_condition.clone()))
                         & Condition::from((vk_symbol!("id1_"), number_condition()))
                         & Condition::from((vk_symbol!("id2_"), number_condition()))),
                 )
@@ -5962,8 +5980,8 @@ Evaluated (n_loops=1, mu_r=1) :
                         .to_pattern(),
                 )
                 .when(
-                    &(Condition::from((vk_symbol!("v1_"), symbol_condition()))
-                        & Condition::from((vk_symbol!("v2_"), symbol_condition()))
+                    &(Condition::from((vk_symbol!("v1_"), vector_head_condition.clone()))
+                        & Condition::from((vk_symbol!("v2_"), vector_head_condition.clone()))
                         & Condition::from((vk_symbol!("id1_"), number_condition()))
                         & Condition::from((vk_symbol!("id2_"), number_condition()))),
                 )

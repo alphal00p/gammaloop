@@ -8,7 +8,7 @@ use crate::utils::{self, set_precision_in_polynomial_atom, undress_vakint_symbol
 use crate::utils::{get_full_name, set_precision_in_float_atom};
 use crate::{
     gt_condition,
-    matad_numerics::{ADDITIONAL_CONSTANTS, HPL_SUBSTITUTIONS, POLY_GAMMA_SUBSTITUTIONS},
+    matad_numerics::{ADDITIONAL_CONSTANTS, HPL_SUBSTITUTIONS},
 };
 use colored::Colorize;
 use log::debug;
@@ -19,7 +19,7 @@ use symbolica::id::Replacement;
 use symbolica::printer::{AtomPrinter, PrintOptions};
 use symbolica::{
     atom::{Atom, AtomCore, AtomView},
-    domains::{integer::Integer, rational::Rational},
+    domains::rational::Rational,
     function,
     id::Condition,
 };
@@ -50,9 +50,9 @@ pub static MASTERS_EXPANSION: LazyLock<HashMap<Atom, (Atom, symbolica::id::Condi
         ( vk_parse!("Gamma(a_ + ep)").unwrap(), ( vk_parse!("GammaArgs(a_,1)").unwrap(), Condition::default() ) ),
         ( vk_parse!("Gamma(a_ - ep)").unwrap(), ( vk_parse!("GammaArgs(a_,-1)").unwrap(), Condition::default() ) ),
         ( vk_parse!("Gamma(a_ + b_*ep)").unwrap(), ( vk_parse!("GammaArgs(a_,b_)").unwrap(), Condition::default() ) ),
-        ( vk_parse!("GammaArgs(-1,b_)").unwrap(), ( vk_parse!("-1 + EulerGamma - 1/(ep*(b_)) + ep*(-(b_) + EulerGamma*(b_) - ((EulerGamma^2 + 𝜋^2/6)*(b_))/2) + ep^2*(-(b_)^2 + EulerGamma*(b_)^2 - ((EulerGamma^2 + 𝜋^2/6)*(b_)^2)/2 - ((b_)^2*(-EulerGamma^3 - (EulerGamma*𝜋^2)/2 + PolyGamma(2, 1)))/6) + ep^3*(-(b_)^3 + EulerGamma*(b_)^3 - ((EulerGamma^2 + 𝜋^2/6)*(b_)^3)/2 - ((b_)^3*(-EulerGamma^3 - (EulerGamma*𝜋^2)/2 + PolyGamma(2, 1)))/6 - ((b_)^3*(EulerGamma^4 + EulerGamma^2*𝜋^2 + (3*𝜋^4)/20 - 4*EulerGamma*PolyGamma(2, 1)))/24) + ep^4*(-(b_)^4 + EulerGamma*(b_)^4 - ((EulerGamma^2 + 𝜋^2/6)*(b_)^4)/2 - ((b_)^4*(-EulerGamma^3 - (EulerGamma*𝜋^2)/2 + PolyGamma(2, 1)))/6 - ((b_)^4*(EulerGamma^4 + EulerGamma^2*𝜋^2 + (3*𝜋^4)/20 - 4*EulerGamma*PolyGamma(2, 1)))/24 - ((b_)^4*(-EulerGamma^5 - (5*EulerGamma^3*𝜋^2)/3 - (3*EulerGamma*𝜋^4)/4 + 10*EulerGamma^2*PolyGamma(2, 1) + (5*𝜋^2*PolyGamma(2, 1))/3 + PolyGamma(4, 1)))/120) + ep^5*(-(b_)^5 + EulerGamma*(b_)^5 - ((EulerGamma^2 + 𝜋^2/6)*(b_)^5)/2 - ((b_)^5*(-EulerGamma^3 - (EulerGamma*𝜋^2)/2 + PolyGamma(2, 1)))/6 - ((b_)^5*(EulerGamma^4 + EulerGamma^2*𝜋^2 + (3*𝜋^4)/20 - 4*EulerGamma*PolyGamma(2, 1)))/24 - ((b_)^5*(-EulerGamma^5 - (5*EulerGamma^3*𝜋^2)/3 - (3*EulerGamma*𝜋^4)/4 + 10*EulerGamma^2*PolyGamma(2, 1) + (5*𝜋^2*PolyGamma(2, 1))/3 + PolyGamma(4, 1)))/120 - ((b_)^5*(EulerGamma^6 + (5*EulerGamma^4*𝜋^2)/2 + (9*EulerGamma^2*𝜋^4)/4 + (61*𝜋^6)/168 - 20*EulerGamma^3*PolyGamma(2, 1) - 10*EulerGamma*𝜋^2*PolyGamma(2, 1) + 10*PolyGamma(2, 1)^2 - 6*EulerGamma*PolyGamma(4, 1)))/720) + ep^6 * Oep(6, I_Gamma)").unwrap(), Condition::default() ) ),
-        ( vk_parse!("GammaArgs(0,b_)").unwrap(), ( vk_parse!("-EulerGamma + 1/(ep*(b_)) + (ep*(6*EulerGamma^2 + 𝜋^2)*(b_))/12 + (ep^2*(b_)^2*(-EulerGamma^3 - (EulerGamma*𝜋^2)/2 + PolyGamma(2, 1)))/6 + (ep^3*(b_)^3*(EulerGamma^4 + EulerGamma^2*𝜋^2 + (3*𝜋^4)/20 - 4*EulerGamma*PolyGamma(2, 1)))/24 + (ep^4*(b_)^4*(-EulerGamma^5 - (5*EulerGamma^3*𝜋^2)/3 - (3*EulerGamma*𝜋^4)/4 + 10*EulerGamma^2*PolyGamma(2, 1) + (5*𝜋^2*PolyGamma(2, 1))/3 + PolyGamma(4, 1)))/120 + (ep^5*(b_)^5*(EulerGamma^6 + (5*EulerGamma^4*𝜋^2)/2 + (9*EulerGamma^2*𝜋^4)/4 + (61*𝜋^6)/168 - 20*EulerGamma^3*PolyGamma(2, 1) - 10*EulerGamma*𝜋^2*PolyGamma(2, 1) + 10*PolyGamma(2, 1)^2 - 6*EulerGamma*PolyGamma(4, 1)))/720 + ep^6 * Oep(6, I_Gamma)").unwrap(), Condition::default() ) ),
-        ( vk_parse!("GammaArgs(a_,b_)").unwrap(), ( vk_parse!("Gamma(a_) + ep*Gamma(a_)*(b_)*PolyGamma(0, a_) + (ep^2*(b_)^2*(Gamma(a_)*PolyGamma(0, a_)^2 + Gamma(a_)*PolyGamma(1, a_)))/2 + (ep^3*(b_)^3*(Gamma(a_)*PolyGamma(0, a_)^3 + 3*Gamma(a_)*PolyGamma(0, a_)*PolyGamma(1, a_) + Gamma(a_)*PolyGamma(2, a_)))/6 + (ep^4*(b_)^4*(Gamma(a_)*PolyGamma(0, a_)^4 + 6*Gamma(a_)*PolyGamma(0, a_)^2*PolyGamma(1, a_) + 3*Gamma(a_)*PolyGamma(1, a_)^2 + 4*Gamma(a_)*PolyGamma(0, a_)*PolyGamma(2, a_) + Gamma(a_)*PolyGamma(3, a_)))/24 + (ep^5*(b_)^5*(Gamma(a_)*PolyGamma(0, a_)^5 + 10*Gamma(a_)*PolyGamma(0, a_)^3*PolyGamma(1, a_) + 15*Gamma(a_)*PolyGamma(0, a_)*PolyGamma(1, a_)^2 + 10*Gamma(a_)*PolyGamma(0, a_)^2*PolyGamma(2, a_) + 10*Gamma(a_)*PolyGamma(1, a_)*PolyGamma(2, a_) + 5*Gamma(a_)*PolyGamma(0, a_)*PolyGamma(3, a_) + Gamma(a_)*PolyGamma(4, a_)))/120 + ep^6*Oep(6, I_Gamma)").unwrap(), Condition::from((S.a_, gt_condition(0))) ) ),
+        ( vk_parse!("GammaArgs(-1,b_)").unwrap(), ( vk_parse!("-1 + EulerGamma - 1/(ep*(b_)) + ep*(-(b_) + EulerGamma*(b_) - ((EulerGamma^2 + 𝜋^2/6)*(b_))/2) + ep^2*(-(b_)^2 + EulerGamma*(b_)^2 - ((EulerGamma^2 + 𝜋^2/6)*(b_)^2)/2 - ((b_)^2*(-EulerGamma^3 - (EulerGamma*𝜋^2)/2 + symbolica::polygamma(2, 1)))/6) + ep^3*(-(b_)^3 + EulerGamma*(b_)^3 - ((EulerGamma^2 + 𝜋^2/6)*(b_)^3)/2 - ((b_)^3*(-EulerGamma^3 - (EulerGamma*𝜋^2)/2 + symbolica::polygamma(2, 1)))/6 - ((b_)^3*(EulerGamma^4 + EulerGamma^2*𝜋^2 + (3*𝜋^4)/20 - 4*EulerGamma*symbolica::polygamma(2, 1)))/24) + ep^4*(-(b_)^4 + EulerGamma*(b_)^4 - ((EulerGamma^2 + 𝜋^2/6)*(b_)^4)/2 - ((b_)^4*(-EulerGamma^3 - (EulerGamma*𝜋^2)/2 + symbolica::polygamma(2, 1)))/6 - ((b_)^4*(EulerGamma^4 + EulerGamma^2*𝜋^2 + (3*𝜋^4)/20 - 4*EulerGamma*symbolica::polygamma(2, 1)))/24 - ((b_)^4*(-EulerGamma^5 - (5*EulerGamma^3*𝜋^2)/3 - (3*EulerGamma*𝜋^4)/4 + 10*EulerGamma^2*symbolica::polygamma(2, 1) + (5*𝜋^2*symbolica::polygamma(2, 1))/3 + symbolica::polygamma(4, 1)))/120) + ep^5*(-(b_)^5 + EulerGamma*(b_)^5 - ((EulerGamma^2 + 𝜋^2/6)*(b_)^5)/2 - ((b_)^5*(-EulerGamma^3 - (EulerGamma*𝜋^2)/2 + symbolica::polygamma(2, 1)))/6 - ((b_)^5*(EulerGamma^4 + EulerGamma^2*𝜋^2 + (3*𝜋^4)/20 - 4*EulerGamma*symbolica::polygamma(2, 1)))/24 - ((b_)^5*(-EulerGamma^5 - (5*EulerGamma^3*𝜋^2)/3 - (3*EulerGamma*𝜋^4)/4 + 10*EulerGamma^2*symbolica::polygamma(2, 1) + (5*𝜋^2*symbolica::polygamma(2, 1))/3 + symbolica::polygamma(4, 1)))/120 - ((b_)^5*(EulerGamma^6 + (5*EulerGamma^4*𝜋^2)/2 + (9*EulerGamma^2*𝜋^4)/4 + (61*𝜋^6)/168 - 20*EulerGamma^3*symbolica::polygamma(2, 1) - 10*EulerGamma*𝜋^2*symbolica::polygamma(2, 1) + 10*symbolica::polygamma(2, 1)^2 - 6*EulerGamma*symbolica::polygamma(4, 1)))/720) + ep^6 * Oep(6, I_Gamma)").unwrap(), Condition::default() ) ),
+        ( vk_parse!("GammaArgs(0,b_)").unwrap(), ( vk_parse!("-EulerGamma + 1/(ep*(b_)) + (ep*(6*EulerGamma^2 + 𝜋^2)*(b_))/12 + (ep^2*(b_)^2*(-EulerGamma^3 - (EulerGamma*𝜋^2)/2 + symbolica::polygamma(2, 1)))/6 + (ep^3*(b_)^3*(EulerGamma^4 + EulerGamma^2*𝜋^2 + (3*𝜋^4)/20 - 4*EulerGamma*symbolica::polygamma(2, 1)))/24 + (ep^4*(b_)^4*(-EulerGamma^5 - (5*EulerGamma^3*𝜋^2)/3 - (3*EulerGamma*𝜋^4)/4 + 10*EulerGamma^2*symbolica::polygamma(2, 1) + (5*𝜋^2*symbolica::polygamma(2, 1))/3 + symbolica::polygamma(4, 1)))/120 + (ep^5*(b_)^5*(EulerGamma^6 + (5*EulerGamma^4*𝜋^2)/2 + (9*EulerGamma^2*𝜋^4)/4 + (61*𝜋^6)/168 - 20*EulerGamma^3*symbolica::polygamma(2, 1) - 10*EulerGamma*𝜋^2*symbolica::polygamma(2, 1) + 10*symbolica::polygamma(2, 1)^2 - 6*EulerGamma*symbolica::polygamma(4, 1)))/720 + ep^6 * Oep(6, I_Gamma)").unwrap(), Condition::default() ) ),
+        ( vk_parse!("GammaArgs(a_,b_)").unwrap(), ( vk_parse!("Gamma(a_) + ep*Gamma(a_)*(b_)*symbolica::polygamma(0, a_) + (ep^2*(b_)^2*(Gamma(a_)*symbolica::polygamma(0, a_)^2 + Gamma(a_)*symbolica::polygamma(1, a_)))/2 + (ep^3*(b_)^3*(Gamma(a_)*symbolica::polygamma(0, a_)^3 + 3*Gamma(a_)*symbolica::polygamma(0, a_)*symbolica::polygamma(1, a_) + Gamma(a_)*symbolica::polygamma(2, a_)))/6 + (ep^4*(b_)^4*(Gamma(a_)*symbolica::polygamma(0, a_)^4 + 6*Gamma(a_)*symbolica::polygamma(0, a_)^2*symbolica::polygamma(1, a_) + 3*Gamma(a_)*symbolica::polygamma(1, a_)^2 + 4*Gamma(a_)*symbolica::polygamma(0, a_)*symbolica::polygamma(2, a_) + Gamma(a_)*symbolica::polygamma(3, a_)))/24 + (ep^5*(b_)^5*(Gamma(a_)*symbolica::polygamma(0, a_)^5 + 10*Gamma(a_)*symbolica::polygamma(0, a_)^3*symbolica::polygamma(1, a_) + 15*Gamma(a_)*symbolica::polygamma(0, a_)*symbolica::polygamma(1, a_)^2 + 10*Gamma(a_)*symbolica::polygamma(0, a_)^2*symbolica::polygamma(2, a_) + 10*Gamma(a_)*symbolica::polygamma(1, a_)*symbolica::polygamma(2, a_) + 5*Gamma(a_)*symbolica::polygamma(0, a_)*symbolica::polygamma(3, a_) + Gamma(a_)*symbolica::polygamma(4, a_)))/120 + ep^6*Oep(6, I_Gamma)").unwrap(), Condition::from((S.a_, gt_condition(0))) ) ),
     ])
 });
 
@@ -208,7 +208,7 @@ impl MATAD {
         }));
 
         // println!("DONE! {}", r);
-        Ok(r)
+        Ok(Vakint::normalize_gamma_functions(r.as_view()))
     }
 
     pub fn expand_matad_masters(&self, result: AtomView) -> Result<Atom, VakintError> {
@@ -239,7 +239,7 @@ impl MATAD {
                 self.settings.epsilon_symbol
             )));
         }
-        Ok(r)
+        Ok(Vakint::normalize_gamma_functions(r.as_view()))
     }
 
     pub fn substitute_masters(&self, result: AtomView) -> Result<Atom, VakintError> {
@@ -252,57 +252,6 @@ impl MATAD {
             res
         }));
 
-        Ok(r)
-    }
-
-    pub fn substitute_poly_gamma(&self, result: AtomView) -> Result<Atom, VakintError> {
-        MasterPrecisionWarnings::new(&self.settings).check_substitutions(
-            result,
-            POLY_GAMMA_SUBSTITUTIONS
-                .iter()
-                .map(|(source, target)| (source, target, None)),
-        );
-        let processed_constants = POLY_GAMMA_SUBSTITUTIONS
-            .iter()
-            .map(|(src, trgt)| {
-                (
-                    src,
-                    set_precision_in_float_atom(trgt.as_view(), &self.settings),
-                )
-            })
-            .collect::<Vec<_>>();
-        let mut r = result.to_owned();
-
-        r = r
-            .replace(vk_parse!("Gamma(n_)").unwrap().to_pattern())
-            .when(Condition::from((S.n_, gt_condition(0))))
-            .with_map(move |match_in| {
-                let n = get_integer_from_atom(match_in.get(S.n_).unwrap().to_atom().as_view())
-                    .unwrap() as u32;
-                Atom::num(Integer::factorial(n - 1))
-            });
-        r.repeat_map(Box::new(move |av: AtomView| {
-            let mut res = av.to_owned();
-            for (src, trgt) in processed_constants.iter() {
-                res = res.replace(src.to_pattern()).with(trgt.to_pattern());
-            }
-            res
-        }));
-
-        if let Some(m) = r
-            .pattern_match(
-                &vk_parse!("PolyGamma(x_,y_)").unwrap().to_pattern(),
-                None,
-                None,
-            )
-            .next()
-        {
-            return Err(VakintError::MATADError(format!(
-                "MATAD result contains a PolyGamma function whose numerical evaluation is not implemented in vakint: PolyGamma({},{})",
-                m.get(&S.x_).unwrap(),
-                m.get(&S.y_).unwrap()
-            )));
-        }
         Ok(r)
     }
 
@@ -470,12 +419,8 @@ impl MATAD {
                 )));
             }
             if options.direct_numerical_substition {
-                debug!(
-                    "{}: Substituting PolyGamma and period constants...",
-                    "MATAD".green()
-                );
+                debug!("{}: Substituting period constants...", "MATAD".green());
                 evaluated_integral = evaluated_integral.expand();
-                evaluated_integral = self.substitute_poly_gamma(evaluated_integral.as_view())?;
                 evaluated_integral =
                     self.substitute_additional_constants(evaluated_integral.as_view())?;
             } else if options.susbstitute_masters {
@@ -486,8 +431,6 @@ impl MATAD {
                     evaluated_integral = evaluated_integral.expand();
                     debug!("{}: Substituting HPLs with numerics ...", "MATAD".green());
                     evaluated_integral = self.substitute_hpls(evaluated_integral.as_view())?;
-                    evaluated_integral =
-                        self.substitute_poly_gamma(evaluated_integral.as_view())?;
                     evaluated_integral =
                         self.substitute_additional_constants(evaluated_integral.as_view())?;
                 }

@@ -4,14 +4,11 @@ mod finalize;
 #[cfg(test)]
 mod routing_tests;
 
+use crate::fmft_numerics::ADDITIONAL_CONSTANTS;
 use crate::fmft_numerics::{MASTERS_EXPANSION, MASTERS_NUMERIC_SUBSTITUTIONS};
 use crate::utils::vakint_macros::{vk_parse, vk_symbol};
 use crate::utils::{self, set_precision_in_polynomial_atom, undress_vakint_symbols};
 use crate::utils::{get_full_name, set_precision_in_float_atom};
-use crate::{
-    fmft_numerics::{ADDITIONAL_CONSTANTS, POLY_GAMMA_SUBSTITUTIONS},
-    gt_condition,
-};
 use colored::Colorize;
 use log::debug;
 use regex::Regex;
@@ -19,7 +16,6 @@ use string_template_plus::{Render, RenderOptions, Template};
 use symbolica::printer::{AtomPrinter, PrintOptions};
 use symbolica::{
     atom::{Atom, AtomCore, AtomView},
-    domains::integer::Integer,
     function,
     id::Condition,
 };
@@ -123,7 +119,7 @@ impl FMFT {
                 self.settings.epsilon_symbol
             )));
         }
-        Ok(r)
+        Ok(Vakint::normalize_gamma_functions(r.as_view()))
     }
 
     pub fn substitute_masters(&self, result: AtomView) -> Result<Atom, VakintError> {
@@ -158,48 +154,7 @@ impl FMFT {
             res
         }));
         // println!("DONE! {}", r);
-        Ok(r)
-    }
-
-    pub fn substitute_poly_gamma(&self, result: AtomView) -> Result<Atom, VakintError> {
-        let processed_constants = POLY_GAMMA_SUBSTITUTIONS
-            .iter()
-            .map(|(src, trgt)| {
-                (
-                    src,
-                    set_precision_in_float_atom(trgt.as_view(), &self.settings),
-                )
-            })
-            .collect::<Vec<_>>();
-        let mut r = result.to_owned();
-
-        r = r
-            .replace(vk_parse!("Gamma(n_)").unwrap().to_pattern())
-            .when(Condition::from((S.n_, gt_condition(0))))
-            .with_map(move |match_in| {
-                let n = get_integer_from_atom(match_in.get(S.n_).unwrap().to_atom().as_view())
-                    .unwrap() as u32;
-                Atom::num(Integer::factorial(n - 1))
-            });
-        r.repeat_map(Box::new(move |av: AtomView| {
-            let mut res = av.to_owned();
-            for (src, trgt) in processed_constants.iter() {
-                res = res.replace(src.to_pattern()).with(trgt.to_pattern());
-            }
-            res
-        }));
-
-        if let Some(m) = r
-            .pattern_match(&vk_parse!("PolyGamma(x_,y_)").unwrap().into(), None, None)
-            .next()
-        {
-            return Err(VakintError::FMFTError(format!(
-                "FMFT result contains a PolyGamma function whose numerical evaluation is not implemented in vakint: PolyGamma({},{})",
-                m.get(&S.x_).unwrap(),
-                m.get(&S.y_).unwrap()
-            )));
-        }
-        Ok(r)
+        Ok(Vakint::normalize_gamma_functions(r.as_view()))
     }
 
     pub fn substitute_additional_constants(&self, result: AtomView) -> Result<Atom, VakintError> {
