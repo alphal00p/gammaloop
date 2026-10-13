@@ -217,9 +217,11 @@ impl NumeratorJetCache {
             }
             normalized = next;
         }
-        normalized.replace_multiple(aliases.iter().map(|(source, alias)| {
-            Replacement::new(alias.to_pattern(), source.to_pattern())
-        }))
+        normalized.replace_multiple(
+            aliases
+                .iter()
+                .map(|(source, alias)| Replacement::new(alias.to_pattern(), source.to_pattern())),
+        )
     }
 
     /// Test certificate by alternative common-factor groupings. Failure to
@@ -230,11 +232,7 @@ impl NumeratorJetCache {
         // function or compressed power as an indivisible factor. Other products and
         // opaque functions/powers stay intact; this never builds monomials of
         // a graph numerator or distributes all of its additive factors.
-        fn split(
-            atom: AtomView<'_>,
-            factor: &Atom,
-            remaining: &mut usize,
-        ) -> Option<(Atom, Atom)> {
+        fn split(atom: AtomView<'_>, factor: &Atom, remaining: &mut usize) -> Option<(Atom, Atom)> {
             *remaining = remaining.checked_sub(1)?;
             if atom == factor.as_view() {
                 return Some((Atom::one(), Atom::Zero));
@@ -257,11 +255,10 @@ impl NumeratorJetCache {
                         if coefficient.is_zero() && residual.as_view() == *term {
                             continue;
                         }
-                        let other = Atom::mul_many(
-                            terms.iter().enumerate().filter_map(|(position, term)| {
-                                (position != index).then_some(*term)
-                            }),
-                        );
+                        let other =
+                            Atom::mul_many(terms.iter().enumerate().filter_map(
+                                |(position, term)| (position != index).then_some(*term),
+                            ));
                         return Some((&other * coefficient, other * residual));
                     }
                     Some((Atom::Zero, atom.to_owned()))
@@ -286,9 +283,7 @@ impl NumeratorJetCache {
             // color and denominator-jet spectators throughout the search.
             if let AtomView::Mul(product) = atom.as_view() {
                 for factor in product.iter() {
-                    if matches!(factor, AtomView::Add(_))
-                        && search(factor.to_owned(), visited)
-                    {
+                    if matches!(factor, AtomView::Add(_)) && search(factor.to_owned(), visited) {
                         return true;
                     }
                 }
@@ -300,7 +295,10 @@ impl NumeratorJetCache {
                         product
                             .iter()
                             .filter(|factor| {
-                                matches!(factor, AtomView::Add(_) | AtomView::Fun(_) | AtomView::Pow(_))
+                                matches!(
+                                    factor,
+                                    AtomView::Add(_) | AtomView::Fun(_) | AtomView::Pow(_)
+                                )
                             })
                             .map(|factor| factor.to_owned()),
                     );
@@ -319,15 +317,13 @@ impl NumeratorJetCache {
                 }
                 let coefficient =
                     NumeratorJetCache::normalize_scalar_component(coefficient.as_view());
-                let residual =
-                    NumeratorJetCache::normalize_scalar_component(residual.as_view());
+                let residual = NumeratorJetCache::normalize_scalar_component(residual.as_view());
                 let candidate = if coefficient.is_zero() {
                     residual
                 } else {
                     factor * coefficient + residual
                 };
-                let candidate =
-                    NumeratorJetCache::normalize_scalar_component(candidate.as_view());
+                let candidate = NumeratorJetCache::normalize_scalar_component(candidate.as_view());
                 if candidate.as_view().get_byte_size() < atom.as_view().get_byte_size()
                     && search(candidate, visited)
                 {
@@ -352,9 +348,8 @@ impl NumeratorJetCache {
                 for (i, left) in terms.iter().enumerate() {
                     for (j, right) in terms.iter().enumerate().skip(i + 1) {
                         let original_pair = *left + *right;
-                        let pair = NumeratorJetCache::normalize_scalar_component(
-                            original_pair.as_view(),
-                        );
+                        let pair =
+                            NumeratorJetCache::normalize_scalar_component(original_pair.as_view());
                         if pair == original_pair {
                             continue;
                         }
@@ -372,9 +367,8 @@ impl NumeratorJetCache {
                                 **output = regrouped.clone();
                             }
                         });
-                        let candidate = NumeratorJetCache::normalize_scalar_component(
-                            candidate.as_view(),
-                        );
+                        let candidate =
+                            NumeratorJetCache::normalize_scalar_component(candidate.as_view());
                         if candidate.as_view().get_byte_size() < atom.as_view().get_byte_size()
                             && search(candidate, visited)
                         {
@@ -389,7 +383,18 @@ impl NumeratorJetCache {
     }
 
     fn contract(body: &Atom) -> Result<CanonicalTensor> {
+        let started = std::time::Instant::now();
+        crate::debug_tags!(#generation, #profile, #uv, #numerator, #summary;
+            stage = "numerator_certificate_parse_start",
+            input_bytes = body.as_view().get_byte_size(),
+            "Parsing the factorized numerator certificate"
+        );
         let mut network = body.parse_into_net()?;
+        crate::debug_tags!(#generation, #profile, #uv, #numerator, #summary;
+            stage = "numerator_certificate_parse_done",
+            elapsed_ms = started.elapsed().as_secs_f64() * 1000.0,
+            "Parsed the factorized numerator certificate"
+        );
         let slots = network.graph.dangling_indices();
         let mut capacity = 1usize;
         for slot in slots {
@@ -402,18 +407,42 @@ impl NumeratorJetCache {
         }
         // Only finite tensor execution: this closes sum boundaries without
         // distributing scalar spectators, powers, or the surrounding graph.
+        let started = std::time::Instant::now();
+        crate::debug_tags!(#generation, #profile, #uv, #numerator, #summary;
+            stage = "numerator_certificate_sum_boundaries_start",
+            external_capacity = capacity,
+            "Contracting ready numerator sum boundaries"
+        );
         network.graph.contract_ready_sum_boundaries();
+        crate::debug_tags!(#generation, #profile, #uv, #numerator, #summary;
+            stage = "numerator_certificate_sum_boundaries_done",
+            elapsed_ms = started.elapsed().as_secs_f64() * 1000.0,
+            "Contracted ready numerator sum boundaries"
+        );
+        let started = std::time::Instant::now();
+        crate::debug_tags!(#generation, #profile, #uv, #numerator, #summary;
+            stage = "numerator_certificate_execute_start",
+            strategy = "SequentialRef", external_capacity = capacity,
+            "Executing the finite numerator certificate network"
+        );
         network.execute::<SequentialRef, MinResultRank, _, _, _>(
             TENSORLIB.read().unwrap().deref(),
             FUN_LIB.deref(),
         )?;
+        crate::debug_tags!(#generation, #profile, #uv, #numerator, #summary;
+            stage = "numerator_certificate_execute_done",
+            strategy = "SequentialRef",
+            elapsed_ms = started.elapsed().as_secs_f64() * 1000.0,
+            "Executed the finite numerator certificate network"
+        );
         let tensor = match network.result_tensor(TENSORLIB.read().unwrap().deref())? {
             ExecutionResult::One => return Ok(CanonicalTensor::number(Atom::num(1))),
             ExecutionResult::Zero => return Ok(CanonicalTensor::number(Atom::Zero)),
             ExecutionResult::Val(tensor) => tensor.into_owned(),
         };
+        let tensor_size = tensor.size()?;
         ensure!(
-            tensor.size()? <= MAX_COMPONENTS,
+            tensor_size <= MAX_COMPONENTS,
             NumeratorJetFailure::Budget("result tensor components")
         );
         // Canonicalize the external coordinate order together with each data
@@ -431,6 +460,12 @@ impl NumeratorJetCache {
         let mut components = Vec::new();
         let mut bytes = slots.as_view().get_byte_size();
         let mut scalar_prefactor = Atom::num(1);
+        let started = std::time::Instant::now();
+        crate::debug_tags!(#generation, #profile, #uv, #numerator, #summary;
+            stage = "numerator_certificate_normalize_start",
+            tensor_size,
+            "Normalizing finite tensor certificate components"
+        );
         for (index, value) in tensor.iter_flat() {
             // Finite tensor execution can leave nested numeric signs and
             // rational weights, such as -(C*(-2*k)+C*(-2*(p-k)))+C*(-2*p).
@@ -463,6 +498,12 @@ impl NumeratorJetCache {
             );
             components.push((coordinate, value));
         }
+        crate::debug_tags!(#generation, #profile, #uv, #numerator, #summary;
+            stage = "numerator_certificate_normalize_done",
+            elapsed_ms = started.elapsed().as_secs_f64() * 1000.0,
+            nonzero_components = components.len(), component_bytes = bytes,
+            "Normalized finite tensor certificate components"
+        );
         if components.is_empty() {
             return Ok(CanonicalTensor::number(Atom::Zero));
         }
@@ -579,8 +620,8 @@ mod tests {
                 + (-2 * x + 2 * y) * (-x - y)
                 + (-2 * x - 2 * y) * (-z + w)
         );
-        let spectator = parse_lit!((a + b) * (c + d) * (a - b) ^ 11)
-            * idenso::color_cas!(2, idenso::cof!(3));
+        let spectator =
+            parse_lit!((a + b) * (c + d) * (a - b) ^ 11) * idenso::color_cas!(2, idenso::cof!(3));
         assert!(cache.canonicalize(&difference).unwrap().is_zero);
         assert!(
             cache
@@ -625,8 +666,7 @@ mod tests {
         let normalized = NumeratorJetCache::normalize_scalar_component(retained.as_view());
         assert!(normalized.contains(&parse_lit!((a + b) ^ 11)));
         assert!(
-            normalized.contains(&parse_lit!(p1 - p2))
-                || normalized.contains(&parse_lit!(-p1 + p2))
+            normalized.contains(&parse_lit!(p1 - p2)) || normalized.contains(&parse_lit!(-p1 + p2))
         );
     }
 
@@ -639,9 +679,8 @@ mod tests {
                 parse_lit!((x + y) ^ 11)
             )
         });
-        let difference = &a * (&b * &c - &d * &e)
-            + &b * (&f * &e - &a * &c)
-            + &e * (&a * &d - &b * &f);
+        let difference =
+            &a * (&b * &c - &d * &e) + &b * (&f * &e - &a * &c) + &e * (&a * &d - &b * &f);
         assert!(NumeratorJetCache::factorized_is_zero(difference.clone()));
         assert!(!NumeratorJetCache::factorized_is_zero(difference + &a));
         assert_eq!(
@@ -657,9 +696,7 @@ mod tests {
         let opposite = (-&contraction).expand_num();
         let spectator = parse_lit!((a + b) * (c + d) ^ 11);
         let difference = contraction.pow(2) * opposite + contraction.pow(3);
-        assert!(
-            NumeratorJetCache::normalize_scalar_component(difference.as_view()).is_zero()
-        );
+        assert!(NumeratorJetCache::normalize_scalar_component(difference.as_view()).is_zero());
         assert!(NumeratorJetCache::factorized_is_zero(
             &spectator * difference
         ));
@@ -669,8 +706,8 @@ mod tests {
         assert!(!retained.is_zero());
         assert!(retained.contains(&parse_lit!((c + d) ^ 11)));
         assert!(
-            retained.contains(&contraction.pow(3))
-                || retained.contains(&(-&contraction).expand_num().pow(3))
+            retained.contains(contraction.pow(3))
+                || retained.contains((-&contraction).expand_num().pow(3))
         );
     }
 
@@ -681,8 +718,7 @@ mod tests {
         let opposite = parse_lit!(-a + b);
         for exponent in [-2, -1, 2, 3, 11] {
             let left = base.pow(exponent);
-            let right = Atom::num(if exponent % 2 == 0 { 1 } else { -1 })
-                * opposite.pow(exponent);
+            let right = Atom::num(if exponent % 2 == 0 { 1 } else { -1 }) * opposite.pow(exponent);
             assert_eq!(
                 NumeratorJetCache::normalize_scalar_component(left.as_view()),
                 NumeratorJetCache::normalize_scalar_component(right.as_view()),

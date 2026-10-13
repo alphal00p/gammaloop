@@ -13,12 +13,20 @@ use crate::{
 };
 use idenso::{
     color::{ColorSimplifier, ColorSimplifySettings},
+    dirac::GammaSimplifySettings,
+    representations::Bispinor,
     shorthands::UndoShorthands,
+    tensor::SymbolicNetParse,
 };
 use linnet::half_edge::involution::Hedge;
 use spenso::{
-    network::{ExecutionResult, Sequential, SmallestDegree, tags::SPENSO_TAG},
-    structure::representation::{Minkowski, RepName},
+    network::{
+        ExecutionResult, Sequential, SmallestDegree, parsing::ParseSettings, tags::SPENSO_TAG,
+    },
+    structure::{
+        representation::{Minkowski, RepName},
+        slot::IsAbstractSlot,
+    },
 };
 
 pub(crate) fn fixture(massless: bool) -> Result<(Graph, OwnedForestNode, OwnedForestNode)> {
@@ -110,16 +118,75 @@ pub(super) fn assert_rational_zero(
 ) -> Result<()> {
     let mut numerators = NumeratorJetCache::default();
     let mut zero_proofs = BTreeMap::<Atom, bool>::new();
-    for (class, (denominators, numerator)) in rational_coefficients(graph, current, atom)?
-        .into_iter()
-        .enumerate()
-    {
-        // Close Dirac chains symbolically before finite component execution.
-        // The shared spin-algebra owner protects scalar products and leaves
-        // graph numerator products factorized, avoiding large matrix-entry
-        // circuits for a closed quark trace. It performs no Taylor operation.
-        let reduced = crate::uv::approx::integrated::simplify(&numerator)?;
+    let started = std::time::Instant::now();
+    debug_tags!(#generation, #profile, #uv, #numerator, #summary;
+        stage = "os_exact_grouping_start", label,
+        input_bytes = atom.as_view().get_byte_size(),
+        "Grouping the exact oracle by denominator products"
+    );
+    let coefficients = rational_coefficients(graph, current, atom)?;
+    debug_tags!(#generation, #profile, #uv, #numerator, #summary;
+        stage = "os_exact_grouping_done", label,
+        elapsed_ms = started.elapsed().as_secs_f64() * 1000.0,
+        denominator_classes = coefficients.len(),
+        numerator_bytes = coefficients.values().map(|atom| atom.as_view().get_byte_size()).sum::<usize>(),
+        "Grouped the exact oracle by denominator products"
+    );
+    for (class, (denominators, numerator)) in coefficients.into_iter().enumerate() {
+        // Reduce repeated gamma pairs before finite component execution.
+        // Fully ordering open chains can grow compact nested numerators;
+        // omitting spin reduction instead leaves large matrix-entry circuits.
+        // Closed spin coefficients retain canonical trace reduction.
+        let started = std::time::Instant::now();
+        debug_tags!(#generation, #profile, #uv, #numerator, #summary;
+            stage = "os_exact_spin_simplify_start", label, denominator_class = class,
+            input_bytes = numerator.as_view().get_byte_size(),
+            "Simplifying the exact oracle spin algebra"
+        );
+        let open_spinor = numerator
+            .parse_to_symbolic_net::<Aind>(&ParseSettings::default())?
+            .graph
+            .dangling_indices()
+            .into_iter()
+            .any(|slot| slot.rep_name() == Bispinor {}.into());
+        let gamma_settings = if open_spinor {
+            GammaSimplifySettings::repeated_pairs()
+        } else {
+            GammaSimplifySettings::canonical()
+        };
+        debug_tags!(#generation, #profile, #uv, #numerator, #summary;
+            stage = "os_exact_spin_settings", label, denominator_class = class,
+            open_spinor, gamma_settings = ?gamma_settings,
+            "Selected exact oracle gamma-chain reduction"
+        );
+        let reduced = crate::uv::approx::integrated::simplify(&numerator, gamma_settings)?;
+        debug_tags!(#generation, #profile, #uv, #numerator, #summary;
+            stage = "os_exact_spin_simplify_done", label, denominator_class = class,
+            elapsed_ms = started.elapsed().as_secs_f64() * 1000.0,
+            output_bytes = reduced.as_view().get_byte_size(),
+            open_spinor,
+            "Simplified the exact oracle spin algebra"
+        );
+        let started = std::time::Instant::now();
+        debug_tags!(#generation, #profile, #uv, #numerator, #summary;
+            stage = "os_exact_canonicalize_start", label, denominator_class = class,
+            input_bytes = reduced.as_view().get_byte_size(),
+            "Contracting the exact oracle tensor coefficient"
+        );
         let certificate = numerators.canonicalize(&reduced.undo_dots::<Aind>()?)?;
+        debug_tags!(#generation, #profile, #uv, #numerator, #summary;
+            stage = "os_exact_canonicalize_done", label, denominator_class = class,
+            elapsed_ms = started.elapsed().as_secs_f64() * 1000.0,
+            key_bytes = certificate.key.as_view().get_byte_size(),
+            is_zero = certificate.is_zero,
+            "Contracted the exact oracle tensor coefficient"
+        );
+        let started = std::time::Instant::now();
+        debug_tags!(#generation, #profile, #uv, #numerator, #summary;
+            stage = "os_exact_zero_proof_start", label, denominator_class = class,
+            key_bytes = certificate.key.as_view().get_byte_size(),
+            "Proving the factorized tensor coefficient zero"
+        );
         let is_zero = certificate.is_zero
             || match certificate.key.as_view() {
                 AtomView::Fun(tensor)
@@ -149,6 +216,12 @@ pub(super) fn assert_rational_zero(
                 }
                 _ => false,
             };
+        debug_tags!(#generation, #profile, #uv, #numerator, #summary;
+            stage = "os_exact_zero_proof_done", label, denominator_class = class,
+            elapsed_ms = started.elapsed().as_secs_f64() * 1000.0,
+            cached_component_proofs = zero_proofs.len(), is_zero,
+            "Finished the factorized tensor coefficient proof"
+        );
         if !is_zero {
             debug_tags!(#uv, #local, #four_d, #trace;
                 stage = "os_exact_oracle_failure",
@@ -271,17 +344,34 @@ fn symbolic_spin_reduction_preserves_os_phase_order_and_scalar_factors() -> Resu
     let spectator = parse_lit!((spin_a + spin_b) * (spin_c + spin_d) ^ 11);
     let mut tensors = NumeratorJetCache::default();
     for original in [numerator.clone(), gamma_zero_at_port(&graph, &numerator, 1)] {
-        let reduced = crate::uv::approx::integrated::simplify(&original)?;
-        // This comparison deliberately uses the original finite component
-        // engine directly, without the symbolic reduction under test.
-        assert!(
-            tensors
-                .canonicalize(&(&original - &reduced).undo_dots::<Aind>()?)?
-                .is_zero,
-            "symbolic spin reduction must preserve the exact QCD phase and ordered gamma0 insertion",
-        );
-        let factored = crate::uv::approx::integrated::simplify(&(&spectator * &original))?;
-        assert_eq!(factored, &spectator * reduced);
+        for gamma_settings in [
+            GammaSimplifySettings::canonical(),
+            GammaSimplifySettings::repeated_pairs(),
+        ] {
+            let reduced = crate::uv::approx::integrated::simplify(&original, gamma_settings)?;
+            // This comparison deliberately uses the original finite component
+            // engine directly, without the symbolic reduction under test.
+            assert!(
+                tensors
+                    .canonicalize(&(&original - &reduced).undo_dots::<Aind>()?)?
+                    .is_zero,
+                "symbolic spin reduction must preserve the exact QCD phase and ordered gamma0 insertion",
+            );
+            let factored =
+                crate::uv::approx::integrated::simplify(&(&spectator * &original), gamma_settings)?;
+            assert_eq!(factored, &spectator * &reduced);
+            let momentum =
+                |edge| function!(GS.emr_mom, edge, Minkowski {}.new_rep(4).to_symbolic([]));
+            let scalar_product = dot(&momentum(2), &momentum(0));
+            for power in [2, 3] {
+                assert_rational_zero(
+                    "finite open-spinor proof preserves powered dots and ordered gamma0",
+                    &graph,
+                    &current,
+                    &(&spectator * scalar_product.pow(power) * (&original - &reduced)),
+                )?;
+            }
+        }
     }
     Ok(())
 }

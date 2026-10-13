@@ -279,25 +279,30 @@ impl ForestOracle {
         Ok(ordinary + refinement - overlap)
     }
 
-    fn assert_primitive_branches(
+    fn assert_operator_branches(
         &self,
         label: &str,
         node: &OwnedForestNode,
         component: Component,
         ctx: &UVCtx<'_>,
-        root: &OwnedForestNode,
+        given: (&OwnedForestNode, &Full4dCts),
     ) -> Result<Atom> {
-        let seed = Full4dCts::root();
-        let actual_source = grow(&seed, ctx, node, root)?;
-        let source = self.source(node, root);
-        let lmb = compatible_lmb(ctx, node, root, &seed)?;
+        let (given_node, prefix) = given;
+        let actual_source = grow(prefix, ctx, node, given_node)?;
+        // A completed prefix is used here only after its own independent
+        // branch certificate. Congruence then composes that certificate with
+        // this independently constructed cograph, before the outer operation.
+        let source = (self.source(node, given_node)
+            * GS.erase_uv_momentum_provenance(prefix.atom()))
+        .simplify_metrics();
+        let lmb = compatible_lmb(ctx, node, given_node, prefix)?;
         assert_rational_zero(
             &format!("{label} source"),
             &self.graph,
             node,
             &(&actual_source - &source),
         )?;
-        let actual_u = t_raw(&actual_source, ctx, node, root, &lmb)?;
+        let actual_u = t_raw(&actual_source, ctx, node, given_node, &lmb)?;
         let reference_u = self.jet(&source, node, true)?;
         assert_rational_zero(
             &format!("{label} U branch"),
@@ -313,7 +318,7 @@ impl ForestOracle {
                 (positive + negative, self.on_shell(&source, node, boundary))
             }
             None => (
-                tilde_t_raw(&actual_source, ctx, node, root, &lmb)?,
+                tilde_t_raw(&actual_source, ctx, node, given_node, &lmb)?,
                 self.jet(&source, node, false)?,
             ),
         };
@@ -327,7 +332,7 @@ impl ForestOracle {
             &GS.resolve_os_momenta(&actual_refinement),
             ctx,
             node,
-            root,
+            given_node,
             &lmb,
         )?;
         let reference_overlap = self.jet(&reference_refinement, node, true)?;
@@ -338,6 +343,95 @@ impl ForestOracle {
             &(&actual_overlap - reference_overlap),
         )?;
         Ok(finalize(actual_u + actual_refinement - actual_overlap))
+    }
+
+    /// The four completed prefixes below the outer OS operation, in forest
+    /// order: empty, gamma, Gamma, Gamma-after-gamma. Only local terms enter.
+    fn three_loop_prefixes(&self) -> Result<[(OwnedForestNode, Full4dCts); 4]> {
+        let child = THREE_LOOP_CHILD.node(&self.graph)?;
+        let parent = THREE_LOOP_PARENT.node(&self.graph)?;
+        let root = self.root();
+        let settings = UVgenerationSettings {
+            generate_integrated: false,
+            ..Default::default()
+        };
+        let ctx = UVCtx::new(&self.graph, &settings);
+        let seed = Full4dCts::root();
+        let child_local = uv_limit(&seed, &ctx, &child, &root, &child, &root)?;
+        let child_prefix = Full4dCts::from_factorized_local(&child_local);
+        let parent_local = uv_limit(&seed, &ctx, &parent, &root, &parent, &root)?;
+        let nested_local = uv_limit(&child_prefix, &ctx, &parent, &child, &parent, &child)?;
+        Ok([
+            (root, seed),
+            (child, child_prefix),
+            (
+                THREE_LOOP_PARENT.node(&self.graph)?,
+                Full4dCts::from_factorized_local(&parent_local),
+            ),
+            (parent, Full4dCts::from_factorized_local(&nested_local)),
+        ])
+    }
+
+    fn three_loop_families(
+        &self,
+        prefixes: &[(OwnedForestNode, Full4dCts); 4],
+    ) -> Result<[Atom; 8]> {
+        let whole = THREE_LOOP_WHOLE.node(&self.graph)?;
+        let settings = UVgenerationSettings {
+            generate_integrated: false,
+            ..Default::default()
+        };
+        let ctx = UVCtx::new(&self.graph, &settings);
+        let mut families = std::array::from_fn(|_| Atom::Zero);
+        for (index, (given, prefix)) in prefixes.iter().enumerate() {
+            families[2 * index] = grow(prefix, &ctx, &whole, given)?;
+            families[2 * index + 1] = uv_limit(prefix, &ctx, &whole, given, &whole, given)?
+                .atom()
+                .clone();
+        }
+        Ok(families)
+    }
+
+    fn assert_three_loop_hard_strata(&self, strata: &[[usize; 3]]) -> Result<()> {
+        let whole = THREE_LOOP_WHOLE.node(&self.graph)?;
+        let families = self.three_loop_families(&self.three_loop_prefixes()?)?;
+        let complete = Atom::add_many(&families);
+        let parameter = Atom::var(symbol!("os_forest_reference::hard"));
+        for blocks in strata {
+            // Zero denotes a fixed carrier. Each positive label denotes an
+            // independent hard vector; equal labels retain a fixed difference.
+            // These partitions also cover vanishing hard gluon momenta k-p/l-k.
+            let loops = *blocks.iter().max().unwrap();
+            assert!(loops > 0);
+            let mut momenta = Vec::new();
+            for (index, block) in blocks.iter().enumerate() {
+                if *block == 0 {
+                    continue;
+                }
+                let representative = blocks
+                    .iter()
+                    .position(|candidate| candidate == block)
+                    .unwrap();
+                let mut momentum = function!(GS.emr_mom, representative + 2) / &parameter;
+                if representative != index {
+                    momentum += function!(GS.emr_mom, index + 2);
+                }
+                momenta.push((index + 2, momentum));
+            }
+            let [p, k, l] = *blocks;
+            let hard_fermions =
+                2 * usize::from(p != 0) + 2 * usize::from(k != 0) + usize::from(l != 0);
+            let hard_gluons = usize::from(p != 0) + usize::from(k != p) + usize::from(l != k);
+            let bare_degree = 4 * loops as i32 - hard_fermions as i32 - 2 * hard_gluons as i32;
+            self.assert_hard_limit(
+                &format!("three-loop hard blocks {blocks:?}"),
+                (&complete, (bare_degree >= 0).then_some(&families[0])),
+                &whole,
+                &momenta,
+                loops,
+            )?;
+        }
+        Ok(())
     }
 
     fn physical_limit(atom: &Atom) -> Atom {
@@ -368,6 +462,12 @@ impl ForestOracle {
         momenta: &[(usize, Atom)],
         hard_loops: usize,
     ) -> Result<BTreeMap<symbolica::domains::rational::Rational, Atom>> {
+        let started = std::time::Instant::now();
+        debug_tags!(#generation, #profile, #uv, #numerator, #summary;
+            stage = "os_hard_coefficients_start", label, hard_loops,
+            input_bytes = atom.as_view().get_byte_size(),
+            "Constructing exact hard-limit coefficients"
+        );
         let parameter = symbol!("os_forest_reference::hard");
         let scale = Atom::var(parameter);
         let physical = self.route(&Self::physical_limit(atom), node);
@@ -382,7 +482,17 @@ impl ForestOracle {
             })
             .collect::<Vec<_>>();
         let mut coefficients = BTreeMap::new();
-        for term in FourDTerm::from_view(physical.as_view())? {
+        for (term_index, term) in FourDTerm::from_view(physical.as_view())?
+            .into_iter()
+            .enumerate()
+        {
+            let term_started = std::time::Instant::now();
+            debug_tags!(#generation, #profile, #uv, #numerator, #summary;
+                stage = "os_hard_term_start", label, term_index,
+                numerator_bytes = term.numerator.as_view().get_byte_size(),
+                denominator_count = term.denominators.len(),
+                "Constructing one hard-limit denominator class"
+            );
             let mut scaled = term
                 .numerator
                 .undo_dots::<Aind>()?
@@ -417,7 +527,20 @@ impl ForestOracle {
             for (power, coefficient) in jet.series(parameter, Atom::Zero, 0)?.terms() {
                 *coefficients.entry(power).or_insert(Atom::Zero) += coefficient;
             }
+            debug_tags!(#generation, #profile, #uv, #numerator, #summary;
+                stage = "os_hard_term_done", label, term_index,
+                elapsed_ms = term_started.elapsed().as_secs_f64() * 1000.0,
+                jet_bytes = jet.as_view().get_byte_size(),
+                "Constructed one hard-limit denominator class"
+            );
         }
+        debug_tags!(#generation, #profile, #uv, #numerator, #summary;
+            stage = "os_hard_coefficients_done", label, hard_loops,
+            elapsed_ms = started.elapsed().as_secs_f64() * 1000.0,
+            coefficient_count = coefficients.len(),
+            coefficient_bytes = coefficients.values().map(|atom| atom.as_view().get_byte_size()).sum::<usize>(),
+            "Constructed exact hard-limit coefficients"
+        );
         Ok(coefficients)
     }
 
@@ -429,16 +552,32 @@ impl ForestOracle {
         momenta: &[(usize, Atom)],
         hard_loops: usize,
     ) -> Result<()> {
+        let started = std::time::Instant::now();
+        debug_tags!(#generation, #profile, #uv, #numerator, #summary;
+            stage = "os_hard_stratum_start", label, hard_loops,
+            "Certifying an exact hard-limit stratum"
+        );
         let (complete, bare_control) = sources;
         for (power, coefficient) in
             self.hard_coefficients(label, complete, node, momenta, hard_loops)?
         {
+            let coefficient_started = std::time::Instant::now();
+            debug_tags!(#generation, #profile, #uv, #numerator, #summary;
+                stage = "os_hard_coefficient_start", label, power = %power,
+                coefficient_bytes = coefficient.as_view().get_byte_size(),
+                "Certifying one exact hard-limit coefficient"
+            );
             assert_rational_zero(
                 &format!("{label}: measure-weighted inverse-hard coefficient {power}"),
                 &self.graph,
                 node,
                 &coefficient,
             )?;
+            debug_tags!(#generation, #profile, #uv, #numerator, #summary;
+                stage = "os_hard_coefficient_done", label, power = %power,
+                elapsed_ms = coefficient_started.elapsed().as_secs_f64() * 1000.0,
+                "Certified one exact hard-limit coefficient"
+            );
         }
         if let Some(bare) = bare_control {
             let bare = self.hard_coefficients(label, bare, node, momenta, hard_loops)?;
@@ -498,10 +637,20 @@ impl ForestOracle {
                 "{label}: the bare divergent jet needs an exact nonzero control"
             );
         }
+        debug_tags!(#generation, #profile, #uv, #numerator, #summary;
+            stage = "os_hard_stratum_done", label, hard_loops,
+            elapsed_ms = started.elapsed().as_secs_f64() * 1000.0,
+            "Certified an exact hard-limit stratum and its bare control"
+        );
         Ok(())
     }
 
-    fn nested_families(&self, child_spec: Component, parent_spec: Component) -> Result<()> {
+    fn nested_families(
+        &self,
+        child_spec: Component,
+        parent_spec: Component,
+        hard_carriers: [usize; 2],
+    ) -> Result<Atom> {
         let child = child_spec.node(&self.graph)?;
         let parent = parent_spec.node(&self.graph)?;
         let root = self.root();
@@ -515,7 +664,7 @@ impl ForestOracle {
         let child_reference = -self.operation(&bare_child, &child, child_spec)?;
         let child_local = uv_limit(&seed, &ctx, &child, &root, &child, &root)?;
         let certified_child =
-            self.assert_primitive_branches("child", &child, child_spec, &ctx, &root)?;
+            self.assert_operator_branches("child", &child, child_spec, &ctx, (&root, &seed))?;
         // Each branch already equals its independent bounded-jet reference.
         // Certify the one forest minus sign against their exact composition.
         assert_rational_zero(
@@ -531,7 +680,7 @@ impl ForestOracle {
             // own fixed rest-frame points, but not on the parent's external q.
             // Check this boundary before attaching the three-line cograph.
             let lmb = compatible_lmb(&ctx, &parent, &child, &completed_child)?;
-            let actual_soft = tilde_t_raw(&child_local.atom(), &ctx, &parent, &child, &lmb)?;
+            let actual_soft = tilde_t_raw(child_local.atom(), &ctx, &parent, &child, &lmb)?;
             let reference_soft = self.jet(&child_reference, &parent, false)?;
             assert_rational_zero(
                 "the parent soft jet leaves the independent OS child fixed",
@@ -553,7 +702,7 @@ impl ForestOracle {
             -self.operation(&(&child_reference * &cograph), &parent, parent_spec)?;
         let parent_local = uv_limit(&seed, &ctx, &parent, &root, &parent, &root)?;
         let certified_parent =
-            self.assert_primitive_branches("parent", &parent, parent_spec, &ctx, &root)?;
+            self.assert_operator_branches("parent", &parent, parent_spec, &ctx, (&root, &seed))?;
         let nested_local = uv_limit(&completed_child, &ctx, &parent, &child, &parent, &child)?;
         // Compose the independently certified open-child tensor with an
         // independently certified cograph. Recontracting their difference
@@ -620,19 +769,32 @@ impl ForestOracle {
             "the complete forest adds each certified signed family once without a second depth sign",
         );
         let parameter = Atom::var(symbol!("os_forest_reference::hard"));
-        let p = function!(GS.emr_mom, 2);
-        let k = function!(GS.emr_mom, 3);
+        let [parent_carrier, child_carrier] = hard_carriers;
+        assert!(parent.lmb().loop_edges.contains(&EdgeIndex(parent_carrier)));
+        assert!(child.lmb().loop_edges.contains(&EdgeIndex(child_carrier)));
+        let p = function!(GS.emr_mom, parent_carrier);
+        let k = function!(GS.emr_mom, child_carrier);
         for (label, momenta, loops) in [
-            ("hard child loop", vec![(3, &k / &parameter)], 1),
-            ("hard parent loop", vec![(2, &p / &parameter)], 1),
+            ("hard child loop", vec![(child_carrier, &k / &parameter)], 1),
+            (
+                "hard parent loop",
+                vec![(parent_carrier, &p / &parameter)],
+                1,
+            ),
             (
                 "both generic hard loops",
-                vec![(2, &p / &parameter), (3, &k / &parameter)],
+                vec![
+                    (parent_carrier, &p / &parameter),
+                    (child_carrier, &k / &parameter),
+                ],
                 2,
             ),
             (
                 "correlated hard k=p+r",
-                vec![(2, &p / &parameter), (3, &p / &parameter + &k)],
+                vec![
+                    (parent_carrier, &p / &parameter),
+                    (child_carrier, &p / &parameter + &k),
+                ],
                 1,
             ),
         ] {
@@ -674,7 +836,7 @@ impl ForestOracle {
         // completed-child parent have separate exact certificates above.
         // Linearity composes those certificates into the full four-family
         // identity without re-expanding a difference of complete forests.
-        Ok(())
+        Ok(complete)
     }
 }
 
@@ -701,6 +863,25 @@ const GLUON_PARENT: Component = Component {
     degree: 2,
     scheme: ApproximationType::IR,
     on_shell: None,
+};
+
+const THREE_LOOP_CHILD: Component = Component {
+    edges: &[4, 5],
+    degree: 1,
+    scheme: ApproximationType::OS,
+    on_shell: Some((3, 10)),
+};
+const THREE_LOOP_PARENT: Component = Component {
+    edges: &[3, 4, 5, 6, 7],
+    degree: 1,
+    scheme: ApproximationType::OS,
+    on_shell: Some((2, 14)),
+};
+const THREE_LOOP_WHOLE: Component = Component {
+    edges: &[2, 3, 4, 5, 6, 7, 8, 9],
+    degree: 1,
+    scheme: ApproximationType::OS,
+    on_shell: Some((0, 1)),
 };
 
 pub(crate) const FIG10_LOGARITHMIC_BOX: Component = Component {
@@ -736,6 +917,18 @@ pub(crate) fn nested_quark_fixture(
     let oracle = ForestOracle::new(source)?;
     let parent = QUARK_PARENT.node(&oracle.graph)?;
     let child = (if soft_child { GLUON_CHILD } else { QUARK_CHILD }).node(&oracle.graph)?;
+    let root = oracle.root();
+    Ok((oracle.graph, parent, child, root))
+}
+
+pub(crate) fn three_loop_quark_fixture()
+-> Result<(Graph, OwnedForestNode, OwnedForestNode, OwnedForestNode)> {
+    let oracle = ForestOracle::new(include_str!(
+        "../../../../../tests/resources/graphs/local_os_three_loop_top_self_energy.dot"
+    ))?;
+    let mut parent = THREE_LOOP_PARENT.node(&oracle.graph)?;
+    parent.topo_order = 2;
+    let child = THREE_LOOP_CHILD.node(&oracle.graph)?;
     let root = oracle.root();
     Ok((oracle.graph, parent, child, root))
 }
@@ -1017,7 +1210,8 @@ fn os_quark_in_ir_gluon_forest_matches_independent_component_jets() -> Result<()
     ForestOracle::new(include_str!(
         "../../../../../tests/resources/graphs/paper_appendix_b1_nested_gluon_self_energy.dot"
     ))?
-    .nested_families(QUARK_CHILD, GLUON_PARENT)
+    .nested_families(QUARK_CHILD, GLUON_PARENT, [2, 3])
+    .map(|_| ())
 }
 
 #[test]
@@ -1026,7 +1220,8 @@ fn os_quark_in_os_quark_forest_matches_independent_component_jets() -> Result<()
     ForestOracle::new(include_str!(
         "../../../../../tests/resources/graphs/local_nested_soft_top_self_energy.dot"
     ))?
-    .nested_families(QUARK_CHILD, QUARK_PARENT)
+    .nested_families(QUARK_CHILD, QUARK_PARENT, [2, 3])
+    .map(|_| ())
 }
 
 #[test]
@@ -1035,7 +1230,288 @@ fn ir_gluon_in_os_quark_forest_matches_independent_component_jets() -> Result<()
     ForestOracle::new(include_str!(
         "../../../../../tests/resources/graphs/local_soft_gluon_in_top_self_energy.dot"
     ))?
-    .nested_families(GLUON_CHILD, QUARK_PARENT)
+    .nested_families(GLUON_CHILD, QUARK_PARENT, [2, 3])
+    .map(|_| ())
+}
+
+#[test]
+fn proper_two_loop_os_forest_in_three_loop_graph_keeps_owned_points_and_uv_limits() -> Result<()> {
+    test_initialise()?;
+    let oracle = ForestOracle::new(include_str!(
+        "../../../../../tests/resources/graphs/local_os_three_loop_top_self_energy.dot"
+    ))?;
+    let child = THREE_LOOP_CHILD.node(&oracle.graph)?;
+    let parent = THREE_LOOP_PARENT.node(&oracle.graph)?;
+    let whole = THREE_LOOP_WHOLE.node(&oracle.graph)?;
+    let root = oracle.root();
+    assert_eq!(oracle.graph.n_loops(whole.subgraph()), 3);
+    assert_eq!(oracle.graph.n_loops(parent.subgraph()), 2);
+    assert_eq!(oracle.graph.n_loops(child.subgraph()), 1);
+    assert_eq!(oracle.external_edges(&parent), [EdgeIndex(2)]);
+    assert_eq!(oracle.external_edges(&child), [EdgeIndex(3)]);
+
+    // The same bounded four-family certificate now acts on a proper component:
+    // k/l become hard while the surrounding p loop remains formal and live.
+    let complete = oracle.nested_families(THREE_LOOP_CHILD, THREE_LOOP_PARENT, [3, 4])?;
+    let mut point_owners = BTreeSet::new();
+    complete.visitor(&mut |view| {
+        if let AtomView::Fun(point) = view
+            && point.get_symbol() == GS.os_mom
+            && let Ok(owner) = usize::try_from(point.get(0))
+        {
+            point_owners.insert(owner);
+            assert!(owner == 2 || owner == 3);
+            let mass = oracle.graph[EdgeIndex(owner)].mass_atom();
+            assert!(point.get(1) == mass.as_view() || point.get(1) == (-mass).as_view());
+        }
+        true
+    });
+    assert_eq!(point_owners, BTreeSet::from([2, 3]));
+
+    let settings = UVgenerationSettings {
+        generate_integrated: false,
+        ..Default::default()
+    };
+    let ctx = UVCtx::new(&oracle.graph, &settings);
+    let cograph = oracle.source(&whole, &parent);
+    let production_cograph = grow_factor(&ctx, &whole, &parent)?;
+    assert_rational_zero(
+        "three-loop spectator cograph",
+        &oracle.graph,
+        &whole,
+        &(&production_cograph - &cograph),
+    )?;
+    let cograph_terms = FourDTerm::from_view(cograph.as_view())?;
+    assert_eq!(cograph_terms.len(), 1);
+    assert_eq!(
+        cograph_terms[0]
+            .denominators
+            .iter()
+            .map(|den| den.source_edge)
+            .collect::<BTreeSet<_>>(),
+        BTreeSet::from([EdgeIndex(2), EdgeIndex(8), EdgeIndex(9)]),
+    );
+    assert!(!cograph.contains_symbol(GS.os_mom));
+    let mut live_outer_momentum = false;
+    cograph.visitor(&mut |view| {
+        if let AtomView::Fun(momentum) = view
+            && momentum.get_symbol() == GS.emr_mom
+            && let Ok(owner) = usize::try_from(momentum.get(0))
+        {
+            assert!(
+                owner != 3 && owner != 4,
+                "the cograph cannot carry either proper-component hard loop"
+            );
+            live_outer_momentum |= owner == 2;
+        }
+        true
+    });
+    assert!(live_outer_momentum);
+
+    // Check the production attachment boundary on the doubly nested signed
+    // family, without distributing a full three-loop numerator. The certified
+    // cograph is independent of k/l, so multiplication preserves all four
+    // component UV identities above. No outer-p UV subtraction is claimed.
+    let seed = Full4dCts::root();
+    let local_child = uv_limit(&seed, &ctx, &child, &root, &child, &root)?;
+    let completed_child = Full4dCts::from_factorized_local(&local_child);
+    let nested = uv_limit(&completed_child, &ctx, &parent, &child, &parent, &child)?;
+    let completed_parent = Full4dCts::from_factorized_local(&nested);
+    assert_eq!(
+        grow(&completed_parent, &ctx, &whole, &parent)?,
+        (nested.atom() * production_cograph).simplify_metrics(),
+        "the completed proper parent attaches once to the untouched three-loop cograph",
+    );
+    Ok(())
+}
+
+#[test]
+fn full_three_loop_os_forests_match_independent_component_jets() -> Result<()> {
+    test_initialise()?;
+    let oracle = ForestOracle::new(include_str!(
+        "../../../../../tests/resources/graphs/local_os_three_loop_top_self_energy.dot"
+    ))?;
+    let whole = THREE_LOOP_WHOLE.node(&oracle.graph)?;
+    let settings = UVgenerationSettings {
+        generate_integrated: false,
+        renormalization_prescription: crate::uv::RenormalizationPrescriptionSettings {
+            massive_power_divergent: ApproximationType::OS,
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+    let spinneys = oracle.graph.classified_spinneys(
+        &oracle.graph.full_filter(),
+        &settings,
+        &oracle.graph.loop_momentum_basis,
+    )?;
+    assert!(
+        spinneys.iter().all(|spinney| spinney.n_components() <= 1),
+        "the nested chain must not have an omitted disconnected forest component"
+    );
+    let connected = spinneys
+        .iter()
+        .filter(|spinney| spinney.n_components() == 1)
+        .map(|spinney| {
+            assert_eq!(spinney.dod, 1);
+            assert_eq!(spinney.renormalization_scheme, ApproximationType::OS);
+            oracle
+                .graph
+                .paired_edges(spinney.filter())
+                .into_iter()
+                .map(usize::from)
+                .collect::<BTreeSet<_>>()
+        })
+        .collect::<BTreeSet<_>>();
+    assert_eq!(
+        connected,
+        [THREE_LOOP_CHILD, THREE_LOOP_PARENT, THREE_LOOP_WHOLE]
+            .into_iter()
+            .map(|component| component.edges.iter().copied().collect::<BTreeSet<_>>())
+            .collect::<BTreeSet<_>>(),
+        "the production classifier must yield exactly the three components of the eight forests"
+    );
+    let prefixes = oracle.three_loop_prefixes()?;
+    let ctx = UVCtx::new(&oracle.graph, &settings);
+    // Prove the prefixes in dependency order before reusing their actual
+    // factors in the outer independent jet. In particular Gamma-after-gamma
+    // acts on the completed child, including its one forest minus sign.
+    for (label, output, input, specification) in [
+        ("three-loop primitive gamma", 1, 0, THREE_LOOP_CHILD),
+        ("three-loop proper Gamma", 2, 0, THREE_LOOP_PARENT),
+        (
+            "three-loop proper Gamma after gamma",
+            3,
+            1,
+            THREE_LOOP_PARENT,
+        ),
+    ] {
+        let (node, prefix) = &prefixes[output];
+        let certified = oracle.assert_operator_branches(
+            label,
+            node,
+            specification,
+            &ctx,
+            (&prefixes[input].0, &prefixes[input].1),
+        )?;
+        assert_rational_zero(
+            &format!("{label}: one signed completed prefix"),
+            &oracle.graph,
+            node,
+            &(prefix.atom() + certified),
+        )?;
+    }
+    let families = oracle.three_loop_families(&prefixes)?;
+    for (index, (label, (given, prefix))) in [
+        "G",
+        "G after gamma (middle omitted)",
+        "G after Gamma",
+        "G after Gamma after gamma",
+    ]
+    .into_iter()
+    .zip(&prefixes)
+    .enumerate()
+    {
+        let cograph = grow_factor(&ctx, &whole, given)?;
+        assert_rational_zero(
+            &format!("{label}: independent live cograph"),
+            &oracle.graph,
+            &whole,
+            &(&cograph - oracle.source(&whole, given)),
+        )?;
+        assert_eq!(
+            families[2 * index],
+            (prefix.atom() * cograph).simplify_metrics()
+        );
+        let certified = oracle.assert_operator_branches(
+            label,
+            &whole,
+            THREE_LOOP_WHOLE,
+            &ctx,
+            (given, prefix),
+        )?;
+        assert_rational_zero(
+            &format!("{label}: one outer forest minus"),
+            &oracle.graph,
+            &whole,
+            &(&families[2 * index + 1] + certified),
+        )?;
+    }
+    // The four pairs are the eight ordered forests of gamma < Gamma < G.
+    // Each outer branch and each source factor has its own exact certificate;
+    // associativity/linearity compose them without a giant tensor difference.
+    let paired_sum = families
+        .as_chunks::<2>()
+        .0
+        .iter()
+        .fold(Atom::Zero, |sum, pair| sum + &pair[0] + &pair[1]);
+    assert_eq!(Atom::add_many(&families), paired_sum);
+    Ok(())
+}
+
+#[test]
+fn three_loop_open_spinor_hard_coefficient_has_exact_finite_certificate() -> Result<()> {
+    test_initialise()?;
+    let oracle = ForestOracle::new(include_str!(
+        "../../../../../tests/resources/graphs/local_os_three_loop_top_self_energy.dot"
+    ))?;
+    let whole = THREE_LOOP_WHOLE.node(&oracle.graph)?;
+    let families = oracle.three_loop_families(&oracle.three_loop_prefixes()?)?;
+    let parameter = Atom::var(symbol!("os_forest_reference::hard"));
+    let coefficients = oracle.hard_coefficients(
+        "three-loop innermost hard logarithmic coefficient",
+        &Atom::add_many(&families),
+        &whole,
+        &[(4, function!(GS.emr_mom, 4) / parameter)],
+        1,
+    )?;
+    // This complete coefficient includes the open-spinor denominator class
+    // whose canonical Clifford reduction stalled despite its compact input.
+    // Certify all classes and all finite components; no coordinate sampling
+    // or special-case denominator index enters the proof.
+    let logarithmic = coefficients
+        .get(&0.into())
+        .expect("the completed forest retains a logarithmic coefficient to certify");
+    assert_rational_zero(
+        "three-loop innermost hard logarithmic coefficient",
+        &oracle.graph,
+        &whole,
+        logarithmic,
+    )
+}
+
+#[test]
+fn full_three_loop_os_forest_removes_generic_hard_limits() -> Result<()> {
+    test_initialise()?;
+    ForestOracle::new(include_str!(
+        "../../../../../tests/resources/graphs/local_os_three_loop_top_self_energy.dot"
+    ))?
+    .assert_three_loop_hard_strata(&[
+        [0, 0, 1],
+        [0, 1, 0],
+        [1, 0, 0],
+        [0, 1, 2],
+        [1, 0, 2],
+        [1, 2, 0],
+        [1, 2, 3],
+    ])
+}
+
+#[test]
+fn full_three_loop_os_forest_removes_correlated_hard_limits() -> Result<()> {
+    test_initialise()?;
+    ForestOracle::new(include_str!(
+        "../../../../../tests/resources/graphs/local_os_three_loop_top_self_energy.dot"
+    ))?
+    .assert_three_loop_hard_strata(&[
+        [1, 1, 0],
+        [1, 0, 1],
+        [0, 1, 1],
+        [1, 1, 1],
+        [1, 1, 2],
+        [1, 2, 1],
+        [1, 2, 2],
+    ])
 }
 
 #[test]

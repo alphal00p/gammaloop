@@ -23,6 +23,10 @@ pub(crate) enum Local3DConceptualBranch {
     S,
     #[serde(rename = "US")]
     US,
+    #[serde(rename = "O")]
+    O,
+    #[serde(rename = "UO")]
+    UO,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -37,6 +41,8 @@ pub(crate) enum Local3DMaterialization {
     DirectU,
     /// The exact linear identity H(X) = S(X) + U(X-S(X)).
     FactorizedSoft,
+    /// The exact linear identity T_OS(X) = O(X) + U(X-O(X)).
+    FactorizedOnShell,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -147,6 +153,24 @@ impl Local3DLoopRescaling {
                         },
                     ],
                     Local3DMaterialization::FactorizedSoft,
+                )
+            } else if current.renormalization_scheme() == ApproximationType::OS {
+                (
+                    vec![
+                        Local3DSignedBranch {
+                            branch: Local3DConceptualBranch::U,
+                            coefficient: 1,
+                        },
+                        Local3DSignedBranch {
+                            branch: Local3DConceptualBranch::O,
+                            coefficient: 1,
+                        },
+                        Local3DSignedBranch {
+                            branch: Local3DConceptualBranch::UO,
+                            coefficient: -1,
+                        },
+                    ],
+                    Local3DMaterialization::FactorizedOnShell,
                 )
             } else {
                 (

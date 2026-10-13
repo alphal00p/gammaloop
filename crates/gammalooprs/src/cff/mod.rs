@@ -461,7 +461,6 @@ impl PlannedExactSourceNumerator {
                 .sum::<usize>())
     }
 
-    #[cfg(test)]
     fn sample(
         &self,
         orientation: &OrientationExpression,
@@ -585,6 +584,36 @@ impl PlannedExactSourceNumerator {
 }
 
 impl CFFTerm {
+    /// Original propagator sources admit physical occurrence maps only when
+    /// those maps reconstruct the complete numerator plan exactly. In
+    /// particular, equal-momentum raised occurrences cannot be identified.
+    pub(crate) fn certified_original_source_energy_rows(
+        &self,
+        numerator: &Atom,
+        edge_count: usize,
+    ) -> Result<Vec<Vec<Atom>>> {
+        let planned = self.exact_source_numerator.as_ref().ok_or_else(|| {
+            eyre::eyre!("an original component source requires its exact numerator plan")
+        })?;
+        self.orientations.iter().map(|orientation| {
+            let source = &orientation.orientation;
+            let sampled = planned.mapper.map_numerator(
+                &source.loop_energy_map, &source.edge_energy_map, numerator,
+            )?;
+            if sampled != planned.sample(source, None)? {
+                return Err(eyre::eyre!(
+                    "original component occurrence maps do not reconstruct the factorized source numerator"
+                ));
+            }
+            (0..edge_count).map(|edge| {
+                planned.mapper.map_numerator(
+                    &source.loop_energy_map, &source.edge_energy_map,
+                    &GS.emr_mom(EdgeIndex(edge), GS.cind(0)),
+                )
+            }).collect()
+        }).collect()
+    }
+
     pub(crate) fn prepare_exact_source_numerator(
         &self,
         scope: &Atom,
