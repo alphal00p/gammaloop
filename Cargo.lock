@@ -5736,7 +5736,7 @@ dependencies = [
 [[package]]
 name = "rustred"
 version = "0.1.0"
-source = "git+https://github.com/alphal00p/rustred?branch=main#7c1ed03722b8c05daf60c89ba4ecc79457ed2ada"
+source = "git+https://github.com/alphal00p/rustred?rev=1fca5bd0ae11b8d25c89658a9c78a476a2b76048#1fca5bd0ae11b8d25c89658a9c78a476a2b76048"
 dependencies = [
  "bincode 2.0.1",
  "blake3",
@@ -5749,10 +5749,11 @@ dependencies = [
 [[package]]
 name = "rustred-app"
 version = "0.1.0"
-source = "git+https://github.com/alphal00p/rustred?branch=main#7c1ed03722b8c05daf60c89ba4ecc79457ed2ada"
+source = "git+https://github.com/alphal00p/rustred?rev=1fca5bd0ae11b8d25c89658a9c78a476a2b76048#1fca5bd0ae11b8d25c89658a9c78a476a2b76048"
 dependencies = [
  "bincode 2.0.1",
  "blake3",
+ "flate2",
  "rayon",
  "rustred",
  "serde",
@@ -5764,7 +5765,7 @@ dependencies = [
 [[package]]
 name = "rustred-order"
 version = "0.1.0"
-source = "git+https://github.com/alphal00p/rustred?branch=main#7c1ed03722b8c05daf60c89ba4ecc79457ed2ada"
+source = "git+https://github.com/alphal00p/rustred?rev=1fca5bd0ae11b8d25c89658a9c78a476a2b76048#1fca5bd0ae11b8d25c89658a9c78a476a2b76048"
 
 [[package]]
 name = "rustversion"
@@ -8170,12 +8171,14 @@ dependencies = [
  "arrayvec",
  "colored 3.1.1",
  "eyre",
+ "feynkit-generator 0.1.0 (git+https://github.com/alphal00p/gammaloop?branch=feynkit)",
  "feynkit-graph 0.1.0 (git+https://github.com/alphal00p/gammaloop?branch=feynkit)",
  "feynkit-kinematics 0.1.0 (git+https://github.com/alphal00p/gammaloop?branch=feynkit)",
  "feynkit-model 0.1.0 (git+https://github.com/alphal00p/gammaloop?branch=feynkit)",
  "feynkit-py 0.1.0 (git+https://github.com/alphal00p/gammaloop?branch=feynkit)",
  "feynkit-tensor 0.1.0 (git+https://github.com/alphal00p/gammaloop?branch=feynkit)",
  "flate2",
+ "idenso 0.3.0 (git+https://github.com/alphal00p/gammaloop?branch=feynkit)",
  "log",
  "phf 0.13.1",
  "pyo3",
@@ -8185,6 +8188,8 @@ dependencies = [
  "rug",
  "rustred",
  "rustred-app",
+ "serde_json",
+ "sha2",
  "spenso 0.6.0 (git+https://github.com/alphal00p/gammaloop?branch=feynkit)",
  "spenso-macros 0.3.2 (git+https://github.com/alphal00p/gammaloop?branch=feynkit)",
  "string-template-plus",

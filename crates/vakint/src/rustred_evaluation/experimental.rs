@@ -25,7 +25,7 @@ use crate::symbols::S;
 use crate::utils::vakint_macros::{vk_parse, vk_symbol};
 use crate::{
     FMFTOptions, ReplacementRules, Vakint, VakintError, VakintExpression, VakintSettings,
-    get_integer_from_atom, get_prop_with_id,
+    get_prop_with_id,
 };
 
 /// Exact output from RustRed's experimental per-target rule application.
@@ -142,6 +142,7 @@ pub fn prepare_candidate_integrals(
             term.numerator.as_view(),
             &matched,
             reducer,
+            settings,
         )?);
     }
     Ok(prepared)
@@ -153,6 +154,7 @@ fn prepare_matched_candidate_integral(
     numerator: AtomView,
     matched: &ReplacementRules,
     reducer: &dyn CandidateScalarReduction,
+    settings: &VakintSettings,
 ) -> Result<Vec<PreparedCandidateIntegral>, VakintError> {
     let integral = matched.canonical_topology.get_integral();
     if integral.n_loops != 4 {
@@ -160,24 +162,16 @@ fn prepare_matched_candidate_integral(
             "experimental FMFT finalization requires four loops",
         ));
     }
-    integral.validate_parent_routing(reducer.parent_momenta())?;
-    let canonical_loop_momenta = (1..=integral.n_loops)
-        .map(|axis| function!(S.k, Atom::num(axis)))
-        .collect::<Vec<_>>();
-    let routed_numerator = super::numerator::route_to_parent(
+    let input = super::numerator::MatchedScalarInput::prepare(
         numerator,
-        &canonical_loop_momenta,
-        integral
-            .parent_routing
-            .as_ref()
-            .map(|(_, coordinates)| coordinates.as_ref()),
-    );
-    // Parent routing expands vector sums at component level. Restore the
-    // scalar-product representation before replacing vector labels, just
-    // as the production materializer does. Otherwise k(i,mu) is not
-    // matched by k(i), so loop components become opaque spectators in the
-    // family-bound scalar lowerer.
-    let scalar_numerator = Vakint::convert_to_dot_notation(routed_numerator.as_view());
+        matched,
+        reducer.parent_momenta(),
+        &(0..integral.n_props).collect::<Vec<_>>(),
+        reducer.index_count(),
+        settings,
+        super::numerator::ScalarNumeratorForm::ExpandedPolynomial,
+    )?;
+    let scalar_numerator = input.numerator;
     let family_numerator = (1..=integral.n_loops).fold(scalar_numerator, |value, axis| {
         value
             .replace(function!(S.k, Atom::num(axis)).to_pattern())
@@ -192,40 +186,15 @@ fn prepare_matched_candidate_integral(
             "parent-routed numerator retains loop-vector components; tensor preprocessing must produce scalar products",
         ));
     }
-    let expression = integral
-        .canonical_expression
-        .as_ref()
-        .ok_or_else(|| candidate_error("matched canonical expression is absent"))?;
-    let mut powers = vec![0; reducer.index_count()];
-    let mut mass: Option<Atom> = None;
-    for slot in 1..=integral.n_props {
-        let Some(properties) = get_prop_with_id(expression.as_view(), slot) else {
-            continue;
-        };
-        powers[slot - 1] = properties
-            .get(&vk_symbol!("pow_"))
-            .and_then(|power| get_integer_from_atom(power.as_view()))
-            .ok_or_else(|| candidate_error("noninteger matched propagator power"))?;
-        let current = properties
-            .get(&vk_symbol!("mUVsq_"))
-            .ok_or_else(|| candidate_error("matched propagator mass is absent"))?;
-        if current.is_zero() || mass.as_ref().is_some_and(|mass| mass != current) {
-            return Err(candidate_error(
-                "candidate input requires one nonzero common mass",
-            ));
-        }
-        mass.get_or_insert_with(|| current.clone());
-    }
-    let base = IntegralKey::try_new(powers).map_err(|error| candidate_error(error.to_string()))?;
     let lowered = reducer
-        .lower_scalar_numerator(&family_numerator, &base)
+        .lower_scalar_numerator(&family_numerator, &input.target)
         .map_err(candidate_error)?;
     if lowered.is_empty() {
         return Err(candidate_error(
             "scalar-numerator lowering returned no terms",
         ));
     }
-    let mass_squared = mass.ok_or_else(|| candidate_error("candidate input has no mass"))?;
+    let mass_squared = input.mass_squared;
     Ok(lowered
         .into_iter()
         .map(|term| PreparedCandidateIntegral {
@@ -319,7 +288,12 @@ impl ExperimentalRustRed {
         matched: &ReplacementRules,
         substitute_masters: bool,
     ) -> Result<CandidateEvaluation, VakintError> {
-        let terms = prepare_matched_candidate_integral(numerator, matched, self.reducer.as_ref())?;
+        let terms = prepare_matched_candidate_integral(
+            numerator,
+            matched,
+            self.reducer.as_ref(),
+            settings,
+        )?;
         self.evaluate_prepared(
             settings,
             &terms,

@@ -8,7 +8,7 @@ use symbolica::function;
 use crate::matad::MATAD;
 use crate::symbols::S;
 use crate::utils::vakint_macros::{vk_parse, vk_symbol};
-use crate::{MATADOptions, Vakint, VakintSettings};
+use crate::{MATADOptions, VakintSettings};
 
 use super::matching::MatchedScalarFamily;
 use super::{RustRedEvaluationError, RustRedEvaluationOptions};
@@ -35,8 +35,10 @@ pub(super) fn evaluate(
         numerator,
         &loop_momenta,
         matched.parent_coordinates.as_deref(),
-    );
-    let internal_numerator = Vakint::convert_to_dot_notation(routed_numerator.as_view())
+        settings,
+        super::numerator::ScalarNumeratorForm::ExpandedPolynomial,
+    )?;
+    let internal_numerator = routed_numerator
         .replace(Atom::var(vk_symbol!(settings.epsilon_symbol.as_str())).to_pattern())
         .with(vk_parse!("ep").unwrap().to_pattern());
     let scalar_service = ScalarNumeratorService::try_new(

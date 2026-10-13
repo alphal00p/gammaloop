@@ -19,8 +19,8 @@ ahash = "0.8.12"
 arrayvec = "0.7.4"
 colored = { workspace = true }
 eyre = { workspace = true }
-feynkit-graph = { git = "https://github.com/alphal00p/gammaloop", branch = "feynkit", default-features = false, optional = true }
-feynkit-kinematics = { git = "https://github.com/alphal00p/gammaloop", branch = "feynkit", default-features = false, optional = true }
+feynkit-graph = { git = "https://github.com/alphal00p/gammaloop", branch = "feynkit", default-features = false }
+feynkit-kinematics = { git = "https://github.com/alphal00p/gammaloop", branch = "feynkit", default-features = false }
 feynkit-py = { git = "https://github.com/alphal00p/gammaloop", branch = "feynkit", default-features = false, optional = true }
 feynkit-tensor = { git = "https://github.com/alphal00p/gammaloop", branch = "feynkit", default-features = false }
 flate2 = "1.1.9"
@@ -29,6 +29,7 @@ regex = "1.12.2"
 rug = "1.28.0"
 rustred.workspace = true
 rustred-app.workspace = true
+sha2 = "0.10.9"
 spenso = { git = "https://github.com/alphal00p/gammaloop", branch = "feynkit", default-features = false }
 spenso-macros = { git = "https://github.com/alphal00p/gammaloop", branch = "feynkit", default-features = false }
 string-template-plus = "0.4.3"
@@ -45,11 +46,14 @@ default-features = false
 features = ["integer-gmp", "float-mpfr", "tracing_max_level_info"]
 
 [dev-dependencies]
+serde_json.workspace = true
+idenso = { git = "https://github.com/alphal00p/gammaloop", branch = "feynkit", default-features = false }
+feynkit-generator = { git = "https://github.com/alphal00p/gammaloop", branch = "feynkit", default-features = false }
 feynkit-model = { git = "https://github.com/alphal00p/gammaloop", branch = "feynkit", default-features = false }
 test-log = "0.2.19"
 
 [features]
-feynkit-ingress = ["dep:feynkit-graph", "dep:feynkit-kinematics"]
+feynkit-ingress = []
 # Expose candidate diagnostics and offline validation helpers.
 experimental-rustred = []
 python_stubgen = [
@@ -59,3 +63,15 @@ python_stubgen = [
   "symbolica/python_stubgen",
 ]
 symbolica_community_module = ["dep:pyo3", "dep:pyo3-stub-gen-derive", "symbolica/python_export", "feynkit-ingress", "dep:feynkit-py"]
+
+[[example]]
+name = "five_loop_scalar_diagrams"
+required-features = ["feynkit-ingress"]
+
+[[example]]
+name = "five_loop_saved_application"
+required-features = ["feynkit-ingress"]
+
+[[example]]
+name = "five_loop_qcd_ladder"
+required-features = ["feynkit-ingress"]

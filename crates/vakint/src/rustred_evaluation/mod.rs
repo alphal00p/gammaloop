@@ -5,6 +5,9 @@
 //! successful evaluation is not an unrestricted family-closure claim.
 
 mod artifact;
+mod factor_projection;
+mod factor_provider;
+pub(crate) mod five_loop;
 mod four_loop;
 mod matching;
 mod materialize;
@@ -64,6 +67,12 @@ pub enum RustRedEvaluationError {
         "RustRed has no shipped scalar artifact for the {loop_count}-loop family yet: {detail}"
     )]
     FourLoopArtifactUnavailable { loop_count: usize, detail: String },
+    #[error("five-loop RustRed evaluation requires a loaded saved application package")]
+    SavedApplicationUnavailable,
+    #[error("five-loop numerical master substitution is unsupported; set substitute_masters=false")]
+    FiveLoopNumericalMastersUnsupported,
+    #[error("five-loop saved application does not admit routed entry {powers:?}")]
+    SavedApplicationEntryNotAdmitted { powers: Vec<i64> },
     #[error("RustRed could not read propagator {propagator} power as an integer: {power}")]
     InvalidPower { propagator: usize, power: String },
     #[error("RustRed rejected the matched single-scale vacuum family: {detail}")]
@@ -98,9 +107,12 @@ pub(crate) fn supports(
     topology: &Topology,
     options: &RustRedEvaluationOptions,
 ) -> bool {
-    (!options.substitute_masters || settings.number_of_terms_in_epsilon_expansion <= 5)
-        && (MatchedScalarFamily::try_from_topology(topology).is_ok()
-            || four_loop::supports(topology))
+    (settings.rustred_artifact_path.is_some()
+        && matches!(topology, Topology::FiveLoop(_))
+        && five_loop::supports(topology))
+        || (!options.substitute_masters || settings.number_of_terms_in_epsilon_expansion <= 5)
+            && (MatchedScalarFamily::try_from_topology(topology).is_ok()
+                || four_loop::supports(topology))
 }
 
 impl Vakint {
@@ -116,6 +128,14 @@ impl Vakint {
         options: &RustRedEvaluationOptions,
     ) -> Result<Atom, VakintError> {
         crate::citations::USED_CITATIONS.record(crate::citations::CitationSource::RustRed);
+        if integral_specs.canonical_topology.get_integral().n_loops == 5 {
+            if options.substitute_masters {
+                return Err(RustRedEvaluationError::FiveLoopNumericalMastersUnsupported.into());
+            }
+            return self
+                .saved_application(settings)?
+                .evaluate(settings, numerator, integral_specs);
+        }
         if integral_specs.canonical_topology.get_integral().n_loops == 4 {
             return four_loop::evaluate(settings, numerator, integral_specs, options);
         }

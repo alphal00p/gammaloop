@@ -92,10 +92,15 @@ static DESCRIPTORS: LazyLock<Result<Vec<Descriptor>, String>> = LazyLock::new(||
 
 // Independent lazy cells avoid loading all large programs when a calculation
 // only visits one parent. NativeCandidate owns one shared memoized applier.
-static H: LazyLock<Result<ExperimentalRustRed, String>> = LazyLock::new(|| load(0));
-static FG: LazyLock<Result<ExperimentalRustRed, String>> = LazyLock::new(|| load(1));
-static BMW: LazyLock<Result<ExperimentalRustRed, String>> = LazyLock::new(|| load(2));
-static X: LazyLock<Result<ExperimentalRustRed, String>> = LazyLock::new(|| load(3));
+struct LoadedProgram {
+    native: Arc<NativeCandidate<10>>,
+    evaluator: ExperimentalRustRed,
+}
+
+static H: LazyLock<Result<LoadedProgram, String>> = LazyLock::new(|| load(0));
+static FG: LazyLock<Result<LoadedProgram, String>> = LazyLock::new(|| load(1));
+static BMW: LazyLock<Result<LoadedProgram, String>> = LazyLock::new(|| load(2));
+static X: LazyLock<Result<LoadedProgram, String>> = LazyLock::new(|| load(3));
 
 fn descriptor(source: &str) -> Result<Descriptor, String> {
     let mut physical_momenta = Vec::new();
@@ -169,7 +174,7 @@ fn descriptor(source: &str) -> Result<Descriptor, String> {
     })
 }
 
-fn load(index: usize) -> Result<ExperimentalRustRed, String> {
+fn load(index: usize) -> Result<LoadedProgram, String> {
     let input = &INPUTS[index];
     let descriptor = &DESCRIPTORS.as_ref().map_err(Clone::clone)?[index];
     let bytes = super::experimental::compressed::decode(input.program, MAX_PROGRAM_BYTES)
@@ -200,8 +205,10 @@ fn load(index: usize) -> Result<ExperimentalRustRed, String> {
     )?;
     catalog.require_complete()?;
     catalog.require_exact_keys(native.output_terminals())?;
-    ExperimentalRustRed::new(Arc::new(native), catalog.into_terms())
-        .map_err(|error| error.to_string())
+    let native = Arc::new(native);
+    let evaluator = ExperimentalRustRed::new(native.clone(), catalog.into_terms())
+        .map_err(|error| error.to_string())?;
+    Ok(LoadedProgram { native, evaluator })
 }
 
 fn select(topology: &Topology) -> Result<usize, RustRedEvaluationError> {
@@ -279,11 +286,12 @@ pub(super) fn evaluate(
                 detail: detail.clone(),
             })?;
     program
+        .evaluator
         .evaluate_matched(settings, numerator, matched, options.substitute_masters)
         .map(|result| result.value)
 }
 
-fn loaded(index: usize) -> &'static Result<ExperimentalRustRed, String> {
+fn loaded(index: usize) -> &'static Result<LoadedProgram, String> {
     match index {
         0 => &*H,
         1 => &*FG,
@@ -291,6 +299,29 @@ fn loaded(index: usize) -> &'static Result<ExperimentalRustRed, String> {
         3 => &*X,
         _ => unreachable!(),
     }
+}
+
+/// Existing native applier and its declared physical prefix, without evaluating
+/// any terminal catalog values. Selection is by exact denominator mapping.
+pub(super) fn native_program(
+    index: usize,
+) -> Result<Option<(Arc<NativeCandidate<10>>, usize)>, String> {
+    if index >= INPUTS.len() {
+        return Ok(None);
+    }
+    let loaded = loaded(index).as_ref().map_err(Clone::clone)?;
+    let physical = DESCRIPTORS.as_ref().map_err(Clone::clone)?[index]
+        .physical_momenta
+        .len();
+    Ok(Some((Arc::clone(&loaded.native), physical)))
+}
+
+pub(super) fn physical_momenta(index: usize) -> Result<Option<&'static [Atom]>, String> {
+    Ok(DESCRIPTORS
+        .as_ref()
+        .map_err(Clone::clone)?
+        .get(index)
+        .map(|descriptor| descriptor.physical_momenta.as_slice()))
 }
 
 #[cfg(test)]

@@ -1,0 +1,20 @@
+digraph massless_quark_four_rung_self_energy {
+    incoming [style=invis];
+    outgoing [style=invis];
+    incoming -> left [particle="g"];
+    right -> outgoing [particle="g"];
+    left -> t1 [particle="d"];
+    t1 -> t2 [particle="d"];
+    t2 -> t3 [particle="d"];
+    t3 -> t4 [particle="d"];
+    t4 -> right [particle="d"];
+    right -> b4 [particle="d"];
+    b4 -> b3 [particle="d"];
+    b3 -> b2 [particle="d"];
+    b2 -> b1 [particle="d"];
+    b1 -> left [particle="d"];
+    t1 -> b1 [particle="g"];
+    t2 -> b2 [particle="g"];
+    t3 -> b3 [particle="g"];
+    t4 -> b4 [particle="g"];
+}

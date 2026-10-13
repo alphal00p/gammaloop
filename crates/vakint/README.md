@@ -24,6 +24,14 @@ The community-module feature enables this automatically and exports the same
 operation as `integral_from_diagram`; no Python-side graph or algebra adapter is
 involved. Neither entry point rematches the graph or changes evaluation defaults.
 
+Five-loop symbolic reduction is available with an explicitly selected external
+saved-application package and `substitute_masters=false`. The package is not
+embedded or downloaded, and only its recorded input domains are accepted. See
+[the five-loop workflow](five_loop_application.typ) and the Rust/Python examples
+under `examples/` for DOT input, cache settings, exact family-qualified outputs,
+and retained nonzero conditions. Numerical five-loop master substitution is
+unsupported.
+
 For supported one-, two- and three-loop equal-mass vacuum families, the opt-in
 `EvaluationOrder::rustred_only()` scalar backend instead applies closing IBP
 artifacts shipped with Vakint and reuses Vakint's pure-Rust master

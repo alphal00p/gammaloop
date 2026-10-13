@@ -57,8 +57,8 @@ rand = "0.9.4"
 ratatui = "0.30.0"
 rayon = "1.5"
 regex = "1.12.3"
-rustred = { git = "https://github.com/alphal00p/rustred", branch = "main", default-features = false }
-rustred-app = { git = "https://github.com/alphal00p/rustred", branch = "main", default-features = false }
+rustred = { git = "https://github.com/alphal00p/rustred", rev = "1fca5bd0ae11b8d25c89658a9c78a476a2b76048", default-features = false }
+rustred-app = { git = "https://github.com/alphal00p/rustred", rev = "1fca5bd0ae11b8d25c89658a9c78a476a2b76048", default-features = false }
 schemars = "1.2.1"
 serde = "1.0.228"
 self_cell = "1.2.2"

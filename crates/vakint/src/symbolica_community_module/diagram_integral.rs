@@ -11,21 +11,23 @@ use crate::{VakintExpression, diagram_integral::DiagramIntegralOptions};
 
 /// Build a native VakintExpression from a routed, uncut vacuum graph.
 ///
-/// The family must retain the ordered physical denominator prefix in its stored
-/// loop basis; auxiliary powers must be nonpositive. Numerators use native
+/// The family must retain the graph's stored loop basis; `physical_slots` maps
+/// sorted graph edges to zero-based family indices and defaults to the prefix.
+/// Nonpositive physical powers contract edges; auxiliary powers must be nonpositive. Numerators use native
 /// Kinematics.scalar_product notation. Spectator order defines numerical vector
 /// IDs. Parameter substitutions are simultaneous and must already be reflected
 /// in the family's physical denominators. No graph factor is inserted.
 #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
 #[pyfunction]
-#[pyo3(signature = (diagram, family, numerator, *, powers=None, parameter_substitutions=None, external_momenta=Vec::new()), text_signature = "(diagram, family, numerator, *, powers=None, parameter_substitutions=None, external_momenta=())")]
+#[pyo3(signature = (diagram, family, numerator, *, powers=None, physical_slots=None, parameter_substitutions=None, external_momenta=Vec::new()), text_signature = "(diagram, family, numerator, *, powers=None, physical_slots=None, parameter_substitutions=None, external_momenta=())")]
 pub(crate) fn integral_from_diagram(
     diagram: &PyFeynmanDiagram,
     family: &PyIntegralFamily,
     numerator: PythonExpression,
     #[gen_stub(override_type(type_repr="typing.Sequence[int] | None", imports=("typing")))]
     powers: Option<&Bound<'_, PyAny>>,
+    physical_slots: Option<Vec<usize>>,
     #[gen_stub(override_type(type_repr="typing.Mapping[symbolica.Expression, symbolica.Expression] | None", imports=("typing", "symbolica")))]
     parameter_substitutions: Option<&Bound<'_, PyMapping>>,
     #[gen_stub(override_type(type_repr="typing.Sequence[symbolica.Expression]", imports=("typing", "symbolica")))]
@@ -64,6 +66,7 @@ pub(crate) fn integral_from_diagram(
         .unwrap_or_default();
     let options = DiagramIntegralOptions {
         powers,
+        physical_slots,
         parameter_substitutions,
         external_momenta: external_momenta
             .into_iter()

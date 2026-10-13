@@ -1,0 +1,285 @@
+= Symbolic five-loop saved applications
+
+Successful external-package loading prepares the 67 TIDE A5 representatives
+(48 nonfactorized and 19 factorized), using four twelve-line parents and explicit
+physical-to-family slot maps. Ordinary `Vakint::new()` constructs only the
+one-through-four-loop catalogue. The registry is topology input data, not a claim that every power
+or numerator is covered by an application package. The 15 common coordinates
+include auxiliary numerator coordinates. All numerator transport uses the
+same retained simultaneous momentum routing as the propagators.
+
+At the RustRed bridge, closed indexed scalar contractions are restored with
+Vakint's existing FeynKit tensor service before any numerator expansion. The
+bridge permits direct contractions but rejects any remaining projector rank;
+it does not perform an additional tensor reduction. Parent momentum maps act
+simultaneously on native scalar-product heads, preserving the scope of powers
+such as `(k1.k2)^2` and `(q^2-m^2)^n`.
+Bare loop-loop scalar products use FeynKit's native compact invariant syntax;
+they are not opened into artificial free tensor indices. Mixed loop-spectator
+products and genuinely open tensors keep the existing native projector path
+and its rank allowance. The scalar numerator's degree is not a projector rank.
+
+Five-loop long forms use native momentum-family equivalence, including the full
+denominator permutation and a Jacobian of plus or minus one. Thus different
+attachments of the same vacuum factors can share an integral class. Parametric
+polynomial equality only proposes a line permutation. The existing Symbolica
+basis solver tests the remaining independent-edge orientations; FeynKit must
+verify the complete momentum map for numerator transport. No polynomial-only
+identification is accepted. The orientation allowance is an operational limit.
+
+Contractions use one graph quotient before rewriting propagator incidence.
+This matters for shared endpoints: for census sector 31746, contracting the
+parent's q9 and q10 requires the identifications `(8,3)` and `(8,4)`. Sequential
+renames lose the second identification after vertex 8 disappears. The complete
+equivalence class must merge vertices 3, 4 and 8. The resulting six-edge graph
+has two vertices and five loops. Loop bases are complements of deterministic
+native spanning forests, including all disconnected components.
+
+== Selecting an external package
+
+No five-loop application artifact is embedded or downloaded. Set
+`VakintSettings::rustred_artifact_path` to a locally hosted exported package,
+or preload it with `Vakint::with_rustred_application(&mut settings, path)`,
+which also sets that settings path. An instance authenticates the selected package
+once and reuses its owned memoization; clones share the synchronized cache.
+Changing the selected path loads another immutable application. Removing the
+settings path disables five-loop application even if a package is cached.
+One-through-four-loop behavior does not require this setting.
+Matching an existing lower-loop or custom topology does not load a configured
+artifact merely because its path is present. A cold five-loop matching request
+loads the selected artifact before attaching the immutable five-loop catalogue.
+`vakint.topologies.five_loop_catalogue_statistics()` is `None` before successful
+publication and reports its topology count and preparation time afterward.
+
+`VakintSettings::rustred_application_options` controls the native application's
+operational allowances. The default coefficient cache retains RustRed's 1 GiB
+and 16-million aggregate term ceilings. Its default policy evicts inactive,
+completed results in least-recently-used order. Entries needed by pending
+combinations or the current result stay protected. A protected working set or
+single entry that cannot fit still produces a resource error, not a missing-rule
+or closure failure; large admitted workloads can require a larger allowance.
+A different path or different options reloads
+the application, so an older cache cannot bypass tightened allowances.
+
+For a byte-governed cache in Rust, set `max_cached_coefficient_bytes` on the
+options' `reduction_limits`, and set `max_cached_coefficient_terms` to
+`usize::MAX`. In Python, `rustred_cache_bytes` selects that behavior;
+`rustred_cache_terms` can explicitly add a separate aggregate term ceiling.
+For example `rustred_cache_bytes=32*1024**3` requests a 32 GiB coefficient cache.
+None of these settings enlarge the saved mathematical entry union.
+
+Rust callers select the policy through
+`settings.rustred_application_options.cache_policy`, using
+`vakint::RustRedCachePolicy::EvictLeastRecentlyUsed` or `FailOnLimit`. Python's
+`rustred_cache_policy` accepts `"evict-lru"` (default) or `"fail-on-limit"`.
+This changes reuse only. The legacy raw core reducer's default remains
+fail-on-limit, and the separate lower-factor cache retains its existing policy.
+
+`settings.rustred_scalar_numerator_limits` controls caller-numerator lowering
+in the saved five-loop frontend, both when choosing a verified witness and when
+applying it. Its native defaults are unchanged. The charged work allowance is
+`exact_algebra.max_term_operations` (16 million by default); Python exposes the
+optional `rustred_scalar_max_work` keyword. This is a per-lowering-call allowance,
+not a process-memory budget or a total across all matching candidates. Raising
+it never changes the entry union. Tightening it is checked before cached rule
+results can be used, without reloading the immutable package. The legacy
+one-through-four-loop programs and the separate factor-product policy are not
+configured by this setting.
+
+`rustred_product_limits` separately bounds lower-factor sum-of-products work
+and its coefficient cache (default 1 GiB and 16 million terms). It is not an
+aggregate budget with the saved application's cache. Python exposes the
+corresponding `rustred_product_cache_bytes` and `rustred_product_cache_terms`
+options, with the same byte-only override convention. Changing either typed
+limits setting replaces both owned sessions; no old cache bypasses new limits.
+The existing four-loop native program also retains its own operational policy;
+raising the outer product allowance does not relax that inner session's cache
+or per-root limits.
+
+Select `EvaluationMethod::RustRed` with `substitute_masters: false`. Numerical
+five-loop master substitution is unsupported and returns an error. There is
+no FORM fallback. In Python the constructor takes `rustred_artifact_path`,
+and `load_rustred_application(path)` explicitly preloads the same package.
+
+The standard expression contains exact coefficients of
+`RustRedMaster(rustred_family_HASH, powers...)`. HASH is SHA-256 of the full
+authenticated semantic family fingerprint. These masters denote unit-mass
+Minkowski vacuum integrals with unnormalized loop measures. The expression
+includes the common-mass factor and the selected Vakint loop normalization.
+No epsilon expansion or numerical master values are inserted. Coefficients
+hold in generic dimension `d = 4 - 2 epsilon`, subject to the saved nonzero
+conditions. Unexpected parameter-dependent saved-program conditions are rejected;
+conditions inherited from caller-owned scalar spectators and the common mass
+remain explicit in the detailed symbolic result.
+These are conservative execution-provenance conditions, not a minimal pole
+set of the final rational expression. Poles inherited before a coefficient
+cancellation remain recorded; different valid reduction paths need not have
+identical condition lists.
+
+RustRed's exact vacuum-product service prepares proven separations once after
+loading. Existing one-through-four-loop native programs reduce each lower
+factor under its original guards. FeynKit verifies the full momentum map to
+the selected program, including a unit Jacobian. RustRed owns coefficient
+products, coalescing, recursive separation and qualified-factor memoization;
+the adapter does not implement an additional reducer. Numerator-aware charts
+retain the complete verified momentum map, including inactive denominator rows.
+Local numerators pass through the same native transport into the selected lower
+program. Cross-component scalar products use the existing FeynKit tensor engine,
+projecting one independent component at a time with other components as tensor
+spectators. This uses native `d`; epsilon substitution happens only in the final
+Vakint expression. The adapter retains the denominators of FeynKit's public
+tensor-term coefficients before summing those terms. It does not claim access to
+undisclosed intermediate pivot histories inside that engine.
+
+The result contains sorted products of qualified declared masters, not a claim
+of independent master products. Connected or unproved decompositions retain
+their original qualified master labels. The common-mass factor and global
+five-loop normalization are applied once, never once per factor.
+
+`evaluate_rustred_symbolic` exposes the same value together with the exact
+nonzero conditions and the map from master family labels to full semantic
+fingerprints. Its Python counterpart returns `(value, nonzero_conditions,
+families)`, with label/fingerprint pairs in `families`.
+`rustred_application_cache_statistics` and
+`clear_rustred_application_cache` inspect and clear the owned cache without
+changing the accepted entry domain. `rustred_application_product_statistics`
+reports the one-time factor preparation and explicitly counts retained terms.
+`rustred_application_factor_cache_statistics` separately reports the lower
+factor cache. Clearing application caches clears both mutable sessions while
+retaining the immutable structural product plan.
+`rustred_application_product_chart_statistics` separately counts native verified
+numerator charts; these are geometry witnesses, not completed tensor reductions.
+Projection occurs when such a terminal is used, so no additional unbounded
+adapter coefficient cache is created. Owner decoding and validation are reported
+by `rustred_application_owner_preparation_statistics`.
+
+Catalogue preparation, package import, owner preparation and reduction are
+separate stages. Owner programs are prepared lazily on first use; rule results
+and lower-factor products have separate bounded mutable caches. Input matching,
+verified witness selection and numerator lowering still run for each request;
+a warm saved-rule cache does not imply that the whole frontend is cached.
+The family's native inverse scalar-product basis is reused during lowering.
+`rustred_application_cache_work_statistics` reports evicted entries, charged
+coefficient terms/bytes, and recomputed nodes. Python includes these fields in
+`rustred_application_cache_statistics()`. Work counters are cumulative, include
+failed requests, and survive cache clearing. Recomputed nodes count repeated
+cache misses within a single request; no unbounded cross-request history is
+maintained. Cache byte allowances describe retained coefficient payloads, not
+total process memory or an RSS limit.
+
+RustRed combines scalar coefficients, spectators and common-mass factors before
+requesting admission for lowered keys. Thus an expanded denominator-cancelling
+numerator is admitted on its surviving endpoints; intermediate terms which
+cancel exactly do not need independent coverage. Every remaining nonzero key
+follows the package's authenticated route to its declared owner and must belong
+to the recorded entry union. A numerator's total momentum degree does not
+establish this. A squared momentum can leave both a denominator term and a mass
+term, which may occupy different entry domains.
+Missing rules, unsupported entries and unresolved terminals remain errors.
+There is no adapter-wide cutoff at a particular numerator degree or total
+denominator power. Native scalar-algebra, tensor-projector and verified-matching
+work limits are operational bounds, separate from the authenticated entry union.
+Cancellation is performed within each supplied numerator before admission;
+separately supplied integral roots are admitted individually, not accepted on
+the assumption that different unsupported roots will cancel later.
+The five-loop handoff retains products and powers after restoring closed scalar
+contractions. RustRed changes the complete polynomial to denominator coordinates
+before expansion and native coefficient collection. Legacy unweighted lower-loop
+handoffs retain their original expanded-input behavior.
+
+== Native diagram ingress
+
+`VakintExpression::from_diagram` consumes FeynKit's routed vacuum diagram and
+family. `DiagramIntegralOptions::physical_slots` lists zero-based family
+indices in sorted graph-edge order; the default is the physical prefix.
+All other slots must have nonpositive powers. Zero physical powers contract
+edges. Negative physical powers also multiply their original denominators
+into the numerator. These operations preserve the original stored routing
+simultaneously. A contraction removing an independent loop is rejected because
+the remaining graph cannot represent that scaleless integration.
+Authenticated zero-flow massive propagators are extracted as exact native
+scalar powers before the graph contraction, preserving the five-loop measure.
+A positive-power massless zero-flow propagator is rejected. Symbolic scalar
+poles remain in the detailed result's nonzero conditions. Exponents outside the
+native integer-power representation range are rejected before materialization.
+Large supported numeric powers can still require substantial coefficient
+materialization; that representation check is not a memory-cost guarantee.
+
+The native Python function `integral_from_diagram` accepts the same
+`physical_slots` and `powers` options. Compact DOT and exported DOT are parsed
+by FeynKit; Vakint adds no DOT parser. The `five_loop_scalar_diagrams` example
+uses `Process::generate_diagrams` and the scalar model with self loops retained
+to create exported DOT fixtures. Its graph count is not an integral-class count.
+
+The source routing data is transcribed from RustRed's
+`tide_five_loop_parent_vertices.json`, `tide_five_loop_manifest.json`, and
+`tide_five_loop_routing_witnesses.json`, based on Thomas Luthe's 2015 thesis,
+tables A.1 and B.2. Unit-mass denominators are `q^2 - 1`; no numerical equality
+to the thesis's Euclidean convention is implied.
+
+The native generated-graph check maps all 166 connected phi-cubed/phi-quartic
+vacuum graphs to 59 registered integral classes. The 67-class registry also
+covers eight classes absent as direct representatives of that scalar generation
+problem; the separate native DOT pinch round trips cover all 67. Thus neither
+166 nor 59 is the number of masters or a replacement for the TIDE census.
+The separate contraction-closure check enumerates 7,548 source contraction
+representatives, deduplicates 101 native incidence classes, and verifies all
+67 integral classes, including all 19 factorized classes, with no unmatched
+class. Generation permits tadpoles and forbids zero-flow bridges; only
+loop-preserving pinches enter this census. The massive-bridge ingress check
+separately covers connected products excluded by the generation filter.
+
+== Reproducible entry points
+
+Build and run the native examples with the `feynkit-ingress` feature:
+
+```sh
+cargo run --release -p vakint --features feynkit-ingress \
+  --example five_loop_scalar_diagrams -- /path/to/new/dot-directory
+cargo run --release -p vakint --features feynkit-ingress \
+  --example five_loop_saved_application -- /path/to/application --admitted-suite
+```
+
+The admitted suite uses three generation-54 witnesses: scalar point 162,
+inverse-denominator numerator point 60, and scalar rank-eleven point 0.
+It checks exact warm reuse, expanded numerator equality, simultaneous unimodular
+basis changes with vertex/edge relabeling and orientation reversal, nonunit mass,
+independent one-loop factor reductions, cache clearing, and settings opt-out.
+Six additional positive-line controls compare an expanded cancelling numerator
+against a separately constructed and parsed pinched DOT: single, doubled,
+multiple and mixed dotted cancellations, including nonunit mass. Native
+all-row momentum maps and weighted lowering first authenticate their common
+admitted key without loading a package. Loaded comparisons check both the
+qualified value and nonconstant guard obligations. Massive-bridge comparisons
+check unit, nonunit and symbolic masses, retaining the symbolic mass pole.
+The point-60 numerator `(q^2-1)^5` is inhomogeneous, with maximum momentum degree
+ten and scalar degree five; point 0 has maximum momentum degree twenty-two.
+Neither is a claim about arbitrary homogeneous polynomials. These are individual
+admitted witnesses, not rectangular rank/power coverage claims.
+
+The same example accepts a generated DOT path in place of `--admitted-suite`.
+That mode builds the homogeneous degree-ten numerator `(D1-D2)^5` (GeV^10)
+with two dotted propagators, and succeeds
+only if all surviving endpoints lie in the selected package's actual union.
+Failure of admission is a reported unsupported input, not a successful reduction.
+For the pinned generation-54 package, the full parent-32745 two-dot control is
+outside the recorded union: one surviving key is
+`[-3,1,1,1,2,1,1,1,1,1,0,1,0,0,1]`. The separate homogeneous degree-ten control
+on the admitted five-tadpole support succeeds. These are deliberately distinct
+tests; the easier factorized case is not evidence for full-parent coverage.
+The Python `examples/five_loop_saved_application.py` uses the installed native
+HepKit DOT reader, family constructor and Vakint ingress. Its optional `--powers`
+argument follows the native family order. It checks an exact warm repeat of the
+value, guards and family identities, then prints a bounded preview and counts.
+Use `--verbose` to print the complete guarded result and family identities.
+
+The ignored external-package tests require `VAKINT_SAVED_APPLICATION`; the
+813-witness admission test additionally requires
+`VAKINT_SAVED_APPLICATION_INVENTORY`. That inventory is a supplied finite
+witness set, not an exhaustive enumeration of every point in the domain union.
+The admission test reconstructs each common-family integrand, proves its
+weighted-lowering identity, and runs ordinary canonicalization, tensor
+preprocessing and verified witness selection. It asserts that no owner program
+was prepared and no IBP rule was applied. The bounded-cache test separately
+requires actual eviction and compares exact repeated values, guards and family
+identities while checking the retained byte allowance.

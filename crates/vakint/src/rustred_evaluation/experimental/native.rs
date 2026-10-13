@@ -5,14 +5,15 @@ use std::sync::{Arc, Mutex};
 
 use rustred::family::{IntegralFamily, IntegralKey};
 use rustred::persistence::BinaryIoLimits;
-use rustred::reduction::ReductionLimits;
 use rustred::reduction::terminal_normalization::{
     TerminalAliasPlan, TerminalNormalizationLimits, TerminalNormalizationPlan,
-    VacuumParametricLimits,
+    VacuumFactorReduction, VacuumParametricLimits, reduce_transported_candidate_factor,
 };
+use rustred::reduction::{ReductionLimits, ReductionStatistics};
 use rustred::sector::{CoordinatePriority, CoordinatePriorityLimits, Mask, OrderingPolicy, zero};
 use rustred::solver::{
-    CandidateReducer, IntegralOrder, SectorConfig, SectorExecutor, SectorSolveOptions, SourceSystem,
+    CandidateDecomposition, CandidateReducer, IntegralOrder, SectorConfig, SectorExecutor,
+    SectorSolveOptions, SourceSystem,
 };
 use symbolica::atom::Atom;
 
@@ -32,6 +33,60 @@ pub struct NativeCandidate<const N: usize> {
 }
 
 impl<const N: usize> NativeCandidate<N> {
+    pub(crate) fn family_shared(&self) -> Arc<IntegralFamily> {
+        Arc::clone(&self.family)
+    }
+
+    /// One scoped transported batch; RustRed retains and budgets shared DAG
+    /// nodes between endpoints, then clears them at both call boundaries.
+    pub(crate) fn reduce_transported_unit_mass_guarded(
+        &self,
+        transport: &rustred::sector::symmetry::integral_transport::Prepared,
+        target: &IntegralKey,
+        limits: ReductionLimits,
+    ) -> Result<VacuumFactorReduction, String> {
+        let mut reducer = self
+            .reducer
+            .lock()
+            .map_err(|_| "candidate reducer lock poisoned")?;
+        reduce_transported_candidate_factor(
+            &mut reducer,
+            transport,
+            target,
+            Arc::clone(&self.family),
+            Default::default(),
+            limits,
+        )
+        .map_err(|error| error.to_string())
+    }
+
+    /// A scoped native call for the core-owned sum-of-products session.
+    /// Its remaining cache allowance must not hide a persistent native cache.
+    pub(crate) fn reduce_unit_mass_guarded(
+        &self,
+        target: &IntegralKey,
+        remaining: ReductionLimits,
+    ) -> Result<
+        (
+            CandidateDecomposition,
+            Vec<rustred::algebra::Coefficient>,
+            ReductionStatistics,
+        ),
+        String,
+    > {
+        let mut reducer = self
+            .reducer
+            .lock()
+            .map_err(|_| "candidate reducer lock poisoned")?;
+        reducer.clear_cache().map_err(|error| error.to_string())?;
+        let result = reducer
+            .reduce_unit_mass_guarded(target, remaining)
+            .map_err(|error| error.to_string());
+        let cleared = reducer.clear_cache().map_err(|error| error.to_string());
+        cleared?;
+        result
+    }
+
     /// Steer an existing RustRed candidate applier without running discovery.
     ///
     /// The caller may load it with RustRed's candidate-bundle loader. Its
@@ -499,7 +554,7 @@ mod tests {
         ]);
         assert_eq!(
             native.output_terminals(),
-            &expected.keys().cloned().collect()
+            &expected.keys().cloned().collect::<BTreeSet<_>>()
         );
         assert!(!native.output_terminals().contains(&numerator));
         // The four-line circuit symmetry gives D5 -> (D1+D2+D3+D4+1)/3

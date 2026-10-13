@@ -1,9 +1,13 @@
-use std::{collections::HashSet, fmt, sync::Arc};
+use std::{
+    collections::HashSet,
+    fmt,
+    sync::{Arc, OnceLock},
+};
 
 use crate::utils::vakint_macros::{vk_parse, vk_symbol};
 use colored::Colorize;
 use symbolica::{
-    atom::{Atom, AtomCore, AtomView, FunctionArgument, FunctionBuilder, SliceType},
+    atom::{Atom, AtomCore, AtomView, FunctionArgument, FunctionBuilder, SliceType, Symbol},
     function,
     id::{Condition, Match},
     solve::SolveCoverage,
@@ -11,24 +15,30 @@ use symbolica::{
 
 use crate::{
     EvaluationOrder, Integral, ReplacementRules, VakintError, function_condition,
-    get_individual_momenta, get_individual_momenta_from_atom, get_node_ids, get_prop_with_id,
-    graph::Graph, symbols::S,
+    get_individual_momenta, get_individual_momenta_from_atom, get_prop_with_id, graph::Graph,
+    symbols::S,
 };
+mod catalogue;
+pub(crate) mod five_loop;
+pub(crate) use catalogue::FiveLoopCatalogue;
+pub use catalogue::FiveLoopCatalogueStatistics;
+mod momentum_mapping;
+pub use momentum_mapping::MomentumMatchLimits;
+
 pub enum TopologyContractions {
     Custom(Vec<Vec<usize>>),
     Automatic,
 }
 
 #[derive(Debug, Clone)]
-pub struct Topologies(Vec<Topology>);
+pub struct Topologies(Vec<Topology>, OnceLock<Arc<FiveLoopCatalogue>>);
 
 impl fmt::Display for Topologies {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
             "{}",
-            self.0
-                .iter()
+            self.iter()
                 .enumerate()
                 .map(|(i, t)| format!("{}) {}", i + 1, t))
                 .collect::<Vec<_>>()
@@ -38,19 +48,24 @@ impl fmt::Display for Topologies {
 }
 
 impl Topologies {
+    /// Construct the ordinary one-through-four-loop registry. The saved
+    /// five-loop catalogue is installed only by successful artifact loading.
     pub fn generate_topologies() -> Result<Self, VakintError> {
         // ==
         // One-loop topology
         // ==
-        let mut topologies = Topologies(vec![
-            Integral::new(
-                1,
-                Some(vk_parse!("topo(prop(1,edge(1,1),k(1),msq(1),pow(1)))").unwrap()),
-                Some(vk_parse!("I1L(msq(1),pow(1))").unwrap()),
-                EvaluationOrder::all_but_fmft(),
-            )?
-            .into(),
-        ]);
+        let mut topologies = Topologies(
+            vec![
+                Integral::new(
+                    1,
+                    Some(vk_parse!("topo(prop(1,edge(1,1),k(1),msq(1),pow(1)))").unwrap()),
+                    Some(vk_parse!("I1L(msq(1),pow(1))").unwrap()),
+                    EvaluationOrder::all_but_fmft(),
+                )?
+                .into(),
+            ],
+            OnceLock::new(),
+        );
         // ==
         // Two-loop topologies
         // ==
@@ -93,7 +108,16 @@ impl Topologies {
                 vk_parse!("I3L(msq(1),pow(1),pow(2),pow(3),pow(4),pow(5),pow(6))")
                     .unwrap()
                     .as_view(),
-                TopologyContractions::Automatic,
+                // These contraction IDs are established public short forms.
+                // Keep their representatives stable when graph quotient or
+                // canonical-labeling implementations choose another isomorph.
+                TopologyContractions::Custom(vec![
+                    vec![],
+                    vec![6],
+                    vec![1, 6],
+                    vec![3, 6],
+                    vec![1, 3, 6],
+                ]),
                 EvaluationOrder::all_but_fmft(),
             )?
             .0,
@@ -284,23 +308,106 @@ impl Topologies {
                 applicable_evaluation_methods.clone(),
             )?);
         }
-        Ok(Topologies(topologies))
+        Ok(Topologies(topologies, OnceLock::new()))
     }
 
+    /// Match the currently available base/custom and explicitly loaded data.
+    /// This registry-only API never prepares a catalogue or opens an artifact.
     pub fn match_topologies_to_user_input(
         &self,
         input: AtomView,
         allow_unknown_integrals: bool,
     ) -> Result<Option<ReplacementRules>, VakintError> {
-        for topology in self.0.iter() {
-            if matches!(topology, Topology::Unknown(_)) && !allow_unknown_integrals {
-                continue;
+        let match_started = std::time::Instant::now();
+        // The optional five-loop parser must not narrow the legacy Unknown
+        // contract before any five-loop matching data has been installed.
+        if self
+            .iter()
+            .any(|topology| matches!(topology, Topology::FiveLoop(_)))
+            && let Some(source) = momentum_mapping::MomentumInput::from_expression(input, 5)?
+        {
+            log::debug!(target: "vakint::five_loop_match", "phase=native_input_ready elapsed_seconds={:.6}", match_started.elapsed().as_secs_f64());
+            if let Some(replacement) = source.match_topologies(
+                self.iter()
+                    .filter(|topology| matches!(topology, Topology::FiveLoop(_))),
+            )? {
+                return Ok(Some(replacement));
             }
-            if let Some(replacement_rules) = topology.match_topology_to_user_input(input)? {
-                return Ok(Some(replacement_rules));
+        } else {
+            // A validated five-loop long form cannot be a lower-loop topology.
+            // In particular factorized five-loop incidence can otherwise trigger
+            // expensive unsuccessful lower-loop pattern permutations.
+            log::debug!(target: "vakint::five_loop_match", "phase=legacy_sweep_begin");
+            for topology in self.iter() {
+                if matches!(topology, Topology::Unknown(_)) {
+                    continue;
+                }
+                if let Topology::FiveLoop(integral) = topology {
+                    if let Some(mut replacement) =
+                        integral.match_integral_to_short_user_input(input)?
+                    {
+                        replacement.canonical_topology = topology.clone();
+                        return Ok(Some(replacement));
+                    }
+                    // Five-loop integral classes can have different graph incidence.
+                    // Their long form has one native verified momentum-mapping path.
+                    continue;
+                }
+                if let Some(replacement_rules) = topology.match_topology_to_user_input(input)? {
+                    return Ok(Some(replacement_rules));
+                }
+            }
+            log::debug!(target: "vakint::five_loop_match", "phase=legacy_sweep_end elapsed_seconds={:.6}", match_started.elapsed().as_secs_f64());
+        }
+        if allow_unknown_integrals {
+            for topology in self
+                .0
+                .iter()
+                .filter(|topology| matches!(topology, Topology::Unknown(_)))
+            {
+                if let Some(replacement) = topology.match_topology_to_user_input(input)? {
+                    return Ok(Some(replacement));
+                }
             }
         }
         Ok(None)
+    }
+
+    /// Scope-aware exact witness selection for long-form five-loop inputs.
+    /// Ordinary and lower-loop matching retain their existing fast behavior.
+    /// `None` from the criterion means only an ordinary scope rejection; typed
+    /// errors propagate. If no witness is admitted, retain the ordinary exact
+    /// witness so the caller can report its unchanged entry-domain failure.
+    pub fn match_topologies_to_user_input_with_acceptance<K: Ord>(
+        &self,
+        input: AtomView,
+        allow_unknown_integrals: bool,
+        limits: MomentumMatchLimits,
+        mut criterion: impl FnMut(&ReplacementRules) -> Result<Option<K>, VakintError>,
+    ) -> Result<Option<ReplacementRules>, VakintError> {
+        if self
+            .iter()
+            .any(|topology| matches!(topology, Topology::FiveLoop(_)))
+            && let Some(source) = momentum_mapping::MomentumInput::from_expression(input, 5)?
+        {
+            if let Some(candidate) = source.match_topologies_with_acceptance(
+                self.iter()
+                    .filter(|topology| matches!(topology, Topology::FiveLoop(_))),
+                limits,
+                &mut criterion,
+            )? {
+                return Ok(Some(candidate));
+            }
+        }
+        let matched = self.match_topologies_to_user_input(input, allow_unknown_integrals)?;
+        if let Some(candidate) = &matched {
+            if matches!(candidate.canonical_topology, Topology::FiveLoop(_)) {
+                // The unchanged parametric/short-form fallback may supply one
+                // extra exact witness, but never suppress a criterion error.
+                let _ = criterion(candidate)?;
+            }
+        }
+        Ok(matched)
     }
 }
 
@@ -311,6 +418,7 @@ pub enum Topology {
     TwoLoop(Integral),
     ThreeLoop(Integral),
     FourLoop(Integral),
+    FiveLoop(Integral),
     Unknown(Integral),
 }
 
@@ -321,6 +429,7 @@ impl fmt::Display for Topology {
             Topology::TwoLoop(i) => write!(f, "{}{}{}", "TwoLoop(".magenta(), i, ")".magenta()),
             Topology::ThreeLoop(i) => write!(f, "{}{}{}", "ThreeLoop(".magenta(), i, ")".magenta()),
             Topology::FourLoop(i) => write!(f, "{}{}{}", "FourLoop(".magenta(), i, ")".magenta()),
+            Topology::FiveLoop(i) => write!(f, "{}{}{}", "FiveLoop(".magenta(), i, ")".magenta()),
             Topology::Unknown(i) => write!(f, "{}{}{}", "Unknown(".red(), i, ")".red()),
         }
     }
@@ -333,6 +442,7 @@ impl From<Integral> for Topology {
             2 => Topology::TwoLoop(i),
             3 => Topology::ThreeLoop(i),
             4 => Topology::FourLoop(i),
+            5 => Topology::FiveLoop(i),
             _ => Topology::Unknown(i),
         }
     }
@@ -343,6 +453,24 @@ impl From<Integral> for Topology {
 mod routing_tests;
 
 impl Topology {
+    /// The same exact head is used by native contraction generation and the
+    /// cheap optional-catalogue gate; input names are never prefix-matched.
+    pub(super) fn contracted_short_symbol(head: Symbol, contraction: &[usize]) -> Symbol {
+        if contraction.is_empty() {
+            head
+        } else {
+            vk_symbol!(format!(
+                "{}_pinch_{}",
+                head,
+                contraction
+                    .iter()
+                    .map(usize::to_string)
+                    .collect::<Vec<_>>()
+                    .join("_")
+            ))
+        }
+    }
+
     pub fn generate_topology_with_contraction(
         n_tot_props: usize,
         canonical_expression: AtomView,
@@ -352,17 +480,9 @@ impl Topology {
     ) -> Result<Topology, VakintError> {
         let mut contracted_canonical_expression = canonical_expression.to_owned();
         let mut contracted_short_expression = short_expression.to_owned();
-        let mut nodes_to_merge = vec![];
 
         for prop_id in contraction.iter() {
-            if let Some(m) = get_prop_with_id(contracted_canonical_expression.as_view(), *prop_id) {
-                let (left_node_id, right_node_id) = get_node_ids(&m).unwrap();
-                if right_node_id > left_node_id {
-                    nodes_to_merge.push((right_node_id, left_node_id));
-                } else {
-                    nodes_to_merge.push((left_node_id, right_node_id));
-                }
-            } else {
+            if get_prop_with_id(contracted_canonical_expression.as_view(), *prop_id).is_none() {
                 return Err(VakintError::InvalidIntegralFormat(format!(
                     "Cannot contract propagatore id {} as it is not found in integral: {}",
                     prop_id, contracted_canonical_expression
@@ -389,28 +509,23 @@ impl Topology {
             }
         }
 
-        let mut old_contracted_canonical_expression = contracted_canonical_expression.clone();
-        'replace_contracted_nodes: loop {
-            for (old_node_id, new_node_id) in nodes_to_merge.iter() {
-                for (lhs, rhs) in [
-                    (
-                        format!("edge({},nr_)", old_node_id),
-                        format!("edge({},nr_)", new_node_id),
-                    ),
-                    (
-                        format!("edge(nl_,{})", old_node_id),
-                        format!("edge(nl_,{})", new_node_id),
-                    ),
-                ] {
-                    contracted_canonical_expression = contracted_canonical_expression
-                        .replace(vk_parse!(lhs.as_str()).unwrap().to_pattern())
-                        .with(vk_parse!(rhs.as_str()).unwrap().to_pattern());
-                }
-            }
-            if old_contracted_canonical_expression == contracted_canonical_expression {
-                break 'replace_contracted_nodes;
-            }
-            old_contracted_canonical_expression = contracted_canonical_expression.clone();
+        let mut contracted_graph = Graph::new_from_atom(canonical_expression, n_tot_props)?;
+        contracted_graph.contract_edges(&contraction.iter().copied().collect());
+        for edge in contracted_graph.edges.values() {
+            contracted_canonical_expression = contracted_canonical_expression
+                .replace(
+                    vk_parse!(format!("prop({},edge(nl_,nr_),args__)", edge.id))
+                        .unwrap()
+                        .to_pattern(),
+                )
+                .with(
+                    vk_parse!(format!(
+                        "prop({},edge({},{}),args__)",
+                        edge.id, edge.left_node_id, edge.right_node_id
+                    ))
+                    .unwrap()
+                    .to_pattern(),
+                );
         }
 
         // let tt: Topology = Integral::new(
@@ -441,7 +556,7 @@ impl Topology {
                     let topo_name = if let Match::FunctionName(f) =
                         match_in.get(vk_symbol!("TopoName_")).unwrap()
                     {
-                        f.to_string()
+                        *f
                     } else {
                         panic!("Topology name must correspond to a function name.");
                     };
@@ -452,17 +567,9 @@ impl Topology {
                     } else {
                         panic!("Topology arguments must be wrapped in Symbolica Arg construction.");
                     };
-                    let mut res = FunctionBuilder::new(vk_symbol!(
-                        format!(
-                            "{}_pinch_{}",
-                            topo_name,
-                            contraction
-                                .iter()
-                                .map(|i| i.to_string())
-                                .collect::<Vec<_>>()
-                                .join("_")
-                        )
-                        .as_str()
+                    let mut res = FunctionBuilder::new(Self::contracted_short_symbol(
+                        topo_name,
+                        &contraction,
                     ));
                     for a in args.iter() {
                         res = a.to_owned().add_arg_to_function_builder(res);
@@ -478,6 +585,52 @@ impl Topology {
         )?;
         integral.parent_routing = Some((canonical_expression.to_owned(), parent_coordinates));
         Ok(integral.into())
+    }
+
+    fn solve_loop_coordinates(
+        system: &[Atom],
+        variables: &[Atom],
+    ) -> Result<Vec<Atom>, VakintError> {
+        // The general solve API also accepts nonlinear equations. Retain the
+        // native linearity gate before asking it for a complete routing branch.
+        Atom::system_to_matrix::<u8, _, _>(system, variables).map_err(|error| {
+            VakintError::InvalidIntegralFormat(format!(
+                "Could not form the linear system to force the loop momentum basis: {error:?}"
+            ))
+        })?;
+        let solutions = Atom::solve(system)
+            .wrt_with_exponent::<u8, _>(variables)
+            .map_err(|error| {
+                VakintError::InvalidIntegralFormat(format!(
+                    "Could not solve the linear system to force the loop momentum basis: {error:?}"
+                ))
+            })?;
+        // A routing witness must be unique and unconditional. Free coordinates
+        // or exceptional parameter conditions cannot be dropped when changing
+        // the numerator and every propagator simultaneously.
+        if solutions.coverage() != SolveCoverage::Complete || !solutions.coverage_guard().is_empty()
+        {
+            return Err(VakintError::InvalidIntegralFormat(format!(
+                "Loop momentum basis requires complete guard-free coverage: {solutions:?}"
+            )));
+        }
+        if solutions.len() != 1 {
+            return Err(VakintError::InvalidIntegralFormat(format!(
+                "Expected one loop momentum basis, found {} solution branches",
+                solutions.len()
+            )));
+        }
+        let solution = &solutions[0];
+        if !solution.is_point() || solution.coordinates().len() != variables.len() {
+            return Err(VakintError::InvalidIntegralFormat(format!(
+                "Loop momentum basis is not unique and unconditional: {solution:?}"
+            )));
+        }
+        Ok(solution
+            .coordinates()
+            .iter()
+            .map(|(_, value)| value.clone())
+            .collect())
     }
 
     pub fn force_an_lmb(
@@ -537,9 +690,10 @@ impl Topology {
         // println!("lmb: {:?}", lmb);
         if lmb.len() != n_loops {
             return Err(VakintError::InvalidIntegralFormat(format!(
-                "Loop momentum basis identified does not have the same loop count ({}) as detected for this topology ({}).",
+                "Loop momentum basis identified does not have the same loop count ({}) as detected for this topology ({}): {}.",
                 lmb.len(),
-                n_loops
+                n_loops,
+                g
             )));
         }
 
@@ -590,48 +744,7 @@ impl Topology {
         //     "variables: {:?}",
         //     variables.iter().map(|a| a.to_string()).collect::<Vec<_>>()
         // );
-        // The general solve API also accepts nonlinear equations. Retain the
-        // native linearity gate before asking it for a complete routing branch.
-        Atom::system_to_matrix::<u8, _, _>(&system, &variables).map_err(|error| {
-            VakintError::InvalidIntegralFormat(format!(
-                "Could not form the linear system to force the loop momentum basis: {error:?}"
-            ))
-        })?;
-        let solutions = Atom::solve(&system)
-            .wrt_with_exponent::<u8, _>(&variables)
-            .map_err(|error| {
-                VakintError::InvalidIntegralFormat(format!(
-                    "Could not solve the linear system to force the loop momentum basis: {error:?}"
-                ))
-            })?;
-        // A routing witness must be unique and unconditional. Free coordinates
-        // or exceptional parameter conditions cannot be dropped when changing
-        // the numerator and every propagator simultaneously.
-        if solutions.coverage() != SolveCoverage::Complete || !solutions.coverage_guard().is_empty()
-        {
-            return Err(VakintError::InvalidIntegralFormat(format!(
-                "Loop momentum basis requires complete guard-free coverage: {solutions:?}"
-            )));
-        }
-        if solutions.len() != 1 {
-            return Err(VakintError::InvalidIntegralFormat(format!(
-                "Expected one loop momentum basis, found {} solution branches",
-                solutions.len()
-            )));
-        }
-        let solution = &solutions[0];
-        if !solution.is_point() || solution.coordinates().len() != variables.len() {
-            return Err(VakintError::InvalidIntegralFormat(format!(
-                "Loop momentum basis is not unique and unconditional: {solution:?}"
-            )));
-        }
-        let basis_change = Arc::new(
-            solution
-                .coordinates()
-                .iter()
-                .map(|(_, value)| value.clone())
-                .collect::<Vec<_>>(),
-        );
+        let basis_change = Arc::new(Self::solve_loop_coordinates(&system, &variables)?);
         // println!(
         //     "basis_change: {:?}",
         //     basis_change
@@ -690,6 +803,7 @@ impl Topology {
             | Topology::TwoLoop(i)
             | Topology::ThreeLoop(i)
             | Topology::FourLoop(i)
+            | Topology::FiveLoop(i)
             | Topology::Unknown(i) => i,
         }
     }
@@ -700,6 +814,7 @@ impl Topology {
             | Topology::TwoLoop(i)
             | Topology::ThreeLoop(i)
             | Topology::FourLoop(i)
+            | Topology::FiveLoop(i)
             | Topology::Unknown(i) => i,
         }
     }

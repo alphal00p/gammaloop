@@ -1,6 +1,6 @@
 //! Checked ingress from FeynKit's stored graph routing, without graph rematching.
 
-use std::collections::HashSet;
+use std::collections::{BTreeMap, HashSet};
 
 use feynkit_graph::{FeynmanDiagram, IntegralFamily};
 use feynkit_kinematics::Kinematics;
@@ -12,6 +12,8 @@ use symbolica::{
 
 use crate::{VakintError, VakintExpression, symbols::S};
 
+mod constant_factors;
+
 /// Explicit scalar substitutions and spectator routing for a graph integral.
 ///
 /// Physical propagators default to power one and auxiliary slots to zero.
@@ -21,6 +23,9 @@ use crate::{VakintError, VakintExpression, symbols::S};
 #[derive(Clone, Debug, Default)]
 pub struct DiagramIntegralOptions {
     pub powers: Option<Vec<Integer>>,
+    /// Zero-based family slots in sorted graph-edge order. Defaults to the prefix.
+    /// Zero or negative powers pinch the edge; negative powers also enter the numerator.
+    pub physical_slots: Option<Vec<usize>>,
     pub parameter_substitutions: Vec<(Atom, Atom)>,
     pub external_momenta: Vec<Atom>,
 }
@@ -28,7 +33,13 @@ pub struct DiagramIntegralOptions {
 impl VakintExpression {
     /// Convert a routed, uncut vacuum graph using its ordered physical denominators.
     ///
-    /// Extra family slots are allowed only with nonpositive powers. Integrated
+    /// Nonphysical family slots are allowed only with nonpositive powers. Physical
+    /// zero/negative powers contract their graph edges in the original routing.
+    /// Massive zero-flow bridges are first extracted as native scalar factors;
+    /// contracting their incidence does not change the integrated loop basis.
+    /// Their positive powers must fit the native u32 exponent representation;
+    /// this does not promise bounded-size materialization of numeric scalars.
+    /// Contractions that remove an independent loop are rejected. Integrated
     /// momenta retain family order, mapping to `k(1), k(2), ...`; the explicit
     /// spectator list maps to `p(1), p(2), ...`. Numerators must use native FeynKit
     /// scalar products in the family dimension. Unconverted tensors, undeclared
@@ -137,12 +148,29 @@ impl VakintExpression {
             .collect::<Vec<_>>();
         let substitute = |expression: &Atom| expression.replace_multiple(&substitutions);
         let denominators = family.denominators();
+        let default_slots = (0..edges.len()).collect::<Vec<_>>();
+        let physical_slots = options.physical_slots.as_deref().unwrap_or(&default_slots);
+        let physical_set = physical_slots.iter().copied().collect::<HashSet<_>>();
+        if physical_slots.len() != edges.len()
+            || physical_set.len() != physical_slots.len()
+            || physical_slots
+                .iter()
+                .any(|slot| *slot >= denominators.len())
+        {
+            return Err(invalid(
+                "physical slots must be distinct valid family indices, one per graph edge",
+            ));
+        }
         if denominators.len() < edges.len()
             || physical.denominators().len() != edges.len()
-            || denominators
+            || physical_slots
                 .iter()
                 .zip(physical.denominators())
-                .any(|(actual, wanted)| !(actual - substitute(wanted)).expand().is_zero())
+                .any(|(slot, wanted)| {
+                    !(&denominators[*slot] - substitute(wanted))
+                        .expand()
+                        .is_zero()
+                })
         {
             return Err(invalid(
                 "family physical denominator order/sign/masses do not match the graph",
@@ -153,7 +181,7 @@ impl VakintExpression {
             Some(powers) => powers,
             None => {
                 default_powers = (0..denominators.len())
-                    .map(|index| Integer::from(i64::from(index < edges.len())))
+                    .map(|index| Integer::from(i64::from(physical_set.contains(&index))))
                     .collect::<Vec<_>>();
                 &default_powers
             }
@@ -163,16 +191,85 @@ impl VakintExpression {
                 "powers must be one integer (not bool) per family denominator",
             ));
         }
-        if powers[..edges.len()]
+        if powers
             .iter()
-            .any(|power| power <= &Integer::from(0))
-            || powers[edges.len()..]
-                .iter()
-                .any(|power| power > &Integer::from(0))
+            .enumerate()
+            .any(|(slot, power)| !physical_set.contains(&slot) && power > &Integer::from(0))
         {
-            return Err(invalid(
-                "physical powers must be positive; auxiliary powers must be nonpositive",
-            ));
+            return Err(invalid("auxiliary powers must be nonpositive"));
+        }
+
+        let mut constant_slots = Vec::new();
+        for ((id, _, _), slot) in edges.iter().zip(physical_slots) {
+            let signature = basis
+                .edge_signatures
+                .get(id)
+                .ok_or_else(|| invalid("stored graph routing is missing a propagator"))?;
+            if signature.loops.len() != loops.len()
+                || signature
+                    .external
+                    .integer_coefficients()
+                    .iter()
+                    .any(|value| *value != 0)
+            {
+                return Err(invalid(
+                    "stored graph routing is not the declared vacuum loop basis",
+                ));
+            }
+            if signature
+                .loops
+                .integer_coefficients()
+                .iter()
+                .all(|value| *value == 0)
+            {
+                constant_slots.push(*slot);
+            }
+        }
+        let (constant_factor, mut effective_powers) =
+            constant_factors::extract(family, powers, &constant_slots)?;
+
+        // Native scalar diagrams may contain repeated inverse propagators
+        // (for example the two edges of a bubble with tadpole attachments).
+        // Their exact integer powers add before graph contraction; otherwise
+        // one integral class would spuriously depend on that graph realization.
+        let mut representatives = BTreeMap::<Atom, usize>::new();
+        for slot in physical_slots {
+            let denominator = denominators[*slot].expand();
+            if let Some(representative) = representatives.get(&denominator) {
+                let power = effective_powers[*slot].clone();
+                effective_powers[*representative] += power;
+                effective_powers[*slot] = Integer::from(0);
+            } else {
+                representatives.insert(denominator, *slot);
+            }
+        }
+        let powers = &effective_powers;
+
+        // Contract incidence only. The original stored routing is also used for
+        // every numerator factor, including a cancelled physical denominator.
+        let mut vertices = BTreeMap::new();
+        for (_, endpoints, _) in &edges {
+            for vertex in [endpoints.source.unwrap().0, endpoints.target.unwrap().0] {
+                vertices.insert(vertex, vertex);
+            }
+        }
+        for ((_, endpoints, _), slot) in edges.iter().zip(physical_slots) {
+            if powers[*slot] > Integer::from(0) {
+                continue;
+            }
+            let source = vertices[&endpoints.source.unwrap().0];
+            let target = vertices[&endpoints.target.unwrap().0];
+            if source == target {
+                return Err(invalid(
+                    "a pinch removes an independent vacuum loop; its scaleless integration is not represented by this graph",
+                ));
+            }
+            let (keep, remove) = (source.min(target), source.max(target));
+            for vertex in vertices.values_mut() {
+                if *vertex == remove {
+                    *vertex = keep;
+                }
+            }
         }
 
         // Existing heads install Vakint's tensor tags as well as its dot symmetry.
@@ -181,7 +278,11 @@ impl VakintExpression {
             .chain((0..options.external_momenta.len()).map(|i| S.p.call(i + 1)))
             .collect::<Vec<_>>();
         let mut topology = Atom::one();
-        for (index, ((id, endpoints, _), power)) in edges.iter().zip(powers).enumerate() {
+        for (index, ((id, endpoints, _), slot)) in edges.iter().zip(physical_slots).enumerate() {
+            let power = &powers[*slot];
+            if power <= &Integer::from(0) {
+                continue;
+            }
             let signature = basis
                 .edge_signatures
                 .get(id)
@@ -225,19 +326,18 @@ impl VakintExpression {
                 .ok_or_else(|| invalid("propagator has an incomplete incidence"))?;
             topology *= S.prop.call((
                 id.0,
-                S.edge.call((source.0, target.0)),
+                S.edge.call((vertices[&source.0], vertices[&target.0])),
                 momentum,
                 mass_squared,
                 Atom::num(power.clone()),
             ));
         }
 
-        let mut scalar = substitute(numerator);
-        for (denominator, power) in denominators[edges.len()..]
-            .iter()
-            .zip(&powers[edges.len()..])
-        {
-            scalar *= denominator.pow(Atom::num(-power.clone()));
+        let mut scalar = substitute(numerator) * constant_factor;
+        for (denominator, power) in denominators.iter().zip(powers) {
+            if power < &Integer::from(0) {
+                scalar *= denominator.pow(Atom::num(-power.clone()));
+            }
         }
         let free = free
             .with_momenta(momenta.iter().cloned())

@@ -141,6 +141,11 @@ test_gammaloop *args:
         # excludes those classes from the curated base suite.
         cmd+=(--run-ignored all --ignore-default-filter)
     fi
+    if contains_value slow "${selected_modules[@]}"; then
+        # The QCD ladder slow test reruns native diagram ingress and the full
+        # exact five-loop preparation. Do not enable this lane for base CI.
+        cmd+=(--features vakint/feynkit-ingress,rustred-app/capacity-dispatch)
+    fi
     for package in "${gammaloop_packages[@]}"; do
         cmd+=(-p "$package")
     done

@@ -1,17 +1,13 @@
 use std::fmt;
 
-use crate::utils::vakint_macros::{vk_parse, vk_symbol};
+use crate::utils::vakint_macros::vk_symbol;
 use ahash::{HashMap, HashSet};
 use symbolica::{
-    atom::{Atom, AtomCore, AtomView, SliceType},
+    atom::{Atom, AtomView},
     graph,
-    id::Match,
 };
 
-use crate::{
-    VakintError, get_individual_momenta_from_atom, get_node_ids, get_prop_with_id,
-    utils::replace_until_stable,
-};
+use crate::{VakintError, get_individual_momenta_from_atom, get_node_ids, get_prop_with_id};
 
 #[derive(Debug, Clone)]
 pub struct Edge {
@@ -194,12 +190,13 @@ impl Graph {
 
     pub fn to_symbolica_graph(&self, directed: bool) -> graph::Graph<graph::Empty, Atom> {
         let mut g = graph::Graph::new();
-        let symb_nodes: HashMap<usize, usize> = HashMap::from_iter(
-            self.nodes
-                .values()
-                .map(|n| (n.id, g.add_node(graph::Empty))),
-        );
-        for e in self.edges.values() {
+        let mut nodes = self.nodes.values().collect::<Vec<_>>();
+        nodes.sort_by_key(|node| node.id);
+        let symb_nodes: HashMap<usize, usize> =
+            HashMap::from_iter(nodes.into_iter().map(|n| (n.id, g.add_node(graph::Empty))));
+        let mut edges = self.edges.values().collect::<Vec<_>>();
+        edges.sort_by_key(|edge| edge.id);
+        for e in edges {
             g.add_edge(
                 *symb_nodes.get(&e.right_node_id).unwrap(),
                 *symb_nodes.get(&e.left_node_id).unwrap(),
@@ -212,36 +209,41 @@ impl Graph {
     }
 
     pub fn contract_edges(&mut self, edges_to_contract: &HashSet<usize>) {
-        let mut nodes_to_merge = vec![];
-        for contracted_edge in edges_to_contract {
-            let edge = self.edges.get(contracted_edge).unwrap();
-            if edge.left_node_id > edge.right_node_id {
-                nodes_to_merge.push((edge.left_node_id, edge.right_node_id));
-                self.nodes.remove(&edge.left_node_id);
-            } else {
-                nodes_to_merge.push((edge.right_node_id, edge.left_node_id));
-                self.nodes.remove(&edge.right_node_id);
-            }
-            self.edges.remove(contracted_edge);
-        }
-
-        'relabel_nodes_in_edges: loop {
-            let mut did_relabel = false;
-            for (old_node_id, new_node_id) in nodes_to_merge.iter() {
-                for edge in self.edges.values_mut() {
-                    if edge.left_node_id == *old_node_id {
-                        edge.left_node_id = *new_node_id;
-                        did_relabel = true;
-                    }
-                    if edge.right_node_id == *old_node_id {
-                        edge.right_node_id = *new_node_id;
-                        did_relabel = true;
-                    }
+        // Merge whole equivalence classes before touching incidence. Independent
+        // renames lose unions such as (3,1) and (3,2) after the first rename.
+        let mut representatives: HashMap<usize, usize> =
+            self.nodes.keys().map(|id| (*id, *id)).collect();
+        let mut contractions = edges_to_contract.iter().copied().collect::<Vec<_>>();
+        contractions.sort_unstable();
+        for id in contractions {
+            let edge = &self.edges[&id];
+            let left = representatives[&edge.left_node_id];
+            let right = representatives[&edge.right_node_id];
+            let (keep, remove) = (left.min(right), left.max(right));
+            for representative in representatives.values_mut() {
+                if *representative == remove {
+                    *representative = keep;
                 }
             }
-            if !did_relabel {
-                break 'relabel_nodes_in_edges;
-            }
+        }
+        self.edges.retain(|id, _| !edges_to_contract.contains(id));
+        self.nodes.retain(|id, _| representatives[id] == *id);
+        for node in self.nodes.values_mut() {
+            node.edges.clear();
+        }
+        for edge in self.edges.values_mut() {
+            edge.left_node_id = representatives[&edge.left_node_id];
+            edge.right_node_id = representatives[&edge.right_node_id];
+            self.nodes
+                .get_mut(&edge.left_node_id)
+                .unwrap()
+                .edges
+                .push((edge.id, EdgeDirection::Outgoing));
+            self.nodes
+                .get_mut(&edge.right_node_id)
+                .unwrap()
+                .edges
+                .push((edge.id, EdgeDirection::Incoming));
         }
     }
 
@@ -345,66 +347,62 @@ impl Graph {
         res
     }
 
-    // See "counting cycles II" of Ben's blog post at: https://symbolica.io/posts/pattern_matching/
+    /// Independent edges are the complement of a native spanning forest.
+    /// Every connected component contributes; self loops are always independent.
     pub fn get_one_lmb(&self) -> Result<Vec<i64>, VakintError> {
-        let mut atom_graph = Atom::num(1);
-        let mut node_values = self.nodes.values().collect::<Vec<_>>();
-        node_values.sort_by_key(|n| n.id);
-        for node in node_values {
-            let mut sorted_edges = node.edges.clone();
-            sorted_edges.sort_by_key(|(e, _dir)| *e);
-            atom_graph *= vk_parse!(&format!(
-                "v(n({}),{})",
-                node.id,
-                sorted_edges
-                    .iter()
-                    .map(|(e, _dir)| format!("{}", e))
-                    .collect::<Vec<_>>()
-                    .join(",")
-            ))
-            .unwrap();
-        }
-        atom_graph = replace_until_stable(
-            atom_graph.as_view(),
-            &vk_parse!("v(l1___,x_,r1___)*v(l2___,x_,r2___)")
-                .unwrap()
-                .to_pattern(),
-            &vk_parse!("v(l1___,r1___,l2___,r2___)")
-                .unwrap()
-                .to_pattern(),
-            None,
-            None,
-        );
-
-        let mut remaining_edges: Vec<i64> = vec![];
-        if let Some(m) = atom_graph
-            .pattern_match(&vk_parse!("v(args__)").unwrap().to_pattern(), None, None)
-            .next_detailed()
-        {
-            if let Some(Match::Multiple(SliceType::Arg, aviews)) =
-                m.match_stack.get(vk_symbol!("args__"))
-            {
-                for a_id in aviews {
-                    let remaining_edge: i64 = match a_id.to_owned().try_into() {
-                        Ok(res) => res,
-                        Err(_) => continue,
-                    };
-                    if !remaining_edges.contains(&remaining_edge) {
-                        remaining_edges.push(remaining_edge);
-                    }
-                }
-            } else {
-                return Err(VakintError::MalformedGraph(format!(
-                    "Could not construct an LMB for graph:\n{}",
-                    self
-                )));
+        let native = self.to_symbolica_graph(false);
+        let mut visited = vec![false; native.nodes().len()];
+        let mut tree_edges = HashSet::default();
+        for node in 0..visited.len() {
+            if visited[node] {
+                continue;
             }
-        } else {
-            return Err(VakintError::MalformedGraph(format!(
-                "Could not construct an LMB for graph:\n{}",
-                self
-            )));
+            for (index, info) in native.get_spanning_tree(node).nodes.iter().enumerate() {
+                visited[index] |= info.position.is_some();
+                if let Some(edge) = info.edge_id {
+                    tree_edges.insert(edge);
+                }
+            }
         }
-        Ok(remaining_edges)
+        let mut ids = self.edges.keys().copied().collect::<Vec<_>>();
+        ids.sort_unstable();
+        ids.into_iter()
+            .enumerate()
+            .filter(|(index, _)| !tree_edges.contains(index))
+            .map(|(_, id)| {
+                i64::try_from(id).map_err(|_| {
+                    VakintError::MalformedGraph(format!(
+                        "edge ID {id} does not fit a loop-basis index"
+                    ))
+                })
+            })
+            .collect()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::utils::vakint_macros::vk_parse;
+
+    #[test]
+    fn contractions_join_shared_endpoint_equivalence_classes() {
+        crate::Vakint::initialize_vakint_symbols();
+        let expression = vk_parse!("topo(prop(1,edge(3,1),k(1),m2,1)*prop(2,edge(3,2),-k(1),m2,1)*prop(3,edge(1,2),k(1),m2,1))").unwrap();
+        let mut graph = Graph::new_from_atom(expression.as_view(), 3).unwrap();
+        graph.contract_edges(&[1, 2].into_iter().collect());
+        assert_eq!(graph.nodes.len(), 1);
+        let edge = &graph.edges[&3];
+        assert_eq!((edge.left_node_id, edge.right_node_id), (1, 1));
+        assert_eq!(graph.nodes[&1].edges.len(), 2);
+        assert_eq!(graph.get_one_lmb().unwrap(), vec![3]);
+    }
+
+    #[test]
+    fn native_spanning_forest_retains_disconnected_self_loops() {
+        crate::Vakint::initialize_vakint_symbols();
+        let expression = vk_parse!("topo(prop(1,edge(1,1),k(1),m2,1)*prop(2,edge(2,2),k(2),m2,1)*prop(3,edge(3,3),k(3),m2,1)*prop(4,edge(4,4),k(4),m2,1)*prop(5,edge(5,5),k(5),m2,1))").unwrap();
+        let graph = Graph::new_from_atom(expression.as_view(), 5).unwrap();
+        assert_eq!(graph.get_one_lmb().unwrap(), vec![1, 2, 3, 4, 5]);
     }
 }

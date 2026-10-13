@@ -22,6 +22,12 @@ use feynkit_tensor::TensorReducer;
 use graph::Graph;
 #[allow(unused)]
 use log::{debug, info, warn};
+pub use rustred::scalar_numerator::ScalarNumeratorLimits as RustRedScalarNumeratorLimits;
+pub use rustred::solver::{
+    CandidateRoutedCachePolicy as RustRedCachePolicy,
+    CandidateRoutedCacheStatistics as RustRedCacheWorkStatistics,
+};
+pub use rustred_evaluation::five_loop::RustRedSymbolicEvaluation;
 pub use rustred_evaluation::{RustRedEvaluationError, RustRedEvaluationOptions};
 
 use regex::Regex;
@@ -288,6 +294,12 @@ pub enum VakintError {
     IoError(#[from] std::io::Error), // Add this variant to convert std::io::Error to VakintError
     #[error("{0}")]
     MalformedGraph(String),
+    #[error("native momentum matching exceeded {resource}: {requested} > {limit}")]
+    MomentumMatchResourceLimit {
+        resource: &'static str,
+        requested: usize,
+        limit: usize,
+    },
     #[error(
         "Invalid loop normalization factor specified: {0}.\nError: {1}\nNote that the following symbols are allowed in the expression: {2}"
     )]
@@ -2055,6 +2067,21 @@ pub struct VakintSettings {
     pub clean_tmp_dir: bool,
     /// Ordered analytic and numerical backends considered for each integral.
     pub evaluation_order: EvaluationOrder,
+    /// Optional externally supplied application package for symbolic five-loop RustRed.
+    /// No package is downloaded or embedded; lower-loop artifacts are unchanged.
+    pub rustred_artifact_path: Option<PathBuf>,
+    /// Operational application/cache allowances; these never enlarge saved entry domains.
+    pub rustred_application_options: rustred_app::SavedApplicationOptions,
+    /// Per-call numerator lowering allowances for the saved five-loop lane.
+    /// These do not change entry admission, legacy lower-loop programs, or
+    /// the independent lower-factor product policy.
+    pub rustred_scalar_numerator_limits: RustRedScalarNumeratorLimits,
+    /// Separate lower-factor product application/cache allowance, not an
+    /// aggregate with `rustred_application_options`.
+    pub rustred_product_limits:
+        rustred::reduction::terminal_normalization::VacuumProductReductionLimits,
+    /// Bounded exact alternatives used to obtain an admitted five-loop routing.
+    pub rustred_momentum_match_limits: topologies::MomentumMatchLimits,
     pub tensor_reduction_method: TensorReductionMethod,
     // This quantity is typically set equal to *one plus the maximum loop count* of the UV regularisation problem considered.
     // For example when considering a 2-loop problem, then:
@@ -2275,6 +2302,11 @@ impl Default for VakintSettings {
             allow_unknown_integrals: true,
             clean_tmp_dir: env::var("VAKINT_NO_CLEAN_TMP_DIR").is_err(),
             evaluation_order: EvaluationOrder::default(),
+            rustred_artifact_path: None,
+            rustred_application_options: rustred_app::SavedApplicationOptions::default(),
+            rustred_scalar_numerator_limits: Default::default(),
+            rustred_product_limits: Default::default(),
+            rustred_momentum_match_limits: Default::default(),
             tensor_reduction_method: TensorReductionMethod::FeynKit,
             // Default to a three-loop UV subtraction problem, for which alphaLoop implementation can be used.
             number_of_terms_in_epsilon_expansion: 4,
@@ -2305,8 +2337,11 @@ impl From<Pattern> for FullPattern {
 
 #[derive(Debug, Clone)]
 pub struct Vakint {
-    /// Supported topology registry used for matching, canonicalization, and evaluation.
+    /// Base/custom matching registry. Successful saved-artifact loading adds a
+    /// shared immutable five-loop catalogue without replacing the base entries.
     pub topologies: Topologies,
+    rustred_application:
+        Arc<std::sync::Mutex<Option<rustred_evaluation::five_loop::LoadedApplication>>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -2340,10 +2375,8 @@ impl VakintTerm {
         settings: &VakintSettings,
     ) -> Result<(), VakintError> {
         let mut integral_specs = if let Some(replacement_rules) =
-            vakint.topologies.match_topologies_to_user_input(
-                self.integral.as_view(),
-                settings.allow_unknown_integrals,
-            )? {
+            vakint.match_topologies_for_settings(settings, self.integral.as_view())?
+        {
             replacement_rules
         } else {
             return Err(VakintError::UnreckognizedIntegral(
@@ -2351,8 +2384,28 @@ impl VakintTerm {
             ));
         };
 
+        // Choose the witness before transporting the scalar numerator. A
+        // finite saved union may admit only some exact family presentations;
+        // ordinary/default backends keep their original matching path.
+        let scalar_five_loop = matches!(integral_specs.canonical_topology, Topology::FiveLoop(_))
+            && matches!(
+                settings.evaluation_order.0.iter().find(|method| {
+                    method.supports(settings, &integral_specs.canonical_topology)
+                }),
+                Some(EvaluationMethod::RustRed(options)) if !options.substitute_masters
+            );
+        if scalar_five_loop {
+            integral_specs = vakint
+                .match_rustred_input(settings, self.integral.as_view(), self.numerator.as_view())?
+                .unwrap_or(integral_specs);
+        }
+
         integral_specs.apply_replacement_rules()?;
-        self.apply_numerator_replacement_rules(&integral_specs, settings)?;
+        if scalar_five_loop {
+            self.apply_scalar_numerator_replacement_rules(&integral_specs, settings)?;
+        } else {
+            self.apply_numerator_replacement_rules(&integral_specs, settings)?;
+        }
 
         let mut could_evaluate_integral = false;
         'eval: for evaluation_approach in settings.evaluation_order.0.iter() {
@@ -2488,6 +2541,18 @@ impl VakintTerm {
         Ok(())
     }
 
+    /// The scalar tail must restore closed contraction scopes before a linear
+    /// matcher substitution can distribute indexed powers. Open tensor inputs
+    /// still require the existing tensor prepass; no projection occurs here.
+    pub(crate) fn apply_scalar_numerator_replacement_rules(
+        &mut self,
+        replacement_rules: &ReplacementRules,
+        settings: &VakintSettings,
+    ) -> Result<(), VakintError> {
+        self.numerator = Self::scalar_product_form(settings, self.numerator.as_view())?;
+        self.apply_numerator_replacement_rules(replacement_rules, settings)
+    }
+
     pub fn canonicalize(
         &mut self,
         settings: &VakintSettings,
@@ -2555,7 +2620,7 @@ impl VakintTerm {
     ) -> Result<(), VakintError> {
         match settings.tensor_reduction_method {
             TensorReductionMethod::AlphaLoop => self.tensor_reduce_alphaloop(vakint, settings),
-            TensorReductionMethod::FeynKit => self.tensor_reduce_feynkit(settings),
+            TensorReductionMethod::FeynKit => self.tensor_reduce_feynkit(settings, false),
         }
     }
 
@@ -2703,7 +2768,77 @@ impl VakintTerm {
         Ok(())
     }
 
-    fn tensor_reduce_feynkit(&mut self, settings: &VakintSettings) -> Result<(), VakintError> {
+    /// Keep already reduced scalar contractions compact across the private
+    /// five-loop RustRed handoff. The standalone tensor-reduction API continues
+    /// to honor the requested indexed/dot presentation exactly as before.
+    fn tensor_reduce_for_evaluation(
+        &mut self,
+        vakint: &Vakint,
+        settings: &VakintSettings,
+    ) -> Result<(), VakintError> {
+        let compact = settings.rustred_artifact_path.is_some()
+            && matches!(
+                settings.tensor_reduction_method,
+                TensorReductionMethod::FeynKit
+            )
+            && vakint
+                .topologies
+                .match_topologies_to_user_input(
+                    self.integral.as_view(),
+                    settings.allow_unknown_integrals,
+                )?
+                .is_some_and(|matched| {
+                    matches!(matched.canonical_topology, Topology::FiveLoop(_))
+                        && matches!(settings.evaluation_order.0.iter().find(|method| {
+                            method.supports(settings, &matched.canonical_topology)
+                        }), Some(EvaluationMethod::RustRed(options)) if !options.substitute_masters)
+                });
+        if compact {
+            let mut scalar_settings = settings.clone();
+            scalar_settings.use_dot_product_notation = true;
+            self.tensor_reduce(vakint, &scalar_settings)
+        } else {
+            self.tensor_reduce(vakint, settings)
+        }
+    }
+
+    /// Restore closed scalar products through the native index-scope boundary.
+    /// This does not authorize projection of an unprocessed loop tensor.
+    pub(crate) fn scalar_product_form(
+        settings: &VakintSettings,
+        numerator: AtomView,
+    ) -> Result<Atom, VakintError> {
+        // Already scalar syntax has no indexed-loop boundary to normalize.
+        // Its grammar and loop dependence are still checked by RustRed's native
+        // scalar service. Do not initialize an unrelated tensor registry just
+        // to pass through a scalar coefficient or explicit scalar products.
+        fn has_indexed_loop(value: AtomView<'_>) -> bool {
+            if matches!(value, AtomView::Fun(function)
+                if function.get_symbol() == S.k && function.get_nargs() != 1)
+            {
+                return true;
+            }
+            value.children().any(has_indexed_loop)
+        }
+        if !has_indexed_loop(numerator) {
+            return Ok(numerator.to_owned());
+        }
+        let mut scalar_settings = settings.clone();
+        scalar_settings.use_dot_product_notation = true;
+        let mut term = Self {
+            numerator: numerator.to_owned(),
+            integral: Atom::one(),
+            vectors: Vec::new(),
+        };
+        term.tensor_reduce_feynkit(&scalar_settings, true)?;
+        Ok(term.numerator)
+    }
+
+    fn tensor_reduce_feynkit(
+        &mut self,
+        settings: &VakintSettings,
+        scalar_only: bool,
+    ) -> Result<(), VakintError> {
         initialize_spenso_reps();
         let epsilon = vk_parse!(&settings.epsilon_symbol).map_err(VakintError::SymbolicaError)?;
         let dimension = Atom::num(4) - Atom::num(2) * epsilon;
@@ -2712,7 +2847,8 @@ impl VakintTerm {
         // one power of the integrated momentum and must not be treated as an
         // opaque scalar factor.  Expand Vakint's dot shorthand before adding
         // Spenso slots, just as the AlphaLoop backend does before invoking
-        // FORM.
+        // FORM. Closed loop-loop products, in contrast, use the native compact
+        // invariant path and must not be reopened into a spurious tensor rank.
         Self::validate_spenso_loop_dots(self.numerator.as_view())?;
         let vakint_dots = self.numerator.replace_map(|term, _context, out| {
             let AtomView::Fun(function) = term else {
@@ -2726,7 +2862,35 @@ impl VakintTerm {
                 **out = FunctionBuilder::new(S.dot).add_args(arguments).finish();
             }
         });
-        let indexed_numerator = Vakint::convert_from_dot_notation(vakint_dots.as_view());
+        let representation = Minkowski::selfless_symbol().call(&dimension);
+        let native_scalar_dots = vakint_dots.replace_map(|term, _context, out| {
+            let AtomView::Fun(function) = term else {
+                return;
+            };
+            if function.get_symbol() != S.dot || function.get_nargs() != 2 {
+                return;
+            }
+            let arguments = function.iter().collect::<Vec<_>>();
+            if !arguments.iter().all(|argument| {
+                matches!(argument, AtomView::Fun(vector)
+                    if vector.get_symbol() == S.k && vector.get_nargs() == 1
+                        && get_integer_from_atom(vector.iter().next().unwrap()).is_some())
+            }) {
+                return;
+            }
+            **out = FunctionBuilder::new(SPENSO_TAG.dot)
+                .add_args(arguments.iter().map(|argument| {
+                    let AtomView::Fun(vector) = argument else {
+                        unreachable!()
+                    };
+                    FunctionBuilder::new(S.k)
+                        .add_args(vector.iter())
+                        .add_arg(&representation)
+                        .finish()
+                }))
+                .finish();
+        });
+        let indexed_numerator = Vakint::convert_from_dot_notation(native_scalar_dots.as_view());
         let reducer = TensorReducer::new(dimension).with_integrated_head(S.k);
         let mut next_bridge_dummy = Self::next_dot_dummy_index(indexed_numerator.as_view());
         let lorentz = TensorCollectFilter::Reps([Minkowski {}.into()]);
@@ -2736,7 +2900,10 @@ impl VakintTerm {
         // subtrees stay opaque in the existing filtered collector.
         let selected = indexed_numerator.collect_with_map(|value| match value {
             AtomView::Fun(function) => {
-                [S.k, S.p, S.g].contains(&function.get_symbol()) || lorentz.matches(value)
+                [S.k, S.p, S.g].contains(&function.get_symbol())
+                    || (function.get_symbol() == SPENSO_TAG.dot
+                        && Self::is_reducible_spenso_loop_dot(&function.iter().collect::<Vec<_>>()))
+                    || lorentz.matches(value)
             }
             AtomView::Pow(power) => {
                 // A closed indexed power owns a fresh dummy scope per copy.
@@ -2761,7 +2928,12 @@ impl VakintTerm {
                     unreachable!("map_collects visits only collector wrappers")
                 };
                 let term = collected.iter().next().expect("collector wrapper payload");
-                match Self::tensor_reduce_feynkit_term(term, &reducer, &mut next_bridge_dummy) {
+                match Self::tensor_reduce_feynkit_term(
+                    term,
+                    &reducer,
+                    &mut next_bridge_dummy,
+                    scalar_only,
+                ) {
                     Ok(value) => **out = value,
                     Err(error) => failure = Some(error),
                 }
@@ -2782,13 +2954,21 @@ impl VakintTerm {
         numerator: AtomView<'_>,
         reducer: &TensorReducer,
         next_bridge_dummy: &mut usize,
+        scalar_only: bool,
     ) -> Result<Atom, VakintError> {
         let dimension = reducer.dimension();
         let opaque_minkowski_slots = Self::collect_opaque_minkowski_slots(numerator);
         let opaque_compact_vectors = Self::collect_opaque_compact_vectors(numerator, dimension);
         let numerator =
             Self::vakint_to_spenso_numerator(numerator, dimension, &opaque_minkowski_slots);
-        let reduced = reducer.reduce(numerator.as_view())?.into_expression();
+        let reduced = reducer.reduce(numerator.as_view())?;
+        if scalar_only && reduced.max_rank() != 0 {
+            return Err(VakintError::InvalidNumerator(format!(
+                "RustRed scalar input still requires tensor projection of rank {}; run the tensor prepass first",
+                reduced.max_rank(),
+            )));
+        }
+        let reduced = reduced.into_expression();
         let reduced = Self::bridge_opaque_projectors(reduced.as_view(), next_bridge_dummy);
         let reduced =
             Self::spenso_to_vakint_numerator(reduced.as_view(), dimension, &opaque_compact_vectors);
@@ -3710,17 +3890,27 @@ impl VakintExpression {
         Ok(res)
     }
 
+    /// Canonicalize against the supplied registry without artifact I/O. Use
+    /// `Vakint::to_canonical` for settings-driven lazy artifact loading.
     pub fn canonicalize(
         &mut self,
         settings: &VakintSettings,
         topologies: &Topologies,
         short_form: bool,
     ) -> Result<(), VakintError> {
+        self.canonicalize_with(settings, short_form, |input| {
+            topologies.match_topologies_to_user_input(input, settings.allow_unknown_integrals)
+        })
+    }
+
+    fn canonicalize_with(
+        &mut self,
+        settings: &VakintSettings,
+        short_form: bool,
+        mut match_input: impl FnMut(AtomView) -> Result<Option<ReplacementRules>, VakintError>,
+    ) -> Result<(), VakintError> {
         for term in self.0.iter_mut() {
-            if let Some(replacement_rules) = topologies.match_topologies_to_user_input(
-                term.integral.as_view(),
-                settings.allow_unknown_integrals,
-            )? {
+            if let Some(replacement_rules) = match_input(term.integral.as_view())? {
                 //println!("replacement_rules = {}", replacement_rules,);
                 term.canonicalize(settings, &replacement_rules, short_form)?;
             } else {
@@ -4087,9 +4277,46 @@ impl Vakint {
         // Force initialization of symbolica symbols with proper attributes
         LazyLock::force(&S);
 
+        let started = std::time::Instant::now();
         let topologies = Topologies::generate_topologies()?;
+        log::debug!(target: "vakint::saved_application", "phase=base_catalogue_prepared elapsed_seconds={:.6}", started.elapsed().as_secs_f64());
 
-        Ok(Vakint { topologies })
+        Ok(Vakint {
+            topologies,
+            rustred_application: Arc::default(),
+        })
+    }
+
+    /// Match existing lower/custom data first. Only a five-loop candidate miss
+    /// with an explicitly configured artifact enters the saved loader, before
+    /// the unknown fallback. Unrelated unknown lower loops do not open it.
+    /// Registry-only public APIs intentionally have no implicit loader authority.
+    pub(crate) fn match_topologies_for_settings(
+        &self,
+        settings: &VakintSettings,
+        input: AtomView,
+    ) -> Result<Option<ReplacementRules>, VakintError> {
+        if let Some(matched) = self
+            .topologies
+            .match_topologies_to_user_input(input, false)?
+        {
+            return Ok(Some(matched));
+        }
+        if settings.rustred_artifact_path.is_some() && Topologies::needs_five_loop_catalogue(input)?
+        {
+            self.saved_application(settings)?;
+            if let Some(matched) = self
+                .topologies
+                .match_topologies_to_user_input(input, false)?
+            {
+                return Ok(Some(matched));
+            }
+        }
+        if settings.allow_unknown_integrals {
+            self.topologies.match_topologies_to_user_input(input, true)
+        } else {
+            Ok(None)
+        }
     }
 
     pub fn validate_settings(&self, settings: &VakintSettings) -> Result<(), VakintError> {
@@ -6335,8 +6562,12 @@ Evaluated (n_loops=1, mu_r=1) :
     ) -> Result<Atom, VakintError> {
         self.validate_settings(settings)?;
         let mut vakint_expr = VakintExpression::try_from(input)?;
-        vakint_expr.canonicalize(settings, &self.topologies, false)?;
-        vakint_expr.tensor_reduce(self, settings)?;
+        vakint_expr.canonicalize_with(settings, false, |input| {
+            self.match_topologies_for_settings(settings, input)
+        })?;
+        for term in vakint_expr.0.iter_mut() {
+            term.tensor_reduce_for_evaluation(self, settings)?;
+        }
         vakint_expr.evaluate_integral(self, settings)?;
         Ok(vakint_expr.into())
     }
@@ -6348,7 +6579,9 @@ Evaluated (n_loops=1, mu_r=1) :
         short_form: bool,
     ) -> Result<Atom, VakintError> {
         let mut vakint_expr = VakintExpression::try_from(input)?;
-        vakint_expr.canonicalize(settings, &self.topologies, short_form)?;
+        vakint_expr.canonicalize_with(settings, short_form, |input| {
+            self.match_topologies_for_settings(settings, input)
+        })?;
         Ok(vakint_expr.into())
     }
 
