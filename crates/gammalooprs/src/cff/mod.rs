@@ -764,12 +764,11 @@ impl CutCFF {
     /// each variant because contact terms need not have the same half-edge
     /// support; in that case the same `(-1)^N` conversion is supplied here.
     ///
-    /// An ordinary component keeps its established core conversion. A
-    /// generalized component instead uses the numerator-bound-independent
-    /// scalar-denominator frame. Its generalized core sign is already encoded
-    /// in the raw Laurent functional and must not be multiplied again: doing
-    /// so would let an unused numerator-rank allowance change the value of an
-    /// otherwise identical scalar integrand.
+    /// Each component supplies its numerator-bound-independent source frame,
+    /// `(-1)^(r-1)` for surviving denominator rank `r`. Generalized core signs
+    /// are already encoded in the raw Laurent functional, so unused numerator-rank
+    /// allowances cannot change this conversion. Energy-factor ownership controls
+    /// only the explicit `(-1)^N` conversion above.
     fn gamma_loop_prefactor_conversion<E, H>(
         generated: &GeneratedThreeDExpression<E, H>,
     ) -> CffGlobalPrefactorSign {
@@ -778,20 +777,12 @@ impl CutCFF {
         generated.energy_factor_components.iter().fold(
             CffGlobalPrefactorSign::default(),
             |conversion, component| {
-                let source_frame = match component.ownership {
-                    CffEnergyFactorOwnership::GlobalSourceProduct => {
-                        component.core_global_prefactor_sign
-                    }
-                    CffEnergyFactorOwnership::VariantLocal => {
-                        component.denominator_only_global_prefactor_sign
-                    }
-                };
                 conversion
                     .product(CffGlobalPrefactorSign::from_exponent(
                         component.internal_edge_ids.len()
                             * usize::from(retained_positive_energy_factors),
                     ))
-                    .product(source_frame)
+                    .product(component.source_frame)
             },
         )
     }

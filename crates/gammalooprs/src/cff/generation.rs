@@ -1313,8 +1313,7 @@ impl Graph {
             energy_factor_ownership,
             energy_factor_components,
             source_energy_degree_bounds,
-            denominator_only_global_prefactor_sign,
-            core_global_prefactor_sign,
+            source_frame,
         } = generated;
         if !expression.residual_denominators.is_empty() {
             return Err(eyre::eyre!(
@@ -1450,8 +1449,7 @@ impl Graph {
                 energy_factor_ownership,
                 energy_factor_components,
                 source_energy_degree_bounds,
-                denominator_only_global_prefactor_sign,
-                core_global_prefactor_sign,
+                source_frame,
             },
             mapped_surface_ownership,
         ))
@@ -1979,18 +1977,10 @@ mod tests {
                     .energy_factor_components
                     .iter()
                     .fold(1, |sign, component| {
-                        let frame = match component.ownership {
-                            CffEnergyFactorOwnership::GlobalSourceProduct => {
-                                component.core_global_prefactor_sign
-                            }
-                            CffEnergyFactorOwnership::VariantLocal => {
-                                component.denominator_only_global_prefactor_sign
-                            }
-                        };
                         sign * CffGlobalPrefactorSign::from_exponent(
                             component.internal_edge_ids.len(),
                         )
-                        .product(frame)
+                        .product(component.source_frame)
                         .factor()
                     });
             contour *= Atom::num(source_sign);
@@ -2352,18 +2342,10 @@ mod tests {
                         .energy_factor_components
                         .iter()
                         .fold(1, |sign, component| {
-                            let frame = match component.ownership {
-                                CffEnergyFactorOwnership::GlobalSourceProduct => {
-                                    component.core_global_prefactor_sign
-                                }
-                                CffEnergyFactorOwnership::VariantLocal => {
-                                    component.denominator_only_global_prefactor_sign
-                                }
-                            };
                             sign * CffGlobalPrefactorSign::from_exponent(
                                 component.internal_edge_ids.len(),
                             )
-                            .product(frame)
+                            .product(component.source_frame)
                             .factor()
                         });
                 contour *= Atom::num(source_sign);

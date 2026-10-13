@@ -1625,8 +1625,13 @@ pub struct State {
 
 const STATE_MANIFEST_FILE: &str = "state_manifest.toml";
 const INTEGRAND_GENERATION_SUMMARY_FILE: &str = "generation_summary.json";
-// Version 13 persists the selected medium in graph parameter builders for runtime validation,
-// and amplitude graph terms store their zero-temperature Fermi-surface evaluators.
+// Version 14 stores one source-frame sign per generated CFF and rational component,
+// replacing the duplicate core/denominator signs in the positional bincode layout.
+// Version 13 persists the selected medium in graph parameter builders. Amplitude graph
+// terms store denominator H-surfaces and zero-temperature Fermi-surface evaluators.
+// Frozen SymJIT, C++, and assembly modes for amplitudes and cross sections store
+// CompilationOptionsSnapshot, including jit_direct_translation:
+// SymJIT replaces its bare optimization level, while C++/assembly snapshots gain the field.
 // Older positional bincode layouts must be regenerated.
 // Version 12 names square roots OnShellEnergy and energy sums Esurface. Reject older
 // states before Symbolica import can assign the new meaning to an old Esurface atom.
@@ -1647,7 +1652,7 @@ const INTEGRAND_GENERATION_SUMMARY_FILE: &str = "generation_summary.json";
 // regenerated rather than decoded as the new expression type.
 // Local UV forest contributions remain compatible with this layout because
 // they are combined into one persisted integrand before evaluator construction.
-const CURRENT_STATE_MANIFEST_VERSION: u32 = 13;
+const CURRENT_STATE_MANIFEST_VERSION: u32 = 14;
 const GENERATION_THREAD_STACK_SIZE_BYTES: usize = 32 * 1024 * 1024;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
