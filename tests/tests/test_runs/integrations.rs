@@ -200,6 +200,161 @@ fn aa_ttx_born_rejects_a_basis_whose_origin_lies_outside_a_cut_surface() -> Resu
     Ok(())
 }
 
+/// The rejected group remains in the generated integrand, but is never warmed or hashed
+/// when the saved runtime selection excludes it.
+#[test]
+fn selected_group_integrates_and_resumes_with_an_excluded_invalid_basis() -> Result<()> {
+    use gammalooprs::integrands::{HasIntegrand, process::ProcessIntegrand};
+    use gammalooprs::integrate::{IntegrationState, workspace_state_path};
+
+    let name = "selected_group_excludes_invalid_basis";
+    let bad_name = "selected_group_invalid_basis_fixture";
+    let mut cli = aa_ttx_born_cli(name, "")?;
+    let mut bad_cli = aa_ttx_born_cli(bad_name, "--loop-momentum-bases GL0=2 GL1=3 GL2=2 GL3=3")?;
+    for state in [&mut cli, &mut bad_cli] {
+        state.run_command(
+            "set process -p aa_ttx -i LO string '[sampling]\ngraphs = \"monte_carlo\"\ngraph_names = []\n'",
+        )?;
+    }
+    let (process_id, integrand_name) =
+        cli.state.find_integrand_ref(None, Some(&"LO".to_owned()))?;
+    let (bad_id, bad_integrand) = bad_cli
+        .state
+        .find_integrand_ref(None, Some(&"LO".to_owned()))?;
+    let model = cli
+        .state
+        .resolve_model_for_integrand(process_id, &integrand_name)?;
+    let bad_source = bad_cli
+        .state
+        .process_list
+        .get_integrand(bad_id, &bad_integrand)?
+        .require_generated()?
+        .clone();
+    let mut source = cli
+        .state
+        .process_list
+        .get_integrand(process_id, &integrand_name)?
+        .require_generated()?
+        .clone();
+    assert_eq!(
+        source.graph_group_count(),
+        source.graph_count(),
+        "fixture explicitly disables grouping"
+    );
+
+    // Classify by the actual basis-origin check, then resolve names from those groups.
+    let mut rejected_name = None;
+    for master in bad_source.graph_group_master_names() {
+        let mut group =
+            bad_source.clone_with_selected_graph_groups(&model, &[master.to_owned()])?;
+        if let Err(error) = group.warm_up(&model) {
+            assert!(
+                format!("{error:?}").contains("lies on or outside the energy surface of cut group")
+            );
+            rejected_name = Some(master.to_owned());
+            break;
+        }
+    }
+    let rejected_name = rejected_name.expect("fixture must contain an invalid basis");
+    let (ProcessIntegrand::CrossSection(bad), ProcessIntegrand::CrossSection(good)) =
+        (&bad_source, &mut source)
+    else {
+        unreachable!()
+    };
+    let replacement = bad
+        .data
+        .graph_terms
+        .iter()
+        .find(|term| term.graph.name == rejected_name)
+        .unwrap();
+    let destination = good
+        .data
+        .graph_terms
+        .iter_mut()
+        .find(|term| term.graph.name == rejected_name)
+        .unwrap();
+    let group_id = destination.graph.group_id;
+    *destination = replacement.clone();
+    destination.graph.group_id = group_id;
+    destination.multi_channeling_setup.graph.group_id = group_id;
+    let mut accepted_name = None;
+    for master in source.graph_group_master_names() {
+        if master == rejected_name {
+            continue;
+        }
+        let mut group = source.clone_with_selected_graph_groups(&model, &[master.to_owned()])?;
+        group.warm_up(&model)?;
+        accepted_name = Some(master.to_owned());
+        break;
+    }
+    let accepted_name = accepted_name.expect("fixture must retain a valid group");
+    *cli.state
+        .process_list
+        .get_integrand_mut(process_id, &integrand_name)? = source;
+    cli.run_command(&format!("set process -p aa_ttx -i LO string '[sampling]\ngraphs = \"monte_carlo\"\ngraph_names = [\"{accepted_name}\"]\n[integrator]\nn_bins = 4\nmin_samples_for_update = 1\nn_start = 8\nn_increase = 8\nn_max = 8\n'"))?;
+    let before = cli
+        .state
+        .process_list
+        .get_integrand(process_id, &integrand_name)?
+        .require_generated()?
+        .resume_fingerprint()?;
+    let mut integrate = Integrate {
+        integrand_name: vec![integrand_name.clone()],
+        ..default_integrate_for(name)
+    };
+    let first = integrate.run(&mut cli.state, &cli.cli_settings)?;
+    let state_path = workspace_state_path(&first.workspace_path);
+    let (saved, _): (IntegrationState, _) =
+        bincode::decode_from_slice(&std::fs::read(&state_path)?, bincode::config::standard())?;
+    assert!(saved.iter > 0 && saved.num_points > 0);
+    assert_eq!(
+        cli.state
+            .process_list
+            .get_integrand(process_id, &integrand_name)?
+            .require_generated()?
+            .resume_fingerprint()?,
+        before
+    );
+    // Current empty selection is ignored on resume: the saved nonempty selection is effective.
+    cli.run_command(
+        "set process -p aa_ttx -i LO string '[sampling]\ngraphs = \"monte_carlo\"\ngraph_names = []\n'",
+    )?;
+    integrate.restart = false;
+    integrate.run(&mut cli.state, &cli.cli_settings)?;
+    let (resumed, _): (IntegrationState, _) =
+        bincode::decode_from_slice(&std::fs::read(&state_path)?, bincode::config::standard())?;
+    assert_eq!(
+        (resumed.iter, resumed.num_points),
+        (saved.iter, saved.num_points)
+    );
+    assert_eq!(
+        cli.state
+            .process_list
+            .get_integrand(process_id, &integrand_name)?
+            .require_generated()?
+            .resume_fingerprint()?,
+        before
+    );
+
+    // A restart chooses current settings; selecting the rejected group or every group
+    // retains the existing physical error and does not destroy the accepted workspace.
+    let protected = std::fs::read(&state_path)?;
+    for selected in [format!("\"{rejected_name}\""), String::new()] {
+        cli.run_command(&format!("set process -p aa_ttx -i LO string '[sampling]\ngraphs = \"monte_carlo\"\ngraph_names = [{selected}]\n'"))?;
+        integrate.restart = true;
+        let error = integrate
+            .run(&mut cli.state, &cli.cli_settings)
+            .expect_err("invalid selected basis");
+        assert!(
+            format!("{error:?}").contains("lies on or outside the energy surface of cut group")
+        );
+        assert_eq!(std::fs::read(&state_path)?, protected);
+    }
+    clean_test(&cli.cli_settings.state.folder);
+    clean_test(&bad_cli.cli_settings.state.folder);
+    Ok(())
+}
+
 mod failing {
     use super::*;
 

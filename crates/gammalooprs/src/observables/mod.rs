@@ -2789,7 +2789,12 @@ impl HistogramAccumulatorState {
             log_y_axis: snapshot.log_y_axis,
             discrete_min_bin_id,
             discrete_ordering: snapshot.discrete_ordering,
-            bin_labels: bins.iter().map(|bin| bin.label.clone()).collect(),
+            bin_labels: match snapshot.kind {
+                HistogramSnapshotKind::Continuous => Vec::new(),
+                HistogramSnapshotKind::Discrete => {
+                    bins.iter().map(|bin| bin.label.clone()).collect()
+                }
+            },
             bins: bins
                 .iter()
                 .map(ObservableBinAccumulator::from_snapshot)
@@ -4553,6 +4558,42 @@ mod tests {
         let _ = fs::remove_file(&file_path);
 
         assert_eq!(loaded, snapshot);
+        let configured = HistogramAccumulatorState::continuous(
+            "top_pt".to_string(),
+            "AL".to_string(),
+            ObservablePhase::Real,
+            ObservableValueTransform::Identity,
+            0.0,
+            10.0,
+            false,
+            true,
+            1,
+        );
+        let restored = loaded.clone().into_accumulator_state();
+        configured.ensure_compatible(&restored).unwrap();
+        assert_eq!(restored.snapshot(), loaded);
+    }
+
+    #[test]
+    fn labelled_discrete_histogram_snapshot_restores_compatible_accumulator() {
+        let configured = HistogramAccumulatorState::discrete(
+            "multiplicity".to_string(),
+            "AL".to_string(),
+            ObservablePhase::Real,
+            -1,
+            0,
+            DiscreteBinOrdering::AscendingBinId,
+            true,
+            vec![Some("first".to_string()), Some("second".to_string())],
+        )
+        .unwrap();
+        let snapshot = configured.snapshot();
+        let serialized = serde_json::to_string(&snapshot).unwrap();
+        let loaded: HistogramSnapshot = serde_json::from_str(&serialized).unwrap();
+        let restored = loaded.clone().into_accumulator_state();
+        configured.ensure_compatible(&restored).unwrap();
+        assert_eq!(restored.bin_labels, configured.bin_labels);
+        assert_eq!(restored.snapshot(), loaded);
     }
 
     #[test]

@@ -168,7 +168,7 @@ pub struct IntegrationWorkspaceManifest {
 }
 
 impl IntegrationWorkspaceManifest {
-    pub const CURRENT_VERSION: u32 = 1;
+    pub const CURRENT_VERSION: u32 = 2;
 
     pub fn validate_version(&self) -> Result<()> {
         if self.version == Self::CURRENT_VERSION {
@@ -3888,6 +3888,11 @@ mod tests {
         let unversioned_error = unversioned.validate_version().unwrap_err().to_string();
         assert!(unversioned_error.contains("unversioned"));
         assert!(unversioned_error.contains("--restart"));
+
+        let old = integration_workspace_manifest(Some(1));
+        let old_error = old.validate_version().unwrap_err().to_string();
+        assert!(old_error.contains("older format version 1"));
+        assert!(old_error.contains("--restart"));
 
         let future =
             integration_workspace_manifest(Some(IntegrationWorkspaceManifest::CURRENT_VERSION + 1));

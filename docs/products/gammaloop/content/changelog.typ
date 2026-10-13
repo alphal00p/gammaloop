@@ -9,6 +9,15 @@
   presenting development documentation as a complete release history.
 ])
 
+== Integrating selected graph groups
+
+Integration now warms and fingerprints only the graph groups selected by the effective
+runtime settings. An excluded graph with an invalid rescaling centre no longer prevents a
+valid selected group from running. Resume uses the saved selection and checks the same warmed
+selected data; changing an excluded graph does not invalidate that run. Integration workspace
+format 2 rejects older resumable runs with a `--restart` message. A failed preparation leaves
+the generated source and any existing workspace unchanged.
+
 == Explicit generation requests
 
 Generation now requires explicit loops for amplitudes, vacuum graphs, and forward cross

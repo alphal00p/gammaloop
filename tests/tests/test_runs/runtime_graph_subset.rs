@@ -152,6 +152,80 @@ fn amplitude_runtime_graph_subset_preserves_complete_group_metadata() -> Result<
         );
     }
 
+    // The first imported process has singleton groups. The second fixture has
+    // two terms in one group, so check that selecting it retains every member.
+    cli.run_command(
+        "set process -p group -i default string '[sampling]\ngraphs = \"monte_carlo\"\n'",
+    )?;
+    let (grouped_process, grouped_integrand) = cli.state.find_integrand_ref(
+        Some(&ProcessRef::Unqualified("group".to_string())),
+        Some(&"default".to_string()),
+    )?;
+    let grouped_model = cli
+        .state
+        .resolve_model_for_integrand(grouped_process, &grouped_integrand)?;
+    let grouped_source = cli
+        .state
+        .process_list
+        .get_integrand(grouped_process, &grouped_integrand)?
+        .require_generated()?;
+    let grouped_fingerprint = grouped_source.resume_fingerprint()?;
+    let grouped_names = grouped_source.graph_group_master_names();
+    assert_eq!(grouped_names.len(), 1);
+    let grouped_selected = grouped_source
+        .clone_with_selected_graph_groups(&grouped_model, &[grouped_names[0].to_string()])?;
+    assert_eq!(grouped_source.resume_fingerprint()?, grouped_fingerprint);
+    let (
+        ProcessIntegrand::Amplitude(grouped_source),
+        ProcessIntegrand::Amplitude(grouped_selected),
+    ) = (grouped_source, &grouped_selected)
+    else {
+        panic!("expected grouped amplitude integrands")
+    };
+    let expected_members = grouped_source.data.graph_group_structure[GroupId(0)]
+        .into_iter()
+        .map(|id| grouped_source.data.graph_terms[id].graph.name.clone())
+        .collect_vec();
+    assert!(
+        expected_members.len() >= 2,
+        "fixture must have a multi-member group"
+    );
+    let retained_members = grouped_selected.data.graph_group_structure[GroupId(0)]
+        .into_iter()
+        .map(|id| grouped_selected.data.graph_terms[id].graph.name.clone())
+        .collect_vec();
+    assert_eq!(retained_members, expected_members);
+    assert_eq!(
+        grouped_selected.data.graph_terms.len(),
+        expected_members.len()
+    );
+    assert_eq!(grouped_selected.data.group_derived_data.len(), 1);
+    assert_eq!(
+        grouped_selected.data.group_derived_data[GroupId(0)].esurface_map,
+        grouped_source.data.group_derived_data[GroupId(0)].esurface_map
+    );
+    assert_eq!(
+        grouped_selected.data.group_derived_data[GroupId(0)].esurface_atoms,
+        grouped_source.data.group_derived_data[GroupId(0)].esurface_atoms
+    );
+    for retained in &grouped_selected.data.graph_terms {
+        let original = grouped_source
+            .data
+            .graph_terms
+            .iter()
+            .find(|term| term.graph.name == retained.graph.name)
+            .expect("group member must come from source");
+        assert_eq!(retained.lmbs.len(), original.lmbs.len());
+        assert_eq!(
+            retained.threshold_counterterm.generated_mask,
+            original.threshold_counterterm.generated_mask
+        );
+        assert_eq!(
+            retained.threshold_counterterm.active_mask,
+            original.threshold_counterterm.active_mask
+        );
+    }
+
     clean_test(&cli.cli_settings.state.folder);
     Ok(())
 }
@@ -160,7 +234,12 @@ fn amplitude_runtime_graph_subset_preserves_complete_group_metadata() -> Result<
 #[serial]
 fn cross_section_runtime_graph_subset_is_compact_normalized_and_event_safe() -> Result<()> {
     let test_name = "cross_section_runtime_graph_subset_is_compact_normalized_and_event_safe";
-    let mut cli = setup_sm_differential_lu_cli(test_name)?;
+    let mut cli = get_test_cli(
+        Some("runtime_graph_subset_xs.toml".into()),
+        get_tests_workspace_path().join(test_name),
+        Some(test_name.to_string()),
+        true,
+    )?;
     set_process_incoming_helicities(&mut cli, "epem_ddxg", "default", "[1, -1]")?;
     cli.run_command(
         "set process kv general.generate_events=true general.store_additional_weights_in_event=true stability.rotation_axis=[]",
@@ -304,6 +383,8 @@ fn cross_section_runtime_graph_subset_is_compact_normalized_and_event_safe() -> 
         "cross-section subset fixture must contain a nonzero selected contribution"
     );
 
+    super::differential::configure_differential_leading_jet_observable(&mut cli)?;
+    cli.run_command("set process kv integrator.observables_output.format=[\"json\"]")?;
     let persisted_master_name = &expected_master_names[0];
     cli.run_command(&format!(
         "set process string '\n[sampling]\ngraphs = \"monte_carlo\"\ngraph_names = [\"{persisted_master_name}\"]\n\n[integrator]\nn_bins = 4\nmin_samples_for_update = 1\nn_start = 8\nn_increase = 8\nn_max = 8\n'"
@@ -327,17 +408,22 @@ fn cross_section_runtime_graph_subset_is_compact_normalized_and_event_safe() -> 
         workspace_manifest_path(&workspace),
         "runtime graph-subset integration manifest",
     )?;
-    let warmed_source_fingerprint = cli
+    let full_source = cli
         .state
         .process_list
         .get_integrand(process_id, &integrand_name)?
-        .require_generated()?
-        .resume_fingerprint()?;
+        .require_generated()?;
+    assert_eq!(full_source.resume_fingerprint()?, source_fingerprint);
+    assert_eq!(full_source.graph_count(), source_graph_count);
+    let mut persisted_selection = full_source
+        .clone_with_selected_graph_groups(&model, std::slice::from_ref(persisted_master_name))?;
+    persisted_selection.warm_up(&model)?;
+    let selected_fingerprint = persisted_selection.resume_fingerprint()?;
     assert_eq!(
-        manifest.integrand_fingerprints.as_slice(),
-        std::slice::from_ref(&warmed_source_fingerprint)
+        manifest.integrand_fingerprints,
+        [selected_fingerprint.clone()]
     );
-    assert_ne!(warmed_source_fingerprint, source_fingerprint);
+    assert_ne!(selected_fingerprint, source_fingerprint);
     let slot_workspace = selected_slot_workspace(&cli, &workspace, None, Some(&integrand_name))?;
     let workspace_settings: RuntimeSettings = RuntimeSettings::from_file(
         slot_workspace.join("settings.toml"),
@@ -348,22 +434,37 @@ fn cross_section_runtime_graph_subset_is_compact_normalized_and_event_safe() -> 
         std::slice::from_ref(persisted_master_name)
     );
 
-    let full_source = cli
-        .state
-        .process_list
-        .get_integrand_mut(process_id, &integrand_name)?;
-    full_source.warm_up(&model)?;
-    assert_eq!(
-        full_source.resume_fingerprint()?,
-        manifest.integrand_fingerprints[0]
+    let observable_path = slot_workspace.join("observables_final.json");
+    let observable_before =
+        gammalooprs::observables::ObservableSnapshotBundle::from_json_file(&observable_path)?;
+    assert!(observable_before.histograms["leading_jet_pt_hist"].sample_count > 0);
+    let checkpoint = gammalooprs::integrate::latest_observable_resume_state_path(
+        &workspace,
+        &gammalooprs::integrate::SlotMeta {
+            process_name: cli.state.process_list.processes[process_id]
+                .definition
+                .folder_name
+                .clone(),
+            integrand_name: integrand_name.clone(),
+        },
     );
-
+    let checkpoint_before = std::fs::read(&checkpoint)?;
+    let state_before = std::fs::read(gammalooprs::integrate::workspace_state_path(&workspace))?;
     cli.run_command(
         "set process string '\n[sampling]\ngraphs = \"monte_carlo\"\ngraph_names = []\n\n[stability]\nrotation_axis = [{ type = \"x\" }]\n'",
     )?;
     let mut resume = integrate;
     resume.restart = false;
     resume.run(&mut cli.state, &cli.cli_settings)?;
+    assert_eq!(
+        gammalooprs::observables::ObservableSnapshotBundle::from_json_file(&observable_path)?,
+        observable_before
+    );
+    assert_eq!(std::fs::read(&checkpoint)?, checkpoint_before);
+    assert_eq!(
+        std::fs::read(gammalooprs::integrate::workspace_state_path(&workspace))?,
+        state_before
+    );
     let resumed_source = cli
         .state
         .process_list
@@ -385,8 +486,88 @@ fn cross_section_runtime_graph_subset_is_compact_normalized_and_event_safe() -> 
     );
     assert_eq!(
         resumed_source.resume_fingerprint()?,
-        manifest.integrand_fingerprints[0]
+        source_fingerprint,
+        "resuming a subset must not warm or mutate the generated full source"
     );
+
+    // A physically changed excluded graph cannot invalidate this selected run.
+    let ProcessIntegrand::CrossSection(full) = cli
+        .state
+        .process_list
+        .get_integrand_mut(process_id, &integrand_name)?
+    else {
+        unreachable!()
+    };
+    let excluded = full
+        .data
+        .graph_terms
+        .iter()
+        .position(|term| term.graph.is_group_master && term.graph.name != *persisted_master_name)
+        .expect("fixture has an excluded group");
+    full.data.graph_terms[excluded].graph.overall_factor =
+        &full.data.graph_terms[excluded].graph.overall_factor * 2;
+    resume.run(&mut cli.state, &cli.cli_settings)?;
+    let unchanged: IntegrationWorkspaceManifest = IntegrationWorkspaceManifest::from_file(
+        workspace_manifest_path(&workspace),
+        "resumed subset manifest",
+    )?;
+    assert_eq!(
+        unchanged.integrand_fingerprints,
+        manifest.integrand_fingerprints
+    );
+
+    // The same change inside the selected group must reject before touching the workspace
+    // or restoring settings into the live source.
+    let ProcessIntegrand::CrossSection(full) = cli
+        .state
+        .process_list
+        .get_integrand_mut(process_id, &integrand_name)?
+    else {
+        unreachable!()
+    };
+    let selected = full
+        .data
+        .graph_terms
+        .iter()
+        .position(|term| term.graph.name == *persisted_master_name)
+        .expect("selected master exists");
+    full.data.graph_terms[selected].graph.overall_factor =
+        &full.data.graph_terms[selected].graph.overall_factor * 2;
+    let before_rejection = cli
+        .state
+        .process_list
+        .get_integrand(process_id, &integrand_name)?
+        .require_generated()?
+        .resume_fingerprint()?;
+    let protected_files = [
+        workspace_manifest_path(&workspace),
+        gammalooprs::integrate::workspace_state_path(&workspace),
+        slot_workspace.join("settings.toml"),
+    ];
+    let previous = protected_files
+        .iter()
+        .map(std::fs::read)
+        .collect::<std::io::Result<Vec<_>>>()?;
+    let error = resume
+        .run(&mut cli.state, &cli.cli_settings)
+        .expect_err("selected graph changed");
+    assert!(
+        error
+            .to_string()
+            .contains("Workspace integrand fingerprints")
+    );
+    assert!(error.to_string().contains("--restart"));
+    assert_eq!(
+        cli.state
+            .process_list
+            .get_integrand(process_id, &integrand_name)?
+            .require_generated()?
+            .resume_fingerprint()?,
+        before_rejection
+    );
+    for (file, contents) in protected_files.iter().zip(previous) {
+        assert_eq!(std::fs::read(file)?, contents);
+    }
 
     clean_test(&cli.cli_settings.state.folder);
     Ok(())
@@ -396,7 +577,12 @@ fn cross_section_runtime_graph_subset_is_compact_normalized_and_event_safe() -> 
 #[serial]
 fn correlated_runtime_graph_subsets_allow_different_graph_names() -> Result<()> {
     let test_name = "correlated_runtime_graph_subsets_allow_different_graph_names";
-    let mut cli = setup_sm_differential_lu_cli(test_name)?;
+    let mut cli = get_test_cli(
+        Some("runtime_graph_subset_xs.toml".into()),
+        get_tests_workspace_path().join(test_name),
+        Some(test_name.to_string()),
+        true,
+    )?;
     set_process_incoming_helicities(&mut cli, "epem_ddxg", "default", "[1, -1]")?;
 
     let (process_id, integrand_name) = cli.state.find_integrand_ref(None, None)?;

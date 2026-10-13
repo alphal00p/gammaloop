@@ -476,6 +476,7 @@ fn test_integration_workspace_model_mismatch_requires_restart() -> Result<()> {
 fn test_integration_workspace_resume_preserves_current_effective_model_override() -> Result<()> {
     let test_name = "test_integration_workspace_resume_preserves_current_effective_model_override";
     let mut cli = setup_scalar_topologies_cli(test_name)?;
+    cli.run_command(SCALAR_BOX_BELOW_EXTERNALS)?;
     let shared_integrator_settings = "kv integrator.n_start=5000 integrator.n_max=10000 integrator.n_increase=5000 integrator.seed=1337";
 
     cli.run_command(&format!(
@@ -488,10 +489,34 @@ fn test_integration_workspace_resume_preserves_current_effective_model_override(
     cli.run_command("set model mass_scalar_2=1.0")?;
     cli.run_command("set process -p box -i scalar_box kv model.mass_scalar_2=2.0")?;
 
+    let (selection_process, selection_integrand) = cli.state.find_integrand_ref(
+        Some(&ProcessRef::Unqualified("box".into())),
+        Some(&"scalar_box".into()),
+    )?;
+    let master = cli
+        .state
+        .process_list
+        .get_integrand(selection_process, &selection_integrand)?
+        .require_generated()?
+        .graph_group_master_names()[0]
+        .to_owned();
+    cli.run_command(&format!("set process -p box -i scalar_box string '[sampling]\ngraphs = \"monte_carlo\"\ngraph_names = [\"{master}\"]\n'"))?;
+
     let mut resume_command =
         scalar_topology_integrate_command(test_name, workspace_name, &[("box", "scalar_box")], &[]);
     resume_command.restart = false;
     resume_command.run(&mut cli.state, &cli.cli_settings)?;
+    assert!(
+        cli.state
+            .process_list
+            .get_integrand(selection_process, &selection_integrand)?
+            .require_generated()?
+            .get_settings()
+            .sampling
+            .selected_graph_names()
+            .is_empty(),
+        "saved empty selection remains effective on resume"
+    );
 
     let (process_id, integrand_name) = cli.state.find_integrand_ref(
         Some(&ProcessRef::Unqualified("box".to_string())),
