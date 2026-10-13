@@ -7,6 +7,8 @@
 mod artifact;
 pub mod cache;
 #[cfg(test)]
+mod cache_four_loop_tests;
+#[cfg(test)]
 mod cache_lower_tests;
 #[cfg(test)]
 mod cache_tests;
@@ -148,7 +150,7 @@ impl Vakint {
                 .evaluate(settings, numerator, integral_specs);
         }
         if integral_specs.canonical_topology.get_integral().n_loops == 4 {
-            return four_loop::evaluate(settings, numerator, integral_specs, options);
+            return four_loop::evaluate(self, settings, numerator, integral_specs, options);
         }
         MatchedScalarFamily::try_new(integral_specs)?
             .evaluate(self, settings, numerator, options)

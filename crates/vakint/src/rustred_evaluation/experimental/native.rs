@@ -33,6 +33,25 @@ pub struct NativeCandidate<const N: usize> {
 }
 
 impl<const N: usize> NativeCandidate<N> {
+    #[cfg(test)]
+    pub(crate) fn cache_test_statistics(&self) -> rustred::solver::CandidateStatistics {
+        self.reducer.lock().unwrap().statistics()
+    }
+    /// Snapshot immutable native rules and their already-installed terminal
+    /// convention, without clearing or cloning the ordinary point cache.
+    pub(crate) fn cache_program(
+        &self,
+        source_digest: [u8; 32],
+    ) -> Result<rustred::solver::CandidateUnitMassProgram<N>, String> {
+        let reducer = self
+            .reducer
+            .lock()
+            .map_err(|_| "candidate reducer lock poisoned")?;
+        Ok(rustred::solver::CandidateUnitMassProgram::new(
+            &reducer,
+            source_digest,
+        ))
+    }
     pub(crate) fn family_shared(&self) -> Arc<IntegralFamily> {
         Arc::clone(&self.family)
     }

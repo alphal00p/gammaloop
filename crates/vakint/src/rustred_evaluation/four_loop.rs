@@ -8,6 +8,7 @@
 //! pinned RustRed/Symbolica stack, not a public untrusted-file input boundary.
 
 use std::sync::{Arc, LazyLock};
+pub(super) mod cache;
 
 use rustred::input::{Compiler, Limits, LoweringLimits, TextProject, TextPropagator};
 use rustred::persistence::BinaryIoLimits;
@@ -95,6 +96,7 @@ static DESCRIPTORS: LazyLock<Result<Vec<Descriptor>, String>> = LazyLock::new(||
 struct LoadedProgram {
     native: Arc<NativeCandidate<10>>,
     evaluator: ExperimentalRustRed,
+    cache_program: rustred::solver::CandidateUnitMassProgram<10>,
 }
 
 static H: LazyLock<Result<LoadedProgram, String>> = LazyLock::new(|| load(0));
@@ -203,12 +205,17 @@ fn load(index: usize) -> Result<LoadedProgram, String> {
         reducer,
         input.normalization,
     )?;
+    let cache_program = native.cache_program(cache::source_digest(&bytes, input.normalization)?)?;
     catalog.require_complete()?;
     catalog.require_exact_keys(native.output_terminals())?;
     let native = Arc::new(native);
     let evaluator = ExperimentalRustRed::new(native.clone(), catalog.into_terms())
         .map_err(|error| error.to_string())?;
-    Ok(LoadedProgram { native, evaluator })
+    Ok(LoadedProgram {
+        native,
+        evaluator,
+        cache_program,
+    })
 }
 
 fn select(topology: &Topology) -> Result<usize, RustRedEvaluationError> {
@@ -272,6 +279,7 @@ pub(super) fn supports(topology: &Topology) -> bool {
 }
 
 pub(super) fn evaluate(
+    vakint: &Vakint,
     settings: &VakintSettings,
     numerator: AtomView,
     matched: &ReplacementRules,
@@ -287,7 +295,13 @@ pub(super) fn evaluate(
             })?;
     program
         .evaluator
-        .evaluate_matched(settings, numerator, matched, options.substitute_masters)
+        .evaluate_matched(
+            settings,
+            numerator,
+            matched,
+            options.substitute_masters,
+            |target| vakint.cached_candidate_reduction(index, target),
+        )
         .map(|result| result.value)
 }
 
@@ -428,32 +442,11 @@ mod tests {
         use crate::{EvaluationMethod, EvaluationOrder, LoopNormalizationFactor};
 
         let vakint = Vakint::new().unwrap();
-        let descriptors = DESCRIPTORS.as_ref().unwrap();
-        let mut propagators = Atom::num(1);
-        for (slot, line) in INPUTS[1]
-            .csv
-            .lines()
-            .map(str::trim)
-            .filter(|line| !line.is_empty() && !line.starts_with('#'))
-            .enumerate()
-        {
-            let row = line
-                .split(',')
-                .map(|entry| entry.trim().parse::<i64>().unwrap())
-                .collect::<Vec<_>>();
-            if row[0] == 0 && row[1] == 0 {
-                continue;
-            }
-            propagators *= vk_parse!(format!(
-                "prop({},edge({},{}),{},muvsq,1)",
-                slot + 1,
-                row[0],
-                row[1],
-                descriptors[1].physical_momenta[slot].to_canonical_string()
-            ))
-            .unwrap();
-        }
-        let input = function!(S.topo, propagators);
+        let input = cache::test_input_mass(
+            1,
+            &[1, 1, 1, 1, 1, 1, 1, 1, 0, 0],
+            &vk_parse!("muvsq").unwrap(),
+        );
         let settings = VakintSettings {
             form_exe_path: "/four-loop-raw-master-mode-must-not-use-form".into(),
             number_of_terms_in_epsilon_expansion: 7,

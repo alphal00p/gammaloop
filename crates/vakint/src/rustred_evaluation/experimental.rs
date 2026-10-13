@@ -278,7 +278,7 @@ impl ExperimentalRustRed {
         input: AtomView,
     ) -> Result<CandidateEvaluation, VakintError> {
         let terms = prepare_candidate_integrals(vakint, settings, input, self.reducer.as_ref())?;
-        self.evaluate_prepared(settings, &terms, &self.master_options)
+        self.evaluate_prepared(settings, &terms, &self.master_options, |_| Ok(None))
     }
 
     pub(super) fn evaluate_matched(
@@ -287,6 +287,7 @@ impl ExperimentalRustRed {
         numerator: AtomView,
         matched: &ReplacementRules,
         substitute_masters: bool,
+        cached: impl FnMut(&IntegralKey) -> Result<Option<CandidateReduction>, VakintError>,
     ) -> Result<CandidateEvaluation, VakintError> {
         let terms = prepare_matched_candidate_integral(
             numerator,
@@ -301,6 +302,7 @@ impl ExperimentalRustRed {
                 expand_masters: substitute_masters,
                 susbstitute_masters: substitute_masters,
             },
+            cached,
         )
     }
 
@@ -309,14 +311,18 @@ impl ExperimentalRustRed {
         settings: &VakintSettings,
         terms: &[PreparedCandidateIntegral],
         master_options: &FMFTOptions,
+        mut cached: impl FnMut(&IntegralKey) -> Result<Option<CandidateReduction>, VakintError>,
     ) -> Result<CandidateEvaluation, VakintError> {
         let mut contributions = BTreeMap::<Atom, Atom>::new();
         let mut applied_rules = 0usize;
         for term in terms {
-            let reduction = self
-                .reducer
-                .reduce_unit_mass(&term.target)
-                .map_err(candidate_error)?;
+            let reduction = if let Some(reduction) = cached(&term.target)? {
+                reduction
+            } else {
+                self.reducer
+                    .reduce_unit_mass(&term.target)
+                    .map_err(candidate_error)?
+            };
             applied_rules = applied_rules
                 .checked_add(reduction.applied_rules)
                 .ok_or_else(|| candidate_error("candidate application counter overflow"))?;

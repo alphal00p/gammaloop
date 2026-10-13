@@ -1,4 +1,5 @@
 use symbolica::api::python::{Citation, SymbolicaCommunityModule};
+mod cache;
 mod diagram_integral;
 
 use std::collections::HashMap;
@@ -83,9 +84,10 @@ fn rustred_cache_policy(
     use rustred::solver::CandidateRoutedCachePolicy;
     match value {
         "evict-lru" => Ok(CandidateRoutedCachePolicy::EvictLeastRecentlyUsed),
+        "evict-aged-lfu" => Ok(CandidateRoutedCachePolicy::EvictAgedLeastFrequentlyUsed),
         "fail-on-limit" => Ok(CandidateRoutedCachePolicy::FailOnLimit),
         _ => Err(format!(
-            "unknown rustred_cache_policy {value:?}; expected 'evict-lru' or 'fail-on-limit'"
+            "unknown rustred_cache_policy {value:?}; expected 'evict-lru', 'evict-aged-lfu' or 'fail-on-limit'"
         )),
     }
 }
@@ -944,6 +946,176 @@ impl VakintWrapper {
             .map_err(vakint_to_python_error)
     }
 
+    /// Explicitly prepare a finite native cache for one through four loops.
+    /// No cache attaches automatically and no numerical masters are computed.
+    /// Inspect the returned status: resource/time/cancellation stops are partial.
+    /// `workload` is a sequence of `(namespace, complete_integer_powers)` pairs;
+    /// otherwise the native all-pinch relative-dot/rank primer is used.
+    ///
+    /// The GIL is released during native work. `progress(report)` runs between
+    /// roots (throttled) and may return False to cancel; `cancel()` is a polled
+    /// predicate. Python signals and callback errors stop cooperatively after
+    /// the current native operation, checkpoint completed roots, then re-raise
+    /// with `cache_report` attached when possible. No hard deadline is promised.
+    #[pyo3(signature = (n_loops, output_path, *, ram_bytes=None, disk_bytes=None, cache_policy="evict-lru", cache_terms=None, cache_integrals=None, max_rule_applications=None, time_limit_seconds=None, checkpoint_interval_seconds=None, max_roots=None, extra_dots=None, numerator_rank=None, workload=None, resume=true, progress=None, cancel=None, progress_interval_seconds=1.0))]
+    #[allow(clippy::too_many_arguments, clippy::type_complexity)]
+    pub fn prepare_cache(
+        &self,
+        py: Python<'_>,
+        n_loops: usize,
+        output_path: String,
+        ram_bytes: Option<u64>,
+        disk_bytes: Option<u64>,
+        cache_policy: &str,
+        cache_terms: Option<usize>,
+        cache_integrals: Option<usize>,
+        max_rule_applications: Option<usize>,
+        time_limit_seconds: Option<u64>,
+        checkpoint_interval_seconds: Option<u64>,
+        max_roots: Option<usize>,
+        extra_dots: Option<u32>,
+        numerator_rank: Option<u32>,
+        workload: Option<Vec<(usize, Vec<i64>)>>,
+        resume: bool,
+        progress: Option<Py<PyAny>>,
+        cancel: Option<Py<PyAny>>,
+        progress_interval_seconds: f64,
+    ) -> PyResult<Py<PyDict>> {
+        cache::check_loops(n_loops)?;
+        let mut options = crate::RustRedCachePreparationOptions::default();
+        options.storage.ram_bytes = ram_bytes;
+        options.storage.disk_bytes = disk_bytes;
+        options.storage.cache_policy =
+            rustred_cache_policy(cache_policy).map_err(exceptions::PyValueError::new_err)?;
+        options.storage.resume = resume;
+        if let Some(value) = time_limit_seconds {
+            options.storage.time_limit_seconds = value;
+        }
+        if let Some(value) = checkpoint_interval_seconds {
+            options.storage.checkpoint_interval_seconds = value;
+        }
+        if let Some(value) = max_roots {
+            options.storage.max_roots = value;
+        }
+        cache::apply_native_overrides(
+            &mut options.native,
+            None,
+            cache_terms,
+            cache_integrals,
+            max_rule_applications,
+        )?;
+        options.workload = cache::workload(extra_dots, numerator_rank, workload)?;
+        cache::prepare(
+            py,
+            self.vakint.clone(),
+            n_loops,
+            output_path.into(),
+            options,
+            progress,
+            cancel,
+            progress_interval_seconds,
+        )
+    }
+
+    /// Attach an exact read-only native cache bundle. Omitted settings preserve
+    /// the active RAM, work, eviction and lookup policies. A new attachment
+    /// uses native defaults, not preparation's larger RAM default.
+    #[pyo3(signature = (n_loops, path, *, ram_bytes=None, disk_bytes=None, cache_policy=None, lookup_budget_policy=None, cache_terms=None, cache_integrals=None, max_rule_applications=None))]
+    #[allow(clippy::too_many_arguments)]
+    pub fn load_cache(
+        &mut self,
+        py: Python<'_>,
+        n_loops: usize,
+        path: String,
+        ram_bytes: Option<u64>,
+        disk_bytes: Option<u64>,
+        cache_policy: Option<&str>,
+        lookup_budget_policy: Option<&str>,
+        cache_terms: Option<usize>,
+        cache_integrals: Option<usize>,
+        max_rule_applications: Option<usize>,
+    ) -> PyResult<()> {
+        cache::check_loops(n_loops)?;
+        let mut options = crate::RustRedCacheLoadOptions::default();
+        if ram_bytes.is_some()
+            || cache_terms.is_some()
+            || cache_integrals.is_some()
+            || max_rule_applications.is_some()
+        {
+            let mut native = self
+                .vakint
+                .configured_cache_limits(n_loops)
+                .map_err(vakint_to_python_error)?
+                .unwrap_or_default();
+            cache::apply_native_overrides(
+                &mut native,
+                ram_bytes,
+                cache_terms,
+                cache_integrals,
+                max_rule_applications,
+            )?;
+            options.native = Some(native);
+        }
+        options.policy = cache_policy
+            .map(rustred_cache_policy)
+            .transpose()
+            .map_err(exceptions::PyValueError::new_err)?;
+        options.lookup_budget_policy =
+            lookup_budget_policy.map(cache::lookup_policy).transpose()?;
+        if let Some(value) = disk_bytes {
+            options.storage.max_disk_bytes = value;
+        }
+        let engine = self.vakint.clone();
+        py.detach(move || engine.load_cache(n_loops, path, &options))
+            .map_err(vakint_to_python_error)
+    }
+
+    /// Explicitly save `resident-roots` or a portable `full-snapshot`.
+    /// The latter copies captured bases without coefficient decoding, then
+    /// writes the resident overlay and requires a new destination. Partial
+    /// reports distinguish base-copy success from overlay completion.
+    #[pyo3(signature = (n_loops, output_path, *, mode, disk_bytes=None, resume=false))]
+    pub fn save_cache(
+        &self,
+        py: Python<'_>,
+        n_loops: usize,
+        output_path: String,
+        mode: &str,
+        disk_bytes: Option<u64>,
+        resume: bool,
+    ) -> PyResult<Py<PyDict>> {
+        cache::check_loops(n_loops)?;
+        let mode = cache::save_mode(mode)?;
+        let mut options = crate::RustRedCacheSaveOptions::default();
+        options.disk_bytes = disk_bytes;
+        options.resume = resume;
+        let engine = self.vakint.clone();
+        let report = py
+            .detach(move || engine.save_cache(n_loops, output_path, mode, &options))
+            .map_err(vakint_to_python_error)?;
+        cache::json_report(py, &report.to_document().to_string())
+    }
+
+    /// Clear only the attached native RAM cache; preserve its read-only files
+    /// and cumulative counters. No program is loaded for an empty attachment.
+    pub fn clear_cache(&self, py: Python<'_>, n_loops: usize) -> PyResult<()> {
+        cache::check_loops(n_loops)?;
+        let engine = self.vakint.clone();
+        py.detach(move || engine.clear_cache(n_loops))
+            .map_err(vakint_to_python_error)
+    }
+
+    /// Return aggregate and exact-namespace cache telemetry. Coefficient payload
+    /// and I/O buffers are separate; neither is a measurement of process RSS.
+    pub fn cache_statistics(&self, py: Python<'_>, n_loops: usize) -> PyResult<Py<PyDict>> {
+        cache::check_loops(n_loops)?;
+        let engine = self.vakint.clone();
+        let stats = py
+            .detach(move || engine.cache_statistics(n_loops))
+            .map_err(vakint_to_python_error)?;
+        cache::statistics(py, &stats)
+    }
+
     /// Apply the selected five-loop package and retain its symbolic conditions.
     ///
     /// Returns `(value, nonzero_conditions, families)`, where `families` contains
@@ -1342,6 +1514,10 @@ mod tests {
         assert_eq!(
             rustred_cache_policy("fail-on-limit").unwrap(),
             CandidateRoutedCachePolicy::FailOnLimit
+        );
+        assert_eq!(
+            rustred_cache_policy("evict-aged-lfu").unwrap(),
+            CandidateRoutedCachePolicy::EvictAgedLeastFrequentlyUsed
         );
         assert!(rustred_cache_policy("unbounded").is_err());
     }

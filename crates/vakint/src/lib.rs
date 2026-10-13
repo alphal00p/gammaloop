@@ -28,7 +28,8 @@ pub use rustred::solver::{
     CandidateRoutedCacheStatistics as RustRedCacheWorkStatistics,
 };
 pub use rustred_evaluation::cache::{
-    RustRedCacheLoadOptions, RustRedCachePreparationOptions, RustRedCacheRoot,
+    RustRedCacheLoadOptions, RustRedCacheNamespaceStatistics, RustRedCachePreparationOptions,
+    RustRedCacheRoot, RustRedCacheSaveMode, RustRedCacheSaveOptions, RustRedCacheSaveReport,
     RustRedCacheStatistics, RustRedCacheWorkload,
 };
 pub use rustred_evaluation::five_loop::RustRedSymbolicEvaluation;

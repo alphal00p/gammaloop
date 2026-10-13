@@ -10,11 +10,72 @@ epsilon expansions, or a claim of additional reduction coverage.
 
 The one-through-three-loop sealed-program adapter and Rust preparation/load
 surface pass real fresh-process gates on RustRed `a0649fed`, including exact
-mass restoration, guard preservation and held-out native reductions. Four-loop
-candidate-session integration, the Python
-surface and explicit download support are follow-up work; do not treat this
+mass restoration, guard preservation and held-out native reductions. The
+four-loop first-38 gate now also passes on the repaired native collector, as
+recorded below. The default finite one-through-three-loop primers and the
+isolated installed Python runtime also pass. The full four-loop default warmup
+and explicit download support remain follow-up work; do not treat this
 development interface as completed one-through-four-loop cache delivery.
 Five-loop cache preparation is deferred until the updated artifact is available.
+
+The initial local four-loop gate was incomplete: it checkpointed seven roots before
+the native retained-term census requested 16,000,086 terms against the
+unchanged 16,000,000-term ceiling. The next round-robin request was the X
+parent key `(1,1,1,1,1,1,1,1,2,0)`: nine distinct positive denominator slots,
+positive-power sum 10 and numerator rank zero. This is an operational refusal,
+not an out-of-scope or mathematical reduction result. Fresh-process public
+four-loop hit, warm, held-out and numerical-table comparisons were not reached.
+The partial pack and failing test receipt are retained; no assertion or
+allowance was relaxed.
+
+That functional local-patch run used frozen executable
+`126871df24f6bf2a39b84ff0713d9ec490d5932b834e51f47c30f89e3e8e482b`.
+Native program loading took 6.681 seconds and preparation 19.757 seconds;
+the supervised process-tree peak was 3.103 GB, without a memory-guard stop.
+Preparation had a decimal 16-billion-byte aggregate coefficient allowance,
+partitioned equally over four sessions. Its separate native term ceiling was
+not increased. The planned fresh reader uses the ordinary 1 GiB aggregate
+allowance (256 MiB per namespace), not the preparation allowance.
+
+== Passing four-loop first-38 gate
+
+The matched diagnostic established that ordinary coefficient reduction at the
+failed X point used about 1.95 million retained terms, while duplicating complete
+guard vectors in every guarded subtree exhausted 16 million terms. The repaired
+native path collects one bounded request guard union only for provably fresh
+candidate sessions. It preserves the legacy guarded API, original poles and
+shared memory accounting; no configured allowance was raised.
+
+The unchanged 38-root test then passed with frozen executable
+`0789c7e6ec22bd82c9d2055672550948919301827306ec07b23a243e09673473`.
+Preparation completed all 38 roots in 173.084 seconds and stored 397,885 bytes.
+Initial program loading took 7.507 seconds; the fresh child separately loaded
+programs in 7.145 seconds and attached the indexes in 0.001 seconds, with no
+coefficient reads during attachment. The full supervised run took 278.452
+seconds with a 4.468 GB sampled process-tree peak and no guard stop.
+
+The gate checked 76 mass-squared-1/4 prepared public evaluations and RAM
+repeats, four independent exact coefficient/ordered-guard records, eight
+denominator-cancellation/pinch comparisons, four held-out cubed-line roots,
+four substitutions using existing numerical master tables, and clear/reload.
+The prepared phase recorded 38 backing hits, 114 RAM hits and zero IBP rule
+applications. Ordinary shared reducers were unchanged by preparation and cached
+calls. Later cancellation and held-out requests performed real native work;
+they are not counted as prepared hits. Candidate descendant-cache reuse is still
+not claimed.
+
+#table(columns: 3,
+  [Held-out family], [First public call], [RAM repeat],
+  [H], [3.128 s], [0.048 s],
+  [FG], [0.271 s], [0.018 s],
+  [BMW], [1.623 s], [0.016 s],
+  [X], [15.897 s], [0.083 s],
+)
+
+These are same-input functional measurements on a shared host, not a general
+performance claim. Preparation uses decimal 16 GB aggregate RAM; fresh attachment
+uses the unchanged native 1 GiB aggregate default. Passing this finite sample
+does not certify candidate closure or completion of the 164,352-request primer.
 
 The current RustRed dependency uses mandatory gzip chunks and cache-pack/bundle
 schema 02. The earlier `59e45868` gate below used schema 01: its development
@@ -86,6 +147,30 @@ still-live parent and fresh child together, which is a different measurement.
 This establishes representative cache correctness, not exhaustive coverage of
 every admitted numerator or a claim about four-loop cache readiness.
 
+== Default finite one-through-three-loop primers
+
+The public-API driver subsequently completed the default relative-two-dot,
+rank-one primers under explicit decimal 1 GB RAM and disk allowances, using
+the same frozen native libraries as the passing four-loop gate. Its executable
+SHA256 is `55cd4b5a690cdecd1fb97ec7cc8f63bf1363c53546b013a45632867a2f31bc81`.
+
+#table(columns: 4,
+  [Loops], [Completed roots], [Preparation call], [Charged disk bytes],
+  [1], [5], [0.00922 s], [3,201],
+  [2], [77], [0.01248 s], [4,514],
+  [3], [2,320], [5.95493 s], [75,240],
+)
+
+Each run spawned a fresh child, verified index-only attachment, checked
+prepared full-support and pinch witnesses at mass squared 1 and 4 with zero
+IBP rules, and compared held-out fourth-power roots with ordinary evaluation.
+The three-loop pinch witness is undotted. These driver comparisons are exact
+symbolic-value checks; separate typed-record guard parity is established by
+the preceding tests, not inferred from these values. Clear-to-disk reuse also
+passed. Timings include program loading and planning but exclude construction
+of Vakint; they are shared-host functional measurements, not controlled speedups
+or a physics-coverage bound.
+
 == Preparation and attachment
 
 `Vakint::prepare_cache` takes a loop count, an output directory,
@@ -113,6 +198,108 @@ a trusted-generated read-only bundle. Disk misses may fill the configured native
 RAM cache but do not modify the pack. `clear_cache` clears RAM only, retaining
 the backing and cumulative counters. `cache_statistics` distinguishes native
 RAM hits, backing hits, actual reductions, eviction and bounded I/O activity.
+
+The current local four-loop implementation shares immutable native programs
+but gives each attachment isolated mutable sessions. It does not clear or warm
+the ordinary static reducers during preparation or cached evaluation. Calling
+statistics, clear or save without an attachment does not load the four programs.
+Namespace details retain exact bindings; aggregate telemetry adds current
+retained payload and work counters with saturation, never estimates process RSS.
+
+== Explicit snapshots and optional reads
+
+`Vakint::save_cache` requires an explicit `RustRedCacheSaveMode`.
+`ResidentRoots` exports only completed records currently in RAM; never-loaded
+and evicted backing records are deliberately excluded. `FullSnapshot` instead
+copies every captured immutable base through bounded, checksum-verified byte
+transfers without decoding coefficients, then appends the resident overlay.
+It requires a new destination. Source paths can subsequently move without
+invalidating a successfully completed portable snapshot.
+
+Inspect the report, rather than treating a return value as completion.
+Callback-accepted records, durably checkpointed resident records, and the
+base-copy phase are separate. A successful base copy followed by an overlay
+failure remains a partial snapshot. Counts of preserved base record references
+include shadowed entries; they are not a distinct-key count. All namespaces
+share one configured disk quota. Resident-only resume can add overlapping runs
+and consumes quota; no implicit compaction or partial-base-copy resume occurs.
+
+`RustRedCacheSaveOptions` reuses preparation's disk defaults without changing
+the running cache's RAM, eviction or arithmetic policy. Load options independently
+accept an optional lookup-budget policy; omitting it on reload preserves the
+active policy. A new optional attachment defaults to cold native reduction only
+when the typed prospective lookup-work allowance is exhausted, recording a
+separate fallback counter. `Strict` reports that exhaustion. Corruption,
+incompatible bindings, malformed records, failed native admission and arithmetic
+limits never become misses. Preparation's own completed-root verification stays
+strict; its optional descendant reads can fall back under the same explicit rule.
+
+The small #link("examples/native_cache.rs")[Rust cache example] demonstrates
+one-loop preparation, exact loaded/warm parity, a held-out reduction and a
+full portable snapshot. It creates only caller-specified new directories and
+does not evaluate new numerical masters. Its optimized local-patch runtime gate
+passes. The manifest and lockfile now select published RustRed revision
+`6a70dccfac11dbbaa9ffe3facfa5710b4f33a65f`; the corresponding actual-Git source
+check passes, including the Python module and stub-generation feature combination.
+The default five-root one-loop primer used 3,201 disk bytes. A full snapshot
+preserved five base references plus two resident records in 1,697 bytes, without
+copying preparation-job metadata. Restored held-out I5 matched exactly with zero
+native rules. GNU time measured 0.10 seconds total and 12,288 KiB per-process
+maximum RSS; this small workflow is not a performance comparison.
+
+== Python and HepKit steering
+
+The current local `Vakint` Python wrapper exposes the same `prepare_cache`,
+`load_cache`, `save_cache`, `clear_cache` and `cache_statistics` operations for
+one through four loops. This surface is source-checked, and both public examples
+have passing runtime gates. Use a coherent Symbolica /
+HepKit extension build, never a separately loaded second Symbolica kernel.
+#link("examples/native_cache.py")[The Python example] uses only a tiny one-loop
+workload; #link("tests/python/native_cache_smoke.py")[the host smoke tests]
+cover callbacks, interrupts, GIL release, snapshots and partial native overrides.
+
+The private complete Community wheel, SHA256
+`8ddfee95fcf7cd4e28658f0614e3b20291f1a92a15aefdf168e88604f645676d`,
+uses actual Git RustRed `6a70dccf`, Symbolica 3.0.1 and one shared native kernel.
+All eight smoke tests pass in 0.476 seconds. The first attempt passed seven;
+the remaining fixture incorrectly supplied a string instead of the existing
+constructor's required Symbolica epsilon variable. Correcting only that input
+made all eight pass, without changing native code or weakening assertions.
+The public Python example prepared five roots (3,212 charged bytes), made a full
+snapshot (1,716 bytes), and restored held-out I5 exactly with zero native rules.
+The environment and wheel are private validation artifacts, not a Community
+release or modification of a shared installation. No new master values were
+computed. The default four-loop primer remains unexecuted.
+
+Preparation accepts `ram_bytes`, `disk_bytes`, `cache_policy` (`evict-lru`,
+`evict-aged-lfu` or `fail-on-limit`), optional native term/integral/rule ceilings,
+time/checkpoint/root allowances and `resume`. The workload is either the native
+relative primer controlled by `extra_dots` / `numerator_rank`, or an explicit
+sequence of `(namespace, complete_integer_powers)` pairs; the two modes cannot
+be mixed. No network access or numerical master computation is introduced.
+
+The GIL is released during native work. Optional `progress(report)` and
+`cancel()` callables run under the GIL only between native operations. A False
+progress result or True cancellation predicate requests cooperative cancellation.
+Progress callbacks are throttled (one second by default), while Python signals
+and cancellation are checked at the runner's normal root boundaries. One native
+operation can overrun the time allowance; this is not asynchronous interruption
+inside the algebra engine.
+
+Python callback errors and KeyboardInterrupt are re-raised after the native
+runner finishes checkpointing or records a checkpoint failure. When the Python
+exception supports an added attribute, `cache_report` contains that final report.
+Always inspect `checkpoint_failure`; the latest checkpoint is not guaranteed
+durable merely because a Python exception was preserved. Ordinary partial
+resource/time/cancellation results remain report dictionaries, not false success.
+
+Python load controls apply only explicitly supplied native overrides to the
+current RAM/work limits. Omitted eviction and lookup policy also stay active.
+Reader storage/I/O limits are different: the Rust load API uses the supplied
+whole storage policy, or its defaults, on every load. In particular, omitted
+Python `disk_bytes` selects the default reader disk allowance rather than
+preserving a prior custom I/O policy. Full snapshots require
+`mode="full-snapshot"`; a RAM-only export requires `mode="resident-roots"`.
 
 The binding combines the full family identity, physical arity, cache semantic
 layer and digest of the exact immutable bytes used to load the program. Neither
@@ -145,5 +332,15 @@ published through bounded atomic child checkpoints. The binary progress record
 shares the bundle's disk quota, including temporary replacement files and
 interrupted tails. Resume fixes the artifact and workload identities but permits
 an explicit change to operational budgets. It reuses completed guarded roots;
-it does not restore an in-flight native stack or promise lower-loop descendant
-reuse inside an unfinished root.
+it does not restore an in-flight native stack. Closed one-through-three-loop
+programs can reuse completed guarded records as descendants while restarting a
+root. The current candidate four-loop session still caches starting-root results
+only; its fresh transient inner DAG neither reuses prepared roots nor implements
+LRU/LFU eviction of its own intermediate nodes.
+
+The current local opt-in request cap is one million, allowing the native
+four-parent relative-two-dot/rank-one plan of 164,352 requests. An explicit
+100,000 cap still refuses that plan before execution; no workload is silently
+clipped. This count is not a promise that the current four-loop resource profile
+finishes it: only the explicit first-38 workload and its listed follow-up
+requests have completed the current public four-loop gate.
