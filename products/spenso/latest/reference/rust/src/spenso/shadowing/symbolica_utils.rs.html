@@ -299,20 +299,20 @@
 <a href=#298 id=298 data-nosnippet>298</a>    <span class="kw">let </span>id = name.ref_into_symbol();
 <a href=#299 id=299 data-nosnippet>299</a>    atomic_expanded_label_id(indices, id, <span class="kw-2">&amp;</span>[])
 <a href=#300 id=300 data-nosnippet>300</a>}
-<a href=#301 id=301 data-nosnippet>301</a><span class="attr">#[cfg(feature = <span class="string">"shadowing"</span>)]
+<a href=#301 id=301 data-nosnippet>301</a><span class="attr">#[cfg(feature = <span class="string">"symbolica"</span>)]
 <a href=#302 id=302 data-nosnippet>302</a></span><span class="kw">pub fn </span>atomic_flat_label&lt;I: IntoSymbol&gt;(index: usize, name: I) -&gt; Atom {
 <a href=#303 id=303 data-nosnippet>303</a>    <span class="kw">let </span>id = name.ref_into_symbol();
 <a href=#304 id=304 data-nosnippet>304</a>    atomic_flat_label_id(index, id)
 <a href=#305 id=305 data-nosnippet>305</a>}
 <a href=#306 id=306 data-nosnippet>306</a>
 <a href=#307 id=307 data-nosnippet>307</a><span class="attr">#[allow(clippy::cast_possible_wrap)]
-<a href=#308 id=308 data-nosnippet>308</a>#[cfg(feature = <span class="string">"shadowing"</span>)]
+<a href=#308 id=308 data-nosnippet>308</a>#[cfg(feature = <span class="string">"symbolica"</span>)]
 <a href=#309 id=309 data-nosnippet>309</a></span><span class="kw">pub fn </span>atomic_flat_label_id(index: usize, id: Symbol) -&gt; Atom {
 <a href=#310 id=310 data-nosnippet>310</a>    <span class="kw">let </span><span class="kw-2">mut </span>value_builder = FunctionBuilder::new(id);
 <a href=#311 id=311 data-nosnippet>311</a>    value_builder = value_builder.add_arg(Atom::num(index <span class="kw">as </span>i64).as_atom_view());
 <a href=#312 id=312 data-nosnippet>312</a>    value_builder.finish()
 <a href=#313 id=313 data-nosnippet>313</a>}
-<a href=#314 id=314 data-nosnippet>314</a><span class="attr">#[cfg(feature = <span class="string">"shadowing"</span>)]
+<a href=#314 id=314 data-nosnippet>314</a><span class="attr">#[cfg(feature = <span class="string">"symbolica"</span>)]
 <a href=#315 id=315 data-nosnippet>315</a>#[allow(clippy::cast_possible_wrap)]
 <a href=#316 id=316 data-nosnippet>316</a></span><span class="kw">pub fn </span>atomic_expanded_label_id(indices: <span class="kw-2">&amp;</span>[ConcreteIndex], name: Symbol, args: <span class="kw-2">&amp;</span>[Atom]) -&gt; Atom {
 <a href=#317 id=317 data-nosnippet>317</a>    <span class="kw">let </span><span class="kw-2">mut </span>value_builder = FunctionBuilder::new(name);
@@ -328,14 +328,14 @@
 <a href=#327 id=327 data-nosnippet>327</a>    value_builder.add_arg(<span class="kw-2">&amp;</span>indices).finish()
 <a href=#328 id=328 data-nosnippet>328</a>}
 <a href=#329 id=329 data-nosnippet>329</a>
-<a href=#330 id=330 data-nosnippet>330</a><span class="attr">#[cfg(feature = <span class="string">"shadowing"</span>)]
+<a href=#330 id=330 data-nosnippet>330</a><span class="attr">#[cfg(feature = <span class="string">"symbolica"</span>)]
 <a href=#331 id=331 data-nosnippet>331</a></span><span class="kw">pub trait </span>IntoSymbol {
 <a href=#332 id=332 data-nosnippet>332</a>    <span class="kw">fn </span>ref_into_symbol(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Symbol;
 <a href=#333 id=333 data-nosnippet>333</a>
 <a href=#334 id=334 data-nosnippet>334</a>    <span class="kw">fn </span>from_str(s: <span class="kw-2">&amp;</span>str) -&gt; <span class="self">Self</span>;
 <a href=#335 id=335 data-nosnippet>335</a>}
 <a href=#336 id=336 data-nosnippet>336</a>
-<a href=#337 id=337 data-nosnippet>337</a><span class="attr">#[cfg(feature = <span class="string">"shadowing"</span>)]
+<a href=#337 id=337 data-nosnippet>337</a><span class="attr">#[cfg(feature = <span class="string">"symbolica"</span>)]
 <a href=#338 id=338 data-nosnippet>338</a></span><span class="kw">pub trait </span>IntoArgs {
 <a href=#339 id=339 data-nosnippet>339</a>    <span class="kw">fn </span>ref_into_args(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw">impl </span>Iterator&lt;Item = Atom&gt;;
 <a href=#340 id=340 data-nosnippet>340</a>    <span class="kw">fn </span>args(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Vec&lt;Atom&gt; {
@@ -344,7 +344,7 @@
 <a href=#343 id=343 data-nosnippet>343</a>    <span class="kw">fn </span>cooked_name(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; std::string::String;
 <a href=#344 id=344 data-nosnippet>344</a>}
 <a href=#345 id=345 data-nosnippet>345</a>
-<a href=#346 id=346 data-nosnippet>346</a><span class="attr">#[cfg(feature = <span class="string">"shadowing"</span>)]
+<a href=#346 id=346 data-nosnippet>346</a><span class="attr">#[cfg(feature = <span class="string">"symbolica"</span>)]
 <a href=#347 id=347 data-nosnippet>347</a></span><span class="kw">impl </span>IntoArgs <span class="kw">for </span>usize {
 <a href=#348 id=348 data-nosnippet>348</a>    <span class="kw">fn </span>ref_into_args(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw">impl </span>Iterator&lt;Item = Atom&gt; {
 <a href=#349 id=349 data-nosnippet>349</a>        std::iter::once(Atom::num(<span class="kw-2">*</span><span class="self">self </span><span class="kw">as </span>i64))
@@ -354,7 +354,7 @@
 <a href=#353 id=353 data-nosnippet>353</a>    }
 <a href=#354 id=354 data-nosnippet>354</a>}
 <a href=#355 id=355 data-nosnippet>355</a>
-<a href=#356 id=356 data-nosnippet>356</a><span class="attr">#[cfg(feature = <span class="string">"shadowing"</span>)]
+<a href=#356 id=356 data-nosnippet>356</a><span class="attr">#[cfg(feature = <span class="string">"symbolica"</span>)]
 <a href=#357 id=357 data-nosnippet>357</a></span><span class="kw">impl </span>IntoArgs <span class="kw">for </span>() {
 <a href=#358 id=358 data-nosnippet>358</a>    <span class="kw">fn </span>ref_into_args(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw">impl </span>Iterator&lt;Item = Atom&gt; {
 <a href=#359 id=359 data-nosnippet>359</a>        std::iter::empty()
@@ -373,7 +373,7 @@
 <a href=#372 id=372 data-nosnippet>372</a>    }
 <a href=#373 id=373 data-nosnippet>373</a>}
 <a href=#374 id=374 data-nosnippet>374</a>
-<a href=#375 id=375 data-nosnippet>375</a><span class="attr">#[cfg(feature = <span class="string">"shadowing"</span>)]
+<a href=#375 id=375 data-nosnippet>375</a><span class="attr">#[cfg(feature = <span class="string">"symbolica"</span>)]
 <a href=#376 id=376 data-nosnippet>376</a></span><span class="kw">impl </span>IntoArgs <span class="kw">for </span>NoArgs {
 <a href=#377 id=377 data-nosnippet>377</a>    <span class="kw">fn </span>ref_into_args(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw">impl </span>Iterator&lt;Item = Atom&gt; {
 <a href=#378 id=378 data-nosnippet>378</a>        std::iter::empty()
@@ -383,7 +383,7 @@
 <a href=#382 id=382 data-nosnippet>382</a>    }
 <a href=#383 id=383 data-nosnippet>383</a>}
 <a href=#384 id=384 data-nosnippet>384</a>
-<a href=#385 id=385 data-nosnippet>385</a><span class="attr">#[cfg(feature = <span class="string">"shadowing"</span>)]
+<a href=#385 id=385 data-nosnippet>385</a><span class="attr">#[cfg(feature = <span class="string">"symbolica"</span>)]
 <a href=#386 id=386 data-nosnippet>386</a></span><span class="kw">impl </span>IntoArgs <span class="kw">for </span>Atom {
 <a href=#387 id=387 data-nosnippet>387</a>    <span class="kw">fn </span>ref_into_args(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw">impl </span>Iterator&lt;Item = Atom&gt; {
 <a href=#388 id=388 data-nosnippet>388</a>        std::iter::once(<span class="self">self</span>.clone())
@@ -394,7 +394,7 @@
 <a href=#393 id=393 data-nosnippet>393</a>    }
 <a href=#394 id=394 data-nosnippet>394</a>}
 <a href=#395 id=395 data-nosnippet>395</a>
-<a href=#396 id=396 data-nosnippet>396</a><span class="attr">#[cfg(feature = <span class="string">"shadowing"</span>)]
+<a href=#396 id=396 data-nosnippet>396</a><span class="attr">#[cfg(feature = <span class="string">"symbolica"</span>)]
 <a href=#397 id=397 data-nosnippet>397</a></span><span class="kw">impl </span>IntoArgs <span class="kw">for </span>Vec&lt;Atom&gt; {
 <a href=#398 id=398 data-nosnippet>398</a>    <span class="kw">fn </span>ref_into_args(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw">impl </span>Iterator&lt;Item = Atom&gt; {
 <a href=#399 id=399 data-nosnippet>399</a>        <span class="self">self</span>.iter().cloned()
@@ -407,7 +407,7 @@
 <a href=#406 id=406 data-nosnippet>406</a>    }
 <a href=#407 id=407 data-nosnippet>407</a>}
 <a href=#408 id=408 data-nosnippet>408</a>
-<a href=#409 id=409 data-nosnippet>409</a><span class="attr">#[cfg(feature = <span class="string">"shadowing"</span>)]
+<a href=#409 id=409 data-nosnippet>409</a><span class="attr">#[cfg(feature = <span class="string">"symbolica"</span>)]
 <a href=#410 id=410 data-nosnippet>410</a></span><span class="kw">impl</span>&lt;<span class="kw">const </span>N: usize&gt; IntoArgs <span class="kw">for </span>[Atom; N] {
 <a href=#411 id=411 data-nosnippet>411</a>    <span class="kw">fn </span>ref_into_args(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw">impl </span>Iterator&lt;Item = Atom&gt; {
 <a href=#412 id=412 data-nosnippet>412</a>        <span class="self">self</span>.iter().cloned()
@@ -420,7 +420,7 @@
 <a href=#419 id=419 data-nosnippet>419</a>    }
 <a href=#420 id=420 data-nosnippet>420</a>}
 <a href=#421 id=421 data-nosnippet>421</a>
-<a href=#422 id=422 data-nosnippet>422</a><span class="comment">// #[cfg(feature = "shadowing")]
+<a href=#422 id=422 data-nosnippet>422</a><span class="comment">// #[cfg(feature = "symbolica")]
 <a href=#423 id=423 data-nosnippet>423</a>// impl IntoSymbol for String {
 <a href=#424 id=424 data-nosnippet>424</a>//     fn ref_into_symbol(&amp;self) -&gt; Symbol {
 <a href=#425 id=425 data-nosnippet>425</a>//         symbol!(self)
@@ -431,7 +431,7 @@
 <a href=#430 id=430 data-nosnippet>430</a>//     }
 <a href=#431 id=431 data-nosnippet>431</a>// }
 <a href=#432 id=432 data-nosnippet>432</a>
-<a href=#433 id=433 data-nosnippet>433</a></span><span class="attr">#[cfg(feature = <span class="string">"shadowing"</span>)]
+<a href=#433 id=433 data-nosnippet>433</a></span><span class="attr">#[cfg(feature = <span class="string">"symbolica"</span>)]
 <a href=#434 id=434 data-nosnippet>434</a></span><span class="kw">impl </span>IntoSymbol <span class="kw">for </span>Symbol {
 <a href=#435 id=435 data-nosnippet>435</a>    <span class="kw">fn </span>ref_into_symbol(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Symbol {
 <a href=#436 id=436 data-nosnippet>436</a>        <span class="kw-2">*</span><span class="self">self
@@ -442,7 +442,7 @@
 <a href=#441 id=441 data-nosnippet>441</a>    }
 <a href=#442 id=442 data-nosnippet>442</a>}
 <a href=#443 id=443 data-nosnippet>443</a>
-<a href=#444 id=444 data-nosnippet>444</a><span class="attr">#[cfg(feature = <span class="string">"shadowing"</span>)]
+<a href=#444 id=444 data-nosnippet>444</a><span class="attr">#[cfg(feature = <span class="string">"symbolica"</span>)]
 <a href=#445 id=445 data-nosnippet>445</a></span><span class="kw">impl </span>IntoSymbol <span class="kw">for </span>SerializableSymbol {
 <a href=#446 id=446 data-nosnippet>446</a>    <span class="kw">fn </span>ref_into_symbol(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Symbol {
 <a href=#447 id=447 data-nosnippet>447</a>        <span class="self">self</span>.symbol
@@ -453,7 +453,7 @@
 <a href=#452 id=452 data-nosnippet>452</a>    }
 <a href=#453 id=453 data-nosnippet>453</a>}
 <a href=#454 id=454 data-nosnippet>454</a>
-<a href=#455 id=455 data-nosnippet>455</a><span class="attr">#[cfg(feature = <span class="string">"shadowing"</span>)]
+<a href=#455 id=455 data-nosnippet>455</a><span class="attr">#[cfg(feature = <span class="string">"symbolica"</span>)]
 <a href=#456 id=456 data-nosnippet>456</a></span><span class="kw">impl </span>IntoSymbol <span class="kw">for </span>std::string::String {
 <a href=#457 id=457 data-nosnippet>457</a>    <span class="kw">fn </span>ref_into_symbol(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Symbol {
 <a href=#458 id=458 data-nosnippet>458</a>        <span class="macro">symbol!</span>(<span class="self">self</span>)

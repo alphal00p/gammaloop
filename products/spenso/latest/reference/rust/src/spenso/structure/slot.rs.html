@@ -8,14 +8,14 @@
 <a href=#7 id=7 data-nosnippet>7</a>};
 <a href=#8 id=8 data-nosnippet>8</a><span class="kw">use </span><span class="kw">crate</span>::structure::dimension::Dimension;
 <a href=#9 id=9 data-nosnippet>9</a><span class="kw">use </span>bincode::Encode;
-<a href=#10 id=10 data-nosnippet>10</a><span class="comment">// #[cfg(feature = "shadowing")]
+<a href=#10 id=10 data-nosnippet>10</a><span class="comment">// #[cfg(feature = "symbolica")]
 <a href=#11 id=11 data-nosnippet>11</a></span><span class="kw">use </span>serde::{Deserialize, Serialize};
 <a href=#12 id=12 data-nosnippet>12</a><span class="kw">use </span>std::hash::Hash;
 <a href=#13 id=13 data-nosnippet>13</a><span class="kw">use </span>std::{
 <a href=#14 id=14 data-nosnippet>14</a>    cmp::Ordering,
 <a href=#15 id=15 data-nosnippet>15</a>    fmt::{Debug, Display},
 <a href=#16 id=16 data-nosnippet>16</a>};
-<a href=#17 id=17 data-nosnippet>17</a><span class="attr">#[cfg(feature = <span class="string">"shadowing"</span>)]
+<a href=#17 id=17 data-nosnippet>17</a><span class="attr">#[cfg(feature = <span class="string">"symbolica"</span>)]
 <a href=#18 id=18 data-nosnippet>18</a></span><span class="kw">use </span>symbolica::{
 <a href=#19 id=19 data-nosnippet>19</a>    atom::{Atom, AtomView, Symbol},
 <a href=#20 id=20 data-nosnippet>20</a>    symbol,
@@ -39,7 +39,7 @@
 <a href=#38 id=38 data-nosnippet>38</a>    <span class="comment">// bincode_trait_derive::BorrowDecodeFromDecode,
 <a href=#39 id=39 data-nosnippet>39</a></span>)]
 <a href=#40 id=40 data-nosnippet>40</a>#[cfg_attr(
-<a href=#41 id=41 data-nosnippet>41</a>    feature = <span class="string">"shadowing"</span>,
+<a href=#41 id=41 data-nosnippet>41</a>    feature = <span class="string">"symbolica"</span>,
 <a href=#42 id=42 data-nosnippet>42</a>    trait_decode(<span class="kw">trait </span>= symbolica::state::HasStateMap),
 <a href=#43 id=43 data-nosnippet>43</a>)]
 <a href=#44 id=44 data-nosnippet>44</a></span><span class="doccomment">/// A [`Slot`] is an index, identified by a `usize` and a [`Representation`].
@@ -96,7 +96,7 @@
 <a href=#95 id=95 data-nosnippet>95</a>    </span>Any(<span class="attr">#[from] </span>eyre::Error),
 <a href=#96 id=96 data-nosnippet>96</a>}
 <a href=#97 id=97 data-nosnippet>97</a>
-<a href=#98 id=98 data-nosnippet>98</a><span class="attr">#[cfg(feature = <span class="string">"shadowing"</span>)]
+<a href=#98 id=98 data-nosnippet>98</a><span class="attr">#[cfg(feature = <span class="string">"symbolica"</span>)]
 <a href=#99 id=99 data-nosnippet>99</a></span><span class="doccomment">/// Can construct a `Slot` from an `AtomView` of the form
 <a href=#100 id=100 data-nosnippet>100</a>/// `&lt;representation&gt;(&lt;dimension&gt;, &lt;index&gt;)`.
 <a href=#101 id=101 data-nosnippet>101</a>///
@@ -179,7 +179,7 @@
 <a href=#178 id=178 data-nosnippet>178</a></span>{
 <a href=#179 id=179 data-nosnippet>179</a>}
 <a href=#180 id=180 data-nosnippet>180</a>
-<a href=#181 id=181 data-nosnippet>181</a><span class="attr">#[cfg(feature = <span class="string">"shadowing"</span>)]
+<a href=#181 id=181 data-nosnippet>181</a><span class="attr">#[cfg(feature = <span class="string">"symbolica"</span>)]
 <a href=#182 id=182 data-nosnippet>182</a></span><span class="kw">pub trait </span>ParseableAind: Sized {
 <a href=#183 id=183 data-nosnippet>183</a>    <span class="kw">type </span>Error: Into&lt;SlotError&gt;;
 <a href=#184 id=184 data-nosnippet>184</a>    <span class="kw">fn </span>from_view(view: AtomView&lt;<span class="lifetime">'_</span>&gt;) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>, <span class="self">Self</span>::Error&gt;;
@@ -234,16 +234,16 @@
 <a href=#233 id=233 data-nosnippet>233</a>        }
 <a href=#234 id=234 data-nosnippet>234</a>    }
 <a href=#235 id=235 data-nosnippet>235</a>
-<a href=#236 id=236 data-nosnippet>236</a>    <span class="attr">#[cfg(feature = <span class="string">"shadowing"</span>)]
+<a href=#236 id=236 data-nosnippet>236</a>    <span class="attr">#[cfg(feature = <span class="string">"symbolica"</span>)]
 <a href=#237 id=237 data-nosnippet>237</a>    </span><span class="doccomment">/// using the function builder of the representation add the abstract index as an argument, and finish it to an Atom.
 <a href=#238 id=238 data-nosnippet>238</a>    </span><span class="kw">fn </span>to_atom(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Atom
 <a href=#239 id=239 data-nosnippet>239</a>    <span class="kw">where
 <a href=#240 id=240 data-nosnippet>240</a>        </span><span class="self">Self</span>::Aind: ParseableAind;
-<a href=#241 id=241 data-nosnippet>241</a>    <span class="attr">#[cfg(feature = <span class="string">"shadowing"</span>)]
+<a href=#241 id=241 data-nosnippet>241</a>    <span class="attr">#[cfg(feature = <span class="string">"symbolica"</span>)]
 <a href=#242 id=242 data-nosnippet>242</a>    </span><span class="kw">fn </span>to_symbolic_wrapped(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Atom
 <a href=#243 id=243 data-nosnippet>243</a>    <span class="kw">where
 <a href=#244 id=244 data-nosnippet>244</a>        </span><span class="self">Self</span>::Aind: ParseableAind;
-<a href=#245 id=245 data-nosnippet>245</a>    <span class="comment">// #[cfg(feature = "shadowing")]
+<a href=#245 id=245 data-nosnippet>245</a>    <span class="comment">// #[cfg(feature = "symbolica")]
 <a href=#246 id=246 data-nosnippet>246</a>    // fn try_from_view&lt;'a&gt;(v: AtomView&lt;'a&gt;) -&gt; Result&lt;Self, SlotError&gt;
 <a href=#247 id=247 data-nosnippet>247</a>    // where
 <a href=#248 id=248 data-nosnippet>248</a>    //     Self::Aind: TryFrom&lt;AtomView&lt;'a&gt;&gt;,
@@ -288,14 +288,14 @@
 <a href=#287 id=287 data-nosnippet>287</a>    <span class="kw">fn </span>set_aind(<span class="kw-2">&amp;mut </span><span class="self">self</span>, aind: <span class="self">Self</span>::Aind) {
 <a href=#288 id=288 data-nosnippet>288</a>        <span class="self">self</span>.aind = aind;
 <a href=#289 id=289 data-nosnippet>289</a>    }
-<a href=#290 id=290 data-nosnippet>290</a>    <span class="attr">#[cfg(feature = <span class="string">"shadowing"</span>)]
+<a href=#290 id=290 data-nosnippet>290</a>    <span class="attr">#[cfg(feature = <span class="string">"symbolica"</span>)]
 <a href=#291 id=291 data-nosnippet>291</a>    </span><span class="kw">fn </span>to_atom(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Atom
 <a href=#292 id=292 data-nosnippet>292</a>    <span class="kw">where
 <a href=#293 id=293 data-nosnippet>293</a>        </span><span class="self">Self</span>::Aind: ParseableAind,
 <a href=#294 id=294 data-nosnippet>294</a>    {
 <a href=#295 id=295 data-nosnippet>295</a>        <span class="self">self</span>.rep.to_symbolic([<span class="self">self</span>.aind.to_atom()])
 <a href=#296 id=296 data-nosnippet>296</a>    }
-<a href=#297 id=297 data-nosnippet>297</a>    <span class="attr">#[cfg(feature = <span class="string">"shadowing"</span>)]
+<a href=#297 id=297 data-nosnippet>297</a>    <span class="attr">#[cfg(feature = <span class="string">"symbolica"</span>)]
 <a href=#298 id=298 data-nosnippet>298</a>    </span><span class="kw">fn </span>to_symbolic_wrapped(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Atom
 <a href=#299 id=299 data-nosnippet>299</a>    <span class="kw">where
 <a href=#300 id=300 data-nosnippet>300</a>        </span><span class="self">Self</span>::Aind: ParseableAind,
@@ -305,7 +305,7 @@
 <a href=#304 id=304 data-nosnippet>304</a>        <span class="self">self</span>.rep
 <a href=#305 id=305 data-nosnippet>305</a>            .to_symbolic([<span class="macro">function!</span>(<span class="macro">symbol!</span>(<span class="string">"indexid"</span>), <span class="self">self</span>.aind.to_atom())])
 <a href=#306 id=306 data-nosnippet>306</a>    }
-<a href=#307 id=307 data-nosnippet>307</a>    <span class="comment">// #[cfg(feature = "shadowing")]
+<a href=#307 id=307 data-nosnippet>307</a>    <span class="comment">// #[cfg(feature = "symbolica")]
 <a href=#308 id=308 data-nosnippet>308</a>    // fn try_from_view&lt;'a&gt;(v: AtomView&lt;'a&gt;) -&gt; Result&lt;Self, SlotError&gt;
 <a href=#309 id=309 data-nosnippet>309</a>    // where
 <a href=#310 id=310 data-nosnippet>310</a>    //     Self::Aind: TryFrom&lt;AtomView&lt;'a&gt;&gt;,
@@ -327,7 +327,7 @@
 <a href=#326 id=326 data-nosnippet>326</a>    }
 <a href=#327 id=327 data-nosnippet>327</a>}
 <a href=#328 id=328 data-nosnippet>328</a>
-<a href=#329 id=329 data-nosnippet>329</a><span class="attr">#[cfg(feature = <span class="string">"shadowing"</span>)]
+<a href=#329 id=329 data-nosnippet>329</a><span class="attr">#[cfg(feature = <span class="string">"symbolica"</span>)]
 <a href=#330 id=330 data-nosnippet>330</a></span><span class="kw">impl</span>&lt;T: RepName, Aind: AbsInd&gt; Slot&lt;T, Aind&gt;
 <a href=#331 id=331 data-nosnippet>331</a><span class="kw">where
 <a href=#332 id=332 data-nosnippet>332</a>    </span>Atom: From&lt;Aind&gt;,
@@ -359,7 +359,7 @@
 <a href=#358 id=358 data-nosnippet>358</a>}
 <a href=#359 id=359 data-nosnippet>359</a>
 <a href=#360 id=360 data-nosnippet>360</a><span class="attr">#[cfg(test)]
-<a href=#361 id=361 data-nosnippet>361</a>#[cfg(feature = <span class="string">"shadowing"</span>)]
+<a href=#361 id=361 data-nosnippet>361</a>#[cfg(feature = <span class="string">"symbolica"</span>)]
 <a href=#362 id=362 data-nosnippet>362</a></span><span class="kw">mod </span>shadowing_tests {
 <a href=#363 id=363 data-nosnippet>363</a>    <span class="kw">use </span>insta::assert_snapshot;
 <a href=#364 id=364 data-nosnippet>364</a>    <span class="kw">use </span>symbolica::{atom::AtomCore, parse, symbol};

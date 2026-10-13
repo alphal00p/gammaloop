@@ -22,7 +22,7 @@
 <a href=#21 id=21 data-nosnippet>21</a><span class="kw">use </span>tracing::{debug, warn};
 <a href=#22 id=22 data-nosnippet>22</a><span class="kw">use </span>typed_index_collections::TiVec;
 <a href=#23 id=23 data-nosnippet>23</a>
-<a href=#24 id=24 data-nosnippet>24</a><span class="attr">#[cfg_attr(feature = <span class="string">"python_api"</span>, pyo3::pyclass(from_py_object))]
+<a href=#24 id=24 data-nosnippet>24</a><span class="attr">#[cfg_attr(feature = <span class="string">"python"</span>, pyo3::pyclass(from_py_object))]
 <a href=#25 id=25 data-nosnippet>25</a>#[derive(Debug, Clone, Deserialize, Serialize, Encode, Decode, PartialEq, JsonSchema)]
 <a href=#26 id=26 data-nosnippet>26</a>#[serde(default, deny_unknown_fields)]
 <a href=#27 id=27 data-nosnippet>27</a></span><span class="kw">pub struct </span>PhaseSpaceImprovementSettings {
@@ -51,7 +51,7 @@
 <a href=#50 id=50 data-nosnippet>50</a>    }
 <a href=#51 id=51 data-nosnippet>51</a>}
 <a href=#52 id=52 data-nosnippet>52</a>
-<a href=#53 id=53 data-nosnippet>53</a><span class="attr">#[cfg_attr(feature = <span class="string">"python_api"</span>, pyo3::pyclass(from_py_object))]
+<a href=#53 id=53 data-nosnippet>53</a><span class="attr">#[cfg_attr(feature = <span class="string">"python"</span>, pyo3::pyclass(from_py_object))]
 <a href=#54 id=54 data-nosnippet>54</a>#[derive(Debug, Clone, Deserialize, Serialize, Encode, Decode, PartialEq, JsonSchema, Default)]
 <a href=#55 id=55 data-nosnippet>55</a>#[serde(deny_unknown_fields)]
 <a href=#56 id=56 data-nosnippet>56</a></span><span class="kw">pub enum </span>ImprovementMode {

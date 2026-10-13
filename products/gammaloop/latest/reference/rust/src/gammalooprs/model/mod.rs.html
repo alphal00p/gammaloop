@@ -825,7 +825,7 @@
 <a href=#824 id=824 data-nosnippet>824</a></span><span class="kw">pub struct </span>SerializableCoupling {
 <a href=#825 id=825 data-nosnippet>825</a>    name: SmartString&lt;LazyCompact&gt;,
 <a href=#826 id=826 data-nosnippet>826</a>    expression: SmartString&lt;LazyCompact&gt;,
-<a href=#827 id=827 data-nosnippet>827</a>    <span class="attr">#[serde(with = <span class="string">"vectorize"</span>)]
+<a href=#827 id=827 data-nosnippet>827</a>    <span class="attr">#[serde(with = <span class="string">"crate::utils::serde_utils::map_as_pairs"</span>)]
 <a href=#828 id=828 data-nosnippet>828</a>    </span>orders: BTreeMap&lt;SmartString&lt;LazyCompact&gt;, usize&gt;,
 <a href=#829 id=829 data-nosnippet>829</a>    value: <span class="prelude-ty">Option</span>&lt;(f64, f64)&gt;,
 <a href=#830 id=830 data-nosnippet>830</a>}

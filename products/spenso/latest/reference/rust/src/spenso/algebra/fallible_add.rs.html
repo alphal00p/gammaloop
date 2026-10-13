@@ -200,12 +200,12 @@
 <a href=#199 id=199 data-nosnippet>199</a>    }
 <a href=#200 id=200 data-nosnippet>200</a>}
 <a href=#201 id=201 data-nosnippet>201</a>
-<a href=#202 id=202 data-nosnippet>202</a><span class="attr">#[cfg(feature = <span class="string">"shadowing"</span>)]
+<a href=#202 id=202 data-nosnippet>202</a><span class="attr">#[cfg(feature = <span class="string">"symbolica"</span>)]
 <a href=#203 id=203 data-nosnippet>203</a></span><span class="kw">use </span><span class="kw">crate</span>::tensors::parametric::{MixedTensor, ParamTensor};
-<a href=#204 id=204 data-nosnippet>204</a><span class="attr">#[cfg(feature = <span class="string">"shadowing"</span>)]
+<a href=#204 id=204 data-nosnippet>204</a><span class="attr">#[cfg(feature = <span class="string">"symbolica"</span>)]
 <a href=#205 id=205 data-nosnippet>205</a></span><span class="kw">use </span>symbolica::atom::Atom;
 <a href=#206 id=206 data-nosnippet>206</a>
-<a href=#207 id=207 data-nosnippet>207</a><span class="attr">#[cfg(feature = <span class="string">"shadowing"</span>)]
+<a href=#207 id=207 data-nosnippet>207</a><span class="attr">#[cfg(feature = <span class="string">"symbolica"</span>)]
 <a href=#208 id=208 data-nosnippet>208</a></span><span class="kw">impl</span>&lt;S: TensorStructure + Clone&gt; FallibleAdd&lt;ParamTensor&lt;S&gt;&gt; <span class="kw">for </span>ParamTensor&lt;S&gt; {
 <a href=#209 id=209 data-nosnippet>209</a>    <span class="kw">type </span>Output = ParamTensor&lt;S&gt;;
 <a href=#210 id=210 data-nosnippet>210</a>    <span class="kw">fn </span>add_fallible(<span class="kw-2">&amp;</span><span class="self">self</span>, rhs: <span class="kw-2">&amp;</span>ParamTensor&lt;S&gt;) -&gt; <span class="prelude-ty">Option</span>&lt;<span class="self">Self</span>::Output&gt; {
@@ -214,7 +214,7 @@
 <a href=#213 id=213 data-nosnippet>213</a>    }
 <a href=#214 id=214 data-nosnippet>214</a>}
 <a href=#215 id=215 data-nosnippet>215</a>
-<a href=#216 id=216 data-nosnippet>216</a><span class="attr">#[cfg(feature = <span class="string">"shadowing"</span>)]
+<a href=#216 id=216 data-nosnippet>216</a><span class="attr">#[cfg(feature = <span class="string">"symbolica"</span>)]
 <a href=#217 id=217 data-nosnippet>217</a></span><span class="kw">impl</span>&lt;I, T&gt; FallibleAdd&lt;MixedTensor&lt;T, I&gt;&gt; <span class="kw">for </span>MixedTensor&lt;T, I&gt;
 <a href=#218 id=218 data-nosnippet>218</a><span class="kw">where
 <a href=#219 id=219 data-nosnippet>219</a>    </span>I: TensorStructure + Clone,

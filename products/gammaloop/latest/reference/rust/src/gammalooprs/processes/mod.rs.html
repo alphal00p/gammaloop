@@ -45,7 +45,7 @@
 <a href=#44 id=44 data-nosnippet>44</a>};
 <a href=#45 id=45 data-nosnippet>45</a><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">use </span>selection::{GraphCutSelectionSubject, GraphSelectionSubject};
 <a href=#46 id=46 data-nosnippet>46</a>
-<a href=#47 id=47 data-nosnippet>47</a><span class="attr">#[cfg_attr(feature = <span class="string">"python_api"</span>, pyo3::pyclass(from_py_object))]
+<a href=#47 id=47 data-nosnippet>47</a><span class="attr">#[cfg_attr(feature = <span class="string">"python"</span>, pyo3::pyclass(from_py_object))]
 <a href=#48 id=48 data-nosnippet>48</a>#[derive(
 <a href=#49 id=49 data-nosnippet>49</a>    Debug, Clone, Copy, Default, Serialize, Deserialize, Encode, Decode, PartialEq, Eq, JsonSchema,
 <a href=#50 id=50 data-nosnippet>50</a>)]
@@ -59,7 +59,7 @@
 <a href=#58 id=58 data-nosnippet>58</a>    </span>IntermediateCost,
 <a href=#59 id=59 data-nosnippet>59</a>}
 <a href=#60 id=60 data-nosnippet>60</a>
-<a href=#61 id=61 data-nosnippet>61</a><span class="attr">#[cfg_attr(feature = <span class="string">"python_api"</span>, pyo3::pyclass(from_py_object))]
+<a href=#61 id=61 data-nosnippet>61</a><span class="attr">#[cfg_attr(feature = <span class="string">"python"</span>, pyo3::pyclass(from_py_object))]
 <a href=#62 id=62 data-nosnippet>62</a>#[derive(Debug, Clone, Copy, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
 <a href=#63 id=63 data-nosnippet>63</a></span><span class="kw">pub enum </span>ExecutionMode {
 <a href=#64 id=64 data-nosnippet>64</a>    Sequential,
@@ -68,13 +68,13 @@
 <a href=#67 id=67 data-nosnippet>67</a>    SequentialExtract,
 <a href=#68 id=68 data-nosnippet>68</a>}
 <a href=#69 id=69 data-nosnippet>69</a>
-<a href=#70 id=70 data-nosnippet>70</a><span class="attr">#[cfg_attr(feature = <span class="string">"python_api"</span>, pyo3::pyclass(from_py_object))]
+<a href=#70 id=70 data-nosnippet>70</a><span class="attr">#[cfg_attr(feature = <span class="string">"python"</span>, pyo3::pyclass(from_py_object))]
 <a href=#71 id=71 data-nosnippet>71</a>#[derive(Debug, Clone, Copy, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
 <a href=#72 id=72 data-nosnippet>72</a></span><span class="kw">pub enum </span>ContractionMode {
 <a href=#73 id=73 data-nosnippet>73</a>    SmallestDegree,
 <a href=#74 id=74 data-nosnippet>74</a>    MinResultRank,
 <a href=#75 id=75 data-nosnippet>75</a>}
-<a href=#76 id=76 data-nosnippet>76</a><span class="attr">#[cfg_attr(feature = <span class="string">"python_api"</span>, pyo3::pyclass(from_py_object))]
+<a href=#76 id=76 data-nosnippet>76</a><span class="attr">#[cfg_attr(feature = <span class="string">"python"</span>, pyo3::pyclass(from_py_object))]
 <a href=#77 id=77 data-nosnippet>77</a>#[derive(Debug, Clone, Copy, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
 <a href=#78 id=78 data-nosnippet>78</a></span><span class="kw">pub struct </span>EvaluatorSettings {
 <a href=#79 id=79 data-nosnippet>79</a>    <span class="doccomment">/// Perform symbolic tensor and scalar algebra before lowering to an evaluator.
@@ -427,595 +427,589 @@
 <a href=#426 id=426 data-nosnippet>426</a>
 <a href=#427 id=427 data-nosnippet>427</a><span class="doccomment">/// Controls which graph details and algebraic transformations are included in DOT exports.
 <a href=#428 id=428 data-nosnippet>428</a></span><span class="attr">#[derive(Serialize, Deserialize, Debug, Clone)]
-<a href=#429 id=429 data-nosnippet>429</a>#[cfg_attr(feature = <span class="string">"python_stubgen"</span>, pyo3_stub_gen::derive::gen_stub_pyclass)]
-<a href=#430 id=430 data-nosnippet>430</a>#[cfg_attr(
-<a href=#431 id=431 data-nosnippet>431</a>    feature = <span class="string">"python_api"</span>,
-<a href=#432 id=432 data-nosnippet>432</a>    pyo3::pyclass(from_py_object, get_all, set_all)
-<a href=#433 id=433 data-nosnippet>433</a>)]
-<a href=#434 id=434 data-nosnippet>434</a></span><span class="kw">pub struct </span>DotExportSettings {
-<a href=#435 id=435 data-nosnippet>435</a>    <span class="comment">// pub root_folder: PathBuf,
-<a href=#436 id=436 data-nosnippet>436</a>    </span><span class="doccomment">/// Write all diagrams of an integrand to one file during filesystem export.
-<a href=#437 id=437 data-nosnippet>437</a>    </span><span class="kw">pub </span>combine_diagrams: bool,
-<a href=#438 id=438 data-nosnippet>438</a>    <span class="doccomment">/// Request UV counterterm graph output; currently retained for compatibility.
-<a href=#439 id=439 data-nosnippet>439</a>    </span><span class="kw">pub </span>with_uv: bool,
-<a href=#440 id=440 data-nosnippet>440</a>    <span class="doccomment">/// Add the complete symbolic numerator as the graph-level `full_num` field.
-<a href=#441 id=441 data-nosnippet>441</a>    </span><span class="kw">pub </span>output_full_numerator: bool,
-<a href=#442 id=442 data-nosnippet>442</a>    <span class="doccomment">/// Split cross-section graphs by distinct initial-state assignments.
-<a href=#443 id=443 data-nosnippet>443</a>    </span><span class="kw">pub </span>split_xs_by_initial_states: bool,
-<a href=#444 id=444 data-nosnippet>444</a>    <span class="doccomment">/// Simplify gamma-matrix algebra in the full numerator before formatting it.
-<a href=#445 id=445 data-nosnippet>445</a>    </span><span class="kw">pub </span>do_gamma_algebra: bool,
-<a href=#446 id=446 data-nosnippet>446</a>    <span class="doccomment">/// Simplify color algebra in the full numerator before formatting it.
-<a href=#447 id=447 data-nosnippet>447</a>    </span><span class="kw">pub </span>do_color_algebra: bool,
-<a href=#448 id=448 data-nosnippet>448</a>    <span class="attr">#[serde(default, skip_serializing_if = <span class="string">"is_false"</span>)]
-<a href=#449 id=449 data-nosnippet>449</a>    </span><span class="doccomment">/// Include vertex and edge fields whose values GammaLoop generated automatically.
-<a href=#450 id=450 data-nosnippet>450</a>    </span><span class="kw">pub </span>include_autogenerated_fields: bool,
-<a href=#451 id=451 data-nosnippet>451</a>}
-<a href=#452 id=452 data-nosnippet>452</a>
-<a href=#453 id=453 data-nosnippet>453</a><span class="attr">#[derive(Serialize, Deserialize, Debug, Clone)]
-<a href=#454 id=454 data-nosnippet>454</a>#[cfg_attr(
-<a href=#455 id=455 data-nosnippet>455</a>    feature = <span class="string">"python_api"</span>,
-<a href=#456 id=456 data-nosnippet>456</a>    pyo3::pyclass(from_py_object, get_all, set_all)
-<a href=#457 id=457 data-nosnippet>457</a>)]
-<a href=#458 id=458 data-nosnippet>458</a></span><span class="kw">pub struct </span>StandaloneExportSettings {
-<a href=#459 id=459 data-nosnippet>459</a>    <span class="attr">#[serde(default)]
-<a href=#460 id=460 data-nosnippet>460</a>    </span><span class="kw">pub </span>mode: StandaloneExportMode,
-<a href=#461 id=461 data-nosnippet>461</a>    <span class="attr">#[serde(default)]
-<a href=#462 id=462 data-nosnippet>462</a>    </span><span class="kw">pub </span>format: StandaloneDataFormat,
-<a href=#463 id=463 data-nosnippet>463</a>    <span class="attr">#[serde(default)]
-<a href=#464 id=464 data-nosnippet>464</a>    </span><span class="kw">pub </span>precision: StandaloneNumericTarget,
-<a href=#465 id=465 data-nosnippet>465</a>}
-<a href=#466 id=466 data-nosnippet>466</a>
-<a href=#467 id=467 data-nosnippet>467</a><span class="attr">#[cfg_attr(feature = <span class="string">"python_api"</span>, pyo3::pyclass(from_py_object))]
-<a href=#468 id=468 data-nosnippet>468</a>#[derive(
-<a href=#469 id=469 data-nosnippet>469</a>    Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Default, Encode, Decode, JsonSchema,
-<a href=#470 id=470 data-nosnippet>470</a>)]
-<a href=#471 id=471 data-nosnippet>471</a>#[serde(rename_all = <span class="string">"snake_case"</span>)]
-<a href=#472 id=472 data-nosnippet>472</a></span><span class="kw">pub enum </span>StandaloneExportMode {
-<a href=#473 id=473 data-nosnippet>473</a>    <span class="attr">#[default]
-<a href=#474 id=474 data-nosnippet>474</a>    </span>Rust,
-<a href=#475 id=475 data-nosnippet>475</a>    Python,
-<a href=#476 id=476 data-nosnippet>476</a>}
-<a href=#477 id=477 data-nosnippet>477</a>
-<a href=#478 id=478 data-nosnippet>478</a><span class="attr">#[cfg_attr(feature = <span class="string">"python_api"</span>, pyo3::pyclass(from_py_object))]
-<a href=#479 id=479 data-nosnippet>479</a>#[derive(
-<a href=#480 id=480 data-nosnippet>480</a>    Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Default, Encode, Decode, JsonSchema,
-<a href=#481 id=481 data-nosnippet>481</a>)]
-<a href=#482 id=482 data-nosnippet>482</a>#[serde(rename_all = <span class="string">"snake_case"</span>)]
-<a href=#483 id=483 data-nosnippet>483</a></span><span class="kw">pub enum </span>StandaloneDataFormat {
-<a href=#484 id=484 data-nosnippet>484</a>    <span class="attr">#[default]
-<a href=#485 id=485 data-nosnippet>485</a>    </span>Binary,
-<a href=#486 id=486 data-nosnippet>486</a>    Json,
-<a href=#487 id=487 data-nosnippet>487</a>}
-<a href=#488 id=488 data-nosnippet>488</a>
-<a href=#489 id=489 data-nosnippet>489</a><span class="attr">#[cfg_attr(feature = <span class="string">"python_api"</span>, pyo3::pyclass(from_py_object))]
-<a href=#490 id=490 data-nosnippet>490</a>#[derive(
-<a href=#491 id=491 data-nosnippet>491</a>    Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Default, Encode, Decode, JsonSchema,
-<a href=#492 id=492 data-nosnippet>492</a>)]
-<a href=#493 id=493 data-nosnippet>493</a>#[serde(rename_all = <span class="string">"snake_case"</span>)]
-<a href=#494 id=494 data-nosnippet>494</a></span><span class="kw">pub enum </span>StandaloneNumericTarget {
-<a href=#495 id=495 data-nosnippet>495</a>    <span class="attr">#[default]
-<a href=#496 id=496 data-nosnippet>496</a>    </span>Double,
-<a href=#497 id=497 data-nosnippet>497</a>    Quad,
-<a href=#498 id=498 data-nosnippet>498</a>    Arb,
-<a href=#499 id=499 data-nosnippet>499</a>}
-<a href=#500 id=500 data-nosnippet>500</a>
-<a href=#501 id=501 data-nosnippet>501</a><span class="attr">#[cfg(feature = <span class="string">"python_api"</span>)]
-<a href=#502 id=502 data-nosnippet>502</a>#[cfg_attr(feature = <span class="string">"python_stubgen"</span>, pyo3_stub_gen::derive::gen_stub_pymethods)]
-<a href=#503 id=503 data-nosnippet>503</a>#[cfg_attr(feature = <span class="string">"python_api"</span>, pyo3::pymethods)]
-<a href=#504 id=504 data-nosnippet>504</a></span><span class="kw">impl </span>DotExportSettings {
-<a href=#505 id=505 data-nosnippet>505</a>    <span class="doccomment">/// Construct DOT export settings with GammaLoop's defaults.
-<a href=#506 id=506 data-nosnippet>506</a>    </span><span class="attr">#[new]
-<a href=#507 id=507 data-nosnippet>507</a>    </span><span class="kw">fn </span>new() -&gt; <span class="self">Self </span>{
-<a href=#508 id=508 data-nosnippet>508</a>        DotExportSettings::default()
-<a href=#509 id=509 data-nosnippet>509</a>    }
-<a href=#510 id=510 data-nosnippet>510</a>}
-<a href=#511 id=511 data-nosnippet>511</a>
-<a href=#512 id=512 data-nosnippet>512</a><span class="kw">impl </span>Default <span class="kw">for </span>DotExportSettings {
-<a href=#513 id=513 data-nosnippet>513</a>    <span class="kw">fn </span>default() -&gt; <span class="self">Self </span>{
-<a href=#514 id=514 data-nosnippet>514</a>        <span class="self">Self </span>{
-<a href=#515 id=515 data-nosnippet>515</a>            <span class="comment">// root_folder: PathBuf::from("."),
-<a href=#516 id=516 data-nosnippet>516</a>            </span>split_xs_by_initial_states: <span class="bool-val">false</span>,
-<a href=#517 id=517 data-nosnippet>517</a>            output_full_numerator: <span class="bool-val">false</span>,
-<a href=#518 id=518 data-nosnippet>518</a>            do_gamma_algebra: <span class="bool-val">false</span>,
-<a href=#519 id=519 data-nosnippet>519</a>            do_color_algebra: <span class="bool-val">true</span>,
-<a href=#520 id=520 data-nosnippet>520</a>            combine_diagrams: <span class="bool-val">false</span>,
-<a href=#521 id=521 data-nosnippet>521</a>            with_uv: <span class="bool-val">false</span>,
-<a href=#522 id=522 data-nosnippet>522</a>            include_autogenerated_fields: <span class="bool-val">false</span>,
-<a href=#523 id=523 data-nosnippet>523</a>        }
-<a href=#524 id=524 data-nosnippet>524</a>    }
-<a href=#525 id=525 data-nosnippet>525</a>}
-<a href=#526 id=526 data-nosnippet>526</a>
-<a href=#527 id=527 data-nosnippet>527</a><span class="kw">impl </span>Default <span class="kw">for </span>StandaloneExportSettings {
-<a href=#528 id=528 data-nosnippet>528</a>    <span class="kw">fn </span>default() -&gt; <span class="self">Self </span>{
-<a href=#529 id=529 data-nosnippet>529</a>        <span class="self">Self </span>{
-<a href=#530 id=530 data-nosnippet>530</a>            format: StandaloneDataFormat::Binary,
-<a href=#531 id=531 data-nosnippet>531</a>            mode: StandaloneExportMode::Rust,
-<a href=#532 id=532 data-nosnippet>532</a>            precision: StandaloneNumericTarget::Double,
-<a href=#533 id=533 data-nosnippet>533</a>        }
+<a href=#429 id=429 data-nosnippet>429</a>#[cfg_attr(feature = <span class="string">"python-stubs"</span>, pyo3_stub_gen::derive::gen_stub_pyclass)]
+<a href=#430 id=430 data-nosnippet>430</a>#[cfg_attr(feature = <span class="string">"python"</span>, pyo3::pyclass(from_py_object, get_all, set_all))]
+<a href=#431 id=431 data-nosnippet>431</a></span><span class="kw">pub struct </span>DotExportSettings {
+<a href=#432 id=432 data-nosnippet>432</a>    <span class="comment">// pub root_folder: PathBuf,
+<a href=#433 id=433 data-nosnippet>433</a>    </span><span class="doccomment">/// Write all diagrams of an integrand to one file during filesystem export.
+<a href=#434 id=434 data-nosnippet>434</a>    </span><span class="kw">pub </span>combine_diagrams: bool,
+<a href=#435 id=435 data-nosnippet>435</a>    <span class="doccomment">/// Request UV counterterm graph output; currently retained for compatibility.
+<a href=#436 id=436 data-nosnippet>436</a>    </span><span class="kw">pub </span>with_uv: bool,
+<a href=#437 id=437 data-nosnippet>437</a>    <span class="doccomment">/// Add the complete symbolic numerator as the graph-level `full_num` field.
+<a href=#438 id=438 data-nosnippet>438</a>    </span><span class="kw">pub </span>output_full_numerator: bool,
+<a href=#439 id=439 data-nosnippet>439</a>    <span class="doccomment">/// Split cross-section graphs by distinct initial-state assignments.
+<a href=#440 id=440 data-nosnippet>440</a>    </span><span class="kw">pub </span>split_xs_by_initial_states: bool,
+<a href=#441 id=441 data-nosnippet>441</a>    <span class="doccomment">/// Simplify gamma-matrix algebra in the full numerator before formatting it.
+<a href=#442 id=442 data-nosnippet>442</a>    </span><span class="kw">pub </span>do_gamma_algebra: bool,
+<a href=#443 id=443 data-nosnippet>443</a>    <span class="doccomment">/// Simplify color algebra in the full numerator before formatting it.
+<a href=#444 id=444 data-nosnippet>444</a>    </span><span class="kw">pub </span>do_color_algebra: bool,
+<a href=#445 id=445 data-nosnippet>445</a>    <span class="attr">#[serde(default, skip_serializing_if = <span class="string">"is_false"</span>)]
+<a href=#446 id=446 data-nosnippet>446</a>    </span><span class="doccomment">/// Include vertex and edge fields whose values GammaLoop generated automatically.
+<a href=#447 id=447 data-nosnippet>447</a>    </span><span class="kw">pub </span>include_autogenerated_fields: bool,
+<a href=#448 id=448 data-nosnippet>448</a>}
+<a href=#449 id=449 data-nosnippet>449</a>
+<a href=#450 id=450 data-nosnippet>450</a><span class="attr">#[derive(Serialize, Deserialize, Debug, Clone)]
+<a href=#451 id=451 data-nosnippet>451</a>#[cfg_attr(feature = <span class="string">"python"</span>, pyo3::pyclass(from_py_object, get_all, set_all))]
+<a href=#452 id=452 data-nosnippet>452</a></span><span class="kw">pub struct </span>StandaloneExportSettings {
+<a href=#453 id=453 data-nosnippet>453</a>    <span class="attr">#[serde(default)]
+<a href=#454 id=454 data-nosnippet>454</a>    </span><span class="kw">pub </span>mode: StandaloneExportMode,
+<a href=#455 id=455 data-nosnippet>455</a>    <span class="attr">#[serde(default)]
+<a href=#456 id=456 data-nosnippet>456</a>    </span><span class="kw">pub </span>format: StandaloneDataFormat,
+<a href=#457 id=457 data-nosnippet>457</a>    <span class="attr">#[serde(default)]
+<a href=#458 id=458 data-nosnippet>458</a>    </span><span class="kw">pub </span>precision: StandaloneNumericTarget,
+<a href=#459 id=459 data-nosnippet>459</a>}
+<a href=#460 id=460 data-nosnippet>460</a>
+<a href=#461 id=461 data-nosnippet>461</a><span class="attr">#[cfg_attr(feature = <span class="string">"python"</span>, pyo3::pyclass(from_py_object))]
+<a href=#462 id=462 data-nosnippet>462</a>#[derive(
+<a href=#463 id=463 data-nosnippet>463</a>    Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Default, Encode, Decode, JsonSchema,
+<a href=#464 id=464 data-nosnippet>464</a>)]
+<a href=#465 id=465 data-nosnippet>465</a>#[serde(rename_all = <span class="string">"snake_case"</span>)]
+<a href=#466 id=466 data-nosnippet>466</a></span><span class="kw">pub enum </span>StandaloneExportMode {
+<a href=#467 id=467 data-nosnippet>467</a>    <span class="attr">#[default]
+<a href=#468 id=468 data-nosnippet>468</a>    </span>Rust,
+<a href=#469 id=469 data-nosnippet>469</a>    Python,
+<a href=#470 id=470 data-nosnippet>470</a>}
+<a href=#471 id=471 data-nosnippet>471</a>
+<a href=#472 id=472 data-nosnippet>472</a><span class="attr">#[cfg_attr(feature = <span class="string">"python"</span>, pyo3::pyclass(from_py_object))]
+<a href=#473 id=473 data-nosnippet>473</a>#[derive(
+<a href=#474 id=474 data-nosnippet>474</a>    Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Default, Encode, Decode, JsonSchema,
+<a href=#475 id=475 data-nosnippet>475</a>)]
+<a href=#476 id=476 data-nosnippet>476</a>#[serde(rename_all = <span class="string">"snake_case"</span>)]
+<a href=#477 id=477 data-nosnippet>477</a></span><span class="kw">pub enum </span>StandaloneDataFormat {
+<a href=#478 id=478 data-nosnippet>478</a>    <span class="attr">#[default]
+<a href=#479 id=479 data-nosnippet>479</a>    </span>Binary,
+<a href=#480 id=480 data-nosnippet>480</a>    Json,
+<a href=#481 id=481 data-nosnippet>481</a>}
+<a href=#482 id=482 data-nosnippet>482</a>
+<a href=#483 id=483 data-nosnippet>483</a><span class="attr">#[cfg_attr(feature = <span class="string">"python"</span>, pyo3::pyclass(from_py_object))]
+<a href=#484 id=484 data-nosnippet>484</a>#[derive(
+<a href=#485 id=485 data-nosnippet>485</a>    Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Default, Encode, Decode, JsonSchema,
+<a href=#486 id=486 data-nosnippet>486</a>)]
+<a href=#487 id=487 data-nosnippet>487</a>#[serde(rename_all = <span class="string">"snake_case"</span>)]
+<a href=#488 id=488 data-nosnippet>488</a></span><span class="kw">pub enum </span>StandaloneNumericTarget {
+<a href=#489 id=489 data-nosnippet>489</a>    <span class="attr">#[default]
+<a href=#490 id=490 data-nosnippet>490</a>    </span>Double,
+<a href=#491 id=491 data-nosnippet>491</a>    Quad,
+<a href=#492 id=492 data-nosnippet>492</a>    Arb,
+<a href=#493 id=493 data-nosnippet>493</a>}
+<a href=#494 id=494 data-nosnippet>494</a>
+<a href=#495 id=495 data-nosnippet>495</a><span class="attr">#[cfg(feature = <span class="string">"python"</span>)]
+<a href=#496 id=496 data-nosnippet>496</a>#[cfg_attr(feature = <span class="string">"python-stubs"</span>, pyo3_stub_gen::derive::gen_stub_pymethods)]
+<a href=#497 id=497 data-nosnippet>497</a>#[cfg_attr(feature = <span class="string">"python"</span>, pyo3::pymethods)]
+<a href=#498 id=498 data-nosnippet>498</a></span><span class="kw">impl </span>DotExportSettings {
+<a href=#499 id=499 data-nosnippet>499</a>    <span class="doccomment">/// Construct DOT export settings with GammaLoop's defaults.
+<a href=#500 id=500 data-nosnippet>500</a>    </span><span class="attr">#[new]
+<a href=#501 id=501 data-nosnippet>501</a>    </span><span class="kw">fn </span>new() -&gt; <span class="self">Self </span>{
+<a href=#502 id=502 data-nosnippet>502</a>        DotExportSettings::default()
+<a href=#503 id=503 data-nosnippet>503</a>    }
+<a href=#504 id=504 data-nosnippet>504</a>}
+<a href=#505 id=505 data-nosnippet>505</a>
+<a href=#506 id=506 data-nosnippet>506</a><span class="kw">impl </span>Default <span class="kw">for </span>DotExportSettings {
+<a href=#507 id=507 data-nosnippet>507</a>    <span class="kw">fn </span>default() -&gt; <span class="self">Self </span>{
+<a href=#508 id=508 data-nosnippet>508</a>        <span class="self">Self </span>{
+<a href=#509 id=509 data-nosnippet>509</a>            <span class="comment">// root_folder: PathBuf::from("."),
+<a href=#510 id=510 data-nosnippet>510</a>            </span>split_xs_by_initial_states: <span class="bool-val">false</span>,
+<a href=#511 id=511 data-nosnippet>511</a>            output_full_numerator: <span class="bool-val">false</span>,
+<a href=#512 id=512 data-nosnippet>512</a>            do_gamma_algebra: <span class="bool-val">false</span>,
+<a href=#513 id=513 data-nosnippet>513</a>            do_color_algebra: <span class="bool-val">true</span>,
+<a href=#514 id=514 data-nosnippet>514</a>            combine_diagrams: <span class="bool-val">false</span>,
+<a href=#515 id=515 data-nosnippet>515</a>            with_uv: <span class="bool-val">false</span>,
+<a href=#516 id=516 data-nosnippet>516</a>            include_autogenerated_fields: <span class="bool-val">false</span>,
+<a href=#517 id=517 data-nosnippet>517</a>        }
+<a href=#518 id=518 data-nosnippet>518</a>    }
+<a href=#519 id=519 data-nosnippet>519</a>}
+<a href=#520 id=520 data-nosnippet>520</a>
+<a href=#521 id=521 data-nosnippet>521</a><span class="kw">impl </span>Default <span class="kw">for </span>StandaloneExportSettings {
+<a href=#522 id=522 data-nosnippet>522</a>    <span class="kw">fn </span>default() -&gt; <span class="self">Self </span>{
+<a href=#523 id=523 data-nosnippet>523</a>        <span class="self">Self </span>{
+<a href=#524 id=524 data-nosnippet>524</a>            format: StandaloneDataFormat::Binary,
+<a href=#525 id=525 data-nosnippet>525</a>            mode: StandaloneExportMode::Rust,
+<a href=#526 id=526 data-nosnippet>526</a>            precision: StandaloneNumericTarget::Double,
+<a href=#527 id=527 data-nosnippet>527</a>        }
+<a href=#528 id=528 data-nosnippet>528</a>    }
+<a href=#529 id=529 data-nosnippet>529</a>}
+<a href=#530 id=530 data-nosnippet>530</a>
+<a href=#531 id=531 data-nosnippet>531</a><span class="kw">impl </span>Default <span class="kw">for </span>ProcessList {
+<a href=#532 id=532 data-nosnippet>532</a>    <span class="kw">fn </span>default() -&gt; <span class="self">Self </span>{
+<a href=#533 id=533 data-nosnippet>533</a>        <span class="self">Self</span>::new()
 <a href=#534 id=534 data-nosnippet>534</a>    }
 <a href=#535 id=535 data-nosnippet>535</a>}
 <a href=#536 id=536 data-nosnippet>536</a>
-<a href=#537 id=537 data-nosnippet>537</a><span class="kw">impl </span>Default <span class="kw">for </span>ProcessList {
-<a href=#538 id=538 data-nosnippet>538</a>    <span class="kw">fn </span>default() -&gt; <span class="self">Self </span>{
-<a href=#539 id=539 data-nosnippet>539</a>        <span class="self">Self</span>::new()
-<a href=#540 id=540 data-nosnippet>540</a>    }
-<a href=#541 id=541 data-nosnippet>541</a>}
-<a href=#542 id=542 data-nosnippet>542</a>
-<a href=#543 id=543 data-nosnippet>543</a><span class="comment">// Python Api
-<a href=#544 id=544 data-nosnippet>544</a></span><span class="kw">impl </span>ProcessList {
-<a href=#545 id=545 data-nosnippet>545</a>    <span class="doccomment">/// Generates a new empty process list
-<a href=#546 id=546 data-nosnippet>546</a>    </span><span class="kw">pub fn </span>new() -&gt; <span class="self">Self </span>{
-<a href=#547 id=547 data-nosnippet>547</a>        ProcessList { processes: <span class="macro">vec!</span>[] }
-<a href=#548 id=548 data-nosnippet>548</a>    }
-<a href=#549 id=549 data-nosnippet>549</a>
-<a href=#550 id=550 data-nosnippet>550</a>    <span class="kw">pub fn </span>warm_up_all_processes(<span class="kw-2">&amp;mut </span><span class="self">self</span>, model: <span class="kw-2">&amp;</span>Model) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
-<a href=#551 id=551 data-nosnippet>551</a>        <span class="kw">for </span>process <span class="kw">in </span><span class="kw-2">&amp;mut </span><span class="self">self</span>.processes.iter_mut() {
-<a href=#552 id=552 data-nosnippet>552</a>            process.warm_up(model)<span class="question-mark">?</span>;
-<a href=#553 id=553 data-nosnippet>553</a>        }
-<a href=#554 id=554 data-nosnippet>554</a>
-<a href=#555 id=555 data-nosnippet>555</a>        <span class="prelude-val">Ok</span>(())
-<a href=#556 id=556 data-nosnippet>556</a>    }
-<a href=#557 id=557 data-nosnippet>557</a>
-<a href=#558 id=558 data-nosnippet>558</a>    <span class="kw">pub fn </span>load(path: <span class="kw">impl </span>AsRef&lt;Path&gt;, context: GammaLoopContextContainer) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>&gt; {
-<a href=#559 id=559 data-nosnippet>559</a>        <span class="self">Self</span>::load_with_selection(path, context, <span class="prelude-val">None</span>)
-<a href=#560 id=560 data-nosnippet>560</a>    }
-<a href=#561 id=561 data-nosnippet>561</a>
-<a href=#562 id=562 data-nosnippet>562</a>    <span class="kw">pub fn </span>load_with_selection(
-<a href=#563 id=563 data-nosnippet>563</a>        path: <span class="kw">impl </span>AsRef&lt;Path&gt;,
-<a href=#564 id=564 data-nosnippet>564</a>        context: GammaLoopContextContainer,
-<a href=#565 id=565 data-nosnippet>565</a>        selection: <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span>ProcessLoadSelection&gt;,
-<a href=#566 id=566 data-nosnippet>566</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>&gt; {
-<a href=#567 id=567 data-nosnippet>567</a>        <span class="kw">let </span><span class="kw-2">mut </span>process_list = <span class="self">Self</span>::new();
-<a href=#568 id=568 data-nosnippet>568</a>        <span class="kw">let </span>selection = selection.filter(|selection| !selection.is_unrestricted());
-<a href=#569 id=569 data-nosnippet>569</a>
-<a href=#570 id=570 data-nosnippet>570</a>        <span class="kw">let </span>path = path.as_ref().join(<span class="string">"processes"</span>);
-<a href=#571 id=571 data-nosnippet>571</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(selection) = selection {
-<a href=#572 id=572 data-nosnippet>572</a>            validate_process_load_selection(<span class="kw-2">&amp;</span>path, selection)<span class="question-mark">?</span>;
-<a href=#573 id=573 data-nosnippet>573</a>        }
-<a href=#574 id=574 data-nosnippet>574</a>        <span class="kw">let </span>amplitudes_path = path.join(<span class="string">"amplitudes"</span>);
-<a href=#575 id=575 data-nosnippet>575</a>        <span class="kw">if </span>amplitudes_path.exists() {
-<a href=#576 id=576 data-nosnippet>576</a>            <span class="macro">debug!</span>(<span class="string">"Looking for amplitudes in {}"</span>, amplitudes_path.display());
-<a href=#577 id=577 data-nosnippet>577</a>
-<a href=#578 id=578 data-nosnippet>578</a>            <span class="kw">for </span>entry <span class="kw">in </span>fs::read_dir(amplitudes_path).context(<span class="string">"Error reading dir"</span>)<span class="question-mark">? </span>{
-<a href=#579 id=579 data-nosnippet>579</a>                <span class="kw">let </span><span class="prelude-val">Ok</span>(entry) = entry <span class="kw">else </span>{
-<a href=#580 id=580 data-nosnippet>580</a>                    <span class="macro">debug!</span>(<span class="string">"Skipping invalid entry"</span>);
-<a href=#581 id=581 data-nosnippet>581</a>
-<a href=#582 id=582 data-nosnippet>582</a>                    <span class="kw">continue</span>;
-<a href=#583 id=583 data-nosnippet>583</a>                };
-<a href=#584 id=584 data-nosnippet>584</a>                <span class="kw">let </span>path = entry.path();
-<a href=#585 id=585 data-nosnippet>585</a>                <span class="kw">let </span>process_name = path.file_name().and_then(|name| name.to_str());
-<a href=#586 id=586 data-nosnippet>586</a>                <span class="kw">let </span>process_selected = selection.is_some_and(|selection| {
-<a href=#587 id=587 data-nosnippet>587</a>                    process_name.is_some_and(|name| selection.process_names.contains(name))
-<a href=#588 id=588 data-nosnippet>588</a>                });
-<a href=#589 id=589 data-nosnippet>589</a>                <span class="kw">let </span>selected_integrands = <span class="kw">match </span>(selection, process_name) {
-<a href=#590 id=590 data-nosnippet>590</a>                    (<span class="prelude-val">Some</span>(selection), <span class="prelude-val">Some</span>(process_name)) =&gt; {
-<a href=#591 id=591 data-nosnippet>591</a>                        <span class="kw">let </span>available = process::saved_child_dirs(<span class="kw-2">&amp;</span>path, <span class="string">"amp.bin"</span>, <span class="string">"amplitude"</span>)<span class="question-mark">?</span>;
-<a href=#592 id=592 data-nosnippet>592</a>                        <span class="prelude-val">Some</span>(
-<a href=#593 id=593 data-nosnippet>593</a>                            selection.selected_integrand_names(
-<a href=#594 id=594 data-nosnippet>594</a>                                process_name,
-<a href=#595 id=595 data-nosnippet>595</a>                                available.iter().filter_map(|path| {
-<a href=#596 id=596 data-nosnippet>596</a>                                    path.file_name().and_then(|name| name.to_str())
-<a href=#597 id=597 data-nosnippet>597</a>                                }),
-<a href=#598 id=598 data-nosnippet>598</a>                            ),
-<a href=#599 id=599 data-nosnippet>599</a>                        )
-<a href=#600 id=600 data-nosnippet>600</a>                    }
-<a href=#601 id=601 data-nosnippet>601</a>                    <span class="kw">_ </span>=&gt; <span class="prelude-val">None</span>,
-<a href=#602 id=602 data-nosnippet>602</a>                };
-<a href=#603 id=603 data-nosnippet>603</a>                <span class="kw">if </span>selected_integrands.as_ref().is_some_and(BTreeSet::is_empty) &amp;&amp; !process_selected
-<a href=#604 id=604 data-nosnippet>604</a>                {
-<a href=#605 id=605 data-nosnippet>605</a>                    <span class="kw">continue</span>;
-<a href=#606 id=606 data-nosnippet>606</a>                }
-<a href=#607 id=607 data-nosnippet>607</a>                <span class="kw">let </span>process = Process::load_amplitude(path, context, selected_integrands.as_ref())
-<a href=#608 id=608 data-nosnippet>608</a>                    .context(<span class="string">"Error loading amplitude"</span>)<span class="question-mark">?</span>;
-<a href=#609 id=609 data-nosnippet>609</a>                process_list.processes.push(process);
-<a href=#610 id=610 data-nosnippet>610</a>            }
-<a href=#611 id=611 data-nosnippet>611</a>        }
-<a href=#612 id=612 data-nosnippet>612</a>
-<a href=#613 id=613 data-nosnippet>613</a>        <span class="kw">let </span>cross_sections_path = path.join(<span class="string">"cross_sections"</span>);
-<a href=#614 id=614 data-nosnippet>614</a>        <span class="kw">if </span>cross_sections_path.exists() {
-<a href=#615 id=615 data-nosnippet>615</a>            <span class="macro">debug!</span>(
-<a href=#616 id=616 data-nosnippet>616</a>                <span class="string">"Looking for cross sections in {}"</span>,
-<a href=#617 id=617 data-nosnippet>617</a>                cross_sections_path.display()
-<a href=#618 id=618 data-nosnippet>618</a>            );
-<a href=#619 id=619 data-nosnippet>619</a>
-<a href=#620 id=620 data-nosnippet>620</a>            <span class="kw">for </span>entry <span class="kw">in </span>fs::read_dir(cross_sections_path)<span class="question-mark">? </span>{
-<a href=#621 id=621 data-nosnippet>621</a>                <span class="kw">let </span>entry = entry<span class="question-mark">?</span>;
-<a href=#622 id=622 data-nosnippet>622</a>                <span class="kw">let </span>path = entry.path();
-<a href=#623 id=623 data-nosnippet>623</a>                <span class="kw">let </span>process_name = path.file_name().and_then(|name| name.to_str());
-<a href=#624 id=624 data-nosnippet>624</a>                <span class="kw">let </span>process_selected = selection.is_some_and(|selection| {
-<a href=#625 id=625 data-nosnippet>625</a>                    process_name.is_some_and(|name| selection.process_names.contains(name))
-<a href=#626 id=626 data-nosnippet>626</a>                });
-<a href=#627 id=627 data-nosnippet>627</a>                <span class="kw">let </span>selected_integrands =
-<a href=#628 id=628 data-nosnippet>628</a>                    <span class="kw">match </span>(selection, process_name) {
-<a href=#629 id=629 data-nosnippet>629</a>                        (<span class="prelude-val">Some</span>(selection), <span class="prelude-val">Some</span>(process_name)) =&gt; {
-<a href=#630 id=630 data-nosnippet>630</a>                            <span class="kw">let </span>available =
-<a href=#631 id=631 data-nosnippet>631</a>                                process::saved_child_dirs(<span class="kw-2">&amp;</span>path, <span class="string">"cs.bin"</span>, <span class="string">"cross section"</span>)<span class="question-mark">?</span>;
-<a href=#632 id=632 data-nosnippet>632</a>                            <span class="prelude-val">Some</span>(selection.selected_integrand_names(
-<a href=#633 id=633 data-nosnippet>633</a>                                process_name,
-<a href=#634 id=634 data-nosnippet>634</a>                                available.iter().filter_map(|path| {
-<a href=#635 id=635 data-nosnippet>635</a>                                    path.file_name().and_then(|name| name.to_str())
-<a href=#636 id=636 data-nosnippet>636</a>                                }),
-<a href=#637 id=637 data-nosnippet>637</a>                            ))
-<a href=#638 id=638 data-nosnippet>638</a>                        }
-<a href=#639 id=639 data-nosnippet>639</a>                        <span class="kw">_ </span>=&gt; <span class="prelude-val">None</span>,
-<a href=#640 id=640 data-nosnippet>640</a>                    };
-<a href=#641 id=641 data-nosnippet>641</a>                <span class="kw">if </span>selected_integrands.as_ref().is_some_and(BTreeSet::is_empty) &amp;&amp; !process_selected
-<a href=#642 id=642 data-nosnippet>642</a>                {
-<a href=#643 id=643 data-nosnippet>643</a>                    <span class="kw">continue</span>;
-<a href=#644 id=644 data-nosnippet>644</a>                }
-<a href=#645 id=645 data-nosnippet>645</a>                <span class="kw">let </span>process =
-<a href=#646 id=646 data-nosnippet>646</a>                    Process::load_cross_section(path, context, selected_integrands.as_ref())<span class="question-mark">?</span>;
-<a href=#647 id=647 data-nosnippet>647</a>                process_list.processes.push(process);
-<a href=#648 id=648 data-nosnippet>648</a>            }
-<a href=#649 id=649 data-nosnippet>649</a>        }
-<a href=#650 id=650 data-nosnippet>650</a>        process_list
-<a href=#651 id=651 data-nosnippet>651</a>            .processes
-<a href=#652 id=652 data-nosnippet>652</a>            .sort_by_key(|p| p.definition.process_id);
+<a href=#537 id=537 data-nosnippet>537</a><span class="comment">// Python Api
+<a href=#538 id=538 data-nosnippet>538</a></span><span class="kw">impl </span>ProcessList {
+<a href=#539 id=539 data-nosnippet>539</a>    <span class="doccomment">/// Generates a new empty process list
+<a href=#540 id=540 data-nosnippet>540</a>    </span><span class="kw">pub fn </span>new() -&gt; <span class="self">Self </span>{
+<a href=#541 id=541 data-nosnippet>541</a>        ProcessList { processes: <span class="macro">vec!</span>[] }
+<a href=#542 id=542 data-nosnippet>542</a>    }
+<a href=#543 id=543 data-nosnippet>543</a>
+<a href=#544 id=544 data-nosnippet>544</a>    <span class="kw">pub fn </span>warm_up_all_processes(<span class="kw-2">&amp;mut </span><span class="self">self</span>, model: <span class="kw-2">&amp;</span>Model) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
+<a href=#545 id=545 data-nosnippet>545</a>        <span class="kw">for </span>process <span class="kw">in </span><span class="kw-2">&amp;mut </span><span class="self">self</span>.processes.iter_mut() {
+<a href=#546 id=546 data-nosnippet>546</a>            process.warm_up(model)<span class="question-mark">?</span>;
+<a href=#547 id=547 data-nosnippet>547</a>        }
+<a href=#548 id=548 data-nosnippet>548</a>
+<a href=#549 id=549 data-nosnippet>549</a>        <span class="prelude-val">Ok</span>(())
+<a href=#550 id=550 data-nosnippet>550</a>    }
+<a href=#551 id=551 data-nosnippet>551</a>
+<a href=#552 id=552 data-nosnippet>552</a>    <span class="kw">pub fn </span>load(path: <span class="kw">impl </span>AsRef&lt;Path&gt;, context: GammaLoopContextContainer) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>&gt; {
+<a href=#553 id=553 data-nosnippet>553</a>        <span class="self">Self</span>::load_with_selection(path, context, <span class="prelude-val">None</span>)
+<a href=#554 id=554 data-nosnippet>554</a>    }
+<a href=#555 id=555 data-nosnippet>555</a>
+<a href=#556 id=556 data-nosnippet>556</a>    <span class="kw">pub fn </span>load_with_selection(
+<a href=#557 id=557 data-nosnippet>557</a>        path: <span class="kw">impl </span>AsRef&lt;Path&gt;,
+<a href=#558 id=558 data-nosnippet>558</a>        context: GammaLoopContextContainer,
+<a href=#559 id=559 data-nosnippet>559</a>        selection: <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span>ProcessLoadSelection&gt;,
+<a href=#560 id=560 data-nosnippet>560</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>&gt; {
+<a href=#561 id=561 data-nosnippet>561</a>        <span class="kw">let </span><span class="kw-2">mut </span>process_list = <span class="self">Self</span>::new();
+<a href=#562 id=562 data-nosnippet>562</a>        <span class="kw">let </span>selection = selection.filter(|selection| !selection.is_unrestricted());
+<a href=#563 id=563 data-nosnippet>563</a>
+<a href=#564 id=564 data-nosnippet>564</a>        <span class="kw">let </span>path = path.as_ref().join(<span class="string">"processes"</span>);
+<a href=#565 id=565 data-nosnippet>565</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(selection) = selection {
+<a href=#566 id=566 data-nosnippet>566</a>            validate_process_load_selection(<span class="kw-2">&amp;</span>path, selection)<span class="question-mark">?</span>;
+<a href=#567 id=567 data-nosnippet>567</a>        }
+<a href=#568 id=568 data-nosnippet>568</a>        <span class="kw">let </span>amplitudes_path = path.join(<span class="string">"amplitudes"</span>);
+<a href=#569 id=569 data-nosnippet>569</a>        <span class="kw">if </span>amplitudes_path.exists() {
+<a href=#570 id=570 data-nosnippet>570</a>            <span class="macro">debug!</span>(<span class="string">"Looking for amplitudes in {}"</span>, amplitudes_path.display());
+<a href=#571 id=571 data-nosnippet>571</a>
+<a href=#572 id=572 data-nosnippet>572</a>            <span class="kw">for </span>entry <span class="kw">in </span>fs::read_dir(amplitudes_path).context(<span class="string">"Error reading dir"</span>)<span class="question-mark">? </span>{
+<a href=#573 id=573 data-nosnippet>573</a>                <span class="kw">let </span><span class="prelude-val">Ok</span>(entry) = entry <span class="kw">else </span>{
+<a href=#574 id=574 data-nosnippet>574</a>                    <span class="macro">debug!</span>(<span class="string">"Skipping invalid entry"</span>);
+<a href=#575 id=575 data-nosnippet>575</a>
+<a href=#576 id=576 data-nosnippet>576</a>                    <span class="kw">continue</span>;
+<a href=#577 id=577 data-nosnippet>577</a>                };
+<a href=#578 id=578 data-nosnippet>578</a>                <span class="kw">let </span>path = entry.path();
+<a href=#579 id=579 data-nosnippet>579</a>                <span class="kw">let </span>process_name = path.file_name().and_then(|name| name.to_str());
+<a href=#580 id=580 data-nosnippet>580</a>                <span class="kw">let </span>process_selected = selection.is_some_and(|selection| {
+<a href=#581 id=581 data-nosnippet>581</a>                    process_name.is_some_and(|name| selection.process_names.contains(name))
+<a href=#582 id=582 data-nosnippet>582</a>                });
+<a href=#583 id=583 data-nosnippet>583</a>                <span class="kw">let </span>selected_integrands = <span class="kw">match </span>(selection, process_name) {
+<a href=#584 id=584 data-nosnippet>584</a>                    (<span class="prelude-val">Some</span>(selection), <span class="prelude-val">Some</span>(process_name)) =&gt; {
+<a href=#585 id=585 data-nosnippet>585</a>                        <span class="kw">let </span>available = process::saved_child_dirs(<span class="kw-2">&amp;</span>path, <span class="string">"amp.bin"</span>, <span class="string">"amplitude"</span>)<span class="question-mark">?</span>;
+<a href=#586 id=586 data-nosnippet>586</a>                        <span class="prelude-val">Some</span>(
+<a href=#587 id=587 data-nosnippet>587</a>                            selection.selected_integrand_names(
+<a href=#588 id=588 data-nosnippet>588</a>                                process_name,
+<a href=#589 id=589 data-nosnippet>589</a>                                available.iter().filter_map(|path| {
+<a href=#590 id=590 data-nosnippet>590</a>                                    path.file_name().and_then(|name| name.to_str())
+<a href=#591 id=591 data-nosnippet>591</a>                                }),
+<a href=#592 id=592 data-nosnippet>592</a>                            ),
+<a href=#593 id=593 data-nosnippet>593</a>                        )
+<a href=#594 id=594 data-nosnippet>594</a>                    }
+<a href=#595 id=595 data-nosnippet>595</a>                    <span class="kw">_ </span>=&gt; <span class="prelude-val">None</span>,
+<a href=#596 id=596 data-nosnippet>596</a>                };
+<a href=#597 id=597 data-nosnippet>597</a>                <span class="kw">if </span>selected_integrands.as_ref().is_some_and(BTreeSet::is_empty) &amp;&amp; !process_selected
+<a href=#598 id=598 data-nosnippet>598</a>                {
+<a href=#599 id=599 data-nosnippet>599</a>                    <span class="kw">continue</span>;
+<a href=#600 id=600 data-nosnippet>600</a>                }
+<a href=#601 id=601 data-nosnippet>601</a>                <span class="kw">let </span>process = Process::load_amplitude(path, context, selected_integrands.as_ref())
+<a href=#602 id=602 data-nosnippet>602</a>                    .context(<span class="string">"Error loading amplitude"</span>)<span class="question-mark">?</span>;
+<a href=#603 id=603 data-nosnippet>603</a>                process_list.processes.push(process);
+<a href=#604 id=604 data-nosnippet>604</a>            }
+<a href=#605 id=605 data-nosnippet>605</a>        }
+<a href=#606 id=606 data-nosnippet>606</a>
+<a href=#607 id=607 data-nosnippet>607</a>        <span class="kw">let </span>cross_sections_path = path.join(<span class="string">"cross_sections"</span>);
+<a href=#608 id=608 data-nosnippet>608</a>        <span class="kw">if </span>cross_sections_path.exists() {
+<a href=#609 id=609 data-nosnippet>609</a>            <span class="macro">debug!</span>(
+<a href=#610 id=610 data-nosnippet>610</a>                <span class="string">"Looking for cross sections in {}"</span>,
+<a href=#611 id=611 data-nosnippet>611</a>                cross_sections_path.display()
+<a href=#612 id=612 data-nosnippet>612</a>            );
+<a href=#613 id=613 data-nosnippet>613</a>
+<a href=#614 id=614 data-nosnippet>614</a>            <span class="kw">for </span>entry <span class="kw">in </span>fs::read_dir(cross_sections_path)<span class="question-mark">? </span>{
+<a href=#615 id=615 data-nosnippet>615</a>                <span class="kw">let </span>entry = entry<span class="question-mark">?</span>;
+<a href=#616 id=616 data-nosnippet>616</a>                <span class="kw">let </span>path = entry.path();
+<a href=#617 id=617 data-nosnippet>617</a>                <span class="kw">let </span>process_name = path.file_name().and_then(|name| name.to_str());
+<a href=#618 id=618 data-nosnippet>618</a>                <span class="kw">let </span>process_selected = selection.is_some_and(|selection| {
+<a href=#619 id=619 data-nosnippet>619</a>                    process_name.is_some_and(|name| selection.process_names.contains(name))
+<a href=#620 id=620 data-nosnippet>620</a>                });
+<a href=#621 id=621 data-nosnippet>621</a>                <span class="kw">let </span>selected_integrands =
+<a href=#622 id=622 data-nosnippet>622</a>                    <span class="kw">match </span>(selection, process_name) {
+<a href=#623 id=623 data-nosnippet>623</a>                        (<span class="prelude-val">Some</span>(selection), <span class="prelude-val">Some</span>(process_name)) =&gt; {
+<a href=#624 id=624 data-nosnippet>624</a>                            <span class="kw">let </span>available =
+<a href=#625 id=625 data-nosnippet>625</a>                                process::saved_child_dirs(<span class="kw-2">&amp;</span>path, <span class="string">"cs.bin"</span>, <span class="string">"cross section"</span>)<span class="question-mark">?</span>;
+<a href=#626 id=626 data-nosnippet>626</a>                            <span class="prelude-val">Some</span>(selection.selected_integrand_names(
+<a href=#627 id=627 data-nosnippet>627</a>                                process_name,
+<a href=#628 id=628 data-nosnippet>628</a>                                available.iter().filter_map(|path| {
+<a href=#629 id=629 data-nosnippet>629</a>                                    path.file_name().and_then(|name| name.to_str())
+<a href=#630 id=630 data-nosnippet>630</a>                                }),
+<a href=#631 id=631 data-nosnippet>631</a>                            ))
+<a href=#632 id=632 data-nosnippet>632</a>                        }
+<a href=#633 id=633 data-nosnippet>633</a>                        <span class="kw">_ </span>=&gt; <span class="prelude-val">None</span>,
+<a href=#634 id=634 data-nosnippet>634</a>                    };
+<a href=#635 id=635 data-nosnippet>635</a>                <span class="kw">if </span>selected_integrands.as_ref().is_some_and(BTreeSet::is_empty) &amp;&amp; !process_selected
+<a href=#636 id=636 data-nosnippet>636</a>                {
+<a href=#637 id=637 data-nosnippet>637</a>                    <span class="kw">continue</span>;
+<a href=#638 id=638 data-nosnippet>638</a>                }
+<a href=#639 id=639 data-nosnippet>639</a>                <span class="kw">let </span>process =
+<a href=#640 id=640 data-nosnippet>640</a>                    Process::load_cross_section(path, context, selected_integrands.as_ref())<span class="question-mark">?</span>;
+<a href=#641 id=641 data-nosnippet>641</a>                process_list.processes.push(process);
+<a href=#642 id=642 data-nosnippet>642</a>            }
+<a href=#643 id=643 data-nosnippet>643</a>        }
+<a href=#644 id=644 data-nosnippet>644</a>        process_list
+<a href=#645 id=645 data-nosnippet>645</a>            .processes
+<a href=#646 id=646 data-nosnippet>646</a>            .sort_by_key(|p| p.definition.process_id);
+<a href=#647 id=647 data-nosnippet>647</a>
+<a href=#648 id=648 data-nosnippet>648</a>        <span class="kw">if </span>selection.is_some() {
+<a href=#649 id=649 data-nosnippet>649</a>            <span class="kw">for </span>(process_id, process) <span class="kw">in </span>process_list.processes.iter_mut().enumerate() {
+<a href=#650 id=650 data-nosnippet>650</a>                process.definition.process_id = process_id;
+<a href=#651 id=651 data-nosnippet>651</a>            }
+<a href=#652 id=652 data-nosnippet>652</a>        }
 <a href=#653 id=653 data-nosnippet>653</a>
-<a href=#654 id=654 data-nosnippet>654</a>        <span class="kw">if </span>selection.is_some() {
-<a href=#655 id=655 data-nosnippet>655</a>            <span class="kw">for </span>(process_id, process) <span class="kw">in </span>process_list.processes.iter_mut().enumerate() {
-<a href=#656 id=656 data-nosnippet>656</a>                process.definition.process_id = process_id;
-<a href=#657 id=657 data-nosnippet>657</a>            }
-<a href=#658 id=658 data-nosnippet>658</a>        }
+<a href=#654 id=654 data-nosnippet>654</a>        <span class="prelude-val">Ok</span>(process_list)
+<a href=#655 id=655 data-nosnippet>655</a>    }
+<a href=#656 id=656 data-nosnippet>656</a>
+<a href=#657 id=657 data-nosnippet>657</a>    <span class="kw">pub fn </span>save(<span class="kw-2">&amp;mut </span><span class="self">self</span>, folder: <span class="kw">impl </span>AsRef&lt;Path&gt;, override_existing: bool) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
+<a href=#658 id=658 data-nosnippet>658</a>        <span class="kw">let </span>path = folder.as_ref().join(<span class="string">"processes"</span>);
 <a href=#659 id=659 data-nosnippet>659</a>
-<a href=#660 id=660 data-nosnippet>660</a>        <span class="prelude-val">Ok</span>(process_list)
-<a href=#661 id=661 data-nosnippet>661</a>    }
-<a href=#662 id=662 data-nosnippet>662</a>
-<a href=#663 id=663 data-nosnippet>663</a>    <span class="kw">pub fn </span>save(<span class="kw-2">&amp;mut </span><span class="self">self</span>, folder: <span class="kw">impl </span>AsRef&lt;Path&gt;, override_existing: bool) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
-<a href=#664 id=664 data-nosnippet>664</a>        <span class="kw">let </span>path = folder.as_ref().join(<span class="string">"processes"</span>);
-<a href=#665 id=665 data-nosnippet>665</a>
-<a href=#666 id=666 data-nosnippet>666</a>        <span class="kw">let </span>r = fs::create_dir_all(<span class="kw-2">&amp;</span>path);
-<a href=#667 id=667 data-nosnippet>667</a>        <span class="kw">if </span>!override_existing {
-<a href=#668 id=668 data-nosnippet>668</a>            r<span class="question-mark">?</span>;
-<a href=#669 id=669 data-nosnippet>669</a>        }
-<a href=#670 id=670 data-nosnippet>670</a>
-<a href=#671 id=671 data-nosnippet>671</a>        <span class="kw">for </span>p <span class="kw">in </span><span class="self">self</span>.processes.iter_mut() {
-<a href=#672 id=672 data-nosnippet>672</a>            p.save(<span class="kw-2">&amp;</span>path, override_existing)<span class="question-mark">?</span>;
-<a href=#673 id=673 data-nosnippet>673</a>        }
-<a href=#674 id=674 data-nosnippet>674</a>
-<a href=#675 id=675 data-nosnippet>675</a>        <span class="prelude-val">Ok</span>(())
-<a href=#676 id=676 data-nosnippet>676</a>    }
-<a href=#677 id=677 data-nosnippet>677</a>
-<a href=#678 id=678 data-nosnippet>678</a>    <span class="kw">pub fn </span>compile(
-<a href=#679 id=679 data-nosnippet>679</a>        <span class="kw-2">&amp;mut </span><span class="self">self</span>,
-<a href=#680 id=680 data-nosnippet>680</a>        folder: <span class="kw">impl </span>AsRef&lt;Path&gt;,
-<a href=#681 id=681 data-nosnippet>681</a>        override_existing: bool,
-<a href=#682 id=682 data-nosnippet>682</a>        process_id: <span class="prelude-ty">Option</span>&lt;usize&gt;,
-<a href=#683 id=683 data-nosnippet>683</a>        integrand_name: <span class="prelude-ty">Option</span>&lt;String&gt;,
-<a href=#684 id=684 data-nosnippet>684</a>        thread_pool: <span class="kw-2">&amp;</span>ThreadPool,
-<a href=#685 id=685 data-nosnippet>685</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;Vec&lt;GeneratedGraphReport&gt;&gt; {
-<a href=#686 id=686 data-nosnippet>686</a>        <span class="kw">let </span>path = folder.as_ref().join(<span class="string">"processes"</span>);
-<a href=#687 id=687 data-nosnippet>687</a>
-<a href=#688 id=688 data-nosnippet>688</a>        <span class="kw">let </span>r = fs::create_dir_all(<span class="kw-2">&amp;</span>path);
-<a href=#689 id=689 data-nosnippet>689</a>        <span class="kw">if </span>!override_existing {
-<a href=#690 id=690 data-nosnippet>690</a>            r<span class="question-mark">?</span>;
-<a href=#691 id=691 data-nosnippet>691</a>        }
-<a href=#692 id=692 data-nosnippet>692</a>
-<a href=#693 id=693 data-nosnippet>693</a>        <span class="kw">let </span><span class="kw-2">mut </span>reports = Vec::new();
-<a href=#694 id=694 data-nosnippet>694</a>        <span class="kw">for </span>p <span class="kw">in </span><span class="self">self</span>.processes.iter_mut() {
-<a href=#695 id=695 data-nosnippet>695</a>            <span class="kw">if let </span><span class="prelude-val">Some</span>(id) = process_id
-<a href=#696 id=696 data-nosnippet>696</a>                &amp;&amp; p.definition.process_id != id
-<a href=#697 id=697 data-nosnippet>697</a>            {
-<a href=#698 id=698 data-nosnippet>698</a>                <span class="kw">continue</span>;
-<a href=#699 id=699 data-nosnippet>699</a>            }
-<a href=#700 id=700 data-nosnippet>700</a>            reports.extend(p.compile(
-<a href=#701 id=701 data-nosnippet>701</a>                <span class="kw-2">&amp;</span>path,
-<a href=#702 id=702 data-nosnippet>702</a>                override_existing,
-<a href=#703 id=703 data-nosnippet>703</a>                integrand_name.clone(),
-<a href=#704 id=704 data-nosnippet>704</a>                thread_pool,
-<a href=#705 id=705 data-nosnippet>705</a>            )<span class="question-mark">?</span>);
-<a href=#706 id=706 data-nosnippet>706</a>        }
-<a href=#707 id=707 data-nosnippet>707</a>
-<a href=#708 id=708 data-nosnippet>708</a>        <span class="prelude-val">Ok</span>(reports)
-<a href=#709 id=709 data-nosnippet>709</a>    }
-<a href=#710 id=710 data-nosnippet>710</a>
-<a href=#711 id=711 data-nosnippet>711</a>    <span class="kw">pub fn </span>activate_loaded_integrand_backends(
-<a href=#712 id=712 data-nosnippet>712</a>        <span class="kw-2">&amp;mut </span><span class="self">self</span>,
-<a href=#713 id=713 data-nosnippet>713</a>        allow_symjit_fallback: bool,
-<a href=#714 id=714 data-nosnippet>714</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
-<a href=#715 id=715 data-nosnippet>715</a>        <span class="kw">for </span>process <span class="kw">in </span><span class="kw-2">&amp;mut </span><span class="self">self</span>.processes {
-<a href=#716 id=716 data-nosnippet>716</a>            process.activate_loaded_integrand_backends(allow_symjit_fallback)<span class="question-mark">?</span>;
-<a href=#717 id=717 data-nosnippet>717</a>        }
-<a href=#718 id=718 data-nosnippet>718</a>        <span class="prelude-val">Ok</span>(())
-<a href=#719 id=719 data-nosnippet>719</a>    }
-<a href=#720 id=720 data-nosnippet>720</a>
-<a href=#721 id=721 data-nosnippet>721</a>    <span class="kw">pub fn </span>get_integrand(
-<a href=#722 id=722 data-nosnippet>722</a>        <span class="kw-2">&amp;</span><span class="self">self</span>,
-<a href=#723 id=723 data-nosnippet>723</a>        process_id: usize,
-<a href=#724 id=724 data-nosnippet>724</a>        integrand_name: <span class="kw">impl </span>AsRef&lt;str&gt;,
-<a href=#725 id=725 data-nosnippet>725</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="kw">crate</span>::processes::process::ResolvedIntegrandRef&lt;<span class="lifetime">'_</span>&gt;&gt; {
-<a href=#726 id=726 data-nosnippet>726</a>        <span class="kw">let </span>process = <span class="kw-2">&amp;</span><span class="self">self</span>.processes[process_id];
-<a href=#727 id=727 data-nosnippet>727</a>        process.get_integrand(integrand_name)
-<a href=#728 id=728 data-nosnippet>728</a>    }
-<a href=#729 id=729 data-nosnippet>729</a>
-<a href=#730 id=730 data-nosnippet>730</a>    <span class="kw">pub fn </span>get_integrand_mut(
-<a href=#731 id=731 data-nosnippet>731</a>        <span class="kw-2">&amp;mut </span><span class="self">self</span>,
-<a href=#732 id=732 data-nosnippet>732</a>        process_id: usize,
-<a href=#733 id=733 data-nosnippet>733</a>        integrand_name: <span class="kw">impl </span>AsRef&lt;str&gt;,
-<a href=#734 id=734 data-nosnippet>734</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="kw-2">&amp;mut </span><span class="kw">crate</span>::integrands::process::ProcessIntegrand&gt; {
-<a href=#735 id=735 data-nosnippet>735</a>        <span class="kw">let </span>process = <span class="kw-2">&amp;mut </span><span class="self">self</span>.processes[process_id];
-<a href=#736 id=736 data-nosnippet>736</a>        process.get_integrand_mut(integrand_name)
-<a href=#737 id=737 data-nosnippet>737</a>    }
-<a href=#738 id=738 data-nosnippet>738</a>
-<a href=#739 id=739 data-nosnippet>739</a>    <span class="kw">pub fn </span>export_dot(<span class="kw-2">&amp;</span><span class="self">self</span>, path: <span class="kw">impl </span>AsRef&lt;Path&gt;, settings: <span class="kw-2">&amp;</span>DotExportSettings) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
-<a href=#740 id=740 data-nosnippet>740</a>        <span class="kw">let </span>path = path.as_ref().join(<span class="string">"processes"</span>);
-<a href=#741 id=741 data-nosnippet>741</a>        fs::create_dir_all(<span class="kw-2">&amp;</span>path)<span class="question-mark">?</span>;
+<a href=#660 id=660 data-nosnippet>660</a>        <span class="kw">let </span>r = fs::create_dir_all(<span class="kw-2">&amp;</span>path);
+<a href=#661 id=661 data-nosnippet>661</a>        <span class="kw">if </span>!override_existing {
+<a href=#662 id=662 data-nosnippet>662</a>            r<span class="question-mark">?</span>;
+<a href=#663 id=663 data-nosnippet>663</a>        }
+<a href=#664 id=664 data-nosnippet>664</a>
+<a href=#665 id=665 data-nosnippet>665</a>        <span class="kw">for </span>p <span class="kw">in </span><span class="self">self</span>.processes.iter_mut() {
+<a href=#666 id=666 data-nosnippet>666</a>            p.save(<span class="kw-2">&amp;</span>path, override_existing)<span class="question-mark">?</span>;
+<a href=#667 id=667 data-nosnippet>667</a>        }
+<a href=#668 id=668 data-nosnippet>668</a>
+<a href=#669 id=669 data-nosnippet>669</a>        <span class="prelude-val">Ok</span>(())
+<a href=#670 id=670 data-nosnippet>670</a>    }
+<a href=#671 id=671 data-nosnippet>671</a>
+<a href=#672 id=672 data-nosnippet>672</a>    <span class="kw">pub fn </span>compile(
+<a href=#673 id=673 data-nosnippet>673</a>        <span class="kw-2">&amp;mut </span><span class="self">self</span>,
+<a href=#674 id=674 data-nosnippet>674</a>        folder: <span class="kw">impl </span>AsRef&lt;Path&gt;,
+<a href=#675 id=675 data-nosnippet>675</a>        override_existing: bool,
+<a href=#676 id=676 data-nosnippet>676</a>        process_id: <span class="prelude-ty">Option</span>&lt;usize&gt;,
+<a href=#677 id=677 data-nosnippet>677</a>        integrand_name: <span class="prelude-ty">Option</span>&lt;String&gt;,
+<a href=#678 id=678 data-nosnippet>678</a>        thread_pool: <span class="kw-2">&amp;</span>ThreadPool,
+<a href=#679 id=679 data-nosnippet>679</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;Vec&lt;GeneratedGraphReport&gt;&gt; {
+<a href=#680 id=680 data-nosnippet>680</a>        <span class="kw">let </span>path = folder.as_ref().join(<span class="string">"processes"</span>);
+<a href=#681 id=681 data-nosnippet>681</a>
+<a href=#682 id=682 data-nosnippet>682</a>        <span class="kw">let </span>r = fs::create_dir_all(<span class="kw-2">&amp;</span>path);
+<a href=#683 id=683 data-nosnippet>683</a>        <span class="kw">if </span>!override_existing {
+<a href=#684 id=684 data-nosnippet>684</a>            r<span class="question-mark">?</span>;
+<a href=#685 id=685 data-nosnippet>685</a>        }
+<a href=#686 id=686 data-nosnippet>686</a>
+<a href=#687 id=687 data-nosnippet>687</a>        <span class="kw">let </span><span class="kw-2">mut </span>reports = Vec::new();
+<a href=#688 id=688 data-nosnippet>688</a>        <span class="kw">for </span>p <span class="kw">in </span><span class="self">self</span>.processes.iter_mut() {
+<a href=#689 id=689 data-nosnippet>689</a>            <span class="kw">if let </span><span class="prelude-val">Some</span>(id) = process_id
+<a href=#690 id=690 data-nosnippet>690</a>                &amp;&amp; p.definition.process_id != id
+<a href=#691 id=691 data-nosnippet>691</a>            {
+<a href=#692 id=692 data-nosnippet>692</a>                <span class="kw">continue</span>;
+<a href=#693 id=693 data-nosnippet>693</a>            }
+<a href=#694 id=694 data-nosnippet>694</a>            reports.extend(p.compile(
+<a href=#695 id=695 data-nosnippet>695</a>                <span class="kw-2">&amp;</span>path,
+<a href=#696 id=696 data-nosnippet>696</a>                override_existing,
+<a href=#697 id=697 data-nosnippet>697</a>                integrand_name.clone(),
+<a href=#698 id=698 data-nosnippet>698</a>                thread_pool,
+<a href=#699 id=699 data-nosnippet>699</a>            )<span class="question-mark">?</span>);
+<a href=#700 id=700 data-nosnippet>700</a>        }
+<a href=#701 id=701 data-nosnippet>701</a>
+<a href=#702 id=702 data-nosnippet>702</a>        <span class="prelude-val">Ok</span>(reports)
+<a href=#703 id=703 data-nosnippet>703</a>    }
+<a href=#704 id=704 data-nosnippet>704</a>
+<a href=#705 id=705 data-nosnippet>705</a>    <span class="kw">pub fn </span>activate_loaded_integrand_backends(
+<a href=#706 id=706 data-nosnippet>706</a>        <span class="kw-2">&amp;mut </span><span class="self">self</span>,
+<a href=#707 id=707 data-nosnippet>707</a>        allow_symjit_fallback: bool,
+<a href=#708 id=708 data-nosnippet>708</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
+<a href=#709 id=709 data-nosnippet>709</a>        <span class="kw">for </span>process <span class="kw">in </span><span class="kw-2">&amp;mut </span><span class="self">self</span>.processes {
+<a href=#710 id=710 data-nosnippet>710</a>            process.activate_loaded_integrand_backends(allow_symjit_fallback)<span class="question-mark">?</span>;
+<a href=#711 id=711 data-nosnippet>711</a>        }
+<a href=#712 id=712 data-nosnippet>712</a>        <span class="prelude-val">Ok</span>(())
+<a href=#713 id=713 data-nosnippet>713</a>    }
+<a href=#714 id=714 data-nosnippet>714</a>
+<a href=#715 id=715 data-nosnippet>715</a>    <span class="kw">pub fn </span>get_integrand(
+<a href=#716 id=716 data-nosnippet>716</a>        <span class="kw-2">&amp;</span><span class="self">self</span>,
+<a href=#717 id=717 data-nosnippet>717</a>        process_id: usize,
+<a href=#718 id=718 data-nosnippet>718</a>        integrand_name: <span class="kw">impl </span>AsRef&lt;str&gt;,
+<a href=#719 id=719 data-nosnippet>719</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="kw">crate</span>::processes::process::ResolvedIntegrandRef&lt;<span class="lifetime">'_</span>&gt;&gt; {
+<a href=#720 id=720 data-nosnippet>720</a>        <span class="kw">let </span>process = <span class="kw-2">&amp;</span><span class="self">self</span>.processes[process_id];
+<a href=#721 id=721 data-nosnippet>721</a>        process.get_integrand(integrand_name)
+<a href=#722 id=722 data-nosnippet>722</a>    }
+<a href=#723 id=723 data-nosnippet>723</a>
+<a href=#724 id=724 data-nosnippet>724</a>    <span class="kw">pub fn </span>get_integrand_mut(
+<a href=#725 id=725 data-nosnippet>725</a>        <span class="kw-2">&amp;mut </span><span class="self">self</span>,
+<a href=#726 id=726 data-nosnippet>726</a>        process_id: usize,
+<a href=#727 id=727 data-nosnippet>727</a>        integrand_name: <span class="kw">impl </span>AsRef&lt;str&gt;,
+<a href=#728 id=728 data-nosnippet>728</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="kw-2">&amp;mut </span><span class="kw">crate</span>::integrands::process::ProcessIntegrand&gt; {
+<a href=#729 id=729 data-nosnippet>729</a>        <span class="kw">let </span>process = <span class="kw-2">&amp;mut </span><span class="self">self</span>.processes[process_id];
+<a href=#730 id=730 data-nosnippet>730</a>        process.get_integrand_mut(integrand_name)
+<a href=#731 id=731 data-nosnippet>731</a>    }
+<a href=#732 id=732 data-nosnippet>732</a>
+<a href=#733 id=733 data-nosnippet>733</a>    <span class="kw">pub fn </span>export_dot(<span class="kw-2">&amp;</span><span class="self">self</span>, path: <span class="kw">impl </span>AsRef&lt;Path&gt;, settings: <span class="kw-2">&amp;</span>DotExportSettings) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
+<a href=#734 id=734 data-nosnippet>734</a>        <span class="kw">let </span>path = path.as_ref().join(<span class="string">"processes"</span>);
+<a href=#735 id=735 data-nosnippet>735</a>        fs::create_dir_all(<span class="kw-2">&amp;</span>path)<span class="question-mark">?</span>;
+<a href=#736 id=736 data-nosnippet>736</a>
+<a href=#737 id=737 data-nosnippet>737</a>        <span class="kw">for </span>p <span class="kw">in </span><span class="self">self</span>.processes.iter() {
+<a href=#738 id=738 data-nosnippet>738</a>            p.export_dot(<span class="kw-2">&amp;</span>path, settings)<span class="question-mark">?</span>;
+<a href=#739 id=739 data-nosnippet>739</a>        }
+<a href=#740 id=740 data-nosnippet>740</a>        <span class="prelude-val">Ok</span>(())
+<a href=#741 id=741 data-nosnippet>741</a>    }
 <a href=#742 id=742 data-nosnippet>742</a>
-<a href=#743 id=743 data-nosnippet>743</a>        <span class="kw">for </span>p <span class="kw">in </span><span class="self">self</span>.processes.iter() {
-<a href=#744 id=744 data-nosnippet>744</a>            p.export_dot(<span class="kw-2">&amp;</span>path, settings)<span class="question-mark">?</span>;
-<a href=#745 id=745 data-nosnippet>745</a>        }
-<a href=#746 id=746 data-nosnippet>746</a>        <span class="prelude-val">Ok</span>(())
-<a href=#747 id=747 data-nosnippet>747</a>    }
-<a href=#748 id=748 data-nosnippet>748</a>
-<a href=#749 id=749 data-nosnippet>749</a>    <span class="kw">pub fn </span>export_uv_forests(
-<a href=#750 id=750 data-nosnippet>750</a>        <span class="kw-2">&amp;</span><span class="self">self</span>,
-<a href=#751 id=751 data-nosnippet>751</a>        path: <span class="kw">impl </span>AsRef&lt;Path&gt;,
-<a href=#752 id=752 data-nosnippet>752</a>        process_id: usize,
-<a href=#753 id=753 data-nosnippet>753</a>        integrand_name: <span class="kw-2">&amp;</span>str,
-<a href=#754 id=754 data-nosnippet>754</a>        graph_ids: <span class="kw-2">&amp;</span>[usize],
-<a href=#755 id=755 data-nosnippet>755</a>        settings: <span class="kw-2">&amp;</span>UVForestExportSettings,
-<a href=#756 id=756 data-nosnippet>756</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
-<a href=#757 id=757 data-nosnippet>757</a>        <span class="kw">let </span>path = path.as_ref().join(<span class="string">"processes"</span>);
-<a href=#758 id=758 data-nosnippet>758</a>        fs::create_dir_all(<span class="kw-2">&amp;</span>path)<span class="question-mark">?</span>;
-<a href=#759 id=759 data-nosnippet>759</a>        <span class="kw">let </span>process = <span class="self">self</span>.processes.get(process_id).ok_or_else(|| {
-<a href=#760 id=760 data-nosnippet>760</a>            <span class="macro">eyre!</span>(
-<a href=#761 id=761 data-nosnippet>761</a>                <span class="string">"Process id {} is out of range; there are {} processes"</span>,
-<a href=#762 id=762 data-nosnippet>762</a>                process_id,
-<a href=#763 id=763 data-nosnippet>763</a>                <span class="self">self</span>.processes.len()
-<a href=#764 id=764 data-nosnippet>764</a>            )
-<a href=#765 id=765 data-nosnippet>765</a>        })<span class="question-mark">?</span>;
-<a href=#766 id=766 data-nosnippet>766</a>        process.export_uv_forests(<span class="kw-2">&amp;</span>path, integrand_name, graph_ids, settings)
-<a href=#767 id=767 data-nosnippet>767</a>    }
-<a href=#768 id=768 data-nosnippet>768</a>
-<a href=#769 id=769 data-nosnippet>769</a>    <span class="kw">pub fn </span>export_standalone(
-<a href=#770 id=770 data-nosnippet>770</a>        <span class="kw-2">&amp;</span><span class="self">self</span>,
-<a href=#771 id=771 data-nosnippet>771</a>        path: <span class="kw">impl </span>AsRef&lt;Path&gt;,
-<a href=#772 id=772 data-nosnippet>772</a>        settings: <span class="kw-2">&amp;</span>StandaloneExportSettings,
-<a href=#773 id=773 data-nosnippet>773</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
-<a href=#774 id=774 data-nosnippet>774</a>        <span class="kw">let </span>path = path.as_ref().join(<span class="string">"processes"</span>);
-<a href=#775 id=775 data-nosnippet>775</a>        fs::create_dir_all(<span class="kw-2">&amp;</span>path)<span class="question-mark">?</span>;
+<a href=#743 id=743 data-nosnippet>743</a>    <span class="kw">pub fn </span>export_uv_forests(
+<a href=#744 id=744 data-nosnippet>744</a>        <span class="kw-2">&amp;</span><span class="self">self</span>,
+<a href=#745 id=745 data-nosnippet>745</a>        path: <span class="kw">impl </span>AsRef&lt;Path&gt;,
+<a href=#746 id=746 data-nosnippet>746</a>        process_id: usize,
+<a href=#747 id=747 data-nosnippet>747</a>        integrand_name: <span class="kw-2">&amp;</span>str,
+<a href=#748 id=748 data-nosnippet>748</a>        graph_ids: <span class="kw-2">&amp;</span>[usize],
+<a href=#749 id=749 data-nosnippet>749</a>        settings: <span class="kw-2">&amp;</span>UVForestExportSettings,
+<a href=#750 id=750 data-nosnippet>750</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
+<a href=#751 id=751 data-nosnippet>751</a>        <span class="kw">let </span>path = path.as_ref().join(<span class="string">"processes"</span>);
+<a href=#752 id=752 data-nosnippet>752</a>        fs::create_dir_all(<span class="kw-2">&amp;</span>path)<span class="question-mark">?</span>;
+<a href=#753 id=753 data-nosnippet>753</a>        <span class="kw">let </span>process = <span class="self">self</span>.processes.get(process_id).ok_or_else(|| {
+<a href=#754 id=754 data-nosnippet>754</a>            <span class="macro">eyre!</span>(
+<a href=#755 id=755 data-nosnippet>755</a>                <span class="string">"Process id {} is out of range; there are {} processes"</span>,
+<a href=#756 id=756 data-nosnippet>756</a>                process_id,
+<a href=#757 id=757 data-nosnippet>757</a>                <span class="self">self</span>.processes.len()
+<a href=#758 id=758 data-nosnippet>758</a>            )
+<a href=#759 id=759 data-nosnippet>759</a>        })<span class="question-mark">?</span>;
+<a href=#760 id=760 data-nosnippet>760</a>        process.export_uv_forests(<span class="kw-2">&amp;</span>path, integrand_name, graph_ids, settings)
+<a href=#761 id=761 data-nosnippet>761</a>    }
+<a href=#762 id=762 data-nosnippet>762</a>
+<a href=#763 id=763 data-nosnippet>763</a>    <span class="kw">pub fn </span>export_standalone(
+<a href=#764 id=764 data-nosnippet>764</a>        <span class="kw-2">&amp;</span><span class="self">self</span>,
+<a href=#765 id=765 data-nosnippet>765</a>        path: <span class="kw">impl </span>AsRef&lt;Path&gt;,
+<a href=#766 id=766 data-nosnippet>766</a>        settings: <span class="kw-2">&amp;</span>StandaloneExportSettings,
+<a href=#767 id=767 data-nosnippet>767</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
+<a href=#768 id=768 data-nosnippet>768</a>        <span class="kw">let </span>path = path.as_ref().join(<span class="string">"processes"</span>);
+<a href=#769 id=769 data-nosnippet>769</a>        fs::create_dir_all(<span class="kw-2">&amp;</span>path)<span class="question-mark">?</span>;
+<a href=#770 id=770 data-nosnippet>770</a>
+<a href=#771 id=771 data-nosnippet>771</a>        <span class="kw">for </span>p <span class="kw">in </span><span class="self">self</span>.processes.iter() {
+<a href=#772 id=772 data-nosnippet>772</a>            p.export_standalone(<span class="kw-2">&amp;</span>path, settings)<span class="question-mark">?</span>;
+<a href=#773 id=773 data-nosnippet>773</a>        }
+<a href=#774 id=774 data-nosnippet>774</a>        <span class="prelude-val">Ok</span>(())
+<a href=#775 id=775 data-nosnippet>775</a>    }
 <a href=#776 id=776 data-nosnippet>776</a>
-<a href=#777 id=777 data-nosnippet>777</a>        <span class="kw">for </span>p <span class="kw">in </span><span class="self">self</span>.processes.iter() {
-<a href=#778 id=778 data-nosnippet>778</a>            p.export_standalone(<span class="kw-2">&amp;</span>path, settings)<span class="question-mark">?</span>;
-<a href=#779 id=779 data-nosnippet>779</a>        }
-<a href=#780 id=780 data-nosnippet>780</a>        <span class="prelude-val">Ok</span>(())
-<a href=#781 id=781 data-nosnippet>781</a>    }
-<a href=#782 id=782 data-nosnippet>782</a>
-<a href=#783 id=783 data-nosnippet>783</a>    <span class="kw">pub fn </span>add_process(<span class="kw-2">&amp;mut </span><span class="self">self</span>, process: Process) {
-<a href=#784 id=784 data-nosnippet>784</a>        <span class="self">self</span>.processes.push(process);
-<a href=#785 id=785 data-nosnippet>785</a>    }
-<a href=#786 id=786 data-nosnippet>786</a>
-<a href=#787 id=787 data-nosnippet>787</a>    <span class="doccomment">///preprocesses the process list according to the settings
-<a href=#788 id=788 data-nosnippet>788</a>    </span><span class="kw">pub fn </span>preprocess(
-<a href=#789 id=789 data-nosnippet>789</a>        <span class="kw-2">&amp;mut </span><span class="self">self</span>,
-<a href=#790 id=790 data-nosnippet>790</a>        model: <span class="kw-2">&amp;</span>Model,
-<a href=#791 id=791 data-nosnippet>791</a>        settings: <span class="kw-2">&amp;</span>GlobalSettings,
-<a href=#792 id=792 data-nosnippet>792</a>        locked_runtime_settings: <span class="kw-2">&amp;</span>LockedRuntimeSettings,
-<a href=#793 id=793 data-nosnippet>793</a>        thread_pool: <span class="kw-2">&amp;</span>ThreadPool,
-<a href=#794 id=794 data-nosnippet>794</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;Vec&lt;GeneratedGraphReport&gt;&gt; {
-<a href=#795 id=795 data-nosnippet>795</a>        <span class="kw">let </span><span class="kw-2">mut </span>reports = Vec::new();
-<a href=#796 id=796 data-nosnippet>796</a>        <span class="kw">for </span>process <span class="kw">in </span><span class="self">self</span>.processes.iter_mut() {
-<a href=#797 id=797 data-nosnippet>797</a>            reports.extend(process.preprocess(
-<a href=#798 id=798 data-nosnippet>798</a>                model,
-<a href=#799 id=799 data-nosnippet>799</a>                settings,
-<a href=#800 id=800 data-nosnippet>800</a>                locked_runtime_settings,
-<a href=#801 id=801 data-nosnippet>801</a>                thread_pool,
-<a href=#802 id=802 data-nosnippet>802</a>            )<span class="question-mark">?</span>);
-<a href=#803 id=803 data-nosnippet>803</a>        }
-<a href=#804 id=804 data-nosnippet>804</a>        <span class="prelude-val">Ok</span>(reports)
-<a href=#805 id=805 data-nosnippet>805</a>    }
-<a href=#806 id=806 data-nosnippet>806</a>
-<a href=#807 id=807 data-nosnippet>807</a>    <span class="kw">pub fn </span>generate_integrands(
-<a href=#808 id=808 data-nosnippet>808</a>        <span class="kw-2">&amp;mut </span><span class="self">self</span>,
-<a href=#809 id=809 data-nosnippet>809</a>        model: <span class="kw-2">&amp;</span>Model,
-<a href=#810 id=810 data-nosnippet>810</a>        global_settings: <span class="kw-2">&amp;</span>GlobalSettings,
-<a href=#811 id=811 data-nosnippet>811</a>        runtime_default: LockedRuntimeSettings,
-<a href=#812 id=812 data-nosnippet>812</a>        thread_pool: <span class="kw-2">&amp;</span>ThreadPool,
-<a href=#813 id=813 data-nosnippet>813</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;Vec&lt;GeneratedGraphReport&gt;&gt; {
-<a href=#814 id=814 data-nosnippet>814</a>        <span class="kw">let </span><span class="kw-2">mut </span>reports = Vec::new();
-<a href=#815 id=815 data-nosnippet>815</a>        <span class="kw">for </span>process <span class="kw">in </span><span class="kw-2">&amp;mut </span><span class="self">self</span>.processes {
-<a href=#816 id=816 data-nosnippet>816</a>            reports.extend(process.generate_integrands(
-<a href=#817 id=817 data-nosnippet>817</a>                model,
-<a href=#818 id=818 data-nosnippet>818</a>                global_settings,
-<a href=#819 id=819 data-nosnippet>819</a>                runtime_default,
-<a href=#820 id=820 data-nosnippet>820</a>                thread_pool,
-<a href=#821 id=821 data-nosnippet>821</a>            )<span class="question-mark">?</span>);
-<a href=#822 id=822 data-nosnippet>822</a>        }
-<a href=#823 id=823 data-nosnippet>823</a>        <span class="prelude-val">Ok</span>(reports)
-<a href=#824 id=824 data-nosnippet>824</a>    }
-<a href=#825 id=825 data-nosnippet>825</a>
-<a href=#826 id=826 data-nosnippet>826</a>    <span class="kw">pub fn </span>find_process(<span class="kw-2">&amp;</span><span class="self">self</span>, process_id: <span class="prelude-ty">Option</span>&lt;usize&gt;) -&gt; <span class="prelude-ty">Result</span>&lt;usize&gt; {
-<a href=#827 id=827 data-nosnippet>827</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(id) = process_id {
-<a href=#828 id=828 data-nosnippet>828</a>            <span class="kw">if </span>id &gt;= <span class="self">self</span>.processes.len() {
-<a href=#829 id=829 data-nosnippet>829</a>                <span class="kw">return </span><span class="prelude-val">Err</span>(<span class="macro">color_eyre::eyre::eyre!</span>(
-<a href=#830 id=830 data-nosnippet>830</a>                    <span class="string">"Invalid process id {}. Number of processes: {}"</span>,
-<a href=#831 id=831 data-nosnippet>831</a>                    id,
-<a href=#832 id=832 data-nosnippet>832</a>                    <span class="self">self</span>.processes.len()
-<a href=#833 id=833 data-nosnippet>833</a>                ));
-<a href=#834 id=834 data-nosnippet>834</a>            }
-<a href=#835 id=835 data-nosnippet>835</a>            <span class="prelude-val">Ok</span>(id)
-<a href=#836 id=836 data-nosnippet>836</a>        } <span class="kw">else if </span><span class="self">self</span>.processes.is_empty() {
-<a href=#837 id=837 data-nosnippet>837</a>            <span class="prelude-val">Err</span>(<span class="macro">color_eyre::eyre::eyre!</span>(<span class="string">"No processes generated yet."</span>))
-<a href=#838 id=838 data-nosnippet>838</a>        } <span class="kw">else if </span><span class="self">self</span>.processes.len() &gt; <span class="number">1 </span>{
-<a href=#839 id=839 data-nosnippet>839</a>            <span class="prelude-val">Err</span>(<span class="macro">color_eyre::eyre::eyre!</span>(
-<a href=#840 id=840 data-nosnippet>840</a>                <span class="string">"There are {} processes available. Please specify a process."</span>,
-<a href=#841 id=841 data-nosnippet>841</a>                <span class="self">self</span>.processes.len()
-<a href=#842 id=842 data-nosnippet>842</a>            ))
-<a href=#843 id=843 data-nosnippet>843</a>        } <span class="kw">else </span>{
-<a href=#844 id=844 data-nosnippet>844</a>            <span class="prelude-val">Ok</span>(<span class="number">0</span>)
-<a href=#845 id=845 data-nosnippet>845</a>        }
-<a href=#846 id=846 data-nosnippet>846</a>    }
-<a href=#847 id=847 data-nosnippet>847</a>
-<a href=#848 id=848 data-nosnippet>848</a>    <span class="kw">pub fn </span>find_integrand(
-<a href=#849 id=849 data-nosnippet>849</a>        <span class="kw-2">&amp;</span><span class="self">self</span>,
-<a href=#850 id=850 data-nosnippet>850</a>        process_id: <span class="prelude-ty">Option</span>&lt;usize&gt;,
-<a href=#851 id=851 data-nosnippet>851</a>        integrand_name: <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span>String&gt;,
-<a href=#852 id=852 data-nosnippet>852</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;(usize, String)&gt; {
-<a href=#853 id=853 data-nosnippet>853</a>        <span class="kw">let </span>p_id = <span class="self">self</span>.find_process(process_id)<span class="question-mark">?</span>;
-<a href=#854 id=854 data-nosnippet>854</a>        <span class="kw">let </span>integrand_name = <span class="self">self</span>.processes[p_id]
-<a href=#855 id=855 data-nosnippet>855</a>            .collection
-<a href=#856 id=856 data-nosnippet>856</a>            .find_integrand(integrand_name.cloned())<span class="question-mark">?</span>;
-<a href=#857 id=857 data-nosnippet>857</a>        <span class="prelude-val">Ok</span>((p_id, integrand_name))
-<a href=#858 id=858 data-nosnippet>858</a>    }
-<a href=#859 id=859 data-nosnippet>859</a>}
-<a href=#860 id=860 data-nosnippet>860</a>
-<a href=#861 id=861 data-nosnippet>861</a><span class="kw">pub mod </span>process;
-<a href=#862 id=862 data-nosnippet>862</a><span class="kw">pub use </span>process::<span class="kw-2">*</span>;
-<a href=#863 id=863 data-nosnippet>863</a><span class="kw">pub mod </span>amplitude;
-<a href=#864 id=864 data-nosnippet>864</a><span class="kw">pub use </span>amplitude::<span class="kw-2">*</span>;
-<a href=#865 id=865 data-nosnippet>865</a><span class="kw">pub mod </span>cross_section;
-<a href=#866 id=866 data-nosnippet>866</a><span class="kw">pub use </span>cross_section::<span class="kw-2">*</span>;
-<a href=#867 id=867 data-nosnippet>867</a><span class="kw">pub mod </span>threshold_counterterms;
-<a href=#868 id=868 data-nosnippet>868</a><span class="kw">pub use </span>threshold_counterterms::<span class="kw-2">*</span>;
-<a href=#869 id=869 data-nosnippet>869</a>
-<a href=#870 id=870 data-nosnippet>870</a><span class="attr">#[cfg(test)]
-<a href=#871 id=871 data-nosnippet>871</a></span><span class="kw">mod </span>no_directive_equivalence_tests;
-<a href=#872 id=872 data-nosnippet>872</a><span class="attr">#[cfg(test)]
-<a href=#873 id=873 data-nosnippet>873</a></span><span class="kw">mod </span>raised_cross_section_tests;
-<a href=#874 id=874 data-nosnippet>874</a>
-<a href=#875 id=875 data-nosnippet>875</a><span class="attr">#[cfg(test)]
-<a href=#876 id=876 data-nosnippet>876</a></span><span class="kw">mod </span>tests {
-<a href=#877 id=877 data-nosnippet>877</a>    <span class="kw">use </span>symbolica::state::State;
-<a href=#878 id=878 data-nosnippet>878</a>
-<a href=#879 id=879 data-nosnippet>879</a>    <span class="kw">use crate</span>::{
-<a href=#880 id=880 data-nosnippet>880</a>        GammaLoopContextContainer, dot,
-<a href=#881 id=881 data-nosnippet>881</a>        graph::{Graph, parse::IntoGraph},
-<a href=#882 id=882 data-nosnippet>882</a>        initialisation::test_initialise,
-<a href=#883 id=883 data-nosnippet>883</a>        settings::{
-<a href=#884 id=884 data-nosnippet>884</a>            RuntimeSettings,
-<a href=#885 id=885 data-nosnippet>885</a>            global::{
-<a href=#886 id=886 data-nosnippet>886</a>                CompilationMode, CompilationOptimizationLevel, GammaloopCompileOptions,
-<a href=#887 id=887 data-nosnippet>887</a>                GenerationSettings, TropicalSubgraphTableSettings,
-<a href=#888 id=888 data-nosnippet>888</a>            },
-<a href=#889 id=889 data-nosnippet>889</a>            runtime::LockedRuntimeSettings,
-<a href=#890 id=890 data-nosnippet>890</a>        },
-<a href=#891 id=891 data-nosnippet>891</a>        utils::load_generic_model,
-<a href=#892 id=892 data-nosnippet>892</a>    };
+<a href=#777 id=777 data-nosnippet>777</a>    <span class="kw">pub fn </span>add_process(<span class="kw-2">&amp;mut </span><span class="self">self</span>, process: Process) {
+<a href=#778 id=778 data-nosnippet>778</a>        <span class="self">self</span>.processes.push(process);
+<a href=#779 id=779 data-nosnippet>779</a>    }
+<a href=#780 id=780 data-nosnippet>780</a>
+<a href=#781 id=781 data-nosnippet>781</a>    <span class="doccomment">///preprocesses the process list according to the settings
+<a href=#782 id=782 data-nosnippet>782</a>    </span><span class="kw">pub fn </span>preprocess(
+<a href=#783 id=783 data-nosnippet>783</a>        <span class="kw-2">&amp;mut </span><span class="self">self</span>,
+<a href=#784 id=784 data-nosnippet>784</a>        model: <span class="kw-2">&amp;</span>Model,
+<a href=#785 id=785 data-nosnippet>785</a>        settings: <span class="kw-2">&amp;</span>GlobalSettings,
+<a href=#786 id=786 data-nosnippet>786</a>        locked_runtime_settings: <span class="kw-2">&amp;</span>LockedRuntimeSettings,
+<a href=#787 id=787 data-nosnippet>787</a>        thread_pool: <span class="kw-2">&amp;</span>ThreadPool,
+<a href=#788 id=788 data-nosnippet>788</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;Vec&lt;GeneratedGraphReport&gt;&gt; {
+<a href=#789 id=789 data-nosnippet>789</a>        <span class="kw">let </span><span class="kw-2">mut </span>reports = Vec::new();
+<a href=#790 id=790 data-nosnippet>790</a>        <span class="kw">for </span>process <span class="kw">in </span><span class="self">self</span>.processes.iter_mut() {
+<a href=#791 id=791 data-nosnippet>791</a>            reports.extend(process.preprocess(
+<a href=#792 id=792 data-nosnippet>792</a>                model,
+<a href=#793 id=793 data-nosnippet>793</a>                settings,
+<a href=#794 id=794 data-nosnippet>794</a>                locked_runtime_settings,
+<a href=#795 id=795 data-nosnippet>795</a>                thread_pool,
+<a href=#796 id=796 data-nosnippet>796</a>            )<span class="question-mark">?</span>);
+<a href=#797 id=797 data-nosnippet>797</a>        }
+<a href=#798 id=798 data-nosnippet>798</a>        <span class="prelude-val">Ok</span>(reports)
+<a href=#799 id=799 data-nosnippet>799</a>    }
+<a href=#800 id=800 data-nosnippet>800</a>
+<a href=#801 id=801 data-nosnippet>801</a>    <span class="kw">pub fn </span>generate_integrands(
+<a href=#802 id=802 data-nosnippet>802</a>        <span class="kw-2">&amp;mut </span><span class="self">self</span>,
+<a href=#803 id=803 data-nosnippet>803</a>        model: <span class="kw-2">&amp;</span>Model,
+<a href=#804 id=804 data-nosnippet>804</a>        global_settings: <span class="kw-2">&amp;</span>GlobalSettings,
+<a href=#805 id=805 data-nosnippet>805</a>        runtime_default: LockedRuntimeSettings,
+<a href=#806 id=806 data-nosnippet>806</a>        thread_pool: <span class="kw-2">&amp;</span>ThreadPool,
+<a href=#807 id=807 data-nosnippet>807</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;Vec&lt;GeneratedGraphReport&gt;&gt; {
+<a href=#808 id=808 data-nosnippet>808</a>        <span class="kw">let </span><span class="kw-2">mut </span>reports = Vec::new();
+<a href=#809 id=809 data-nosnippet>809</a>        <span class="kw">for </span>process <span class="kw">in </span><span class="kw-2">&amp;mut </span><span class="self">self</span>.processes {
+<a href=#810 id=810 data-nosnippet>810</a>            reports.extend(process.generate_integrands(
+<a href=#811 id=811 data-nosnippet>811</a>                model,
+<a href=#812 id=812 data-nosnippet>812</a>                global_settings,
+<a href=#813 id=813 data-nosnippet>813</a>                runtime_default,
+<a href=#814 id=814 data-nosnippet>814</a>                thread_pool,
+<a href=#815 id=815 data-nosnippet>815</a>            )<span class="question-mark">?</span>);
+<a href=#816 id=816 data-nosnippet>816</a>        }
+<a href=#817 id=817 data-nosnippet>817</a>        <span class="prelude-val">Ok</span>(reports)
+<a href=#818 id=818 data-nosnippet>818</a>    }
+<a href=#819 id=819 data-nosnippet>819</a>
+<a href=#820 id=820 data-nosnippet>820</a>    <span class="kw">pub fn </span>find_process(<span class="kw-2">&amp;</span><span class="self">self</span>, process_id: <span class="prelude-ty">Option</span>&lt;usize&gt;) -&gt; <span class="prelude-ty">Result</span>&lt;usize&gt; {
+<a href=#821 id=821 data-nosnippet>821</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(id) = process_id {
+<a href=#822 id=822 data-nosnippet>822</a>            <span class="kw">if </span>id &gt;= <span class="self">self</span>.processes.len() {
+<a href=#823 id=823 data-nosnippet>823</a>                <span class="kw">return </span><span class="prelude-val">Err</span>(<span class="macro">color_eyre::eyre::eyre!</span>(
+<a href=#824 id=824 data-nosnippet>824</a>                    <span class="string">"Invalid process id {}. Number of processes: {}"</span>,
+<a href=#825 id=825 data-nosnippet>825</a>                    id,
+<a href=#826 id=826 data-nosnippet>826</a>                    <span class="self">self</span>.processes.len()
+<a href=#827 id=827 data-nosnippet>827</a>                ));
+<a href=#828 id=828 data-nosnippet>828</a>            }
+<a href=#829 id=829 data-nosnippet>829</a>            <span class="prelude-val">Ok</span>(id)
+<a href=#830 id=830 data-nosnippet>830</a>        } <span class="kw">else if </span><span class="self">self</span>.processes.is_empty() {
+<a href=#831 id=831 data-nosnippet>831</a>            <span class="prelude-val">Err</span>(<span class="macro">color_eyre::eyre::eyre!</span>(<span class="string">"No processes generated yet."</span>))
+<a href=#832 id=832 data-nosnippet>832</a>        } <span class="kw">else if </span><span class="self">self</span>.processes.len() &gt; <span class="number">1 </span>{
+<a href=#833 id=833 data-nosnippet>833</a>            <span class="prelude-val">Err</span>(<span class="macro">color_eyre::eyre::eyre!</span>(
+<a href=#834 id=834 data-nosnippet>834</a>                <span class="string">"There are {} processes available. Please specify a process."</span>,
+<a href=#835 id=835 data-nosnippet>835</a>                <span class="self">self</span>.processes.len()
+<a href=#836 id=836 data-nosnippet>836</a>            ))
+<a href=#837 id=837 data-nosnippet>837</a>        } <span class="kw">else </span>{
+<a href=#838 id=838 data-nosnippet>838</a>            <span class="prelude-val">Ok</span>(<span class="number">0</span>)
+<a href=#839 id=839 data-nosnippet>839</a>        }
+<a href=#840 id=840 data-nosnippet>840</a>    }
+<a href=#841 id=841 data-nosnippet>841</a>
+<a href=#842 id=842 data-nosnippet>842</a>    <span class="kw">pub fn </span>find_integrand(
+<a href=#843 id=843 data-nosnippet>843</a>        <span class="kw-2">&amp;</span><span class="self">self</span>,
+<a href=#844 id=844 data-nosnippet>844</a>        process_id: <span class="prelude-ty">Option</span>&lt;usize&gt;,
+<a href=#845 id=845 data-nosnippet>845</a>        integrand_name: <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span>String&gt;,
+<a href=#846 id=846 data-nosnippet>846</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;(usize, String)&gt; {
+<a href=#847 id=847 data-nosnippet>847</a>        <span class="kw">let </span>p_id = <span class="self">self</span>.find_process(process_id)<span class="question-mark">?</span>;
+<a href=#848 id=848 data-nosnippet>848</a>        <span class="kw">let </span>integrand_name = <span class="self">self</span>.processes[p_id]
+<a href=#849 id=849 data-nosnippet>849</a>            .collection
+<a href=#850 id=850 data-nosnippet>850</a>            .find_integrand(integrand_name.cloned())<span class="question-mark">?</span>;
+<a href=#851 id=851 data-nosnippet>851</a>        <span class="prelude-val">Ok</span>((p_id, integrand_name))
+<a href=#852 id=852 data-nosnippet>852</a>    }
+<a href=#853 id=853 data-nosnippet>853</a>}
+<a href=#854 id=854 data-nosnippet>854</a>
+<a href=#855 id=855 data-nosnippet>855</a><span class="kw">pub mod </span>process;
+<a href=#856 id=856 data-nosnippet>856</a><span class="kw">pub use </span>process::<span class="kw-2">*</span>;
+<a href=#857 id=857 data-nosnippet>857</a><span class="kw">pub mod </span>amplitude;
+<a href=#858 id=858 data-nosnippet>858</a><span class="kw">pub use </span>amplitude::<span class="kw-2">*</span>;
+<a href=#859 id=859 data-nosnippet>859</a><span class="kw">pub mod </span>cross_section;
+<a href=#860 id=860 data-nosnippet>860</a><span class="kw">pub use </span>cross_section::<span class="kw-2">*</span>;
+<a href=#861 id=861 data-nosnippet>861</a><span class="kw">pub mod </span>threshold_counterterms;
+<a href=#862 id=862 data-nosnippet>862</a><span class="kw">pub use </span>threshold_counterterms::<span class="kw-2">*</span>;
+<a href=#863 id=863 data-nosnippet>863</a>
+<a href=#864 id=864 data-nosnippet>864</a><span class="attr">#[cfg(test)]
+<a href=#865 id=865 data-nosnippet>865</a></span><span class="kw">mod </span>no_directive_equivalence_tests;
+<a href=#866 id=866 data-nosnippet>866</a><span class="attr">#[cfg(test)]
+<a href=#867 id=867 data-nosnippet>867</a></span><span class="kw">mod </span>raised_cross_section_tests;
+<a href=#868 id=868 data-nosnippet>868</a>
+<a href=#869 id=869 data-nosnippet>869</a><span class="attr">#[cfg(test)]
+<a href=#870 id=870 data-nosnippet>870</a></span><span class="kw">mod </span>tests {
+<a href=#871 id=871 data-nosnippet>871</a>    <span class="kw">use </span>symbolica::state::State;
+<a href=#872 id=872 data-nosnippet>872</a>
+<a href=#873 id=873 data-nosnippet>873</a>    <span class="kw">use crate</span>::{
+<a href=#874 id=874 data-nosnippet>874</a>        GammaLoopContextContainer, dot,
+<a href=#875 id=875 data-nosnippet>875</a>        graph::{Graph, parse::IntoGraph},
+<a href=#876 id=876 data-nosnippet>876</a>        initialisation::test_initialise,
+<a href=#877 id=877 data-nosnippet>877</a>        settings::{
+<a href=#878 id=878 data-nosnippet>878</a>            RuntimeSettings,
+<a href=#879 id=879 data-nosnippet>879</a>            global::{
+<a href=#880 id=880 data-nosnippet>880</a>                CompilationMode, CompilationOptimizationLevel, GammaloopCompileOptions,
+<a href=#881 id=881 data-nosnippet>881</a>                GenerationSettings, TropicalSubgraphTableSettings,
+<a href=#882 id=882 data-nosnippet>882</a>            },
+<a href=#883 id=883 data-nosnippet>883</a>            runtime::LockedRuntimeSettings,
+<a href=#884 id=884 data-nosnippet>884</a>        },
+<a href=#885 id=885 data-nosnippet>885</a>        utils::load_generic_model,
+<a href=#886 id=886 data-nosnippet>886</a>    };
+<a href=#887 id=887 data-nosnippet>887</a>
+<a href=#888 id=888 data-nosnippet>888</a>    <span class="kw">use super</span>::{AmplitudeGraph, EvaluatorSettings};
+<a href=#889 id=889 data-nosnippet>889</a>
+<a href=#890 id=890 data-nosnippet>890</a>    <span class="attr">#[test]
+<a href=#891 id=891 data-nosnippet>891</a>    </span><span class="kw">fn </span>numerator_inlining_defaults_and_explicit_opt_out_round_trip() {
+<a href=#892 id=892 data-nosnippet>892</a>        <span class="kw">use </span><span class="kw">crate</span>::utils::serde_utils::ShowDefaultsGuard;
 <a href=#893 id=893 data-nosnippet>893</a>
-<a href=#894 id=894 data-nosnippet>894</a>    <span class="kw">use super</span>::{AmplitudeGraph, EvaluatorSettings};
-<a href=#895 id=895 data-nosnippet>895</a>
-<a href=#896 id=896 data-nosnippet>896</a>    <span class="attr">#[test]
-<a href=#897 id=897 data-nosnippet>897</a>    </span><span class="kw">fn </span>numerator_inlining_defaults_and_explicit_opt_out_round_trip() {
-<a href=#898 id=898 data-nosnippet>898</a>        <span class="kw">use </span><span class="kw">crate</span>::utils::serde_utils::ShowDefaultsGuard;
+<a href=#894 id=894 data-nosnippet>894</a>        <span class="macro">assert!</span>(EvaluatorSettings::default().inline_numerator_functions);
+<a href=#895 id=895 data-nosnippet>895</a>        <span class="kw">for </span>input <span class="kw">in </span>[<span class="string">""</span>, <span class="string">"n_cores = 2"</span>] {
+<a href=#896 id=896 data-nosnippet>896</a>            <span class="kw">let </span>settings: EvaluatorSettings = toml::from_str(input).unwrap();
+<a href=#897 id=897 data-nosnippet>897</a>            <span class="macro">assert!</span>(settings.inline_numerator_functions);
+<a href=#898 id=898 data-nosnippet>898</a>        }
 <a href=#899 id=899 data-nosnippet>899</a>
-<a href=#900 id=900 data-nosnippet>900</a>        <span class="macro">assert!</span>(EvaluatorSettings::default().inline_numerator_functions);
-<a href=#901 id=901 data-nosnippet>901</a>        <span class="kw">for </span>input <span class="kw">in </span>[<span class="string">""</span>, <span class="string">"n_cores = 2"</span>] {
-<a href=#902 id=902 data-nosnippet>902</a>            <span class="kw">let </span>settings: EvaluatorSettings = toml::from_str(input).unwrap();
-<a href=#903 id=903 data-nosnippet>903</a>            <span class="macro">assert!</span>(settings.inline_numerator_functions);
-<a href=#904 id=904 data-nosnippet>904</a>        }
-<a href=#905 id=905 data-nosnippet>905</a>
-<a href=#906 id=906 data-nosnippet>906</a>        {
-<a href=#907 id=907 data-nosnippet>907</a>            <span class="kw">let </span>_guard = ShowDefaultsGuard::new(<span class="bool-val">false</span>);
-<a href=#908 id=908 data-nosnippet>908</a>            <span class="kw">let </span>settings = EvaluatorSettings::default();
-<a href=#909 id=909 data-nosnippet>909</a>            <span class="kw">let </span>serialized = toml::to_string(<span class="kw-2">&amp;</span>settings).unwrap();
-<a href=#910 id=910 data-nosnippet>910</a>            <span class="macro">assert!</span>(!serialized.contains(<span class="string">"inline_numerator_functions"</span>));
-<a href=#911 id=911 data-nosnippet>911</a>            <span class="macro">assert_eq!</span>(
-<a href=#912 id=912 data-nosnippet>912</a>                toml::from_str::&lt;EvaluatorSettings&gt;(<span class="kw-2">&amp;</span>serialized).unwrap(),
-<a href=#913 id=913 data-nosnippet>913</a>                settings
-<a href=#914 id=914 data-nosnippet>914</a>            );
-<a href=#915 id=915 data-nosnippet>915</a>
-<a href=#916 id=916 data-nosnippet>916</a>            <span class="kw">let </span>settings: EvaluatorSettings =
-<a href=#917 id=917 data-nosnippet>917</a>                toml::from_str(<span class="string">"inline_numerator_functions = false"</span>).unwrap();
-<a href=#918 id=918 data-nosnippet>918</a>            <span class="kw">let </span>serialized = toml::to_string(<span class="kw-2">&amp;</span>settings).unwrap();
-<a href=#919 id=919 data-nosnippet>919</a>            <span class="macro">assert!</span>(serialized.contains(<span class="string">"inline_numerator_functions = false"</span>));
-<a href=#920 id=920 data-nosnippet>920</a>            <span class="macro">assert_eq!</span>(
-<a href=#921 id=921 data-nosnippet>921</a>                toml::from_str::&lt;EvaluatorSettings&gt;(<span class="kw-2">&amp;</span>serialized).unwrap(),
-<a href=#922 id=922 data-nosnippet>922</a>                settings
-<a href=#923 id=923 data-nosnippet>923</a>            );
-<a href=#924 id=924 data-nosnippet>924</a>        }
-<a href=#925 id=925 data-nosnippet>925</a>
-<a href=#926 id=926 data-nosnippet>926</a>        <span class="kw">let </span>_guard = ShowDefaultsGuard::new(<span class="bool-val">true</span>);
-<a href=#927 id=927 data-nosnippet>927</a>        <span class="kw">let </span>serialized = toml::to_string(<span class="kw-2">&amp;</span>EvaluatorSettings::default()).unwrap();
-<a href=#928 id=928 data-nosnippet>928</a>        <span class="macro">assert!</span>(serialized.contains(<span class="string">"inline_numerator_functions = true"</span>));
-<a href=#929 id=929 data-nosnippet>929</a>    }
+<a href=#900 id=900 data-nosnippet>900</a>        {
+<a href=#901 id=901 data-nosnippet>901</a>            <span class="kw">let </span>_guard = ShowDefaultsGuard::new(<span class="bool-val">false</span>);
+<a href=#902 id=902 data-nosnippet>902</a>            <span class="kw">let </span>settings = EvaluatorSettings::default();
+<a href=#903 id=903 data-nosnippet>903</a>            <span class="kw">let </span>serialized = toml::to_string(<span class="kw-2">&amp;</span>settings).unwrap();
+<a href=#904 id=904 data-nosnippet>904</a>            <span class="macro">assert!</span>(!serialized.contains(<span class="string">"inline_numerator_functions"</span>));
+<a href=#905 id=905 data-nosnippet>905</a>            <span class="macro">assert_eq!</span>(
+<a href=#906 id=906 data-nosnippet>906</a>                toml::from_str::&lt;EvaluatorSettings&gt;(<span class="kw-2">&amp;</span>serialized).unwrap(),
+<a href=#907 id=907 data-nosnippet>907</a>                settings
+<a href=#908 id=908 data-nosnippet>908</a>            );
+<a href=#909 id=909 data-nosnippet>909</a>
+<a href=#910 id=910 data-nosnippet>910</a>            <span class="kw">let </span>settings: EvaluatorSettings =
+<a href=#911 id=911 data-nosnippet>911</a>                toml::from_str(<span class="string">"inline_numerator_functions = false"</span>).unwrap();
+<a href=#912 id=912 data-nosnippet>912</a>            <span class="kw">let </span>serialized = toml::to_string(<span class="kw-2">&amp;</span>settings).unwrap();
+<a href=#913 id=913 data-nosnippet>913</a>            <span class="macro">assert!</span>(serialized.contains(<span class="string">"inline_numerator_functions = false"</span>));
+<a href=#914 id=914 data-nosnippet>914</a>            <span class="macro">assert_eq!</span>(
+<a href=#915 id=915 data-nosnippet>915</a>                toml::from_str::&lt;EvaluatorSettings&gt;(<span class="kw-2">&amp;</span>serialized).unwrap(),
+<a href=#916 id=916 data-nosnippet>916</a>                settings
+<a href=#917 id=917 data-nosnippet>917</a>            );
+<a href=#918 id=918 data-nosnippet>918</a>        }
+<a href=#919 id=919 data-nosnippet>919</a>
+<a href=#920 id=920 data-nosnippet>920</a>        <span class="kw">let </span>_guard = ShowDefaultsGuard::new(<span class="bool-val">true</span>);
+<a href=#921 id=921 data-nosnippet>921</a>        <span class="kw">let </span>serialized = toml::to_string(<span class="kw-2">&amp;</span>EvaluatorSettings::default()).unwrap();
+<a href=#922 id=922 data-nosnippet>922</a>        <span class="macro">assert!</span>(serialized.contains(<span class="string">"inline_numerator_functions = true"</span>));
+<a href=#923 id=923 data-nosnippet>923</a>    }
+<a href=#924 id=924 data-nosnippet>924</a>
+<a href=#925 id=925 data-nosnippet>925</a>    <span class="attr">#[test]
+<a href=#926 id=926 data-nosnippet>926</a>    </span><span class="kw">fn </span>test_encode_decode_amplitude_graph() {
+<a href=#927 id=927 data-nosnippet>927</a>        test_initialise().unwrap();
+<a href=#928 id=928 data-nosnippet>928</a>        <span class="comment">// Use the model routing produced by graph import for the persistence roundtrip.
+<a href=#929 id=929 data-nosnippet>929</a>        </span><span class="kw">let </span>model = load_generic_model(<span class="string">"sm"</span>);
 <a href=#930 id=930 data-nosnippet>930</a>
-<a href=#931 id=931 data-nosnippet>931</a>    <span class="attr">#[test]
-<a href=#932 id=932 data-nosnippet>932</a>    </span><span class="kw">fn </span>test_encode_decode_amplitude_graph() {
-<a href=#933 id=933 data-nosnippet>933</a>        test_initialise().unwrap();
-<a href=#934 id=934 data-nosnippet>934</a>        <span class="comment">// Use the model routing produced by graph import for the persistence roundtrip.
-<a href=#935 id=935 data-nosnippet>935</a>        </span><span class="kw">let </span>model = load_generic_model(<span class="string">"sm"</span>);
-<a href=#936 id=936 data-nosnippet>936</a>
-<a href=#937 id=937 data-nosnippet>937</a>        <span class="kw">let </span>graph: Graph = <span class="macro">dot!</span>(
-<a href=#938 id=938 data-nosnippet>938</a>            digraph G{
-<a href=#939 id=939 data-nosnippet>939</a>                e1      [style=invis]
-<a href=#940 id=940 data-nosnippet>940</a>                e2      [style=invis]
-<a href=#941 id=941 data-nosnippet>941</a>                e1 -&gt; n1  [particle=H]
-<a href=#942 id=942 data-nosnippet>942</a>                n4 -&gt; e2    [particle=H]
-<a href=#943 id=943 data-nosnippet>943</a>                n1 -&gt; n2    [particle=H]
-<a href=#944 id=944 data-nosnippet>944</a>                n1 -&gt; n3    [particle=H]
-<a href=#945 id=945 data-nosnippet>945</a>                n2 -&gt; n3    [particle=t]
-<a href=#946 id=946 data-nosnippet>946</a>                n3 -&gt; n4    [particle=t]
-<a href=#947 id=947 data-nosnippet>947</a>                n4 -&gt; n2    [particle=t]
-<a href=#948 id=948 data-nosnippet>948</a>            }
-<a href=#949 id=949 data-nosnippet>949</a>        )
-<a href=#950 id=950 data-nosnippet>950</a>        .unwrap();
-<a href=#951 id=951 data-nosnippet>951</a>        <span class="kw">let </span><span class="kw-2">mut </span>amplitude: AmplitudeGraph = AmplitudeGraph::new(graph.clone());
-<a href=#952 id=952 data-nosnippet>952</a>
-<a href=#953 id=953 data-nosnippet>953</a>        amplitude
-<a href=#954 id=954 data-nosnippet>954</a>            .preprocess(
-<a href=#955 id=955 data-nosnippet>955</a>                <span class="kw-2">&amp;</span>model,
-<a href=#956 id=956 data-nosnippet>956</a>                <span class="kw-2">&amp;</span>GenerationSettings {
-<a href=#957 id=957 data-nosnippet>957</a>                    compile: GammaloopCompileOptions {
-<a href=#958 id=958 data-nosnippet>958</a>                        compilation_mode: CompilationMode::Cpp,
-<a href=#959 id=959 data-nosnippet>959</a>                        fast_math: <span class="bool-val">false</span>,
-<a href=#960 id=960 data-nosnippet>960</a>                        optimization_level: CompilationOptimizationLevel::O0,
-<a href=#961 id=961 data-nosnippet>961</a>                        unsafe_math: <span class="bool-val">false</span>,
-<a href=#962 id=962 data-nosnippet>962</a>                        compiler: <span class="kw">crate</span>::settings::global::default_external_compiler().to_owned(),
-<a href=#963 id=963 data-nosnippet>963</a>                        custom: Vec::new(),
-<a href=#964 id=964 data-nosnippet>964</a>                    },
-<a href=#965 id=965 data-nosnippet>965</a>                    tropical_subgraph_table: TropicalSubgraphTableSettings {
-<a href=#966 id=966 data-nosnippet>966</a>                        panic_on_fail: <span class="bool-val">false</span>,
-<a href=#967 id=967 data-nosnippet>967</a>                        target_omega: <span class="number">1.0</span>,
-<a href=#968 id=968 data-nosnippet>968</a>                        ..Default::default()
-<a href=#969 id=969 data-nosnippet>969</a>                    },
-<a href=#970 id=970 data-nosnippet>970</a>                    ..Default::default()
-<a href=#971 id=971 data-nosnippet>971</a>                },
-<a href=#972 id=972 data-nosnippet>972</a>                <span class="kw-2">&amp;</span>LockedRuntimeSettings::from(<span class="kw-2">&amp;</span>RuntimeSettings::default()),
-<a href=#973 id=973 data-nosnippet>973</a>            )
-<a href=#974 id=974 data-nosnippet>974</a>            .unwrap();
-<a href=#975 id=975 data-nosnippet>975</a>
-<a href=#976 id=976 data-nosnippet>976</a>        <span class="kw">let </span><span class="kw-2">mut </span>symbols = Vec::new();
-<a href=#977 id=977 data-nosnippet>977</a>        State::export(<span class="kw-2">&amp;mut </span>symbols).unwrap();
-<a href=#978 id=978 data-nosnippet>978</a>        <span class="kw">let </span>state_map = State::import(<span class="kw-2">&amp;mut </span>std::io::Cursor::new(symbols), <span class="prelude-val">None</span>).unwrap();
-<a href=#979 id=979 data-nosnippet>979</a>
-<a href=#980 id=980 data-nosnippet>980</a>        <span class="kw">let </span>context = GammaLoopContextContainer {
-<a href=#981 id=981 data-nosnippet>981</a>            model: <span class="kw-2">&amp;</span>model,
-<a href=#982 id=982 data-nosnippet>982</a>            state_map: <span class="kw-2">&amp;</span>state_map,
-<a href=#983 id=983 data-nosnippet>983</a>        };
-<a href=#984 id=984 data-nosnippet>984</a>
-<a href=#985 id=985 data-nosnippet>985</a>        <span class="kw">let </span>encoded_amplitude =
-<a href=#986 id=986 data-nosnippet>986</a>            bincode::encode_to_vec(<span class="kw-2">&amp;</span>amplitude, bincode::config::standard()).unwrap();
-<a href=#987 id=987 data-nosnippet>987</a>
-<a href=#988 id=988 data-nosnippet>988</a>        <span class="kw">let </span>decoded: AmplitudeGraph = bincode::decode_from_slice_with_context(
-<a href=#989 id=989 data-nosnippet>989</a>            <span class="kw-2">&amp;</span>encoded_amplitude,
-<a href=#990 id=990 data-nosnippet>990</a>            bincode::config::standard(),
-<a href=#991 id=991 data-nosnippet>991</a>            context,
-<a href=#992 id=992 data-nosnippet>992</a>        )
-<a href=#993 id=993 data-nosnippet>993</a>        .expect(<span class="string">"amplitude decode failed"</span>)
-<a href=#994 id=994 data-nosnippet>994</a>        .<span class="number">0</span>;
-<a href=#995 id=995 data-nosnippet>995</a>
-<a href=#996 id=996 data-nosnippet>996</a>        <span class="macro">assert_eq!</span>(decoded.graph.name, amplitude.graph.name);
-<a href=#997 id=997 data-nosnippet>997</a>        <span class="macro">assert_eq!</span>(decoded.graph.overall_factor, amplitude.graph.overall_factor);
-<a href=#998 id=998 data-nosnippet>998</a>        <span class="macro">assert_eq!</span>(
-<a href=#999 id=999 data-nosnippet>999</a>            decoded.graph.loop_momentum_basis,
-<a href=#1000 id=1000 data-nosnippet>1000</a>            amplitude.graph.loop_momentum_basis
-<a href=#1001 id=1001 data-nosnippet>1001</a>        );
-<a href=#1002 id=1002 data-nosnippet>1002</a>        <span class="macro">assert_eq!</span>(
-<a href=#1003 id=1003 data-nosnippet>1003</a>            decoded.graph.param_builder.reps,
-<a href=#1004 id=1004 data-nosnippet>1004</a>            amplitude.graph.param_builder.reps
-<a href=#1005 id=1005 data-nosnippet>1005</a>        );
-<a href=#1006 id=1006 data-nosnippet>1006</a>        <span class="macro">assert_eq!</span>(
-<a href=#1007 id=1007 data-nosnippet>1007</a>            decoded.graph.param_builder.values,
-<a href=#1008 id=1008 data-nosnippet>1008</a>            amplitude.graph.param_builder.values
-<a href=#1009 id=1009 data-nosnippet>1009</a>        );
-<a href=#1010 id=1010 data-nosnippet>1010</a>        <span class="macro">assert_eq!</span>(
-<a href=#1011 id=1011 data-nosnippet>1011</a>            decoded.derived_data.all_mighty_integrand,
-<a href=#1012 id=1012 data-nosnippet>1012</a>            amplitude.derived_data.all_mighty_integrand
-<a href=#1013 id=1013 data-nosnippet>1013</a>        );
-<a href=#1014 id=1014 data-nosnippet>1014</a>        <span class="macro">assert_eq!</span>(
-<a href=#1015 id=1015 data-nosnippet>1015</a>            decoded.derived_data.all_mighty_numerators,
-<a href=#1016 id=1016 data-nosnippet>1016</a>            amplitude.derived_data.all_mighty_numerators
-<a href=#1017 id=1017 data-nosnippet>1017</a>        );
-<a href=#1018 id=1018 data-nosnippet>1018</a>    }
-<a href=#1019 id=1019 data-nosnippet>1019</a>}
+<a href=#931 id=931 data-nosnippet>931</a>        <span class="kw">let </span>graph: Graph = <span class="macro">dot!</span>(
+<a href=#932 id=932 data-nosnippet>932</a>            digraph G{
+<a href=#933 id=933 data-nosnippet>933</a>                e1      [style=invis]
+<a href=#934 id=934 data-nosnippet>934</a>                e2      [style=invis]
+<a href=#935 id=935 data-nosnippet>935</a>                e1 -&gt; n1  [particle=H]
+<a href=#936 id=936 data-nosnippet>936</a>                n4 -&gt; e2    [particle=H]
+<a href=#937 id=937 data-nosnippet>937</a>                n1 -&gt; n2    [particle=H]
+<a href=#938 id=938 data-nosnippet>938</a>                n1 -&gt; n3    [particle=H]
+<a href=#939 id=939 data-nosnippet>939</a>                n2 -&gt; n3    [particle=t]
+<a href=#940 id=940 data-nosnippet>940</a>                n3 -&gt; n4    [particle=t]
+<a href=#941 id=941 data-nosnippet>941</a>                n4 -&gt; n2    [particle=t]
+<a href=#942 id=942 data-nosnippet>942</a>            }
+<a href=#943 id=943 data-nosnippet>943</a>        )
+<a href=#944 id=944 data-nosnippet>944</a>        .unwrap();
+<a href=#945 id=945 data-nosnippet>945</a>        <span class="kw">let </span><span class="kw-2">mut </span>amplitude: AmplitudeGraph = AmplitudeGraph::new(graph.clone());
+<a href=#946 id=946 data-nosnippet>946</a>
+<a href=#947 id=947 data-nosnippet>947</a>        amplitude
+<a href=#948 id=948 data-nosnippet>948</a>            .preprocess(
+<a href=#949 id=949 data-nosnippet>949</a>                <span class="kw-2">&amp;</span>model,
+<a href=#950 id=950 data-nosnippet>950</a>                <span class="kw-2">&amp;</span>GenerationSettings {
+<a href=#951 id=951 data-nosnippet>951</a>                    compile: GammaloopCompileOptions {
+<a href=#952 id=952 data-nosnippet>952</a>                        compilation_mode: CompilationMode::Cpp,
+<a href=#953 id=953 data-nosnippet>953</a>                        fast_math: <span class="bool-val">false</span>,
+<a href=#954 id=954 data-nosnippet>954</a>                        optimization_level: CompilationOptimizationLevel::O0,
+<a href=#955 id=955 data-nosnippet>955</a>                        unsafe_math: <span class="bool-val">false</span>,
+<a href=#956 id=956 data-nosnippet>956</a>                        compiler: <span class="kw">crate</span>::settings::global::default_external_compiler().to_owned(),
+<a href=#957 id=957 data-nosnippet>957</a>                        custom: Vec::new(),
+<a href=#958 id=958 data-nosnippet>958</a>                    },
+<a href=#959 id=959 data-nosnippet>959</a>                    tropical_subgraph_table: TropicalSubgraphTableSettings {
+<a href=#960 id=960 data-nosnippet>960</a>                        panic_on_fail: <span class="bool-val">false</span>,
+<a href=#961 id=961 data-nosnippet>961</a>                        target_omega: <span class="number">1.0</span>,
+<a href=#962 id=962 data-nosnippet>962</a>                        ..Default::default()
+<a href=#963 id=963 data-nosnippet>963</a>                    },
+<a href=#964 id=964 data-nosnippet>964</a>                    ..Default::default()
+<a href=#965 id=965 data-nosnippet>965</a>                },
+<a href=#966 id=966 data-nosnippet>966</a>                <span class="kw-2">&amp;</span>LockedRuntimeSettings::from(<span class="kw-2">&amp;</span>RuntimeSettings::default()),
+<a href=#967 id=967 data-nosnippet>967</a>            )
+<a href=#968 id=968 data-nosnippet>968</a>            .unwrap();
+<a href=#969 id=969 data-nosnippet>969</a>
+<a href=#970 id=970 data-nosnippet>970</a>        <span class="kw">let </span><span class="kw-2">mut </span>symbols = Vec::new();
+<a href=#971 id=971 data-nosnippet>971</a>        State::export(<span class="kw-2">&amp;mut </span>symbols).unwrap();
+<a href=#972 id=972 data-nosnippet>972</a>        <span class="kw">let </span>state_map = State::import(<span class="kw-2">&amp;mut </span>std::io::Cursor::new(symbols), <span class="prelude-val">None</span>).unwrap();
+<a href=#973 id=973 data-nosnippet>973</a>
+<a href=#974 id=974 data-nosnippet>974</a>        <span class="kw">let </span>context = GammaLoopContextContainer {
+<a href=#975 id=975 data-nosnippet>975</a>            model: <span class="kw-2">&amp;</span>model,
+<a href=#976 id=976 data-nosnippet>976</a>            state_map: <span class="kw-2">&amp;</span>state_map,
+<a href=#977 id=977 data-nosnippet>977</a>        };
+<a href=#978 id=978 data-nosnippet>978</a>
+<a href=#979 id=979 data-nosnippet>979</a>        <span class="kw">let </span>encoded_amplitude =
+<a href=#980 id=980 data-nosnippet>980</a>            bincode::encode_to_vec(<span class="kw-2">&amp;</span>amplitude, bincode::config::standard()).unwrap();
+<a href=#981 id=981 data-nosnippet>981</a>
+<a href=#982 id=982 data-nosnippet>982</a>        <span class="kw">let </span>decoded: AmplitudeGraph = bincode::decode_from_slice_with_context(
+<a href=#983 id=983 data-nosnippet>983</a>            <span class="kw-2">&amp;</span>encoded_amplitude,
+<a href=#984 id=984 data-nosnippet>984</a>            bincode::config::standard(),
+<a href=#985 id=985 data-nosnippet>985</a>            context,
+<a href=#986 id=986 data-nosnippet>986</a>        )
+<a href=#987 id=987 data-nosnippet>987</a>        .expect(<span class="string">"amplitude decode failed"</span>)
+<a href=#988 id=988 data-nosnippet>988</a>        .<span class="number">0</span>;
+<a href=#989 id=989 data-nosnippet>989</a>
+<a href=#990 id=990 data-nosnippet>990</a>        <span class="macro">assert_eq!</span>(decoded.graph.name, amplitude.graph.name);
+<a href=#991 id=991 data-nosnippet>991</a>        <span class="macro">assert_eq!</span>(decoded.graph.overall_factor, amplitude.graph.overall_factor);
+<a href=#992 id=992 data-nosnippet>992</a>        <span class="macro">assert_eq!</span>(
+<a href=#993 id=993 data-nosnippet>993</a>            decoded.graph.loop_momentum_basis,
+<a href=#994 id=994 data-nosnippet>994</a>            amplitude.graph.loop_momentum_basis
+<a href=#995 id=995 data-nosnippet>995</a>        );
+<a href=#996 id=996 data-nosnippet>996</a>        <span class="macro">assert_eq!</span>(
+<a href=#997 id=997 data-nosnippet>997</a>            decoded.graph.param_builder.reps,
+<a href=#998 id=998 data-nosnippet>998</a>            amplitude.graph.param_builder.reps
+<a href=#999 id=999 data-nosnippet>999</a>        );
+<a href=#1000 id=1000 data-nosnippet>1000</a>        <span class="macro">assert_eq!</span>(
+<a href=#1001 id=1001 data-nosnippet>1001</a>            decoded.graph.param_builder.values,
+<a href=#1002 id=1002 data-nosnippet>1002</a>            amplitude.graph.param_builder.values
+<a href=#1003 id=1003 data-nosnippet>1003</a>        );
+<a href=#1004 id=1004 data-nosnippet>1004</a>        <span class="macro">assert_eq!</span>(
+<a href=#1005 id=1005 data-nosnippet>1005</a>            decoded.derived_data.all_mighty_integrand,
+<a href=#1006 id=1006 data-nosnippet>1006</a>            amplitude.derived_data.all_mighty_integrand
+<a href=#1007 id=1007 data-nosnippet>1007</a>        );
+<a href=#1008 id=1008 data-nosnippet>1008</a>        <span class="macro">assert_eq!</span>(
+<a href=#1009 id=1009 data-nosnippet>1009</a>            decoded.derived_data.all_mighty_numerators,
+<a href=#1010 id=1010 data-nosnippet>1010</a>            amplitude.derived_data.all_mighty_numerators
+<a href=#1011 id=1011 data-nosnippet>1011</a>        );
+<a href=#1012 id=1012 data-nosnippet>1012</a>    }
+<a href=#1013 id=1013 data-nosnippet>1013</a>}
 </code></pre></div></section></main></body></html>

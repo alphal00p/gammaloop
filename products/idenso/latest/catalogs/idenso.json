@@ -12,7 +12,6 @@
     "language": "rust",
     "features": [
       "native",
-      "bincode",
       "reference-cases"
     ]
   },
@@ -722,7 +721,7 @@
             "source": {
               "identifier": "idenso::representations::initialize",
               "file": "crates/idenso/src/representations.rs",
-              "line": 127,
+              "line": 122,
               "column": 1
             }
           }

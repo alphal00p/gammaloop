@@ -27,21 +27,21 @@
 <a href=#26 id=26 data-nosnippet>26</a>
 <a href=#27 id=27 data-nosnippet>27</a><span class="kw">use </span><span class="kw">crate</span>::algebra::{ScalarMul, algebraic_traits::RefOne};
 <a href=#28 id=28 data-nosnippet>28</a><span class="kw">use </span><span class="kw">crate</span>::contraction::{Contract, Trace};
-<a href=#29 id=29 data-nosnippet>29</a><span class="attr">#[cfg(feature = <span class="string">"shadowing"</span>)]
+<a href=#29 id=29 data-nosnippet>29</a><span class="attr">#[cfg(feature = <span class="string">"symbolica"</span>)]
 <a href=#30 id=30 data-nosnippet>30</a></span><span class="kw">use </span><span class="kw">crate</span>::iterators::IteratableTensor;
 <a href=#31 id=31 data-nosnippet>31</a><span class="kw">use </span><span class="kw">crate</span>::network::library::{DummyKey, FunctionLibrary, FunctionLibraryError, LibraryTensor};
 <a href=#32 id=32 data-nosnippet>32</a><span class="kw">use </span><span class="kw">crate</span>::structure::abstract_index::AbstractIndex;
-<a href=#33 id=33 data-nosnippet>33</a><span class="attr">#[cfg(feature = <span class="string">"shadowing"</span>)]
+<a href=#33 id=33 data-nosnippet>33</a><span class="attr">#[cfg(feature = <span class="string">"symbolica"</span>)]
 <a href=#34 id=34 data-nosnippet>34</a></span><span class="kw">use </span><span class="kw">crate</span>::structure::concrete_index::{ConcreteIndex, FlatIndex};
 <a href=#35 id=35 data-nosnippet>35</a><span class="kw">use </span><span class="kw">crate</span>::structure::permuted::ApplyPendingIndexPermutation;
 <a href=#36 id=36 data-nosnippet>36</a><span class="comment">// use crate::shadowing::Concretize;
-<a href=#37 id=37 data-nosnippet>37</a></span><span class="attr">#[cfg(feature = <span class="string">"shadowing"</span>)]
+<a href=#37 id=37 data-nosnippet>37</a></span><span class="attr">#[cfg(feature = <span class="string">"symbolica"</span>)]
 <a href=#38 id=38 data-nosnippet>38</a></span><span class="kw">use </span><span class="kw">crate</span>::structure::StructureContract;
 <a href=#39 id=39 data-nosnippet>39</a><span class="kw">use </span><span class="kw">crate</span>::structure::representation::LibrarySlot;
 <a href=#40 id=40 data-nosnippet>40</a><span class="kw">use </span><span class="kw">crate</span>::structure::slot::{AbsInd, IsAbstractSlot};
 <a href=#41 id=41 data-nosnippet>41</a><span class="kw">use </span><span class="kw">crate</span>::structure::{Canonicalized, HasName, StructureError, TensorShell};
 <a href=#42 id=42 data-nosnippet>42</a><span class="kw">use </span>std::borrow::Cow;
-<a href=#43 id=43 data-nosnippet>43</a><span class="attr">#[cfg(feature = <span class="string">"shadowing"</span>)]
+<a href=#43 id=43 data-nosnippet>43</a><span class="attr">#[cfg(feature = <span class="string">"symbolica"</span>)]
 <a href=#44 id=44 data-nosnippet>44</a></span><span class="kw">use </span>std::collections::HashMap;
 <a href=#45 id=45 data-nosnippet>45</a><span class="kw">use </span>std::fmt::Display;
 <a href=#46 id=46 data-nosnippet>46</a><span class="kw">use </span>std::ops::{Add, AddAssign, Div, Mul, MulAssign, Neg, Sub, SubAssign};
@@ -52,9 +52,9 @@
 <a href=#51 id=51 data-nosnippet>51</a><span class="kw">use </span>thiserror::Error;
 <a href=#52 id=52 data-nosnippet>52</a><span class="comment">// use log::trace;
 <a href=#53 id=53 data-nosnippet>53</a>
-<a href=#54 id=54 data-nosnippet>54</a></span><span class="attr">#[cfg(feature = <span class="string">"shadowing"</span>)]
+<a href=#54 id=54 data-nosnippet>54</a></span><span class="attr">#[cfg(feature = <span class="string">"symbolica"</span>)]
 <a href=#55 id=55 data-nosnippet>55</a></span><span class="kw">use </span><span class="kw">crate</span>::algebra::complex::RealOrComplexRef;
-<a href=#56 id=56 data-nosnippet>56</a><span class="attr">#[cfg(feature = <span class="string">"shadowing"</span>)]
+<a href=#56 id=56 data-nosnippet>56</a><span class="attr">#[cfg(feature = <span class="string">"symbolica"</span>)]
 <a href=#57 id=57 data-nosnippet>57</a></span><span class="kw">use </span><span class="kw">crate</span>::tensors::parametric::{
 <a href=#58 id=58 data-nosnippet>58</a>    AtomViewOrConcrete, ConcreteOrParam, ParamOrConcrete, ParamTensor,
 <a href=#59 id=59 data-nosnippet>59</a>};
@@ -68,14 +68,14 @@
 <a href=#67 id=67 data-nosnippet>67</a>};
 <a href=#68 id=68 data-nosnippet>68</a><span class="kw">use </span>eyre::eyre;
 <a href=#69 id=69 data-nosnippet>69</a>
-<a href=#70 id=70 data-nosnippet>70</a><span class="attr">#[cfg(feature = <span class="string">"shadowing"</span>)]
+<a href=#70 id=70 data-nosnippet>70</a><span class="attr">#[cfg(feature = <span class="string">"symbolica"</span>)]
 <a href=#71 id=71 data-nosnippet>71</a></span><span class="kw">use </span>symbolica::atom::{Atom, AtomCore, AtomView};
-<a href=#72 id=72 data-nosnippet>72</a><span class="attr">#[cfg(feature = <span class="string">"shadowing"</span>)]
+<a href=#72 id=72 data-nosnippet>72</a><span class="attr">#[cfg(feature = <span class="string">"symbolica"</span>)]
 <a href=#73 id=73 data-nosnippet>73</a></span><span class="kw">use </span>symbolica::id::AliasedAtom;
 <a href=#74 id=74 data-nosnippet>74</a>
-<a href=#75 id=75 data-nosnippet>75</a><span class="attr">#[cfg(feature = <span class="string">"shadowing"</span>)]
+<a href=#75 id=75 data-nosnippet>75</a><span class="attr">#[cfg(feature = <span class="string">"symbolica"</span>)]
 <a href=#76 id=76 data-nosnippet>76</a></span><span class="kw">pub mod </span>tags;
-<a href=#77 id=77 data-nosnippet>77</a><span class="attr">#[cfg(feature = <span class="string">"shadowing"</span>)]
+<a href=#77 id=77 data-nosnippet>77</a><span class="attr">#[cfg(feature = <span class="string">"symbolica"</span>)]
 <a href=#78 id=78 data-nosnippet>78</a></span><span class="kw">use </span>tags::{SPENSO_TAG, scalar_store_alias, scalar_store_alias_index};
 <a href=#79 id=79 data-nosnippet>79</a><span class="comment">// use eyre::Result;
 <a href=#80 id=80 data-nosnippet>80</a>
@@ -83,9 +83,9 @@
 <a href=#82 id=82 data-nosnippet>82</a>
 <a href=#83 id=83 data-nosnippet>83</a><span class="kw">const </span>LARGE_SUM_PROFILE_THRESHOLD: usize = <span class="number">32</span>;
 <a href=#84 id=84 data-nosnippet>84</a><span class="kw">const </span>MIN_LAZY_TENSOR_SUM_TERMS: usize = <span class="number">2</span>;
-<a href=#85 id=85 data-nosnippet>85</a><span class="attr">#[cfg(feature = <span class="string">"shadowing"</span>)]
+<a href=#85 id=85 data-nosnippet>85</a><span class="attr">#[cfg(feature = <span class="string">"symbolica"</span>)]
 <a href=#86 id=86 data-nosnippet>86</a></span><span class="kw">pub const </span>MAX_EAGER_TENSOR_SUM_BYTES: usize = <span class="number">16 </span>* <span class="number">1024 </span>* <span class="number">1024</span>;
-<a href=#87 id=87 data-nosnippet>87</a><span class="attr">#[cfg(feature = <span class="string">"shadowing"</span>)]
+<a href=#87 id=87 data-nosnippet>87</a><span class="attr">#[cfg(feature = <span class="string">"symbolica"</span>)]
 <a href=#88 id=88 data-nosnippet>88</a></span><span class="kw">const </span>MIN_LAZY_FUSED_NUMERIC_CONTRACT_TERMS: usize = <span class="number">8</span>;
 <a href=#89 id=89 data-nosnippet>89</a>
 <a href=#90 id=90 data-nosnippet>90</a><span class="kw">pub struct </span>FastTensorSumContractTerm&lt;T, Sc&gt; {
@@ -100,7 +100,7 @@
 <a href=#99 id=99 data-nosnippet>99</a>}
 <a href=#100 id=100 data-nosnippet>100</a>
 <a href=#101 id=101 data-nosnippet>101</a><span class="kw">impl</span>&lt;T, Sc&gt; FastTensorSumContract&lt;T, Sc&gt; {
-<a href=#102 id=102 data-nosnippet>102</a>    <span class="attr">#[cfg(feature = <span class="string">"shadowing"</span>)]
+<a href=#102 id=102 data-nosnippet>102</a>    <span class="attr">#[cfg(feature = <span class="string">"symbolica"</span>)]
 <a href=#103 id=103 data-nosnippet>103</a>    </span><span class="kw">fn </span>map&lt;U&gt;(<span class="self">self</span>, <span class="kw-2">mut </span>f: <span class="kw">impl </span>FnMut(T) -&gt; U) -&gt; FastTensorSumContract&lt;U, Sc&gt; {
 <a href=#104 id=104 data-nosnippet>104</a>        <span class="kw">match </span><span class="self">self </span>{
 <a href=#105 id=105 data-nosnippet>105</a>            FastTensorSumContract::Materialized(tensor) =&gt; {
@@ -181,7 +181,7 @@
 <a href=#180 id=180 data-nosnippet>180</a>        }
 <a href=#181 id=181 data-nosnippet>181</a>    }
 <a href=#182 id=182 data-nosnippet>182</a>
-<a href=#183 id=183 data-nosnippet>183</a>    <span class="attr">#[cfg(feature = <span class="string">"shadowing"</span>)]
+<a href=#183 id=183 data-nosnippet>183</a>    <span class="attr">#[cfg(feature = <span class="string">"symbolica"</span>)]
 <a href=#184 id=184 data-nosnippet>184</a>    </span><span class="kw">fn </span>from_param_tensor&lt;S&gt;(tensor: <span class="kw-2">&amp;</span>ParamTensor&lt;S&gt;) -&gt; <span class="self">Self
 <a href=#185 id=185 data-nosnippet>185</a>    </span><span class="kw">where
 <a href=#186 id=186 data-nosnippet>186</a>        </span>S: TensorStructure + Clone,
@@ -329,7 +329,7 @@
 <a href=#328 id=328 data-nosnippet>328</a><span class="kw">impl</span>&lt;S, Sc&gt; FastTensorSumContractible&lt;Sc&gt; <span class="kw">for </span>TensorShell&lt;S&gt; {}
 <a href=#329 id=329 data-nosnippet>329</a><span class="kw">impl</span>&lt;S, Sc&gt; TensorCommonFactor&lt;Sc&gt; <span class="kw">for </span>TensorShell&lt;S&gt; {}
 <a href=#330 id=330 data-nosnippet>330</a>
-<a href=#331 id=331 data-nosnippet>331</a><span class="attr">#[cfg(feature = <span class="string">"shadowing"</span>)]
+<a href=#331 id=331 data-nosnippet>331</a><span class="attr">#[cfg(feature = <span class="string">"symbolica"</span>)]
 <a href=#332 id=332 data-nosnippet>332</a></span><span class="kw">impl</span>&lt;S&gt; FastTensorSum <span class="kw">for </span>ParamTensor&lt;S&gt;
 <a href=#333 id=333 data-nosnippet>333</a><span class="kw">where
 <a href=#334 id=334 data-nosnippet>334</a>    </span>S: TensorStructure + Clone + Sync,
@@ -449,7 +449,7 @@
 <a href=#448 id=448 data-nosnippet>448</a>    }
 <a href=#449 id=449 data-nosnippet>449</a>}
 <a href=#450 id=450 data-nosnippet>450</a>
-<a href=#451 id=451 data-nosnippet>451</a><span class="attr">#[cfg(feature = <span class="string">"shadowing"</span>)]
+<a href=#451 id=451 data-nosnippet>451</a><span class="attr">#[cfg(feature = <span class="string">"symbolica"</span>)]
 <a href=#452 id=452 data-nosnippet>452</a>#[derive(Default)]
 <a href=#453 id=453 data-nosnippet>453</a></span><span class="kw">struct </span>FastTensorSumWorkload {
 <a href=#454 id=454 data-nosnippet>454</a>    shape: AtomSumShapeStats,
@@ -457,7 +457,7 @@
 <a href=#456 id=456 data-nosnippet>456</a>    max_group_bytes: usize,
 <a href=#457 id=457 data-nosnippet>457</a>}
 <a href=#458 id=458 data-nosnippet>458</a>
-<a href=#459 id=459 data-nosnippet>459</a><span class="attr">#[cfg(feature = <span class="string">"shadowing"</span>)]
+<a href=#459 id=459 data-nosnippet>459</a><span class="attr">#[cfg(feature = <span class="string">"symbolica"</span>)]
 <a href=#460 id=460 data-nosnippet>460</a></span><span class="kw">impl </span>FastTensorSumWorkload {
 <a href=#461 id=461 data-nosnippet>461</a>    <span class="comment">// These conservative floors select only shapes that showed a clear win in
 <a href=#462 id=462 data-nosnippet>462</a>    // the fast sparse-sum benchmark. In particular, a large number of trivial
@@ -510,7 +510,7 @@
 <a href=#509 id=509 data-nosnippet>509</a>    }
 <a href=#510 id=510 data-nosnippet>510</a>}
 <a href=#511 id=511 data-nosnippet>511</a>
-<a href=#512 id=512 data-nosnippet>512</a><span class="attr">#[cfg(feature = <span class="string">"shadowing"</span>)]
+<a href=#512 id=512 data-nosnippet>512</a><span class="attr">#[cfg(feature = <span class="string">"symbolica"</span>)]
 <a href=#513 id=513 data-nosnippet>513</a></span><span class="kw">impl</span>&lt;S&gt; FastTensorSumContractible&lt;Atom&gt; <span class="kw">for </span>ParamTensor&lt;S&gt;
 <a href=#514 id=514 data-nosnippet>514</a><span class="kw">where
 <a href=#515 id=515 data-nosnippet>515</a>    </span>S: TensorStructure + Clone + Send + Sync + StructureContract,
@@ -553,7 +553,7 @@
 <a href=#552 id=552 data-nosnippet>552</a>    }
 <a href=#553 id=553 data-nosnippet>553</a>}
 <a href=#554 id=554 data-nosnippet>554</a>
-<a href=#555 id=555 data-nosnippet>555</a><span class="attr">#[cfg(feature = <span class="string">"shadowing"</span>)]
+<a href=#555 id=555 data-nosnippet>555</a><span class="attr">#[cfg(feature = <span class="string">"symbolica"</span>)]
 <a href=#556 id=556 data-nosnippet>556</a></span><span class="kw">impl</span>&lt;S&gt; TensorCommonFactor&lt;Atom&gt; <span class="kw">for </span>ParamTensor&lt;S&gt;
 <a href=#557 id=557 data-nosnippet>557</a><span class="kw">where
 <a href=#558 id=558 data-nosnippet>558</a>    </span>S: TensorStructure + Clone,
@@ -596,7 +596,7 @@
 <a href=#595 id=595 data-nosnippet>595</a>    }
 <a href=#596 id=596 data-nosnippet>596</a>}
 <a href=#597 id=597 data-nosnippet>597</a>
-<a href=#598 id=598 data-nosnippet>598</a><span class="attr">#[cfg(feature = <span class="string">"shadowing"</span>)]
+<a href=#598 id=598 data-nosnippet>598</a><span class="attr">#[cfg(feature = <span class="string">"symbolica"</span>)]
 <a href=#599 id=599 data-nosnippet>599</a>#[allow(clippy::too_many_arguments)]
 <a href=#600 id=600 data-nosnippet>600</a></span><span class="kw">fn </span>sparse_atom_pair_estimate&lt;S&gt;(
 <a href=#601 id=601 data-nosnippet>601</a>    left: <span class="kw-2">&amp;</span>ParamTensor&lt;S&gt;,
@@ -719,7 +719,7 @@
 <a href=#718 id=718 data-nosnippet>718</a>    }
 <a href=#719 id=719 data-nosnippet>719</a>}
 <a href=#720 id=720 data-nosnippet>720</a>
-<a href=#721 id=721 data-nosnippet>721</a><span class="attr">#[cfg(feature = <span class="string">"shadowing"</span>)]
+<a href=#721 id=721 data-nosnippet>721</a><span class="attr">#[cfg(feature = <span class="string">"symbolica"</span>)]
 <a href=#722 id=722 data-nosnippet>722</a></span><span class="kw">fn </span>sparse_free_keys_by_match&lt;S&gt;(
 <a href=#723 id=723 data-nosnippet>723</a>    sparse: <span class="kw-2">&amp;</span>SparseTensor&lt;Atom, S&gt;,
 <a href=#724 id=724 data-nosnippet>724</a>    matches: <span class="kw-2">&amp;</span>[bool],
@@ -750,7 +750,7 @@
 <a href=#749 id=749 data-nosnippet>749</a>    groups
 <a href=#750 id=750 data-nosnippet>750</a>}
 <a href=#751 id=751 data-nosnippet>751</a>
-<a href=#752 id=752 data-nosnippet>752</a><span class="attr">#[cfg(feature = <span class="string">"shadowing"</span>)]
+<a href=#752 id=752 data-nosnippet>752</a><span class="attr">#[cfg(feature = <span class="string">"symbolica"</span>)]
 <a href=#753 id=753 data-nosnippet>753</a></span><span class="kw">impl</span>&lt;C, S&gt; FastTensorSum <span class="kw">for </span>ParamOrConcrete&lt;C, S&gt;
 <a href=#754 id=754 data-nosnippet>754</a><span class="kw">where
 <a href=#755 id=755 data-nosnippet>755</a>    </span>S: TensorStructure + Clone + Sync,
@@ -769,7 +769,7 @@
 <a href=#768 id=768 data-nosnippet>768</a>    }
 <a href=#769 id=769 data-nosnippet>769</a>}
 <a href=#770 id=770 data-nosnippet>770</a>
-<a href=#771 id=771 data-nosnippet>771</a><span class="attr">#[cfg(feature = <span class="string">"shadowing"</span>)]
+<a href=#771 id=771 data-nosnippet>771</a><span class="attr">#[cfg(feature = <span class="string">"symbolica"</span>)]
 <a href=#772 id=772 data-nosnippet>772</a></span><span class="kw">impl</span>&lt;C, S&gt; FastTensorSumContractible&lt;Atom&gt; <span class="kw">for </span>ParamOrConcrete&lt;C, S&gt;
 <a href=#773 id=773 data-nosnippet>773</a><span class="kw">where
 <a href=#774 id=774 data-nosnippet>774</a>    </span>S: TensorStructure + Clone + Send + Sync + StructureContract,
@@ -840,7 +840,7 @@
 <a href=#839 id=839 data-nosnippet>839</a>    }
 <a href=#840 id=840 data-nosnippet>840</a>}
 <a href=#841 id=841 data-nosnippet>841</a>
-<a href=#842 id=842 data-nosnippet>842</a><span class="attr">#[cfg(feature = <span class="string">"shadowing"</span>)]
+<a href=#842 id=842 data-nosnippet>842</a><span class="attr">#[cfg(feature = <span class="string">"symbolica"</span>)]
 <a href=#843 id=843 data-nosnippet>843</a></span><span class="kw">impl</span>&lt;C, S, CSc&gt; FastTensorSumContractible&lt;ConcreteOrParam&lt;CSc&gt;&gt; <span class="kw">for </span>ParamOrConcrete&lt;C, S&gt;
 <a href=#844 id=844 data-nosnippet>844</a><span class="kw">where
 <a href=#845 id=845 data-nosnippet>845</a>    </span>S: TensorStructure + Clone + Send + Sync + StructureContract,
@@ -896,7 +896,7 @@
 <a href=#895 id=895 data-nosnippet>895</a>    }
 <a href=#896 id=896 data-nosnippet>896</a>}
 <a href=#897 id=897 data-nosnippet>897</a>
-<a href=#898 id=898 data-nosnippet>898</a><span class="attr">#[cfg(feature = <span class="string">"shadowing"</span>)]
+<a href=#898 id=898 data-nosnippet>898</a><span class="attr">#[cfg(feature = <span class="string">"symbolica"</span>)]
 <a href=#899 id=899 data-nosnippet>899</a></span><span class="kw">impl</span>&lt;C, S&gt; TensorCommonFactor&lt;Atom&gt; <span class="kw">for </span>ParamOrConcrete&lt;C, S&gt;
 <a href=#900 id=900 data-nosnippet>900</a><span class="kw">where
 <a href=#901 id=901 data-nosnippet>901</a>    </span>S: TensorStructure + Clone,
@@ -911,7 +911,7 @@
 <a href=#910 id=910 data-nosnippet>910</a>    }
 <a href=#911 id=911 data-nosnippet>911</a>}
 <a href=#912 id=912 data-nosnippet>912</a>
-<a href=#913 id=913 data-nosnippet>913</a><span class="attr">#[cfg(feature = <span class="string">"shadowing"</span>)]
+<a href=#913 id=913 data-nosnippet>913</a><span class="attr">#[cfg(feature = <span class="string">"symbolica"</span>)]
 <a href=#914 id=914 data-nosnippet>914</a></span><span class="kw">impl</span>&lt;C, S, CSc&gt; TensorCommonFactor&lt;ConcreteOrParam&lt;CSc&gt;&gt; <span class="kw">for </span>ParamOrConcrete&lt;C, S&gt;
 <a href=#915 id=915 data-nosnippet>915</a><span class="kw">where
 <a href=#916 id=916 data-nosnippet>916</a>    </span>S: TensorStructure + Clone,
@@ -929,7 +929,7 @@
 <a href=#928 id=928 data-nosnippet>928</a>    }
 <a href=#929 id=929 data-nosnippet>929</a>}
 <a href=#930 id=930 data-nosnippet>930</a>
-<a href=#931 id=931 data-nosnippet>931</a><span class="attr">#[cfg(feature = <span class="string">"shadowing"</span>)]
+<a href=#931 id=931 data-nosnippet>931</a><span class="attr">#[cfg(feature = <span class="string">"symbolica"</span>)]
 <a href=#932 id=932 data-nosnippet>932</a></span><span class="kw">struct </span>NumericContractEntry {
 <a href=#933 id=933 data-nosnippet>933</a>    index: Vec&lt;ConcreteIndex&gt;,
 <a href=#934 id=934 data-nosnippet>934</a>    coefficient: Atom,
@@ -937,7 +937,7 @@
 <a href=#936 id=936 data-nosnippet>936</a>    left_metric_negative: bool,
 <a href=#937 id=937 data-nosnippet>937</a>}
 <a href=#938 id=938 data-nosnippet>938</a>
-<a href=#939 id=939 data-nosnippet>939</a><span class="attr">#[cfg(feature = <span class="string">"shadowing"</span>)]
+<a href=#939 id=939 data-nosnippet>939</a><span class="attr">#[cfg(feature = <span class="string">"symbolica"</span>)]
 <a href=#940 id=940 data-nosnippet>940</a></span><span class="kw">struct </span>FusedNumericContractPlan&lt;S&gt;
 <a href=#941 id=941 data-nosnippet>941</a><span class="kw">where
 <a href=#942 id=942 data-nosnippet>942</a>    </span>S: TensorStructure,
@@ -955,7 +955,7 @@
 <a href=#954 id=954 data-nosnippet>954</a>    right_match_flags: Vec&lt;bool&gt;,
 <a href=#955 id=955 data-nosnippet>955</a>}
 <a href=#956 id=956 data-nosnippet>956</a>
-<a href=#957 id=957 data-nosnippet>957</a><span class="attr">#[cfg(feature = <span class="string">"shadowing"</span>)]
+<a href=#957 id=957 data-nosnippet>957</a><span class="attr">#[cfg(feature = <span class="string">"symbolica"</span>)]
 <a href=#958 id=958 data-nosnippet>958</a></span><span class="kw">fn </span>fused_numeric_tensor_sum_contract&lt;S&gt;(
 <a href=#959 id=959 data-nosnippet>959</a>    terms: <span class="kw-2">&amp;</span>[<span class="kw-2">&amp;</span>ParamTensor&lt;S&gt;],
 <a href=#960 id=960 data-nosnippet>960</a>    numeric: <span class="kw-2">&amp;</span>ParamTensor&lt;S&gt;,
@@ -1060,7 +1060,7 @@
 <a href=#1059 id=1059 data-nosnippet>1059</a>    })())
 <a href=#1060 id=1060 data-nosnippet>1060</a>}
 <a href=#1061 id=1061 data-nosnippet>1061</a>
-<a href=#1062 id=1062 data-nosnippet>1062</a><span class="attr">#[cfg(feature = <span class="string">"shadowing"</span>)]
+<a href=#1062 id=1062 data-nosnippet>1062</a><span class="attr">#[cfg(feature = <span class="string">"symbolica"</span>)]
 <a href=#1063 id=1063 data-nosnippet>1063</a></span><span class="kw">fn </span>fused_numeric_tensor_sum_contract_impl&lt;S&gt;(
 <a href=#1064 id=1064 data-nosnippet>1064</a>    terms: <span class="kw-2">&amp;</span>[<span class="kw-2">&amp;</span>ParamTensor&lt;S&gt;],
 <a href=#1065 id=1065 data-nosnippet>1065</a>    plan: FusedNumericContractPlan&lt;S&gt;,
@@ -1091,7 +1091,7 @@
 <a href=#1090 id=1090 data-nosnippet>1090</a>    plan.finish_groups(groups)
 <a href=#1091 id=1091 data-nosnippet>1091</a>}
 <a href=#1092 id=1092 data-nosnippet>1092</a>
-<a href=#1093 id=1093 data-nosnippet>1093</a><span class="attr">#[cfg(feature = <span class="string">"shadowing"</span>)]
+<a href=#1093 id=1093 data-nosnippet>1093</a><span class="attr">#[cfg(feature = <span class="string">"symbolica"</span>)]
 <a href=#1094 id=1094 data-nosnippet>1094</a></span><span class="kw">impl</span>&lt;S&gt; FusedNumericContractPlan&lt;S&gt;
 <a href=#1095 id=1095 data-nosnippet>1095</a><span class="kw">where
 <a href=#1096 id=1096 data-nosnippet>1096</a>    </span>S: TensorStructure + Clone + Send + Sync + StructureContract,
@@ -1454,7 +1454,7 @@
 <a href=#1453 id=1453 data-nosnippet>1453</a>    }
 <a href=#1454 id=1454 data-nosnippet>1454</a>}
 <a href=#1455 id=1455 data-nosnippet>1455</a>
-<a href=#1456 id=1456 data-nosnippet>1456</a><span class="attr">#[cfg(feature = <span class="string">"shadowing"</span>)]
+<a href=#1456 id=1456 data-nosnippet>1456</a><span class="attr">#[cfg(feature = <span class="string">"symbolica"</span>)]
 <a href=#1457 id=1457 data-nosnippet>1457</a></span><span class="kw">fn </span>common_sparse_atom_factors&lt;S&gt;(sum_sparse: <span class="kw-2">&amp;</span>SparseTensor&lt;Atom, S&gt;) -&gt; Vec&lt;Atom&gt;
 <a href=#1458 id=1458 data-nosnippet>1458</a><span class="kw">where
 <a href=#1459 id=1459 data-nosnippet>1459</a>    </span>S: TensorStructure,
@@ -1481,7 +1481,7 @@
 <a href=#1480 id=1480 data-nosnippet>1480</a>    common
 <a href=#1481 id=1481 data-nosnippet>1481</a>}
 <a href=#1482 id=1482 data-nosnippet>1482</a>
-<a href=#1483 id=1483 data-nosnippet>1483</a><span class="attr">#[cfg(feature = <span class="string">"shadowing"</span>)]
+<a href=#1483 id=1483 data-nosnippet>1483</a><span class="attr">#[cfg(feature = <span class="string">"symbolica"</span>)]
 <a href=#1484 id=1484 data-nosnippet>1484</a></span><span class="kw">fn </span>atom_factors(atom: AtomView&lt;<span class="lifetime">'_</span>&gt;) -&gt; Vec&lt;Atom&gt; {
 <a href=#1485 id=1485 data-nosnippet>1485</a>    <span class="kw">match </span>atom {
 <a href=#1486 id=1486 data-nosnippet>1486</a>        AtomView::Mul(mul) =&gt; mul
@@ -1492,7 +1492,7 @@
 <a href=#1491 id=1491 data-nosnippet>1491</a>    }
 <a href=#1492 id=1492 data-nosnippet>1492</a>}
 <a href=#1493 id=1493 data-nosnippet>1493</a>
-<a href=#1494 id=1494 data-nosnippet>1494</a><span class="attr">#[cfg(feature = <span class="string">"shadowing"</span>)]
+<a href=#1494 id=1494 data-nosnippet>1494</a><span class="attr">#[cfg(feature = <span class="string">"symbolica"</span>)]
 <a href=#1495 id=1495 data-nosnippet>1495</a></span><span class="kw">fn </span>atom_contains_factor(atom: AtomView&lt;<span class="lifetime">'_</span>&gt;, factor: <span class="kw-2">&amp;</span>Atom) -&gt; bool {
 <a href=#1496 id=1496 data-nosnippet>1496</a>    <span class="kw">match </span>atom {
 <a href=#1497 id=1497 data-nosnippet>1497</a>        AtomView::Mul(mul) =&gt; mul
@@ -1502,7 +1502,7 @@
 <a href=#1501 id=1501 data-nosnippet>1501</a>    }
 <a href=#1502 id=1502 data-nosnippet>1502</a>}
 <a href=#1503 id=1503 data-nosnippet>1503</a>
-<a href=#1504 id=1504 data-nosnippet>1504</a><span class="attr">#[cfg(feature = <span class="string">"shadowing"</span>)]
+<a href=#1504 id=1504 data-nosnippet>1504</a><span class="attr">#[cfg(feature = <span class="string">"symbolica"</span>)]
 <a href=#1505 id=1505 data-nosnippet>1505</a></span><span class="kw">fn </span>atom_without_factors(atom: AtomView&lt;<span class="lifetime">'_</span>&gt;, factors: <span class="kw-2">&amp;</span>[Atom]) -&gt; Atom {
 <a href=#1506 id=1506 data-nosnippet>1506</a>    <span class="kw">match </span>atom {
 <a href=#1507 id=1507 data-nosnippet>1507</a>        AtomView::Mul(mul) =&gt; {
@@ -1530,14 +1530,14 @@
 <a href=#1529 id=1529 data-nosnippet>1529</a>    }
 <a href=#1530 id=1530 data-nosnippet>1530</a>}
 <a href=#1531 id=1531 data-nosnippet>1531</a>
-<a href=#1532 id=1532 data-nosnippet>1532</a><span class="attr">#[cfg(feature = <span class="string">"shadowing"</span>)]
+<a href=#1532 id=1532 data-nosnippet>1532</a><span class="attr">#[cfg(feature = <span class="string">"symbolica"</span>)]
 <a href=#1533 id=1533 data-nosnippet>1533</a></span><span class="kw">fn </span>atom_product(factors: <span class="kw">impl </span>IntoIterator&lt;Item = Atom&gt;) -&gt; Atom {
 <a href=#1534 id=1534 data-nosnippet>1534</a>    factors
 <a href=#1535 id=1535 data-nosnippet>1535</a>        .into_iter()
 <a href=#1536 id=1536 data-nosnippet>1536</a>        .fold(Atom::num(<span class="number">1</span>), |product, factor| product * factor)
 <a href=#1537 id=1537 data-nosnippet>1537</a>}
 <a href=#1538 id=1538 data-nosnippet>1538</a>
-<a href=#1539 id=1539 data-nosnippet>1539</a><span class="attr">#[cfg(feature = <span class="string">"shadowing"</span>)]
+<a href=#1539 id=1539 data-nosnippet>1539</a><span class="attr">#[cfg(feature = <span class="string">"symbolica"</span>)]
 <a href=#1540 id=1540 data-nosnippet>1540</a></span><span class="kw">fn </span>collect_numeric_contract_entries&lt;S&gt;(
 <a href=#1541 id=1541 data-nosnippet>1541</a>    numeric: <span class="kw-2">&amp;</span>SparseTensor&lt;Atom, S&gt;,
 <a href=#1542 id=1542 data-nosnippet>1542</a>    numeric_match_axes: <span class="kw-2">&amp;</span>[usize],
@@ -1572,12 +1572,12 @@
 <a href=#1571 id=1571 data-nosnippet>1571</a>    <span class="prelude-val">Ok</span>(entries)
 <a href=#1572 id=1572 data-nosnippet>1572</a>}
 <a href=#1573 id=1573 data-nosnippet>1573</a>
-<a href=#1574 id=1574 data-nosnippet>1574</a><span class="attr">#[cfg(feature = <span class="string">"shadowing"</span>)]
+<a href=#1574 id=1574 data-nosnippet>1574</a><span class="attr">#[cfg(feature = <span class="string">"symbolica"</span>)]
 <a href=#1575 id=1575 data-nosnippet>1575</a></span><span class="kw">fn </span>component_key(index: <span class="kw-2">&amp;</span>[ConcreteIndex], axes: <span class="kw-2">&amp;</span>[usize]) -&gt; Vec&lt;ConcreteIndex&gt; {
 <a href=#1576 id=1576 data-nosnippet>1576</a>    axes.iter().map(|axis| index[<span class="kw-2">*</span>axis]).collect()
 <a href=#1577 id=1577 data-nosnippet>1577</a>}
 <a href=#1578 id=1578 data-nosnippet>1578</a>
-<a href=#1579 id=1579 data-nosnippet>1579</a><span class="attr">#[cfg(feature = <span class="string">"shadowing"</span>)]
+<a href=#1579 id=1579 data-nosnippet>1579</a><span class="attr">#[cfg(feature = <span class="string">"symbolica"</span>)]
 <a href=#1580 id=1580 data-nosnippet>1580</a></span><span class="kw">fn </span>match_flags(order: usize, axes: <span class="kw-2">&amp;</span>[usize]) -&gt; Vec&lt;bool&gt; {
 <a href=#1581 id=1581 data-nosnippet>1581</a>    <span class="kw">let </span><span class="kw-2">mut </span>flags = <span class="macro">vec!</span>[<span class="bool-val">false</span>; order];
 <a href=#1582 id=1582 data-nosnippet>1582</a>    <span class="kw">for </span>axis <span class="kw">in </span>axes {
@@ -1586,7 +1586,7 @@
 <a href=#1585 id=1585 data-nosnippet>1585</a>    flags
 <a href=#1586 id=1586 data-nosnippet>1586</a>}
 <a href=#1587 id=1587 data-nosnippet>1587</a>
-<a href=#1588 id=1588 data-nosnippet>1588</a><span class="attr">#[cfg(feature = <span class="string">"shadowing"</span>)]
+<a href=#1588 id=1588 data-nosnippet>1588</a><span class="attr">#[cfg(feature = <span class="string">"symbolica"</span>)]
 <a href=#1589 id=1589 data-nosnippet>1589</a></span><span class="kw">fn </span>metric_negative&lt;S&gt;(
 <a href=#1590 id=1590 data-nosnippet>1590</a>    structure: <span class="kw-2">&amp;</span>S,
 <a href=#1591 id=1591 data-nosnippet>1591</a>    matched_axes: <span class="kw-2">&amp;</span>[usize],
@@ -1613,7 +1613,7 @@
 <a href=#1612 id=1612 data-nosnippet>1612</a>    <span class="prelude-val">Ok</span>(negative)
 <a href=#1613 id=1613 data-nosnippet>1613</a>}
 <a href=#1614 id=1614 data-nosnippet>1614</a>
-<a href=#1615 id=1615 data-nosnippet>1615</a><span class="attr">#[cfg(feature = <span class="string">"shadowing"</span>)]
+<a href=#1615 id=1615 data-nosnippet>1615</a><span class="attr">#[cfg(feature = <span class="string">"symbolica"</span>)]
 <a href=#1616 id=1616 data-nosnippet>1616</a></span><span class="kw">fn </span>contract_result_index&lt;S&gt;(
 <a href=#1617 id=1617 data-nosnippet>1617</a>    result_structure: <span class="kw-2">&amp;</span>S,
 <a href=#1618 id=1618 data-nosnippet>1618</a>    left_slots: <span class="kw-2">&amp;</span>[S::Slot],
@@ -1660,7 +1660,7 @@
 <a href=#1659 id=1659 data-nosnippet>1659</a>        .map_err(ContractionError::from)
 <a href=#1660 id=1660 data-nosnippet>1660</a>}
 <a href=#1661 id=1661 data-nosnippet>1661</a>
-<a href=#1662 id=1662 data-nosnippet>1662</a><span class="attr">#[cfg(feature = <span class="string">"shadowing"</span>)]
+<a href=#1662 id=1662 data-nosnippet>1662</a><span class="attr">#[cfg(feature = <span class="string">"symbolica"</span>)]
 <a href=#1663 id=1663 data-nosnippet>1663</a></span><span class="kw">fn </span>multiply_atom_by_numeric_coefficient(atom: Atom, coefficient: <span class="kw-2">&amp;</span>Atom) -&gt; Atom {
 <a href=#1664 id=1664 data-nosnippet>1664</a>    <span class="kw">if </span>coefficient == <span class="kw-2">&amp;</span>Atom::num(<span class="number">1</span>) {
 <a href=#1665 id=1665 data-nosnippet>1665</a>        atom
@@ -1682,7 +1682,7 @@
 <a href=#1681 id=1681 data-nosnippet>1681</a>    Eq,
 <a href=#1682 id=1682 data-nosnippet>1682</a>)]
 <a href=#1683 id=1683 data-nosnippet>1683</a>#[cfg_attr(
-<a href=#1684 id=1684 data-nosnippet>1684</a>    feature = <span class="string">"shadowing"</span>,
+<a href=#1684 id=1684 data-nosnippet>1684</a>    feature = <span class="string">"symbolica"</span>,
 <a href=#1685 id=1685 data-nosnippet>1685</a>    trait_decode(<span class="kw">trait </span>= symbolica::state::HasStateMap),
 <a href=#1686 id=1686 data-nosnippet>1686</a>)]
 <a href=#1687 id=1687 data-nosnippet>1687</a></span><span class="doccomment">/// An owned tensor-expression graph together with the values referenced by it.
@@ -1773,7 +1773,7 @@
 <a href=#1772 id=1772 data-nosnippet>1772</a>    </span><span class="kw">pub </span>state: NetworkState,
 <a href=#1773 id=1773 data-nosnippet>1773</a>}
 <a href=#1774 id=1774 data-nosnippet>1774</a>
-<a href=#1775 id=1775 data-nosnippet>1775</a><span class="attr">#[cfg(feature = <span class="string">"shadowing"</span>)]
+<a href=#1775 id=1775 data-nosnippet>1775</a><span class="attr">#[cfg(feature = <span class="string">"symbolica"</span>)]
 <a href=#1776 id=1776 data-nosnippet>1776</a>#[derive(Debug, Clone)]
 <a href=#1777 id=1777 data-nosnippet>1777</a></span><span class="kw">pub struct </span>ScalarAliases {
 <a href=#1778 id=1778 data-nosnippet>1778</a>    aliased_originals: Vec&lt;bool&gt;,
@@ -1783,7 +1783,7 @@
 <a href=#1782 id=1782 data-nosnippet>1782</a>    max_aliased_bytes: usize,
 <a href=#1783 id=1783 data-nosnippet>1783</a>}
 <a href=#1784 id=1784 data-nosnippet>1784</a>
-<a href=#1785 id=1785 data-nosnippet>1785</a><span class="attr">#[cfg(feature = <span class="string">"shadowing"</span>)]
+<a href=#1785 id=1785 data-nosnippet>1785</a><span class="attr">#[cfg(feature = <span class="string">"symbolica"</span>)]
 <a href=#1786 id=1786 data-nosnippet>1786</a></span><span class="kw">impl </span>ScalarAliases {
 <a href=#1787 id=1787 data-nosnippet>1787</a>    <span class="kw">fn </span>new(scalars: usize) -&gt; <span class="self">Self </span>{
 <a href=#1788 id=1788 data-nosnippet>1788</a>        <span class="self">Self </span>{
@@ -1882,7 +1882,7 @@
 <a href=#1881 id=1881 data-nosnippet>1881</a>    }
 <a href=#1882 id=1882 data-nosnippet>1882</a>}
 <a href=#1883 id=1883 data-nosnippet>1883</a>
-<a href=#1884 id=1884 data-nosnippet>1884</a><span class="attr">#[cfg(feature = <span class="string">"shadowing"</span>)]
+<a href=#1884 id=1884 data-nosnippet>1884</a><span class="attr">#[cfg(feature = <span class="string">"symbolica"</span>)]
 <a href=#1885 id=1885 data-nosnippet>1885</a></span><span class="kw">impl</span>&lt;T, K: Debug, FK: Debug, Aind: AbsInd&gt; Network&lt;NetworkStore&lt;T, Atom&gt;, K, FK, Aind&gt; {
 <a href=#1886 id=1886 data-nosnippet>1886</a>    <span class="kw">pub fn </span>alias_scalar_refs(
 <a href=#1887 id=1887 data-nosnippet>1887</a>        <span class="kw-2">&amp;mut </span><span class="self">self</span>,
@@ -2588,7 +2588,7 @@
 <a href=#2587 id=2587 data-nosnippet>2587</a>    </span><span class="attr">#[error(<span class="string">"library tensor graph has {actual} indices, expected {expected}"</span>)]
 <a href=#2588 id=2588 data-nosnippet>2588</a>    </span>LibraryIndexRankMismatch { expected: usize, actual: usize },
 <a href=#2589 id=2589 data-nosnippet>2589</a>    <span class="doccomment">/// A chain expression had invalid nesting.
-<a href=#2590 id=2590 data-nosnippet>2590</a>    </span><span class="attr">#[cfg(feature = <span class="string">"shadowing"</span>)]
+<a href=#2590 id=2590 data-nosnippet>2590</a>    </span><span class="attr">#[cfg(feature = <span class="string">"symbolica"</span>)]
 <a href=#2591 id=2591 data-nosnippet>2591</a>    #[error(transparent)]
 <a href=#2592 id=2592 data-nosnippet>2592</a>    </span>ChainNesting(<span class="attr">#[from] </span>parsing::ChainNestingError),
 <a href=#2593 id=2593 data-nosnippet>2593</a>    <span class="doccomment">/// Applying a registered tensor function failed.
@@ -3196,7 +3196,7 @@
 <a href=#3195 id=3195 data-nosnippet>3195</a>}
 <a href=#3196 id=3196 data-nosnippet>3196</a>
 <a href=#3197 id=3197 data-nosnippet>3197</a><span class="comment">// use log::trace;
-<a href=#3198 id=3198 data-nosnippet>3198</a></span><span class="attr">#[cfg(feature = <span class="string">"shadowing"</span>)]
+<a href=#3198 id=3198 data-nosnippet>3198</a></span><span class="attr">#[cfg(feature = <span class="string">"symbolica"</span>)]
 <a href=#3199 id=3199 data-nosnippet>3199</a></span><span class="kw">pub mod </span>parsing;
 <a href=#3200 id=3200 data-nosnippet>3200</a><span class="comment">// use log::trace;
 <a href=#3201 id=3201 data-nosnippet>3201</a></span><span class="kw">pub mod </span>contract;
@@ -3368,7 +3368,7 @@
 <a href=#3367 id=3367 data-nosnippet>3367</a>    }
 <a href=#3368 id=3368 data-nosnippet>3368</a>}
 <a href=#3369 id=3369 data-nosnippet>3369</a>
-<a href=#3370 id=3370 data-nosnippet>3370</a><span class="attr">#[cfg(feature = <span class="string">"shadowing"</span>)]
+<a href=#3370 id=3370 data-nosnippet>3370</a><span class="attr">#[cfg(feature = <span class="string">"symbolica"</span>)]
 <a href=#3371 id=3371 data-nosnippet>3371</a>#[derive(Clone, Copy, Debug, Default)]
 <a href=#3372 id=3372 data-nosnippet>3372</a></span><span class="kw">struct </span>AtomSumShapeStats {
 <a href=#3373 id=3373 data-nosnippet>3373</a>    logical_entries: usize,
@@ -3381,7 +3381,7 @@
 <a href=#3380 id=3380 data-nosnippet>3380</a>    max_bytes: usize,
 <a href=#3381 id=3381 data-nosnippet>3381</a>}
 <a href=#3382 id=3382 data-nosnippet>3382</a>
-<a href=#3383 id=3383 data-nosnippet>3383</a><span class="attr">#[cfg(feature = <span class="string">"shadowing"</span>)]
+<a href=#3383 id=3383 data-nosnippet>3383</a><span class="attr">#[cfg(feature = <span class="string">"symbolica"</span>)]
 <a href=#3384 id=3384 data-nosnippet>3384</a></span><span class="kw">impl </span>AtomSumShapeStats {
 <a href=#3385 id=3385 data-nosnippet>3385</a>    <span class="kw">fn </span>observe_atom(<span class="kw-2">&amp;mut </span><span class="self">self</span>, atom: AtomView&lt;<span class="lifetime">'_</span>&gt;, include_bytes: bool) -&gt; (usize, usize) {
 <a href=#3386 id=3386 data-nosnippet>3386</a>        <span class="kw">let </span>terms = atom.nterms();
@@ -3413,19 +3413,19 @@
 <a href=#3412 id=3412 data-nosnippet>3412</a>    }
 <a href=#3413 id=3413 data-nosnippet>3413</a>}
 <a href=#3414 id=3414 data-nosnippet>3414</a>
-<a href=#3415 id=3415 data-nosnippet>3415</a><span class="attr">#[cfg(feature = <span class="string">"shadowing"</span>)]
+<a href=#3415 id=3415 data-nosnippet>3415</a><span class="attr">#[cfg(feature = <span class="string">"symbolica"</span>)]
 <a href=#3416 id=3416 data-nosnippet>3416</a></span><span class="kw">trait </span>AtomEntryShape {
 <a href=#3417 id=3417 data-nosnippet>3417</a>    <span class="kw">fn </span>observe_atom_shape(<span class="self">self</span>, stats: <span class="kw-2">&amp;mut </span>AtomSumShapeStats, include_bytes: bool);
 <a href=#3418 id=3418 data-nosnippet>3418</a>}
 <a href=#3419 id=3419 data-nosnippet>3419</a>
-<a href=#3420 id=3420 data-nosnippet>3420</a><span class="attr">#[cfg(feature = <span class="string">"shadowing"</span>)]
+<a href=#3420 id=3420 data-nosnippet>3420</a><span class="attr">#[cfg(feature = <span class="string">"symbolica"</span>)]
 <a href=#3421 id=3421 data-nosnippet>3421</a></span><span class="kw">impl </span>AtomEntryShape <span class="kw">for </span>AtomView&lt;<span class="lifetime">'_</span>&gt; {
 <a href=#3422 id=3422 data-nosnippet>3422</a>    <span class="kw">fn </span>observe_atom_shape(<span class="self">self</span>, stats: <span class="kw-2">&amp;mut </span>AtomSumShapeStats, include_bytes: bool) {
 <a href=#3423 id=3423 data-nosnippet>3423</a>        stats.observe_atom(<span class="self">self</span>, include_bytes);
 <a href=#3424 id=3424 data-nosnippet>3424</a>    }
 <a href=#3425 id=3425 data-nosnippet>3425</a>}
 <a href=#3426 id=3426 data-nosnippet>3426</a>
-<a href=#3427 id=3427 data-nosnippet>3427</a><span class="attr">#[cfg(feature = <span class="string">"shadowing"</span>)]
+<a href=#3427 id=3427 data-nosnippet>3427</a><span class="attr">#[cfg(feature = <span class="string">"symbolica"</span>)]
 <a href=#3428 id=3428 data-nosnippet>3428</a></span><span class="kw">impl</span>&lt;T&gt; AtomEntryShape <span class="kw">for </span>AtomViewOrConcrete&lt;<span class="lifetime">'_</span>, T&gt; {
 <a href=#3429 id=3429 data-nosnippet>3429</a>    <span class="kw">fn </span>observe_atom_shape(<span class="self">self</span>, stats: <span class="kw-2">&amp;mut </span>AtomSumShapeStats, include_bytes: bool) {
 <a href=#3430 id=3430 data-nosnippet>3430</a>        <span class="kw">if let </span>AtomViewOrConcrete::Atom(atom) = <span class="self">self </span>{
@@ -3434,28 +3434,28 @@
 <a href=#3433 id=3433 data-nosnippet>3433</a>    }
 <a href=#3434 id=3434 data-nosnippet>3434</a>}
 <a href=#3435 id=3435 data-nosnippet>3435</a>
-<a href=#3436 id=3436 data-nosnippet>3436</a><span class="attr">#[cfg(feature = <span class="string">"shadowing"</span>)]
+<a href=#3436 id=3436 data-nosnippet>3436</a><span class="attr">#[cfg(feature = <span class="string">"symbolica"</span>)]
 <a href=#3437 id=3437 data-nosnippet>3437</a></span><span class="kw">impl</span>&lt;T&gt; AtomEntryShape <span class="kw">for </span><span class="kw-2">&amp;</span>T {
 <a href=#3438 id=3438 data-nosnippet>3438</a>    <span class="kw">fn </span>observe_atom_shape(<span class="self">self</span>, _stats: <span class="kw-2">&amp;mut </span>AtomSumShapeStats, _include_bytes: bool) {}
 <a href=#3439 id=3439 data-nosnippet>3439</a>}
 <a href=#3440 id=3440 data-nosnippet>3440</a>
-<a href=#3441 id=3441 data-nosnippet>3441</a><span class="attr">#[cfg(feature = <span class="string">"shadowing"</span>)]
+<a href=#3441 id=3441 data-nosnippet>3441</a><span class="attr">#[cfg(feature = <span class="string">"symbolica"</span>)]
 <a href=#3442 id=3442 data-nosnippet>3442</a></span><span class="kw">impl</span>&lt;T&gt; AtomEntryShape <span class="kw">for </span>RealOrComplexRef&lt;<span class="lifetime">'_</span>, T&gt; {
 <a href=#3443 id=3443 data-nosnippet>3443</a>    <span class="kw">fn </span>observe_atom_shape(<span class="self">self</span>, _stats: <span class="kw-2">&amp;mut </span>AtomSumShapeStats, _include_bytes: bool) {}
 <a href=#3444 id=3444 data-nosnippet>3444</a>}
 <a href=#3445 id=3445 data-nosnippet>3445</a>
-<a href=#3446 id=3446 data-nosnippet>3446</a><span class="attr">#[cfg(feature = <span class="string">"shadowing"</span>)]
+<a href=#3446 id=3446 data-nosnippet>3446</a><span class="attr">#[cfg(feature = <span class="string">"symbolica"</span>)]
 <a href=#3447 id=3447 data-nosnippet>3447</a></span><span class="kw">trait </span>AtomSumShapeDiagnostics {
 <a href=#3448 id=3448 data-nosnippet>3448</a>    <span class="kw">fn </span>atom_sum_shape_stats(<span class="kw-2">&amp;</span><span class="self">self</span>, include_bytes: bool) -&gt; AtomSumShapeStats;
 <a href=#3449 id=3449 data-nosnippet>3449</a>}
 <a href=#3450 id=3450 data-nosnippet>3450</a>
-<a href=#3451 id=3451 data-nosnippet>3451</a><span class="attr">#[cfg(not(feature = <span class="string">"shadowing"</span>))]
+<a href=#3451 id=3451 data-nosnippet>3451</a><span class="attr">#[cfg(not(feature = <span class="string">"symbolica"</span>))]
 <a href=#3452 id=3452 data-nosnippet>3452</a></span><span class="kw">trait </span>AtomSumShapeDiagnostics {}
 <a href=#3453 id=3453 data-nosnippet>3453</a>
-<a href=#3454 id=3454 data-nosnippet>3454</a><span class="attr">#[cfg(not(feature = <span class="string">"shadowing"</span>))]
+<a href=#3454 id=3454 data-nosnippet>3454</a><span class="attr">#[cfg(not(feature = <span class="string">"symbolica"</span>))]
 <a href=#3455 id=3455 data-nosnippet>3455</a></span><span class="kw">impl</span>&lt;T&gt; AtomSumShapeDiagnostics <span class="kw">for </span>T {}
 <a href=#3456 id=3456 data-nosnippet>3456</a>
-<a href=#3457 id=3457 data-nosnippet>3457</a><span class="attr">#[cfg(feature = <span class="string">"shadowing"</span>)]
+<a href=#3457 id=3457 data-nosnippet>3457</a><span class="attr">#[cfg(feature = <span class="string">"symbolica"</span>)]
 <a href=#3458 id=3458 data-nosnippet>3458</a></span><span class="kw">impl</span>&lt;T&gt; AtomSumShapeDiagnostics <span class="kw">for </span>T
 <a href=#3459 id=3459 data-nosnippet>3459</a><span class="kw">where
 <a href=#3460 id=3460 data-nosnippet>3460</a>    </span>T: HasStructure + IteratableTensor,
@@ -3473,7 +3473,7 @@
 <a href=#3472 id=3472 data-nosnippet>3472</a>    }
 <a href=#3473 id=3473 data-nosnippet>3473</a>}
 <a href=#3474 id=3474 data-nosnippet>3474</a>
-<a href=#3475 id=3475 data-nosnippet>3475</a><span class="attr">#[cfg(feature = <span class="string">"shadowing"</span>)]
+<a href=#3475 id=3475 data-nosnippet>3475</a><span class="attr">#[cfg(feature = <span class="string">"symbolica"</span>)]
 <a href=#3476 id=3476 data-nosnippet>3476</a></span><span class="kw">fn </span>scalar_atom_sum_shape_stats&lt;S: <span class="lifetime">'static</span>&gt;(
 <a href=#3477 id=3477 data-nosnippet>3477</a>    scalar: <span class="kw-2">&amp;</span>S,
 <a href=#3478 id=3478 data-nosnippet>3478</a>    include_bytes: bool,
@@ -3487,7 +3487,7 @@
 <a href=#3486 id=3486 data-nosnippet>3486</a>    <span class="prelude-val">Some</span>(stats)
 <a href=#3487 id=3487 data-nosnippet>3487</a>}
 <a href=#3488 id=3488 data-nosnippet>3488</a>
-<a href=#3489 id=3489 data-nosnippet>3489</a><span class="attr">#[cfg(feature = <span class="string">"shadowing"</span>)]
+<a href=#3489 id=3489 data-nosnippet>3489</a><span class="attr">#[cfg(feature = <span class="string">"symbolica"</span>)]
 <a href=#3490 id=3490 data-nosnippet>3490</a></span><span class="kw">fn </span>log_sum_leaf_atom_shapes&lt;K, FK, Aind, Store, LT, L&gt;(
 <a href=#3491 id=3491 data-nosnippet>3491</a>    store: <span class="kw-2">&amp;</span>Store,
 <a href=#3492 id=3492 data-nosnippet>3492</a>    graph: <span class="kw-2">&amp;</span>NetworkGraph&lt;K, FK, Aind&gt;,
@@ -3813,7 +3813,7 @@
 <a href=#3812 id=3812 data-nosnippet>3812</a>    <span class="kw">let </span>keep_lazy = !all_scalar_terms
 <a href=#3813 id=3813 data-nosnippet>3813</a>        &amp;&amp; terms.len() &gt;= MIN_LAZY_TENSOR_SUM_TERMS
 <a href=#3814 id=3814 data-nosnippet>3814</a>        &amp;&amp; (profile::lazy_tensor_sums() || {
-<a href=#3815 id=3815 data-nosnippet>3815</a>            <span class="attr">#[cfg(feature = <span class="string">"shadowing"</span>)]
+<a href=#3815 id=3815 data-nosnippet>3815</a>            <span class="attr">#[cfg(feature = <span class="string">"symbolica"</span>)]
 <a href=#3816 id=3816 data-nosnippet>3816</a>            </span>{
 <a href=#3817 id=3817 data-nosnippet>3817</a>                <span class="comment">// Broadcasting a scalar coefficient into every component can
 <a href=#3818 id=3818 data-nosnippet>3818</a>                // make a small factored sum enormous before external tensors
@@ -3839,7 +3839,7 @@
 <a href=#3838 id=3838 data-nosnippet>3838</a>                    estimated_bytes &gt;= MAX_EAGER_TENSOR_SUM_BYTES
 <a href=#3839 id=3839 data-nosnippet>3839</a>                })
 <a href=#3840 id=3840 data-nosnippet>3840</a>            }
-<a href=#3841 id=3841 data-nosnippet>3841</a>            <span class="attr">#[cfg(not(feature = <span class="string">"shadowing"</span>))]
+<a href=#3841 id=3841 data-nosnippet>3841</a>            <span class="attr">#[cfg(not(feature = <span class="string">"symbolica"</span>))]
 <a href=#3842 id=3842 data-nosnippet>3842</a>            </span><span class="bool-val">false
 <a href=#3843 id=3843 data-nosnippet>3843</a>        </span>});
 <a href=#3844 id=3844 data-nosnippet>3844</a>
@@ -3940,7 +3940,7 @@
 <a href=#3939 id=3939 data-nosnippet>3939</a>    NetworkLeaf::LocalTensor(store.push_tensor(result))
 <a href=#3940 id=3940 data-nosnippet>3940</a>}
 <a href=#3941 id=3941 data-nosnippet>3941</a>
-<a href=#3942 id=3942 data-nosnippet>3942</a><span class="attr">#[cfg(feature = <span class="string">"shadowing"</span>)]
+<a href=#3942 id=3942 data-nosnippet>3942</a><span class="attr">#[cfg(feature = <span class="string">"symbolica"</span>)]
 <a href=#3943 id=3943 data-nosnippet>3943</a></span><span class="kw">fn </span>try_atom_scalar_sum&lt;K, Aind, Store&gt;(
 <a href=#3944 id=3944 data-nosnippet>3944</a>    store: <span class="kw-2">&amp;mut </span>Store,
 <a href=#3945 id=3945 data-nosnippet>3945</a>    targets: <span class="kw-2">&amp;</span>[(NodeIndex, <span class="kw-2">&amp;</span>NetworkLeaf&lt;K, Aind&gt;)],
@@ -4608,7 +4608,7 @@
 <a href=#4607 id=4607 data-nosnippet>4607</a>        FK: Clone + Debug + Display + Send + Sync,
 <a href=#4608 id=4608 data-nosnippet>4608</a>        Aind: AbsInd + Send + Sync,
 <a href=#4609 id=4609 data-nosnippet>4609</a>    {
-<a href=#4610 id=4610 data-nosnippet>4610</a>        <span class="attr">#[cfg(feature = <span class="string">"shadowing"</span>)]
+<a href=#4610 id=4610 data-nosnippet>4610</a>        <span class="attr">#[cfg(feature = <span class="string">"symbolica"</span>)]
 <a href=#4611 id=4611 data-nosnippet>4611</a>        </span><span class="kw">if </span>!<span class="kw">crate</span>::symbolic_parallelism::symbolica_rayon_enabled() {
 <a href=#4612 id=4612 data-nosnippet>4612</a>            <span class="kw">return </span>&lt;Sequential <span class="kw">as </span>ExecutionStrategy&lt;
 <a href=#4613 id=4613 data-nosnippet>4613</a>                NetworkStore&lt;T, Sc&gt;,
@@ -5319,7 +5319,7 @@
 <a href=#5318 id=5318 data-nosnippet>5318</a>                        target_start.elapsed().as_secs_f64() * <span class="number">1000.0</span>,
 <a href=#5319 id=5319 data-nosnippet>5319</a>                    );
 <a href=#5320 id=5320 data-nosnippet>5320</a>                }
-<a href=#5321 id=5321 data-nosnippet>5321</a>                <span class="attr">#[cfg(feature = <span class="string">"shadowing"</span>)]
+<a href=#5321 id=5321 data-nosnippet>5321</a>                <span class="attr">#[cfg(feature = <span class="string">"symbolica"</span>)]
 <a href=#5322 id=5322 data-nosnippet>5322</a>                </span><span class="kw">if </span>profile_sum {
 <a href=#5323 id=5323 data-nosnippet>5323</a>                    log_sum_leaf_atom_shapes::&lt;K, FK, Aind, <span class="self">Self</span>, LT, L&gt;(
 <a href=#5324 id=5324 data-nosnippet>5324</a>                        <span class="self">self</span>, graph, <span class="kw-2">&amp;</span>targets, lib,
@@ -5328,7 +5328,7 @@
 <a href=#5327 id=5327 data-nosnippet>5327</a>
 <a href=#5328 id=5328 data-nosnippet>5328</a>                <span class="kw">let </span>(nf, first) = <span class="kw-2">&amp;</span>targets[<span class="number">0</span>];
 <a href=#5329 id=5329 data-nosnippet>5329</a>
-<a href=#5330 id=5330 data-nosnippet>5330</a>                <span class="attr">#[cfg(feature = <span class="string">"shadowing"</span>)]
+<a href=#5330 id=5330 data-nosnippet>5330</a>                <span class="attr">#[cfg(feature = <span class="string">"symbolica"</span>)]
 <a href=#5331 id=5331 data-nosnippet>5331</a>                </span><span class="kw">if let </span><span class="prelude-val">Some</span>(new_node) = try_atom_scalar_sum(<span class="self">self</span>, <span class="kw-2">&amp;</span>targets) {
 <a href=#5332 id=5332 data-nosnippet>5332</a>                    <span class="kw">if let </span><span class="prelude-val">Some</span>(sum_start) = sum_start {
 <a href=#5333 id=5333 data-nosnippet>5333</a>                        <span class="macro">eprintln!</span>(
@@ -6042,9 +6042,9 @@
 <a href=#6041 id=6041 data-nosnippet>6041</a>    </span>}
 <a href=#6042 id=6042 data-nosnippet>6042</a>}
 <a href=#6043 id=6043 data-nosnippet>6043</a>
-<a href=#6044 id=6044 data-nosnippet>6044</a><span class="comment">// #[cfg(feature = "shadowing")]
+<a href=#6044 id=6044 data-nosnippet>6044</a><span class="comment">// #[cfg(feature = "symbolica")]
 <a href=#6045 id=6045 data-nosnippet>6045</a>// pub mod levels;
-<a href=#6046 id=6046 data-nosnippet>6046</a></span><span class="attr">#[cfg(feature = <span class="string">"shadowing"</span>)]
+<a href=#6046 id=6046 data-nosnippet>6046</a></span><span class="attr">#[cfg(feature = <span class="string">"symbolica"</span>)]
 <a href=#6047 id=6047 data-nosnippet>6047</a></span><span class="kw">pub mod </span>symbolica_interop;
 <a href=#6048 id=6048 data-nosnippet>6048</a>
 <a href=#6049 id=6049 data-nosnippet>6049</a><span class="attr">#[cfg(test)]

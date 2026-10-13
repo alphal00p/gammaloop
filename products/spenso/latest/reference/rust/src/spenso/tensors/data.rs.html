@@ -21,13 +21,13 @@
 <a href=#20 id=20 data-nosnippet>20</a><span class="kw">use </span><span class="kw">crate</span>::structure::slot::IsAbstractSlot;
 <a href=#21 id=21 data-nosnippet>21</a><span class="kw">use </span>delegate::delegate;
 <a href=#22 id=22 data-nosnippet>22</a>
-<a href=#23 id=23 data-nosnippet>23</a><span class="attr">#[cfg(feature = <span class="string">"shadowing"</span>)]
+<a href=#23 id=23 data-nosnippet>23</a><span class="attr">#[cfg(feature = <span class="string">"symbolica"</span>)]
 <a href=#24 id=24 data-nosnippet>24</a></span><span class="kw">use crate</span>::{
 <a href=#25 id=25 data-nosnippet>25</a>    shadowing::{ShadowMapping, Shadowable},
 <a href=#26 id=26 data-nosnippet>26</a>    structure::slot::ParseableAind,
 <a href=#27 id=27 data-nosnippet>27</a>    tensors::parametric::TensorCoefficient,
 <a href=#28 id=28 data-nosnippet>28</a>};
-<a href=#29 id=29 data-nosnippet>29</a><span class="attr">#[cfg(feature = <span class="string">"shadowing"</span>)]
+<a href=#29 id=29 data-nosnippet>29</a><span class="attr">#[cfg(feature = <span class="string">"symbolica"</span>)]
 <a href=#30 id=30 data-nosnippet>30</a></span><span class="kw">use </span>symbolica_utils::{IntoArgs, IntoSymbol};
 <a href=#31 id=31 data-nosnippet>31</a>
 <a href=#32 id=32 data-nosnippet>32</a><span class="kw">use </span>eyre::{<span class="prelude-ty">Result</span>, eyre};
@@ -41,7 +41,7 @@
 <a href=#40 id=40 data-nosnippet>40</a><span class="kw">use </span>serde::{Deserialize, Serialize};
 <a href=#41 id=41 data-nosnippet>41</a><span class="kw">use </span>std::{borrow::Cow, fmt::Display, hash::Hash};
 <a href=#42 id=42 data-nosnippet>42</a>
-<a href=#43 id=43 data-nosnippet>43</a><span class="attr">#[cfg(feature = <span class="string">"shadowing"</span>)]
+<a href=#43 id=43 data-nosnippet>43</a><span class="attr">#[cfg(feature = <span class="string">"symbolica"</span>)]
 <a href=#44 id=44 data-nosnippet>44</a></span><span class="kw">use </span>symbolica::{atom::Atom, atom::Symbol};
 <a href=#45 id=45 data-nosnippet>45</a><span class="kw">pub trait </span>DataIterator&lt;T&gt; {
 <a href=#46 id=46 data-nosnippet>46</a>    <span class="kw">type </span>FlatIter&lt;<span class="lifetime">'a</span>&gt;: Iterator&lt;Item = (FlatIndex, <span class="kw-2">&amp;</span><span class="lifetime">'a </span>T)&gt;
@@ -110,7 +110,7 @@
 <a href=#109 id=109 data-nosnippet>109</a>    </span><span class="kw">fn </span>hashmap(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; IndexMap&lt;ExpandedIndex, <span class="self">Self</span>::Data&gt;;
 <a href=#110 id=110 data-nosnippet>110</a>
 <a href=#111 id=111 data-nosnippet>111</a>    <span class="doccomment">/// Returns a hashmap of the data, with the the shadowed indices as keys
-<a href=#112 id=112 data-nosnippet>112</a>    </span><span class="attr">#[cfg(feature = <span class="string">"shadowing"</span>)]
+<a href=#112 id=112 data-nosnippet>112</a>    </span><span class="attr">#[cfg(feature = <span class="string">"symbolica"</span>)]
 <a href=#113 id=113 data-nosnippet>113</a>    </span><span class="kw">fn </span>symhashmap(<span class="kw-2">&amp;</span><span class="self">self</span>, name: Symbol, args: <span class="kw-2">&amp;</span>[Atom]) -&gt; HashMap&lt;Atom, <span class="self">Self</span>::Data&gt;;
 <a href=#114 id=114 data-nosnippet>114</a>
 <a href=#115 id=115 data-nosnippet>115</a>    <span class="comment">// fn map(&amp;self, f: impl Fn(&amp;Self::Data) -&gt; Self::Data) -&gt; Self;
@@ -243,7 +243,7 @@
 <a href=#242 id=242 data-nosnippet>242</a>    }
 <a href=#243 id=243 data-nosnippet>243</a>}
 <a href=#244 id=244 data-nosnippet>244</a>
-<a href=#245 id=245 data-nosnippet>245</a><span class="attr">#[cfg(feature = <span class="string">"shadowing"</span>)]
+<a href=#245 id=245 data-nosnippet>245</a><span class="attr">#[cfg(feature = <span class="string">"symbolica"</span>)]
 <a href=#246 id=246 data-nosnippet>246</a></span><span class="kw">impl</span>&lt;T: Clone, S: TensorStructure&gt; Shadowable <span class="kw">for </span>DataTensor&lt;T, S&gt;
 <a href=#247 id=247 data-nosnippet>247</a><span class="kw">where
 <a href=#248 id=248 data-nosnippet>248</a>    </span>S: HasName + Clone,
@@ -253,7 +253,7 @@
 <a href=#252 id=252 data-nosnippet>252</a>{
 <a href=#253 id=253 data-nosnippet>253</a>}
 <a href=#254 id=254 data-nosnippet>254</a>
-<a href=#255 id=255 data-nosnippet>255</a><span class="attr">#[cfg(feature = <span class="string">"shadowing"</span>)]
+<a href=#255 id=255 data-nosnippet>255</a><span class="attr">#[cfg(feature = <span class="string">"symbolica"</span>)]
 <a href=#256 id=256 data-nosnippet>256</a></span><span class="kw">impl</span>&lt;T: Clone, S: TensorStructure&gt; ShadowMapping <span class="kw">for </span>DataTensor&lt;T, S&gt;
 <a href=#257 id=257 data-nosnippet>257</a><span class="kw">where
 <a href=#258 id=258 data-nosnippet>258</a>    </span>S: HasName + Clone,
@@ -385,7 +385,7 @@
 <a href=#384 id=384 data-nosnippet>384</a>            DataTensor::Sparse(s) =&gt; s.hashmap(),
 <a href=#385 id=385 data-nosnippet>385</a>        }
 <a href=#386 id=386 data-nosnippet>386</a>    }
-<a href=#387 id=387 data-nosnippet>387</a>    <span class="attr">#[cfg(feature = <span class="string">"shadowing"</span>)]
+<a href=#387 id=387 data-nosnippet>387</a>    <span class="attr">#[cfg(feature = <span class="string">"symbolica"</span>)]
 <a href=#388 id=388 data-nosnippet>388</a>    </span><span class="kw">fn </span>symhashmap(<span class="kw-2">&amp;</span><span class="self">self</span>, name: Symbol, args: <span class="kw-2">&amp;</span>[Atom]) -&gt; HashMap&lt;Atom, T&gt; {
 <a href=#389 id=389 data-nosnippet>389</a>        <span class="kw">match </span><span class="self">self </span>{
 <a href=#390 id=390 data-nosnippet>390</a>            DataTensor::Dense(d) =&gt; d.symhashmap(name, args),

@@ -19,31 +19,31 @@
 <a href=#18 id=18 data-nosnippet>18</a><span class="kw">use </span>eyre::{<span class="prelude-ty">Result</span>, eyre};
 <a href=#19 id=19 data-nosnippet>19</a>
 <a href=#20 id=20 data-nosnippet>20</a><span class="kw">use </span><span class="kw">crate</span>::network::StructureLessDisplay;
-<a href=#21 id=21 data-nosnippet>21</a><span class="attr">#[cfg(feature = <span class="string">"shadowing"</span>)]
+<a href=#21 id=21 data-nosnippet>21</a><span class="attr">#[cfg(feature = <span class="string">"symbolica"</span>)]
 <a href=#22 id=22 data-nosnippet>22</a></span><span class="kw">use crate</span>::{
 <a href=#23 id=23 data-nosnippet>23</a>    structure::ToSymbolic,
 <a href=#24 id=24 data-nosnippet>24</a>    tensors::parametric::{ExpandedCoefficent, TensorCoefficient},
 <a href=#25 id=25 data-nosnippet>25</a>};
-<a href=#26 id=26 data-nosnippet>26</a><span class="attr">#[cfg(feature = <span class="string">"shadowing"</span>)]
+<a href=#26 id=26 data-nosnippet>26</a><span class="attr">#[cfg(feature = <span class="string">"symbolica"</span>)]
 <a href=#27 id=27 data-nosnippet>27</a></span><span class="kw">use </span>symbolica_utils::IntoSymbol;
 <a href=#28 id=28 data-nosnippet>28</a>
-<a href=#29 id=29 data-nosnippet>29</a><span class="attr">#[cfg(feature = <span class="string">"shadowing"</span>)]
+<a href=#29 id=29 data-nosnippet>29</a><span class="attr">#[cfg(feature = <span class="string">"symbolica"</span>)]
 <a href=#30 id=30 data-nosnippet>30</a></span><span class="kw">use crate</span>::{structure::FlatIndex, tensors::data::DenseTensor};
 <a href=#31 id=31 data-nosnippet>31</a>
-<a href=#32 id=32 data-nosnippet>32</a><span class="attr">#[cfg(not(feature = <span class="string">"shadowing"</span>))]
+<a href=#32 id=32 data-nosnippet>32</a><span class="attr">#[cfg(not(feature = <span class="string">"symbolica"</span>))]
 <a href=#33 id=33 data-nosnippet>33</a></span><span class="kw">use </span>serde::{Deserialize, Serialize};
-<a href=#34 id=34 data-nosnippet>34</a><span class="attr">#[cfg(feature = <span class="string">"shadowing"</span>)]
+<a href=#34 id=34 data-nosnippet>34</a><span class="attr">#[cfg(feature = <span class="string">"symbolica"</span>)]
 <a href=#35 id=35 data-nosnippet>35</a></span><span class="kw">use </span>symbolica::atom::{Atom, FunctionBuilder, Symbol};
 <a href=#36 id=36 data-nosnippet>36</a>
 <a href=#37 id=37 data-nosnippet>37</a><span class="attr">#[derive(
 <a href=#38 id=38 data-nosnippet>38</a>    Clone, PartialEq, Eq, Default, Hash, bincode_trait_derive::Encode, bincode_trait_derive::Decode,
 <a href=#39 id=39 data-nosnippet>39</a>)]
-<a href=#40 id=40 data-nosnippet>40</a>#[cfg_attr(not(feature = <span class="string">"shadowing"</span>), derive(Serialize, Deserialize))]
+<a href=#40 id=40 data-nosnippet>40</a>#[cfg_attr(not(feature = <span class="string">"symbolica"</span>), derive(Serialize, Deserialize))]
 <a href=#41 id=41 data-nosnippet>41</a>#[cfg_attr(
-<a href=#42 id=42 data-nosnippet>42</a>    feature = <span class="string">"shadowing"</span>,
+<a href=#42 id=42 data-nosnippet>42</a>    feature = <span class="string">"symbolica"</span>,
 <a href=#43 id=43 data-nosnippet>43</a>    trait_decode(<span class="kw">trait </span>= symbolica::state::HasStateMap),
 <a href=#44 id=44 data-nosnippet>44</a>)]
-<a href=#45 id=45 data-nosnippet>45</a></span><span class="comment">// #[cfg_attr(not(feature = "shadowing"), derive(bincode::Decode))]
+<a href=#45 id=45 data-nosnippet>45</a></span><span class="comment">// #[cfg_attr(not(feature = "symbolica"), derive(bincode::Decode))]
 <a href=#46 id=46 data-nosnippet>46</a></span><span class="kw">pub struct </span>IndexLess&lt;T: RepName = LibraryRep, Aind = AbstractIndex&gt; {
 <a href=#47 id=47 data-nosnippet>47</a>    <span class="kw">pub </span>structure: Vec&lt;Representation&lt;T&gt;&gt;,
 <a href=#48 id=48 data-nosnippet>48</a>    ind: PhantomData&lt;Aind&gt;,
@@ -262,7 +262,7 @@
 <a href=#261 id=261 data-nosnippet>261</a>        [].iter().cloned()
 <a href=#262 id=262 data-nosnippet>262</a>    }
 <a href=#263 id=263 data-nosnippet>263</a>
-<a href=#264 id=264 data-nosnippet>264</a>    <span class="attr">#[cfg(feature = <span class="string">"shadowing"</span>)]
+<a href=#264 id=264 data-nosnippet>264</a>    <span class="attr">#[cfg(feature = <span class="string">"symbolica"</span>)]
 <a href=#265 id=265 data-nosnippet>265</a>    </span><span class="kw">fn </span>symbolic_external_args(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Vec&lt;Atom&gt;
 <a href=#266 id=266 data-nosnippet>266</a>    <span class="kw">where
 <a href=#267 id=267 data-nosnippet>267</a>        </span>Aind: <span class="kw">super</span>::slot::ParseableAind,
@@ -338,7 +338,7 @@
 <a href=#337 id=337 data-nosnippet>337</a>    }
 <a href=#338 id=338 data-nosnippet>338</a>}
 <a href=#339 id=339 data-nosnippet>339</a>
-<a href=#340 id=340 data-nosnippet>340</a><span class="attr">#[cfg(feature = <span class="string">"shadowing"</span>)]
+<a href=#340 id=340 data-nosnippet>340</a><span class="attr">#[cfg(feature = <span class="string">"symbolica"</span>)]
 <a href=#341 id=341 data-nosnippet>341</a></span><span class="kw">impl</span>&lt;T: RepName&lt;Dual = T&gt;, Aind: AbsInd&gt; ToSymbolic <span class="kw">for </span>IndexLess&lt;T, Aind&gt; {
 <a href=#342 id=342 data-nosnippet>342</a>    <span class="kw">fn </span>concrete_atom(<span class="kw-2">&amp;</span><span class="self">self</span>, id: FlatIndex) -&gt; ExpandedCoefficent&lt;()&gt; {
 <a href=#343 id=343 data-nosnippet>343</a>        ExpandedCoefficent {
@@ -407,9 +407,9 @@
 <a href=#406 id=406 data-nosnippet>406</a><span class="attr">#[derive(
 <a href=#407 id=407 data-nosnippet>407</a>    Clone, PartialEq, Eq, Default, Hash, bincode_trait_derive::Encode, bincode_trait_derive::Decode,
 <a href=#408 id=408 data-nosnippet>408</a>)]
-<a href=#409 id=409 data-nosnippet>409</a>#[cfg_attr(not(feature = <span class="string">"shadowing"</span>), derive(Serialize, Deserialize))]
+<a href=#409 id=409 data-nosnippet>409</a>#[cfg_attr(not(feature = <span class="string">"symbolica"</span>), derive(Serialize, Deserialize))]
 <a href=#410 id=410 data-nosnippet>410</a>#[cfg_attr(
-<a href=#411 id=411 data-nosnippet>411</a>    feature = <span class="string">"shadowing"</span>,
+<a href=#411 id=411 data-nosnippet>411</a>    feature = <span class="string">"symbolica"</span>,
 <a href=#412 id=412 data-nosnippet>412</a>    trait_decode(<span class="kw">trait </span>= symbolica::state::HasStateMap),
 <a href=#413 id=413 data-nosnippet>413</a>)]
 <a href=#414 id=414 data-nosnippet>414</a></span><span class="kw">pub struct </span>IndexlessNamedStructure&lt;
@@ -469,7 +469,7 @@
 <a href=#468 id=468 data-nosnippet>468</a>        }
 <a href=#469 id=469 data-nosnippet>469</a>    }
 <a href=#470 id=470 data-nosnippet>470</a>
-<a href=#471 id=471 data-nosnippet>471</a>    <span class="attr">#[cfg(feature = <span class="string">"shadowing"</span>)]
+<a href=#471 id=471 data-nosnippet>471</a>    <span class="attr">#[cfg(feature = <span class="string">"symbolica"</span>)]
 <a href=#472 id=472 data-nosnippet>472</a>    </span><span class="kw">fn </span>symbolic_external_args(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Vec&lt;Atom&gt;
 <a href=#473 id=473 data-nosnippet>473</a>    <span class="kw">where
 <a href=#474 id=474 data-nosnippet>474</a>        </span>Aind: <span class="kw">super</span>::slot::ParseableAind,

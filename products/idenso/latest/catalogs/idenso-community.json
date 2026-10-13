@@ -12,7 +12,7 @@
     "language": "python",
     "features": [
       "python",
-      "python_stubgen"
+      "python-stubs"
     ]
   },
   "root": {
@@ -45,7 +45,7 @@
             "supported": true,
             "required_features": [
               "python",
-              "python_stubgen"
+              "python-stubs"
             ],
             "docs": {
               "format": "python-docstring",
@@ -74,7 +74,7 @@
             "supported": true,
             "required_features": [
               "python",
-              "python_stubgen"
+              "python-stubs"
             ],
             "docs": {
               "format": "python-docstring",
@@ -154,7 +154,7 @@
             "supported": true,
             "required_features": [
               "python",
-              "python_stubgen"
+              "python-stubs"
             ],
             "docs": {
               "format": "python-docstring",
@@ -253,7 +253,7 @@
             "supported": true,
             "required_features": [
               "python",
-              "python_stubgen"
+              "python-stubs"
             ],
             "docs": {
               "format": "python-docstring",
@@ -404,7 +404,7 @@
             "supported": true,
             "required_features": [
               "python",
-              "python_stubgen"
+              "python-stubs"
             ],
             "docs": {
               "format": "python-docstring",
@@ -485,7 +485,7 @@
             "supported": true,
             "required_features": [
               "python",
-              "python_stubgen"
+              "python-stubs"
             ],
             "docs": {
               "format": "python-docstring",
@@ -566,7 +566,7 @@
             "supported": true,
             "required_features": [
               "python",
-              "python_stubgen"
+              "python-stubs"
             ],
             "docs": {
               "format": "python-docstring",
@@ -595,7 +595,7 @@
             "supported": true,
             "required_features": [
               "python",
-              "python_stubgen"
+              "python-stubs"
             ],
             "docs": {
               "format": "python-docstring",
@@ -624,7 +624,7 @@
             "supported": true,
             "required_features": [
               "python",
-              "python_stubgen"
+              "python-stubs"
             ],
             "docs": {
               "format": "python-docstring",
@@ -653,7 +653,7 @@
             "supported": true,
             "required_features": [
               "python",
-              "python_stubgen"
+              "python-stubs"
             ],
             "docs": {
               "format": "python-docstring",
@@ -682,7 +682,7 @@
             "supported": true,
             "required_features": [
               "python",
-              "python_stubgen"
+              "python-stubs"
             ],
             "docs": {
               "format": "python-docstring",
@@ -803,7 +803,7 @@
             "supported": true,
             "required_features": [
               "python",
-              "python_stubgen"
+              "python-stubs"
             ],
             "docs": {
               "format": "python-docstring",
@@ -832,7 +832,7 @@
             "supported": true,
             "required_features": [
               "python",
-              "python_stubgen"
+              "python-stubs"
             ],
             "docs": {
               "format": "python-docstring",
@@ -1100,7 +1100,7 @@
             "supported": true,
             "required_features": [
               "python",
-              "python_stubgen"
+              "python-stubs"
             ],
             "docs": {
               "format": "python-docstring",
@@ -1152,7 +1152,7 @@
             "supported": true,
             "required_features": [
               "python",
-              "python_stubgen"
+              "python-stubs"
             ],
             "docs": {
               "format": "python-docstring",
@@ -1204,7 +1204,7 @@
             "supported": true,
             "required_features": [
               "python",
-              "python_stubgen"
+              "python-stubs"
             ],
             "docs": {
               "format": "python-docstring",
@@ -1322,7 +1322,7 @@
             "supported": true,
             "required_features": [
               "python",
-              "python_stubgen"
+              "python-stubs"
             ],
             "docs": {
               "format": "python-docstring",
@@ -1374,7 +1374,7 @@
             "supported": true,
             "required_features": [
               "python",
-              "python_stubgen"
+              "python-stubs"
             ],
             "docs": {
               "format": "python-docstring",
@@ -1426,7 +1426,7 @@
             "supported": true,
             "required_features": [
               "python",
-              "python_stubgen"
+              "python-stubs"
             ],
             "docs": {
               "format": "python-docstring",
@@ -1455,7 +1455,7 @@
             "supported": true,
             "required_features": [
               "python",
-              "python_stubgen"
+              "python-stubs"
             ],
             "docs": {
               "format": "python-docstring",
@@ -1484,7 +1484,7 @@
             "supported": true,
             "required_features": [
               "python",
-              "python_stubgen"
+              "python-stubs"
             ],
             "docs": {
               "format": "python-docstring",
@@ -1513,7 +1513,7 @@
             "supported": true,
             "required_features": [
               "python",
-              "python_stubgen"
+              "python-stubs"
             ],
             "docs": {
               "format": "python-docstring",
@@ -1542,7 +1542,7 @@
             "supported": true,
             "required_features": [
               "python",
-              "python_stubgen"
+              "python-stubs"
             ],
             "docs": {
               "format": "python-docstring",
@@ -1571,7 +1571,7 @@
             "supported": true,
             "required_features": [
               "python",
-              "python_stubgen"
+              "python-stubs"
             ],
             "docs": {
               "format": "python-docstring",
@@ -1600,7 +1600,7 @@
             "supported": true,
             "required_features": [
               "python",
-              "python_stubgen"
+              "python-stubs"
             ],
             "docs": {
               "format": "python-docstring",
@@ -1629,7 +1629,7 @@
             "supported": true,
             "required_features": [
               "python",
-              "python_stubgen"
+              "python-stubs"
             ],
             "docs": {
               "format": "python-docstring",
@@ -1658,7 +1658,7 @@
             "supported": true,
             "required_features": [
               "python",
-              "python_stubgen"
+              "python-stubs"
             ],
             "docs": {
               "format": "python-docstring",
@@ -1687,7 +1687,7 @@
             "supported": true,
             "required_features": [
               "python",
-              "python_stubgen"
+              "python-stubs"
             ],
             "docs": {
               "format": "python-docstring",
@@ -1716,7 +1716,7 @@
             "supported": true,
             "required_features": [
               "python",
-              "python_stubgen"
+              "python-stubs"
             ],
             "docs": {
               "format": "python-docstring",
@@ -1745,7 +1745,7 @@
             "supported": true,
             "required_features": [
               "python",
-              "python_stubgen"
+              "python-stubs"
             ],
             "docs": {
               "format": "python-docstring",
@@ -1774,7 +1774,7 @@
             "supported": true,
             "required_features": [
               "python",
-              "python_stubgen"
+              "python-stubs"
             ],
             "docs": {
               "format": "python-docstring",
@@ -1803,7 +1803,7 @@
             "supported": true,
             "required_features": [
               "python",
-              "python_stubgen"
+              "python-stubs"
             ],
             "docs": {
               "format": "python-docstring",
@@ -1832,7 +1832,7 @@
             "supported": true,
             "required_features": [
               "python",
-              "python_stubgen"
+              "python-stubs"
             ],
             "docs": {
               "format": "python-docstring",
@@ -1861,7 +1861,7 @@
             "supported": true,
             "required_features": [
               "python",
-              "python_stubgen"
+              "python-stubs"
             ],
             "docs": {
               "format": "python-docstring",
@@ -1890,7 +1890,7 @@
             "supported": true,
             "required_features": [
               "python",
-              "python_stubgen"
+              "python-stubs"
             ],
             "docs": {
               "format": "python-docstring",
@@ -1919,7 +1919,7 @@
             "supported": true,
             "required_features": [
               "python",
-              "python_stubgen"
+              "python-stubs"
             ],
             "docs": {
               "format": "python-docstring",
@@ -1948,7 +1948,7 @@
             "supported": true,
             "required_features": [
               "python",
-              "python_stubgen"
+              "python-stubs"
             ],
             "docs": {
               "format": "python-docstring",
@@ -1977,7 +1977,7 @@
             "supported": true,
             "required_features": [
               "python",
-              "python_stubgen"
+              "python-stubs"
             ],
             "docs": {
               "format": "python-docstring",
@@ -2006,7 +2006,7 @@
             "supported": true,
             "required_features": [
               "python",
-              "python_stubgen"
+              "python-stubs"
             ],
             "docs": {
               "format": "python-docstring",
@@ -2035,7 +2035,7 @@
             "supported": true,
             "required_features": [
               "python",
-              "python_stubgen"
+              "python-stubs"
             ],
             "docs": {
               "format": "python-docstring",
@@ -2064,7 +2064,7 @@
             "supported": true,
             "required_features": [
               "python",
-              "python_stubgen"
+              "python-stubs"
             ],
             "docs": {
               "format": "python-docstring",
@@ -2093,7 +2093,7 @@
             "supported": true,
             "required_features": [
               "python",
-              "python_stubgen"
+              "python-stubs"
             ],
             "docs": {
               "format": "python-docstring",
@@ -2122,7 +2122,7 @@
             "supported": true,
             "required_features": [
               "python",
-              "python_stubgen"
+              "python-stubs"
             ],
             "docs": {
               "format": "python-docstring",
@@ -2151,7 +2151,7 @@
             "supported": true,
             "required_features": [
               "python",
-              "python_stubgen"
+              "python-stubs"
             ],
             "docs": {
               "format": "python-docstring",
@@ -2180,7 +2180,7 @@
             "supported": true,
             "required_features": [
               "python",
-              "python_stubgen"
+              "python-stubs"
             ],
             "docs": {
               "format": "python-docstring",
@@ -2209,7 +2209,7 @@
             "supported": true,
             "required_features": [
               "python",
-              "python_stubgen"
+              "python-stubs"
             ],
             "docs": {
               "format": "python-docstring",
@@ -2238,7 +2238,7 @@
             "supported": true,
             "required_features": [
               "python",
-              "python_stubgen"
+              "python-stubs"
             ],
             "docs": {
               "format": "python-docstring",
@@ -2267,7 +2267,7 @@
             "supported": true,
             "required_features": [
               "python",
-              "python_stubgen"
+              "python-stubs"
             ],
             "docs": {
               "format": "python-docstring",
@@ -2296,7 +2296,7 @@
             "supported": true,
             "required_features": [
               "python",
-              "python_stubgen"
+              "python-stubs"
             ],
             "docs": {
               "format": "python-docstring",
@@ -2325,7 +2325,7 @@
             "supported": true,
             "required_features": [
               "python",
-              "python_stubgen"
+              "python-stubs"
             ],
             "docs": {
               "format": "python-docstring",
@@ -2354,7 +2354,7 @@
             "supported": true,
             "required_features": [
               "python",
-              "python_stubgen"
+              "python-stubs"
             ],
             "docs": {
               "format": "python-docstring",
@@ -2383,7 +2383,7 @@
             "supported": true,
             "required_features": [
               "python",
-              "python_stubgen"
+              "python-stubs"
             ],
             "docs": {
               "format": "python-docstring",
@@ -2412,7 +2412,7 @@
             "supported": true,
             "required_features": [
               "python",
-              "python_stubgen"
+              "python-stubs"
             ],
             "docs": {
               "format": "python-docstring",
@@ -2441,7 +2441,7 @@
             "supported": true,
             "required_features": [
               "python",
-              "python_stubgen"
+              "python-stubs"
             ],
             "docs": {
               "format": "python-docstring",
@@ -2470,7 +2470,7 @@
             "supported": true,
             "required_features": [
               "python",
-              "python_stubgen"
+              "python-stubs"
             ],
             "docs": {
               "format": "python-docstring",
@@ -2499,7 +2499,7 @@
             "supported": true,
             "required_features": [
               "python",
-              "python_stubgen"
+              "python-stubs"
             ],
             "docs": {
               "format": "python-docstring",
@@ -2528,7 +2528,7 @@
             "supported": true,
             "required_features": [
               "python",
-              "python_stubgen"
+              "python-stubs"
             ],
             "docs": {
               "format": "python-docstring",
@@ -2557,7 +2557,7 @@
             "supported": true,
             "required_features": [
               "python",
-              "python_stubgen"
+              "python-stubs"
             ],
             "docs": {
               "format": "python-docstring",
@@ -2586,7 +2586,7 @@
             "supported": true,
             "required_features": [
               "python",
-              "python_stubgen"
+              "python-stubs"
             ],
             "docs": {
               "format": "python-docstring",
@@ -2615,7 +2615,7 @@
             "supported": true,
             "required_features": [
               "python",
-              "python_stubgen"
+              "python-stubs"
             ],
             "docs": {
               "format": "python-docstring",
@@ -2644,7 +2644,7 @@
             "supported": true,
             "required_features": [
               "python",
-              "python_stubgen"
+              "python-stubs"
             ],
             "docs": {
               "format": "python-docstring",
@@ -2673,7 +2673,7 @@
             "supported": true,
             "required_features": [
               "python",
-              "python_stubgen"
+              "python-stubs"
             ],
             "docs": {
               "format": "python-docstring",
@@ -2702,7 +2702,7 @@
             "supported": true,
             "required_features": [
               "python",
-              "python_stubgen"
+              "python-stubs"
             ],
             "docs": {
               "format": "python-docstring",

@@ -11,9 +11,9 @@
     "version": "0.3.4",
     "language": "python",
     "features": [
-      "python_api",
-      "python_abi",
-      "python_stubgen"
+      "python",
+      "abi3",
+      "python-stubs"
     ]
   },
   "root": {
@@ -45,9 +45,9 @@
             "kind": "python-class",
             "supported": false,
             "required_features": [
-              "python_api",
-              "python_abi",
-              "python_stubgen"
+              "python",
+              "abi3",
+              "python-stubs"
             ],
             "docs": {
               "format": "python-docstring",
@@ -108,9 +108,9 @@
             "kind": "python-class",
             "supported": true,
             "required_features": [
-              "python_api",
-              "python_abi",
-              "python_stubgen"
+              "python",
+              "abi3",
+              "python-stubs"
             ],
             "docs": {
               "format": "python-docstring",
@@ -161,9 +161,9 @@
             "kind": "python-class",
             "supported": true,
             "required_features": [
-              "python_api",
-              "python_abi",
-              "python_stubgen"
+              "python",
+              "abi3",
+              "python-stubs"
             ],
             "docs": {
               "format": "python-docstring",
@@ -244,9 +244,9 @@
             "kind": "python-class",
             "supported": false,
             "required_features": [
-              "python_api",
-              "python_abi",
-              "python_stubgen"
+              "python",
+              "abi3",
+              "python-stubs"
             ],
             "docs": {
               "format": "python-docstring",
@@ -291,9 +291,9 @@
             "kind": "python-class",
             "supported": true,
             "required_features": [
-              "python_api",
-              "python_abi",
-              "python_stubgen"
+              "python",
+              "abi3",
+              "python-stubs"
             ],
             "docs": {
               "format": "python-docstring",
@@ -410,9 +410,9 @@
             "kind": "python-class",
             "supported": false,
             "required_features": [
-              "python_api",
-              "python_abi",
-              "python_stubgen"
+              "python",
+              "abi3",
+              "python-stubs"
             ],
             "docs": {
               "format": "python-docstring",
@@ -465,9 +465,9 @@
             "kind": "python-class",
             "supported": false,
             "required_features": [
-              "python_api",
-              "python_abi",
-              "python_stubgen"
+              "python",
+              "abi3",
+              "python-stubs"
             ],
             "docs": {
               "format": "python-docstring",
@@ -552,9 +552,9 @@
             "kind": "python-class",
             "supported": false,
             "required_features": [
-              "python_api",
-              "python_abi",
-              "python_stubgen"
+              "python",
+              "abi3",
+              "python-stubs"
             ],
             "docs": {
               "format": "python-docstring",
@@ -607,9 +607,9 @@
             "kind": "python-class",
             "supported": true,
             "required_features": [
-              "python_api",
-              "python_abi",
-              "python_stubgen"
+              "python",
+              "abi3",
+              "python-stubs"
             ],
             "docs": {
               "format": "python-docstring",
@@ -866,9 +866,9 @@
             "kind": "python-class",
             "supported": true,
             "required_features": [
-              "python_api",
-              "python_abi",
-              "python_stubgen"
+              "python",
+              "abi3",
+              "python-stubs"
             ],
             "docs": {
               "format": "python-docstring",
@@ -1051,9 +1051,9 @@
             "kind": "python-class",
             "supported": true,
             "required_features": [
-              "python_api",
-              "python_abi",
-              "python_stubgen"
+              "python",
+              "abi3",
+              "python-stubs"
             ],
             "docs": {
               "format": "python-docstring",
@@ -1170,9 +1170,9 @@
             "kind": "python-class",
             "supported": true,
             "required_features": [
-              "python_api",
-              "python_abi",
-              "python_stubgen"
+              "python",
+              "abi3",
+              "python-stubs"
             ],
             "docs": {
               "format": "python-docstring",
@@ -1234,9 +1234,9 @@
             "kind": "python-class",
             "supported": true,
             "required_features": [
-              "python_api",
-              "python_abi",
-              "python_stubgen"
+              "python",
+              "abi3",
+              "python-stubs"
             ],
             "docs": {
               "format": "python-docstring",
@@ -1309,9 +1309,9 @@
             "kind": "python-class",
             "supported": true,
             "required_features": [
-              "python_api",
-              "python_abi",
-              "python_stubgen"
+              "python",
+              "abi3",
+              "python-stubs"
             ],
             "docs": {
               "format": "python-docstring",
@@ -2258,9 +2258,9 @@
             "kind": "python-class",
             "supported": true,
             "required_features": [
-              "python_api",
-              "python_abi",
-              "python_stubgen"
+              "python",
+              "abi3",
+              "python-stubs"
             ],
             "docs": {
               "format": "python-docstring",
@@ -2660,9 +2660,9 @@
             "kind": "python-class",
             "supported": true,
             "required_features": [
-              "python_api",
-              "python_abi",
-              "python_stubgen"
+              "python",
+              "abi3",
+              "python-stubs"
             ],
             "docs": {
               "format": "python-docstring",
@@ -2825,9 +2825,9 @@
             "kind": "python-class",
             "supported": true,
             "required_features": [
-              "python_api",
-              "python_abi",
-              "python_stubgen"
+              "python",
+              "abi3",
+              "python-stubs"
             ],
             "docs": {
               "format": "python-docstring",
@@ -3043,9 +3043,9 @@
             "kind": "python-class",
             "supported": true,
             "required_features": [
-              "python_api",
-              "python_abi",
-              "python_stubgen"
+              "python",
+              "abi3",
+              "python-stubs"
             ],
             "docs": {
               "format": "python-docstring",
@@ -3107,9 +3107,9 @@
             "kind": "python-class",
             "supported": false,
             "required_features": [
-              "python_api",
-              "python_abi",
-              "python_stubgen"
+              "python",
+              "abi3",
+              "python-stubs"
             ],
             "docs": {
               "format": "python-docstring",
@@ -3194,9 +3194,9 @@
             "kind": "python-class",
             "supported": true,
             "required_features": [
-              "python_api",
-              "python_abi",
-              "python_stubgen"
+              "python",
+              "abi3",
+              "python-stubs"
             ],
             "docs": {
               "format": "python-docstring",
@@ -3247,9 +3247,9 @@
             "kind": "python-class",
             "supported": true,
             "required_features": [
-              "python_api",
-              "python_abi",
-              "python_stubgen"
+              "python",
+              "abi3",
+              "python-stubs"
             ],
             "docs": {
               "format": "python-docstring",
@@ -3333,9 +3333,9 @@
             "kind": "python-class",
             "supported": true,
             "required_features": [
-              "python_api",
-              "python_abi",
-              "python_stubgen"
+              "python",
+              "abi3",
+              "python-stubs"
             ],
             "docs": {
               "format": "python-docstring",
@@ -3419,9 +3419,9 @@
             "kind": "python-class",
             "supported": true,
             "required_features": [
-              "python_api",
-              "python_abi",
-              "python_stubgen"
+              "python",
+              "abi3",
+              "python-stubs"
             ],
             "docs": {
               "format": "python-docstring",
@@ -3505,9 +3505,9 @@
             "kind": "python-class",
             "supported": true,
             "required_features": [
-              "python_api",
-              "python_abi",
-              "python_stubgen"
+              "python",
+              "abi3",
+              "python-stubs"
             ],
             "docs": {
               "format": "python-docstring",
@@ -3624,9 +3624,9 @@
             "kind": "python-class",
             "supported": true,
             "required_features": [
-              "python_api",
-              "python_abi",
-              "python_stubgen"
+              "python",
+              "abi3",
+              "python-stubs"
             ],
             "docs": {
               "format": "python-docstring",
@@ -3776,9 +3776,9 @@
             "kind": "python-class",
             "supported": true,
             "required_features": [
-              "python_api",
-              "python_abi",
-              "python_stubgen"
+              "python",
+              "abi3",
+              "python-stubs"
             ],
             "docs": {
               "format": "python-docstring",
@@ -3851,9 +3851,9 @@
             "kind": "python-class",
             "supported": true,
             "required_features": [
-              "python_api",
-              "python_abi",
-              "python_stubgen"
+              "python",
+              "abi3",
+              "python-stubs"
             ],
             "docs": {
               "format": "python-docstring",
@@ -3904,9 +3904,9 @@
             "kind": "python-class",
             "supported": true,
             "required_features": [
-              "python_api",
-              "python_abi",
-              "python_stubgen"
+              "python",
+              "abi3",
+              "python-stubs"
             ],
             "docs": {
               "format": "python-docstring",
@@ -3990,9 +3990,9 @@
             "kind": "python-class",
             "supported": false,
             "required_features": [
-              "python_api",
-              "python_abi",
-              "python_stubgen"
+              "python",
+              "abi3",
+              "python-stubs"
             ],
             "docs": {
               "format": "python-docstring",
@@ -4053,9 +4053,9 @@
             "kind": "python-class",
             "supported": false,
             "required_features": [
-              "python_api",
-              "python_abi",
-              "python_stubgen"
+              "python",
+              "abi3",
+              "python-stubs"
             ],
             "docs": {
               "format": "python-docstring",
@@ -4117,9 +4117,9 @@
             "kind": "python-class",
             "supported": false,
             "required_features": [
-              "python_api",
-              "python_abi",
-              "python_stubgen"
+              "python",
+              "abi3",
+              "python-stubs"
             ],
             "docs": {
               "format": "python-docstring",
@@ -4268,9 +4268,9 @@
             "kind": "python-class",
             "supported": false,
             "required_features": [
-              "python_api",
-              "python_abi",
-              "python_stubgen"
+              "python",
+              "abi3",
+              "python-stubs"
             ],
             "docs": {
               "format": "python-docstring",
@@ -4363,9 +4363,9 @@
             "kind": "python-class",
             "supported": false,
             "required_features": [
-              "python_api",
-              "python_abi",
-              "python_stubgen"
+              "python",
+              "abi3",
+              "python-stubs"
             ],
             "docs": {
               "format": "python-docstring",
@@ -4426,9 +4426,9 @@
             "kind": "python-class",
             "supported": true,
             "required_features": [
-              "python_api",
-              "python_abi",
-              "python_stubgen"
+              "python",
+              "abi3",
+              "python-stubs"
             ],
             "docs": {
               "format": "python-docstring",
@@ -4589,9 +4589,9 @@
             "kind": "python-class",
             "supported": true,
             "required_features": [
-              "python_api",
-              "python_abi",
-              "python_stubgen"
+              "python",
+              "abi3",
+              "python-stubs"
             ],
             "docs": {
               "format": "python-docstring",
@@ -4810,9 +4810,9 @@
             "kind": "python-class",
             "supported": false,
             "required_features": [
-              "python_api",
-              "python_abi",
-              "python_stubgen"
+              "python",
+              "abi3",
+              "python-stubs"
             ],
             "docs": {
               "format": "python-docstring",
@@ -4924,9 +4924,9 @@
             "kind": "python-class",
             "supported": true,
             "required_features": [
-              "python_api",
-              "python_abi",
-              "python_stubgen"
+              "python",
+              "abi3",
+              "python-stubs"
             ],
             "docs": {
               "format": "python-docstring",
@@ -5018,9 +5018,9 @@
             "kind": "python-class",
             "supported": false,
             "required_features": [
-              "python_api",
-              "python_abi",
-              "python_stubgen"
+              "python",
+              "abi3",
+              "python-stubs"
             ],
             "docs": {
               "format": "python-docstring",
@@ -5097,9 +5097,9 @@
             "kind": "python-class",
             "supported": false,
             "required_features": [
-              "python_api",
-              "python_abi",
-              "python_stubgen"
+              "python",
+              "abi3",
+              "python-stubs"
             ],
             "docs": {
               "format": "python-docstring",
@@ -5176,9 +5176,9 @@
             "kind": "python-class",
             "supported": false,
             "required_features": [
-              "python_api",
-              "python_abi",
-              "python_stubgen"
+              "python",
+              "abi3",
+              "python-stubs"
             ],
             "docs": {
               "format": "python-docstring",
@@ -5255,9 +5255,9 @@
             "kind": "python-class",
             "supported": false,
             "required_features": [
-              "python_api",
-              "python_abi",
-              "python_stubgen"
+              "python",
+              "abi3",
+              "python-stubs"
             ],
             "docs": {
               "format": "python-docstring",
@@ -5342,9 +5342,9 @@
             "kind": "python-class",
             "supported": false,
             "required_features": [
-              "python_api",
-              "python_abi",
-              "python_stubgen"
+              "python",
+              "abi3",
+              "python-stubs"
             ],
             "docs": {
               "format": "python-docstring",
@@ -5437,9 +5437,9 @@
             "kind": "python-class",
             "supported": false,
             "required_features": [
-              "python_api",
-              "python_abi",
-              "python_stubgen"
+              "python",
+              "abi3",
+              "python-stubs"
             ],
             "docs": {
               "format": "python-docstring",
@@ -5508,9 +5508,9 @@
             "kind": "python-class",
             "supported": false,
             "required_features": [
-              "python_api",
-              "python_abi",
-              "python_stubgen"
+              "python",
+              "abi3",
+              "python-stubs"
             ],
             "docs": {
               "format": "python-docstring",
@@ -5555,9 +5555,9 @@
             "kind": "python-class",
             "supported": false,
             "required_features": [
-              "python_api",
-              "python_abi",
-              "python_stubgen"
+              "python",
+              "abi3",
+              "python-stubs"
             ],
             "docs": {
               "format": "python-docstring",
@@ -5618,9 +5618,9 @@
             "kind": "python-class",
             "supported": false,
             "required_features": [
-              "python_api",
-              "python_abi",
-              "python_stubgen"
+              "python",
+              "abi3",
+              "python-stubs"
             ],
             "docs": {
               "format": "python-docstring",
@@ -5681,9 +5681,9 @@
             "kind": "python-class",
             "supported": false,
             "required_features": [
-              "python_api",
-              "python_abi",
-              "python_stubgen"
+              "python",
+              "abi3",
+              "python-stubs"
             ],
             "docs": {
               "format": "python-docstring",
@@ -5832,9 +5832,9 @@
             "kind": "python-class",
             "supported": false,
             "required_features": [
-              "python_api",
-              "python_abi",
-              "python_stubgen"
+              "python",
+              "abi3",
+              "python-stubs"
             ],
             "docs": {
               "format": "python-docstring",
@@ -5929,9 +5929,9 @@
             "kind": "python-function",
             "supported": true,
             "required_features": [
-              "python_api",
-              "python_abi",
-              "python_stubgen"
+              "python",
+              "abi3",
+              "python-stubs"
             ],
             "docs": {
               "format": "python-docstring",
@@ -5959,9 +5959,9 @@
             "kind": "python-function",
             "supported": true,
             "required_features": [
-              "python_api",
-              "python_abi",
-              "python_stubgen"
+              "python",
+              "abi3",
+              "python-stubs"
             ],
             "docs": {
               "format": "python-docstring",
@@ -5989,9 +5989,9 @@
             "kind": "python-function",
             "supported": true,
             "required_features": [
-              "python_api",
-              "python_abi",
-              "python_stubgen"
+              "python",
+              "abi3",
+              "python-stubs"
             ],
             "docs": {
               "format": "python-docstring",

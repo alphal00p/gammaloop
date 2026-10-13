@@ -143,7 +143,7 @@
             "source": {
               "identifier": "vakint::Vakint",
               "file": "crates/vakint/src/lib.rs",
-              "line": 2353,
+              "line": 2318,
               "column": 1
             }
           },
@@ -341,7 +341,7 @@
             "source": {
               "identifier": "vakint::VakintSettings",
               "file": "crates/vakint/src/lib.rs",
-              "line": 2078,
+              "line": 2043,
               "column": 1
             }
           },
@@ -385,7 +385,7 @@
             "source": {
               "identifier": "vakint::VakintExpression",
               "file": "crates/vakint/src/lib.rs",
-              "line": 2951,
+              "line": 2909,
               "column": 1
             }
           },
@@ -429,7 +429,7 @@
             "source": {
               "identifier": "vakint::EvaluationOrder",
               "file": "crates/vakint/src/lib.rs",
-              "line": 1961,
+              "line": 1926,
               "column": 1
             }
           },
@@ -493,7 +493,7 @@
             "source": {
               "identifier": "vakint::VakintExpression::canonicalize",
               "file": "crates/vakint/src/lib.rs",
-              "line": 3002,
+              "line": 2960,
               "column": 1
             }
           },
@@ -550,7 +550,7 @@
             "source": {
               "identifier": "vakint::VakintExpression::tensor_reduce",
               "file": "crates/vakint/src/lib.rs",
-              "line": 3024,
+              "line": 2982,
               "column": 1
             }
           },
@@ -607,7 +607,7 @@
             "source": {
               "identifier": "vakint::VakintExpression::evaluate_integral",
               "file": "crates/vakint/src/lib.rs",
-              "line": 3041,
+              "line": 2999,
               "column": 1
             }
           },
@@ -651,7 +651,7 @@
             "source": {
               "identifier": "vakint::NumericalEvaluationResult",
               "file": "crates/vakint/src/lib.rs",
-              "line": 3125,
+              "line": 3083,
               "column": 1
             }
           }

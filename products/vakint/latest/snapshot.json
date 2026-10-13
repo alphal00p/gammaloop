@@ -4,8 +4,8 @@
   "title": "Vakint",
   "channel": "latest",
   "snapshot_tag": null,
-  "git_commit": "05d89644c38dbda1361528e676a3ab1cbc5b0c77",
-  "git_timestamp": 1791617020,
+  "git_commit": "2e22d46aae9aa987aada970474cec266976cde5b",
+  "git_timestamp": 1791918268,
   "route": "/products/vakint/latest/",
   "components": [
     {
@@ -36,9 +36,9 @@
       "module": "gammaloop._gammaloop",
       "version": "0.3.4",
       "features": [
-        "python_api",
-        "python_abi",
-        "python_stubgen"
+        "python",
+        "abi3",
+        "python-stubs"
       ]
     },
     {
@@ -50,7 +50,6 @@
       "version": "0.17.0",
       "features": [
         "native",
-        "nodestore-vec",
         "serde",
         "bincode",
         "drawing",
@@ -66,7 +65,7 @@
       "version": "0.1.0",
       "features": [
         "extension-module",
-        "abi3-py310"
+        "abi3"
       ]
     },
     {
@@ -78,7 +77,7 @@
       "version": "0.6.0",
       "features": [
         "native",
-        "shadowing"
+        "symbolica"
       ]
     },
     {
@@ -109,7 +108,7 @@
       "module": "symbolica.community.spenso",
       "version": "0.1.2",
       "features": [
-        "python_stubgen"
+        "python-stubs"
       ]
     },
     {
@@ -121,7 +120,6 @@
       "version": "0.3.0",
       "features": [
         "native",
-        "bincode",
         "reference-cases"
       ]
     },
@@ -134,7 +132,7 @@
       "version": "0.3.0",
       "features": [
         "python",
-        "python_stubgen"
+        "python-stubs"
       ]
     },
     {
@@ -154,8 +152,8 @@
       "module": "symbolica.community.vakint",
       "version": "0.1.2",
       "features": [
-        "symbolica_community_module",
-        "python_stubgen"
+        "python",
+        "python-stubs"
       ]
     }
   ]

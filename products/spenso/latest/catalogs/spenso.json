@@ -12,7 +12,7 @@
     "language": "rust",
     "features": [
       "native",
-      "shadowing"
+      "symbolica"
     ]
   },
   "root": {
@@ -1645,7 +1645,7 @@
             "kind": "type",
             "supported": true,
             "required_features": [
-              "shadowing"
+              "symbolica"
             ],
             "docs": {
               "format": "rust-markdown",
@@ -1757,7 +1757,7 @@
             "kind": "trait",
             "supported": true,
             "required_features": [
-              "shadowing"
+              "symbolica"
             ],
             "docs": {
               "format": "rust-markdown",
@@ -1803,7 +1803,7 @@
             "kind": "type",
             "supported": true,
             "required_features": [
-              "shadowing"
+              "symbolica"
             ],
             "docs": {
               "format": "rust-markdown",
@@ -1871,7 +1871,7 @@
             "kind": "type",
             "supported": true,
             "required_features": [
-              "shadowing"
+              "symbolica"
             ],
             "docs": {
               "format": "rust-markdown",

@@ -733,7 +733,7 @@
 <a href=#732 id=732 data-nosnippet>732</a>        <span class="macro">assert_eq!</span>(base.tensor(<span class="number">1</span>), <span class="kw-2">&amp;</span><span class="number">20</span>);
 <a href=#733 id=733 data-nosnippet>733</a>    }
 <a href=#734 id=734 data-nosnippet>734</a>
-<a href=#735 id=735 data-nosnippet>735</a>    <span class="attr">#[cfg(feature = <span class="string">"shadowing"</span>)]
+<a href=#735 id=735 data-nosnippet>735</a>    <span class="attr">#[cfg(feature = <span class="string">"symbolica"</span>)]
 <a href=#736 id=736 data-nosnippet>736</a>    #[test]
 <a href=#737 id=737 data-nosnippet>737</a>    </span><span class="kw">fn </span>tensor_retention_preserves_unreferenced_alias_definitions() {
 <a href=#738 id=738 data-nosnippet>738</a>        <span class="kw">use </span>symbolica::{atom::Atom, parse};
@@ -769,7 +769,7 @@
 <a href=#768 id=768 data-nosnippet>768</a>            tensors::data::DenseTensor,
 <a href=#769 id=769 data-nosnippet>769</a>        };
 <a href=#770 id=770 data-nosnippet>770</a>
-<a href=#771 id=771 data-nosnippet>771</a>        <span class="attr">#[cfg(feature = <span class="string">"shadowing"</span>)]
+<a href=#771 id=771 data-nosnippet>771</a>        <span class="attr">#[cfg(feature = <span class="string">"symbolica"</span>)]
 <a href=#772 id=772 data-nosnippet>772</a>        </span><span class="kw">let </span>_parallel = <span class="kw">crate</span>::symbolic_parallelism::scoped_symbolica_rayon_setting_for_test(
 <a href=#773 id=773 data-nosnippet>773</a>            <span class="kw">crate</span>::symbolic_parallelism::SymbolicParallelism::Parallel,
 <a href=#774 id=774 data-nosnippet>774</a>            || <span class="bool-val">true</span>,

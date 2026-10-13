@@ -2,7 +2,7 @@
 <nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><section id="main-content" class="content" tabindex="-1"><div class="main-heading"><h1><div class="sub-heading">spenso/tensors/data/</div>sparse.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap digits-3"><pre class="rust"><code><a href=#1 id=1 data-nosnippet>1</a><span class="kw">use </span><span class="kw">crate</span>::algebra::algebraic_traits::RefZero;
 <a href=#2 id=2 data-nosnippet>2</a><span class="kw">use </span><span class="kw">crate</span>::structure::dimension::Dimension;
 <a href=#3 id=3 data-nosnippet>3</a><span class="kw">use </span><span class="kw">crate</span>::structure::representation::{RepName, Representation};
-<a href=#4 id=4 data-nosnippet>4</a><span class="attr">#[cfg(feature = <span class="string">"shadowing"</span>)]
+<a href=#4 id=4 data-nosnippet>4</a><span class="attr">#[cfg(feature = <span class="string">"symbolica"</span>)]
 <a href=#5 id=5 data-nosnippet>5</a></span><span class="kw">use </span><span class="kw">crate</span>::structure::slot::ParseableAind;
 <a href=#6 id=6 data-nosnippet>6</a><span class="kw">use </span><span class="kw">crate</span>::structure::slot::{AbsInd, IsAbstractSlot, Slot};
 <a href=#7 id=7 data-nosnippet>7</a><span class="kw">use </span><span class="kw">crate</span>::structure::{
@@ -22,13 +22,13 @@
 <a href=#21 id=21 data-nosnippet>21</a><span class="kw">use </span>delegate::delegate;
 <a href=#22 id=22 data-nosnippet>22</a><span class="kw">use </span>eyre::{<span class="prelude-ty">Result</span>, eyre};
 <a href=#23 id=23 data-nosnippet>23</a>
-<a href=#24 id=24 data-nosnippet>24</a><span class="attr">#[cfg(feature = <span class="string">"shadowing"</span>)]
+<a href=#24 id=24 data-nosnippet>24</a><span class="attr">#[cfg(feature = <span class="string">"symbolica"</span>)]
 <a href=#25 id=25 data-nosnippet>25</a></span><span class="kw">use crate</span>::{
 <a href=#26 id=26 data-nosnippet>26</a>    shadowing::symbolica_utils::atomic_expanded_label_id,
 <a href=#27 id=27 data-nosnippet>27</a>    shadowing::{ShadowMapping, Shadowable},
 <a href=#28 id=28 data-nosnippet>28</a>    tensors::parametric::{ExpandedCoefficent, FlatCoefficent, TensorCoefficient},
 <a href=#29 id=29 data-nosnippet>29</a>};
-<a href=#30 id=30 data-nosnippet>30</a><span class="attr">#[cfg(feature = <span class="string">"shadowing"</span>)]
+<a href=#30 id=30 data-nosnippet>30</a><span class="attr">#[cfg(feature = <span class="string">"symbolica"</span>)]
 <a href=#31 id=31 data-nosnippet>31</a></span><span class="kw">use </span>symbolica_utils::{IntoArgs, IntoSymbol};
 <a href=#32 id=32 data-nosnippet>32</a>
 <a href=#33 id=33 data-nosnippet>33</a><span class="kw">use </span>bincode::{Decode, Encode};
@@ -38,7 +38,7 @@
 <a href=#37 id=37 data-nosnippet>37</a><span class="kw">use </span>serde::{Deserialize, Serialize};
 <a href=#38 id=38 data-nosnippet>38</a><span class="kw">use </span>std::{borrow::Cow, fmt::Display, hash::Hash};
 <a href=#39 id=39 data-nosnippet>39</a>
-<a href=#40 id=40 data-nosnippet>40</a><span class="attr">#[cfg(feature = <span class="string">"shadowing"</span>)]
+<a href=#40 id=40 data-nosnippet>40</a><span class="attr">#[cfg(feature = <span class="string">"symbolica"</span>)]
 <a href=#41 id=41 data-nosnippet>41</a></span><span class="kw">use </span>symbolica::{atom::Atom, atom::Symbol};
 <a href=#42 id=42 data-nosnippet>42</a>
 <a href=#43 id=43 data-nosnippet>43</a><span class="kw">use super</span>::{
@@ -211,7 +211,7 @@
 <a href=#210 id=210 data-nosnippet>210</a>    }
 <a href=#211 id=211 data-nosnippet>211</a>}
 <a href=#212 id=212 data-nosnippet>212</a>
-<a href=#213 id=213 data-nosnippet>213</a><span class="attr">#[cfg(feature = <span class="string">"shadowing"</span>)]
+<a href=#213 id=213 data-nosnippet>213</a><span class="attr">#[cfg(feature = <span class="string">"symbolica"</span>)]
 <a href=#214 id=214 data-nosnippet>214</a></span><span class="kw">impl</span>&lt;T: Clone, S: TensorStructure&gt; Shadowable <span class="kw">for </span>SparseTensor&lt;T, S&gt;
 <a href=#215 id=215 data-nosnippet>215</a><span class="kw">where
 <a href=#216 id=216 data-nosnippet>216</a>    </span>S: HasName + Clone,
@@ -221,7 +221,7 @@
 <a href=#220 id=220 data-nosnippet>220</a>{
 <a href=#221 id=221 data-nosnippet>221</a>}
 <a href=#222 id=222 data-nosnippet>222</a>
-<a href=#223 id=223 data-nosnippet>223</a><span class="attr">#[cfg(feature = <span class="string">"shadowing"</span>)]
+<a href=#223 id=223 data-nosnippet>223</a><span class="attr">#[cfg(feature = <span class="string">"symbolica"</span>)]
 <a href=#224 id=224 data-nosnippet>224</a></span><span class="kw">impl</span>&lt;T: Clone, S: TensorStructure&gt; ShadowMapping <span class="kw">for </span>SparseTensor&lt;T, S&gt;
 <a href=#225 id=225 data-nosnippet>225</a><span class="kw">where
 <a href=#226 id=226 data-nosnippet>226</a>    </span>S: HasName + Clone,
@@ -287,7 +287,7 @@
 <a href=#286 id=286 data-nosnippet>286</a>        <span class="self">self</span>.structure.set_name(name);
 <a href=#287 id=287 data-nosnippet>287</a>    }
 <a href=#288 id=288 data-nosnippet>288</a>
-<a href=#289 id=289 data-nosnippet>289</a>    <span class="attr">#[cfg(feature = <span class="string">"shadowing"</span>)]
+<a href=#289 id=289 data-nosnippet>289</a>    <span class="attr">#[cfg(feature = <span class="string">"symbolica"</span>)]
 <a href=#290 id=290 data-nosnippet>290</a>    </span><span class="kw">fn </span>expanded_coef(<span class="kw-2">&amp;</span><span class="self">self</span>, id: FlatIndex) -&gt; ExpandedCoefficent&lt;<span class="self">Self</span>::Args&gt;
 <a href=#291 id=291 data-nosnippet>291</a>    <span class="kw">where
 <a href=#292 id=292 data-nosnippet>292</a>        </span><span class="self">Self</span>: TensorStructure,
@@ -297,7 +297,7 @@
 <a href=#296 id=296 data-nosnippet>296</a>        <span class="self">self</span>.structure.expanded_coef(id)
 <a href=#297 id=297 data-nosnippet>297</a>    }
 <a href=#298 id=298 data-nosnippet>298</a>
-<a href=#299 id=299 data-nosnippet>299</a>    <span class="attr">#[cfg(feature = <span class="string">"shadowing"</span>)]
+<a href=#299 id=299 data-nosnippet>299</a>    <span class="attr">#[cfg(feature = <span class="string">"symbolica"</span>)]
 <a href=#300 id=300 data-nosnippet>300</a>    </span><span class="kw">fn </span>flat_coef(<span class="kw-2">&amp;</span><span class="self">self</span>, id: FlatIndex) -&gt; FlatCoefficent&lt;<span class="self">Self</span>::Args&gt;
 <a href=#301 id=301 data-nosnippet>301</a>    <span class="kw">where
 <a href=#302 id=302 data-nosnippet>302</a>        </span><span class="self">Self</span>: TensorStructure,
@@ -336,7 +336,7 @@
 <a href=#335 id=335 data-nosnippet>335</a>        }
 <a href=#336 id=336 data-nosnippet>336</a>        hashmap
 <a href=#337 id=337 data-nosnippet>337</a>    }
-<a href=#338 id=338 data-nosnippet>338</a>    <span class="attr">#[cfg(feature = <span class="string">"shadowing"</span>)]
+<a href=#338 id=338 data-nosnippet>338</a>    <span class="attr">#[cfg(feature = <span class="string">"symbolica"</span>)]
 <a href=#339 id=339 data-nosnippet>339</a>    </span><span class="kw">fn </span>symhashmap(<span class="kw-2">&amp;</span><span class="self">self</span>, name: Symbol, args: <span class="kw-2">&amp;</span>[Atom]) -&gt; HashMap&lt;Atom, T&gt; {
 <a href=#340 id=340 data-nosnippet>340</a>        <span class="kw">let </span><span class="kw-2">mut </span>hashmap = HashMap::new();
 <a href=#341 id=341 data-nosnippet>341</a>

@@ -11,18 +11,18 @@
 <a href=#10 id=10 data-nosnippet>10</a><span class="kw">use </span>tabled::{builder::Builder, settings::Style};
 <a href=#11 id=11 data-nosnippet>11</a>
 <a href=#12 id=12 data-nosnippet>12</a><span class="kw">use </span><span class="kw">crate</span>::structure::SlotIndex;
-<a href=#13 id=13 data-nosnippet>13</a><span class="attr">#[cfg(feature = <span class="string">"shadowing"</span>)]
+<a href=#13 id=13 data-nosnippet>13</a><span class="attr">#[cfg(feature = <span class="string">"symbolica"</span>)]
 <a href=#14 id=14 data-nosnippet>14</a></span><span class="kw">use crate</span>::{
 <a href=#15 id=15 data-nosnippet>15</a>    structure::{ExpandedCoefficent, FlatIndex, ToSymbolic, slot::ParseableAind},
 <a href=#16 id=16 data-nosnippet>16</a>    tensors::{data::DenseTensor, parametric::TensorCoefficient},
 <a href=#17 id=17 data-nosnippet>17</a>};
-<a href=#18 id=18 data-nosnippet>18</a><span class="attr">#[cfg(feature = <span class="string">"shadowing"</span>)]
+<a href=#18 id=18 data-nosnippet>18</a><span class="attr">#[cfg(feature = <span class="string">"symbolica"</span>)]
 <a href=#19 id=19 data-nosnippet>19</a></span><span class="kw">use </span>symbolica_utils::IntoSymbol;
 <a href=#20 id=20 data-nosnippet>20</a>
-<a href=#21 id=21 data-nosnippet>21</a><span class="attr">#[cfg(feature = <span class="string">"shadowing"</span>)]
+<a href=#21 id=21 data-nosnippet>21</a><span class="attr">#[cfg(feature = <span class="string">"symbolica"</span>)]
 <a href=#22 id=22 data-nosnippet>22</a></span><span class="kw">use </span>eyre::Result;
 <a href=#23 id=23 data-nosnippet>23</a>
-<a href=#24 id=24 data-nosnippet>24</a><span class="attr">#[cfg(feature = <span class="string">"shadowing"</span>)]
+<a href=#24 id=24 data-nosnippet>24</a><span class="attr">#[cfg(feature = <span class="string">"symbolica"</span>)]
 <a href=#25 id=25 data-nosnippet>25</a></span><span class="kw">use </span>symbolica::atom::{Atom, FunctionBuilder, Symbol};
 <a href=#26 id=26 data-nosnippet>26</a>
 <a href=#27 id=27 data-nosnippet>27</a><span class="kw">use super</span>::{
@@ -34,13 +34,13 @@
 <a href=#33 id=33 data-nosnippet>33</a>    representation::{LibraryRep, RepName, Representation},
 <a href=#34 id=34 data-nosnippet>34</a>    slot::{AbsInd, DualSlotTo, DummyAind, IsAbstractSlot, Slot},
 <a href=#35 id=35 data-nosnippet>35</a>};
-<a href=#36 id=36 data-nosnippet>36</a><span class="attr">#[cfg(not(feature = <span class="string">"shadowing"</span>))]
+<a href=#36 id=36 data-nosnippet>36</a><span class="attr">#[cfg(not(feature = <span class="string">"symbolica"</span>))]
 <a href=#37 id=37 data-nosnippet>37</a></span><span class="kw">use </span>serde::{Deserialize, Serialize};
 <a href=#38 id=38 data-nosnippet>38</a>
 <a href=#39 id=39 data-nosnippet>39</a><span class="attr">#[derive(Clone, bincode_trait_derive::Encode, bincode_trait_derive::Decode)]
-<a href=#40 id=40 data-nosnippet>40</a>#[cfg_attr(not(feature = <span class="string">"shadowing"</span>), derive(Serialize, Deserialize))]
+<a href=#40 id=40 data-nosnippet>40</a>#[cfg_attr(not(feature = <span class="string">"symbolica"</span>), derive(Serialize, Deserialize))]
 <a href=#41 id=41 data-nosnippet>41</a>#[cfg_attr(
-<a href=#42 id=42 data-nosnippet>42</a>    feature = <span class="string">"shadowing"</span>,
+<a href=#42 id=42 data-nosnippet>42</a>    feature = <span class="string">"symbolica"</span>,
 <a href=#43 id=43 data-nosnippet>43</a>    trait_decode(<span class="kw">trait </span>= symbolica::state::HasStateMap),
 <a href=#44 id=44 data-nosnippet>44</a>)]
 <a href=#45 id=45 data-nosnippet>45</a></span><span class="kw">pub struct </span>OrderedStructure&lt;R: RepName = LibraryRep, Aind = AbstractIndex&gt; {
@@ -452,7 +452,7 @@
 <a href=#451 id=451 data-nosnippet>451</a>    }
 <a href=#452 id=452 data-nosnippet>452</a>}
 <a href=#453 id=453 data-nosnippet>453</a>
-<a href=#454 id=454 data-nosnippet>454</a><span class="attr">#[cfg(feature = <span class="string">"shadowing"</span>)]
+<a href=#454 id=454 data-nosnippet>454</a><span class="attr">#[cfg(feature = <span class="string">"symbolica"</span>)]
 <a href=#455 id=455 data-nosnippet>455</a></span><span class="kw">impl</span>&lt;R: RepName&lt;Dual = R&gt;, Aind: AbsInd + ParseableAind&gt; ToSymbolic <span class="kw">for </span>OrderedStructure&lt;R, Aind&gt; {
 <a href=#456 id=456 data-nosnippet>456</a>    <span class="kw">fn </span>concrete_atom(<span class="kw-2">&amp;</span><span class="self">self</span>, id: FlatIndex) -&gt; ExpandedCoefficent&lt;()&gt; {
 <a href=#457 id=457 data-nosnippet>457</a>        ExpandedCoefficent {
@@ -1079,7 +1079,7 @@
 <a href=#1078 id=1078 data-nosnippet>1078</a>        }
 <a href=#1079 id=1079 data-nosnippet>1079</a>    }
 <a href=#1080 id=1080 data-nosnippet>1080</a>
-<a href=#1081 id=1081 data-nosnippet>1081</a>    <span class="attr">#[cfg(feature = <span class="string">"shadowing"</span>)]
+<a href=#1081 id=1081 data-nosnippet>1081</a>    <span class="attr">#[cfg(feature = <span class="string">"symbolica"</span>)]
 <a href=#1082 id=1082 data-nosnippet>1082</a>    #[test]
 <a href=#1083 id=1083 data-nosnippet>1083</a>    </span><span class="kw">fn </span>canonicalized_symbolic_output_uses_logical_slot_order_and_delegates_name() {
 <a href=#1084 id=1084 data-nosnippet>1084</a>        <span class="kw">use </span>symbolica::{

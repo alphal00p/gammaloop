@@ -260,8 +260,8 @@
 <a href=#259 id=259 data-nosnippet>259</a>/// - `H`: The type of data associated with each individual half-edge.
 <a href=#260 id=260 data-nosnippet>260</a>/// - `S`: The node storage strategy, implementing the [`NodeStorage`] trait.
 <a href=#261 id=261 data-nosnippet>261</a>///   This determines how node data and their connectivity to half-edges
-<a href=#262 id=262 data-nosnippet>262</a>///   are stored. Defaults to [`DefaultNodeStore&lt;V&gt;`] (feature-selected; `nodestore-vec` uses
-<a href=#263 id=263 data-nosnippet>263</a>///   [`nodestore::NodeStorageVec&lt;V&gt;`]).
+<a href=#262 id=262 data-nosnippet>262</a>///   are stored. Defaults to [`DefaultNodeStore&lt;V&gt;`], which uses
+<a href=#263 id=263 data-nosnippet>263</a>///   [`nodestore::NodeStorageVec&lt;V&gt;`] unless a forest nodestore feature is enabled.
 <a href=#264 id=264 data-nosnippet>264</a></span><span class="kw">pub struct </span>HedgeGraph&lt;E, V, H = NoData, S: NodeStorage&lt;NodeData = V&gt; = DefaultNodeStore&lt;V&gt;&gt; {
 <a href=#265 id=265 data-nosnippet>265</a>    <span class="kw">pub</span>(<span class="kw">crate</span>) hedge_data: HedgeVec&lt;H&gt;,
 <a href=#266 id=266 data-nosnippet>266</a>    <span class="doccomment">/// Edge data and the involution that pairs internal half-edges or marks

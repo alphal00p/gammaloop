@@ -13,9 +13,9 @@
 <a href=#12 id=12 data-nosnippet>12</a><span class="kw">use </span>linnet::half_edge::swap::Swap;
 <a href=#13 id=13 data-nosnippet>13</a><span class="kw">use </span>thiserror::Error;
 <a href=#14 id=14 data-nosnippet>14</a>
-<a href=#15 id=15 data-nosnippet>15</a><span class="attr">#[cfg(feature = <span class="string">"shadowing"</span>)]
+<a href=#15 id=15 data-nosnippet>15</a><span class="attr">#[cfg(feature = <span class="string">"symbolica"</span>)]
 <a href=#16 id=16 data-nosnippet>16</a></span><span class="kw">use </span><span class="kw">crate</span>::structure::slot::ParseableAind;
-<a href=#17 id=17 data-nosnippet>17</a><span class="attr">#[cfg(feature = <span class="string">"shadowing"</span>)]
+<a href=#17 id=17 data-nosnippet>17</a><span class="attr">#[cfg(feature = <span class="string">"symbolica"</span>)]
 <a href=#18 id=18 data-nosnippet>18</a></span><span class="kw">use crate</span>::{
 <a href=#19 id=19 data-nosnippet>19</a>    tensors::data::DenseTensor,
 <a href=#20 id=20 data-nosnippet>20</a>    tensors::parametric::{ExpandedCoefficent, FlatCoefficent, TensorCoefficient},
@@ -28,9 +28,9 @@
 <a href=#27 id=27 data-nosnippet>27</a><span class="kw">use </span>slot::IsAbstractSlot;
 <a href=#28 id=28 data-nosnippet>28</a><span class="kw">use </span>slot::SlotError;
 <a href=#29 id=29 data-nosnippet>29</a><span class="kw">use </span>std::fmt::Debug;
-<a href=#30 id=30 data-nosnippet>30</a><span class="attr">#[cfg(feature = <span class="string">"shadowing"</span>)]
+<a href=#30 id=30 data-nosnippet>30</a><span class="attr">#[cfg(feature = <span class="string">"symbolica"</span>)]
 <a href=#31 id=31 data-nosnippet>31</a></span><span class="kw">use </span>symbolica::atom::{Atom, FunctionBuilder, Symbol};
-<a href=#32 id=32 data-nosnippet>32</a><span class="attr">#[cfg(feature = <span class="string">"shadowing"</span>)]
+<a href=#32 id=32 data-nosnippet>32</a><span class="attr">#[cfg(feature = <span class="string">"symbolica"</span>)]
 <a href=#33 id=33 data-nosnippet>33</a></span><span class="kw">use </span>symbolica_utils::{IntoArgs, IntoSymbol};
 <a href=#34 id=34 data-nosnippet>34</a>
 <a href=#35 id=35 data-nosnippet>35</a><span class="kw">use </span><span class="kw">crate</span>::iterators::TensorStructureIndexIterator;
@@ -114,7 +114,7 @@
 <a href=#113 id=113 data-nosnippet>113</a>    <span class="kw">fn </span>cast_structure(<span class="self">self</span>) -&gt; O;
 <a href=#114 id=114 data-nosnippet>114</a>}
 <a href=#115 id=115 data-nosnippet>115</a>
-<a href=#116 id=116 data-nosnippet>116</a><span class="attr">#[cfg(feature = <span class="string">"shadowing"</span>)]
+<a href=#116 id=116 data-nosnippet>116</a><span class="attr">#[cfg(feature = <span class="string">"symbolica"</span>)]
 <a href=#117 id=117 data-nosnippet>117</a></span><span class="kw">impl</span>&lt;T&gt; ToSymbolic <span class="kw">for </span>Canonicalized&lt;T&gt;
 <a href=#118 id=118 data-nosnippet>118</a><span class="kw">where
 <a href=#119 id=119 data-nosnippet>119</a>    </span>T: TensorStructure + ToSymbolic,
@@ -197,7 +197,7 @@
 <a href=#196 id=196 data-nosnippet>196</a>    }
 <a href=#197 id=197 data-nosnippet>197</a>}
 <a href=#198 id=198 data-nosnippet>198</a>
-<a href=#199 id=199 data-nosnippet>199</a><span class="attr">#[cfg(feature = <span class="string">"shadowing"</span>)]
+<a href=#199 id=199 data-nosnippet>199</a><span class="attr">#[cfg(feature = <span class="string">"symbolica"</span>)]
 <a href=#200 id=200 data-nosnippet>200</a></span><span class="kw">impl</span>&lt;T: HasName&gt; ToSymbolic <span class="kw">for </span>T
 <a href=#201 id=201 data-nosnippet>201</a><span class="kw">where
 <a href=#202 id=202 data-nosnippet>202</a>    </span>T: TensorStructure,
@@ -275,7 +275,7 @@
 <a href=#274 id=274 data-nosnippet>274</a>    }
 <a href=#275 id=275 data-nosnippet>275</a>}
 <a href=#276 id=276 data-nosnippet>276</a>
-<a href=#277 id=277 data-nosnippet>277</a><span class="attr">#[cfg(feature = <span class="string">"shadowing"</span>)]
+<a href=#277 id=277 data-nosnippet>277</a><span class="attr">#[cfg(feature = <span class="string">"symbolica"</span>)]
 <a href=#278 id=278 data-nosnippet>278</a></span><span class="kw">pub trait </span>ToSymbolic {
 <a href=#279 id=279 data-nosnippet>279</a>    <span class="kw">fn </span>concrete_atom(<span class="kw-2">&amp;</span><span class="self">self</span>, id: FlatIndex) -&gt; ExpandedCoefficent&lt;()&gt;;
 <a href=#280 id=280 data-nosnippet>280</a>    <span class="comment">// {
@@ -410,7 +410,7 @@
 <a href=#409 id=409 data-nosnippet>409</a>    </span><span class="kw">fn </span>external_indices_iter(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw">impl </span>Iterator&lt;Item = &lt;<span class="self">Self</span>::Slot <span class="kw">as </span>IsAbstractSlot&gt;::Aind&gt;;
 <a href=#410 id=410 data-nosnippet>410</a>
 <a href=#411 id=411 data-nosnippet>411</a>    <span class="doccomment">/// Returns the symbolic arguments for external tensor ports in storage order.
-<a href=#412 id=412 data-nosnippet>412</a>    </span><span class="attr">#[cfg(feature = <span class="string">"shadowing"</span>)]
+<a href=#412 id=412 data-nosnippet>412</a>    </span><span class="attr">#[cfg(feature = <span class="string">"symbolica"</span>)]
 <a href=#413 id=413 data-nosnippet>413</a>    </span><span class="kw">fn </span>symbolic_external_args(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Vec&lt;Atom&gt;
 <a href=#414 id=414 data-nosnippet>414</a>    <span class="kw">where
 <a href=#415 id=415 data-nosnippet>415</a>        </span>&lt;<span class="self">Self</span>::Slot <span class="kw">as </span>IsAbstractSlot&gt;::Aind: ParseableAind,
@@ -879,7 +879,7 @@
 <a href=#878 id=878 data-nosnippet>878</a>    <span class="kw">fn </span>args(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Option</span>&lt;<span class="self">Self</span>::Args&gt;;
 <a href=#879 id=879 data-nosnippet>879</a>    <span class="kw">fn </span>set_name(<span class="kw-2">&amp;mut </span><span class="self">self</span>, name: <span class="self">Self</span>::Name);
 <a href=#880 id=880 data-nosnippet>880</a>
-<a href=#881 id=881 data-nosnippet>881</a>    <span class="attr">#[cfg(feature = <span class="string">"shadowing"</span>)]
+<a href=#881 id=881 data-nosnippet>881</a>    <span class="attr">#[cfg(feature = <span class="string">"symbolica"</span>)]
 <a href=#882 id=882 data-nosnippet>882</a>    </span><span class="kw">fn </span>expanded_coef(<span class="kw-2">&amp;</span><span class="self">self</span>, id: FlatIndex) -&gt; ExpandedCoefficent&lt;<span class="self">Self</span>::Args&gt;
 <a href=#883 id=883 data-nosnippet>883</a>    <span class="kw">where
 <a href=#884 id=884 data-nosnippet>884</a>        </span><span class="self">Self</span>: TensorStructure,
@@ -892,7 +892,7 @@
 <a href=#891 id=891 data-nosnippet>891</a>            args: <span class="self">self</span>.args(),
 <a href=#892 id=892 data-nosnippet>892</a>        }
 <a href=#893 id=893 data-nosnippet>893</a>    }
-<a href=#894 id=894 data-nosnippet>894</a>    <span class="attr">#[cfg(feature = <span class="string">"shadowing"</span>)]
+<a href=#894 id=894 data-nosnippet>894</a>    <span class="attr">#[cfg(feature = <span class="string">"symbolica"</span>)]
 <a href=#895 id=895 data-nosnippet>895</a>    </span><span class="kw">fn </span>flat_coef(<span class="kw-2">&amp;</span><span class="self">self</span>, id: FlatIndex) -&gt; FlatCoefficent&lt;<span class="self">Self</span>::Args&gt;
 <a href=#896 id=896 data-nosnippet>896</a>    <span class="kw">where
 <a href=#897 id=897 data-nosnippet>897</a>        </span><span class="self">Self</span>: TensorStructure,
@@ -1100,6 +1100,6 @@
 <a href=#1099 id=1099 data-nosnippet>1099</a>}
 <a href=#1100 id=1100 data-nosnippet>1100</a>
 <a href=#1101 id=1101 data-nosnippet>1101</a><span class="attr">#[cfg(test)]
-<a href=#1102 id=1102 data-nosnippet>1102</a>#[cfg(feature = <span class="string">"shadowing"</span>)]
+<a href=#1102 id=1102 data-nosnippet>1102</a>#[cfg(feature = <span class="string">"symbolica"</span>)]
 <a href=#1103 id=1103 data-nosnippet>1103</a></span><span class="kw">mod </span>shadowing_tests {}
 </code></pre></div></section></main></body></html>

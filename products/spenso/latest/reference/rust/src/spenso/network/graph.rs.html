@@ -50,7 +50,7 @@
 <a href=#49 id=49 data-nosnippet>49</a>    Eq, <span class="comment">// bincode_trait_derive::BorrowDecodeFromDecode,
 <a href=#50 id=50 data-nosnippet>50</a></span>)]
 <a href=#51 id=51 data-nosnippet>51</a>#[cfg_attr(
-<a href=#52 id=52 data-nosnippet>52</a>    feature = <span class="string">"shadowing"</span>,
+<a href=#52 id=52 data-nosnippet>52</a>    feature = <span class="string">"symbolica"</span>,
 <a href=#53 id=53 data-nosnippet>53</a>    trait_decode(<span class="kw">trait </span>= symbolica::state::HasStateMap),
 <a href=#54 id=54 data-nosnippet>54</a>)]
 <a href=#55 id=55 data-nosnippet>55</a></span><span class="kw">pub struct </span>NetworkGraph&lt;K, FK = i8, Aind = AbstractIndex&gt; {
@@ -202,7 +202,7 @@
 <a href=#201 id=201 data-nosnippet>201</a>    <span class="comment">// bincode_trait_derive::BorrowDecodeFromDecode,
 <a href=#202 id=202 data-nosnippet>202</a></span>)]
 <a href=#203 id=203 data-nosnippet>203</a>#[cfg_attr(
-<a href=#204 id=204 data-nosnippet>204</a>    feature = <span class="string">"shadowing"</span>,
+<a href=#204 id=204 data-nosnippet>204</a>    feature = <span class="string">"symbolica"</span>,
 <a href=#205 id=205 data-nosnippet>205</a>    trait_decode(<span class="kw">trait </span>= symbolica::state::HasStateMap),
 <a href=#206 id=206 data-nosnippet>206</a>)]
 <a href=#207 id=207 data-nosnippet>207</a></span><span class="kw">pub enum </span>NetworkEdge&lt;Aind&gt; {
@@ -1871,7 +1871,7 @@
 <a href=#1870 id=1870 data-nosnippet>1870</a>            <span class="kw-2">&amp;</span>|<span class="kw">_</span>| <span class="prelude-val">None</span>,
 <a href=#1871 id=1871 data-nosnippet>1871</a>            <span class="kw-2">&amp;</span>|e| {
 <a href=#1872 id=1872 data-nosnippet>1872</a>                <span class="kw">if let </span>NetworkEdge::Slot(s) = e {
-<a href=#1873 id=1873 data-nosnippet>1873</a>                    <span class="comment">// #[cfg(feature = "shadowing")]
+<a href=#1873 id=1873 data-nosnippet>1873</a>                    <span class="comment">// #[cfg(feature = "symbolica")]
 <a href=#1874 id=1874 data-nosnippet>1874</a>                    // {
 <a href=#1875 id=1875 data-nosnippet>1875</a>                    //     use symbolica::atom::AtomCore;
 <a href=#1876 id=1876 data-nosnippet>1876</a>
@@ -1883,7 +1883,7 @@
 <a href=#1882 id=1882 data-nosnippet>1882</a>                    //             .printer(SpensoPrintSettings::compact().nice_symbolica())
 <a href=#1883 id=1883 data-nosnippet>1883</a>                    //     ))
 <a href=#1884 id=1884 data-nosnippet>1884</a>                    // }
-<a href=#1885 id=1885 data-nosnippet>1885</a>                    // #[cfg(not(feature = "shadowing"))]
+<a href=#1885 id=1885 data-nosnippet>1885</a>                    // #[cfg(not(feature = "symbolica"))]
 <a href=#1886 id=1886 data-nosnippet>1886</a>                    </span><span class="prelude-val">Some</span>(<span class="macro">format!</span>(<span class="string">"label=\"{s}\""</span>))
 <a href=#1887 id=1887 data-nosnippet>1887</a>                } <span class="kw">else </span>{
 <a href=#1888 id=1888 data-nosnippet>1888</a>                    <span class="prelude-val">None
@@ -3015,7 +3015,7 @@
 <a href=#3014 id=3014 data-nosnippet>3014</a>        tree::child_vec::ChildVecStore,
 <a href=#3015 id=3015 data-nosnippet>3015</a>    };
 <a href=#3016 id=3016 data-nosnippet>3016</a>
-<a href=#3017 id=3017 data-nosnippet>3017</a>    <span class="attr">#[cfg(feature = <span class="string">"shadowing"</span>)]
+<a href=#3017 id=3017 data-nosnippet>3017</a>    <span class="attr">#[cfg(feature = <span class="string">"symbolica"</span>)]
 <a href=#3018 id=3018 data-nosnippet>3018</a>    </span><span class="kw">use </span><span class="kw">crate</span>::network::TensorNetworkError;
 <a href=#3019 id=3019 data-nosnippet>3019</a>    <span class="kw">use crate</span>::{
 <a href=#3020 id=3020 data-nosnippet>3020</a>        network::graph::NetworkLeaf,
@@ -3028,7 +3028,7 @@
 <a href=#3027 id=3027 data-nosnippet>3027</a>
 <a href=#3028 id=3028 data-nosnippet>3028</a>    <span class="kw">use super</span>::{NetworkGraph, NetworkNode, NetworkOp};
 <a href=#3029 id=3029 data-nosnippet>3029</a>
-<a href=#3030 id=3030 data-nosnippet>3030</a>    <span class="attr">#[cfg(feature = <span class="string">"shadowing"</span>)]
+<a href=#3030 id=3030 data-nosnippet>3030</a>    <span class="attr">#[cfg(feature = <span class="string">"symbolica"</span>)]
 <a href=#3031 id=3031 data-nosnippet>3031</a>    #[test]
 <a href=#3032 id=3032 data-nosnippet>3032</a>    </span><span class="kw">fn </span>library_materialization_preserves_repeated_representation_axis_order() {
 <a href=#3033 id=3033 data-nosnippet>3033</a>        <span class="kw">use crate</span>::{

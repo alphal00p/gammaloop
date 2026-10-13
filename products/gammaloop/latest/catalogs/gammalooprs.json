@@ -417,7 +417,7 @@
             "source": {
               "identifier": "gammalooprs::settings::GlobalSettings",
               "file": "crates/gammalooprs/src/settings/mod.rs",
-              "line": 24,
+              "line": 21,
               "column": 1
             }
           },
@@ -571,7 +571,7 @@
             "source": {
               "identifier": "gammalooprs::settings::RuntimeSettings",
               "file": "crates/gammalooprs/src/settings/mod.rs",
-              "line": 51,
+              "line": 45,
               "column": 1
             }
           },

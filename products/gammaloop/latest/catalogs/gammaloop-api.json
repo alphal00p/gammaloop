@@ -213,7 +213,7 @@
             "source": {
               "identifier": "gammaloop_api::StateLoadOption",
               "file": "crates/gammaloop-api/src/lib.rs",
-              "line": 589,
+              "line": 578,
               "column": 1
             }
           },
@@ -312,7 +312,7 @@
             "source": {
               "identifier": "gammaloop_api::LoadedState",
               "file": "crates/gammaloop-api/src/lib.rs",
-              "line": 625,
+              "line": 614,
               "column": 1
             }
           },
@@ -355,7 +355,7 @@
             "source": {
               "identifier": "gammaloop_api::StateLoadOption::load",
               "file": "crates/gammaloop-api/src/lib.rs",
-              "line": 734,
+              "line": 724,
               "column": 1
             }
           },
@@ -398,7 +398,7 @@
             "source": {
               "identifier": "gammaloop_api::LoadedState::cli_session",
               "file": "crates/gammaloop-api/src/lib.rs",
-              "line": 646,
+              "line": 635,
               "column": 1
             }
           },
@@ -430,7 +430,7 @@
             "source": {
               "identifier": "gammaloop_api::session::CliSession",
               "file": "crates/gammaloop-api/src/session.rs",
-              "line": 112,
+              "line": 116,
               "column": 1
             }
           },
@@ -480,7 +480,7 @@
             "source": {
               "identifier": "gammaloop_api::session::CliSession::execute_command",
               "file": "crates/gammaloop-api/src/session.rs",
-              "line": 154,
+              "line": 158,
               "column": 1
             }
           },
@@ -1030,7 +1030,7 @@
             "source": {
               "identifier": "gammaloop_api::commands::import::model::ImportModel",
               "file": "crates/gammaloop-api/src/commands/import/model.rs",
-              "line": 32,
+              "line": 35,
               "column": 1
             }
           },
@@ -1080,7 +1080,7 @@
             "source": {
               "identifier": "gammaloop_api::commands::import::model::ImportModel::run",
               "file": "crates/gammaloop-api/src/commands/import/model.rs",
-              "line": 189,
+              "line": 192,
               "column": 1
             }
           },
@@ -2374,7 +2374,7 @@
             "source": {
               "identifier": "gammaloop_api::CLISettings",
               "file": "crates/gammaloop-api/src/lib.rs",
-              "line": 346,
+              "line": 335,
               "column": 1
             }
           },
@@ -2462,7 +2462,7 @@
             "source": {
               "identifier": "gammaloop_api::CLISettings",
               "file": "crates/gammaloop-api/src/lib.rs",
-              "line": 346,
+              "line": 335,
               "column": 1
             }
           }

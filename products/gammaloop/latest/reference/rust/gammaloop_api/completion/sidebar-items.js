@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["ProcessKind"],"struct":["IntegrandDetailCompletionEntry","IrProfileCompletionEntry","ModelParameterCompletionEntry","ModelVertexCompletionEntry","ProcessCompletionEntry"]};

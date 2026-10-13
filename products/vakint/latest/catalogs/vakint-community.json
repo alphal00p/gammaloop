@@ -11,8 +11,8 @@
     "version": "0.1.2",
     "language": "python",
     "features": [
-      "symbolica_community_module",
-      "python_stubgen"
+      "python",
+      "python-stubs"
     ]
   },
   "root": {
@@ -44,8 +44,8 @@
             "kind": "python-class",
             "supported": true,
             "required_features": [
-              "symbolica_community_module",
-              "python_stubgen"
+              "python",
+              "python-stubs"
             ],
             "docs": {
               "format": "python-docstring",
@@ -420,8 +420,8 @@
             "kind": "python-class",
             "supported": true,
             "required_features": [
-              "symbolica_community_module",
-              "python_stubgen"
+              "python",
+              "python-stubs"
             ],
             "docs": {
               "format": "python-docstring",
@@ -651,8 +651,8 @@
             "kind": "python-class",
             "supported": true,
             "required_features": [
-              "symbolica_community_module",
-              "python_stubgen"
+              "python",
+              "python-stubs"
             ],
             "docs": {
               "format": "python-docstring",
@@ -726,8 +726,8 @@
             "kind": "python-class",
             "supported": true,
             "required_features": [
-              "symbolica_community_module",
-              "python_stubgen"
+              "python",
+              "python-stubs"
             ],
             "docs": {
               "format": "python-docstring",

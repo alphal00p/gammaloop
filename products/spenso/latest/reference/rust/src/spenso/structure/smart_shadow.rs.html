@@ -16,19 +16,19 @@
 <a href=#15 id=15 data-nosnippet>15</a><span class="kw">use </span>eyre::Result;
 <a href=#16 id=16 data-nosnippet>16</a>
 <a href=#17 id=17 data-nosnippet>17</a><span class="kw">use </span><span class="kw">crate</span>::structure::SlotIndex;
-<a href=#18 id=18 data-nosnippet>18</a><span class="attr">#[cfg(feature = <span class="string">"shadowing"</span>)]
+<a href=#18 id=18 data-nosnippet>18</a><span class="attr">#[cfg(feature = <span class="string">"symbolica"</span>)]
 <a href=#19 id=19 data-nosnippet>19</a></span><span class="kw">use </span>symbolica_utils::{IntoArgs, IntoSymbol};
 <a href=#20 id=20 data-nosnippet>20</a>
-<a href=#21 id=21 data-nosnippet>21</a><span class="attr">#[cfg(not(feature = <span class="string">"shadowing"</span>))]
+<a href=#21 id=21 data-nosnippet>21</a><span class="attr">#[cfg(not(feature = <span class="string">"symbolica"</span>))]
 <a href=#22 id=22 data-nosnippet>22</a></span><span class="kw">use </span>serde::{Deserialize, Serialize};
 <a href=#23 id=23 data-nosnippet>23</a>
 <a href=#24 id=24 data-nosnippet>24</a><span class="doccomment">/// A structure to enable smart shadowing of tensors in a tensor network contraction algorithm.
 <a href=#25 id=25 data-nosnippet>25</a></span><span class="attr">#[derive(
 <a href=#26 id=26 data-nosnippet>26</a>    Clone, PartialEq, Eq, Debug, Hash, bincode_trait_derive::Encode, bincode_trait_derive::Decode,
 <a href=#27 id=27 data-nosnippet>27</a>)]
-<a href=#28 id=28 data-nosnippet>28</a>#[cfg_attr(not(feature = <span class="string">"shadowing"</span>), derive(Serialize, Deserialize))]
+<a href=#28 id=28 data-nosnippet>28</a>#[cfg_attr(not(feature = <span class="string">"symbolica"</span>), derive(Serialize, Deserialize))]
 <a href=#29 id=29 data-nosnippet>29</a>#[cfg_attr(
-<a href=#30 id=30 data-nosnippet>30</a>feature = <span class="string">"shadowing"</span>,
+<a href=#30 id=30 data-nosnippet>30</a>feature = <span class="string">"symbolica"</span>,
 <a href=#31 id=31 data-nosnippet>31</a>trait_decode(<span class="kw">trait </span>= symbolica::state::HasStateMap),
 <a href=#32 id=32 data-nosnippet>32</a>)]
 <a href=#33 id=33 data-nosnippet>33</a></span><span class="kw">pub struct </span>SmartShadowStructure&lt;
@@ -93,7 +93,7 @@
 <a href=#92 id=92 data-nosnippet>92</a>    }
 <a href=#93 id=93 data-nosnippet>93</a>}
 <a href=#94 id=94 data-nosnippet>94</a>
-<a href=#95 id=95 data-nosnippet>95</a><span class="attr">#[cfg(feature = <span class="string">"shadowing"</span>)]
+<a href=#95 id=95 data-nosnippet>95</a><span class="attr">#[cfg(feature = <span class="string">"symbolica"</span>)]
 <a href=#96 id=96 data-nosnippet>96</a></span><span class="kw">impl</span>&lt;N: IntoSymbol, A: IntoArgs, R: RepName, Aind: AbsInd&gt; std::fmt::Display
 <a href=#97 id=97 data-nosnippet>97</a>    <span class="kw">for </span>SmartShadowStructure&lt;N, A, R, Aind&gt;
 <a href=#98 id=98 data-nosnippet>98</a>{

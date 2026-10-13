@@ -87,7 +87,7 @@
 <a href=#86 id=86 data-nosnippet>86</a><span class="attr">#[derive(
 <a href=#87 id=87 data-nosnippet>87</a>    Debug, Clone, Copy, Default, Serialize, Deserialize, Encode, Decode, PartialEq, Eq, JsonSchema,
 <a href=#88 id=88 data-nosnippet>88</a>)]
-<a href=#89 id=89 data-nosnippet>89</a>#[cfg_attr(feature = <span class="string">"python_api"</span>, pyo3::pyclass(from_py_object))]
+<a href=#89 id=89 data-nosnippet>89</a>#[cfg_attr(feature = <span class="string">"python"</span>, pyo3::pyclass(from_py_object))]
 <a href=#90 id=90 data-nosnippet>90</a></span><span class="kw">pub enum </span>ObservableFileFormat {
 <a href=#91 id=91 data-nosnippet>91</a>    <span class="attr">#[serde(rename = <span class="string">"none"</span>)]
 <a href=#92 id=92 data-nosnippet>92</a>    </span><span class="prelude-val">None</span>,
@@ -334,7 +334,7 @@
 <a href=#333 id=333 data-nosnippet>333</a>
 <a href=#334 id=334 data-nosnippet>334</a><span class="attr">#[derive(Debug, Clone, Default, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
 <a href=#335 id=335 data-nosnippet>335</a>#[allow(non_snake_case)]
-<a href=#336 id=336 data-nosnippet>336</a>#[cfg_attr(feature = <span class="string">"python_api"</span>, pyo3::pyclass(from_py_object))]
+<a href=#336 id=336 data-nosnippet>336</a>#[cfg_attr(feature = <span class="string">"python"</span>, pyo3::pyclass(from_py_object))]
 <a href=#337 id=337 data-nosnippet>337</a>#[serde(default, deny_unknown_fields)]
 <a href=#338 id=338 data-nosnippet>338</a></span><span class="kw">pub struct </span>QuantityComputationSettings {
 <a href=#339 id=339 data-nosnippet>339</a>    <span class="attr">#[serde(default, skip_serializing_if = <span class="string">"IsDefault::is_default"</span>)]
@@ -447,7 +447,7 @@
 <a href=#446 id=446 data-nosnippet>446</a>
 <a href=#447 id=447 data-nosnippet>447</a><span class="attr">#[derive(Debug, Clone, Default, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
 <a href=#448 id=448 data-nosnippet>448</a>#[allow(non_snake_case)]
-<a href=#449 id=449 data-nosnippet>449</a>#[cfg_attr(feature = <span class="string">"python_api"</span>, pyo3::pyclass(from_py_object))]
+<a href=#449 id=449 data-nosnippet>449</a>#[cfg_attr(feature = <span class="string">"python"</span>, pyo3::pyclass(from_py_object))]
 <a href=#450 id=450 data-nosnippet>450</a>#[serde(default, deny_unknown_fields)]
 <a href=#451 id=451 data-nosnippet>451</a></span><span class="kw">pub struct </span>JetClusteringSettings {
 <a href=#452 id=452 data-nosnippet>452</a>    <span class="attr">#[serde(default, skip_serializing_if = <span class="string">"IsDefault::is_default"</span>)]
@@ -523,7 +523,7 @@
 <a href=#522 id=522 data-nosnippet>522</a>
 <a href=#523 id=523 data-nosnippet>523</a><span class="attr">#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
 <a href=#524 id=524 data-nosnippet>524</a>#[allow(non_snake_case)]
-<a href=#525 id=525 data-nosnippet>525</a>#[cfg_attr(feature = <span class="string">"python_api"</span>, pyo3::pyclass(from_py_object))]
+<a href=#525 id=525 data-nosnippet>525</a>#[cfg_attr(feature = <span class="string">"python"</span>, pyo3::pyclass(from_py_object))]
 <a href=#526 id=526 data-nosnippet>526</a>#[serde(deny_unknown_fields)]
 <a href=#527 id=527 data-nosnippet>527</a></span><span class="kw">pub struct </span>ParticleQuantitySettings {
 <a href=#528 id=528 data-nosnippet>528</a>    <span class="attr">#[serde(skip_serializing_if = <span class="string">"IsDefault::is_default"</span>)]
@@ -545,7 +545,7 @@
 <a href=#544 id=544 data-nosnippet>544</a>
 <a href=#545 id=545 data-nosnippet>545</a><span class="attr">#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
 <a href=#546 id=546 data-nosnippet>546</a>#[allow(non_snake_case)]
-<a href=#547 id=547 data-nosnippet>547</a>#[cfg_attr(feature = <span class="string">"python_api"</span>, pyo3::pyclass(from_py_object))]
+<a href=#547 id=547 data-nosnippet>547</a>#[cfg_attr(feature = <span class="string">"python"</span>, pyo3::pyclass(from_py_object))]
 <a href=#548 id=548 data-nosnippet>548</a>#[serde(deny_unknown_fields)]
 <a href=#549 id=549 data-nosnippet>549</a></span><span class="kw">pub struct </span>JetQuantitySettings {
 <a href=#550 id=550 data-nosnippet>550</a>    <span class="attr">#[serde(flatten)]
@@ -568,7 +568,7 @@
 <a href=#567 id=567 data-nosnippet>567</a><span class="attr">#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
 <a href=#568 id=568 data-nosnippet>568</a>#[allow(non_snake_case)]
 <a href=#569 id=569 data-nosnippet>569</a>#[serde(tag = <span class="string">"type"</span>, rename_all = <span class="string">"snake_case"</span>)]
-<a href=#570 id=570 data-nosnippet>570</a>#[cfg_attr(feature = <span class="string">"python_api"</span>, pyo3::pyclass(from_py_object))]
+<a href=#570 id=570 data-nosnippet>570</a>#[cfg_attr(feature = <span class="string">"python"</span>, pyo3::pyclass(from_py_object))]
 <a href=#571 id=571 data-nosnippet>571</a></span><span class="kw">pub enum </span>QuantitySettings {
 <a href=#572 id=572 data-nosnippet>572</a>    Particle(ParticleQuantitySettings),
 <a href=#573 id=573 data-nosnippet>573</a>    Jet(JetQuantitySettings),
@@ -606,7 +606,7 @@
 <a href=#605 id=605 data-nosnippet>605</a>
 <a href=#606 id=606 data-nosnippet>606</a><span class="attr">#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
 <a href=#607 id=607 data-nosnippet>607</a>#[allow(non_snake_case)]
-<a href=#608 id=608 data-nosnippet>608</a>#[cfg_attr(feature = <span class="string">"python_api"</span>, pyo3::pyclass(from_py_object))]
+<a href=#608 id=608 data-nosnippet>608</a>#[cfg_attr(feature = <span class="string">"python"</span>, pyo3::pyclass(from_py_object))]
 <a href=#609 id=609 data-nosnippet>609</a>#[serde(deny_unknown_fields)]
 <a href=#610 id=610 data-nosnippet>610</a></span><span class="kw">pub struct </span>ValueRangeSelectorSettings {
 <a href=#611 id=611 data-nosnippet>611</a>    <span class="attr">#[serde(default, skip_serializing_if = <span class="string">"IsDefault::is_default"</span>)]
@@ -621,7 +621,7 @@
 <a href=#620 id=620 data-nosnippet>620</a>
 <a href=#621 id=621 data-nosnippet>621</a><span class="attr">#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
 <a href=#622 id=622 data-nosnippet>622</a>#[allow(non_snake_case)]
-<a href=#623 id=623 data-nosnippet>623</a>#[cfg_attr(feature = <span class="string">"python_api"</span>, pyo3::pyclass(from_py_object))]
+<a href=#623 id=623 data-nosnippet>623</a>#[cfg_attr(feature = <span class="string">"python"</span>, pyo3::pyclass(from_py_object))]
 <a href=#624 id=624 data-nosnippet>624</a>#[serde(deny_unknown_fields)]
 <a href=#625 id=625 data-nosnippet>625</a></span><span class="kw">pub struct </span>DiscreteRangeSelectorSettings {
 <a href=#626 id=626 data-nosnippet>626</a>    <span class="attr">#[serde(default, skip_serializing_if = <span class="string">"IsDefault::is_default"</span>)]
@@ -634,7 +634,7 @@
 <a href=#633 id=633 data-nosnippet>633</a>
 <a href=#634 id=634 data-nosnippet>634</a><span class="attr">#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
 <a href=#635 id=635 data-nosnippet>635</a>#[allow(non_snake_case)]
-<a href=#636 id=636 data-nosnippet>636</a>#[cfg_attr(feature = <span class="string">"python_api"</span>, pyo3::pyclass(from_py_object))]
+<a href=#636 id=636 data-nosnippet>636</a>#[cfg_attr(feature = <span class="string">"python"</span>, pyo3::pyclass(from_py_object))]
 <a href=#637 id=637 data-nosnippet>637</a>#[serde(deny_unknown_fields)]
 <a href=#638 id=638 data-nosnippet>638</a></span><span class="kw">pub struct </span>CountRangeSelectorSettings {
 <a href=#639 id=639 data-nosnippet>639</a>    <span class="kw">pub </span>min_count: usize,
@@ -645,7 +645,7 @@
 <a href=#644 id=644 data-nosnippet>644</a><span class="attr">#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
 <a href=#645 id=645 data-nosnippet>645</a>#[allow(non_snake_case)]
 <a href=#646 id=646 data-nosnippet>646</a>#[serde(tag = <span class="string">"selector"</span>, rename_all = <span class="string">"snake_case"</span>)]
-<a href=#647 id=647 data-nosnippet>647</a>#[cfg_attr(feature = <span class="string">"python_api"</span>, pyo3::pyclass(from_py_object))]
+<a href=#647 id=647 data-nosnippet>647</a>#[cfg_attr(feature = <span class="string">"python"</span>, pyo3::pyclass(from_py_object))]
 <a href=#648 id=648 data-nosnippet>648</a></span><span class="kw">pub enum </span>SelectorDefinitionSettings {
 <a href=#649 id=649 data-nosnippet>649</a>    ValueRange(ValueRangeSelectorSettings),
 <a href=#650 id=650 data-nosnippet>650</a>    DiscreteRange(DiscreteRangeSelectorSettings),
@@ -654,7 +654,7 @@
 <a href=#653 id=653 data-nosnippet>653</a>
 <a href=#654 id=654 data-nosnippet>654</a><span class="attr">#[derive(Debug, Clone, Encode, Decode, PartialEq)]
 <a href=#655 id=655 data-nosnippet>655</a>#[allow(non_snake_case)]
-<a href=#656 id=656 data-nosnippet>656</a>#[cfg_attr(feature = <span class="string">"python_api"</span>, pyo3::pyclass(from_py_object))]
+<a href=#656 id=656 data-nosnippet>656</a>#[cfg_attr(feature = <span class="string">"python"</span>, pyo3::pyclass(from_py_object))]
 <a href=#657 id=657 data-nosnippet>657</a></span><span class="kw">pub struct </span>SelectorSettings {
 <a href=#658 id=658 data-nosnippet>658</a>    <span class="kw">pub </span>quantity: String,
 <a href=#659 id=659 data-nosnippet>659</a>    <span class="kw">pub </span>active: bool,
@@ -841,7 +841,7 @@
 <a href=#840 id=840 data-nosnippet>840</a>
 <a href=#841 id=841 data-nosnippet>841</a><span class="attr">#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
 <a href=#842 id=842 data-nosnippet>842</a>#[allow(non_snake_case)]
-<a href=#843 id=843 data-nosnippet>843</a>#[cfg_attr(feature = <span class="string">"python_api"</span>, pyo3::pyclass(from_py_object))]
+<a href=#843 id=843 data-nosnippet>843</a>#[cfg_attr(feature = <span class="string">"python"</span>, pyo3::pyclass(from_py_object))]
 <a href=#844 id=844 data-nosnippet>844</a>#[serde(default, deny_unknown_fields)]
 <a href=#845 id=845 data-nosnippet>845</a></span><span class="kw">pub struct </span>ContinuousHistogramSettings {
 <a href=#846 id=846 data-nosnippet>846</a>    <span class="attr">#[serde(skip_serializing_if = <span class="string">"is_float::&lt;0&gt;"</span>)]
@@ -885,7 +885,7 @@
 <a href=#884 id=884 data-nosnippet>884</a>    Debug, Clone, Copy, Default, Serialize, Deserialize, Encode, Decode, PartialEq, Eq, JsonSchema,
 <a href=#885 id=885 data-nosnippet>885</a>)]
 <a href=#886 id=886 data-nosnippet>886</a>#[serde(rename_all = <span class="string">"snake_case"</span>)]
-<a href=#887 id=887 data-nosnippet>887</a>#[cfg_attr(feature = <span class="string">"python_api"</span>, pyo3::pyclass(from_py_object))]
+<a href=#887 id=887 data-nosnippet>887</a>#[cfg_attr(feature = <span class="string">"python"</span>, pyo3::pyclass(from_py_object))]
 <a href=#888 id=888 data-nosnippet>888</a></span><span class="kw">pub enum </span>DiscreteBinOrdering {
 <a href=#889 id=889 data-nosnippet>889</a>    <span class="attr">#[default]
 <a href=#890 id=890 data-nosnippet>890</a>    </span>AscendingBinId,
@@ -929,7 +929,7 @@
 <a href=#928 id=928 data-nosnippet>928</a>
 <a href=#929 id=929 data-nosnippet>929</a><span class="attr">#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
 <a href=#930 id=930 data-nosnippet>930</a>#[allow(non_snake_case)]
-<a href=#931 id=931 data-nosnippet>931</a>#[cfg_attr(feature = <span class="string">"python_api"</span>, pyo3::pyclass(from_py_object))]
+<a href=#931 id=931 data-nosnippet>931</a>#[cfg_attr(feature = <span class="string">"python"</span>, pyo3::pyclass(from_py_object))]
 <a href=#932 id=932 data-nosnippet>932</a>#[serde(default, deny_unknown_fields)]
 <a href=#933 id=933 data-nosnippet>933</a></span><span class="kw">pub struct </span>DiscreteHistogramSettings {
 <a href=#934 id=934 data-nosnippet>934</a>    <span class="kw">pub </span>domain: DiscreteBinDomainSettings,
@@ -968,7 +968,7 @@
 <a href=#967 id=967 data-nosnippet>967</a><span class="attr">#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
 <a href=#968 id=968 data-nosnippet>968</a>#[allow(non_snake_case)]
 <a href=#969 id=969 data-nosnippet>969</a>#[serde(tag = <span class="string">"kind"</span>, rename_all = <span class="string">"snake_case"</span>)]
-<a href=#970 id=970 data-nosnippet>970</a>#[cfg_attr(feature = <span class="string">"python_api"</span>, pyo3::pyclass(from_py_object))]
+<a href=#970 id=970 data-nosnippet>970</a>#[cfg_attr(feature = <span class="string">"python"</span>, pyo3::pyclass(from_py_object))]
 <a href=#971 id=971 data-nosnippet>971</a></span><span class="kw">pub enum </span>HistogramSettings {
 <a href=#972 id=972 data-nosnippet>972</a>    Continuous(ContinuousHistogramSettings),
 <a href=#973 id=973 data-nosnippet>973</a>    Discrete(DiscreteHistogramSettings),
@@ -982,7 +982,7 @@
 <a href=#981 id=981 data-nosnippet>981</a>
 <a href=#982 id=982 data-nosnippet>982</a><span class="attr">#[derive(Debug, Clone, Encode, Decode, PartialEq)]
 <a href=#983 id=983 data-nosnippet>983</a>#[allow(non_snake_case)]
-<a href=#984 id=984 data-nosnippet>984</a>#[cfg_attr(feature = <span class="string">"python_api"</span>, pyo3::pyclass(from_py_object))]
+<a href=#984 id=984 data-nosnippet>984</a>#[cfg_attr(feature = <span class="string">"python"</span>, pyo3::pyclass(from_py_object))]
 <a href=#985 id=985 data-nosnippet>985</a></span><span class="kw">pub struct </span>ObservableSettings {
 <a href=#986 id=986 data-nosnippet>986</a>    <span class="kw">pub </span>quantity: String,
 <a href=#987 id=987 data-nosnippet>987</a>    <span class="kw">pub </span>selections: Vec&lt;String&gt;,

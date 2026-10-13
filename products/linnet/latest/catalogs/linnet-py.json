@@ -12,7 +12,7 @@
     "language": "python",
     "features": [
       "extension-module",
-      "abi3-py310"
+      "abi3"
     ]
   },
   "root": {
@@ -45,7 +45,7 @@
             "supported": true,
             "required_features": [
               "extension-module",
-              "abi3-py310"
+              "abi3"
             ],
             "docs": {
               "format": "python-docstring",
@@ -74,7 +74,7 @@
             "supported": true,
             "required_features": [
               "extension-module",
-              "abi3-py310"
+              "abi3"
             ],
             "docs": {
               "format": "python-docstring",
@@ -171,7 +171,7 @@
             "supported": true,
             "required_features": [
               "extension-module",
-              "abi3-py310"
+              "abi3"
             ],
             "docs": {
               "format": "python-docstring",
@@ -234,7 +234,7 @@
             "supported": true,
             "required_features": [
               "extension-module",
-              "abi3-py310"
+              "abi3"
             ],
             "docs": {
               "format": "python-docstring",
@@ -330,7 +330,7 @@
             "supported": true,
             "required_features": [
               "extension-module",
-              "abi3-py310"
+              "abi3"
             ],
             "docs": {
               "format": "python-docstring",
@@ -400,7 +400,7 @@
             "supported": true,
             "required_features": [
               "extension-module",
-              "abi3-py310"
+              "abi3"
             ],
             "docs": {
               "format": "python-docstring",
@@ -454,7 +454,7 @@
             "supported": true,
             "required_features": [
               "extension-module",
-              "abi3-py310"
+              "abi3"
             ],
             "docs": {
               "format": "python-docstring",
@@ -534,7 +534,7 @@
             "supported": true,
             "required_features": [
               "extension-module",
-              "abi3-py310"
+              "abi3"
             ],
             "docs": {
               "format": "python-docstring",
@@ -588,7 +588,7 @@
             "supported": true,
             "required_features": [
               "extension-module",
-              "abi3-py310"
+              "abi3"
             ],
             "docs": {
               "format": "python-docstring",
@@ -640,7 +640,7 @@
             "supported": true,
             "required_features": [
               "extension-module",
-              "abi3-py310"
+              "abi3"
             ],
             "docs": {
               "format": "python-docstring",
@@ -743,7 +743,7 @@
             "supported": true,
             "required_features": [
               "extension-module",
-              "abi3-py310"
+              "abi3"
             ],
             "docs": {
               "format": "python-docstring",
@@ -846,7 +846,7 @@
             "supported": true,
             "required_features": [
               "extension-module",
-              "abi3-py310"
+              "abi3"
             ],
             "docs": {
               "format": "python-docstring",
@@ -965,7 +965,7 @@
             "supported": true,
             "required_features": [
               "extension-module",
-              "abi3-py310"
+              "abi3"
             ],
             "docs": {
               "format": "python-docstring",
@@ -1068,7 +1068,7 @@
             "supported": true,
             "required_features": [
               "extension-module",
-              "abi3-py310"
+              "abi3"
             ],
             "docs": {
               "format": "python-docstring",
@@ -1419,7 +1419,7 @@
             "supported": true,
             "required_features": [
               "extension-module",
-              "abi3-py310"
+              "abi3"
             ],
             "docs": {
               "format": "python-docstring",
@@ -1498,7 +1498,7 @@
             "supported": true,
             "required_features": [
               "extension-module",
-              "abi3-py310"
+              "abi3"
             ],
             "docs": {
               "format": "python-docstring",
@@ -1577,7 +1577,7 @@
             "supported": true,
             "required_features": [
               "extension-module",
-              "abi3-py310"
+              "abi3"
             ],
             "docs": {
               "format": "python-docstring",
@@ -1623,7 +1623,7 @@
             "supported": true,
             "required_features": [
               "extension-module",
-              "abi3-py310"
+              "abi3"
             ],
             "docs": {
               "format": "python-docstring",
@@ -1686,7 +1686,7 @@
             "supported": true,
             "required_features": [
               "extension-module",
-              "abi3-py310"
+              "abi3"
             ],
             "docs": {
               "format": "python-docstring",
@@ -1898,7 +1898,7 @@
             "supported": true,
             "required_features": [
               "extension-module",
-              "abi3-py310"
+              "abi3"
             ],
             "docs": {
               "format": "python-docstring",
@@ -3412,7 +3412,7 @@
             "supported": true,
             "required_features": [
               "extension-module",
-              "abi3-py310"
+              "abi3"
             ],
             "docs": {
               "format": "python-docstring",
@@ -3515,7 +3515,7 @@
             "supported": true,
             "required_features": [
               "extension-module",
-              "abi3-py310"
+              "abi3"
             ],
             "docs": {
               "format": "python-docstring",
@@ -3586,7 +3586,7 @@
             "supported": true,
             "required_features": [
               "extension-module",
-              "abi3-py310"
+              "abi3"
             ],
             "docs": {
               "format": "python-docstring",
@@ -3615,7 +3615,7 @@
             "supported": true,
             "required_features": [
               "extension-module",
-              "abi3-py310"
+              "abi3"
             ],
             "docs": {
               "format": "python-docstring",
@@ -3678,7 +3678,7 @@
             "supported": true,
             "required_features": [
               "extension-module",
-              "abi3-py310"
+              "abi3"
             ],
             "docs": {
               "format": "python-docstring",
@@ -3781,7 +3781,7 @@
             "supported": true,
             "required_features": [
               "extension-module",
-              "abi3-py310"
+              "abi3"
             ],
             "docs": {
               "format": "python-docstring",
@@ -3851,7 +3851,7 @@
             "supported": true,
             "required_features": [
               "extension-module",
-              "abi3-py310"
+              "abi3"
             ],
             "docs": {
               "format": "python-docstring",
@@ -4684,7 +4684,7 @@
             "supported": true,
             "required_features": [
               "extension-module",
-              "abi3-py310"
+              "abi3"
             ],
             "docs": {
               "format": "python-docstring",
@@ -4876,7 +4876,7 @@
             "supported": true,
             "required_features": [
               "extension-module",
-              "abi3-py310"
+              "abi3"
             ],
             "docs": {
               "format": "python-docstring",
@@ -5040,7 +5040,7 @@
             "supported": true,
             "required_features": [
               "extension-module",
-              "abi3-py310"
+              "abi3"
             ],
             "docs": {
               "format": "python-docstring",
@@ -5159,7 +5159,7 @@
             "supported": true,
             "required_features": [
               "extension-module",
-              "abi3-py310"
+              "abi3"
             ],
             "docs": {
               "format": "python-docstring",
@@ -5230,7 +5230,7 @@
             "supported": true,
             "required_features": [
               "extension-module",
-              "abi3-py310"
+              "abi3"
             ],
             "docs": {
               "format": "python-docstring",
@@ -5309,7 +5309,7 @@
             "supported": true,
             "required_features": [
               "extension-module",
-              "abi3-py310"
+              "abi3"
             ],
             "docs": {
               "format": "python-docstring",
@@ -5361,7 +5361,7 @@
             "supported": true,
             "required_features": [
               "extension-module",
-              "abi3-py310"
+              "abi3"
             ],
             "docs": {
               "format": "python-docstring",
@@ -5415,7 +5415,7 @@
             "supported": true,
             "required_features": [
               "extension-module",
-              "abi3-py310"
+              "abi3"
             ],
             "docs": {
               "format": "python-docstring",
@@ -5537,7 +5537,7 @@
             "supported": true,
             "required_features": [
               "extension-module",
-              "abi3-py310"
+              "abi3"
             ],
             "docs": {
               "format": "python-docstring",
@@ -5609,7 +5609,7 @@
             "supported": true,
             "required_features": [
               "extension-module",
-              "abi3-py310"
+              "abi3"
             ],
             "docs": {
               "format": "python-docstring",
@@ -5711,7 +5711,7 @@
             "supported": true,
             "required_features": [
               "extension-module",
-              "abi3-py310"
+              "abi3"
             ],
             "docs": {
               "format": "python-docstring",
@@ -5821,7 +5821,7 @@
             "supported": true,
             "required_features": [
               "extension-module",
-              "abi3-py310"
+              "abi3"
             ],
             "docs": {
               "format": "python-docstring",
@@ -5867,7 +5867,7 @@
             "supported": true,
             "required_features": [
               "extension-module",
-              "abi3-py310"
+              "abi3"
             ],
             "docs": {
               "format": "python-docstring",
@@ -5977,7 +5977,7 @@
             "supported": true,
             "required_features": [
               "extension-module",
-              "abi3-py310"
+              "abi3"
             ],
             "docs": {
               "format": "python-docstring",
@@ -6088,7 +6088,7 @@
             "supported": true,
             "required_features": [
               "extension-module",
-              "abi3-py310"
+              "abi3"
             ],
             "docs": {
               "format": "python-docstring",
@@ -6564,7 +6564,7 @@
             "supported": true,
             "required_features": [
               "extension-module",
-              "abi3-py310"
+              "abi3"
             ],
             "docs": {
               "format": "python-docstring",
@@ -6674,7 +6674,7 @@
             "supported": true,
             "required_features": [
               "extension-module",
-              "abi3-py310"
+              "abi3"
             ],
             "docs": {
               "format": "python-docstring",
@@ -6762,7 +6762,7 @@
             "supported": true,
             "required_features": [
               "extension-module",
-              "abi3-py310"
+              "abi3"
             ],
             "docs": {
               "format": "python-docstring",
@@ -6873,7 +6873,7 @@
             "supported": true,
             "required_features": [
               "extension-module",
-              "abi3-py310"
+              "abi3"
             ],
             "docs": {
               "format": "python-docstring",
@@ -7184,7 +7184,7 @@
             "supported": true,
             "required_features": [
               "extension-module",
-              "abi3-py310"
+              "abi3"
             ],
             "docs": {
               "format": "python-docstring",
@@ -7272,7 +7272,7 @@
             "supported": true,
             "required_features": [
               "extension-module",
-              "abi3-py310"
+              "abi3"
             ],
             "docs": {
               "format": "python-docstring",
@@ -7326,7 +7326,7 @@
             "supported": true,
             "required_features": [
               "extension-module",
-              "abi3-py310"
+              "abi3"
             ],
             "docs": {
               "format": "python-docstring",
@@ -7396,7 +7396,7 @@
             "supported": true,
             "required_features": [
               "extension-module",
-              "abi3-py310"
+              "abi3"
             ],
             "docs": {
               "format": "python-docstring",
@@ -7442,7 +7442,7 @@
             "supported": true,
             "required_features": [
               "extension-module",
-              "abi3-py310"
+              "abi3"
             ],
             "docs": {
               "format": "python-docstring",
@@ -7488,7 +7488,7 @@
             "supported": true,
             "required_features": [
               "extension-module",
-              "abi3-py310"
+              "abi3"
             ],
             "docs": {
               "format": "python-docstring",
@@ -7534,7 +7534,7 @@
             "supported": true,
             "required_features": [
               "extension-module",
-              "abi3-py310"
+              "abi3"
             ],
             "docs": {
               "format": "python-docstring",
@@ -7580,7 +7580,7 @@
             "supported": true,
             "required_features": [
               "extension-module",
-              "abi3-py310"
+              "abi3"
             ],
             "docs": {
               "format": "python-docstring",
@@ -7634,7 +7634,7 @@
             "supported": true,
             "required_features": [
               "extension-module",
-              "abi3-py310"
+              "abi3"
             ],
             "docs": {
               "format": "python-docstring",
@@ -7680,7 +7680,7 @@
             "supported": true,
             "required_features": [
               "extension-module",
-              "abi3-py310"
+              "abi3"
             ],
             "docs": {
               "format": "python-docstring",
@@ -7775,7 +7775,7 @@
             "supported": true,
             "required_features": [
               "extension-module",
-              "abi3-py310"
+              "abi3"
             ],
             "docs": {
               "format": "python-docstring",
@@ -8119,7 +8119,7 @@
             "supported": true,
             "required_features": [
               "extension-module",
-              "abi3-py310"
+              "abi3"
             ],
             "docs": {
               "format": "python-docstring",
@@ -8207,7 +8207,7 @@
             "supported": true,
             "required_features": [
               "extension-module",
-              "abi3-py310"
+              "abi3"
             ],
             "docs": {
               "format": "python-docstring",
@@ -8277,7 +8277,7 @@
             "supported": true,
             "required_features": [
               "extension-module",
-              "abi3-py310"
+              "abi3"
             ],
             "docs": {
               "format": "python-docstring",
@@ -8323,7 +8323,7 @@
             "supported": true,
             "required_features": [
               "extension-module",
-              "abi3-py310"
+              "abi3"
             ],
             "docs": {
               "format": "python-docstring",
@@ -8393,7 +8393,7 @@
             "supported": true,
             "required_features": [
               "extension-module",
-              "abi3-py310"
+              "abi3"
             ],
             "docs": {
               "format": "python-docstring",
@@ -8439,7 +8439,7 @@
             "supported": true,
             "required_features": [
               "extension-module",
-              "abi3-py310"
+              "abi3"
             ],
             "docs": {
               "format": "python-docstring",
@@ -8501,7 +8501,7 @@
             "supported": true,
             "required_features": [
               "extension-module",
-              "abi3-py310"
+              "abi3"
             ],
             "docs": {
               "format": "python-docstring",
@@ -8555,7 +8555,7 @@
             "supported": true,
             "required_features": [
               "extension-module",
-              "abi3-py310"
+              "abi3"
             ],
             "docs": {
               "format": "python-docstring",
@@ -8609,7 +8609,7 @@
             "supported": true,
             "required_features": [
               "extension-module",
-              "abi3-py310"
+              "abi3"
             ],
             "docs": {
               "format": "python-docstring",
@@ -8663,7 +8663,7 @@
             "supported": true,
             "required_features": [
               "extension-module",
-              "abi3-py310"
+              "abi3"
             ],
             "docs": {
               "format": "python-docstring",
@@ -8743,7 +8743,7 @@
             "supported": true,
             "required_features": [
               "extension-module",
-              "abi3-py310"
+              "abi3"
             ],
             "docs": {
               "format": "python-docstring",
@@ -8806,7 +8806,7 @@
             "supported": true,
             "required_features": [
               "extension-module",
-              "abi3-py310"
+              "abi3"
             ],
             "docs": {
               "format": "python-docstring",
@@ -9134,7 +9134,7 @@
             "supported": true,
             "required_features": [
               "extension-module",
-              "abi3-py310"
+              "abi3"
             ],
             "docs": {
               "format": "python-docstring",
@@ -9229,7 +9229,7 @@
             "supported": true,
             "required_features": [
               "extension-module",
-              "abi3-py310"
+              "abi3"
             ],
             "docs": {
               "format": "python-docstring",
@@ -9692,7 +9692,7 @@
             "supported": true,
             "required_features": [
               "extension-module",
-              "abi3-py310"
+              "abi3"
             ],
             "docs": {
               "format": "python-docstring",
@@ -9787,7 +9787,7 @@
             "supported": true,
             "required_features": [
               "extension-module",
-              "abi3-py310"
+              "abi3"
             ],
             "docs": {
               "format": "python-docstring",
@@ -9938,7 +9938,7 @@
             "supported": true,
             "required_features": [
               "extension-module",
-              "abi3-py310"
+              "abi3"
             ],
             "docs": {
               "format": "python-docstring",
@@ -10001,7 +10001,7 @@
             "supported": true,
             "required_features": [
               "extension-module",
-              "abi3-py310"
+              "abi3"
             ],
             "docs": {
               "format": "python-docstring",
@@ -10039,7 +10039,7 @@
             "supported": true,
             "required_features": [
               "extension-module",
-              "abi3-py310"
+              "abi3"
             ],
             "docs": {
               "format": "python-docstring",
@@ -10162,7 +10162,7 @@
             "supported": true,
             "required_features": [
               "extension-module",
-              "abi3-py310"
+              "abi3"
             ],
             "docs": {
               "format": "python-docstring",
@@ -10250,7 +10250,7 @@
             "supported": true,
             "required_features": [
               "extension-module",
-              "abi3-py310"
+              "abi3"
             ],
             "docs": {
               "format": "python-docstring",
@@ -10279,7 +10279,7 @@
             "supported": true,
             "required_features": [
               "extension-module",
-              "abi3-py310"
+              "abi3"
             ],
             "docs": {
               "format": "python-docstring",
@@ -10308,7 +10308,7 @@
             "supported": true,
             "required_features": [
               "extension-module",
-              "abi3-py310"
+              "abi3"
             ],
             "docs": {
               "format": "python-docstring",
@@ -10337,7 +10337,7 @@
             "supported": true,
             "required_features": [
               "extension-module",
-              "abi3-py310"
+              "abi3"
             ],
             "docs": {
               "format": "python-docstring",
@@ -10366,7 +10366,7 @@
             "supported": true,
             "required_features": [
               "extension-module",
-              "abi3-py310"
+              "abi3"
             ],
             "docs": {
               "format": "python-docstring",

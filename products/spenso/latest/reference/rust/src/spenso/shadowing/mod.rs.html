@@ -726,15 +726,15 @@
 <a href=#725 id=725 data-nosnippet>725</a></span><span class="kw">pub mod </span>test {
 <a href=#726 id=726 data-nosnippet>726</a>    <span class="kw">use </span>std::sync::RwLock;
 <a href=#727 id=727 data-nosnippet>727</a>
-<a href=#728 id=728 data-nosnippet>728</a>    <span class="kw">use </span>once_cell::sync::Lazy;
+<a href=#728 id=728 data-nosnippet>728</a>    <span class="kw">use </span>std::sync::LazyLock;
 <a href=#729 id=729 data-nosnippet>729</a>    <span class="kw">use </span>symbolica::atom::Symbol;
 <a href=#730 id=730 data-nosnippet>730</a>
 <a href=#731 id=731 data-nosnippet>731</a>    <span class="kw">use </span><span class="kw">crate</span>::network::library::{symbolic::ETS, symbolic::ExplicitKey, symbolic::TensorLibrary};
 <a href=#732 id=732 data-nosnippet>732</a>
 <a href=#733 id=733 data-nosnippet>733</a>    <span class="attr">#[allow(clippy::type_complexity)]
-<a href=#734 id=734 data-nosnippet>734</a>    </span><span class="kw">pub static </span>EXPLICIT_TENSOR_MAP: Lazy&lt;
+<a href=#734 id=734 data-nosnippet>734</a>    </span><span class="kw">pub static </span>EXPLICIT_TENSOR_MAP: LazyLock&lt;
 <a href=#735 id=735 data-nosnippet>735</a>        RwLock&lt;TensorLibrary&lt;MixedTensor&lt;f64, ExplicitKey&lt;AbstractIndex&gt;&gt;, AbstractIndex&gt;&gt;,
-<a href=#736 id=736 data-nosnippet>736</a>    &gt; = Lazy::new(|| {
+<a href=#736 id=736 data-nosnippet>736</a>    &gt; = LazyLock::new(|| {
 <a href=#737 id=737 data-nosnippet>737</a>        <span class="kw">let </span><span class="kw-2">mut </span>lib = TensorLibrary::new();
 <a href=#738 id=738 data-nosnippet>738</a>        lib.update_ids();
 <a href=#739 id=739 data-nosnippet>739</a>        RwLock::new(lib)
