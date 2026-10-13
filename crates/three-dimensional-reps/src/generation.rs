@@ -8713,10 +8713,6 @@ mod initial_state_cut_tests {
             assert!(validation.vertex_external_balance_info.is_empty());
             let generated =
                 generate_3d_expression(&parsed, &Generate3DExpressionOptions::default()).unwrap();
-            let reversed =
-                crate::graph_io::test_graphs::initial_state_cut_line_graph(-external_sign);
-            let reversed_expression =
-                generate_3d_expression(&reversed, &Generate3DExpressionOptions::default()).unwrap();
             for p0 in [0.6, 1.4] {
                 let input = crate::eval::EvaluationInput {
                     external_momenta: vec![[p0, 0.0, 0.0, 0.0]],
@@ -8736,16 +8732,6 @@ mod initial_state_cut_tests {
                 )
                 .unwrap()
                 .value;
-                let mut reversed_input = input.clone();
-                reversed_input.external_momenta[0][0] = -p0;
-                let reversed_value = crate::eval::evaluate_expression(
-                    &reversed,
-                    &reversed_expression.expression,
-                    "1",
-                    &reversed_input,
-                )
-                .unwrap()
-                .value;
                 let energy = (input.masses[1].powi(2)
                     + input.loop_spatial_momenta[0]
                         .iter()
@@ -8760,7 +8746,6 @@ mod initial_state_cut_tests {
                 for (actual, expected) in [
                     (source_sign * scalar, -1.0 / (2.0 * energy)),
                     (cut, external_sign as f64 * p0 * scalar),
-                    (reversed_value, scalar),
                 ] {
                     let scale = actual.abs().max(expected.abs()).max(f64::MIN_POSITIVE);
                     assert!(
@@ -8770,6 +8755,97 @@ mod initial_state_cut_tests {
                         "sign={external_sign}, p0={p0}: {actual:e} != {expected:e}"
                     );
                 }
+            }
+        }
+    }
+
+    #[cfg(feature = "eval")]
+    #[test]
+    fn cff_initial_state_cut_bubble_preserves_signed_external_shifts() {
+        let mut values = BTreeMap::new();
+        for external_sign in [1, -1] {
+            let mut parsed =
+                crate::graph_io::test_graphs::initial_state_cut_line_graph(external_sign);
+            // The cut carries s*p from 0 to 1. The k line leaves 0 and the
+            // k+s*p line returns, so the signed shift enters a causal surface.
+            parsed.internal_edges[0].head = 1;
+            parsed.internal_edges[1].head = 1;
+            parsed.node_name_to_internal.insert("n1".to_string(), 1);
+            let mut second = parsed.internal_edges[1].clone();
+            second.edge_id = 2;
+            second.label = "q1".to_string();
+            second.mass_key = Some("m_return".to_string());
+            std::mem::swap(&mut second.tail, &mut second.head);
+            second.signature.external_signature = vec![external_sign];
+            parsed.internal_edges.push(second);
+            let validation = crate::validate_parsed_graph(&parsed);
+            assert!(validation.ok, "{validation:?}");
+            assert!(validation.vertex_external_balance_info.is_empty());
+            let generated =
+                generate_3d_expression(&parsed, &Generate3DExpressionOptions::default()).unwrap();
+            assert_eq!(generated.expression.orientations.len(), 2);
+
+            for (energy_index, p0) in [0.6, 1.4].into_iter().enumerate() {
+                let input = crate::eval::EvaluationInput {
+                    external_momenta: vec![[p0, 0.0, 0.0, 0.0]],
+                    loop_spatial_momenta: vec![[0.2, -0.3, 0.7]],
+                    masses: vec![1.0, 1.7, 2.1],
+                    uniform_scale: None,
+                };
+                let spatial_norm_squared = input.loop_spatial_momenta[0]
+                    .iter()
+                    .map(|component| component * component)
+                    .sum::<f64>();
+                let e1 = (input.masses[1].powi(2) + spatial_norm_squared).sqrt();
+                let e2 = (input.masses[2].powi(2) + spatial_norm_squared).sqrt();
+                for orientation in &generated.expression.orientations {
+                    assert_eq!(
+                        orientation.data.orientation[EdgeIndex(0)],
+                        Orientation::Default
+                    );
+                    assert_eq!(
+                        orientation.data.orientation[EdgeIndex(2)],
+                        orientation.data.orientation[EdgeIndex(1)].reverse()
+                    );
+                    let pole_sign = match orientation.data.orientation[EdgeIndex(1)] {
+                        Orientation::Default => 1,
+                        Orientation::Reversed => -1,
+                        Orientation::Undirected => panic!("bubble line has no pole direction"),
+                    };
+                    let mut branch = generated.expression.clone();
+                    branch.orientations = vec![orientation.clone()].into();
+                    for input_sign in [1, -1] {
+                        let mut signed_input = input.clone();
+                        signed_input.external_momenta[0][0] *= f64::from(input_sign);
+                        let actual =
+                            crate::eval::evaluate_expression(&parsed, &branch, "1", &signed_input)
+                                .unwrap()
+                                .value;
+                        // A bubble has the two causal denominators E1+E2 +/- s*p0.
+                        // Their sum is even in p0, so check each orientation separately.
+                        let expected = 1.0
+                            / (4.0
+                                * e1
+                                * e2
+                                * (e1
+                                    + e2
+                                    + f64::from(pole_sign * external_sign * input_sign) * p0));
+                        assert!(
+                            (actual - expected).abs() <= 1.0e-12 * expected.abs(),
+                            "cut sign={external_sign}, pole={pole_sign}, p0={p0}, input sign={input_sign}: {actual:e} != {expected:e}"
+                        );
+                        values.insert((external_sign, pole_sign, energy_index, input_sign), actual);
+                    }
+                }
+            }
+        }
+        for pole_sign in [1, -1] {
+            for energy_index in [0, 1] {
+                let forward = values[&(1, pole_sign, energy_index, 1)];
+                let joint_reversal = values[&(-1, pole_sign, energy_index, -1)];
+                let cut_reversal = values[&(-1, pole_sign, energy_index, 1)];
+                assert!((forward - joint_reversal).abs() <= 1.0e-12 * forward.abs());
+                assert!((forward - cut_reversal).abs() > 1.0e-3 * forward.abs());
             }
         }
     }
