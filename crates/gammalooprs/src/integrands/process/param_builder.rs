@@ -26,7 +26,7 @@ use symbolica::prelude::{
     ReplaceWith, Replacement, Symbol, parse_lit, symbol,
 };
 use tabled::{Table, settings::Style};
-use three_dimensional_reps::MediumMode;
+use three_dimensional_reps::{MediumMode, ThermalDistributionCall};
 use tracing::debug;
 use tracing::warn;
 
@@ -100,54 +100,6 @@ pub trait SplitPolarizations {
     fn polarizations(&self) -> Vec<Atom>;
 }
 
-/// The tagged arguments of an N call, before physical orientations are resolved.
-pub(crate) struct ThermalDistributionCall {
-    pub edge: EdgeIndex,
-    pub derivative_order: usize,
-    pub temperature_flag: Atom,
-    pub thermal_sign: Atom,
-    pub orientation_sign: Atom,
-}
-
-impl TryFrom<AtomView<'_>> for ThermalDistributionCall {
-    type Error = color_eyre::Report;
-
-    fn try_from(atom: AtomView<'_>) -> Result<Self> {
-        let [
-            edge,
-            derivative_order,
-            temperature_flag,
-            thermal_sign,
-            orientation_sign,
-        ] = match atom {
-            AtomView::Fun(function) if function.get_symbol() == GS.thermal_distribution => {
-                <[_; 5]>::try_from(function.iter().collect::<Vec<_>>()).ok()
-            }
-            _ => None,
-        }
-        .ok_or_else(|| {
-            color_eyre::eyre::eyre!(
-                "Thermal distribution must be an N call with five arguments, got {atom}"
-            )
-        })?;
-        let edge = usize::try_from(edge).map_err(|_| {
-            color_eyre::eyre::eyre!(
-                "Thermal distribution edge must be a non-negative integer, got {edge}"
-            )
-        })?;
-        let derivative_order = usize::try_from(derivative_order).map_err(|_| color_eyre::eyre::eyre!(
-            "Thermal distribution derivative order must be a non-negative integer, got {derivative_order}"
-        ))?;
-        Ok(Self {
-            edge: EdgeIndex(edge),
-            derivative_order,
-            temperature_flag: temperature_flag.to_owned(),
-            thermal_sign: thermal_sign.to_owned(),
-            orientation_sign: orientation_sign.to_owned(),
-        })
-    }
-}
-
 pub trait ParamBuilderGraph {
     fn get_external_energy_atoms(&self) -> Vec<Atom>;
     fn iter_edge_ids(&self) -> impl Iterator<Item = EdgeIndex> + '_;
@@ -189,7 +141,7 @@ pub trait ParamBuilderGraph {
             let call = match ThermalDistributionCall::try_from(term) {
                 Ok(call) => call,
                 Err(parse_error) => {
-                    error = Some(parse_error);
+                    error = Some(parse_error.into());
                     return;
                 }
             };
@@ -2277,6 +2229,8 @@ mod tests {
 
     #[test]
     fn thermal_function_registration_follows_the_selected_medium() {
+        // A call must also work before GammaLoop's Symbolica initializer has run.
+        let _ = ThermalDistributionCall::atom(0, 0, 1, 1, 1);
         test_initialise().unwrap();
         let mut graph: Graph = dot!(digraph thermal {
             node [num=1]; edge [num=1 particle="d"];
@@ -2383,7 +2337,7 @@ mod tests {
                     for thermal_sign in [-1, 0, 1] {
                         for orientation_sign in [-1, 1] {
                             let expressions = [
-                                GS.thermal_distribution(
+                                ThermalDistributionCall::atom(
                                     0,
                                     order,
                                     Atom::num(i64::from(limit.is_finite_temperature())),
@@ -2450,8 +2404,8 @@ mod tests {
         .unwrap();
         let weight = symbolica::function!(
             GS.thermal_weight_wrapper,
-            GS.thermal_distribution(0, 0, 1, 1, GS.sign(EdgeIndex(0)))
-                * GS.thermal_distribution(1, 0, 1, 1, GS.sign(EdgeIndex(1)))
+            ThermalDistributionCall::atom(0, 0, 1, 1, GS.sign(EdgeIndex(0)))
+                * ThermalDistributionCall::atom(1, 0, 1, 1, GS.sign(EdgeIndex(1)))
                 - 1
         );
         let partial = graph
@@ -2461,7 +2415,7 @@ mod tests {
             partial,
             symbolica::function!(
                 GS.thermal_weight_wrapper,
-                GS.thermal_distribution(1, 0, 1, 1, GS.sign(EdgeIndex(1))) - 1
+                ThermalDistributionCall::atom(1, 0, 1, 1, GS.sign(EdgeIndex(1))) - 1
             )
         );
         assert!(
@@ -2471,7 +2425,13 @@ mod tests {
                 .is_zero()
         );
 
-        let params = [GS.thermal_distribution(1, 0, 1, 1, GS.sign(EdgeIndex(1)))];
+        let params = [ThermalDistributionCall::atom(
+            1,
+            0,
+            1,
+            1,
+            GS.sign(EdgeIndex(1)),
+        )];
         let replacements = graph
             .param_builder
             .reps
